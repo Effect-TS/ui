@@ -343,6 +343,15 @@ describe("Html", () => {
     expect<View.Requirements<any>>().type.toBe<any>()
   })
 
+  it("style accepts CSS text and preserves the element type", () => {
+    const div = new Html.Element<Msg, Clock, Html.EventsOf<"div">, HTMLDivElement, "div">("div")
+    const input = new Html.VoidElement<Msg, Logger, Html.EventsOf<"input">, HTMLInputElement, "input">("input")
+    expect(div.style("color: red")).type.toBe<typeof div>()
+    expect(input.style(undefined)).type.toBe<typeof input>()
+    expect(div.style).type.not.toBeCallableWith(1)
+    expect(div.style).type.not.toBeCallableWith({ color: "red" })
+  })
+
   it("class takes string tokens and rejects true and numbers", () => {
     const button = new Html.Element<Msg>("button")
     const saving = false as boolean

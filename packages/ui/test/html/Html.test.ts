@@ -180,6 +180,32 @@ describe("Html", () => {
       assert.strictEqual(toned.elementKey, "k")
     })
 
+    it.effect("style sets, replaces and removes inline CSS without changing the original builder", () =>
+      Effect.gen(function*() {
+        const h = helper()
+        const styled = h.div.id("styled").style("color: red; --spacing: 2px")
+        assert.deepStrictEqual(h.div.attrs, {})
+        assert.deepStrictEqual(styled.attrs, { id: "styled", style: "color: red; --spacing: 2px" })
+        assert.deepStrictEqual(styled.style("color: blue").attrs, { id: "styled", style: "color: blue" })
+        assert.deepStrictEqual(styled.style(undefined).attrs, { id: "styled" })
+        assert.deepStrictEqual(styled.style("").attrs, { id: "styled", style: "" })
+        const Page = Component.define({
+          name: "Styled",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => h.div.style("color: red").children(h.input.style("width: 2px"))
+        })
+        const rendered = yield* HtmlServer.renderToHtml(Page, {})
+        assert.strictEqual(
+          rendered.html,
+          "<!--[/Styled--><div style=\"color: red\"><input style=\"width: 2px\"></div><!--]/Styled-->"
+        )
+      }))
+
     it("fields added to a library builder are kept by its chain calls", () => {
       const mark = Symbol("mark")
       const decorated = Object.assign(new View.ElementBuilder<TodoMessage>("button"), { tone: "warm", [mark]: 1 })

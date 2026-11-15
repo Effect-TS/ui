@@ -561,6 +561,23 @@ export class VoidElement<
     return this.attr("id", id)
   }
   /**
+   * Sets the inline `style` attribute from CSS text. Passing `undefined`
+   * removes the attribute. Calling `style` again replaces the earlier value.
+   *
+   * ```ts
+   * import type { Html } from "@effect/ui/html"
+   *
+   * declare const h: Html.Tags<never>
+   *
+   * const note = h.div.style("color: red; margin-top: 1rem").children("Note")
+   * ```
+   *
+   * @since 0.1.0
+   */
+  style(style: string | undefined): this {
+    return this.attr("style", style)
+  }
+  /**
    * Sets the `class` attribute from class tokens, skipping `false`, `null`,
    * `undefined` and `""`.
    *
