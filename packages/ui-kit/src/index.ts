@@ -1,0 +1,8 @@
+/**
+ * Components for `@effect/ui`. The package has none yet.
+ *
+ * @stability experimental
+ * @since 0.1.0
+ */
+
+// @barrel: Auto-generated exports. Do not edit manually.
