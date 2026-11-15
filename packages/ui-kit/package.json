@@ -1,0 +1,73 @@
+{
+  "name": "@effect/ui-kit",
+  "type": "module",
+  "version": "0.0.0",
+  "license": "MIT",
+  "description": "A component library for @effect/ui",
+  "homepage": "https://effect.website",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Effect-TS/ui.git",
+    "directory": "packages/ui-kit"
+  },
+  "bugs": {
+    "url": "https://github.com/Effect-TS/ui/issues"
+  },
+  "tags": [
+    "typescript",
+    "ui",
+    "components",
+    "effect"
+  ],
+  "keywords": [
+    "typescript",
+    "ui",
+    "components",
+    "effect"
+  ],
+  "sideEffects": [],
+  "exports": {
+    "./package.json": "./package.json",
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts",
+    "./internal/*": null,
+    "./index": null,
+    "./*/index": null
+  },
+  "files": [
+    "src/**/*.ts",
+    "dist/**/*.js",
+    "dist/**/*.js.map",
+    "dist/**/*.d.ts",
+    "dist/**/*.d.ts.map",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "ai-docs/**/*"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "exports": {
+      "./package.json": "./package.json",
+      ".": "./dist/index.js",
+      "./*": "./dist/*.js",
+      "./internal/*": null,
+      "./index": null,
+      "./*/index": null
+    }
+  },
+  "scripts": {
+    "codegen": "effect-utils codegen",
+    "build": "tsc -b tsconfig.json && pnpm babel",
+    "babel": "babel dist --plugins annotate-pure-calls --out-dir dist --source-maps",
+    "check": "tsc -b tsconfig.json"
+  },
+  "peerDependencies": {
+    "@effect/ui": "workspace:^",
+    "effect": "^4.1.4"
+  },
+  "devDependencies": {
+    "@effect/ui": "workspace:^",
+    "effect": "^4.1.4"
+  }
+}
