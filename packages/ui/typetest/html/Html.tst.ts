@@ -343,6 +343,23 @@ describe("Html", () => {
     expect<View.Requirements<any>>().type.toBe<any>()
   })
 
+  it("style accepts typed CSS properties and preserves the element type", () => {
+    const div = new Html.Element<Msg, Clock, Html.EventsOf<"div">, HTMLDivElement, "div">("div")
+    const input = new Html.VoidElement<Msg, Logger, Html.EventsOf<"input">, HTMLInputElement, "input">("input")
+    expect(div.style({ color: "red", marginTop: "1rem", "--accent": "#09f" })).type.toBe<typeof div>()
+    expect(input.style({ color: false, width: null, height: undefined })).type.toBe<typeof input>()
+    expect(div.style).type.not.toBeCallableWith(1)
+    expect(div.style).type.not.toBeCallableWith("color:red")
+    expect(div.style).type.not.toBeCallableWith({ width: 10 })
+    expect(div.style).type.not.toBeCallableWith({ color: true })
+    expect(div.style).type.not.toBeCallableWith({ unknownProperty: "red" })
+    expect(div.style).type.not.toBeCallableWith({ cssText: "color:red" })
+    expect(div.style).type.not.toBeCallableWith({ cssFloat: "left" })
+    expect(div.style).type.not.toBeCallableWith({ length: "1" })
+    expect(div.style).type.not.toBeCallableWith({ setProperty: "red" })
+    expect<Html.StyleValue>().type.toBe<string | false | null | undefined>()
+  })
+
   it("class takes string tokens and rejects true and numbers", () => {
     const button = new Html.Element<Msg>("button")
     const saving = false as boolean

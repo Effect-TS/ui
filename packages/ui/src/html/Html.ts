@@ -561,6 +561,50 @@ export class VoidElement<
     return this.attr("id", id)
   }
   /**
+   * Sets inline CSS from camelCase properties and `--custom` properties.
+   *
+   * **Details**
+   *
+   * Values are strings with explicit units. Skips `false`, `null`, `undefined`
+   * and `""`. Each call replaces the previous style; an empty result removes
+   * the attribute. Merge objects with spread to keep earlier declarations.
+   * Raw CSS text can still be set with `attr("style", text)`.
+   *
+   * This writes the whole attribute, so styles set by `onMount` are lost when
+   * the style text changes. A Content Security Policy must allow inline style
+   * attributes (for example, `style-src-attr 'unsafe-inline'`). Values are not
+   * parsed: a semicolon can start another declaration. Do not pass untrusted
+   * input as a raw value.
+   *
+   * **Example** (Defining inline styles)
+   *
+   * ```ts
+   * import type { Html } from "@effect/ui/html"
+   *
+   * declare const h: Html.Tags<never>
+   * declare const model: { readonly error: string | undefined }
+   *
+   * const note = h.div.style({
+   *   color: model.error !== undefined && "red",
+   *   marginTop: "1rem",
+   *   "--accent": "#09f"
+   * }).children("Note")
+   * ```
+   *
+   * @since 0.1.0
+   */
+  style(style: Style): this {
+    const declarations: Array<string> = []
+    for (const [name, value] of Object.entries(style)) {
+      if (!value) continue
+      const property = name.startsWith("--")
+        ? name
+        : name.replace(/[A-Z]/g, (letter) => "-" + letter.toLowerCase()).replace(/^(webkit|moz|ms)-/, "-$1-")
+      declarations.push(property + ":" + value)
+    }
+    return this.attr("style", declarations.length === 0 ? undefined : declarations.join(";"))
+  }
+  /**
    * Sets the `class` attribute from class tokens, skipping `false`, `null`,
    * `undefined` and `""`.
    *
@@ -1008,6 +1052,36 @@ export class Element<
  * @since 0.1.0
  */
 export type ClassToken = string | false | null | undefined
+
+/**
+ * An inline CSS value, or `false`, `null` or `undefined` to omit a declaration.
+ *
+ * @stability experimental
+ * @category attributes
+ * @since 0.1.0
+ */
+export type StyleValue = string | false | null | undefined
+
+type StyleProperty = {
+  [K in keyof CSSStyleDeclaration]: K extends string ? CSSStyleDeclaration[K] extends string ? K : never : never
+}[keyof CSSStyleDeclaration]
+
+/**
+ * Inline styles with camelCase CSS property names and `--custom` properties.
+ *
+ * **Details**
+ *
+ * Property names come from the DOM library. Values are strings, not numbers;
+ * include units where CSS requires them. Use `float` rather than `cssFloat`.
+ * Empty strings and other falsy values omit the declaration.
+ *
+ * @stability experimental
+ * @category attributes
+ * @since 0.1.0
+ */
+export type Style =
+  & { readonly [K in Exclude<StyleProperty, "cssText" | "cssFloat"> | "float"]?: StyleValue }
+  & { readonly [K in `--${string}`]?: StyleValue }
 
 /**
  * Joins class tokens with one space, skipping `false`, `null`, `undefined`
