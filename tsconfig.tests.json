@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./tsconfig.base.json",
+  "references": [{ "path": "tsconfig.packages.json" }],
+  "include": [
+    "**/vitest.*.ts", // All vitest config files across all packages
+    "./packages/*/test/**/*.ts",
+    "./packages/*/typetest/**/*.ts",
+    "./packages/*/benchmark/**/*.ts"
+  ],
+  "exclude": [
+    "**/node_modules/**",
+    "**/dist/**",
+    // Import `@effect/ui/html/register`, which would register the HTML vocabulary for every test in this program.
+    // Vitest still runs the first and TSTyche still checks the second in its own program.
+    "./packages/ui/test/html/register.test.ts",
+    "./packages/ui/typetest/html/register.tst.ts"
+  ],
+  "compilerOptions": {
+    "rootDir": ".",
+    "noEmit": true,
+    "erasableSyntaxOnly": false,
+    "resolveJsonModule": true,
+    "types": ["node"],
+    "paths": {
+      // These path aliases let tests load internal modules and type check against the sources.
+      "@effect/ui": ["./packages/ui/src/index.ts"],
+      "@effect/ui/testing": ["./packages/ui/src/testing/index.ts"],
+      "@effect/ui/html": ["./packages/ui/src/html/index.ts"],
+      "@effect/ui/html/testing": ["./packages/ui/src/html/testing/index.ts"],
+      "@effect/ui/*": ["./packages/ui/src/*.ts"],
+      "@effect/ui-kit": ["./packages/ui-kit/src/index.ts"],
+      "@effect/ui-kit/*": ["./packages/ui-kit/src/*.ts"]
+    },
+    "plugins": [{
+      "name": "@effect/language-service",
+      "effectFn": ["untraced"],
+      "namespaceImportPackages": [],
+      "includeSuggestionsInTsc": false,
+      "ignoreEffectWarningsInTscExitCode": true,
+      "ignoreEffectErrorsInTscExitCode": false,
+      "overrides": [
+        {
+          "include": ["**/typetest/**/*.ts"],
+          "options": {
+            "diagnosticSeverity": {
+              "floatingEffect": "off"
+            }
+          }
+        }
+      ],
+      "diagnosticSeverity": {
+        "unknownInEffectCatch": "off",
+        "multipleEffectProvide": "off",
+        "unstableApiUsage": "off",
+        "effectFnOpportunity": "error"
+      }
+    }]
+  }
+}

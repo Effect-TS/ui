@@ -1,0 +1,54 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/npm/oxlint/configuration_schema.json",
+  "extends": ["./packages/tools/oxc/oxlintrc.json"],
+  "ignorePatterns": [
+    "LLMS.md",
+    "**/dist",
+    "**/build",
+    "**/docs",
+    "**/*.tsbuildinfo",
+    "**/CHANGELOG.md",
+    "!scratchpad/**/*",
+    "**/.*",
+    "!.changeset",
+    "!.changeset/**/*",
+    "!.envrc",
+    "!.github",
+    "!.github/**/*",
+    "!.gitignore",
+    "!.oxlintrc.json",
+    "!.vscode",
+    "!.vscode/**/*"
+  ],
+  "jsPlugins": ["@effect/oxc/oxlint"],
+  "overrides": [{
+    "files": ["**/{test,typetest,examples,ai-docs,benchmark,bundle,scripts,scratchpad}/**"],
+    "rules": {
+      "effect/no-bigint-literals": "off",
+      "eslint/no-console": "off",
+      "effect/no-import-from-barrel-package": "off"
+    }
+  }, {
+    // The barrel stays empty until @effect/ui-kit has its first component.
+    "files": ["packages/ui-kit/src/index.ts"],
+    "rules": {
+      "unicorn/no-empty-file": "off"
+    }
+  }, {
+    // Only @effect/ui/html may use DOM types, so nothing else in @effect/ui imports it.
+    "files": ["packages/ui/src/**"],
+    "rules": {
+      "eslint/no-restricted-imports": ["error", {
+        "patterns": [{
+          "regex": "(^|/)ui/html(/|$)|^\\.{1,2}/(\\.\\./)*html(/|$)",
+          "message": "Only @effect/ui/html may use DOM types; nothing else in @effect/ui may import it."
+        }]
+      }]
+    }
+  }, {
+    "files": ["packages/ui/src/html/**"],
+    "rules": {
+      "eslint/no-restricted-imports": "off"
+    }
+  }]
+}
