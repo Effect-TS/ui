@@ -2159,8 +2159,17 @@ const toLayer = (layers: Layer.Any | ReadonlyArray<Layer.Any>): Layer.Layer<any,
 // What `onFailure` returns: the component's message. A generic call that
 // returns a component, such as an inline `define(...).make(...)`, is skipped in
 // the first inference pass, so `C` is still `Any` there, and `Message<Any>`,
-// `never`, would reject the handler before `C` is inferred.
-type ProvideMessage<C> = [Any] extends [C] ? any : Message<C>
+// `never`, would reject the handler before `C` is inferred. While `C` is
+// `Any` the handler returns `M`, and `ErasedFailure` checks it on the
+// component argument, which that pass skips too: a component that is still
+// `Any` once inferred takes no message, as `Message<Any>` says.
+type ProvideMessage<C, M> = [Any] extends [C] ? M : Message<C>
+
+type ErasedFailure<C, M> = [Any] extends [C] ? [M] extends [never] ? unknown
+  : { readonly "An erased component takes no message, so onFailure can't return one": M }
+  : unknown
+
+type FailureMessage<O> = O extends { readonly onFailure?: ((...args: any) => infer M) | undefined } ? M : never
 
 /**
  * Provides services to a component and everything below it, like
@@ -2255,19 +2264,19 @@ export const provide: {
     component: C,
     layer: (props: Props<C>) => Layer.Layer<ROut, never, RIn>
   ): Provided<C, ROut, RIn>
-  <C extends Any, ROut, E, RIn>(
-    component: C,
+  <C extends Any, ROut, E, RIn, M = never>(
+    component: C & ErasedFailure<C, M>,
     layer: (props: Props<C>) => Layer.Layer<ROut, E, RIn>,
-    options: ProvideOptions<E, ProvideMessage<C>>
+    options: ProvideOptions<E, ProvideMessage<C, M>>
   ): Provided<C, ROut, RIn>
   <
     C extends Any,
     const L extends Layer.Any | ReadonlyArray<Layer.Any>,
-    const O extends ProvideRest<L, ProvideMessage<C>>[0] = never
+    const O extends ProvideRest<L, ProvideMessage<C, any>>[0] = never
   >(
-    component: C,
+    component: C & ErasedFailure<C, FailureMessage<O>>,
     layer: L & RequiresOnFailure<L, O>,
-    options?: O & ProvideRest<L, ProvideMessage<C>>[0]
+    options?: O & ProvideRest<L, ProvideMessage<C, any>>[0]
   ): Provided<C, ProvideInput.Success<L>, ProvideInput.Services<L>>
 } = ((...args: Array<any>) => {
   const go = (

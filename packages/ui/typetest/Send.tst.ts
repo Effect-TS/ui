@@ -385,6 +385,18 @@ describe("a component slot with a ref", () => {
     )
   })
 
+  it("rejects a message from onFailure for an erased component", () => {
+    // An erased component takes no message, whatever the component behind it takes.
+    const erased: Component.Any = Plain
+    expect(Component.provide).type.not.toBeCallableWith(erased, Layer.effect(Store, Effect.fail("no")), {
+      onFailure: () => 123
+    })
+    expect(Component.provide).type.not.toBeCallableWith(erased, () => Layer.effect(Store, Effect.fail("no")), {
+      onFailure: () => 123
+    })
+    expect(Component.provide(erased, Layer.succeed(Store, { draft: "" }))).type.toBe<Component.Any>()
+  })
+
   it("rejects a ref for an erased component or feature", () => {
     const erased = Story.start(Plain, {}).current.component
     ParentDef.view((_, h) => {
