@@ -7,20 +7,30 @@ update the components that already follow them.
 ## Files and exports
 
 - One module per component: `packages/ui-kit/src/<Name>.ts`, named as in
-  Base UI (`Switch`, `ToggleGroup`). `pnpm codegen` adds it to the barrel,
-  so consumers write `import { Switch } from "@effect/ui-kit"` or import
-  `@effect/ui-kit/Switch`.
+  Base UI (`Switch`, `ToggleGroup`).
+- Consumers import the component by name and call it:
+
+  ```ts
+  import { Switch } from "@effect/ui-kit"
+
+  view: (model, h) => Switch(h, { key: "notify", props: { checked: model.notify }, view: (s) => ... })
+  ```
+
+  So `src/index.ts` is not a generated barrel: `pnpm codegen` would export
+  each module as a namespace, which can't be called. Add
+  `export * from "./<Name>.ts"` to it by hand, in alphabetical order.
+- Everything a module exports starts with the component's name, so the
+  flat barrel never has two exports with one name:
+  - the component: `Switch`
+  - `<Name>Props`, the props Schema, and its type
+  - `<Name>Events`, the events Schema, and its type
+  - any other Schema or type the API needs, such as `ListboxOption`
+    The message Schema stays private.
 - Code shared by several components goes in `src/internal/<topic>.ts`.
 - Tests go in `packages/ui-kit/test/<Name>.test.ts`.
 - Import from module paths in `src` (`@effect/ui/Component`,
   `@effect/ui/html/Html`, `effect/Schema`); the lint rejects barrel imports
   there. Tests may use the barrels.
-- A module exports:
-  - the component, under the module's name: `Switch.Switch`
-  - `Props`, the props Schema, and its `Props` type
-  - `Events`, the events Schema, and its `Events` type
-  - any row Schema the props take, such as `Option`
-    The message Schema stays private.
 
 ## Headless component or pure view helper
 
@@ -44,19 +54,61 @@ update the components that already follow them.
 - A part sets ARIA, data attributes, ids, refs and handlers, and nothing
   visual. The consumer sets classes, styles, children and the accessible
   name.
+- Markup the component needs to work, such as a form field, must not be a
+  part the consumer can forget to draw. A part can't add children, so the
+  part it belongs to becomes a function in `parts` that applies the part
+  and appends that markup: `s.root(h.button, ...children)` returns the
+  finished button with the hidden input as its last child. Only put it
+  inside an element whose content model allows it (a hidden input may sit
+  in a `<button>`, a checkbox may not).
 - `parts` also returns plain values for markup that depends on state, in
   place of Base UI's `className(state)` functions: `s.checked`, `m.open`.
+
+## Messages and events
+
+- Name messages and events as Foldkit does
+  (https://foldkit.dev/core/messages): verb-first, past-tense facts about
+  what happened, not instructions. Messages name their cause
+  (`ClickedRoot`, `PressedKey`, `UpdatedQuery`). Events name what the
+  user did (`Toggled`, `Picked`, `Dismissed`), not Base UI's callback
+  names (`CheckedChange`, `OpenChange`).
+- `update` always uses `Message.match`, even when the union has one
+  member, so adding a message is a type error until it is handled.
 
 ## State
 
 - The value is controlled. It comes in through props (`checked`, `value`,
-  `open`), and the component emits `<Value>Change` with the value the
-  user asked for, as Base UI's `on<Value>Change`. There are no `default*`
+  `open`), and the component emits an event with the value the user asked
+  for, in place of Base UI's `on<Value>Change`. There are no `default*`
   props: the consumer keeps the value in its Model.
 - The Model holds only interaction state the consumer would never store:
   the active row, the typeahead buffer.
 - `disabled` and `readOnly` are checked in `update`, so no message from
   a disabled control gets through even if an event fires.
+
+## Popups and the top layer
+
+A React portal only moves where a popup renders. Choose the top-layer element
+by who decides when it closes, not because the React source uses a portal.
+The details are in the JSDoc of `popover` and `modal` in
+`packages/ui/src/html/Html.ts`.
+
+- `.popover("manual", open)` is controlled: the host shows and hides it as
+  `open` says, and puts it back if anything else changes it. Use it when
+  `open` is a prop. Dismissal is then the kit's job: handle Escape on the
+  focused part, and an outside click with `subscriptions` (stop if none
+  fits), each emitting `Dismissed`. The popup stays open until the consumer
+  passes `open: false`, so a consumer can refuse.
+- `.popover("auto", open)` with `onToggle` is followed: the browser closes
+  it on Escape, an outside click or another auto popover opening, and the
+  Model must store what `onToggle` reports. Use it only when `open` is the
+  component's own Model state and nobody can refuse a close, as in
+  `Listbox`. Never use it for an `open` prop: the browser closes the popup
+  while the props still say open.
+- `<dialog>` with `.modal(open)` and `onCancel` is a controlled modal: the
+  host cancels Escape and backdrop clicks and sends them as `onCancel`,
+  which emits `Dismissed`. Browsers may still force a close after repeated
+  cancels, so handle `onClose` too and emit `Dismissed` from it.
 
 ## Data attributes and ARIA
 

@@ -11,8 +11,7 @@ helper, stop and open a separate issue for it. When the missing piece only
 backs an optional feature, leave the feature out, list it under "Differences
 from Base UI" in the module docs, and carry on.
 
-Read [references/conventions.md](references/conventions.md) before step 3, and
-[references/react-mapping.md](references/react-mapping.md) before step 4.
+Read [references/conventions.md](references/conventions.md) before step 3.
 `Switch` (`packages/ui-kit/src/Switch.ts`) is the worked example. The
 headless component guide in `LLMS.md` and
 `ai-docs/src/10_ui/fixtures/kit/Listbox.ts` show the API it builds on.
@@ -42,12 +41,12 @@ Work top to bottom. Write the notes from steps 1 to 3 into the PR description.
    - the parts, named after Base UI's, and the native tag each one accepts
    - the props (the controlled value and the options), the events, and the
      Model, which holds only interaction state the consumer never stores
+   - the message and event names, as past-tense facts
    - which Base UI features you leave out, and why
-4. **Map React to Effect UI.** Translate each hook, context, ref, render prop
-   and portal with the mapping table. A row marked "stop" is the scope rule.
-5. **Implement** `packages/ui-kit/src/<Name>.ts`, unstyled, following the
-   conventions. Run `nix develop -c pnpm codegen` to update the barrel.
-6. **Test** in `packages/ui-kit/test/<Name>.test.ts`, with as few tests as
+4. **Implement** `packages/ui-kit/src/<Name>.ts`, unstyled, following the
+   conventions, and add `export * from "./<Name>.ts"` to
+   `packages/ui-kit/src/index.ts`.
+5. **Test** in `packages/ui-kit/test/<Name>.test.ts`, with as few tests as
    cover the behaviour:
    - each interaction emits the right event, and a disabled or read-only one
      emits nothing
@@ -56,17 +55,13 @@ Work top to bottom. Write the notes from steps 1 to 3 into the PR description.
      keys a native element handles, assert that the part rejects other tags.
      Use `Story.make` with a stand-in view and `Story.parts`. Break the code
      once (for example, drop the disabled guard) and check that a test fails.
-7. **Document and check.**
+6. **Document and check.**
    - module JSDoc in the shape the conventions give, with one example
      in a fence opened with `ts import.meta.vitest` so it runs as a doctest, and `@since`,
      `@category` and `@stability experimental` on every export
    - add the component to `packages/ui-kit/README.md`
    - a changeset: `"@effect/ui-kit": minor`
-   - run, each prefixed with `nix develop -c`: `pnpm codegen`,
-     `pnpm lint`, `pnpm check`, `pnpm vitest run --project @effect/ui-kit`,
+   - run, each prefixed with `nix develop -c`: `pnpm lint`, `pnpm check`, `pnpm vitest run --project @effect/ui-kit`,
      `pnpm doctest run packages/ui-kit/src/<Name>.ts`, `pnpm jsdocs --check`,
      `pnpm circular` and `pnpm ai-docgen` (it should leave `LLMS.md`
      unchanged)
-8. **Update this skill.** If a step was unclear, or the port needed a
-   convention that isn't written down, fix this file or the conventions in
-   the same PR and say so in the PR description.
