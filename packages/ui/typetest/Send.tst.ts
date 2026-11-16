@@ -422,6 +422,24 @@ describe("a component slot with a ref", () => {
     expect(Component.provide(erased, dies, throws)).type.toBe<Component.Any>()
   })
 
+  it("forwards options constrained to a handler that returns no message", () => {
+    expect(<O extends Component.ProvideRest<typeof Layer.empty, never>[0]>(component: Component.Any, options: O) =>
+      Component.provide(component, Layer.empty, options)
+    ).type.not.toRaiseError()
+    expect(<O extends Component.ProvideOptions<string, never>>(component: Component.Any, options: O) =>
+      Component.provide(component, () => Layer.effect(Store, Effect.fail("no")), options)
+    ).type.not.toRaiseError()
+    // A constraint that lets the handler return a message isn't safe to forward.
+    const unsafe = <O extends { readonly onFailure?: (() => number) | undefined }>(
+      component: Component.Any,
+      options: O
+    ) => {
+      // @ts-expect-error No overload matches this call
+      return Component.provide(component, Layer.empty, options)
+    }
+    expect(unsafe).type.toBeCallableWith(Plain, {})
+  })
+
   it("checks an overloaded onFailure by the call it gets", () => {
     // The last overload returns nothing, but a failure gets the first, which returns a number.
     function onFailure(failure: AsyncResult.Failure<never, string>): number

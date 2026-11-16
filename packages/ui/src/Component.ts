@@ -2282,6 +2282,18 @@ export const provide: {
     layer: (props: Props<C>) => Layer.Layer<ROut, E, RIn>,
     options: ProvideOptions<E, ProvideMessage<C, M>>
   ): Provided<C, ROut, RIn>
+  // Options checked against the component's message as given. A component
+  // defined inline isn't inferred yet when they are, so it takes the next
+  // overload.
+  <
+    C extends Any,
+    const L extends Layer.Any | ReadonlyArray<Layer.Any>,
+    const O extends ProvideRest<L, Message<C>>[0] = never
+  >(
+    component: C,
+    layer: L & RequiresOnFailure<L, O>,
+    options?: O & ProvideRest<L, Message<C>>[0]
+  ): Provided<C, ProvideInput.Success<L>, ProvideInput.Services<L>>
   <
     C extends Any,
     const L extends Layer.Any | ReadonlyArray<Layer.Any>,
