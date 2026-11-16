@@ -127,6 +127,11 @@ ordinary UI code need not adopt its entire Block/Binding/Composition surface.
 
 References: [Effect UI at `6f5c415`](https://github.com/Effect-TS/ui/tree/6f5c415d4c1bc6fc9648cd8b0ac8a67a8357bb9c) and [Foldkit Blocks and Layers preview, PR #1655](https://github.com/foldkit/foldkit/pull/1655), at `54f8bcd`.
 
+The [Core primitive map](core-primitives.md) covers every topic in that preview's
+Core sidebar, including Mount, Subscriptions, ManagedResources, browser
+capabilities, and developer tooling. It separates the recommended contracts
+from integrations and API details that need further design.
+
 ## Commented API sketch
 
 ```ts
