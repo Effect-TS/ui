@@ -458,22 +458,28 @@ export interface Instance {
 interface Selection {
   readonly parentEnv: Env
   keys: Keys
-  /** The Model and props the keys were read from. While the instance's differ, a read is due. */
-  model: unknown
-  props: unknown
-  /** The Scope the current selection's Layer builds in. */
+  /** An update or new props since the last read: the keys are read before the next view. */
+  due: boolean
+  /** The Scope the current selection's Layer builds in. The instance's Scope closes it, and the retired ones. */
   scope: Scope.Closeable
   /**
    * The last selection that was built, kept while the current one builds. It is released once that
    * build settles and once the work stopped against it has exited.
    */
-  retired: { readonly scope: Scope.Closeable; readonly waits: Array<Fiber.Fiber<unknown, unknown>> } | undefined
+  retired: Retired | undefined
+  /** Retired selections waiting for the work stopped against them to exit before they close. */
+  readonly releasing: Set<Retired>
   /** The runs issued while a read is due: a change of key keeps them, and they run against the new services. */
   readonly issued: Set<Run>
   /** What waits for the read to bind to an Env: those runs' starts, and load mores. */
   held: Array<() => void>
   /** A Subscription sync skipped while a read was due, so none starts against services about to go. */
   skipped: boolean
+}
+
+interface Retired {
+  readonly scope: Scope.Closeable
+  readonly waits: Array<Fiber.Fiber<unknown, unknown>>
 }
 
 /**
@@ -1589,10 +1595,16 @@ const setup = (
   }
 
   // -- keyed provides ---------------------------------------------------------
-  /** A keyed provide's keys are due to be read: the instance's Model or props changed since. */
-  const keyDue = (inst: Instance): boolean => {
-    const selection = inst.selection
-    return selection !== undefined && (inst.model !== selection.model || inst.props !== selection.props)
+  /** A keyed provide's keys are due to be read: the instance had an update, or new props, since. */
+  const keyDue = (inst: Instance): boolean => inst.selection?.due === true
+  /**
+   * Starts a Subscription or a loader once the instance's Layer is ready. After a handled failure it
+   * runs against the parent's services, except under a keyed provide: there it was set up for the
+   * selected services, and it waits for the next selection rather than fail the instance without them.
+   */
+  const startWatching = (inst: Instance, go: (envCtx: Context.Context<any>) => void) => {
+    if (inst.env.failure === undefined) whenReady(inst.env, go)
+    else if (inst.selection === undefined) go(settled(inst.env).ctx!)
   }
   /** Runs `f` now, or once a due read of the keys has picked the Env it binds to. */
   const onceSelected = (inst: Instance, f: () => void) => {
@@ -1601,15 +1613,14 @@ const setup = (
   }
 
   /**
-   * Reads a keyed provide's keys before the view of an instance whose Model or props changed, so once
-   * per flush however many updates it had. A change selects again. Either way, the runs issued since
-   * the last read then start, and a Subscription sync that waited for the read runs.
+   * Reads a keyed provide's keys before the view of an instance that had an update or new props, so
+   * once per flush however many updates it had. A change selects again. Either way, the runs issued
+   * since the last read then start, and a Subscription sync that waited for the read runs.
    */
   const reselect = (inst: Instance) => {
     const selection = inst.selection
-    if (selection === undefined || !keyDue(inst)) return
-    selection.model = inst.model
-    selection.props = inst.props
+    if (selection === undefined || !selection.due) return
+    selection.due = false
     const keys = readKeys(inst.component, inst.props, inst.model)
     const changed = !sameKeys(selection.keys, keys)
     if (changed) swap(inst, selection, keys)
@@ -1661,7 +1672,7 @@ const setup = (
       closeScope(selection.scope)
       selection.retired?.waits.push(...waits)
     }
-    selection.scope = Scope.forkUnsafe(inst.scope, "sequential")
+    selection.scope = Scope.makeUnsafe("sequential")
   }
 
   /** Builds a selection made after mount, logged and counted as a build at mount is. */
@@ -1713,10 +1724,42 @@ const setup = (
     const retired = selection.retired
     if (retired === undefined) return
     selection.retired = undefined
-    const live = retired.waits.filter((fiber) => fiber.pollUnsafe() === undefined)
-    if (live.length === 0) return closeScope(retired.scope)
-    track(closing, forkNow(ctx, Effect.andThen(Fiber.awaitAll(live), Effect.sync(() => closeScope(retired.scope)))))
+    if (retired.waits.every((fiber) => fiber.pollUnsafe() !== undefined)) return closeScope(retired.scope)
+    selection.releasing.add(retired)
+    track(
+      closing,
+      forkNow(
+        ctx,
+        Effect.andThen(
+          Fiber.awaitAll(retired.waits),
+          Effect.sync(() => {
+            selection.releasing.delete(retired)
+            closeScope(retired.scope)
+          })
+        )
+      )
+    )
   }
+
+  /**
+   * The instance's Scope closing: the current selection is released, then each retired one once the
+   * work stopped against it has exited, so a finalizer still running never sees its services go.
+   */
+  const closeSelection = (selection: Selection): Effect.Effect<void> =>
+    Effect.suspend(() => {
+      const retired = [...selection.releasing]
+      if (selection.retired !== undefined) retired.push(selection.retired)
+      selection.retired = undefined
+      selection.releasing.clear()
+      return Effect.andThen(
+        Scope.close(selection.scope, Exit.void),
+        Effect.forEach(
+          retired,
+          ({ scope, waits }) => Effect.andThen(Fiber.awaitAll(waits), Scope.close(scope, Exit.void)),
+          { discard: true }
+        )
+      )
+    })
 
   /** Stops a run whose selection went: an awaiting run's message is dropped rather than delivered. */
   const dropRun = (inst: Instance, run: Run) => {
@@ -1741,7 +1784,9 @@ const setup = (
     if (inst.watches !== undefined) {
       for (const running of inst.watches.values()) {
         record({ _tag: "SubscriptionStopped", path: inst.path, key: running.logKey })
-        releaseWatch(running)
+        // Abandoned: a fetch it started that nothing else waits for is interrupted now, while the old
+        // services are alive. A fetch another watcher, a `get` or a prefetch still needs runs on.
+        releaseWatch(running, true)
       }
       inst.watches = undefined
     }
@@ -2046,20 +2091,25 @@ const setup = (
             ? start.adopted.value.model
             : start.first?.model
           keys = readKeys(component, props, model)
-          buildScope = Scope.forkUnsafe(scope, "sequential")
-          // The server builds once, from the Model it starts with.
-          if (server === undefined) {
-            inst.selection = {
+          if (server !== undefined) {
+            // The server builds once, from the Model it starts with.
+            buildScope = Scope.forkUnsafe(scope, "sequential")
+          } else {
+            buildScope = Scope.makeUnsafe("sequential")
+            const selection: Selection = {
               parentEnv,
               keys,
-              model,
-              props,
+              due: false,
               scope: buildScope,
               retired: undefined,
+              releasing: new Set(),
               issued: new Set(),
               held: [],
               skipped: false
             }
+            inst.selection = selection
+            // Added before the instance's runs and Subscriptions start, so it closes after them.
+            addFinalizer(scope, closeSelection(selection))
           }
         }
         const sharedLayer = component.sharedLayer
@@ -2250,6 +2300,8 @@ const setup = (
   const apply = (inst: Instance, next: Component.Next<any, any, any, any>, entrySeq: number, initial: boolean) => {
     inst.model = next.model
     if (!refreshShares(inst)) return
+    // Before its Commands are issued, so they wait for the read, even when the Model is unchanged.
+    if (!initial && inst.selection !== undefined) inst.selection.due = true
     const mounting = inst.mounting
     if (mounting !== undefined) {
       // Before the first render: nothing is issued or marked dirty, and only the watches follow the Model.
@@ -3063,8 +3115,7 @@ const setup = (
           }
         })
       }
-      if (inst.env.failure !== undefined) go(settled(inst.env).ctx!)
-      else whenReady(inst.env, go)
+      startWatching(inst, go)
     }
   }
 
@@ -3182,10 +3233,7 @@ const setup = (
         if (folds !== undefined) folds.push(fold)
         else fold()
       }
-      const start = () => {
-        if (inst.env.failure !== undefined) go(settled(inst.env).ctx!)
-        else whenReady(inst.env, go)
-      }
+      const start = () => startWatching(inst, go)
       if (
         marker.debounce === undefined || server !== undefined || !inst.watchesSynced || !wouldFetch(def, marker.args)
       ) {
@@ -4884,6 +4932,7 @@ const setup = (
         const changed = !propsEqual(child.props, instance.props)
         if (changed) {
           instance.props = child.props
+          if (instance.selection !== undefined) instance.selection.due = true
           // Before the loader state writes the new props cause, so a replay opens them against these props.
           record({ _tag: "PropsChanged", path: instance.path, component: instance.component, props: child.props })
           // Watches first: new args over a settled entry write its value before this render, and the

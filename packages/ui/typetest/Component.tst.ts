@@ -1,6 +1,7 @@
 import { Command, Component, Feature, type Loader, type View } from "@effect/ui"
 import { Context, Effect, Layer, Schema, Scope } from "effect"
 import type { KeyValueStore } from "effect/persistence"
+import type { AsyncResult } from "effect/reactivity"
 import { describe, expect, it } from "tstyche"
 import { Counter, SaveTodo, Todo, TodoItem, TodoItemEvents, TodoItemMessage } from "../test/fixtures/components.ts"
 
@@ -35,6 +36,15 @@ declare const NeedsBoth: Component.Component<"NeedsBoth", { readonly admin: bool
 // Two Layers a factory chooses between: only `A` is in both, and each needs a service of its own.
 declare const adminLayer: Layer.Layer<A | B, never, CA>
 declare const guestLayer: Layer.Layer<A, never, CB>
+declare const NeedsFailed: Component.Component<
+  "NeedsFailed",
+  { readonly admin: boolean },
+  {},
+  "failed",
+  never,
+  A | B,
+  any
+>
 
 describe("Component", () => {
   describe("Requirements", () => {
@@ -230,6 +240,29 @@ describe("Component", () => {
         onFailure: () => TodoItemMessage.make({ _tag: "SaveFailed", reason: "offline" })
       })
       expect(Component.provide).type.not.toBeCallableWith(failing)
+    })
+
+    it("infers a fallible keyed provide's key and layer with a contextually typed onFailure", () => {
+      const failingAdmin = Layer.effect(A, Effect.fail("admin" as const)).pipe(Layer.provideMerge(adminLayer))
+      const failingGuest = Layer.effect(A, Effect.fail("guest" as const)).pipe(Layer.provideMerge(guestLayer))
+      const Keyed = Component.provide(NeedsFailed, {
+        key: (props) => props.admin,
+        layer: (admin) => admin ? failingAdmin : failingGuest
+      }, {
+        onFailure: (failure) => {
+          expect(failure).type.toBe<AsyncResult.Failure<never, "admin" | "guest">>()
+          return "failed" as const
+        }
+      })
+      expect<Component.Requirements<typeof Keyed>>().type.toBe<B | CA | CB>()
+      const keyed = {
+        key: (props: { readonly admin: boolean }) => props.admin,
+        layer: (admin: boolean) => admin ? failingAdmin : failingGuest
+      }
+      expect(Component.provide).type.not.toBeCallableWith(NeedsFailed, keyed)
+      expect(Component.provide).type.not.toBeCallableWith(NeedsFailed, keyed, {
+        onFailure: (_: AsyncResult.Failure<never, "guest">) => "failed" as const
+      })
     })
 
     it("never removes a service the runtime owns", () => {

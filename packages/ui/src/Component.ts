@@ -2734,6 +2734,10 @@ interface KeyedOptionsInfallible<Msg> {
   readonly local?: never
 }
 
+// The keyed form's options: `onFailure` is required when the Layer can fail.
+type KeyedRest<E, Msg> = [E] extends [never] ? [options?: KeyedOptionsInfallible<Msg>]
+  : [options: ProvideKeyedOptions<E, Msg>]
+
 // The curried keyed form: `key`'s Model parameter, annotated by hand, must take the component's Model.
 type KeyTakes<C, M> = [Model<C>] extends [M] ? unknown
   : { readonly "The key's model parameter doesn't take this component's Model": Model<C> }
@@ -2808,15 +2812,16 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F } ? "onFailure" ext
  * changes, and a key change remounts everything below the component. `key`
  * reads props and the Model, and `layer` gets only the key: anything the Layer
  * needs goes in the key. The key is read once per flush, before the view of an
- * instance whose Model or props changed, and compared with `Equal.equals`, so
- * an update that leaves it equal calls nothing and builds nothing. On a change
+ * instance that had an update or new props, and compared with `Equal.equals`,
+ * so an update that leaves it equal calls nothing and builds nothing. On a change
  * the component keeps its Model. Its in-flight Commands are interrupted, its
  * Subscriptions and loaders restart, and its loader slots go back to their
  * initial state. The Commands issued in the flush that changed the key run
  * against the new services. The previous selection is released once the new
  * one has built, and a selection still building is interrupted. A failed build
  * goes to `onFailure` or fails the instance, as at mount, and a later key
- * change builds again. A keyed provide builds per instance and turns off
+ * change builds again. After a handled failure, its Subscriptions and loaders
+ * wait for that next selection. A keyed provide builds per instance and turns off
  * sharing for every provide on the component: share between instances with a
  * `LayerMap`. On the server the key is read from `init`'s Model; the client
  * reads it from the Model it hydrates or restores.
@@ -2937,15 +2942,12 @@ export const provide: {
     layer: (props: Props<C>) => L,
     options: ProvideOptions<AnyError<L>, ProvideMessage<C, M>>
   ): Provided<C, CommonSuccess<L>, AnyServices<L>>
-  <C extends Any, K, L extends Layer.Layer<never, never, any>, M = never>(
-    component: C & ErasedMessage<C, M>,
-    keyed: ProvideKeyed<Props<C>, Model<C>, K, L>,
-    options?: KeyedOptionsInfallible<ProvideMessage<C, M>>
-  ): Provided<C, CommonSuccess<L>, AnyServices<L>>
+  // One overload whether or not the Layer can fail: a failed candidate would fix `onFailure`'s
+  // parameter type before the next one is tried.
   <C extends Any, K, L extends Layer.Layer<never, any, any>, M = never>(
     component: C & ErasedMessage<C, M>,
     keyed: ProvideKeyed<Props<C>, Model<C>, K, L>,
-    options: ProvideKeyedOptions<AnyError<L>, ProvideMessage<C, M>>
+    ...options: KeyedRest<AnyError<L>, ProvideMessage<C, M>>
   ): Provided<C, CommonSuccess<L>, AnyServices<L>>
   // Options checked against the component's message as given. A component
   // defined inline isn't inferred yet when they are, so it takes the next

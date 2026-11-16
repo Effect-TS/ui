@@ -2927,7 +2927,7 @@ describe("Runtime", () => {
 
   describe("a keyed provide", () => {
     class Greeter extends Context.Service<Greeter, { readonly room: string }>()("test/KeyedGreeter") {}
-    const Msg = Schema.TaggedUnion({ Move: { room: Schema.String }, Shown: { room: Schema.String } })
+    const Msg = Schema.TaggedUnion({ Again: {}, Move: { room: Schema.String }, Shown: { room: Schema.String } })
     class Show extends Command.Service<Show>()(
       "test/KeyedShow",
       { args: {}, invalidates: () => [] },
@@ -2942,6 +2942,8 @@ describe("Runtime", () => {
       init: ($) => $.set({ room: "a", shown: [] }).run(Show.make()),
       update: (model, message, $) =>
         Msg.match(message, {
+          // Shows again, in the same room: the Model is the same object.
+          Again: () => $.set(model).run(Show.make()),
           Move: ({ room }) => $.set({ ...model, room }).run(Show.make()),
           Shown: ({ room }) => ({ ...model, shown: [...model.shown, room] })
         }),
@@ -3018,6 +3020,210 @@ describe("Runtime", () => {
         yield* TestHost.settle
         assert.strictEqual(root.text(), "c:a!c")
         assert.deepStrictEqual(calls, ["a", "b", "c"])
+      })))
+
+    const byRoom = (calls?: Array<string>) =>
+      Component.provide(RoomView, {
+        key: (_, model) => model.room,
+        layer: (room) => {
+          calls?.push(room)
+          return Show.layer.pipe(Layer.provide(Layer.succeed(Greeter, { room })))
+        }
+      })
+
+    it.effect("a Command from an update that kept the Model, earlier in the flush that changes the key, runs against the new services", () =>
+      provideHost(Effect.gen(function*() {
+        const root = yield* TestHost.mount(byRoom(), {})
+        yield* TestHost.settle
+        root.send(Msg.make({ _tag: "Again" }))
+        root.send(Msg.make({ _tag: "Move", room: "b" }))
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "b:abb")
+      })))
+
+    it.effect("a Model that changes and changes back within a flush builds nothing and runs every Command", () =>
+      provideHost(Effect.gen(function*() {
+        const calls: Array<string> = []
+        const seen: Array<string> = []
+        class Record extends Command.Service<Record>()(
+          "test/KeyedRecord",
+          { args: {} },
+          Greeter.useSync((greeter) => () => Effect.sync(() => seen.push(greeter.room)))
+        ) {}
+        // A string Model: the last update leaves the very value the key was read from.
+        const Recording = Component.define({ name: "Recording", model: Schema.String, message: Schema.String }).make({
+          init: () => "a",
+          update: (_, room, $) => $.set(room).run(Record.make().pipe(Command.asNoop)),
+          view: (room, h) => h.text(room)
+        })
+        const Room = Component.provide(Recording, {
+          key: (_, room) => room,
+          layer: (room) => {
+            calls.push(room)
+            return Record.layer.pipe(Layer.provide(Layer.succeed(Greeter, { room })))
+          }
+        })
+        const root = yield* TestHost.mount(Room, {})
+        yield* TestHost.settle
+        root.send("b")
+        root.send("a")
+        yield* TestHost.settle
+        assert.deepStrictEqual([calls, seen], [["a"], ["a", "a"]])
+      })))
+
+    it.effect("after a handled failed selection, Subscriptions and loaders wait for the next selection", () =>
+      provideHost(Effect.gen(function*() {
+        const subscribed: Array<string> = []
+        class Read extends Loader.Service<Read>()("test/KeyedRead", {
+          args: { room: Schema.String },
+          success: Schema.String,
+          error: Schema.Never,
+          staleTime: "30 seconds"
+        }, Greeter.useSync((greeter) => () => Effect.succeed(greeter.room))) {}
+        const Watching = Component.define({
+          name: "Watching",
+          model: Schema.String,
+          message: Schema.String,
+          loaders: { data: { load: Read, args: (room) => ({ room }) } }
+        }).make({
+          init: () => "a",
+          update: (room, message) => message === "failed" ? room : message,
+          subscriptions: () => [
+            Subscription.make(
+              "greeter",
+              Stream.unwrap(
+                Greeter.useSync((greeter) =>
+                  Stream.fromEffect(Effect.sync(() => subscribed.push(greeter.room))).pipe(Stream.drain)
+                )
+              )
+            )
+          ],
+          view: (room, h) => h.text(`${room}:${AsyncResult.isSuccess(h.loaded.data) ? h.loaded.data.value : "-"}`)
+        })
+        const Room = Component.provide(Watching, {
+          key: (_, room) => room,
+          layer: (room) =>
+            Read.layer.pipe(Layer.provideMerge(
+              room === "b" ? Layer.effect(Greeter, Effect.fail("no room b")) : Layer.succeed(Greeter, { room })
+            ))
+        }, { onFailure: () => "failed" })
+        const root = yield* TestHost.mount(Room, {})
+        yield* TestHost.settle
+        root.send("b")
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "b:-")
+        root.send("c")
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "c:c")
+        assert.deepStrictEqual(subscribed, ["a", "c"])
+      })))
+
+    it.effect("a key change interrupts a loader's fetch before the next selection is ready, unless another instance watches it", () =>
+      provideHost(Effect.gen(function*() {
+        const pending = yield* Deferred.make<void>()
+        const events: Array<string> = []
+        class Read extends Loader.Service<Read>()(
+          "test/KeyedPendingRead",
+          { args: {}, success: Schema.String, error: Schema.Never, staleTime: "30 seconds" },
+          Greeter.useSync((greeter) => () =>
+            Effect.sync(() => events.push(`fetch ${greeter.room}`)).pipe(
+              Effect.andThen(Effect.never),
+              Effect.onInterrupt(() => Effect.sync(() => events.push(`interrupt ${greeter.room}`)))
+            )
+          )
+        ) {}
+        const Loading = Component.define({
+          name: "Loading",
+          props: Schema.Struct({ shared: Schema.Boolean }),
+          model: Schema.String,
+          message: Schema.String,
+          loaders: { data: { load: Read, args: () => ({}) } }
+        }).make({
+          init: () => "a",
+          update: (_, room) => room,
+          view: (room, h) => h.el("button").on("click", "b").children(room)
+        })
+        const Room = Component.provide(Loading, {
+          key: (_, room) => room,
+          layer: (room) =>
+            Read.layer.pipe(Layer.provide(Layer.effect(
+              Greeter,
+              room === "b" ? Effect.as(Deferred.await(pending), { room }) : Effect.succeed({ room })
+            )))
+        })
+        const Pair = Component.define({ name: "Pair", model: Schema.Null, message: Schema.Never }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) =>
+            h.el("div", Room(h, { key: "1", props: { shared: true } }), Room(h, { key: "2", props: { shared: true } }))
+        })
+        // Alone: the fetch only it watched is interrupted at once, while "a" is still alive.
+        const scope = yield* Scope.make()
+        const alone = yield* TestHost.mount(Room, { shared: false }).pipe(Scope.provide(scope))
+        yield* TestHost.settle
+        alone.send("b")
+        yield* TestHost.settle
+        assert.deepStrictEqual(events, ["fetch a", "interrupt a"])
+        yield* Scope.close(scope, Exit.void)
+        events.length = 0
+        // Shared: the other instance still watches the entry, so its fetch runs on.
+        const pair = yield* TestHost.mount(Pair, {})
+        yield* TestHost.settle
+        Query.fire(pair.all(Query.tag("button"))[0], "click")
+        yield* TestHost.settle
+        assert.deepStrictEqual(events, ["fetch a"])
+      })))
+
+    it.effect("unmount releases a retired selection only after an interrupted Command's finalizer", () =>
+      provideHost(Effect.gen(function*() {
+        const gate = yield* Deferred.make<void>()
+        const events: Array<string> = []
+        const alive = new Set<string>()
+        class Hold extends Command.Service<Hold>()(
+          "test/KeyedFinalizer",
+          { args: {}, mode: "switch" },
+          Greeter.useSync((greeter) => () =>
+            Effect.never.pipe(Effect.onInterrupt(() =>
+              Deferred.await(gate).pipe(
+                Effect.andThen(Effect.sync(() => events.push(`clean ${greeter.room} alive=${alive.has(greeter.room)}`)))
+              )
+            ))
+          )
+        ) {}
+        const Holding = Component.define({ name: "Holding", model: Schema.String, message: Schema.String }).make({
+          init: ($) => $.set("a").run(Hold.make().pipe(Command.asNoop)),
+          update: (_, room) => room,
+          view: (room, h) => h.text(room)
+        })
+        const Room = Component.provide(Holding, {
+          key: (_, room) => room,
+          layer: (room) =>
+            Hold.layer.pipe(Layer.provide(Layer.effect(
+              Greeter,
+              Effect.acquireRelease(
+                Effect.sync(() => {
+                  alive.add(room)
+                  return { room }
+                }),
+                () =>
+                  Effect.sync(() => {
+                    alive.delete(room)
+                    events.push(`release ${room}`)
+                  })
+              )
+            )))
+        })
+        const scope = yield* Scope.make()
+        const root = yield* TestHost.mount(Room, {}).pipe(Scope.provide(scope))
+        yield* TestHost.settle
+        root.send("b")
+        yield* TestHost.settle
+        const closed = yield* Scope.close(scope, Exit.void).pipe(Effect.forkChild)
+        yield* Effect.yieldNow
+        yield* TestHost.settle
+        yield* Deferred.succeed(gate, undefined)
+        yield* Fiber.join(closed)
+        assert.deepStrictEqual(events, ["release b", "clean a alive=true", "release a"])
       })))
 
     it.effect("a key change calls layer once, keeps the Model, and runs the flush's Commands against the new services", () =>
