@@ -1400,9 +1400,15 @@ const HeadlessProto = Object.assign(Object.create(Function.prototype), {
 // A callable component: calling it declares a slot of it. A function's own
 // `name` is read-only, so every field is defined rather than assigned.
 const makeComponent = (proto: object, fields: { readonly name: string; readonly [key: string]: unknown }): any => {
-  const component = (_h: unknown, options: child.Options) => child.make(component as any, options)
+  // Named where it's made: redefining a function's `name`, or assigning its
+  // fields, leaves it with slow, dictionary-mode properties, and the runtime
+  // reads them on every instance.
+  const component = {
+    [fields.name]: (_h: unknown, options: child.Options) => child.make(component as any, options)
+  }[fields.name]
   Object.setPrototypeOf(component, proto)
   for (const key of Object.keys(fields)) {
+    if (key === "name") continue
     Object.defineProperty(component, key, { value: fields[key], enumerable: true, writable: true, configurable: true })
   }
   return component
@@ -2324,6 +2330,8 @@ export const provide: {
         : undefined
     return makeComponent(Proto, {
       ...component,
+      // A function's `name` isn't enumerable, so the spread leaves it out.
+      name: component.name,
       layer: inner === undefined ? outer : (props: unknown) => Layer.provideMerge(inner(props), outer(props)),
       layerFailure,
       sharedLayer,
