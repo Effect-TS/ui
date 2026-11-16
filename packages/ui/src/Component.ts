@@ -945,8 +945,16 @@ export interface Mountable<in out Props, out Events, out R = never, in Rcv = nev
     | undefined
   /** The component's vocabulary: its `elements` override, else the registered one. Read lazily. */
   readonly elements: () => View.Vocabulary<any> | undefined
-  /** Set by `provide`: the Layer built for each instance, in its Scope. Descendants inherit its services. */
-  readonly layer: ((props: Props) => Layer.Layer<any, any, any>) | undefined
+  /**
+   * Set by `provide`: the Layer built for each instance, in its Scope. Descendants inherit its services.
+   * `keys` is what `layerKeys` read, one value per keyed provide, and empty without one.
+   */
+  readonly layer: ((props: Props, keys: ReadonlyArray<unknown>) => Layer.Layer<any, any, any>) | undefined
+  /**
+   * Set by a keyed `provide`: the key of each, innermost first. The instance's Layer is built again
+   * when any of them changes by `Equal.equals`.
+   */
+  readonly layerKeys: ReadonlyArray<(props: Props, model: any) => unknown> | undefined
   /** Set by `provide`: maps a provided Layer's failure to one of this component's messages. */
   readonly layerFailure: ((failure: AsyncResult.Failure<never, any>) => any) | undefined
   /** Set by `provide` when every provided Layer is a value: shared by every instance resolving from one Env. */
@@ -2487,6 +2495,7 @@ const finish = (
         head(model, props, open(model, props, loaderState)),
     elements: () => elements ?? View.registeredElements(),
     layer: undefined,
+    layerKeys: undefined,
     layerFailure: undefined,
     sharedLayer: undefined,
     layerOnServer: true,
@@ -2592,7 +2601,42 @@ export type RuntimeService =
  * @category models
  * @since 0.1.0
  */
-export type ProvideInput = Layer.Any | ReadonlyArray<Layer.Any> | ((props: any) => Layer.Any)
+export type ProvideInput =
+  | Layer.Any
+  | ReadonlyArray<Layer.Any>
+  | ((props: any) => Layer.Any)
+  | ProvideKeyed<any, any, any, Layer.Any>
+
+/**
+ * The keyed form of `provide`: `key` picks a selection from props and the
+ * Model, and `layer` turns it into the Layer to build. The Layer is built
+ * again, in place, when the key changes by `Equal.equals`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface ProvideKeyed<in Props, in Model, K, out L> {
+  readonly key: (props: Props, model: Model) => K
+  readonly layer: (key: K) => L
+}
+
+/**
+ * The options of the keyed form of `provide`: `onFailure` and `server`. A
+ * keyed provide always builds per instance, so `local` is rejected.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface ProvideKeyedOptions<in E, out Msg> {
+  /** As in `ProvideOptions`: required when the Layer can fail. */
+  readonly onFailure: (failure: AsyncResult.Failure<never, E>) => Msg
+  /** As in `ProvideOptions`. */
+  readonly server?: false | undefined
+  /** A keyed provide builds per instance already. */
+  readonly local?: never
+}
 
 /**
  * Helper types for `provide`.
@@ -2607,7 +2651,10 @@ export declare namespace ProvideInput {
    * @category utility types
    * @since 0.1.0
    */
-  export type LayerOf<L> = L extends (props: any) => infer R ? R : L extends ReadonlyArray<infer E> ? E : L
+  export type LayerOf<L> = L extends (props: any) => infer R ? R
+    : L extends ReadonlyArray<infer E> ? E
+    : L extends ProvideKeyed<any, any, any, infer R> ? R
+    : L
 
   /**
    * The services an input provides.
@@ -2672,6 +2719,28 @@ export type CurriedCantFail<L> = [ProvideInput.Error<L>] extends [never] ? unkno
       ProvideInput.Error<L>
   }
 
+// What a factory's Layer provides: the services every branch provides, so a branch that provides
+// less never has a service removed for it. The check is non-distributive, so a union of Layers
+// matches only with an `ROut` all of them provide; with none in common it removes nothing.
+type CommonSuccess<L> = [L] extends [Layer.Layer<infer ROut, any, any>] ? ROut : never
+// What any branch needs, and what any can fail with: distributive, so the union of them.
+type AnyServices<L> = L extends Layer.Layer<any, any, infer RIn> ? RIn : never
+type AnyError<L> = L extends Layer.Layer<any, infer E, any> ? E : never
+
+// The keyed form's options when its Layer can't fail: `onFailure` still hears about a defect.
+interface KeyedOptionsInfallible<Msg> {
+  readonly onFailure?: ((failure: AsyncResult.Failure<never, never>) => Msg) | undefined
+  readonly server?: false | undefined
+  readonly local?: never
+}
+
+// The curried keyed form: `key`'s Model parameter, annotated by hand, must take the component's Model.
+type KeyTakes<C, M> = [Model<C>] extends [M] ? unknown
+  : { readonly "The key's model parameter doesn't take this component's Model": Model<C> }
+
+const isKeyed = (u: unknown): u is ProvideKeyed<unknown, unknown, unknown, Layer.Layer<any, any, any>> =>
+  typeof u === "object" && u !== null && !Array.isArray(u) && !Layer.isLayer(u) && "key" in u
+
 const mergeAll = Layer.mergeAll as (...layers: ReadonlyArray<Layer.Any>) => Layer.Layer<any, any, any>
 
 const toLayer = (layers: Layer.Any | ReadonlyArray<Layer.Any>): Layer.Layer<any, any, any> =>
@@ -2735,6 +2804,23 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F } ? "onFailure" ext
  * Nested provides let the inner one win, and the inner one can use the outer
  * one's services.
  *
+ * A keyed provide, `{ key, layer }`, selects the Layer again whenever the key
+ * changes, and a key change remounts everything below the component. `key`
+ * reads props and the Model, and `layer` gets only the key: anything the Layer
+ * needs goes in the key. The key is read once per flush, before the view of an
+ * instance whose Model or props changed, and compared with `Equal.equals`, so
+ * an update that leaves it equal calls nothing and builds nothing. On a change
+ * the component keeps its Model. Its in-flight Commands are interrupted, its
+ * Subscriptions and loaders restart, and its loader slots go back to their
+ * initial state. The Commands issued in the flush that changed the key run
+ * against the new services. The previous selection is released once the new
+ * one has built, and a selection still building is interrupted. A failed build
+ * goes to `onFailure` or fails the instance, as at mount, and a later key
+ * change builds again. A keyed provide builds per instance and turns off
+ * sharing for every provide on the component: share between instances with a
+ * `LayerMap`. On the server the key is read from `init`'s Model; the client
+ * reads it from the Model it hydrates or restores.
+ *
  * Builds run in the background: the component renders from `init` at once and
  * its Commands and Subscriptions wait for the Layer. `onFailure` is required
  * when a provided Layer can fail, and the curried form can't take it.
@@ -2782,27 +2868,85 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F } ? "onFailure" ext
  * const Editor = Component.provide(Row, EditorStore.layer, { local: true }) // per instance
  * ```
  *
+ * **Example** (A room switcher selecting its services by a Model field)
+ *
+ * ```ts import.meta.vitest
+ * import { Command, Component } from "@effect/ui"
+ * import { Context, Effect, Layer, LayerMap, Schema } from "effect"
+ *
+ * class Chat extends Context.Service<Chat, { readonly room: string }>()("Chat") {}
+ *
+ * class Rooms extends LayerMap.Service<Rooms>()("Rooms", {
+ *   lookup: (room: string) => Layer.succeed(Chat, { room })
+ * }) {}
+ *
+ * const RoomMessage = Schema.TaggedUnion({ Move: { room: Schema.String }, Joined: { room: Schema.String } })
+ *
+ * class Join extends Command.Service<Join>()(
+ *   "rooms/Join",
+ *   { args: {} },
+ *   Chat.useSync((chat) => () => Effect.succeed(RoomMessage.make({ _tag: "Joined", room: chat.room })))
+ * ) {}
+ *
+ * const RoomView = Component.define({
+ *   name: "RoomView",
+ *   model: Schema.Struct({ room: Schema.String, joined: Schema.String }),
+ *   message: RoomMessage
+ * }).make({
+ *   init: ($) => $.set({ room: "lobby", joined: "" }).run(Join.make()),
+ *   update: (model, message, $) =>
+ *     RoomMessage.match(message, {
+ *       // Selects the new room's Layer: Join runs against it.
+ *       Move: ({ room }) => $.set({ ...model, room }).run(Join.make()),
+ *       Joined: ({ room }) => ({ ...model, joined: room })
+ *     }),
+ *   view: (model, h) => h.el("p", model.joined)
+ * })
+ *
+ * // Requires `Rooms`, provided above, so the rooms outlive a switch.
+ * const Room = Component.provide(RoomView, {
+ *   key: (_, model) => model.room,
+ *   layer: (room) => Join.layer.pipe(Layer.provideMerge(Rooms.get(room)))
+ * })
+ * ```
+ *
  * @stability experimental
  * @category composition
  * @since 0.1.0
  */
 export const provide: {
-  <Props, ROut, RIn>(
-    layer: (props: Props) => Layer.Layer<ROut, never, RIn>
-  ): <C extends Mountable<Props, any, any, never>>(component: C) => Provided<C, ROut, RIn>
+  <Props, L extends Layer.Layer<never, never, any>>(
+    layer: (props: Props) => L
+  ): <C extends Mountable<Props, any, any, never>>(component: C) => Provided<C, CommonSuccess<L>, AnyServices<L>>
+  <Props, Model, K, L extends Layer.Layer<never, never, any>>(
+    keyed: ProvideKeyed<Props, Model, K, L>,
+    options?: { readonly server?: false | undefined; readonly local?: never }
+  ): <C extends Mountable<Props, any, any, never>>(
+    component: C & KeyTakes<C, Model>
+  ) => Provided<C, CommonSuccess<L>, AnyServices<L>>
   <const L extends Layer.Any | ReadonlyArray<Layer.Any>>(
     layer: L & CurriedCantFail<L>,
     options?: LocalOption
   ): <C extends Any>(component: C) => Provided<C, ProvideInput.Success<L>, ProvideInput.Services<L>>
-  <C extends Any, ROut, RIn>(
+  <C extends Any, L extends Layer.Layer<never, never, any>>(
     component: C,
-    layer: (props: Props<C>) => Layer.Layer<ROut, never, RIn>
-  ): Provided<C, ROut, RIn>
-  <C extends Any, ROut, E, RIn, M = never>(
+    layer: (props: Props<C>) => L
+  ): Provided<C, CommonSuccess<L>, AnyServices<L>>
+  <C extends Any, L extends Layer.Layer<never, any, any>, M = never>(
     component: C & ErasedMessage<C, M>,
-    layer: (props: Props<C>) => Layer.Layer<ROut, E, RIn>,
-    options: ProvideOptions<E, ProvideMessage<C, M>>
-  ): Provided<C, ROut, RIn>
+    layer: (props: Props<C>) => L,
+    options: ProvideOptions<AnyError<L>, ProvideMessage<C, M>>
+  ): Provided<C, CommonSuccess<L>, AnyServices<L>>
+  <C extends Any, K, L extends Layer.Layer<never, never, any>, M = never>(
+    component: C & ErasedMessage<C, M>,
+    keyed: ProvideKeyed<Props<C>, Model<C>, K, L>,
+    options?: KeyedOptionsInfallible<ProvideMessage<C, M>>
+  ): Provided<C, CommonSuccess<L>, AnyServices<L>>
+  <C extends Any, K, L extends Layer.Layer<never, any, any>, M = never>(
+    component: C & ErasedMessage<C, M>,
+    keyed: ProvideKeyed<Props<C>, Model<C>, K, L>,
+    options: ProvideKeyedOptions<AnyError<L>, ProvideMessage<C, M>>
+  ): Provided<C, CommonSuccess<L>, AnyServices<L>>
   // Options checked against the component's message as given. A component
   // defined inline isn't inferred yet when they are, so it takes the next
   // overload.
@@ -2830,29 +2974,47 @@ export const provide: {
     given: ProvideInput,
     options?: Partial<ProvideOptions<any, any>>
   ): Any => {
-    // Arrays are merged once, here, so a shared Layer keeps one identity.
-    const layer: Layer.Layer<any, any, any> | ((props: any) => Layer.Layer<any, any, any>) = typeof given === "function"
-      ? (given as (props: any) => Layer.Layer<any, any, any>)
-      : toLayer(given)
-    const outer = Layer.isLayer(layer) ? () => layer : layer
+    type Built = Layer.Layer<any, any, any>
+    const innerKeys = component.layerKeys
+    let layer: Built | undefined
+    let outer: (props: unknown, keys: ReadonlyArray<unknown>) => Built
+    let layerKeys = innerKeys
+    if (isKeyed(given)) {
+      // The provides are built as one Layer, so their keys are read together: this one's goes after the inner ones'.
+      const at = innerKeys?.length ?? 0
+      const select = given.layer
+      outer = (_, keys) => select(keys[at])
+      layerKeys = [...(innerKeys ?? []), given.key]
+    } else if (typeof given === "function") {
+      const factory = given as (props: unknown) => Built
+      outer = (props) => factory(props)
+    } else {
+      // Arrays are merged once, here, so a shared Layer keeps one identity.
+      const value = toLayer(given as Layer.Any | ReadonlyArray<Layer.Any>)
+      layer = value
+      outer = () => value
+    }
     const inner = component.layer
     // Nested: the handler closest to the component is kept.
     const layerFailure = component.layerFailure ?? options?.onFailure
     // A Layer value is shared by every instance resolving from one Env, if everything inside is too.
     const sharedLayer =
-      Layer.isLayer(layer) && options?.local !== true && (inner === undefined || component.sharedLayer !== undefined)
+      layer !== undefined && options?.local !== true && (inner === undefined || component.sharedLayer !== undefined)
         ? (component.sharedLayer === undefined ? layer : Layer.provideMerge(component.sharedLayer, layer))
         : undefined
     return makeComponent(Proto, {
       ...component,
-      layer: inner === undefined ? outer : (props: unknown) => Layer.provideMerge(inner(props), outer(props)),
+      layer: inner === undefined
+        ? outer
+        : (props: unknown, keys: ReadonlyArray<unknown>) => Layer.provideMerge(inner(props, keys), outer(props, keys)),
+      layerKeys,
       layerFailure,
       sharedLayer,
       // Nested provides are built as one Layer, so one opt-out keeps all of them off the server.
       layerOnServer: component.layerOnServer && options?.server !== false
     })
   }
-  // A component is an object with the type id; a Layer, an array or a function means the curried form.
+  // A component is an object with the type id; a Layer, an array, a function or a keyed selection means the curried form.
   const curried = !isComponent(args[0])
   return curried ? (component: Any) => go(component, args[0], args[1]) : go(args[0], args[1], args[2])
 }) as any

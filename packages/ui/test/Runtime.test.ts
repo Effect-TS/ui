@@ -2995,6 +2995,31 @@ describe("Runtime", () => {
         assert.deepStrictEqual([calls, builds], [["a"], 1])
       })))
 
+    it.effect("a failed reselection goes to onFailure, isn't retried for an unchanged key, and a later key builds again", () =>
+      provideHost(Effect.gen(function*() {
+        const calls: Array<string> = []
+        const Room = Component.provide(RoomView, {
+          key: (_, model) => model.room,
+          layer: (room) => {
+            calls.push(room)
+            return Show.layer.pipe(Layer.provide(
+              room === "b" ? Layer.effect(Greeter, Effect.fail("no room b")) : Layer.succeed(Greeter, { room })
+            ))
+          }
+        }, { onFailure: () => Msg.make({ _tag: "Shown", room: "!" }) })
+        const root = yield* TestHost.mount(Room, {})
+        yield* TestHost.settle
+        root.send(Msg.make({ _tag: "Move", room: "b" }))
+        yield* TestHost.settle
+        // The Command waiting for "b" is interrupted. onFailure's message changes the Model, not the key.
+        assert.strictEqual(root.text(), "b:a!")
+        assert.deepStrictEqual(calls, ["a", "b"])
+        root.send(Msg.make({ _tag: "Move", room: "c" }))
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "c:a!c")
+        assert.deepStrictEqual(calls, ["a", "b", "c"])
+      })))
+
     it.effect("a key change calls layer once, keeps the Model, and runs the flush's Commands against the new services", () =>
       provideHost(Effect.gen(function*() {
         const calls: Array<string> = []
