@@ -2231,7 +2231,7 @@ const mergeAll = Layer.mergeAll as (...layers: ReadonlyArray<Layer.Any>) => Laye
 const toLayer = (layers: Layer.Any | ReadonlyArray<Layer.Any>): Layer.Layer<any, any, any> =>
   Array.isArray(layers) ? mergeAll(...layers) : (layers as Layer.Layer<any, any, any>)
 
-// What `onFailure` returns: the component's message. A generic call that
+// What `onFailure` returns: a local message, excluding parent-only receives. A generic call that
 // returns a component, such as an inline `define(...).make(...)`, is skipped in
 // the first inference pass, so `C` is still `Any` there, and `Message<Any>`,
 // `never`, would reject the handler before `C` is inferred. While `C` is
@@ -2239,7 +2239,7 @@ const toLayer = (layers: Layer.Any | ReadonlyArray<Layer.Any>): Layer.Layer<any,
 // checks it on the component argument, which that pass skips too: a
 // component that is still `Any` once inferred takes no message, as
 // `Message<Any>` says.
-type ProvideMessage<C, M> = [Any] extends [C] ? M : Message<C>
+type ProvideMessage<C, M> = [Any] extends [C] ? M : Exclude<Message<C>, Receives<C>>
 
 type ErasedHint = "An erased component takes no message, so onFailure can't return one"
 
@@ -2363,11 +2363,11 @@ export const provide: {
   <
     C extends Any,
     const L extends Layer.Any | ReadonlyArray<Layer.Any>,
-    const O extends ProvideRest<L, Message<C>>[0] = never
+    const O extends ProvideRest<L, Exclude<Message<C>, Receives<C>>>[0] = never
   >(
     component: C,
     layer: L & RequiresOnFailure<L, O>,
-    options?: O & ProvideRest<L, Message<C>>[0]
+    options?: O & ProvideRest<L, Exclude<Message<C>, Receives<C>>>[0]
   ): Provided<C, ProvideInput.Success<L>, ProvideInput.Services<L>>
   <
     C extends Any,

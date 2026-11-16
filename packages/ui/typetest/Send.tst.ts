@@ -385,6 +385,16 @@ describe("a component slot with a ref", () => {
     )
   })
 
+  it("allows local layer-failure messages but rejects parent-only messages", () => {
+    const layer = Layer.effect(Store, Effect.fail("no"))
+    const received = { onFailure: () => EditorMessage.cases.Clear.make({}) }
+    const local = { onFailure: () => EditorMessage.cases.Typed.make({ text: "failed" }) }
+    expect(Component.provide).type.not.toBeCallableWith(Editor, layer, received)
+    expect(Component.provide).type.not.toBeCallableWith(Editor, () => layer, received)
+    expect(Component.provide(Editor, layer, local)).type.toBe<typeof Editor>()
+    expect(Component.provide(Editor, () => layer, local)).type.toBe<typeof Editor>()
+  })
+
   it("rejects a message from onFailure for an erased component", () => {
     // An erased component takes no message, whatever the component behind it takes.
     const erased: Component.Any = Plain
