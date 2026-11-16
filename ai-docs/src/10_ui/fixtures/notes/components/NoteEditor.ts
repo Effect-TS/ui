@@ -4,10 +4,11 @@ import { Note, NotesTag } from "../domain/Note.ts"
 import { Notes } from "../services/Notes.ts"
 
 // Props, Model, messages and events are Schemas, so the runtime can log,
-// serialise and hydrate them. Build a message with `Message.make({ _tag })`.
+// serialise and hydrate them. Use `Message.cases.Tag.make` to build a narrow message.
 export const NoteEditorMessage = Schema.TaggedUnion({
   Edited: { body: Schema.String },
   Save: {},
+  SaveRequested: {},
   Saved: { note: Note },
   SaveFailed: { reason: Schema.String },
   AskDiscard: {},
@@ -76,11 +77,11 @@ const NoteEditorDef = Component.define({
 const closeActions = NoteEditorDef.update((model) => ({ ...model, actionsOpen: false }))
 const clearError = NoteEditorDef.update((model) => ({ ...model, error: null }))
 
-// A slice for one tag: `message` is the Save message, and the Model, props
-// and `$` come from the definition. `init`, `update` and `view` are pure.
+// Both the parent's Save and the local SaveRequested run this update.
+// The Model, props and `$` come from the definition. `init`, `update` and `view` are pure.
 // They read props from `$.props` and `h.props`. A props change re-renders,
 // but never reaches `update`.
-const save = NoteEditorDef.update("Save", (model, _message, $) =>
+const save = NoteEditorDef.update((model, _message, $) =>
   model.draft === model.saved
     // With nothing to run or emit, return the next Model.
     ? model
@@ -92,10 +93,11 @@ const save = NoteEditorDef.update("Save", (model, _message, $) =>
     // Command that can't fail takes `Command.map`.
     : $.combine(closeActions, clearError).run(
       SaveNote.make({ note: { ...$.props.note, body: model.draft } }).pipe(Command.match({
-        onSuccess: (note) => NoteEditorMessage.make({ _tag: "Saved", note }),
-        onFailure: (error) => NoteEditorMessage.make({ _tag: "SaveFailed", reason: error.reason })
+        onSuccess: (note) => NoteEditorMessage.cases.Saved.make({ note }),
+        onFailure: (error) => NoteEditorMessage.cases.SaveFailed.make({ reason: error.reason })
       }))
-    ))
+    )
+)
 
 // Choosing a menu item closes the menu, and the confirm dialog's state is in
 // the Model, like any other.
@@ -117,10 +119,10 @@ const askDiscard = NoteEditorDef.update(
 const discardDialog = NoteEditorDef.fragment((h, open: boolean) =>
   h.dialog.attr("aria-label", "Discard your changes?")
     .modal(open)
-    .onCancel(NoteEditorMessage.make({ _tag: "KeepEditing" })).children(
+    .onCancel(NoteEditorMessage.cases.KeepEditing.make({})).children(
       h.h2("Discard your changes?"),
       h.form.onSubmit(({ entries }) =>
-        NoteEditorMessage.make({ _tag: "Answered", choice: entries.find(([name]) => name === "choice")?.[1] ?? "" })
+        NoteEditorMessage.cases.Answered.make({ choice: entries.find(([name]) => name === "choice")?.[1] ?? "" })
       ).children(
         h.button.attr("name", "choice").attr("value", "keep").children("Keep editing"),
         h.button.attr("name", "choice").attr("value", "discard").children("Discard")
@@ -142,18 +144,19 @@ const discardDialog = NoteEditorDef.fragment((h, open: boolean) =>
 // the same string anywhere else.
 const noteEditorView = NoteEditorDef.view((model, h) =>
   h.div(
-    h.form.attr("aria-label", "Edit note").onSubmit(NoteEditorMessage.make({ _tag: "Save" })).children(
+    h.form.attr("aria-label", "Edit note").onSubmit(NoteEditorMessage.cases.SaveRequested.make({})).children(
       h.h2(h.props.note.title),
       h.textarea.attr("aria-label", "Body").value(model.draft)
         .class("note-body", model.draft !== model.saved && "unsaved")
-        .onInput(({ value }) => NoteEditorMessage.make({ _tag: "Edited", body: value }))
+        .onInput(({ value }) => NoteEditorMessage.cases.Edited.make({ body: value }))
         // Ctrl+S or Cmd+S saves instead of opening the browser's save
         // dialog. With `preventDefault`, the browser's default is cancelled
         // only when the handler returns a message, so every other key types
         // as usual. Nothing stops the event's propagation, and a form's
         // `submit` is always cancelled, so `onSubmit` takes no options.
         .onKeyDown(
-          ({ ctrl, key, meta }) => (ctrl || meta) && key === "s" ? NoteEditorMessage.make({ _tag: "Save" }) : undefined,
+          ({ ctrl, key, meta }) =>
+            (ctrl || meta) && key === "s" ? NoteEditorMessage.cases.SaveRequested.make({}) : undefined,
           { preventDefault: true }
         ),
       // `h.isRunning` is true while this instance has a save queued or running.
@@ -170,9 +173,9 @@ const noteEditorView = NoteEditorDef.view((model, h) =>
       h.div.attr("id", `actions-${h.props.note.id}`).attr("role", "menu").attr("aria-label", "Note actions")
         .attr("style", `position-anchor: --actions-${h.props.note.id}; position-area: bottom span-left; margin: 0`)
         .popover("auto", model.actionsOpen)
-        .onToggle(({ open }) => NoteEditorMessage.make({ _tag: "ActionsToggled", open })).children(
+        .onToggle(({ open }) => NoteEditorMessage.cases.ActionsToggled.make({ open })).children(
           h.button.attr("type", "button").disabled(model.draft === model.saved)
-            .onClick(NoteEditorMessage.make({ _tag: "AskDiscard" })).children("Discard changes")
+            .onClick(NoteEditorMessage.cases.AskDiscard.make({})).children("Discard changes")
         ),
       model.error !== null && h.p.attr("role", "alert").children(model.error)
     ),
@@ -198,6 +201,7 @@ export const NoteEditorNoDeps = NoteEditorDef.make({
   update: {
     Edited: (model, { body }) => ({ ...model, draft: body, edits: model.edits + 1 }),
     Save: save,
+    SaveRequested: save,
     // `$.set` replaces the Model and doesn't merge. `$.emit` reports to the
     // parent.
     Saved: (model, { note }, $) =>
@@ -224,7 +228,7 @@ export const NoteEditorNoDeps = NoteEditorDef.make({
     Subscription.make(
       "autosave",
       model.edits,
-      () => Stream.fromEffect(Effect.as(Effect.sleep("2 seconds"), NoteEditorMessage.make({ _tag: "Save" })))
+      () => Stream.fromEffect(Effect.as(Effect.sleep("2 seconds"), NoteEditorMessage.cases.SaveRequested.make({})))
     )
   ],
   view: noteEditorView

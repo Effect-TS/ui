@@ -1,4 +1,4 @@
-import { Component, Feature, type View } from "@effect/ui"
+import { Command, Component, Feature, type View } from "@effect/ui"
 import { Story, TestHost } from "@effect/ui/testing"
 import { Context, Effect, Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
@@ -575,5 +575,54 @@ describe("a component that receives", () => {
     expect(Story.make(Editor, {}, (s) => s.send(EditorMessage.make({ _tag: "Clear" })))).type.not.toRaiseError()
     expect(Story.start(Editor, {}).childEmit(Draft, {})).type.not.toRaiseError()
     expect(Story.start(Editor, {}).childEmit(Plain.ref("P"), {})).type.not.toRaiseError()
+  })
+})
+
+describe("received messages stay parent-only", () => {
+  it("excludes receives from commands and views while updates handle them", () => {
+    const Def = Component.define({
+      name: "Restricted",
+      model: Schema.String,
+      message: EditorMessage,
+      receives: ["Clear", "Focus"]
+    })
+    const clear = Command.make("Clear", { args: {} }, () => Effect.succeed({ _tag: "Clear" } as const))
+    const typed = Command.make("Typed", { args: {} }, () => Effect.succeed({ _tag: "Typed", text: "ok" } as const))
+    const slice = Def.update("Clear", (_model, message, $) => {
+      expect(message).type.toBe<Extract<EditorMessage, { readonly _tag: "Clear" }>>()
+      expect($.run).type.not.toBeCallableWith(clear())
+      return $.run(typed())
+    })
+    const view = Def.view((model, h) => {
+      expect(h.el("button").on).type.not.toBeCallableWith("click", { _tag: "Clear" } as const)
+      return h.el("button").on("click", { _tag: "Typed", text: model })
+    })
+    Def.fragment((h) => {
+      expect(h.el("button").on).type.not.toBeCallableWith("click", { _tag: "Focus" } as const)
+    })
+    Def.make({
+      init: ($) => {
+        expect($.set("").run).type.not.toBeCallableWith(clear())
+        return $.set("").run(typed())
+      },
+      update: (model, message, $) => {
+        expect(message).type.toBe<EditorMessage>()
+        expect($.run).type.not.toBeCallableWith(clear())
+        if (message._tag === "Clear") return slice(model, message, $)
+        return $.run(typed())
+      },
+      view
+    })
+    Def.make({
+      init: () => "",
+      update: { Clear: slice, Focus: (model) => model, Typed: (_, msg) => msg.text },
+      parts: (_, p) => {
+        expect(p).type.toBe<Component.PartsHelper<Exclude<EditorMessage, Received>, {}, View.Registered>>()
+        return {}
+      }
+    })
+    expect<Component.Helper<typeof Def>>().type.toBe<
+      View.Helper<Exclude<EditorMessage, Received>, {}> & View.Tags<View.Registered, Exclude<EditorMessage, Received>>
+    >()
   })
 })

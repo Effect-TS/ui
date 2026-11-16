@@ -1427,7 +1427,7 @@ export const isHeadless = (u: unknown): u is Headless.Any => Predicate.hasProper
 
 // The tags of a message union, and the member with one tag.
 type TagOf<Msg> = Msg extends { readonly _tag: infer T extends string } ? T : never
-type Tagged<Msg, T> = Extract<Msg, { readonly _tag: T }>
+type Tagged<Msg, T> = [T] extends [never] ? never : Extract<Msg, { readonly _tag: T }>
 
 /**
  * What `define` returns: a component's name, Schemas, loaders and
@@ -1464,25 +1464,38 @@ export interface Definition<Name extends string, Props, Model, Msg, Events, V ex
    * an update function can call it by hand, and `$` is bound to the
    * message it's given.
    */
-  update<const Tag extends TagOf<Msg>, U extends Model | Step<Model, Msg, Events, any, L>>(
+  update<const Tag extends TagOf<Msg>, U extends Model | Step<Model, Exclude<Msg, Rcv>, Events, any, L>>(
     tag: Tag,
-    update: (model: Model, msg: Tagged<Msg, Tag>, $: Update<Model, Msg, Events, Props, L, Tagged<Msg, Tag>>) => U
-  ): (model: Model, msg: Tagged<Msg, Tag>, $: Update<Model, Msg, Events, Props, L>) => U
+    update: (
+      model: Model,
+      msg: Tagged<Msg, Tag>,
+      $: Update<Model, Exclude<Msg, Rcv>, Events, Props, L, Tagged<Msg, Tag>>
+    ) => U
+  ): (model: Model, msg: Tagged<Msg, Tag>, $: Update<Model, Exclude<Msg, Rcv>, Events, Props, L, Msg>) => U
   /** An update function over the whole message type. */
-  update<U extends Model | Step<Model, Msg, Events, any, L>>(
-    update: (model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L>) => U
-  ): (model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L>) => U
+  update<U extends Model | Step<Model, Exclude<Msg, Rcv>, Events, any, L>>(
+    update: (model: Model, msg: Msg, $: Update<Model, Exclude<Msg, Rcv>, Events, Props, L, Msg>) => U
+  ): (model: Model, msg: Msg, $: Update<Model, Exclude<Msg, Rcv>, Events, Props, L, Msg>) => U
   /** A view, to pass as `view` or call from another view. */
-  view<UV extends View.Content<Msg, any>>(
-    view: (model: Model, h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L>) => UV
-  ): (model: Model, h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L>) => UV
+  view<UV extends View.Content<Exclude<Msg, Rcv>, any>>(
+    view: (
+      model: Model,
+      h: View.Helper<Exclude<Msg, Rcv>, Props> & View.Tags<V, Exclude<Msg, Rcv>> & LoaderHelpers<L>
+    ) => UV
+  ): (model: Model, h: View.Helper<Exclude<Msg, Rcv>, Props> & View.Tags<V, Exclude<Msg, Rcv>> & LoaderHelpers<L>) => UV
   /**
    * A view fragment: a function that takes `h` first and any other
    * arguments after it, called from a view as `fragment(h, ...args)`.
    */
   fragment<Args extends ReadonlyArray<unknown>, Out>(
-    fragment: (h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L>, ...args: Args) => Out
-  ): (h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L>, ...args: Args) => Out
+    fragment: (
+      h: View.Helper<Exclude<Msg, Rcv>, Props> & View.Tags<V, Exclude<Msg, Rcv>> & LoaderHelpers<L>,
+      ...args: Args
+    ) => Out
+  ): (
+    h: View.Helper<Exclude<Msg, Rcv>, Props> & View.Tags<V, Exclude<Msg, Rcv>> & LoaderHelpers<L>,
+    ...args: Args
+  ) => Out
   /**
    * Finishes a headless component: `parts` in place of `view`. Whoever
    * declares it, by calling it with `view`, writes the view from what
@@ -1490,24 +1503,24 @@ export interface Definition<Name extends string, Props, Model, Msg, Events, V ex
    */
   make<
     Parts,
-    UI extends Model | InitStep<Model, Msg, Events, any> = Model,
-    U extends Model | Step<Model, Msg, Events, any, L> = Model,
-    UR extends { readonly [T in TagOf<Msg>]: Model | Step<Model, Msg, Events, any, L> } = {
+    UI extends Model | InitStep<Model, Exclude<Msg, Rcv>, Events, any> = Model,
+    U extends Model | Step<Model, Exclude<Msg, Rcv>, Events, any, L> = Model,
+    UR extends { readonly [T in TagOf<Msg>]: Model | Step<Model, Exclude<Msg, Rcv>, Events, any, L> } = {
       readonly [T in TagOf<Msg>]: Model
     },
-    Sub extends Subscription.Subscription<Msg, any> = never
+    Sub extends Subscription.Subscription<Exclude<Msg, Rcv>, any> = never
   >(options: {
-    readonly init: ($: Init<Model, Msg, Events, Props>) => UI
+    readonly init: ($: Init<Model, Exclude<Msg, Rcv>, Events, Props>) => UI
     readonly update:
-      | ((model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L>) => U)
+      | ((model: Model, msg: Msg, $: Update<Model, Exclude<Msg, Rcv>, Events, Props, L, Msg>) => U)
       | {
         readonly [T in keyof UR]: (
           model: Model,
           msg: Tagged<Msg, T>,
-          $: Update<Model, Msg, Events, Props, L, Tagged<Msg, T>>
+          $: Update<Model, Exclude<Msg, Rcv>, Events, Props, L, Tagged<Msg, T>>
         ) => UR[T]
       }
-    readonly parts: (model: Model, p: PartsHelper<Msg, Props, V> & LoaderHelpers<L>) => Parts
+    readonly parts: (model: Model, p: PartsHelper<Exclude<Msg, Rcv>, Props, V> & LoaderHelpers<L>) => Parts
     readonly subscriptions?:
       | ((
         model: Model,
@@ -1539,26 +1552,29 @@ export interface Definition<Name extends string, Props, Model, Msg, Events, V ex
   >
   /** Finishes the component. */
   make<
-    UI extends Model | InitStep<Model, Msg, Events, any> = Model,
-    U extends Model | Step<Model, Msg, Events, any, L> = Model,
+    UI extends Model | InitStep<Model, Exclude<Msg, Rcv>, Events, any> = Model,
+    U extends Model | Step<Model, Exclude<Msg, Rcv>, Events, any, L> = Model,
     // What each function of a record `update` returns, by tag.
-    UR extends { readonly [T in TagOf<Msg>]: Model | Step<Model, Msg, Events, any, L> } = {
+    UR extends { readonly [T in TagOf<Msg>]: Model | Step<Model, Exclude<Msg, Rcv>, Events, any, L> } = {
       readonly [T in TagOf<Msg>]: Model
     },
-    UV extends View.Content<Msg, any> = View.Node<Msg>,
-    Sub extends Subscription.Subscription<Msg, any> = never
+    UV extends View.Content<Exclude<Msg, Rcv>, any> = View.Node<Exclude<Msg, Rcv>>,
+    Sub extends Subscription.Subscription<Exclude<Msg, Rcv>, any> = never
   >(options: {
-    readonly init: ($: Init<Model, Msg, Events, Props>) => UI
+    readonly init: ($: Init<Model, Exclude<Msg, Rcv>, Events, Props>) => UI
     readonly update:
-      | ((model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L>) => U)
+      | ((model: Model, msg: Msg, $: Update<Model, Exclude<Msg, Rcv>, Events, Props, L, Msg>) => U)
       | {
         readonly [T in keyof UR]: (
           model: Model,
           msg: Tagged<Msg, T>,
-          $: Update<Model, Msg, Events, Props, L, Tagged<Msg, T>>
+          $: Update<Model, Exclude<Msg, Rcv>, Events, Props, L, Tagged<Msg, T>>
         ) => UR[T]
       }
-    readonly view: (model: Model, h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L>) => UV
+    readonly view: (
+      model: Model,
+      h: View.Helper<Exclude<Msg, Rcv>, Props> & View.Tags<V, Exclude<Msg, Rcv>> & LoaderHelpers<L>
+    ) => UV
     readonly subscriptions?:
       | ((
         model: Model,
@@ -1671,8 +1687,8 @@ export declare namespace Definition {
  * @since 0.1.0
  */
 export type Helper<D> = D extends
-  Definition<infer _N, infer P, infer _M, infer Msg, infer _E, infer V, infer L, infer _Rcv> ?
-  View.Helper<Msg, P> & View.Tags<V, Msg> & LoaderHelpers<L>
+  Definition<infer _N, infer P, infer _M, infer Msg, infer _E, infer V, infer L, infer Rcv> ?
+  View.Helper<Exclude<Msg, Rcv>, P> & View.Tags<V, Exclude<Msg, Rcv>> & LoaderHelpers<L>
   : never
 
 /**
@@ -1899,7 +1915,7 @@ export const define = <
     readonly model: Schema.Codec<Model, any>
     readonly message: Schema.Codec<Msg, any>
     readonly events?: Schema.Codec<Events, any> | undefined
-    /** The tags of `message` a parent may send with `$.send`. None by default. */
+    /** The parent-only tags of `message`, sent with `$.send`. Commands and views cannot produce these. None by default. */
     readonly receives?: ReadonlyArray<Tags> | undefined
     /** The reads the component shows, by name. */
     readonly loaders?:
@@ -1913,7 +1929,9 @@ export const define = <
               loaded: { readonly [P in Exclude<keyof NoInfer<L>, K>]: LoadedOf<NoInfer<L>[P]> }
             ) => ArgsFor<S[K], M[K & keyof M]>
             readonly debounce?: Duration.Input | undefined
-            readonly onChange?: OnChange<S[K], M[K & keyof M], NoInfer<Msg>> | undefined
+            readonly onChange?:
+              | OnChange<S[K], M[K & keyof M], Exclude<NoInfer<Msg>, Tagged<NoInfer<Msg>, NoInfer<Tags>>>>
+              | undefined
           }
         }
         & { readonly [K in keyof M]: { readonly loadMany?: M[K] & KeyedRead<M[K]> } }

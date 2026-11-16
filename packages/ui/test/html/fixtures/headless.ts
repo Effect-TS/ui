@@ -11,6 +11,7 @@ export type Item = typeof Item.Type
 
 export const MenuMessage = Schema.TaggedUnion({
   Toggle: {},
+  TriggerClicked: {},
   Toggled: { open: Schema.Boolean },
   Query: { value: Schema.String },
   Key: { key: Schema.String },
@@ -68,12 +69,13 @@ export const Menu = MenuDef.make({
   update: (model, message, $) =>
     MenuMessage.match(message, {
       Toggle: () => ({ ...model, open: !model.open }),
+      TriggerClicked: () => ({ ...model, open: !model.open }),
       // The browser's report of an auto popover: the Model follows, and focus moves with it.
       Toggled: ({ open }) =>
         $.set({ ...model, open, query: open ? model.query : "", active: open ? model.active : null }).run(
           open
-            ? Html.focus(Input, ({ found }) => MenuMessage.make({ _tag: "Focused", found }))
-            : Html.focus(Trigger, ({ found }) => MenuMessage.make({ _tag: "Focused", found }))
+            ? Html.focus(Input, ({ found }) => MenuMessage.cases.Focused.make({ found }))
+            : Html.focus(Trigger, ({ found }) => MenuMessage.cases.Focused.make({ found }))
         ),
       Query: ({ value }) => ({ ...model, query: value, active: step(filter($.props.items, value), null, 1) }),
       Key: ({ key }) => {
@@ -121,9 +123,9 @@ export const Menu = MenuDef.make({
           .attr("aria-haspopup", "menu")
           .attr("aria-expanded", String(model.open))
           .attr("aria-controls", p.id("popup"))
-          .onClick(MenuMessage.make({ _tag: "Toggle" }))
+          .onClick(MenuMessage.cases.TriggerClicked.make({}))
           .onKeyDown(
-            ({ key }) => key.length === 1 || key === "ArrowDown" ? MenuMessage.make({ _tag: "Key", key }) : undefined,
+            ({ key }) => key.length === 1 || key === "ArrowDown" ? MenuMessage.cases.Key.make({ key }) : undefined,
             {
               preventDefault: true
             }
@@ -132,18 +134,18 @@ export const Menu = MenuDef.make({
         b.id(p.id("popup"))
           .attr("role", "menu")
           .popover("auto", model.open)
-          .onToggle(({ open }) => MenuMessage.make({ _tag: "Toggled", open }))),
+          .onToggle(({ open }) => MenuMessage.cases.Toggled.make({ open }))),
       input: p.part("input", (b) =>
         b.ref(Input)
           .attr("role", "combobox")
           .attr("aria-controls", p.id("popup"))
           .attr("aria-activedescendant", active === null ? undefined : p.id("item", active))
           .value(model.query)
-          .onInput(({ value }) => MenuMessage.make({ _tag: "Query", value }))
+          .onInput(({ value }) => MenuMessage.cases.Query.make({ value }))
           .onKeyDown(
             ({ key }) =>
               key === "ArrowDown" || key === "ArrowUp" || key === "Enter" || key === "Escape"
-                ? MenuMessage.make({ _tag: "Key", key })
+                ? MenuMessage.cases.Key.make({ key })
                 : undefined,
             { preventDefault: true }
           )),
@@ -152,7 +154,7 @@ export const Menu = MenuDef.make({
           .attr("role", "menuitem")
           .attr("aria-disabled", item.disabled === true ? "true" : undefined)
           .attr("data-active", active === item.id ? "" : undefined)
-          .onClick(item.disabled === true ? () => undefined : MenuMessage.make({ _tag: "Pick", id: item.id })))
+          .onClick(item.disabled === true ? () => undefined : MenuMessage.cases.Pick.make({ id: item.id })))
     }
   }
 })

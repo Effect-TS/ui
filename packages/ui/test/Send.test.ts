@@ -24,7 +24,7 @@ const Item = Component.define({
     return { clears: model.clears + 1, label: $.props.label }
   },
   view: (model, h) =>
-    h.el("li").on("click", ItemMessage.make({ _tag: "Boom" })).children(
+    h.el("li").on("click", ItemMessage.cases.Boom.make({})).children(
       `${h.props.label}:${model.clears}:${model.label}`
     )
 })
