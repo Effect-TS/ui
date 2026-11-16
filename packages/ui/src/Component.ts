@@ -2174,13 +2174,15 @@ type ErasedMessage<C, M> = [Any] extends [C] ? [M] extends [never] ? unknown : {
 
 // The handler in `O`, if any, checked against the call it gets: one that
 // returns no message. An overloaded handler passes only if the overload for
-// that call does.
-type ErasedHandler<C, O, E> = [Any] extends [C] ? [O] extends [never] ? unknown
-  : [O] extends [{ readonly onFailure: infer F }] ?
-    [F] extends [((failure: AsyncResult.Failure<never, E>) => never) | undefined] ? unknown
-    : { readonly [K in ErasedHint]: F }
+// that call does. A Layer that can't fail still calls it on a defect.
+type ErasedHandler<C, O, E> = [Any] extends [C] ?
+  [HandlerOf<O>] extends [((failure: AsyncResult.Failure<never, E>) => never) | undefined] ? unknown
+  : { readonly [K in ErasedHint]: HandlerOf<O> }
   : unknown
-  : unknown
+
+// The `onFailure` of each member of `O` that has the key, required or
+// optional, and `never` for options without it.
+type HandlerOf<O> = O extends { readonly onFailure?: infer F } ? "onFailure" extends keyof O ? F : never : never
 
 /**
  * Provides services to a component and everything below it, like

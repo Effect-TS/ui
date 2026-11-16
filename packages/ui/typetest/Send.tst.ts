@@ -409,6 +409,19 @@ describe("a component slot with a ref", () => {
     })).type.toBe<Component.Any>()
   })
 
+  it("checks a forwarded onFailure that is optional", () => {
+    // A Layer that can't fail still calls the handler on a defect.
+    const erased: Component.Any = Plain
+    const dies = Layer.effect(Store, Effect.die("boom"))
+    const options: { readonly onFailure?: (() => number) | undefined } = { onFailure: () => 123 }
+    const maybe: { readonly onFailure: () => number } | undefined = condition ? { onFailure: () => 123 } : undefined
+    const throws: { readonly onFailure?: (() => never) | undefined } = {}
+    expect(Component.provide).type.not.toBeCallableWith(erased, dies, options)
+    expect(Component.provide).type.not.toBeCallableWith(erased, Layer.effect(Store, Effect.fail("no")), options)
+    expect(Component.provide).type.not.toBeCallableWith(erased, dies, maybe)
+    expect(Component.provide(erased, dies, throws)).type.toBe<Component.Any>()
+  })
+
   it("checks an overloaded onFailure by the call it gets", () => {
     // The last overload returns nothing, but a failure gets the first, which returns a number.
     function onFailure(failure: AsyncResult.Failure<never, string>): number
