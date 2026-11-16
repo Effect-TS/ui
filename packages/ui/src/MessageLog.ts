@@ -804,7 +804,7 @@ export const makeEncoder = (options?: {
   const warned = new Set<string>()
   const encoders = new WeakMap<Schema.Top, (value: unknown) => unknown>()
   const through = (component: Component.Any, field: "props" | "model" | "message" | "events", value: unknown) =>
-    encodeWith(component[field] as Schema.Top, `${component.name}.${field}`, value)
+    encodeWith(component[field] as Schema.Top, `${component.definition.name}.${field}`, value)
   const encodeWith = (schema: Schema.Top, id: string, value: unknown) => {
     let encode = encoders.get(schema)
     if (encode === undefined) {
@@ -827,7 +827,7 @@ export const makeEncoder = (options?: {
     const schema = (component["~loaders"] as loaders.Bound | undefined)?.logSchema
     return schema === undefined
       ? { "~unserialisable": "encode" }
-      : cap(encodeWith(schema, `${component.name}.loaders`, loaded) as Schema.Json)
+      : cap(encodeWith(schema, `${component.definition.name}.loaders`, loaded) as Schema.Json)
   }
   // A message can carry a loader's whole result, so messages are capped like Models and slots.
   const capped = (component: Component.Any, field: "model" | "message", value: unknown): Schema.Json =>
@@ -844,7 +844,7 @@ export const makeEncoder = (options?: {
           return {
             ...base(entry),
             _tag: "Update",
-            component: entry.component.name,
+            component: entry.component.definition.name,
             source: encodeSource(entry.source),
             message: capped(entry.component, "message", entry.message),
             props: through(entry.component, "props", entry.props) as Schema.Json,
@@ -864,7 +864,7 @@ export const makeEncoder = (options?: {
           return {
             ...base(entry),
             _tag: "Mounted",
-            component: entry.component.name,
+            component: entry.component.definition.name,
             props: through(entry.component, "props", entry.props) as Schema.Json,
             model: capped(entry.component, "model", entry.model),
             commands: entry.commands.map(encodeCommand),
@@ -875,7 +875,7 @@ export const makeEncoder = (options?: {
           return {
             ...base(entry),
             _tag: "PropsChanged",
-            component: entry.component.name,
+            component: entry.component.definition.name,
             props: through(entry.component, "props", entry.props) as Schema.Json
           }
         case "LoaderChanged": {
@@ -883,11 +883,17 @@ export const makeEncoder = (options?: {
           return {
             ...base(entry),
             _tag: "LoaderChanged",
-            component: entry.component.name,
+            component: entry.component.definition.name,
             name: entry.name,
             slot: schema === undefined
               ? { "~unserialisable": "encode" }
-              : cap(encodeWith(schema, `${entry.component.name}.loaders.${entry.name}`, entry.slot) as Schema.Json)
+              : cap(
+                encodeWith(
+                  schema,
+                  `${entry.component.definition.name}.loaders.${entry.name}`,
+                  entry.slot
+                ) as Schema.Json
+              )
           }
         }
         case "LayerFailed":

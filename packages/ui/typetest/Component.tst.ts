@@ -96,7 +96,7 @@ describe("Component", () => {
       }).make({
         init: () => ({ a: true }),
         update: (model) => model,
-        view: (model, h) => model.a ? h.child(ChildA, { key: "a" }) : h.child(ChildB, { key: "b" })
+        view: (model, h) => model.a ? ChildA(h, { key: "a" }) : ChildB(h, { key: "b" })
       })
       expect<Component.Requirements<typeof Parent>>().type.toBe<CA | CB>()
     })
@@ -214,8 +214,8 @@ describe("Component", () => {
 
     it("names the missing fallback for a feature child", () => {
       const h = null as unknown as View.Helper<never, {}>
-      // @ts-expect-error The last overload gave the following error...Property 'fallback' is missing
-      h.child(Todos, {
+      // @ts-expect-error Property 'fallback' is missing
+      Todos.render(h, {
         key: "main",
         props: { todo: { id: "", title: "", done: false } }
       })
@@ -232,15 +232,65 @@ describe("Component", () => {
         view: (_, h) =>
           h.el(
             "div",
-            h.child(Todos, {
+            Todos.render(h, {
               key: "main",
               props: { todo: { id: "", title: "", done: false } },
               fallback: () => h.el("p", "loading")
             }),
-            h.child(Counter, { key: "count", props: { initial: 0 } })
+            Counter(h, { key: "count", props: { initial: 0 } })
           )
       })
       expect<Component.Requirements<typeof Parent>>().type.toBe<Todos>()
+    })
+  })
+
+  describe("calling a component", () => {
+    const ParentMessage = Schema.TaggedUnion({ Toggled: { done: Schema.Boolean } })
+    type ParentMessage = typeof ParentMessage.Type
+    const ParentDef = Component.define({ name: "Parent", model: Schema.Null, message: ParentMessage })
+    const todo = { id: "", title: "", done: false }
+
+    it("builds a slot typed by h's messages, requiring what the component does", () => {
+      ParentDef.view((_, h) => {
+        expect(TodoItem(h, { key: "t", props: { todo } })).type.toBe<View.Child<ParentMessage, SaveTodo>>()
+        expect(TodoItem(h, { key: "t", props: { todo }, onEmit: (events) => ParentMessage.make(events) })).type
+          .toBe<View.Child<ParentMessage, SaveTodo>>()
+        expect(TodoItem).type.not.toBeCallableWith(h, {
+          key: "t",
+          props: { todo },
+          onEmit: () => Message.make({ _tag: "X" })
+        })
+        expect(TodoItem).type.not.toBeCallableWith(h, { key: "t" })
+        expect(TodoItem).type.not.toBeCallableWith(h, { key: "t", props: { initial: 0 } })
+        return h.el("p")
+      })
+    })
+
+    it("adds a fallback's requirements to the parent's", () => {
+      const Parent = ParentDef.make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) =>
+          Counter(h, { key: "c", props: { initial: 0 }, fallback: () => TodoItem(h, { key: "t", props: { todo } }) })
+      })
+      // As with any slot, the fallback's requirements come back as `NoInfer<SaveTodo>`.
+      expect<Component.Requirements<typeof Parent>>().type.toBeAssignableTo<SaveTodo>()
+      expect<Component.Requirements<typeof Parent>>().type.toBeAssignableFrom<SaveTodo>()
+    })
+
+    it("keeps the component's fields next to the call signature", () => {
+      expect(TodoItem.definition).type.toBe<Component.Definition.Of<"TodoItem">>()
+      expect(TodoItem.definition.name).type.toBe<"TodoItem">()
+      expect(Component.provide(TodoItem, [SaveTodo.layer]).definition.name).type.toBe<"TodoItem">()
+      expect(TodoItem.ref).type.toBe<(name: string) => Component.Ref<never>>()
+      expect(TodoItem).type.toBeAssignableTo<Component.Any>()
+      expect(TodoItem).type.toBeAssignableTo<
+        Component.Mountable<{ readonly todo: typeof Todo.Type }, typeof TodoItemEvents.Type, SaveTodo>
+      >()
+    })
+
+    it("leaves the helper without child", () => {
+      expect<View.Helper<ParentMessage, {}>>().type.not.toHaveProperty("child")
     })
   })
 })

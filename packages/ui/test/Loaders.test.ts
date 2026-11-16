@@ -100,7 +100,7 @@ const makeApp = () => {
     view: (route, h) =>
       h.main(AppRoute.match(route, {
         Home: () => h.h1("Home"),
-        Note: (note) => h.child(Note, { key: AppRoute.print(note), props: { id: note.params.id } })
+        Note: (note) => Note(h, { key: AppRoute.print(note), props: { id: note.params.id } })
       }))
   })
 
@@ -114,7 +114,7 @@ const makeApp = () => {
   }).make({
     init: () => "1",
     update: (_id, message) => message.id,
-    view: (id, h) => h.div(h.child(Note, { key: "note", props: { id } }))
+    view: (id, h) => h.div(Note(h, { key: "note", props: { id } }))
   })
   const setId = (id: string) => ShellMessage.make({ _tag: "SetId", id })
 
@@ -153,7 +153,9 @@ const noteOf = (replay: Story.Replay<any, any, any>) => {
 
 /** The Note's Mounted entry, for its path under a parent. */
 const noteMount = (log: ReadonlyArray<MessageLog.Entry>) =>
-  log.find((entry): entry is MessageLog.Mounted => entry._tag === "Mounted" && entry.component.name === "Note")!
+  log.find((entry): entry is MessageLog.Mounted =>
+    entry._tag === "Mounted" && entry.component.definition.name === "Note"
+  )!
 
 const updates = (log: ReadonlyArray<MessageLog.Entry>, path: string) =>
   log.filter((entry): entry is MessageLog.Update => entry._tag === "Update" && entry.path === path)
@@ -173,7 +175,7 @@ describe("a loader without onChange", { concurrent: false }, () => {
         assert.deepStrictEqual(
           loaderChanges(root.log(), "/Note").map((entry) => [
             entry.name,
-            entry.component.name,
+            entry.component.definition.name,
             Loader.snapshotData(entry.slot)?.result?._tag
           ]),
           [["note", "Note", "Success"]]

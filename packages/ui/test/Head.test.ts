@@ -109,7 +109,7 @@ describe("Head", () => {
             throw new Error("bad template")
           })
         ],
-        view: (_, h) => h.child(Page, { key: "page", props: {} })
+        view: (_, h) => Page(h, { key: "page", props: {} })
       })
       const App = Component.define({
         name: "App",
@@ -119,7 +119,7 @@ describe("Head", () => {
         init: () => 0,
         update: (model) => model,
         head: () => [Head.title("App")],
-        view: (_, h) => h.el("main", h.child(Layout, { key: "layout", props: {}, fallback: () => h.text("down") }))
+        view: (_, h) => h.el("main", Layout(h, { key: "layout", props: {}, fallback: () => h.text("down") }))
       })
       const root = yield* TestHost.mount(App, {})
       yield* TestHost.settle
@@ -154,7 +154,7 @@ describe("Head", () => {
             throw new Error("bad template")
           })
         ],
-        view: (_, h) => h.child(Page, { key: "page", props: {} })
+        view: (_, h) => Page(h, { key: "page", props: {} })
       })
       const root = yield* TestHost.mount(App, {}, { fallback: (_, h) => h.text("down") })
       const crashed = yield* Effect.flip(TestHost.settle)
@@ -182,7 +182,7 @@ describe("Head", () => {
       const App = Component.define({ name: "App", model: Schema.String, message: Schema.String }).make({
         init: () => "a",
         update: (_, id) => id,
-        view: (id, h) => h.child(Page, { key: "page", props: { id } })
+        view: (id, h) => Page(h, { key: "page", props: { id } })
       })
       const root = yield* TestHost.mount(App, {})
       yield* TestHost.settle
@@ -203,7 +203,7 @@ describe("Head", () => {
       const App = Component.define({ name: "App", model: Schema.Boolean, message: Schema.Boolean }).make({
         init: () => false,
         update: (_, shown) => shown,
-        view: (shown, h) => h.el("main", shown ? h.child(Page, { key: "page", props: {} }) : "none")
+        view: (shown, h) => h.el("main", shown ? Page(h, { key: "page", props: {} }) : "none")
       })
       const root = yield* TestHost.mount(App, {})
       yield* TestHost.settle

@@ -10,7 +10,7 @@ import type * as View from "../View.ts"
 
 /** @internal */
 export const childName = (component: Component.Any | Feature.Any): string =>
-  Feature.isService(component) ? component[Feature.TypeId].name : component.name
+  Feature.isService(component) ? component[Feature.TypeId].name : component.definition.name
 
 /**
  * The segment a child slot adds to its parent's path: `Name[key]`.

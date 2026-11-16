@@ -612,7 +612,7 @@ const record = <Props, Model, Msg, Events>(
 ): Story<Props, Model, Msg, Events> => {
   let rendered: View.Node<Msg, any> | undefined
   const view = () => {
-    return rendered ??= expandRoot(render(), fields.component.name, fields.childModels)
+    return rendered ??= expandRoot(render(), fields.component.definition.name, fields.childModels)
   }
   // A view value is a `Query` tree; a child slot is a node with no tag or text.
   const root = () => view() as Query.Node
@@ -691,7 +691,9 @@ const isKeyed = (story: Story<any, any, any, any>, name: string): boolean =>
 /** The loader called `name`, or a throw naming the step. */
 const loaderOf = (story: Story<any, any, any, any>, step: string, name: string): loaders.Entry => {
   const entry = boundOf(story.component)?.byName.get(name)
-  if (entry === undefined) throw new Error(`Story.${step}: "${name}" is not a loader of ${story.component.name}`)
+  if (entry === undefined) {
+    throw new Error(`Story.${step}: "${name}" is not a loader of ${story.component.definition.name}`)
+  }
   return entry
 }
 
@@ -852,7 +854,7 @@ const moreOfPages = (def: ReturnType<typeof Loader.defOf>, pages: ReadonlyArray<
 
 const listLoader = (story: Story<any, any, any, any>, step: string, name: string): void => {
   if (boundOf(story.component)?.byName.get(name)?.list !== true) {
-    throw new Error(`Story.${step}: "${name}" is not a list loader of ${story.component.name}`)
+    throw new Error(`Story.${step}: "${name}" is not a list loader of ${story.component.definition.name}`)
   }
 }
 
@@ -941,7 +943,7 @@ const keyedLoader = (
 ): { readonly entry: loaders.Entry; readonly keys: ReadonlyArray<loaders.Keyed> } => {
   const entry = boundOf(story.component)?.byName.get(name)
   if (entry === undefined || !entry.keyed) {
-    throw new Error(`Story.${step}: "${name}" is not a loadMany loader of ${story.component.name}`)
+    throw new Error(`Story.${step}: "${name}" is not a loadMany loader of ${story.component.definition.name}`)
   }
   return { entry, keys: argsAt(story, name).entries! }
 }
@@ -1044,7 +1046,7 @@ const pruneKeyed = (story: Story<any, any, any, any>): Story<any, any, any, any>
       if (Array.from(held.entries.keys()).every((key) => declared.has(key))) continue
       if (round === pruneRounds) {
         throw new Error(
-          `Story: ${story.component.name}'s loader "${entry.name}" was still pruned after ${pruneRounds} rounds in one step. Each prune's onChange changes its key set again, and the runtime would prune without limit.`
+          `Story: ${story.component.definition.name}'s loader "${entry.name}" was still pruned after ${pruneRounds} rounds in one step. Each prune's onChange changes its key set again, and the runtime would prune without limit.`
         )
       }
       out = writeKeyed(out, entry, keys, [])
@@ -1375,7 +1377,7 @@ const fireAt = <Props, Model, Msg, Events>(
   }
   // A story runs its own component's layers: the element's handlers, and in an author's story the
   // parts' layers it owns, wherever its view applied them. A headless child's layer needs the child's `update`.
-  const own = "/" + story.component.name
+  const own = "/" + story.component.definition.name
   const owned = handler.owned ?? []
   const layers = [...owned.filter((layer) => layer.owner.path === own), handler].filter((layer) =>
     Object.hasOwn(layer.handlers, event)
@@ -1723,7 +1725,7 @@ const withView = (
   view: (parts: any, h: any) => View.Content<any, any>,
   elements: View.Vocabulary<any> | undefined
 ): AnyComponent => {
-  const owner: View.Owner = { path: "/" + component.name, depth: 0 }
+  const owner: View.Owner = { path: "/" + component.definition.name, depth: 0 }
   return Object.assign(Object.create(component), {
     view: (model: unknown, props: unknown, running?: View.Running, slots?: Component.Slots) => {
       const h = View.makeHelper(props, elements ?? component.elements(), running, owner.path)
@@ -1743,7 +1745,7 @@ const withView = (
 export const parts = <Props, Events, Parts, R, Rcv>(
   component: Component.Headless<Props, Events, Parts, R, Rcv>,
   story: { readonly model: unknown; readonly props: Props }
-): Parts => component.parts(story.model, story.props, { owner: { path: "/" + component.name, depth: 0 } })
+): Parts => component.parts(story.model, story.props, { owner: { path: "/" + component.definition.name, depth: 0 } })
 
 const findChild = <Msg>(
   view: View.Node<Msg, any>,
@@ -1953,9 +1955,10 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
   )
   const path = options?.path ??
     stateful.find((entry) =>
-      (typeof entry.component === "string" ? entry.component : entry.component.name) === component.name
+      (typeof entry.component === "string" ? entry.component : entry.component.definition.name) ===
+        component.definition.name
     )?.path
-  if (path === undefined) throw new Error(`Story.fromLog: the log has no entry for ${component.name}`)
+  if (path === undefined) throw new Error(`Story.fromLog: the log has no entry for ${component.definition.name}`)
   const all = stateful.filter((entry) => entry.path === path)
   // The replay starts at the first Model. Props and slots written before it are in that Update's record, or
   // belong to an earlier mount.

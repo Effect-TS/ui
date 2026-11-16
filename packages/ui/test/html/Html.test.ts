@@ -51,7 +51,7 @@ describe("Html", () => {
         h.input.ref(NewTodo).value("draft").onInput(onInput),
         h.button.attr("type", "submit").children("Add"),
         h.span("Todos"),
-        todos.map((title) => h.child(Item, { key: title, props: { title } }))
+        todos.map((title) => Item(h, { key: title, props: { title } }))
       )
       assert.deepStrictEqual(
         tree,
@@ -59,8 +59,8 @@ describe("Html", () => {
           element("input", { refKey: NewTodo.key, props: { value: "draft" }, handlers: { input: onInput } }, []),
           element("button", { attrs: { type: "submit" } }, [View.text("Add")]),
           element("span", {}, [View.text("Todos")]),
-          h.child(Item, { key: "Milk", props: { title: "Milk" } }),
-          h.child(Item, { key: "Eggs", props: { title: "Eggs" } })
+          Item(h, { key: "Milk", props: { title: "Milk" } }),
+          Item(h, { key: "Eggs", props: { title: "Eggs" } })
         ])
       )
     })
@@ -80,7 +80,7 @@ describe("Html", () => {
               h.input.ref(NewTodo).value(draft).onInput(onInput),
               h.button.attr("type", "submit").children("Add"),
               h.span("Todos"),
-              todos.map((title) => h.child(Item, { key: title, props: { title } }))
+              todos.map((title) => Item(h, { key: title, props: { title } }))
             )
         })
         const rendered = yield* HtmlServer.renderToHtml(Todos, {})
@@ -247,8 +247,8 @@ describe("Html", () => {
         ["a", null, "b"],
         [h.span, undefined, h.p("x")],
         [h.span, ["a", "b"], "c"],
-        ["a", [h.span, false], h.child(Item, { key: "i", props: { title: "t" } })],
-        [h.span.attr("id", "x"), h.p("x"), h.child(Item, { key: "i", props: { title: "t" } }), "end"]
+        ["a", [h.span, false], Item(h, { key: "i", props: { title: "t" } })],
+        [h.span.attr("id", "x"), h.p("x"), Item(h, { key: "i", props: { title: "t" } }), "end"]
       ]
       for (const inputs of cases) {
         const expected: ReadonlyArray<View.Node<TodoMessage, any>> = View.children(inputs)

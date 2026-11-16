@@ -121,7 +121,7 @@ export const TodoList = Component.define({
     h.el(
       "ul",
       model.todos.map((todo) =>
-        h.child(TodoItem, {
+        TodoItem(h, {
           key: todo.id,
           props: { todo },
           onEmit: (events) => TodoListMessage.make({ _tag: "SetDone", id: todo.id, done: events.done }),

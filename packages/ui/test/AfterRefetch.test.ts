@@ -151,7 +151,7 @@ const makeApp = (options?: {
         "div",
         cards.map((card) => {
           const [tag, id] = card.split(":")
-          return h.child(Card, { key: tag, props: { id, tag } })
+          return Card(h, { key: tag, props: { id, tag } })
         })
       )
   })

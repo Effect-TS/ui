@@ -185,9 +185,9 @@ export const App = Component.define({
         h.el("button").on("click", AppMessage.make({ _tag: "Unblock" })).children("Unblock")
       ),
       AppRoute.match(model.route, {
-        Home: (route) => h.child(Home, { key: AppRoute.print(route), props: {} }),
-        Person: (route) => h.child(Person, { key: AppRoute.print(route), props: { id: route.params.id } }),
-        Slow: (route) => h.child(Slow, { key: AppRoute.print(route), props: {} }),
+        Home: (route) => Home(h, { key: AppRoute.print(route), props: {} }),
+        Person: (route) => Person(h, { key: AppRoute.print(route), props: { id: route.params.id } }),
+        Slow: (route) => Slow(h, { key: AppRoute.print(route), props: {} }),
         NotFound: () => h.el("h1", "Not found")
       })
     )

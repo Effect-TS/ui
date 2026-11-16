@@ -288,7 +288,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       ],
       view: (model, h) =>
         SearchRoute.match(model.route, {
-          Search: (route) => h.child(SearchPage, { key: SearchRoute.printPath(route), props: { route } }),
+          Search: (route) => SearchPage(h, { key: SearchRoute.printPath(route), props: { route } }),
           NotFound: () => h.p("Not found")
         })
     })
@@ -648,7 +648,12 @@ describe("BrowserHost", { concurrent: false }, () => {
       return event.defaultPrevented
     }
     const box = (element: Element, left: number, top: number, width: number, height: number) => {
-      element.getBoundingClientRect = () => ({ left, top, width, height }) as DOMRect
+      element.getBoundingClientRect = () => (({
+        left,
+        top,
+        width,
+        height
+      }) as DOMRect)
     }
     const byLabel = (app: Element, label: string) => app.querySelector(`[aria-label="${label}"]`)!
 
@@ -1117,7 +1122,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           view: (open, h) =>
             h.div(
               h.button.onClick(DrawerMessage.make({ _tag: "Close" })).children("Close"),
-              open && h.child(Nested, { key: "nested" })
+              open && Nested(h, { key: "nested" })
             )
         })
         const drawer = yield* container
@@ -1391,7 +1396,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       view: (_, h) =>
         h.div(
           h.p("before"),
-          h.child(NativeBox, {
+          NativeBox(h, {
             key: "box",
             fallback: () => h.p("wrong host")
           }),

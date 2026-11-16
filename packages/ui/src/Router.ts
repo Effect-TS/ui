@@ -24,7 +24,7 @@
  * Pages are chosen with the union's exhaustive `match` and keyed by their
  * path, `AppRoute.printPath(route)`. A new path mounts a fresh page, and a
  * change to the query alone updates the page in place:
- * `h.child(SearchPage, { key: AppRoute.printPath(route), props: { route } })`.
+ * `SearchPage(h, { key: AppRoute.printPath(route), props: { route } })`.
  * A page that should start over when a param changes adds the param to its
  * key.
  *
@@ -764,7 +764,7 @@ interface ErasedPage {
  * **Details**
  *
  * The props argument is left out when the component takes none, as with
- * `h.child`. The page's own reads join the declaring component's
+ * a component call's `props`. The page's own reads join the declaring component's
  * requirements, so a read the page provides itself is a compile error at
  * `mount`: provide it at the declarer, or return `[]` for that route.
  *

@@ -411,8 +411,7 @@ describe("Loaded lists", () => {
       subscriptions: (model) => [
         Router.subscription(ShellRoute, model, (route) => ShellMessage.make({ _tag: "ChangedRoute", route }))
       ],
-      view: (model, h) =>
-        model._tag === "Chat" ? h.child(app.Chat, { key: "chat", props: { room: "r" } }) : h.el("p", "home")
+      view: (model, h) => model._tag === "Chat" ? app.Chat(h, { key: "chat", props: { room: "r" } }) : h.el("p", "home")
     })
     const history = Router.memoryHistory("/chat")
     const hosted = (effect: Effect.Effect<void, unknown, any>) =>

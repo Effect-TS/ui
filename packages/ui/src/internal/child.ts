@@ -1,0 +1,45 @@
+/**
+ * The child slot record a component call and a feature's `render` build.
+ *
+ * @internal
+ */
+import type * as AsyncResult from "effect/reactivity/AsyncResult"
+import type * as Component from "../Component.ts"
+import type * as Feature from "../Feature.ts"
+import type * as View from "../View.ts"
+
+/** @internal */
+export interface Options {
+  readonly key?: string | undefined
+  // Every ref fits `Ref.Any`; the call's type has checked what it receives.
+  readonly ref?: Component.Ref.Any | undefined
+  readonly props?: unknown
+  readonly onEmit?: ((events: any) => unknown) | undefined
+  readonly fallback?: ((result: any) => View.Content<any, any>) | undefined
+  readonly onFailure?: ((failure: AsyncResult.Failure<never, unknown>) => unknown) | undefined
+  readonly view?: ((parts: any) => View.Content<any, any>) | undefined
+}
+
+/** @internal */
+export const make = (
+  component: Component.Any | Component.Headless.Any | Feature.Any,
+  options: Options
+): View.Child<any, any> => {
+  // A slot with a key and a ref would have two identities that can disagree.
+  if ((options.key === undefined) === (options.ref === undefined)) {
+    throw new Error("A child slot takes exactly one of key and ref")
+  }
+  return {
+    _tag: "Child",
+    component: component as Component.Any,
+    key: options.ref !== undefined ? options.ref.key : options.key!,
+    ref: options.ref,
+    props: options.props ?? {},
+    onEmit: options.onEmit ?? ignore,
+    fallback: options.fallback,
+    onFailure: options.onFailure,
+    view: options.view
+  }
+}
+
+const ignore = () => undefined

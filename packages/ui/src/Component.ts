@@ -5,9 +5,10 @@
  * `update` returns the next Model, or a step that also runs Commands and
  * emits to the parent. The runtime holds each instance's Model, runs its
  * Commands in the instance's own Scope, and re-renders its view. Children are
- * declared in the view with `h.child`, and communicate up through `events` and
- * down through props. A component's requirements, `R`, name the Commands and
- * feature services it uses, never what their implementations use.
+ * declared in the view by calling them, `Editor(h, { key, props })`, and
+ * communicate up through `events` and down through props. A component's
+ * requirements, `R`, name the Commands and feature services it uses, never
+ * what their implementations use.
  *
  * A component is built in two steps: `define` takes its name and Schemas,
  * and `make` on the definition takes `init`, `update` and `view`. A large
@@ -67,6 +68,7 @@ import * as Schema from "effect/Schema"
 import type * as Types from "effect/Types"
 import * as Command from "./Command.ts"
 import type * as Head from "./Head.ts"
+import * as child from "./internal/child.ts"
 import * as loaders from "./internal/loaders.ts"
 import * as internalNoop from "./internal/noop.ts"
 import * as childRef from "./internal/ref.ts"
@@ -274,7 +276,7 @@ export type RefTypeId = typeof RefTypeId
  *
  * `Editor.ref("Draft")` makes a ref for `Editor`'s slots, and
  * `Todos.ref("Main")` one for a feature's. A parent renders the slot with
- * `h.child(Editor, { ref: Draft, props })` in place of a `key`: the ref's
+ * `Editor(h, { ref: Draft, props })` in place of a `key`: the ref's
  * key is the slot's key, so the child's path segment is `Editor[Draft]`.
  * `at` derives a ref for one row of a list: `Row.at(id)` has the key
  * `Row[id]`, as `Renderer.ref`'s `at` does. Two refs with different names
@@ -321,7 +323,7 @@ export declare namespace Ref {
    *
    * Every `Ref` fits `Ref.Any`, but `Ref.Any` fits no `Ref`, so it can't be
    * annotated back into one, and `$.send` takes nothing through it or its
-   * `at` rows. It names no slot in `h.child` either: every typed ref fits
+   * `at` rows. It names no slot either: every typed ref fits
    * it, so a slot that took it would skip the receives check. It keeps its
    * `key`, so `Story.childEmit`, `childFailure` and `Story.fallback` find a
    * slot by it.
@@ -344,6 +346,32 @@ export declare namespace Ref {
     /** A ref for one row: `Row.at(id)`. */
     readonly at: (key: string | number) => Any
   }
+
+  /**
+   * A ref for messages that are all among `Rcv`. A `Ref<A>` is one when
+   * every `A` is an `Rcv`.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  export interface Within<out Rcv> extends Any {
+    readonly [RefTypeId]: { readonly _Rcv: (_: never) => Rcv }
+  }
+
+  /**
+   * The ref a slot of a component or feature that receives `Rcv` takes:
+   * one whose messages the component all receives, or one that takes no
+   * message, such as the ref of a feature whose `receives` is
+   * `Schema.Unknown`. A ref made from a component also fits a provided copy
+   * of it or a feature implementation that receives more. `Ref.Any` fits no
+   * slot.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  export type Slot<Rcv> = Within<Rcv> | Ref<unknown>
 
   /**
    * The ref a component or a feature that receives `Rcv` hands out:
@@ -667,8 +695,33 @@ const toNext = (result: unknown): Next<any, any, any, any> =>
  * @since 0.1.0
  */
 export interface Mountable<in out Props, out Events, out R = never, in Rcv = never> extends Pipeable.Pipeable {
+  /**
+   * Declares a slot of this component in a parent's view, from the parent's
+   * `h`, which types `onEmit`, `onFailure` and `fallback` against the
+   * parent's message type. The component's requirements, and the fallback's,
+   * surface in the parent's. A component whose props are erased, such as a
+   * `Component.Any`, takes `props` even when it needs none.
+   */
+  // The type parameters don't depend on the component, so a union of
+  // components is callable.
+  <Msg, RF = never>(
+    h: View.Helper<Msg, unknown>,
+    options:
+      & View.Child.Options<Props, Events, NoInfer<Msg>, Rcv>
+      & {
+        /** Shown if the child fails, until its key changes. Without it, the slot is blank. */
+        readonly fallback?:
+          | ((result: AsyncResult.Failure<never, unknown>) => View.Content<NoInfer<Msg>, RF>)
+          | undefined
+      }
+      // Erased props are required, so every component is a `Component.Any`:
+      // its options must fit every component's, including one whose props
+      // are required.
+      & (0 extends 1 & Props ? { readonly props: Props } : {})
+  ): View.Child<Msg, R | NoInfer<RF>>
   readonly [TypeId]: Mountable.Variance<Props, Events, R, Rcv>
-  readonly name: string
+  /** What `define` returned. `provide` keeps it, so `definition.name` is the name the component was defined with. */
+  readonly definition: Definition.Any
   readonly props: Schema.Codec<Props, any>
   readonly model: Schema.Codec<any, any>
   readonly message: Schema.Codec<any, any>
@@ -754,7 +807,8 @@ export interface Component<
   out L = {},
   in out Rcv = never
 > extends Mountable<Props, Events, R, Rcv> {
-  readonly name: Name
+  /** What `define` returned. `provide` keeps it, so `definition.name` is the name the component was defined with. */
+  readonly definition: Definition.Of<Name>
   readonly model: Schema.Codec<Model, any>
   readonly message: Schema.Codec<Msg, any>
   /** The Schema of the messages a parent may send: the cases of `message` listed in `receives`. */
@@ -798,15 +852,15 @@ export const HeadlessTypeId = "~@effect/ui/Component/Headless" as const
 export type HeadlessTypeId = typeof HeadlessTypeId
 
 /**
- * A component with `parts` and no `view`. Whoever declares it with
- * `h.child` writes its whole view from the parts.
+ * A component with `parts` and no `view`. Whoever declares it, with
+ * `Listbox(h, { key, props, view })`, writes its whole view from the parts.
  *
  * **Details**
  *
  * It keeps its own Model, `update`, Commands and Scope. It isn't a
  * `Mountable`, so it can't be a root, a page or a feature.
  *
- * The `view` closure given to `h.child` is the consumer's code. A child
+ * The `view` closure given to the call is the consumer's code. A child
  * declared in it, its `onEmit` and `onFailure` messages, and a fallback in
  * it all belong to the consumer, and a slot in it takes the consumer's refs.
  * A ref's key names one slot across the consumer's view and every closure it
@@ -849,6 +903,28 @@ export type HeadlessTypeId = typeof HeadlessTypeId
 export interface Headless<in out Props, out Events, out Parts, out R = never, in out Rcv = never>
   extends Pipeable.Pipeable
 {
+  /**
+   * Declares a slot of this component in a parent's view, from the parent's
+   * `h`. `view` is the child's whole view, built from its parts. Its
+   * requirements, the view's and the fallback's surface in the parent's.
+   */
+  <Msg, RV = never, RF = never>(
+    h: View.Helper<Msg, unknown>,
+    options:
+      & View.Child.Options<Props, Events, NoInfer<Msg>, Rcv>
+      & {
+        /** Shown if the child fails, until its key changes. Without it, the slot is blank. */
+        readonly fallback?:
+          | ((result: AsyncResult.Failure<never, unknown>) => View.Content<NoInfer<Msg>, RF>)
+          | undefined
+        /**
+         * The child's whole view, from its parts. It's the parent view's code:
+         * the children it declares report to the parent, and it runs again
+         * whenever the parent or the child renders.
+         */
+        readonly view: (parts: Parts) => View.Content<NoInfer<Msg>, RV>
+      }
+  ): View.Child<Msg, R | RV | NoInfer<RF>>
   readonly [HeadlessTypeId]: {
     readonly _Props: Types.Invariant<Props>
     readonly _Events: Types.Covariant<Events>
@@ -856,7 +932,8 @@ export interface Headless<in out Props, out Events, out Parts, out R = never, in
     readonly _R: Types.Covariant<R>
     readonly _Rcv: Types.Invariant<Rcv>
   }
-  readonly name: string
+  /** What `define` returned. `provide` keeps it, so `definition.name` is the name the component was defined with. */
+  readonly definition: Definition.Any
   readonly props: Schema.Codec<Props, any>
   readonly model: Schema.Codec<any, any>
   readonly message: Schema.Codec<any, any>
@@ -1300,7 +1377,8 @@ export type OnChange<S, M, Msg> = M extends Loader.Read.Any
  */
 export const isComponent = (u: unknown): u is Any => Predicate.hasProperty(u, TypeId)
 
-const Proto = {
+// A component is a function, so the prototypes keep `call`, `apply` and `bind`.
+const Proto = Object.assign(Object.create(Function.prototype), {
   [TypeId]: { _Props: (_: never) => _, _Events: (_: never) => _, _R: (_: never) => _, _Rcv: (_: never) => _ },
   pipe() {
     return Pipeable.pipeArguments(this, arguments)
@@ -1308,9 +1386,9 @@ const Proto = {
   ref(this: { readonly receives: Schema.Codec<any, any> }, name: string) {
     return childRef.make(name, this.receives)
   }
-}
+})
 
-const HeadlessProto = {
+const HeadlessProto = Object.assign(Object.create(Function.prototype), {
   [HeadlessTypeId]: {
     _Props: (_: never) => _,
     _Events: (_: never) => _,
@@ -1320,6 +1398,22 @@ const HeadlessProto = {
   },
   pipe: Proto.pipe,
   ref: Proto.ref
+})
+
+// A callable component: calling it declares a slot of it. The function's own
+// `name` is left alone. Its fields are defined, not assigned: a function given
+// more than 15 properties by assignment, or a new `name`, switches to slow,
+// dictionary-mode properties, and the runtime reads them on every instance.
+const makeComponent = (
+  proto: object,
+  fields: { readonly [key: string]: unknown }
+): any => {
+  const component = (_h: unknown, options: child.Options) => child.make(component as any, options)
+  Object.setPrototypeOf(component, proto)
+  for (const key of Object.keys(fields)) {
+    Object.defineProperty(component, key, { value: fields[key], enumerable: true, writable: true, configurable: true })
+  }
+  return component
 }
 
 /**
@@ -1391,7 +1485,8 @@ export interface Definition<Name extends string, Props, Model, Msg, Events, V ex
   ): (h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L>, ...args: Args) => Out
   /**
    * Finishes a headless component: `parts` in place of `view`. Whoever
-   * declares it with `h.child` writes the view from what `parts` returns.
+   * declares it, by calling it with `view`, writes the view from what
+   * `parts` returns.
    */
   make<
     Parts,
@@ -1500,6 +1595,50 @@ export interface Definition<Name extends string, Props, Model, Msg, Events, V ex
 }
 
 /**
+ * Types for definitions: what a component keeps of the one it was made from.
+ *
+ * @stability experimental
+ * @since 0.1.0
+ */
+export declare namespace Definition {
+  /**
+   * A component's `definition` as the types see it: the name and Schemas of
+   * what `define` returned. It's that same object, so every `Definition` fits.
+   *
+   * **Details**
+   *
+   * The Schemas are erased. The component itself carries them typed, and a
+   * `Definition` can't be typed exactly here, since a component is covariant
+   * in its events and loaders and a definition isn't.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  export interface Any {
+    readonly name: string
+    readonly props: Schema.Codec<any, any>
+    readonly model: Schema.Codec<any, any>
+    readonly message: Schema.Codec<any, any>
+    readonly events: Schema.Codec<any, any>
+    readonly receives: Schema.Codec<any, any>
+    readonly loaders: unknown
+    readonly elements: View.Vocabulary<any> | undefined
+  }
+
+  /**
+   * A `Definition.Any` that keeps the name's literal type.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  export interface Of<Name extends string> extends Any {
+    readonly name: Name
+  }
+}
+
+/**
  * `h` in the view of a definition, for a function that takes it without
  * `Def.fragment`.
  *
@@ -1558,6 +1697,11 @@ export type Helper<D> = D extends
  * return type of `init`, `update` and `view` is inferred and `R` is read off
  * it, so `R` covers every branch, including conditional views. Framework
  * services such as `Scope` are never part of `R`.
+ *
+ * The component keeps what `define` returned as its `definition`, so the
+ * `name` option is read back as `Component.definition.name`. Paths, messages
+ * and the message log use it. A component is a function, so its own `name`
+ * is the function's and doesn't carry it.
  *
  * `props` and `events` are optional. `subscriptions` returns keyed Streams run
  * while their key is listed, and falsy entries are skipped. `elements`
@@ -1838,8 +1982,8 @@ const finish = (
   const elements = definition.elements
   const view = options.view
   const parts = options.parts
-  return Object.assign(Object.create(view === undefined ? HeadlessProto : Proto), {
-    name: definition.name,
+  return makeComponent(view === undefined ? HeadlessProto : Proto, {
+    definition,
     props: definition.props,
     model: definition.model,
     message: definition.message,
@@ -2069,6 +2213,34 @@ const mergeAll = Layer.mergeAll as (...layers: ReadonlyArray<Layer.Any>) => Laye
 const toLayer = (layers: Layer.Any | ReadonlyArray<Layer.Any>): Layer.Layer<any, any, any> =>
   Array.isArray(layers) ? mergeAll(...layers) : (layers as Layer.Layer<any, any, any>)
 
+// What `onFailure` returns: the component's message. A generic call that
+// returns a component, such as an inline `define(...).make(...)`, is skipped in
+// the first inference pass, so `C` is still `Any` there, and `Message<Any>`,
+// `never`, would reject the handler before `C` is inferred. While `C` is
+// `Any` the handler is taken as is, and `ErasedMessage` or `ErasedHandler`
+// checks it on the component argument, which that pass skips too: a
+// component that is still `Any` once inferred takes no message, as
+// `Message<Any>` says.
+type ProvideMessage<C, M> = [Any] extends [C] ? M : Message<C>
+
+type ErasedHint = "An erased component takes no message, so onFailure can't return one"
+
+// `M` is what the handler returns, inferred from the call.
+type ErasedMessage<C, M> = [Any] extends [C] ? [M] extends [never] ? unknown : { readonly [K in ErasedHint]: M }
+  : unknown
+
+// The handler in `O`, if any, checked against the call it gets: one that
+// returns no message. An overloaded handler passes only if the overload for
+// that call does. A Layer that can't fail still calls it on a defect.
+type ErasedHandler<C, O, E> = [Any] extends [C] ?
+  [HandlerOf<O>] extends [((failure: AsyncResult.Failure<never, E>) => never) | undefined] ? unknown
+  : { readonly [K in ErasedHint]: HandlerOf<O> }
+  : unknown
+
+// The `onFailure` of each member of `O` that has the key, required or
+// optional, and `never` for options without it.
+type HandlerOf<O> = O extends { readonly onFailure?: infer F } ? "onFailure" extends keyof O ? F : never : never
+
 /**
  * Provides services to a component and everything below it, like
  * `Effect.provide`.
@@ -2162,11 +2334,14 @@ export const provide: {
     component: C,
     layer: (props: Props<C>) => Layer.Layer<ROut, never, RIn>
   ): Provided<C, ROut, RIn>
-  <C extends Any, ROut, E, RIn>(
-    component: C,
+  <C extends Any, ROut, E, RIn, M = never>(
+    component: C & ErasedMessage<C, M>,
     layer: (props: Props<C>) => Layer.Layer<ROut, E, RIn>,
-    options: ProvideOptions<E, Message<C>>
+    options: ProvideOptions<E, ProvideMessage<C, M>>
   ): Provided<C, ROut, RIn>
+  // Options checked against the component's message as given. A component
+  // defined inline isn't inferred yet when they are, so it takes the next
+  // overload.
   <
     C extends Any,
     const L extends Layer.Any | ReadonlyArray<Layer.Any>,
@@ -2175,6 +2350,15 @@ export const provide: {
     component: C,
     layer: L & RequiresOnFailure<L, O>,
     options?: O & ProvideRest<L, Message<C>>[0]
+  ): Provided<C, ProvideInput.Success<L>, ProvideInput.Services<L>>
+  <
+    C extends Any,
+    const L extends Layer.Any | ReadonlyArray<Layer.Any>,
+    const O extends ProvideRest<L, ProvideMessage<C, any>>[0] = never
+  >(
+    component: C & ErasedHandler<C, O, ProvideInput.Error<L>>,
+    layer: L & RequiresOnFailure<L, O>,
+    options?: O & ProvideRest<L, ProvideMessage<C, any>>[0]
   ): Provided<C, ProvideInput.Success<L>, ProvideInput.Services<L>>
 } = ((...args: Array<any>) => {
   const go = (
@@ -2195,7 +2379,8 @@ export const provide: {
       Layer.isLayer(layer) && options?.local !== true && (inner === undefined || component.sharedLayer !== undefined)
         ? (component.sharedLayer === undefined ? layer : Layer.provideMerge(component.sharedLayer, layer))
         : undefined
-    return Object.assign(Object.create(Proto), component, {
+    return makeComponent(Proto, {
+      ...component,
       layer: inner === undefined ? outer : (props: unknown) => Layer.provideMerge(inner(props), outer(props)),
       layerFailure,
       sharedLayer,

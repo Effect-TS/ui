@@ -130,10 +130,10 @@ export const App = Component.define({
           )
       ),
       AppRoute.match(route, {
-        Home: (route) => h.child(Home, { key: AppRoute.print(route), props: {} }),
-        Person: (route) => h.child(Person, { key: AppRoute.print(route), props: { id: route.params.id } }),
+        Home: (route) => Home(h, { key: AppRoute.print(route), props: {} }),
+        Person: (route) => Person(h, { key: AppRoute.print(route), props: { id: route.params.id } }),
         Search: (route) => h.h1(`Search ${route.query.q}`),
-        Slow: (route) => h.child(Slow, { key: AppRoute.print(route), props: {} }),
+        Slow: (route) => Slow(h, { key: AppRoute.print(route), props: {} }),
         NotFound: () => h.h1("Not found")
       })
     )

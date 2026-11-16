@@ -22,8 +22,10 @@ browser host and router, and server rendering.
 
 A `Command.Service` may omit `invalidates` when it invalidates no reads.
 Provide a feature implementation with `NoteActivity.toLayer(ActivityLog)`.
-When rendering a feature service with `h.child`, include a `fallback` for
-loading or failure; a child passed as a component value may omit it.
+Declare a child component by calling it with the parent's `h`:
+`NoteEditor(h, { key, props, onEmit })`. Render a feature service with its
+`render`, `NoteActivity.render(h, { key, fallback })`, and include a
+`fallback` for loading or failure; a component child may omit it.
 
 A parent passes a child state through props, and a child answers through
 `events`. A one-shot instruction, such as "save now" or "clear your draft",
@@ -76,7 +78,7 @@ instance ended with.
 
 A component finished with `parts` instead of `view` is headless: it keeps
 its own Model, `update` and Commands, and owns behaviour such as keyboard
-handling, ids and ARIA, but no markup. A consumer places it with `h.child`
+handling, ids and ARIA, but no markup. A consumer calls it with `h`
 and a `view` closure that applies each part to a builder of its own:
 `m.trigger(h.button).children("Open")`. The closure is the consumer's code,
 so children declared in it report to the consumer. Pass rows as Schema data in
@@ -170,8 +172,8 @@ client, not the services.
   mounts the page, which is in `fixtures/pages/notes/NotePage.ts`.
 - **[Headless components](./ai-docs/src/10_ui/22_headless-components.ts)**:
   Build a filterable listbox that owns its state, keyboard handling and ARIA
-  but no markup, and draw it from a consumer with `h.child` and a `view`
-  closure. This browser entry module mounts the consumer, which is in
+  but no markup, and draw it from a consumer that calls it with `h` and a
+  `view` closure. This browser entry module mounts the consumer, which is in
   `fixtures/notes/components/NoteLinkPicker.ts`.
 - **[Routing and the document head](./ai-docs/src/10_ui/30_routing.ts)**:
   Define typed routes with `Route` and keep the current route in the root's

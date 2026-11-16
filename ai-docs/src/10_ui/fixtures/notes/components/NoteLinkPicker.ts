@@ -36,10 +36,10 @@ export const NoteLinkPickerNoDeps = Component.define({
       onFailure: () => h.p("The notes couldn't be loaded."),
       onSuccess: ({ value }) => {
         const notes = new Map(value.filter((note) => note.id !== h.props.noteId).map((note) => [note.id, note]))
-        // A headless child is placed with `h.child`, like any other, and
+        // A headless child is placed by calling it, like any other, and
         // takes a `key` or a `ref`. Its state lives in its own instance, and
         // `onEmit` maps its events to this component's messages.
-        return h.child(Listbox, {
+        return Listbox(h, {
           key: "link",
           // Only what the Listbox filters and announces goes in its props.
           props: {
