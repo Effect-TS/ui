@@ -339,7 +339,15 @@ export declare namespace Child {
    * @category models
    * @since 0.1.0
    */
-  export type Receives<Rcv> = 0 extends 1 & Rcv ? never : Rcv
+  export type Receives<Rcv> = [Rcv] extends [ErasedReceives] ? never : Rcv
+}
+
+// Only `any` and `never` extend it. A conditional on `[Rcv]` against a fixed
+// type, unlike `0 extends 1 & Rcv`, relates for two `Rcv`s, so it passes a
+// variance check.
+declare const ErasedReceivesId: unique symbol
+interface ErasedReceives {
+  readonly [ErasedReceivesId]: never
 }
 
 /**

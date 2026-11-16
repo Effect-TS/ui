@@ -355,9 +355,8 @@ export declare namespace Ref {
    * @category models
    * @since 0.1.0
    */
-  export interface Within<out Rcv> {
+  export interface Within<out Rcv> extends Any {
     readonly [RefTypeId]: { readonly _Rcv: (_: never) => Rcv }
-    readonly key: string
   }
 
   /**
@@ -702,15 +701,14 @@ export interface Mountable<in out Props, out Events, out R = never, in Rcv = nev
    * parent's message type. The component's requirements, and the fallback's,
    * surface in the parent's.
    */
-  // `Slot` is what the slot's ref is checked against: the default, which only
-  // an explicit type argument changes, and then only to fewer messages. As a
-  // default it stays out of the variance check, which a conditional of `Rcv`
-  // would fail.
-  <Msg, RF = never, Slot extends View.Child.Receives<Rcv> = View.Child.Receives<Rcv>>(
+  // The type parameters don't depend on the component, so a union of
+  // components is callable.
+  <Msg, RF = never>(
     h: View.Helper<Msg, unknown>,
-    // Erased props take any options, so every component is a `Component.Any`.
+    // Erased props take any options, so every component is a `Component.Any`:
+    // its options must fit every component's, including required props.
     options: 0 extends 1 & Props ? any
-      : View.Child.Options<Props, Events, NoInfer<Msg>, NoInfer<Slot>> & {
+      : View.Child.Options<Props, Events, NoInfer<Msg>, Rcv> & {
         /** Shown if the child fails, until its key changes. Without it, the slot is blank. */
         readonly fallback?:
           | ((result: AsyncResult.Failure<never, unknown>) => View.Content<NoInfer<Msg>, RF>)
@@ -2154,6 +2152,12 @@ const mergeAll = Layer.mergeAll as (...layers: ReadonlyArray<Layer.Any>) => Laye
 const toLayer = (layers: Layer.Any | ReadonlyArray<Layer.Any>): Layer.Layer<any, any, any> =>
   Array.isArray(layers) ? mergeAll(...layers) : (layers as Layer.Layer<any, any, any>)
 
+// What `onFailure` returns: the component's message. A generic call that
+// returns a component, such as an inline `define(...).make(...)`, is skipped in
+// the first inference pass, so `C` is still `Any` there, and `Message<Any>`,
+// `never`, would reject the handler before `C` is inferred.
+type ProvideMessage<C> = [Any] extends [C] ? any : Message<C>
+
 /**
  * Provides services to a component and everything below it, like
  * `Effect.provide`.
@@ -2250,16 +2254,16 @@ export const provide: {
   <C extends Any, ROut, E, RIn>(
     component: C,
     layer: (props: Props<C>) => Layer.Layer<ROut, E, RIn>,
-    options: ProvideOptions<E, Message<C>>
+    options: ProvideOptions<E, ProvideMessage<C>>
   ): Provided<C, ROut, RIn>
   <
     C extends Any,
     const L extends Layer.Any | ReadonlyArray<Layer.Any>,
-    const O extends ProvideRest<L, Message<C>>[0] = never
+    const O extends ProvideRest<L, ProvideMessage<C>>[0] = never
   >(
     component: C,
     layer: L & RequiresOnFailure<L, O>,
-    options?: O & ProvideRest<L, Message<C>>[0]
+    options?: O & ProvideRest<L, ProvideMessage<C>>[0]
   ): Provided<C, ProvideInput.Success<L>, ProvideInput.Services<L>>
 } = ((...args: Array<any>) => {
   const go = (

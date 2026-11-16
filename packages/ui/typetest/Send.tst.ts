@@ -1,6 +1,6 @@
 import { Component, Feature, type View } from "@effect/ui"
 import { Story, TestHost } from "@effect/ui/testing"
-import { Context, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { describe, expect, it } from "tstyche"
 
@@ -274,36 +274,37 @@ describe("a component slot with a ref", () => {
     })
   })
 
-  it("calls a union of components through the Mountable both members are", () => {
-    type Clear = Extract<Received, { readonly _tag: "Clear" }>
+  it("checks a union of components against each member", () => {
     ParentDef.view((_, h) => {
-      // The members' call signatures are generic, so the union itself has none.
-      // @ts-expect-error none of those signatures are compatible with each other
-      EditorOrNote(h, { ref: Rows })
-      const either: Component.Mountable<{}, never, never, Clear> = EditorOrNote
-      expect(either(h, { ref: Rows })).type.not.toRaiseError()
-      expect(either).type.not.toBeCallableWith(h, { ref: Draft })
-      expect<Component.Mountable<{}, never, never, Clear>>().type.not.toBeAssignableFrom(EditorOrPlain)
+      expect((condition ? Editor : Note)(h, { key: "e" })).type.not.toRaiseError()
+      expect(EditorOrNote(h, { ref: Rows })).type.not.toRaiseError()
+      expect(EditorOrNote).type.not.toBeCallableWith(h, { ref: Draft })
+      expect(EditorOrPlain).type.not.toBeCallableWith(h, { ref: Rows })
+      expect(EditorOrPlain(h, { key: "p" })).type.toBe<View.Child<typeof ParentMessage.Type, never>>()
       return h.el("p")
     })
   })
 
   it("checks a ref against the component when the type arguments are explicit", () => {
     type Msg = typeof ParentMessage.Type
-    type Clear = Extract<Received, { readonly _tag: "Clear" }>
     ParentDef.view((_, h) => {
       expect(Plain<Msg>(h, { key: "a" })).type.not.toRaiseError()
       expect(Plain<Msg>).type.not.toBeCallableWith(h, { ref: Rows })
-      expect(Editor<Msg, never, Received>(h, { ref: Draft })).type.not.toRaiseError()
-      // The receives a slot checks against can be narrowed, never widened.
-      expect(Editor<Msg, never, Clear>(h, { ref: Rows })).type.not.toRaiseError()
-      expect(Editor<Msg, never, Clear>).type.not.toBeCallableWith(h, { ref: Draft })
-      // @ts-expect-error does not satisfy the constraint
-      Note<Msg, never, Received>(h, { ref: Draft })
-      // @ts-expect-error does not satisfy the constraint
-      Plain<Msg, never, Clear>(h, { ref: Rows })
+      expect(Editor<Msg>(h, { ref: Draft })).type.not.toRaiseError()
+      expect(Note<Msg>).type.not.toBeCallableWith(h, { ref: Draft })
       // `Msg` comes from `h`: a different one is rejected.
       expect(Editor<Received>).type.not.toBeCallableWith(h, { ref: Draft })
+      return h.el("p")
+    })
+  })
+
+  it("takes only a complete ref", () => {
+    const full = Plain.ref("p")
+    const partial = { [Component.RefTypeId]: full[Component.RefTypeId], key: full.key }
+    expect(partial).type.not.toBeAssignableTo<Component.Ref.Within<never>>()
+    ParentDef.view((_, h) => {
+      expect(Plain).type.not.toBeCallableWith(h, { ref: partial })
+      expect(Plain(h, { ref: full }).ref).type.toBe<Component.Ref.Any | undefined>()
       return h.el("p")
     })
   })
@@ -339,6 +340,49 @@ describe("a component slot with a ref", () => {
       expect(Component.provide(Plain, Layer.empty)).type.not.toBeCallableWith(h, { ref: Rows })
       return h.el("p")
     })
+  })
+
+  it("infers an inline component given to provide with a failing Layer", () => {
+    const make = () =>
+      Component.define({
+        name: "Inline",
+        props: Schema.Struct({ name: Schema.String }),
+        model: Schema.Null,
+        message: Schema.String
+      })
+        .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p", h.props.name) })
+    type Inline = Component.Component<"Inline", { readonly name: string }, null, string, never, never, never, {}, never>
+    expect(Component.provide(
+      Component.define({
+        name: "Inline",
+        props: Schema.Struct({ name: Schema.String }),
+        model: Schema.Null,
+        message: Schema.String
+      })
+        .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p", h.props.name) }),
+      (props) => Layer.effect(Store, props.name === "" ? Effect.fail("no") : Effect.succeed({ draft: props.name })),
+      { onFailure: () => "failed" }
+    )).type.toBe<Inline>()
+    expect(Component.provide(
+      Component.define({
+        name: "Inline",
+        props: Schema.Struct({ name: Schema.String }),
+        model: Schema.Null,
+        message: Schema.String
+      })
+        .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p", h.props.name) }),
+      Layer.effect(Store, Effect.fail("no")),
+      { onFailure: () => "failed" }
+    )).type.toBe<Inline>()
+    // The handler still returns one of the component's messages.
+    expect(Component.provide).type.not.toBeCallableWith(make(), Layer.effect(Store, Effect.fail("no")), {
+      onFailure: () => 1
+    })
+    expect(Component.provide).type.not.toBeCallableWith(
+      make(),
+      (props: { readonly name: string }) => Layer.effect(Store, Effect.fail(props.name)),
+      { onFailure: () => 1 }
+    )
   })
 
   it("rejects a ref for an erased component or feature", () => {

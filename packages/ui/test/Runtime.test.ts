@@ -2928,18 +2928,17 @@ describe("Runtime", () => {
   it.effect("each provided Layer build is stamped with the flush it began in", () =>
     provideHost(Effect.gen(function*() {
       class Slow extends Context.Service<Slow, { readonly name: string }>()("test/Slow") {}
-      const Plain = Component.define({
-        name: "Inner",
-        props: Schema.Struct({ name: Schema.String }),
-        model: Schema.Number,
-        message: Schema.String
-      }).make({
-        init: () => 0,
-        update: (model) => model,
-        view: (_, h) => h.text(h.props.name)
-      })
       const Inner = Component.provide(
-        Plain,
+        Component.define({
+          name: "Inner",
+          props: Schema.Struct({ name: Schema.String }),
+          model: Schema.Number,
+          message: Schema.String
+        }).make({
+          init: () => 0,
+          update: (model) => model,
+          view: (_, h) => h.text(h.props.name)
+        }),
         (props) =>
           Layer.effect(
             Slow,
