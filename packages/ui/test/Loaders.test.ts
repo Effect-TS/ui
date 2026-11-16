@@ -153,7 +153,9 @@ const noteOf = (replay: Story.Replay<any, any, any>) => {
 
 /** The Note's Mounted entry, for its path under a parent. */
 const noteMount = (log: ReadonlyArray<MessageLog.Entry>) =>
-  log.find((entry): entry is MessageLog.Mounted => entry._tag === "Mounted" && entry.component.name === "Note")!
+  log.find((entry): entry is MessageLog.Mounted =>
+    entry._tag === "Mounted" && entry.component.definition.name === "Note"
+  )!
 
 const updates = (log: ReadonlyArray<MessageLog.Entry>, path: string) =>
   log.filter((entry): entry is MessageLog.Update => entry._tag === "Update" && entry.path === path)
@@ -173,7 +175,7 @@ describe("a loader without onChange", { concurrent: false }, () => {
         assert.deepStrictEqual(
           loaderChanges(root.log(), "/Note").map((entry) => [
             entry.name,
-            entry.component.name,
+            entry.component.definition.name,
             Loader.snapshotData(entry.slot)?.result?._tag
           ]),
           [["note", "Note", "Success"]]

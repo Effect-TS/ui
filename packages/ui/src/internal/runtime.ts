@@ -876,7 +876,7 @@ const setup = (
   }
   // Every fetch the cache starts is logged against the root.
   const offFetch = cache.onFetch((event) => {
-    if (!frozen) record({ _tag: "FetchStarted", path: `/${component.name}`, ...event })
+    if (!frozen) record({ _tag: "FetchStarted", path: `/${component.definition.name}`, ...event })
   })
   // On the server a fetch in flight holds the response, so one that ends may make the tree idle.
   const offFetchEnd = server === undefined ? undefined : cache.onFetchEnd(() => checkIdle())
@@ -1693,7 +1693,9 @@ const setup = (
         const elements = component.elements()
         if (elements !== undefined && host.elements !== "any" && !host.elements.includes(elements.name)) {
           throw new Error(
-            `${component.name} renders ${elements.name} elements, and this host shows ${host.elements.join(", ")}`
+            `${component.definition.name} renders ${elements.name} elements, and this host shows ${
+              host.elements.join(", ")
+            }`
           )
         }
         return component.init(inst.props)
@@ -2915,7 +2917,7 @@ const setup = (
    */
   const walkPage = (inst: Instance, envCtx: Context.Context<any>, page: services.Page): WalkedPage => {
     const component = page.component as Component.Any
-    const walked: WalkedPage = { name: component.name, entries: new Map() }
+    const walked: WalkedPage = { name: component.definition.name, entries: new Map() }
     const visit = (component: Component.Any, props: unknown, provided: boolean) => {
       // Behind a `provide`, a read the declarer can't see may be given below it: the skip is silent.
       const behind = provided || component.layer !== undefined
@@ -2936,7 +2938,7 @@ const setup = (
                 new Router.PrefetchReadNotProvided({
                   message: `${inst.path}: Router.prefetch skipped the read ${
                     JSON.stringify(def.name)
-                  } of ${component.name}, because the declaring component can't see it. Provide it at the declarer.`,
+                  } of ${component.definition.name}, because the declaring component can't see it. Provide it at the declarer.`,
                   path: inst.path,
                   page: walked.name,
                   read: def.name
@@ -2974,7 +2976,7 @@ const setup = (
     try {
       visit(component, page.props, false)
     } catch (error) {
-      report(prefetchThrew(inst, component.name, error))
+      report(prefetchThrew(inst, component.definition.name, error))
     }
     return walked
   }
@@ -2995,8 +2997,8 @@ const setup = (
     const fresh = new Map<string, Array<Instance>>()
     for (const at of recorded) {
       if (at.closed || at.born <= since.born) continue
-      const found = fresh.get(at.component.name)
-      if (found === undefined) fresh.set(at.component.name, [at])
+      const found = fresh.get(at.component.definition.name)
+      if (found === undefined) fresh.set(at.component.definition.name, [at])
       else found.push(at)
     }
     let mounted: Set<string> | undefined
@@ -3005,7 +3007,7 @@ const setup = (
       const names = new Set<string>()
       const collect = (at: Instance) => {
         if (at.closed) return
-        names.add(at.component.name)
+        names.add(at.component.definition.name)
         for (const child of at.children) collect(child)
       }
       collect(root)
@@ -3455,8 +3457,8 @@ const setup = (
     if (headless !== (view.view !== undefined)) {
       throw new Error(
         headless
-          ? inst.path + ": " + component.name + " is headless, so its slot needs a view"
-          : inst.path + ": " + component.name + " has its own view, so its slot takes none"
+          ? inst.path + ": " + component.definition.name + " is headless, so its slot needs a view"
+          : inst.path + ": " + component.definition.name + " has its own view, so its slot takes none"
       )
     }
     const path = `${inst.path}/${segment(view)}`
@@ -4276,7 +4278,7 @@ const setup = (
   }
 
   // -- root -----------------------------------------------------------------
-  record({ _tag: "SessionStarted", path: `/${component.name}`, app: component.name })
+  record({ _tag: "SessionStarted", path: `/${component.definition.name}`, app: component.definition.name })
   // Registered before the root instance forks its Scope from `rootScope`: finalizers run in
   // reverse, so every instance Scope (and its Layers' finalizers) closes before the nodes go.
   let rootRendered: () => ReadonlyArray<Rendered> = () => []
@@ -4295,7 +4297,7 @@ const setup = (
     })
   )
   // Hydration: the root's range among the container's nodes, which may hold more than the app.
-  const rootPath = `/${component.name}`
+  const rootPath = `/${component.definition.name}`
   let rootRange: Range | undefined
   let rootRef: unknown = undefined
   if (hydrating !== undefined && hydration !== undefined) {
@@ -4388,7 +4390,7 @@ const setup = (
     forkNow(
       ctx,
       Effect.logWarning(
-        `${inst.component.name}: its state holds a Schema.Redacted, so the server sends no state for it and the ` +
+        `${inst.component.definition.name}: its state holds a Schema.Redacted, so the server sends no state for it and the ` +
           "client builds it and everything under it fresh, without hydration. Keep the secret in a leaf component " +
           "or in a service."
       )

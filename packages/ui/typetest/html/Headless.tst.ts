@@ -172,6 +172,7 @@ describe("headless components", () => {
     expect(Menu).type.not.toBeAssignableTo<Component.Any>()
     expect(TestHost.mount).type.not.toBeCallableWith(Menu, { items })
     expect(Menu).type.toBeAssignableTo<Component.Headless.Any>()
+    expect(Menu.definition).type.toBeAssignableTo<Component.Definition.Any>()
   })
 
   it("view is required for a headless child, and a normal child takes none", () => {

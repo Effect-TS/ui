@@ -279,7 +279,9 @@ describe("Component", () => {
     })
 
     it("keeps the component's fields next to the call signature", () => {
-      expect(TodoItem.name).type.toBe<"TodoItem">()
+      expect(TodoItem.definition).type.toBe<Component.Definition.Of<"TodoItem">>()
+      expect(TodoItem.definition.name).type.toBe<"TodoItem">()
+      expect(Component.provide(TodoItem, [SaveTodo.layer]).definition.name).type.toBe<"TodoItem">()
       expect(TodoItem.ref).type.toBe<(name: string) => Component.Ref<never>>()
       expect(TodoItem).type.toBeAssignableTo<Component.Any>()
       expect(TodoItem).type.toBeAssignableTo<

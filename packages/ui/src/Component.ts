@@ -720,7 +720,8 @@ export interface Mountable<in out Props, out Events, out R = never, in Rcv = nev
       & (0 extends 1 & Props ? { readonly props: Props } : {})
   ): View.Child<Msg, R | NoInfer<RF>>
   readonly [TypeId]: Mountable.Variance<Props, Events, R, Rcv>
-  readonly name: string
+  /** What `define` returned. `provide` keeps it, so `definition.name` is the name the component was defined with. */
+  readonly definition: Definition.Any
   readonly props: Schema.Codec<Props, any>
   readonly model: Schema.Codec<any, any>
   readonly message: Schema.Codec<any, any>
@@ -806,7 +807,8 @@ export interface Component<
   out L = {},
   in out Rcv = never
 > extends Mountable<Props, Events, R, Rcv> {
-  readonly name: Name
+  /** What `define` returned. `provide` keeps it, so `definition.name` is the name the component was defined with. */
+  readonly definition: Definition.Of<Name>
   readonly model: Schema.Codec<Model, any>
   readonly message: Schema.Codec<Msg, any>
   /** The Schema of the messages a parent may send: the cases of `message` listed in `receives`. */
@@ -930,7 +932,8 @@ export interface Headless<in out Props, out Events, out Parts, out R = never, in
     readonly _R: Types.Covariant<R>
     readonly _Rcv: Types.Invariant<Rcv>
   }
-  readonly name: string
+  /** What `define` returned. `provide` keeps it, so `definition.name` is the name the component was defined with. */
+  readonly definition: Definition.Any
   readonly props: Schema.Codec<Props, any>
   readonly model: Schema.Codec<any, any>
   readonly message: Schema.Codec<any, any>
@@ -1397,18 +1400,17 @@ const HeadlessProto = Object.assign(Object.create(Function.prototype), {
   ref: Proto.ref
 })
 
-// A callable component: calling it declares a slot of it. A function's own
-// `name` is read-only, so every field is defined rather than assigned.
-const makeComponent = (proto: object, fields: { readonly name: string; readonly [key: string]: unknown }): any => {
-  // Named where it's made: redefining a function's `name`, or assigning its
-  // fields, leaves it with slow, dictionary-mode properties, and the runtime
-  // reads them on every instance.
-  const component = {
-    [fields.name]: (_h: unknown, options: child.Options) => child.make(component as any, options)
-  }[fields.name]
+// A callable component: calling it declares a slot of it. The function's own
+// `name` is left alone. Its fields are defined, not assigned: a function given
+// more than 15 properties by assignment, or a new `name`, switches to slow,
+// dictionary-mode properties, and the runtime reads them on every instance.
+const makeComponent = (
+  proto: object,
+  fields: { readonly [key: string]: unknown }
+): any => {
+  const component = (_h: unknown, options: child.Options) => child.make(component as any, options)
   Object.setPrototypeOf(component, proto)
   for (const key of Object.keys(fields)) {
-    if (key === "name") continue
     Object.defineProperty(component, key, { value: fields[key], enumerable: true, writable: true, configurable: true })
   }
   return component
@@ -1593,6 +1595,50 @@ export interface Definition<Name extends string, Props, Model, Msg, Events, V ex
 }
 
 /**
+ * Types for definitions: what a component keeps of the one it was made from.
+ *
+ * @stability experimental
+ * @since 0.1.0
+ */
+export declare namespace Definition {
+  /**
+   * A component's `definition` as the types see it: the name and Schemas of
+   * what `define` returned. It's that same object, so every `Definition` fits.
+   *
+   * **Details**
+   *
+   * The Schemas are erased. The component itself carries them typed, and a
+   * `Definition` can't be typed exactly here, since a component is covariant
+   * in its events and loaders and a definition isn't.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  export interface Any {
+    readonly name: string
+    readonly props: Schema.Codec<any, any>
+    readonly model: Schema.Codec<any, any>
+    readonly message: Schema.Codec<any, any>
+    readonly events: Schema.Codec<any, any>
+    readonly receives: Schema.Codec<any, any>
+    readonly loaders: unknown
+    readonly elements: View.Vocabulary<any> | undefined
+  }
+
+  /**
+   * A `Definition.Any` that keeps the name's literal type.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  export interface Of<Name extends string> extends Any {
+    readonly name: Name
+  }
+}
+
+/**
  * `h` in the view of a definition, for a function that takes it without
  * `Def.fragment`.
  *
@@ -1651,6 +1697,11 @@ export type Helper<D> = D extends
  * return type of `init`, `update` and `view` is inferred and `R` is read off
  * it, so `R` covers every branch, including conditional views. Framework
  * services such as `Scope` are never part of `R`.
+ *
+ * The component keeps what `define` returned as its `definition`, so the
+ * `name` option is read back as `Component.definition.name`. Paths, messages
+ * and the message log use it. A component is a function, so its own `name`
+ * is the function's and doesn't carry it.
  *
  * `props` and `events` are optional. `subscriptions` returns keyed Streams run
  * while their key is listed, and falsy entries are skipped. `elements`
@@ -1932,7 +1983,7 @@ const finish = (
   const view = options.view
   const parts = options.parts
   return makeComponent(view === undefined ? HeadlessProto : Proto, {
-    name: definition.name,
+    definition,
     props: definition.props,
     model: definition.model,
     message: definition.message,
@@ -2330,8 +2381,6 @@ export const provide: {
         : undefined
     return makeComponent(Proto, {
       ...component,
-      // A function's `name` isn't enumerable, so the spread leaves it out.
-      name: component.name,
       layer: inner === undefined ? outer : (props: unknown) => Layer.provideMerge(inner(props), outer(props)),
       layerFailure,
       sharedLayer,

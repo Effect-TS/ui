@@ -5,20 +5,24 @@ import { Layer, Schema } from "effect"
 const RowMessage = Schema.TaggedUnion({ Clear: {}, Typed: { text: Schema.String } })
 const RowEvents = Schema.TaggedUnion({ Changed: { text: Schema.String } })
 
-const Row = Component.define({
+const RowDef = Component.define({
   name: "Row",
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.String,
   message: RowMessage,
   events: RowEvents,
   receives: ["Clear"]
-}).make({
+})
+
+const Row = RowDef.make({
   init: () => "",
   update: (text) => text,
   view: (text, h) => h.el("li", text)
 })
 
-const Listbox = Component.define({ name: "Listbox", model: Schema.Null, message: Schema.Never }).make({
+const ListboxDef = Component.define({ name: "Listbox", model: Schema.Null, message: Schema.Never })
+
+const Listbox = ListboxDef.make({
   init: () => null,
   update: (model) => model,
   parts: (_, p) => ({ id: p.id("list") })
@@ -32,15 +36,26 @@ const h = View.makeHelper<typeof ParentMessage.Type, {}>({}, undefined)
 describe("a component call", () => {
   it("is a function that keeps the component's fields", () => {
     assert.strictEqual(typeof Row, "function")
-    assert.strictEqual(Row.name, "Row")
+    assert.strictEqual(Row.definition, RowDef)
+    assert.strictEqual(Row.definition.name, "Row")
+    // The function's own name isn't the component's.
+    assert.notStrictEqual(Row.name, "Row")
     assert.isTrue(Component.isComponent(Row))
     assert.isFalse(Component.isHeadless(Row))
-    assert.strictEqual(Row.pipe((c) => c.name), "Row")
+    assert.strictEqual(Row.pipe((c) => c.definition.name), "Row")
     assert.strictEqual(Row.ref("Draft").key, "Draft")
     // `call`, `apply` and `bind` are Function.prototype's.
     assert.strictEqual(Row.call, Function.prototype.call)
     assert.strictEqual(Row.apply, Function.prototype.apply)
     assert.strictEqual(Row.bind, Function.prototype.bind)
+  })
+
+  it("keeps its fields enumerable, so a copy keeps them", () => {
+    const copy = { ...Row }
+    assert.strictEqual(copy.definition, RowDef)
+    assert.strictEqual(copy.update, Row.update)
+    assert.includeMembers(Object.keys(Row), ["definition", "props", "model", "message", "init", "update", "view"])
+    assert.includeMembers(Object.keys(Listbox), ["definition", "parts"])
   })
 
   it("builds a slot with a key", () => {
@@ -79,7 +94,8 @@ describe("a component call", () => {
     const slot = Listbox(h, { key: "l", view })
     assert.isTrue(Component.isHeadless(Listbox))
     assert.strictEqual(typeof Listbox, "function")
-    assert.strictEqual(Listbox.name, "Listbox")
+    assert.strictEqual(Listbox.definition, ListboxDef)
+    assert.strictEqual(Listbox.definition.name, "Listbox")
     assert.strictEqual(slot.component, Listbox as unknown)
     assert.strictEqual(slot.view, view)
   })
@@ -88,7 +104,10 @@ describe("a component call", () => {
     const Provided = Component.provide(Row, Layer.empty)
     assert.notStrictEqual<unknown>(Provided, Row)
     assert.strictEqual(typeof Provided, "function")
-    assert.strictEqual(Provided.name, "Row")
+    // `provide` keeps the definition, so nested provides do too.
+    assert.strictEqual(Provided.definition, RowDef)
+    assert.strictEqual(Component.provide(Provided, Layer.empty).definition, RowDef)
+    assert.includeMembers(Object.keys(Provided), ["definition", "layer", "update"])
     assert.isTrue(Component.isComponent(Provided))
     assert.isDefined(Provided.layer)
     assert.strictEqual(Provided.update, Row.update)
