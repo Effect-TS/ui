@@ -1448,6 +1448,10 @@ const setup = (
    * starts again while `scope` is open, once the interrupted entries are gone and their resources
    * released. One still held makes the next attempt fail the same way, and try again. A Layer that
    * interrupts itself still fails.
+   *
+   * An attempt interrupted when its Scope closes runs its cleanup in its fiber, a failed Layer's
+   * included. `scope` owns that cleanup: its close ends after it, so the services the Layer used
+   * outlive it.
    */
   const buildLayer = (
     layer: Layer.Layer<any, any, any>,
@@ -1456,6 +1460,12 @@ const setup = (
     scope: Scope.Scope,
     onExit: (exit: Exit.Exit<Context.Context<any>, unknown>) => void
   ) => {
+    const cleanups = new Set<Fiber.Fiber<unknown, unknown>>()
+    // Never a wait for itself, should a build close `scope` from inside.
+    addFinalizer(
+      scope,
+      Effect.withFiber((current) => Fiber.awaitAll([...cleanups].filter((fiber) => fiber !== current)))
+    )
     const attempt = (again: boolean) => {
       const buildScope = Scope.forkUnsafe(scope, "sequential")
       const build = memoMap === undefined
@@ -1496,8 +1506,10 @@ const setup = (
         buildScope,
         Effect.sync(() => {
           if (fiber.pollUnsafe() !== undefined) return
-          // The interrupted Layer runs its own cleanup in the fiber, after the close has ended.
+          // The interrupted Layer runs its own cleanup in the fiber, after this close has ended and
+          // before `scope`'s does.
           track(releasedBuilds, fiber)
+          track(cleanups, fiber)
           fiber.interruptUnsafe(buildInterrupter)
         })
       )
@@ -1540,11 +1552,16 @@ const setup = (
     return entry
   }
 
-  const releaseShared = (parentEnv: Env, layer: Layer.Layer<any, any, any>, entry: SharedBuild) => {
-    if (--entry.refs > 0) return
+  /** The last user's close ends once the build's has, so the parent's services outlive it. */
+  const releaseShared = (
+    parentEnv: Env,
+    layer: Layer.Layer<any, any, any>,
+    entry: SharedBuild
+  ): Effect.Effect<void> => {
+    if (--entry.refs > 0) return Effect.void
     const byLayer = sharedBuilds.get(parentEnv)
     if (byLayer?.get(layer) === entry) byLayer.delete(layer)
-    closeScope(entry.scope)
+    return Scope.close(entry.scope, Exit.void)
   }
 
   /**
@@ -2134,7 +2151,7 @@ const setup = (
         const own = shared !== undefined ? shared.env : buildingEnv(parentEnv)
         inst.env = own
         if (shared !== undefined) {
-          addFinalizer(scope, Effect.sync(() => releaseShared(parentEnv, sharedLayer!, shared)))
+          addFinalizer(scope, Effect.suspend(() => releaseShared(parentEnv, sharedLayer!, shared)))
         }
         let settleBuild: (() => void) | undefined
         const buildStamp = shared !== undefined ? shared.stamp : ++builds

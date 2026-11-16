@@ -1754,8 +1754,8 @@ describe("Runtime", () => {
           // B is waiting for A's cleanup to end.
           drop(root, "b")
           yield* TestHost.settle
-          // Only A's cleanup is still running.
-          assert.strictEqual(fibers, 1)
+          // Only A's cleanup is still running, and A's close, which waits for it.
+          assert.strictEqual(fibers, 2)
           yield* Deferred.succeed(finishCleanup, undefined)
           yield* TestHost.settle
           assert.strictEqual(fibers, 0)
@@ -3325,6 +3325,115 @@ describe("Runtime", () => {
               JSON.stringify({ descendant, unmount })
             )
           }
+        }
+      })))
+
+    /** A Layer cleanup that waits on `gate`, then checks the parent's service is still alive. */
+    const gatedCleanup = (gate: Deferred.Deferred<void>, entered: Deferred.Deferred<void>, events: Array<string>) =>
+      Alive.use((service) =>
+        Effect.andThen(Deferred.succeed(entered, undefined), Deferred.await(gate)).pipe(
+          Effect.andThen(Effect.sync(() => events.push(`clean ${service.room} alive=${service.alive()}`)))
+        )
+      )
+    /** Under a parent that provides `Alive`, closes `scope` and checks the cleanup ends before the parent's release. */
+    const closesAfterCleanup = Effect.fnUntraced(function*(
+      scope: Scope.Closeable,
+      gate: Deferred.Deferred<void>,
+      entered: Deferred.Deferred<void>,
+      events: Array<string>,
+      label: unknown
+    ) {
+      const closed = yield* Scope.close(scope, Exit.void).pipe(Effect.forkChild)
+      yield* Effect.yieldNow
+      yield* TestHost.settle
+      yield* Deferred.await(entered)
+      assert.deepStrictEqual(events, [], JSON.stringify(label))
+      assert.isUndefined(closed.pollUnsafe(), JSON.stringify(label))
+      yield* Deferred.succeed(gate, undefined)
+      yield* TestHost.settle
+      yield* Fiber.join(closed)
+      assert.deepStrictEqual(events, ["clean parent alive=true", "release parent"], JSON.stringify(label))
+    })
+
+    it.effect("an unmount waits for a selection's Layer cleanup, pending, failing or superseded, before the parent's services", () =>
+      provideHost(Effect.gen(function*() {
+        for (const kind of ["pending", "failing"] as const) {
+          for (const supersede of [false, true]) {
+            const gate = yield* Deferred.make<void>()
+            const entered = yield* Deferred.make<void>()
+            const events: Array<string> = []
+            const cleanup = gatedCleanup(gate, entered, events)
+            const Picking = Component.define({ name: "Picking", model: Schema.String, message: Schema.String }).make({
+              init: () => "a",
+              update: (room, message) => message === "failed" ? room : room === "a" ? "b" : "c",
+              view: (room, h) => h.el("button").on("click", "next").children(room)
+            })
+            const Child = Component.provide(Picking, {
+              key: (_, room) => room,
+              // "b" is still building, or still cleaning up after it failed, when it is let go.
+              layer: (room) =>
+                room !== "b"
+                  ? Layer.empty
+                  : kind === "pending"
+                  ? Layer.effectDiscard(Effect.never.pipe(Effect.onInterrupt(() => cleanup)))
+                  : Layer.effectDiscard(Effect.andThen(Effect.addFinalizer(() => cleanup), Effect.fail("bad")))
+            }, { onFailure: () => "failed" })
+            const Parent = Component.provide(
+              Component.define({ name: "Parent", model: Schema.Null, message: Schema.Never }).make({
+                init: () => null,
+                update: (model) => model,
+                view: (_, h) => h.el("div", Child(h, { key: "child", props: {} }))
+              }),
+              () => scopedGreeter("parent", events)
+            )
+            const scope = yield* Scope.make()
+            const root = yield* TestHost.mount(Parent, {}).pipe(Scope.provide(scope))
+            yield* TestHost.settle
+            Query.fire(root.all(Query.tag("button"))[0], "click")
+            yield* TestHost.settle
+            if (supersede) {
+              Query.fire(root.all(Query.tag("button"))[0], "click")
+              yield* TestHost.settle
+            }
+            yield* closesAfterCleanup(scope, gate, entered, events, { kind, supersede })
+          }
+        }
+      })))
+
+    it.effect("an unmount waits for an unkeyed provide's Layer cleanup, pending, failed or shared, before the parent's services", () =>
+      provideHost(Effect.gen(function*() {
+        for (const kind of ["pending", "failed", "shared"] as const) {
+          const gate = yield* Deferred.make<void>()
+          const entered = yield* Deferred.make<void>()
+          const events: Array<string> = []
+          const cleanup = gatedCleanup(gate, entered, events)
+          const Plain = Component.define({ name: "Plain", model: Schema.Null, message: Schema.String }).make({
+            init: () => null,
+            update: (model) => model,
+            view: (_, h) => h.text("plain")
+          })
+          const Child = kind === "shared"
+            ? Component.provide(Plain, Layer.effectDiscard(Effect.addFinalizer(() => cleanup)))
+            : Component.provide(
+              Plain,
+              () =>
+                kind === "pending"
+                  ? Layer.effectDiscard(Effect.never.pipe(Effect.onInterrupt(() => cleanup)))
+                  : Layer.effectDiscard(Effect.andThen(Effect.addFinalizer(() => cleanup), Effect.fail("bad"))),
+              { onFailure: () => "failed" }
+            )
+          const Parent = Component.provide(
+            Component.define({ name: "Parent", model: Schema.Null, message: Schema.Never }).make({
+              init: () => null,
+              update: (model) => model,
+              view: (_, h) => h.el("div", Child(h, { key: "child", props: {} }))
+            }),
+            () => scopedGreeter("parent", events)
+          )
+          const scope = yield* Scope.make()
+          yield* TestHost.mount(Parent, {}).pipe(Scope.provide(scope))
+          yield* TestHost.settle
+          yield* closesAfterCleanup(scope, gate, entered, events, { kind })
         }
       })))
 
