@@ -50,6 +50,11 @@ const audit = NoteDef.update((model, _msg, $) => $.set(model).run(Audit.make()))
 const touch = NoteDef.update((model) => ({ ...model, edits: model.edits + 1 }))
 
 describe("Component.define", () => {
+  it("H supports pure views without a registered vocabulary", () => {
+    const row = <Msg>(h: Component.H<Msg>, label: string) => h.el("li", label)
+    NoteDef.view((model, h) => h.ul(row(h, model.body)))
+  })
+
   it("types an untagged update over the whole message, from the definition", () => {
     NoteDef.update((model, msg, $) => {
       expect(model).type.toBe<Model>()
