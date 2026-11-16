@@ -308,6 +308,9 @@ export declare namespace Child {
    * every typed ref fits it, so a slot that took it would take a ref the
    * component doesn't receive.
    *
+   * A component call adds one rule: a component whose props are erased,
+   * such as a `Component.Any`, takes `props` even when it needs none.
+   *
    * @category models
    * @since 0.1.0
    */

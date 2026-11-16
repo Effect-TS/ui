@@ -699,21 +699,25 @@ export interface Mountable<in out Props, out Events, out R = never, in Rcv = nev
    * Declares a slot of this component in a parent's view, from the parent's
    * `h`, which types `onEmit`, `onFailure` and `fallback` against the
    * parent's message type. The component's requirements, and the fallback's,
-   * surface in the parent's.
+   * surface in the parent's. A component whose props are erased, such as a
+   * `Component.Any`, takes `props` even when it needs none.
    */
   // The type parameters don't depend on the component, so a union of
   // components is callable.
   <Msg, RF = never>(
     h: View.Helper<Msg, unknown>,
-    // Erased props take any options, so every component is a `Component.Any`:
-    // its options must fit every component's, including required props.
-    options: 0 extends 1 & Props ? any
-      : View.Child.Options<Props, Events, NoInfer<Msg>, Rcv> & {
+    options:
+      & View.Child.Options<Props, Events, NoInfer<Msg>, Rcv>
+      & {
         /** Shown if the child fails, until its key changes. Without it, the slot is blank. */
         readonly fallback?:
           | ((result: AsyncResult.Failure<never, unknown>) => View.Content<NoInfer<Msg>, RF>)
           | undefined
       }
+      // Erased props are required, so every component is a `Component.Any`:
+      // its options must fit every component's, including one whose props
+      // are required.
+      & (0 extends 1 & Props ? { readonly props: Props } : {})
   ): View.Child<Msg, R | NoInfer<RF>>
   readonly [TypeId]: Mountable.Variance<Props, Events, R, Rcv>
   readonly name: string

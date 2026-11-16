@@ -398,6 +398,45 @@ describe("a component slot with a ref", () => {
   })
 })
 
+describe("an erased component", () => {
+  // Component.Any, and a component whose props are `Schema.Any`.
+  const any: Component.Any = Plain
+  const AnyProps = Component.define({ name: "AnyProps", props: Schema.Any, model: Schema.Null, message: EditorMessage })
+    .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p") })
+
+  it("takes props, and exactly one of key and ref", () => {
+    ParentDef.view((_, h) => {
+      expect(any(h, { key: "a", props: {} })).type.toBe<View.Child<typeof ParentMessage.Type, any>>()
+      expect(AnyProps(h, { key: "a", props: 1 })).type.not.toRaiseError()
+      expect(any).type.not.toBeCallableWith(h, { key: "a" })
+      expect(AnyProps).type.not.toBeCallableWith(h, { key: "a" })
+      expect(any).type.not.toBeCallableWith(h, { props: {} })
+      expect(any).type.not.toBeCallableWith(h, { key: "a", ref: Plain.ref("p"), props: {} })
+      return h.el("p")
+    })
+  })
+
+  it("takes only a ref that receives nothing", () => {
+    ParentDef.view((_, h) => {
+      expect(any(h, { ref: Plain.ref("p"), props: {} })).type.not.toRaiseError()
+      expect(any).type.not.toBeCallableWith(h, { ref: Draft, props: {} })
+      expect(AnyProps).type.not.toBeCallableWith(h, { ref: Draft, props: {} })
+      return h.el("p")
+    })
+  })
+
+  it("checks callbacks against the parent's message", () => {
+    ParentDef.view((_, h) => {
+      expect(any(h, { key: "a", props: {}, onEmit: () => ({ _tag: "Go" as const }) })).type.not.toRaiseError()
+      expect(any).type.not.toBeCallableWith(h, { key: "a", props: {}, onEmit: () => 1 })
+      expect(any).type.not.toBeCallableWith(h, { key: "a", props: {}, onFailure: () => 1 })
+      expect(any).type.not.toBeCallableWith(h, { key: "a", props: {}, fallback: () => 1 })
+      expect(AnyProps).type.not.toBeCallableWith(h, { key: "a", props: 1, onEmit: () => 1 })
+      return h.el("p")
+    })
+  })
+})
+
 describe("Mountable", () => {
   it("can't claim a message the component doesn't receive", () => {
     expect<Component.Mountable<{}, never, never, Received>>().type.not.toBeAssignableFrom(Plain)
