@@ -64,8 +64,9 @@ Work top to bottom. Write the notes from steps 1 to 3 into the PR description.
    - a changeset: `"@effect/ui-kit": minor`
    - run, each prefixed with `nix develop -c`: `pnpm codegen`,
      `pnpm lint`, `pnpm check`, `pnpm vitest run --project @effect/ui-kit`,
-     `pnpm doctest run packages/ui-kit/src/<Name>.ts`, `pnpm jsdocs --check`
-     and `pnpm circular`
+     `pnpm doctest run packages/ui-kit/src/<Name>.ts`, `pnpm jsdocs --check`,
+     `pnpm circular` and `pnpm ai-docgen` (it should leave `LLMS.md`
+     unchanged)
 8. **Update this skill.** If a step was unclear, or the port needed a
    convention that isn't written down, fix this file or the conventions in
    the same PR and say so in the PR description.
