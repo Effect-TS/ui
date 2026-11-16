@@ -2,18 +2,21 @@
  * A control that turns a setting on or off, ported from Base UI's Switch
  * (https://base-ui.com/react/components/switch).
  *
- * `Switch` is headless: it owns the ARIA, the data attributes and the click
- * handling, and the consumer draws the markup. The consumer owns the value,
- * passes it as `checked`, and stores what the `CheckedChange` event
- * reports.
+ * `Switch` is headless: it owns the ARIA, the data attributes, the form
+ * field and the click handling, and the consumer draws the markup. The
+ * consumer owns the value, passes it as `checked`, and stores what the
+ * `Toggled` event reports.
  *
  * **Anatomy**
  *
- * | Base UI        | Part     | Element                    |
- * | :------------- | :------- | :------------------------- |
- * | `Switch.Root`  | `root`   | `<button role="switch">`   |
- * | `Switch.Thumb` | `thumb`  | `<span>` inside the root   |
- * | hidden input   | `input`  | `<input type="hidden">`    |
+ * | Base UI        | Part    | Element                                         |
+ * | :------------- | :------ | :---------------------------------------------- |
+ * | `Switch.Root`  | `root`  | `<button role="switch">`, with the hidden input |
+ * | `Switch.Thumb` | `thumb` | `<span>` inside the root                        |
+ *
+ * `root` takes the button and its children, and adds the hidden
+ * `<input>` that carries the form value as the last child, so a switch
+ * with a `name` can't be drawn without it.
  *
  * **Data attributes**
  *
@@ -35,8 +38,9 @@
  * - The value is always controlled. There is no `defaultChecked`: keep the
  *   value in the consumer's Model.
  * - The root is always a native `<button>`, Base UI's `nativeButton` mode.
- * - The form value is a hidden input, so `required` sets `aria-required`
- *   and `data-required` but doesn't block a form submission.
+ * - The form value is a hidden input inside the root, so `required` sets
+ *   `aria-required` and `data-required` but doesn't block a form
+ *   submission.
  * - Field state (`data-valid`, `data-invalid`, `data-dirty`,
  *   `data-touched`, `data-filled`, `data-focused`) waits for a ui-kit
  *   Field.
@@ -49,7 +53,7 @@
  * import { Switch } from "@effect/ui-kit"
  * import { Schema } from "effect"
  *
- * const SettingsMessage = Schema.TaggedUnion({ SetNotify: { checked: Schema.Boolean } })
+ * const SettingsMessage = Schema.TaggedUnion({ ToggledNotify: { checked: Schema.Boolean } })
  *
  * const Settings = Component.define({
  *   name: "Settings",
@@ -58,16 +62,18 @@
  *   elements: Html
  * }).make({
  *   init: () => ({ notify: false }),
- *   update: (model, { checked }) => ({ ...model, notify: checked }),
+ *   update: (model, message) =>
+ *     SettingsMessage.match(message, {
+ *       ToggledNotify: ({ checked }) => ({ ...model, notify: checked })
+ *     }),
  *   view: (model, h) =>
- *     Switch.Switch(h, {
+ *     Switch(h, {
  *       key: "notify",
  *       props: { checked: model.notify, name: "notify" },
- *       onEmit: ({ checked }) => SettingsMessage.make({ _tag: "SetNotify", checked }),
+ *       onEmit: ({ checked }) => SettingsMessage.make({ _tag: "ToggledNotify", checked }),
  *       view: (s) =>
  *         h.label.class("setting").children(
- *           s.root(h.button.class("switch")).children(s.thumb(h.span.class("thumb"))),
- *           s.input(h.input),
+ *           s.root(h.button.class("switch"), s.thumb(h.span.class("thumb"))),
  *           "Notifications"
  *         )
  *     })
@@ -79,6 +85,7 @@
  */
 import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
+import * as View from "@effect/ui/View"
 import * as Schema from "effect/Schema"
 
 /**
@@ -92,15 +99,16 @@ import * as Schema from "effect/Schema"
  * - `readOnly`: ignores clicks but stays focusable, and sets
  *   `aria-readonly`.
  * - `required`: sets `aria-required` and `data-required`.
- * - `name`, `value` and `uncheckedValue`: the hidden input's form
- *   field. An on switch submits `value`, `"on"` by default. An off switch
- *   submits `uncheckedValue`, or nothing when it is unset.
+ * - `name`, `value` and `uncheckedValue`: the form field. An on switch
+ *   submits `value`, `"on"` by default. An off switch submits
+ *   `uncheckedValue`, or nothing when it is unset. A disabled switch, or
+ *   one without a `name`, submits nothing.
  *
  * @stability experimental
  * @category schemas
  * @since 0.1.0
  */
-export const Props = Schema.Struct({
+export const SwitchProps = Schema.Struct({
   checked: Schema.Boolean,
   disabled: Schema.optional(Schema.Boolean),
   readOnly: Schema.optional(Schema.Boolean),
@@ -117,19 +125,19 @@ export const Props = Schema.Struct({
  * @category models
  * @since 0.1.0
  */
-export type Props = typeof Props.Type
+export type SwitchProps = typeof SwitchProps.Type
 
 /**
- * What a `Switch` emits. `CheckedChange` is Base UI's `onCheckedChange`:
- * the value the user asked for, which the consumer stores and passes back as
- * `checked`.
+ * What a `Switch` emits. `Toggled` is Base UI's `onCheckedChange`: the
+ * user toggled the switch, and `checked` is the value they asked for, which
+ * the consumer stores and passes back.
  *
  * @stability experimental
  * @category schemas
  * @since 0.1.0
  */
-export const Events = Schema.TaggedUnion({
-  CheckedChange: { checked: Schema.Boolean }
+export const SwitchEvents = Schema.TaggedUnion({
+  Toggled: { checked: Schema.Boolean }
 })
 
 /**
@@ -139,11 +147,12 @@ export const Events = Schema.TaggedUnion({
  * @category models
  * @since 0.1.0
  */
-export type Events = typeof Events.Type
+export type SwitchEvents = typeof SwitchEvents.Type
 
-const Message = Schema.TaggedUnion({ Toggle: {} })
+// A click on the root. Space and Enter on the native button arrive as one.
+const Message = Schema.TaggedUnion({ ClickedRoot: {} })
 
-const interactive = (props: Props): boolean => props.disabled !== true && props.readOnly !== true
+const interactive = (props: SwitchProps): boolean => props.disabled !== true && props.readOnly !== true
 
 // A data attribute is present, with an empty value, or absent.
 const flag = (on: boolean | undefined): string | undefined => on === true ? "" : undefined
@@ -152,7 +161,7 @@ const flag = (on: boolean | undefined): string | undefined => on === true ? "" :
 // can be styled on its own.
 const state = <B extends { readonly attr: (name: string, value: string | undefined) => B }>(
   builder: B,
-  props: Props
+  props: SwitchProps
 ): B =>
   builder
     .attr("data-checked", flag(props.checked))
@@ -161,18 +170,52 @@ const state = <B extends { readonly attr: (name: string, value: string | undefin
     .attr("data-readonly", flag(props.readOnly))
     .attr("data-required", flag(props.required))
 
+// What the form submits for these props, or nothing, like a checkbox: an off
+// switch without an `uncheckedValue` and a disabled one submit nothing.
+const submitted = (props: SwitchProps): string | undefined =>
+  props.name === undefined || props.disabled === true
+    ? undefined
+    : props.checked
+    ? (props.value ?? "on")
+    : props.uncheckedValue
+
+// The hidden input inside the root. A hidden input isn't interactive
+// content, so it may sit inside a <button>, and a form still submits it.
+const field = (props: SwitchProps): View.Node<never> | undefined => {
+  const value = submitted(props)
+  return value === undefined
+    ? undefined
+    : View.toNode(
+      new Html.VoidElement<never>("input")
+        .attr("type", "hidden")
+        .attr("name", props.name)
+        .attr("value", value)
+    )
+}
+
+/**
+ * A button the switch's root accepts, from the consumer's `h.button`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type SwitchButton<Msg, R> = Html.Element<Msg, R, Html.EventsOf<"button">, HTMLButtonElement, "button">
+
 /**
  * A headless switch. Call it with the consumer's `h` and a `view` closure
- * that applies `root`, `thumb` and, inside a form, `input` to its own
- * builders.
+ * that draws the root with `s.root(h.button, ...children)`, usually with
+ * `s.thumb(h.span)` as a child.
  *
  * **Details**
  *
  * The parts also return `checked`, `disabled`, `readOnly` and
  * `required`, resolved to booleans, for markup that depends on them.
  *
- * A click on a disabled or read-only switch emits nothing. A handler the
- * consumer adds to the root runs after the switch's own.
+ * `root` returns the finished element: set the button's classes and
+ * handlers before passing it. A click on a disabled or read-only switch
+ * emits nothing. A handler the consumer adds to the root runs after the
+ * switch's own.
  *
  * @stability experimental
  * @category components
@@ -180,21 +223,22 @@ const state = <B extends { readonly attr: (name: string, value: string | undefin
  */
 export const Switch = Component.define({
   name: "Switch",
-  props: Props,
+  props: SwitchProps,
   model: Schema.Struct({}),
   message: Message,
-  events: Events,
+  events: SwitchEvents,
   elements: Html
 }).make({
   init: () => ({}),
-  update: (model, _message, $) =>
-    interactive($.props) ? $.emit(Events.make({ _tag: "CheckedChange", checked: !$.props.checked })) : model,
-  parts: (_model, p) => ({
-    checked: p.props.checked,
-    disabled: p.props.disabled === true,
-    readOnly: p.props.readOnly === true,
-    required: p.props.required === true,
-    root: p.part("button", (b) =>
+  update: (model, message, $) =>
+    Message.match(message, {
+      ClickedRoot: () =>
+        interactive($.props)
+          ? $.emit(SwitchEvents.make({ _tag: "Toggled", checked: !$.props.checked }))
+          : model
+    }),
+  parts: (_model, p) => {
+    const root = p.part("button", (b) =>
       state(b, p.props)
         // Inside a form a button submits by default.
         .attr("type", "button")
@@ -203,14 +247,18 @@ export const Switch = Component.define({
         .attr("aria-readonly", p.props.readOnly === true ? "true" : undefined)
         .attr("aria-required", p.props.required === true ? "true" : undefined)
         .disabled(p.props.disabled === true)
-        .onClick(Message.make({ _tag: "Toggle" }))),
-    thumb: p.part("span", (b) => state(b, p.props)),
-    // A disabled input isn't submitted, which is how an off switch without
-    // an `uncheckedValue` submits nothing, like a checkbox.
-    input: p.part("input", (b) =>
-      b.attr("type", "hidden")
-        .attr("name", p.props.name)
-        .attr("value", p.props.checked ? (p.props.value ?? "on") : p.props.uncheckedValue)
-        .disabled(p.props.disabled === true || (!p.props.checked && p.props.uncheckedValue === undefined)))
-  })
+        .onClick(Message.make({ _tag: "ClickedRoot" })))
+    const hidden = field(p.props)
+    return {
+      checked: p.props.checked,
+      disabled: p.props.disabled === true,
+      readOnly: p.props.readOnly === true,
+      required: p.props.required === true,
+      root: <Msg, R, const C extends ReadonlyArray<View.Input<Msg, any>>>(
+        button: SwitchButton<Msg, R>,
+        ...children: C
+      ): View.Element<Msg, R | View.Requirements<C[number]>> => root(button).children(...children, hidden),
+      thumb: p.part("span", (b) => state(b, p.props))
+    }
+  }
 })
