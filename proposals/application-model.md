@@ -66,6 +66,38 @@ boundary so these guarantees hold for Queries as well as application code.
    across the graph. Story/Scene can then exercise real composition with
    controlled work/time, without HTTP clients or a live cache during rendering.
    Construction may use Effects; the acquired state transitions stay pure.
+7. Typed field evolution and reusable Steps. Authors supply transformations
+   such as `count: Number.increment`; the framework applies them to the current
+   field values. This keeps Model evolution concise and preserves unchanged
+   field references for predictable component-level rendering.
+
+## Field evolution in the update DSL
+
+Effect UI's immutable Step builder already composes Model transformations,
+Commands, and emitted outputs. Add contextual `$.modifyFields(...)` to that
+builder so a handler can declare how fields evolve. Keep standalone
+`modifyFields` for ordinary pure transformations and reusable helpers.
+Changing fields on a Step preserves its accumulated Commands, emitted
+outputs, and inferred service requirements.
+
+Each field callback receives that field's current value. Omitted fields keep
+their values and references; a payload replacement uses `() => payload`.
+Callbacks in one record read the incoming field values. Use sequential Steps
+when a later transformation needs the result of an earlier one. These rules
+make update order explicit without reconstructing the whole Model.
+
+The contextual helper should reject unknown fields and transformations that
+violate field types or Model variant constraints, following the preview's
+contract-bound field Steps. Preserve the original Model reference when all
+transformed values are unchanged. This catches invalid updates and avoids
+unnecessary rendering work. Existing children evolve through their public
+operations so field helpers do not bypass the child's invariants.
+
+The preview's `Definition.makeFieldsStep` and `.fromMessage` demonstrate
+reusable field Steps with Model and Message inference supplied by the owning
+contract. Preserve that capability; evaluate how it fits UI's existing
+`Component.update` helpers before choosing the final method names. This lets
+larger updates be composed from named operations with useful inferred types.
 
 ## SSR and prefetch: the specific difference
 
@@ -87,8 +119,9 @@ replacing the active feature.
 ## Scope and status
 
 This is a non-runnable API sketch. Application, Query, makeLayer, union
-helpers, composition, and testing spellings are proposed. Route/Url examples
-use preview shapes. Optional/keyed composition and prefetch need a prototype.
+helpers, field-evolution helpers, composition, and testing spellings are
+proposed. Route/Url examples use preview shapes. Optional/keyed composition
+and prefetch need a prototype.
 "Query" is a naming suggestion. The preview supplies semantic evidence;
 ordinary UI code need not adopt its entire Block/Binding/Composition surface.
 
@@ -105,6 +138,7 @@ import {
   defineInMessageUnion,
   defineMessageUnion,
   defineTaggedUnion,
+  modifyFields,
   Query,
   Route,
   Url
@@ -187,9 +221,14 @@ const NoteInMessage = defineInMessageUnion({
   InformedOfSelectedNoteChanged: { maybeNoteId: Schema.Option(Schema.String) }
 })
 
+const DetailState = Schema.Literals(["Collapsed", "Expanded"])
+
+const toggleDetailState = (detailState: typeof DetailState.Type): typeof DetailState.Type =>
+  detailState === "Collapsed" ? "Expanded" : "Collapsed"
+
 const NoteDetailsModel = Schema.Struct({
   maybeNoteId: Schema.Option(Schema.String),
-  detailState: Schema.Literals(["Collapsed", "Expanded"])
+  detailState: DetailState
 })
 
 // Like a preview Block contract, this declaration is usable by a parent
@@ -228,24 +267,30 @@ const NoteDetails = Component.define({
 const noteDetailsLayer = NoteDetails.makeLayer({
   init: () => ({ maybeNoteId: Option.none(), detailState: "Collapsed" }),
 
+  // Add field evolution to UI's immutable Step builder. The helper supplies
+  // the current field value and preserves omitted fields, so the handler
+  // describes the change without reconstructing Model. It also preserves
+  // work and outputs already accumulated on the Step.
   update: {
-    ClickedToggleDetails: (model) => ({
-      ...model,
-      detailState: model.detailState === "Collapsed" ? "Expanded" : "Collapsed"
-    })
+    ClickedToggleDetails: (_model, _message, $) => $.modifyFields({ detailState: toggleDetailState })
   },
 
   // Borrow the preview's InMessage contract: a parent can request a public
   // transition without depending on the child's private Message union. The
   // child retains control of its invariants when composed into different apps.
   inMessageUpdate: {
-    RequestedCollapse: (model) => ({ ...model, detailState: "Collapsed" }),
+    RequestedCollapse: (_model, _message, $) => $.modifyFields({ detailState: () => "Collapsed" }),
 
     // The parent reports a relevant fact; the child owns its consequences.
     // A different selected note resets expansion. An unchanged selection
     // preserves it. The Query declaration then derives the required read.
-    InformedOfSelectedNoteChanged: (model, { maybeNoteId }) =>
-      Equal.equals(model.maybeNoteId, maybeNoteId) ? model : { ...model, maybeNoteId, detailState: "Collapsed" }
+    InformedOfSelectedNoteChanged: (model, { maybeNoteId }, $) =>
+      Equal.equals(model.maybeNoteId, maybeNoteId)
+        ? model
+        : $.modifyFields({
+          maybeNoteId: () => maybeNoteId,
+          detailState: () => "Collapsed"
+        })
   },
 
   view: (model, h) =>
@@ -365,11 +410,13 @@ const notesApplicationLayer = NotesApplication.makeLayer({
     // the relevant children. The child's handler decides whether to reset.
     // Both Steps form one pure application transition, so rendering cannot
     // observe the new root Route paired with the child's previous selection.
+    // The field helper evolves the Model supplied by the composition. Later
+    // Steps see that result, preserving fields another Step may have changed.
     ChangedUrl: (_model, { url }, $) => {
       const route = urlToAppRoute(url)
 
       return $.combine(
-        () => ({ route }),
+        (stepModel) => modifyFields(stepModel, { route: () => route }),
         $.children.details.informOfSelectedNoteChanged({
           maybeNoteId: selectedNoteFromRoute(route)
         })
@@ -545,6 +592,8 @@ export const noteStory = Story.make(
 ### Foldkit preview semantics
 
 - [Block composition and public contracts](https://github.com/foldkit/foldkit/blob/54f8bcd443b4fd18952403a3d02e212abf872d58/packages/website/src/page/core/block.md)
+- [Field evolution and structural sharing](https://github.com/foldkit/foldkit/blob/54f8bcd443b4fd18952403a3d02e212abf872d58/packages/foldkit/src/struct/index.ts)
+- [Reusable field Steps](https://github.com/foldkit/foldkit/blob/54f8bcd443b4fd18952403a3d02e212abf872d58/packages/foldkit/src/block/fieldStep.ts)
 - [Query transitions and freshness](https://github.com/foldkit/foldkit/blob/54f8bcd443b4fd18952403a3d02e212abf872d58/packages/website/src/page/core/query.md)
 - [Runtime and host boundaries](https://github.com/foldkit/foldkit/blob/54f8bcd443b4fd18952403a3d02e212abf872d58/packages/website/src/page/core/runtime.md)
 - [Server rendering and Flags handoff](https://github.com/foldkit/foldkit/blob/54f8bcd443b4fd18952403a3d02e212abf872d58/packages/website/src/page/core/serverRendering.md)
