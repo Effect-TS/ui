@@ -1642,6 +1642,8 @@ export declare namespace Definition {
  * The view helper for reusable pure view functions, without a component
  * definition. `Msg` defaults to `never` for views that emit no messages.
  *
+ * **Details**
+ *
  * Includes the app's registered vocabulary (for example, import
  * `@effect/ui/html/register` for HTML tags). Props remain `unknown` and
  * component-specific loaders are not included. Use {@link Helper} instead
