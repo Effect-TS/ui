@@ -121,10 +121,10 @@ const LoaderPage = Component.define({ name: "LoaderPage", model: Schema.Null, me
   view: (_, h) =>
     h.el(
       "main",
-      h.child(ByArgs, { key: "args" }),
-      h.child(ByError, { key: "error" }),
-      h.child(ByKeys, { key: "keys" }),
-      h.child(Plain, { key: "plain" })
+      ByArgs(h, { key: "args" }),
+      ByError(h, { key: "error" }),
+      ByKeys(h, { key: "keys" }),
+      Plain(h, { key: "plain" })
     )
 })
 
@@ -134,9 +134,9 @@ const Page = Component.define({ name: "Page", model: Schema.Null, message: Schem
   view: (_, h) =>
     h.el(
       "main",
-      h.child(Secret, { key: "secret" }),
-      h.child(Loaded, { key: "loaded" }),
-      h.child(Plain, { key: "plain" })
+      Secret(h, { key: "secret" }),
+      Loaded(h, { key: "loaded" }),
+      Plain(h, { key: "plain" })
     )
 })
 

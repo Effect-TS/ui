@@ -58,7 +58,7 @@ const NormalRow = Component.define({
 const Normal = Component.define(app).make({
   init,
   update,
-  view: (rows, h) => h.ul.children(rows.map((row) => h.child(NormalRow, { key: row.id, props: { row } })))
+  view: (rows, h) => h.ul.children(rows.map((row) => NormalRow(h, { key: row.id, props: { row } })))
 })
 
 /** The same disclosure, headless: the list's closure owns the markup. */
@@ -79,7 +79,7 @@ const Headless = Component.define(app).make({
   update,
   view: (rows, h) =>
     h.ul.children(rows.map((row) =>
-      h.child(Disclosure, {
+      Disclosure(h, {
         key: row.id,
         view: (d) =>
           h.li.class("row").attr("data-done", row.done ? "" : undefined).children(
@@ -102,7 +102,7 @@ const WrappedRow = Component.define({
   init: () => null,
   update: (model) => model,
   view: (_, h) =>
-    h.child(Disclosure, {
+    Disclosure(h, {
       key: "d",
       view: (d) =>
         h.li.class("row").attr("data-done", h.props.row.done ? "" : undefined).children(
@@ -115,7 +115,7 @@ const WrappedRow = Component.define({
 const Wrapped = Component.define(app).make({
   init,
   update,
-  view: (rows, h) => h.ul.children(rows.map((row) => h.child(WrappedRow, { key: row.id, props: { row } })))
+  view: (rows, h) => h.ul.children(rows.map((row) => WrappedRow(h, { key: row.id, props: { row } })))
 })
 
 const variants = { plain: Plain, normal: Normal, headless: Headless, wrapped: Wrapped }

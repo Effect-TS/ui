@@ -31,8 +31,8 @@ const makeList = (layout: "siblings" | "nested") =>
     update: (_, message) => message.keys,
     view: (keys, h) =>
       layout === "siblings"
-        ? h.el("ul", keys.map((key) => h.child(Row, { key, props: { label: key } })))
-        : h.el("div", keys.map((key) => h.el("ul", h.child(Row, { key, props: { label: key } }))))
+        ? h.el("ul", keys.map((key) => Row(h, { key, props: { label: key } })))
+        : h.el("div", keys.map((key) => h.el("ul", Row(h, { key, props: { label: key } }))))
   })
 
 /** Holds the list in a slot with a fallback, so the list's failure shows instead of crashing the root. */
@@ -47,7 +47,17 @@ const makePage = (layout: "siblings" | "nested") => {
     init: () => null,
     update: (model) => model,
     view: (_, h) =>
-      h.el("main", h.child(List, { key: "l", props: { keys: h.props.keys }, fallback: () => h.text("failed") }))
+      h.el(
+        "main",
+        List(
+          h,
+          {
+            key: "l",
+            props: { keys: h.props.keys },
+            fallback: () => h.text("failed")
+          }
+        )
+      )
   })
 }
 
@@ -101,8 +111,8 @@ describe("duplicate child paths", () => {
         view: (_, h) =>
           h.el(
             "main",
-            h.child(Group, { key: "a", props: { keys: ["b"] } }),
-            h.child(Group, { key: "a]/Row[b", props: { keys: [] } })
+            Group(h, { key: "a", props: { keys: ["b"] } }),
+            Group(h, { key: "a]/Row[b", props: { keys: [] } })
           )
       })
       const root = yield* TestHost.mount(Page, {})
@@ -127,8 +137,8 @@ describe("duplicate child paths", () => {
       view: (_, h) =>
         h.el(
           "div",
-          h.child(Row, { ref: Shared, props: { label: "a" } }),
-          h.child(Other, { ref: Shared, props: { label: "b" } })
+          Row(h, { ref: Shared, props: { label: "a" } }),
+          Other(h, { ref: Shared, props: { label: "b" } })
         )
     })
     assert.throws(() => Story.start(Both, {}), /\/Both renders two children with the ref Shared/)
@@ -175,12 +185,12 @@ describe("duplicate child paths", () => {
         update: (count) => count + 1,
         view: (_, h) => {
           const rows = (keys: ReadonlyArray<string>) =>
-            h.el("div", keys.map((key) => h.el("p", h.child(Row, { key, props: { label: key } }))))
+            h.el("div", keys.map((key) => h.el("p", Row(h, { key, props: { label: key } }))))
           return h.el(
             "div",
-            h.props.siblings.map((key) => h.child(Row, { key, props: { label: key } })),
-            h.child(Broken, { key: "b", fallback: () => rows(h.props.first) }),
-            h.child(Broken, { key: "c", fallback: () => rows(h.props.second) })
+            h.props.siblings.map((key) => Row(h, { key, props: { label: key } })),
+            Broken(h, { key: "b", fallback: () => rows(h.props.first) }),
+            Broken(h, { key: "c", fallback: () => rows(h.props.second) })
           )
         }
       })
@@ -188,7 +198,7 @@ describe("duplicate child paths", () => {
     const Root = Component.define({ name: "Root", props: Props, model: Schema.Null, message: Schema.Never }).make({
       init: () => null,
       update: (model) => model,
-      view: (_, h) => h.child(Parent, { key: "p", props: h.props, fallback: () => h.text("parent-failed") })
+      view: (_, h) => Parent(h, { key: "p", props: h.props, fallback: () => h.text("parent-failed") })
     })
 
     const cases: ReadonlyArray<Props & { readonly name: string; readonly error: string }> = [
@@ -288,7 +298,7 @@ describe("duplicate child paths", () => {
         init: () => 0,
         update: (count) => count + 1,
         view: (_, h) =>
-          h.child(Broken, {
+          Broken(h, {
             key: "b",
             fallback: () => {
               const rows = () =>
@@ -296,13 +306,13 @@ describe("duplicate child paths", () => {
                   "ul",
                   h.props.nested.map((key) =>
                     h.props.ref
-                      ? h.child(Row, { ref: Row.ref(key), props: { label: key } })
-                      : h.child(Row, { key, props: { label: key } })
+                      ? Row(h, { ref: Row.ref(key), props: { label: key } })
+                      : Row(h, { key, props: { label: key } })
                   )
                 )
               return h.props.ref
-                ? h.child(Faulty, { ref: RowRef, fallback: rows })
-                : h.child(Faulty, { key: "a", fallback: rows })
+                ? Faulty(h, { ref: RowRef, fallback: rows })
+                : Faulty(h, { key: "a", fallback: rows })
             }
           })
       })
@@ -310,7 +320,7 @@ describe("duplicate child paths", () => {
     const Root = Component.define({ name: "Root", props: Props, model: Schema.Null, message: Schema.Never }).make({
       init: () => null,
       update: (model) => model,
-      view: (_, h) => h.child(Parent, { key: "p", props: h.props, fallback: () => h.text("parent-failed") })
+      view: (_, h) => Parent(h, { key: "p", props: h.props, fallback: () => h.text("parent-failed") })
     })
 
     const parentFailures = (root: TestHost.TestRoot<null, never, never>) =>

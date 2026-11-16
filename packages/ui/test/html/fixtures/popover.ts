@@ -191,7 +191,7 @@ export const Rows = Component.define({
   update: (_, reversed) => reversed,
   view: (reversed, h) => {
     const rows = ["A", "B"].map((label) =>
-      h.div.key(label).children(h.child(Popup, { key: label, props: { label, mode: h.props.mode } }))
+      h.div.key(label).children(Popup(h, { key: label, props: { label, mode: h.props.mode } }))
     )
     return h.div(reversed ? rows.reverse() : rows)
   }

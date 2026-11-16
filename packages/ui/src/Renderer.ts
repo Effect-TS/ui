@@ -4,7 +4,7 @@
  *
  * Rendering is a virtual DOM bounded by components. A message re-runs only the
  * view of the instance that received it, and the diff against its last view
- * stops at `h.child`: a child's nodes belong to the child, and the parent only
+ * stops at a child slot: a child's nodes belong to the child, and the parent only
  * places, moves or removes them. A child re-renders only when its props change,
  * compared shallowly. Dirty instances render in one flush, parents before
  * children.

@@ -2,10 +2,11 @@
  * Views are values: a tree of element, text and child nodes that a component's
  * `view` returns and a host renders.
  *
- * The core `h` has only `el`, `child` and `text`. An element vocabulary such as
- * the HTML one adds element names and its own element class, registered once
- * for the app by module augmentation of `Register` plus `registerElements`, or
- * set on one component with `elements`.
+ * The core `h` has only `el` and `text`. A child component is declared by
+ * calling it with `h`, and a feature by its `render`. An element vocabulary
+ * such as the HTML one adds element names and its own element class,
+ * registered once for the app by module augmentation of `Register` plus
+ * `registerElements`, or set on one component with `elements`.
  *
  * An element's attributes and handlers come first and its children last:
  * `h.el("form").on("submit", msg).children(...)`. `children` ends the chain
@@ -247,7 +248,9 @@ export type MountHint =
   "onMount's Effect ends with a message or Component.noop. A mount with nothing to send ends with Effect.as(Component.noop)"
 
 /**
- * A child component slot declared with `h.child`.
+ * A child component slot, declared by calling a component with the
+ * parent's `h`, `Editor(h, { key })`, or with a feature's `render`,
+ * `Todos.render(h, { key, fallback })`.
  *
  * **Details**
  *
@@ -292,23 +295,23 @@ export interface Child<out Msg, out R = never> {
  */
 export declare namespace Child {
   /**
-   * The options of `h.child`. `props` may be left out when the component takes
-   * none.
+   * The options of a slot: what a component call and a feature's `render`
+   * take. `props` may be left out when the component takes none.
    *
    * **Details**
    *
    * A slot takes exactly one of `key` and `ref`. With a ref, the ref's key
-   * is the slot's key, and the parent can `$.send` to the slot. `SlotRef`
-   * is the ref the slot takes; `h.child` checks what it receives against
-   * what the component receives, so a ref made from a component also fits a
-   * provided copy of it or a feature implementation. An erased
-   * `Component.Ref.Any` names no slot: every typed ref fits it, so a slot
-   * that took it would take a ref the component doesn't receive.
+   * is the slot's key, and the parent can `$.send` to the slot. `Rcv` is
+   * what the component receives, and the ref must be a `Component.Ref.Slot`
+   * of it: a ref made from a component also fits a provided copy of it or a
+   * feature implementation. An erased `Component.Ref.Any` names no slot:
+   * every typed ref fits it, so a slot that took it would take a ref the
+   * component doesn't receive.
    *
    * @category models
    * @since 0.1.0
    */
-  export type Options<Props, Events, Msg, SlotRef = Component.Ref<never>> =
+  export type Options<Props, Events, Msg, Rcv = never> =
     & (
       | {
         readonly key: string
@@ -316,7 +319,7 @@ export declare namespace Child {
       }
       | {
         /** Names the slot, so the parent can send it messages. Its key is the slot's key. */
-        readonly ref: SlotRef
+        readonly ref: Component.Ref.Slot<Receives<Rcv>>
         readonly key?: undefined
       }
     )
@@ -329,20 +332,7 @@ export declare namespace Child {
     & ({} extends Props ? { readonly props?: Props | undefined } : { readonly props: Props })
 
   /**
-   * Passes when every message a ref receives, `RefRcv`, is one the
-   * component receives, `Rcv`, and otherwise names the ones it doesn't. A
-   * ref whose `RefRcv` is `unknown`, such as the ref of a feature whose
-   * `receives` is `Schema.Unknown`, takes no message, so it fits any slot.
-   *
-   * @category models
-   * @since 0.1.0
-   */
-  export type RefFits<RefRcv, Rcv> = unknown extends RefRcv ? unknown
-    : [RefRcv] extends [Rcv] ? unknown
-    : { readonly "This ref sends messages the component doesn't receive": Exclude<RefRcv, Rcv> }
-
-  /**
-   * What a component or feature receives, as `h.child` checks a ref against
+   * What a component or feature receives, as a slot checks a ref against
    * it: `Rcv`, or nothing when `Rcv` is `any`, as for an erased component or
    * `Feature.Any`.
    *
@@ -1345,7 +1335,7 @@ export const registeredElements = (): Vocabulary<any> | undefined => registered
  *
  * **Details**
  *
- * The core helper has `el`, `child` and `text`. A vocabulary's element names
+ * The core helper has `el` and `text`. A vocabulary's element names
  * are mixed in by `Component.define`.
  *
  * @stability experimental
@@ -1382,66 +1372,6 @@ export interface Helper<Msg, Props> {
    * the same on the server and the client, and different for every instance.
    */
   id(name: string, key?: string | number | undefined): string
-  /**
-   * A component by value. Its requirements surface in the parent's. `Rcv` has
-   * no default: one would stop a nested call, such as an inline
-   * `Component.provide(C, layer)`, from being inferred.
-   */
-  child<Props, Events, RC, Rcv, RefRcv = Child.Receives<Rcv>, RF = never>(
-    component: Component.Mountable<Props, Events, RC, Rcv>,
-    options:
-      & Child.Options<Props, Events, Msg, Component.Ref<RefRcv>>
-      & Child.RefFits<NoInfer<RefRcv>, NoInfer<Child.Receives<Rcv>>>
-      & {
-        /** Shown if the child fails, until its key changes. Without it, the slot is blank. */
-        readonly fallback?: ((result: AsyncResult.Failure<never, unknown>) => Content<Msg, RF>) | undefined
-      }
-  ): Child<Msg, RC | NoInfer<RF>>
-  /**
-   * A component by value, with `Props`, `Events` and `RC` given explicitly. It
-   * receives nothing as far as the types know, so it takes a key, not a ref.
-   */
-  child<Props, Events, RC, RF = never>(
-    component: Component.Mountable<Props, Events, RC>,
-    options: Child.Options<Props, Events, Msg> & {
-      /** Shown if the child fails, until its key changes. Without it, the slot is blank. */
-      readonly fallback?: ((result: AsyncResult.Failure<never, unknown>) => Content<Msg, RF>) | undefined
-    }
-  ): Child<Msg, RC | NoInfer<RF>>
-  /**
-   * A headless component by value. `view` is the child's whole view, built
-   * from its parts. Its requirements, and the view's, surface in the parent's.
-   */
-  child<Props, Events, Parts, RC, Rcv, RefRcv = Child.Receives<Rcv>, RV = never, RF = never>(
-    component: Component.Headless<Props, Events, Parts, RC, Rcv>,
-    options:
-      & Child.Options<Props, Events, Msg, Component.Ref<RefRcv>>
-      & Child.RefFits<NoInfer<RefRcv>, NoInfer<Child.Receives<Rcv>>>
-      & {
-        /** Shown if the child fails, until its key changes. Without it, the slot is blank. */
-        readonly fallback?: ((result: AsyncResult.Failure<never, unknown>) => Content<Msg, RF>) | undefined
-        /**
-         * The child's whole view, from its parts. It's this view's code: the
-         * children it declares report to this component, and it runs again
-         * whenever this component or the child renders.
-         */
-        readonly view: (parts: Parts) => Content<Msg, RV>
-      }
-  ): Child<Msg, RC | RV | NoInfer<RF>>
-  // Keep this overload last so a missing feature fallback is the final diagnostic.
-  /** A feature by service. The parent requires the service only. */
-  child<Self, Props, Events, Rcv = never, RefRcv = Child.Receives<Rcv>, RF = never>(
-    service: Feature.Service<Self, Props, Events, Rcv>,
-    options:
-      & Child.Options<Props, Events, Msg, Component.Ref<RefRcv>>
-      & Child.RefFits<NoInfer<RefRcv>, NoInfer<Child.Receives<Rcv>>>
-      & {
-        /** Required: the service may be building (`Initial`) or failed (`Failure`). */
-        readonly fallback: (
-          result: AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>
-        ) => Content<Msg, RF>
-      }
-  ): Child<Msg, Self | NoInfer<RF>>
 }
 
 /**
@@ -1481,38 +1411,7 @@ class HelperImpl<Msg, Props> implements Helper<Msg, Props> {
   text(value: string): Text {
     return text(value)
   }
-  child(
-    component: Component.Any | Component.Headless.Any | Feature.Any,
-    options: {
-      readonly key?: string | undefined
-      // Every ref fits `Ref.Any`; the overloads have checked what it receives.
-      readonly ref?: Component.Ref.Any | undefined
-      readonly props?: unknown
-      readonly onEmit?: ((events: any) => Msg | undefined) | undefined
-      readonly fallback?: ((result: any) => Content<Msg, any>) | undefined
-      readonly onFailure?: ((failure: AsyncResult.Failure<never, unknown>) => Msg | undefined) | undefined
-      readonly view?: ((parts: any) => Content<Msg, any>) | undefined
-    }
-  ): Child<Msg, any> {
-    // A slot with a key and a ref would have two identities that can disagree.
-    if ((options.key === undefined) === (options.ref === undefined)) {
-      throw new Error("h.child takes exactly one of key and ref")
-    }
-    return {
-      _tag: "Child",
-      component: component as Component.Any,
-      key: options.ref !== undefined ? options.ref.key : options.key!,
-      ref: options.ref,
-      props: options.props ?? {},
-      onEmit: options.onEmit ?? ignore,
-      fallback: options.fallback,
-      onFailure: options.onFailure,
-      view: options.view
-    }
-  }
 }
-
-const ignore = () => undefined
 
 /** `h.el` of a tag that can't hold text in the helper's vocabulary. */
 class NoTextBuilder<Msg> extends ContainerBuilder<Msg> {

@@ -263,9 +263,9 @@ export const DetailPage = Component.define({
   update: (model) => ({ renaming: !model.renaming }),
   view: (model, h) =>
     h.section(
-      h.child(UserCard, { key: "card", props: { id: h.props.id } }),
+      UserCard(h, { key: "card", props: { id: h.props.id } }),
       h.button.onClick(DetailPageMessage.make({ _tag: "ToggleRename" })).children(model.renaming ? "Close" : "Rename"),
-      model.renaming && h.child(RenameForm, { key: "rename", props: { id: h.props.id } })
+      model.renaming && RenameForm(h, { key: "rename", props: { id: h.props.id } })
     )
 })
 
@@ -335,8 +335,8 @@ export const App = Component.define({
       h.header(h.a.attr("href", AppRoute.print(AppRoute.make({ _tag: "List" }))).children("Users")),
       h.main(
         AppRoute.match(route, {
-          List: () => h.child(ListPage, { key: "list" }),
-          Detail: ({ params }) => h.child(DetailPage, { key: `user-${params.id}`, props: { id: params.id } }),
+          List: () => ListPage(h, { key: "list" }),
+          Detail: ({ params }) => DetailPage(h, { key: `user-${params.id}`, props: { id: params.id } }),
           NotFound: () => h.h1("Not found")
         })
       )

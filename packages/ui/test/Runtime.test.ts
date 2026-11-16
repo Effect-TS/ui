@@ -68,7 +68,7 @@ const List = Component.define({
       Remove: ({ id }) => ids.filter((x) => x !== id),
       Reverse: () => [...ids].reverse()
     }),
-  view: (ids, h) => h.el("ul", ids.map((id) => h.child(Row, { key: id, props: { id } })))
+  view: (ids, h) => h.el("ul", ids.map((id) => Row(h, { key: id, props: { id } })))
 })
 
 describe("Runtime", () => {
@@ -164,7 +164,7 @@ describe("Runtime", () => {
           init: () => false,
           update: (_, changed) => changed,
           // A wrapper with another tag is a new element: the row in it mounts before the old one closes.
-          view: (changed, h) => h.el(changed ? "section" : "div", h.child(Row, { key: "a", props: { id: "a" } }))
+          view: (changed, h) => h.el(changed ? "section" : "div", Row(h, { key: "a", props: { id: "a" } }))
         })
         const root = yield* TestHost.mount(Wrap, {})
         yield* TestHost.settle
@@ -374,8 +374,7 @@ describe("Runtime", () => {
         const Parent = Component.define({ name: "Parent", model: Schema.Null, message: Schema.Never }).make({
           init: () => null,
           update: (model) => model,
-          view: (_, h) =>
-            h.el("div", "before ", h.child(Twice, { key: "t", props: {}, fallback: () => h.text("down") }))
+          view: (_, h) => h.el("div", "before ", Twice(h, { key: "t", props: {}, fallback: () => h.text("down") }))
         })
         const root = yield* TestHost.mount(Parent, {})
         yield* TestHost.settle
@@ -532,13 +531,13 @@ describe("Runtime", () => {
       view: (model, h) =>
         h.el(
           "main",
-          h.child(Bomb, {
+          Bomb(h, {
             key: `bomb-${model.attempt}`,
             props: {},
             onFailure: () => PageMessage.make({ _tag: "BombFailed" }),
             fallback: () => h.el("p", "bomb failed")
           }),
-          h.child(Counter, { key: "counter", props: { initial: 0 } })
+          Counter(h, { key: "counter", props: { initial: 0 } })
         )
     })
 
@@ -585,8 +584,7 @@ describe("Runtime", () => {
         }).make({
           init: () => 0,
           update: (model) => model,
-          view: (_, h) =>
-            h.el("div", "before ", h.child(Broken, { key: "x", props: {}, fallback: () => h.text("down") }))
+          view: (_, h) => h.el("div", "before ", Broken(h, { key: "x", props: {}, fallback: () => h.text("down") }))
         })
         const root = yield* TestHost.mount(Parent, {})
         yield* TestHost.settle
@@ -625,7 +623,7 @@ describe("Runtime", () => {
         }).make({
           init: () => 0,
           update: (model) => model,
-          view: (_, h) => h.el("div", h.child(Child, { key: "c", props: {} }), "parent")
+          view: (_, h) => h.el("div", Child(h, { key: "c", props: {} }), "parent")
         })
         const root = yield* TestHost.mount(Parent, {})
         assert.strictEqual(root.text(), "childparent")
@@ -660,7 +658,7 @@ describe("Runtime", () => {
         }).make({
           init: () => 0,
           update: (n) => n,
-          view: (_, h) => h.el("main", h.child(Child, { key: "c", fallback: () => h.text("down ") }), "alive")
+          view: (_, h) => h.el("main", Child(h, { key: "c", fallback: () => h.text("down ") }), "alive")
         })
         const root = yield* TestHost.mount(Parent, {}, { fallback: (_, h) => h.text("ROOT CRASH") })
         yield* TestHost.settle
@@ -706,7 +704,7 @@ describe("Runtime", () => {
         }).make({
           init: () => 0,
           update: (_, n) => n,
-          view: (n, h) => h.child(Broken, { key: "b", fallback: () => h.child(Counted, { key: String(n) }) })
+          view: (n, h) => Broken(h, { key: "b", fallback: () => Counted(h, { key: String(n) }) })
         })
         const root = yield* TestHost.mount(Parent, {})
         assert.strictEqual(root.text(), "1")
@@ -904,7 +902,7 @@ describe("Runtime", () => {
         view: (model, h) =>
           h.el("main", [
             h.el("p", `count ${model.count}`),
-            model.editing ? h.child(editor, { key: "editor", props: {} }) : null
+            model.editing ? editor(h, { key: "editor", props: {} }) : null
           ])
       })
     const EditorPage = page(Editor)
@@ -1101,7 +1099,7 @@ describe("Runtime", () => {
         }).make({
           init: () => true,
           update: (open, message) => message._tag === "Close" ? false : open,
-          view: (open, h) => h.el("div", open ? h.child(child, { key: "child", props: {} }) : null)
+          view: (open, h) => h.el("div", open ? child(h, { key: "child", props: {} }) : null)
         })
       return { events, gate, Stubborn, Child, Holder, parent, Msg }
     }
@@ -1218,18 +1216,15 @@ describe("Runtime", () => {
             h.el(
               "div",
               open ?
-                h.child(
-                  Component.define({
-                    name: "Inner",
-                    model: Schema.Null,
-                    message: Schema.Never
-                  }).make({
-                    init: ($) => $.set(null).run(Latest.make()).run(Watch.make()).run(Local()),
-                    update: (model) => model,
-                    view: (_, h) => h.text("inner")
-                  }),
-                  { key: "inner", props: {} }
-                ) :
+                Component.define({
+                  name: "Inner",
+                  model: Schema.Null,
+                  message: Schema.Never
+                }).make({
+                  init: ($) => $.set(null).run(Latest.make()).run(Watch.make()).run(Local()),
+                  update: (model) => model,
+                  view: (_, h) => h.text("inner")
+                })(h, { key: "inner", props: {} }) :
                 null
             )
         })
@@ -1379,7 +1374,7 @@ describe("Runtime", () => {
       }).make({
         init: () => 0,
         update: (n) => n + 1,
-        view: (n, h) => h.el("div", String(n), h.child(Child, { key: "c", onEmit: (message) => message }))
+        view: (n, h) => h.el("div", String(n), Child(h, { key: "c", onEmit: (message) => message }))
       })
       const root = yield* TestHost.mount(Parent, {})
       yield* TestHost.settle
@@ -1408,7 +1403,7 @@ describe("Runtime", () => {
         }).make({
           init: () => "one",
           update: (_, message) => message.text,
-          view: (text, h) => h.el("div", h.child(Label, { key: "l", props: { text } }))
+          view: (text, h) => h.el("div", Label(h, { key: "l", props: { text } }))
         })
         const root = yield* TestHost.mount(Host, {})
         const span = root.get(Query.tag("span"))
@@ -1443,7 +1438,7 @@ describe("Runtime", () => {
         const Table = Component.define({ name: "Table", model: Props, message: Props }).make({
           init: () => ({ row: { id: 1, label: "one", tags: ["x"] }, at: Option.some(1), ratio: NaN }),
           update: (_, next) => next,
-          view: (model, h) => h.el("div", h.child(Cell, { key: "c", props: model }))
+          view: (model, h) => h.el("div", Cell(h, { key: "c", props: model }))
         })
         const root = yield* TestHost.mount(Table, {})
         yield* TestHost.settle
@@ -1541,8 +1536,7 @@ describe("Runtime", () => {
         }).make({
           init: () => 2,
           update: (n) => n - 1,
-          view: (n, h) =>
-            h.el("div", Array.from({ length: n }, (_, i) => h.child(Shared, { key: String(i), props: {} })))
+          view: (n, h) => h.el("div", Array.from({ length: n }, (_, i) => Shared(h, { key: String(i), props: {} })))
         })
         const root = yield* TestHost.mount(Two, {})
         yield* TestHost.settle
@@ -1603,7 +1597,7 @@ describe("Runtime", () => {
         }).make({
           init: () => Object.keys(children),
           update: (keys, { key }) => keys.filter((k) => k !== key),
-          view: (keys, h) => h.el("div", keys.map((key) => h.child(children[key], { key, props: {} })))
+          view: (keys, h) => h.el("div", keys.map((key) => children[key](h, { key, props: {} })))
         })
       const drop = (root: TestHost.TestRoot<any, any, any>, key: string) =>
         root.send(DropMsg.make({ _tag: "Drop", key }))
@@ -1659,7 +1653,7 @@ describe("Runtime", () => {
           }).make({
             init: () => null,
             update: (model) => model,
-            view: (_, h) => h.el("div", h.child(Task, { key: "task", props: {} }))
+            view: (_, h) => h.el("div", Task(h, { key: "task", props: {} }))
           })
           const Page = Component.provide(PageView, (props) => Layer.succeed(Project, { id: props.id }))
           const Split = Component.define({
@@ -1672,8 +1666,8 @@ describe("Runtime", () => {
             view: (_, h) =>
               h.el(
                 "div",
-                h.child(Page, { key: "a", props: { id: "a" } }),
-                h.child(Page, { key: "b", props: { id: "b" } })
+                Page(h, { key: "a", props: { id: "a" } }),
+                Page(h, { key: "b", props: { id: "b" } })
               )
           })
           const root = yield* TestHost.mount(Split, {})
@@ -1824,7 +1818,7 @@ describe("Runtime", () => {
       view: (_, h) =>
         h.el(
           "div",
-          h.child(Badge, {
+          Badge.render(h, {
             key: "b",
             props: { label: "new" },
             onEmit: (text) => Msg.make({ _tag: "Heard", text }),
@@ -2451,7 +2445,7 @@ describe("Runtime", () => {
           init: () => 0,
           update: (model) => model,
           view: (_, h) =>
-            h.el("div", "outer ", h.child(Inner, { key: "i", props: {}, fallback: () => h.text("unsupported") }))
+            h.el("div", "outer ", Inner(h, { key: "i", props: {}, fallback: () => h.text("unsupported") }))
         })
         const root = yield* TestHost.mount(Outer, {})
         assert.strictEqual(root.text(), "outer unsupported")
@@ -2920,9 +2914,9 @@ describe("Runtime", () => {
         view: (_, h) =>
           h.el(
             "div",
-            h.child(Room, { key: "1", props: { room: "a" } }),
-            h.child(Room, { key: "2", props: { room: "a" } }),
-            h.child(Room, { key: "3", props: { room: "b" } })
+            Room(h, { key: "1", props: { room: "a" } }),
+            Room(h, { key: "2", props: { room: "a" } }),
+            Room(h, { key: "3", props: { room: "b" } })
           )
       })
       const root = yield* TestHost.mount(Lobby, {}).pipe(Effect.provide(Rooms.layer))
@@ -2934,17 +2928,18 @@ describe("Runtime", () => {
   it.effect("each provided Layer build is stamped with the flush it began in", () =>
     provideHost(Effect.gen(function*() {
       class Slow extends Context.Service<Slow, { readonly name: string }>()("test/Slow") {}
+      const Plain = Component.define({
+        name: "Inner",
+        props: Schema.Struct({ name: Schema.String }),
+        model: Schema.Number,
+        message: Schema.String
+      }).make({
+        init: () => 0,
+        update: (model) => model,
+        view: (_, h) => h.text(h.props.name)
+      })
       const Inner = Component.provide(
-        Component.define({
-          name: "Inner",
-          props: Schema.Struct({ name: Schema.String }),
-          model: Schema.Number,
-          message: Schema.String
-        }).make({
-          init: () => 0,
-          update: (model) => model,
-          view: (_, h) => h.text(h.props.name)
-        }),
+        Plain,
         (props) =>
           Layer.effect(
             Slow,
@@ -2960,7 +2955,7 @@ describe("Runtime", () => {
       }).make({
         init: () => ["first"],
         update: (names, message) => [...names, message.name],
-        view: (names, h) => h.el("div", names.map((name) => h.child(Inner, { key: name, props: { name } })))
+        view: (names, h) => h.el("div", names.map((name) => Inner(h, { key: name, props: { name } })))
       })
       const testHost = yield* TestHost.TestHost
       const root = yield* runtime.mount(Shell, {}, testHost.host.createElement("#app"))

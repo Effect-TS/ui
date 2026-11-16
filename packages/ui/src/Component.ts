@@ -5,9 +5,10 @@
  * `update` returns the next Model, or a step that also runs Commands and
  * emits to the parent. The runtime holds each instance's Model, runs its
  * Commands in the instance's own Scope, and re-renders its view. Children are
- * declared in the view with `h.child`, and communicate up through `events` and
- * down through props. A component's requirements, `R`, name the Commands and
- * feature services it uses, never what their implementations use.
+ * declared in the view by calling them, `Editor(h, { key, props })`, and
+ * communicate up through `events` and down through props. A component's
+ * requirements, `R`, name the Commands and feature services it uses, never
+ * what their implementations use.
  *
  * A component is built in two steps: `define` takes its name and Schemas,
  * and `make` on the definition takes `init`, `update` and `view`. A large
@@ -67,6 +68,7 @@ import * as Schema from "effect/Schema"
 import type * as Types from "effect/Types"
 import * as Command from "./Command.ts"
 import type * as Head from "./Head.ts"
+import * as child from "./internal/child.ts"
 import * as loaders from "./internal/loaders.ts"
 import * as internalNoop from "./internal/noop.ts"
 import * as childRef from "./internal/ref.ts"
@@ -274,7 +276,7 @@ export type RefTypeId = typeof RefTypeId
  *
  * `Editor.ref("Draft")` makes a ref for `Editor`'s slots, and
  * `Todos.ref("Main")` one for a feature's. A parent renders the slot with
- * `h.child(Editor, { ref: Draft, props })` in place of a `key`: the ref's
+ * `Editor(h, { ref: Draft, props })` in place of a `key`: the ref's
  * key is the slot's key, so the child's path segment is `Editor[Draft]`.
  * `at` derives a ref for one row of a list: `Row.at(id)` has the key
  * `Row[id]`, as `Renderer.ref`'s `at` does. Two refs with different names
@@ -321,7 +323,7 @@ export declare namespace Ref {
    *
    * Every `Ref` fits `Ref.Any`, but `Ref.Any` fits no `Ref`, so it can't be
    * annotated back into one, and `$.send` takes nothing through it or its
-   * `at` rows. It names no slot in `h.child` either: every typed ref fits
+   * `at` rows. It names no slot either: every typed ref fits
    * it, so a slot that took it would skip the receives check. It keeps its
    * `key`, so `Story.childEmit`, `childFailure` and `Story.fallback` find a
    * slot by it.
@@ -344,6 +346,33 @@ export declare namespace Ref {
     /** A ref for one row: `Row.at(id)`. */
     readonly at: (key: string | number) => Any
   }
+
+  /**
+   * A ref for messages that are all among `Rcv`. A `Ref<A>` is one when
+   * every `A` is an `Rcv`.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  export interface Within<out Rcv> {
+    readonly [RefTypeId]: { readonly _Rcv: (_: never) => Rcv }
+    readonly key: string
+  }
+
+  /**
+   * The ref a slot of a component or feature that receives `Rcv` takes:
+   * one whose messages the component all receives, or one that takes no
+   * message, such as the ref of a feature whose `receives` is
+   * `Schema.Unknown`. A ref made from a component also fits a provided copy
+   * of it or a feature implementation that receives more. `Ref.Any` fits no
+   * slot.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  export type Slot<Rcv> = Within<Rcv> | Ref<unknown>
 
   /**
    * The ref a component or a feature that receives `Rcv` hands out:
@@ -667,6 +696,27 @@ const toNext = (result: unknown): Next<any, any, any, any> =>
  * @since 0.1.0
  */
 export interface Mountable<in out Props, out Events, out R = never, in Rcv = never> extends Pipeable.Pipeable {
+  /**
+   * Declares a slot of this component in a parent's view, from the parent's
+   * `h`, which types `onEmit`, `onFailure` and `fallback` against the
+   * parent's message type. The component's requirements, and the fallback's,
+   * surface in the parent's.
+   */
+  // `Slot` is what the slot's ref is checked against: the default, which only
+  // an explicit type argument changes, and then only to fewer messages. As a
+  // default it stays out of the variance check, which a conditional of `Rcv`
+  // would fail.
+  <Msg, RF = never, Slot extends View.Child.Receives<Rcv> = View.Child.Receives<Rcv>>(
+    h: View.Helper<Msg, unknown>,
+    // Erased props take any options, so every component is a `Component.Any`.
+    options: 0 extends 1 & Props ? any
+      : View.Child.Options<Props, Events, NoInfer<Msg>, NoInfer<Slot>> & {
+        /** Shown if the child fails, until its key changes. Without it, the slot is blank. */
+        readonly fallback?:
+          | ((result: AsyncResult.Failure<never, unknown>) => View.Content<NoInfer<Msg>, RF>)
+          | undefined
+      }
+  ): View.Child<Msg, R | NoInfer<RF>>
   readonly [TypeId]: Mountable.Variance<Props, Events, R, Rcv>
   readonly name: string
   readonly props: Schema.Codec<Props, any>
@@ -798,15 +848,15 @@ export const HeadlessTypeId = "~@effect/ui/Component/Headless" as const
 export type HeadlessTypeId = typeof HeadlessTypeId
 
 /**
- * A component with `parts` and no `view`. Whoever declares it with
- * `h.child` writes its whole view from the parts.
+ * A component with `parts` and no `view`. Whoever declares it, with
+ * `Listbox(h, { key, props, view })`, writes its whole view from the parts.
  *
  * **Details**
  *
  * It keeps its own Model, `update`, Commands and Scope. It isn't a
  * `Mountable`, so it can't be a root, a page or a feature.
  *
- * The `view` closure given to `h.child` is the consumer's code. A child
+ * The `view` closure given to the call is the consumer's code. A child
  * declared in it, its `onEmit` and `onFailure` messages, and a fallback in
  * it all belong to the consumer, and a slot in it takes the consumer's refs.
  * A ref's key names one slot across the consumer's view and every closure it
@@ -849,6 +899,28 @@ export type HeadlessTypeId = typeof HeadlessTypeId
 export interface Headless<in out Props, out Events, out Parts, out R = never, in out Rcv = never>
   extends Pipeable.Pipeable
 {
+  /**
+   * Declares a slot of this component in a parent's view, from the parent's
+   * `h`. `view` is the child's whole view, built from its parts. Its
+   * requirements, the view's and the fallback's surface in the parent's.
+   */
+  <Msg, RV = never, RF = never>(
+    h: View.Helper<Msg, unknown>,
+    options:
+      & View.Child.Options<Props, Events, NoInfer<Msg>, Rcv>
+      & {
+        /** Shown if the child fails, until its key changes. Without it, the slot is blank. */
+        readonly fallback?:
+          | ((result: AsyncResult.Failure<never, unknown>) => View.Content<NoInfer<Msg>, RF>)
+          | undefined
+        /**
+         * The child's whole view, from its parts. It's the parent view's code:
+         * the children it declares report to the parent, and it runs again
+         * whenever the parent or the child renders.
+         */
+        readonly view: (parts: Parts) => View.Content<NoInfer<Msg>, RV>
+      }
+  ): View.Child<Msg, R | RV | NoInfer<RF>>
   readonly [HeadlessTypeId]: {
     readonly _Props: Types.Invariant<Props>
     readonly _Events: Types.Covariant<Events>
@@ -1300,7 +1372,8 @@ export type OnChange<S, M, Msg> = M extends Loader.Read.Any
  */
 export const isComponent = (u: unknown): u is Any => Predicate.hasProperty(u, TypeId)
 
-const Proto = {
+// A component is a function, so the prototypes keep `call`, `apply` and `bind`.
+const Proto = Object.assign(Object.create(Function.prototype), {
   [TypeId]: { _Props: (_: never) => _, _Events: (_: never) => _, _R: (_: never) => _, _Rcv: (_: never) => _ },
   pipe() {
     return Pipeable.pipeArguments(this, arguments)
@@ -1308,9 +1381,9 @@ const Proto = {
   ref(this: { readonly receives: Schema.Codec<any, any> }, name: string) {
     return childRef.make(name, this.receives)
   }
-}
+})
 
-const HeadlessProto = {
+const HeadlessProto = Object.assign(Object.create(Function.prototype), {
   [HeadlessTypeId]: {
     _Props: (_: never) => _,
     _Events: (_: never) => _,
@@ -1320,6 +1393,17 @@ const HeadlessProto = {
   },
   pipe: Proto.pipe,
   ref: Proto.ref
+})
+
+// A callable component: calling it declares a slot of it. A function's own
+// `name` is read-only, so every field is defined rather than assigned.
+const makeComponent = (proto: object, fields: { readonly name: string; readonly [key: string]: unknown }): any => {
+  const component = (_h: unknown, options: child.Options) => child.make(component as any, options)
+  Object.setPrototypeOf(component, proto)
+  for (const key of Object.keys(fields)) {
+    Object.defineProperty(component, key, { value: fields[key], enumerable: true, writable: true, configurable: true })
+  }
+  return component
 }
 
 /**
@@ -1391,7 +1475,8 @@ export interface Definition<Name extends string, Props, Model, Msg, Events, V ex
   ): (h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L>, ...args: Args) => Out
   /**
    * Finishes a headless component: `parts` in place of `view`. Whoever
-   * declares it with `h.child` writes the view from what `parts` returns.
+   * declares it, by calling it with `view`, writes the view from what
+   * `parts` returns.
    */
   make<
     Parts,
@@ -1838,7 +1923,7 @@ const finish = (
   const elements = definition.elements
   const view = options.view
   const parts = options.parts
-  return Object.assign(Object.create(view === undefined ? HeadlessProto : Proto), {
+  return makeComponent(view === undefined ? HeadlessProto : Proto, {
     name: definition.name,
     props: definition.props,
     model: definition.model,
@@ -2195,7 +2280,8 @@ export const provide: {
       Layer.isLayer(layer) && options?.local !== true && (inner === undefined || component.sharedLayer !== undefined)
         ? (component.sharedLayer === undefined ? layer : Layer.provideMerge(component.sharedLayer, layer))
         : undefined
-    return Object.assign(Object.create(Proto), component, {
+    return makeComponent(Proto, {
+      ...component,
       layer: inner === undefined ? outer : (props: unknown) => Layer.provideMerge(inner(props), outer(props)),
       layerFailure,
       sharedLayer,

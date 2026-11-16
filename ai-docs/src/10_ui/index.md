@@ -9,8 +9,10 @@ browser host and router, and server rendering.
 
 A `Command.Service` may omit `invalidates` when it invalidates no reads.
 Provide a feature implementation with `NoteActivity.toLayer(ActivityLog)`.
-When rendering a feature service with `h.child`, include a `fallback` for
-loading or failure; a child passed as a component value may omit it.
+Declare a child component by calling it with the parent's `h`:
+`NoteEditor(h, { key, props, onEmit })`. Render a feature service with its
+`render`, `NoteActivity.render(h, { key, fallback })`, and include a
+`fallback` for loading or failure; a component child may omit it.
 
 A parent passes a child state through props, and a child answers through
 `events`. A one-shot instruction, such as "save now" or "clear your draft",
@@ -63,7 +65,7 @@ instance ended with.
 
 A component finished with `parts` instead of `view` is headless: it keeps
 its own Model, `update` and Commands, and owns behaviour such as keyboard
-handling, ids and ARIA, but no markup. A consumer places it with `h.child`
+handling, ids and ARIA, but no markup. A consumer calls it with `h`
 and a `view` closure that applies each part to a builder of its own:
 `m.trigger(h.button).children("Open")`. The closure is the consumer's code,
 so children declared in it report to the consumer. Pass rows as Schema data in

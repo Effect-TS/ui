@@ -257,7 +257,7 @@ describe("Router.prefetch", () => {
     expect(Router.page).type.not.toBeCallableWith(Mixed, { id: 1 })
   })
 
-  it("takes props like h.child, and a handler for every route", () => {
+  it("takes props like a component call, and a handler for every route", () => {
     expect(Router.page).type.toBeCallableWith(HomePage)
     expect(Router.page).type.not.toBeCallableWith(PersonPage)
     expect(Router.page).type.not.toBeCallableWith(PersonPage, { id: "1" })

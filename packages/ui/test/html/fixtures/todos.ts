@@ -107,7 +107,7 @@ export const TodoApp = Component.define({
       ),
       h.ul.attr("aria-label", "Todos").children(
         model.todos.map((todo) =>
-          h.child(TodoItem, {
+          TodoItem(h, {
             key: todo.id,
             props: { todo },
             onEmit: (emitted) =>

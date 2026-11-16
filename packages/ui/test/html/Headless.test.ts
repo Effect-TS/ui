@@ -48,7 +48,7 @@ const Picker = Component.define({
     })
   ],
   view: (log, h) =>
-    h.child(Dialog, {
+    Dialog(h, {
       key: "confirm",
       props: { label: "Confirm" },
       onEmit: () => PickerMessage.make({ _tag: "Closed" }),
@@ -57,7 +57,7 @@ const Picker = Component.define({
           d.trigger(h.button).children("Open"),
           d.popup(h.dialog).children(
             d.title(h.h2).children("Pick one"),
-            h.child(Menu, {
+            Menu(h, {
               key: "actions",
               props: { items },
               onEmit: (event) => PickerMessage.make({ _tag: "Picked", id: event.id }),
@@ -100,7 +100,7 @@ const Toolbar = Component.define({
       Focused: ({ found }) => [...log, "focused " + String(found)]
     }),
   view: (log, h) =>
-    h.child(Menu, {
+    Menu(h, {
       key: "actions",
       props: { items },
       onEmit: (event) => ToolbarMessage.make({ _tag: "Picked", id: event.id }),
@@ -155,7 +155,7 @@ const Tip = Component.define({
   init: () => true,
   update: (on) => !on,
   view: (on, h) =>
-    h.child(Anchor, {
+    Anchor(h, {
       key: "anchor",
       view: (a) => {
         const button = h.button.attr("aria-label", "Target")
@@ -177,13 +177,13 @@ const Twin = Component.define({ name: "Twin", model: Schema.Null, message: Schem
   init: () => null,
   update: (model) => model,
   view: (_, h) =>
-    h.child(Menu, {
+    Menu(h, {
       ref: TwinActions,
       props: { items },
       view: (m) =>
         h.div(
           m.trigger(h.button).children("Actions"),
-          h.child(Menu, {
+          Menu(h, {
             ...(twin.client ? { ref: TwinActions } : { key: "Actions" }),
             props: { items },
             view: () => h.span("again")
@@ -195,7 +195,7 @@ const TwinShell = Component.define({ name: "Shell", model: Schema.Null, message:
   .make({
     init: () => null,
     update: (model) => model,
-    view: (_, h) => h.main(h.child(Twin, { key: "t", props: {}, fallback: () => h.p("twin down") }))
+    view: (_, h) => h.main(Twin(h, { key: "t", props: {}, fallback: () => h.p("twin down") }))
   })
 
 const Page = Component.define({
@@ -208,7 +208,7 @@ const Page = Component.define({
   update: (model) => model,
   view: (_, h) =>
     h.main(
-      h.child(Menu, {
+      Menu(h, {
         key: "ok",
         props: { items },
         view: (m) =>
@@ -219,7 +219,7 @@ const Page = Component.define({
             )
           )
       }),
-      h.child(Menu, {
+      Menu(h, {
         key: "flaky",
         props: { items },
         fallback: () => h.p("menu down"),
@@ -259,7 +259,7 @@ const KeysApp = Component.define({
   init: () => [],
   update: (seen, message) => [...seen, message],
   view: (seen, h) =>
-    h.child(Keys, {
+    Keys(h, {
       key: "keys",
       view: (k) =>
         k.container(h.div).children(
@@ -285,7 +285,7 @@ const Confirm = Component.define({
   init: () => 0,
   update: (closed) => closed + 1,
   view: (closed, h) =>
-    h.child(Dialog, {
+    Dialog(h, {
       key: "confirm",
       props: { label: "Confirm" },
       onEmit: () => "closed" as const,
@@ -348,7 +348,7 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
           update: (model) => model,
           view: (_, h) =>
             h.main(
-              h.child(Menu, {
+              Menu(h, {
                 key: "ok",
                 props: { items },
                 view: (m) =>
@@ -359,7 +359,7 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
                     )
                   )
               }),
-              h.child(Menu, {
+              Menu(h, {
                 key: "flaky",
                 props: { items },
                 fallback: () => h.p("menu down"),
@@ -525,7 +525,7 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
         init: () => null,
         update: (model) => model,
         view: (_, h) =>
-          h.child(Hit, {
+          Hit(h, {
             key: "h",
             view: (p) => p.button(h.button).onClick(() => undefined, { preventDefault: false }).children("hit")
           })
@@ -554,7 +554,7 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
           init: () => null,
           update: (model) => model,
           view: (_, h) =>
-            h.child(Plain, {
+            Plain(h, {
               key: "p",
               view: (p) => p.button(h.button).onClick("own", { preventDefault: true }).children("hit")
             })

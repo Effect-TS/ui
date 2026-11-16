@@ -193,7 +193,7 @@ describe("Component.noop", () => {
         Component.define({ name: "Parent", model: Schema.Boolean, message: Close }).make({
           init: () => true,
           update: () => false,
-          view: (open, h) => h.el("div", [open ? h.child(Child, { key: "child", props: {} }) : null])
+          view: (open, h) => h.el("div", [open ? Child(h, { key: "child", props: {} }) : null])
         }),
         Slow.layer
       )

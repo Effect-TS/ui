@@ -3423,7 +3423,7 @@ const setup = (
       // `fallback`, rendered against the nearest settled Env, and re-renders when the Layer settles.
       if (view.fallback === undefined) {
         throw new Error(
-          `${inst.path}: ${target.key} isn't available, because a Layer above it is still building or failed. Pass \`fallback\` to \`h.child\`.`
+          `${inst.path}: ${target.key} isn't available, because a Layer above it is still building or failed. Pass \`fallback\` to the feature's \`render\`.`
         )
       }
       if (env.failure === undefined) {

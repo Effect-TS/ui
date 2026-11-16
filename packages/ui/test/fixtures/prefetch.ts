@@ -71,10 +71,10 @@ export const Walked = Component.define({
   view: (_, h) =>
     h.el(
       "div",
-      h.child(Card, { key: "card", props: { id: 2 } }),
-      h.child(Badge, { key: "badge", fallback: () => h.text("") }),
-      h.child(Note.pipe(Component.provide(GetNote.layer)), { key: "provided", props: { id: 1 } }),
-      h.child(Note, { key: "bare", props: { id: 2 } })
+      Card(h, { key: "card", props: { id: 2 } }),
+      Badge.render(h, { key: "badge", fallback: () => h.text("") }),
+      Note.pipe(Component.provide(GetNote.layer))(h, { key: "provided", props: { id: 1 } }),
+      Note(h, { key: "bare", props: { id: 2 } })
     )
 })
 
@@ -138,14 +138,14 @@ export const App = Component.define({
   view: (model, h) =>
     h.el(
       "div",
-      h.child(Sidebar, { key: "sidebar", props: { id: 0 } }),
+      Sidebar(h, { key: "sidebar", props: { id: 0 } }),
       Routes.match(model.route, {
         Home: () => h.el("h1", "Home"),
-        Person: (route) => h.child(Detail, { key: Routes.print(route), props: { id: route.params.id } }),
+        Person: (route) => Detail(h, { key: Routes.print(route), props: { id: route.params.id } }),
         Walk: () => h.el("h1", "Walk"),
         Broken: () => h.el("h1", "Broken"),
         Empty: () => h.el("h1", "Empty"),
-        Failing: (route) => h.child(Failing, { key: Routes.print(route), props: {} })
+        Failing: (route) => Failing(h, { key: Routes.print(route), props: {} })
       })
     )
 })

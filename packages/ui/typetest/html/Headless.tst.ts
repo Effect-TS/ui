@@ -41,7 +41,7 @@ describe("headless components", () => {
       init: () => null,
       update: (model) => model,
       view: (_, h) =>
-        h.child(Menu, {
+        Menu(h, {
           key: "actions",
           props: { items },
           onEmit: (event) => {
@@ -76,7 +76,7 @@ describe("headless components", () => {
       init: () => null,
       update: (model) => model,
       view: (_, h) =>
-        h.child(Menu, {
+        Menu(h, {
           key: "actions",
           props: { items },
           view: (m) => {
@@ -92,7 +92,7 @@ describe("headless components", () => {
             expect(m.item).type.not.toBeCallableWith(h.li)
             expect(m.item).type.not.toBeCallableWith(h.li, "a")
             // The tagless part takes any element.
-            return h.child(Dialog, {
+            return Dialog(h, {
               key: "confirm",
               props: { label: "Confirm" },
               view: (d) => d.popup(h.dialog).children(d.close(m.item(h.li, items[0]!)).children("Close"))
@@ -109,7 +109,7 @@ describe("headless components", () => {
       init: () => null,
       update: (model) => model,
       view: (_, h) =>
-        h.child(Timed, {
+        Timed(h, {
           key: "t",
           view: (t) =>
             t.clock(h.time).onMount("seen", () =>
@@ -125,14 +125,14 @@ describe("headless components", () => {
       init: () => null,
       update: (model) => model,
       view: (_, h) =>
-        h.child(Dialog, {
+        Dialog(h, {
           key: "confirm",
           props: { label: "Confirm" },
           view: (d) => {
             // Both are HTMLHeadingElement: the check is by tag name, as at runtime.
             expect(d.title).type.toBeCallableWith(h.h2)
             expect(d.title).type.not.toBeCallableWith(h.h3)
-            return h.child(Heading, {
+            return Heading(h, {
               key: "h",
               view: (p) => {
                 expect(p.heading).type.toBe<View.Part<"h2" | "h3", [], never>>()
@@ -157,8 +157,8 @@ describe("headless components", () => {
       init: () => null,
       update: (model) => model,
       view: (_, h) => {
-        expect(h.child).type.toBeCallableWith(Menu, { ref: Menu.ref("Actions"), props: { items }, view: () => h.div() })
-        expect(h.child).type.not.toBeCallableWith(Menu, {
+        expect(Menu).type.toBeCallableWith(h, { ref: Menu.ref("Actions"), props: { items }, view: () => h.div() })
+        expect(Menu).type.not.toBeCallableWith(h, {
           ref: Other.ref("Actions"),
           props: { items },
           view: () => h.div()
@@ -179,7 +179,7 @@ describe("headless components", () => {
       init: () => null,
       update: (model) => model,
       view: (_, h) => {
-        expect(h.child).type.not.toBeCallableWith(Menu, { key: "actions", props: { items } })
+        expect(Menu).type.not.toBeCallableWith(h, { key: "actions", props: { items } })
         return h.div()
       }
     })

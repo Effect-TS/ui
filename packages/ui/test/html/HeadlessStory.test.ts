@@ -23,7 +23,7 @@ const Toolbar = Component.define({
   init: () => [],
   update: (log, message) => [...log, message._tag + " " + message.id],
   view: (_, h) =>
-    h.child(Menu, {
+    Menu(h, {
       key: "actions",
       props: { items },
       onEmit: (event) => ToolbarMessage.make({ _tag: "Picked", id: event.id }),
@@ -252,7 +252,10 @@ describe("headless components in a story", () => {
       init: () => 0,
       update: (count) => count + 1,
       view: (_, h) =>
-        h.child(Guard, { key: "g", view: (p) => p.link(h.a).onClick(Clicked.make({ _tag: "Clicked" })).children("go") })
+        Guard(
+          h,
+          { key: "g", view: (p) => p.link(h.a).onClick(Clicked.make({ _tag: "Clicked" })).children("go") }
+        )
     })
     const story = Story.make(Page, {}, (s) => {
       s.click("go")
@@ -286,7 +289,7 @@ describe("headless components in a story", () => {
       view: (p, h) =>
         p.ten(p.one(h.div)).children(
           h.button("hit"),
-          h.child(Inner, { key: "inner", view: () => p.hundred(h.button).children("inside") })
+          Inner(h, { key: "inner", view: () => p.hundred(h.button).children("inside") })
         )
     }, (s) => {
       s.click("hit")

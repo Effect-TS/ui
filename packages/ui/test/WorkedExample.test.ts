@@ -55,8 +55,8 @@ const Both = Component.define({
   update: (model) => model,
   view: (_, h) =>
     h.div(
-      h.child(users.ListPage, { key: "list" }),
-      h.child(users.DetailPage, { key: "detail", props: { id: "1" } })
+      users.ListPage(h, { key: "list" }),
+      users.DetailPage(h, { key: "detail", props: { id: "1" } })
     )
 })
 

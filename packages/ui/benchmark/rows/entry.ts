@@ -78,7 +78,7 @@ const Components = Component.define(app).make({
   view: (model, h) =>
     h.table.class("table").children(
       h.tbody.children(model.rows.map((row) =>
-        h.child(RowView, {
+        RowView(h, {
           key: String(row.id),
           props: { row, selected: row.id === model.selected },
           onEmit: (message) => message

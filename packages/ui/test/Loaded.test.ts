@@ -128,7 +128,7 @@ const makeApp = (options?: {
         "div",
         cards.map((card) => {
           const [tag, id] = card.split(":")
-          return h.child(Card, { key: tag, props: { id, tag } })
+          return Card(h, { key: tag, props: { id, tag } })
         })
       )
   })
@@ -372,8 +372,8 @@ describe("Loaded", () => {
       view: (swapped, h) =>
         h.el(
           "div",
-          h.el("section", swapped ? [h.child(app.Card, { key: "new", props: { id: "1", tag: "n" } })] : []),
-          h.el("section", swapped ? [] : [h.child(app.Card, { key: "old", props: { id: "1", tag: "o" } })])
+          h.el("section", swapped ? [app.Card(h, { key: "new", props: { id: "1", tag: "n" } })] : []),
+          h.el("section", swapped ? [] : [app.Card(h, { key: "old", props: { id: "1", tag: "o" } })])
         )
     })
     return run(
@@ -427,8 +427,7 @@ describe("Loaded", () => {
     }).make({
       init: () => null,
       update: (model) => model,
-      view: (_model, h) =>
-        h.el("div", h.props.show ? [h.child(app.Card, { key: "old", props: { id: "1", tag: "o" } })] : [])
+      view: (_model, h) => h.el("div", h.props.show ? [app.Card(h, { key: "old", props: { id: "1", tag: "o" } })] : [])
     })
     const Page = Component.define({
       name: "Page",
@@ -440,8 +439,8 @@ describe("Loaded", () => {
       view: (swapped, h) =>
         h.el(
           "div",
-          h.el("section", swapped ? [h.child(app.Card, { key: "new", props: { id: "1", tag: "n" } })] : []),
-          h.child(Shell, { key: "shell", props: { show: !swapped } })
+          h.el("section", swapped ? [app.Card(h, { key: "new", props: { id: "1", tag: "n" } })] : []),
+          Shell(h, { key: "shell", props: { show: !swapped } })
         )
     })
     return run(
@@ -521,8 +520,7 @@ describe("Loaded", () => {
       }).make({
         init: () => null,
         update: (model) => model,
-        view: (_model, h) =>
-          h.el("div", h.props.show ? [h.child(Watcher, { key: "old", props: { id: "9", tag: "o" } })] : [])
+        view: (_model, h) => h.el("div", h.props.show ? [Watcher(h, { key: "old", props: { id: "9", tag: "o" } })] : [])
       })
       const Page = Component.define({
         name: "Page",
@@ -534,10 +532,10 @@ describe("Loaded", () => {
         view: (swapped, h) =>
           h.el(
             "div",
-            h.el("section", swapped ? [h.child(Watcher, { key: "new", props: { id: "9", tag: "n" } })] : []),
+            h.el("section", swapped ? [Watcher(h, { key: "new", props: { id: "9", tag: "n" } })] : []),
             extracted
-              ? h.child(Shell, { key: "shell", props: { show: !swapped } })
-              : h.el("div", swapped ? [] : [h.child(Watcher, { key: "old", props: { id: "9", tag: "o" } })])
+              ? Shell(h, { key: "shell", props: { show: !swapped } })
+              : h.el("div", swapped ? [] : [Watcher(h, { key: "old", props: { id: "9", tag: "o" } })])
           )
       })
       return run(
@@ -616,7 +614,7 @@ describe("Loaded", () => {
       }).make({
         init: () => null,
         update: (model) => model,
-        view: (_model, h) => h.el("div", h.props.show ? [h.child(Watcher, { key: "old", props: { tag: "o" } })] : [])
+        view: (_model, h) => h.el("div", h.props.show ? [Watcher(h, { key: "old", props: { tag: "o" } })] : [])
       })
       const PageMessage = Schema.TaggedUnion({
         Enable: {},
@@ -637,10 +635,10 @@ describe("Loaded", () => {
         view: (model, h) =>
           h.el(
             "div",
-            h.el("section", model.swapped ? [h.child(Watcher, { key: "new", props: { tag: "n" } })] : []),
+            h.el("section", model.swapped ? [Watcher(h, { key: "new", props: { tag: "n" } })] : []),
             extracted
-              ? h.child(Shell, { key: "shell", props: { show: !model.swapped } })
-              : h.el("div", model.swapped ? [] : [h.child(Watcher, { key: "old", props: { tag: "o" } })])
+              ? Shell(h, { key: "shell", props: { show: !model.swapped } })
+              : h.el("div", model.swapped ? [] : [Watcher(h, { key: "old", props: { tag: "o" } })])
           )
       })
       return run(
@@ -697,8 +695,8 @@ describe("Loaded", () => {
       view: (joined, h) =>
         h.el(
           "div",
-          h.child(Watcher, { key: "a", props: { id: "9", tag: "a" } }),
-          joined ? [h.child(Watcher, { key: "b", props: { id: "9", tag: "b" } })] : []
+          Watcher(h, { key: "a", props: { id: "9", tag: "a" } }),
+          joined ? [Watcher(h, { key: "b", props: { id: "9", tag: "b" } })] : []
         )
     })
     return run(
@@ -758,9 +756,8 @@ describe("Loaded", () => {
       view: (model, h) =>
         h.el(
           "div",
-          // Keeps user 2 warm.
-          h.child(app.Card, { key: "warm", props: { id: "2", tag: "w" } }),
-          h.child(Emitter, {
+          app.Card(h, { key: "warm", props: { id: "2", tag: "w" } }),
+          Emitter(h, {
             key: "emitter",
             props: { id: model.switched ? "2" : "1" },
             onEmit: (id) => ParentMessage.make({ _tag: "Noted", label: (model.switched ? "new " : "old ") + id })
@@ -812,9 +809,9 @@ describe("Loaded", () => {
       init: () => null,
       update: (model) => model,
       view: (_model, h) =>
-        h.child(Bad, {
+        Bad(h, {
           key: "bad",
-          fallback: () => h.child(app.Card, { key: "fallback", props: { id: "1", tag: "f" } })
+          fallback: () => app.Card(h, { key: "fallback", props: { id: "1", tag: "f" } })
         })
     })
     return run(
@@ -942,7 +939,7 @@ describe("Loaded", () => {
       init: () => false,
       update: (_model, message) => message,
       view: (show, h) =>
-        h.el("div", h.child(app.Card, { key: "a", props: { id: "1", tag: "a" } }), show && h.child(Noter, { key: "n" }))
+        h.el("div", app.Card(h, { key: "a", props: { id: "1", tag: "a" } }), show && Noter(h, { key: "n" }))
     })
     return run(
       app.layer,

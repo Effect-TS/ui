@@ -2,8 +2,8 @@
  * @title Headless components
  *
  * Build a filterable listbox that owns its state, keyboard handling and ARIA
- * but no markup, and draw it from a consumer with `h.child` and a `view`
- * closure. This browser entry module mounts the consumer, which is in
+ * but no markup, and draw it from a consumer that calls it with `h` and a
+ * `view` closure. This browser entry module mounts the consumer, which is in
  * `fixtures/notes/components/NoteLinkPicker.ts`.
  */
 import { BrowserHost } from "@effect/ui/html"

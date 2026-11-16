@@ -6,7 +6,7 @@
  * messages a parent may send, if any. Model and Message belong to the
  * implementation. The app provides an implementation
  * with `Todos.toLayer(TodoList)`, and a test or storybook provides a fake with
- * `Todos.toLayer(FakeTodos)`. A parent renders it with `h.child(Todos, ...)` and
+ * `Todos.toLayer(FakeTodos)`. A parent renders it with `Todos.render(h, ...)` and
  * requires `Todos` only: the implementation's requirements are closed where
  * the feature's Layer is built.
  *
@@ -44,10 +44,13 @@ import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as Predicate from "effect/Predicate"
+import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Schema from "effect/Schema"
 import * as Scope from "effect/Scope"
 import type * as Component from "./Component.ts"
+import * as child from "./internal/child.ts"
 import * as childRef from "./internal/ref.ts"
+import type * as View from "./View.ts"
 
 /**
  * Identifies a feature service.
@@ -105,6 +108,20 @@ export interface Service<in out Self, in out Props, in out Events, in out Receiv
   readonly receives: Schema.Codec<Receives, any>
   /** A ref for this feature's slots, so a parent can send them messages. */
   readonly ref: (name: string) => Component.Ref.Of<Receives>
+  /**
+   * Declares a slot of this feature in a parent's view, from the parent's
+   * `h`. The parent requires the service only. `fallback` is required: the
+   * service may be building (`Initial`) or failed (`Failure`).
+   */
+  // A method, so `Feature.Any` takes every feature, as for `toLayer`.
+  render<Msg, RF = never>(
+    h: View.Helper<Msg, unknown>,
+    options: View.Child.Options<Props, Events, NoInfer<Msg>, Receives> & {
+      readonly fallback: (
+        result: AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>
+      ) => View.Content<NoInfer<Msg>, RF>
+    }
+  ): View.Child<Msg, Self | NoInfer<RF>>
   /**
    * Provides this feature with `component`. The Layer requires whatever the
    * component requires, and closes it where the Layer is built. The
@@ -174,7 +191,7 @@ export const isService = (u: unknown): u is Any => Predicate.hasProperty(u, Type
  *
  * `receives` is a Schema, since a feature has no message type of its own. A
  * parent sends with `$.send(Todos.ref("Main"), message)` to the slot it
- * renders with `h.child(Todos, { ref, fallback })`.
+ * renders with `Todos.render(h, { ref, fallback })`.
  *
  * **Example** (A feature with a fake for tests)
  *
@@ -241,6 +258,10 @@ export const Service: <Self>() => <
       static readonly receives = schemas.receives ?? Schema.Never
       static ref(refName: string) {
         return childRef.make(refName, FeatureService.receives)
+      }
+      static render(this: unknown, _h: unknown, options: child.Options): View.Child<any, any> {
+        // `this` is the subclass the user declared, unless the method was detached.
+        return child.make(isService(this) ? this : (FeatureService as any), options)
       }
       static toLayer<R>(component: Component.Mountable<any, any, R, never>): Layer.Layer<any, never, R> {
         return Layer.effect(

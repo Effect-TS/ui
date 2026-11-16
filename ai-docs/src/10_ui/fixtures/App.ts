@@ -61,11 +61,11 @@ export const App = Component.define({
         // A page that should start over when one param changes adds that
         // param to its key, as `${AppRoute.printPath(route)}?sort=${route.query.sort}`.
         AppRoute.match(route, {
-          Index: (route) => h.child(NotesIndex, { key: AppRoute.printPath(route) }),
+          Index: (route) => NotesIndex(h, { key: AppRoute.printPath(route) }),
           // A page that uses its query takes the whole route as props.
-          Search: (route) => h.child(SearchPage, { key: AppRoute.printPath(route), props: { route } }),
+          Search: (route) => SearchPage(h, { key: AppRoute.printPath(route), props: { route } }),
           // A page that doesn't can keep taking picked fields.
-          Note: (route) => h.child(NotePage, { key: AppRoute.printPath(route), props: { id: route.params.id } }),
+          Note: (route) => NotePage(h, { key: AppRoute.printPath(route), props: { id: route.params.id } }),
           NotFound: () =>
             h.section(
               h.h1("Page not found"),

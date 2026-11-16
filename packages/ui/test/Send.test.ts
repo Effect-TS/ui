@@ -54,8 +54,7 @@ const List = Component.define({
         return message.ids.reduce((step, id) => step.send(Row.at(id), { _tag: "Clear" }), $.set(ids))
     }
   },
-  view: (ids, h) =>
-    h.el("ul", ids.map((id) => h.child(Item, { ref: Row.at(id), props: { label: `${id}${ids.length}` } })))
+  view: (ids, h) => h.el("ul", ids.map((id) => Item(h, { ref: Row.at(id), props: { label: `${id}${ids.length}` } })))
 })
 
 const updates = (log: ReadonlyArray<MessageLog.Entry>, path: string) =>
@@ -126,7 +125,7 @@ describe("$.send", () => {
         init: () => null,
         update: (model, message, $) => message._tag === "Clear" ? $.send(Draft, { _tag: "Clear" }) : model,
         view: (_, h) =>
-          h.child(Item, {
+          Item(h, {
             ref: Draft,
             props: { label: "d" },
             fallback: () => h.text("failed"),
@@ -157,7 +156,7 @@ describe("$.send", () => {
       const Page = Component.define({ name: "Page", model: Schema.Null, message: Message }).make({
         init: () => null,
         update: (_, __, $) => $.send(Main, { _tag: "Clear" }),
-        view: (_, h) => h.child(Editor, { ref: Main, props: { label: "m" }, fallback: () => h.text("loading") })
+        view: (_, h) => Editor.render(h, { ref: Main, props: { label: "m" }, fallback: () => h.text("loading") })
       })
       const Never: Layer.Layer<Editor> = Layer.effect(Editor, Effect.never)
       const root = yield* TestHost.mount(Component.provide(Page, Never), {})
@@ -186,8 +185,8 @@ describe("$.send", () => {
         view: (_, h) =>
           h.el(
             "div",
-            h.child(Editor, { ref: Main, props: { label: "m" }, fallback: () => h.text("loading") }),
-            h.child(Provided, { ref: Draft, props: { label: "d" } })
+            Editor.render(h, { ref: Main, props: { label: "m" }, fallback: () => h.text("loading") }),
+            Provided(h, { ref: Draft, props: { label: "d" } })
           )
       })
       const root = yield* TestHost.mount(Component.provide(Page, Editor.toLayer(Item)), {})
@@ -218,13 +217,13 @@ describe("$.send", () => {
         update: (_, message, $) => $.send(Other, message),
         view: (_, h) =>
           h.el("button").on("click", PingMessage.make({ _tag: "Ping" })).children(
-            h.child(Echo, { ref: Other, onEmit: (ping) => ping })
+            Echo(h, { ref: Other, onEmit: (ping) => ping })
           )
       })
       const Page = Component.define({ name: "Page", model: Schema.Null, message: PingMessage }).make({
         init: () => null,
         update: (model) => model,
-        view: (_, h) => h.child(Loop, { key: "l", fallback: () => h.text("looped") })
+        view: (_, h) => Loop(h, { key: "l", fallback: () => h.text("looped") })
       })
       const root = yield* TestHost.mount(Page, {})
       yield* TestHost.settle
@@ -251,14 +250,14 @@ describe("$.send", () => {
       const Row = Component.define({ name: "Row", model: Schema.Null, message: GoMessage, receives: ["Go"] }).make({
         init: () => null,
         update: (_, __, $) => $.send(LeafRef, { _tag: "Go" }),
-        view: (_, h) => h.child(Leaf, { ref: LeafRef })
+        view: (_, h) => Leaf(h, { ref: LeafRef })
       })
       const Rows = Row.ref("Rows")
       const keys = Array.from({ length: 150 }, (_, i) => i)
       const List = Component.define({ name: "List", model: Schema.Null, message: GoMessage }).make({
         init: () => null,
         update: (_, __, $) => keys.reduce((step, i) => step.send(Rows.at(i), { _tag: "Go" }), $.set(null)),
-        view: (_, h) => h.el("div", keys.map((i) => h.child(Row, { ref: Rows.at(i) })))
+        view: (_, h) => h.el("div", keys.map((i) => Row(h, { ref: Rows.at(i) })))
       })
       const root = yield* TestHost.mount(List, {})
       yield* TestHost.settle
@@ -296,7 +295,7 @@ describe("Story and sends", () => {
       init: () => [],
       update: (seen, message) => [...seen, message.what],
       view: (_, h) =>
-        h.child(Echo, {
+        Echo(h, {
           ref: Mine,
           onEmit: () => Message.make({ _tag: "Saw", what: "emit" }),
           onFailure: () => Message.make({ _tag: "Saw", what: "failure" }),
@@ -336,7 +335,7 @@ describe("Story and sends", () => {
       }).make({
         init: ($) => $.props.ids,
         update: (ids, _, $) => $.set(ids).send(Row.at(ids[0]), { _tag: "Clear" }),
-        view: (ids, h) => h.el("ul", ids.map((id) => h.child(Item, { ref: Row.at(id), props: { label: id } })))
+        view: (ids, h) => h.el("ul", ids.map((id) => Item(h, { ref: Row.at(id), props: { label: id } })))
       })
       for (const entries of [log, wire]) {
         assert.isUndefined(Story.fromLog(List, entries).divergence)
@@ -359,7 +358,7 @@ describe("Story and sends", () => {
       const Page = Component.define({ name: "Page", model: Schema.Null, message: Message }).make({
         init: () => null,
         update: (_, __, $) => $.send(Main, { _tag: "Focus" }).send(Main, { _tag: "Clear" }),
-        view: (_, h) => h.child(Editor, { ref: Main, fallback: () => h.text("loading") })
+        view: (_, h) => Editor.render(h, { ref: Main, fallback: () => h.text("loading") })
       })
       const stub = TestHost.stub(Editor)
       const root = yield* TestHost.mount(Page, {}).pipe(Effect.provide(stub.layer))

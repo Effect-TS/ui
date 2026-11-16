@@ -58,11 +58,7 @@ export const NotePageNoDeps = Component.define({
       onSuccess: ({ value: note }) =>
         h.article(
           h.button.attr("type", "button").onClick(NotePageMessage.make({ _tag: "SaveNow" })).children("Save now"),
-          // A child by value. Its key is its identity, so a new key mounts
-          // a fresh instance. Props never reach the child's `update`, so
-          // re-key to reset a child. A slot takes a `key` or a `ref`, and
-          // the ref's key is the slot's key.
-          h.child(NoteEditor, {
+          NoteEditor(h, {
             ref: Editor.at(note.id),
             props: { note },
             // Maps the child's events to this component's messages.
@@ -72,9 +68,7 @@ export const NotePageNoDeps = Component.define({
             onFailure: () => NotePageMessage.make({ _tag: "EditorFailed" }),
             fallback: () => h.p("The editor is unavailable.")
           }),
-          // A child by service. `fallback` is required here, and it shows
-          // while the feature's Layer builds (`Initial`) and after a failure.
-          h.child(NoteActivity, {
+          NoteActivity.render(h, {
             key: "activity",
             props: { noteId: note.id },
             fallback: (result) => h.p(AsyncResult.isInitial(result) ? "Loading activity…" : "No activity.")

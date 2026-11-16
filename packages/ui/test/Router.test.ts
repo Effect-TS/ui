@@ -642,7 +642,7 @@ describe("Router", { concurrent: false }, () => {
           throw new Error("bad template")
         })
       ],
-      view: (_, h) => h.child(Page, { key: "page", props: {} })
+      view: (_, h) => Page(h, { key: "page", props: {} })
     })
     const Shell = Component.define({
       name: "Shell",
@@ -656,7 +656,10 @@ describe("Router", { concurrent: false }, () => {
       head: () => [Head.title("App")],
       view: (route, h) =>
         route._tag === "Person"
-          ? h.child(Layout, { key: AppRoute.print(route), props: {}, fallback: () => h.text("down") })
+          ? Layout(
+            h,
+            { key: AppRoute.print(route), props: {}, fallback: () => h.text("down") }
+          )
           : h.text("home")
     })
     return run(
@@ -769,7 +772,7 @@ describe("Router.patchQuery", { concurrent: false }, () => {
       ],
       view: (model, h) =>
         Routes.match(model.route, {
-          Search: (route) => h.child(SearchPage, { key: key(route), props: { route } }),
+          Search: (route) => SearchPage(h, { key: key(route), props: { route } }),
           Home: () => h.el("h1", "Home"),
           Item: () => h.el("h1", "Item"),
           NotFound: () => h.el("h1", "Not found")

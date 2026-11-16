@@ -227,7 +227,7 @@ describe("Html", () => {
           () => Logger.use((logger) => logger.log("up")).pipe(Effect.as(Msg.make({ _tag: "Mounted" })))
         )
           .class("box")
-          .children(h.child(Ticker, { key: "ticker" }))
+          .children(Ticker(h, { key: "ticker" }))
     })
     expect(Mounted).type.toBe<Component.Component<"Mounted", {}, null, Msg, never, Logger | Clock, Html.Elements>>()
     const Shorthand = Component.define({
@@ -238,7 +238,7 @@ describe("Html", () => {
     }).make({
       init: () => null,
       update: (model) => model,
-      view: (_, h) => h.section(h.p("clock"), [h.child(Ticker, { key: "ticker" })])
+      view: (_, h) => h.section(h.p("clock"), [Ticker(h, { key: "ticker" })])
     })
     expect(Shorthand).type.toBe<Component.Component<"Shorthand", {}, null, Msg, never, Clock, Html.Elements>>()
     const Bare = Component.define({

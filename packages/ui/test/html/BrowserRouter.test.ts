@@ -87,7 +87,7 @@ const ListApp = Component.define({
   subscriptions: (route) => [Router.subscription(ListRoute, route, (next) => next)],
   view: (route, h) =>
     ListRoute.match(route, {
-      List: (route) => h.child(ListPage, { key: ListRoute.printPath(route), props: { route } }),
+      List: (route) => ListPage(h, { key: ListRoute.printPath(route), props: { route } }),
       Other: () => h.h1("Other")
     })
 })

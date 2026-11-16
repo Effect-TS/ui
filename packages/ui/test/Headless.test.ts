@@ -47,7 +47,7 @@ const Picker = Component.define({
     })
   ],
   view: (log, h) =>
-    h.child(Dialog, {
+    Dialog(h, {
       key: "confirm",
       props: { label: "Confirm" },
       onEmit: () => PickerMessage.make({ _tag: "Closed" }),
@@ -56,7 +56,7 @@ const Picker = Component.define({
           d.trigger(h.button).children("Open"),
           d.popup(h.dialog).children(
             d.title(h.h2).children("Pick one"),
-            h.child(Menu, {
+            Menu(h, {
               key: "actions",
               props: { items },
               onEmit: (event) => PickerMessage.make({ _tag: "Picked", id: event.id }),
@@ -113,12 +113,12 @@ const Board = Component.define({
   init: () => [],
   update: (log, message) => [...log, message._tag],
   view: (log, h) =>
-    h.child(Menu, {
+    Menu(h, {
       key: "actions",
       props: { items },
       view: (m) =>
         m.popup(h.div).children(
-          h.child(Bell, {
+          Bell(h, {
             key: "bell",
             onEmit: () => BoardMessage.make({ _tag: "Rang" }),
             onFailure: () => BoardMessage.make({ _tag: "Failed" }),
@@ -175,7 +175,7 @@ const Opener = Component.define({
   view: (model, h) =>
     h.div(
       h.button.onClick(OpenerMessage.make({ _tag: "Open" })).children("open"),
-      h.child(Menu, {
+      Menu(h, {
         ref: Actions,
         props: { items },
         view: (m) =>
@@ -183,21 +183,27 @@ const Opener = Component.define({
             m.open ? "shown" : "hidden",
             // The closure is the parent's code, so a slot in it takes the parent's refs.
             (model.twin || (h.props.twin === "open" && m.open)) &&
-              h.child(Menu, { ref: Actions, props: { items }, view: () => h.span("again") }),
+              Menu(h, { ref: Actions, props: { items }, view: () => h.span("again") }),
             // Removed with its holder when the ref moves back to the view. The holder's Scope closes
             // after its `Lingering` child's, which its Command holds open.
-            model.swapped && h.child(Menu, {
+            model.swapped && Menu(h, {
               key: "holder",
               props: { items },
               view: () =>
                 h.div(
-                  h.child(Menu, { ref: Spare, props: { items }, view: () => h.span("spare in a closure") }),
-                  h.child(Lingering, { key: "l" })
+                  Menu(
+                    h,
+                    { ref: Spare, props: { items }, view: () => h.span("spare in a closure") }
+                  ),
+                  Lingering(h, { key: "l" })
                 )
             })
           )
       }),
-      !model.swapped && h.child(Menu, { ref: Spare, props: { items }, view: () => h.span("spare in the view") })
+      !model.swapped && Menu(
+        h,
+        { ref: Spare, props: { items }, view: () => h.span("spare in the view") }
+      )
     )
 })
 
@@ -229,11 +235,11 @@ const Consumer = Component.define({
     h.el(
       "div",
       h.el("button").on("click", ConsumerMessage.make({ _tag: "Break" })).children("break"),
-      h.child(Bare, {
+      Bare(h, {
         key: "h",
         fallback: () => h.text("headless down"),
         view: () =>
-          h.child(Badge, {
+          Badge.render(h, {
             key: "b",
             fallback: () => {
               if (broken) throw new Error("the fallback threw")
@@ -256,7 +262,7 @@ const Waiting = Component.define({
   init: () => null,
   update: (model) => model,
   view: (_, h) =>
-    h.child(Provided, {
+    Provided(h, {
       key: "c",
       props: { throwsAt: h.props.throwsAt },
       fallback: () => h.text("consumer down")
@@ -278,7 +284,10 @@ const Form = Component.define({ name: "Form", model: Schema.Null, message: Schem
   update: (model) => model,
   // One list set before the part is applied, and one after.
   view: (_, h) =>
-    h.child(Field, { key: "f", view: (f) => f.input(h.input.class("wide field")).attr("aria-describedby", "note") })
+    Field(
+      h,
+      { key: "f", view: (f) => f.input(h.input.class("wide field")).attr("aria-describedby", "note") }
+    )
 })
 
 const Shell = Component.define({
@@ -290,7 +299,7 @@ const Shell = Component.define({
 }).make({
   init: () => null,
   update: (model) => model,
-  view: (_, h) => h.child(Board, { key: "board", props: h.props, fallback: () => h.p("board down") })
+  view: (_, h) => Board(h, { key: "board", props: h.props, fallback: () => h.p("board down") })
 })
 
 describe("headless components", () => {
@@ -406,16 +415,19 @@ describe("headless components", () => {
             update: (model) => model,
             view: (_, h) =>
               h.div(
-                h.child(Menu, { ref: Spare, props: { items }, view: () => h.span("in the view") }),
-                h.child(Menu, {
+                Menu(h, { ref: Spare, props: { items }, view: () => h.span("in the view") }),
+                Menu(h, {
                   key: "outer",
                   props: { items },
                   view: () =>
-                    h.child(Menu, {
+                    Menu(h, {
                       key: "inner",
                       props: { items },
                       view: () =>
-                        h.child(Menu, { ref: Spare, props: { items }, view: () => h.span("two closures down") })
+                        Menu(
+                          h,
+                          { ref: Spare, props: { items }, view: () => h.span("two closures down") }
+                        )
                     })
                 })
               )

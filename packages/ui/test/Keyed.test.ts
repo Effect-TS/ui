@@ -155,7 +155,7 @@ const makeApp = (options?: {
         "div",
         boards.map((board) => {
           const [tag, ids] = board.split(":")
-          return h.child(Board, { key: tag, props: { tag, ids: ids.split(",") } })
+          return Board(h, { key: tag, props: { tag, ids: ids.split(",") } })
         })
       )
   })
@@ -335,8 +335,8 @@ describe("Keyed loader fields", () => {
       view: (ids, h) =>
         h.el(
           "div",
-          h.child(Row, { key: "row", props: { ids } }),
-          h.child(app.Board, { key: "b", props: { tag: "b", ids: ["3"] } })
+          Row(h, { key: "row", props: { ids } }),
+          app.Board(h, { key: "b", props: { tag: "b", ids: ["3"] } })
         )
     })
     return run(
@@ -824,7 +824,14 @@ describe("Keyed slots", () => {
       name: "Bad",
       model: Schema.Struct({}),
       message: Schema.Never,
-      loaders: { users: { loadMany: app.GetUser, args: () => ({ id: "1" }) as any } }
+      loaders: {
+        users: {
+          loadMany: app.GetUser,
+          args: () => (({
+            id: "1"
+          }) as any)
+        }
+      }
     }).make({
       init: () => ({}),
       update: (model) => model,
@@ -837,7 +844,7 @@ describe("Keyed slots", () => {
     }).make({
       init: () => ({}),
       update: (model) => model,
-      view: (_model, h) => h.el("div", h.child(Bad, { key: "bad", props: {} }), h.el("p", "host"))
+      view: (_model, h) => h.el("div", Bad(h, { key: "bad", props: {} }), h.el("p", "host"))
     })
     return run(
       app.layer,
@@ -1167,7 +1174,7 @@ describe("Keyed history restore", () => {
             ShellMessage.make({ _tag: "Go", route: ShellRoute.make({ _tag: "Home" }) })
           ).children("Home"),
           model._tag === "Board"
-            ? h.child(app.Board, { key: "board", props: { tag: "a", ids: ["1", "2"] } })
+            ? app.Board(h, { key: "board", props: { tag: "a", ids: ["1", "2"] } })
             : h.el("p", "home")
         )
     })
