@@ -29,12 +29,6 @@
       "effect/no-import-from-barrel-package": "off"
     }
   }, {
-    // The barrel stays empty until @effect/ui-kit has its first component.
-    "files": ["packages/ui-kit/src/index.ts"],
-    "rules": {
-      "unicorn/no-empty-file": "off"
-    }
-  }, {
     // Only @effect/ui/html may use DOM types, so nothing else in @effect/ui imports it.
     "files": ["packages/ui/src/**"],
     "rules": {
