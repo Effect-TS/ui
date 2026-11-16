@@ -397,6 +397,32 @@ describe("a component slot with a ref", () => {
     expect(Component.provide(erased, Layer.succeed(Store, { draft: "" }))).type.toBe<Component.Any>()
   })
 
+  it("takes options without a handler for an erased component", () => {
+    const erased: Component.Any = Plain
+    expect(Component.provide(erased, Layer.empty, undefined)).type.toBe<Component.Any>()
+    expect(Component.provide(erased, Layer.empty, {})).type.toBe<Component.Any>()
+    expect(Component.provide(erased, Layer.empty, { onFailure: undefined })).type.toBe<Component.Any>()
+    expect(Component.provide(erased, Layer.effect(Store, Effect.fail("no")), {
+      onFailure: () => {
+        throw new Error("no")
+      }
+    })).type.toBe<Component.Any>()
+  })
+
+  it("checks an overloaded onFailure by the call it gets", () => {
+    // The last overload returns nothing, but a failure gets the first, which returns a number.
+    function onFailure(failure: AsyncResult.Failure<never, string>): number
+    function onFailure(failure: never): never
+    function onFailure(_failure: unknown): number {
+      return 123
+    }
+    const erased: Component.Any = Plain
+    expect(Component.provide).type.not.toBeCallableWith(erased, Layer.effect(Store, Effect.fail("no")), { onFailure })
+    expect(Component.provide).type.not.toBeCallableWith(erased, () => Layer.effect(Store, Effect.fail("no")), {
+      onFailure
+    })
+  })
+
   it("rejects a ref for an erased component or feature", () => {
     const erased = Story.start(Plain, {}).current.component
     ParentDef.view((_, h) => {

@@ -2160,16 +2160,27 @@ const toLayer = (layers: Layer.Any | ReadonlyArray<Layer.Any>): Layer.Layer<any,
 // returns a component, such as an inline `define(...).make(...)`, is skipped in
 // the first inference pass, so `C` is still `Any` there, and `Message<Any>`,
 // `never`, would reject the handler before `C` is inferred. While `C` is
-// `Any` the handler returns `M`, and `ErasedFailure` checks it on the
-// component argument, which that pass skips too: a component that is still
-// `Any` once inferred takes no message, as `Message<Any>` says.
+// `Any` the handler is taken as is, and `ErasedMessage` or `ErasedHandler`
+// checks it on the component argument, which that pass skips too: a
+// component that is still `Any` once inferred takes no message, as
+// `Message<Any>` says.
 type ProvideMessage<C, M> = [Any] extends [C] ? M : Message<C>
 
-type ErasedFailure<C, M> = [Any] extends [C] ? [M] extends [never] ? unknown
-  : { readonly "An erased component takes no message, so onFailure can't return one": M }
+type ErasedHint = "An erased component takes no message, so onFailure can't return one"
+
+// `M` is what the handler returns, inferred from the call.
+type ErasedMessage<C, M> = [Any] extends [C] ? [M] extends [never] ? unknown : { readonly [K in ErasedHint]: M }
   : unknown
 
-type FailureMessage<O> = O extends { readonly onFailure?: ((...args: any) => infer M) | undefined } ? M : never
+// The handler in `O`, if any, checked against the call it gets: one that
+// returns no message. An overloaded handler passes only if the overload for
+// that call does.
+type ErasedHandler<C, O, E> = [Any] extends [C] ? [O] extends [never] ? unknown
+  : [O] extends [{ readonly onFailure: infer F }] ?
+    [F] extends [((failure: AsyncResult.Failure<never, E>) => never) | undefined] ? unknown
+    : { readonly [K in ErasedHint]: F }
+  : unknown
+  : unknown
 
 /**
  * Provides services to a component and everything below it, like
@@ -2265,7 +2276,7 @@ export const provide: {
     layer: (props: Props<C>) => Layer.Layer<ROut, never, RIn>
   ): Provided<C, ROut, RIn>
   <C extends Any, ROut, E, RIn, M = never>(
-    component: C & ErasedFailure<C, M>,
+    component: C & ErasedMessage<C, M>,
     layer: (props: Props<C>) => Layer.Layer<ROut, E, RIn>,
     options: ProvideOptions<E, ProvideMessage<C, M>>
   ): Provided<C, ROut, RIn>
@@ -2274,7 +2285,7 @@ export const provide: {
     const L extends Layer.Any | ReadonlyArray<Layer.Any>,
     const O extends ProvideRest<L, ProvideMessage<C, any>>[0] = never
   >(
-    component: C & ErasedFailure<C, FailureMessage<O>>,
+    component: C & ErasedHandler<C, O, ProvideInput.Error<L>>,
     layer: L & RequiresOnFailure<L, O>,
     options?: O & ProvideRest<L, ProvideMessage<C, any>>[0]
   ): Provided<C, ProvideInput.Success<L>, ProvideInput.Services<L>>
