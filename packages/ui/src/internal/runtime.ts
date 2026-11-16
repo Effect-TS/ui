@@ -159,6 +159,8 @@ interface RElement {
 interface RunningMount {
   readonly scope: Scope.Closeable
   readonly input: MountInput | undefined
+  /** The instance whose Scope the mount's is forked from. */
+  readonly under: Instance
 }
 
 /** The latest input a mount was rendered with. The PubSub keeps one value for each reader. */
@@ -418,6 +420,12 @@ export interface Instance {
   // empty Map or Set costs about 150 bytes.
   /** Runs asked to stop whose fibers haven't exited: `h.isRunning` still counts them. */
   stopping: Set<Run> | undefined
+  /**
+   * The closes still running of Scopes forked from this instance's and closed early: removed
+   * descendants, stopped Subscriptions and mounts. Their cleanup can use this instance's services,
+   * so its close, and a key change, wait for them.
+   */
+  closes: Set<Fiber.Fiber<void>> | undefined
   subscriptions: Map<string, SubscriptionRun> | undefined
   watches: Map<string, WatchRun> | undefined
   /** The watches followed a Model after mount: from then on, a debounced loader's new args may wait. */
@@ -952,12 +960,32 @@ const setup = (
   /**
    * Closing a Scope detaches it from its parent, so the close is tracked until it ends. Its
    * finalizers start at once, as in a fiber started now: only a close left with something to wait
-   * for takes a fiber.
+   * for takes a fiber, which is returned.
    */
-  const closeScope = (scope: Scope.Closeable) => {
+  const closeScope = (scope: Scope.Closeable): Fiber.Fiber<void> | undefined => {
     const rest = Scope.closeUnsafe(scope, Exit.void)
-    if (rest === undefined || (Exit.isExit(rest) && Exit.isSuccess(rest))) return
-    track(closing, forkNow(ctx, Effect.uninterruptible(rest)))
+    if (rest === undefined || (Exit.isExit(rest) && Exit.isSuccess(rest))) return undefined
+    const fiber = forkNow(ctx, Effect.uninterruptible(rest))
+    track(closing, fiber)
+    return fiber
+  }
+  /**
+   * Closes a Scope forked from `owner`'s. A close left running stays `owner`'s until it ends:
+   * `owner`'s own close waits for it before its services go, and so does a key change.
+   */
+  const closeUnder = (owner: Instance | undefined, scope: Scope.Closeable) => {
+    const fiber = closeScope(scope)
+    if (fiber === undefined || owner === undefined || owner.scope.state._tag === "Closed") return
+    if (owner.closes === undefined) {
+      const closes = owner.closes = new Set()
+      // Added after the instance's Layer and selection, so it runs before they close. Never a wait
+      // for itself, should a cleanup close an ancestor from inside.
+      addFinalizer(
+        owner.scope,
+        Effect.withFiber((current) => Fiber.awaitAll([...closes].filter((fiber) => fiber !== current)))
+      )
+    }
+    track(owner.closes, fiber)
   }
   /** Adds a finalizer without running an Effect. On a Scope already closed, it runs as a tracked close. */
   const addFinalizer = (scope: Scope.Scope, finalizer: Effect.Effect<unknown>) => {
@@ -1348,7 +1376,7 @@ const setup = (
     // Before the Scope closes: a Command's cleanup can hold the close open, and a fallback or
     // replacement created meanwhile must see the count without this instance's watchers.
     releaseWatches(inst)
-    closeScope(inst.scope)
+    closeUnder(inst.parent, inst.scope)
     for (const node of nodes) host.remove(node)
     inst.rendered = [{ _tag: "Text", v: emptyText, node: placeholder }]
     inst.parent?.children.delete(inst)
@@ -1449,9 +1477,9 @@ const setup = (
    * released. One still held makes the next attempt fail the same way, and try again. A Layer that
    * interrupts itself still fails.
    *
-   * An attempt interrupted when its Scope closes runs its cleanup in its fiber, a failed Layer's
-   * included. `scope` owns that cleanup: its close ends after it, so the services the Layer used
-   * outlive it.
+   * An attempt let go of still cleans up: one interrupted as its Scope closes in its fiber, a failed
+   * one as its Scope closes. `scope` owns that cleanup: its close ends after it, so the services the
+   * Layer used outlive it.
    */
   const buildLayer = (
     layer: Layer.Layer<any, any, any>,
@@ -1488,7 +1516,8 @@ const setup = (
       const done = (exit: Exit.Exit<Context.Context<any>, unknown>) => {
         if (Exit.isSuccess(exit)) return onExit(exit)
         // Closing lets go of this attempt's memo entries, the interrupted ones included.
-        closeScope(buildScope)
+        const closed = closeScope(buildScope)
+        if (closed !== undefined) track(cleanups, closed)
         // Released while it waited: nothing was being built, so nothing failed.
         if (waiting) return
         // A build released with `scope` was interrupted for itself: `scope` is closed by then.
@@ -1682,7 +1711,6 @@ const setup = (
     const own = buildingEnv(selection.parentEnv)
     inst.env = own
     const waits: Array<Fiber.Fiber<unknown, unknown>> = []
-    const closingBefore = new Set(closing)
     const stopped = inst.runs.filter((run) => !selection.issued.has(run))
     // Queued and awaiting runs first, so stopping a running one promotes only a kept run.
     for (const run of stopped) if (run.status !== "running") dropRun(inst, run)
@@ -1696,7 +1724,8 @@ const setup = (
     }
     stopSubscriptions(inst, waits)
     clearRendered(inst)
-    for (const fiber of closing) if (!closingBefore.has(fiber)) waits.push(fiber)
+    // What still closes may use the old services, removed in an earlier flush or just now.
+    if (inst.closes !== undefined) waits.push(...inst.closes)
     if (previous.ctx !== undefined && selection.retired === undefined) {
       selection.retired = { scope: selection.scope, waits }
     } else {
@@ -1809,7 +1838,7 @@ const setup = (
       for (const [key, running] of inst.subscriptions) {
         record({ _tag: "SubscriptionStopped", path: inst.path, key })
         if (running.fiber !== undefined) waits.push(running.fiber)
-        closeScope(running.scope)
+        closeUnder(inst, running.scope)
       }
       inst.subscriptions = undefined
     }
@@ -2004,6 +2033,7 @@ const setup = (
       deferred: false,
       runs: [],
       stopping: undefined,
+      closes: undefined,
       subscriptions: undefined,
       watches: undefined,
       watchesSynced: false,
@@ -3111,7 +3141,7 @@ const setup = (
       if (byKey.has(key)) continue
       subscriptions.delete(key)
       record({ _tag: "SubscriptionStopped", path: inst.path, key })
-      closeScope(running.scope)
+      closeUnder(inst, running.scope)
     }
     for (const [key, subscription] of byKey) {
       if (subscriptions.has(key)) continue
@@ -3788,7 +3818,7 @@ const setup = (
         })
       })
     )
-    return { scope: mountScope, input }
+    return { scope: mountScope, input, under }
   }
 
   /** A patch gives a running mount its element's new input, when it differs by `Equal`. */
@@ -3916,7 +3946,7 @@ const setup = (
   const stopMount = (running: RunningMount | undefined) => {
     if (running === undefined) return
     removedMounts.add(running.scope)
-    closeScope(running.scope)
+    closeUnder(running.under, running.scope)
   }
 
   // -- create ---------------------------------------------------------------
@@ -4150,6 +4180,7 @@ const setup = (
       deferred: false,
       runs: [],
       stopping: undefined,
+      closes: undefined,
       subscriptions: undefined,
       watches: undefined,
       watchesSynced: false,
@@ -5112,7 +5143,7 @@ const setup = (
         inst.children.delete(rendered.inst)
         headDirty = true
         releaseWatches(rendered.inst)
-        closeScope(rendered.inst.scope)
+        closeUnder(rendered.inst.parent, rendered.inst.scope)
         return
       }
       case "Fallback":

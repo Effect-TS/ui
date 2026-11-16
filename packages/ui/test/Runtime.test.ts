@@ -3437,6 +3437,74 @@ describe("Runtime", () => {
         }
       })))
 
+    it.effect("cleanup removed in an earlier flush is waited for by the ancestor whose services it uses", () =>
+      Effect.gen(function*() {
+        for (const kind of ["shared", "own", "subscription", "mount"] as const) {
+          for (const swap of [false, true]) {
+            const label = JSON.stringify({ kind, swap })
+            const gate = yield* Deferred.make<void>()
+            const entered = yield* Deferred.make<void>()
+            const events: Array<string> = []
+            const cleanup = gatedCleanup(gate, entered, events)
+            const hold = Effect.never.pipe(Effect.onInterrupt(() => cleanup))
+            const Plain = Component.define({ name: "Plain", model: Schema.Null, message: Schema.Never }).make({
+              init: () => null,
+              update: (model) => model,
+              view: (_, h) => h.text("plain")
+            })
+            const Child = kind === "shared"
+              ? Component.provide(Plain, Layer.effectDiscard(Effect.addFinalizer(() => cleanup)))
+              : Component.provide(Plain, () => Layer.effectDiscard(Effect.addFinalizer(() => cleanup)))
+            const Holder = Component.define({
+              name: "Holder",
+              model: Schema.Struct({ shown: Schema.Boolean, room: Schema.String }),
+              message: Schema.String
+            }).make({
+              init: () => ({ shown: true, room: "a" }),
+              update: (model, message) => message === "hide" ? { ...model, shown: false } : { ...model, room: "b" },
+              subscriptions: (model) =>
+                kind === "subscription" && model.shown ? [Subscription.make("hold", Stream.fromEffect(hold))] : [],
+              view: (model, h) =>
+                !model.shown
+                  ? h.text("hidden")
+                  : kind === "mount"
+                  ? h.el("span").onMount("hold", () => hold)
+                  : kind === "subscription"
+                  ? h.text("shown")
+                  : h.el("div", Child(h, { key: "child", props: {} }))
+            })
+            const Parent = swap
+              ? Component.provide(Holder, {
+                key: (_, model) => model.room,
+                layer: () => scopedGreeter("parent", events)
+              })
+              : Component.provide(Holder, () => scopedGreeter("parent", events))
+            const scope = yield* Scope.make()
+            const root = yield* TestHost.mount(Parent, {}).pipe(Scope.provide(scope))
+            yield* TestHost.settle
+            // Removed in one flush: its cleanup starts and holds.
+            root.send("hide")
+            yield* TestHost.settle
+            yield* Deferred.await(entered)
+            // The ancestor lets go of its services in a later one.
+            const closed = swap ? undefined : yield* Scope.close(scope, Exit.void).pipe(Effect.forkChild)
+            if (swap) root.send("swap")
+            yield* Effect.yieldNow
+            yield* TestHost.settle
+            assert.deepStrictEqual(events, [], label)
+            if (closed !== undefined) assert.isUndefined(closed.pollUnsafe(), label)
+            yield* Deferred.succeed(gate, undefined)
+            yield* TestHost.settle
+            if (closed !== undefined) yield* Fiber.join(closed)
+            else yield* Scope.close(scope, Exit.void)
+            assert.deepStrictEqual(events.slice(0, 2), ["clean parent alive=true", "release parent"], label)
+          }
+        }
+      }).pipe(
+        Effect.provide(Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })),
+        provideHost
+      ))
+
     it.effect("an ancestor's services outlive the close of a retired selection that uses them", () =>
       provideHost(Effect.gen(function*() {
         for (const sibling of [false, true]) {

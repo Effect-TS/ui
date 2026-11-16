@@ -6,4 +6,4 @@
 
 A `(props) => Layer` factory whose branches return different Layers now removes only the services every branch provides from the component's requirements.
 
-Unmounting now waits for the cleanup of a component's Subscriptions, mounts and provided Layer, a build still running or failing included, before the services above it are released.
+Unmounting now waits for the cleanup of a component's Subscriptions, mounts and provided Layer, a build still running or failing included, before the services above it are released. A component that removed a child, Subscription or mount in an earlier update also waits for that cleanup before releasing its own services.
