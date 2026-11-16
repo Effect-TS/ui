@@ -2925,6 +2925,191 @@ describe("Runtime", () => {
       assert.strictEqual(builds, 2)
     })))
 
+  describe("a keyed provide", () => {
+    class Greeter extends Context.Service<Greeter, { readonly room: string }>()("test/KeyedGreeter") {}
+    const Msg = Schema.TaggedUnion({ Move: { room: Schema.String }, Shown: { room: Schema.String } })
+    class Show extends Command.Service<Show>()(
+      "test/KeyedShow",
+      { args: {}, invalidates: () => [] },
+      Greeter.useSync((greeter) => () => Effect.succeed(Msg.make({ _tag: "Shown", room: greeter.room })))
+    ) {}
+    /** Starts in room "a". Its text is its room, then the room each `Show` ran against, in order. */
+    const RoomView = Component.define({
+      name: "RoomView",
+      model: Schema.Struct({ room: Schema.String, shown: Schema.Array(Schema.String) }),
+      message: Msg
+    }).make({
+      init: ($) => $.set({ room: "a", shown: [] }).run(Show.make()),
+      update: (model, message, $) =>
+        Msg.match(message, {
+          Move: ({ room }) => $.set({ ...model, room }).run(Show.make()),
+          Shown: ({ room }) => ({ ...model, shown: [...model.shown, room] })
+        }),
+      view: (model, h) =>
+        h.el("button").on("click", Msg.make({ _tag: "Move", room: "b" })).children(
+          `${model.room}:${model.shown.join("")}`
+        )
+    })
+
+    it.effect("a Model update that leaves the key unchanged doesn't call layer or build anything", () =>
+      provideHost(Effect.gen(function*() {
+        const calls: Array<string> = []
+        let builds = 0
+        const Room = Component.provide(RoomView, {
+          key: (_, model) => model.room,
+          layer: (room) => {
+            calls.push(room)
+            return Show.layer.pipe(Layer.provide(Layer.sync(Greeter, () => {
+              builds++
+              return { room }
+            })))
+          }
+        })
+        const root = yield* TestHost.mount(Room, {})
+        yield* TestHost.settle
+        root.send(Msg.make({ _tag: "Move", room: "a" }))
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "a:aa")
+        assert.deepStrictEqual([calls, builds], [["a"], 1])
+      })))
+
+    it.effect("a key change calls layer once, keeps the Model, and runs the flush's Commands against the new services", () =>
+      provideHost(Effect.gen(function*() {
+        const calls: Array<string> = []
+        const Room = Component.provide(RoomView, {
+          key: (_, model) => model.room,
+          layer: (room) => {
+            calls.push(room)
+            return Show.layer.pipe(Layer.provide(Layer.succeed(Greeter, { room })))
+          }
+        })
+        const root = yield* TestHost.mount(Room, {})
+        yield* TestHost.settle
+        // One flush: the key is read once both updates are in, so "b" is never selected.
+        root.send(Msg.make({ _tag: "Move", room: "b" }))
+        root.send(Msg.make({ _tag: "Move", room: "c" }))
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "c:acc")
+        assert.deepStrictEqual(calls, ["a", "c"])
+      })))
+
+    it.effect("a key change remounts descendants and interrupts the instance's in-flight Command", () =>
+      provideHost(Effect.gen(function*() {
+        let starts = 0
+        let interrupted = false
+        const Hold = Command.make(
+          "test/KeyedHold",
+          { args: {} },
+          () =>
+            Effect.onInterrupt(Effect.never, () =>
+              Effect.sync(() => {
+                interrupted = true
+              }))
+        )
+        const Child = Component.define({
+          name: "Child",
+          model: Schema.Number,
+          message: Schema.Never
+        }).make({
+          init: () => ++starts,
+          update: (n) => n,
+          view: (n, h) => h.text(`child${n}`)
+        })
+        const Parent = Component.define({
+          name: "Parent",
+          model: Schema.String,
+          message: Schema.String
+        }).make({
+          init: ($) => $.set("a").run(Hold()),
+          update: (_, room) => room,
+          view: (room, h) => h.el("div", room, Child(h, { key: "child", props: {} }))
+        })
+        const Keyed = Component.provide(Parent, { key: (_, room) => room, layer: () => Layer.empty })
+        const root = yield* TestHost.mount(Keyed, {})
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "achild1")
+        root.send("b")
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "bchild2")
+        assert.isTrue(interrupted)
+      })))
+
+    it.effect("the old Layer is released once the new one is built, and the current one at unmount", () =>
+      provideHost(Effect.gen(function*() {
+        const events: Array<string> = []
+        const Room = Component.provide(RoomView, {
+          key: (_, model) => model.room,
+          layer: (room) =>
+            Show.layer.pipe(Layer.provide(Layer.effect(
+              Greeter,
+              Effect.acquireRelease(
+                Effect.map(Effect.sleep("1 second"), () => {
+                  events.push(`built ${room}`)
+                  return { room }
+                }),
+                () => Effect.sync(() => events.push(`released ${room}`))
+              )
+            )))
+        })
+        yield* Effect.scoped(Effect.gen(function*() {
+          const root = yield* TestHost.mount(Room, {})
+          yield* TestClock.adjust("1 second")
+          yield* TestHost.settle
+          root.send(Msg.make({ _tag: "Move", room: "b" }))
+          yield* TestHost.settle
+          // "a" is held while "b" builds.
+          assert.deepStrictEqual(events, ["built a"])
+          yield* TestClock.adjust("1 second")
+          yield* TestHost.settle
+          assert.deepStrictEqual(events, ["built a", "built b", "released a"])
+        }))
+        yield* TestHost.settle
+        assert.deepStrictEqual(events, ["built a", "built b", "released a", "released b"])
+      })))
+
+    it.effect("two instances on one LayerMap key share its build, and moving one leaves the other's service alive", () => {
+      const events: Array<string> = []
+      class Rooms extends LayerMap.Service<Rooms>()("test/KeyedRooms", {
+        lookup: (room: string) =>
+          Layer.effect(
+            Greeter,
+            Effect.acquireRelease(
+              Effect.sync(() => {
+                events.push(`built ${room}`)
+                return { room }
+              }),
+              () => Effect.sync(() => events.push(`released ${room}`))
+            )
+          )
+      }) {}
+      const Room = Component.provide(RoomView, {
+        key: (_, model) => model.room,
+        layer: (room) => Show.layer.pipe(Layer.provideMerge(Rooms.get(room)))
+      })
+      const Lobby = Component.define({
+        name: "Lobby",
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => h.el("div", Room(h, { key: "1", props: {} }), Room(h, { key: "2", props: {} }))
+      })
+      // The LayerMap outlives the mount, so it is open when a room is selected later.
+      return provideHost(
+        Effect.gen(function*() {
+          const root = yield* TestHost.mount(Lobby, {})
+          yield* TestHost.settle
+          assert.strictEqual(root.text(), "a:aa:a")
+          Query.fire(root.all(Query.tag("button"))[0], "click")
+          yield* TestHost.settle
+          assert.strictEqual(root.text(), "b:aba:a")
+          assert.deepStrictEqual(events, ["built a", "built b"])
+        }).pipe(Effect.provide(Rooms.layer))
+      )
+    })
+  })
+
   it.effect("each provided Layer build is stamped with the flush it began in", () =>
     provideHost(Effect.gen(function*() {
       class Slow extends Context.Service<Slow, { readonly name: string }>()("test/Slow") {}
