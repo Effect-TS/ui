@@ -31,6 +31,11 @@ declare const NeedsRuntime: Component.Component<
 >
 declare const runtimeLayer: Layer.Layer<A | Loader.Cache | Scope.Scope | typeof Loader.Visibility>
 
+declare const NeedsBoth: Component.Component<"NeedsBoth", { readonly admin: boolean }, {}, never, never, A | B, any>
+// Two Layers a factory chooses between: only `A` is in both, and each needs a service of its own.
+declare const adminLayer: Layer.Layer<A | B, never, CA>
+declare const guestLayer: Layer.Layer<A, never, CB>
+
 describe("Component", () => {
   describe("Requirements", () => {
     it("names the Command service, not what its implementation uses", () => {
@@ -201,6 +206,20 @@ describe("Component", () => {
       const keyed = { key: (props: { readonly todo: Todo }) => props.todo.id, layer: (_: string) => SaveTodo.layer }
       expect(Component.provide).type.toBeCallableWith(TodoItem, keyed, { server: false })
       expect(Component.provide).type.not.toBeCallableWith(TodoItem, keyed, { local: true })
+    })
+
+    it("removes only what every branch of a factory provides, and requires what any branch needs", () => {
+      const FromProps = Component.provide(NeedsBoth, (props) => props.admin ? adminLayer : guestLayer)
+      expect<Component.Requirements<typeof FromProps>>().type.toBe<B | CA | CB>()
+      const Curried = NeedsBoth.pipe(
+        Component.provide((props: { readonly admin: boolean }) => props.admin ? adminLayer : guestLayer)
+      )
+      expect<Component.Requirements<typeof Curried>>().type.toBe<B | CA | CB>()
+      const Keyed = Component.provide(NeedsBoth, {
+        key: (props) => props.admin,
+        layer: (admin) => admin ? adminLayer : guestLayer
+      })
+      expect<Component.Requirements<typeof Keyed>>().type.toBe<B | CA | CB>()
     })
 
     it("requires onFailure when the Layer can fail", () => {

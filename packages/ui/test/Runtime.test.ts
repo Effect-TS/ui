@@ -2973,6 +2973,28 @@ describe("Runtime", () => {
         assert.deepStrictEqual([calls, builds], [["a"], 1])
       })))
 
+    it.effect("a struct key equal to the last one, though a new object, doesn't call layer or build anything", () =>
+      provideHost(Effect.gen(function*() {
+        const calls: Array<string> = []
+        let builds = 0
+        const Room = Component.provide(RoomView, {
+          key: (_, model) => ({ room: model.room }),
+          layer: ({ room }) => {
+            calls.push(room)
+            return Show.layer.pipe(Layer.provide(Layer.sync(Greeter, () => {
+              builds++
+              return { room }
+            })))
+          }
+        })
+        const root = yield* TestHost.mount(Room, {})
+        yield* TestHost.settle
+        root.send(Msg.make({ _tag: "Move", room: "a" }))
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "a:aa")
+        assert.deepStrictEqual([calls, builds], [["a"], 1])
+      })))
+
     it.effect("a key change calls layer once, keeps the Model, and runs the flush's Commands against the new services", () =>
       provideHost(Effect.gen(function*() {
         const calls: Array<string> = []
