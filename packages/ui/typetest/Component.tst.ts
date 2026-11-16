@@ -185,6 +185,24 @@ describe("Component", () => {
       expect<Component.Props<typeof FromProps>>().type.toBe<{ readonly todo: Todo }>()
     })
 
+    it("infers a keyed provide's key from props and the Model, gives it to layer, and rejects local", () => {
+      const Keyed = Component.provide(TodoItem, {
+        key: (props, model) => {
+          expect(props).type.toBe<{ readonly todo: Todo }>()
+          expect(model).type.toBe<{ readonly saving: boolean }>()
+          return props.todo.id
+        },
+        layer: (id) => {
+          expect(id).type.toBe<string>()
+          return SaveTodo.layer
+        }
+      })
+      expect<Component.Requirements<typeof Keyed>>().type.toBe<KeyValueStore.KeyValueStore>()
+      const keyed = { key: (props: { readonly todo: Todo }) => props.todo.id, layer: (_: string) => SaveTodo.layer }
+      expect(Component.provide).type.toBeCallableWith(TodoItem, keyed, { server: false })
+      expect(Component.provide).type.not.toBeCallableWith(TodoItem, keyed, { local: true })
+    })
+
     it("requires onFailure when the Layer can fail", () => {
       const failing = Layer.effect(SaveTodo, Effect.fail("offline" as const))
       expect(Component.provide).type.not.toBeCallableWith(TodoItem, failing)
