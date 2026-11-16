@@ -491,6 +491,9 @@ interface Selection {
   skipped: boolean
 }
 
+/** The Model and loader state an instance adopts instead of `init`'s: the server's, or history's. */
+type Adopted = Option.Option<{ readonly model: unknown; readonly loaderState: loaders.LoaderState | undefined }>
+
 interface Retired {
   readonly scope: Scope.Closeable
   readonly waits: Array<Fiber.Fiber<unknown, unknown>>
@@ -958,6 +961,12 @@ const setup = (
     fiber.addObserver(() => fibers.delete(fiber))
   }
   /**
+   * Ends once the fibers tracked when it runs have. Never a wait for the fiber that runs it, should a
+   * cleanup close its owner from inside.
+   */
+  const awaitOthers = (fibers: Set<Fiber.Fiber<any, any>>): Effect.Effect<unknown> =>
+    Effect.withFiber((current) => Fiber.awaitAll([...fibers].filter((fiber) => fiber !== current)))
+  /**
    * Closing a Scope detaches it from its parent, so the close is tracked until it ends. Its
    * finalizers start at once, as in a fiber started now: only a close left with something to wait
    * for takes a fiber, which is returned.
@@ -977,13 +986,8 @@ const setup = (
     const fiber = closeScope(scope)
     if (fiber === undefined || owner === undefined || owner.scope.state._tag === "Closed") return
     if (owner.closes === undefined) {
-      const closes = owner.closes = new Set()
-      // Added after the instance's Layer and selection, so it runs before they close. Never a wait
-      // for itself, should a cleanup close an ancestor from inside.
-      addFinalizer(
-        owner.scope,
-        Effect.withFiber((current) => Fiber.awaitAll([...closes].filter((fiber) => fiber !== current)))
-      )
+      // Added after the instance's Layer and selection, so it runs before they close.
+      addFinalizer(owner.scope, awaitOthers(owner.closes = new Set()))
     }
     track(owner.closes, fiber)
   }
@@ -997,7 +1001,7 @@ const setup = (
    * Scope's owner closes next, such as the Layer that provides its services.
    */
   const interruptOnClose = (scope: Scope.Scope, fiber: Fiber.Fiber<unknown, unknown>) =>
-    addFinalizer(scope, Effect.asVoid(Fiber.interrupt(fiber)))
+    addFinalizer(scope, Fiber.interrupt(fiber))
 
   // -- loader cache ---------------------------------------------------------
   const withCache = (context: Context.Context<any>): Context.Context<any> =>
@@ -1365,20 +1369,30 @@ const setup = (
     }
   }
 
-  /** Swaps the instance's nodes for an empty text node, then closes its Scope and removes them, once. */
-  const close = (inst: Instance) => {
+  /**
+   * Swaps what the instance rendered for an empty text node. `release` ends what was rendered once
+   * the text node is in, and then the old nodes go, once.
+   */
+  const swapForPlaceholder = (inst: Instance, release: () => void) => {
     const nodes = inst.rendered.flatMap(nodesOf)
     const placeholder = host.createText("")
     const at = nodes[0]
     const parentNode = at === undefined ? undefined : host.parentOf(at)
     if (parentNode !== undefined) host.insertBefore(parentNode, placeholder, at)
     else if (inst.parent === undefined) host.insertBefore(container, placeholder, undefined)
-    // Before the Scope closes: a Command's cleanup can hold the close open, and a fallback or
-    // replacement created meanwhile must see the count without this instance's watchers.
-    releaseWatches(inst)
-    closeUnder(inst.parent, inst.scope)
+    release()
     for (const node of nodes) host.remove(node)
     inst.rendered = [{ _tag: "Text", v: emptyText, node: placeholder }]
+  }
+
+  /** Swaps the instance's nodes for an empty text node, closing its Scope. */
+  const close = (inst: Instance) => {
+    swapForPlaceholder(inst, () => {
+      // Before the Scope closes: a Command's cleanup can hold the close open, and a fallback or
+      // replacement created meanwhile must see the count without this instance's watchers.
+      releaseWatches(inst)
+      closeUnder(inst.parent, inst.scope)
+    })
     inst.parent?.children.delete(inst)
   }
 
@@ -1489,11 +1503,7 @@ const setup = (
     onExit: (exit: Exit.Exit<Context.Context<any>, unknown>) => void
   ) => {
     const cleanups = new Set<Fiber.Fiber<unknown, unknown>>()
-    // Never a wait for itself, should a build close `scope` from inside.
-    addFinalizer(
-      scope,
-      Effect.withFiber((current) => Fiber.awaitAll([...cleanups].filter((fiber) => fiber !== current)))
-    )
+    addFinalizer(scope, awaitOthers(cleanups))
     const attempt = (again: boolean) => {
       const buildScope = Scope.forkUnsafe(scope, "sequential")
       const build = memoMap === undefined
@@ -1626,6 +1636,24 @@ const setup = (
   }
 
   /**
+   * Counts `own` as building until it settles or `scope` closes. Returns what ends the count early,
+   * as a build that failed without failing `own` does.
+   */
+  const countBuilding = (own: Env, scope: Scope.Scope): () => void => {
+    const stamp = { flush: flushes }
+    building.add(stamp)
+    const settle = () => {
+      if (!building.delete(stamp)) return
+      // The router's settle condition is checked after a flush, so a settled build wakes one.
+      if (hooks !== undefined) wake()
+      checkIdle()
+    }
+    whenReady(own, settle, settle)
+    addFinalizer(scope, Effect.sync(settle))
+    return settle
+  }
+
+  /**
    * The instance's provided Layer failed once it was made. Unhandled, the instance fails. Handled, it
    * stays mounted and hears about it once: Feature children below show `fallback`, and Commands waiting
    * for the Layer are interrupted. The server leaves it to the client. A selection a keyed provide
@@ -1652,19 +1680,23 @@ const setup = (
   // -- keyed provides ---------------------------------------------------------
   /** A keyed provide's read point is due: the instance had an update, or new props, since the last. */
   const keyDue = (inst: Instance): boolean => inst.selection?.due === true
+  /** Runs `go` once the instance's Layer is ready. After a handled failure, against the parent's services. */
+  const againstEnv = (inst: Instance, go: (envCtx: Context.Context<any>) => void, failed?: () => void) => {
+    if (inst.env.failure !== undefined) go(settled(inst.env).ctx!)
+    else whenReady(inst.env, go, failed)
+  }
   /**
    * Starts a Subscription or a loader once the instance's Layer is ready. After a handled failure it
    * runs against the parent's services, except under a keyed provide: there it was set up for the
    * selected services, and it waits for the next selection rather than fail the instance without them.
    */
   const startWatching = (inst: Instance, go: (envCtx: Context.Context<any>) => void) => {
-    if (inst.env.failure === undefined) whenReady(inst.env, go)
-    else if (inst.selection === undefined) go(settled(inst.env).ctx!)
+    if (inst.env.failure === undefined || inst.selection === undefined) againstEnv(inst, go)
   }
-  /** Runs `f` now, or once a due read of the keys has picked the Env it binds to. */
-  const onceSelected = (inst: Instance, f: () => void) => {
-    if (keyDue(inst)) inst.selection!.held.push(f)
-    else f()
+  /** As `againstEnv`, now or once a due read of the keys has picked the Env it binds to. */
+  const onceSelected = (inst: Instance, go: (envCtx: Context.Context<any>) => void, failed?: () => void) => {
+    if (keyDue(inst)) inst.selection!.held.push(() => againstEnv(inst, go, failed))
+    else againstEnv(inst, go, failed)
   }
 
   /**
@@ -1769,15 +1801,7 @@ const setup = (
     if (failed || own.ctx !== undefined || own.failure !== undefined) return
     pending = true
     record({ _tag: "LayerPending", path })
-    const building_ = { flush: flushes }
-    building.add(building_)
-    settle = () => {
-      if (!building.delete(building_)) return
-      if (hooks !== undefined) wake()
-      checkIdle()
-    }
-    whenReady(own, settle, settle)
-    addFinalizer(selection.scope, Effect.sync(settle))
+    settle = countBuilding(own, selection.scope)
   }
 
   /** Releases the selection kept while the current one built, once the work stopped against it has exited. */
@@ -1799,9 +1823,8 @@ const setup = (
   const releaseSelection = (selection: Selection, retired: Retired) => {
     const fiber = forkNow(ctx, Effect.uninterruptible(releaseOf(retired)))
     if (fiber.pollUnsafe() !== undefined) return
-    selection.releasing.add(fiber)
     track(closing, fiber)
-    fiber.addObserver(() => selection.releasing.delete(fiber))
+    track(selection.releasing, fiber)
   }
 
   /**
@@ -1874,15 +1897,9 @@ const setup = (
   /** Swaps everything the instance rendered for an empty text node: its descendants and mounts end. */
   const clearRendered = (inst: Instance) => {
     if (inst.rendered.length === 0) return
-    const nodes = inst.rendered.flatMap(nodesOf)
-    const placeholder = host.createText("")
-    const at = nodes[0]
-    const parentNode = at === undefined ? undefined : host.parentOf(at)
-    if (parentNode !== undefined) host.insertBefore(parentNode, placeholder, at)
-    else if (inst.parent === undefined) host.insertBefore(container, placeholder, undefined)
-    for (const rendered of inst.rendered) closeAll(inst, rendered)
-    for (const node of nodes) host.remove(node)
-    inst.rendered = [{ _tag: "Text", v: emptyText, node: placeholder }]
+    swapForPlaceholder(inst, () => {
+      for (const rendered of inst.rendered) closeAll(inst, rendered)
+    })
     headDirty = true
   }
 
@@ -2078,9 +2095,7 @@ const setup = (
     let pending = false
 
     // Hydration: the Model and loader state the server rendered this path with, unless it deferred the path.
-    const fromServer: Option.Option<
-      { readonly model: unknown; readonly loaderState: loaders.LoaderState | undefined }
-    > = hydrating !== undefined &&
+    const fromServer: Adopted = hydrating !== undefined &&
         (parent === undefined || parent.adoptsChildren) &&
         !hydrating.deferred.has(path) &&
         Object.hasOwn(hydrating.state, path)
@@ -2088,22 +2103,10 @@ const setup = (
       : Option.none()
 
     /**
-     * What the instance starts from, read once: `init`'s result, and the Model it adopts from the
-     * server or from history restore instead of `init`'s. Read as it first renders, or before its
-     * Layer builds when a keyed provide selects the Layer from that Model.
+     * What the instance starts from: `init`'s result, and the Model it adopts from the server or from
+     * history restore instead of `init`'s.
      */
-    let starting:
-      | {
-        readonly first: ReturnType<Component.Any["init"]> | undefined
-        readonly adopted: Option.Option<
-          { readonly model: unknown; readonly loaderState: loaders.LoaderState | undefined }
-        >
-      }
-      | undefined
-    const startFrom = (
-      serverModel: Option.Option<{ readonly model: unknown; readonly loaderState: loaders.LoaderState | undefined }>
-    ) => {
-      if (starting !== undefined) return starting
+    const startFrom = (serverModel: Adopted) => {
       const first = guard(inst, "init", () => {
         const elements = component.elements()
         if (elements !== undefined && host.elements !== "any" && !host.elements.includes(elements.name)) {
@@ -2130,8 +2133,13 @@ const setup = (
           )
         }
       }
-      return starting = { first, adopted }
+      return { first, adopted }
     }
+    /**
+     * Read before the Layer builds, when a keyed provide selects the Layer from the starting Model.
+     * `begin` takes it, so `init` runs once.
+     */
+    let selectedFrom: ReturnType<typeof startFrom> | undefined
 
     // A provided Layer builds in the background. The instance renders at once; its Commands,
     // Subscriptions and mounts, and its descendants', wait for it.
@@ -2146,12 +2154,12 @@ const setup = (
         let keys: Keys = none
         let buildScope: Scope.Closeable = scope
         if (component.layerKeys !== undefined) {
-          const start = Option.isSome(fromServer) ? undefined : startFrom(fromServer)
-          const model = start === undefined
-            ? Option.getOrThrow(fromServer).model
-            : Option.isSome(start.adopted)
-            ? start.adopted.value.model
-            : start.first?.model
+          let model: unknown
+          if (Option.isSome(fromServer)) model = fromServer.value.model
+          else {
+            const { adopted, first } = selectedFrom = startFrom(fromServer)
+            model = Option.isSome(adopted) ? adopted.value.model : first?.model
+          }
           keys = readKeys(component, props, model)
           if (server !== undefined) {
             // The server builds once, from the Model it starts with.
@@ -2207,16 +2215,7 @@ const setup = (
         if (!inst.closed && own.ctx === undefined && own.failure === undefined && failedEarly === undefined) {
           pending = true
           lifecycle({ _tag: "LayerPending", path })
-          const stamp = { flush: flushes }
-          building.add(stamp)
-          settleBuild = () => {
-            if (!building.delete(stamp)) return
-            // The router's settle condition is checked after a flush, so a settled build wakes one.
-            if (hooks !== undefined) wake()
-            checkIdle()
-          }
-          whenReady(own, settleBuild, settleBuild)
-          addFinalizer(buildScope, Effect.sync(settleBuild))
+          settleBuild = countBuilding(own, buildScope)
         }
       }
     }
@@ -2227,11 +2226,9 @@ const setup = (
      * Model wins and events are dropped. Given the server's nodes, it adopts them when its
      * view matches, and otherwise builds fresh.
      */
-    const begin = (
-      range: Range | undefined,
-      serverModel: Option.Option<{ readonly model: unknown; readonly loaderState: loaders.LoaderState | undefined }>
-    ) => {
-      const { adopted, first } = startFrom(serverModel)
+    const begin = (range: Range | undefined, serverModel: Adopted) => {
+      const { adopted, first } = selectedFrom ?? startFrom(serverModel)
+      selectedFrom = undefined
       let mountedSeq = -1
       if (first !== undefined) {
         inst.model = Option.isSome(adopted) ? adopted.value.model : first.model
@@ -2436,10 +2433,7 @@ const setup = (
         ;(inst.loadMores ??= new Set()).add(cancel)
       }
     }
-    onceSelected(inst, () => {
-      if (inst.env.failure !== undefined) go(settled(inst.env).ctx!)
-      else whenReady(inst.env, go)
-    })
+    onceSelected(inst, go)
   }
   const queueSends = (inst: Instance, next: Component.Next<any, any, any, any>, entrySeq: number): boolean => {
     if (next.sends === undefined || next.sends.length === 0) return false
@@ -2859,10 +2853,7 @@ const setup = (
     }
     // After a handled Layer failure, work runs against the parent's services. A run issued before a
     // keyed provide's due read starts against the selection the read leaves.
-    onceSelected(inst, () => {
-      if (inst.env.failure !== undefined) go(settled(inst.env).ctx!)
-      else whenReady(inst.env, go, () => stopRun(inst, run))
-    })
+    onceSelected(inst, go, () => stopRun(inst, run))
   }
 
   /**
