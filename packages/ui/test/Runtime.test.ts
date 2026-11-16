@@ -2925,6 +2925,39 @@ describe("Runtime", () => {
       assert.strictEqual(builds, 2)
     })))
 
+  it.effect("a Layer factory gets the Model the instance starts with, and nothing is rebuilt when the Model changes", () =>
+    provideHost(Effect.gen(function*() {
+      class Greeter extends Context.Service<Greeter, { readonly room: string }>()("test/ModelGreeter") {}
+      class Show extends Command.Service<Show>()(
+        "test/ShowModelRoom",
+        { args: {}, invalidates: () => [] },
+        Greeter.useSync((greeter) => () => Effect.succeed(Msg.make({ _tag: "Shown", room: greeter.room })))
+      ) {}
+      const Msg = Schema.TaggedUnion({ Move: { room: Schema.String }, Shown: { room: Schema.String } })
+      const RoomView = Component.define({
+        name: "RoomView",
+        props: Schema.Struct({ initial: Schema.String }),
+        model: Schema.Struct({ room: Schema.String, shown: Schema.String }),
+        message: Msg
+      }).make({
+        init: ($) => ({ room: $.props.initial.toUpperCase(), shown: "" }),
+        update: (model, message, $) =>
+          Msg.match(message, {
+            Move: ({ room }) => $.set({ ...model, room }).run(Show.make()),
+            Shown: ({ room }) => ({ ...model, shown: room })
+          }),
+        view: (model, h) => h.text(`${model.room}:${model.shown}`)
+      })
+      const Room = Component.provide(
+        RoomView,
+        (_, model) => Show.layer.pipe(Layer.provide(Layer.succeed(Greeter, { room: model.room })))
+      )
+      const root = yield* TestHost.mount(Room, { initial: "a" })
+      root.send(Msg.make({ _tag: "Move", room: "B" }))
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "B:A")
+    })))
+
   it.effect("each provided Layer build is stamped with the flush it began in", () =>
     provideHost(Effect.gen(function*() {
       class Slow extends Context.Service<Slow, { readonly name: string }>()("test/Slow") {}

@@ -185,6 +185,23 @@ describe("Component", () => {
       expect<Component.Props<typeof FromProps>>().type.toBe<{ readonly todo: Todo }>()
     })
 
+    it("gives a Layer factory the component's Model after its props", () => {
+      const layer = Layer.succeed(SaveTodo, () => Effect.succeed(TodoItemMessage.make({ _tag: "Saved" })))
+      Component.provide(TodoItem, (props, model) => {
+        expect(props).type.toBe<{ readonly todo: Todo }>()
+        expect(model).type.toBe<{ readonly saving: boolean }>()
+        return layer
+      })
+      // The curried form can't infer them: they're annotated, and checked against the component.
+      expect(TodoItem.pipe).type.toBeCallableWith(
+        Component.provide((_: { readonly todo: Todo }, _model: { readonly saving: boolean }) => layer)
+      )
+      expect(TodoItem.pipe).type.not.toBeCallableWith(
+        Component.provide((_: { readonly todo: Todo }, _model: { readonly saving: string }) => layer)
+      )
+      expect(TodoItem.pipe).type.toBeCallableWith(Component.provide((_: { readonly todo: Todo }) => layer))
+    })
+
     it("requires onFailure when the Layer can fail", () => {
       const failing = Layer.effect(SaveTodo, Effect.fail("offline" as const))
       expect(Component.provide).type.not.toBeCallableWith(TodoItem, failing)

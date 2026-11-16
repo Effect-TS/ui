@@ -476,6 +476,39 @@ describe("HtmlServer", { concurrent: false }, () => {
       expect(app.innerHTML).not.toContain("<!--")
     }).pipe(Effect.scoped))
 
+  it.effect("gives a provided Layer factory the Model the client adopts", () =>
+    Effect.gen(function*() {
+      class Store extends Context.Service<Store, string>()("test/SeededStore") {}
+      class ReadStore extends Command.Service<ReadStore>()(
+        "test/ReadSeededStore",
+        { args: {}, invalidates: () => [] },
+        Store.useSync((seed) => () => Effect.succeed(`seeded from ${seed}`))
+      ) {}
+      // What `init` returns where it runs: the client's is dropped for the Model the server rendered.
+      let side = "server"
+      const Panel = Component.provide(
+        Component.define({
+          name: "Panel",
+          model: Schema.String,
+          message: Schema.String,
+          elements: Html
+        }).make({
+          init: ($) => $.set(side).run(ReadStore.make()),
+          update: (_, message) => message,
+          view: (model, h) => h.p(model)
+        }),
+        (_, model) => ReadStore.layer.pipe(Layer.provide(Layer.succeed(Store, model)))
+      )
+      const rendered = yield* HtmlServer.renderToHtml(Panel, {})
+      expect(rendered.html).toContain("<p>server</p>")
+      side = "client"
+      const app = yield* container(rendered.html)
+      const root = yield* BrowserHost.mountEffect(Panel, {}, app, { state: rendered.state })
+      yield* root.adopted
+      yield* tick
+      expect(app.querySelector("p")!.textContent).toBe("seeded from server")
+    }).pipe(Effect.scoped))
+
   it.effect("rebuilds only the instance whose nodes don't match", () =>
     Effect.gen(function*() {
       const Item = Component.define({
