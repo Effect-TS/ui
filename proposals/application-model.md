@@ -13,6 +13,24 @@ the host to execute, and results return as Messages. Rendering consumes the
 prepared state without starting work. Framework automation follows the same
 boundary so these guarantees hold for Queries as well as application code.
 
+## Decisions to align on
+
+Four principles carry this proposal. Agreement on them matters more than any
+spelling in the sketch, which is illustrative.
+
+1. Rendering reads one complete Application Model. Today an instance's state
+   is its Model, props, and loader slots, held per mounted instance.
+2. Child state lifetime follows the Model. Today it follows the rendered
+   tree: a slot's key creates and disposes the child.
+3. Cache changes are framework Messages reduced by a pure transition. Today
+   a live cache writes slots, and an enabled message log records the write.
+4. One authority chooses the Document's title and metadata. Today each
+   mounted component contributes head entries that are merged in tree order.
+
+Two further choices follow from these and stay open: how a child receives
+values from its parent, and whether document policy must sit at the root.
+[Open decisions](#open-decisions) states both tradeoffs.
+
 ## What Effect UI does well, and why to retain it
 
 - Components colocate a feature's Model, behavior, data needs, and view.
@@ -43,6 +61,32 @@ boundary so these guarantees hold for Queries as well as application code.
 - Current pure Stories stop at child slots. Crossing a component boundary
   requires a runtime test, limiting pure tests of composed behavior.
 
+## Existing Effect UI mechanisms these build on
+
+Several recommendations refine something Effect UI already has. Naming the
+existing mechanism keeps each change as small as its actual difference.
+
+- Saved state. The Router saves every mounted instance's encoded Model and
+  loader slots by path for history restore, and the server ships the same
+  pair for hydration. The Application Model extends that snapshot to
+  unmounted children and the cache, and makes it the input to rendering.
+- Recorded framework changes. An enabled `MessageLog` records `LoaderChanged`
+  and `PropsChanged` entries beside each `Update`, and `Story.fromLog`
+  replays them for one instance. The change is that these become transitions
+  of the state itself, not a development record kept beside it.
+- Public parent inputs. `receives` lists the Messages a parent may send, and
+  `$.send` delivers one through a child ref. Delivery happens after the
+  render the update causes, and a send to a slot that is not rendered is
+  dropped. The change is synchronous delivery inside the parent's
+  transition, independent of rendering.
+- Contracts with Layer-selected implementations. `Feature.Service` holds a
+  child's props, events, and receivable Messages, and a Layer supplies the
+  implementation. The sketch's `Component.define` and `makeLayer` apply that
+  split to every component.
+- Routes. `Route.union` already parses and prints from one definition, with
+  Schema-decoded params and query. The preview's Route module differs in
+  authoring style: composable parser values and callable URL builders.
+
 ## What to borrow from Foldkit, and how to adapt it
 
 1. Foldkit's composed Model. For UI, generate an Application aggregate of
@@ -53,15 +97,18 @@ boundary so these guarantees hold for Queries as well as application code.
    semantics: describe work, then reduce its outcomes as framework Messages.
    This preserves cache convenience with inspectable state changes, without
    application-authored completion handlers for every read.
-3. Public child inputs and generated synchronous composition. Parents inform
-   children; children own the consequences. Related changes complete in one
+3. Synchronous child inputs and generated composition. Parents inform
+   children; children own the consequences. UI's `$.send` waits for a render;
+   delivering inside the parent's transition completes related changes in one
    pure application step, preserving autonomy and consistent rendered state.
 4. A root Application returning a pure Document. Root ChangedUrl parses the
    URL and explicitly informs children; the root chooses title/metadata from
    Model. This gives navigation and document policy one visible authority.
-5. Route biparsers, typed Route unions, and callable URL builders. One parse/
-   print definition prevents URL drift without prescribing a component tree.
-   Callable Message constructors improve readability while retaining Schemas.
+5. Composable Route parsers and callable URL builders. UI's `Route.union`
+   already keeps parsing and printing in one definition, so this is a smaller
+   change than the others: parser values that compose, and builders called
+   as functions. Callable Message constructors improve readability the same
+   way while retaining Schemas.
 6. Separate graph construction from effect-handler initialization and test
    across the graph. Story/Scene can then exercise real composition with
    controlled work/time, without HTTP clients or a live cache during rendering.
@@ -116,14 +163,64 @@ Discovery walks initial views, with limits. Compatible prefetch syntax needs
 design here; its benefit is preparing cached data without navigating or
 replacing the active feature.
 
+## Open decisions
+
+### How a child receives values from its parent
+
+Props and InMessages answer different questions, and each fails where the
+other is strong.
+
+- A prop carries the current value. The child holds no copy, so it cannot go
+  stale, and the call site is one line. A props change never reaches
+  `update`, so a child can react only by being re-keyed, which resets all of
+  its state. Props also come from the view that places the child, which
+  leaves them undefined for a child that is retained but not rendered.
+- An InMessage carries a fact that something changed. The child runs a
+  transition and chooses what to keep, reset, or start, and its own state
+  explains its view. The child copies the value, so every parent path must
+  inform it; a path that forgets leaves the copy stale without an error.
+
+The Notes sketch uses the InMessage form for both needs. Resetting the
+expansion requires a transition. The note id used for Query args is a
+current-value read, where the copy costs an inform in `init` and another in
+`ChangedUrl`. The preview's Block guidance draws the same line: view inputs
+and update context for current reads, `informOf*` when a change requires a
+transition.
+
+A candidate that fits Model-owned child lifetime keeps both channels:
+InMessages for changes a child must react to, and inputs derived from the
+parent Model in the composition declaration for values a child only reads.
+Derived inputs keep one source of truth without depending on rendering. The
+prototype should compare view props, InMessages, and derived inputs on the
+same application.
+
+### Where document policy is decided
+
+The sketch gives the root sole ownership of title and metadata. That makes
+the result explainable from one function, and it costs colocation: the root
+reads `GetNote`, a Query that only the child declares. UI's head merge is
+already deterministic, because entries are read in tree order and the later
+entry wins. An alternative keeps per-component head entries and computes
+them from the Application Model instead of from mounted instances. It meets
+the same explainability goal if entry order comes from Model-owned child
+identity. The choice depends on whether one visible authority is worth the
+root knowing each page's data.
+
 ## Scope and status
 
 This is a non-runnable API sketch. Application, Query, makeLayer, union
 helpers, field-evolution helpers, composition, and testing spellings are
 proposed. Route/Url examples use preview shapes. Optional/keyed composition
-and prefetch need a prototype.
-"Query" is a naming suggestion. The preview supplies semantic evidence;
-ordinary UI code need not adopt its entire Block/Binding/Composition surface.
+and prefetch need a prototype. Keyed children come first: that is where
+UI's view-declared slots and Model-owned lifetime differ most.
+"Query" is a naming suggestion; `@effect/ui/testing` already exports a
+`Query` module of locators, so the final name must avoid that clash. The
+preview supplies semantic evidence; ordinary UI code need not adopt its
+entire Block/Binding/Composition surface.
+
+The preview reports editor latency in large Block compositions. A generated
+whole-application Model type has a similar shape, so the prototype should
+measure type-checking cost alongside behavior.
 
 References: [Effect UI at `6f5c415`](https://github.com/Effect-TS/ui/tree/6f5c415d4c1bc6fc9648cd8b0ac8a67a8357bb9c) and [Foldkit Blocks and Layers preview, PR #1655](https://github.com/foldkit/foldkit/pull/1655), at `54f8bcd`.
 
@@ -289,6 +386,8 @@ const noteDetailsLayer = NoteDetails.makeLayer({
     // The parent reports a relevant fact; the child owns its consequences.
     // A different selected note resets expansion. An unchanged selection
     // preserves it. The Query declaration then derives the required read.
+    // Copying the id into Model is one option for a value the child only
+    // reads. "Open decisions" compares it with props and derived inputs.
     InformedOfSelectedNoteChanged: (model, { maybeNoteId }, $) =>
       Equal.equals(model.maybeNoteId, maybeNoteId)
         ? model
@@ -327,6 +426,8 @@ const noteDetailsLayer = NoteDetails.makeLayer({
 // The Application host only supplies URL facts; it does not prescribe a
 // route table. This keeps parsing, URL construction, and application composition
 // independently reusable, with one typed definition for each supported URL.
+// UI's Route.union gives the same parse/print agreement from path templates;
+// this spelling shows the preview's composable form for comparison.
 const AppRoute = Route.defineRouteUnion({
   Note: { noteId: Schema.String },
   NotFound: { path: Schema.String }
@@ -614,4 +715,7 @@ export const noteStory = Story.make(
 - [Document head contributions](https://github.com/Effect-TS/ui/blob/6f5c415d4c1bc6fc9648cd8b0ac8a67a8357bb9c/packages/ui/src/Head.ts)
 - [Pure component Stories](https://github.com/Effect-TS/ui/blob/6f5c415d4c1bc6fc9648cd8b0ac8a67a8357bb9c/packages/ui/src/testing/Story.ts)
 - [Server data preparation and hydration](https://github.com/Effect-TS/ui/blob/6f5c415d4c1bc6fc9648cd8b0ac8a67a8357bb9c/packages/ui/src/html/HtmlServer.ts)
-- [Navigation and prefetch](https://github.com/Effect-TS/ui/blob/6f5c415d4c1bc6fc9648cd8b0ac8a67a8357bb9c/packages/ui/src/Router.ts)
+- [Navigation, prefetch, and history restore](https://github.com/Effect-TS/ui/blob/6f5c415d4c1bc6fc9648cd8b0ac8a67a8357bb9c/packages/ui/src/Router.ts)
+- [Route unions](https://github.com/Effect-TS/ui/blob/6f5c415d4c1bc6fc9648cd8b0ac8a67a8357bb9c/packages/ui/src/Route.ts)
+- [Feature contracts](https://github.com/Effect-TS/ui/blob/6f5c415d4c1bc6fc9648cd8b0ac8a67a8357bb9c/packages/ui/src/Feature.ts)
+- [Message log entries](https://github.com/Effect-TS/ui/blob/6f5c415d4c1bc6fc9648cd8b0ac8a67a8357bb9c/packages/ui/src/MessageLog.ts)
