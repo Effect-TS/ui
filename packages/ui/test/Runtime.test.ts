@@ -2927,6 +2927,9 @@ describe("Runtime", () => {
 
   describe("a keyed provide", () => {
     class Greeter extends Context.Service<Greeter, { readonly room: string }>()("test/KeyedGreeter") {}
+    class Alive extends Context.Service<Alive, { readonly room: string; readonly alive: () => boolean }>()(
+      "test/KeyedAlive"
+    ) {}
     const Msg = Schema.TaggedUnion({ Again: {}, Move: { room: Schema.String }, Shown: { room: Schema.String } })
     class Show extends Command.Service<Show>()(
       "test/KeyedShow",
@@ -3224,6 +3227,181 @@ describe("Runtime", () => {
         yield* Deferred.succeed(gate, undefined)
         yield* Fiber.join(closed)
         assert.deepStrictEqual(events, ["release b", "clean a alive=true", "release a"])
+      })))
+
+    it.effect("updates that leave the Model and props as they were don't read the key", () =>
+      provideHost(Effect.gen(function*() {
+        let reads = 0
+        const Same = Component.define({ name: "Same", model: Schema.String, message: Schema.String }).make({
+          init: () => "a",
+          update: (room) => room,
+          view: (room, h) => h.text(room)
+        })
+        const Room = Component.provide(Same, {
+          key: (_, room) => {
+            reads++
+            return room
+          },
+          layer: () => Layer.empty
+        })
+        const root = yield* TestHost.mount(Room, {})
+        yield* TestHost.settle
+        root.send("x")
+        root.send("y")
+        yield* TestHost.settle
+        assert.strictEqual(reads, 1)
+      })))
+
+    /** A selected service that knows whether it has been released, and logs its release. */
+    const scopedGreeter = (room: string, events: Array<string>) =>
+      Layer.effect(
+        Alive,
+        Effect.acquireRelease(
+          Effect.sync(() => {
+            let alive = true
+            return {
+              room,
+              alive: () => alive,
+              close: () => {
+                alive = false
+                events.push(`release ${room}`)
+              }
+            }
+          }),
+          (service) => Effect.sync(service.close)
+        )
+      )
+    /** A Subscription whose cleanup waits on `gate`, then checks its service is still alive. */
+    const holdingSubscription = (gate: Deferred.Deferred<void>, events: Array<string>) =>
+      Subscription.make(
+        "alive",
+        Stream.unwrap(Alive.useSync((service) =>
+          Stream.fromEffect(Effect.never.pipe(Effect.onInterrupt(() =>
+            Effect.andThen(
+              Deferred.await(gate),
+              Effect.sync(() => events.push(`clean ${service.room} alive=${service.alive()}`))
+            )
+          )))
+        ))
+      )
+
+    it.effect("a key change and an unmount wait for Subscription cleanup, a descendant's included, before releasing services", () =>
+      provideHost(Effect.gen(function*() {
+        for (const descendant of [false, true]) {
+          for (const unmount of [false, true]) {
+            const gate = yield* Deferred.make<void>()
+            const events: Array<string> = []
+            const Child = Component.define({ name: "Child", model: Schema.Null, message: Schema.Never }).make({
+              init: () => null,
+              update: (model) => model,
+              subscriptions: () => [holdingSubscription(gate, events)],
+              view: (_, h) => h.text("child")
+            })
+            const Holding = Component.define({ name: "Holding", model: Schema.String, message: Schema.String }).make({
+              init: () => "a",
+              update: (_, room) => room,
+              subscriptions: () => descendant ? [] : [holdingSubscription(gate, events)],
+              view: (room, h) => descendant ? h.el("div", Child(h, { key: "child", props: {} })) : h.text(room)
+            })
+            const Room = Component.provide(Holding, {
+              key: (_, room) => room,
+              layer: (room) => scopedGreeter(room, events)
+            })
+            const scope = yield* Scope.make()
+            const root = yield* TestHost.mount(Room, {}).pipe(Scope.provide(scope))
+            yield* TestHost.settle
+            const closed = unmount ? yield* Scope.close(scope, Exit.void).pipe(Effect.forkChild) : undefined
+            if (!unmount) root.send("b")
+            yield* Effect.yieldNow
+            yield* TestHost.settle
+            assert.deepStrictEqual(events, [], JSON.stringify({ descendant, unmount }))
+            yield* Deferred.succeed(gate, undefined)
+            yield* TestHost.settle
+            if (closed !== undefined) yield* Fiber.join(closed)
+            else yield* Scope.close(scope, Exit.void)
+            assert.deepStrictEqual(
+              events.slice(0, 2),
+              ["clean a alive=true", "release a"],
+              JSON.stringify({ descendant, unmount })
+            )
+          }
+        }
+      })))
+
+    it.effect("an ancestor's services outlive the close of a retired selection that uses them", () =>
+      provideHost(Effect.gen(function*() {
+        for (const sibling of [false, true]) {
+          const gate = yield* Deferred.make<void>()
+          const entered = yield* Deferred.make<void>()
+          const events: Array<string> = []
+          class Read extends Loader.Service<Read>()(
+            "test/KeyedAncestorRead",
+            { args: { room: Schema.String }, success: Schema.String, error: Schema.Never, staleTime: "30 seconds" },
+            Alive.useSync((service) => ({ room }) =>
+              room === "b"
+                ? Effect.succeed(room)
+                : Effect.never.pipe(Effect.onInterrupt(() =>
+                  Effect.andThen(Deferred.succeed(entered, undefined), Deferred.await(gate)).pipe(
+                    Effect.andThen(Effect.sync(() => events.push(`clean ${service.room} alive=${service.alive()}`)))
+                  )
+                ))
+            )
+          ) {}
+          const Reading = Component.define({
+            name: "Reading",
+            model: Schema.String,
+            message: Schema.String,
+            loaders: { data: { load: Read, args: (room) => ({ room }) } }
+          }).make({
+            init: () => "a",
+            update: (_, room) => room,
+            view: (room, h) => h.el("button").on("click", "b").children(room)
+          })
+          // The selection builds the fetcher. The service it captures comes from the parent.
+          const Child = Component.provide(Reading, { key: (_, room) => room, layer: () => Read.layer })
+          const Parent = Component.define({
+            name: "Parent",
+            props: Schema.Struct({ id: Schema.String }),
+            model: Schema.Null,
+            message: Schema.Never
+          }).make({
+            init: () => null,
+            update: (model) => model,
+            view: (_, h) => h.el("div", Child(h, { key: "child", props: {} }))
+          }).pipe(Component.provide((props: { readonly id: string }) => scopedGreeter(props.id, events)))
+          const Shell = Component.define({ name: "Shell", model: Schema.Boolean, message: Schema.Boolean }).make({
+            init: () => true,
+            update: (_, show) => show,
+            view: (show, h) =>
+              h.el(
+                "div",
+                show ? Parent(h, { key: "first", props: { id: "first" } }) : null,
+                sibling ? Parent(h, { key: "other", props: { id: "other" } }) : null
+              )
+          })
+          const scope = yield* Scope.make()
+          const root = yield* TestHost.mount(Shell, {}).pipe(Scope.provide(scope))
+          yield* TestHost.settle
+          // The first child selects "b": fetch "a" is interrupted, and its cleanup holds the old selection open.
+          Query.fire(root.all(Query.tag("button"))[0], "click")
+          yield* TestHost.settle
+          yield* Deferred.await(entered)
+          // Then the first parent goes, alone or with the whole tree.
+          const closed = sibling ? undefined : yield* Scope.close(scope, Exit.void).pipe(Effect.forkChild)
+          if (sibling) root.send(false)
+          yield* Effect.yieldNow
+          yield* TestHost.settle
+          assert.deepStrictEqual(events, [], JSON.stringify({ sibling }))
+          yield* Deferred.succeed(gate, undefined)
+          yield* TestHost.settle
+          if (closed !== undefined) yield* Fiber.join(closed)
+          else yield* Scope.close(scope, Exit.void)
+          assert.deepStrictEqual(
+            events.slice(0, 2),
+            ["clean first alive=true", "release first"],
+            JSON.stringify({ sibling })
+          )
+        }
       })))
 
     it.effect("a key change calls layer once, keeps the Model, and runs the flush's Commands against the new services", () =>

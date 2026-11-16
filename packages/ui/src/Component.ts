@@ -2812,8 +2812,8 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F } ? "onFailure" ext
  * changes, and a key change remounts everything below the component. `key`
  * reads props and the Model, and `layer` gets only the key: anything the Layer
  * needs goes in the key. The key is read once per flush, before the view of an
- * instance that had an update or new props, and compared with `Equal.equals`,
- * so an update that leaves it equal calls nothing and builds nothing. On a change
+ * instance whose Model or props changed, and compared with `Equal.equals`, so
+ * an update that leaves it equal calls nothing and builds nothing. On a change
  * the component keeps its Model. Its in-flight Commands are interrupted, its
  * Subscriptions and loaders restart, and its loader slots go back to their
  * initial state. The Commands issued in the flush that changed the key run

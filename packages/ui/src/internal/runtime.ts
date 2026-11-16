@@ -458,7 +458,13 @@ export interface Instance {
 interface Selection {
   readonly parentEnv: Env
   keys: Keys
-  /** An update or new props since the last read: the keys are read before the next view. */
+  /** The Model and props the keys were last read from. The next read is due only if they differ. */
+  model: unknown
+  props: unknown
+  /**
+   * An update or new props since the last read point, before the next view. The runs issued meanwhile
+   * wait for that point, whether or not the keys are read there.
+   */
   due: boolean
   /** The Scope the current selection's Layer builds in. The instance's Scope closes it, and the retired ones. */
   scope: Scope.Closeable
@@ -467,8 +473,8 @@ interface Selection {
    * build settles and once the work stopped against it has exited.
    */
   retired: Retired | undefined
-  /** Retired selections waiting for the work stopped against them to exit before they close. */
-  readonly releasing: Set<Retired>
+  /** The releases of earlier selections still running: the instance's close waits for each to end. */
+  readonly releasing: Set<Fiber.Fiber<void>>
   /** The runs issued while a read is due: a change of key keeps them, and they run against the new services. */
   readonly issued: Set<Run>
   /** What waits for the read to bind to an Env: those runs' starts, and load mores. */
@@ -958,9 +964,12 @@ const setup = (
     if (scope.state._tag === "Closed") track(closing, forkNow(ctx, Effect.asVoid(finalizer)))
     else scopeAddFinalizerUnsafe(scope, {}, () => finalizer)
   }
-  /** The close interrupts the fiber without waiting for it to exit. */
+  /**
+   * The close interrupts the fiber and waits for it to exit, so its cleanup runs before whatever the
+   * Scope's owner closes next, such as the Layer that provides its services.
+   */
   const interruptOnClose = (scope: Scope.Scope, fiber: Fiber.Fiber<unknown, unknown>) =>
-    addFinalizer(scope, Effect.sync(() => fiber.interruptUnsafe()))
+    addFinalizer(scope, Effect.asVoid(Fiber.interrupt(fiber)))
 
   // -- loader cache ---------------------------------------------------------
   const withCache = (context: Context.Context<any>): Context.Context<any> =>
@@ -1595,7 +1604,7 @@ const setup = (
   }
 
   // -- keyed provides ---------------------------------------------------------
-  /** A keyed provide's keys are due to be read: the instance had an update, or new props, since. */
+  /** A keyed provide's read point is due: the instance had an update, or new props, since the last. */
   const keyDue = (inst: Instance): boolean => inst.selection?.due === true
   /**
    * Starts a Subscription or a loader once the instance's Layer is ready. After a handled failure it
@@ -1613,17 +1622,23 @@ const setup = (
   }
 
   /**
-   * Reads a keyed provide's keys before the view of an instance that had an update or new props, so
-   * once per flush however many updates it had. A change selects again. Either way, the runs issued
-   * since the last read then start, and a Subscription sync that waited for the read runs.
+   * The read point of a keyed provide, before the view of an instance that had an update or new
+   * props. Its keys are read only if its Model or props changed since the last read, so once per flush
+   * however many updates it had. A change selects again. Either way, the runs issued since the last
+   * read point then start, and a Subscription sync that waited for it runs.
    */
   const reselect = (inst: Instance) => {
     const selection = inst.selection
     if (selection === undefined || !selection.due) return
     selection.due = false
-    const keys = readKeys(inst.component, inst.props, inst.model)
-    const changed = !sameKeys(selection.keys, keys)
-    if (changed) swap(inst, selection, keys)
+    let changed = false
+    if (inst.model !== selection.model || inst.props !== selection.props) {
+      selection.model = inst.model
+      selection.props = inst.props
+      const keys = readKeys(inst.component, inst.props, inst.model)
+      changed = !sameKeys(selection.keys, keys)
+      if (changed) swap(inst, selection, keys)
+    }
     selection.issued.clear()
     const held = selection.held
     selection.held = []
@@ -1669,7 +1684,7 @@ const setup = (
       selection.retired = { scope: selection.scope, waits }
     } else {
       // Still building, or failed: nothing in it is kept.
-      closeScope(selection.scope)
+      releaseSelection(selection, { scope: selection.scope, waits: [] })
       selection.retired?.waits.push(...waits)
     }
     selection.scope = Scope.makeUnsafe("sequential")
@@ -1724,39 +1739,39 @@ const setup = (
     const retired = selection.retired
     if (retired === undefined) return
     selection.retired = undefined
-    if (retired.waits.every((fiber) => fiber.pollUnsafe() !== undefined)) return closeScope(retired.scope)
-    selection.releasing.add(retired)
-    track(
-      closing,
-      forkNow(
-        ctx,
-        Effect.andThen(
-          Fiber.awaitAll(retired.waits),
-          Effect.sync(() => {
-            selection.releasing.delete(retired)
-            closeScope(retired.scope)
-          })
-        )
-      )
-    )
+    releaseSelection(selection, retired)
+  }
+
+  /** Waits for the work stopped against a selection to exit, then closes its Scope, to the end. */
+  const releaseOf = ({ scope, waits }: Retired): Effect.Effect<void> =>
+    Effect.andThen(Fiber.awaitAll(waits), Scope.close(scope, Exit.void))
+
+  /**
+   * Releases a selection the instance has let go of. Until the close has ended, its own cleanup
+   * included, the release stays the instance's: the instance's close waits for it.
+   */
+  const releaseSelection = (selection: Selection, retired: Retired) => {
+    const fiber = forkNow(ctx, Effect.uninterruptible(releaseOf(retired)))
+    if (fiber.pollUnsafe() !== undefined) return
+    selection.releasing.add(fiber)
+    track(closing, fiber)
+    fiber.addObserver(() => selection.releasing.delete(fiber))
   }
 
   /**
-   * The instance's Scope closing: the current selection is released, then each retired one once the
-   * work stopped against it has exited, so a finalizer still running never sees its services go.
+   * The instance's Scope closing: the current selection is released, then the retired one once the
+   * work stopped against it has exited, and the releases already running end, so a finalizer still
+   * running never sees its services go, and the services above outlive every one of them.
    */
   const closeSelection = (selection: Selection): Effect.Effect<void> =>
     Effect.suspend(() => {
-      const retired = [...selection.releasing]
-      if (selection.retired !== undefined) retired.push(selection.retired)
+      const retired = selection.retired
       selection.retired = undefined
-      selection.releasing.clear()
       return Effect.andThen(
         Scope.close(selection.scope, Exit.void),
-        Effect.forEach(
-          retired,
-          ({ scope, waits }) => Effect.andThen(Fiber.awaitAll(waits), Scope.close(scope, Exit.void)),
-          { discard: true }
+        Effect.andThen(
+          retired === undefined ? Effect.void : releaseOf(retired),
+          Effect.suspend(() => Fiber.awaitAll([...selection.releasing]))
         )
       )
     })
@@ -2099,6 +2114,8 @@ const setup = (
             const selection: Selection = {
               parentEnv,
               keys,
+              model,
+              props,
               due: false,
               scope: buildScope,
               retired: undefined,
