@@ -19,6 +19,35 @@ declare const todoItem: Story.Steps<typeof TodoItem>
 declare const searchBox: Story.Steps<typeof SearchBox>
 
 describe("Story", () => {
+  it("receive accepts only declared parent messages and callbacks infer the Model", () => {
+    const Message = Schema.TaggedUnion({ Set: { value: Schema.Number }, Reset: {} })
+    const Receiver = Component.define({
+      name: "Receiver",
+      model: Schema.Number,
+      message: Message,
+      receives: ["Set"]
+    }).make({
+      init: () => 0,
+      update: (_, message) => message._tag === "Set" ? message.value : 0,
+      view: (model, h) => h.el("p", String(model))
+    })
+    const steps = Story.start(Receiver, {})
+    steps.receive((model) => {
+      expect(model).type.toBe<number>()
+      return { _tag: "Set", value: model + 1 }
+    }).send((model) => {
+      expect(model).type.toBe<number>()
+      return { _tag: "Set", value: model + 1 }
+    })
+    expect(steps.receive).type.not.toBeCallableWith({ _tag: "Reset" })
+    expect(steps.receive).type.not.toBeCallableWith((_: number) => ({ _tag: "Reset" as const }))
+    expect(counter.receive).type.not.toBeCallableWith(CounterMessage.make({ _tag: "Increment" }))
+    expect(steps.send).type.not.toBeCallableWith((_: number) => "invalid")
+    expect(steps.subscription).type.not.toBeCallableWith("key", "invalid")
+    const shared: Steps.Steps<typeof Receiver> = steps
+    expect(shared.receive({ _tag: "Set", value: 1 })).type.toBe<Steps.Steps<typeof Receiver>>()
+  })
+
   it("types steps by the component", () => {
     const story = Story.make(Counter, { initial: 0 }, (s) =>
       s.model((model) => {

@@ -11,6 +11,7 @@
  * @since 0.1.0
  */
 import type { Pipeable } from "effect/Pipeable"
+import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import type * as Command from "../Command.ts"
 import type * as Component from "../Component.ts"
 import type * as Loader from "../Loader.ts"
@@ -250,6 +251,21 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    * view and changes the Subscription keys.
    */
   props(next: Component.Props<C> | ((props: Component.Props<C>) => Component.Props<C>)): this
+
+  /** Delivers a parent message, or derives it from the current Model. */
+  receive(message: Component.Receives<C> | ((model: Component.Model<C>) => Component.Receives<C>)): this
+  /**
+   * Delivers a message from an active Subscription key, as listed by
+   * `subscriptions`. Throws for inactive keys and loader watch keys, listing
+   * the active keys. Any component message is accepted for an active key;
+   * this does not validate which messages that Subscription produces.
+   */
+  subscription(key: string, message: Component.Message<C>): this
+  /**
+   * Delivers the message mapped by `Component.provide`'s `onFailure`.
+   * Without a failure handler, no message is delivered.
+   */
+  layerFailed(failure: AsyncResult.Failure<never, any>): this
 
   /**
    * Resolves the oldest running Command matching `target` with the result it
