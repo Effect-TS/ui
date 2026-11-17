@@ -1,5 +1,5 @@
-import { Command, Component, Loader, MessageLog } from "@effect/ui"
-import { Query, TestHost } from "@effect/ui/testing"
+import { Command, Component, MessageLog, Query } from "@effect/ui"
+import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Layer, Option, Redacted, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
@@ -20,7 +20,7 @@ const makeApp = (options?: {
   }
   const order: Array<string> = []
 
-  class GetUser extends Loader.Service<GetUser>()(
+  class GetUser extends Query.Service<GetUser>()(
     "users/GetUser",
     {
       args: { id: Schema.String },
@@ -56,7 +56,7 @@ const makeApp = (options?: {
     )
   ) {}
 
-  // An empty id disables the loader.
+  // An empty id disables the query.
   const userArgs = (_model: unknown, props: { readonly id: string }) => props.id === "" ? undefined : { id: props.id }
   const CardMessage = Schema.TaggedUnion({
     UserChanged: { state: Schema.String },
@@ -68,12 +68,12 @@ const makeApp = (options?: {
     props: Schema.Struct({ id: Schema.String, tag: Schema.String }),
     model: Schema.Struct({ saving: Schema.Boolean }),
     message: CardMessage,
-    loaders: {
+    queries: {
       user: {
-        load: GetUser,
+        query: GetUser,
         debounce: options?.debounce,
         args: userArgs,
-        // The loader state is written by the runtime: the message only lets update see the change.
+        // The result is written by the runtime: the message only lets update see the change.
         onChange: (result) => CardMessage.make({ _tag: "UserChanged", state: result._tag })
       }
     }
@@ -97,7 +97,7 @@ const makeApp = (options?: {
         Renamed: () => ({ ...model, saving: false })
       }),
     view: (model, h) => {
-      const text = AsyncResult.match(h.loaded.user, {
+      const text = AsyncResult.match(h.queries.user, {
         onInitial: (initial) =>
           Option.isSome(h.previous.user)
             ? `was ${h.previous.user.value.name}${initial.waiting ? "…" : ""}`
@@ -133,7 +133,7 @@ const makeApp = (options?: {
       )
   })
 
-  /** Calls `get` and `prefetch` from Commands, as an app would outside a loader field. */
+  /** Calls `get` and `prefetch` from Commands, as an app would outside a query field. */
   const ToolsMessage = Schema.TaggedUnion({
     Get: { id: Schema.String },
     Prefetch: { id: Schema.String },
@@ -198,8 +198,8 @@ const load = TestHost.settle.pipe(Effect.andThen(TestClock.adjust("10 millis")),
 type Root = Pick<TestHost.TestRoot<any, any, any>, "fetches">
 const triggers = (root: Root) => root.fetches().map((fetch) => fetch.trigger)
 
-describe("Loaded", () => {
-  it.effect("a loader field opens as Initial(waiting), then Success, from one fetch the watch started", () => {
+describe("Query results", () => {
+  it.effect("a query field opens as Initial(waiting), then Success, from one fetch the watch started", () => {
     const app = makeApp()
     return run(
       app.layer,
@@ -210,7 +210,7 @@ describe("Loaded", () => {
         yield* TestClock.adjust("10 millis")
         // The clock wake drained the scheduler: no settle needed.
         assert.strictEqual(root.text(), "a=Ann")
-        assert.deepStrictEqual(root.fetches().map((f) => [f.read, f.logKey, f.trigger]), [[
+        assert.deepStrictEqual(root.fetches().map((f) => [f.query, f.logKey, f.trigger]), [[
           "users/GetUser",
           "{\"id\":\"1\"}",
           "watch"
@@ -280,7 +280,7 @@ describe("Loaded", () => {
     )
   })
 
-  it.effect("debounce: args whose entry is fresh, and a disabled loader, don't wait", () => {
+  it.effect("debounce: args whose entry is fresh, and a disabled query, don't wait", () => {
     const app = makeApp({ debounce: "300 millis" })
     const set = (...cards: Array<string>) => app.ListMessage.make({ _tag: "Set", cards })
     return run(
@@ -300,7 +300,7 @@ describe("Loaded", () => {
     )
   })
 
-  it.effect("a disabled loader opens as Initial, not waiting, and nothing is fetched", () => {
+  it.effect("a disabled query opens as Initial, not waiting, and nothing is fetched", () => {
     const app = makeApp()
     return run(
       app.layer,
@@ -490,9 +490,9 @@ describe("Loaded", () => {
       props: Schema.Struct({ id: Schema.String, tag: Schema.String }),
       model: Schema.Struct({}),
       message: WatchMessage,
-      loaders: {
+      queries: {
         user: {
-          load: app.GetUser,
+          query: app.GetUser,
           args: (_model, props) => ({ id: props.id }),
           onChange: (result) => WatchMessage.make({ _tag: "Changed", state: `${result._tag}:${result.waiting}` })
         }
@@ -503,7 +503,7 @@ describe("Loaded", () => {
         messages.push(`${$.props.tag} ${message.state}`)
         return model
       },
-      view: (_model, h) => h.el("p", `${h.props.tag}=${h.loaded.user._tag}:${h.loaded.user.waiting}`)
+      view: (_model, h) => h.el("p", `${h.props.tag}=${h.queries.user._tag}:${h.queries.user.waiting}`)
     })
   }
 
@@ -565,7 +565,7 @@ describe("Loaded", () => {
           messages: [],
           text: "n=Initial:true",
           stored: "Initial" as const,
-          triggers: ["watch", "watch"] as Array<Loader.Trigger>
+          triggers: ["watch", "watch"] as Array<Query.Trigger>
         },
         settled: ["n Failure:false"],
         frames: ["o=Initial:true", "o=Failure:false", "n=Initial:true", "n=Failure:false"]
@@ -580,7 +580,7 @@ describe("Loaded", () => {
       // The fetcher waits for the test to finish it.
       const finish = new Map<string, (effect: Effect.Effect<string, string>) => void>()
       const messages: Array<string> = []
-      class Read extends Loader.Service<Read>()(
+      class Read extends Query.Service<Read>()(
         "test/Read",
         { args: { id: Schema.String }, success: Schema.String, error: Schema.String, staleTime: "1 second" },
         Effect.succeed(({ id }) => Effect.callback<string, string>((resume) => void finish.set(id, resume)))
@@ -591,9 +591,9 @@ describe("Loaded", () => {
         props: Schema.Struct({ tag: Schema.String }),
         model: Schema.Struct({}),
         message: Message,
-        loaders: {
+        queries: {
           data: {
-            load: Read,
+            query: Read,
             args: () => ({ id: "fail" }),
             onChange: (result) => Message.make({ _tag: "Changed", state: `${result._tag}:${result.waiting}` })
           }
@@ -604,7 +604,7 @@ describe("Loaded", () => {
           messages.push(`${$.props.tag} ${message.state}`)
           return model
         },
-        view: (_model, h) => h.el("p", `${h.props.tag}=${h.loaded.data._tag}:${h.loaded.data.waiting}`)
+        view: (_model, h) => h.el("p", `${h.props.tag}=${h.queries.data._tag}:${h.queries.data.waiting}`)
       })
       const Shell = Component.define({
         name: "Shell",
@@ -624,7 +624,7 @@ describe("Loaded", () => {
         name: "Page",
         model: Schema.Struct({ enabled: Schema.Boolean, swapped: Schema.Boolean }),
         message: PageMessage,
-        loaders: { other: { load: Read, args: (model) => model.enabled ? { id: "other" } : undefined } }
+        queries: { other: { query: Read, args: (model) => model.enabled ? { id: "other" } : undefined } }
       }).make({
         init: () => ({ enabled: false, swapped: false }),
         update: (model, message) =>
@@ -646,7 +646,7 @@ describe("Loaded", () => {
         Effect.gen(function*() {
           const root = yield* TestHost.mount(Page, {})
           yield* TestHost.settle
-          // An unrelated loader opens a pass, and the old watcher's fetch fails while it is open.
+          // An unrelated query opens a pass, and the old watcher's fetch fails while it is open.
           root.send(PageMessage.make({ _tag: "Enable" }))
           finish.get("fail")!(Effect.fail("missing"))
           if (timing === "an earlier pass") yield* TestHost.settle
@@ -730,9 +730,9 @@ describe("Loaded", () => {
       model: Schema.Struct({}),
       message: EmitterMessage,
       events: Schema.String,
-      loaders: {
+      queries: {
         user: {
-          load: app.GetUser,
+          query: app.GetUser,
           args: (_model, props) => ({ id: props.id }),
           onChange: () => EmitterMessage.make({ _tag: "UserChanged" })
         }
@@ -793,7 +793,7 @@ describe("Loaded", () => {
       name: "Bad",
       model: Schema.Struct({}),
       message: BadMessage,
-      loaders: { user: { load: app.GetUser, args: () => ({ id: "1" }) } }
+      queries: { user: { query: app.GetUser, args: () => ({ id: "1" }) } }
     }).make({
       init: ($) => $.set({}).run(Hold()),
       update: (): {} => {
@@ -820,7 +820,7 @@ describe("Loaded", () => {
         const root = yield* TestHost.mount(Host, {})
         yield* load
         yield* TestClock.adjust("31 seconds")
-        Query.fire(root.get(Query.text("bad", { exact: true })), "click")
+        Locator.fire(root.get(Locator.text("bad", { exact: true })), "click")
         yield* TestHost.settle
         // Hold is still cleaning up, and the fallback's watch was a zero-to-one. Read now and checked
         // after the cleanup, so a failure doesn't leave the close waiting on the clock.
@@ -854,7 +854,7 @@ describe("Loaded", () => {
       name: "Poll",
       model: Schema.Struct({ done: Schema.Boolean }),
       message: PollMessage,
-      loaders: { user: { load: app.GetUser, args: () => ({ id: "1" }) } }
+      queries: { user: { query: app.GetUser, args: () => ({ id: "1" }) } }
     }).make({
       init: () => ({ done: false }),
       update: (model, message, $) =>
@@ -909,9 +909,9 @@ describe("Loaded", () => {
       name: "Noter",
       model: Schema.Struct({}),
       message: Message,
-      loaders: {
+      queries: {
         user: {
-          load: app.GetUser,
+          query: app.GetUser,
           args: () => ({ id: "1" }),
           onChange: () => Message.make({ _tag: "UserChanged" })
         }
@@ -927,7 +927,7 @@ describe("Loaded", () => {
           Noted: () => model
         }),
       view: (_model, h) => {
-        seen.push(`view ${h.loaded.user._tag}`)
+        seen.push(`view ${h.queries.user._tag}`)
         return h.el("i", "noter")
       }
     })
@@ -986,9 +986,9 @@ describe("Loaded", () => {
         const root = yield* TestHost.mount(app.List, { cards: ["a:1", "b:1"] })
         yield* load
         app.order.length = 0
-        Query.fire(root.get(Query.text("a=Ann", { exact: true })), "click")
+        Locator.fire(root.get(Locator.text("a=Ann", { exact: true })), "click")
         yield* TestHost.settle
-        // Both instances get the patched loader state (and its onChange) before the one flush that renders the issuing update.
+        // Both instances get the patched result (and its onChange) before the one flush that renders the issuing update.
         assert.deepStrictEqual(app.order, [
           "update a Rename",
           "update a UserChanged",
@@ -1117,9 +1117,9 @@ describe("Loaded", () => {
     )
   })
 
-  it("make rejects a loaders entry that isn't { load, args } or { loadMany, args }", () => {
+  it("make rejects a queries entry that isn't { query, args } or { queryMany, args }", () => {
     const app = makeApp()
-    class ListUsers extends Loader.ListService<ListUsers>()(
+    class ListUsers extends Query.InfiniteService<ListUsers>()(
       "users/ListUsers",
       {
         args: {},
@@ -1133,47 +1133,47 @@ describe("Loaded", () => {
       },
       Effect.succeed(() => Effect.succeed([]))
     ) {}
-    const make = (loaders: unknown) =>
+    const make = (queries: unknown) =>
       Component.define({
         name: "Bad",
         model: Schema.Struct({}),
         message: Schema.Never,
-        loaders
+        queries
       } as any).make({
         init: () => ({}),
         update: (model: any) => model,
         view: (_: any, h: any) => h.text("")
       } as any)
     const args = () => ({ id: "1" })
-    assert.throws(() => make(42), /Bad: loaders must be a record/)
-    assert.throws(() => make({ user: args }), /Bad: loaders\.user must be \{ load, args \} or \{ loadMany, args \}/)
-    assert.throws(() => make({ user: { args } }), /loaders\.user must have exactly one of load and loadMany/)
+    assert.throws(() => make(42), /Bad: queries must be a record/)
+    assert.throws(() => make({ user: args }), /Bad: queries\.user must be \{ query, args \} or \{ queryMany, args \}/)
+    assert.throws(() => make({ user: { args } }), /queries\.user must have exactly one of query and queryMany/)
     assert.throws(
-      () => make({ user: { load: app.GetUser, loadMany: app.GetUser, args } }),
-      /must have exactly one of load and loadMany/
+      () => make({ user: { query: app.GetUser, queryMany: app.GetUser, args } }),
+      /must have exactly one of query and queryMany/
     )
-    assert.throws(() => make({ user: { load: "users/GetUser", args } }), /has a load that isn't a read/)
-    assert.throws(() => make({ user: { loadMany: {}, args } }), /has a loadMany that isn't a read/)
-    assert.throws(() => make({ user: { load: app.GetUser } }), /must have an args function/)
+    assert.throws(() => make({ user: { query: "users/GetUser", args } }), /has a query that isn't a Query/)
+    assert.throws(() => make({ user: { queryMany: {}, args } }), /has a queryMany that isn't a Query/)
+    assert.throws(() => make({ user: { query: app.GetUser } }), /must have an args function/)
     assert.throws(
-      () => make({ user: { load: app.GetUser, args, onChange: 1 } }),
+      () => make({ user: { query: app.GetUser, args, onChange: 1 } }),
       /has an onChange that isn't a function/
     )
-    assert.throws(() => make({ users: { loadMany: ListUsers, args: () => [{}] } }), /A list read takes load/)
+    assert.throws(() => make({ users: { queryMany: ListUsers, args: () => [{}] } }), /An infinite query takes query/)
     // The well-formed entries pass.
-    make({ user: { load: app.GetUser, args }, users: { load: ListUsers, args: () => ({}) } })
-    make({ users: { loadMany: app.GetUser, args: () => [{ id: "1" }] } })
+    make({ user: { query: app.GetUser, args }, users: { query: ListUsers, args: () => ({}) } })
+    make({ users: { queryMany: app.GetUser, args: () => [{ id: "1" }] } })
   })
 
-  it.effect("loaders that read each other in a cycle fail the instance, and settle fails with RootCrashed", () => {
+  it.effect("queries that read each other in a cycle fail the instance, and settle fails with RootCrashed", () => {
     const app = makeApp()
     const Cycle = Component.define({
       name: "Cycle",
       model: Schema.Struct({}),
       message: Schema.Never,
-      loaders: {
-        a: { load: app.GetUser, args: (_model: any, _props: any, loaded: any) => (loaded.b, { id: "1" }) },
-        b: { load: app.GetUser, args: (_model: any, _props: any, loaded: any) => (loaded.a, { id: "2" }) }
+      queries: {
+        a: { query: app.GetUser, args: (_model: any, _props: any, queries: any) => (queries.b, { id: "1" }) },
+        b: { query: app.GetUser, args: (_model: any, _props: any, queries: any) => (queries.a, { id: "2" }) }
       }
     } as any).make({
       init: () => ({}),
@@ -1191,9 +1191,9 @@ describe("Loaded", () => {
     )
   })
 
-  it.effect("Schema.Redacted in a read's args and success: the log is redacted, the Model and the cache are not", () => {
+  it.effect("Schema.Redacted in a query's args and success: the log is redacted, the Model and the cache are not", () => {
     const Account = Schema.Struct({ id: Schema.String, secret: Schema.Redacted(Schema.String) })
-    class GetAccount extends Loader.Service<GetAccount>()(
+    class GetAccount extends Query.Service<GetAccount>()(
       "accounts/GetAccount",
       {
         args: { token: Schema.Redacted(Schema.String) },
@@ -1210,31 +1210,31 @@ describe("Loaded", () => {
       props: Schema.Struct({ token: Schema.Redacted(Schema.String) }),
       model: Schema.Struct({}),
       message: Schema.Never,
-      loaders: { account: { load: GetAccount, args: (_model, props) => ({ token: props.token }) } }
+      queries: { account: { query: GetAccount, args: (_model, props) => ({ token: props.token }) } }
     }).make({
       init: () => ({}),
       update: (model) => model,
       view: (_model, h) =>
-        h.el("p", AsyncResult.isSuccess(h.loaded.account) ? Redacted.value(h.loaded.account.value.secret) : "…")
+        h.el("p", AsyncResult.isSuccess(h.queries.account) ? Redacted.value(h.queries.account.value.secret) : "…")
     })
     return run(
       GetAccount.layer,
       Effect.gen(function*() {
         const root = yield* TestHost.mount(Page, { token: Redacted.make("tok-123") })
         yield* TestHost.settle
-        // Page state keeps the real values: the loader state's key and value as the state's JSON codec writes them.
+        // Page state keeps the real values: the result's key and value as the state's JSON codec writes them.
         assert.strictEqual(root.text(), "secret-of-tok-123")
-        const changed = root.log().filter((entry) => entry._tag === "LoaderChanged")
+        const changed = root.log().filter((entry) => entry._tag === "QueryChanged")
         assert.deepStrictEqual(changed.map((entry) => entry.name), ["account"])
-        // Page state is { model, loaderState }, with the loader state encoded by the loaders' Schemas.
-        const loaderState = (Page["~loaders"] as { readonly schema: Schema.Codec<unknown, unknown> }).schema
-        const codec = Schema.toCodecJson(Schema.Struct({ model: Page.model, loaderState }))
+        // Page state is { model, queries }, with the results encoded by the queries' Schemas.
+        const queries = (Page["~queries"] as { readonly schema: Schema.Codec<unknown, unknown> }).schema
+        const codec = Schema.toCodecJson(Schema.Struct({ model: Page.model, queries }))
         const state = JSON.stringify(
-          Schema.encodeUnknownSync(codec)({ model: root.model(), loaderState: { account: changed[0].state } })
+          Schema.encodeUnknownSync(codec)({ model: root.model(), queries: { account: changed[0].result } })
         )
         assert.include(state, "tok-123")
         assert.include(state, "secret-of-tok-123")
-        // The log doesn't: not the args in the log key, nor the value in the written loader state.
+        // The log doesn't: not the args in the log key, nor the value in the written result.
         const fetch = root.fetches()[0]
         assert.notInclude(fetch.logKey, "tok-123")
         const encoder = MessageLog.makeEncoder()
@@ -1254,7 +1254,7 @@ describe("Loaded", () => {
       {
         args: { id: Schema.String },
         invalidates: () => [],
-        // The patched value fails the read's success Schema.
+        // The patched value fails the query's success Schema.
         optimistic: ({ id }) => [app.GetUser.patch({ id }, (user) => ({ ...user, name: 42 as unknown as string }))]
       },
       Effect.succeed(() => Effect.never)
@@ -1264,7 +1264,7 @@ describe("Loaded", () => {
       name: "Breaker",
       model: Schema.Struct({}),
       message: Message,
-      loaders: { user: { load: app.GetUser, args: () => ({ id: "1" }) } }
+      queries: { user: { query: app.GetUser, args: () => ({ id: "1" }) } }
     }).make({
       init: () => ({}),
       update: (model, _message, $) =>
@@ -1280,7 +1280,7 @@ describe("Loaded", () => {
         const error = yield* Effect.flip(TestHost.settle)
         assert.strictEqual(error._tag, "ProblemsError")
         const [problem] = yield* TestHost.expectProblem("PatchInvalid")
-        assert.deepStrictEqual([problem.read, problem.logKey, problem.command], [
+        assert.deepStrictEqual([problem.query, problem.logKey, problem.command], [
           "users/GetUser",
           `{"id":"1"}`,
           "users/BadRename"

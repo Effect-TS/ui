@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Command, Component, Feature, Head, Loader, MessageLog, type Renderer, Router, Subscription } from "@effect/ui"
+import { Command, Component, Feature, Head, MessageLog, Query, type Renderer, Router, Subscription } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
@@ -231,7 +231,7 @@ describe("HtmlServer", { concurrent: false }, () => {
     }))
 
   it.effect("checks only the first Router subscription on the server", () => {
-    const problems: Array<Loader.Problem.Any> = []
+    const problems: Array<Query.Problem.Any> = []
     const Root = Component.define({
       name: "FirstRoute",
       model: Schema.Number,
@@ -254,12 +254,12 @@ describe("HtmlServer", { concurrent: false }, () => {
       assert.deepStrictEqual(problems, [])
     }).pipe(
       Effect.provide(Router.static({ routes: AppRoute, url: "/" })),
-      Effect.provideService(Loader.Problems, (problem) => problems.push(problem))
+      Effect.provideService(Query.Problems, (problem) => problems.push(problem))
     )
   })
 
   it.effect("reports a server route mismatch even after navigation, but accepts a fresh snapshot", () => {
-    const problems: Array<Loader.Problem.Any> = []
+    const problems: Array<Query.Problem.Any> = []
     return Effect.gen(function*() {
       const router = yield* Router.Router
       const route = yield* Router.currentRoute(AppRoute)
@@ -273,7 +273,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       assert.deepStrictEqual(problems, [])
     }).pipe(
       Effect.provide([People.layer, Router.memory({ routes: AppRoute, url: "/people/1" })]),
-      Effect.provideService(Loader.Problems, (problem) => problems.push(problem))
+      Effect.provideService(Query.Problems, (problem) => problems.push(problem))
     )
   })
 
@@ -285,7 +285,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       )
       expect(rendered.html).toContain("<p id=\"bio\">Bio of person 1</p>")
       expect(rendered.html).toContain("<!--[/App/Person[/people/1]-->")
-      expect(rendered.state["~loader"]).toEqual({ GetBio: [["{\"id\":1}", 0, "Bio of person 1", 0]] })
+      expect(rendered.state["~query"]).toEqual({ GetBio: [["{\"id\":1}", 0, "Bio of person 1", 0]] })
       expect("~pending" in rendered.state).toBe(false)
       expect(rendered.head).toBe(
         "<title data-eui>Person 1 · App</title>" +
@@ -298,10 +298,10 @@ describe("HtmlServer", { concurrent: false }, () => {
         const result = yield* ssr(App, Router.props(AppRoute)).pipe(Effect.provide([People.layer, router]))
         expect(result.adopted).toEqual(["/App", "/App/Person[/people/1]"])
         expect(result.misses).toEqual([])
-        // The bio is hydrated, so the client doesn't fetch it. The hydrated loader state is on Mounted, and the
+        // The bio is hydrated, so the client doesn't fetch it. The hydrated result is on Mounted, and the
         // watch's first value equals it, so it isn't written again.
         expect(result.root.fetches()).toEqual([])
-        expect(result.log.filter((entry) => entry._tag === "LoaderChanged")).toEqual([])
+        expect(result.log.filter((entry) => entry._tag === "QueryChanged")).toEqual([])
         expect(result.log.some((entry) => entry._tag === "Update" && entry.path === "/App/Person[/people/1]")).toBe(
           false
         )
@@ -382,9 +382,9 @@ describe("HtmlServer", { concurrent: false }, () => {
       )
       expect(missed.html).toContain("<p id=\"bio\">Loading</p>")
       // The fetch in flight at the budget was interrupted and isn't shipped: the client fetches it.
-      expect(missed.misses).toEqual([{ read: "GetBio", logKey: "{\"id\":2}" }])
-      expect(missed.state["~loader"]).toEqual({})
-      expect(missed.root.fetches().map((fetch) => [fetch.read, fetch.trigger, fetch.inWindow])).toEqual([
+      expect(missed.misses).toEqual([{ query: "GetBio", logKey: "{\"id\":2}" }])
+      expect(missed.state["~query"]).toEqual({})
+      expect(missed.root.fetches().map((fetch) => [fetch.query, fetch.trigger, fetch.inWindow])).toEqual([
         ["GetBio", "watch", false]
       ])
       yield* TestClock.adjust("300 millis")
@@ -410,14 +410,14 @@ describe("HtmlServer", { concurrent: false }, () => {
       const result = yield* ssr(App, props, { budget: 0 }).pipe(Effect.provide([People.layer, router]))
       expect(result.html).toContain("<p id=\"bio\">Loading</p>")
       expect(result.serverLog.filter((entry) => entry._tag === "FetchStarted")).toEqual([])
-      expect(result.misses).toEqual([{ read: "GetBio", logKey: "{\"id\":1}" }])
+      expect(result.misses).toEqual([{ query: "GetBio", logKey: "{\"id\":1}" }])
       yield* TestHost.settle
       expect(result.container.querySelector("#bio")!.textContent).toBe("Bio of person 1")
     })))
 
   it.effect("runs no Command on the server, applies events, and defers failures and opted-out Layers", () =>
     Effect.gen(function*() {
-      class GetText extends Loader.Service<GetText>()("GetText", {
+      class GetText extends Query.Service<GetText>()("GetText", {
         args: {},
         success: Schema.String,
         error: Schema.Never,
@@ -432,8 +432,8 @@ describe("HtmlServer", { concurrent: false }, () => {
         message: ChildMessage,
         events: Schema.Literal("loaded"),
         elements: Html,
-        loaders: {
-          text: { load: GetText, args: () => ({}), onChange: () => ChildMessage.make({ _tag: "Loaded" }) }
+        queries: {
+          text: { query: GetText, args: () => ({}), onChange: () => ChildMessage.make({ _tag: "Loaded" }) }
         }
       }).make({
         // init's Command is dropped silently: the client runs it when it adopts.
@@ -499,10 +499,10 @@ describe("HtmlServer", { concurrent: false }, () => {
 
       // The opted-out Layer doesn't spend the budget: under the TestClock, waiting for it would never end.
       const log = MessageLog.makeMemory({ size: 1000 })
-      const problems: Array<Loader.Problem.Any> = []
+      const problems: Array<Query.Problem.Any> = []
       const result = yield* HtmlServer.renderToHtml(Parent, {}, { budget: "1 hour" }).pipe(
         Effect.provideService(MessageLog.MessageLog, log),
-        Effect.provideService(Loader.Problems, (problem) => problems.push(problem))
+        Effect.provideService(Query.Problems, (problem) => problems.push(problem))
       )
       expect(result.html).toContain("<p>ready</p>")
       expect(result.html).toContain("<span>loaded</span>")
@@ -559,9 +559,9 @@ describe("HtmlServer", { concurrent: false }, () => {
         view: (count, h) =>
           h.div(h.p(String(count)), Child(h, { key: "c", props: {}, onEmit: () => Message.make({ _tag: "Go" }) }))
       })
-      const problems: Array<Loader.Problem.Any> = []
+      const problems: Array<Query.Problem.Any> = []
       const rendered = yield* HtmlServer.renderToHtml(Parent, {}).pipe(
-        Effect.provideService(Loader.Problems, (problem) => problems.push(problem))
+        Effect.provideService(Query.Problems, (problem) => problems.push(problem))
       )
       expect(rendered.html).toContain("<p>2</p>")
       expect(problems.map((problem) => problem._tag)).toEqual(["ServerCommandIssued", "ServerCommandIssued"])
@@ -626,6 +626,42 @@ describe("HtmlServer", { concurrent: false }, () => {
       yield* tick
       expect(button.textContent).toBe("1 mounted")
       expect(app.innerHTML).not.toContain("<!--")
+    }).pipe(Effect.scoped))
+
+  it.effect("a keyed provide selects its Layer from the Model the client adopts", () =>
+    Effect.gen(function*() {
+      class Store extends Context.Service<Store, string>()("test/KeyedStore") {}
+      class ReadStore extends Command.Service<ReadStore>()(
+        "test/ReadKeyedStore",
+        { args: {}, invalidates: () => [] },
+        Store.useSync((store) => () => Effect.succeed(store))
+      ) {}
+      // What `init` returns where it runs: the client's is dropped for the Model the server rendered.
+      let side = "server"
+      const Panel = Component.provide(
+        Component.define({
+          name: "Panel",
+          model: Schema.Struct({ side: Schema.String, store: Schema.String }),
+          message: Schema.String,
+          elements: Html
+        }).make({
+          init: ($) => $.set({ side, store: "" }).run(ReadStore.make()),
+          update: (model, store) => ({ ...model, store }),
+          view: (model, h) => h.p(`${model.side}:${model.store}`)
+        }),
+        {
+          key: (_, model) => model.side,
+          layer: (side) => ReadStore.layer.pipe(Layer.provide(Layer.succeed(Store, side)))
+        }
+      )
+      const rendered = yield* HtmlServer.renderToHtml(Panel, {})
+      expect(rendered.html).toContain("<p>server:</p>")
+      side = "client"
+      const app = yield* container(rendered.html)
+      const root = yield* BrowserHost.mountEffect(Panel, {}, app, { state: rendered.state })
+      yield* root.adopted
+      yield* tick
+      expect(app.querySelector("p")!.textContent).toBe("server:server")
     }).pipe(Effect.scoped))
 
   it.effect("rebuilds only the instance whose nodes don't match", () =>
@@ -722,7 +758,7 @@ describe("HtmlServer", { concurrent: false }, () => {
     }).pipe(Effect.scoped))
   it.effect("waits for the instance a Layer that settles in budget wakes, and for the fetches it starts", () =>
     Effect.gen(function*() {
-      class GetText extends Loader.Service<GetText>()("GetText", {
+      class GetText extends Query.Service<GetText>()("GetText", {
         args: {},
         success: Schema.String,
         error: Schema.Never,
@@ -734,11 +770,11 @@ describe("HtmlServer", { concurrent: false }, () => {
         model: Schema.Struct({}),
         message: Schema.Never,
         elements: Html,
-        loaders: { text: { load: GetText, args: () => ({}) } }
+        queries: { text: { query: GetText, args: () => ({}) } }
       }).make({
         init: () => ({}),
         update: (model) => model,
-        view: (_, h) => h.p(AsyncResult.isSuccess(h.loaded.text) ? h.loaded.text.value : "loading")
+        view: (_, h) => h.p(AsyncResult.isSuccess(h.queries.text) ? h.queries.text.value : "loading")
       }).pipe(Component.provide(GetText.layer))
       const Page = Component.define({
         name: "Page",
@@ -760,12 +796,12 @@ describe("HtmlServer", { concurrent: false }, () => {
       const rendered = yield* Fiber.join(fiber)
       expect(rendered.html).toContain("<p>data</p>")
       expect(rendered.state["~deferred"]).toEqual([])
-      expect(rendered.state["~loader"]).toEqual({ GetText: [["{}", 0, "data", 30]] })
+      expect(rendered.state["~query"]).toEqual({ GetText: [["{}", 0, "data", 30]] })
     }))
 
   it.effect("fails and defers the instance whose fetcher dies, and ships no entry for it", () =>
     Effect.gen(function*() {
-      class Die extends Loader.Service<Die>()("Die", {
+      class Die extends Query.Service<Die>()("Die", {
         args: {},
         success: Schema.String,
         error: Schema.Never,
@@ -776,7 +812,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         model: Schema.Struct({}),
         message: Schema.Never,
         elements: Html,
-        loaders: { text: { load: Die, args: () => ({}) } }
+        queries: { text: { query: Die, args: () => ({}) } }
       }).make({
         init: () => ({}),
         update: (model) => model,
@@ -799,7 +835,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       const rendered = yield* HtmlServer.renderToHtml(Page, {})
       expect(rendered.html).toContain("<!--[/Page/Doomed[d]--><p>failed</p><!--]/Page/Doomed[d]-->")
       expect(rendered.state["~deferred"]).toEqual(["/Page/Doomed[d]"])
-      expect(rendered.state["~loader"]).toEqual({})
+      expect(rendered.state["~query"]).toEqual({})
     }))
 
   it.effect("closes everything it started when the render is interrupted", () =>
@@ -1068,7 +1104,7 @@ describe("HtmlServer", { concurrent: false }, () => {
   it.effect("an instance removed while it waits logs Waiting, then Unmounted, and nothing once its Layer would be ready", () =>
     Effect.gen(function*() {
       class Slow extends Context.Service<Slow, string>()("test/Slow") {}
-      class GetText extends Loader.Service<GetText>()("GetText", {
+      class GetText extends Query.Service<GetText>()("GetText", {
         args: {},
         success: Schema.String,
         error: Schema.Never,
@@ -1080,7 +1116,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         model: Schema.Struct({ label: Schema.String }),
         message: Schema.Never,
         elements: Html,
-        loaders: { text: { load: GetText, args: () => ({}) } }
+        queries: { text: { query: GetText, args: () => ({}) } }
       }).make({
         init: ($) => ({ label: `panel ${$.props.id}` }),
         update: (model) => model,
@@ -1123,7 +1159,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       const wire = MessageLog.makeEncoder().encode(panel[0]!) as Extract<MessageLog.Wire, { _tag: "Waiting" }>
       expect(wire.props).toEqual({ id: "a" })
       expect(wire.model).toEqual({ label: "panel a" })
-      expect((wire.loaderState as { readonly text: ReadonlyArray<unknown> }).text.slice(0, 3)).toEqual([
+      expect((wire.queries as { readonly text: ReadonlyArray<unknown> }).text.slice(0, 3)).toEqual([
         "{}",
         0,
         "loaded"
@@ -1284,10 +1320,10 @@ describe("HtmlServer", { concurrent: false }, () => {
     }).pipe(Effect.scoped))
 })
 
-/** A read that counts its fetches and fails for id 404, and an `Item` that watches it by its props. */
+/** A query that counts its fetches and fails for id 404, and an `Item` that watches it by its props. */
 const makeItems = () => {
   const calls: Array<number> = []
-  class GetItem extends Loader.Service<GetItem>()(
+  class GetItem extends Query.Service<GetItem>()(
     "GetItem",
     {
       args: { id: Schema.Number },
@@ -1310,16 +1346,16 @@ const makeItems = () => {
     message: Schema.Never,
     props: Schema.Struct({ id: Schema.Number }),
     elements: Html,
-    loaders: { item: { load: GetItem, args: (_model, props) => ({ id: props.id }) } }
+    queries: { item: { query: GetItem, args: (_model, props) => ({ id: props.id }) } }
   }).make({
     init: () => ({}),
     update: (model) => model,
-    view: (_, h) => h.p(show(h.loaded.item))
+    view: (_, h) => h.p(show(h.queries.item))
   }).pipe(Component.provide(GetItem.layer))
   return { calls, GetItem, Item, show }
 }
 
-describe("HtmlServer loaders", { concurrent: false }, () => {
+describe("HtmlServer queries", { concurrent: false }, () => {
   it.effect("fetches each key once per request and ships every settled entry, typed Failures included", () =>
     hosted(Effect.gen(function*() {
       const { Item, calls } = makeItems()
@@ -1341,14 +1377,14 @@ describe("HtmlServer loaders", { concurrent: false }, () => {
       const result = yield* ssr(Page, {})
       expect(result.html).toContain("<p>Item 1</p>")
       expect(result.html).toContain("<p>failed</p>")
-      expect(result.state["~loader"]).toEqual({
+      expect(result.state["~query"]).toEqual({
         GetItem: expect.arrayContaining([["{\"id\":1}", 0, "Item 1", 0], ["{\"id\":404}", 1, ["missing"], 0]])
       })
-      expect((result.state["~loader"] as any).GetItem).toHaveLength(2)
-      // The client adopts both entries without fetching, and each instance's hydrated loader state is on its Mounted.
+      expect((result.state["~query"] as any).GetItem).toHaveLength(2)
+      // The client adopts both entries without fetching, and each instance's hydrated results are on its Mounted.
       expect(calls).toEqual([1, 404])
       expect(result.root.fetches()).toEqual([])
-      expect(result.log.filter((entry) => entry._tag === "LoaderChanged")).toEqual([])
+      expect(result.log.filter((entry) => entry._tag === "QueryChanged")).toEqual([])
       expect(result.log.some((entry) => entry._tag === "Update")).toBe(false)
       expect(result.container.textContent).toBe("Item 1Item 1failed")
     })))
@@ -1362,9 +1398,9 @@ describe("HtmlServer loaders", { concurrent: false }, () => {
         model: Schema.Struct({ page: Schema.Number }),
         message: Message,
         elements: Html,
-        loaders: {
+        queries: {
           item: {
-            load: GetItem,
+            query: GetItem,
             args: (model) => ({ id: model.page }),
             onChange: (result) => Message.make({ _tag: "Loaded", ok: AsyncResult.isSuccess(result) })
           }
@@ -1372,12 +1408,12 @@ describe("HtmlServer loaders", { concurrent: false }, () => {
       }).make({
         init: () => ({ page: 1 }),
         update: (model, message) => ({ page: message.ok && model.page < 3 ? model.page + 1 : model.page }),
-        view: (_, h) => h.p(show(h.loaded.item))
+        view: (_, h) => h.p(show(h.queries.item))
       }).pipe(Component.provide(GetItem.layer))
       const result = yield* ssr(Pager, {})
       expect(result.html).toContain("<p>Item 3</p>")
       expect(calls).toEqual([1, 2, 3])
-      expect((result.state["~loader"] as any).GetItem.map((tuple: ReadonlyArray<unknown>) => tuple[0])).toEqual([
+      expect((result.state["~query"] as any).GetItem.map((tuple: ReadonlyArray<unknown>) => tuple[0])).toEqual([
         "{\"id\":1}",
         "{\"id\":2}",
         "{\"id\":3}"
@@ -1388,7 +1424,7 @@ describe("HtmlServer loaders", { concurrent: false }, () => {
   it.effect("ships the k of N keys of a keyed field that settled in budget, and the client fetches the rest", () =>
     hosted(Effect.gen(function*() {
       const calls: Array<number> = []
-      class GetSlowItem extends Loader.Service<GetSlowItem>()(
+      class GetSlowItem extends Query.Service<GetSlowItem>()(
         "GetSlowItem",
         { args: { id: Schema.Number }, success: Schema.String, error: Schema.String, staleTime: "1 minute" },
         Effect.succeed(({ id }) =>
@@ -1405,12 +1441,12 @@ describe("HtmlServer loaders", { concurrent: false }, () => {
         model: Schema.Struct({}),
         message: Schema.Never,
         elements: Html,
-        loaders: { items: { loadMany: GetSlowItem, args: () => [{ id: 1 }, { id: 404 }, { id: 3 }] } }
+        queries: { items: { queryMany: GetSlowItem, args: () => [{ id: 1 }, { id: 404 }, { id: 3 }] } }
       }).make({
         init: () => ({}),
         update: (model) => model,
         view: (_, h) =>
-          h.ul(h.loaded.items.map(({ args, result }) =>
+          h.ul(h.queries.items.map(({ args, result }) =>
             h.li.key(String(args.id)).children(
               AsyncResult.isSuccess(result) ? result.value : AsyncResult.isFailure(result) ? "failed" : "loading"
             )
@@ -1418,13 +1454,13 @@ describe("HtmlServer loaders", { concurrent: false }, () => {
       }).pipe(Component.provide(GetSlowItem.layer))
       const result = yield* ssr(List, {}, { budget: "50 millis" })
       expect(result.html).toContain("<li>Item 1</li><li>failed</li><li>loading</li>")
-      // The loader state is the settled keys' tuples; the entries ship as ordinary entries of the read.
+      // The result is the settled keys' tuples; the entries ship as ordinary entries of the query.
       expect(result.state["/List"]).toEqual({
         model: {},
-        loaderState: { items: [["{\"id\":1}", 0, "Item 1", 0, false], ["{\"id\":404}", 1, ["missing"], null]] }
+        queries: { items: [["{\"id\":1}", 0, "Item 1", 0, false], ["{\"id\":404}", 1, ["missing"], null]] }
       })
-      expect((result.state["~loader"] as any).GetSlowItem).toHaveLength(2)
-      expect(result.misses).toEqual([{ read: "GetSlowItem", logKey: "{\"id\":3}" }])
+      expect((result.state["~query"] as any).GetSlowItem).toHaveLength(2)
+      expect(result.misses).toEqual([{ query: "GetSlowItem", logKey: "{\"id\":3}" }])
       // The client adopts the two settled keys and fetches only the third.
       expect(result.root.fetches().map((fetch) => fetch.logKey)).toEqual(["{\"id\":3}"])
       yield* TestClock.adjust("300 millis")
@@ -1435,7 +1471,7 @@ describe("HtmlServer loaders", { concurrent: false }, () => {
 
   it.effect("fails ssr when an entry doesn't encode, and doesn't ship it", () =>
     hosted(Effect.gen(function*() {
-      class GetCount extends Loader.Service<GetCount>()("GetCount", {
+      class GetCount extends Query.Service<GetCount>()("GetCount", {
         args: {},
         success: Schema.Number,
         error: Schema.Never,
@@ -1446,7 +1482,7 @@ describe("HtmlServer loaders", { concurrent: false }, () => {
         model: Schema.Struct({}),
         message: Schema.Never,
         elements: Html,
-        loaders: { count: { load: GetCount, args: () => ({}) } }
+        queries: { count: { query: GetCount, args: () => ({}) } }
       }).make({
         init: () => ({}),
         update: (model) => model,
@@ -1561,7 +1597,7 @@ describe("HtmlServer loaders", { concurrent: false }, () => {
   it.effect("runs a push's Router.prefetch after the navigation closes the fetch-free window", () =>
     Effect.gen(function*() {
       // Always stale: inside the window a prefetch leaves the hydrated entry alone, and after it, fetches it.
-      class GetNow extends Loader.Service<GetNow>()("GetNow", {
+      class GetNow extends Query.Service<GetNow>()("GetNow", {
         args: { id: Schema.Number },
         success: Schema.String,
         error: Schema.Never,
@@ -1573,7 +1609,7 @@ describe("HtmlServer loaders", { concurrent: false }, () => {
         model: Schema.Struct({}),
         message: Schema.Never,
         elements: Html,
-        loaders: { now: { load: GetNow, args: (_model, props) => ({ id: props.id }) } }
+        queries: { now: { query: GetNow, args: (_model, props) => ({ id: props.id }) } }
       }).make({
         init: () => ({}),
         update: (model) => model,

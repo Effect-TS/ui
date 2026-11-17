@@ -1,16 +1,16 @@
 import { Command, Component, Feature, type MessageLog, Renderer, Route, Router } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Query, TestHost } from "@effect/ui/testing"
+import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Option, Schema } from "effect"
 import { Tiny } from "./fixtures/vocabulary.ts"
 
 const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(TestHost.layer()))
 type Root = {
-  readonly get: (locator: Query.Locator) => TestHost.TestNode
+  readonly get: (locator: Locator.Locator) => TestHost.TestNode
   readonly log: () => ReadonlyArray<MessageLog.Entry>
 }
-const click = (root: Root, text: string) => Query.fire(root.get(Query.text(text, { exact: true })), "click")
+const click = (root: Root, text: string) => Locator.fire(root.get(Locator.text(text, { exact: true })), "click")
 const updates = (root: Root) =>
   root.log().flatMap((entry) =>
     entry._tag === "Update" ? [entry.path + " " + entry.source._tag + " " + (entry.message as any)._tag] : []

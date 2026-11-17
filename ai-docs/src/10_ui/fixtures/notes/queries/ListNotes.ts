@@ -1,12 +1,12 @@
-import { Loader } from "@effect/ui"
+import { Query } from "@effect/ui"
 import { Effect, Schema } from "effect"
 import { Note, NotesTag } from "../domain/Note.ts"
 import { Notes } from "../services/Notes.ts"
 
-// A read with no arguments writes `args: {}`, and one that can't fail writes
+// A query with no arguments writes `args: {}`, and one that can't fail writes
 // `error: Schema.Never`. The Effect runs once, when the Layer is built, and
 // returns the fetcher.
-export class ListNotes extends Loader.Service<ListNotes>()(
+export class ListNotes extends Query.Service<ListNotes>()(
   "notes/ListNotes",
   {
     args: {},

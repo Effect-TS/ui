@@ -2,7 +2,7 @@
  * Story tests drive one component instance step by step: pure, with no
  * runtime, no Layers and no host.
  *
- * A story covers `init`, `update` and queries over the instance's view value.
+ * A story covers `init`, `update` and locators over the instance's view value.
  * Commands stay pending as data until a step resolves them with the message
  * they would have produced, so no service is needed. A child is a leaf:
  * anything that crosses into one is a runtime test.
@@ -68,7 +68,6 @@ import * as Schema from "effect/Schema"
 import * as Command from "../Command.ts"
 import type * as Component from "../Component.ts"
 import type * as Head from "../Head.ts"
-import * as loaders from "../internal/loaders.ts"
 import { isNoop } from "../internal/noop.ts"
 import {
   checkAuthorPlacements,
@@ -79,11 +78,12 @@ import {
   segment,
   slotSegment
 } from "../internal/paths.ts"
+import * as componentQueries from "../internal/queries.ts"
 import * as schedule from "../internal/schedule.ts"
-import * as Loader from "../Loader.ts"
 import * as MessageLog from "../MessageLog.ts"
+import * as Query from "../Query.ts"
 import * as View from "../View.ts"
-import * as Query from "./Query.ts"
+import * as Locator from "./Locator.ts"
 
 /**
  * A Command issued by the instance whose message hasn't been delivered.
@@ -93,7 +93,7 @@ import * as Query from "./Query.ts"
  * `running` is what the runtime would be executing; `queued` is waiting behind
  * a running run of the same group under `mode: "queue"`. `awaiting` has
  * resolved or failed, and holds `message`: a `Command.afterRefetch` run
- * waits for the loaders in `awaiting`, and under `mode: "queue"` a
+ * waits for the queries in `awaiting`, and under `mode: "queue"` a
  * message also waits for the earlier ones of its group.
  *
  * @stability experimental
@@ -107,20 +107,20 @@ export interface Pending<Msg> {
   readonly status: "running" | "queued" | "awaiting"
   /** On an awaiting run: the message it delivers when its wait ends, or `Component.noop` for none. */
   readonly message?: Msg | Component.Noop | undefined
-  /** On an awaiting run: the loaders its wait is still on, each at the args it awaits. */
-  readonly awaiting?: ReadonlyArray<AwaitedLoader> | undefined
+  /** On an awaiting run: the queries its wait is still on, each at the args it awaits. */
+  readonly awaiting?: ReadonlyArray<AwaitedQuery> | undefined
 }
 
 /**
- * A loader a `Command.afterRefetch` run waits for, by its name in
- * `loaders`, at the args it returned when the run resolved. A `loadMany`
- * loader has one per awaited key.
+ * A query a `Command.afterRefetch` run waits for, by its name in
+ * `queries`, at the args it returned when the run resolved. A `queryMany`
+ * query has one per awaited key.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface AwaitedLoader {
+export interface AwaitedQuery {
   readonly name: string
   readonly args: unknown
 }
@@ -131,25 +131,25 @@ export interface AwaitedLoader {
  *
  * **Details**
  *
- * `get`, `query` and `all` run `Query` locators over the current view, as
+ * `get`, `query` and `all` run locators over the current view, as
  * `TestHost`'s roots do.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface Story<Props, Model, Msg, Events, Loaded = { readonly [name: string]: unknown }> {
+export interface Story<Props, Model, Msg, Events, Queries = { readonly [name: string]: unknown }> {
   /** The component, erased to receive nothing: a story doesn't know what it receives. */
   readonly component: Component.Component<any, Props, Model, Msg, Events, any, any, any, never>
   readonly props: Props
   readonly model: Model
   /**
-   * The loader state, beside the Model: what each loader's read last
-   * returned. Opaque: `loaded` opens it.
+   * The query results, beside the Model: what each query last
+   * returned. Opaque: `queries` opens them.
    */
-  readonly loaderState: Component.LoaderState | undefined
-  /** The loaders' results, by name, as `h.loaded` opens them for the current Model, props and loader state. */
-  readonly loaded: () => Loaded
+  readonly results: Component.Results | undefined
+  /** The queries' results, by name, as `h.queries` opens them for the current Model, props and results. */
+  readonly queries: () => Queries
   /** Commands issued but not yet resolved, oldest first. */
   readonly pending: ReadonlyArray<Pending<Msg>>
   /** Everything emitted to the parent so far. */
@@ -169,7 +169,7 @@ export interface Story<Props, Model, Msg, Events, Loaded = { readonly [name: str
     | Command.Issued<Msg | Component.Noop, any, never, "Effect">
     | Command.Issued<Msg | Component.Noop, any, never, "Stream">
   >
-  /** The list loaders with a load more `update` issued and no step has settled yet. */
+  /** The infinite queries with a load more `update` issued and no step has settled yet. */
   readonly loadingMore: ReadonlyArray<string>
   /**
    * Whether the `click` or `fire` step that made this record cancelled its
@@ -192,56 +192,56 @@ export interface Story<Props, Model, Msg, Events, Loaded = { readonly [name: str
    * step.
    */
   readonly view: () => View.Node<Msg, any>
-  /** The Subscription keys the current Model and props ask for, without the loader watches. Nothing runs. */
+  /** The Subscription keys the current Model and props ask for, without the query watches. Nothing runs. */
   readonly subscriptions: () => ReadonlyArray<string>
-  /** Each loader with its read and the args it returns for the current Model and props. */
-  readonly loaders: () => ReadonlyArray<LoaderInfo>
-  /** The view as a `Query` tree. */
-  readonly root: Query.Node
+  /** Each of the component's queries, with its `Query`'s name and the args it returns for the current Model and props. */
+  readonly queryInfo: () => ReadonlyArray<QueryInfo>
+  /** The view as a `Locator.Node` tree. */
+  readonly root: Locator.Node
   /** The one element matching `locator`. Throws when there's none or several. */
-  readonly get: (locator: Query.Locator) => Query.Node
+  readonly get: (locator: Locator.Locator) => Locator.Node
   /** The one element matching `locator`, or `undefined`. Throws when there are several. */
-  readonly query: (locator: Query.Locator) => Query.Node | undefined
+  readonly query: (locator: Locator.Locator) => Locator.Node | undefined
   /** Every element matching `locator`, in document order. */
-  readonly all: (locator: Query.Locator) => ReadonlyArray<Query.Node>
+  readonly all: (locator: Locator.Locator) => ReadonlyArray<Locator.Node>
 }
 
 /**
- * One loader in a story: its name, its read's name, and the args it returns
+ * One of a component's queries in a story: its name, its `Query`'s name, and the args it returns
  * for the current Model and props, `undefined` when it is disabled. A
- * `loadMany` loader's args are its unique args, in order.
+ * `queryMany` query's args are its unique args, in order.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface LoaderInfo {
+export interface QueryInfo {
   readonly name: string
-  readonly read: string
+  readonly query: string
   readonly args: unknown
 }
 
-// The read of a loader entry, for the steps that name a loader.
-type ReadOf<D> = D extends Component.Load<infer R> ? R : D extends Component.LoadMany<infer R> ? R : never
+// The `Query` a `queries` entry shows, for the steps that name a query.
+type QueryOf<D> = D extends Component.QueryOne<infer R> ? R : D extends Component.QueryMany<infer R> ? R : never
 
 /**
- * One key of a `loadMany` loader for `loadedMany`: its args and a Success
+ * One key of a `queryMany` query for `loadedMany`: its args and a Success
  * value or a typed failure.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export type KeyedLoad<R extends Loader.Read.Any> =
+export type KeyedLoad<R extends Query.Query.Any> =
   | {
-    readonly args: Loader.Read.Args<R>
-    readonly value: Loader.Read.Success<R>
+    readonly args: Query.Query.Args<R>
+    readonly value: Query.Query.Success<R>
     readonly waiting?: boolean | undefined
     readonly patched?: boolean | undefined
   }
   | {
-    readonly args: Loader.Read.Args<R>
-    readonly error: Loader.Read.Error<R>
+    readonly args: Query.Query.Args<R>
+    readonly error: Query.Query.Error<R>
     readonly waiting?: boolean | undefined
   }
 
@@ -321,7 +321,7 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
     Component.Model<C>,
     Component.Message<C>,
     Component.Events<C>,
-    { readonly [K in keyof Component.Loaders<C>]: Component.LoadedOf<Component.Loaders<C>[K]> }
+    { readonly [K in keyof Component.Queries<C>]: Component.QueryResultOf<Component.Queries<C>[K]> }
   >
 
   /**
@@ -331,17 +331,17 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    *
    * **Details**
    *
-   * `given` never runs `update`. Loaders keep their state, except that a
-   * keyed loader drops the stored keys it no longer returns, with no
+   * `given` never runs `update`. Queries keep their results, except that a
+   * keyed query drops the stored keys it no longer returns, with no
    * `onChange` message. Later steps send `onChange` as usual.
    *
-   * `loaded` starts the loaders it names from loaded results: a Success
-   * value, a list loader's page array, or a keyed loader's entries as
-   * `loadedMany` takes them. Each loader's state is written at the args the loader
-   * returns for the new Model and the given results, so a loader whose args
+   * `loaded` starts the queries it names from loaded results: a Success
+   * value, an infinite query's page array, or a keyed query's entries as
+   * `loadedMany` takes them. Each result is written at the args the query
+   * returns for the new Model and the given results, so a query whose args
    * read another's result follows the new one, whatever the order of the keys
-   * and whatever the loader state held before. The view renders once. It throws if a
-   * named loader is disabled, or a keyed entry's args aren't ones the loader
+   * and whatever the results held before. The view renders once. It throws if a
+   * named query is disabled, or a keyed entry's args aren't ones the query
    * returns.
    *
    * `shared` sets the values owners share, as `shared` steps would, in the
@@ -350,10 +350,10 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    */
   given<const O extends ReadonlyArray<Component.Headless.Any> = []>(
     model: Component.Model<C> | ((model: Component.Model<C>) => Component.Model<C>),
-    loaded?: {
-      readonly [K in keyof Component.Loaders<C>]?: Component.Loaders<C>[K] extends Component.LoadMany<infer R>
+    queries?: {
+      readonly [K in keyof Component.Queries<C>]?: Component.Queries<C>[K] extends Component.QueryMany<infer R>
         ? ReadonlyArray<KeyedLoad<R>>
-        : Loader.Read.Success<ReadOf<Component.Loaders<C>[K]>>
+        : Query.Query.Success<QueryOf<Component.Queries<C>[K]>>
     },
     shared?: { readonly [K in keyof O]: readonly [owner: O[K], value: Component.Shared.Value<O[K]>] }
   ): this
@@ -367,11 +367,11 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
   /**
    * Clicks the one element `target` matches: the innermost element with a
    * `click` handler, that element or an ancestor, sends its message. A string
-   * means `Query.text(target)`. Throws when nothing or several elements match,
+   * means `Locator.text(target)`. Throws when nothing or several elements match,
    * or when nothing handles the click. `defaultPrevented` tells whether the
    * default was cancelled.
    */
-  click(target: string | Query.Locator): this
+  click(target: string | Locator.Locator): this
   /**
    * Sends `event` with `payload`, `{}` by default, to the one element
    * `locator` matches: the innermost element with a handler for it, that
@@ -379,7 +379,7 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    * it, except for `submit`, which the browser host cancels with or without a
    * handler. `defaultPrevented` tells whether the default was cancelled.
    */
-  fire(locator: Query.Locator, event: string, payload?: unknown): this
+  fire(locator: Locator.Locator, event: string, payload?: unknown): this
   /**
    * Sends the message the parent's `onEmit` maps `events` from the child with
    * `key` to, if any. A ref finds the child rendered with it.
@@ -429,9 +429,9 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    * queued run of the same group starts when the running one resolves.
    *
    * A Command issued with `Command.afterRefetch` becomes `awaiting` on the
-   * component's own loaders its declared targets match, less those its
+   * component's own queries its declared targets match, less those its
    * `writes` store, and sends at once when there are none. A `loaded` or
-   * `loadFailed` step on the last of them writes the loader's state, then
+   * `loadFailed` step on the last of them writes the query's result, then
    * sends this one. `waitExpired` ends the wait by budget. Under `mode: "queue"`
    * a message also waits for the earlier ones of its group.
    */
@@ -455,79 +455,79 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
   waitExpired(target: Target): this
 
   /**
-   * Loads a loader with a Success: writes its state at the loader's current
+   * Loads a query with a Success: writes its result at the query's current
    * args, then sends the message of its `onChange`, if any. Throws when the
-   * loader is disabled. For a list loader `value` is the page array, and
+   * query is disabled. For an infinite query `value` is the page array, and
    * unless `waiting` it settles a pending load more.
    *
    * **Details**
    *
    * Unless `waiting` or `patched`, it is a settle: it ends a
-   * `Command.afterRefetch` wait on the loader. It throws while a running or
-   * queued Command's patch is live on the loader, since no fetch settles
+   * `Command.afterRefetch` wait on the query. It throws while a running or
+   * queued Command's patch is live on the query, since no fetch settles
    * under a live patch: only a `patched` value is written then. As in the
-   * cache, a patch is live only when the loader's state held a Success at issue.
+   * cache, a patch is live only when the result held a Success at issue.
    */
-  loaded<N extends Component.SingleNames<Component.Loaders<C>>>(
+  loaded<N extends Component.SingleNames<Component.Queries<C>>>(
     name: N,
-    value: Loader.Read.Success<ReadOf<Component.Loaders<C>[N]>>,
+    value: Query.Query.Success<QueryOf<Component.Queries<C>[N]>>,
     options?: { readonly waiting?: boolean | undefined; readonly patched?: boolean | undefined }
   ): this
   /**
-   * Loads one key of a `loadMany` loader with a Success, as `loadedMany`
+   * Loads one key of a `queryMany` query with a Success, as `loadedMany`
    * does with one entry.
    */
-  loaded<N extends Component.KeyedNames<Component.Loaders<C>>>(
+  loaded<N extends Component.KeyedNames<Component.Queries<C>>>(
     name: N,
-    args: Loader.Read.Args<ReadOf<Component.Loaders<C>[N]>>,
-    value: Loader.Read.Success<ReadOf<Component.Loaders<C>[N]>>,
+    args: Query.Query.Args<QueryOf<Component.Queries<C>[N]>>,
+    value: Query.Query.Success<QueryOf<Component.Queries<C>[N]>>,
     options?: { readonly waiting?: boolean | undefined; readonly patched?: boolean | undefined }
   ): this
   /**
-   * Loads a loader with a typed failure, as `loaded` does. The failure keeps
-   * the loader state's last Success as `previousSuccess` when it holds one at the
-   * loader's current args. Unless `waiting`, it settles a list loader's
+   * Loads a query with a typed failure, as `loaded` does. The failure keeps
+   * the result's last Success as `previousSuccess` when it holds one at the
+   * query's current args. Unless `waiting`, it settles an infinite query's
    * pending load more.
    */
-  loadFailed<N extends Component.SingleNames<Component.Loaders<C>>>(
+  loadFailed<N extends Component.SingleNames<Component.Queries<C>>>(
     name: N,
-    error: Loader.Read.Error<ReadOf<Component.Loaders<C>[N]>>,
+    error: Query.Query.Error<QueryOf<Component.Queries<C>[N]>>,
     options?: { readonly waiting?: boolean | undefined }
   ): this
-  /** Loads one key of a `loadMany` loader with a typed failure, as `loadedMany` does with one entry. */
-  loadFailed<N extends Component.KeyedNames<Component.Loaders<C>>>(
+  /** Loads one key of a `queryMany` query with a typed failure, as `loadedMany` does with one entry. */
+  loadFailed<N extends Component.KeyedNames<Component.Queries<C>>>(
     name: N,
-    args: Loader.Read.Args<ReadOf<Component.Loaders<C>[N]>>,
-    error: Loader.Read.Error<ReadOf<Component.Loaders<C>[N]>>,
+    args: Query.Query.Args<QueryOf<Component.Queries<C>[N]>>,
+    error: Query.Query.Error<QueryOf<Component.Queries<C>[N]>>,
     options?: { readonly waiting?: boolean | undefined }
   ): this
   /**
-   * Settles a list loader's pending load more with its next page: writes the
-   * loader's pages with `page` appended. Throws when no load more is
+   * Settles an infinite query's pending load more with its next page: writes the
+   * query's pages with `page` appended. Throws when no load more is
    * pending.
    */
-  loadedMore<N extends Component.ListNames<Component.Loaders<C>>>(
+  loadedMore<N extends Component.InfiniteNames<Component.Queries<C>>>(
     name: N,
-    page: Loader.ListRead.Page<ReadOf<Component.Loaders<C>[N]>>
+    page: Query.InfiniteQuery.Page<QueryOf<Component.Queries<C>[N]>>
   ): this
   /**
-   * Settles a list loader's pending load more with a failure: the pages stay,
+   * Settles an infinite query's pending load more with a failure: the pages stay,
    * and `more` is `Failed` with `error`. Throws when no load more is
    * pending.
    */
-  loadMoreFailed<N extends Component.ListNames<Component.Loaders<C>>>(
+  loadMoreFailed<N extends Component.InfiniteNames<Component.Queries<C>>>(
     name: N,
-    error: Loader.Read.Error<ReadOf<Component.Loaders<C>[N]>>
+    error: Query.Query.Error<QueryOf<Component.Queries<C>[N]>>
   ): this
   /**
-   * Loads several keys of a `loadMany` loader in one write, as the runtime
-   * writes a first emission or a batch: its state holds the loader's stored
+   * Loads several keys of a `queryMany` query in one write, as the runtime
+   * writes a first emission or a batch: the result holds the query's stored
    * keys and these, and `onChange`'s `changes` holds these. Throws on args
-   * the loader doesn't currently return.
+   * the query doesn't currently return.
    */
-  loadedMany<N extends Component.KeyedNames<Component.Loaders<C>>>(
+  loadedMany<N extends Component.KeyedNames<Component.Queries<C>>>(
     name: N,
-    entries: ReadonlyArray<KeyedLoad<ReadOf<Component.Loaders<C>[N]>>>
+    entries: ReadonlyArray<KeyedLoad<QueryOf<Component.Queries<C>[N]>>>
   ): this
 
   /** Checks the Model. `f` throws to fail the test. */
@@ -540,8 +540,8 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
   sent(f: (sent: ReadonlyArray<Component.Send>) => void): this
   /** Checks the Subscription keys the current Model and props ask for. `f` throws to fail the test. */
   subscriptions(f: (keys: ReadonlyArray<string>) => void): this
-  /** Checks the loaders and their current args. `f` throws to fail the test. */
-  loaders(f: (loaders: ReadonlyArray<LoaderInfo>) => void): this
+  /** Checks the queries and their current args. `f` throws to fail the test. */
+  queryInfo(f: (info: ReadonlyArray<QueryInfo>) => void): this
   /** Checks the whole story. `f` throws to fail the test. */
   check(f: (story: Steps<C>["current"]) => void): this
 
@@ -576,7 +576,7 @@ type Fields<Props, Model, Msg, Events> =
     | "component"
     | "props"
     | "model"
-    | "loaderState"
+    | "results"
     | "pending"
     | "emitted"
     | "sent"
@@ -774,15 +774,15 @@ const record = <Props, Model, Msg, Events>(
 ): Story<Props, Model, Msg, Events> => {
   let rendered: View.Node<Msg, any> | undefined
   const view = () => rendered ??= render()
-  // A view value is a `Query` tree; a child is a node with no tag or text.
-  const root = () => view() as Query.Node
-  const context = () => boundOf(fields.component)?.context(fields.model, fields.props, fields.loaderState)
+  // A view value is a `Locator.Node` tree; a child is a node with no tag or text.
+  const root = () => view() as Locator.Node
+  const context = () => boundOf(fields.component)?.context(fields.model, fields.props, fields.results)
   const story: Story<Props, Model, Msg, Events> = {
     component: fields.component,
     props: fields.props,
     model: fields.model,
-    loaderState: fields.loaderState,
-    loaded: () => context()?.loaded ?? {},
+    results: fields.results,
+    queries: () => context()?.queries ?? {},
     pending: fields.pending,
     emitted: fields.emitted,
     sent: fields.sent,
@@ -792,23 +792,23 @@ const record = <Props, Model, Msg, Events>(
     defaultPrevented: fields.defaultPrevented,
     view,
     subscriptions: () =>
-      (fields.component.subscriptions?.(fields.model, fields.props, fields.loaderState) ?? []).map((sub) => sub.key),
-    loaders: () => {
+      (fields.component.subscriptions?.(fields.model, fields.props, fields.results) ?? []).map((sub) => sub.key),
+    queryInfo: () => {
       const bound = boundOf(fields.component)
       if (bound === undefined) return []
       const current = context()!
       return bound.entries.map((entry) => ({
         name: entry.name,
-        read: Loader.defOf(entry.read).name,
+        query: Query.defOf(entry.query).name,
         args: current.argsOf(entry.name).args
       }))
     },
     get root() {
       return root()
     },
-    get: (locator) => Query.get(root(), locator),
-    query: (locator) => Query.query(root(), locator),
-    all: (locator) => Query.all(root(), locator)
+    get: (locator) => Locator.get(root(), locator),
+    query: (locator) => Locator.query(root(), locator),
+    all: (locator) => Locator.all(root(), locator)
   }
   if (fields.childModels !== undefined) childModels.set(story, fields.childModels)
   if (fields.shared !== undefined) sharedGiven.set(story, fields.shared)
@@ -823,7 +823,7 @@ const update = <Props, Model, Msg, Events>(
     component: story.component,
     props: story.props,
     model: story.model,
-    loaderState: story.loaderState,
+    results: story.results,
     pending: story.pending,
     emitted: story.emitted,
     sent: story.sent,
@@ -836,15 +836,14 @@ const update = <Props, Model, Msg, Events>(
     shared: sharedGiven.get(story),
     ...patch
   }
-  // A defect in `view` fails the step that changed the Model, the loader state, the props or what's pending.
+  // A defect in `view` fails the step that changed the Model, the query results, the props or what's pending.
   // An unchanged view is kept as expanded: expanding it again would rebuild slot content without the
   // owners whose nodes the first expansion replaced.
-  const view =
-    fields.model === story.model && fields.loaderState === story.loaderState && fields.props === story.props &&
+  const view = fields.model === story.model && fields.results === story.results && fields.props === story.props &&
       fields.pending === story.pending && fields.loadingMore === story.loadingMore &&
       fields.childModels === childModels.get(story) && fields.shared === sharedGiven.get(story)
-      ? story.view
-      : () => expandedView(fields)
+    ? story.view
+    : () => expandedView(fields)
   return record(fields, view)
 }
 
@@ -865,85 +864,85 @@ const viewOfFields = (fields: Fields<any, any, any, any>): View.Node<any, any> =
     fields.model,
     fields.props,
     runningOf(fields.pending),
-    fields.loaderState,
+    fields.results,
     undefined,
     sharedLookup(fields.shared, rootOwners(fields.component, fields.model, fields.props))
   )
 
-const boundOf = loaders.boundOf
+const boundOf = componentQueries.boundOf
 
 const isKeyed = (story: Story<any, any, any, any>, name: string): boolean =>
   boundOf(story.component)?.byName.get(name)?.keyed === true
 
-/** The loader called `name`, or a throw naming the step. */
-const loaderOf = (story: Story<any, any, any, any>, step: string, name: string): loaders.Entry => {
+/** The query called `name`, or a throw naming the step. */
+const queryOf = (story: Story<any, any, any, any>, step: string, name: string): componentQueries.Entry => {
   const entry = boundOf(story.component)?.byName.get(name)
   if (entry === undefined) {
-    throw new Error(`Story.${step}: "${name}" is not a loader of ${story.component.definition.name}`)
+    throw new Error(`Story.${step}: "${name}" is not a query of ${story.component.definition.name}`)
   }
   return entry
 }
 
-/** A loader's args for the story's Model, props and loader state. */
+/** A query's args for the story's Model, props and results. */
 const argsAt = (story: Story<any, any, any, any>, name: string) =>
-  boundOf(story.component)!.context(story.model, story.props, story.loaderState).argsOf(name)
+  boundOf(story.component)!.context(story.model, story.props, story.results).argsOf(name)
 
 /**
- * Writes a loader's state, then sends the message of its `onChange`, if any, as the runtime does.
- * A keyed loader's `onChange` also gets `changes`.
+ * Writes a query's result, then sends the message of its `onChange`, if any, as the runtime does.
+ * A keyed query's `onChange` also gets `changes`.
  */
-const writeLoaderState = (
+const writeResult = (
   story: Story<any, any, any, any>,
-  entry: loaders.Entry,
-  state: unknown,
-  changes: ReadonlyArray<loaders.KeyedChange>
+  entry: componentQueries.Entry,
+  result: unknown,
+  changes: ReadonlyArray<componentQueries.KeyedChange>
 ): Story<any, any, any, any> => {
   const bound = boundOf(story.component)!
   // As in the runtime, the same snapshot writes nothing.
-  if (Equal.equals((story.loaderState ?? bound.empty)[entry.name], state)) return story
-  const out = update(story, { loaderState: { ...(story.loaderState ?? bound.empty), [entry.name]: state } })
-  const message = bound.context(out.model, out.props, out.loaderState).changed(entry.name, changes)
+  if (Equal.equals((story.results ?? bound.empty)[entry.name], result)) return story
+  const out = update(story, { results: { ...(story.results ?? bound.empty), [entry.name]: result } })
+  const message = bound.context(out.model, out.props, out.results).changed(entry.name, changes)
   return message === undefined ? out : dispatch(out, message.value)
 }
 
-/** The result a load step writes, from the loader's last Success at its current args. */
+/** The result a load step writes, from the query's last Success at its current args. */
 type Build = (
   previous: Option.Option<AsyncResult.Success<any, any>>
 ) => AsyncResult.Success<any, any> | AsyncResult.Failure<any, any>
 
-/** Writes `result` to a single or list loader's state at its current args. */
+/** Writes `result` to a single or infinite query's result at its current args. */
 const loadStep = (
   story: Story<any, any, any, any>,
   step: string,
   name: string,
   build: Build,
   patched: boolean,
-  more?: Loader.More<any>
+  more?: Query.More<any>
 ): Story<any, any, any, any> => {
-  const entry = loaderOf(story, step, name)
+  const entry = queryOf(story, step, name)
   const current = argsAt(story, name)
   if (current.argsKey === undefined) {
-    throw new Error(`Story.${step}: the loader "${name}" is disabled for the current Model and props`)
+    throw new Error(`Story.${step}: the query "${name}" is disabled for the current Model and props`)
   }
   const result = build(storedAt(story, name, current.argsKey))
-  const def = Loader.defOf(entry.read)
-  const state = boundOf(story.component)!.state(
+  const def = Query.defOf(entry.query)
+  const snapshot = boundOf(story.component)!.snapshot(
     entry,
     { args: current.args, argsKey: current.argsKey },
     result,
     patched,
     more ?? (def.list !== undefined && result._tag === "Success" ? moreOfPages(def, result.value) : undefined)
   )
-  return writeLoaderState(story, entry, state, [])
+  return writeResult(story, entry, snapshot, [])
 }
 
-/** The loader state's last Success at `argsKey`: its value, or a Failure's previous one. */
+/** The result's last Success at `argsKey`: its value, or a Failure's previous one. */
 const storedAt = (
   story: Story<any, any, any, any>,
   name: string,
   argsKey: string
 ): Option.Option<AsyncResult.Success<any, any>> => {
-  const data = Loader.snapshotData(story.loaderState?.[name])
+  const data = Query.snapshotData(story.results?.[name])
   const stored = data?.argsKey === argsKey ? data.result : undefined
   return stored === undefined
     ? Option.none()
@@ -953,29 +952,29 @@ const storedAt = (
 }
 
 /**
- * The loader state `given` starts from, written with no `onChange` message. Each
- * named loader holds its given results at the args it returns, and a keyed
- * loader that isn't named keeps the keys it held before that it still returns. Args can
- * read other loaders' results, so the writes repeat until none changes: the
- * result doesn't depend on the order of the names or on the loader state held before.
+ * The results `given` starts from, written with no `onChange` message. Each
+ * named query holds its given results at the args it returns, and a keyed
+ * query that isn't named keeps the keys it held before that it still returns. Args can
+ * read other queries' results, so the writes repeat until none changes: the
+ * result doesn't depend on the order of the names or on the results held before.
  */
-const givenLoaderState = (
+const givenResults = (
   story: Story<any, any, any, any>,
-  loaded: { readonly [name: string]: unknown }
-): Component.LoaderState | undefined => {
-  for (const name of Object.keys(loaded)) loaderOf(story, "given", name)
+  given: { readonly [name: string]: unknown }
+): Component.Results | undefined => {
+  for (const name of Object.keys(given)) queryOf(story, "given", name)
   const bound = boundOf(story.component)
-  if (bound === undefined) return story.loaderState
-  const before = story.loaderState ?? bound.empty
-  const loaderState: { [name: string]: unknown } = { ...before }
-  // The state a loader should hold for the current loader state, or undefined while a named loader is
+  if (bound === undefined) return story.results
+  const before = story.results ?? bound.empty
+  const results: { [name: string]: unknown } = { ...before }
+  // The result a query should hold for the current results, or undefined while a named query is
   // disabled or doesn't return the given args.
-  const target = (entry: loaders.Entry): unknown => {
-    const current = bound.context(story.model, story.props, { ...loaderState }).argsOf(entry.name)
-    if (!Object.hasOwn(loaded, entry.name)) {
-      // From the loader state held before: a key an earlier round dropped can come back once the args settle.
-      const held = Loader.snapshotMapData(before[entry.name])?.entries
-      return bound.stateMany(
+  const target = (entry: componentQueries.Entry): unknown => {
+    const current = bound.context(story.model, story.props, { ...results }).argsOf(entry.name)
+    if (!Object.hasOwn(given, entry.name)) {
+      // From the results held before: a key an earlier round dropped can come back once the args settle.
+      const held = Query.snapshotMapData(before[entry.name])?.entries
+      return bound.snapshotMany(
         entry,
         current.entries!.flatMap((key) => {
           const stored = held?.get(key.argsKey)
@@ -983,23 +982,23 @@ const givenLoaderState = (
         })
       )
     }
-    const def = Loader.defOf(entry.read)
+    const def = Query.defOf(entry.query)
     if (entry.keyed) {
       const keys = current.entries!
       const snapshots: Array<unknown> = []
-      for (const load of loaded[entry.name] as ReadonlyArray<KeyedLoad<any>>) {
+      for (const load of given[entry.name] as ReadonlyArray<KeyedLoad<any>>) {
         const key = keys.find((key) => key.argsKey === def.argsKey(load.args))
         if (key === undefined) return undefined
         const result = "value" in load
           ? AsyncResult.success(load.value, { waiting: load.waiting, timestamp: 0 })
           : AsyncResult.failure(Cause.fail(load.error), { waiting: load.waiting })
-        snapshots.push(bound.state(entry, key, result as any, false, undefined))
+        snapshots.push(bound.snapshot(entry, key, result as any, false, undefined))
       }
-      return bound.stateMany(entry, snapshots)
+      return bound.snapshotMany(entry, snapshots)
     }
     if (current.argsKey === undefined) return undefined
-    const value = loaded[entry.name]
-    return bound.state(
+    const value = given[entry.name]
+    return bound.snapshot(
       entry,
       { args: current.args, argsKey: current.argsKey },
       AsyncResult.success(value, { timestamp: 0 }),
@@ -1007,53 +1006,53 @@ const givenLoaderState = (
       def.list !== undefined ? moreOfPages(def, value as ReadonlyArray<unknown>) : undefined
     )
   }
-  const written = bound.entries.filter((entry) => entry.keyed || Object.hasOwn(loaded, entry.name))
-  // Each round settles at least one more level of loaders whose args read another's result, so a
-  // write still due after a round per loader never settles.
+  const written = bound.entries.filter((entry) => entry.keyed || Object.hasOwn(given, entry.name))
+  // Each round settles at least one more level of queries whose args read another's result, so a
+  // write still due after a round per query never settles.
   for (let round = 0, changed = true; changed; round++) {
     changed = false
     for (const entry of written) {
       const next = target(entry)
-      if (next === undefined || Equal.equals(loaderState[entry.name], next)) continue
+      if (next === undefined || Equal.equals(results[entry.name], next)) continue
       if (round > written.length) {
         throw new Error(
-          `Story.given: the loader "${entry.name}" doesn't settle: its args keep changing with the given results`
+          `Story.given: the query "${entry.name}" doesn't settle: its args keep changing with the given results`
         )
       }
-      loaderState[entry.name] = next
+      results[entry.name] = next
       changed = true
     }
   }
   const unmet = written.find((entry) => target(entry) === undefined)
   if (unmet !== undefined) {
     throw new Error(
-      `Story.given: the loader "${unmet.name}" is disabled, or doesn't return the given args, for the Model and props`
+      `Story.given: the query "${unmet.name}" is disabled, or doesn't return the given args, for the Model and props`
     )
   }
-  return loaderState
+  return results
 }
 
 /** Whether a page array has a next page, by the definition's `next`. */
-const moreOfPages = (def: ReturnType<typeof Loader.defOf>, pages: ReadonlyArray<unknown>): Loader.More<never> =>
+const moreOfPages = (def: ReturnType<typeof Query.defOf>, pages: ReadonlyArray<unknown>): Query.More<never> =>
   pages.length > 0 && Option.isSome(def.list!.next(pages[pages.length - 1], pages))
     ? { _tag: "Available" }
     : { _tag: "End" }
 
-const listLoader = (story: Story<any, any, any, any>, step: string, name: string): void => {
+const listQuery = (story: Story<any, any, any, any>, step: string, name: string): void => {
   if (boundOf(story.component)?.byName.get(name)?.list !== true) {
-    throw new Error(`Story.${step}: "${name}" is not a list loader of ${story.component.definition.name}`)
+    throw new Error(`Story.${step}: "${name}" is not an infinite query of ${story.component.definition.name}`)
   }
 }
 
-/** Settles a loader's pending load more with `result`, written at its pages. A live patch makes it throw. */
+/** Settles a query's pending load more with `result`, written at its pages. A live patch makes it throw. */
 const settleMore = (
   story: Story<any, any, any, any>,
   step: string,
   name: string,
   pagesOf: (pages: ReadonlyArray<unknown>) => ReadonlyArray<unknown>,
-  more?: Loader.More<any>
+  more?: Query.More<any>
 ): Story<any, any, any, any> => {
-  listLoader(story, step, name)
+  listQuery(story, step, name)
   const argsKey = argsAt(story, name).argsKey
   if (argsKey !== undefined) checkUnpatched(story, step, name, argsKey)
   if (!story.loadingMore.includes(name)) {
@@ -1073,7 +1072,7 @@ const settleMore = (
 }
 
 /**
- * A `$.loadMore` or `$.reset` from `update`, as the runtime runs it at the loader's
+ * A `$.loadMore` or `$.reset` from `update`, as the runtime runs it at the query's
  * current args: a load more is pending, and writes `Loading`; a reset writes the
  * first page, waiting, and ends a pending load more.
  */
@@ -1083,8 +1082,8 @@ const applyList = (story: Story<any, any, any, any>, list: Component.ListIssue):
   const argsKey = argsAt(story, list.name).argsKey
   if (argsKey === undefined) return story
   const previous = storedAt(story, list.name, argsKey)
-  const def = Loader.defOf(entry.read)
-  const data = Loader.snapshotData(story.loaderState?.[list.name])
+  const def = Query.defOf(entry.query)
+  const data = Query.snapshotData(story.results?.[list.name])
   if (list.op === "loadMore") {
     if (story.loadingMore.includes(list.name)) return story
     // At the end, or with nothing held at these args, nothing is written and nothing waits.
@@ -1116,46 +1115,46 @@ const applyList = (story: Story<any, any, any, any>, list: Component.ListIssue):
   )
 }
 
-/** Ends a list loader's pending load more: a settle, Success or Failure, ends the walk it waits on. */
+/** Ends an infinite query's pending load more: a settle, Success or Failure, ends the walk it waits on. */
 const settlePending = (story: Story<any, any, any, any>, name: string): Story<any, any, any, any> =>
   story.loadingMore.includes(name)
     ? update(story, { loadingMore: story.loadingMore.filter((other) => other !== name) })
     : story
 
-/** A `loadMany` loader and its unique args, or a throw naming the step. */
-const keyedLoader = (
+/** A `queryMany` query and its unique args, or a throw naming the step. */
+const keyedQuery = (
   story: Story<any, any, any, any>,
   step: string,
   name: string
-): { readonly entry: loaders.Entry; readonly keys: ReadonlyArray<loaders.Keyed> } => {
+): { readonly entry: componentQueries.Entry; readonly keys: ReadonlyArray<componentQueries.Keyed> } => {
   const entry = boundOf(story.component)?.byName.get(name)
   if (entry === undefined || !entry.keyed) {
-    throw new Error(`Story.${step}: "${name}" is not a loadMany loader of ${story.component.definition.name}`)
+    throw new Error(`Story.${step}: "${name}" is not a queryMany query of ${story.component.definition.name}`)
   }
   return { entry, keys: argsAt(story, name).entries! }
 }
 
 /**
- * Writes a keyed loader's state as the runtime does: the stored keys the
- * loader still returns, with `loads` over them, and `changes` holds
+ * Writes a keyed query's result as the runtime does: the stored keys the
+ * query still returns, with `loads` over them, and `changes` holds
  * `loads`.
  */
 const writeKeyed = (
   story: Story<any, any, any, any>,
-  entry: loaders.Entry,
-  keys: ReadonlyArray<loaders.Keyed>,
+  entry: componentQueries.Entry,
+  keys: ReadonlyArray<componentQueries.Keyed>,
   loads: ReadonlyArray<
     { readonly argsKey: string; readonly result: AsyncResult.AsyncResult<any, any>; readonly patched: boolean }
   >
 ): Story<any, any, any, any> => {
   const bound = boundOf(story.component)!
-  const held = Loader.snapshotMapData(story.loaderState?.[entry.name])?.entries
+  const held = Query.snapshotMapData(story.results?.[entry.name])?.entries
   const byKey = new Map(loads.map((load) => [load.argsKey, load]))
-  const state = bound.stateMany(
+  const snapshot = bound.snapshotMany(
     entry,
     keys.flatMap((key) => {
       const load = byKey.get(key.argsKey)
-      if (load !== undefined) return [bound.state(entry, key, load.result as any, load.patched, undefined)]
+      if (load !== undefined) return [bound.snapshot(entry, key, load.result as any, load.patched, undefined)]
       const stored = held?.get(key.argsKey)
       return stored === undefined ? [] : [stored]
     })
@@ -1164,19 +1163,19 @@ const writeKeyed = (
     const load = byKey.get(key.argsKey)
     return load === undefined ? [] : [{ args: key.args, result: load.result }]
   })
-  return writeLoaderState(story, entry, state, changes)
+  return writeResult(story, entry, snapshot, changes)
 }
 
-/** Loads keys of a keyed loader: each args must be one the loader currently returns. */
+/** Loads keys of a keyed query: each args must be one the query currently returns. */
 const loadKeyedStep = (
   story: Story<any, any, any, any>,
   step: string,
   name: string,
   loads: ReadonlyArray<KeyedLoad<any>>
 ): Story<any, any, any, any> => {
-  const { entry, keys } = keyedLoader(story, step, name)
-  const def = Loader.defOf(entry.read)
-  const held = Loader.snapshotMapData(story.loaderState?.[name])?.entries
+  const { entry, keys } = keyedQuery(story, step, name)
+  const def = Query.defOf(entry.query)
+  const held = Query.snapshotMapData(story.results?.[name])?.entries
   const settled = new Set<string>()
   const written = writeKeyed(
     story,
@@ -1186,7 +1185,7 @@ const loadKeyedStep = (
       const argsKey = def.argsKey(load.args)
       if (!keys.some((key) => key.argsKey === argsKey)) {
         throw new Error(
-          `Story.${step}: the loader "${name}" doesn't return the args ${def.logKey(load.args, argsKey)}`
+          `Story.${step}: the query "${name}" doesn't return the args ${def.logKey(load.args, argsKey)}`
         )
       }
       const patched = "value" in load && load.patched === true
@@ -1197,14 +1196,14 @@ const loadKeyedStep = (
         result: "value" in load
           ? AsyncResult.success(load.value, { waiting: load.waiting, timestamp: 0 })
           : AsyncResult.failWithPrevious(load.error, {
-            previous: Option.fromUndefinedOr(Loader.snapshotData(held?.get(argsKey))?.result),
+            previous: Option.fromUndefinedOr(Query.snapshotData(held?.get(argsKey))?.result),
             waiting: load.waiting
           }),
         patched
       }
     })
   )
-  // After the loader state's write: the wait's own message comes second.
+  // After the result's write: the wait's own message comes second.
   return settleWaits(written, (awaited) => awaited.name === name && settled.has(def.argsKey(awaited.args)))
 }
 
@@ -1212,10 +1211,10 @@ const loadKeyedStep = (
 const pruneRounds = 100
 
 /**
- * After a step: a keyed loader whose state holds a key it no longer returns
- * gets its state pruned, with no changes, as the runtime's drain writes it. A
+ * After a step: a keyed query whose result holds a key it no longer returns
+ * gets the result pruned, with no changes, as the runtime's drain writes it. A
  * prune's `onChange` can change the key set again, so rounds run until none
- * is due, at most one write per loader per round. The runtime doesn't bound
+ * is due, at most one write per query per round. The runtime doesn't bound
  * them; a step throws after `pruneRounds`.
  */
 const pruneKeyed = (story: Story<any, any, any, any>): Story<any, any, any, any> => {
@@ -1226,14 +1225,14 @@ const pruneKeyed = (story: Story<any, any, any, any>): Story<any, any, any, any>
     let pruned = false
     for (const entry of bound.entries) {
       if (!entry.keyed) continue
-      const held = Loader.snapshotMapData(out.loaderState?.[entry.name])
+      const held = Query.snapshotMapData(out.results?.[entry.name])
       if (held === undefined || held.entries.size === 0) continue
       const keys = argsAt(out, entry.name).entries!
       const declared = new Set(keys.map((key) => key.argsKey))
       if (Array.from(held.entries.keys()).every((key) => declared.has(key))) continue
       if (round === pruneRounds) {
         throw new Error(
-          `Story: ${story.component.definition.name}'s loader "${entry.name}" was still pruned after ${pruneRounds} rounds in one step. Each prune's onChange changes its key set again, and the runtime would prune without limit.`
+          `Story: ${story.component.definition.name}'s query "${entry.name}" was still pruned after ${pruneRounds} rounds in one step. Each prune's onChange changes its key set again, and the runtime would prune without limit.`
         )
       }
       out = writeKeyed(out, entry, keys, [])
@@ -1312,7 +1311,7 @@ const apply = <Props, Model, Msg, Events>(
 const exited = <Props, Model, Msg, Events>(
   story: Story<Props, Model, Msg, Events>,
   entry: Pending<Msg>,
-  held: { readonly message: Msg; readonly awaiting: ReadonlyArray<AwaitedLoader> } | undefined
+  held: { readonly message: Msg; readonly awaiting: ReadonlyArray<AwaitedQuery> } | undefined
 ): Story<Props, Model, Msg, Events> => {
   const awaiting: Pending<Msg> | undefined = held === undefined
     ? undefined
@@ -1346,10 +1345,10 @@ const release = <Props, Model, Msg, Events>(
   }
 }
 
-/** Takes awaited loaders off the awaiting runs, delivering what a wait that ends lets go. */
+/** Takes awaited queries off the awaiting runs, delivering what a wait that ends lets go. */
 const settleWaits = <Props, Model, Msg, Events>(
   story: Story<Props, Model, Msg, Events>,
-  settled: (awaited: AwaitedLoader) => boolean
+  settled: (awaited: AwaitedQuery) => boolean
 ): Story<Props, Model, Msg, Events> => {
   let out = story
   for (const entry of story.pending) {
@@ -1362,8 +1361,8 @@ const settleWaits = <Props, Model, Msg, Events>(
 }
 
 /**
- * A single or list loader's `loaded` or `loadFailed`: unless `patched`, a live patch makes it throw,
- * and unless `waiting` too, it settles the loader's entry for the waits on it, after its write.
+ * A single or infinite query's `loaded` or `loadFailed`: unless `patched`, a live patch makes it throw,
+ * and unless `waiting` too, it settles the query's entry for the waits on it, after its write.
  */
 const settleStep = (
   story: Story<any, any, any, any>,
@@ -1373,28 +1372,28 @@ const settleStep = (
   waiting: boolean,
   build: Build
 ): Story<any, any, any, any> => {
-  const entry = loaderOf(story, step, name)
+  const entry = queryOf(story, step, name)
   const argsKey = argsAt(story, name).argsKey
   if (!patched && argsKey !== undefined) checkUnpatched(story, step, name, argsKey)
   // A settle ends the walk a list's pending load more waits on, unless a walk is still running.
   const loaded = loadStep(waiting ? story : settlePending(story, name), step, name, build, patched)
   return patched || waiting ? loaded : settleWaits(
     loaded,
-    (awaited) => awaited.name === name && Loader.defOf(entry.read).argsKey(awaited.args) === argsKey
+    (awaited) => awaited.name === name && Query.defOf(entry.query).argsKey(awaited.args) === argsKey
   )
 }
 
-/** The component's own loaders, each with the entries it is at: one per args it returns now. */
+/** The component's own queries, each with the entries it is at: one per args it returns now. */
 function* currentEntries(
   story: Story<any, any, any, any>
-): Generator<{ readonly loader: loaders.Entry; readonly entries: ReadonlyArray<loaders.Keyed> }> {
+): Generator<{ readonly query: componentQueries.Entry; readonly entries: ReadonlyArray<componentQueries.Keyed> }> {
   const bound = boundOf(story.component)
   if (bound === undefined) return
-  const context = bound.context(story.model, story.props, story.loaderState)
-  for (const loader of bound.entries) {
-    const current = context.argsOf(loader.name)
+  const context = bound.context(story.model, story.props, story.results)
+  for (const query of bound.entries) {
+    const current = context.argsOf(query.name)
     yield {
-      loader,
+      query,
       entries: current.entries ??
         (current.argsKey === undefined ? [] : [{ args: current.args, argsKey: current.argsKey }])
     }
@@ -1402,61 +1401,61 @@ function* currentEntries(
 }
 
 /**
- * What a `Command.afterRefetch` run resolved with `result` waits for: the component's own loaders,
+ * What a `Command.afterRefetch` run resolved with `result` waits for: the component's own queries,
  * at their current args, that its declared targets match, less the entries its `writes` store.
  */
-const awaitedLoaders = (
+const awaitedQueries = (
   story: Story<any, any, any, any>,
   command: Command.Issued<any, any, never, "Effect"> | Command.Issued<any, any, never, "Stream">,
   result: unknown
-): ReadonlyArray<AwaitedLoader> => {
+): ReadonlyArray<AwaitedQuery> => {
   const budget = command.afterRefetch
   if (command._tag !== "Effect" || budget === undefined || Duration.isZero(budget)) return []
   if (boundOf(story.component) === undefined) return []
   const written = (command.writes?.(result) ?? []).map((write) => ({
-    name: Loader.defOf(write.read).name,
-    argsKey: Loader.defOf(write.read).argsKey(write.args)
+    name: Query.defOf(write.query).name,
+    argsKey: Query.defOf(write.query).argsKey(write.args)
   }))
-  const out: Array<AwaitedLoader> = []
-  for (const { entries, loader } of currentEntries(story)) {
-    const read = Loader.defOf(loader.read).name
+  const out: Array<AwaitedQuery> = []
+  for (const { entries, query } of currentEntries(story)) {
+    const queryName = Query.defOf(query.query).name
     for (const { args, argsKey } of entries) {
-      if (!Loader.invalidatesEntry(command, loader.read, args)) continue
-      if (written.some((write) => write.name === read && write.argsKey === argsKey)) continue
-      out.push({ name: loader.name, args })
+      if (!Query.invalidatesEntry(command, query.query, args)) continue
+      if (written.some((write) => write.name === queryName && write.argsKey === argsKey)) continue
+      out.push({ name: query.name, args })
     }
   }
   return out
 }
 
 /**
- * Patches registered at issue, by loader name and args key. As in the cache, only entries that
+ * Patches registered at issue, by query name and args key. As in the cache, only entries that
  * held a Success then register a patch; cold or failed entries don't delay settling.
  */
 const livePatches = new WeakMap<Pending<any>, ReadonlyArray<{ readonly name: string; readonly argsKey: string }>>()
 
-/** The component's own loaders, at their current args, that `command`'s patches register on. */
+/** The component's own queries, at their current args, that `command`'s patches register on. */
 const registeredPatches = (
   story: Story<any, any, any, any>,
   command: Command.Issued<any, any, never, "Effect"> | Command.Issued<any, any, never, "Stream">
 ): ReadonlyArray<{ readonly name: string; readonly argsKey: string }> => {
   if (command.optimistic.length === 0) return []
   const out: Array<{ readonly name: string; readonly argsKey: string }> = []
-  for (const { entries, loader } of currentEntries(story)) {
-    const state = story.loaderState?.[loader.name]
-    const held = loader.keyed ? Loader.snapshotMapData(state)?.entries : undefined
+  for (const { entries, query } of currentEntries(story)) {
+    const result = story.results?.[query.name]
+    const held = query.keyed ? Query.snapshotMapData(result)?.entries : undefined
     for (const { args, argsKey } of entries) {
-      const data = Loader.snapshotData(held !== undefined ? held.get(argsKey) : state)
+      const data = Query.snapshotData(held !== undefined ? held.get(argsKey) : result)
       if (data?.argsKey !== argsKey || data.result?._tag !== "Success") continue
-      if (!Loader.invalidatesEntry({ invalidates: [], optimistic: command.optimistic }, loader.read, args)) continue
-      out.push({ name: loader.name, argsKey })
+      if (!Query.invalidatesEntry({ invalidates: [], optimistic: command.optimistic }, query.query, args)) continue
+      out.push({ name: query.name, argsKey })
     }
   }
   return out
 }
 
 /**
- * Throws when a running or queued Command's optimistic patch is live on the entry of loader `name`
+ * Throws when a running or queued Command's optimistic patch is live on the entry of query `name`
  * at `argsKey`: the runtime settles no fetch there, so only a patched value can be written.
  */
 const checkUnpatched = (story: Story<any, any, any, any>, step: string, name: string, argsKey: string): void => {
@@ -1514,10 +1513,10 @@ const dispatch = <Props, Model, Msg, Events>(
   // `undefined` is a handler's "no message", and `Component.noop` a Command's or a mount's.
   message === undefined || isNoop(message)
     ? story
-    : apply(story, story.component.update(story.model, message, story.props, story.loaderState))
+    : apply(story, story.component.update(story.model, message, story.props, story.results))
 
 /** `node` and its ancestors in `root`, innermost first, or `undefined` when `node` isn't in `root`. */
-const pathTo = (root: View.Node<any, any>, node: Query.Node): Array<View.Node<any, any>> | undefined => {
+const pathTo = (root: View.Node<any, any>, node: Locator.Node): Array<View.Node<any, any>> | undefined => {
   if (root === node) return [root]
   // An element's children, or the content a story shows under a child or an outlet.
   const children = (root as { readonly children?: ReadonlyArray<View.Node<any, any>> }).children
@@ -1540,7 +1539,7 @@ const pathTo = (root: View.Node<any, any>, node: Query.Node): Array<View.Node<an
  */
 const fireAt = <Props, Model, Msg, Events>(
   story: Story<Props, Model, Msg, Events>,
-  locator: Query.Locator,
+  locator: Locator.Locator,
   event: string,
   payload: unknown,
   step: string
@@ -1626,7 +1625,7 @@ class StepsImpl implements Steps<AnyComponent> {
 
   given(
     model: unknown,
-    loaded?: { readonly [name: string]: unknown },
+    queries?: { readonly [name: string]: unknown },
     shared: ReadonlyArray<readonly [Component.Headless.Any, unknown]> = []
   ): this {
     const next = typeof model === "function" ? model(this.current.model) : model
@@ -1641,7 +1640,7 @@ class StepsImpl implements Steps<AnyComponent> {
       shared: withShared(this.current, shared, "given")
     })
     // Settled here, with no onChange message: the step's own prune then has nothing to write.
-    return this.step(update(out, { loaderState: givenLoaderState(out, loaded ?? {}) }))
+    return this.step(update(out, { results: givenResults(out, queries ?? {}) }))
   }
   props(next: unknown): this {
     const props = typeof next === "function" ? next(this.current.props) : next
@@ -1650,12 +1649,12 @@ class StepsImpl implements Steps<AnyComponent> {
   send(message: unknown): this {
     return this.step(dispatch(this.current, message))
   }
-  click(target: string | Query.Locator): this {
-    const locator = typeof target === "string" ? Query.text(target) : target
+  click(target: string | Locator.Locator): this {
+    const locator = typeof target === "string" ? Locator.text(target) : target
     const { prevented, story } = fireAt(this.current, locator, "click", {}, "click")
     return this.step(story, prevented)
   }
-  fire(locator: Query.Locator, event: string, payload: unknown = {}): this {
+  fire(locator: Locator.Locator, event: string, payload: unknown = {}): this {
     const { prevented, story } = fireAt(this.current, locator, event, payload, "fire")
     return this.step(story, prevented)
   }
@@ -1683,7 +1682,7 @@ class StepsImpl implements Steps<AnyComponent> {
     const entry = findRunning(this.current, target, "resolve")
     return this.step(exited(this.current, entry, {
       message: resolveWith(entry, result),
-      awaiting: awaitedLoaders(this.current, entry.command, result)
+      awaiting: awaitedQueries(this.current, entry.command, result)
     }))
   }
   fail(target: Target, error: unknown): this {
@@ -1780,8 +1779,8 @@ class StepsImpl implements Steps<AnyComponent> {
     f(this.current.subscriptions())
     return this
   }
-  loaders(f: (loaders: ReadonlyArray<LoaderInfo>) => void): this {
-    f(this.current.loaders())
+  queryInfo(f: (info: ReadonlyArray<QueryInfo>) => void): this {
+    f(this.current.queryInfo())
     return this
   }
   check(f: (story: Story<any, any, any, any, any>) => void): this {
@@ -1915,7 +1914,7 @@ export const start = <C extends AnyComponent>(component: C, props: Component.Pro
     component: component as Component.Component<any, any, any, any, any, any, any, any, never>,
     props,
     model: first.model,
-    loaderState: undefined,
+    results: undefined,
     pending: [],
     emitted: [],
     sent: [],
@@ -1975,12 +1974,12 @@ const withView = (
       model: unknown,
       props: unknown,
       running?: View.Running,
-      loaderState?: Component.LoaderState,
+      queries?: Component.Results,
       _path?: string,
       shared?: Component.SharedLookup
     ) => {
       const h = View.makeHelper(props, elements ?? component.elements(), running, owner.path)
-      return View.toNode(view(component.parts(model, props, { owner, running, loaderState, shared }), h))
+      return View.toNode(view(component.parts(model, props, { owner, running, queries, shared }), h))
     }
   })
 }
@@ -2083,12 +2082,12 @@ export const layerFailure = <C extends Component.Any>(
 
 /**
  * One instance's head entries for a Model and props, or for a story's Model,
- * props and loaders: what its `head` option returns, or none without one.
+ * props and queries: what its `head` option returns, or none without one.
  * The merge across the tree is a runtime test's.
  *
  * **Details**
  *
- * Given a component, every loader is empty: each loader opens at the
+ * Given a component, every query result is empty: each query opens at the
  * args it returns for the Model and props, as on a first render. The props
  * may be left out when the component takes none.
  *
@@ -2130,7 +2129,7 @@ export const head: {
   props?: unknown
 ) =>
   "pending" in self
-    ? self.component.head?.(self.model, self.props, self.loaderState) ?? []
+    ? self.component.head?.(self.model, self.props, self.results) ?? []
     : self.head?.(model, props ?? {}, undefined) ?? []
 
 // ---------------------------------------------------------------------------
@@ -2176,9 +2175,9 @@ export interface Outcome<Model, Events> {
 
 /**
  * The result of `fromLog`: the state the replay reached (the Model, props and
- * loader state), how many messages it re-ran, and the first divergence, if
+ * query results), how many messages it re-ran, and the first divergence, if
  * any. On a divergence, the state is the one the diverging message was sent
- * to: the Model before it, and the props and loader state its `update` read.
+ * to: the Model before it, and the props and results its `update` read.
  *
  * @stability experimental
  * @category models
@@ -2188,17 +2187,17 @@ export interface Replay<
   Model,
   Msg,
   Events,
-  Loaded = { readonly [name: string]: unknown },
+  Queries = { readonly [name: string]: unknown },
   Props = unknown
 > {
   readonly path: string
   readonly model: Model
   /** The props the instance had, from its latest `Mounted`, `PropsChanged` or `Update` entry. */
   readonly props: Props
-  /** The loader state, beside the Model. Opaque: `loaded` opens it. */
-  readonly loaderState: Component.LoaderState | undefined
-  /** The loaders' results, by name, as `h.loaded` opens them for the Model, props and loader state reached. */
-  readonly loaded: () => Loaded
+  /** The query results, beside the Model. Opaque: `queries` opens them. */
+  readonly results: Component.Results | undefined
+  /** The queries' results, by name, as `h.queries` opens them for the Model, props and results reached. */
+  readonly queries: () => Queries
   readonly replayed: number
   readonly divergence: Divergence<Model, Msg, Events> | undefined
 }
@@ -2223,11 +2222,11 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
   type Stateful =
     | MessageLog.Update
     | MessageLog.Mounted
-    | MessageLog.LoaderChanged
+    | MessageLog.QueryChanged
     | MessageLog.PropsChanged
-    | Extract<MessageLog.Wire, { _tag: "Update" | "Mounted" | "LoaderChanged" | "PropsChanged" }>
+    | Extract<MessageLog.Wire, { _tag: "Update" | "Mounted" | "QueryChanged" | "PropsChanged" }>
   const stateful = entries.filter((entry): entry is Stateful =>
-    entry._tag === "Update" || entry._tag === "Mounted" || entry._tag === "LoaderChanged" ||
+    entry._tag === "Update" || entry._tag === "Mounted" || entry._tag === "QueryChanged" ||
     entry._tag === "PropsChanged"
   )
   const path = options?.path ??
@@ -2237,7 +2236,7 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
     )?.path
   if (path === undefined) throw new Error(`Story.fromLog: the log has no entry for ${component.definition.name}`)
   const all = stateful.filter((entry) => entry.path === path)
-  // The replay starts at the first Model. Props and loader state written before it are in that Update's record, or
+  // The replay starts at the first Model. Props and query results written before it are in that Update's record, or
   // belong to an earlier mount.
   const start = all.findIndex((entry) => entry._tag === "Update" || entry._tag === "Mounted")
   if (start === -1) throw new Error(`Story.fromLog: the log has no entry for ${path}`)
@@ -2246,13 +2245,13 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
     | MessageLog.Mounted
     | Extract<MessageLog.Wire, { _tag: "Update" | "Mounted" }>
   const bound = boundOf(component)
-  const stateOf = (entry: MessageLog.LoaderChanged | Extract<MessageLog.Wire, { _tag: "LoaderChanged" }>) => {
-    if (typeof entry.component !== "string") return entry.state
+  const resultOf = (entry: MessageLog.QueryChanged | Extract<MessageLog.Wire, { _tag: "QueryChanged" }>) => {
+    if (typeof entry.component !== "string") return entry.result
     const schema = bound?.logSchema.fields[entry.name]
     if (schema === undefined) {
-      throw new Error(`Story.fromLog: entry #${entry.seq} (${path}) writes "${entry.name}", which isn't a loader`)
+      throw new Error(`Story.fromLog: entry #${entry.seq} (${path}) writes "${entry.name}", which isn't a query`)
     }
-    return decodeWith(entry, `loader "${entry.name}"`, schema, entry.state)
+    return decodeWith(entry, `query "${entry.name}"`, schema, entry.result)
   }
 
   const decoders = new Map<Schema.Top, (value: unknown) => unknown>()
@@ -2282,7 +2281,7 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
   const read = (entry: typeof first) => {
     if (typeof entry.component !== "string") {
       return {
-        loaderState: (entry as MessageLog.Update | MessageLog.Mounted).loaderState,
+        results: (entry as MessageLog.Update | MessageLog.Mounted).queries,
         props: entry.props as Props,
         model: entry.model as Model,
         events: entry.events as ReadonlyArray<Events>,
@@ -2294,8 +2293,8 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
     }
     const wire = entry as Extract<MessageLog.Wire, { _tag: "Update" | "Mounted" }>
     return {
-      loaderState: wire.loaderState !== undefined && bound !== undefined
-        ? decodeWith(entry, "loaderState", bound.logSchema, wire.loaderState) as Component.LoaderState
+      results: wire.queries !== undefined && bound !== undefined
+        ? decodeWith(entry, "queries", bound.logSchema, wire.queries) as Component.Results
         : undefined,
       props: decode(entry, "props", wire.props) as Props,
       model: decode(entry, "model", wire.model) as Model,
@@ -2316,12 +2315,12 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
   interface State {
     model: Model
     props: unknown
-    loaderState: Component.LoaderState | undefined
+    results: Component.Results | undefined
   }
   const states = new Map<number, State>()
   const begin = (entry: typeof first): State => {
     const initial = read(entry)
-    const state = { model: initial.model, props: initial.props, loaderState: initial.loaderState }
+    const state = { model: initial.model, props: initial.props, results: initial.results }
     states.set(entry.instance, state)
     return state
   }
@@ -2333,16 +2332,16 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
   ): Replay<Model, Msg, Events, any, any> => ({
     path,
     ...reached,
-    loaded: () => bound?.context(reached.model, reached.props, reached.loaderState).loaded ?? {},
+    queries: () => bound?.context(reached.model, reached.props, reached.results).queries ?? {},
     replayed,
     divergence
   })
   for (const entry of all.slice(start + 1)) {
     const state = states.get(entry.instance)
-    if (entry._tag === "LoaderChanged") {
+    if (entry._tag === "QueryChanged") {
       // Without a Model yet, the write is in the instance's first surviving `Update`.
       if (state !== undefined) {
-        state.loaderState = { ...(state.loaderState ?? bound?.empty), [entry.name]: stateOf(entry) }
+        state.results = { ...(state.results ?? bound?.empty), [entry.name]: resultOf(entry) }
       }
       continue
     }
@@ -2360,8 +2359,8 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
     const recorded = read(entry)
     // The Update's record is what `update` read, so it holds even when earlier entries were evicted.
     state.props = recorded.props
-    if (recorded.loaderState !== undefined) state.loaderState = recorded.loaderState
-    const next = component.update(state.model, recorded.message as Msg, recorded.props as Props, state.loaderState)
+    if (recorded.results !== undefined) state.results = recorded.results
+    const next = component.update(state.model, recorded.message as Msg, recorded.props as Props, state.results)
     replayed++
     const recomputed = {
       model: next.model,
@@ -2402,15 +2401,15 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
  * The replay starts at the oldest surviving `Mounted` or `Update` entry for
  * the path (the first one logged for a component with this name, unless
  * `path` is given), takes its Model, and re-runs every following message with
- * the props and loader state it was recorded with, so every `update` sees
- * `$.loaded` as it did when it ran, whichever entries the log still holds.
+ * the props and query results it was recorded with, so every `update` sees
+ * `$.queries` as it did when it ran, whichever entries the log still holds.
  * Commands are compared, never run. Models and events are compared with
  * `Schema.toEquivalence`, and Commands by their Wire encoding.
  *
- * The props and loader state are tracked with the Model, so the result is the state
+ * The props and results are tracked with the Model, so the result is the state
  * the instance ended with. They start from the first entry's: a `Mounted`
- * entry's or an `Update` entry's recorded props and loader state. Each later `PropsChanged` entry sets the props and each
- * `LoaderChanged` entry writes its loader's state, so props from the parent and loads
+ * entry's or an `Update` entry's recorded props and results. Each later `PropsChanged` entry sets the props and each
+ * `QueryChanged` entry writes its result, so props from the parent and loads
  * that settled after the last message are in the result too.
  *
  * A path that mounted more than once is replayed instance by instance, each
@@ -2431,6 +2430,6 @@ export const fromLog: <C extends AnyComponent>(
   Component.Model<C>,
   Component.Message<C>,
   Component.Events<C>,
-  { readonly [K in keyof Component.Loaders<C>]: Component.LoadedOf<Component.Loaders<C>[K]> },
+  { readonly [K in keyof Component.Queries<C>]: Component.QueryResultOf<Component.Queries<C>[K]> },
   Component.Props<C>
 > = replayLog as any

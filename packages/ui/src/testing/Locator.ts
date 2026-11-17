@@ -1,5 +1,5 @@
 /**
- * Locators over a minimal structural tree, so one query works on a story's
+ * Locators over a minimal structural tree, so one locator works on a story's
  * view value and on `TestHost`'s rendered tree alike.
  *
  * A node is anything with some of `tag`, `attrs`, `text` and `children`:
@@ -11,7 +11,7 @@
  * **Example** (Finding a row's button)
  *
  * ```ts import.meta.vitest
- * import { Query } from "@effect/ui/testing"
+ * import { Locator } from "@effect/ui/testing"
  *
  * const row = (id: string) => ({
  *   tag: "li",
@@ -20,7 +20,7 @@
  * })
  * const tree = { tag: "ul", children: [row("row-1"), row("row-2")] }
  *
- * const button = Query.get(tree, Query.inside(Query.testId("row-2"), Query.text("Save")))
+ * const button = Locator.get(tree, Locator.inside(Locator.testId("row-2"), Locator.text("Save")))
  * console.log(button === tree.children[1].children[0]) // true
  * ```
  *
@@ -29,14 +29,14 @@
  */
 
 /**
- * The structural tree every query runs over.
+ * The structural tree every locator runs over.
  *
  * **Details**
  *
  * `props` holds the typed values set with `.prop`, such as a field's
  * `value` and `checked`, which aren't attributes. A story's view value and a
  * `TestHost` tree both have them, and a vocabulary's readers, such as
- * `HtmlQuery.value`, read them.
+ * `HtmlLocator.value`, read them.
  *
  * @stability experimental
  * @category models
@@ -188,7 +188,7 @@ export const all = <N extends Node>(root: N, locator: Locator): ReadonlyArray<N>
  */
 export const query = <N extends Node>(root: N, locator: Locator): N | undefined => {
   const found = locator.all(root)
-  if (found.length > 1) throw new Error(`Query: ${found.length} elements match ${locator.description}`)
+  if (found.length > 1) throw new Error(`Locator: ${found.length} elements match ${locator.description}`)
   return found[0]
 }
 
@@ -201,7 +201,7 @@ export const query = <N extends Node>(root: N, locator: Locator): N | undefined 
  */
 export const get = <N extends Node>(root: N, locator: Locator): N => {
   const found = query(root, locator)
-  if (found === undefined) throw new Error(`Query: nothing matches ${locator.description}`)
+  if (found === undefined) throw new Error(`Locator: nothing matches ${locator.description}`)
   return found
 }
 

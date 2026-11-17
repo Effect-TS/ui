@@ -1,7 +1,7 @@
 import { Component, Renderer, Route, Router, type View } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
-import { HtmlQuery } from "@effect/ui/html/testing"
-import type { Query } from "@effect/ui/testing"
+import { HtmlLocator } from "@effect/ui/html/testing"
+import type { Locator } from "@effect/ui/testing"
 import { Context, Effect, type Layer, Schema, type Scope, Stream } from "effect"
 import { describe, expect, it } from "tstyche"
 
@@ -389,7 +389,7 @@ describe("Html", () => {
   })
 })
 
-describe("HtmlQuery", () => {
+describe("HtmlLocator", () => {
   it("structural queries return a structural node, which compares with any node in the tree", () => {
     const tree = {
       tag: "form",
@@ -398,17 +398,17 @@ describe("HtmlQuery", () => {
         { tag: "input", attrs: { id: "new" } }
       ]
     }
-    expect(HtmlQuery.getByRole(tree, "textbox")).type.toBe<Query.Node>()
-    expect(HtmlQuery.queryAllByRole(tree, "textbox")).type.toBe<ReadonlyArray<Query.Node>>()
-    expect(HtmlQuery.getByRole(tree, "textbox") === tree.children[1]).type.toBe<boolean>()
-    expect(HtmlQuery.nameOf(tree, tree.children[1]!)).type.toBe<string>()
-    expect(HtmlQuery.value(tree.children[1])).type.toBe<string | undefined>()
-    expect(HtmlQuery.checked(tree.children[1])).type.toBe<boolean | undefined>()
+    expect(HtmlLocator.getByRole(tree, "textbox")).type.toBe<Locator.Node>()
+    expect(HtmlLocator.queryAllByRole(tree, "textbox")).type.toBe<ReadonlyArray<Locator.Node>>()
+    expect(HtmlLocator.getByRole(tree, "textbox") === tree.children[1]).type.toBe<boolean>()
+    expect(HtmlLocator.nameOf(tree, tree.children[1]!)).type.toBe<string>()
+    expect(HtmlLocator.value(tree.children[1])).type.toBe<string | undefined>()
+    expect(HtmlLocator.checked(tree.children[1])).type.toBe<boolean | undefined>()
   })
 
   it("DOM queries return elements", () => {
-    expect(HtmlQuery.getByRole(document, "button")).type.toBe<HTMLElement>()
-    expect(HtmlQuery.queryAllByRole(document.body, "button")).type.toBe<ReadonlyArray<HTMLElement>>()
+    expect(HtmlLocator.getByRole(document, "button")).type.toBe<HTMLElement>()
+    expect(HtmlLocator.queryAllByRole(document.body, "button")).type.toBe<ReadonlyArray<HTMLElement>>()
   })
 })
 

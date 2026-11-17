@@ -5,7 +5,7 @@ import { Collapsible } from "../../kit/Collapsible.ts"
 import { ActivityLog } from "../../notes/components/ActivityLog.ts"
 import { NoteActivity } from "../../notes/components/NoteActivity.ts"
 import { NoteEditor } from "../../notes/components/NoteEditor.ts"
-import { GetNote } from "../../notes/loaders/GetNote.ts"
+import { GetNote } from "../../notes/queries/GetNote.ts"
 import { Notes } from "../../notes/services/Notes.ts"
 
 export const NotePageMessage = Schema.TaggedUnion({
@@ -21,19 +21,19 @@ const Editor = NoteEditor.ref("Editor")
 export const NotePageNoDeps = Component.define({
   name: "NotePage",
   props: Schema.Struct({ id: Schema.String }),
-  // The Model holds no copy of the note. The runtime keeps each loader's
-  // last result in its state beside the Model, and the Model plus the loader
-  // state is the instance's state.
+  // The Model holds no copy of the note. The runtime keeps each query's
+  // last result beside the Model, and the Model plus the query results is
+  // the instance's state.
   model: Schema.Struct({ notice: Schema.String }),
   message: NotePageMessage,
-  // Each loader names its read and returns the read's args, or `undefined`
-  // to disable it. The runtime watches the read at those args and writes
-  // every change to the loader's state, which re-renders the page. No message or
+  // Each entry names a `Query` and returns its args, or `undefined` to
+  // disable it. The runtime watches the query at those args and keeps its
+  // latest result, which re-renders the page. No message or
   // `update` case is involved.
-  loaders: { note: { load: GetNote, args: (_model, props) => ({ id: props.id }) } }
+  queries: { note: { query: GetNote, args: (_model, props) => ({ id: props.id }) } }
 }).make({
   init: () => ({ notice: "" }),
-  // `update` can read the loader state too, as `$.loaded`.
+  // `update` can read the results too, as `$.queries`.
   update: (model, message, $) =>
     NotePageMessage.match(message, {
       Saved: () => ({ ...model, notice: "Saved" }),
@@ -45,15 +45,15 @@ export const NotePageNoDeps = Component.define({
       // the note loads, is dropped and logged.
       SaveNow: () => $.send(Editor.at($.props.id), { _tag: "Save" })
     }),
-  // `head` gets the Model, the props and the loaders' results, as a view
+  // `head` gets the Model, the props and the queries' results, as a view
   // does. The title comes from the loaded note, and the note's id from the
   // route stands in while it loads, with no copy of the prop in the Model.
-  head: (_model, props, loaded) => [
-    Head.title(AsyncResult.isSuccess(loaded.note) ? loaded.note.value.title : `Note ${props.id}`)
+  head: (_model, props, queries) => [
+    Head.title(AsyncResult.isSuccess(queries.note) ? queries.note.value.title : `Note ${props.id}`)
   ],
   view: (model, h) =>
-    // `h.loaded.note` is the loader's state as an `AsyncResult`.
-    AsyncResult.match(h.loaded.note, {
+    // `h.queries.note` is the query's result as an `AsyncResult`.
+    AsyncResult.match(h.queries.note, {
       onInitial: () => h.p("Loading note…"),
       onFailure: () => h.p("This note doesn't exist."),
       onSuccess: ({ value: note }) =>
@@ -103,7 +103,9 @@ export const NotePageNoDeps = Component.define({
 //   The root keeps platform Layers: the Router, the HTTP client, logging.
 // - A Layer value is built once and shared by the instances using it. Pass
 //   `{ local: true }` or a function of props for state each instance owns.
-// - Nothing is rebuilt when props change. Re-key the component instead.
+// - Nothing is rebuilt when props change. Re-key the component instead, or
+//   pass `{ key: (props, model) => key, layer: (key) => Layer }` to select
+//   the Layer again when the key changes, which remounts everything below.
 // - A Layer that can fail needs `{ onFailure: (failure) => message }`.
 export const NotePage = NotePageNoDeps.pipe(
   Component.provide([

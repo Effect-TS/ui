@@ -2,7 +2,7 @@ import { Component } from "@effect/ui"
 import type { View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { HtmlStory } from "@effect/ui/html/testing"
-import { Query, Story } from "@effect/ui/testing"
+import { Locator, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 
@@ -29,13 +29,13 @@ describe("HtmlStory", () => {
   it("drop goes to the innermost target that accepts the drag, and throws when none does", () => {
     Story.make(Board, {}, (s) => {
       // The inner target doesn't accept a todo, so the outer one takes it.
-      s.pipe(HtmlStory.drop(Query.text("Inner child"), { data: { "application/x-todo": "milk" } }))
+      s.pipe(HtmlStory.drop(Locator.text("Inner child"), { data: { "application/x-todo": "milk" } }))
         .check((story) => assert.isTrue(story.defaultPrevented))
-        .pipe(HtmlStory.drop(Query.text("Inner child"), { data: { "text/uri-list": "https://example.com" } }))
-        .pipe(HtmlStory.drop(Query.text("Plain"), { files: [new File(["x"], "a.txt")] }))
+        .pipe(HtmlStory.drop(Locator.text("Inner child"), { data: { "text/uri-list": "https://example.com" } }))
+        .pipe(HtmlStory.drop(Locator.text("Plain"), { files: [new File(["x"], "a.txt")] }))
         .model((log) => assert.deepStrictEqual(log, ["outer milk", "inner", "outer a.txt"]))
       assert.throws(
-        () => s.pipe(HtmlStory.drop(Query.text("Plain"), { data: { "text/plain": "hello" } })),
+        () => s.pipe(HtmlStory.drop(Locator.text("Plain"), { data: { "text/plain": "hello" } })),
         /HtmlStory\.drop: nothing at text "Plain" accepts "text\/plain"/
       )
     })

@@ -1,9 +1,9 @@
 /**
- * The worked example of the loader spec (§5.7): a paged list and a detail page
+ * The worked example of the query spec (§5.7): a paged list and a detail page
  * with an edit, over an in-memory users API whose calls take time on the
  * clock.
  */
-import { Command, Component, Loader, Route, Router } from "@effect/ui"
+import { Command, Component, Query, Route, Router } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Context, Effect, Layer, Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
@@ -79,9 +79,9 @@ export const makeServer = () => {
 
 // Reads
 
-export const Users = Loader.Tag("users")
+export const Users = Query.Tag("users")
 
-export class ListUsers extends Loader.Service<ListUsers>()("users/ListUsers", {
+export class ListUsers extends Query.Service<ListUsers>()("users/ListUsers", {
   args: { page: Schema.Number },
   success: UserPage,
   error: Schema.Never,
@@ -89,7 +89,7 @@ export class ListUsers extends Loader.Service<ListUsers>()("users/ListUsers", {
   tags: [Users]
 }, Effect.map(UsersApi, (api) => ({ page }) => api.list(page))) {}
 
-export class GetUser extends Loader.Service<GetUser>()("users/GetUser", {
+export class GetUser extends Query.Service<GetUser>()("users/GetUser", {
   args: { id: Schema.String },
   success: User,
   error: UserNotFound,
@@ -146,8 +146,8 @@ export const UserCard = Component.define({
   model: Schema.Struct({}),
   message: UserCardMessage,
   elements: Html,
-  loaders: {
-    user: { load: GetUser, args: (_model, props) => ({ id: props.id }) }
+  queries: {
+    user: { query: GetUser, args: (_model, props) => ({ id: props.id }) }
   }
 }).make({
   init: () => ({}),
@@ -163,7 +163,7 @@ export const UserCard = Component.define({
       Liked: () => model
     }),
   view: (_model, h) =>
-    AsyncResult.match(h.loaded.user, {
+    AsyncResult.match(h.queries.user, {
       onInitial: () => h.p("Loading user…"),
       onFailure: () => h.p("This user doesn't exist."),
       onSuccess: ({ value: user, waiting }) =>
@@ -198,8 +198,8 @@ export const RenameForm = Component.define({
   }),
   message: RenameFormMessage,
   elements: Html,
-  loaders: {
-    user: { load: GetUser, args: (_model, props) => ({ id: props.id }) }
+  queries: {
+    user: { query: GetUser, args: (_model, props) => ({ id: props.id }) }
   }
 }).make({
   init: () => ({ draft: Option.none(), error: Option.none() }),
@@ -228,7 +228,7 @@ export const RenameForm = Component.define({
       })
     }),
   view: (model, h) =>
-    AsyncResult.match(h.loaded.user, {
+    AsyncResult.match(h.queries.user, {
       onInitial: () => h.p("Loading…"),
       onFailure: () => h.p("There is nothing to rename."),
       onSuccess: ({ value: user }) =>
@@ -280,8 +280,8 @@ export const ListPage = Component.define({
   model: Schema.Struct({ page: Schema.Number }),
   message: ListPageMessage,
   elements: Html,
-  loaders: {
-    users: { load: ListUsers, args: (model) => ({ page: model.page }) }
+  queries: {
+    users: { query: ListUsers, args: (model) => ({ page: model.page }) }
   }
 }).make({
   init: () => ({ page: 0 }),
@@ -290,9 +290,9 @@ export const ListPage = Component.define({
       GoTo: ({ page }) => ({ ...model, page })
     }),
   view: (model, h) => {
-    const current = h.loaded.users
+    const current = h.queries.users
     if (AsyncResult.isFailure(current)) return h.p("The users couldn't be loaded.")
-    // The requested page once it is here. Until then the page the loader still holds, if any.
+    // The requested page once it is here. Until then the page the query still holds, if any.
     const shown = AsyncResult.isSuccess(current) ? Option.some(current.value) : h.previous.users
     return Option.match(shown, {
       onNone: () => h.p("Loading users…"),

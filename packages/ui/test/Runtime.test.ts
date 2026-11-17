@@ -1,7 +1,7 @@
-import { Command, Component, Feature, Loader, MessageLog, Renderer, Subscription } from "@effect/ui"
+import { Command, Component, Feature, MessageLog, Query, Renderer, Subscription } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import * as runtime from "@effect/ui/internal/runtime"
-import { Query, Story, TestHost } from "@effect/ui/testing"
+import { Locator, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import {
   Cause,
@@ -32,7 +32,7 @@ const tags = (root: { readonly log: () => ReadonlyArray<MessageLog.Entry> }, pat
     entry._tag
   )
 const click = (root: TestHost.TestRoot<any, any, any>, text: string) =>
-  Query.fire(root.get(Query.text(text, { exact: true })), "click")
+  Locator.fire(root.get(Locator.text(text, { exact: true })), "click")
 
 // ---------------------------------------------------------------------------
 // A keyed list whose rows hold a Command open until they unmount
@@ -118,7 +118,7 @@ describe("Runtime", () => {
         const root = yield* TestHost.mount(List, { ids: ["a", "b", "c"] })
         yield* TestHost.settle
         const testHost = yield* TestHost.TestHost
-        const items = () => root.all(Query.tag("li"))
+        const items = () => root.all(Locator.tag("li"))
         const [a, b, c] = items()
         assert.strictEqual(root.text(), "a:0b:0c:0")
         assert.deepStrictEqual(root.pending().map((p) => p.path), ["/List/Row[a]", "/List/Row[b]", "/List/Row[c]"])
@@ -216,7 +216,7 @@ describe("Runtime", () => {
         const root = yield* TestHost.mount(Rows, {})
         yield* TestHost.settle
         const testHost = yield* TestHost.TestHost
-        const items = () => root.all(Query.tag("li"))
+        const items = () => root.all(Locator.tag("li"))
         const [head, a, b, c, d] = items()
         testHost.host.clearOperations()
         root.send(RowsMessage.make({ _tag: "Show", ids: ["a", "d", "c", "b"] }))
@@ -284,7 +284,7 @@ describe("Runtime", () => {
         const root = yield* TestHost.mount(Rows, {})
         yield* TestHost.settle
         const testHost = yield* TestHost.TestHost
-        const items = () => root.all(Query.tag("li"))
+        const items = () => root.all(Locator.tag("li"))
         const before = items()
         const structural = () =>
           testHost.host.operations().filter((op) =>
@@ -318,7 +318,7 @@ describe("Runtime", () => {
         const root = yield* TestHost.mount(Tail, {}, { fallback: (_, h) => h.el("h1", "down") })
         yield* TestHost.settle
         const testHost = yield* TestHost.TestHost
-        const items = () => root.all(Query.tag("li"))
+        const items = () => root.all(Locator.tag("li"))
         const [a, b] = items()
 
         testHost.host.clearOperations()
@@ -384,7 +384,7 @@ describe("Runtime", () => {
         const root = yield* TestHost.mount(Parent, {})
         yield* TestHost.settle
         assert.strictEqual(root.text(), "before down")
-        assert.deepStrictEqual(root.all(Query.tag("li")), [])
+        assert.deepStrictEqual(root.all(Locator.tag("li")), [])
         const failed = root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
         assert.strictEqual(failed.in, "view")
         assert.include(Cause.pretty(failed.cause), "/Parent/Twice[t]: two siblings share the key li[a]")
@@ -434,7 +434,7 @@ describe("Runtime", () => {
         const root = yield* TestHost.mount(Rows, {})
         yield* TestHost.settle
         const testHost = yield* TestHost.TestHost
-        const items = () => root.all(Query.tag("li"))
+        const items = () => root.all(Locator.tag("li"))
         const [head, a, b, c, d] = items()
         // Without `foot`, which has no key and is made again where the count changes.
         const moves = () => testHost.host.operations().filter((op) => op.startsWith("insert <li>")).length - 1
@@ -466,7 +466,7 @@ describe("Runtime", () => {
       provideHost(Effect.gen(function*() {
         const root = yield* TestHost.mount(Rows, {})
         yield* TestHost.settle
-        const items = () => root.all(Query.tag("li"))
+        const items = () => root.all(Locator.tag("li"))
         // A fixed sequence of pseudo-random lists over a small alphabet, so keys come and go and move.
         let seed = 12345
         const random = (below: number) => {
@@ -551,7 +551,7 @@ describe("Runtime", () => {
         const root = yield* TestHost.mount(Page, {})
         click(root, "bomb")
         yield* TestHost.settle
-        assert.strictEqual((root.get(Query.tag("main")) as TestHost.TestElement).children.length, 2)
+        assert.strictEqual((root.get(Locator.tag("main")) as TestHost.TestElement).children.length, 2)
         assert.strictEqual(root.text(), "bomb failed-0+")
         assert.deepStrictEqual(root.model(), { failures: 1, attempt: 0 })
         const failed = root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
@@ -817,11 +817,11 @@ describe("Runtime", () => {
   })
 
   describe("run owners", () => {
-    // The server behind the fake API, and the requests that reached the read's fetcher.
+    // The server behind the fake API, and the requests that reached the query's fetcher.
     const makeServer = () => ({ count: 0, requests: 0, interrupted: 0 })
     type Server = ReturnType<typeof makeServer>
 
-    class GetCount extends Loader.Service<GetCount>()("test/GetCount", {
+    class GetCount extends Query.Service<GetCount>()("test/GetCount", {
       args: { id: Schema.String },
       success: Schema.Number,
       error: Schema.Never,
@@ -964,6 +964,111 @@ describe("Runtime", () => {
         assert.isTrue(
           editor.slice(unmounted + 1).every((entry) => (entry as MessageLog.CommandEnded).detached)
         )
+      })))
+
+    it.effect("a removed branch doesn't start a queued Stream Command while a sibling's cleanup holds its close", () =>
+      provideHost(Effect.gen(function*() {
+        const finish = yield* Deferred.make<void>()
+        const gate = yield* Deferred.make<void>()
+        const entered = yield* Deferred.make<void>()
+        const calls: Array<number> = []
+        // Not detached, though its service is a Layer above the branch that stays open.
+        class Watch extends Command.Service<Watch>()(
+          "test/QueuedStream",
+          { args: { n: Schema.Number }, stream: true, mode: "queue" },
+          Effect.succeed(({ n }) =>
+            Stream.fromEffect(Effect.andThen(
+              Effect.sync(() => calls.push(n)),
+              Effect.as(n === 1 ? Deferred.await(finish) : Effect.void, Component.noop)
+            ))
+          )
+        ) {}
+        const Queue = Component.define({ name: "Queue", model: Schema.Null, message: Schema.Never }).make({
+          init: ($) => $.set(null).run(Watch.make({ n: 1 })).run(Watch.make({ n: 2 })),
+          update: (m) => m,
+          view: (_, h) => h.text("")
+        })
+        // Closes before the queue, as it mounted after it, and holds the branch's close open.
+        const Blocker = Component.provide(
+          Component.define({ name: "Blocker", model: Schema.Null, message: Schema.Never }).make({
+            init: () => null,
+            update: (m) => m,
+            view: (_, h) => h.text("")
+          }),
+          () =>
+            Layer.effectDiscard(
+              Effect.addFinalizer(() => Effect.andThen(Deferred.succeed(entered, undefined), Deferred.await(gate)))
+            )
+        )
+        const Branch = Component.define({ name: "Branch", model: Schema.Null, message: Schema.Never }).make({
+          init: () => null,
+          update: (m) => m,
+          view: (_, h) => h.el("div", Queue(h, { key: "queue", props: {} }), Blocker(h, { key: "blocker", props: {} }))
+        })
+        const Parent = Component.provide(
+          Component.define({ name: "Parent", model: Schema.Boolean, message: Schema.Boolean }).make({
+            init: () => true,
+            update: (_, shown) => shown,
+            view: (shown, h) => shown ? Branch(h, { key: "branch", props: {} }) : h.text("gone")
+          }),
+          Watch.layer
+        )
+        const root = yield* TestHost.mount(Parent, {})
+        yield* TestHost.settle
+        root.send(false)
+        yield* TestHost.settle
+        yield* Deferred.await(entered)
+        // The running one ends while the close is held: the queued one is stopped, not started.
+        yield* Deferred.succeed(finish, undefined)
+        yield* TestHost.settle
+        assert.deepStrictEqual(calls, [1])
+        yield* Deferred.succeed(gate, undefined)
+        yield* TestHost.settle
+        assert.deepStrictEqual(calls, [1])
+        assert.strictEqual(root.text(), "gone")
+      })))
+
+    it.effect("a Command issued just before its instance is removed doesn't begin while the instance's Layer cleans up", () =>
+      provideHost(Effect.gen(function*() {
+        const gate = yield* Deferred.make<void>()
+        const entered = yield* Deferred.make<void>()
+        const events: Array<string> = []
+        const Write = Command.make("test/ScheduledWrite", { args: {} }, () =>
+          Effect.sync(() => {
+            events.push("work")
+            return Component.noop
+          }))
+        const Child = Component.provide(
+          Component.define({ name: "Child", model: Schema.Null, message: Schema.Null }).make({
+            init: () => null,
+            update: (m, _, $) => $.set(m).run(Write()),
+            view: (_, h) => h.el("button").on("click", null).children("write")
+          }),
+          () =>
+            Layer.effectDiscard(Effect.addFinalizer(() =>
+              Effect.andThen(
+                Effect.sync(() => events.push("closing")),
+                Effect.andThen(Deferred.succeed(entered, undefined), Deferred.await(gate))
+              )
+            ))
+        )
+        const Parent = Component.define({ name: "Parent", model: Schema.Boolean, message: Schema.Boolean }).make({
+          init: () => true,
+          update: (_, shown) => shown,
+          view: (shown, h) => shown ? Child(h, { key: "child", props: {} }) : h.text("gone")
+        })
+        const root = yield* TestHost.mount(Parent, {})
+        yield* TestHost.settle
+        // The removal renders before the Command's fiber takes its first step on the scheduler.
+        root.send(false)
+        Locator.fire(root.get(Locator.tag("button")), "click")
+        yield* TestHost.settle
+        yield* Deferred.await(entered)
+        assert.deepStrictEqual(events, ["closing"])
+        yield* Deferred.succeed(gate, undefined)
+        yield* TestHost.settle
+        assert.deepStrictEqual(events, ["closing"])
+        assert.strictEqual(root.text(), "gone")
       })))
 
     it.effect("the Layer build that owns a detached run ends it when it closes", () =>
@@ -1309,14 +1414,14 @@ describe("Runtime", () => {
         assert.strictEqual(server.requests, 1)
       })))
 
-    it.effect("the loader mount option sets how long an unwatched entry stays", () =>
+    it.effect("the query mount option sets how long an unwatched entry stays", () =>
       provideHost(Effect.gen(function*() {
         const server = makeServer()
         const App = Component.provide(
           page(Editor),
           Layer.mergeAll(fetcher(server), commands(server))
         )
-        const root = yield* TestHost.mount(App, {}, { loader: { idleTimeToLive: "1 second" } })
+        const root = yield* TestHost.mount(App, {}, { query: { idleTimeToLive: "1 second" } })
         yield* TestHost.settle
         root.send(PageMsg.make({ _tag: "Watch", on: false }))
         yield* TestHost.settle
@@ -1425,11 +1530,11 @@ describe("Runtime", () => {
           view: (text, h) => h.el("div", Label(h, { key: "l", props: { text } }))
         })
         const root = yield* TestHost.mount(Host, {})
-        const span = root.get(Query.tag("span"))
+        const span = root.get(Locator.tag("span"))
         root.send(Msg.make({ _tag: "Rename", text: "two" }))
         yield* TestHost.settle
         assert.strictEqual(root.text(), "two")
-        assert.strictEqual(root.get(Query.tag("span")), span)
+        assert.strictEqual(root.get(Locator.tag("span")), span)
         // The new props are logged, and no Update: update never sees them.
         assert.deepStrictEqual(tags(root, "/Host/Label[l]"), ["Mounted", "PropsChanged"])
         const changed = root.log().find((entry) => entry._tag === "PropsChanged")
@@ -1773,8 +1878,8 @@ describe("Runtime", () => {
           // B is waiting for A's cleanup to end.
           drop(root, "b")
           yield* TestHost.settle
-          // Only A's cleanup is still running.
-          assert.strictEqual(fibers, 1)
+          // Only A's cleanup is still running, and A's close, which waits for it.
+          assert.strictEqual(fibers, 2)
           yield* Deferred.succeed(finishCleanup, undefined)
           yield* TestHost.settle
           assert.strictEqual(fibers, 0)
@@ -1867,7 +1972,7 @@ describe("Runtime", () => {
         const root = yield* TestHost.mount(Shell, {}).pipe(Effect.provide(stub.layer))
         yield* TestHost.settle
         assert.deepStrictEqual(stub.props(), [{ label: "new" }])
-        assert.isDefined(root.query(Query.attr("data-stub", "test/Badge")))
+        assert.isDefined(root.query(Locator.attr("data-stub", "test/Badge")))
         stub.emit("ping")
         yield* TestHost.settle
         assert.deepStrictEqual(root.model(), ["ping"])
@@ -2350,7 +2455,7 @@ describe("Runtime", () => {
         seq: 3,
         at: 10,
         session: "s",
-        read: "users/GetUser",
+        query: "users/GetUser",
         logKey: `{"id":"1"}`,
         trigger: "visibility",
         restart: false,
@@ -2581,14 +2686,14 @@ describe("Runtime", () => {
             )
         })
         const root = yield* TestHost.mount(Form, {})
-        const field = root.get(Query.tag("field")) as TestHost.TestElement
+        const field = root.get(Locator.tag("field")) as TestHost.TestElement
         // The user edits the live value; the next patch puts the Model's value back.
         field.props.value = "edited"
         click(root, "0")
         yield* TestHost.settle
         assert.strictEqual(field.props.value, "a")
         field.props.value = "b"
-        Query.fire(field, "input", { value: "b" })
+        Locator.fire(field, "input", { value: "b" })
         yield* TestHost.settle
         assert.strictEqual(field.props.value, "B")
       })))
@@ -2819,14 +2924,14 @@ describe("Runtime", () => {
 
   it.effect("Renderer.mount stopped at any yield point leaves nothing behind once its Scope closes", () =>
     Effect.gen(function*() {
-      // No TestHost executor: the mount runs on the scheduler below throughout, the loader cache's build included.
+      // No TestHost executor: the mount runs on the scheduler below throughout, the query cache's build included.
       const host = TestHost.makeHost()
       // The mount is interrupted and its Scope closes after it exits, or while it's pending. Or the Scope
       // closes under a pending mount that isn't interrupted, which then mounts nothing.
       for (const mode of ["interrupt, then close", "interrupt and close", "close"] as const) {
         for (let at = 1;; at++) {
           let listeners = 0
-          const signal: Loader.Signal = {
+          const signal: Query.Signal = {
             get: () => true,
             subscribe: () => {
               listeners++
@@ -2845,8 +2950,8 @@ describe("Runtime", () => {
             Renderer.mount(Counter, { initial: 1 }, container).pipe(
               Scope.provide(scope),
               Effect.provide(Renderer.layer(host)),
-              Effect.provideService(Loader.Visibility, signal),
-              Effect.provideService(Loader.Connectivity, signal),
+              Effect.provideService(Query.Visibility, signal),
+              Effect.provideService(Query.Connectivity, signal),
               Effect.provideService(Scheduler.Scheduler, scheduler)
             )
           )
@@ -2888,7 +2993,7 @@ describe("Runtime", () => {
             makeDispatcher: () => dispatcher
           }
           let listeners = 0
-          const signal: Loader.Signal = {
+          const signal: Query.Signal = {
             get: () => true,
             subscribe: () => {
               listeners++
@@ -2934,12 +3039,12 @@ describe("Runtime", () => {
             ))
           )
           const mounted = yield* Effect.exit(
-            Renderer.mount(App, {}, container, { state: { "~loader": "malformed" } }).pipe(
+            Renderer.mount(App, {}, container, { state: { "~query": "malformed" } }).pipe(
               Scope.provide(scope),
               Effect.provide(Renderer.layer(host)),
-              Effect.provideService(Loader.Visibility, signal),
-              Effect.provideService(Loader.Connectivity, signal),
-              Effect.provideService(Loader.Problems, () => {
+              Effect.provideService(Query.Visibility, signal),
+              Effect.provideService(Query.Connectivity, signal),
+              Effect.provideService(Query.Problems, () => {
                 if (site === "Problems") close()
               })
             )
@@ -2973,10 +3078,10 @@ describe("Runtime", () => {
       const testHost = yield* TestHost.TestHost
       const container = testHost.host.createElement("#app") as TestHost.TestElement
       const root = yield* Renderer.mount(Counter, { initial: 7 }, container)
-      assert.strictEqual(Query.textOf(container), "-7+")
+      assert.strictEqual(Locator.textOf(container), "-7+")
       root.send(CounterMessage.make({ _tag: "Decrement" }))
       yield* TestHost.settle
-      assert.strictEqual(Query.textOf(container), "-6+")
+      assert.strictEqual(Locator.textOf(container), "-6+")
       assert.isAbove(testHost.host.commits(), 1)
     })))
 
@@ -3027,6 +3132,558 @@ describe("Runtime", () => {
       assert.strictEqual(root.text(), "[a][a][b]")
       assert.strictEqual(builds, 2)
     })))
+
+  describe("a keyed provide", () => {
+    class Greeter extends Context.Service<Greeter, { readonly room: string }>()("test/KeyedGreeter") {}
+    const Msg = Schema.TaggedUnion({ Move: { room: Schema.String }, Shown: { room: Schema.String } })
+    class Show extends Command.Service<Show>()(
+      "test/KeyedShow",
+      { args: {}, invalidates: () => [] },
+      Greeter.useSync((greeter) => () => Effect.succeed(Msg.make({ _tag: "Shown", room: greeter.room })))
+    ) {}
+    /** Starts in room "a". Its text is its room, then the room each `Show` ran against, in order. */
+    const RoomView = Component.define({
+      name: "RoomView",
+      model: Schema.Struct({ room: Schema.String, shown: Schema.Array(Schema.String) }),
+      message: Msg
+    }).make({
+      init: ($) => $.set({ room: "a", shown: [] }).run(Show.make()),
+      update: (model, message, $) =>
+        Msg.match(message, {
+          Move: ({ room }) => $.set({ ...model, room }).run(Show.make()),
+          Shown: ({ room }) => ({ ...model, shown: [...model.shown, room] })
+        }),
+      view: (model, h) =>
+        h.el("button").on("click", Msg.make({ _tag: "Move", room: "b" })).children(
+          `${model.room}:${model.shown.join("")}`
+        )
+    })
+
+    it.effect("an update that leaves the key equal, though a new object, doesn't call layer or build anything", () =>
+      provideHost(Effect.gen(function*() {
+        const calls: Array<string> = []
+        let builds = 0
+        const Room = Component.provide(RoomView, {
+          key: (_, model) => ({ room: model.room }),
+          layer: ({ room }) => {
+            calls.push(room)
+            return Show.layer.pipe(Layer.provide(Layer.sync(Greeter, () => {
+              builds++
+              return { room }
+            })))
+          }
+        })
+        const root = yield* TestHost.mount(Room, {})
+        yield* TestHost.settle
+        root.send(Msg.make({ _tag: "Move", room: "a" }))
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "a:aa")
+        assert.deepStrictEqual([calls, builds], [["a"], 1])
+      })))
+
+    it.effect("a key change calls layer once, keeps the Model, and runs the flush's Commands against the new services", () =>
+      provideHost(Effect.gen(function*() {
+        const calls: Array<string> = []
+        const Room = Component.provide(RoomView, {
+          key: (_, model) => model.room,
+          layer: (room) => {
+            calls.push(room)
+            return Show.layer.pipe(Layer.provide(Layer.succeed(Greeter, { room })))
+          }
+        })
+        const root = yield* TestHost.mount(Room, {})
+        yield* TestHost.settle
+        // One flush: the key is read once both updates are in, so "b" is never selected.
+        root.send(Msg.make({ _tag: "Move", room: "b" }))
+        root.send(Msg.make({ _tag: "Move", room: "c" }))
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "c:acc")
+        assert.deepStrictEqual(calls, ["a", "c"])
+      })))
+
+    it.effect("a key change remounts descendants and interrupts the instance's in-flight Command", () =>
+      provideHost(Effect.gen(function*() {
+        let starts = 0
+        let interrupted = false
+        const Hold = Command.make(
+          "test/KeyedHold",
+          { args: {} },
+          () =>
+            Effect.onInterrupt(Effect.never, () =>
+              Effect.sync(() => {
+                interrupted = true
+              }))
+        )
+        const Child = Component.define({
+          name: "Child",
+          model: Schema.Number,
+          message: Schema.Never
+        }).make({
+          init: () => ++starts,
+          update: (n) => n,
+          view: (n, h) => h.text(`child${n}`)
+        })
+        const Parent = Component.define({
+          name: "Parent",
+          model: Schema.String,
+          message: Schema.String
+        }).make({
+          init: ($) => $.set("a").run(Hold()),
+          update: (_, room) => room,
+          view: (room, h) => h.el("div", room, Child(h, { key: "child", props: {} }))
+        })
+        const Keyed = Component.provide(Parent, { key: (_, room) => room, layer: () => Layer.empty })
+        const root = yield* TestHost.mount(Keyed, {})
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "achild1")
+        root.send("b")
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "bchild2")
+        assert.isTrue(interrupted)
+      })))
+
+    it.effect("the old Layer is released once the new one is built, and the current one at unmount", () =>
+      provideHost(Effect.gen(function*() {
+        const events: Array<string> = []
+        const Room = Component.provide(RoomView, {
+          key: (_, model) => model.room,
+          layer: (room) =>
+            Show.layer.pipe(Layer.provide(Layer.effect(
+              Greeter,
+              Effect.acquireRelease(
+                Effect.map(Effect.sleep("1 second"), () => {
+                  events.push(`built ${room}`)
+                  return { room }
+                }),
+                () => Effect.sync(() => events.push(`released ${room}`))
+              )
+            )))
+        })
+        yield* Effect.scoped(Effect.gen(function*() {
+          const root = yield* TestHost.mount(Room, {})
+          yield* TestClock.adjust("1 second")
+          yield* TestHost.settle
+          root.send(Msg.make({ _tag: "Move", room: "b" }))
+          yield* TestHost.settle
+          // "a" is held while "b" builds.
+          assert.deepStrictEqual(events, ["built a"])
+          yield* TestClock.adjust("1 second")
+          yield* TestHost.settle
+          assert.deepStrictEqual(events, ["built a", "built b", "released a"])
+        }))
+        yield* TestHost.settle
+        assert.deepStrictEqual(events, ["built a", "built b", "released a", "released b"])
+      })))
+
+    it.effect("two instances on one LayerMap key share its build, and moving one leaves the other's service alive", () => {
+      const events: Array<string> = []
+      class Rooms extends LayerMap.Service<Rooms>()("test/KeyedRooms", {
+        lookup: (room: string) =>
+          Layer.effect(
+            Greeter,
+            Effect.acquireRelease(
+              Effect.sync(() => {
+                events.push(`built ${room}`)
+                return { room }
+              }),
+              () => Effect.sync(() => events.push(`released ${room}`))
+            )
+          )
+      }) {}
+      const Room = Component.provide(RoomView, {
+        key: (_, model) => model.room,
+        layer: (room) => Show.layer.pipe(Layer.provideMerge(Rooms.get(room)))
+      })
+      const Lobby = Component.define({
+        name: "Lobby",
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => h.el("div", Room(h, { key: "1", props: {} }), Room(h, { key: "2", props: {} }))
+      })
+      // The LayerMap outlives the mount, so it is open when a room is selected later.
+      return provideHost(
+        Effect.gen(function*() {
+          const root = yield* TestHost.mount(Lobby, {})
+          yield* TestHost.settle
+          assert.strictEqual(root.text(), "a:aa:a")
+          Locator.fire(root.all(Locator.tag("button"))[0], "click")
+          yield* TestHost.settle
+          assert.strictEqual(root.text(), "b:aba:a")
+          assert.deepStrictEqual(events, ["built a", "built b"])
+        }).pipe(Effect.provide(Rooms.layer))
+      )
+    })
+
+    it.effect("a failed reselection goes to onFailure, isn't retried for an unchanged key, and a later key builds again", () =>
+      provideHost(Effect.gen(function*() {
+        const calls: Array<string> = []
+        const Room = Component.provide(RoomView, {
+          key: (_, model) => model.room,
+          layer: (room) => {
+            calls.push(room)
+            return Show.layer.pipe(Layer.provide(
+              room === "b" ? Layer.effect(Greeter, Effect.fail("no room b")) : Layer.succeed(Greeter, { room })
+            ))
+          }
+        }, { onFailure: () => Msg.make({ _tag: "Shown", room: "!" }) })
+        const root = yield* TestHost.mount(Room, {})
+        yield* TestHost.settle
+        root.send(Msg.make({ _tag: "Move", room: "b" }))
+        yield* TestHost.settle
+        // The Command waiting for "b" is interrupted. onFailure's message changes the Model, not the key.
+        assert.strictEqual(root.text(), "b:a!")
+        assert.deepStrictEqual(calls, ["a", "b"])
+        root.send(Msg.make({ _tag: "Move", room: "c" }))
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "c:a!c")
+        assert.deepStrictEqual(calls, ["a", "b", "c"])
+      })))
+
+    /** A service from above the keyed provide, outside its selection. */
+    class Host extends Context.Service<Host, { readonly name: string }>()("test/KeyedHost") {}
+
+    it.effect("after a handled failed selection, a new Command runs against the parent's services, and fails the instance if it needs a selected one", () => {
+      const Act = Schema.TaggedUnion({ Move: {}, Ping: {}, Need: {}, Done: { by: Schema.String } })
+      class Ping extends Command.Service<Ping>()(
+        "test/KeyedPing",
+        { args: {}, invalidates: () => [] },
+        Host.useSync((host) => () => Effect.succeed(Act.make({ _tag: "Done", by: host.name })))
+      ) {}
+      class Need extends Command.Service<Need>()(
+        "test/KeyedNeed",
+        { args: {}, invalidates: () => [] },
+        Greeter.useSync((greeter) => () => Effect.succeed(Act.make({ _tag: "Done", by: greeter.room })))
+      ) {}
+      const Acting = Component.define({
+        name: "Acting",
+        model: Schema.Struct({ room: Schema.String, done: Schema.String }),
+        message: Act
+      }).make({
+        init: () => ({ room: "a", done: "" }),
+        update: (model, message, $) =>
+          Act.match(message, {
+            Move: () => ({ ...model, room: "b" }),
+            Ping: () => $.set(model).run(Ping.make()),
+            Need: () => $.set(model).run(Need.make()),
+            Done: ({ by }) => ({ ...model, done: by })
+          }),
+        view: (model, h) => h.text(`${model.room}:${model.done}`)
+      })
+      const Room = Component.provide(Acting, {
+        key: (_, model) => model.room,
+        layer: (room) =>
+          Need.layer.pipe(Layer.provide(
+            room === "b" ? Layer.effect(Greeter, Effect.fail("no room b")) : Layer.succeed(Greeter, { room })
+          ))
+      }, { onFailure: () => Act.make({ _tag: "Done", by: "failed" }) })
+      return provideHost(
+        Effect.gen(function*() {
+          const root = yield* TestHost.mount(Room, {})
+          root.send(Act.make({ _tag: "Move" }))
+          yield* TestHost.settle
+          assert.strictEqual(root.text(), "b:failed")
+          root.send(Act.make({ _tag: "Ping" }))
+          yield* TestHost.settle
+          assert.strictEqual(root.text(), "b:parent")
+          root.send(Act.make({ _tag: "Need" }))
+          const crashed = yield* Effect.flip(TestHost.settle)
+          assert.strictEqual(crashed._tag, "RootCrashed")
+        }).pipe(Effect.provide(Ping.layer.pipe(Layer.provide(Layer.succeed(Host, { name: "parent" })))))
+      )
+    })
+
+    it.effect("after a handled failed selection, a Subscription that uses only the parent's services waits too, and starts on the next selection", () =>
+      provideHost(
+        Effect.gen(function*() {
+          const started: Array<string> = []
+          const Watching = Component.define({ name: "Watching", model: Schema.String, message: Schema.String }).make({
+            init: () => "a",
+            update: (room, message) => message === "failed" ? room : message,
+            subscriptions: (room) => [
+              Subscription.make(
+                "host",
+                Stream.unwrap(
+                  Host.useSync((host) =>
+                    Stream.fromEffect(Effect.sync(() => started.push(`${host.name}@${room}`))).pipe(Stream.drain)
+                  )
+                )
+              )
+            ],
+            view: (room, h) => h.text(room)
+          })
+          const Room = Component.provide(Watching, {
+            key: (_, room) => room,
+            layer: (room) => room === "b" ? Layer.effectDiscard(Effect.fail("no room b")) : Layer.empty
+          }, { onFailure: () => "failed" })
+          const root = yield* TestHost.mount(Room, {})
+          yield* TestHost.settle
+          root.send("b")
+          yield* TestHost.settle
+          // Stopped by the swap, and not started again while no selection is built.
+          assert.deepStrictEqual(started, ["parent@a"])
+          root.send("c")
+          yield* TestHost.settle
+          assert.deepStrictEqual(started, ["parent@a", "parent@c"])
+        }).pipe(Effect.provideService(Host, { name: "parent" }))
+      ))
+
+    it.effect("a key change keeps the query cache: a query gets the old selection's entry unless the key is in its args", () =>
+      provideHost(Effect.gen(function*() {
+        class Read extends Query.Service<Read>()("test/KeyedRead", {
+          args: { room: Schema.String },
+          success: Schema.String,
+          error: Schema.Never,
+          staleTime: "30 seconds"
+        }, Greeter.useSync((greeter) => () => Effect.succeed(greeter.room))) {}
+        const value = (result: AsyncResult.AsyncResult<string, never>) =>
+          AsyncResult.isSuccess(result) ? result.value : "-"
+        const Reading = Component.define({
+          name: "Reading",
+          model: Schema.String,
+          message: Schema.String,
+          queries: {
+            fixed: { query: Read, args: () => ({ room: "any" }) },
+            byRoom: { query: Read, args: (room) => ({ room }) }
+          }
+        }).make({
+          init: () => "a",
+          update: (_, room) => room,
+          view: (room, h) => h.text(`${room}:${value(h.queries.fixed)}${value(h.queries.byRoom)}`)
+        })
+        const Room = Component.provide(Reading, {
+          key: (_, room) => room,
+          layer: (room) => Read.layer.pipe(Layer.provide(Layer.succeed(Greeter, { room })))
+        })
+        const root = yield* TestHost.mount(Room, {})
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "a:aa")
+        root.send("b")
+        yield* TestHost.settle
+        // The cache is the root's, by read and args: within staleTime the entry "a" fetched is reused.
+        assert.strictEqual(root.text(), "b:ab")
+      })))
+
+    /** A Layer that logs its release. */
+    const releasing = (name: string, events: Array<string>) =>
+      Layer.effectDiscard(Effect.addFinalizer(() => Effect.sync(() => events.push(`release ${name}`))))
+    /** Never ends. Interrupted, its cleanup waits on `gate`, then logs. */
+    const held = (gate: Deferred.Deferred<void>, events: Array<string>) =>
+      Effect.never.pipe(
+        Effect.onInterrupt(() => Effect.andThen(Deferred.await(gate), Effect.sync(() => events.push("clean"))))
+      )
+
+    it.effect("an old selection is released only after the cleanup of a Command the key change interrupted, at unmount too", () =>
+      provideHost(Effect.gen(function*() {
+        const gate = yield* Deferred.make<void>()
+        const events: Array<string> = []
+        const Hold = Command.make("test/KeyedHeld", { args: {} }, () => held(gate, events))
+        const Holding = Component.define({ name: "Holding", model: Schema.String, message: Schema.String }).make({
+          init: ($) => $.set("a").run(Hold()),
+          update: (_, room) => room,
+          view: (room, h) => h.text(room)
+        })
+        const Room = Component.provide(Holding, { key: (_, room) => room, layer: (room) => releasing(room, events) })
+        const scope = yield* Scope.make()
+        const root = yield* TestHost.mount(Room, {}).pipe(Scope.provide(scope))
+        yield* TestHost.settle
+        root.send("b")
+        yield* TestHost.settle
+        // "b" is built, and "a" is kept while the Command's cleanup runs.
+        assert.deepStrictEqual(events, [])
+        const closed = yield* Scope.close(scope, Exit.void).pipe(Effect.forkChild)
+        yield* Effect.yieldNow
+        yield* TestHost.settle
+        yield* Deferred.succeed(gate, undefined)
+        yield* Fiber.join(closed)
+        assert.deepStrictEqual(events, ["release b", "clean", "release a"])
+      })))
+
+    it.effect("cleanup still running from an earlier flush is waited for before a key change releases the services it may use", () =>
+      provideHost(Effect.gen(function*() {
+        const gate = yield* Deferred.make<void>()
+        const events: Array<string> = []
+        const Holder = Component.define({
+          name: "Holder",
+          model: Schema.Struct({ holding: Schema.Boolean, room: Schema.String }),
+          message: Schema.String
+        }).make({
+          init: () => ({ holding: true, room: "a" }),
+          update: (model, message) => message === "stop" ? { ...model, holding: false } : { ...model, room: message },
+          subscriptions: (model) =>
+            model.holding ? [Subscription.make("hold", Stream.fromEffect(held(gate, events)))] : [],
+          view: (model, h) => h.text(model.room)
+        })
+        const Room = Component.provide(Holder, {
+          key: (_, model) => model.room,
+          layer: (room) => releasing(room, events)
+        })
+        const root = yield* TestHost.mount(Room, {})
+        yield* TestHost.settle
+        // Stopped in one flush: its cleanup starts, and holds.
+        root.send("stop")
+        yield* TestHost.settle
+        // The key changes in a later one.
+        root.send("b")
+        yield* TestHost.settle
+        assert.deepStrictEqual(events, [])
+        yield* Deferred.succeed(gate, undefined)
+        yield* TestHost.settle
+        assert.deepStrictEqual(events, ["clean", "release a"])
+      })))
+
+    it.effect("an unmount waits for the cleanup of a selection still building before the parent's services are released", () =>
+      provideHost(Effect.gen(function*() {
+        const gate = yield* Deferred.make<void>()
+        const events: Array<string> = []
+        const Child = Component.provide(
+          Component.define({ name: "Child", model: Schema.Null, message: Schema.Never }).make({
+            init: () => null,
+            update: (model) => model,
+            view: (_, h) => h.text("child")
+          }),
+          { key: () => "a", layer: () => Layer.effectDiscard(held(gate, events)) }
+        )
+        const Parent = Component.provide(
+          Component.define({ name: "Parent", model: Schema.Null, message: Schema.Never }).make({
+            init: () => null,
+            update: (model) => model,
+            view: (_, h) => h.el("div", Child(h, { key: "child", props: {} }))
+          }),
+          () => releasing("parent", events)
+        )
+        const scope = yield* Scope.make()
+        yield* TestHost.mount(Parent, {}).pipe(Scope.provide(scope))
+        yield* TestHost.settle
+        const closed = yield* Scope.close(scope, Exit.void).pipe(Effect.forkChild)
+        yield* Effect.yieldNow
+        yield* TestHost.settle
+        assert.deepStrictEqual(events, [])
+        yield* Deferred.succeed(gate, undefined)
+        yield* Fiber.join(closed)
+        assert.deepStrictEqual(events, ["clean", "release parent"])
+      })))
+
+    it.effect("a keyed provide removed in the flush that changes its key, while its Layer cleans up, doesn't select again", () =>
+      provideHost(Effect.gen(function*() {
+        const gate = yield* Deferred.make<void>()
+        const entered = yield* Deferred.make<void>()
+        const events: Array<string> = []
+        const Counter = Component.define({
+          name: "Counter",
+          model: Schema.Number,
+          message: Schema.Null,
+          events: Schema.Null
+        })
+          .make({
+            init: () => 1,
+            update: (n, _, $) => $.set(n + 1).emit(null),
+            view: (n, h) => h.el("button").on("click", null).children(String(n))
+          })
+        const Child = Component.provide(Counter, {
+          key: (_, n) => n,
+          layer: (n) =>
+            Layer.effectDiscard(Effect.andThen(
+              Effect.sync(() => events.push(`build ${n}`)),
+              Effect.addFinalizer(() =>
+                Effect.andThen(Deferred.succeed(entered, undefined), Deferred.await(gate)).pipe(
+                  Effect.andThen(Effect.sync(() => events.push(`release ${n}`)))
+                )
+              )
+            ))
+        })
+        // The child's update changes its key and tells the parent, which removes it before it renders.
+        const Parent = Component.define({ name: "Parent", model: Schema.Boolean, message: Schema.Null }).make({
+          init: () => true,
+          update: () => false,
+          view: (shown, h) => shown ? Child(h, { key: "child", props: {}, onEmit: () => null }) : h.text("gone")
+        })
+        const scope = yield* Scope.make()
+        const root = yield* TestHost.mount(Parent, {}).pipe(Scope.provide(scope))
+        yield* TestHost.settle
+        Locator.fire(root.get(Locator.tag("button")), "click")
+        yield* TestHost.settle
+        yield* Deferred.await(entered)
+        yield* Deferred.succeed(gate, undefined)
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "gone")
+        yield* Scope.close(scope, Exit.void)
+        assert.deepStrictEqual(events, ["build 1", "release 1"])
+      })))
+
+    it.effect("a keyed provide in a removed branch selects nothing and starts no Command while a sibling's cleanup holds the close", () =>
+      provideHost(Effect.gen(function*() {
+        const gate = yield* Deferred.make<void>()
+        const entered = yield* Deferred.make<void>()
+        const events: Array<string> = []
+        const Write = Command.make("test/KeyedRemovedWrite", { args: {} }, () =>
+          Effect.sync(() => {
+            events.push("command")
+            return Component.noop
+          }))
+        const Counter = Component.define({
+          name: "Counter",
+          model: Schema.Number,
+          message: Schema.Null,
+          events: Schema.Null
+        })
+          .make({
+            init: () => 1,
+            update: (n, _, $) => $.set(n + 1).run(Write()).emit(null),
+            view: (n, h) => h.el("button").on("click", null).children(String(n))
+          })
+        const Child = Component.provide(Counter, {
+          key: (_, n) => n,
+          layer: (n) => Layer.effectDiscard(Effect.sync(() => events.push(`build ${n}`)))
+        })
+        // Closes before the child, as it mounted after it, and holds the branch's close open.
+        const Blocker = Component.provide(
+          Component.define({ name: "Blocker", model: Schema.Null, message: Schema.Never }).make({
+            init: () => null,
+            update: (m) => m,
+            view: (_, h) => h.text("")
+          }),
+          () =>
+            Layer.effectDiscard(
+              Effect.addFinalizer(() => Effect.andThen(Deferred.succeed(entered, undefined), Deferred.await(gate)))
+            )
+        )
+        const Branch = Component.define({
+          name: "Branch",
+          model: Schema.Null,
+          message: Schema.Null,
+          events: Schema.Null
+        })
+          .make({
+            init: () => null,
+            update: (m, _, $) => $.set(m).emit(null),
+            view: (_, h) =>
+              h.el(
+                "div",
+                Child(h, { key: "child", props: {}, onEmit: () => null }),
+                Blocker(h, { key: "blocker", props: {} })
+              )
+          })
+        // The child's update changes its key and tells the parent, which removes its branch before it renders.
+        const Parent = Component.define({ name: "Parent", model: Schema.Boolean, message: Schema.Null }).make({
+          init: () => true,
+          update: () => false,
+          view: (shown, h) => shown ? Branch(h, { key: "branch", props: {}, onEmit: () => null }) : h.text("gone")
+        })
+        const root = yield* TestHost.mount(Parent, {})
+        yield* TestHost.settle
+        Locator.fire(root.get(Locator.tag("button")), "click")
+        yield* TestHost.settle
+        yield* Deferred.await(entered)
+        assert.deepStrictEqual(events, ["build 1"])
+        yield* Deferred.succeed(gate, undefined)
+        yield* TestHost.settle
+        assert.deepStrictEqual(events, ["build 1"])
+        assert.strictEqual(root.text(), "gone")
+      })))
+  })
 
   it.effect("each provided Layer build is stamped with the flush it began in", () =>
     provideHost(Effect.gen(function*() {

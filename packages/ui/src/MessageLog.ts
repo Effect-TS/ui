@@ -37,11 +37,11 @@ import type * as SchemaAST from "effect/SchemaAST"
 import * as Socket from "effect/socket/Socket"
 import type * as Command from "./Command.ts"
 import type * as Component from "./Component.ts"
-import type * as loaders from "./internal/loaders.ts"
+import type * as componentQueries from "./internal/queries.ts"
 import { getIndexSignatureKeys } from "./internal/schemaAST.ts"
 import { holdsRedacted, redactAST } from "./internal/schemaRedact.ts"
-import type * as Loader from "./Loader.ts"
-import { canonical } from "./Loader.ts"
+import type * as Query from "./Query.ts"
+import { canonical } from "./Query.ts"
 
 /**
  * The service the runtime records entries to.
@@ -128,8 +128,8 @@ export interface Issued {
  *
  * `DomEvent` is a view handler, such as a click. `Command` is a Command's
  * result, pointing at the entry that issued it and at its span.
- * `Subscription` is a keyed Subscription. `Loader` is a loader's
- * `onChange`, pointing at the `LoaderChanged` entry it saw. `Emit` is a
+ * `Subscription` is a keyed Subscription. `Query` is a query's
+ * `onChange`, pointing at the `QueryChanged` entry it saw. `Emit` is a
  * child's emit, pointing at the child's entry. `Failure` is a parent's
  * `onFailure` for a child that failed, pointing at the child's `Failed`
  * entry. `Send` is a parent's `$.send`, or a descendant's `$.send` to an
@@ -155,7 +155,7 @@ export type Source =
     readonly traceId: string | undefined
   }
   | { readonly _tag: "Subscription"; readonly key: string }
-  | { readonly _tag: "Loader"; readonly name: string; readonly seq: number }
+  | { readonly _tag: "Query"; readonly name: string; readonly seq: number }
   | { readonly _tag: "Emit"; readonly path: string; readonly seq: number }
   | { readonly _tag: "Failure"; readonly path: string; readonly seq: number }
   | { readonly _tag: "Send"; readonly path: string; readonly seq: number }
@@ -202,7 +202,7 @@ export interface InstanceBase extends Base {
 }
 
 /**
- * One `update` call: the message, what sent it, the props and loader state
+ * One `update` call: the message, what sent it, the props and query results
  * it saw, the Model after it, and the Commands, events, load mores, resets
  * and sends it returned.
  *
@@ -228,24 +228,24 @@ export interface Update extends InstanceBase {
   /** The `$.send` calls, in order. */
   readonly sends: ReadonlyArray<Component.Send>
   /**
-   * The loader state `update` read as `$.loaded`, by loader name: what
+   * The query results `update` read as `$.queries`, by query name: what
    * `Story.fromLog` gives it back, as it gives back `props`. Only a
-   * component with loaders has it.
+   * component with queries has them.
    */
-  readonly loaderState?: Component.LoaderState | undefined
+  readonly queries?: Component.Results | undefined
 }
 
 /**
  * An instance mounted: its props, the Model from `init` (or adopted from the
- * server or from history), its loader state, and the Commands `init`
+ * server or from history), its query results, and the Commands `init`
  * returned.
  *
  * **Details**
  *
- * `loaderState` is what the instance starts with: the server's or
- * history's when it adopted them, and every loader empty otherwise. Only a
- * component with loaders has it. The first values of its watches come after,
- * as `LoaderChanged` entries.
+ * `queries` is what the instance starts with: the server's or history's
+ * results when it adopted them, and every query empty otherwise. Only a
+ * component with queries has it. The first values of its watches come after,
+ * as `QueryChanged` entries.
  *
  * @stability experimental
  * @category models
@@ -255,7 +255,7 @@ export interface Mounted extends InstanceBase {
   readonly _tag: "Mounted"
   readonly props: unknown
   readonly model: unknown
-  readonly loaderState?: Component.LoaderState | undefined
+  readonly queries?: Component.Results | undefined
   readonly commands: ReadonlyArray<Command.Command<any, any>>
   readonly events: ReadonlyArray<unknown>
   readonly adopted: boolean
@@ -263,12 +263,12 @@ export interface Mounted extends InstanceBase {
 
 /**
  * A mounted instance got new props from its parent, without a re-key. Its
- * loaders' args can read them, so `Story.fromLog` applies it to reach the
+ * queries' args can read them, so `Story.fromLog` applies it to reach the
  * state the instance ended with.
  *
  * **Details**
  *
- * It's logged before the loader state writes the new props cause. Props equal to the
+ * It's logged before the result writes the new props cause. Props equal to the
  * current ones log nothing.
  *
  * @stability experimental
@@ -281,24 +281,24 @@ export interface PropsChanged extends InstanceBase {
 }
 
 /**
- * A loader's state changed: the runtime wrote what the loader's read last
- * returned at its args. `state` is opaque. `Story.fromLog` applies it to
- * reach the loader state the instance ended with.
+ * A query's result changed: the runtime wrote what the query last
+ * returned at its args. `result` is opaque. `Story.fromLog` applies it to
+ * reach the results the instance ended with.
  *
  * **Details**
  *
- * A loader with `onChange` logs this entry before the `Update` of the
+ * A query with `onChange` logs this entry before the `Update` of the
  * message it returns, whose source points at it.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface LoaderChanged extends InstanceBase {
-  readonly _tag: "LoaderChanged"
-  /** The loader's name in `loaders`. */
+export interface QueryChanged extends InstanceBase {
+  readonly _tag: "QueryChanged"
+  /** The query's name in `queries`. */
   readonly name: string
-  readonly state: unknown
+  readonly result: unknown
 }
 
 /**
@@ -308,7 +308,7 @@ export interface LoaderChanged extends InstanceBase {
  * **Details**
  *
  * It's the instance's first entry, logged when the instance is created, with
- * the props it was given and the Model and loader state the server rendered
+ * the props it was given and the Model and query results the server rendered
  * the path with. Its Layer entries follow. When the Layer is ready the
  * instance logs `Mounted`, adopting that state. When the Layer fails and the
  * component handles the failure, it logs `Mounted` with a Model from `init`.
@@ -323,13 +323,13 @@ export interface Waiting extends InstanceBase {
   readonly props: unknown
   /** The Model the server rendered the path with, which the nodes on screen show. */
   readonly model: unknown
-  /** The loader state the server rendered the path with. Only a component with loaders has it. */
-  readonly loaderState?: Component.LoaderState | undefined
+  /** The query results the server rendered the path with. Only a component with queries has them. */
+  readonly queries?: Component.Results | undefined
 }
 
 /**
  * An instance left the tree: from then on it takes no message, props or
- * loader state, and its path is free.
+ * query results, and its path is free.
  *
  * **Details**
  *
@@ -382,8 +382,8 @@ export interface LayerFailed extends InstanceBase {
 }
 
 /**
- * A Subscription's key started. A loader's watch isn't a Subscription here:
- * its fetches are `FetchStarted` entries and its values `LoaderChanged`.
+ * A Subscription's key started. A query's watch isn't a Subscription here:
+ * its fetches are `FetchStarted` entries and its values `QueryChanged`.
  *
  * @stability experimental
  * @category models
@@ -492,7 +492,7 @@ export interface CommandInterrupted extends InstanceBase {
 export type WaitEnded = "settled" | "nothing" | "budget" | "switch" | "interrupt" | "closed"
 
 /**
- * An entry a `Command.afterRefetch` run waits for: the read's name and the
+ * An entry a `Command.afterRefetch` run waits for: the query's name and the
  * entry's log key.
  *
  * @stability experimental
@@ -500,7 +500,7 @@ export type WaitEnded = "settled" | "nothing" | "budget" | "switch" | "interrupt
  * @since 0.1.0
  */
 export interface AwaitedEntry {
-  readonly read: string
+  readonly query: string
   readonly logKey: string
 }
 
@@ -605,7 +605,7 @@ export interface SessionStarted extends Base {
 }
 
 /**
- * The loader cache started a fetch.
+ * The query cache started a fetch.
  *
  * **Details**
  *
@@ -617,9 +617,9 @@ export interface SessionStarted extends Base {
  * result goes to `get` callers only. A caller that joins a fetch in flight
  * logs nothing.
  *
- * A list read logs each page it requests as its own entry: `page` is the
+ * An infinite query logs each page it requests as its own entry: `page` is the
  * page's index, from 0, and `cursor` the cursor encoded by the list's
- * `cursor` Schema, absent for the first page. A read that isn't a list has
+ * `cursor` Schema, absent for the first page. A query that isn't a list has
  * neither.
  *
  * @stability experimental
@@ -628,9 +628,9 @@ export interface SessionStarted extends Base {
  */
 export interface FetchStarted extends Base {
   readonly _tag: "FetchStarted"
-  readonly read: string
+  readonly query: string
   readonly logKey: string
-  readonly trigger: Loader.Trigger
+  readonly trigger: Query.Trigger
   readonly restart: boolean
   readonly inWindow: boolean
   readonly stored: boolean
@@ -650,7 +650,7 @@ export type InstanceEntry =
   | Mounted
   | Update
   | PropsChanged
-  | LoaderChanged
+  | QueryChanged
   | LayerPending
   | LayerReady
   | LayerFailed
@@ -799,7 +799,7 @@ const CommandWire = Schema.Struct({
   group: Schema.NullOr(Schema.String),
   args: Schema.Json
 })
-const AwaitedEntryWire = Schema.Struct({ read: Schema.String, logKey: Schema.String })
+const AwaitedEntryWire = Schema.Struct({ query: Schema.String, logKey: Schema.String })
 const CauseWire = Schema.Struct({ pretty: Schema.String, reasons: Schema.Array(Schema.Json) })
 const SourceWire = Schema.Union([
   Schema.TaggedStruct("DomEvent", { name: Schema.String }),
@@ -810,7 +810,7 @@ const SourceWire = Schema.Union([
     traceId: Schema.NullOr(Schema.String)
   }),
   Schema.TaggedStruct("Subscription", { key: Schema.String }),
-  Schema.TaggedStruct("Loader", { name: Schema.String, seq: Schema.Number }),
+  Schema.TaggedStruct("Query", { name: Schema.String, seq: Schema.Number }),
   Schema.TaggedStruct("Emit", { path: Schema.String, seq: Schema.Number }),
   Schema.TaggedStruct("Failure", { path: Schema.String, seq: Schema.Number }),
   Schema.TaggedStruct("Send", { path: Schema.String, seq: Schema.Number }),
@@ -850,7 +850,7 @@ export const Wire = Schema.Union([
   Schema.TaggedStruct("SessionStarted", { ...BaseWire, app: Schema.String }),
   Schema.TaggedStruct("FetchStarted", {
     ...BaseWire,
-    read: Schema.String,
+    query: Schema.String,
     logKey: Schema.String,
     trigger: Schema.Literals([
       "watch",
@@ -873,13 +873,13 @@ export const Wire = Schema.Union([
     ...InstanceWire,
     props: Schema.Json,
     model: Schema.Json,
-    loaderState: Schema.optionalKey(Schema.Json)
+    queries: Schema.optionalKey(Schema.Json)
   }),
   Schema.TaggedStruct("Mounted", {
     ...InstanceWire,
     props: Schema.Json,
     model: Schema.Json,
-    loaderState: Schema.optionalKey(Schema.Json),
+    queries: Schema.optionalKey(Schema.Json),
     commands: Schema.Array(CommandWire),
     events: Schema.Array(Schema.Json),
     adopted: Schema.Boolean
@@ -890,7 +890,7 @@ export const Wire = Schema.Union([
     message: Schema.Json,
     props: Schema.Json,
     model: Schema.Json,
-    loaderState: Schema.optionalKey(Schema.Json),
+    queries: Schema.optionalKey(Schema.Json),
     commands: Schema.Array(CommandWire),
     events: Schema.Array(Schema.Json),
     lists: Schema.Array(Schema.Struct({ name: Schema.String, op: Schema.Literals(["loadMore", "reset"]) })),
@@ -900,7 +900,7 @@ export const Wire = Schema.Union([
     ]))
   }),
   Schema.TaggedStruct("PropsChanged", { ...InstanceWire, props: Schema.Json }),
-  Schema.TaggedStruct("LoaderChanged", { ...InstanceWire, name: Schema.String, state: Schema.Json }),
+  Schema.TaggedStruct("QueryChanged", { ...InstanceWire, name: Schema.String, result: Schema.Json }),
   Schema.TaggedStruct("LayerPending", InstanceWire),
   Schema.TaggedStruct("LayerReady", InstanceWire),
   Schema.TaggedStruct("LayerFailed", { ...InstanceWire, cause: CauseWire }),
@@ -1007,19 +1007,19 @@ export const makeEncoder = (options?: {
       return { "~unserialisable": "encode" }
     }
   }
-  const encodeLoaderState = (
+  const encodeQueries = (
     component: Component.Any,
-    loaderState: Component.LoaderState | undefined
-  ): { readonly loaderState?: Schema.Json } => {
-    if (loaderState === undefined) return {}
-    const schema = (component["~loaders"] as loaders.Bound | undefined)?.logSchema
+    results: Component.Results | undefined
+  ): { readonly queries?: Schema.Json } => {
+    if (results === undefined) return {}
+    const schema = (component["~queries"] as componentQueries.Bound | undefined)?.logSchema
     return {
-      loaderState: schema === undefined
+      queries: schema === undefined
         ? { "~unserialisable": "encode" }
-        : cap(encodeWith(schema, `${component.definition.name}.loaders`, loaderState) as Schema.Json)
+        : cap(encodeWith(schema, `${component.definition.name}.queries`, results) as Schema.Json)
     }
   }
-  // A message can carry a loader's whole result, so messages are capped like Models and loader state.
+  // A message can carry a query's whole result, so messages are capped like Models and query results.
   const capped = (component: Component.Any, field: "model" | "message", value: unknown): Schema.Json =>
     cap(through(component, field, value) as Schema.Json)
   const cap = (encoded: Schema.Json): Schema.Json => {
@@ -1048,7 +1048,7 @@ export const makeEncoder = (options?: {
           return {
             _tag: "FetchStarted",
             ...base(entry),
-            read: entry.read,
+            query: entry.query,
             logKey: entry.logKey,
             trigger: entry.trigger,
             restart: entry.restart,
@@ -1063,7 +1063,7 @@ export const makeEncoder = (options?: {
             ...instanceBase(entry),
             props: props(entry),
             model: capped(entry.component, "model", entry.model),
-            ...encodeLoaderState(entry.component, entry.loaderState)
+            ...encodeQueries(entry.component, entry.queries)
           }
         case "Mounted":
           return {
@@ -1071,7 +1071,7 @@ export const makeEncoder = (options?: {
             ...instanceBase(entry),
             props: props(entry),
             model: capped(entry.component, "model", entry.model),
-            ...encodeLoaderState(entry.component, entry.loaderState),
+            ...encodeQueries(entry.component, entry.queries),
             commands: entry.commands.map(encodeCommand),
             events: events(entry),
             adopted: entry.adopted
@@ -1084,7 +1084,7 @@ export const makeEncoder = (options?: {
             message: capped(entry.component, "message", entry.message),
             props: props(entry),
             model: capped(entry.component, "model", entry.model),
-            ...encodeLoaderState(entry.component, entry.loaderState),
+            ...encodeQueries(entry.component, entry.queries),
             commands: entry.commands.map(encodeCommand),
             events: events(entry),
             lists: entry.lists,
@@ -1095,19 +1095,20 @@ export const makeEncoder = (options?: {
           }
         case "PropsChanged":
           return { _tag: "PropsChanged", ...instanceBase(entry), props: props(entry) }
-        case "LoaderChanged": {
-          const schema = (entry.component["~loaders"] as loaders.Bound | undefined)?.logSchema.fields[entry.name]
+        case "QueryChanged": {
+          const schema = (entry.component["~queries"] as componentQueries.Bound | undefined)?.logSchema
+            .fields[entry.name]
           return {
-            _tag: "LoaderChanged",
+            _tag: "QueryChanged",
             ...instanceBase(entry),
             name: entry.name,
-            state: schema === undefined
+            result: schema === undefined
               ? { "~unserialisable": "encode" }
               : cap(
                 encodeWith(
                   schema,
-                  `${entry.component.definition.name}.loaders.${entry.name}`,
-                  entry.state
+                  `${entry.component.definition.name}.queries.${entry.name}`,
+                  entry.result
                 ) as Schema.Json
               )
           }

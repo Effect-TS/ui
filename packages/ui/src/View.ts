@@ -47,8 +47,8 @@ import type * as Renderer from "./Renderer.ts"
  *
  * Includes the app's registered vocabulary (for example, import
  * `@effect/ui/html/register` for HTML tags). Props remain `unknown` and
- * component-specific loaders are not included. Use `Component.Helper<D>` instead
- * when a function needs a definition's props, loaders or custom elements.
+ * component-specific queries are not included. Use `Component.Helper<D>` instead
+ * when a function needs a definition's props, queries or custom elements.
  *
  * **Example** (A reusable button)
  *

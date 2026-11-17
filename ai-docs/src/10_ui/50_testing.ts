@@ -7,7 +7,7 @@
  */
 // @vitest-environment happy-dom
 import { Component, Router } from "@effect/ui"
-import { HtmlQuery, HtmlStory, ssr } from "@effect/ui/html/testing"
+import { HtmlLocator, HtmlStory, ssr } from "@effect/ui/html/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Layer } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
@@ -16,7 +16,7 @@ import { TestClock } from "effect/testing"
 // many test files does it once, in a Vitest setup file.
 // oxlint-disable-next-line no-unassigned-import
 import "@effect/ui/html/register"
-import { Query, Story, TestHost } from "@effect/ui/testing"
+import { Locator, Story, TestHost } from "@effect/ui/testing"
 // One file here, to read top to bottom. In an app each `describe` sits next
 // to what it tests: `notes/components/NoteEditor.test.ts` and `App.test.ts`.
 import { App } from "./fixtures/App.ts"
@@ -31,7 +31,7 @@ import { AppRoute } from "./fixtures/routes.ts"
 const note: Note = { id: "n1", title: "Shopping", body: "Milk" }
 const edited: Note = { ...note, body: "Oat milk" }
 
-const body = HtmlQuery.role("textbox", { name: "Body" })
+const body = HtmlLocator.role("textbox", { name: "Body" })
 
 // ---------------------------------------------------------------------------
 // Story: one instance as pure functions. No runtime, Layers or host.
@@ -44,11 +44,11 @@ describe("NoteEditor", () => {
     Story.make(NoteEditor, { note }, (s) =>
       s.fire(body, "input", { value: edited.body })
         // A field's value is a property, not an attribute: read it with
-        // `HtmlQuery.value`, and a checkbox with `HtmlQuery.checked`.
-        .check((story) => assert.strictEqual(HtmlQuery.value(story.get(body)), edited.body))
+        // `HtmlLocator.value`, and a checkbox with `HtmlLocator.checked`.
+        .check((story) => assert.strictEqual(HtmlLocator.value(story.get(body)), edited.body))
         // Nothing runs in a story, so Subscriptions are asserted by key.
         .subscriptions((keys) => assert.deepStrictEqual(keys, ["autosave:1"]))
-        .fire(HtmlQuery.role("form", { name: "Edit note" }), "submit")
+        .fire(HtmlLocator.role("form", { name: "Edit note" }), "submit")
         // Commands stay pending as data until a step resolves them.
         .expectExact(SaveNote)
         .check((story) => assert.deepStrictEqual(story.pending[0].command.args, { note: edited }))
@@ -73,21 +73,21 @@ describe("NoteEditor", () => {
   })
 
   it("discards from the actions menu after asking, and Escape keeps the changes", () => {
-    const discard = HtmlQuery.role("dialog", { name: "Discard your changes?" })
-    const actions = HtmlQuery.role("menu", { name: "Note actions" })
+    const discard = HtmlLocator.role("dialog", { name: "Discard your changes?" })
+    const actions = HtmlLocator.role("menu", { name: "Note actions" })
     // A closed popover is hidden from role queries, so opening it finds it with `hidden`.
-    const closedActions = HtmlQuery.role("menu", { name: "Note actions", hidden: true })
+    const closedActions = HtmlLocator.role("menu", { name: "Note actions", hidden: true })
     Story.make(NoteEditor, { note }, (s) =>
       s.fire(body, "input", { value: edited.body })
         // The browser opens the menu from its button; a story sends the
         // toggle the browser host would.
         .fire(closedActions, "toggle", { open: true, newState: "open", oldState: "closed" })
-        .check((story) => assert.strictEqual(HtmlQuery.popoverState(story.get(actions)), "open"))
+        .check((story) => assert.strictEqual(HtmlLocator.popoverState(story.get(actions)), "open"))
         .click("Discard changes")
         // Choosing an item closes the menu.
         .check((story) => assert.isUndefined(story.query(actions)))
         // A dialog's state is `props.open` in a story: closed, open or modal.
-        .check((story) => assert.strictEqual(HtmlQuery.dialogState(story.get(discard)), "modal"))
+        .check((story) => assert.strictEqual(HtmlLocator.dialogState(story.get(discard)), "modal"))
         // Escape is a close request, sent to `onCancel`. Here `update` closes
         // the dialog and keeps the draft. A closed dialog is hidden from role
         // queries, as it is from the accessibility tree.
@@ -97,7 +97,7 @@ describe("NoteEditor", () => {
         .fire(closedActions, "toggle", { open: true, newState: "open", oldState: "closed" })
         .click("Discard changes")
         // The dialog's form is the app's: its choice is in `entries`.
-        .fire(Query.inside(discard, Query.tag("form")), "submit", {
+        .fire(Locator.inside(discard, Locator.tag("form")), "submit", {
           fields: { choice: "discard" },
           entries: [["choice", "discard"]]
         })
@@ -107,9 +107,9 @@ describe("NoteEditor", () => {
   it("shows why a save failed", () => {
     Story.make(NoteEditor, { note }, (s) =>
       s.fire(body, "input", { value: edited.body })
-        .fire(HtmlQuery.role("form", { name: "Edit note" }), "submit")
+        .fire(HtmlLocator.role("form", { name: "Edit note" }), "submit")
         .fail(SaveNote, new NoteSaveError({ reason: "You are offline" }))
-        .check((story) => assert.strictEqual(Query.textOf(story.get(HtmlQuery.role("alert"))), "You are offline")))
+        .check((story) => assert.strictEqual(Locator.textOf(story.get(HtmlLocator.role("alert"))), "You are offline")))
   })
 })
 
@@ -124,8 +124,8 @@ describe("Collapsible", () => {
       (s) =>
         s.click("Hide")
           .check((story) => {
-            assert.strictEqual(Query.textOf(story.get(Query.tag("h2"))), "Groceries")
-            assert.isUndefined(story.query(Query.text("Milk")))
+            assert.strictEqual(Locator.textOf(story.get(Locator.tag("h2"))), "Groceries")
+            assert.isUndefined(story.query(Locator.text("Milk")))
           })
     )
   })
@@ -148,10 +148,10 @@ describe("NotePage", () => {
 
 describe("NotesIndex", () => {
   it("pins a note dropped on the pinned list", () => {
-    const pinned = HtmlQuery.role("complementary", { name: "Pinned" })
+    const pinned = HtmlLocator.role("complementary", { name: "Pinned" })
     Story.make(NotesIndexNoDeps, {}, (s) =>
-      // Load steps take the loader's name. `loaded` writes the result to
-      // the `notes` loader's state, as the runtime would, and re-renders the view.
+      // Load steps take the query's name. `loaded` writes the result to
+      // the `notes` query, as the runtime would, and re-renders the view.
       s.loaded("notes", [note])
         // A drop with a hand-written payload. `HtmlStory.drop` picks the
         // target the browser host would, and throws when none accepts the
@@ -203,7 +203,7 @@ it.layer(Layer.mergeAll(Notes.layerMemory([note]), TestHost.layer()), { buildPer
       Effect.gen(function*() {
         const notes = yield* Notes
         const root = yield* TestHost.mount(NoteEditorTest, { note })
-        Query.fire(root.get(body), "input", { value: edited.body })
+        Locator.fire(root.get(body), "input", { value: edited.body })
         // `settle` drains Commands, fetches, Layer builds and the render flush.
         yield* TestHost.settle
         // The TestClock owns time. Adjusting it fires the autosave Subscription.
@@ -253,11 +253,11 @@ it.layer(AppTest, { buildPerTest: true })("App", (it) => {
       yield* TestHost.settle
       assert.strictEqual(root.head().title, "Shopping · Notes")
 
-      Query.fire(root.get(body), "input", { value: edited.body })
+      Locator.fire(root.get(body), "input", { value: edited.body })
       yield* TestHost.settle
       yield* TestClock.adjust("2 seconds")
       yield* TestHost.settle
-      assert.strictEqual(Query.textOf(root.get(HtmlQuery.role("status"))), "Saved")
+      assert.strictEqual(Locator.textOf(root.get(HtmlLocator.role("status"))), "Saved")
     }))
 
   it.effect("hydrates what the server rendered", () =>

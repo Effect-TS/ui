@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { Component } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
-import { HtmlQuery, ssr } from "@effect/ui/html/testing"
+import { HtmlLocator, ssr } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
@@ -82,7 +82,7 @@ describe("slots on the server", () => {
       assert.strictEqual(result.container.querySelector("aside")!.childNodes.length, 1)
       assert.strictEqual(result.container.querySelector("aside")!.textContent, "")
       // Live: the content's child reports to the parent that wrote it.
-      HtmlQuery.click(result.container.querySelector("button")!)
+      HtmlLocator.click(result.container.querySelector("button")!)
       yield* TestHost.settle
       assert.strictEqual(result.container.querySelector("output")!.textContent, "added 1")
     }).pipe(Effect.provide(TestHost.layer())))

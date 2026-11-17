@@ -1,6 +1,6 @@
 import { Command, Component, Route, Router, View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Query, Story } from "@effect/ui/testing"
+import { Locator, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Data, Effect, Layer, Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
@@ -55,9 +55,9 @@ describe("Story", () => {
 
     it("the record answers locator queries over the view", () => {
       const story = Story.start(Counter, { initial: 3 }).current
-      assert.strictEqual(Query.textOf(story.get(Query.tag("span"))), "3")
-      assert.lengthOf(story.all(Query.tag("button")), 2)
-      assert.isUndefined(story.query(Query.text("missing")))
+      assert.strictEqual(Locator.textOf(story.get(Locator.tag("span"))), "3")
+      assert.lengthOf(story.all(Locator.tag("button")), 2)
+      assert.isUndefined(story.query(Locator.text("missing")))
       assert.strictEqual<unknown>(story.root, story.view())
     })
   })
@@ -90,14 +90,14 @@ describe("Story", () => {
 
     it("fire sends the payload to the element the locator matches", () => {
       Story.make(Form, {}, (s) =>
-        s.fire(Query.testId("name"), "input", { value: "Ada" })
+        s.fire(Locator.testId("name"), "input", { value: "Ada" })
           .model((model) => assert.strictEqual(model.value, "Ada")))
     })
 
     it("click bubbles from the matched element to the nearest ancestor that handles it", () => {
       Story.make(Form, {}, (s) =>
-        s.click(Query.text("Save", { exact: true }))
-          .click(Query.tag("span"))
+        s.click(Locator.text("Save", { exact: true }))
+          .click(Locator.tag("span"))
           .model((model) => assert.strictEqual(model.presses, 2)))
     })
 
@@ -112,7 +112,7 @@ describe("Story", () => {
         /Story\.click: nothing handles "click" at text "plain"/
       )
       assert.throws(
-        () => Story.start(Form, {}).fire(Query.testId("name"), "change"),
+        () => Story.start(Form, {}).fire(Locator.testId("name"), "change"),
         /Story\.fire: nothing handles "change"/
       )
     })
@@ -141,7 +141,7 @@ describe("Story", () => {
           )
       })
       const keyDown = (key: string) => (s: Story.Steps<typeof Composer>) =>
-        s.fire(Query.tag("textarea"), "keydown", { key })
+        s.fire(Locator.tag("textarea"), "keydown", { key })
       Story.make(Composer, {}, (s) => {
         s.pipe(keyDown("Enter"))
           // Checks read the record without making a new one.
@@ -153,13 +153,13 @@ describe("Story", () => {
           .pipe(keyDown("a"))
           .check((story) => assert.isFalse(story.defaultPrevented))
         // A form's submission is always cancelled, whatever its handler returns, and with no handler.
-        s.fire(Query.text("Ignored"), "submit")
+        s.fire(Locator.text("Ignored"), "submit")
         assert.isTrue(s.current.defaultPrevented)
-        s.fire(Query.text("Unhandled"), "submit")
+        s.fire(Locator.text("Unhandled"), "submit")
         assert.isTrue(s.current.defaultPrevented)
         assert.strictEqual(s.current.model, 3)
         // "always" cancels whatever the handler returns.
-        s.fire(Query.text("Menu"), "contextmenu")
+        s.fire(Locator.text("Menu"), "contextmenu")
         assert.isTrue(s.current.defaultPrevented)
       })
     })
@@ -439,8 +439,8 @@ describe("Story", () => {
           .model((model) => assert.strictEqual(model.outcome, "navigated")))
     })
 
-    it("a query patch is named by its class, issued with the patch, and resolves with its own outcome", () => {
-      const Routes = Route.union({ Search: Route.make("/search", { query: { q: Schema.optional(Schema.String) } }) })
+    it("a search patch is named by its class, issued with the patch, and resolves with its own outcome", () => {
+      const Routes = Route.union({ Search: Route.make("/search", { search: { q: Schema.optional(Schema.String) } }) })
       const BoxMessage = Schema.TaggedUnion({
         Typed: { value: Schema.String },
         Patched: { outcome: Schema.Literals(["navigated", "blocked", "stale"]) }
@@ -456,7 +456,7 @@ describe("Story", () => {
           BoxMessage.match(message, {
             Typed: ({ value }) =>
               $.run(
-                Router.patchQuery(Routes, $.props.route, { q: value || undefined }).pipe(
+                Router.patchSearch(Routes, $.props.route, { q: value || undefined }).pipe(
                   Command.map((outcome) => BoxMessage.make({ _tag: "Patched", outcome }))
                 )
               ),
@@ -467,8 +467,8 @@ describe("Story", () => {
       const route = Routes.make({ _tag: "Search" })
       Story.make(Box, { route }, (s) =>
         s.send(BoxMessage.make({ _tag: "Typed", value: "ada" }))
-          .expectExact(Router.patchQuery(Routes, route, { q: "ada" }))
-          .resolve(Router.PatchQuery, "stale")
+          .expectExact(Router.patchSearch(Routes, route, { q: "ada" }))
+          .resolve(Router.PatchSearch, "stale")
           .model((model) => assert.strictEqual(model.outcome, "stale")))
     })
   })
@@ -510,26 +510,26 @@ describe("Story", () => {
     })
   })
 
-  describe("loaders", () => {
-    const text = (story: { readonly root: Query.Node }) => Query.textOf(story.root)
+  describe("queries", () => {
+    const text = (story: { readonly root: Locator.Node }) => Locator.textOf(story.root)
     const page = (n: number, names: ReadonlyArray<string>) => ({
       page: n,
       pages: 2,
       users: names.map((name, i) => ({ id: `${n}-${i}`, name, email: "", likes: 0 }))
     })
 
-    it("loaded writes the loader's state, at the loader's current args", () => {
+    it("loaded writes the query's result, at the query's current args", () => {
       Story.make(users.ListPage, {}, (s) =>
         s
           .check((story) => assert.include(text(story), "Loading users…"))
-          .loaders((loaders) =>
-            assert.deepStrictEqual(loaders, [{ name: "users", read: "users/ListUsers", args: { page: 0 } }])
+          .queryInfo((info) =>
+            assert.deepStrictEqual(info, [{ name: "users", query: "users/ListUsers", args: { page: 0 } }])
           )
           .loaded("users", page(0, ["Ann", "Bea"]))
           .check((story) => assert.include(text(story), "AnnBea"))
-          // The next page: h.previous keeps the page the loader state holds until it is loaded.
+          // The next page: h.previous keeps the page the result holds until it is loaded.
           .click("Next")
-          .loaders((loaders) => assert.deepStrictEqual(loaders.map((loader) => loader.args), [{ page: 1 }]))
+          .queryInfo((info) => assert.deepStrictEqual(info.map((query) => query.args), [{ page: 1 }]))
           .check((story) => {
             assert.include(text(story), "AnnBea")
             assert.include(text(story), "Loading page 2…")
@@ -541,7 +541,7 @@ describe("Story", () => {
           }))
     })
 
-    it("loadFailed keeps the loader's Success at the current args as previousSuccess, and waiting shows", () => {
+    it("loadFailed keeps the query's Success at the current args as previousSuccess, and waiting shows", () => {
       Story.make(users.UserCard, { id: "1" }, (s) =>
         s
           .loaded("user", { id: "1", name: "Ann", email: "ann@x", likes: 0 }, { waiting: true })
@@ -549,19 +549,19 @@ describe("Story", () => {
           .loadFailed("user", new users.UserNotFound({ id: "1" }))
           .check((story) => assert.strictEqual(text(story), "This user doesn't exist."))
           .check((story) => {
-            const result = story.loaded().user
+            const result = story.queries().user
             assert.isTrue(AsyncResult.isFailure(result) && Option.isSome(result.previousSuccess))
           })
           // Another user's result doesn't carry over.
           .props({ id: "2" })
           .loadFailed("user", new users.UserNotFound({ id: "2" }))
           .check((story) => {
-            const result = story.loaded().user
+            const result = story.queries().user
             assert.isTrue(AsyncResult.isFailure(result) && Option.isNone(result.previousSuccess))
           }))
     })
 
-    it("given takes an updater and keeps the loader state, and loaded throws for a name that isn't a loader", () => {
+    it("given takes an updater and keeps the results, and loaded throws for a name that isn't a query", () => {
       Story.make(users.RenameForm, { id: "1" }, (s) =>
         s
           .given((model) => ({ ...model, draft: Option.some("Zed") }))
@@ -570,7 +570,7 @@ describe("Story", () => {
           .given((model) => ({ ...model, draft: Option.none() }))
           .check((story) => {
             assert.strictEqual(story.model.draft._tag, "None")
-            assert.strictEqual(story.loaded().user._tag, "Success")
+            assert.strictEqual(story.queries().user._tag, "Success")
           })
           .subscriptions((keys) => assert.deepStrictEqual(keys, [])))
       assert.throws(
@@ -587,20 +587,20 @@ describe("Story", () => {
       model: Schema.Struct({ changes: Schema.Number }),
       message: TeamMessage,
       elements: Html,
-      loaders: {
-        // Declared before the loader it depends on, so the order of the record doesn't matter.
+      queries: {
+        // Declared before the query it depends on, so the order of the record doesn't matter.
         friend: {
-          load: users.GetUser,
+          query: users.GetUser,
           args: (_model, _props, loaded) =>
             AsyncResult.isSuccess(loaded.user) ? { id: loaded.user.value.email } : undefined
         },
         user: {
-          load: users.GetUser,
+          query: users.GetUser,
           args: (_model, props) => ({ id: props.id }),
           onChange: () => TeamMessage.make({ _tag: "UserChanged" })
         },
-        others: { loadMany: users.GetUser, args: () => [{ id: "8" }, { id: "9" }] },
-        list: { load: users.ListUsers, args: () => ({ page: 0 }) }
+        others: { queryMany: users.GetUser, args: () => [{ id: "8" }, { id: "9" }] },
+        list: { query: users.ListUsers, args: () => ({ page: 0 }) }
       }
     }).make({
       init: () => ({ changes: 0 }),
@@ -609,10 +609,10 @@ describe("Story", () => {
         const name = (result: AsyncResult.AsyncResult<users.User, unknown>) =>
           AsyncResult.isSuccess(result) ? result.value.name : "?"
         const out = [
-          name(h.loaded.user),
-          name(h.loaded.friend),
-          h.loaded.others.map((entry) => name(entry.result)).join("+"),
-          AsyncResult.isSuccess(h.loaded.list) ? String(h.loaded.list.value.users.length) : "?",
+          name(h.queries.user),
+          name(h.queries.friend),
+          h.queries.others.map((entry) => name(entry.result)).join("+"),
+          AsyncResult.isSuccess(h.queries.list) ? String(h.queries.list.value.users.length) : "?",
           String(model.changes)
         ].join(" ")
         renders.push(out)
@@ -621,7 +621,7 @@ describe("Story", () => {
     })
     const user = (id: string, name: string, email = "") => ({ id, name, email, likes: 0 })
 
-    it("given starts from loaded results: one render, dependent and keyed loaders, and no onChange message", () => {
+    it("given starts from loaded results: one render, dependent and keyed queries, and no onChange message", () => {
       const final = Story.make(Team, { id: "1" }, (s) => {
         renders.length = 0
         s.given({ changes: 0 }, {
@@ -636,12 +636,12 @@ describe("Story", () => {
           .check((story) => assert.strictEqual(text(story), "Anna Bea ?+Ivy 1 1"))
       })
       assert.deepStrictEqual(renders, ["Ann Bea ?+Ivy 1 0", "Anna Bea ?+Ivy 1 1"])
-      assert.strictEqual(final.loaded().friend._tag, "Success")
+      assert.strictEqual(final.queries().friend._tag, "Success")
       assert.throws(
         () => Story.make(Team, { id: "1" }, (s) => s.given({ changes: 0 }, { friend: user("2", "Bea") })),
         /friend.*disabled/
       )
-      // A keyed entry at args the loader doesn't return.
+      // A keyed entry at args the query doesn't return.
       assert.throws(
         () =>
           Story.make(
@@ -651,14 +651,14 @@ describe("Story", () => {
           ),
         /others.*given args/
       )
-      // Loaders that aren't named keep their state.
+      // Queries that aren't named keep their results.
       Story.make(Team, { id: "1" }, (s) =>
         s.given({ changes: 0 }, { user: user("1", "Ann", "2") })
           .given({ changes: 5 }, { friend: user("2", "Bea") })
           .check((story) => assert.strictEqual(text(story), "Ann Bea ?+? ? 5")))
     })
 
-    it("given replaces loaded results in any key order, against the new results, not the old loader state", () => {
+    it("given replaces loaded results in any key order, against the new results, not the ones held before", () => {
       Story.make(
         Team,
         { id: "1" },
@@ -671,7 +671,7 @@ describe("Story", () => {
       )
     })
 
-    it("given prunes a keyed loader with no onChange message, and a later step's prune still sends it", () => {
+    it("given prunes a keyed query with no onChange message, and a later step's prune still sends it", () => {
       const Message = Schema.TaggedUnion({ FriendsChanged: {} })
       const Pals = Component.define({
         name: "Pals",
@@ -679,10 +679,10 @@ describe("Story", () => {
         model: Schema.Struct({ changes: Schema.Number }),
         message: Message,
         elements: Html,
-        loaders: {
-          user: { load: users.GetUser, args: (_model, props) => ({ id: props.id }) },
+        queries: {
+          user: { query: users.GetUser, args: (_model, props) => ({ id: props.id }) },
           friends: {
-            loadMany: users.GetUser,
+            queryMany: users.GetUser,
             args: (_model, _props, loaded) =>
               AsyncResult.isSuccess(loaded.user) ? [{ id: loaded.user.value.email }] : [],
             onChange: () => Message.make({ _tag: "FriendsChanged" })
@@ -692,7 +692,7 @@ describe("Story", () => {
         init: () => ({ changes: 0 }),
         update: (model) => ({ changes: model.changes + 1 }),
         view: (model, h) =>
-          h.p(`${h.loaded.friends.filter((entry) => AsyncResult.isSuccess(entry.result)).length} ${model.changes}`)
+          h.p(`${h.queries.friends.filter((entry) => AsyncResult.isSuccess(entry.result)).length} ${model.changes}`)
       })
       Story.make(
         Pals,
@@ -714,7 +714,7 @@ describe("Story", () => {
       )
     })
 
-    it("given keeps a keyed result its loader returns again once the given results settle", () => {
+    it("given keeps a keyed result its query returns again once the given results settle", () => {
       const Message = Schema.TaggedUnion({ FriendsChanged: {} })
       const Circle = Component.define({
         name: "Circle",
@@ -722,15 +722,15 @@ describe("Story", () => {
         model: Schema.Struct({ id: Schema.String, changes: Schema.Number }),
         message: Message,
         elements: Html,
-        loaders: {
-          // Declared before the loader it reads, so a first pass sees the old user at the new Model's args.
+        queries: {
+          // Declared before the query it reads, so a first pass sees the old user at the new Model's args.
           friends: {
-            loadMany: users.GetUser,
+            queryMany: users.GetUser,
             args: (_model, _props, loaded) =>
               AsyncResult.isSuccess(loaded.user) ? [{ id: loaded.user.value.email }] : [],
             onChange: () => Message.make({ _tag: "FriendsChanged" })
           },
-          user: { load: users.GetUser, args: (model) => ({ id: model.id }) }
+          user: { query: users.GetUser, args: (model) => ({ id: model.id }) }
         }
       }).make({
         init: () => ({ id: "1", changes: 0 }),
@@ -738,9 +738,10 @@ describe("Story", () => {
         view: (model, h) =>
           h.p(
             `${
-              h.loaded.friends.map((entry) => AsyncResult.isSuccess(entry.result) ? entry.result.value.name : "?").join(
-                "+"
-              )
+              h.queries.friends.map((entry) => AsyncResult.isSuccess(entry.result) ? entry.result.value.name : "?")
+                .join(
+                  "+"
+                )
             } ${model.changes}`
           )
       })
@@ -758,7 +759,7 @@ describe("Story", () => {
           .check((story) => assert.strictEqual(text(story), "? 0")))
     })
 
-    it("given with no loaded results works on a component without loaders", () => {
+    it("given with no loaded results works on a component without queries", () => {
       Story.make(
         Counter,
         { initial: 0 },

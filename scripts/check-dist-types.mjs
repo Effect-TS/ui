@@ -51,7 +51,7 @@ try {
   // helpers must type check without it.
   Fs.writeFileSync(
     Path.join(dir, "index.ts"),
-    ["@effect/ui", "@effect/ui/Loader", "@effect/ui/testing", "@effect/ui/testing/TestLoader"]
+    ["@effect/ui", "@effect/ui/Query", "@effect/ui/testing", "@effect/ui/testing/TestQuery"]
       .map((entry, i) => `import * as _${i} from "${entry}"\nexport { _${i} }\n`).join("")
   )
   config.compilerOptions.lib = ["ES2024"]
