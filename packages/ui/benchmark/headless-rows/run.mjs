@@ -25,6 +25,14 @@
 //   wrapped   a normal row component (key + props) whose view holds the headless Disclosure child,
 //             so the props skip happens above the closure.
 //
+// The owner variants put the rows inside the `view` closure of a Provider, a headless owner of
+// shared state, next to a small normal Poker component that sends to it:
+//
+//   owner-headless  headless rows written straight into the Provider's closure.
+//   owner-wrapped   wrapped rows in the Provider's closure.
+//   owner-boundary  one normal component directly under the Provider, whose view has headless rows.
+//   owner-readers   wrapped rows that each read the Provider's shared value.
+//
 // Metrics, in milliseconds of wall-clock time on an otherwise idle page. Each update figure runs from
 // just before the message is sent (or the click) to the first microtask after the render flush, which
 // covers update, the views, the diff, the DOM writes and commit hooks; not layout or paint:
@@ -36,6 +44,8 @@
 //   reverse   a list message that reverses all rows (every keyed row moves).
 //   click     a DOM click on one row's button: the row child's own state in normal, headless and
 //             wrapped, a list message in plain.
+//   touch     owner variants: a Provider update that changes its Model but not what it shares.
+//   open      owner variants: a Provider update that changes what it shares.
 //
 // Protocol. A round opens a fresh page per variant and runs `bench`: one warmup pass with 5 repeats,
 // then a measured pass with 21 repeats per update metric (mount and hydrate happen once per pass).
@@ -69,7 +79,9 @@ await build({
 
 const count = Number(process.argv[2] ?? 1000)
 const rounds = Number(process.argv[3] ?? 7)
-const names = ["plain", "normal", "headless", "wrapped"]
+const all = ["plain", "normal", "headless", "wrapped", "owner-headless", "owner-wrapped", "owner-boundary", "owner-readers"]
+// $VARIANTS picks a comma-separated subset.
+const names = process.env.VARIANTS ? process.env.VARIANTS.split(",") : all
 const which = () => {
   try {
     return execSync("which chromium", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim() || undefined
@@ -104,8 +116,10 @@ console.log(count + " rows, " + rounds + " rounds, median (min-max) ms")
 for (const name of names) {
   const row = results[name]
   console.log(
-    name.padEnd(9),
-    ["mount", "hydrate", "toggle", "reverse", "click"].map((key) => key + " " + stat(row.map((r) => r[key]))).join(" | "),
+    name.padEnd(14),
+    ["mount", "hydrate", "toggle", "reverse", "click", "touch", "open"]
+      .filter((key) => row[0][key] !== undefined && row[0][key] !== null)
+      .map((key) => key + " " + stat(row.map((r) => r[key]))).join(" | "),
     "| hops", Math.max(...row.map((r) => r.mountHops)), Math.max(...row.map((r) => r.updateHops))
   )
 }

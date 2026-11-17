@@ -417,8 +417,14 @@ export interface Instance {
    * updates, issued after `init`'s.
    */
   mounting: Array<{ readonly command: Command.Command<any, any>; readonly issued: MessageLog.Issued }> | undefined
-  /** The `$.send`s of updates whose render hasn't happened yet: delivered at the end of it. */
-  outbox: Array<{ readonly send: Component.Send; readonly issued: MessageLog.Issued }>
+  /** The `$.send`s to children of updates whose render hasn't happened yet: delivered at the end of it. */
+  outbox: Array<{ readonly send: Component.Send.ToChild; readonly issued: MessageLog.Issued }>
+  /** An owner of shared state: what its `shares` last returned. */
+  shares: unknown
+  /** An owner of shared state: the instances below it that read it, marked dirty when its value changes. */
+  readers: Set<Instance> | undefined
+  /** A reader of shared state: the owner instance of each definition it reads, found at mount. */
+  owners: Map<Component.Definition.Any, Instance> | undefined
   readonly dispatch: (message: unknown, source: MessageLog.Source) => void
   readonly fire: Renderer.Dispatch
 }
@@ -592,6 +598,12 @@ const isPrimitive = (u: unknown): boolean => u === null || (typeof u !== "object
  * answers for the common change, a record with one field replaced, without the hashes `Equal.equals`
  * takes of both. `false` leaves the answer to `Equal.equals`.
  */
+const isPlainRecord = (value: unknown): value is object => {
+  if (typeof value !== "object" || value === null) return false
+  const proto = Object.getPrototypeOf(value)
+  return proto === Object.prototype || proto === null
+}
+
 const differsPlainly = (a: unknown, b: unknown): boolean => {
   if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false
   if (Object.getPrototypeOf(a) !== Object.prototype || Object.getPrototypeOf(b) !== Object.prototype) return false
@@ -1523,6 +1535,8 @@ const setup = (
     // closes: a Scope that holds nothing else needs no Map, and a close with no run to wait for
     // ends without a fiber.
     const finalizer = () => {
+      // However the instance goes, a removed ancestor and failure included, its owners forget it.
+      if (inst.owners !== undefined) { for (const owner of inst.owners.values()) owner.readers?.delete(inst) }
       const waits = stopRuns(inst)
       if (waits.length === 0) {
         unmounted(inst)
@@ -1627,6 +1641,9 @@ const setup = (
       loadMores: undefined,
       mounting: undefined,
       outbox: [],
+      shares: undefined,
+      readers: undefined,
+      owners: undefined,
       dispatch: undefined as any,
       fire: undefined as any
     }
@@ -1768,10 +1785,15 @@ const setup = (
             }`
           )
         }
+        findOwners(inst)
         return component.init(inst.props)
       })
       let adopted = serverModel
-      if (first !== undefined && Option.isNone(adopted) && hooks !== undefined) {
+      // An owner of shared state isn't restored from history: a reload would reopen what nobody hovers.
+      if (
+        first !== undefined && Option.isNone(adopted) && hooks !== undefined &&
+        component.definition.shares === undefined
+      ) {
         const restored = hooks.restore(path)
         if (restored !== undefined) {
           adopted = Option.map(
@@ -1807,6 +1829,8 @@ const setup = (
       }
       logEarly()
       if (first === undefined) return
+      // Before any child mounts: the readers below read it as they render.
+      if (!refreshShares(inst)) return
       // The first emission of each watch is written to its loader's state before the first render, parent before
       // child, so a new instance over a warm entry never commits "Loading". An instance adopting the
       // server's state renders it first, to match the server's nodes, and gets the emissions after.
@@ -1906,6 +1930,7 @@ const setup = (
 
   const apply = (inst: Instance, next: Component.Next<any, any, any, any>, entrySeq: number, initial: boolean) => {
     inst.model = next.model
+    if (!refreshShares(inst)) return
     const mounting = inst.mounting
     if (mounting !== undefined) {
       // Before the first render: nothing is issued or marked dirty, and only the watches follow the Model.
@@ -1913,6 +1938,7 @@ const setup = (
       // The first render, which makes the children, comes first.
       if (queueSends(inst, next, entrySeq)) defer(() => deliverSends(inst))
       syncSubscriptions(inst, true)
+      if (next.sends !== undefined && next.sends.length > 0) defer(() => sendToOwners(inst, next.sends!, entrySeq))
       if (next.events.length > 0) defer(() => deliverEvents(inst, next.events, entrySeq))
       return
     }
@@ -1927,6 +1953,8 @@ const setup = (
     if (!initial && next.lists !== undefined) {
       for (const list of next.lists) issueList(inst, list)
     }
+    // Synchronous, as emits are: the owner's `update` applies before this one's emits are delivered.
+    if (next.sends !== undefined && next.sends.length > 0) sendToOwners(inst, next.sends, entrySeq)
     if (next.events.length === 0) return
     // An emit from `init` waits until the parent, which is still being built, has its first Model.
     if (initial) defer(() => deliverEvents(inst, next.events, entrySeq))
@@ -1978,8 +2006,115 @@ const setup = (
   }
   const queueSends = (inst: Instance, next: Component.Next<any, any, any, any>, entrySeq: number): boolean => {
     if (next.sends === undefined || next.sends.length === 0) return false
-    next.sends.forEach((send, index) => inst.outbox.push({ send, issued: { seq: entrySeq, index } }))
+    let queued = false
+    next.sends.forEach((send, index) => {
+      if (send.ref === undefined) return
+      inst.outbox.push({ send, issued: { seq: entrySeq, index } })
+      queued = true
+    })
+    return queued
+  }
+  /**
+   * Counts one more round of sends by `inst` in this flush, and fails it past the limit: a parent and
+   * a child, or a reader and its owner, whose updates answer each other would never leave `drainLoop`.
+   */
+  const countSends = (inst: Instance, to: string): boolean => {
+    const passes = (sendPasses.get(inst) ?? 0) + 1
+    sendPasses.set(inst, passes)
+    if (passes <= maxSendPasses) return true
+    const error = new Error(
+      `${inst.path} sent to ${to} ${maxSendPasses} times in one flush. Updates that answer each other loop: answer a send with state, or send from a user event.`
+    )
+    failInstance(inst, Cause.die(error), "send")
+    return false
+  }
+  /**
+   * The nearest instance of `definition` from `from` up: a definition, since `provide` and stories copy
+   * components.
+   */
+  const nearestOwner = (from: Instance | undefined, definition: Component.Definition.Any): Instance | undefined => {
+    for (let at = from; at !== undefined; at = at.parent) {
+      if (at.component.definition === definition) return at
+    }
+    return undefined
+  }
+  /**
+   * A reader of shared state finds the owner of each definition it reads, once, at mount, and registers
+   * with it. Only a cast mounts one with no owner above it, and it fails.
+   */
+  const findOwners = (inst: Instance) => {
+    const reads = inst.component.definition.shared
+    if (reads === undefined) return
+    for (const { definition } of Object.values(reads)) {
+      const owner = nearestOwner(inst.parent, definition)
+      if (owner === undefined) {
+        throw new Error(
+          `${inst.path} reads the shared state of ${definition.name}, and no ${definition.name} is above it`
+        )
+      }
+      ;(inst.owners ??= new Map()).set(definition, owner)
+      ;(owner.readers ??= new Set()).add(inst)
+    }
+  }
+  /** What `h.shared` and `p.shared` read: each owner's current value. */
+  const sharedOf = (inst: Instance): Component.SharedLookup | undefined => {
+    const owners = inst.owners
+    return owners === undefined ? undefined : (owner) => owners.get(owner.definition)?.shares
+  }
+  /**
+   * Recomputes an owner's shared value from its Model and props, and marks its readers dirty when it
+   * changed. A plain record compares as props do, so a `shares` that builds a new object each time
+   * renders nothing new; any other value by `Equal.equals`, so a new Date of the same time does too.
+   * Does nothing for a component that isn't an owner. Returns `false` when `shares` threw and
+   * failed the owner.
+   */
+  const refreshShares = (inst: Instance): boolean => {
+    const shares = inst.component.definition.shares
+    if (shares === undefined) return true
+    let next: unknown
+    try {
+      next = shares(inst.model, inst.props)
+    } catch (error) {
+      failInstance(inst, Cause.die(error), "shares")
+      return false
+    }
+    if (
+      isPlainRecord(inst.shares) && isPlainRecord(next)
+        ? propsEqual(inst.shares, next)
+        : Equal.equals(inst.shares, next)
+    ) {
+      return true
+    }
+    inst.shares = next
+    if (inst.readers !== undefined) {
+      for (const reader of inst.readers) {
+        if (!reader.closed) markDirty(reader)
+      }
+    }
     return true
+  }
+  /**
+   * Delivers `$.send(Owner, message)`s to the nearest owner of each above `inst`, in order. Only a cast
+   * sends to an owner that isn't above, and that fails the sender.
+   */
+  const sendToOwners = (inst: Instance, sends: ReadonlyArray<Component.Send>, entrySeq: number) => {
+    let counted = false
+    for (const send of sends) {
+      if (send.owner === undefined) continue
+      if (inst.closed) return
+      const definition = send.owner.definition
+      if (!counted) {
+        counted = true
+        if (!countSends(inst, definition.name)) return
+      }
+      const owner = nearestOwner(inst.parent, definition)
+      if (owner === undefined) {
+        const error = new Error(`${inst.path} sent to ${definition.name}, and no ${definition.name} is above it`)
+        failInstance(inst, Cause.die(error), "send")
+        return
+      }
+      owner.dispatch(send.message, { _tag: "Send", path: inst.path, seq: entrySeq })
+    }
   }
   /**
    * Delivers the sends of `inst`'s updates to its direct children, matched by ref key in its last
@@ -1989,15 +2124,7 @@ const setup = (
     if (inst.outbox.length === 0 || inst.closed) return
     const outbox = inst.outbox
     inst.outbox = []
-    const passes = (sendPasses.get(inst) ?? 0) + 1
-    sendPasses.set(inst, passes)
-    if (passes > maxSendPasses) {
-      const error = new Error(
-        `${inst.path} sent to its children ${maxSendPasses} times in one flush. A parent and a child whose updates answer each other loop: answer a send with state, or send from a user event.`
-      )
-      failInstance(inst, Cause.die(error), "send")
-      return
-    }
+    if (!countSends(inst, "its children")) return
     for (const { issued, send } of outbox) {
       if (inst.closed) return
       // A headless instance wrote none of the tree it renders, so it has no children to send to.
@@ -3044,7 +3171,14 @@ const setup = (
             return visit(node.component, node.props, behind)
         }
       }
-      visitNode(component.view(model, props))
+      visitNode(component.view(model, props, undefined, undefined, undefined, shared))
+    }
+    // A page that reads shared state reads the owners above the declarer: the walk doesn't run the
+    // closures of the headless components in the page, owners among them.
+    const shared: Component.SharedLookup = (owner) => {
+      const at = nearestOwner(inst, owner.definition)
+      if (at !== undefined) return at.shares
+      throw new Error(`${owner.definition.name} isn't above ${inst.path}, so its shared state can't be read`)
     }
     try {
       visit(component, page.props, false)
@@ -3379,14 +3513,19 @@ const setup = (
       return guard(
         inst,
         "view",
-        () => checked(inst, inst.component.view(inst.model, inst.props, runningOf(inst), inst.loaderState, inst.path))
+        () =>
+          checked(
+            inst,
+            inst.component.view(inst.model, inst.props, runningOf(inst), inst.loaderState, inst.path, sharedOf(inst))
+          )
       )
     }
     const parts = guard(inst, "view", () => ({
       value: (inst.component as unknown as Component.Headless.Any).parts(inst.model, inst.props, {
         owner,
         running: runningOf(inst),
-        loaderState: inst.loaderState
+        loaderState: inst.loaderState,
+        shared: sharedOf(inst)
       })
     }))
     if (parts === undefined) return undefined
@@ -3575,6 +3714,9 @@ const setup = (
       props: undefined,
       model: undefined,
       loaderState: undefined,
+      shares: undefined,
+      readers: undefined,
+      owners: undefined,
       head: [],
       onEmit: ignoreEvents,
       onFailure: undefined,
@@ -4413,6 +4555,7 @@ const setup = (
           // keyed loaders' states are written before it too.
           syncSubscriptions(instance)
           drainKeyed(instance)
+          if (!instance.closed) refreshShares(instance)
         }
         // A headless child's view is the closure, which is new on every render of whoever declared it.
         if (instance.owner !== undefined) instance.content = child.view
@@ -4650,8 +4793,9 @@ const setup = (
       // can come before the drain gets to them.
       if (inst.keyed !== undefined && inst.keyed.size > 0) drainKeyed(inst)
       if (inst.closed || inst.failure !== undefined || inst.waiting) return
-      // An outlet has no state of its own, only the children of the content it places.
-      if (inst.component !== outletComponent) {
+      // An outlet has no state of its own, only the children of the content it places. An owner of shared
+      // state is left out: a reload would reopen what nobody hovers. Its subtree isn't.
+      if (inst.component !== outletComponent && inst.component.definition.shares === undefined) {
         const encoded = stateCodecOf(inst.component).encode(inst.model, inst.loaderState)
         if (Option.isSome(encoded)) out[inst.path] = encoded.value
       }

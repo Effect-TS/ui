@@ -343,14 +343,19 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    * and whatever the loader state held before. The view renders once. It throws if a
    * named loader is disabled, or a keyed entry's args aren't ones the loader
    * returns.
+   *
+   * `shared` sets the values owners share, as `shared` steps would, in the
+   * same render: `[[Provider, value], [Other, value]]`. Values given before
+   * and not listed are kept.
    */
-  given(
+  given<const O extends ReadonlyArray<Component.Headless.Any> = []>(
     model: Component.Model<C> | ((model: Component.Model<C>) => Component.Model<C>),
     loaded?: {
       readonly [K in keyof Component.Loaders<C>]?: Component.Loaders<C>[K] extends Component.LoadMany<infer R>
         ? ReadonlyArray<KeyedLoad<R>>
         : Loader.Read.Success<ReadOf<Component.Loaders<C>[K]>>
-    }
+    },
+    shared?: { readonly [K in keyof O]: readonly [owner: O[K], value: Component.Shared.Value<O[K]>] }
   ): this
   /**
    * Changes the props. A props change never reaches `update`: it re-renders the
@@ -391,6 +396,26 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    * of its `init` Model. The story never runs the child's `update`.
    */
   givenChild(key: string, model: unknown): this
+  /**
+   * Sets the value `owner` shares with the readers in the story, in place of
+   * the one they'd see otherwise.
+   *
+   * **Details**
+   *
+   * `owner` is a headless component with `shares`, and the value is keyed by
+   * it, not by a reader's local name: one step reaches the story's component
+   * and every headless child the story expands. The value is kept until the
+   * next `shared` step or `given` that sets one for `owner`.
+   *
+   * Without it, a reader sees the expanded Model of the nearest `owner` in the
+   * story's own view, or else `shares(init(props).model, props)` with no props
+   * when every prop of `owner` is optional. Otherwise rendering throws, naming
+   * this step, but not in a `shared` step: `shared` steps in a row can give
+   * several owners' values. The next step of another kind, a query or the end
+   * of `Story.make` throws. The story never runs `owner`'s `update`: what a
+   * reader sends it is in `sent`.
+   */
+  shared<O extends Component.Headless.Any>(owner: O, value: Component.Shared.Value<O>): this
 
   /**
    * Resolves the oldest running Command matching `target` with the result it
@@ -560,7 +585,10 @@ type Fields<Props, Model, Msg, Events> =
     | "loadingMore"
     | "defaultPrevented"
   >
-  & { readonly childModels?: ReadonlyMap<string, unknown> | undefined }
+  & {
+    readonly childModels?: ReadonlyMap<string, unknown> | undefined
+    readonly shared?: ReadonlyMap<Component.Definition.Any, unknown> | undefined
+  }
 
 // -- headless children ------------------------------------------------------
 // A story shows a headless child expanded: the closure it was declared with, run against the parts of the
@@ -572,11 +600,89 @@ const expandedChildren = new WeakMap<object, ReadonlyArray<View.Child<any, any>>
 // What a story of a slotted component passed for its slots, by the component `withSlots` made.
 const storySlots = new WeakMap<object, Readonly<Record<string, View.Input<never, any>>>>()
 
+// The values `shared` gave, by owner definition: definitions, since `withView` copies components.
+const sharedGiven = new WeakMap<object, ReadonlyMap<Component.Definition.Any, unknown>>()
+
+// -- shared state -----------------------------------------------------------
+// The owners above a point in the story's view, nearest last: their values as the readers there see them.
+type Owners = ReadonlyMap<Component.Definition.Any, unknown>
+const noOwners: Owners = new Map()
+
+/** The owners the readers below `component` see: `owners`, and `component` nearest when it's an owner. */
+const ownersBelow = (
+  owners: Owners,
+  component: { readonly definition: Component.Definition.Any },
+  model: unknown,
+  props: unknown
+): Owners => {
+  const shares = component.definition.shares
+  return shares === undefined ? owners : new Map(owners).set(component.definition, shares(model, props))
+}
+
+/** The owners above the story's view: the story's component, when it's an owner. */
+const rootOwners = (
+  component: { readonly definition: Component.Definition.Any },
+  model: unknown,
+  props: unknown
+): Owners => ownersBelow(noOwners, component, model, props)
+
+// A reader's owner has no value in the story: a render that a `shared` step could still fix may miss it.
+class MissingShared extends Error {}
+
+/** Renders `story`, letting a missing shared value through: another `shared` step may give it. */
+const renderSharing = (story: Story<any, any, any, any>) => {
+  try {
+    story.view()
+  } catch (error) {
+    if (!(error instanceof MissingShared)) throw error
+  }
+}
+
+/** The values `story` was given, with `entries` set over them. */
+const withShared = (
+  story: Story<any, any, any, any>,
+  entries: ReadonlyArray<readonly [Component.Headless.Any, unknown]>,
+  step: string
+): Owners | undefined => {
+  const before = sharedGiven.get(story)
+  if (entries.length === 0) return before
+  const given = new Map(before)
+  for (const [owner, value] of entries) {
+    if (owner.definition.shares === undefined) {
+      throw new Error(`Story.${step}: ${owner.definition.name} shares nothing: it has no shares`)
+    }
+    given.set(owner.definition, value)
+  }
+  return given
+}
+
+/** What `owner` shares with no instance of it in the story: from `init` with no props, if it takes none. */
+const sharedDefault = (owner: Component.Headless.Any): unknown => {
+  const name = owner.definition.name
+  const props = {}
+  if (!Schema.is(owner.props)(props)) {
+    throw new MissingShared(
+      `Story: the story reads the shared state of ${name}, whose props aren't all optional, so it has no default. Give it with .shared(${name}, value)`
+    )
+  }
+  return owner.definition.shares!(owner.init(props).model, props)
+}
+
+/** `h.shared` and `p.shared` in a story: a given value, else the nearest owner above, else the default. */
+const sharedLookup = (given: Owners | undefined, owners: Owners): Component.SharedLookup => (owner) => {
+  const definition = owner.definition
+  if (given?.has(definition)) return given.get(definition)
+  if (owners.has(definition)) return owners.get(definition)
+  return sharedDefault(owner)
+}
+
 const expandRoot = <Msg>(
   view: View.Node<Msg, any>,
   name: string,
   given: ReadonlyMap<string, unknown> | undefined,
-  filled: Readonly<Record<string, View.Input<never, any>>> | undefined
+  filled: Readonly<Record<string, View.Input<never, any>>> | undefined,
+  shared: Owners | undefined,
+  root: Owners
 ): View.Node<Msg, any> => {
   const replaced: Array<View.Child<any, any>> = []
   // As the runtime does: two children at one path fail the view or the closure that holds them, and
@@ -586,13 +692,19 @@ const expandRoot = <Msg>(
   // Content is shown under `children`, where a query looks, at the path the runtime gives it.
   // `own`: the story's component wrote it, so its refs count with the component's. Content the story
   // passed for its slots was written by a parent, and so were the closures in it.
-  const content = (input: View.Input<any, any>, path: string, depth: number, own: boolean) => {
+  const content = (input: View.Input<any, any>, path: string, depth: number, own: boolean, owners: Owners) => {
     const nodes = View.children([input])
     const paths = checkContentPaths(path, nodes)
     if (own) written.push(paths)
-    return nodes.map((child) => expand(child, path, depth, own))
+    return nodes.map((child) => expand(child, path, depth, own, owners))
   }
-  const expand = (node: View.Node<any, any>, path: string, depth: number, own: boolean): View.Node<any, any> => {
+  const expand = (
+    node: View.Node<any, any>,
+    path: string,
+    depth: number,
+    own: boolean,
+    owners: Owners
+  ): View.Node<any, any> => {
     switch (node._tag) {
       case "Text":
         return node
@@ -600,7 +712,10 @@ const expandRoot = <Msg>(
         // The story's component placing a slot: it shows what the story passed.
         const input = filled?.[node.name]
         if (input === undefined) return node
-        return { ...node, children: content(input, "/" + name + "/" + slotSegment(node.name), 1, false) } as View.Node<
+        return {
+          ...node,
+          children: content(input, "/" + name + "/" + slotSegment(node.name), 1, false, owners)
+        } as View.Node<
           any,
           any
         >
@@ -608,7 +723,7 @@ const expandRoot = <Msg>(
       case "Element": {
         let changed = false
         const children = node.children.map((child) => {
-          const next = expand(child, path, depth, own)
+          const next = expand(child, path, depth, own, owners)
           if (next !== child) changed = true
           return next
         })
@@ -621,7 +736,7 @@ const expandRoot = <Msg>(
           const childPath = path + "/" + segment(node)
           const shown: Array<View.Node<any, any>> = []
           for (const slot in node.slots) {
-            shown.push(...content(node.slots[slot], childPath + "/" + slotSegment(slot), depth + 1, own))
+            shown.push(...content(node.slots[slot], childPath + "/" + slotSegment(slot), depth + 1, own, owners))
           }
           return { ...node, children: shown } as View.Node<any, any>
         }
@@ -629,15 +744,19 @@ const expandRoot = <Msg>(
         replaced.push(node)
         const childPath = path + "/" + segment(node)
         const model = given?.has(node.key) ? given.get(node.key) : component.init(node.props).model
-        const parts = component.parts(model, node.props, { owner: { path: childPath, depth: depth + 1 } })
+        const parts = component.parts(model, node.props, {
+          owner: { path: childPath, depth: depth + 1 },
+          shared: sharedLookup(shared, owners)
+        })
         const tree = View.toNode(node.view(parts))
         const paths = checkChildPaths(childPath, tree)
         if (own) written.push(paths)
-        return expand(tree, childPath, depth + 1, own)
+        // An owner expanded here is the nearest one for the readers in its closure.
+        return expand(tree, childPath, depth + 1, own, ownersBelow(owners, component, model, node.props))
       }
     }
   }
-  const expanded = expand(view, "/" + name, 0, true)
+  const expanded = expand(view, "/" + name, 0, true, root)
   checkAuthorRefs("/" + name, written)
   checkAuthorPlacements("/" + name, written)
   if (replaced.length > 0) expandedChildren.set(expanded, replaced)
@@ -647,20 +766,14 @@ const expandRoot = <Msg>(
 /**
  * Defers rendering until the view is first read, after the step's keyed
  * prunes settle. This skips intermediate records the runtime wouldn't render.
+ * `render` gives the expanded view.
  */
 const record = <Props, Model, Msg, Events>(
   fields: Fields<Props, Model, Msg, Events>,
   render: () => View.Node<Msg, any>
 ): Story<Props, Model, Msg, Events> => {
   let rendered: View.Node<Msg, any> | undefined
-  const view = () => {
-    return rendered ??= expandRoot(
-      render(),
-      fields.component.definition.name,
-      fields.childModels,
-      storySlots.get(fields.component)
-    )
-  }
+  const view = () => rendered ??= render()
   // A view value is a `Query` tree; a child is a node with no tag or text.
   const root = () => view() as Query.Node
   const context = () => boundOf(fields.component)?.context(fields.model, fields.props, fields.loaderState)
@@ -698,6 +811,7 @@ const record = <Props, Model, Msg, Events>(
     all: (locator) => Query.all(root(), locator)
   }
   if (fields.childModels !== undefined) childModels.set(story, fields.childModels)
+  if (fields.shared !== undefined) sharedGiven.set(story, fields.shared)
   return story
 }
 
@@ -719,17 +833,42 @@ const update = <Props, Model, Msg, Events>(
     // Only a `click` or `fire` step sets it, last, once the step has settled.
     defaultPrevented: false,
     childModels: childModels.get(story),
+    shared: sharedGiven.get(story),
     ...patch
   }
   // A defect in `view` fails the step that changed the Model, the loader state, the props or what's pending.
+  // An unchanged view is kept as expanded: expanding it again would rebuild slot content without the
+  // owners whose nodes the first expansion replaced.
   const view =
     fields.model === story.model && fields.loaderState === story.loaderState && fields.props === story.props &&
       fields.pending === story.pending && fields.loadingMore === story.loadingMore &&
-      fields.childModels === childModels.get(story)
+      fields.childModels === childModels.get(story) && fields.shared === sharedGiven.get(story)
       ? story.view
-      : () => story.component.view(fields.model, fields.props, runningOf(fields.pending), fields.loaderState)
+      : () => expandedView(fields)
   return record(fields, view)
 }
+
+/** The story's view: the component's own, with its headless children and slot content expanded. */
+const expandedView = (fields: Fields<any, any, any, any>): View.Node<any, any> =>
+  expandRoot(
+    viewOfFields(fields),
+    fields.component.definition.name,
+    fields.childModels,
+    storySlots.get(fields.component),
+    fields.shared,
+    rootOwners(fields.component, fields.model, fields.props)
+  )
+
+/** The story's component's own view, before its headless children are expanded. */
+const viewOfFields = (fields: Fields<any, any, any, any>): View.Node<any, any> =>
+  fields.component.view(
+    fields.model,
+    fields.props,
+    runningOf(fields.pending),
+    fields.loaderState,
+    undefined,
+    sharedLookup(fields.shared, rootOwners(fields.component, fields.model, fields.props))
+  )
 
 const boundOf = loaders.boundOf
 
@@ -1470,7 +1609,8 @@ class StepsImpl implements Steps<AnyComponent> {
   current: Story<any, any, any, any, any>
   constructor(current: Story<any, any, any, any, any>) {
     this.current = current
-    current.view()
+    // A missing shared value can't be given before the first step.
+    renderSharing(current)
   }
   pipe() {
     return pipeArguments(this, arguments)
@@ -1484,7 +1624,11 @@ class StepsImpl implements Steps<AnyComponent> {
     return this
   }
 
-  given(model: unknown, loaded?: { readonly [name: string]: unknown }): this {
+  given(
+    model: unknown,
+    loaded?: { readonly [name: string]: unknown },
+    shared: ReadonlyArray<readonly [Component.Headless.Any, unknown]> = []
+  ): this {
     const next = typeof model === "function" ? model(this.current.model) : model
     const out = update(this.current, {
       model: next,
@@ -1493,7 +1637,8 @@ class StepsImpl implements Steps<AnyComponent> {
       sent: [],
       interrupted: [],
       dropped: [],
-      loadingMore: []
+      loadingMore: [],
+      shared: withShared(this.current, shared, "given")
     })
     // Settled here, with no onChange message: the step's own prune then has nothing to write.
     return this.step(update(out, { loaderState: givenLoaderState(out, loaded ?? {}) }))
@@ -1526,6 +1671,12 @@ class StepsImpl implements Steps<AnyComponent> {
     const given = new Map(childModels.get(this.current))
     given.set(key, model)
     return this.step(update(this.current, { childModels: given }))
+  }
+  shared(owner: Component.Headless.Any, value: unknown): this {
+    // Nothing to settle and no default to reset: only what readers see changes.
+    this.current = update(this.current, { shared: withShared(this.current, [[owner, value]], "shared") })
+    renderSharing(this.current)
+    return this
   }
 
   resolve(target: Target, result: unknown): this {
@@ -1735,6 +1886,8 @@ export const make: {
   )
   f(steps)
   const story = steps.current
+  // A story with no steps hasn't rendered since `start`, which lets a missing shared value pass.
+  story.view()
   if (story.pending.length > 0) {
     throw new Error(`Story.make: Commands still pending at the end: ${describePending(story.pending)}`)
   }
@@ -1757,7 +1910,7 @@ export const make: {
  */
 export const start = <C extends AnyComponent>(component: C, props: Component.Props<C>): Steps<C> => {
   const first = component.init(props)
-  const empty = record<any, any, any, any>({
+  const fields: Fields<any, any, any, any> = {
     // The record is stored with its types erased; `Steps<C>` restores them.
     component: component as Component.Component<any, any, any, any, any, any, any, any, never>,
     props,
@@ -1770,7 +1923,8 @@ export const start = <C extends AnyComponent>(component: C, props: Component.Pro
     dropped: [],
     loadingMore: [],
     defaultPrevented: false
-  }, () => component.view(first.model, props, runningOf([]), undefined))
+  }
+  const empty = record(fields, () => expandedView(fields))
   return new StepsImpl(apply(empty, first)) as Steps<C>
 }
 
@@ -1817,9 +1971,16 @@ const withView = (
 ): AnyComponent => {
   const owner: View.Owner = { path: "/" + component.definition.name, depth: 0 }
   return Object.assign(Object.create(component), {
-    view: (model: unknown, props: unknown, running?: View.Running, loaderState?: Component.LoaderState) => {
+    view: (
+      model: unknown,
+      props: unknown,
+      running?: View.Running,
+      loaderState?: Component.LoaderState,
+      _path?: string,
+      shared?: Component.SharedLookup
+    ) => {
       const h = View.makeHelper(props, elements ?? component.elements(), running, owner.path)
-      return View.toNode(view(component.parts(model, props, { owner, running, loaderState }), h))
+      return View.toNode(view(component.parts(model, props, { owner, running, loaderState, shared }), h))
     }
   })
 }
@@ -1845,6 +2006,11 @@ const withSlots = (
  * The parts of a headless component for a story's Model and props: the
  * plain values a consumer's closure would read.
  *
+ * **Details**
+ *
+ * A reader of shared state reads what the story's `shared` steps gave, or
+ * else each owner's default, as the story's own view does.
+ *
  * @stability experimental
  * @category queries
  * @since 0.1.0
@@ -1852,7 +2018,11 @@ const withSlots = (
 export const parts = <Props, Events, Parts, R, Rcv>(
   component: Component.Headless<Props, Events, Parts, R, Rcv>,
   story: { readonly model: unknown; readonly props: Props }
-): Parts => component.parts(story.model, story.props, { owner: { path: "/" + component.definition.name, depth: 0 } })
+): Parts =>
+  component.parts(story.model, story.props, {
+    owner: { path: "/" + component.definition.name, depth: 0 },
+    shared: sharedLookup(sharedGiven.get(story), rootOwners(component, story.model, story.props))
+  })
 
 const findChild = <Msg>(
   view: View.Node<Msg, any>,
