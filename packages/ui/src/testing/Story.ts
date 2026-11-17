@@ -4,8 +4,8 @@
  *
  * A story covers `init`, `update` and queries over the instance's view value.
  * Commands stay pending as data until a step resolves them with the message
- * they would have produced, so no service is needed. A child slot is a leaf:
- * anything that crosses one is a runtime test.
+ * they would have produced, so no service is needed. A child is a leaf:
+ * anything that crosses into one is a runtime test.
  *
  * `make` hands a callback a cursor, `Steps`, whose steps run as soon as they
  * are called and return the cursor, so they chain. A shared setup is a function
@@ -70,7 +70,15 @@ import type * as Component from "../Component.ts"
 import type * as Head from "../Head.ts"
 import * as loaders from "../internal/loaders.ts"
 import { isNoop } from "../internal/noop.ts"
-import { checkAuthorRefs, checkChildPaths, checkFallbackPaths, segment } from "../internal/paths.ts"
+import {
+  checkAuthorPlacements,
+  checkAuthorRefs,
+  checkChildPaths,
+  checkContentPaths,
+  checkFallbackPaths,
+  segment,
+  slotSegment
+} from "../internal/paths.ts"
 import * as schedule from "../internal/schedule.ts"
 import * as Loader from "../Loader.ts"
 import * as MessageLog from "../MessageLog.ts"
@@ -136,11 +144,11 @@ export interface Story<Props, Model, Msg, Events, Loaded = { readonly [name: str
   readonly props: Props
   readonly model: Model
   /**
-   * The loader slots, beside the Model: what each loader's read last
-   * returned. Opaque: `loaded` opens them.
+   * The loader state, beside the Model: what each loader's read last
+   * returned. Opaque: `loaded` opens it.
    */
-  readonly slots: Component.Slots | undefined
-  /** The loaders' results, by name, as `h.loaded` opens them for the current Model, props and slots. */
+  readonly loaderState: Component.LoaderState | undefined
+  /** The loaders' results, by name, as `h.loaded` opens them for the current Model, props and loader state. */
   readonly loaded: () => Loaded
   /** Commands issued but not yet resolved, oldest first. */
   readonly pending: ReadonlyArray<Pending<Msg>>
@@ -323,16 +331,16 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    *
    * **Details**
    *
-   * `given` never runs `update`. Loaders keep their slots, except that a
+   * `given` never runs `update`. Loaders keep their state, except that a
    * keyed loader drops the stored keys it no longer returns, with no
    * `onChange` message. Later steps send `onChange` as usual.
    *
    * `loaded` starts the loaders it names from loaded results: a Success
    * value, a list loader's page array, or a keyed loader's entries as
-   * `loadedMany` takes them. Each slot is written at the args the loader
+   * `loadedMany` takes them. Each loader's state is written at the args the loader
    * returns for the new Model and the given results, so a loader whose args
    * read another's result follows the new one, whatever the order of the keys
-   * and whatever the slots held before. The view renders once. It throws if a
+   * and whatever the loader state held before. The view renders once. It throws if a
    * named loader is disabled, or a keyed entry's args aren't ones the loader
    * returns.
    */
@@ -369,13 +377,13 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
   fire(locator: Query.Locator, event: string, payload?: unknown): this
   /**
    * Sends the message the parent's `onEmit` maps `events` from the child with
-   * `key` to, if any. A ref finds the slot rendered with it.
+   * `key` to, if any. A ref finds the child rendered with it.
    */
   childEmit(key: string | Component.Ref.Any, events: unknown): this
   /**
    * Sends the message the parent's `onFailure` maps a failure of the child with
    * `key` to, if any. The failure is passed as an `AsyncResult.Failure`. A
-   * ref finds the slot rendered with it.
+   * ref finds the child rendered with it.
    */
   childFailure(key: string | Component.Ref.Any, cause: Cause.Cause<unknown>): this
   /**
@@ -398,7 +406,7 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    * A Command issued with `Command.afterRefetch` becomes `awaiting` on the
    * component's own loaders its declared targets match, less those its
    * `writes` store, and sends at once when there are none. A `loaded` or
-   * `loadFailed` step on the last of them writes the loader's slot, then
+   * `loadFailed` step on the last of them writes the loader's state, then
    * sends this one. `waitExpired` ends the wait by budget. Under `mode: "queue"`
    * a message also waits for the earlier ones of its group.
    */
@@ -422,7 +430,7 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
   waitExpired(target: Target): this
 
   /**
-   * Loads a loader with a Success: writes its slot at the loader's current
+   * Loads a loader with a Success: writes its state at the loader's current
    * args, then sends the message of its `onChange`, if any. Throws when the
    * loader is disabled. For a list loader `value` is the page array, and
    * unless `waiting` it settles a pending load more.
@@ -433,7 +441,7 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    * `Command.afterRefetch` wait on the loader. It throws while a running or
    * queued Command's patch is live on the loader, since no fetch settles
    * under a live patch: only a `patched` value is written then. As in the
-   * cache, a patch is live only when the slot held a Success at issue.
+   * cache, a patch is live only when the loader's state held a Success at issue.
    */
   loaded<N extends Component.SingleNames<Component.Loaders<C>>>(
     name: N,
@@ -452,7 +460,7 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
   ): this
   /**
    * Loads a loader with a typed failure, as `loaded` does. The failure keeps
-   * the slot's last Success as `previousSuccess` when it holds one at the
+   * the loader state's last Success as `previousSuccess` when it holds one at the
    * loader's current args. Unless `waiting`, it settles a list loader's
    * pending load more.
    */
@@ -488,7 +496,7 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
   ): this
   /**
    * Loads several keys of a `loadMany` loader in one write, as the runtime
-   * writes a first emission or a batch: the slot holds the loader's stored
+   * writes a first emission or a batch: its state holds the loader's stored
    * keys and these, and `onChange`'s `changes` holds these. Throws on args
    * the loader doesn't currently return.
    */
@@ -543,7 +551,7 @@ type Fields<Props, Model, Msg, Events> =
     | "component"
     | "props"
     | "model"
-    | "slots"
+    | "loaderState"
     | "pending"
     | "emitted"
     | "sent"
@@ -555,29 +563,52 @@ type Fields<Props, Model, Msg, Events> =
   & { readonly childModels?: ReadonlyMap<string, unknown> | undefined }
 
 // -- headless children ------------------------------------------------------
-// A story shows a headless child expanded: its slot's closure, run against the parts of the
+// A story shows a headless child expanded: the closure it was declared with, run against the parts of the
 // child's `init` Model or of the Model `givenChild` set. No runtime is involved.
 const childModels = new WeakMap<object, ReadonlyMap<string, unknown>>()
-// The slots an expansion replaced, by the expanded root: `childEmit` and `childFailure` still find them.
-const expandedSlots = new WeakMap<object, ReadonlyArray<View.Child<any, any>>>()
+// The children an expansion replaced, by the expanded root: `childEmit` and `childFailure` still find them.
+const expandedChildren = new WeakMap<object, ReadonlyArray<View.Child<any, any>>>()
+
+// What a story of a slotted component passed for its slots, by the component `withSlots` made.
+const storySlots = new WeakMap<object, Readonly<Record<string, View.Input<never, any>>>>()
 
 const expandRoot = <Msg>(
   view: View.Node<Msg, any>,
   name: string,
-  given: ReadonlyMap<string, unknown> | undefined
+  given: ReadonlyMap<string, unknown> | undefined,
+  filled: Readonly<Record<string, View.Input<never, any>>> | undefined
 ): View.Node<Msg, any> => {
-  const slots: Array<View.Child<any, any>> = []
-  // As the runtime does: two child slots at one path fail the view or the closure that holds them, and
-  // so do two slots with one ref key across the view and the closures it gives its headless children.
+  const replaced: Array<View.Child<any, any>> = []
+  // As the runtime does: two children at one path fail the view or the closure that holds them, and
+  // so do two children with one ref key across the view and the closures it gives its headless children.
+  // Nor can two of them place one slot.
   const written = [checkChildPaths("/" + name, view)]
-  const expand = (node: View.Node<any, any>, path: string, depth: number): View.Node<any, any> => {
+  // Content is shown under `children`, where a query looks, at the path the runtime gives it.
+  // `own`: the story's component wrote it, so its refs count with the component's. Content the story
+  // passed for its slots was written by a parent, and so were the closures in it.
+  const content = (input: View.Input<any, any>, path: string, depth: number, own: boolean) => {
+    const nodes = View.children([input])
+    const paths = checkContentPaths(path, nodes)
+    if (own) written.push(paths)
+    return nodes.map((child) => expand(child, path, depth, own))
+  }
+  const expand = (node: View.Node<any, any>, path: string, depth: number, own: boolean): View.Node<any, any> => {
     switch (node._tag) {
       case "Text":
         return node
+      case "Outlet": {
+        // The story's component placing a slot: it shows what the story passed.
+        const input = filled?.[node.name]
+        if (input === undefined) return node
+        return { ...node, children: content(input, "/" + name + "/" + slotSegment(node.name), 1, false) } as View.Node<
+          any,
+          any
+        >
+      }
       case "Element": {
         let changed = false
         const children = node.children.map((child) => {
-          const next = expand(child, path, depth)
+          const next = expand(child, path, depth, own)
           if (next !== child) changed = true
           return next
         })
@@ -585,20 +616,31 @@ const expandRoot = <Msg>(
       }
       case "Child": {
         const component = node.component as unknown as Component.Headless.Any
+        if (node.slots !== undefined) {
+          // A child's view isn't run, but what the parent passed for its slots is the parent's.
+          const childPath = path + "/" + segment(node)
+          const shown: Array<View.Node<any, any>> = []
+          for (const slot in node.slots) {
+            shown.push(...content(node.slots[slot], childPath + "/" + slotSegment(slot), depth + 1, own))
+          }
+          return { ...node, children: shown } as View.Node<any, any>
+        }
         if (node.view === undefined || component.parts === undefined) return node
-        slots.push(node)
+        replaced.push(node)
         const childPath = path + "/" + segment(node)
         const model = given?.has(node.key) ? given.get(node.key) : component.init(node.props).model
         const parts = component.parts(model, node.props, { owner: { path: childPath, depth: depth + 1 } })
         const tree = View.toNode(node.view(parts))
-        written.push(checkChildPaths(childPath, tree))
-        return expand(tree, childPath, depth + 1)
+        const paths = checkChildPaths(childPath, tree)
+        if (own) written.push(paths)
+        return expand(tree, childPath, depth + 1, own)
       }
     }
   }
-  const expanded = expand(view, "/" + name, 0)
+  const expanded = expand(view, "/" + name, 0, true)
   checkAuthorRefs("/" + name, written)
-  if (slots.length > 0) expandedSlots.set(expanded, slots)
+  checkAuthorPlacements("/" + name, written)
+  if (replaced.length > 0) expandedChildren.set(expanded, replaced)
   return expanded
 }
 
@@ -612,16 +654,21 @@ const record = <Props, Model, Msg, Events>(
 ): Story<Props, Model, Msg, Events> => {
   let rendered: View.Node<Msg, any> | undefined
   const view = () => {
-    return rendered ??= expandRoot(render(), fields.component.definition.name, fields.childModels)
+    return rendered ??= expandRoot(
+      render(),
+      fields.component.definition.name,
+      fields.childModels,
+      storySlots.get(fields.component)
+    )
   }
-  // A view value is a `Query` tree; a child slot is a node with no tag or text.
+  // A view value is a `Query` tree; a child is a node with no tag or text.
   const root = () => view() as Query.Node
-  const context = () => boundOf(fields.component)?.context(fields.model, fields.props, fields.slots)
+  const context = () => boundOf(fields.component)?.context(fields.model, fields.props, fields.loaderState)
   const story: Story<Props, Model, Msg, Events> = {
     component: fields.component,
     props: fields.props,
     model: fields.model,
-    slots: fields.slots,
+    loaderState: fields.loaderState,
     loaded: () => context()?.loaded ?? {},
     pending: fields.pending,
     emitted: fields.emitted,
@@ -632,7 +679,7 @@ const record = <Props, Model, Msg, Events>(
     defaultPrevented: fields.defaultPrevented,
     view,
     subscriptions: () =>
-      (fields.component.subscriptions?.(fields.model, fields.props, fields.slots) ?? []).map((sub) => sub.key),
+      (fields.component.subscriptions?.(fields.model, fields.props, fields.loaderState) ?? []).map((sub) => sub.key),
     loaders: () => {
       const bound = boundOf(fields.component)
       if (bound === undefined) return []
@@ -662,7 +709,7 @@ const update = <Props, Model, Msg, Events>(
     component: story.component,
     props: story.props,
     model: story.model,
-    slots: story.slots,
+    loaderState: story.loaderState,
     pending: story.pending,
     emitted: story.emitted,
     sent: story.sent,
@@ -674,12 +721,13 @@ const update = <Props, Model, Msg, Events>(
     childModels: childModels.get(story),
     ...patch
   }
-  // A defect in `view` fails the step that changed the Model, the slots, the props or what's pending.
-  const view = fields.model === story.model && fields.slots === story.slots && fields.props === story.props &&
+  // A defect in `view` fails the step that changed the Model, the loader state, the props or what's pending.
+  const view =
+    fields.model === story.model && fields.loaderState === story.loaderState && fields.props === story.props &&
       fields.pending === story.pending && fields.loadingMore === story.loadingMore &&
       fields.childModels === childModels.get(story)
-    ? story.view
-    : () => story.component.view(fields.model, fields.props, runningOf(fields.pending), fields.slots)
+      ? story.view
+      : () => story.component.view(fields.model, fields.props, runningOf(fields.pending), fields.loaderState)
   return record(fields, view)
 }
 
@@ -697,25 +745,25 @@ const loaderOf = (story: Story<any, any, any, any>, step: string, name: string):
   return entry
 }
 
-/** A loader's args for the story's Model, props and slots. */
+/** A loader's args for the story's Model, props and loader state. */
 const argsAt = (story: Story<any, any, any, any>, name: string) =>
-  boundOf(story.component)!.context(story.model, story.props, story.slots).argsOf(name)
+  boundOf(story.component)!.context(story.model, story.props, story.loaderState).argsOf(name)
 
 /**
- * Writes a loader's slot, then sends the message of its `onChange`, if any, as the runtime does.
+ * Writes a loader's state, then sends the message of its `onChange`, if any, as the runtime does.
  * A keyed loader's `onChange` also gets `changes`.
  */
-const writeSlot = (
+const writeLoaderState = (
   story: Story<any, any, any, any>,
   entry: loaders.Entry,
-  slot: unknown,
+  state: unknown,
   changes: ReadonlyArray<loaders.KeyedChange>
 ): Story<any, any, any, any> => {
   const bound = boundOf(story.component)!
   // As in the runtime, the same snapshot writes nothing.
-  if (Equal.equals((story.slots ?? bound.empty)[entry.name], slot)) return story
-  const out = update(story, { slots: { ...(story.slots ?? bound.empty), [entry.name]: slot } })
-  const message = bound.context(out.model, out.props, out.slots).changed(entry.name, changes)
+  if (Equal.equals((story.loaderState ?? bound.empty)[entry.name], state)) return story
+  const out = update(story, { loaderState: { ...(story.loaderState ?? bound.empty), [entry.name]: state } })
+  const message = bound.context(out.model, out.props, out.loaderState).changed(entry.name, changes)
   return message === undefined ? out : dispatch(out, message.value)
 }
 
@@ -724,7 +772,7 @@ type Build = (
   previous: Option.Option<AsyncResult.Success<any, any>>
 ) => AsyncResult.Success<any, any> | AsyncResult.Failure<any, any>
 
-/** Writes `result` to a single or list loader's slot at its current args. */
+/** Writes `result` to a single or list loader's state at its current args. */
 const loadStep = (
   story: Story<any, any, any, any>,
   step: string,
@@ -740,23 +788,23 @@ const loadStep = (
   }
   const result = build(storedAt(story, name, current.argsKey))
   const def = Loader.defOf(entry.read)
-  const slot = boundOf(story.component)!.slot(
+  const state = boundOf(story.component)!.state(
     entry,
     { args: current.args, argsKey: current.argsKey },
     result,
     patched,
     more ?? (def.list !== undefined && result._tag === "Success" ? moreOfPages(def, result.value) : undefined)
   )
-  return writeSlot(story, entry, slot, [])
+  return writeLoaderState(story, entry, state, [])
 }
 
-/** The slot's last Success at `argsKey`: its value, or a Failure's previous one. */
+/** The loader state's last Success at `argsKey`: its value, or a Failure's previous one. */
 const storedAt = (
   story: Story<any, any, any, any>,
   name: string,
   argsKey: string
 ): Option.Option<AsyncResult.Success<any, any>> => {
-  const data = Loader.snapshotData(story.slots?.[name])
+  const data = Loader.snapshotData(story.loaderState?.[name])
   const stored = data?.argsKey === argsKey ? data.result : undefined
   return stored === undefined
     ? Option.none()
@@ -766,29 +814,29 @@ const storedAt = (
 }
 
 /**
- * The slots `given` starts from, written with no `onChange` message. Each
+ * The loader state `given` starts from, written with no `onChange` message. Each
  * named loader holds its given results at the args it returns, and a keyed
  * loader that isn't named keeps the keys it held before that it still returns. Args can
  * read other loaders' results, so the writes repeat until none changes: the
- * result doesn't depend on the order of the names or on the slots held before.
+ * result doesn't depend on the order of the names or on the loader state held before.
  */
-const givenSlots = (
+const givenLoaderState = (
   story: Story<any, any, any, any>,
   loaded: { readonly [name: string]: unknown }
-): Component.Slots | undefined => {
+): Component.LoaderState | undefined => {
   for (const name of Object.keys(loaded)) loaderOf(story, "given", name)
   const bound = boundOf(story.component)
-  if (bound === undefined) return story.slots
-  const before = story.slots ?? bound.empty
-  const slots: { [name: string]: unknown } = { ...before }
-  // The slot a loader should hold for the current slots, or undefined while a named loader is
+  if (bound === undefined) return story.loaderState
+  const before = story.loaderState ?? bound.empty
+  const loaderState: { [name: string]: unknown } = { ...before }
+  // The state a loader should hold for the current loader state, or undefined while a named loader is
   // disabled or doesn't return the given args.
   const target = (entry: loaders.Entry): unknown => {
-    const current = bound.context(story.model, story.props, { ...slots }).argsOf(entry.name)
+    const current = bound.context(story.model, story.props, { ...loaderState }).argsOf(entry.name)
     if (!Object.hasOwn(loaded, entry.name)) {
-      // From the slots held before: a key an earlier round dropped can come back once the args settle.
+      // From the loader state held before: a key an earlier round dropped can come back once the args settle.
       const held = Loader.snapshotMapData(before[entry.name])?.entries
-      return bound.slotMany(
+      return bound.stateMany(
         entry,
         current.entries!.flatMap((key) => {
           const stored = held?.get(key.argsKey)
@@ -806,13 +854,13 @@ const givenSlots = (
         const result = "value" in load
           ? AsyncResult.success(load.value, { waiting: load.waiting, timestamp: 0 })
           : AsyncResult.failure(Cause.fail(load.error), { waiting: load.waiting })
-        snapshots.push(bound.slot(entry, key, result as any, false, undefined))
+        snapshots.push(bound.state(entry, key, result as any, false, undefined))
       }
-      return bound.slotMany(entry, snapshots)
+      return bound.stateMany(entry, snapshots)
     }
     if (current.argsKey === undefined) return undefined
     const value = loaded[entry.name]
-    return bound.slot(
+    return bound.state(
       entry,
       { args: current.args, argsKey: current.argsKey },
       AsyncResult.success(value, { timestamp: 0 }),
@@ -827,13 +875,13 @@ const givenSlots = (
     changed = false
     for (const entry of written) {
       const next = target(entry)
-      if (next === undefined || Equal.equals(slots[entry.name], next)) continue
+      if (next === undefined || Equal.equals(loaderState[entry.name], next)) continue
       if (round > written.length) {
         throw new Error(
           `Story.given: the loader "${entry.name}" doesn't settle: its args keep changing with the given results`
         )
       }
-      slots[entry.name] = next
+      loaderState[entry.name] = next
       changed = true
     }
   }
@@ -843,7 +891,7 @@ const givenSlots = (
       `Story.given: the loader "${unmet.name}" is disabled, or doesn't return the given args, for the Model and props`
     )
   }
-  return slots
+  return loaderState
 }
 
 /** Whether a page array has a next page, by the definition's `next`. */
@@ -897,7 +945,7 @@ const applyList = (story: Story<any, any, any, any>, list: Component.ListIssue):
   if (argsKey === undefined) return story
   const previous = storedAt(story, list.name, argsKey)
   const def = Loader.defOf(entry.read)
-  const data = Loader.snapshotData(story.slots?.[list.name])
+  const data = Loader.snapshotData(story.loaderState?.[list.name])
   if (list.op === "loadMore") {
     if (story.loadingMore.includes(list.name)) return story
     // At the end, or with nothing held at these args, nothing is written and nothing waits.
@@ -949,7 +997,7 @@ const keyedLoader = (
 }
 
 /**
- * Writes a keyed loader's slot as the runtime does: the stored keys the
+ * Writes a keyed loader's state as the runtime does: the stored keys the
  * loader still returns, with `loads` over them, and `changes` holds
  * `loads`.
  */
@@ -962,13 +1010,13 @@ const writeKeyed = (
   >
 ): Story<any, any, any, any> => {
   const bound = boundOf(story.component)!
-  const held = Loader.snapshotMapData(story.slots?.[entry.name])?.entries
+  const held = Loader.snapshotMapData(story.loaderState?.[entry.name])?.entries
   const byKey = new Map(loads.map((load) => [load.argsKey, load]))
-  const slot = bound.slotMany(
+  const state = bound.stateMany(
     entry,
     keys.flatMap((key) => {
       const load = byKey.get(key.argsKey)
-      if (load !== undefined) return [bound.slot(entry, key, load.result as any, load.patched, undefined)]
+      if (load !== undefined) return [bound.state(entry, key, load.result as any, load.patched, undefined)]
       const stored = held?.get(key.argsKey)
       return stored === undefined ? [] : [stored]
     })
@@ -977,7 +1025,7 @@ const writeKeyed = (
     const load = byKey.get(key.argsKey)
     return load === undefined ? [] : [{ args: key.args, result: load.result }]
   })
-  return writeSlot(story, entry, slot, changes)
+  return writeLoaderState(story, entry, state, changes)
 }
 
 /** Loads keys of a keyed loader: each args must be one the loader currently returns. */
@@ -989,7 +1037,7 @@ const loadKeyedStep = (
 ): Story<any, any, any, any> => {
   const { entry, keys } = keyedLoader(story, step, name)
   const def = Loader.defOf(entry.read)
-  const held = Loader.snapshotMapData(story.slots?.[name])?.entries
+  const held = Loader.snapshotMapData(story.loaderState?.[name])?.entries
   const settled = new Set<string>()
   const written = writeKeyed(
     story,
@@ -1017,7 +1065,7 @@ const loadKeyedStep = (
       }
     })
   )
-  // After the slot's write: the wait's own message comes second.
+  // After the loader state's write: the wait's own message comes second.
   return settleWaits(written, (awaited) => awaited.name === name && settled.has(def.argsKey(awaited.args)))
 }
 
@@ -1025,8 +1073,8 @@ const loadKeyedStep = (
 const pruneRounds = 100
 
 /**
- * After a step: a keyed loader whose slot holds a key it no longer returns
- * gets the slot pruned, with no changes, as the runtime's drain writes it. A
+ * After a step: a keyed loader whose state holds a key it no longer returns
+ * gets its state pruned, with no changes, as the runtime's drain writes it. A
  * prune's `onChange` can change the key set again, so rounds run until none
  * is due, at most one write per loader per round. The runtime doesn't bound
  * them; a step throws after `pruneRounds`.
@@ -1039,7 +1087,7 @@ const pruneKeyed = (story: Story<any, any, any, any>): Story<any, any, any, any>
     let pruned = false
     for (const entry of bound.entries) {
       if (!entry.keyed) continue
-      const held = Loader.snapshotMapData(out.slots?.[entry.name])
+      const held = Loader.snapshotMapData(out.loaderState?.[entry.name])
       if (held === undefined || held.entries.size === 0) continue
       const keys = argsAt(out, entry.name).entries!
       const declared = new Set(keys.map((key) => key.argsKey))
@@ -1203,7 +1251,7 @@ function* currentEntries(
 ): Generator<{ readonly loader: loaders.Entry; readonly entries: ReadonlyArray<loaders.Keyed> }> {
   const bound = boundOf(story.component)
   if (bound === undefined) return
-  const context = bound.context(story.model, story.props, story.slots)
+  const context = bound.context(story.model, story.props, story.loaderState)
   for (const loader of bound.entries) {
     const current = context.argsOf(loader.name)
     yield {
@@ -1256,10 +1304,10 @@ const registeredPatches = (
   if (command.optimistic.length === 0) return []
   const out: Array<{ readonly name: string; readonly argsKey: string }> = []
   for (const { entries, loader } of currentEntries(story)) {
-    const slot = story.slots?.[loader.name]
-    const held = loader.keyed ? Loader.snapshotMapData(slot)?.entries : undefined
+    const state = story.loaderState?.[loader.name]
+    const held = loader.keyed ? Loader.snapshotMapData(state)?.entries : undefined
     for (const { args, argsKey } of entries) {
-      const data = Loader.snapshotData(held !== undefined ? held.get(argsKey) : slot)
+      const data = Loader.snapshotData(held !== undefined ? held.get(argsKey) : state)
       if (data?.argsKey !== argsKey || data.result?._tag !== "Success") continue
       if (!Loader.invalidatesEntry({ invalidates: [], optimistic: command.optimistic }, loader.read, args)) continue
       out.push({ name: loader.name, argsKey })
@@ -1327,13 +1375,15 @@ const dispatch = <Props, Model, Msg, Events>(
   // `undefined` is a handler's "no message", and `Component.noop` a Command's or a mount's.
   message === undefined || isNoop(message)
     ? story
-    : apply(story, story.component.update(story.model, message, story.props, story.slots))
+    : apply(story, story.component.update(story.model, message, story.props, story.loaderState))
 
 /** `node` and its ancestors in `root`, innermost first, or `undefined` when `node` isn't in `root`. */
 const pathTo = (root: View.Node<any, any>, node: Query.Node): Array<View.Node<any, any>> | undefined => {
   if (root === node) return [root]
-  if (root._tag !== "Element") return undefined
-  for (const child of root.children) {
+  // An element's children, or the content a story shows under a child or an outlet.
+  const children = (root as { readonly children?: ReadonlyArray<View.Node<any, any>> }).children
+  if (children === undefined) return undefined
+  for (const child of children) {
     const path = pathTo(child, node)
     if (path !== undefined) {
       path.push(root)
@@ -1446,7 +1496,7 @@ class StepsImpl implements Steps<AnyComponent> {
       loadingMore: []
     })
     // Settled here, with no onChange message: the step's own prune then has nothing to write.
-    return this.step(update(out, { slots: givenSlots(out, loaded ?? {}) }))
+    return this.step(update(out, { loaderState: givenLoaderState(out, loaded ?? {}) }))
   }
   props(next: unknown): this {
     const props = typeof next === "function" ? next(this.current.props) : next
@@ -1634,6 +1684,25 @@ export const make: {
     f: (steps: Steps<C>) => void
   ): Steps<C>["current"]
   /**
+   * A story of a component with slots: `slots` stands in for what a parent
+   * passes. Its `h` has no messages of its own, as a parent's content in a
+   * story has nothing to send them to. `h` builds elements from
+   * `elements`, then the component's own vocabulary, then the registered
+   * one, and is typed with `elements`, or else the component's vocabulary. The content shows where the view places each slot, at the path the
+   * runtime gives it, such as `/Panel/[body]/Editor[e]`.
+   */
+  <C extends AnyComponent, V extends View.Elements = never>(
+    component: C,
+    props: Component.Props<C>,
+    options: {
+      readonly elements?: View.Vocabulary<V> | undefined
+      readonly slots: (
+        h: View.Helper<never, unknown> & View.Tags<[V] extends [never] ? VocabularyOf<C> : V, never>
+      ) => { readonly [K in Component.Slots<C>]?: View.Input<never, any> }
+    },
+    f: (steps: Steps<C>) => void
+  ): Steps<C>["current"]
+  /**
    * A story of a headless component: `view` stands in for a consumer's
    * closure. Its `h` has no messages of its own, so every handler in the
    * story is one of the component's parts'. `h` builds elements from
@@ -1656,7 +1725,14 @@ export const make: {
   ...rest: ReadonlyArray<any>
 ): any => {
   const f: (steps: Steps<any>) => void = rest[rest.length - 1]
-  const steps = start(rest.length === 2 ? withView(component, rest[0].view, rest[0].elements) : component, props)
+  const steps = start(
+    rest.length === 1
+      ? component
+      : rest[0].slots !== undefined
+      ? withSlots(component, rest[0].slots, rest[0].elements)
+      : withView(component, rest[0].view, rest[0].elements),
+    props
+  )
   f(steps)
   const story = steps.current
   if (story.pending.length > 0) {
@@ -1686,7 +1762,7 @@ export const start = <C extends AnyComponent>(component: C, props: Component.Pro
     component: component as Component.Component<any, any, any, any, any, any, any, any, never>,
     props,
     model: first.model,
-    slots: undefined,
+    loaderState: undefined,
     pending: [],
     emitted: [],
     sent: [],
@@ -1699,7 +1775,7 @@ export const start = <C extends AnyComponent>(component: C, props: Component.Pro
 }
 
 /**
- * The child slots declared in a view, optionally filtered by component or
+ * The children declared in a view, optionally filtered by component or
  * feature service.
  *
  * @stability experimental
@@ -1710,9 +1786,23 @@ export const children = <Msg>(
   view: View.Node<Msg, any>,
   component?: Component.Any | { readonly key: string }
 ): ReadonlyArray<View.Child<Msg, any>> =>
-  [...(expandedSlots.get(view) ?? []), ...View.nodes(view)].filter((node): node is View.Child<Msg, any> =>
+  [...(expandedChildren.get(view) ?? []), ...shownNodes(view)].filter((node): node is View.Child<Msg, any> =>
     node._tag === "Child" && (component === undefined || node.component === component)
   )
+
+/**
+ * `node` and the nodes below it, as a story shows them: the content it expanded under a child or an
+ * outlet, or, in a view it didn't expand, what a child's slots were passed.
+ */
+const shownNodes = function*(node: View.Node<any, any>): Generator<View.Node<any, any>> {
+  yield node
+  const shown = (node as { readonly children?: ReadonlyArray<View.Node<any, any>> }).children
+  if (shown !== undefined) {
+    for (const child of shown) yield* shownNodes(child)
+  } else if (node._tag === "Child") {
+    for (const child of View.slotNodes(node)) yield* shownNodes(child)
+  }
+}
 
 /**
  * A headless component with `view` as its consumer, as a component a story
@@ -1727,11 +1817,28 @@ const withView = (
 ): AnyComponent => {
   const owner: View.Owner = { path: "/" + component.definition.name, depth: 0 }
   return Object.assign(Object.create(component), {
-    view: (model: unknown, props: unknown, running?: View.Running, slots?: Component.Slots) => {
+    view: (model: unknown, props: unknown, running?: View.Running, loaderState?: Component.LoaderState) => {
       const h = View.makeHelper(props, elements ?? component.elements(), running, owner.path)
-      return View.toNode(view(component.parts(model, props, { owner, running, loaded: slots }), h))
+      return View.toNode(view(component.parts(model, props, { owner, running, loaderState }), h))
     }
   })
+}
+
+/** The vocabulary a component's view builds from. */
+type VocabularyOf<C> = C extends { readonly "~V"?: infer V } ? V : never
+
+/** A component whose story passed `slots`: the content shows where its view places each slot. */
+const withSlots = (
+  component: AnyComponent,
+  slots: (h: any) => Readonly<Record<string, View.Input<never, any>>>,
+  elements: View.Vocabulary<any> | undefined
+): AnyComponent => {
+  const made = Object.create(component)
+  storySlots.set(
+    made,
+    slots(View.makeHelper({}, elements ?? component.elements(), undefined, "/" + component.definition.name))
+  )
+  return made
 }
 
 /**
@@ -1766,11 +1873,11 @@ const findChild = <Msg>(
 }
 
 /**
- * What the slot with `key` shows for `result`: its `fallback` evaluated with an
+ * What the child with `key` shows for `result`: its `fallback` evaluated with an
  * `AsyncResult.Initial` or `AsyncResult.Failure`, or `undefined` without one.
- * A ref finds the slot rendered with it.
+ * A ref finds the child rendered with it.
  * Throws, as the runtime fails the parent, if the fallback renders two
- * children at one path, or a child at the path or ref key of another slot of
+ * children at one path, or a child at the path or ref key of another child of
  * `view`. It sees one fallback, so it can't check two shown at once, as the
  * runtime does.
  *
@@ -1783,11 +1890,11 @@ export const fallback = <Msg>(
   key: string | Component.Ref.Any,
   result: AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>
 ): View.Node<Msg, any> | undefined => {
-  const slot = findChild(view, key, "fallback")
-  if (slot.fallback === undefined) return undefined
-  const node = View.toNode(slot.fallback(result))
+  const child = findChild(view, key, "fallback")
+  if (child.fallback === undefined) return undefined
+  const node = View.toNode(child.fallback(result))
   // As the runtime does: the fallback's children share the parent's paths.
-  checkFallbackPaths(checkChildPaths("Story.fallback", view), slot, node)
+  checkFallbackPaths(checkChildPaths("Story.fallback", view), child, node)
   return node
 }
 
@@ -1811,7 +1918,7 @@ export const layerFailure = <C extends Component.Any>(
  *
  * **Details**
  *
- * Given a component, every loader slot is empty: each loader opens at the
+ * Given a component, every loader is empty: each loader opens at the
  * args it returns for the Model and props, as on a first render. The props
  * may be left out when the component takes none.
  *
@@ -1853,7 +1960,7 @@ export const head: {
   props?: unknown
 ) =>
   "pending" in self
-    ? self.component.head?.(self.model, self.props, self.slots) ?? []
+    ? self.component.head?.(self.model, self.props, self.loaderState) ?? []
     : self.head?.(model, props ?? {}, undefined) ?? []
 
 // ---------------------------------------------------------------------------
@@ -1899,9 +2006,9 @@ export interface Outcome<Model, Events> {
 
 /**
  * The result of `fromLog`: the state the replay reached (the Model, props and
- * loader slots), how many messages it re-ran, and the first divergence, if
+ * loader state), how many messages it re-ran, and the first divergence, if
  * any. On a divergence, the state is the one the diverging message was sent
- * to: the Model before it, and the props and slots its `update` read.
+ * to: the Model before it, and the props and loader state its `update` read.
  *
  * @stability experimental
  * @category models
@@ -1918,9 +2025,9 @@ export interface Replay<
   readonly model: Model
   /** The props the instance had, from its latest `Mounted`, `PropsChanged` or `Update` entry. */
   readonly props: Props
-  /** The loader slots, beside the Model. Opaque: `loaded` opens them. */
-  readonly slots: Component.Slots | undefined
-  /** The loaders' results, by name, as `h.loaded` opens them for the Model, props and slots reached. */
+  /** The loader state, beside the Model. Opaque: `loaded` opens it. */
+  readonly loaderState: Component.LoaderState | undefined
+  /** The loaders' results, by name, as `h.loaded` opens them for the Model, props and loader state reached. */
   readonly loaded: () => Loaded
   readonly replayed: number
   readonly divergence: Divergence<Model, Msg, Events> | undefined
@@ -1960,7 +2067,7 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
     )?.path
   if (path === undefined) throw new Error(`Story.fromLog: the log has no entry for ${component.definition.name}`)
   const all = stateful.filter((entry) => entry.path === path)
-  // The replay starts at the first Model. Props and slots written before it are in that Update's record, or
+  // The replay starts at the first Model. Props and loader state written before it are in that Update's record, or
   // belong to an earlier mount.
   const start = all.findIndex((entry) => entry._tag === "Update" || entry._tag === "Mounted")
   if (start === -1) throw new Error(`Story.fromLog: the log has no entry for ${path}`)
@@ -1969,13 +2076,13 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
     | MessageLog.Mounted
     | Extract<MessageLog.Wire, { _tag: "Update" | "Mounted" }>
   const bound = boundOf(component)
-  const slotOf = (entry: MessageLog.LoaderChanged | Extract<MessageLog.Wire, { _tag: "LoaderChanged" }>) => {
-    if (typeof entry.component !== "string") return entry.slot
+  const stateOf = (entry: MessageLog.LoaderChanged | Extract<MessageLog.Wire, { _tag: "LoaderChanged" }>) => {
+    if (typeof entry.component !== "string") return entry.state
     const schema = bound?.logSchema.fields[entry.name]
     if (schema === undefined) {
       throw new Error(`Story.fromLog: entry #${entry.seq} (${path}) writes "${entry.name}", which isn't a loader`)
     }
-    return decodeWith(entry, `loader "${entry.name}"`, schema, entry.slot)
+    return decodeWith(entry, `loader "${entry.name}"`, schema, entry.state)
   }
 
   const decoders = new Map<Schema.Top, (value: unknown) => unknown>()
@@ -2005,7 +2112,7 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
   const read = (entry: typeof first) => {
     if (typeof entry.component !== "string") {
       return {
-        loaded: entry._tag === "Update" ? (entry as MessageLog.Update).loaded : undefined,
+        loaderState: entry._tag === "Update" ? (entry as MessageLog.Update).loaderState : undefined,
         props: entry.props as Props,
         model: entry.model as Model,
         events: entry.events as ReadonlyArray<Events>,
@@ -2017,8 +2124,8 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
     }
     const wire = entry as Extract<MessageLog.Wire, { _tag: "Update" | "Mounted" }>
     return {
-      loaded: wire._tag === "Update" && wire.loaded !== undefined && bound !== undefined
-        ? decodeWith(entry, "loaded", bound.logSchema, wire.loaded) as Component.Slots
+      loaderState: wire._tag === "Update" && wire.loaderState !== undefined && bound !== undefined
+        ? decodeWith(entry, "loaderState", bound.logSchema, wire.loaderState) as Component.LoaderState
         : undefined,
       props: decode(entry, "props", wire.props) as Props,
       model: decode(entry, "model", wire.model) as Model,
@@ -2037,21 +2144,21 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
   const initial = read(first)
   let model = initial.model
   let props: unknown = initial.props
-  let slots: Component.Slots | undefined = initial.loaded
+  let loaderState: Component.LoaderState | undefined = initial.loaderState
   let replayed = 0
   const result = (divergence: Divergence<Model, Msg, Events> | undefined): Replay<Model, Msg, Events, any, any> => {
-    const reached = { model, props, slots }
+    const reached = { model, props, loaderState }
     return {
       path,
       ...reached,
-      loaded: () => bound?.context(reached.model, reached.props, reached.slots).loaded ?? {},
+      loaded: () => bound?.context(reached.model, reached.props, reached.loaderState).loaded ?? {},
       replayed,
       divergence
     }
   }
   for (const entry of all.slice(start + 1)) {
     if (entry._tag === "LoaderChanged") {
-      slots = { ...(slots ?? bound?.empty), [entry.name]: slotOf(entry) }
+      loaderState = { ...(loaderState ?? bound?.empty), [entry.name]: stateOf(entry) }
       continue
     }
     if (entry._tag === "PropsChanged") {
@@ -2060,16 +2167,16 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
     }
     const recorded = read(entry)
     if (entry._tag === "Mounted") {
-      // Mounted again at the same path: the replay starts over from it, with every slot empty.
+      // Mounted again at the same path: the replay starts over from it, with every loader empty.
       model = recorded.model
       props = recorded.props
-      slots = undefined
+      loaderState = undefined
       continue
     }
     // The Update's record is what `update` read, so it holds even when earlier entries were evicted.
     props = recorded.props
-    if (recorded.loaded !== undefined) slots = recorded.loaded
-    const next = component.update(model, recorded.message as Msg, recorded.props as Props, slots)
+    if (recorded.loaderState !== undefined) loaderState = recorded.loaderState
+    const next = component.update(model, recorded.message as Msg, recorded.props as Props, loaderState)
     replayed++
     const recomputed = {
       model: next.model,
@@ -2110,16 +2217,16 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
  * The replay starts at the oldest surviving `Mounted` or `Update` entry for
  * the path (the first one logged for a component with this name, unless
  * `path` is given), takes its Model, and re-runs every following message with
- * the props and loader slots it was recorded with, so every `update` sees
+ * the props and loader state it was recorded with, so every `update` sees
  * `$.loaded` as it did when it ran, whichever entries the log still holds.
  * Commands are compared, never run. Models and events are compared with
  * `Schema.toEquivalence`, and Commands by their Wire encoding.
  *
- * The props and slots are tracked with the Model, so the result is the state
+ * The props and loader state are tracked with the Model, so the result is the state
  * the instance ended with. They start from the first entry: a `Mounted`
- * entry's props and empty slots, or an `Update` entry's recorded props and
- * slots. Each later `PropsChanged` entry sets the props and each
- * `LoaderChanged` entry writes its slot, so props from the parent and loads
+ * entry's props and empty loader state, or an `Update` entry's recorded props and
+ * loader state. Each later `PropsChanged` entry sets the props and each
+ * `LoaderChanged` entry writes its loader's state, so props from the parent and loads
  * that settled after the last message are in the result too.
  *
  * It takes live entries or Wire frames. A Wire value sent as a placeholder,

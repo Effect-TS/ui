@@ -103,10 +103,10 @@ const legacyState = (component: Component.Any, model: unknown) => {
   const codec = Schema.toCodecJson(
     Schema.Struct({
       model: (component as Component.Component<any, any, any, any, any, any, any>).model,
-      loaded: bound.schema
+      loaderState: bound.schema
     })
   )
-  return Schema.encodeUnknownSync(codec)({ model, loaded: bound.empty })
+  return Schema.encodeUnknownSync(codec)({ model, loaderState: bound.empty })
 }
 
 const Plain = Component.define({ name: "Plain", model: Schema.Number, message: Schema.Never }).make({

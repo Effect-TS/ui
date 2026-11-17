@@ -1404,7 +1404,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         )
     })
 
-    it.effect("a nested component of another vocabulary fails its own slot", () =>
+    it.effect("a nested component of another vocabulary fails as a child", () =>
       Effect.gen(function*() {
         const app = yield* container
         yield* BrowserHost.mountEffect(Page, {}, app)

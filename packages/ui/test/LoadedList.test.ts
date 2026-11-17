@@ -91,7 +91,7 @@ describe("Loaded lists", () => {
         assert.strictEqual(root.text(), "r0 /1 Available")
         root.send(app.ChatMessage.make({ _tag: "More" }))
         yield* TestHost.settle
-        // A change of `more` is a slot write of its own.
+        // A change of `more` is a loader state write of its own.
         assert.strictEqual(root.text(), "r0 /1 Loading")
         yield* page
         // The second page repeats m0: the first stays.
@@ -197,9 +197,9 @@ describe("Loaded lists", () => {
         const wire = root.log().map(encoder.encode)
         assert.deepStrictEqual(warnings, [])
         const changed = wire.filter((entry) => entry._tag === "LoaderChanged") as ReadonlyArray<
-          { readonly slot: ReadonlyArray<unknown> }
+          { readonly state: ReadonlyArray<unknown> }
         >
-        assert.deepStrictEqual(changed.at(-1)!.slot.at(-1), [false, { Failed: "42" }])
+        assert.deepStrictEqual(changed.at(-1)!.state.at(-1), [false, { Failed: "42" }])
         const replay = Story.fromLog(Codes, wire)
         assert.isUndefined(replay.divergence)
         assert.strictEqual(replay.model, "failed 42")
@@ -237,15 +237,15 @@ describe("Loaded lists", () => {
       >
     const state = json(false)
     const log = json(true)
-    /** The last slot written for "messages": as page state encodes it, as the Wire does, and each decoded back. */
-    const lastSlot = (root: Pick<TestHost.TestRoot<any, any, any>, "log">) => {
+    /** The last loader state written for "messages": as page state encodes it, as the Wire does, and each decoded back. */
+    const lastState = (root: Pick<TestHost.TestRoot<any, any, any>, "log">) => {
       const entry = [...root.log()].reverse().find((entry): entry is MessageLog.LoaderChanged =>
         entry._tag === "LoaderChanged" && entry.name === "messages"
       )!
-      const encoded = Schema.encodeUnknownSync(state)(entry.slot) as ReadonlyArray<unknown>
-      const wire = (encoder.encode(entry) as { readonly slot: ReadonlyArray<unknown> }).slot
+      const encoded = Schema.encodeUnknownSync(state)(entry.state) as ReadonlyArray<unknown>
+      const wire = (encoder.encode(entry) as { readonly state: ReadonlyArray<unknown> }).state
       return {
-        slot: entry.slot,
+        state: entry.state,
         encoded,
         decoded: Schema.decodeUnknownSync(state)(encoded),
         wire,
@@ -259,8 +259,8 @@ describe("Loaded lists", () => {
         yield* page
         root.send(app.ChatMessage.make({ _tag: "More" }))
         yield* TestHost.settle
-        const loading = lastSlot(root)
-        assert.deepStrictEqual(Loader.snapshotData(loading.slot)?.more, { _tag: "Loading" })
+        const loading = lastState(root)
+        assert.deepStrictEqual(Loader.snapshotData(loading.state)?.more, { _tag: "Loading" })
         assert.strictEqual(loading.encoded.length, 6)
         assert.strictEqual(loading.encoded[5], true)
         assert.deepStrictEqual(Loader.snapshotData(loading.decoded)?.more, { _tag: "Available" })
@@ -271,7 +271,7 @@ describe("Loaded lists", () => {
         yield* page
         root.send(app.ChatMessage.make({ _tag: "More" }))
         yield* page
-        const ended = lastSlot(root)
+        const ended = lastState(root)
         assert.strictEqual(ended.encoded[5], false)
         assert.deepStrictEqual(Loader.snapshotData(ended.decoded)?.more, { _tag: "End" })
         assert.deepStrictEqual(ended.wire[6], [false, "End"])
@@ -433,7 +433,7 @@ describe("Loaded lists", () => {
         yield* TestHost.settle
         history.go(-1)
         yield* TestHost.settle
-        // The two pages show at once, from the restored slot, while they load again.
+        // The two pages show at once, from the restored loader state, while they load again.
         assert.strictEqual(root.text(), "r0,r1 /2 Available")
         yield* page
         yield* page

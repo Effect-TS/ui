@@ -268,7 +268,7 @@ const payloadOf = (name: string, event: Event, target: EventTarget | null, eleme
  *
  * Most apps use `layer` or `mount`, which manage this for them. The host shows
  * the `html` vocabulary and host-neutral components. A component of another
- * vocabulary fails its own slot when it mounts.
+ * vocabulary fails as a child when it mounts.
  *
  * The host keeps the document head in sync with the tree's merged
  * `Head.Head`. It owns only tags marked `data-eui`, plus `<title>` and
@@ -1057,7 +1057,7 @@ export interface MountOptions<V extends View.Elements, RF = never> {
  *
  * The root must render HTML (or be host-neutral): mounting a root of another
  * vocabulary is a type error. Nested components are checked when they mount,
- * and one of another vocabulary fails its own slot. The tree's requirements
+ * and one of another vocabulary fails as a child. The tree's requirements
  * are the root's, minus `Html.Host`, which the host provides. When the root
  * itself fails, `fallback` is shown in its place.
  *
@@ -1082,9 +1082,9 @@ export interface MountOptions<V extends View.Elements, RF = never> {
  *
  * An instance whose provided Layer is still building keeps the server's
  * nodes until the Layer is ready, and everything else is live at once. A
- * waiting slot is inert: its buttons do nothing, links still navigate through
+ * waiting instance is inert: its buttons do nothing, links still navigate through
  * the Router, a `<form>` submits natively, and typed input is overwritten
- * when it adopts. Head sync starts once no slot is waiting.
+ * when it adopts. Head sync starts once no instance is waiting.
  *
  * **Example** (Launching an app)
  *
@@ -1138,7 +1138,7 @@ export const mount = <
  * **When to use**
  *
  * Use when the caller needs the root: to read its Model, send it a message,
- * or wait for `root.adopted`, which completes when no hydrating slot is still
+ * or wait for `root.adopted`, which completes when no hydrating instance is still
  * waiting. `mount` is the form that runs an app.
  *
  * **Details**

@@ -151,7 +151,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         const result = yield* ssr(App, Router.props(AppRoute)).pipe(Effect.provide([People.layer, router]))
         expect(result.adopted).toEqual(["/App", "/App/Person[/people/1]"])
         expect(result.misses).toEqual([])
-        // The bio is hydrated, so the client doesn't fetch it. The hydrated slot is logged once, and the
+        // The bio is hydrated, so the client doesn't fetch it. The hydrated loader state is logged once, and the
         // watch's first value equals it, so it isn't written again.
         expect(result.root.fetches()).toEqual([])
         expect(
@@ -226,7 +226,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       expect(stub.calls).toEqual(["showPopover Menu"])
     }).pipe(Effect.scoped))
 
-  it.effect("hydrates slots that missed the budget: a fetch in flight and a deferred Layer", () =>
+  it.effect("hydrates what missed the budget: a fetch in flight and a deferred Layer", () =>
     hosted(Effect.gen(function*() {
       const person = yield* routed("/people/2")
       const missed = yield* ssr(App, person.props, {
@@ -433,7 +433,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       }))
     }))
 
-  it.effect("keeps a slot whose Layer is still building inert until it adopts, then fires onMount", () =>
+  it.effect("keeps an instance whose Layer is still building inert until it adopts, then fires onMount", () =>
     Effect.gen(function*() {
       class Store extends Context.Service<Store, string>()("test/Store") {}
       const Message = Schema.TaggedUnion({ Mounted: {}, Clicked: {} })
@@ -568,7 +568,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         "/Page/List[l]"
       ])
     }).pipe(Effect.scoped))
-  it.effect("waits for the slot a Layer that settles in budget wakes, and for the fetches it starts", () =>
+  it.effect("waits for the instance a Layer that settles in budget wakes, and for the fetches it starts", () =>
     Effect.gen(function*() {
       class GetText extends Loader.Service<GetText>()("GetText", {
         args: {},
@@ -763,7 +763,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       expect(app.innerHTML).toBe("<p>leaf</p>")
     }).pipe(Effect.scoped))
 
-  it.effect("compares the head at adoption, so a mount update while a slot waits isn't a mismatch", () =>
+  it.effect("compares the head at adoption, so a mount update while an instance waits isn't a mismatch", () =>
     hosted(Effect.gen(function*() {
       class Slow extends Context.Service<Slow, string>()("test/Slow") {}
       const Waiting = Component.define({
@@ -867,7 +867,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         "head title: the server has \"Inner (server)\", the client \"Inner (client)\""
       ])
     })))
-  it.effect("snapshots the instances adoption saw, so removing one while a slot waits isn't a mismatch", () =>
+  it.effect("snapshots the instances adoption saw, so removing one while an instance waits isn't a mismatch", () =>
     hosted(Effect.gen(function*() {
       class Slow extends Context.Service<Slow, string>()("test/Slow") {}
       const Waiting = Component.define({
@@ -1127,7 +1127,7 @@ describe("HtmlServer loaders", { concurrent: false }, () => {
         GetItem: expect.arrayContaining([["{\"id\":1}", 0, "Item 1", 0], ["{\"id\":404}", 1, ["missing"], 0]])
       })
       expect((result.state["~loader"] as any).GetItem).toHaveLength(2)
-      // The client adopts both entries without fetching, and each instance's hydrated slot is logged once.
+      // The client adopts both entries without fetching, and each instance's hydrated loader state is logged once.
       expect(calls).toEqual([1, 404])
       expect(result.root.fetches()).toEqual([])
       expect(result.log.filter((entry) => entry._tag === "LoaderChanged").map((entry) => entry.path)).toEqual([
@@ -1204,10 +1204,10 @@ describe("HtmlServer loaders", { concurrent: false }, () => {
       }).pipe(Component.provide(GetSlowItem.layer))
       const result = yield* ssr(List, {}, { budget: "50 millis" })
       expect(result.html).toContain("<li>Item 1</li><li>failed</li><li>loading</li>")
-      // The slot is the settled keys' tuples; the entries ship as ordinary entries of the read.
+      // The loader state is the settled keys' tuples; the entries ship as ordinary entries of the read.
       expect(result.state["/List"]).toEqual({
         model: {},
-        loaded: { items: [["{\"id\":1}", 0, "Item 1", 0, false], ["{\"id\":404}", 1, ["missing"], null]] }
+        loaderState: { items: [["{\"id\":1}", 0, "Item 1", 0, false], ["{\"id\":404}", 1, ["missing"], null]] }
       })
       expect((result.state["~loader"] as any).GetSlowItem).toHaveLength(2)
       expect(result.misses).toEqual([{ read: "GetSlowItem", logKey: "{\"id\":3}" }])
@@ -1276,7 +1276,7 @@ describe("HtmlServer loaders", { concurrent: false }, () => {
         elements: Html
       }).make({
         // init's Command reruns on the client, and its invalidation refetches the hydrated entry while
-        // the slot below still holds the window open.
+        // the instance below still holds the window open.
         init: ($) => $.set({}).run(Refresh.make()),
         update: (model) => model,
         view: (_, h) => h.div(Item(h, { key: "a", props: { id: 1 } }), Slow(h, { key: "s", props: {} }))
@@ -1297,7 +1297,7 @@ describe("HtmlServer loaders", { concurrent: false }, () => {
       }))
     }))
 
-  it.effect("closes the window at the first navigation, before a waiting slot adopts", () =>
+  it.effect("closes the window at the first navigation, before a waiting instance adopts", () =>
     Effect.gen(function*() {
       const { GetItem, Item, calls } = makeItems()
       class Store extends Context.Service<Store, string>()("test/Store") {}
@@ -1365,7 +1365,7 @@ describe("HtmlServer loaders", { concurrent: false }, () => {
         update: (model) => model,
         view: (_, h) => h.p("now")
       })
-      // Holds the window open on the client: the slot waits 10 millis for its Layer.
+      // Holds the window open on the client: the instance waits 10 millis for its Layer.
       class Store extends Context.Service<Store, string>()("test/Store") {}
       let builds = 0
       const Slow = Component.define({
@@ -1388,7 +1388,7 @@ describe("HtmlServer loaders", { concurrent: false }, () => {
         message: Message,
         elements: Html
       }).make({
-        // On the client, init navigates while the slot holds the window open.
+        // On the client, init navigates while the instance holds the window open.
         init: ($) =>
           $.set({}).run(
             Router.push(AppRoute, Option.getOrThrow(AppRoute.parse("/people/1"))).pipe(
@@ -1493,7 +1493,7 @@ describe("HtmlServer loaders", { concurrent: false }, () => {
       expect(result.adopted).toEqual(["/Page", "/Page/Panel[p]"])
     })))
 
-  it.effect("fails ssr naming the slots still waiting for their Layer when the budget is spent", () =>
+  it.effect("fails ssr naming the instances still waiting for their Layer when the budget is spent", () =>
     hosted(Effect.gen(function*() {
       class Store extends Context.Service<Store, string>()("test/Store") {}
       let builds = 0

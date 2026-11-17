@@ -9,7 +9,7 @@
  * and the render flush all go through, so `settle` can drain everything, and
  * provides `MessageLog.memory`, so `root.log()` reads back what happened.
  *
- * Runtime tests are plain scoped Effects. Anything that crosses a child slot
+ * Runtime tests are plain scoped Effects. Anything that crosses into a child
  * is tested here; one instance on its own is a `Story`.
  *
  * **Example** (Counting on a TestHost)

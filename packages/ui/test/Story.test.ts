@@ -298,7 +298,7 @@ describe("Story", () => {
       )
     })
 
-    it("hears about a child's failure and shows the slot's fallback", () => {
+    it("hears about a child's failure and shows the child's fallback", () => {
       const failure = AsyncResult.failure<never, unknown>(Cause.die(new Error("boom")))
       Story.make(TodoList, { initial: todos }, (s) =>
         s.childFailure("t1", failure.cause)
@@ -518,7 +518,7 @@ describe("Story", () => {
       users: names.map((name, i) => ({ id: `${n}-${i}`, name, email: "", likes: 0 }))
     })
 
-    it("loaded writes the loader's slot, at the loader's current args", () => {
+    it("loaded writes the loader's state, at the loader's current args", () => {
       Story.make(users.ListPage, {}, (s) =>
         s
           .check((story) => assert.include(text(story), "Loading users…"))
@@ -527,7 +527,7 @@ describe("Story", () => {
           )
           .loaded("users", page(0, ["Ann", "Bea"]))
           .check((story) => assert.include(text(story), "AnnBea"))
-          // The next page: h.previous keeps the page the slot holds until it is loaded.
+          // The next page: h.previous keeps the page the loader state holds until it is loaded.
           .click("Next")
           .loaders((loaders) => assert.deepStrictEqual(loaders.map((loader) => loader.args), [{ page: 1 }]))
           .check((story) => {
@@ -561,7 +561,7 @@ describe("Story", () => {
           }))
     })
 
-    it("given takes an updater and keeps the slots, and loaded throws for a name that isn't a loader", () => {
+    it("given takes an updater and keeps the loader state, and loaded throws for a name that isn't a loader", () => {
       Story.make(users.RenameForm, { id: "1" }, (s) =>
         s
           .given((model) => ({ ...model, draft: Option.some("Zed") }))
@@ -651,14 +651,14 @@ describe("Story", () => {
           ),
         /others.*given args/
       )
-      // Loaders that aren't named keep their slots.
+      // Loaders that aren't named keep their state.
       Story.make(Team, { id: "1" }, (s) =>
         s.given({ changes: 0 }, { user: user("1", "Ann", "2") })
           .given({ changes: 5 }, { friend: user("2", "Bea") })
           .check((story) => assert.strictEqual(text(story), "Ann Bea ?+? ? 5")))
     })
 
-    it("given replaces loaded results in any key order, against the new results, not the old slots", () => {
+    it("given replaces loaded results in any key order, against the new results, not the old loader state", () => {
       Story.make(
         Team,
         { id: "1" },
