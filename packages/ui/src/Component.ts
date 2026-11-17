@@ -1639,16 +1639,6 @@ export declare namespace Definition {
 }
 
 /**
- * Compatibility alias for `View.H`, the helper for reusable pure view functions.
- * Use {@link Helper} for a component definition's props, loaders or custom elements.
- *
- * @stability experimental
- * @category utility types
- * @since 0.1.0
- */
-export type H<Msg = never> = View.H<Msg>
-
-/**
  * `h` in the view of a definition, for a function that takes it without
  * `Def.fragment`.
  *

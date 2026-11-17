@@ -7,8 +7,7 @@ import { describe, expect, it } from "tstyche"
 
 describe("@effect/ui/html/register", () => {
   it("types reusable pure views with View.H", () => {
-    expect<Component.H>().type.toBe<View.H>()
-    expect<Component.H<"Save">>().type.toBe<View.H<"Save">>()
+    expect<View.H>().type.toBe<View.H<never>>()
     const Button = <Msg>(h: View.H<Msg>, message: Msg) => {
       expect(h.props).type.toBe<unknown>()
       expect(h.button).type.toBe<Html.Tags<Msg>["button"]>()

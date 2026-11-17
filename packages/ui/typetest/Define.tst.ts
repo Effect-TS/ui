@@ -52,8 +52,7 @@ const touch = NoteDef.update((model) => ({ ...model, edits: model.edits + 1 }))
 
 describe("Component.define", () => {
   it("H supports pure views without a registered vocabulary", () => {
-    expect<Component.H>().type.toBe<View.H>()
-    expect<Component.H<Message>>().type.toBe<View.H<Message>>()
+    expect<View.H>().type.toBe<View.H<never>>()
     expect<View.H<Message>>().type.toBe<View.Helper<Message, unknown>>()
     const Row = <Msg>(h: View.H<Msg>, label: string) => h.el("li", label)
     NoteDef.view((model, h) => h.ul(Row(h, model.body)))
