@@ -1,13 +1,13 @@
 import { Command, Component, Feature, type MessageLog, type View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Query, Story, TestHost } from "@effect/ui/testing"
+import { Locator, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Deferred, Effect, Layer, Schema } from "effect"
 import { Dialog, type Item, Menu } from "./html/fixtures/headless.ts"
 
 const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(TestHost.layer()))
-const click = (root: { readonly get: (locator: Query.Locator) => TestHost.TestNode }, text: string) =>
-  Query.fire(root.get(Query.text(text, { exact: true })), "click")
+const click = (root: { readonly get: (locator: Locator.Locator) => TestHost.TestNode }, text: string) =>
+  Locator.fire(root.get(Locator.text(text, { exact: true })), "click")
 const updates = (root: { readonly log: () => ReadonlyArray<MessageLog.Entry> }) =>
   root.log().flatMap((entry) =>
     entry._tag === "Update" ? [entry.path + " " + entry.source._tag + " " + (entry.message as any)._tag] : []
@@ -323,7 +323,7 @@ describe("headless components", () => {
       ])
       assert.deepStrictEqual(root.model(), ["picked c", "closed", "clicked c"])
       assert.include(root.text(), "picked c, closed, clicked c")
-      assert.deepStrictEqual((root.get(Query.text("Copy", { exact: true })) as TestHost.TestElement).owners, {
+      assert.deepStrictEqual((root.get(Locator.text("Copy", { exact: true })) as TestHost.TestElement).owners, {
         click: ["/Picker/Dialog[confirm]/Menu[actions]", "/Picker/Dialog[confirm]", "/Picker"]
       })
     })))
@@ -454,14 +454,14 @@ describe("headless components", () => {
       assert.throws(() => Story.start(Opener, { twin: "open" }).givenChild("Actions", open).current.view(), twice)
       // Moved in one step, the ref is held once.
       const swapped = Story.start(Opener, { twin: "never" }).send(OpenerMessage.make({ _tag: "Swap" }))
-      assert.lengthOf(swapped.current.all(Query.text("spare in a closure")), 1)
+      assert.lengthOf(swapped.current.all(Locator.text("spare in a closure")), 1)
     })
   })
 
   it.effect("a part adds its tokens to a token list, whenever the consumer set it", () =>
     provideHost(Effect.gen(function*() {
       const root = yield* TestHost.mount(Form, {})
-      const input = root.get(Query.tag("input")) as TestHost.TestElement
+      const input = root.get(Locator.tag("input")) as TestHost.TestElement
       assert.strictEqual(input.attrs.class, "wide field")
       assert.strictEqual(input.attrs["aria-describedby"], "note hint")
     })))
@@ -511,7 +511,7 @@ describe("headless components", () => {
           )
       })
       const root = yield* TestHost.mount(Consumer, {})
-      const attrs = () => (root.get(Query.text("control", { exact: true })) as TestHost.TestElement).attrs
+      const attrs = () => (root.get(Locator.text("control", { exact: true })) as TestHost.TestElement).attrs
       const kept = { title: "part", "aria-label": "Keep me", class: "consumer part" }
       assert.deepStrictEqual(attrs(), kept)
       click(root, "toggle")

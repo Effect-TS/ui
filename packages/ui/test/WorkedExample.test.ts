@@ -4,7 +4,7 @@
  */
 import { Component, Router } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Query, TestHost } from "@effect/ui/testing"
+import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Layer, Schema } from "effect"
 import { TestClock } from "effect/testing"
@@ -33,14 +33,14 @@ const navigate = Effect.fnUntraced(function*(url: string) {
 
 type Root = Pick<TestHost.TestRoot<any, any, any>, "get" | "fetches">
 
-const click = (root: Root, text: string) => Query.fire(root.get(Query.text(text, { exact: true })), "click")
-const nameInput = (root: Root) => root.get(Query.attr("aria-label", "Name")) as TestHost.TestElement
+const click = (root: Root, text: string) => Locator.fire(root.get(Locator.text(text, { exact: true })), "click")
+const nameInput = (root: Root) => root.get(Locator.attr("aria-label", "Name")) as TestHost.TestElement
 const rename = (root: Root, name: string) => {
-  Query.fire(nameInput(root), "input", { value: name })
-  Query.fire(root.get(Query.tag("form")), "submit")
+  Locator.fire(nameInput(root), "input", { value: name })
+  Locator.fire(root.get(Locator.tag("form")), "submit")
 }
 /** The card's heading: the user's name as the card shows it. */
-const cardName = (root: Root) => Query.textOf(root.get(Query.tag("h2")))
+const cardName = (root: Root) => Locator.textOf(root.get(Locator.tag("h2")))
 const fetchesOf = (root: Root, read: string) => root.fetches().filter((fetch) => fetch.read === read)
 const count = (text: string, part: string) => text.split(part).length - 1
 
@@ -211,7 +211,7 @@ describe("the worked example", () => {
         yield* TestClock.adjust("10 millis")
         click(root, "Rename")
         yield* TestHost.settle
-        Query.fire(nameInput(root), "input", { value: "Zed" })
+        Locator.fire(nameInput(root), "input", { value: "Zed" })
         yield* TestHost.settle
         yield* TestClock.adjust("31 seconds")
         yield* TestHost.setVisible(false)
@@ -239,7 +239,7 @@ describe("the worked example", () => {
         rename(root, "C")
         click(root, "Close")
         yield* TestHost.settle
-        assert.isUndefined(root.query(Query.tag("form")))
+        assert.isUndefined(root.query(Locator.tag("form")))
         assert.strictEqual(root.pending().length, 2)
         yield* TestClock.adjust("100 millis")
         yield* TestClock.adjust("100 millis")

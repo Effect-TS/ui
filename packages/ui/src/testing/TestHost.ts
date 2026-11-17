@@ -17,7 +17,7 @@
  * ```ts import.meta.vitest
  * import { Effect, Schema } from "effect"
  * import { Component } from "@effect/ui"
- * import { Query, TestHost } from "@effect/ui/testing"
+ * import { Locator, TestHost } from "@effect/ui/testing"
  *
  * const Msg = Schema.TaggedUnion({ Increment: {} })
  *
@@ -33,7 +33,7 @@
  *
  * const program = Effect.gen(function*() {
  *   const root = yield* TestHost.mount(Counter, {})
- *   Query.fire(root.get(Query.text("0")), "click")
+ *   Locator.fire(root.get(Locator.text("0")), "click")
  *   yield* TestHost.settle
  *   return root.text()
  * }).pipe(Effect.scoped, Effect.provide(TestHost.layer()))
@@ -66,7 +66,7 @@ import * as MessageLog from "../MessageLog.ts"
 import * as Renderer from "../Renderer.ts"
 import * as Subscription from "../Subscription.ts"
 import type * as View from "../View.ts"
-import * as Query from "./Query.ts"
+import * as Locator from "./Locator.ts"
 import * as TestLoader from "./TestLoader.ts"
 
 /**
@@ -84,7 +84,7 @@ import * as TestLoader from "./TestLoader.ts"
  * @category models
  * @since 0.1.0
  */
-export interface TestElement extends Query.Firable {
+export interface TestElement extends Locator.Firable {
   readonly _tag: "Element"
   readonly tag: string
   readonly attrs: Record<string, string>
@@ -110,7 +110,7 @@ export interface TestElement extends Query.Firable {
  * @category models
  * @since 0.1.0
  */
-export interface TestText extends Query.Firable {
+export interface TestText extends Locator.Firable {
   readonly _tag: "Text"
   readonly tag?: undefined
   text: string
@@ -539,9 +539,9 @@ export interface TestRoot<out Model, in Msg, out Events> extends Root<Model, Msg
   readonly container: TestElement
   /** The text of everything mounted. */
   readonly text: () => string
-  readonly all: (locator: Query.Locator) => ReadonlyArray<TestNode>
-  readonly query: (locator: Query.Locator) => TestNode | undefined
-  readonly get: (locator: Query.Locator) => TestNode
+  readonly all: (locator: Locator.Locator) => ReadonlyArray<TestNode>
+  readonly query: (locator: Locator.Locator) => TestNode | undefined
+  readonly get: (locator: Locator.Locator) => TestNode
 }
 
 /**
@@ -617,10 +617,10 @@ export const mount = <
     testRoot = {
       ...neutral,
       container,
-      text: () => Query.textOf(container),
-      all: (locator) => Query.all(container as TestNode, locator),
-      query: (locator) => Query.query(container as TestNode, locator),
-      get: (locator) => Query.get(container as TestNode, locator)
+      text: () => Locator.textOf(container),
+      all: (locator) => Locator.all(container as TestNode, locator),
+      query: (locator) => Locator.query(container as TestNode, locator),
+      get: (locator) => Locator.get(container as TestNode, locator)
     }
     frame()
     return testRoot

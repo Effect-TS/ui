@@ -1,5 +1,5 @@
 import { Command, Component, Loader, MessageLog, Route, Router } from "@effect/ui"
-import { Query, Story, TestHost } from "@effect/ui/testing"
+import { Locator, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Exit, Layer, Option, Redacted, Request, RequestResolver, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
@@ -619,7 +619,7 @@ describe("Keyed loader fields", () => {
         yield* load
         app.order.length = 0
         const before = root.frames().length
-        Query.fire(root.get(Query.text("a: 1=Ann 2=Bea", { exact: true })), "click")
+        Locator.fire(root.get(Locator.text("a: 1=Ann 2=Bea", { exact: true })), "click")
         yield* TestHost.settle
         assert.deepStrictEqual(app.order, [
           "update a Rename",
@@ -643,8 +643,8 @@ describe("Keyed loader fields", () => {
         yield* load
         app.order.length = 0
         const before = root.frames().length
-        Query.fire(root.get(Query.text("a: 1=Ann 2=Bea", { exact: true })), "click")
-        Query.fire(root.get(Query.text("b: 2=Bea 1=Ann", { exact: true })), "click")
+        Locator.fire(root.get(Locator.text("a: 1=Ann 2=Bea", { exact: true })), "click")
+        Locator.fire(root.get(Locator.text("b: 2=Bea 1=Ann", { exact: true })), "click")
         yield* TestHost.settle
         assert.deepStrictEqual(app.order, [
           "update a Rename",
@@ -923,9 +923,9 @@ describe("Story keyed steps", () => {
           args: { id: "2" },
           error: "gone"
         }])
-        .check((story) => assert.strictEqual(Query.textOf(story.get(Query.tag("p"))), "a: 1=Ann 2=failed"))
+        .check((story) => assert.strictEqual(Locator.textOf(story.get(Locator.tag("p"))), "a: 1=Ann 2=failed"))
         .loaded("users", { id: "2" }, { id: "2", name: "Bea" }, { patched: true })
-        .check((story) => assert.strictEqual(Query.textOf(story.get(Query.tag("p"))), "a: 1=Ann 2=Bea~"))
+        .check((story) => assert.strictEqual(Locator.textOf(story.get(Locator.tag("p"))), "a: 1=Ann 2=Bea~"))
         .loadFailed("users", { id: "1" }, "gone", { waiting: true })
         .check((story) => {
           const [ann] = tuples(app.Board, "users", story.loaderState?.users)
@@ -1035,10 +1035,10 @@ describe("Keyed selection repaired by the prune handler", () => {
           { args: { id: "1" }, value: { id: "1", name: "Ann" } },
           { args: { id: "2" }, value: { id: "2", name: "Bea" } }
         ])
-        .check((story) => assert.strictEqual(Query.textOf(story.get(Query.tag("p"))), "Bea"))
+        .check((story) => assert.strictEqual(Locator.textOf(story.get(Locator.tag("p"))), "Bea"))
         .send(Message.make({ _tag: "Show", ids: ["1"] }))
         .check((story) => {
-          assert.strictEqual(Query.textOf(story.get(Query.tag("p"))), "Ann")
+          assert.strictEqual(Locator.textOf(story.get(Locator.tag("p"))), "Ann")
           assert.deepStrictEqual(heldIds(Selection, story.loaderState?.users), ["1"])
         }))
   })
@@ -1189,10 +1189,10 @@ describe("Keyed history restore", () => {
           const root = yield* mount
           yield* load
           // The rename never finishes, so its patch on key 1 is live when the push snapshots the page.
-          Query.fire(root.get(Query.text("a: 1=Ann 2=Bea", { exact: true })), "click")
+          Locator.fire(root.get(Locator.text("a: 1=Ann 2=Bea", { exact: true })), "click")
           yield* TestHost.settle
           assert.isTrue(root.text().includes("1=Boba~"))
-          Query.fire(root.get(Query.text("Home", { exact: true })), "click")
+          Locator.fire(root.get(Locator.text("Home", { exact: true })), "click")
           yield* TestHost.settle
         })
       )

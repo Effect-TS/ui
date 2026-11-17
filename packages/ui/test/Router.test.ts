@@ -1,6 +1,6 @@
 import { Command, Component, Head, Loader, type MessageLog, type Renderer, Route, Router } from "@effect/ui"
 import * as runtime from "@effect/ui/internal/runtime"
-import { Query, TestHost } from "@effect/ui/testing"
+import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Exit, type Layer, Option, Schema, type Scope, Stream } from "effect"
 import { AsyncResult } from "effect/reactivity"
@@ -9,7 +9,7 @@ import * as Prefetching from "./fixtures/prefetch.ts"
 import { App, AppRoute, GetPerson, personFetches } from "./fixtures/router.ts"
 
 const click = (root: TestHost.TestRoot<any, any, any>, text: string) =>
-  Query.fire(root.get(Query.text(text, { exact: true })), "click")
+  Locator.fire(root.get(Locator.text(text, { exact: true })), "click")
 
 const setup = (url = "/") => {
   const history = Router.memoryHistory(url)

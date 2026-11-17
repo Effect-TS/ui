@@ -2,7 +2,7 @@
 import { Command, Component, Head, Loader, MessageLog, Route, Router } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
-import { Query, Story, TestHost } from "@effect/ui/testing"
+import { Locator, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
@@ -133,7 +133,7 @@ const makeApp = () => {
 }
 
 const click = (root: TestHost.TestRoot<any, any, any>, text: string) =>
-  Query.fire(root.get(Query.text(text, { exact: true })), "click")
+  Locator.fire(root.get(Locator.text(text, { exact: true })), "click")
 
 /** Runs a block on a fresh TestHost, so each run has its own loader cache. */
 const run = <A, E>(layer: Layer.Layer<any>, effect: Effect.Effect<A, E, any>) =>

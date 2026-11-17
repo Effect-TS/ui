@@ -83,7 +83,7 @@ import * as schedule from "../internal/schedule.ts"
 import * as Loader from "../Loader.ts"
 import * as MessageLog from "../MessageLog.ts"
 import * as View from "../View.ts"
-import * as Query from "./Query.ts"
+import * as Locator from "./Locator.ts"
 
 /**
  * A Command issued by the instance whose message hasn't been delivered.
@@ -131,7 +131,7 @@ export interface AwaitedLoader {
  *
  * **Details**
  *
- * `get`, `query` and `all` run `Query` locators over the current view, as
+ * `get`, `query` and `all` run locators over the current view, as
  * `TestHost`'s roots do.
  *
  * @stability experimental
@@ -196,14 +196,14 @@ export interface Story<Props, Model, Msg, Events, Loaded = { readonly [name: str
   readonly subscriptions: () => ReadonlyArray<string>
   /** Each loader with its read and the args it returns for the current Model and props. */
   readonly loaders: () => ReadonlyArray<LoaderInfo>
-  /** The view as a `Query` tree. */
-  readonly root: Query.Node
+  /** The view as a `Locator.Node` tree. */
+  readonly root: Locator.Node
   /** The one element matching `locator`. Throws when there's none or several. */
-  readonly get: (locator: Query.Locator) => Query.Node
+  readonly get: (locator: Locator.Locator) => Locator.Node
   /** The one element matching `locator`, or `undefined`. Throws when there are several. */
-  readonly query: (locator: Query.Locator) => Query.Node | undefined
+  readonly query: (locator: Locator.Locator) => Locator.Node | undefined
   /** Every element matching `locator`, in document order. */
-  readonly all: (locator: Query.Locator) => ReadonlyArray<Query.Node>
+  readonly all: (locator: Locator.Locator) => ReadonlyArray<Locator.Node>
 }
 
 /**
@@ -367,11 +367,11 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
   /**
    * Clicks the one element `target` matches: the innermost element with a
    * `click` handler, that element or an ancestor, sends its message. A string
-   * means `Query.text(target)`. Throws when nothing or several elements match,
+   * means `Locator.text(target)`. Throws when nothing or several elements match,
    * or when nothing handles the click. `defaultPrevented` tells whether the
    * default was cancelled.
    */
-  click(target: string | Query.Locator): this
+  click(target: string | Locator.Locator): this
   /**
    * Sends `event` with `payload`, `{}` by default, to the one element
    * `locator` matches: the innermost element with a handler for it, that
@@ -379,7 +379,7 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    * it, except for `submit`, which the browser host cancels with or without a
    * handler. `defaultPrevented` tells whether the default was cancelled.
    */
-  fire(locator: Query.Locator, event: string, payload?: unknown): this
+  fire(locator: Locator.Locator, event: string, payload?: unknown): this
   /**
    * Sends the message the parent's `onEmit` maps `events` from the child with
    * `key` to, if any. A ref finds the child rendered with it.
@@ -774,8 +774,8 @@ const record = <Props, Model, Msg, Events>(
 ): Story<Props, Model, Msg, Events> => {
   let rendered: View.Node<Msg, any> | undefined
   const view = () => rendered ??= render()
-  // A view value is a `Query` tree; a child is a node with no tag or text.
-  const root = () => view() as Query.Node
+  // A view value is a `Locator.Node` tree; a child is a node with no tag or text.
+  const root = () => view() as Locator.Node
   const context = () => boundOf(fields.component)?.context(fields.model, fields.props, fields.loaderState)
   const story: Story<Props, Model, Msg, Events> = {
     component: fields.component,
@@ -806,9 +806,9 @@ const record = <Props, Model, Msg, Events>(
     get root() {
       return root()
     },
-    get: (locator) => Query.get(root(), locator),
-    query: (locator) => Query.query(root(), locator),
-    all: (locator) => Query.all(root(), locator)
+    get: (locator) => Locator.get(root(), locator),
+    query: (locator) => Locator.query(root(), locator),
+    all: (locator) => Locator.all(root(), locator)
   }
   if (fields.childModels !== undefined) childModels.set(story, fields.childModels)
   if (fields.shared !== undefined) sharedGiven.set(story, fields.shared)
@@ -1517,7 +1517,7 @@ const dispatch = <Props, Model, Msg, Events>(
     : apply(story, story.component.update(story.model, message, story.props, story.loaderState))
 
 /** `node` and its ancestors in `root`, innermost first, or `undefined` when `node` isn't in `root`. */
-const pathTo = (root: View.Node<any, any>, node: Query.Node): Array<View.Node<any, any>> | undefined => {
+const pathTo = (root: View.Node<any, any>, node: Locator.Node): Array<View.Node<any, any>> | undefined => {
   if (root === node) return [root]
   // An element's children, or the content a story shows under a child or an outlet.
   const children = (root as { readonly children?: ReadonlyArray<View.Node<any, any>> }).children
@@ -1540,7 +1540,7 @@ const pathTo = (root: View.Node<any, any>, node: Query.Node): Array<View.Node<an
  */
 const fireAt = <Props, Model, Msg, Events>(
   story: Story<Props, Model, Msg, Events>,
-  locator: Query.Locator,
+  locator: Locator.Locator,
   event: string,
   payload: unknown,
   step: string
@@ -1650,12 +1650,12 @@ class StepsImpl implements Steps<AnyComponent> {
   send(message: unknown): this {
     return this.step(dispatch(this.current, message))
   }
-  click(target: string | Query.Locator): this {
-    const locator = typeof target === "string" ? Query.text(target) : target
+  click(target: string | Locator.Locator): this {
+    const locator = typeof target === "string" ? Locator.text(target) : target
     const { prevented, story } = fireAt(this.current, locator, "click", {}, "click")
     return this.step(story, prevented)
   }
-  fire(locator: Query.Locator, event: string, payload: unknown = {}): this {
+  fire(locator: Locator.Locator, event: string, payload: unknown = {}): this {
     const { prevented, story } = fireAt(this.current, locator, event, payload, "fire")
     return this.step(story, prevented)
   }

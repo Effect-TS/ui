@@ -9,7 +9,7 @@
  * @stability experimental
  * @since 0.1.0
  */
-export * as Query from "./Query.ts"
+export * as Locator from "./Locator.ts"
 
 /**
  * @stability experimental

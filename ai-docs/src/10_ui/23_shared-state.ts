@@ -8,7 +8,7 @@
  */
 import { Component } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Query, Story } from "@effect/ui/testing"
+import { Locator, Story } from "@effect/ui/testing"
 import { Schema } from "effect"
 
 // ---------------------------------------------------------------------------
@@ -128,7 +128,7 @@ export const Toolbar = Component.define({
 // until `shared` gives it a value. Sends to the owner are in `sent`, and the
 // story never runs the owner's `update`.
 export const focused = Story.make(Tooltip, { label: "B", tip: "Bold" }, (s) => {
-  s.fire(Query.text("B"), "focus")
+  s.fire(Locator.text("B"), "focus")
   const [enter] = s.current.sent
   console.log(enter?.owner?.definition.name) // "TooltipProvider"
   // What the provider would make of it, given by hand: the tooltip shows.
