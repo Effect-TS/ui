@@ -1845,6 +1845,17 @@ export type Helper<D> = D extends
  * view, and `Def.fragment(f)` a view fragment that takes `h` and any other
  * arguments, such as a row.
  *
+ * `slots` names the places a parent can fill with markup. The parent passes
+ * `slots: { name: content }` when it declares the child, written with its own
+ * `h`, and the view places each one with `h.slots.<name>`, once per render.
+ * The content belongs to the parent: its handlers send the parent's
+ * messages, its children's events and failures map to them, `$.send` and
+ * refs reach into it from the parent, and it resolves services where the
+ * parent declared the child. A parent's re-render patches only the content,
+ * without running the child's view. Content the view doesn't place is not
+ * mounted, and a slot placed again starts over. A definition with slots
+ * finishes with `view`, not `parts`.
+ *
  * **Gotchas**
  *
  * An instance whose `model` Schema, or a loader's success, error or args
@@ -1967,6 +1978,40 @@ import { Loader } from "@effect/ui"
  *     SaveClicked: (_model, _msg, $) => $.combine(validate)
  *   },
  *   view: noteView
+ * })
+ * ```
+ *
+ * **Example** (A card whose title and body its parent fills)
+ *
+ * ```ts import.meta.vitest
+ * import { Component } from "@effect/ui"
+ * import { Schema } from "effect"
+ *
+ * const Card = Component.define({
+ *   name: "Card",
+ *   model: Schema.Boolean,
+ *   message: Schema.Literal("Toggle"),
+ *   slots: ["title", "body"]
+ * }).make({
+ *   init: () => true,
+ *   update: (open) => !open,
+ *   view: (open, h) =>
+ *     h.el("section", h.el("h2", h.slots.title), h.el("button").onClick("Toggle"), open && h.slots.body)
+ * })
+ *
+ * export const Page = Component.define({
+ *   name: "Page",
+ *   model: Schema.Number,
+ *   message: Schema.Literal("Like")
+ * }).make({
+ *   init: () => 0,
+ *   update: (likes) => likes + 1,
+ *   // The button is the page's, so a click sends the page's `Like`.
+ *   view: (likes, h) =>
+ *     Card(h, {
+ *       key: "card",
+ *       slots: { title: "Likes", body: h.el("button").onClick("Like").children(`${likes} likes`) }
+ *     })
  * })
  * ```
  *
