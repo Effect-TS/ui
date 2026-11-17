@@ -1,4 +1,4 @@
-import { Component, type View } from "@effect/ui"
+import { Component, View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { TestHost } from "@effect/ui/testing"
 import { Context, Effect, Schema } from "effect"
@@ -115,6 +115,60 @@ describe("headless components", () => {
             t.clock(h.time).onMount("seen", () =>
               Effect.as(Tracker.use((tracker) => tracker.seen), Msg.make({ _tag: "Seen" })))
               .children(String(t.now))
+        })
+    })
+    expect<Component.Requirements<typeof App>>().type.toBe<Clock | Tracker>()
+  })
+
+  it("wrapped parts keep their requirements and the wrapper's call signature", () => {
+    const Wrapped = Component.define({
+      name: "Wrapped",
+      model: Schema.Null,
+      message: Schema.Number,
+      elements: Html
+    }).make({
+      init: () => null,
+      update: (model) => model,
+      parts: (_, p) => {
+        const clock = p.part("time", (b) => b.onMount("tick", () => Clock.use((clock) => clock.now)))
+        const seen = p.part(
+          "div",
+          (b, label: string) =>
+            b.attr("aria-label", label).onMount(
+              "seen",
+              () => Effect.as(Tracker.use((tracker) => tracker.seen), Component.noop)
+            )
+        )
+        return {
+          clock: View.wrapPart(
+            clock,
+            <B extends View.PartTarget<"time">>(element: B): ReturnType<B["attr"]> => clock(element)
+          ),
+          seen: View.wrapPart(seen, <B extends View.PartTarget<"div">>(
+            { element, label }: { element: B; label: string }
+          ): ReturnType<B["attr"]> => seen(element, label))
+        }
+      }
+    })
+    expect<Component.Headless.Requirements<typeof Wrapped>>().type.toBe<Clock | Tracker>()
+    const App = Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
+      init: () => null,
+      update: (model) => model,
+      view: (_, h) =>
+        Wrapped(h, {
+          key: "wrapped",
+          view: (w) => {
+            expect(w.clock).type.not.toBeCallableWith(h.div)
+            expect(w.seen).type.not.toBeCallableWith({ element: h.div })
+            expect(w.seen).type.not.toBeCallableWith({ element: h.time, label: "Seen" })
+            expect(w.clock(h.time)).type.toBe<
+              Html.Element<Msg, never, Html.EventsOf<"time">, HTMLTimeElement, "time">
+            >()
+            expect(w.seen({ element: h.div, label: "Seen" })).type.toBe<
+              Html.Element<Msg, never, Html.EventsOf<"div">, HTMLDivElement, "div">
+            >()
+            return h.div(w.clock(h.time), w.seen({ element: h.div, label: "Seen" }))
+          }
         })
     })
     expect<Component.Requirements<typeof App>>().type.toBe<Clock | Tracker>()

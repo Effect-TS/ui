@@ -823,6 +823,37 @@ export interface PartTarget<out Tag extends string> {
  */
 export type PartRequirements<P> = P extends { readonly "~R"?: (_: never) => infer R } ? R : never
 
+/**
+ * Keeps a part's requirements on a wrapper function returned from a headless
+ * component's `parts`.
+ *
+ * **Details**
+ *
+ * Returns `wrapper` unchanged, preserving its parameters, generics and return
+ * type. Use it when adapting a part to an options object or adding markup.
+ * The wrapper must apply `part`; this only carries that part's requirements,
+ * not requirements of any other parts or effects the wrapper uses.
+ *
+ * **Example** (A part with an options object)
+ *
+ * ```ts import.meta.vitest
+ * import { View } from "@effect/ui"
+ *
+ * const withOptions = <R>(part: View.Part<"button", [], R>) =>
+ *   View.wrapPart(part, <B extends View.PartTarget<"button">>(
+ *     { element }: { element: B }
+ *   ): ReturnType<B["attr"]> => part(element))
+ * ```
+ *
+ * @stability experimental
+ * @category constructors
+ * @since 0.1.0
+ */
+export const wrapPart = <
+  P extends { readonly "~R"?: (_: never) => unknown },
+  F extends (...args: Array<any>) => any
+>(_part: P, wrapper: F): F & Pick<P, "~R"> => wrapper
+
 // Only a part's blank builder records removals. Ordinary builders keep their
 // string-only attrs and their fast copier; copies of a part patch keep this symbol.
 const partAttributeRemovals = Symbol("partAttributeRemovals")
