@@ -21,6 +21,31 @@ renders the slot with a ref from `Child.ref("Name")`, and its `update` calls
 `$.send(ref, message)`. Don't send what the child shows: that belongs in its
 props.
 
+### Stateless view wrappers
+
+Use `Component.H<M>` with `@effect/ui/html/register` for shared HTML view
+functions. No separate HTML helper type is needed. When the root is the hole,
+return its builder and let the caller add children: `card(h).children(...)`.
+This needs no children generic. For a nested hole, use an options object
+and keep its children inferred through `C`:
+
+```ts
+import "@effect/ui/html/register"
+import { Component, View } from "@effect/ui"
+
+const card = <M>(h: Component.H<M>) => h.section.class("card")
+
+const field = <M, C extends View.Children<M>>(h: Component.H<M>, options: {
+  readonly label: string
+  readonly children: C
+}) => h.label.children(options.label, h.div.class("control").children(options.children))
+```
+
+Pass `children: [child, otherChild]`. The unspread array retains the union
+of its children's service requirements. `View.Children<M>` is a generic
+constraint, not a parameter annotation: annotating children directly with it
+erases requirements. `View.Input<M>` instead rejects service-requiring children.
+
 ### Loading data
 
 A component declares the reads it shows in `loaders`, by name. Each entry

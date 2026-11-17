@@ -1,8 +1,8 @@
 // oxlint-disable-next-line no-unassigned-import
 import "@effect/ui/html/register"
 import { Component, type View } from "@effect/ui"
-import type { Html } from "@effect/ui/html"
-import { Schema } from "effect"
+import { Html } from "@effect/ui/html"
+import { Context, Schema } from "effect"
 import { describe, expect, it } from "tstyche"
 
 describe("@effect/ui/html/register", () => {
@@ -45,4 +45,46 @@ describe("@effect/ui/html/register", () => {
       }
     })
   })
+})
+
+const Msg = Schema.Literal("Click")
+type Msg = typeof Msg.Type
+class Clock extends Context.Service<Clock, {}>()("Clock") {}
+class Logger extends Context.Service<Logger, {}>()("Logger") {}
+
+it("shared wrappers preserve unspread options.children requirements across components", () => {
+  const card = <M>(h: Component.H<M>) => h.section.class("card")
+  const field = <M, C extends View.Children<M>>(h: Component.H<M>, options: {
+    readonly label: string
+    readonly children: C
+  }) => h.label.children(options.label, h.div.class("control").children(options.children))
+  const Page = Component.define({ name: "Page", model: Schema.Null, message: Msg, elements: Html }).make({
+    init: () => null,
+    update: (model) => model,
+    view: (_, h) => {
+      const clock = {} as View.Node<Msg, Clock>
+      const logger = {} as View.Node<Msg, Logger>
+      expect(field(h, { label: "Empty", children: [] })).type.toBe<View.Element<Msg, never>>()
+      expect(field(h, { label: "Text", children: ["text", false, null, undefined, h.br] })).type.toBe<
+        View.Element<Msg, never>
+      >()
+      const children = [clock, logger] as const
+      expect(field(h, { label: "Services", children })).type.toBe<View.Element<Msg, Clock | Logger>>()
+      return card(h).children(field(h, { label: "Services", children: [clock, logger] }))
+    }
+  })
+  expect<Component.Requirements<typeof Page>>().type.toBe<Clock | Logger>()
+  const Other = Component.define({
+    name: "Other",
+    props: Schema.Struct({ title: Schema.String }),
+    model: Schema.Null,
+    message: Schema.String,
+    elements: Html
+  }).make({
+    init: () => null,
+    update: (model) => model,
+    view: (_, h) =>
+      field(h, { label: h.props.title, children: [h.button.onClick("clicked"), {} as View.Node<string, Logger>] })
+  })
+  expect<Component.Requirements<typeof Other>>().type.toBe<Logger>()
 })

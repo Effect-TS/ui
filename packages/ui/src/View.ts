@@ -363,7 +363,7 @@ interface ErasedReceives {
  * Use to type the children a shared view helper passes on. Leaving `R` out
  * accepts only children that need no service, so a child that needs one
  * fails at the call site. To pass on whatever the children need, take them
- * as a generic tuple, as in the example: the element adds their
+ * with a generic `Children` constraint, as in the example: the element adds their
  * requirements to its own.
  *
  * **Gotchas**
@@ -374,20 +374,13 @@ interface ErasedReceives {
  * **Example** (A view helper that keeps its children's requirements)
  *
  * ```ts
- * import { Schema } from "effect"
+ * import "@effect/ui/html/register"
  * import { Component, View } from "@effect/ui"
  *
- * const Msg = Schema.TaggedUnion({ Close: {} })
- * const PageDef = Component.define({
- *   name: "Page",
- *   model: Schema.Null,
- *   message: Msg
- * })
- *
- * const card = <const C extends ReadonlyArray<View.Input<typeof Msg.Type, any>>>(
- *   h: Component.Helper<typeof PageDef>,
- *   ...children: C
- * ) => h.el("section").children(...children)
+ * const field = <M, C extends View.Children<M>>(h: Component.H<M>, options: {
+ *   readonly label: string
+ *   readonly children: C
+ * }) => h.label.children(options.label, h.div.class("control").children(options.children))
  * ```
  *
  * @stability experimental
@@ -400,7 +393,20 @@ export type Input<Msg, R = never> =
   | false
   | null
   | undefined
-  | ReadonlyArray<Content<Msg, R> | string | false | null | undefined>
+  | Children<Msg, R>
+
+/**
+ * A readonly array of children. Use `C extends View.Children<Msg>` for a
+ * wrapper's children option to preserve each child's requirements, and pass
+ * that option directly to `.children(options.children)` without spreading it.
+ * The default requirement is `any` for generic constraints, not annotations:
+ * annotating a value as `Children<Msg>` erases its requirements.
+ *
+ * @stability experimental
+ * @category utility types
+ * @since 0.1.0
+ */
+export type Children<Msg, R = any> = ReadonlyArray<Content<Msg, R> | string | false | null | undefined>
 
 /**
  * What a view, a child and a fallback may return: a node, or an element
