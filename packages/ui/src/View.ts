@@ -827,6 +827,8 @@ export type PartRequirements<P> = P extends { readonly "~R"?: (_: never) => infe
  * Keeps a part's requirements on a wrapper function returned from a headless
  * component's `parts`.
  *
+ * **Details**
+ *
  * Returns `wrapper` unchanged, preserving its parameters, generics and return
  * type. Use it when adapting a part to an options object or adding markup.
  * The wrapper must apply `part`; this only carries that part's requirements,
