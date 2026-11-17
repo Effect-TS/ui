@@ -4,8 +4,8 @@
  *
  * A story covers `init`, `update` and queries over the instance's view value.
  * Commands stay pending as data until a step resolves them with the message
- * they would have produced, so no service is needed. A child slot is a leaf:
- * anything that crosses one is a runtime test.
+ * they would have produced, so no service is needed. A child is a leaf:
+ * anything that crosses into one is a runtime test.
  *
  * `make` hands a callback a cursor, `Steps`, whose steps run as soon as they
  * are called and return the cursor, so they chain. A shared setup is a function
@@ -131,11 +131,11 @@ export interface Story<Props, Model, Msg, Events, Loaded = { readonly [name: str
   readonly props: Props
   readonly model: Model
   /**
-   * The loader slots, beside the Model: what each loader's read last
-   * returned. Opaque: `loaded` opens them.
+   * The loader state, beside the Model: what each loader's read last
+   * returned. Opaque: `loaded` opens it.
    */
-  readonly slots: Component.Slots | undefined
-  /** The loaders' results, by name, as `h.loaded` opens them for the current Model, props and slots. */
+  readonly loaderState: Component.LoaderState | undefined
+  /** The loaders' results, by name, as `h.loaded` opens them for the current Model, props and loader state. */
   readonly loaded: () => Loaded
   /** Commands issued but not yet resolved, oldest first. */
   readonly pending: ReadonlyArray<Pending<Msg>>
@@ -318,16 +318,16 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    *
    * **Details**
    *
-   * `given` never runs `update`. Loaders keep their slots, except that a
+   * `given` never runs `update`. Loaders keep their state, except that a
    * keyed loader drops the stored keys it no longer returns, with no
    * `onChange` message. Later steps send `onChange` as usual.
    *
    * `loaded` starts the loaders it names from loaded results: a Success
    * value, a list loader's page array, or a keyed loader's entries as
-   * `loadedMany` takes them. Each slot is written at the args the loader
+   * `loadedMany` takes them. Each loader's state is written at the args the loader
    * returns for the new Model and the given results, so a loader whose args
    * read another's result follows the new one, whatever the order of the keys
-   * and whatever the slots held before. The view renders once. It throws if a
+   * and whatever the loader state held before. The view renders once. It throws if a
    * named loader is disabled, or a keyed entry's args aren't ones the loader
    * returns.
    */
@@ -364,13 +364,13 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
   fire(locator: Query.Locator, event: string, payload?: unknown): this
   /**
    * Sends the message the parent's `onEmit` maps `events` from the child with
-   * `key` to, if any. A ref finds the slot rendered with it.
+   * `key` to, if any. A ref finds the child rendered with it.
    */
   childEmit(key: string | Component.Ref.Any, events: unknown): this
   /**
    * Sends the message the parent's `onFailure` maps a failure of the child with
    * `key` to, if any. The failure is passed as an `AsyncResult.Failure`. A
-   * ref finds the slot rendered with it.
+   * ref finds the child rendered with it.
    */
   childFailure(key: string | Component.Ref.Any, cause: Cause.Cause<unknown>): this
   /**
@@ -393,7 +393,7 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    * A Command issued with `Command.afterRefetch` becomes `awaiting` on the
    * component's own loaders its declared targets match, less those its
    * `writes` store, and sends at once when there are none. A `loaded` or
-   * `loadFailed` step on the last of them writes the loader's slot, then
+   * `loadFailed` step on the last of them writes the loader's state, then
    * sends this one. `waitExpired` ends the wait by budget. Under `mode: "queue"`
    * a message also waits for the earlier ones of its group.
    */
@@ -417,7 +417,7 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
   waitExpired(target: Target): this
 
   /**
-   * Loads a loader with a Success: writes its slot at the loader's current
+   * Loads a loader with a Success: writes its state at the loader's current
    * args, then sends the message of its `onChange`, if any. Throws when the
    * loader is disabled. For a list loader `value` is the page array, and
    * unless `waiting` it settles a pending load more.
@@ -428,7 +428,7 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    * `Command.afterRefetch` wait on the loader. It throws while a running or
    * queued Command's patch is live on the loader, since no fetch settles
    * under a live patch: only a `patched` value is written then. As in the
-   * cache, a patch is live only when the slot held a Success at issue.
+   * cache, a patch is live only when the loader's state held a Success at issue.
    */
   loaded<N extends Component.SingleNames<Component.Loaders<C>>>(
     name: N,
@@ -447,7 +447,7 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
   ): this
   /**
    * Loads a loader with a typed failure, as `loaded` does. The failure keeps
-   * the slot's last Success as `previousSuccess` when it holds one at the
+   * the loader state's last Success as `previousSuccess` when it holds one at the
    * loader's current args. Unless `waiting`, it settles a list loader's
    * pending load more.
    */
@@ -483,7 +483,7 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
   ): this
   /**
    * Loads several keys of a `loadMany` loader in one write, as the runtime
-   * writes a first emission or a batch: the slot holds the loader's stored
+   * writes a first emission or a batch: its state holds the loader's stored
    * keys and these, and `onChange`'s `changes` holds these. Throws on args
    * the loader doesn't currently return.
    */
@@ -564,7 +564,7 @@ class StepsImpl implements Steps<AnyComponent> {
       loadingMore: []
     })
     // Settled here, with no onChange message: the step's own prune then has nothing to write.
-    return this.step(engine.update(out, { slots: engine.givenSlots(out, loaded ?? {}, "Story.given") }))
+    return this.step(engine.update(out, { loaderState: engine.givenLoaderState(out, loaded ?? {}, "Story.given") }))
   }
   props(next: unknown): this {
     const props = typeof next === "function" ? next(this.current.props) : next
@@ -764,6 +764,25 @@ export const make: {
     f: (steps: Steps<C>) => void
   ): Steps<C>["current"]
   /**
+   * A story of a component with slots: `slots` stands in for what a parent
+   * passes. Its `h` has no messages of its own, as a parent's content in a
+   * story has nothing to send them to. `h` builds elements from
+   * `elements`, then the component's own vocabulary, then the registered
+   * one, and is typed with `elements`, or else the component's vocabulary. The content shows where the view places each slot, at the path the
+   * runtime gives it, such as `/Panel/[body]/Editor[e]`.
+   */
+  <C extends AnyComponent, V extends View.Elements = never>(
+    component: C,
+    props: Component.Props<C>,
+    options: {
+      readonly elements?: View.Vocabulary<V> | undefined
+      readonly slots: (
+        h: View.Helper<never, unknown> & View.Tags<[V] extends [never] ? VocabularyOf<C> : V, never>
+      ) => { readonly [K in Component.Slots<C>]?: View.Input<never, any> }
+    },
+    f: (steps: Steps<C>) => void
+  ): Steps<C>["current"]
+  /**
    * A story of a headless component: `view` stands in for a consumer's
    * closure. Its `h` has no messages of its own, so every handler in the
    * story is one of the component's parts'. `h` builds elements from
@@ -786,7 +805,14 @@ export const make: {
   ...rest: ReadonlyArray<any>
 ): any => {
   const f: (steps: Steps<any>) => void = rest[rest.length - 1]
-  const steps = start(rest.length === 2 ? engine.withView(component, rest[0].view, rest[0].elements) : component, props)
+  const steps = start(
+    rest.length === 1
+      ? component
+      : rest[0].slots !== undefined
+      ? engine.withSlots(component, rest[0].slots, rest[0].elements)
+      : engine.withView(component, rest[0].view, rest[0].elements),
+    props
+  )
   f(steps)
   const story = steps.current
   if (story.pending.length > 0) {
@@ -816,7 +842,7 @@ export const start = <C extends AnyComponent>(component: C, props: Component.Pro
     component: component as Component.Component<any, any, any, any, any, any, any, any, never>,
     props,
     model: first.model,
-    slots: undefined,
+    loaderState: undefined,
     pending: [],
     emitted: [],
     sent: [],
@@ -829,7 +855,7 @@ export const start = <C extends AnyComponent>(component: C, props: Component.Pro
 }
 
 /**
- * The child slots declared in a view, optionally filtered by component or
+ * The children declared in a view, optionally filtered by component or
  * feature service.
  *
  * @stability experimental
@@ -840,6 +866,9 @@ export const children = <Msg>(
   view: View.Node<Msg, any>,
   component?: Component.Any | { readonly key: string }
 ): ReadonlyArray<View.Child<Msg, any>> => engine.children(view, component)
+
+/** The vocabulary a component's view builds from. */
+type VocabularyOf<C> = C extends { readonly "~V"?: infer V } ? V : never
 
 /**
  * The parts of a headless component for a story's Model and props: the
@@ -855,11 +884,11 @@ export const parts = <Props, Events, Parts, R, Rcv>(
 ): Parts => component.parts(story.model, story.props, { owner: { path: "/" + component.definition.name, depth: 0 } })
 
 /**
- * What the slot with `key` shows for `result`: its `fallback` evaluated with an
+ * What the child with `key` shows for `result`: its `fallback` evaluated with an
  * `AsyncResult.Initial` or `AsyncResult.Failure`, or `undefined` without one.
- * A ref finds the slot rendered with it.
+ * A ref finds the child rendered with it.
  * Throws, as the runtime fails the parent, if the fallback renders two
- * children at one path, or a child at the path or ref key of another slot of
+ * children at one path, or a child at the path or ref key of another child of
  * `view`. It sees one fallback, so it can't check two shown at once, as the
  * runtime does.
  *
@@ -872,11 +901,11 @@ export const fallback = <Msg>(
   key: string | Component.Ref.Any,
   result: AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>
 ): View.Node<Msg, any> | undefined => {
-  const slot = engine.findChild(view, key, "Story.fallback")
-  if (slot.fallback === undefined) return undefined
-  const node = View.toNode(slot.fallback(result))
+  const child = engine.findChild(view, key, "Story.fallback")
+  if (child.fallback === undefined) return undefined
+  const node = View.toNode(child.fallback(result))
   // As the runtime does: the fallback's children share the parent's paths.
-  checkFallbackPaths(checkChildPaths("Story.fallback", view), slot, node)
+  checkFallbackPaths(checkChildPaths("Story.fallback", view), child, node)
   return node
 }
 
@@ -900,7 +929,7 @@ export const layerFailure = <C extends Component.Any>(
  *
  * **Details**
  *
- * Given a component, every loader slot is empty: each loader opens at the
+ * Given a component, every loader is empty: each loader opens at the
  * args it returns for the Model and props, as on a first render. The props
  * may be left out when the component takes none.
  *
@@ -942,7 +971,7 @@ export const head: {
   props?: unknown
 ) =>
   "pending" in self
-    ? self.component.head?.(self.model, self.props, self.slots) ?? []
+    ? self.component.head?.(self.model, self.props, self.loaderState) ?? []
     : self.head?.(model, props ?? {}, undefined) ?? []
 
 // ---------------------------------------------------------------------------
@@ -988,9 +1017,9 @@ export interface Outcome<Model, Events> {
 
 /**
  * The result of `fromLog`: the state the replay reached (the Model, props and
- * loader slots), how many messages it re-ran, and the first divergence, if
+ * loader state), how many messages it re-ran, and the first divergence, if
  * any. On a divergence, the state is the one the diverging message was sent
- * to: the Model before it, and the props and slots its `update` read.
+ * to: the Model before it, and the props and loader state its `update` read.
  *
  * @stability experimental
  * @category models
@@ -1007,9 +1036,9 @@ export interface Replay<
   readonly model: Model
   /** The props the instance had, from its latest `Mounted`, `PropsChanged` or `Update` entry. */
   readonly props: Props
-  /** The loader slots, beside the Model. Opaque: `loaded` opens them. */
-  readonly slots: Component.Slots | undefined
-  /** The loaders' results, by name, as `h.loaded` opens them for the Model, props and slots reached. */
+  /** The loader state, beside the Model. Opaque: `loaded` opens it. */
+  readonly loaderState: Component.LoaderState | undefined
+  /** The loaders' results, by name, as `h.loaded` opens them for the Model, props and loader state reached. */
   readonly loaded: () => Loaded
   readonly replayed: number
   readonly divergence: Divergence<Model, Msg, Events> | undefined
@@ -1024,16 +1053,16 @@ export interface Replay<
  * The replay starts at the oldest surviving `Mounted` or `Update` entry for
  * the path (the first one logged for a component with this name, unless
  * `path` is given), takes its Model, and re-runs every following message with
- * the props and loader slots it was recorded with, so every `update` sees
+ * the props and loader state it was recorded with, so every `update` sees
  * `$.loaded` as it did when it ran, whichever entries the log still holds.
  * Commands are compared, never run. Models and events are compared with
  * `Schema.toEquivalence`, and Commands by their Wire encoding.
  *
- * The props and slots are tracked with the Model, so the result is the state
+ * The props and loader state are tracked with the Model, so the result is the state
  * the instance ended with. They start from the first entry: a `Mounted`
- * entry's props and empty slots, or an `Update` entry's recorded props and
- * slots. Each later `PropsChanged` entry sets the props and each
- * `LoaderChanged` entry writes its slot, so props from the parent and loads
+ * entry's props and empty loader state, or an `Update` entry's recorded props and
+ * loader state. Each later `PropsChanged` entry sets the props and each
+ * `LoaderChanged` entry writes its loader's state, so props from the parent and loads
  * that settled after the last message are in the result too.
  *
  * It takes live entries or Wire frames. A Wire value sent as a placeholder,

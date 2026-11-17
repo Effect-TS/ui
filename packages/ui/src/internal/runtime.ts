@@ -34,7 +34,16 @@ import * as View from "../View.ts"
 import * as Executor from "./executor.ts"
 import * as loaders from "./loaders.ts"
 import { isNoop } from "./noop.ts"
-import { checkAuthorRefs, checkChildPaths, checkFallbackPaths, type ChildPaths, segment } from "./paths.ts"
+import {
+  checkAuthorPlacements,
+  checkAuthorRefs,
+  checkChildPaths,
+  checkContentPaths,
+  checkFallbackPaths,
+  type ChildPaths,
+  segment,
+  slotSegment
+} from "./paths.ts"
 import * as schedule from "./schedule.ts"
 import { holdsRedacted } from "./schemaRedact.ts"
 import { scopeAddFinalizerUnsafe } from "./scope.ts"
@@ -110,7 +119,7 @@ const unavailable = (env: Env): AsyncResult.Initial<never, unknown> | AsyncResul
 // Rendered tree
 // ---------------------------------------------------------------------------
 
-type Rendered = RElement | RText | RChild | RSlot
+type Rendered = RElement | RText | RChild | RFallback | ROutlet
 
 /**
  * A rendered element. A patch updates it in place, so a node that stays keeps
@@ -188,9 +197,32 @@ interface RChild {
   readonly inst: Instance
 }
 
-/** A slot showing its `fallback`: its feature service is building or failed, or its child failed. */
-interface RSlot {
-  readonly _tag: "Slot"
+/** A placed outlet: what the receiver's parent passed for one slot, rendered by an instance of its own. */
+interface ROutlet {
+  readonly _tag: "Outlet"
+  v: View.Outlet
+  readonly inst: Instance
+}
+
+/** What a receiver's parent last passed for its slots, and the outlets that place them. */
+interface Slotted {
+  values: Readonly<Record<string, View.Input<any, any>>> | undefined
+  /** The Env at the receiver's child node: the content resolves its services from it. */
+  readonly env: Env
+  readonly placed: Map<string, Instance>
+}
+
+/** An outlet instance: the receiver's slots it shows one of, and the content it last rendered. */
+interface OutletOf {
+  readonly slotted: Slotted
+  /** The outlet node last placed, which names the slot and carries the check its element needs. */
+  view: View.Outlet
+  content: unknown
+}
+
+/** A child showing its `fallback`: its feature service is building or failed, or the child failed. */
+interface RFallback {
+  readonly _tag: "Fallback"
   readonly v: View.Child<any, any>
   readonly inner: Rendered
   readonly failure: Cause.Cause<unknown> | undefined
@@ -203,20 +235,43 @@ const maxSendPasses = 100
 const taken = -1
 
 /**
- * The slot rendered with the ref `key` in the trees one author wrote: its view, the fallbacks shown
+ * The child rendered with the ref `key` in the trees one author wrote: its view, the fallbacks shown
  * in it, and the closures of the headless children declared there, which it wrote too. Each render
- * checks that at most one slot across them has the key.
+ * checks that at most one child across them has the key.
  */
-const findSlot = (rendered: ReadonlyArray<Rendered>, key: string): RChild | RSlot | undefined => {
+const findChild = (rendered: ReadonlyArray<Rendered>, key: string): RChild | RFallback | undefined => {
   for (const r of rendered) {
-    let found: RChild | RSlot | undefined
+    let found: RChild | RFallback | undefined
     if (r._tag === "Element") {
-      found = findSlot(r.children, key)
-    } else if (r._tag === "Child" || r._tag === "Slot") {
+      found = findChild(r.children, key)
+    } else if (r._tag === "Child" || r._tag === "Fallback") {
       if (r.v.ref !== undefined && r.v.ref.key === key) return r
-      if (r._tag === "Slot") found = findSlot([r.inner], key)
-      else if (r.inst.owner !== undefined) found = findSlot(r.inst.rendered, key)
+      if (r._tag === "Fallback") found = findChild([r.inner], key)
+      else if (r.inst.owner !== undefined) found = findChild(r.inst.rendered, key)
+      else found = firstInOutlets(r.inst, (out) => findChild(out.rendered, key))
     }
+    // An outlet in the tree shows what another author wrote, so the search passes it by.
+    if (found !== undefined) return found
+  }
+  return undefined
+}
+
+// Kept beside the instances, so a component without slots carries no field for them.
+const slottedBy = new WeakMap<Instance, Slotted>()
+const outletOf = new WeakMap<Instance, OutletOf>()
+
+/**
+ * The first result of `f` over the outlets `receiver` places. Their content was written by the author
+ * of the tree `receiver` sits in, so a search of that author's trees goes into them.
+ */
+const firstInOutlets = <A>(receiver: Instance, f: (out: Instance) => A | undefined): A | undefined => {
+  // Read first: most components declare no slots, and this is cheaper than the map.
+  if (receiver.component.definition.slots.length === 0) return undefined
+  const slotted = slottedBy.get(receiver)
+  if (slotted === undefined) return undefined
+  for (const out of slotted.placed.values()) {
+    if (out.closed) continue
+    const found = f(out)
     if (found !== undefined) return found
   }
   return undefined
@@ -278,7 +333,7 @@ interface WatchRun {
 
 /**
  * One keyed loader's watchers, collected: the last value of each key, and the
- * keys that changed since the loader's slot was last written.
+ * keys that changed since the loader's state was last written.
  */
 interface KeyedRun {
   group: loaders.Group
@@ -299,7 +354,7 @@ export interface Instance {
   readonly parent: Instance | undefined
   /**
    * Who wrote the tree this instance renders: the instance itself, or for a headless instance the
-   * author of the tree its slot sits in.
+   * author of the tree it sits in.
    */
   author: Instance
   /** A headless instance: who its parts' layers belong to. */
@@ -312,8 +367,8 @@ export interface Instance {
   children: Set<Instance>
   props: unknown
   model: unknown
-  /** The loader slots, beside the Model: what each loader's read last returned. */
-  slots: loaders.Slots | undefined
+  /** The loader state, beside the Model: what each loader's read last returned. */
+  loaderState: loaders.LoaderState | undefined
   /** The entries from the component's `head`, as of the last render. */
   head: ReadonlyArray<Head.Entry>
   onEmit: (events: unknown) => unknown
@@ -410,9 +465,9 @@ export interface Root {
   readonly buildsPendingSince: (flush: number) => number
   /** The merged head, as last given to the host. */
   readonly head: () => Head.Head
-  /** Completes once no slot is waiting to adopt the server's nodes. */
+  /** Completes once no child is waiting to adopt the server's nodes. */
   readonly adopted: Effect.Effect<void>
-  /** Hydration: the paths of the slots still waiting for their Layer before they adopt. */
+  /** Hydration: the paths of the children still waiting for their Layer before they adopt. */
   readonly waiting: () => ReadonlyArray<string>
   /** On the server: calls `f` once nothing is in flight. */
   readonly whenIdle: (f: () => void) => void
@@ -463,7 +518,7 @@ const jsonCodecOf = (schema: Schema.Codec<any, any>) => {
 
 /**
  * An instance's state as JSON, for page state and history restore: its Model, and for a component
- * with loaders, `{ model, loaded }` with the slots.
+ * with loaders, `{ model, loaderState }`.
  *
  * A state whose Schema holds a `Schema.Redacted` anywhere is never serialised: JSON would hold the
  * secret. Its codec encodes and decodes nothing, so the server defers the instance and history keeps
@@ -472,10 +527,10 @@ const jsonCodecOf = (schema: Schema.Codec<any, any>) => {
 const stateCodecs = new WeakMap<object, StateCodec>()
 interface StateCodec {
   readonly redacted: boolean
-  readonly encode: (model: unknown, slots: loaders.Slots | undefined) => Option.Option<unknown>
+  readonly encode: (model: unknown, loaderState: loaders.LoaderState | undefined) => Option.Option<unknown>
   readonly decode: (
     encoded: unknown
-  ) => Option.Option<{ readonly model: unknown; readonly slots: loaders.Slots | undefined }>
+  ) => Option.Option<{ readonly model: unknown; readonly loaderState: loaders.LoaderState | undefined }>
 }
 const redactedState: StateCodec = { redacted: true, encode: () => Option.none(), decode: () => Option.none() }
 /** @internal */
@@ -491,15 +546,15 @@ export const stateCodecOf = (component: Component.Any): StateCodec => {
       found = {
         redacted: false,
         encode: (model) => codec.encode(model),
-        decode: (encoded) => Option.map(codec.decode(encoded), (model) => ({ model, slots: undefined }))
+        decode: (encoded) => Option.map(codec.decode(encoded), (model) => ({ model, loaderState: undefined }))
       }
     } else {
-      const codec = jsonCodecOf(Schema.Struct({ model: schema, loaded: bound.schema }))
+      const codec = jsonCodecOf(Schema.Struct({ model: schema, loaderState: bound.schema }))
       found = {
         redacted: false,
-        encode: (model, slots) => codec.encode({ model, loaded: slots ?? bound.empty }),
+        encode: (model, loaderState) => codec.encode({ model, loaderState: loaderState ?? bound.empty }),
         decode: (encoded) =>
-          Option.map(codec.decode(encoded), (state: any) => ({ model: state.model, slots: state.loaded }))
+          Option.map(codec.decode(encoded), (state: any) => ({ model: state.model, loaderState: state.loaderState }))
       }
     }
     stateCodecs.set(component, found)
@@ -553,6 +608,7 @@ const differsPlainly = (a: unknown, b: unknown): boolean => {
 }
 
 const emptyText: View.Text = { _tag: "Text", text: "" }
+const ignoreEvents = () => undefined
 
 /**
  * What merging a tree with no entries gives: `Head.empty`'s fields in an object of its own, as a
@@ -582,7 +638,7 @@ interface Range {
   readonly open: unknown
   readonly close: unknown
   readonly nodes: ReadonlyArray<unknown>
-  /** Whether the instance took these nodes, so whoever created the slot leaves them in place. */
+  /** Whether the instance took these nodes, so whoever declared the child leaves them in place. */
   claimed: boolean
 }
 
@@ -595,6 +651,7 @@ type Plan =
     readonly children: ReadonlyArray<Plan> | undefined
   }
   | { readonly _tag: "Text"; readonly node: unknown }
+  // A child's range, or an outlet's.
   | { readonly _tag: "Child"; readonly range: Range }
 
 // ---------------------------------------------------------------------------
@@ -760,7 +817,7 @@ const setup = (
 
   // -- hydration ------------------------------------------------------------
   const hydration = host.hydration
-  // The server's state, until every slot has adopted.
+  // The server's state, until every instance has adopted.
   let hydrating: {
     readonly state: Renderer.State
     readonly deferred: ReadonlySet<string>
@@ -768,7 +825,7 @@ const setup = (
     state: options.state,
     deferred: new Set(options.state["~deferred"] ?? [])
   }
-  // Slots still waiting for their Layer before they adopt, and whether the first render is done.
+  // Children still waiting for their Layer before they adopt, and whether the first render is done.
   let waiting = 0
   let started = false
   let adoptedDone = hydrating === undefined
@@ -844,32 +901,35 @@ const setup = (
   const withCache = (context: Context.Context<any>): Context.Context<any> =>
     Context.add(context, Loader.Cache, cache as unknown as Loader.Cache["Service"])
   /**
-   * History restore: each slot restored seeds a cold entry, stale, so the first frame shows the data
+   * History restore: each loader state restored seeds a cold entry, stale, so the first frame shows the data
    * with `waiting: true` while one refetch runs. A snapshot taken under a patch may hold a value that
    * was never saved: it seeds nothing, and the loader starts from loading.
    */
-  const restoreLoaders = (component: Component.Any, slots: loaders.Slots | undefined): loaders.Slots | undefined => {
+  const restoreLoaders = (
+    component: Component.Any,
+    loaderState: loaders.LoaderState | undefined
+  ): loaders.LoaderState | undefined => {
     const bound = loaders.boundOf(component)
-    if (bound === undefined || slots === undefined) return slots
+    if (bound === undefined || loaderState === undefined) return loaderState
     const out: Record<string, unknown> = {}
     for (const entry of bound.entries) {
-      const slot = slots[entry.name]
+      const state = loaderState[entry.name]
       if (entry.keyed) {
         // Per tuple: one taken under a patch is dropped.
-        const map = Loader.snapshotMapData(slot)
+        const map = Loader.snapshotMapData(state)
         const kept: Array<unknown> = []
         for (const one of map?.entries.values() ?? []) {
           if (Loader.snapshotData(one)!.patched) continue
           cache.seed(one)
           kept.push(one)
         }
-        out[entry.name] = map !== undefined && kept.length === map.entries.size ? slot : bound.slotMany(entry, kept)
+        out[entry.name] = map !== undefined && kept.length === map.entries.size ? state : bound.stateMany(entry, kept)
         continue
       }
-      const data = Loader.snapshotData(slot)
+      const data = Loader.snapshotData(state)
       if (data !== undefined && !data.patched) {
-        cache.seed(slot)
-        out[entry.name] = slot
+        cache.seed(state)
+        out[entry.name] = state
       } else out[entry.name] = bound.empty[entry.name]
     }
     return out
@@ -1023,7 +1083,7 @@ const setup = (
   /**
    * Decides whether the server is idle once the current callback has finished:
    * a Layer that settled or a Command that ended may still be about to wake a
-   * slot, fail an instance or start work.
+   * child, fail an instance or start work.
    */
   let idleCheck = false
   const checkIdle = () => {
@@ -1059,7 +1119,7 @@ const setup = (
     const head = inst.component.head
     if (head === undefined) return
     headed = true
-    const entries = guard(inst, "head", () => head(inst.model, inst.props, inst.slots))
+    const entries = guard(inst, "head", () => head(inst.model, inst.props, inst.loaderState))
     if (entries === undefined) return
     inst.head = entries
     headDirty = true
@@ -1093,7 +1153,7 @@ const setup = (
       return found
     })
 
-  /** The head entries in document order. A slot's fallback contributes none. */
+  /** The head entries in document order. A child's fallback contributes none. */
   const headTree = (inst: Instance): Head.Tree => ({
     entries: inst.closed || inst.failure !== undefined ? [] : memoized(inst.head),
     children: inst.closed || inst.failure !== undefined ? [] : inst.rendered.flatMap(headChildren),
@@ -1101,18 +1161,20 @@ const setup = (
     onError: (error) => failInstance(inst, Cause.die(error), "head")
   })
   const headChildren = (rendered: Rendered): Array<Head.Tree> =>
-    rendered._tag === "Child"
+    rendered._tag === "Child" || rendered._tag === "Outlet"
       ? [headTree(rendered.inst)]
       : rendered._tag === "Element"
       ? rendered.children.flatMap(headChildren)
       : []
 
-  /** The child instances an instance rendered, as their snapshots. A failed slot has none. */
+  /** The child instances an instance rendered, as their snapshots. A failed child has none. */
   const snapshotChildren = (rendered: Rendered): Array<Snapshot> =>
     rendered._tag === "Child"
       ? rendered.inst.snapshot === undefined || rendered.inst.failure !== undefined ? [] : [rendered.inst.snapshot]
       : rendered._tag === "Element"
       ? rendered.children.flatMap(snapshotChildren)
+      : rendered._tag === "Outlet"
+      ? rendered.inst.rendered.flatMap(snapshotChildren)
       : []
   const snapshotTree = (snapshot: Snapshot): Head.Tree => ({
     entries: memoized(snapshot.entries),
@@ -1127,11 +1189,11 @@ const setup = (
 
   /**
    * Reports the head the tree had at adoption: each instance's entries and
-   * children as they were when it mounted, a waiting slot's from when it
+   * children as they were when it mounted, a waiting child's from when it
    * adopted. It runs after the live merge of the flush that finished
    * adoption, whose template results it reuses. A template is only called for
    * the report when no live merge applied it to that title, which happens
-   * when an ancestor rendered again while the slot holding the title waited.
+   * when an ancestor rendered again while the child holding the title waited.
    */
   let reportPending = false
   const reportAdoption = () => {
@@ -1173,7 +1235,7 @@ const setup = (
     }
   }
 
-  /** After the nodes commit: head sync, then the router's hook. Both wait until every slot has adopted. */
+  /** After the nodes commit: head sync, then the router's hook. Both wait until every instance has adopted. */
   const afterCommitHooks = () => {
     if (!adoptedDone) return
     if (headChanged) {
@@ -1243,7 +1305,7 @@ const setup = (
     }
     const onFailure = inst.onFailure
     if (onFailure !== undefined) {
-      // The code of whoever wrote the slot, so a defect in it is theirs, and it runs between renders.
+      // The code of whoever declared the child, so a defect in it is theirs, and it runs between renders.
       const author = parent.author
       defer(() => {
         const message = guard(author, "onFailure", () => onFailure(AsyncResult.failure(cause)))
@@ -1274,7 +1336,7 @@ const setup = (
   /** The root fallback runs with no instance: plain nodes, no handlers, no children. */
   const buildStatic = (view: View.Node<any, any>): unknown => {
     if (view._tag === "Text") return host.createText(view.text)
-    if (view._tag === "Child") return host.createText("")
+    if (view._tag === "Child" || view._tag === "Outlet") return host.createText("")
     const node = host.createElement(view.tag)
     for (const name in view.attrs) host.setAttr(node, name, view.attrs[name])
     for (const child of view.children) host.insertBefore(node, buildStatic(child), undefined)
@@ -1422,7 +1484,11 @@ const setup = (
     handlers.dispatch = (message, source) => {
       if (inst.closed || inst.waiting || frozen) return
       const component = inst.component
-      const next = guard(inst, "update", () => component.update(inst.model, message as never, inst.props, inst.slots))
+      const next = guard(
+        inst,
+        "update",
+        () => component.update(inst.model, message as never, inst.props, inst.loaderState)
+      )
       if (next === undefined) return
       const entrySeq = record({
         _tag: "Update",
@@ -1437,7 +1503,7 @@ const setup = (
         lists: next.lists ?? [],
         ...(next.sends === undefined || next.sends.length === 0 ? undefined : { sends: next.sends }),
         // What `update` saw in `$.loaded`, so a replay from any surviving entry sees it too.
-        ...(bound === undefined ? undefined : { loaded: inst.slots ?? bound.empty })
+        ...(bound === undefined ? undefined : { loaderState: inst.loaderState ?? bound.empty })
       })
       apply(inst, next, entrySeq, false)
     }
@@ -1497,7 +1563,7 @@ const setup = (
     // Normally done already by whoever closed the Scope, in the patcher's pre-pass.
     releaseWatches(inst)
     record({ _tag: "Unmounted", path: inst.path })
-    // A slot that closes while it waits no longer holds up adoption.
+    // A child that closes while it waits no longer holds up adoption.
     if (inst.waiting) {
       inst.waiting = false
       settleWaiting()
@@ -1513,7 +1579,8 @@ const setup = (
     onEmit: (events: unknown) => unknown,
     onFailure: ((failure: AsyncResult.Failure<never, unknown>) => unknown) | undefined,
     range: Range | undefined,
-    content?: ((parts: any) => View.Content<any, any>) | undefined
+    content?: ((parts: any) => View.Content<any, any>) | undefined,
+    slots?: Slotted["values"]
   ): Instance => {
     const scope = Scope.forkUnsafe(parent?.scope ?? rootScope, "sequential")
     const bound = loaders.boundOf(component)
@@ -1533,7 +1600,7 @@ const setup = (
       children: noChildren,
       props,
       model: undefined,
-      slots: undefined,
+      loaderState: undefined,
       head: [],
       onEmit,
       onFailure,
@@ -1566,6 +1633,8 @@ const setup = (
     // Made outside this function, the closures the instance keeps hold it alone, and not the
     // locals of its mount: see `instanceHandlers`.
     instanceHandlers(inst, bound)
+    // `parentEnv` is the Env at the child node, but for a feature's implementation, which is passed no slots.
+    if (component.definition.slots.length > 0) slottedBy.set(inst, { values: slots, env: parentEnv, placed: new Map() })
     inst.author = owner === undefined || parent === undefined ? inst : parent.author
     if (owner !== undefined) owners.set(owner, inst)
     if (recording > 0) {
@@ -1621,7 +1690,7 @@ const setup = (
             }
             return
           }
-          // Handled: the component stays mounted and hears about it once. Feature slots below show
+          // Handled: the component stays mounted and hears about it once. Feature children below show
           // `fallback`, and Commands waiting for the Layer are interrupted. The server leaves it to the client.
           inst.deferred = true
           failEnv(own, cause)
@@ -1670,14 +1739,15 @@ const setup = (
       }
     }
 
-    // Hydration: the Model and slots the server rendered this path with, unless it deferred the path.
-    const fromServer: Option.Option<{ readonly model: unknown; readonly slots: loaders.Slots | undefined }> =
-      hydrating !== undefined &&
+    // Hydration: the Model and loader state the server rendered this path with, unless it deferred the path.
+    const fromServer: Option.Option<
+      { readonly model: unknown; readonly loaderState: loaders.LoaderState | undefined }
+    > = hydrating !== undefined &&
         (parent === undefined || parent.adoptsChildren) &&
         !hydrating.deferred.has(path) &&
         Object.hasOwn(hydrating.state, path)
-        ? stateCodecOf(component).decode(hydrating.state[path])
-        : Option.none()
+      ? stateCodecOf(component).decode(hydrating.state[path])
+      : Option.none()
 
     /**
      * Runs `init` and renders. An instance adopting a Model (from the server, or from
@@ -1687,7 +1757,7 @@ const setup = (
      */
     const begin = (
       range: Range | undefined,
-      serverModel: Option.Option<{ readonly model: unknown; readonly slots: loaders.Slots | undefined }>
+      serverModel: Option.Option<{ readonly model: unknown; readonly loaderState: loaders.LoaderState | undefined }>
     ) => {
       const first = guard(inst, "init", () => {
         const elements = component.elements()
@@ -1706,14 +1776,14 @@ const setup = (
         if (restored !== undefined) {
           adopted = Option.map(
             stateCodecOf(component).decode(restored),
-            (state) => ({ model: state.model, slots: restoreLoaders(component, state.slots) })
+            (state) => ({ model: state.model, loaderState: restoreLoaders(component, state.loaderState) })
           )
         }
       }
       let mountedSeq = -1
       if (first !== undefined) {
         inst.model = Option.isSome(adopted) ? adopted.value.model : first.model
-        inst.slots = Option.isSome(adopted) ? adopted.value.slots : undefined
+        inst.loaderState = Option.isSome(adopted) ? adopted.value.loaderState : undefined
         inst.adoptsChildren = Option.isSome(serverModel)
         mountedSeq = record({
           _tag: "Mounted",
@@ -1725,19 +1795,19 @@ const setup = (
           events: first.events,
           adopted: Option.isSome(adopted)
         })
-        // Restored or hydrated slots, so a replay of the log starts from them.
-        if (bound !== undefined && inst.slots !== undefined) {
+        // Restored or hydrated loader state, so a replay of the log starts from them.
+        if (bound !== undefined && inst.loaderState !== undefined) {
           for (const entry of bound.entries) {
-            const slot = inst.slots[entry.name]
-            if (slot !== bound.empty[entry.name]) {
-              record({ _tag: "LoaderChanged", path, component, name: entry.name, slot })
+            const state = inst.loaderState[entry.name]
+            if (state !== bound.empty[entry.name]) {
+              record({ _tag: "LoaderChanged", path, component, name: entry.name, state })
             }
           }
         }
       }
       logEarly()
       if (first === undefined) return
-      // The first emission of each watch is written to its slot before the first render, parent before
+      // The first emission of each watch is written to its loader's state before the first render, parent before
       // child, so a new instance over a warm entry never commits "Loading". An instance adopting the
       // server's state renders it first, to match the server's nodes, and gets the emissions after.
       const early: NonNullable<Instance["mounting"]> = []
@@ -1871,7 +1941,7 @@ const setup = (
     const bound = loaders.boundOf(inst.component)
     const field = bound?.byName.get(list.name)
     if (bound === undefined || field === undefined || !field.list) return
-    const args = bound.context(inst.model, inst.props, inst.slots).argsOf(field.name).args
+    const args = bound.context(inst.model, inst.props, inst.loaderState).argsOf(field.name).args
     if (args === undefined) return
     const call = `$.${list.op}(${JSON.stringify(list.name)})`
     if (server !== undefined) {
@@ -1913,7 +1983,7 @@ const setup = (
   }
   /**
    * Delivers the sends of `inst`'s updates to its direct children, matched by ref key in its last
-   * render. A send whose slot can't take it is dropped and logged, never kept for a later instance.
+   * render. A send whose child can't take it is dropped and logged, never kept for a later instance.
    */
   const deliverSends = (inst: Instance) => {
     if (inst.outbox.length === 0 || inst.closed) return
@@ -1930,28 +2000,28 @@ const setup = (
     }
     for (const { issued, send } of outbox) {
       if (inst.closed) return
-      // A headless instance wrote none of the tree it renders, so it has no slots to send to.
-      const slot = inst.owner === undefined ? findSlot(inst.rendered, send.ref.key) : undefined
-      const reason: MessageLog.SendDropped["reason"] | undefined = slot === undefined
+      // A headless instance wrote none of the tree it renders, so it has no children to send to.
+      const child = inst.owner === undefined ? findChild(inst.rendered, send.ref.key) : undefined
+      const reason: MessageLog.SendDropped["reason"] | undefined = child === undefined
         ? "unrendered"
-        : slot._tag === "Slot"
-        ? (slot.failure !== undefined ? "failed" : "fallback")
-        : slot.inst.failure !== undefined
+        : child._tag === "Fallback"
+        ? (child.failure !== undefined ? "failed" : "fallback")
+        : child.inst.failure !== undefined
         ? "failed"
-        : slot.inst.closed
+        : child.inst.closed
         ? "unrendered"
-        : slot.inst.waiting
+        : child.inst.waiting
         ? "waiting"
         : undefined
       if (reason !== undefined) {
         record({ _tag: "SendDropped", path: inst.path, ref: send.ref.key, issued, reason })
         continue
       }
-      ;(slot as RChild).inst.dispatch(send.message, { _tag: "Send", path: inst.path, seq: issued.seq })
+      ;(child as RChild).inst.dispatch(send.message, { _tag: "Send", path: inst.path, seq: issued.seq })
     }
   }
   const deliverEvents = (inst: Instance, events: ReadonlyArray<unknown>, entrySeq: number) => {
-    // The slot's `onEmit` was written by the author of the tree it sits in.
+    // The child's `onEmit` was written by the author of the tree it sits in.
     const parent = inst.parent?.author
     for (const emitted of events) {
       if (inst.closed) return
@@ -2325,7 +2395,7 @@ const setup = (
       ? Math.max(0, Duration.toMillis(budget) - handle.sinceApplied())
       : Infinity
     if (remaining === 0) return endWait(run, "budget")
-    // After the cache's emission: a single loader's slot is already written, and a keyed loader's is
+    // After the cache's emission: a single loader's state is already written, and a keyed loader's is
     // queued in the flush's deferred work, which the delivery goes behind.
     const ended = (by: MessageLog.WaitEnded) => {
       endWait(run, by)
@@ -2411,7 +2481,7 @@ const setup = (
   const syncSubscriptions = (inst: Instance, watchesOnly = false) => {
     const subscriptions = inst.component.subscriptions
     const bound = loaders.boundOf(inst.component)
-    // A waiting slot has no Model yet.
+    // A waiting instance has no Model yet.
     if (inst.closed || inst.waiting || (subscriptions === undefined && bound === undefined)) return
     // Sample the root once for server checks, and loader components for their watches.
     // Nothing under a Layer kept off the server is sampled.
@@ -2422,15 +2492,15 @@ const setup = (
     }
     const watches = bound === undefined
       ? []
-      : guard(inst, "subscription", () => bound.context(inst.model, inst.props, inst.slots).watches())
+      : guard(inst, "subscription", () => bound.context(inst.model, inst.props, inst.loaderState).watches())
     if (watches === undefined) return
     // A throw from the root's check fails the render: `guard` would defer the root to the client, unchecked.
     // On the server only the root's are sampled, for their checks.
     const wanted = subscriptions === undefined || (server !== undefined && !checkRoot)
       ? []
       : checkRoot
-      ? subscriptions(inst.model, inst.props, inst.slots)
-      : guard(inst, "subscription", () => subscriptions(inst.model, inst.props, inst.slots))
+      ? subscriptions(inst.model, inst.props, inst.loaderState)
+      : guard(inst, "subscription", () => subscriptions(inst.model, inst.props, inst.loaderState))
     if (wanted === undefined) return
     const byKey = new Map<string, Subscription.Subscription<any, any>>()
     const markers = new Map<string, loaders.Marker>()
@@ -2479,7 +2549,7 @@ const setup = (
     // Streams never run on the server.
     if (!watchesOnly && server === undefined) syncStreams(inst, byKey)
     // The cache never calls back with the state at registration. Each new watcher's settled value
-    // is written to its slot here, once the watchers and Streams follow the state that asked for
+    // is written to its loader's state here, once the watchers and Streams follow the state that asked for
     // them, and so before this instance's next render. A keyed loader's go to its next drain.
     for (const fold of folds) fold()
     // The key set may have changed: the next drain checks for a prune.
@@ -2617,7 +2687,7 @@ const setup = (
         const loader = bound.byName.get(marker.name)!
         // It may run inside another instance's `update`: a patch registered at issue reaches every
         // watcher before that `update` returns.
-        writeSlot(inst, loader, bound.slot(loader, entry, result, patched, more), [], logKey)
+        writeLoaderState(inst, loader, bound.state(loader, entry, result, patched, more), [], logKey)
       }
       const go = (envCtx: Context.Context<any>) => {
         if (inst.closed || running.released) return
@@ -2713,7 +2783,7 @@ const setup = (
     })
   }
   /**
-   * Writes each keyed loader's slot that is due, at most once per loader per round, and runs rounds
+   * Writes each keyed loader's state that is due, at most once per loader per round, and runs rounds
    * until none is due: a write, and the `update` of its `onChange`, can change the key set, or
    * another keyed loader's keys. Runs at mount before the first view, before a kept child's view
    * when its props change, and as the deferred job. Nothing bounds the rounds, as nothing bounds a
@@ -2732,8 +2802,8 @@ const setup = (
     }
   }
   /**
-   * Writes a keyed loader's slot when a declared key's watcher emitted since the last write, or when
-   * the slot holds a key the loader no longer returns. The slot is sampled from the watchers now:
+   * Writes a keyed loader's state when a declared key's watcher emitted since the last write, or when
+   * the state holds a key the loader no longer returns. The state is sampled from the watchers now:
    * each declared key's last value.
    */
   const deliverKeyed = (inst: Instance, run: KeyedRun): boolean => {
@@ -2743,7 +2813,7 @@ const setup = (
       const value = run.changes.has(entry.argsKey) ? run.values.get(entry.argsKey) : undefined
       return value === undefined ? [] : [{ args: value.args, result: value.result }]
     })
-    const held = Loader.snapshotMapData(inst.slots?.[group.name])
+    const held = Loader.snapshotMapData(inst.loaderState?.[group.name])
     let prune = false
     for (const key of held?.entries.keys() ?? []) {
       if (!declared.has(key)) {
@@ -2755,34 +2825,34 @@ const setup = (
     if (!prune && changes.length === 0) return false
     const bound = loaders.boundOf(inst.component)!
     const loader = bound.byName.get(group.name)!
-    const slot = bound.slotMany(
+    const state = bound.stateMany(
       loader,
       group.entries.flatMap((entry) => {
         const value = run.values.get(entry.argsKey)
-        return value === undefined ? [] : [bound.slot(loader, entry, value.result, value.patched, undefined)]
+        return value === undefined ? [] : [bound.state(loader, entry, value.result, value.patched, undefined)]
       })
     )
-    writeSlot(inst, loader, slot, changes, run.logKey)
+    writeLoaderState(inst, loader, state, changes, run.logKey)
     return true
   }
   /**
-   * Writes a loader's slot, logs it and re-renders the instance. The watches follow the new slots,
+   * Writes a loader's state, logs it and re-renders the instance. The watches follow the new state,
    * since a loader's args can read another's result. Then the loader's `onChange`, if any, sends
-   * its message, whose `update` sees the slot written.
+   * its message, whose `update` sees the state written.
    */
-  const writeSlot = (
+  const writeLoaderState = (
     inst: Instance,
     loader: loaders.Entry,
-    slot: unknown,
+    state: unknown,
     changes: ReadonlyArray<loaders.KeyedChange>,
     key: string
   ) => {
     if (inst.closed || inst.waiting || frozen) return
     const bound = loaders.boundOf(inst.component)!
     // The same snapshot, as when a watcher's first value is what the server or history already gave.
-    if (Equal.equals((inst.slots ?? bound.empty)[loader.name], slot)) return
-    inst.slots = { ...(inst.slots ?? bound.empty), [loader.name]: slot }
-    record({ _tag: "LoaderChanged", path: inst.path, component: inst.component, name: loader.name, slot })
+    if (Equal.equals((inst.loaderState ?? bound.empty)[loader.name], state)) return
+    inst.loaderState = { ...(inst.loaderState ?? bound.empty), [loader.name]: state }
+    record({ _tag: "LoaderChanged", path: inst.path, component: inst.component, name: loader.name, state })
     const mounting = inst.mounting !== undefined
     if (!mounting) markDirty(inst)
     syncSubscriptions(inst, mounting)
@@ -2790,7 +2860,7 @@ const setup = (
     const message = guard(
       inst,
       "subscription",
-      () => bound.context(inst.model, inst.props, inst.slots).changed(loader.name, changes),
+      () => bound.context(inst.model, inst.props, inst.loaderState).changed(loader.name, changes),
       key
     )
     if (message !== undefined) inst.dispatch(message.value, { _tag: "Subscription", key })
@@ -2959,11 +3029,14 @@ const setup = (
       const visitNode = (node: View.Node<any, any>): void => {
         switch (node._tag) {
           case "Text":
+          case "Outlet":
             return
           case "Element":
             for (const child of node.children) visitNode(child)
             return
           case "Child":
+            // What the parent passed for the child's slots is the parent's, whether the child places it.
+            for (const child of View.slotNodes(node)) visitNode(child)
             // A feature has no implementation until its Layer is built.
             if (Feature.isService(node.component)) return
             // A headless child's view is a closure over its parts, which this walk doesn't run.
@@ -3060,8 +3133,9 @@ const setup = (
   const releaseRendered = (rendered: Rendered): void => {
     switch (rendered._tag) {
       case "Child":
+      case "Outlet":
         return releaseWatches(rendered.inst)
-      case "Slot":
+      case "Fallback":
         return releaseRendered(rendered.inner)
       case "Element": {
         for (const child of rendered.children) releaseRendered(child)
@@ -3090,13 +3164,17 @@ const setup = (
         }
         return firstDefined(rendered.children, (child) => findRef(child, key, who, author))
       }
-      case "Slot":
+      case "Fallback":
         return findRef(rendered.inner, key, who, author)
       case "Child":
         return rendered.inst.owner === undefined
-          ? undefined
+          ? firstInOutlets(
+            rendered.inst,
+            (out) => firstDefined(out.rendered, (child) => findRef(child, key, who, author))
+          )
           : firstDefined(rendered.inst.rendered, (child) => findRef(child, key, who, author))
       case "Text":
+      case "Outlet":
         return undefined
     }
   }
@@ -3294,21 +3372,21 @@ const setup = (
   }
 
   // -- create ---------------------------------------------------------------
-  /** The instance's view. A headless instance's is its slot's closure, run against its parts. */
+  /** The instance's view. A headless instance's is the closure it was declared with, run against its parts. */
   const viewOf = (inst: Instance): View.Node<any, any> | undefined => {
     const owner = inst.owner
     if (owner === undefined) {
       return guard(
         inst,
         "view",
-        () => checked(inst, inst.component.view(inst.model, inst.props, runningOf(inst), inst.slots, inst.path))
+        () => checked(inst, inst.component.view(inst.model, inst.props, runningOf(inst), inst.loaderState, inst.path))
       )
     }
     const parts = guard(inst, "view", () => ({
       value: (inst.component as unknown as Component.Headless.Any).parts(inst.model, inst.props, {
         owner,
         running: runningOf(inst),
-        loaded: inst.slots
+        loaderState: inst.loaderState
       })
     }))
     if (parts === undefined) return undefined
@@ -3331,8 +3409,8 @@ const setup = (
    */
   const refChecks = new Set<Instance>()
   /**
-   * Fails `author` with source `view` when two slots across its view and the closures it wrote have
-   * refs with one key, since a send matches a slot by its key alone. Run once all of them are current.
+   * Fails `author` with source `view` when two children across its view and the closures it wrote have
+   * refs with one key, since a send matches a child by its key alone. Run once all of them are current.
    */
   const checkRefs = (author: Instance) => {
     refChecks.delete(author)
@@ -3341,17 +3419,27 @@ const setup = (
     closurePaths(author, written)
     try {
       checkAuthorRefs(author.path, written)
+      checkAuthorPlacements(author.path, written)
     } catch (error) {
       failInstance(author, Cause.die(error), "view")
     }
   }
   /**
-   * Adds the paths of the closures below `inst` that its author wrote: those of its headless children,
-   * at any depth. Only what's still in the tree counts, since a removed child's Scope can close later.
+   * Adds the paths of the trees below `inst` that its author wrote: the closures of its headless
+   * children and the content its children place, at any depth. Only what's still in the tree counts,
+   * since a removed child's Scope can close later.
    */
   const closurePaths = (inst: Instance, out: Array<ChildPaths>) => {
     for (const child of inst.children) {
-      if (child.owner === undefined || child.closed) continue
+      if (child.closed) continue
+      if (child.owner === undefined) {
+        firstInOutlets(child, (placed) => {
+          if (placed.childPaths !== undefined) out.push(placed.childPaths)
+          closurePaths(placed, out)
+          return undefined
+        })
+        continue
+      }
       if (child.childPaths !== undefined) out.push(child.childPaths)
       closurePaths(child, out)
     }
@@ -3361,6 +3449,7 @@ const setup = (
   }
 
   const render = (inst: Instance) => {
+    if (inst.component === outletComponent) return renderOutlet(inst)
     if (inst.waiting) return
     const tree = viewOf(inst)
     if (tree === undefined) return
@@ -3415,13 +3504,198 @@ const setup = (
       }
       case "Child":
         return createChild(inst, view, env)
+      case "Outlet":
+        return createOutlet(inst, view)
+    }
+  }
+
+  // -- outlets ----------------------------------------------------------------
+  const outletComponent: Component.Any = {
+    definition: { name: "[outlet]", slots: [] },
+    head: undefined,
+    subscriptions: undefined,
+    layer: undefined,
+    "~loaders": undefined,
+    elements: () => undefined
+  } as any
+
+  /**
+   * Places the slot `view` names, in the tree `inst` renders. Its receiver is the author of that tree,
+   * the outlet instance's parent is `inst`, so the content lives as long as `inst` places it, and its
+   * author is whoever wrote the content.
+   */
+  const createOutlet = (inst: Instance, view: View.Outlet, range?: Range): ROutlet => {
+    const out = makeOutlet(inst, view)
+    const views = checkedViews(out)
+    try {
+      const plan = range === undefined ? undefined : matchList(out, views, range.nodes)
+      const rendered: Array<Rendered> = new Array(views.length)
+      if (plan !== undefined) {
+        // Adopted: the markers go, and the server's nodes are the content's.
+        for (let index = 0; index < views.length; index++) {
+          rendered[index] = adoptNode(out, views[index]!, plan[index]!, out.env)
+        }
+        host.remove(range!.open)
+        host.remove(range!.close)
+      } else {
+        // Built fresh: the server's nodes go, and the parent places the new ones.
+        if (range !== undefined) removeRange(range)
+        for (let index = 0; index < views.length; index++) rendered[index] = create(out, views[index]!, out.env)
+      }
+      out.rendered = rendered
+    } catch (error) {
+      contentFailed(out, error)
+      out.rendered = [{ _tag: "Text", v: emptyText, node: host.createText("") }]
+    }
+    failClash(out)
+    if (inst.children === noChildren) inst.children = new Set()
+    inst.children.add(out)
+    return { _tag: "Outlet", v: view, inst: out }
+  }
+
+  const makeOutlet = (parent: Instance, view: View.Outlet): Instance => {
+    const receiver = parent.author
+    const slotted = slottedBy.get(receiver)
+    if (slotted === undefined) throw new Error(`${receiver.path} places the slot ${view.name}, and declares no slots`)
+    // Who wrote the content: the author of the tree the receiver's child node sits in.
+    const author = receiver.parent === undefined ? receiver : receiver.parent.author
+    const name = view.name
+    const out: Instance = {
+      path: outletPath(receiver, name),
+      born: ++instancesMade,
+      depth: parent.depth + 1,
+      component: outletComponent,
+      parent,
+      author,
+      owner: undefined,
+      content: undefined,
+      scope: Scope.forkUnsafe(parent.scope, "sequential"),
+      env: slotted.env,
+      children: noChildren,
+      props: undefined,
+      model: undefined,
+      loaderState: undefined,
+      head: [],
+      onEmit: ignoreEvents,
+      onFailure: undefined,
+      failure: undefined,
+      childPaths: undefined,
+      clash: undefined,
+      rendered: [],
+      closed: false,
+      waiting: false,
+      // The content's children adopt the server's state when the instance placing it and the one that
+      // wrote it both did.
+      adoptsChildren: parent.adoptsChildren && author.adoptsChildren,
+      snapshot: undefined,
+      deferred: false,
+      runs: [],
+      stopping: undefined,
+      subscriptions: undefined,
+      watches: undefined,
+      watchesSynced: false,
+      watched: undefined,
+      prefetch: undefined,
+      keyed: undefined,
+      keyedQueued: false,
+      loadMores: undefined,
+      mounting: undefined,
+      outbox: [],
+      dispatch: author.dispatch,
+      fire: author.fire
+    }
+    outletOf.set(out, { slotted, view, content: undefined })
+    slotted.placed.set(name, out)
+    scopeAddFinalizerUnsafe(out.scope, out, () => {
+      out.closed = true
+      dirty.delete(out)
+      if (slotted.placed.get(name) === out) slotted.placed.delete(name)
+      return Effect.void
+    })
+    return out
+  }
+
+  const outletPath = (receiver: Instance, name: string): string => receiver.path + "/" + slotSegment(name)
+
+  /** What the receiver's parent last passed for the outlet's slot. */
+  const contentOf = (outlet: OutletOf): unknown => outlet.slotted.values?.[outlet.view.name]
+
+  /** Whether the outlet has to render: it was marked to, or its content isn't what it last rendered. */
+  const isStale = (out: Instance, outlet: OutletOf): boolean => dirty.has(out) || outlet.content !== contentOf(outlet)
+
+  /**
+   * The nodes an outlet shows: its slot's content, once it passes the checks the reconcile can make
+   * before it builds them, or one empty text node. A content that fails a check shows nothing, and
+   * fails its author.
+   */
+  const checkedViews = (out: Instance): Array<View.Node<any, any>> => {
+    const outlet = outletOf.get(out)!
+    const content = outlet.content = contentOf(outlet)
+    try {
+      let views = content === undefined ? [] : View.children([content as View.Input<any, any>])
+      const noText = outlet.view.noText
+      if (noText !== undefined) {
+        if (views.some((node) => node._tag === "Text")) throw new Error(out.path + ": " + noText)
+        // A forwarded slot sits where this one does, so its content can't hold text either.
+        views = views.map((node) =>
+          node._tag === "Outlet" && node.noText !== noText ? { _tag: "Outlet", name: node.name, noText } : node
+        )
+      }
+      out.childPaths = checkContentPaths(out.path, views)
+      out.clash = undefined
+      checkKeys(out, views)
+      // The author's refs are checked once its other trees are current too.
+      refChecks.add(out.author)
+      return views.length === 0 ? [emptyText] : views
+    } catch (error) {
+      contentFailed(out, error)
+      out.childPaths = undefined
+      return [emptyText]
+    }
+  }
+
+  /**
+   * A content is its author's code, so a mistake in it fails the author. Deferred, as a fallback clash
+   * is: failing an ancestor midway through a patch would close it over nodes the patch has removed.
+   */
+  const contentFailed = (out: Instance, error: unknown) => {
+    const author = out.author
+    defer(() => failInstance(author, Cause.die(error), "view"))
+  }
+
+  const renderOutlet = (out: Instance) => {
+    dirty.delete(out)
+    const views = checkedViews(out)
+    try {
+      const parentNode = host.parentOf(firstNodeOfList(out.rendered))!
+      const ref = host.nextOf(lastNodeOfList(out.rendered))
+      releaseRemoved(out.rendered, views)
+      out.rendered = patchList(out, parentNode, out.rendered, views, ref, out.env)
+    } catch (error) {
+      contentFailed(out, error)
+    }
+    failClash(out)
+  }
+
+  /** A fallback in the content that clashed with its paths fails the content's author, as `throwClash` fails a view's. */
+  const failClash = (out: Instance) => {
+    const clash = out.clash
+    if (clash === undefined) return
+    out.clash = undefined
+    contentFailed(out, clash)
+  }
+
+  /** Re-renders the placed outlets whose content the parent changed. */
+  const refreshOutlets = (slotted: Slotted) => {
+    for (const out of slotted.placed.values()) {
+      if (!out.closed && isStale(out, outletOf.get(out)!)) renderOutlet(out)
     }
   }
 
   const createChild = (inst: Instance, view: View.Child<any, any>, env: Env, range?: Range): Rendered => {
     const target = view.component
     if (Feature.isService(target) && env.ctx === undefined) {
-      // The feature's service comes from a Layer that is still building, or failed. The slot shows
+      // The feature's service comes from a Layer that is still building, or failed. The child shows
       // `fallback`, rendered against the nearest settled Env, and re-renders when the Layer settles.
       if (view.fallback === undefined) {
         throw new Error(
@@ -3436,7 +3710,7 @@ const setup = (
       }
       if (range !== undefined) removeRange(range)
       return {
-        _tag: "Slot",
+        _tag: "Fallback",
         v: view,
         inner: create(inst, fallbackOf(inst, view, env), settled(env)),
         failure: undefined
@@ -3457,8 +3731,8 @@ const setup = (
     if (headless !== (view.view !== undefined)) {
       throw new Error(
         headless
-          ? inst.path + ": " + component.definition.name + " is headless, so its slot needs a view"
-          : inst.path + ": " + component.definition.name + " has its own view, so its slot takes none"
+          ? inst.path + ": " + component.definition.name + " is headless, so declaring it as a child needs a view"
+          : inst.path + ": " + component.definition.name + " has its own view, so declaring it as a child takes none"
       )
     }
     const path = `${inst.path}/${segment(view)}`
@@ -3471,15 +3745,16 @@ const setup = (
       view.onEmit,
       view.onFailure,
       range,
-      view.view
+      view.view,
+      view.slots
     )
     // Built fresh: the server's nodes go, and the parent places the new ones.
     if (range !== undefined && !range.claimed) removeRange(range)
     if (child.failure !== undefined) {
-      // Failed while mounting: the slot shows its fallback in the placeholder's place.
+      // Failed while mounting: the child shows its fallback in the placeholder's place.
       const nodes = child.rendered.flatMap(nodesOf)
       for (const node of nodes) host.remove(node)
-      return failedSlot(inst, view, child.failure, env)
+      return failedChild(inst, view, child.failure, env)
     }
     // A set of the instances, not a map by path: a path is a string made for each child, and hashing
     // it would cost more than anything else here.
@@ -3490,7 +3765,7 @@ const setup = (
 
   /**
    * A fallback's children are `inst`'s, so their paths are checked against the render's other
-   * slots and fallbacks. Outside the `fallback` guard: a clash fails `inst` with source `view`, as
+   * children and fallbacks. Outside the `fallback` guard: a clash fails `inst` with source `view`, as
    * one in its view does.
    */
   const shownIn = (inst: Instance, view: View.Child<any, any>, node: View.Node<any, any>): View.Node<any, any> => {
@@ -3514,7 +3789,7 @@ const setup = (
     throw clash
   }
 
-  /** What a feature slot shows while its Layer is building or failed. */
+  /** What a feature child shows while its Layer is building or failed. */
   const fallbackOf = (inst: Instance, view: View.Child<any, any>, env: Env): View.Node<any, any> =>
     shownIn(
       inst,
@@ -3523,25 +3798,25 @@ const setup = (
       guard(inst.author, "fallback", () => View.toNode(view.fallback!(unavailable(env)))) ?? emptyText
     )
 
-  /** What a failed slot shows. A fallback that throws fails `inst` with source `fallback`. */
+  /** What a failed child shows. A fallback that throws fails `inst` with source `fallback`. */
   const fallbackFor = (inst: Instance, view: View.Child<any, any>, failure: Cause.Cause<unknown>) =>
     shownIn(
       inst,
       view,
-      // The fallback was written by the author of the tree its slot sits in.
+      // The fallback was written by the author of the tree it sits in.
       guard(inst.author, "fallback", () =>
         view.fallback !== undefined ? View.toNode(view.fallback(AsyncResult.failure(failure))) : emptyText) ??
         emptyText
     )
 
-  const failedSlot = (
+  const failedChild = (
     inst: Instance,
     view: View.Child<any, any>,
     failure: Cause.Cause<unknown>,
     env: Env
   ): Rendered => {
     const shown = fallbackFor(inst, view, failure)
-    return { _tag: "Slot", v: view, inner: create(inst, shown, settled(env)), failure }
+    return { _tag: "Fallback", v: view, inner: create(inst, shown, settled(env)), failure }
   }
 
   // -- hydration ------------------------------------------------------------
@@ -3570,7 +3845,7 @@ const setup = (
 
   /**
    * Matches a view against the server's nodes: the instance's own nodes one by
-   * one, and each child slot by its marker range, which the child matches
+   * one, and each child by its marker range, which the child matches
    * itself. A server never writes an empty text node, so an empty text matches
    * nothing and is created.
    */
@@ -3606,8 +3881,10 @@ const setup = (
           index++
           break
         }
-        case "Child": {
-          const path = `${inst.path}/${segment(view)}`
+        case "Child":
+        case "Outlet": {
+          // An outlet's content matches itself against the range, as a child does, and builds fresh if it can't.
+          const path = view._tag === "Child" ? `${inst.path}/${segment(view)}` : outletPath(inst.author, view.name)
           if (kind?._tag !== "Open" || kind.path !== path) return undefined
           const range = rangeFrom(node, path)
           if (range === undefined) return undefined
@@ -3651,17 +3928,23 @@ const setup = (
       }
       case "Child":
         return createChild(inst, view, env, (plan as Extract<Plan, { _tag: "Child" }>).range)
+      case "Outlet":
+        return createOutlet(inst, view, (plan as Extract<Plan, { _tag: "Child" }>).range)
     }
   }
 
   // -- diff -----------------------------------------------------------------
-  /** Whether a node is matched among its siblings by key: a child slot, or an element with a key. Else by position. */
+  /** Whether a node is matched among its siblings by key: a child, or an element with a key. Else by position. */
   const isKeyed = (view: View.Node<any, any>): boolean =>
-    view._tag === "Child" || (view._tag === "Element" && view.elementKey !== undefined)
+    view._tag === "Child" || view._tag === "Outlet" || (view._tag === "Element" && view.elementKey !== undefined)
 
   /** A keyed node's key among its siblings. */
   const keyOf = (view: View.Node<any, any>): string =>
-    view._tag === "Child" ? "c:" + segment(view) : "e:" + (view as View.Element<any, any>).tag + "[" +
+    view._tag === "Child" ?
+      "c:" + segment(view) :
+      view._tag === "Outlet" ?
+      "o:" + view.name :
+      "e:" + (view as View.Element<any, any>).tag + "[" +
       (view as View.Element<any, any>).elementKey + "]"
 
   const duplicateKey = (inst: Instance, key: string): Error =>
@@ -3669,7 +3952,7 @@ const setup = (
 
   /**
    * Throws when two keyed elements in `views` have one key. Every list of siblings is checked as
-   * it is made, so the olds of a patch never share a key. Child slots aren't checked here: each
+   * it is made, so the olds of a patch never share a key. Children aren't checked here: each
    * view's are checked by their paths, across the whole view, before it renders.
    */
   const checkKeys = (inst: Instance, views: ReadonlyArray<View.Node<any, any>>): void => {
@@ -3698,13 +3981,15 @@ const setup = (
 
   const same = (rendered: Rendered, view: View.Node<any, any>): boolean => {
     switch (rendered._tag) {
-      case "Slot":
+      case "Fallback":
       case "Child":
         return view._tag === "Child" && rendered.v.component === view.component
       case "Element":
         return view._tag === "Element" && rendered.v.tag === view.tag
       case "Text":
         return view._tag === "Text"
+      case "Outlet":
+        return view._tag === "Outlet" && rendered.v.name === view.name
     }
   }
 
@@ -3720,8 +4005,10 @@ const setup = (
       case "Element":
         return rendered._tag === "Element" && rendered.v.tag === view.tag && rendered.v.elementKey === view.elementKey
       case "Child":
-        return (rendered._tag === "Child" || rendered._tag === "Slot") && rendered.v.component === view.component &&
+        return (rendered._tag === "Child" || rendered._tag === "Fallback") && rendered.v.component === view.component &&
           rendered.v.key === view.key
+      case "Outlet":
+        return rendered._tag === "Outlet" && rendered.v.name === view.name
     }
   }
 
@@ -3764,7 +4051,7 @@ const setup = (
     let start = 0
     // Whether an old before `start` is keyed: a list with keyed nodes can change order.
     let keyedBefore = false
-    // A slot at `start` that changed what it shows, so its nodes may not be placed yet.
+    // A child at `start` that changed what it shows, so its nodes may not be placed yet.
     let replaced: Rendered | undefined
     while (start < shared) {
       const old = olds[start]!
@@ -3812,7 +4099,7 @@ const setup = (
       for (let index = start; index < newLength; index++) insertNodes(parentNode, result[index]!, ref)
       return result
     }
-    // Where matching goes on from: after the nodes that stayed, and after a slot that was replaced.
+    // Where matching goes on from: after the nodes that stayed, and after a child that was replaced.
     const first = replaced === undefined ? start : start + 1
     // Keyed nodes at the end, matched with the keyed olds at the end. They are patched in their turn.
     let oldEnd = oldLength
@@ -3880,7 +4167,7 @@ const setup = (
       matched++
       const old = olds[at]!
       const next = patch(inst, old, view, env)
-      // A slot that changed what it shows has nodes that may not be placed yet.
+      // A child that changed what it shows has nodes that may not be placed yet.
       if (inPlace && (next !== old || at < previous)) {
         if (keyed) from = orderSoFar(olds, result, index)
         inPlace = false
@@ -4068,12 +4355,12 @@ const setup = (
         rendered.v = text
         return rendered
       }
-      case "Slot": {
+      case "Fallback": {
         const child = view as View.Child<any, any>
         if (rendered.failure !== undefined) {
           const shown = fallbackFor(inst, child, rendered.failure!)
           return {
-            _tag: "Slot",
+            _tag: "Fallback",
             v: child,
             inner: patchOrReplace(inst, rendered.inner, shown, settled(env)),
             failure: rendered.failure
@@ -4086,30 +4373,44 @@ const setup = (
         }
         const shown = fallbackOf(inst, child, env)
         return {
-          _tag: "Slot",
+          _tag: "Fallback",
           v: child,
           inner: patchOrReplace(inst, rendered.inner, shown, settled(env)),
           failure: undefined
         }
+      }
+      case "Outlet": {
+        const out = rendered.inst
+        const outlet = outletOf.get(out)!
+        // Moved between an element that holds text and one that can't: its content is checked again.
+        const moved = outlet.view.noText !== (view as View.Outlet).noText
+        outlet.view = rendered.v = view as View.Outlet
+        if (moved || isStale(out, outlet)) renderOutlet(out)
+        return rendered
       }
       case "Child": {
         const child = view as View.Child<any, any>
         const instance = rendered.inst
         if (instance.closed) {
           for (const node of nodesOf(rendered)) host.remove(node)
-          // Failed: the slot shows its fallback until the key changes.
-          if (instance.failure !== undefined) return failedSlot(inst, child, instance.failure, env)
+          // Failed: the child shows its fallback until the key changes.
+          if (instance.failure !== undefined) return failedChild(inst, child, instance.failure, env)
           return createChild(inst, child, env)
         }
         instance.onEmit = child.onEmit
         instance.onFailure = child.onFailure
+        // Read first: most children are passed no slots, and this is cheaper than the map.
+        const slotted = child.slots !== undefined || rendered.v.slots !== undefined
+          ? slottedBy.get(instance)
+          : undefined
+        if (slotted !== undefined) slotted.values = child.slots
         const changed = !propsEqual(child.props, instance.props)
         if (changed) {
           instance.props = child.props
-          // Before the slot writes the new props cause, so a replay opens them against these props.
+          // Before the loader state writes the new props cause, so a replay opens them against these props.
           record({ _tag: "PropsChanged", path: instance.path, component: instance.component, props: child.props })
           // Watches first: new args over a settled entry write its value before this render, and the
-          // keyed loaders' slots are written before it too.
+          // keyed loaders' states are written before it too.
           syncSubscriptions(instance)
           drainKeyed(instance)
         }
@@ -4119,6 +4420,7 @@ const setup = (
           dirty.delete(instance)
           render(instance)
         }
+        if (slotted !== undefined && !instance.closed) refreshOutlets(slotted)
         rendered.v = child
         return rendered
       }
@@ -4157,8 +4459,9 @@ const setup = (
         out.push(rendered.node)
         return
       }
-      case "Slot":
+      case "Fallback":
         return collectNodes(rendered.inner, out)
+      case "Outlet":
       case "Child": {
         const items = rendered.inst.rendered
         for (let index = 0; index < items.length; index++) collectNodes(items[index]!, out)
@@ -4168,21 +4471,21 @@ const setup = (
 
   /** The first host node of a rendered item, without collecting the others. `undefined` if it has none. */
   const firstNodeOf = (rendered: Rendered): unknown =>
-    rendered._tag === "Child"
+    rendered._tag === "Child" || rendered._tag === "Outlet"
       ? firstNodeOfList(rendered.inst.rendered)
-      : rendered._tag === "Slot"
+      : rendered._tag === "Fallback"
       ? firstNodeOf(rendered.inner)
       : rendered.node
   const lastNodeOf = (rendered: Rendered): unknown =>
-    rendered._tag === "Child"
+    rendered._tag === "Child" || rendered._tag === "Outlet"
       ? lastNodeOfList(rendered.inst.rendered)
-      : rendered._tag === "Slot"
+      : rendered._tag === "Fallback"
       ? lastNodeOf(rendered.inner)
       : rendered.node
   const hasNodes = (rendered: Rendered): boolean =>
-    rendered._tag === "Child"
+    rendered._tag === "Child" || rendered._tag === "Outlet"
       ? rendered.inst.rendered.some(hasNodes)
-      : rendered._tag === "Slot"
+      : rendered._tag === "Fallback"
       ? hasNodes(rendered.inner)
       : true
   const firstNodeOfList = (items: ReadonlyArray<Rendered>): unknown => {
@@ -4231,8 +4534,9 @@ const setup = (
       case "Element":
       case "Text":
         return host.insertBefore(parentNode, rendered.node, ref)
-      case "Slot":
+      case "Fallback":
         return insertNodes(parentNode, rendered.inner, ref)
+      case "Outlet":
       case "Child": {
         const items = rendered.inst.rendered
         for (let index = 0; index < items.length; index++) insertNodes(parentNode, items[index]!, ref)
@@ -4242,6 +4546,7 @@ const setup = (
 
   const closeAll = (inst: Instance, rendered: Rendered): void => {
     switch (rendered._tag) {
+      case "Outlet":
       case "Child": {
         inst.children.delete(rendered.inst)
         headDirty = true
@@ -4249,7 +4554,7 @@ const setup = (
         closeScope(rendered.inst.scope)
         return
       }
-      case "Slot":
+      case "Fallback":
         return closeAll(inst, rendered.inner)
       case "Element": {
         // The element's `onMount` work ends with it.
@@ -4340,13 +4645,16 @@ const setup = (
   const snapshot = (): Record<string, unknown> => {
     const out: Record<string, unknown> = {}
     const visit = (inst: Instance) => {
-      // A keyed loader's pending writes go first, so the slot holds only the declared keys. A
+      // A keyed loader's pending writes go first, so its state holds only the declared keys. A
       // navigation issued in the `update` that changed them runs in the flush's deferred work, which
       // can come before the drain gets to them.
       if (inst.keyed !== undefined && inst.keyed.size > 0) drainKeyed(inst)
       if (inst.closed || inst.failure !== undefined || inst.waiting) return
-      const encoded = stateCodecOf(inst.component).encode(inst.model, inst.slots)
-      if (Option.isSome(encoded)) out[inst.path] = encoded.value
+      // An outlet has no state of its own, only the children of the content it places.
+      if (inst.component !== outletComponent) {
+        const encoded = stateCodecOf(inst.component).encode(inst.model, inst.loaderState)
+        if (Option.isSome(encoded)) out[inst.path] = encoded.value
+      }
       for (const child of inst.children) visit(child)
     }
     visit(root)
@@ -4416,7 +4724,7 @@ const setup = (
             inst.deferred ||
             (inst.component.layer !== undefined && inst.env.ctx === undefined)
           ? Option.none()
-          : codec.encode(inst.model, inst.slots)
+          : codec.encode(inst.model, inst.loaderState)
         if (codec.redacted) warnRedacted(inst)
         if (Option.isNone(encoded)) {
           deferredPaths.push(inst.path)
@@ -4445,7 +4753,13 @@ const setup = (
           }
         case "Child":
           return instance(rendered.inst, under)
-        case "Slot": {
+        case "Outlet":
+          return {
+            _tag: "Range",
+            path: rendered.inst.path,
+            children: rendered.inst.rendered.map((child) => serialize(rendered.inst, child, under))
+          }
+        case "Fallback": {
           // A failed child, or a feature whose Layer isn't ready: the client builds it fresh.
           const path = `${inst.path}/${segment(rendered.v)}`
           if (!under) deferredPaths.push(path)

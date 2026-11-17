@@ -123,7 +123,7 @@ describe("$.send", () => {
 
   it("takes nothing through an erased ref, from any public output, and keeps concrete refs", () => {
     ParentDef.view((_, h) => {
-      // A slot's `component` is `Component.Any | Feature.Any`, and `Feature.Any`'s ref receives `any`.
+      // A child's `component` is `Component.Any | Feature.Any`, and `Feature.Any`'s ref receives `any`.
       const target = Todos.render(h, { ref: Todos.ref("Main"), fallback: () => h.el("p") }).component
       if (Feature.isService(target)) {
         const erased = target.ref("Main")
@@ -134,11 +134,11 @@ describe("$.send", () => {
           return model
         })
       }
-      // A slot's `ref` receives `unknown`.
-      const slotRef = Editor(h, { ref: Draft }).ref!
+      // A child's `ref` receives `unknown`.
+      const childRef = Editor(h, { ref: Draft }).ref!
       ParentDef.update((model, _msg, $) => {
-        expect($.send).type.not.toBeCallableWith(slotRef, { _tag: "Clear" })
-        expect($.send).type.not.toBeCallableWith(slotRef.at(1), { arbitrary: 1 })
+        expect($.send).type.not.toBeCallableWith(childRef, { _tag: "Clear" })
+        expect($.send).type.not.toBeCallableWith(childRef.at(1), { arbitrary: 1 })
         return model
       })
       return h.el("p")
@@ -204,12 +204,12 @@ describe("$.send", () => {
       ReadonlyArray<Component.Ref.Any>
     >()
     ParentDef.view((_, h) => {
-      const slot = Panel.render(h, { key: "p", fallback: () => h.el("p") })
-      expect(slot.component).type.toBeAssignableFrom(Panel)
-      expect(slot.component).type.toBeAssignableFrom(Todos)
-      expect(slot.component).type.toBeAssignableFrom(Bare)
-      expect(slot.ref).type.toBeAssignableFrom(Draft)
-      // An erased ref names no slot: a typed ref stored as one would slip past the receives check.
+      const child = Panel.render(h, { key: "p", fallback: () => h.el("p") })
+      expect(child.component).type.toBeAssignableFrom(Panel)
+      expect(child.component).type.toBeAssignableFrom(Todos)
+      expect(child.component).type.toBeAssignableFrom(Bare)
+      expect(child.ref).type.toBeAssignableFrom(Draft)
+      // An erased ref names no child: a typed ref stored as one would slip past the receives check.
       const stored: Component.Ref.Any = Draft
       expect(Plain).type.not.toBeCallableWith(h, { ref: stored })
       expect(Editor).type.not.toBeCallableWith(h, { ref: stored })
@@ -239,7 +239,7 @@ describe("$.send", () => {
   })
 })
 
-describe("a component slot with a ref", () => {
+describe("a component child with a ref", () => {
   it("takes a ref in place of a key, and rejects both or neither", () => {
     ParentDef.view((_, h) => {
       expect(Editor(h, { ref: Draft })).type.not.toRaiseError()
@@ -309,7 +309,7 @@ describe("a component slot with a ref", () => {
     })
   })
 
-  it("checks a feature slot's ref with explicit type arguments", () => {
+  it("checks a feature child's ref with explicit type arguments", () => {
     class Bare extends Feature.Service<Bare>()("Bare", { props: Schema.Struct({}) }) {}
     type Msg = typeof ParentMessage.Type
     ParentDef.view((_, h) => {

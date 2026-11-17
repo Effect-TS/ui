@@ -179,34 +179,34 @@ const run = <A, E>(layer: Layer.Layer<any>, effect: Effect.Effect<A, E, any>) =>
 const load = TestHost.settle.pipe(Effect.andThen(TestClock.adjust("10 millis")), Effect.andThen(TestHost.settle))
 
 /**
- * A loader's slot JSON codec, as the runtime writes page state, history state and the log's Wire with
+ * A loader's state JSON codec, as the runtime writes page state, history state and the log's Wire with
  * it. The component's loaders carry the Schemas.
  */
-const slotCodec = (component: Component.Any, name: string) =>
+const stateCodec = (component: Component.Any, name: string) =>
   Schema.toCodecJson(
     (component["~loaders"] as { readonly schema: Schema.Struct<Record<string, Schema.Codec<unknown, unknown>>> })
       .schema.fields[name]
   )
 
-/** A keyed slot's tuples as its JSON codec writes them: the old snapshot's JSON. */
-const tuples = (component: Component.Any, name: string, slot: unknown): ReadonlyArray<ReadonlyArray<unknown>> =>
-  Schema.encodeSync(slotCodec(component, name))(slot) as ReadonlyArray<ReadonlyArray<unknown>>
+/** A keyed loader state's tuples as its JSON codec writes them: the old snapshot's JSON. */
+const tuples = (component: Component.Any, name: string, state: unknown): ReadonlyArray<ReadonlyArray<unknown>> =>
+  Schema.encodeSync(stateCodec(component, name))(state) as ReadonlyArray<ReadonlyArray<unknown>>
 
-/** The last slot the runtime wrote for a loader at a path, from the log. */
-const slotOf = (log: ReadonlyArray<MessageLog.Entry>, path: string, name: string): unknown =>
+/** The last state the runtime wrote for a loader at a path, from the log. */
+const stateOf = (log: ReadonlyArray<MessageLog.Entry>, path: string, name: string): unknown =>
   [...log].reverse().find((entry): entry is MessageLog.LoaderChanged =>
     entry._tag === "LoaderChanged" && entry.path === path && entry.name === name
-  )?.slot
+  )?.state
 
 const updates = (order: ReadonlyArray<string>) => order.filter((line) => line.startsWith("update"))
 
-/** The args ids a keyed slot holds. */
-const heldIds = (component: Component.Any, slot: unknown): ReadonlyArray<unknown> =>
-  tuples(component, "users", slot).map((tuple) => JSON.parse(tuple[0] as string).id)
+/** The args ids a keyed loader's state holds. */
+const heldIds = (component: Component.Any, state: unknown): ReadonlyArray<unknown> =>
+  tuples(component, "users", state).map((tuple) => JSON.parse(tuple[0] as string).id)
 
-/** The ids the root Board's slot holds. */
+/** The ids the root Board's users loader holds. */
 const boardIds = (app: ReturnType<typeof makeApp>, root: { readonly log: () => ReadonlyArray<MessageLog.Entry> }) =>
-  heldIds(app.Board, slotOf(root.log(), "/Board", "users"))
+  heldIds(app.Board, stateOf(root.log(), "/Board", "users"))
 
 describe("Keyed loader fields", () => {
   it.effect("N cold keys start N fetches in one batch, and its results are one message with N changes", () => {
@@ -231,7 +231,7 @@ describe("Keyed loader fields", () => {
           root.log().flatMap((entry) => entry._tag === "SubscriptionStarted" ? [entry.key] : []),
           ["1", "2", "3"].map((id) => `~loaded/users:${JSON.stringify(JSON.stringify({ id }))}`)
         )
-        // The slot's write is logged, then the Update of its onChange message.
+        // The loader state's write is logged, then the Update of its onChange message.
         const written = root.log().flatMap((entry) =>
           entry._tag === "LoaderChanged" ?
             [entry._tag] :
@@ -465,7 +465,7 @@ describe("Keyed loader fields", () => {
     )
   })
 
-  it.effect("a prune: a removed key leaves the slot, and onChange gets no changes", () => {
+  it.effect("a prune: a removed key leaves the loader state, and onChange gets no changes", () => {
     const app = makeApp()
     return run(
       app.layer,
@@ -483,7 +483,7 @@ describe("Keyed loader fields", () => {
     )
   })
 
-  it.effect("a prune is written once, and not again until the slot holds a key the loader no longer returns", () => {
+  it.effect("a prune is written once, and not again until the loader state holds a key the loader no longer returns", () => {
     const app = makeApp()
     return run(
       app.layer,
@@ -494,7 +494,7 @@ describe("Keyed loader fields", () => {
         root.send(app.BoardMessage.make({ _tag: "Show", ids: ["1", "3"] }))
         yield* TestHost.settle
         assert.deepStrictEqual(updates(app.order), ["update a []"])
-        // The slot no longer holds key 2, so a reorder of the rest prunes nothing.
+        // The loader state no longer holds key 2, so a reorder of the rest prunes nothing.
         assert.deepStrictEqual(boardIds(app, root), ["1", "3"])
         assert.strictEqual(root.text(), "a: 1=Ann 3=Cy")
         root.send(app.BoardMessage.make({ _tag: "Show", ids: ["3", "1"] }))
@@ -765,7 +765,7 @@ describe("Keyed loader fields", () => {
   })
 })
 
-describe("Keyed slots", () => {
+describe("Keyed loader state", () => {
   it.effect("encode to the single form's tuples, and a duplicate args key fails to decode", () => {
     const app = makeApp()
     return run(
@@ -773,8 +773,8 @@ describe("Keyed slots", () => {
       Effect.gen(function*() {
         const root = yield* TestHost.mount(app.Board, { tag: "a", ids: ["1", "9"] })
         yield* load
-        const slot = slotOf(root.log(), "/Board", "users")
-        const encoded = tuples(app.Board, "users", slot)
+        const state = stateOf(root.log(), "/Board", "users")
+        const encoded = tuples(app.Board, "users", state)
         assert.deepStrictEqual(encoded, [
           ["{\"id\":\"1\"}", 0, { id: "1", name: "Ann" }, 10, false],
           ["{\"id\":\"9\"}", 1, ["missing"], null]
@@ -782,10 +782,10 @@ describe("Keyed slots", () => {
         // The log's Wire writes the same tuples, each ending with [waiting, more] for a replayed update.
         const changed = [...root.log()].reverse().find((entry) => entry._tag === "LoaderChanged")!
         assert.deepStrictEqual(
-          (MessageLog.makeEncoder().encode(changed) as { readonly slot?: unknown }).slot,
+          (MessageLog.makeEncoder().encode(changed) as { readonly state?: unknown }).state,
           encoded.map((tuple) => [...tuple, [false, null]])
         )
-        const decode = Schema.decodeUnknownExit(slotCodec(app.Board, "users"))
+        const decode = Schema.decodeUnknownExit(stateCodec(app.Board, "users"))
         assert.isTrue(Exit.isSuccess(decode(encoded)))
         assert.isTrue(Exit.isFailure(decode([encoded[0], encoded[0]])))
         assert.isTrue(Exit.isFailure(decode([[]])))
@@ -899,8 +899,8 @@ describe("Keyed redaction", () => {
         const root = yield* TestHost.mount(Page, { tokens: [Redacted.make("tok-1"), Redacted.make("tok-2")] })
         yield* TestHost.settle
         assert.strictEqual(root.text(), "secret-of-tok-1 secret-of-tok-2")
-        // The slot as page state and history state hold it.
-        const state = JSON.stringify(tuples(Page, "accounts", slotOf(root.log(), "/Page", "accounts")))
+        // The loader state as page state and history state hold it.
+        const state = JSON.stringify(tuples(Page, "accounts", stateOf(root.log(), "/Page", "accounts")))
         assert.include(state, "tok-2")
         assert.include(state, "secret-of-tok-2")
         const wire = JSON.stringify(root.log().map((entry) => MessageLog.makeEncoder().encode(entry)))
@@ -928,12 +928,12 @@ describe("Story keyed steps", () => {
         .check((story) => assert.strictEqual(Query.textOf(story.get(Query.tag("p"))), "a: 1=Ann 2=Bea~"))
         .loadFailed("users", { id: "1" }, "gone", { waiting: true })
         .check((story) => {
-          const [ann] = tuples(app.Board, "users", story.slots?.users)
+          const [ann] = tuples(app.Board, "users", story.loaderState?.users)
           // The failure keeps the key's last Success.
           assert.deepStrictEqual(ann, ["{\"id\":\"1\"}", 1, ["gone"], [{ id: "1", name: "Ann" }, 0]])
         })
         .send(app.BoardMessage.make({ _tag: "Show", ids: ["2"] }))
-        .check((story) => assert.deepStrictEqual(heldIds(app.Board, story.slots?.users), ["2"])))
+        .check((story) => assert.deepStrictEqual(heldIds(app.Board, story.loaderState?.users), ["2"])))
     assert.deepStrictEqual(updates(app.order), [
       "update a [1:Ann,2:failed]",
       "update a [2:Bea]",
@@ -960,7 +960,7 @@ describe("Story keyed steps", () => {
         .send(app.BoardMessage.make({ _tag: "Show", ids: ["3", "1"] }))
         .loaded("users", { id: "1" }, { id: "1", name: "Al" })
         .send(app.BoardMessage.make({ _tag: "Show", ids: ["1"] }))
-        .check((story) => assert.deepStrictEqual(heldIds(app.Board, story.slots?.users), ["1"])))
+        .check((story) => assert.deepStrictEqual(heldIds(app.Board, story.loaderState?.users), ["1"])))
     assert.deepStrictEqual(updates(app.order), [
       "update a [1:Ann,2:Bea,3:Cy]",
       "update a []",
@@ -1039,7 +1039,7 @@ describe("Keyed selection repaired by the prune handler", () => {
         .send(Message.make({ _tag: "Show", ids: ["1"] }))
         .check((story) => {
           assert.strictEqual(Query.textOf(story.get(Query.tag("p"))), "Ann")
-          assert.deepStrictEqual(heldIds(Selection, story.slots?.users), ["1"])
+          assert.deepStrictEqual(heldIds(Selection, story.loaderState?.users), ["1"])
         }))
   })
 })
@@ -1055,7 +1055,7 @@ describe("Story keyed rounds", () => {
           { args: { id: "3" }, value: { id: "3", name: "Cy" } }
         ])
         .send(app.BoardMessage.make({ _tag: "Show", ids: ["1", "2"] }))
-        .check((story) => assert.deepStrictEqual(heldIds(app.Board, story.slots?.users), ["1"])))
+        .check((story) => assert.deepStrictEqual(heldIds(app.Board, story.loaderState?.users), ["1"])))
     assert.deepStrictEqual(updates(app.order), ["update a [1:Ann,2:Bea,3:Cy]", "update a []", "update a []"])
   })
 
@@ -1123,14 +1123,14 @@ describe("Keyed history restore", () => {
           readonly "@effect/ui": {
             readonly snapshot: Record<string, {
               readonly model: unknown
-              readonly loaded: { readonly users: ReadonlyArray<ReadonlyArray<unknown>> }
+              readonly loaderState: { readonly users: ReadonlyArray<ReadonlyArray<unknown>> }
             }>
           }
         }
         | undefined
       const saved = left?.["@effect/ui"].snapshot["/Page"]
       assert.deepStrictEqual(saved?.model, { ids: ["1"] })
-      assert.deepStrictEqual(saved?.loaded.users.map((tuple) => tuple[0]), ["{\"id\":\"1\"}"])
+      assert.deepStrictEqual(saved?.loaderState.users.map((tuple) => tuple[0]), ["{\"id\":\"1\"}"])
       assert.strictEqual(root.text(), "1")
     }).pipe(
       Effect.provide(Layer.merge(Router.make({ routes: PageRoute, history }), app.layer)),
@@ -1208,11 +1208,11 @@ describe("Keyed history restore", () => {
           const mounted = log.findIndex((entry) => entry._tag === "Mounted" && entry.path === "/Shell/Board[board]")
           const restored = log[mounted] as MessageLog.Mounted
           assert.isTrue(restored.adopted)
-          // The restored slot is logged right after Mounted.
+          // The restored loader state is logged right after Mounted.
           const seeded = log[mounted + 1]
           assert.strictEqual(seeded._tag, "LoaderChanged")
           assert.deepStrictEqual(
-            heldIds(app.Board, (seeded as MessageLog.LoaderChanged).slot),
+            heldIds(app.Board, (seeded as MessageLog.LoaderChanged).state),
             ["2"]
           )
           // Key 2 is seeded stale and shows while it refetches; key 1 starts from loading.
