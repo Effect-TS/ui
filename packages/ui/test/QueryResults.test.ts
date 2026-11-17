@@ -73,7 +73,7 @@ const makeApp = (options?: {
         query: GetUser,
         debounce: options?.debounce,
         args: userArgs,
-        // The slot is written by the runtime: the message only lets update see the change.
+        // The result is written by the runtime: the message only lets update see the change.
         onChange: (result) => CardMessage.make({ _tag: "UserChanged", state: result._tag })
       }
     }
@@ -988,7 +988,7 @@ describe("Query results", () => {
         app.order.length = 0
         Locator.fire(root.get(Locator.text("a=Ann", { exact: true })), "click")
         yield* TestHost.settle
-        // Both instances get the patched slot (and its onChange) before the one flush that renders the issuing update.
+        // Both instances get the patched result (and its onChange) before the one flush that renders the issuing update.
         assert.deepStrictEqual(app.order, [
           "update a Rename",
           "update a UserChanged",
@@ -1222,7 +1222,7 @@ describe("Query results", () => {
       Effect.gen(function*() {
         const root = yield* TestHost.mount(Page, { token: Redacted.make("tok-123") })
         yield* TestHost.settle
-        // Page state keeps the real values: the slot's key and value as the state's JSON codec writes them.
+        // Page state keeps the real values: the result's key and value as the state's JSON codec writes them.
         assert.strictEqual(root.text(), "secret-of-tok-123")
         const changed = root.log().filter((entry) => entry._tag === "QueryChanged")
         assert.deepStrictEqual(changed.map((entry) => entry.name), ["account"])
@@ -1234,7 +1234,7 @@ describe("Query results", () => {
         )
         assert.include(state, "tok-123")
         assert.include(state, "secret-of-tok-123")
-        // The log doesn't: not the args in the log key, nor the value in the written slot.
+        // The log doesn't: not the args in the log key, nor the value in the written result.
         const fetch = root.fetches()[0]
         assert.notInclude(fetch.logKey, "tok-123")
         const encoder = MessageLog.makeEncoder()

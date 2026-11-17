@@ -168,7 +168,7 @@ export interface Hydration<Node> {
 
 /**
  * What a server render hands the client: each instance's Schema-encoded
- * Model by path, the paths to build fresh, and the query entries the
+ * Model and query results by path, the paths to build fresh, and the query entries the
  * server's per-request cache settled.
  *
  * **Details**
@@ -191,6 +191,11 @@ export interface Hydration<Node> {
  * An instance whose Model or query Schemas hold a `Schema.Redacted` is
  * never in the state: it's deferred, so the client builds it and its
  * subtree fresh, and the server logs a warning once per component.
+ *
+ * The client decodes the state with its own Schemas, so it has to come from a
+ * server on the same build. A path whose state doesn't decode isn't adopted:
+ * the client runs `init` and builds it and its subtree fresh. Only `~query`
+ * hydrates the cache, so a payload without it fetches every query again.
  *
  * @stability experimental
  * @category models

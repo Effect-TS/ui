@@ -39,7 +39,7 @@ declare const fetcher: Effect.Effect<(args: {}) => Effect.Effect<string>>
 declare const needsApi: Effect.Effect<(args: {}) => Effect.Effect<string, never, Api>>
 
 describe("Query", () => {
-  it("a read's statics require the read and the cache, never what its fetcher uses", () => {
+  it("a query's statics require the query and the cache, never what its fetcher uses", () => {
     expect(GetUser.get({ id: "1" })).type.toBe<Effect.Effect<User, NotFound, GetUser | Query.Cache>>()
     expect(GetUser.prefetch({ id: "1" })).type.toBe<Effect.Effect<void, never, GetUser | Query.Cache>>()
     expect(GetUser.changes({ id: "1" })).type.toBe<

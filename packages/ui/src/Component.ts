@@ -479,7 +479,7 @@ export interface Step<in out Model, in out Msg, in out Events, out R = never, L 
   /**
    * Loads the next page of an infinite query. The runtime takes the args from the
    * query, after this `update`'s Model. The page arrives in the query's
-   * slot, and nothing is issued for a disabled query.
+   * result, and nothing is issued for a disabled query.
    */
   loadMore(name: InfiniteNames<L>): Step<Model, Msg, Events, R, L>
   /**
@@ -1069,7 +1069,7 @@ export type PartTag<T> = T extends { readonly "~Tag"?: infer Tag extends string 
  *
  * `queries` holds each query's result, as `$.queries` does in `update`.
  *
- * `previous` holds, per single or infinite query, the Success value its slot
+ * `previous` holds, per single or infinite query, the Success value its result
  * holds for args other than the query's current ones. It's `Some` only while
  * the query is enabled, so it is `None` whenever `h.queries` has the stored
  * result.
@@ -1268,7 +1268,7 @@ type ServiceOf<D> = D extends { readonly query: { readonly Identifier: infer Sel
  * A single query opens to an `AsyncResult` of its `Query`'s success and error,
  * an infinite query to an `AsyncResult` of its `InfiniteData`, and a `queryMany`
  * query to its entries in the order of its args. A single or infinite query
- * holds the result its slot took at the query's current args, and otherwise
+ * holds the result it took at the query's current args, and otherwise
  * `Initial`, waiting while the query is enabled.
  *
  * @stability experimental
@@ -1733,7 +1733,7 @@ export type Helper<D> = D extends
  * An entry's `onChange` returns a message to send when its result changes, for
  * a component that has to react in `update`. A `query` entry's gets its
  * result as `h.queries` opens it, and a `queryMany` query's gets its entries
- * and the keys whose result changed. The slot is written first, and the
+ * and the keys whose result changed. The result is written first, and the
  * message's `update` sees it in `$.queries`.
  *
  * `head` returns the instance's document head entries (see `Head`). It's a

@@ -518,7 +518,7 @@ describe("Story", () => {
       users: names.map((name, i) => ({ id: `${n}-${i}`, name, email: "", likes: 0 }))
     })
 
-    it("loaded writes the query's slot, at the query's current args", () => {
+    it("loaded writes the query's result, at the query's current args", () => {
       Story.make(users.ListPage, {}, (s) =>
         s
           .check((story) => assert.include(text(story), "Loading users…"))
@@ -527,7 +527,7 @@ describe("Story", () => {
           )
           .loaded("users", page(0, ["Ann", "Bea"]))
           .check((story) => assert.include(text(story), "AnnBea"))
-          // The next page: h.previous keeps the page the slot holds until it is loaded.
+          // The next page: h.previous keeps the page the result holds until it is loaded.
           .click("Next")
           .queryInfo((info) => assert.deepStrictEqual(info.map((query) => query.args), [{ page: 1 }]))
           .check((story) => {
@@ -561,7 +561,7 @@ describe("Story", () => {
           }))
     })
 
-    it("given takes an updater and keeps the slots, and loaded throws for a name that isn't a query", () => {
+    it("given takes an updater and keeps the results, and loaded throws for a name that isn't a query", () => {
       Story.make(users.RenameForm, { id: "1" }, (s) =>
         s
           .given((model) => ({ ...model, draft: Option.some("Zed") }))
@@ -651,14 +651,14 @@ describe("Story", () => {
           ),
         /others.*given args/
       )
-      // Queries that aren't named keep their slots.
+      // Queries that aren't named keep their results.
       Story.make(Team, { id: "1" }, (s) =>
         s.given({ changes: 0 }, { user: user("1", "Ann", "2") })
           .given({ changes: 5 }, { friend: user("2", "Bea") })
           .check((story) => assert.strictEqual(text(story), "Ann Bea ?+? ? 5")))
     })
 
-    it("given replaces loaded results in any key order, against the new results, not the old slots", () => {
+    it("given replaces loaded results in any key order, against the new results, not the ones held before", () => {
       Story.make(
         Team,
         { id: "1" },

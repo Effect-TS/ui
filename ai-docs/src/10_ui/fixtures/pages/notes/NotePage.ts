@@ -21,7 +21,7 @@ export const NotePageNoDeps = Component.define({
   name: "NotePage",
   props: Schema.Struct({ id: Schema.String }),
   // The Model holds no copy of the note. The runtime keeps each query's
-  // last result in a slot beside the Model, and the Model plus the slots is
+  // last result beside the Model, and the Model plus the query results is
   // the instance's state.
   model: Schema.Struct({ notice: Schema.String }),
   message: NotePageMessage,
@@ -32,7 +32,7 @@ export const NotePageNoDeps = Component.define({
   queries: { note: { query: GetNote, args: (_model, props) => ({ id: props.id }) } }
 }).make({
   init: () => ({ notice: "" }),
-  // `update` can read the slots too, as `$.queries`.
+  // `update` can read the results too, as `$.queries`.
   update: (model, message, $) =>
     NotePageMessage.match(message, {
       Saved: () => ({ ...model, notice: "Saved" }),
@@ -51,7 +51,7 @@ export const NotePageNoDeps = Component.define({
     Head.title(AsyncResult.isSuccess(queries.note) ? queries.note.value.title : `Note ${props.id}`)
   ],
   view: (model, h) =>
-    // `h.queries.note` is the query's slot as an `AsyncResult`.
+    // `h.queries.note` is the query's result as an `AsyncResult`.
     AsyncResult.match(h.queries.note, {
       onInitial: () => h.p("Loading note…"),
       onFailure: () => h.p("This note doesn't exist."),

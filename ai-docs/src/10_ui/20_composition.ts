@@ -1,7 +1,7 @@
 /**
  * @title Composing components, data and Layers
  *
- * Load a note with a `Query` read and show it with child components. The
+ * Load a note with a `Query` and show it with child components. The
  * page handles a child's events, provides Layers with `Component.provide`,
  * and makes one child swappable with `Feature.Service`. This entry module
  * mounts the page, which is in `fixtures/pages/notes/NotePage.ts`.

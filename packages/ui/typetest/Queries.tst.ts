@@ -178,7 +178,7 @@ describe("Component queries", () => {
     })
   })
 
-  it("type args and onChange by the read", () => {
+  it("type args and onChange by the query", () => {
     Component.define({
       name: "Typed",
       props: Schema.Struct({ id: Schema.String }),
@@ -456,7 +456,7 @@ describe("Keyed queries", () => {
     >()
   })
 
-  it("take the Story's keyed steps, typed by the read", () => {
+  it("take the Story's keyed steps, typed by the query", () => {
     Story.make(List, {}, (s) =>
       s
         .send(ListMessage.make({ _tag: "Show", ids: ["1", "2"] }))
@@ -585,7 +585,7 @@ describe("List queries", () => {
     })
   })
 
-  it("keep a list read under load, and one of load and queryMany", () => {
+  it("keep an infinite query under query, and one of query and queryMany", () => {
     Component.define({
       name: "ListMany",
       model: Schema.Struct({}),

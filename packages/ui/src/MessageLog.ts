@@ -238,8 +238,8 @@ export interface PropsChanged extends Base {
 
 /**
  * A query's result changed: the runtime wrote what the query last
- * returned at its args. `slot` is opaque. `Story.fromLog` applies it to
- * reach the slots the instance ended with.
+ * returned at its args. `result` is opaque. `Story.fromLog` applies it to
+ * reach the results the instance ended with.
  *
  * **Details**
  *
@@ -253,7 +253,7 @@ export interface PropsChanged extends Base {
  */
 export interface QueryChanged extends Base {
   readonly _tag: "QueryChanged"
-  /** The component, whose query Schemas encode the slot for the Wire. */
+  /** The component, whose query Schemas encode the result for the Wire. */
   readonly component: Component.Any
   /** The query's name in `queries`. */
   readonly name: string
@@ -829,7 +829,7 @@ export const makeEncoder = (options?: {
       ? { "~unserialisable": "encode" }
       : cap(encodeWith(schema, `${component.definition.name}.queries`, results) as Schema.Json)
   }
-  // A message can carry a query's whole result, so messages are capped like Models and slots.
+  // A message can carry a query's whole result, so messages are capped like Models and query results.
   const capped = (component: Component.Any, field: "model" | "message", value: unknown): Schema.Json =>
     cap(through(component, field, value) as Schema.Json)
   const cap = (encoded: Schema.Json): Schema.Json => {

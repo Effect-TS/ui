@@ -34,7 +34,7 @@ export class SaveNote extends Command.Service<SaveNote>()(
     args: { note: Note },
     // Saves from one editor run one at a time, in order.
     mode: "queue",
-    // Required. Returns the tags of the reads a run makes stale, or `[]`.
+    // Required. Returns the tags of the queries a run makes stale, or `[]`.
     invalidates: () => [NotesTag]
   },
   Effect.gen(function*() {

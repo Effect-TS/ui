@@ -91,7 +91,7 @@ describe("Infinite queries", () => {
         assert.strictEqual(root.text(), "r0 /1 Available")
         root.send(app.ChatMessage.make({ _tag: "More" }))
         yield* TestHost.settle
-        // A change of `more` is a slot write of its own.
+        // A change of `more` is a result write of its own.
         assert.strictEqual(root.text(), "r0 /1 Loading")
         yield* page
         // The second page repeats m0: the first stays.
@@ -237,15 +237,15 @@ describe("Infinite queries", () => {
       >
     const state = json(false)
     const log = json(true)
-    /** The last slot written for "messages": as page state encodes it, as the Wire does, and each decoded back. */
-    const lastSlot = (root: Pick<TestHost.TestRoot<any, any, any>, "log">) => {
+    /** The last result written for "messages": as page state encodes it, as the Wire does, and each decoded back. */
+    const lastResult = (root: Pick<TestHost.TestRoot<any, any, any>, "log">) => {
       const entry = [...root.log()].reverse().find((entry): entry is MessageLog.QueryChanged =>
         entry._tag === "QueryChanged" && entry.name === "messages"
       )!
       const encoded = Schema.encodeUnknownSync(state)(entry.result) as ReadonlyArray<unknown>
       const wire = (encoder.encode(entry) as { readonly result: ReadonlyArray<unknown> }).result
       return {
-        slot: entry.result,
+        result: entry.result,
         encoded,
         decoded: Schema.decodeUnknownSync(state)(encoded),
         wire,
@@ -259,8 +259,8 @@ describe("Infinite queries", () => {
         yield* page
         root.send(app.ChatMessage.make({ _tag: "More" }))
         yield* TestHost.settle
-        const loading = lastSlot(root)
-        assert.deepStrictEqual(Query.snapshotData(loading.slot)?.more, { _tag: "Loading" })
+        const loading = lastResult(root)
+        assert.deepStrictEqual(Query.snapshotData(loading.result)?.more, { _tag: "Loading" })
         assert.strictEqual(loading.encoded.length, 6)
         assert.strictEqual(loading.encoded[5], true)
         assert.deepStrictEqual(Query.snapshotData(loading.decoded)?.more, { _tag: "Available" })
@@ -271,7 +271,7 @@ describe("Infinite queries", () => {
         yield* page
         root.send(app.ChatMessage.make({ _tag: "More" }))
         yield* page
-        const ended = lastSlot(root)
+        const ended = lastResult(root)
         assert.strictEqual(ended.encoded[5], false)
         assert.deepStrictEqual(Query.snapshotData(ended.decoded)?.more, { _tag: "End" })
         assert.deepStrictEqual(ended.wire[6], [false, "End"])
@@ -433,7 +433,7 @@ describe("Infinite queries", () => {
         yield* TestHost.settle
         history.go(-1)
         yield* TestHost.settle
-        // The two pages show at once, from the restored slot, while they load again.
+        // The two pages show at once, from the restored result, while they load again.
         assert.strictEqual(root.text(), "r0,r1 /2 Available")
         yield* page
         yield* page

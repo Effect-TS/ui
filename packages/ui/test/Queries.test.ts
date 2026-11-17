@@ -10,7 +10,7 @@ import { TestClock } from "effect/testing"
 
 /**
  * A component with one query and no `onChange`: the runtime writes the
- * query's slot, the view shows it, and `update` reads it through
+ * query's result, the view shows it, and `update` reads it through
  * `$.queries`. Fresh per test: the fetch count is closed over.
  */
 const makeApp = () => {
@@ -53,7 +53,7 @@ const makeApp = () => {
     }
   }).make({
     init: () => ({ clicks: 0, last: "none" }),
-    // What the query holds when the click is handled, so a replay only reproduces it with the slots.
+    // What the query holds when the click is handled, so a replay only reproduces it with the results.
     update: (model, message, $) =>
       NoteMessage.match(message, {
         Click: () => ({
@@ -171,7 +171,7 @@ describe("a query without onChange", { concurrent: false }, () => {
         yield* load
         assert.strictEqual(root.text(), "Note 1clicks 0")
         assert.strictEqual(app.server.calls, 1)
-        // The slot is written by the runtime: one QueryChanged entry holding the Success, and no update.
+        // The result is written by the runtime: one QueryChanged entry holding the Success, and no update.
         assert.deepStrictEqual(
           queryChanges(root.log(), "/Note").map((entry) => [
             entry.name,
@@ -193,7 +193,7 @@ describe("a query without onChange", { concurrent: false }, () => {
     const app = makeApp()
     return Effect.gen(function*() {
       const result = yield* ssr(app.Note, { id: "1" })
-      // The page state of a component with queries: its Model and its slots, a slot as its snapshot tuple.
+      // The page state of a component with queries: its Model and its results, a result as its snapshot tuple.
       const state = result.state["/Note"] as {
         readonly model: unknown
         readonly queries: { readonly note: ReadonlyArray<unknown> }
@@ -207,14 +207,14 @@ describe("a query without onChange", { concurrent: false }, () => {
       assert.deepStrictEqual(result.root.fetches(), [])
       assert.strictEqual(app.server.calls, 1)
       assert.strictEqual(result.container.textContent, "Note 1clicks 0")
-      // The hydrated slot is logged once, right after Mounted; the watch's first value equals it, so it isn't
+      // The hydrated result is logged once, right after Mounted; the watch's first value equals it, so it isn't
       // written again.
       const index = result.log.findIndex((entry) => entry._tag === "Mounted" && entry.path === "/Note")
       assert.isTrue((result.log[index] as MessageLog.Mounted).adopted)
       assert.strictEqual(result.log[index + 1]?._tag, "QueryChanged")
       assert.strictEqual(queryChanges(result.log, "/Note").length, 1)
       assert.deepStrictEqual(updates(result.log, "/Note"), [])
-      // update sees the hydrated slot.
+      // update sees the hydrated result.
       result.root.send(app.NoteMessage.make({ _tag: "Click" }))
       yield* TestHost.settle
       assert.deepStrictEqual(result.root.model(), { clicks: 1, last: "Note 1" })
@@ -226,7 +226,7 @@ describe("a query without onChange", { concurrent: false }, () => {
     ) as Effect.Effect<void, unknown>
   })
 
-  it.effect("restores the Model and slot from history.state, seeding the cold cache, and refetches once", () => {
+  it.effect("restores the Model and result from history.state, seeding the cold cache, and refetches once", () => {
     const app = makeApp()
     const history = Router.memoryHistory("/notes/1")
     const path = "/App/Note[/notes/1]"
@@ -248,7 +248,7 @@ describe("a query without onChange", { concurrent: false }, () => {
       }))
       assert.strictEqual(app.server.calls, 1)
 
-      // The entry's history.state holds the instance's { model, loaded }.
+      // The entry's history.state holds the instance's { model, queries }.
       history.go(-1)
       const saved = Object.values(history.current().state as Record<string, { readonly snapshot: any }>)[0]
         .snapshot[path]
@@ -262,7 +262,7 @@ describe("a query without onChange", { concurrent: false }, () => {
         yield* TestHost.settle
         history.go(-1)
         yield* TestHost.settle
-        // The restored slot shows at once, stale, while one refetch runs.
+        // The restored result shows at once, stale, while one refetch runs.
         assert.strictEqual(root.text(), "Note 1clicks 1")
         const log = root.log()
         const index = log.findIndex((entry) => entry._tag === "Mounted" && entry.path === path)
@@ -286,7 +286,53 @@ describe("a query without onChange", { concurrent: false }, () => {
     })
   })
 
-  it.effect("replays from the MessageLog with Story.fromLog, update reading the logged slots as $.queries", () => {
+  it.effect("drops history.state saved as { model, loaded }, rerunning init and fetching afresh", () => {
+    const app = makeApp()
+    const history = Router.memoryHistory("/notes/1")
+    const path = "/App/Note[/notes/1]"
+    const mount = TestHost.mount(app.App, Router.props(app.AppRoute))
+    const routed = <E>(effect: Effect.Effect<void, E, any>) =>
+      run(Router.make({ routes: app.AppRoute, history }), effect.pipe(Effect.provide(app.layer)))
+    return Effect.gen(function*() {
+      yield* routed(Effect.gen(function*() {
+        const root = yield* mount
+        yield* load
+        click(root, "clicks 0")
+        yield* TestHost.settle
+        const router = yield* Router.Router
+        yield* router.navigate("/")
+        yield* TestHost.settle
+      }))
+      assert.strictEqual(app.server.calls, 1)
+
+      // Rewrite the saved entry in the format written before the rename to Query.
+      history.go(-1)
+      const snapshot = Object.values(history.current().state as Record<string, { readonly snapshot: any }>)[0]
+        .snapshot
+      const saved = snapshot[path]
+      snapshot[path] = { model: saved.model, loaded: saved.queries }
+      history.go(1)
+
+      yield* routed(Effect.gen(function*() {
+        const root = yield* mount
+        yield* TestHost.settle
+        history.go(-1)
+        yield* TestHost.settle
+        // The whole state fails to decode, so the saved Model is lost along with the result.
+        const log = root.log()
+        const index = log.findIndex((entry) => entry._tag === "Mounted" && entry.path === path)
+        assert.isFalse((log[index] as MessageLog.Mounted).adopted)
+        assert.notStrictEqual(log[index + 1]?._tag, "QueryChanged")
+        assert.strictEqual(root.text(), "loadingclicks 0")
+        yield* TestClock.adjust("10 millis")
+        yield* TestHost.settle
+        assert.strictEqual(app.server.calls, 2)
+        assert.strictEqual(root.text(), "Note 1clicks 0")
+      }))
+    })
+  })
+
+  it.effect("replays from the MessageLog with Story.fromLog, update reading the logged results as $.queries", () => {
     const app = makeApp()
     return run(
       app.layer,
@@ -306,7 +352,7 @@ describe("a query without onChange", { concurrent: false }, () => {
         assert.strictEqual(replay.replayed, 3)
         assert.deepStrictEqual(replay.model, { clicks: 3, last: "Note 1" })
 
-        // Through the Wire: each Update's slots are decoded with the queries' Schemas.
+        // Through the Wire: each Update's results are decoded with the queries' Schemas.
         const encoder = MessageLog.makeEncoder()
         const fromWire = Story.fromLog(app.Note, log.map(encoder.encode))
         assert.isUndefined(fromWire.divergence)
@@ -315,7 +361,7 @@ describe("a query without onChange", { concurrent: false }, () => {
     )
   })
 
-  it.effect("replays a bounded log whose slot writes were evicted", () => {
+  it.effect("replays a bounded log whose result writes were evicted", () => {
     const app = makeApp()
     return run(
       app.layer,
@@ -327,7 +373,7 @@ describe("a query without onChange", { concurrent: false }, () => {
         click(root, "clicks 1")
         yield* TestHost.settle
         const log = root.log()
-        // What a ring buffer keeps once Mounted and the slot's only QueryChanged have been evicted.
+        // What a ring buffer keeps once Mounted and the result's only QueryChanged have been evicted.
         const first = log.findIndex((entry) => entry._tag === "Update" && entry.path === "/Note")
         const bounded = log.slice(first)
         assert.deepStrictEqual(queryChanges(bounded, "/Note"), [])
@@ -337,7 +383,7 @@ describe("a query without onChange", { concurrent: false }, () => {
         assert.isUndefined(replay.divergence)
         assert.strictEqual(replay.replayed, 1)
         assert.deepStrictEqual(replay.model, { clicks: 2, last: "Note 1" })
-        // The first Update's record gives the slots back, so the final state has the note.
+        // The first Update's record gives the results back, so the final state has the note.
         assert.strictEqual(noteOf(replay), "Note 1")
         const fromWire = Story.fromLog(app.Note, bounded.map(MessageLog.makeEncoder().encode))
         assert.isUndefined(fromWire.divergence)
@@ -356,7 +402,7 @@ describe("a query without onChange", { concurrent: false }, () => {
         yield* load
         root.send(app.NoteMessage.make({ _tag: "Touch" }))
         yield* TestHost.settle
-        // The refetch is in flight: the slot keeps the value, waiting.
+        // The refetch is in flight: the result keeps the value, waiting.
         click(root, "clicks 0")
         yield* TestHost.settle
         assert.deepStrictEqual(root.model(), { clicks: 1, last: "Note 1 (waiting)" })
@@ -379,13 +425,13 @@ describe("a query without onChange", { concurrent: false }, () => {
     )
   })
 
-  it.effect("replay ends with the slots a load wrote after the last message, live and through the Wire", () => {
+  it.effect("replay ends with the results a load wrote after the last message, live and through the Wire", () => {
     const app = makeApp()
     return run(
       app.layer,
       Effect.gen(function*() {
         const root = yield* TestHost.mount(app.Note, { id: "1" })
-        // Nothing is loaded yet: the replay ends with the slot empty.
+        // Nothing is loaded yet: the replay ends with the result empty.
         assert.strictEqual(noteOf(Story.fromLog(app.Note, root.log())), "Initial")
         click(root, "clicks 0")
         yield* TestHost.settle
@@ -428,7 +474,7 @@ describe("a query without onChange", { concurrent: false }, () => {
     )
   })
 
-  it.effect("a Mounted entry at the same path starts the slots over", () => {
+  it.effect("a Mounted entry at the same path starts the results over", () => {
     const app = makeApp()
     return Effect.gen(function*() {
       const first = yield* run(
@@ -439,7 +485,7 @@ describe("a query without onChange", { concurrent: false }, () => {
           return root.log()
         })
       )
-      // A second mount on a cold cache: the earlier session's slot isn't carried over.
+      // A second mount on a cold cache: the earlier session's result isn't carried over.
       const second = yield* run(app.layer, Effect.map(TestHost.mount(app.Note, { id: "2" }), (root) => root.log()))
       const replay = Story.fromLog(app.Note, [...first, ...second])
       assert.strictEqual(noteOf(Story.fromLog(app.Note, first)), "Note 1")
@@ -469,7 +515,7 @@ describe("a query without onChange", { concurrent: false }, () => {
         root.send(app.setId("2"))
         yield* load
         assert.strictEqual(root.text(), "Note 2clicks 0")
-        // The props are logged before the slot write they cause.
+        // The props are logged before the result write they cause.
         assert.deepStrictEqual(
           root.log().filter((entry) => entry.path === path).map((entry) => entry._tag).filter((tag) =>
             tag === "PropsChanged" || tag === "QueryChanged"
@@ -483,7 +529,7 @@ describe("a query without onChange", { concurrent: false }, () => {
           assert.strictEqual(noteOf(replay), "Note 2")
         }
 
-        // Disabling writes no slot: only the props show that the query is off.
+        // Disabling writes no result: only the props show that the query is off.
         root.send(app.setId(""))
         yield* load
         assert.strictEqual(root.text(), "loadingclicks 0")
@@ -496,7 +542,7 @@ describe("a query without onChange", { concurrent: false }, () => {
     )
   })
 
-  it.effect("a divergence returns the props and slots the diverging update read", () => {
+  it.effect("a divergence returns the props and results the diverging update read", () => {
     const app = makeApp()
     return run(
       app.layer,
@@ -519,7 +565,7 @@ describe("a query without onChange", { concurrent: false }, () => {
           ]
         ) {
           assert.deepStrictEqual(replay.divergence?.recomputed.model, { clicks: 1, last: "Note 2" })
-          // The Model before the message, with the props and slots it was sent with.
+          // The Model before the message, with the props and results it was sent with.
           assert.deepStrictEqual(replay.model, { clicks: 0, last: "none" })
           assert.deepStrictEqual(replay.props, { id: "2" })
           assert.strictEqual(noteOf(replay), "Note 2")
@@ -528,7 +574,7 @@ describe("a query without onChange", { concurrent: false }, () => {
     )
   })
 
-  it("Story.head opens the queries at the props it is given, with every slot empty", () => {
+  it("Story.head opens the queries at the props it is given, with every result empty", () => {
     const app = makeApp()
     // The query's args read the props, so head needs them to open it.
     assert.deepStrictEqual(Story.head(app.Note, { clicks: 0, last: "none" }, { id: "1" }), [Head.title("Note")])

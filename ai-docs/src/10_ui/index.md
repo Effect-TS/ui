@@ -3,8 +3,8 @@
 `@effect/ui` is a frontend framework whose apps are composed with Layers. You
 describe a component with Schemas for its props, Model, messages and events,
 and with pure `init`, `update` and `view` functions. Side effects are Commands
-and Subscriptions that the runtime runs for you, and data comes from `Query`
-reads, also in `@effect/ui`. `@effect/ui/html` adds the HTML elements, the
+and Subscriptions that the runtime runs for you, and data comes from queries,
+built with `Query`, also in `@effect/ui`. `@effect/ui/html` adds the HTML elements, the
 browser host and router, and server rendering.
 
 A `Command.Service` may omit `invalidates` when it invalidates no queries.

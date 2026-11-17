@@ -1,7 +1,7 @@
 /**
  * A keyed data cache. Each query is a class service with a name, argument and
  * result Schemas, a freshness duration, and a fetcher. The cache keeps one
- * entry per read and arguments, shares in-flight fetches, refetches stale
+ * entry per query and arguments, shares in-flight fetches, refetches stale
  * entries on demand, and collects unused entries.
  *
  * A query's fetcher is built once per Layer build and captures the services it
@@ -229,7 +229,7 @@ export interface Service<
    */
   prefetch(args: Args): Effect.Effect<void, never, Self | Cache>
   /**
-   * Marks one entry, or every entry of the read when called without
+   * Marks one entry, or every entry of the query when called without
    * arguments, stale. A watched entry refetches at once, a fetch in flight is
    * restarted, and any other entry refetches the next time it's asked for.
    */
@@ -720,7 +720,7 @@ export interface InfiniteService<
   /**
    * An optimistic patch of every list of the query that holds pages when the
    * run is issued, applied to each page. It implies invalidation of the whole
-   * read.
+   * query.
    */
   patchAll(f: (page: Page, args: Args, index: number) => Page): Patch<InfiniteQuery<Args, Page, Item, E>>
 }
@@ -1341,7 +1341,7 @@ export class PatchInvalid extends Data.TaggedClass("PatchInvalid")<{
  * `ownKeys` and `getOwnPropertyDescriptor` traps called, never `get` or
  * `set`, and one whose traps answer differently each time can be reported on
  * a patch that changed nothing. If a mutation goes unreported,
- * give the read a `success` Schema that encodes the value. A value the Schema
+ * give the query a `success` Schema that encodes the value. A value the Schema
  * can't encode is not checked.
  *
  * @stability experimental
@@ -2183,7 +2183,7 @@ const write = (query: Query.Any, args: unknown, value: unknown): Write =>
   ({ _tag: "Set", query, args, value, [ArgsKey]: defOf(query).argsKey(args) }) as Write
 
 /**
- * A run's declarations compiled for matching: the reads it names whole, the
+ * A run's declarations compiled for matching: the queries it names whole, the
  * entries it names one by one, and its tags.
  */
 interface Targets {
@@ -2490,7 +2490,7 @@ interface CacheInternals {
   readonly reset: (def: QueryDef, args: unknown) => void
   /**
    * One synchronous batch: an entry hit twice restarts once. `byHand` is a
-   * read's own `invalidate`, which a settle-once cache reports and ignores.
+   * query's own `invalidate`, which a settle-once cache reports and ignores.
    */
   readonly invalidate: (
     targets: ReadonlyArray<Target>,
@@ -2640,7 +2640,7 @@ const settledMap = (
   success: (u: unknown) => Effect.Effect<unknown, SchemaIssue.Issue>,
   error: (u: unknown) => Effect.Effect<unknown, SchemaIssue.Issue>
 ): Effect.Effect<Settled, SchemaIssue.Issue> => {
-  // `waiting` is carried over, so a check of a slot keeps it. The JSON codec never sets it, so a decoded
+  // `waiting` is carried over, so a check of a query result keeps it. The JSON codec never sets it, so a decoded
   // snapshot is never waiting.
   const waiting = result.waiting
   if (result._tag === "Success") {
@@ -2668,7 +2668,7 @@ const settledMap = (
 /**
  * The Schema of a query result that holds a snapshot of a query. Its type
  * parameters are the query's `args`, `success` and `error` Schemas, so a walk
- * over the slots' AST, such as the log's redaction, reaches what a snapshot
+ * over the results' AST, such as the log's redaction, reaches what a snapshot
  * holds. On the wire a snapshot is a tuple: `[]` when empty,
  * `[argsKey, 0, value, timestamp, patched]` for a Success, and
  * `[argsKey, 1, [error, ...], [value, timestamp] | null]` for a Failure with
@@ -2736,7 +2736,7 @@ const snapshotRun = (def: QueryDef, label: string, decoding: boolean) => {
         Effect.all([
           args(data.args, options),
           // A patched value is used as it is: a patch that fails `success` is reported as `PatchInvalid`, and a
-          // check of a slot mustn't throw on it.
+          // check of a query result mustn't throw on it.
           settledMap(result, (u) => data.patched ? Effect.succeed(u) : success(u, options), (u) => error(u, options)),
           // A failed load more holds a typed error too, which the message log's form carries.
           data.more?._tag === "Failed"
@@ -2761,7 +2761,7 @@ const snapshotRun = (def: QueryDef, label: string, decoding: boolean) => {
 }
 
 /**
- * The JSON form of a snapshot, built from the query's Schemas as a walk over the slots passes them: the
+ * The JSON form of a snapshot, built from the query's Schemas as a walk over the results passes them: the
  * tuple Schema and the two steps between a tuple and a snapshot.
  */
 const snapshotWire = (

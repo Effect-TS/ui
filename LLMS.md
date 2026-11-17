@@ -16,8 +16,8 @@ purposes. In practice, you would not include these comments in your code.
 `@effect/ui` is a frontend framework whose apps are composed with Layers. You
 describe a component with Schemas for its props, Model, messages and events,
 and with pure `init`, `update` and `view` functions. Side effects are Commands
-and Subscriptions that the runtime runs for you, and data comes from `Query`
-reads, also in `@effect/ui`. `@effect/ui/html` adds the HTML elements, the
+and Subscriptions that the runtime runs for you, and data comes from queries,
+built with `Query`, also in `@effect/ui`. `@effect/ui/html` adds the HTML elements, the
 browser host and router, and server rendering.
 
 A `Command.Service` may omit `invalidates` when it invalidates no queries.
@@ -169,7 +169,7 @@ client, not the services.
   entry module, which mounts it with `BrowserHost`. The editor is in
   `fixtures/notes/components/NoteEditor.ts`.
 - **[Composing components, data and Layers](./ai-docs/src/10_ui/20_composition.ts)**:
-  Load a note with a `Query` read and show it with child components. The
+  Load a note with a `Query` and show it with child components. The
   page handles a child's events, provides Layers with `Component.provide`,
   and makes one child swappable with `Feature.Service`. This entry module
   mounts the page, which is in `fixtures/pages/notes/NotePage.ts`.

@@ -473,7 +473,7 @@ describe("Command.afterRefetch", () => {
         yield* tick
         app.order.length = 0
         renameOn(root, app, "Cy")
-        // Bob's onSuccess comes inside the update that cut it, after Cy's patch has reached the slot.
+        // Bob's onSuccess comes inside the update that cut it, after Cy's patch has reached the result.
         assert.deepStrictEqual(app.order.slice(0, 3), [
           "update a Rename Cy",
           "update a UserChanged",
@@ -735,7 +735,7 @@ describe("Command.afterRefetch", () => {
     )
   })
 
-  it.effect("a list read: the wait ends when the walk swaps, not on its first page", () => {
+  it.effect("an infinite query: the wait ends when the walk swaps, not on its first page", () => {
     const Item = Schema.Struct({ id: Schema.String })
     const Page = Schema.Struct({ items: Schema.Array(Item), next: Schema.NullOr(Schema.Number) })
     const db = { version: 0 }

@@ -179,34 +179,34 @@ const run = <A, E>(layer: Layer.Layer<any>, effect: Effect.Effect<A, E, any>) =>
 const load = TestHost.settle.pipe(Effect.andThen(TestClock.adjust("10 millis")), Effect.andThen(TestHost.settle))
 
 /**
- * A query's slot JSON codec, as the runtime writes page state, history state and the log's Wire with
+ * A query's result JSON codec, as the runtime writes page state, history state and the log's Wire with
  * it. The component's queries carry the Schemas.
  */
-const slotCodec = (component: Component.Any, name: string) =>
+const resultCodec = (component: Component.Any, name: string) =>
   Schema.toCodecJson(
     (component["~queries"] as { readonly schema: Schema.Struct<Record<string, Schema.Codec<unknown, unknown>>> })
       .schema.fields[name]
   )
 
-/** A keyed slot's tuples as its JSON codec writes them: the old snapshot's JSON. */
-const tuples = (component: Component.Any, name: string, slot: unknown): ReadonlyArray<ReadonlyArray<unknown>> =>
-  Schema.encodeSync(slotCodec(component, name))(slot) as ReadonlyArray<ReadonlyArray<unknown>>
+/** A keyed result's tuples as its JSON codec writes them: the old snapshot's JSON. */
+const tuples = (component: Component.Any, name: string, result: unknown): ReadonlyArray<ReadonlyArray<unknown>> =>
+  Schema.encodeSync(resultCodec(component, name))(result) as ReadonlyArray<ReadonlyArray<unknown>>
 
-/** The last slot the runtime wrote for a query at a path, from the log. */
-const slotOf = (log: ReadonlyArray<MessageLog.Entry>, path: string, name: string): unknown =>
+/** The last result the runtime wrote for a query at a path, from the log. */
+const resultOf = (log: ReadonlyArray<MessageLog.Entry>, path: string, name: string): unknown =>
   [...log].reverse().find((entry): entry is MessageLog.QueryChanged =>
     entry._tag === "QueryChanged" && entry.path === path && entry.name === name
   )?.result
 
 const updates = (order: ReadonlyArray<string>) => order.filter((line) => line.startsWith("update"))
 
-/** The args ids a keyed slot holds. */
-const heldIds = (component: Component.Any, slot: unknown): ReadonlyArray<unknown> =>
-  tuples(component, "users", slot).map((tuple) => JSON.parse(tuple[0] as string).id)
+/** The args ids a keyed result holds. */
+const heldIds = (component: Component.Any, result: unknown): ReadonlyArray<unknown> =>
+  tuples(component, "users", result).map((tuple) => JSON.parse(tuple[0] as string).id)
 
-/** The ids the root Board's slot holds. */
+/** The ids the root Board's result holds. */
 const boardIds = (app: ReturnType<typeof makeApp>, root: { readonly log: () => ReadonlyArray<MessageLog.Entry> }) =>
-  heldIds(app.Board, slotOf(root.log(), "/Board", "users"))
+  heldIds(app.Board, resultOf(root.log(), "/Board", "users"))
 
 describe("Keyed query fields", () => {
   it.effect("N cold keys start N fetches in one batch, and its results are one message with N changes", () => {
@@ -231,7 +231,7 @@ describe("Keyed query fields", () => {
           root.log().flatMap((entry) => entry._tag === "SubscriptionStarted" ? [entry.key] : []),
           ["1", "2", "3"].map((id) => `~query/users:${JSON.stringify(JSON.stringify({ id }))}`)
         )
-        // The slot's write is logged, then the Update of its onChange message.
+        // The result's write is logged, then the Update of its onChange message.
         const written = root.log().flatMap((entry) =>
           entry._tag === "QueryChanged" ?
             [entry._tag] :
@@ -465,7 +465,7 @@ describe("Keyed query fields", () => {
     )
   })
 
-  it.effect("a prune: a removed key leaves the slot, and onChange gets no changes", () => {
+  it.effect("a prune: a removed key leaves the result, and onChange gets no changes", () => {
     const app = makeApp()
     return run(
       app.layer,
@@ -483,7 +483,7 @@ describe("Keyed query fields", () => {
     )
   })
 
-  it.effect("a prune is written once, and not again until the slot holds a key the query no longer returns", () => {
+  it.effect("a prune is written once, and not again until the result holds a key the query no longer returns", () => {
     const app = makeApp()
     return run(
       app.layer,
@@ -494,7 +494,7 @@ describe("Keyed query fields", () => {
         root.send(app.BoardMessage.make({ _tag: "Show", ids: ["1", "3"] }))
         yield* TestHost.settle
         assert.deepStrictEqual(updates(app.order), ["update a []"])
-        // The slot no longer holds key 2, so a reorder of the rest prunes nothing.
+        // The result no longer holds key 2, so a reorder of the rest prunes nothing.
         assert.deepStrictEqual(boardIds(app, root), ["1", "3"])
         assert.strictEqual(root.text(), "a: 1=Ann 3=Cy")
         root.send(app.BoardMessage.make({ _tag: "Show", ids: ["3", "1"] }))
@@ -765,7 +765,7 @@ describe("Keyed query fields", () => {
   })
 })
 
-describe("Keyed slots", () => {
+describe("Keyed results", () => {
   it.effect("encode to the single form's tuples, and a duplicate args key fails to decode", () => {
     const app = makeApp()
     return run(
@@ -773,8 +773,8 @@ describe("Keyed slots", () => {
       Effect.gen(function*() {
         const root = yield* TestHost.mount(app.Board, { tag: "a", ids: ["1", "9"] })
         yield* load
-        const slot = slotOf(root.log(), "/Board", "users")
-        const encoded = tuples(app.Board, "users", slot)
+        const result = resultOf(root.log(), "/Board", "users")
+        const encoded = tuples(app.Board, "users", result)
         assert.deepStrictEqual(encoded, [
           ["{\"id\":\"1\"}", 0, { id: "1", name: "Ann" }, 10, false],
           ["{\"id\":\"9\"}", 1, ["missing"], null]
@@ -785,7 +785,7 @@ describe("Keyed slots", () => {
           (MessageLog.makeEncoder().encode(changed) as { readonly result?: unknown }).result,
           encoded.map((tuple) => [...tuple, [false, null]])
         )
-        const decode = Schema.decodeUnknownExit(slotCodec(app.Board, "users"))
+        const decode = Schema.decodeUnknownExit(resultCodec(app.Board, "users"))
         assert.isTrue(Exit.isSuccess(decode(encoded)))
         assert.isTrue(Exit.isFailure(decode([encoded[0], encoded[0]])))
         assert.isTrue(Exit.isFailure(decode([[]])))
@@ -864,7 +864,7 @@ describe("Keyed slots", () => {
 })
 
 describe("Keyed redaction", () => {
-  it.effect("Schema.Redacted in a keyed read's args and success: the log is redacted, the state is not", () => {
+  it.effect("Schema.Redacted in a keyed query's args and success: the log is redacted, the state is not", () => {
     const Account = Schema.Struct({ secret: Schema.Redacted(Schema.String) })
     class GetAccount extends Query.Service<GetAccount>()(
       "accounts/GetAccount",
@@ -902,8 +902,8 @@ describe("Keyed redaction", () => {
         const root = yield* TestHost.mount(Page, { tokens: [Redacted.make("tok-1"), Redacted.make("tok-2")] })
         yield* TestHost.settle
         assert.strictEqual(root.text(), "secret-of-tok-1 secret-of-tok-2")
-        // The slot as page state and history state hold it.
-        const state = JSON.stringify(tuples(Page, "accounts", slotOf(root.log(), "/Page", "accounts")))
+        // The result as page state and history state hold it.
+        const state = JSON.stringify(tuples(Page, "accounts", resultOf(root.log(), "/Page", "accounts")))
         assert.include(state, "tok-2")
         assert.include(state, "secret-of-tok-2")
         const wire = JSON.stringify(root.log().map((entry) => MessageLog.makeEncoder().encode(entry)))
@@ -1211,7 +1211,7 @@ describe("Keyed history restore", () => {
           const mounted = log.findIndex((entry) => entry._tag === "Mounted" && entry.path === "/Shell/Board[board]")
           const restored = log[mounted] as MessageLog.Mounted
           assert.isTrue(restored.adopted)
-          // The restored slot is logged right after Mounted.
+          // The restored result is logged right after Mounted.
           const seeded = log[mounted + 1]
           assert.strictEqual(seeded._tag, "QueryChanged")
           assert.deepStrictEqual(

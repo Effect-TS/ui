@@ -3,7 +3,7 @@
  * holds beside its Model, their Schema, the opened views of `h` and `$`,
  * and the watches the runtime registers.
  *
- * A slot holds a snapshot: the last settled result of the query's read, at
+ * A query result holds a snapshot: the last settled result of the query, at
  * the args it was taken for. The Model plus the results is an instance's state.
  *
  * @internal
@@ -260,7 +260,7 @@ export interface Context {
   /** The args of a query: a keyed query's are its unique args. */
   readonly argsOf: (name: string) => Current
   /**
-   * The message a query's `onChange` returns for its slot as these views open
+   * The message a query's `onChange` returns for its result as these views open
    * it, or `undefined` without `onChange`. A keyed query's also gets `changes`.
    */
   readonly changed: (name: string, changes: ReadonlyArray<KeyedChange>) => { readonly value: unknown } | undefined
@@ -381,7 +381,7 @@ export const bind = (component: string, queries: unknown): Bound | undefined => 
     }
     return proto
   }
-  const openSlot = (state: State, entry: Entry) => {
+  const openKeyedResult = (state: State, entry: Entry) => {
     let opened = state.opened.get(entry.name)
     if (opened === undefined) {
       opened = openKeyed(Query.defOf(entry.query), state.results[entry.name], argsOf(state, entry).entries!)
@@ -392,7 +392,7 @@ export const bind = (component: string, queries: unknown): Bound | undefined => 
   const queriesProto = view((snapshot, argsKey, entry) => {
     const result = open(snapshot, argsKey)
     return entry.list ? openList(snapshot, result) : result
-  }, openSlot)
+  }, openKeyedResult)
   const previousProto = view(previous, undefined)
   const patchedProto = view(patched, undefined)
   const viewOf = (proto: object, state: State) => {

@@ -313,7 +313,7 @@ export interface Instance {
   props: unknown
   model: unknown
   /** The query results, beside the Model: what each query last returned. */
-  slots: componentQueries.Results | undefined
+  results: componentQueries.Results | undefined
   /** The entries from the component's `head`, as of the last render. */
   head: ReadonlyArray<Head.Entry>
   onEmit: (events: unknown) => unknown
@@ -463,7 +463,7 @@ const jsonCodecOf = (schema: Schema.Codec<any, any>) => {
 
 /**
  * An instance's state as JSON, for page state and history restore: its Model, and for a component
- * with queries, `{ model, loaded }` with the slots.
+ * with queries, `{ model, queries }` with the query results.
  *
  * A state whose Schema holds a `Schema.Redacted` anywhere is never serialised: JSON would hold the
  * secret. Its codec encodes and decodes nothing, so the server defers the instance and history keeps
@@ -472,10 +472,10 @@ const jsonCodecOf = (schema: Schema.Codec<any, any>) => {
 const stateCodecs = new WeakMap<object, StateCodec>()
 interface StateCodec {
   readonly redacted: boolean
-  readonly encode: (model: unknown, slots: componentQueries.Results | undefined) => Option.Option<unknown>
+  readonly encode: (model: unknown, results: componentQueries.Results | undefined) => Option.Option<unknown>
   readonly decode: (
     encoded: unknown
-  ) => Option.Option<{ readonly model: unknown; readonly slots: componentQueries.Results | undefined }>
+  ) => Option.Option<{ readonly model: unknown; readonly results: componentQueries.Results | undefined }>
 }
 const redactedState: StateCodec = { redacted: true, encode: () => Option.none(), decode: () => Option.none() }
 /** @internal */
@@ -491,15 +491,15 @@ export const stateCodecOf = (component: Component.Any): StateCodec => {
       found = {
         redacted: false,
         encode: (model) => codec.encode(model),
-        decode: (encoded) => Option.map(codec.decode(encoded), (model) => ({ model, slots: undefined }))
+        decode: (encoded) => Option.map(codec.decode(encoded), (model) => ({ model, results: undefined }))
       }
     } else {
       const codec = jsonCodecOf(Schema.Struct({ model: schema, queries: bound.schema }))
       found = {
         redacted: false,
-        encode: (model, slots) => codec.encode({ model, queries: slots ?? bound.empty }),
+        encode: (model, results) => codec.encode({ model, queries: results ?? bound.empty }),
         decode: (encoded) =>
-          Option.map(codec.decode(encoded), (state: any) => ({ model: state.model, slots: state.queries }))
+          Option.map(codec.decode(encoded), (state: any) => ({ model: state.model, results: state.queries }))
       }
     }
     stateCodecs.set(component, found)
@@ -511,7 +511,7 @@ export const stateCodecOf = (component: Component.Any): StateCodec => {
 const warnedRedacted = new WeakSet<Component.Any>()
 
 /** An entry of the cache, by query name and args key: what a watch registered on, or a prefetch fetched. */
-const entryKey = (read: string, argsKey: string): string => `${read}\u0000${argsKey}`
+const entryKey = (query: string, argsKey: string): string => `${query}\u0000${argsKey}`
 
 /** How long a declaration that ran for a route drops intents for it. Fixed. */
 const intentGuardMillis = 30_000
@@ -844,35 +844,37 @@ const setup = (
   const withCache = (context: Context.Context<any>): Context.Context<any> =>
     Context.add(context, Query.Cache, cache as unknown as Query.Cache["Service"])
   /**
-   * History restore: each slot restored seeds a cold entry, stale, so the first frame shows the data
+   * History restore: each query result restored seeds a cold entry, stale, so the first frame shows the data
    * with `waiting: true` while one refetch runs. A snapshot taken under a patch may hold a value that
    * was never saved: it seeds nothing, and the query starts from loading.
    */
   const restoreQueries = (
     component: Component.Any,
-    slots: componentQueries.Results | undefined
+    results: componentQueries.Results | undefined
   ): componentQueries.Results | undefined => {
     const bound = componentQueries.boundOf(component)
-    if (bound === undefined || slots === undefined) return slots
+    if (bound === undefined || results === undefined) return results
     const out: Record<string, unknown> = {}
     for (const entry of bound.entries) {
-      const slot = slots[entry.name]
+      const snapshot = results[entry.name]
       if (entry.keyed) {
         // Per tuple: one taken under a patch is dropped.
-        const map = Query.snapshotMapData(slot)
+        const map = Query.snapshotMapData(snapshot)
         const kept: Array<unknown> = []
         for (const one of map?.entries.values() ?? []) {
           if (Query.snapshotData(one)!.patched) continue
           cache.seed(one)
           kept.push(one)
         }
-        out[entry.name] = map !== undefined && kept.length === map.entries.size ? slot : bound.snapshotMany(entry, kept)
+        out[entry.name] = map !== undefined && kept.length === map.entries.size
+          ? snapshot
+          : bound.snapshotMany(entry, kept)
         continue
       }
-      const data = Query.snapshotData(slot)
+      const data = Query.snapshotData(snapshot)
       if (data !== undefined && !data.patched) {
-        cache.seed(slot)
-        out[entry.name] = slot
+        cache.seed(snapshot)
+        out[entry.name] = snapshot
       } else out[entry.name] = bound.empty[entry.name]
     }
     return out
@@ -1062,7 +1064,7 @@ const setup = (
     const head = inst.component.head
     if (head === undefined) return
     headed = true
-    const entries = guard(inst, "head", () => head(inst.model, inst.props, inst.slots))
+    const entries = guard(inst, "head", () => head(inst.model, inst.props, inst.results))
     if (entries === undefined) return
     inst.head = entries
     headDirty = true
@@ -1425,7 +1427,7 @@ const setup = (
     handlers.dispatch = (message, source) => {
       if (inst.closed || inst.waiting || frozen) return
       const component = inst.component
-      const next = guard(inst, "update", () => component.update(inst.model, message as never, inst.props, inst.slots))
+      const next = guard(inst, "update", () => component.update(inst.model, message as never, inst.props, inst.results))
       if (next === undefined) return
       const entrySeq = record({
         _tag: "Update",
@@ -1440,7 +1442,7 @@ const setup = (
         lists: next.lists ?? [],
         ...(next.sends === undefined || next.sends.length === 0 ? undefined : { sends: next.sends }),
         // What `update` saw in `$.queries`, so a replay from any surviving entry sees it too.
-        ...(bound === undefined ? undefined : { queries: inst.slots ?? bound.empty })
+        ...(bound === undefined ? undefined : { queries: inst.results ?? bound.empty })
       })
       apply(inst, next, entrySeq, false)
     }
@@ -1536,7 +1538,7 @@ const setup = (
       children: noChildren,
       props,
       model: undefined,
-      slots: undefined,
+      results: undefined,
       head: [],
       onEmit,
       onFailure,
@@ -1673,14 +1675,15 @@ const setup = (
       }
     }
 
-    // Hydration: the Model and slots the server rendered this path with, unless it deferred the path.
-    const fromServer: Option.Option<{ readonly model: unknown; readonly slots: componentQueries.Results | undefined }> =
-      hydrating !== undefined &&
+    // Hydration: the Model and query results the server rendered this path with, unless it deferred the path.
+    const fromServer: Option.Option<
+      { readonly model: unknown; readonly results: componentQueries.Results | undefined }
+    > = hydrating !== undefined &&
         (parent === undefined || parent.adoptsChildren) &&
         !hydrating.deferred.has(path) &&
         Object.hasOwn(hydrating.state, path)
-        ? stateCodecOf(component).decode(hydrating.state[path])
-        : Option.none()
+      ? stateCodecOf(component).decode(hydrating.state[path])
+      : Option.none()
 
     /**
      * Runs `init` and renders. An instance adopting a Model (from the server, or from
@@ -1690,7 +1693,7 @@ const setup = (
      */
     const begin = (
       range: Range | undefined,
-      serverModel: Option.Option<{ readonly model: unknown; readonly slots: componentQueries.Results | undefined }>
+      serverModel: Option.Option<{ readonly model: unknown; readonly results: componentQueries.Results | undefined }>
     ) => {
       const first = guard(inst, "init", () => {
         const elements = component.elements()
@@ -1709,14 +1712,14 @@ const setup = (
         if (restored !== undefined) {
           adopted = Option.map(
             stateCodecOf(component).decode(restored),
-            (state) => ({ model: state.model, slots: restoreQueries(component, state.slots) })
+            (state) => ({ model: state.model, results: restoreQueries(component, state.results) })
           )
         }
       }
       let mountedSeq = -1
       if (first !== undefined) {
         inst.model = Option.isSome(adopted) ? adopted.value.model : first.model
-        inst.slots = Option.isSome(adopted) ? adopted.value.slots : undefined
+        inst.results = Option.isSome(adopted) ? adopted.value.results : undefined
         inst.adoptsChildren = Option.isSome(serverModel)
         mountedSeq = record({
           _tag: "Mounted",
@@ -1729,18 +1732,18 @@ const setup = (
           adopted: Option.isSome(adopted)
         })
         // Restored or hydrated results, so a replay of the log starts from them.
-        if (bound !== undefined && inst.slots !== undefined) {
+        if (bound !== undefined && inst.results !== undefined) {
           for (const entry of bound.entries) {
-            const slot = inst.slots[entry.name]
-            if (slot !== bound.empty[entry.name]) {
-              record({ _tag: "QueryChanged", path, component, name: entry.name, result: slot })
+            const result = inst.results[entry.name]
+            if (result !== bound.empty[entry.name]) {
+              record({ _tag: "QueryChanged", path, component, name: entry.name, result })
             }
           }
         }
       }
       logEarly()
       if (first === undefined) return
-      // The first emission of each watch is written to its slot before the first render, parent before
+      // The first emission of each watch is written as its result before the first render, parent before
       // child, so a new instance over a warm entry never commits "Loading". An instance adopting the
       // server's state renders it first, to match the server's nodes, and gets the emissions after.
       const early: NonNullable<Instance["mounting"]> = []
@@ -1874,7 +1877,7 @@ const setup = (
     const bound = componentQueries.boundOf(inst.component)
     const field = bound?.byName.get(list.name)
     if (bound === undefined || field === undefined || !field.list) return
-    const args = bound.context(inst.model, inst.props, inst.slots).argsOf(field.name).args
+    const args = bound.context(inst.model, inst.props, inst.results).argsOf(field.name).args
     if (args === undefined) return
     const call = `$.${list.op}(${JSON.stringify(list.name)})`
     if (server !== undefined) {
@@ -2425,15 +2428,15 @@ const setup = (
     }
     const watches = bound === undefined
       ? []
-      : guard(inst, "subscription", () => bound.context(inst.model, inst.props, inst.slots).watches())
+      : guard(inst, "subscription", () => bound.context(inst.model, inst.props, inst.results).watches())
     if (watches === undefined) return
     // A throw from the root's check fails the render: `guard` would defer the root to the client, unchecked.
     // On the server only the root's are sampled, for their checks.
     const wanted = subscriptions === undefined || (server !== undefined && !checkRoot)
       ? []
       : checkRoot
-      ? subscriptions(inst.model, inst.props, inst.slots)
-      : guard(inst, "subscription", () => subscriptions(inst.model, inst.props, inst.slots))
+      ? subscriptions(inst.model, inst.props, inst.results)
+      : guard(inst, "subscription", () => subscriptions(inst.model, inst.props, inst.results))
     if (wanted === undefined) return
     const byKey = new Map<string, Subscription.Subscription<any, any>>()
     const markers = new Map<string, componentQueries.Marker>()
@@ -2482,7 +2485,7 @@ const setup = (
     // Streams never run on the server.
     if (!watchesOnly && server === undefined) syncStreams(inst, byKey)
     // The cache never calls back with the state at registration. Each new watcher's settled value
-    // is written to its slot here, once the watchers and Streams follow the state that asked for
+    // is written as its query's result here, once the watchers and Streams follow the state that asked for
     // them, and so before this instance's next render. A keyed query's go to its next drain.
     for (const fold of folds) fold()
     // The key set may have changed: the next drain checks for a prune.
@@ -2620,7 +2623,7 @@ const setup = (
         const query = bound.byName.get(marker.name)!
         // It may run inside another instance's `update`: a patch registered at issue reaches every
         // watcher before that `update` returns.
-        writeSlot(inst, query, bound.snapshot(query, entry, result, patched, more), [], logKey)
+        writeResult(inst, query, bound.snapshot(query, entry, result, patched, more), [], logKey)
       }
       const go = (envCtx: Context.Context<any>) => {
         if (inst.closed || running.released) return
@@ -2628,7 +2631,7 @@ const setup = (
         if (Option.isNone(fetcher)) {
           return failInstance(
             inst,
-            Cause.die(new Error(`${inst.path}: nothing provides the read ${JSON.stringify(def.name)}`)),
+            Cause.die(new Error(`${inst.path}: nothing provides the query ${JSON.stringify(def.name)}`)),
             "subscription",
             logKey
           )
@@ -2736,7 +2739,7 @@ const setup = (
   }
   /**
    * Writes a keyed query's result when a declared key's watcher emitted since the last write, or when
-   * the slot holds a key the query no longer returns. The slot is sampled from the watchers now:
+   * the result holds a key the query no longer returns. The result is sampled from the watchers now:
    * each declared key's last value.
    */
   const deliverKeyed = (inst: Instance, run: KeyedRun): boolean => {
@@ -2746,7 +2749,7 @@ const setup = (
       const value = run.changes.has(entry.argsKey) ? run.values.get(entry.argsKey) : undefined
       return value === undefined ? [] : [{ args: value.args, result: value.result }]
     })
-    const held = Query.snapshotMapData(inst.slots?.[group.name])
+    const held = Query.snapshotMapData(inst.results?.[group.name])
     let prune = false
     for (const key of held?.entries.keys() ?? []) {
       if (!declared.has(key)) {
@@ -2758,34 +2761,34 @@ const setup = (
     if (!prune && changes.length === 0) return false
     const bound = componentQueries.boundOf(inst.component)!
     const query = bound.byName.get(group.name)!
-    const slot = bound.snapshotMany(
+    const snapshot = bound.snapshotMany(
       query,
       group.entries.flatMap((entry) => {
         const value = run.values.get(entry.argsKey)
         return value === undefined ? [] : [bound.snapshot(query, entry, value.result, value.patched, undefined)]
       })
     )
-    writeSlot(inst, query, slot, changes, run.logKey)
+    writeResult(inst, query, snapshot, changes, run.logKey)
     return true
   }
   /**
-   * Writes a query's slot, logs it and re-renders the instance. The watches follow the new slots,
+   * Writes a query's result, logs it and re-renders the instance. The watches follow the new results,
    * since a query's args can read another's result. Then the query's `onChange`, if any, sends
-   * its message, whose `update` sees the slot written.
+   * its message, whose `update` sees the result written.
    */
-  const writeSlot = (
+  const writeResult = (
     inst: Instance,
     query: componentQueries.Entry,
-    slot: unknown,
+    result: unknown,
     changes: ReadonlyArray<componentQueries.KeyedChange>,
     key: string
   ) => {
     if (inst.closed || inst.waiting || frozen) return
     const bound = componentQueries.boundOf(inst.component)!
     // The same snapshot, as when a watcher's first value is what the server or history already gave.
-    if (Equal.equals((inst.slots ?? bound.empty)[query.name], slot)) return
-    inst.slots = { ...(inst.slots ?? bound.empty), [query.name]: slot }
-    record({ _tag: "QueryChanged", path: inst.path, component: inst.component, name: query.name, result: slot })
+    if (Equal.equals((inst.results ?? bound.empty)[query.name], result)) return
+    inst.results = { ...(inst.results ?? bound.empty), [query.name]: result }
+    record({ _tag: "QueryChanged", path: inst.path, component: inst.component, name: query.name, result })
     const mounting = inst.mounting !== undefined
     if (!mounting) markDirty(inst)
     syncSubscriptions(inst, mounting)
@@ -2793,7 +2796,7 @@ const setup = (
     const message = guard(
       inst,
       "subscription",
-      () => bound.context(inst.model, inst.props, inst.slots).changed(query.name, changes),
+      () => bound.context(inst.model, inst.props, inst.results).changed(query.name, changes),
       key
     )
     if (message !== undefined) inst.dispatch(message.value, { _tag: "Subscription", key })
@@ -2939,7 +2942,7 @@ const setup = (
             if (!behind) {
               report(
                 new Router.PrefetchQueryNotProvided({
-                  message: `${inst.path}: Router.prefetch skipped the read ${
+                  message: `${inst.path}: Router.prefetch skipped the query ${
                     JSON.stringify(def.name)
                   } of ${component.definition.name}, because the declaring component can't see it. Provide it at the declarer.`,
                   path: inst.path,
@@ -3304,14 +3307,14 @@ const setup = (
       return guard(
         inst,
         "view",
-        () => checked(inst, inst.component.view(inst.model, inst.props, runningOf(inst), inst.slots, inst.path))
+        () => checked(inst, inst.component.view(inst.model, inst.props, runningOf(inst), inst.results, inst.path))
       )
     }
     const parts = guard(inst, "view", () => ({
       value: (inst.component as unknown as Component.Headless.Any).parts(inst.model, inst.props, {
         owner,
         running: runningOf(inst),
-        queries: inst.slots
+        queries: inst.results
       })
     }))
     if (parts === undefined) return undefined
@@ -4112,7 +4115,7 @@ const setup = (
           // Before the result writes the new props cause, so a replay opens them against these props.
           record({ _tag: "PropsChanged", path: instance.path, component: instance.component, props: child.props })
           // Watches first: new args over a settled entry write its value before this render, and the
-          // keyed queries' slots are written before it too.
+          // keyed queries' results are written before it too.
           syncSubscriptions(instance)
           drainKeyed(instance)
         }
@@ -4343,12 +4346,12 @@ const setup = (
   const snapshot = (): Record<string, unknown> => {
     const out: Record<string, unknown> = {}
     const visit = (inst: Instance) => {
-      // A keyed query's pending writes go first, so the slot holds only the declared keys. A
+      // A keyed query's pending writes go first, so the result holds only the declared keys. A
       // navigation issued in the `update` that changed them runs in the flush's deferred work, which
       // can come before the drain gets to them.
       if (inst.keyed !== undefined && inst.keyed.size > 0) drainKeyed(inst)
       if (inst.closed || inst.failure !== undefined || inst.waiting) return
-      const encoded = stateCodecOf(inst.component).encode(inst.model, inst.slots)
+      const encoded = stateCodecOf(inst.component).encode(inst.model, inst.results)
       if (Option.isSome(encoded)) out[inst.path] = encoded.value
       for (const child of inst.children) visit(child)
     }
@@ -4419,7 +4422,7 @@ const setup = (
             inst.deferred ||
             (inst.component.layer !== undefined && inst.env.ctx === undefined)
           ? Option.none()
-          : codec.encode(inst.model, inst.slots)
+          : codec.encode(inst.model, inst.results)
         if (codec.redacted) warnRedacted(inst)
         if (Option.isNone(encoded)) {
           deferredPaths.push(inst.path)

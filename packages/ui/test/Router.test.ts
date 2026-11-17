@@ -420,9 +420,9 @@ describe("Router", { concurrent: false }, () => {
             const log = root.log()
             const index = log.findIndex((entry) => entry._tag === "Mounted" && entry.path === "/App/Person[/people/1]")
             assert.isTrue((log[index] as MessageLog.Mounted).adopted)
-            // The restored slot is logged right after Mounted.
-            const slot = log[index + 1]
-            assert.isTrue(slot?._tag === "QueryChanged" && slot.name === "person")
+            // The restored result is logged right after Mounted.
+            const result = log[index + 1]
+            assert.isTrue(result?._tag === "QueryChanged" && result.name === "person")
             assert.strictEqual(
               root.frames().at(-1),
               "HomePerson 1Person 2SlowBackBlockUnblockPerson 1Refreshingcount 0Rename"
@@ -460,7 +460,7 @@ describe("Router", { concurrent: false }, () => {
     })
   }
 
-  it.effect("drops a query slot taken under a patch from the restored state", () => {
+  it.effect("drops a query result taken under a patch from the restored state", () => {
     const { history, layer } = setup("/people/1")
     const path = "/App/Person[/people/1]"
     return Effect.gen(function*() {
@@ -489,7 +489,7 @@ describe("Router", { concurrent: false }, () => {
           const restored = log[index] as MessageLog.Mounted
           assert.isDefined(restored)
           assert.isTrue(restored.adopted)
-          // The Model is restored; the slot isn't (a restored slot is logged right after Mounted), so the
+          // The Model is restored; the result isn't (a restored result is logged right after Mounted), so the
           // query starts from loading, and the fetch fills it.
           assert.strictEqual((restored.model as { readonly name: string }).name, "Renamed")
           assert.notStrictEqual(log[index + 1]?._tag, "QueryChanged")

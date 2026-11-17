@@ -41,10 +41,10 @@ const ApiClient = Layer.effect(
 // with `Router.props(AppRoute)`, the props the browser mounts with.
 //
 // The server runs `init`, `update` and `view`, builds the provided Layers
-// and fetches query reads once per key in a per-request cache. It runs no
-// Command and no Subscription. Its queries are the exception: the runtime
-// watches their queries itself, so data the server renders has to come from a
-// query read.
+// and fetches queries once per key in a per-request cache. It runs no
+// Command and no Subscription. Queries are the exception: the runtime
+// watches them itself, so data the server renders has to come from a
+// query.
 const Pages = layerHttp(App, {
   routes: AppRoute,
   // `budget` is one deadline for Layers and fetches, 500 ms by default. Set
@@ -54,7 +54,7 @@ const Pages = layerHttp(App, {
   // `head`, `htmlAttributes` and `bodyAttributes` come from the components'
   // `head` and are already escaped. `serializeState` makes the state safe
   // inside a script tag, which `JSON.stringify` doesn't. The state holds
-  // every instance's state, its Model and its queries' slots, and every
+  // every instance's state, its Model and its query results, and every
   // settled query, so treat all of it as public.
   document: (page) =>
     `<!doctype html>

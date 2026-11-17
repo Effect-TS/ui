@@ -323,16 +323,16 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    *
    * **Details**
    *
-   * `given` never runs `update`. Queries keep their slots, except that a
+   * `given` never runs `update`. Queries keep their results, except that a
    * keyed query drops the stored keys it no longer returns, with no
    * `onChange` message. Later steps send `onChange` as usual.
    *
    * `loaded` starts the queries it names from loaded results: a Success
    * value, an infinite query's page array, or a keyed query's entries as
-   * `loadedMany` takes them. Each slot is written at the args the query
+   * `loadedMany` takes them. Each result is written at the args the query
    * returns for the new Model and the given results, so a query whose args
    * read another's result follows the new one, whatever the order of the keys
-   * and whatever the slots held before. The view renders once. It throws if a
+   * and whatever the results held before. The view renders once. It throws if a
    * named query is disabled, or a keyed entry's args aren't ones the query
    * returns.
    */
@@ -433,7 +433,7 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    * `Command.afterRefetch` wait on the query. It throws while a running or
    * queued Command's patch is live on the query, since no fetch settles
    * under a live patch: only a `patched` value is written then. As in the
-   * cache, a patch is live only when the slot held a Success at issue.
+   * cache, a patch is live only when the result held a Success at issue.
    */
   loaded<N extends Component.SingleNames<Component.Queries<C>>>(
     name: N,
@@ -488,7 +488,7 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
   ): this
   /**
    * Loads several keys of a `queryMany` query in one write, as the runtime
-   * writes a first emission or a batch: the slot holds the query's stored
+   * writes a first emission or a batch: the result holds the query's stored
    * keys and these, and `onChange`'s `changes` holds these. Throws on args
    * the query doesn't currently return.
    */
@@ -674,7 +674,7 @@ const update = <Props, Model, Msg, Events>(
     childModels: childModels.get(story),
     ...patch
   }
-  // A defect in `view` fails the step that changed the Model, the slots, the props or what's pending.
+  // A defect in `view` fails the step that changed the Model, the query results, the props or what's pending.
   const view = fields.model === story.model && fields.results === story.results && fields.props === story.props &&
       fields.pending === story.pending && fields.loadingMore === story.loadingMore &&
       fields.childModels === childModels.get(story)
@@ -705,16 +705,16 @@ const argsAt = (story: Story<any, any, any, any>, name: string) =>
  * Writes a query's result, then sends the message of its `onChange`, if any, as the runtime does.
  * A keyed query's `onChange` also gets `changes`.
  */
-const writeSlot = (
+const writeResult = (
   story: Story<any, any, any, any>,
   entry: componentQueries.Entry,
-  slot: unknown,
+  result: unknown,
   changes: ReadonlyArray<componentQueries.KeyedChange>
 ): Story<any, any, any, any> => {
   const bound = boundOf(story.component)!
   // As in the runtime, the same snapshot writes nothing.
-  if (Equal.equals((story.results ?? bound.empty)[entry.name], slot)) return story
-  const out = update(story, { results: { ...(story.results ?? bound.empty), [entry.name]: slot } })
+  if (Equal.equals((story.results ?? bound.empty)[entry.name], result)) return story
+  const out = update(story, { results: { ...(story.results ?? bound.empty), [entry.name]: result } })
   const message = bound.context(out.model, out.props, out.results).changed(entry.name, changes)
   return message === undefined ? out : dispatch(out, message.value)
 }
@@ -740,17 +740,17 @@ const loadStep = (
   }
   const result = build(storedAt(story, name, current.argsKey))
   const def = Query.defOf(entry.query)
-  const slot = boundOf(story.component)!.snapshot(
+  const snapshot = boundOf(story.component)!.snapshot(
     entry,
     { args: current.args, argsKey: current.argsKey },
     result,
     patched,
     more ?? (def.list !== undefined && result._tag === "Success" ? moreOfPages(def, result.value) : undefined)
   )
-  return writeSlot(story, entry, slot, [])
+  return writeResult(story, entry, snapshot, [])
 }
 
-/** The slot's last Success at `argsKey`: its value, or a Failure's previous one. */
+/** The result's last Success at `argsKey`: its value, or a Failure's previous one. */
 const storedAt = (
   story: Story<any, any, any, any>,
   name: string,
@@ -766,7 +766,7 @@ const storedAt = (
 }
 
 /**
- * The slots `given` starts from, written with no `onChange` message. Each
+ * The results `given` starts from, written with no `onChange` message. Each
  * named query holds its given results at the args it returns, and a keyed
  * query that isn't named keeps the keys it held before that it still returns. Args can
  * read other queries' results, so the writes repeat until none changes: the
@@ -781,7 +781,7 @@ const givenResults = (
   if (bound === undefined) return story.results
   const before = story.results ?? bound.empty
   const results: { [name: string]: unknown } = { ...before }
-  // The slot a query should hold for the current results, or undefined while a named query is
+  // The result a query should hold for the current results, or undefined while a named query is
   // disabled or doesn't return the given args.
   const target = (entry: componentQueries.Entry): unknown => {
     const current = bound.context(story.model, story.props, { ...results }).argsOf(entry.name)
@@ -964,7 +964,7 @@ const writeKeyed = (
   const bound = boundOf(story.component)!
   const held = Query.snapshotMapData(story.results?.[entry.name])?.entries
   const byKey = new Map(loads.map((load) => [load.argsKey, load]))
-  const slot = bound.snapshotMany(
+  const snapshot = bound.snapshotMany(
     entry,
     keys.flatMap((key) => {
       const load = byKey.get(key.argsKey)
@@ -977,7 +977,7 @@ const writeKeyed = (
     const load = byKey.get(key.argsKey)
     return load === undefined ? [] : [{ args: key.args, result: load.result }]
   })
-  return writeSlot(story, entry, slot, changes)
+  return writeResult(story, entry, snapshot, changes)
 }
 
 /** Loads keys of a keyed query: each args must be one the query currently returns. */
@@ -1017,7 +1017,7 @@ const loadKeyedStep = (
       }
     })
   )
-  // After the slot's write: the wait's own message comes second.
+  // After the result's write: the wait's own message comes second.
   return settleWaits(written, (awaited) => awaited.name === name && settled.has(def.argsKey(awaited.args)))
 }
 
@@ -1025,8 +1025,8 @@ const loadKeyedStep = (
 const pruneRounds = 100
 
 /**
- * After a step: a keyed query whose slot holds a key it no longer returns
- * gets the slot pruned, with no changes, as the runtime's drain writes it. A
+ * After a step: a keyed query whose result holds a key it no longer returns
+ * gets the result pruned, with no changes, as the runtime's drain writes it. A
  * prune's `onChange` can change the key set again, so rounds run until none
  * is due, at most one write per query per round. The runtime doesn't bound
  * them; a step throws after `pruneRounds`.
@@ -1232,10 +1232,10 @@ const awaitedQueries = (
   }))
   const out: Array<AwaitedQuery> = []
   for (const { entries, query } of currentEntries(story)) {
-    const read = Query.defOf(query.query).name
+    const queryName = Query.defOf(query.query).name
     for (const { args, argsKey } of entries) {
       if (!Query.invalidatesEntry(command, query.query, args)) continue
-      if (written.some((write) => write.name === read && write.argsKey === argsKey)) continue
+      if (written.some((write) => write.name === queryName && write.argsKey === argsKey)) continue
       out.push({ name: query.name, args })
     }
   }
@@ -1256,10 +1256,10 @@ const registeredPatches = (
   if (command.optimistic.length === 0) return []
   const out: Array<{ readonly name: string; readonly argsKey: string }> = []
   for (const { entries, query } of currentEntries(story)) {
-    const slot = story.results?.[query.name]
-    const held = query.keyed ? Query.snapshotMapData(slot)?.entries : undefined
+    const result = story.results?.[query.name]
+    const held = query.keyed ? Query.snapshotMapData(result)?.entries : undefined
     for (const { args, argsKey } of entries) {
-      const data = Query.snapshotData(held !== undefined ? held.get(argsKey) : slot)
+      const data = Query.snapshotData(held !== undefined ? held.get(argsKey) : result)
       if (data?.argsKey !== argsKey || data.result?._tag !== "Success") continue
       if (!Query.invalidatesEntry({ invalidates: [], optimistic: command.optimistic }, query.query, args)) continue
       out.push({ name: query.name, argsKey })
@@ -1960,7 +1960,7 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
     )?.path
   if (path === undefined) throw new Error(`Story.fromLog: the log has no entry for ${component.definition.name}`)
   const all = stateful.filter((entry) => entry.path === path)
-  // The replay starts at the first Model. Props and slots written before it are in that Update's record, or
+  // The replay starts at the first Model. Props and query results written before it are in that Update's record, or
   // belong to an earlier mount.
   const start = all.findIndex((entry) => entry._tag === "Update" || entry._tag === "Mounted")
   if (start === -1) throw new Error(`Story.fromLog: the log has no entry for ${path}`)
@@ -1969,7 +1969,7 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
     | MessageLog.Mounted
     | Extract<MessageLog.Wire, { _tag: "Update" | "Mounted" }>
   const bound = boundOf(component)
-  const slotOf = (entry: MessageLog.QueryChanged | Extract<MessageLog.Wire, { _tag: "QueryChanged" }>) => {
+  const resultOf = (entry: MessageLog.QueryChanged | Extract<MessageLog.Wire, { _tag: "QueryChanged" }>) => {
     if (typeof entry.component !== "string") return entry.result
     const schema = bound?.logSchema.fields[entry.name]
     if (schema === undefined) {
@@ -2051,7 +2051,7 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
   }
   for (const entry of all.slice(start + 1)) {
     if (entry._tag === "QueryChanged") {
-      results = { ...(results ?? bound?.empty), [entry.name]: slotOf(entry) }
+      results = { ...(results ?? bound?.empty), [entry.name]: resultOf(entry) }
       continue
     }
     if (entry._tag === "PropsChanged") {
@@ -2118,8 +2118,8 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
  * The props and results are tracked with the Model, so the result is the state
  * the instance ended with. They start from the first entry: a `Mounted`
  * entry's props and empty results, or an `Update` entry's recorded props and
- * slots. Each later `PropsChanged` entry sets the props and each
- * `QueryChanged` entry writes its slot, so props from the parent and loads
+ * results. Each later `PropsChanged` entry sets the props and each
+ * `QueryChanged` entry writes its result, so props from the parent and loads
  * that settled after the last message are in the result too.
  *
  * It takes live entries or Wire frames. A Wire value sent as a placeholder,

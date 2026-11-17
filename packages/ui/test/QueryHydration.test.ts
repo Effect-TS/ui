@@ -70,9 +70,9 @@ const settleOnce = (problems: Array<Query.Problem.Any>) =>
 
 const cache = Query.Cache.useSync(Query.internals)
 
-/** The Schema of a query slot holding a snapshot of `read`, as the @effect/ui runtime builds it. */
-const slotSchema = (read: Query.Query.Any, label: string) =>
-  Query.snapshotSchema(read, label) as Schema.Codec<unknown, unknown>
+/** The Schema of a query result holding a snapshot of `query`, as the @effect/ui runtime builds it. */
+const resultSchema = (query: Query.Query.Any, label: string) =>
+  Query.snapshotSchema(query, label) as Schema.Codec<unknown, unknown>
 
 const fetchLog = Effect.map(TestQuery.fetches, (fetches) => fetches.map((fetch) => fetch.trigger))
 
@@ -80,9 +80,9 @@ describe("Query snapshots", () => {
   const { GetUser } = makeUsers()
   const def = Query.defOf(GetUser)
   const at = { args: { id: "1" }, argsKey: def.argsKey({ id: "1" }) }
-  const json = Schema.toCodecJson(slotSchema(GetUser, "user"))
+  const json = Schema.toCodecJson(resultSchema(GetUser, "user"))
 
-  it("encodes as a tuple through the read's own Schemas, and decodes to an equal snapshot", () => {
+  it("encodes as a tuple through the query's own Schemas, and decodes to an equal snapshot", () => {
     const success = Query.makeSnapshot(
       def,
       "user",
@@ -122,18 +122,18 @@ describe("Query snapshots", () => {
     assert.deepStrictEqual([decoded?.result?.waiting, decoded?.patched, decoded?.argsKey], [false, true, `{"id":"1"}`])
   })
 
-  it("keeps waiting in memory through the type side, so a slots struct built with make carries it", () => {
+  it("keeps waiting in memory through the type side, so a results struct built with make carries it", () => {
     const waiting = Query.makeSnapshot(
       def,
       "user",
       at,
       AsyncResult.success({ id: "1", name: "Ann" }, { timestamp: 5, waiting: true })
     )
-    const Slots = Schema.Struct({ user: slotSchema(GetUser, "user") })
-    const made = Slots.make({ user: waiting })
+    const Results = Schema.Struct({ user: resultSchema(GetUser, "user") })
+    const made = Results.make({ user: waiting })
     assert.isTrue(Query.snapshotData(made.user)?.result?.waiting)
     const failing = Query.makeSnapshot(def, "user", at, AsyncResult.failure(Cause.fail("nope"), { waiting: true }))
-    const decoded = Schema.decodeUnknownSync(slotSchema(GetUser, "user"))(failing)
+    const decoded = Schema.decodeUnknownSync(resultSchema(GetUser, "user"))(failing)
     assert.isTrue(Query.snapshotData(decoded)?.result?.waiting)
   })
 
@@ -145,7 +145,7 @@ describe("Query snapshots", () => {
       AsyncResult.success({ id: "1", name: 42 }, { timestamp: 5 }),
       true
     )
-    const schema = slotSchema(GetUser, "user")
+    const schema = resultSchema(GetUser, "user")
     assert.isTrue(Equal.equals(Schema.decodeUnknownSync(schema)(patched), patched))
     const unpatched = Query.makeSnapshot(def, "user", at, AsyncResult.success({ id: "1", name: 42 }, { timestamp: 5 }))
     assert.throws(() => Schema.decodeUnknownSync(schema)(unpatched))
@@ -159,13 +159,13 @@ describe("Query snapshots", () => {
       staleTime: 0
     }, Effect.succeed(({ id }) => Effect.succeed({ id, name: "" }))) {}
     const snapshot = Query.makeSnapshot(def, "user", undefined, undefined)
-    assert.isTrue(Schema.is(slotSchema(GetUser, "user"))(snapshot))
-    assert.isFalse(Schema.is(slotSchema(GetUser, "users"))(snapshot))
-    assert.isFalse(Schema.is(slotSchema(Other, "user"))(snapshot))
-    assert.isFalse(Schema.is(slotSchema(GetUser, "user"))({ user: "forged" }))
+    assert.isTrue(Schema.is(resultSchema(GetUser, "user"))(snapshot))
+    assert.isFalse(Schema.is(resultSchema(GetUser, "users"))(snapshot))
+    assert.isFalse(Schema.is(resultSchema(Other, "user"))(snapshot))
+    assert.isFalse(Schema.is(resultSchema(GetUser, "user"))({ user: "forged" }))
   })
 
-  it("a Schema.Redacted in a read's args and success is redacted by the log's walk, and kept in the clear otherwise", () => {
+  it("a Schema.Redacted in a query's args and success is redacted by the log's walk, and kept in the clear otherwise", () => {
     class GetSecret extends Query.Service<GetSecret>()("secrets/GetSecret", {
       args: { token: Schema.Redacted(Schema.String) },
       success: Schema.Struct({ value: Schema.Redacted(Schema.String) }),
@@ -180,16 +180,16 @@ describe("Query snapshots", () => {
       { args, argsKey: secretDef.argsKey(args) },
       AsyncResult.success({ value: Redacted.make("v") }, { timestamp: 1 })
     )
-    // The slots of a component with a `secret` query, as the runtime and the log build them.
-    const Slots = Schema.Struct({ secret: slotSchema(GetSecret, "secret") })
+    // The results of a component with a `secret` query, as the runtime and the log build them.
+    const Results = Schema.Struct({ secret: resultSchema(GetSecret, "secret") })
     const logged = Schema.encodeUnknownSync(
-      Schema.toCodecJson(Schema.make<Schema.Codec<unknown, unknown>>(redactAST(Slots.ast)))
+      Schema.toCodecJson(Schema.make<Schema.Codec<unknown, unknown>>(redactAST(Results.ast)))
     )({ secret: snapshot })
     assert.deepStrictEqual(logged, {
       secret: [`{"token":{"~redacted":true}}`, 0, { value: { "~redacted": true } }, 1, false]
     })
     // Page state and history.state keep the real key and value.
-    const page = Schema.encodeUnknownSync(Schema.toCodecJson(Slots))({ secret: snapshot })
+    const page = Schema.encodeUnknownSync(Schema.toCodecJson(Results))({ secret: snapshot })
     assert.deepStrictEqual(page, { secret: [`{"token":"t"}`, 0, { value: "v" }, 1, false] })
   })
 })
@@ -426,7 +426,7 @@ describe("Query snapshot identity", () => {
       Effect.sync(() => ({ n }) => Effect.succeed(Object.is(n, -0) ? "minus zero" : "zero"))
     ) {}
     const def = Query.defOf(GetPoint)
-    const json = Schema.toCodecJson(slotSchema(GetPoint, "point"))
+    const json = Schema.toCodecJson(resultSchema(GetPoint, "point"))
     const snapshot = Query.makeSnapshot(
       def,
       "point",
@@ -455,7 +455,7 @@ describe("Query snapshot identity", () => {
       Effect.sync(() => ({ s }) => Effect.succeed(s))
     ) {}
     const def = Query.defOf(GetTrimmed)
-    const json = Schema.toCodecJson(slotSchema(GetTrimmed, "trimmed"))
+    const json = Schema.toCodecJson(resultSchema(GetTrimmed, "trimmed"))
     // " a " decodes to "a", whose key is {"s":"a"}: the snapshot would name an entry it wasn't taken from.
     assert.isTrue(Exit.isFailure(Schema.decodeUnknownExit(json)([`{"s":" a "}`, 0, "cached", 1, false])))
     const decoded = Schema.decodeUnknownSync(json)([`{"s":"a"}`, 0, "cached", 1, false])
@@ -474,7 +474,7 @@ describe("Query snapshot identity", () => {
       Effect.sync(() => ({ id }) => Effect.succeed(id))
     ) {}
     const def = Query.defOf(GetPage)
-    const json = Schema.toCodecJson(slotSchema(GetPage, "page"))
+    const json = Schema.toCodecJson(resultSchema(GetPage, "page"))
     const args = { id: "1", page: undefined }
     const snapshot = Query.makeSnapshot(
       def,

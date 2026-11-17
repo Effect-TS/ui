@@ -111,7 +111,7 @@ export interface Ssr<out Model, in Msg, out Events = never> {
 
 /**
  * Hydration didn't adopt what the server rendered, or a check around it
- * failed. `problems` lists each one, by path, head identity or read.
+ * failed. `problems` lists each one, by path, head identity or query.
  *
  * @stability experimental
  * @category errors
@@ -462,16 +462,16 @@ export const ssr = <
         problems.push(`${path}: the client didn't adopt the server's Model`)
         continue
       }
-      // The adopted slots are logged right after the adoption, one entry per slot the server wrote.
-      const slots: Record<string, unknown> = {}
+      // The adopted results are logged right after the adoption, one entry per result the server wrote.
+      const results: Record<string, unknown> = {}
       for (const later of log.slice(log.indexOf(entry) + 1)) {
         if (later.path !== path) continue
         if (later._tag !== "QueryChanged") break
-        slots[later.name] = later.result
+        results[later.name] = later.result
       }
       const encoded = runtime.stateCodecOf(entry.component).encode(
         entry.model,
-        { ...componentQueries.boundOf(entry.component)?.empty, ...slots }
+        { ...componentQueries.boundOf(entry.component)?.empty, ...results }
       )
       const json = encoded._tag === "Some" ? JSON.stringify(encoded.value) : undefined
       if (json !== JSON.stringify(state[path])) {
