@@ -66,9 +66,9 @@ describe("HtmlServerHttp.layerHttp", () => {
     assert.strictEqual(response.headers.get("location"), "/people/1")
   })
 
-  it("redirects a URL with query params dropped as invalid temporarily, keeping the others", async () => {
+  it("redirects a URL with search params dropped as invalid temporarily, keeping the others", async () => {
     const ListRoute = Route.union({
-      List: Route.make("/list", { query: { page: Schema.Int.pipe(Schema.withDecodingDefaultKey(Effect.succeed(1))) } })
+      List: Route.make("/list", { search: { page: Schema.Int.pipe(Schema.withDecodingDefaultKey(Effect.succeed(1))) } })
     })
     const List = Component.define({
       name: "List",
@@ -79,7 +79,7 @@ describe("HtmlServerHttp.layerHttp", () => {
     }).make({
       init: () => ({}),
       update: (model) => model,
-      view: (_, h) => h.p(`Page ${h.props.route.query.page}`)
+      view: (_, h) => h.p(`Page ${h.props.route.search.page}`)
     })
     const lists = layerHttp(List, { routes: ListRoute, document })
     const response = await request(lists, "/list?page=x&utm_source=mail")

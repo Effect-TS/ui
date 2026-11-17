@@ -6,7 +6,7 @@ import { describe, expect, it } from "tstyche"
 
 const AppRoute = Route.union({
   Home: Route.make("/"),
-  Person: Route.make("/people/:id", { params: { id: Schema.Number }, query: { tab: Schema.optional(Schema.String) } }),
+  Person: Route.make("/people/:id", { params: { id: Schema.Number }, search: { tab: Schema.optional(Schema.String) } }),
   Files: Route.make("/files/*"),
   NotFound: Route.make("/*")
 })
@@ -18,40 +18,40 @@ describe("Route", () => {
     expect(Route.make).type.not.toBeCallableWith("/people/:id", { params: {} })
     expect(Route.make).type.not.toBeCallableWith("/people/:id/:tab", { params: { id: Schema.Number } })
     expect(Route.make).type.toBeCallableWith("/people/:id", { params: { id: Schema.Number } })
-    expect(Route.make).type.toBeCallableWith("/people", { query: { q: Schema.String } })
+    expect(Route.make).type.toBeCallableWith("/people", { search: { q: Schema.String } })
   })
 
   it("types each route value, with a rest param for a trailing *", () => {
     expect<Extract<AppRoute, { _tag: "Home" }>>().type.toBe<
-      { readonly _tag: "Home"; readonly params: {}; readonly query: {} }
+      { readonly _tag: "Home"; readonly params: {}; readonly search: {} }
     >()
     expect<Extract<AppRoute, { _tag: "Person" }>>().type.toBe<{
       readonly _tag: "Person"
       readonly params: { readonly id: number }
-      readonly query: { readonly tab?: string | undefined }
+      readonly search: { readonly tab?: string | undefined }
     }>()
     expect<Extract<AppRoute, { _tag: "Files" }>["params"]>().type.toBe<{ readonly "*": string }>()
   })
 
-  it("types a defaulted query field as required, and lets make leave it out", () => {
+  it("types a defaulted search field as required, and lets make leave it out", () => {
     const Search = Route.union({
       Search: Route.make("/search", {
-        query: {
+        search: {
           q: Schema.optional(Schema.String),
           page: Schema.Number.pipe(Schema.withDecodingDefaultKey(Effect.succeed(1)))
         }
       })
     })
-    expect<typeof Search.Type["query"]>().type.toBe<{ readonly q?: string | undefined; readonly page: number }>()
+    expect<typeof Search.Type["search"]>().type.toBe<{ readonly q?: string | undefined; readonly page: number }>()
     expect(Search.make).type.toBeCallableWith({ _tag: "Search" })
-    expect(Search.make).type.toBeCallableWith({ _tag: "Search", query: { q: "a" } })
-    expect(Search.make).type.toBeCallableWith({ _tag: "Search", query: { page: 2 } })
-    expect(Search.make).type.not.toBeCallableWith({ _tag: "Search", query: { page: "2" } })
+    expect(Search.make).type.toBeCallableWith({ _tag: "Search", search: { q: "a" } })
+    expect(Search.make).type.toBeCallableWith({ _tag: "Search", search: { page: 2 } })
+    expect(Search.make).type.not.toBeCallableWith({ _tag: "Search", search: { page: "2" } })
   })
 
   it("prints only the union's own route values", () => {
     expect(AppRoute.print).type.toBeCallableWith(AppRoute.make({ _tag: "Home" }))
-    expect(AppRoute.print).type.not.toBeCallableWith({ _tag: "Elsewhere", params: {}, query: {} })
+    expect(AppRoute.print).type.not.toBeCallableWith({ _tag: "Elsewhere", params: {}, search: {} })
   })
 })
 
@@ -85,12 +85,12 @@ describe("Router", () => {
     const People = AppRoute.subset(["Person"])
     expect(Router.replace).type.toBeCallableWith(People, People.make({ _tag: "Person", params: { id: 1 } }))
     expect(Router.push).type.not.toBeCallableWith(AppRoute, { _tag: "Person" })
-    expect(Router.push).type.not.toBeCallableWith(AppRoute, { _tag: "Person", params: {}, query: {} })
-    expect(Router.replace).type.not.toBeCallableWith(AppRoute, { _tag: "Elsewhere", params: {}, query: {} })
+    expect(Router.push).type.not.toBeCallableWith(AppRoute, { _tag: "Person", params: {}, search: {} })
+    expect(Router.replace).type.not.toBeCallableWith(AppRoute, { _tag: "Elsewhere", params: {}, search: {} })
     expect(Router.push).type.not.toBeCallableWith(AppRoute.subset(["Home"]), {
       _tag: "Person",
       params: { id: 1 },
-      query: {}
+      search: {}
     })
     // The Command classes only take what push and replace build.
     expect(Router.Push.make).type.not.toBeCallableWith({ _tag: "Person" })

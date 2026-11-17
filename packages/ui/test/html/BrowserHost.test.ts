@@ -240,14 +240,14 @@ describe("BrowserHost", { concurrent: false }, () => {
 
   describe("a field bound to the URL", () => {
     const SearchRoute = Route.union({
-      Search: Route.make("/search", { query: { q: Schema.optional(Schema.String) } }),
+      Search: Route.make("/search", { search: { q: Schema.optional(Schema.String) } }),
       NotFound: Route.make("/*")
     })
     const SearchMessage = Schema.TaggedUnion({
       Typed: { value: Schema.String },
       Patched: { outcome: Schema.Literals(["navigated", "blocked", "stale"]) }
     })
-    // The query is the only copy of the text: the page's Model holds none. Digits are rejected.
+    // The search is the only copy of the text: the page's Model holds none. Digits are rejected.
     const SearchPage = Component.define({
       name: "SearchPage",
       props: Schema.Struct({ route: SearchRoute.subset(["Search"]) }),
@@ -262,14 +262,14 @@ describe("BrowserHost", { concurrent: false }, () => {
             /\d/.test(value)
               ? model
               : $.run(
-                Router.patchQuery(SearchRoute, $.props.route, { q: value || undefined }).pipe(
+                Router.patchSearch(SearchRoute, $.props.route, { q: value || undefined }).pipe(
                   Command.map((outcome) => SearchMessage.make({ _tag: "Patched", outcome }))
                 )
               ),
           Patched: () => model
         }),
       view: (_, h) =>
-        h.input.attr("aria-label", "Search").value(h.props.route.query.q ?? "").onInput(({ value }) =>
+        h.input.attr("aria-label", "Search").value(h.props.route.search.q ?? "").onInput(({ value }) =>
           SearchMessage.make({ _tag: "Typed", value })
         )
     })
