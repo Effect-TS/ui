@@ -100,40 +100,13 @@ import * as Loader from "../Loader.ts"
 import * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
 import * as Html from "./Html.ts"
+import * as elements from "./internal/elements.ts"
 import * as headSync from "./internal/head.ts"
 import * as markers from "./internal/markers.ts"
 import * as server from "./internal/server.ts"
 import * as submit from "./internal/submit.ts"
 
 const SVG = "http://www.w3.org/2000/svg"
-
-const svgTags: ReadonlySet<string> = new Set([
-  "svg",
-  "g",
-  "path",
-  "circle",
-  "ellipse",
-  "line",
-  "polyline",
-  "polygon",
-  "rect",
-  "text",
-  "tspan",
-  "textPath",
-  "defs",
-  "use",
-  "symbol",
-  "clipPath",
-  "mask",
-  "pattern",
-  "marker",
-  "linearGradient",
-  "radialGradient",
-  "stop",
-  "filter",
-  "image",
-  "foreignObject"
-])
 
 /** Events that don't bubble: only the element they happen on gets them. */
 const ownEvents: ReadonlySet<string> = new Set([
@@ -779,7 +752,7 @@ export const makeHost = (
   return {
     createElement(tag) {
       freshMayBeForm = tag.length === 4 && (tag === "form" || tag.toLowerCase() === "form")
-      return fresh = svgTags.has(tag) ? document.createElementNS(SVG, tag) : document.createElement(tag)
+      return fresh = elements.svgTags.has(tag) ? document.createElementNS(SVG, tag) : document.createElement(tag)
     },
     createText: (text) => document.createTextNode(text),
     setText(node, text) {
@@ -788,6 +761,9 @@ export const makeHost = (
     },
     setAttr(node, name, value) {
       const element = node as globalThis.Element
+      const normalized = elements.attributeName(name, element.namespaceURI === SVG)
+      if (normalized === undefined) return
+      name = normalized
       if (value === undefined) element.removeAttribute(name)
       else element.setAttribute(name, value)
     },

@@ -4,6 +4,7 @@
  */
 import * as Head from "../../Head.ts"
 import type * as Renderer from "../../Renderer.ts"
+import * as elements from "./elements.ts"
 import * as markers from "./markers.ts"
 
 // ---------------------------------------------------------------------------
@@ -68,7 +69,12 @@ const textOf = (nodes: ReadonlyArray<ServerNode>): string =>
  * the client adopts the element.
  */
 const elementAttributes = (node: ServerElement, selectValue: string | undefined): Map<string, string> => {
-  const out = new Map(Object.entries(node.attrs))
+  const out = new Map<string, string>()
+  const svg = elements.svgTags.has(node.tag)
+  for (const [name, value] of Object.entries(node.attrs)) {
+    const normalized = elements.attributeName(name, svg)
+    if (normalized !== undefined) out.set(normalized, value)
+  }
   for (const [name, value] of Object.entries(node.props)) {
     switch (name) {
       case "value":
@@ -84,7 +90,7 @@ const elementAttributes = (node: ServerElement, selectValue: string | undefined)
     }
   }
   if (node.tag === "option" && selectValue !== undefined && !Object.hasOwn(node.props, "selected")) {
-    const value = node.attrs.value ?? textOf(node.children)
+    const value = out.get("value") ?? textOf(node.children)
     if (value === selectValue) out.set("selected", "")
   }
   return out

@@ -43,6 +43,109 @@ const container = (html: string) =>
   )
 
 describe("HtmlServer", { concurrent: false }, () => {
+  it.effect("drops unsafe attribute names on the server, fresh client and hydrated client", () =>
+    Effect.gen(function*() {
+      const names = [
+        "",
+        "x onclick",
+        "x\tonclick",
+        "x\nonclick",
+        "x\ronclick",
+        "x\fonclick",
+        "x\u0000",
+        "x\u001f",
+        "x'",
+        "x\"",
+        "x=onclick",
+        "x<",
+        "x>",
+        "x/",
+        "a\"><script>alert(2)</script"
+      ]
+      const Page = Component.define({
+        name: "SafeAttributes",
+        model: Schema.Boolean,
+        message: Schema.Boolean,
+        elements: Html
+      }).make({
+        init: () => false,
+        update: (_, message) => message,
+        view: (remove, h) =>
+          h.div.children(
+            names.reduce(
+              (element, name) => element.attr(name, remove ? undefined : "alert(1)"),
+              h.div.attr("data-safe", remove ? "updated" : "a\"<&")
+            ).children("hi"),
+            names.reduce((element, name) => element.attr(name, remove ? undefined : "alert(1)"), h.el("x-safe"))
+              .children(),
+            names.reduce((element, name) => element.attr(name, remove ? undefined : "alert(1)"), h.el("svg")).children()
+          )
+      })
+      const rendered = yield* HtmlServer.renderToHtml(Page, {})
+      expect(rendered.html).toBe(
+        "<!--[/SafeAttributes--><div><div data-safe=\"a&quot;&lt;&amp;\">hi</div><x-safe></x-safe><svg></svg></div><!--]/SafeAttributes-->"
+      )
+      for (const hydrate of [false, true]) {
+        const app = yield* container(hydrate ? rendered.html : "")
+        const before = app.firstElementChild
+        const root = yield* BrowserHost.mountEffect(Page, {}, app, hydrate ? { state: rendered.state } : undefined)
+        if (hydrate) expect(app.firstElementChild).toBe(before)
+        const elements = app.firstElementChild!.children
+        expect(elements[0]!.getAttributeNames()).toEqual(["data-safe"])
+        expect(elements[0]!.getAttribute("data-safe")).toBe("a\"<&")
+        expect(elements[1]!.getAttributeNames()).toEqual([])
+        expect(elements[2]!.getAttributeNames()).toEqual([])
+        expect(app.querySelector("script")).toBeNull()
+        root.send(true)
+        yield* tick
+        expect(elements[0]!.getAttributeNames()).toEqual(["data-safe"])
+        expect(elements[0]!.getAttribute("data-safe")).toBe("updated")
+        expect(elements[1]!.getAttributeNames()).toEqual([])
+        expect(elements[2]!.getAttributeNames()).toEqual([])
+      }
+    }).pipe(Effect.scoped))
+
+  it.effect("folds HTML attribute names with last-write wins, but preserves SVG casing", () =>
+    Effect.gen(function*() {
+      const Page = Component.define({
+        name: "AttributeCase",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) =>
+          h.div.attr("TYPE", "first").attr("type", "last").children(
+            h.el("x-safe").attr("DATA-X", "first").attr("data-x", "last"),
+            h.select.value("chosen").children(h.option.attr("VALUE", "chosen").children("label")),
+            h.el("svg").attr("viewBox", "0 0 10 10").children(
+              h.el("linearGradient").attr("gradientUnits", "userSpaceOnUse")
+            )
+          )
+      })
+      const rendered = yield* HtmlServer.renderToHtml(Page, {})
+      expect(rendered.html).toBe(
+        "<!--[/AttributeCase--><div type=\"last\"><x-safe data-x=\"last\"></x-safe>" +
+          "<select><option value=\"chosen\" selected>label</option></select>" +
+          "<svg viewBox=\"0 0 10 10\"><linearGradient gradientUnits=\"userSpaceOnUse\"></linearGradient></svg></div><!--]/AttributeCase-->"
+      )
+      for (const hydrate of [false, true]) {
+        const app = yield* container(hydrate ? rendered.html : "")
+        const before = app.firstElementChild
+        yield* BrowserHost.mountEffect(Page, {}, app, hydrate ? { state: rendered.state } : undefined)
+        if (hydrate) expect(app.firstElementChild).toBe(before)
+        const div = app.firstElementChild!
+        expect(div.getAttributeNames()).toEqual(["type"])
+        expect(div.getAttribute("type")).toBe("last")
+        expect(div.querySelector("x-safe")!.getAttribute("data-x")).toBe("last")
+        expect(div.querySelector("select")!.value).toBe("chosen")
+        expect(div.querySelector("option")!.selected).toBe(true)
+        expect(div.querySelector("svg")!.getAttributeNames()).toEqual(["viewBox"])
+        expect(div.querySelector("linearGradient")!.getAttributeNames()).toEqual(["gradientUnits"])
+      }
+    }).pipe(Effect.scoped))
+
   it.effect("samples root subscriptions once on the server without building Streams, and surfaces throws", () =>
     Effect.gen(function*() {
       let sampled = 0
