@@ -3404,6 +3404,77 @@ describe("Runtime", () => {
         yield* Scope.close(scope, Exit.void)
         assert.deepStrictEqual(events, ["build 1", "release 1"])
       })))
+
+    it.effect("a keyed provide in a removed branch selects nothing and starts no Command while a sibling's cleanup holds the close", () =>
+      provideHost(Effect.gen(function*() {
+        const gate = yield* Deferred.make<void>()
+        const entered = yield* Deferred.make<void>()
+        const events: Array<string> = []
+        const Write = Command.make("test/KeyedRemovedWrite", { args: {} }, () =>
+          Effect.sync(() => {
+            events.push("command")
+            return Component.noop
+          }))
+        const Counter = Component.define({
+          name: "Counter",
+          model: Schema.Number,
+          message: Schema.Null,
+          events: Schema.Null
+        })
+          .make({
+            init: () => 1,
+            update: (n, _, $) => $.set(n + 1).run(Write()).emit(null),
+            view: (n, h) => h.el("button").on("click", null).children(String(n))
+          })
+        const Child = Component.provide(Counter, {
+          key: (_, n) => n,
+          layer: (n) => Layer.effectDiscard(Effect.sync(() => events.push(`build ${n}`)))
+        })
+        // Closes before the child, as it mounted after it, and holds the branch's close open.
+        const Blocker = Component.provide(
+          Component.define({ name: "Blocker", model: Schema.Null, message: Schema.Never }).make({
+            init: () => null,
+            update: (m) => m,
+            view: (_, h) => h.text("")
+          }),
+          () =>
+            Layer.effectDiscard(
+              Effect.addFinalizer(() => Effect.andThen(Deferred.succeed(entered, undefined), Deferred.await(gate)))
+            )
+        )
+        const Branch = Component.define({
+          name: "Branch",
+          model: Schema.Null,
+          message: Schema.Null,
+          events: Schema.Null
+        })
+          .make({
+            init: () => null,
+            update: (m, _, $) => $.set(m).emit(null),
+            view: (_, h) =>
+              h.el(
+                "div",
+                Child(h, { key: "child", props: {}, onEmit: () => null }),
+                Blocker(h, { key: "blocker", props: {} })
+              )
+          })
+        // The child's update changes its key and tells the parent, which removes its branch before it renders.
+        const Parent = Component.define({ name: "Parent", model: Schema.Boolean, message: Schema.Null }).make({
+          init: () => true,
+          update: () => false,
+          view: (shown, h) => shown ? Branch(h, { key: "branch", props: {}, onEmit: () => null }) : h.text("gone")
+        })
+        const root = yield* TestHost.mount(Parent, {})
+        yield* TestHost.settle
+        Query.fire(root.get(Query.tag("button")), "click")
+        yield* TestHost.settle
+        yield* Deferred.await(entered)
+        assert.deepStrictEqual(events, ["build 1"])
+        yield* Deferred.succeed(gate, undefined)
+        yield* TestHost.settle
+        assert.deepStrictEqual(events, ["build 1"])
+        assert.strictEqual(root.text(), "gone")
+      })))
   })
 
   it.effect("each provided Layer build is stamped with the flush it began in", () =>

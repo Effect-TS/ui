@@ -405,8 +405,9 @@ export interface Instance {
   clash: unknown
   rendered: Array<Rendered>
   /**
-   * From the moment its Scope starts closing, not once it has: nothing new starts in a teardown
-   * that a Layer's async cleanup holds open, while that cleanup stays owned to its end.
+   * From the moment its Scope or an ancestor's starts closing, not once it has: nothing new starts
+   * in a teardown that an async cleanup holds open, its own or one that a sequential close of an
+   * ancestor reaches first, while that cleanup stays owned to its end.
    */
   readonly closed: boolean
   /** Hydration: the provided Layer is still building, so the server's nodes wait, inert. */
@@ -2044,7 +2045,7 @@ const setup = (
       clash: undefined,
       rendered: [],
       get closed() {
-        return isClosed(this.scope)
+        return isClosed(this.scope) || this.parent?.closed === true
       },
       waiting: false,
       adoptsChildren: false,
@@ -4169,7 +4170,7 @@ const setup = (
       clash: undefined,
       rendered: [],
       get closed() {
-        return isClosed(this.scope)
+        return isClosed(this.scope) || this.parent?.closed === true
       },
       waiting: false,
       // The content's children adopt the server's state when the instance placing it and the one that
