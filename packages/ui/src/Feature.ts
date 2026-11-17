@@ -77,7 +77,7 @@ export type TypeId = typeof TypeId
  *
  * `context` is the Context the feature's Layer was built with, minus `Scope`,
  * which closes the implementation's requirements. It isn't an instance, so
- * Layer memoisation is harmless and every slot still gets its own instance,
+ * Layer memoisation is harmless and every child still gets its own instance,
  * Model and Scope.
  *
  * @stability experimental
@@ -106,10 +106,10 @@ export interface Service<in out Self, in out Props, in out Events, in out Receiv
   readonly events: Schema.Codec<Events, any>
   /** The Schema of the messages a parent may send. `Schema.Never` when it declares none. */
   readonly receives: Schema.Codec<Receives, any>
-  /** A ref for this feature's slots, so a parent can send them messages. */
+  /** A ref for this feature's children, so a parent can send them messages. */
   readonly ref: (name: string) => Component.Ref.Of<Receives>
   /**
-   * Declares a slot of this feature in a parent's view, from the parent's
+   * Declares a child of this feature in a parent's view, from the parent's
    * `h`. The parent requires the service only. `fallback` is required: the
    * service may be building (`Initial`) or failed (`Failure`).
    */
@@ -120,6 +120,8 @@ export interface Service<in out Self, in out Props, in out Events, in out Receiv
       readonly fallback: (
         result: AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>
       ) => View.Content<NoInfer<Msg>, RF>
+      /** A feature takes no slots: its implementation may not declare them, and its parent can't see. */
+      readonly slots?: never
     }
   ): View.Child<Msg, Self | NoInfer<RF>>
   /**
@@ -190,7 +192,7 @@ export const isService = (u: unknown): u is Any => Predicate.hasProperty(u, Type
  * `C` doesn't receive every case of `receives`.
  *
  * `receives` is a Schema, since a feature has no message type of its own. A
- * parent sends with `$.send(Todos.ref("Main"), message)` to the slot it
+ * parent sends with `$.send(Todos.ref("Main"), message)` to the child it
  * renders with `Todos.render(h, { ref, fallback })`.
  *
  * **Example** (A feature with a fake for tests)

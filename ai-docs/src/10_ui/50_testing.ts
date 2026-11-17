@@ -20,6 +20,7 @@ import { Query, Story, TestHost } from "@effect/ui/testing"
 // One file here, to read top to bottom. In an app each `describe` sits next
 // to what it tests: `notes/components/NoteEditor.test.ts` and `App.test.ts`.
 import { App } from "./fixtures/App.ts"
+import { Collapsible } from "./fixtures/kit/Collapsible.ts"
 import { NoteEditor, NoteEditorEvents, NoteEditorNoDeps, SaveNote } from "./fixtures/notes/components/NoteEditor.ts"
 import { type Note, NoteSaveError } from "./fixtures/notes/domain/Note.ts"
 import { Notes } from "./fixtures/notes/services/Notes.ts"
@@ -112,10 +113,31 @@ describe("NoteEditor", () => {
   })
 })
 
+describe("Collapsible", () => {
+  it("places what a parent passes, and hides the body", () => {
+    // `slots` stands in for a parent's content. Its `h` has no messages,
+    // as the content's handlers would send the parent's.
+    Story.make(
+      Collapsible,
+      {},
+      { slots: (h) => ({ summary: h.h2("Groceries"), body: h.p("Milk") }) },
+      (s) =>
+        s.click("Hide")
+          .check((story) => {
+            assert.strictEqual(Query.textOf(story.get(Query.tag("h2"))), "Groceries")
+            assert.isUndefined(story.query(Query.text("Milk")))
+          })
+    )
+  })
+})
+
 describe("NotePage", () => {
   it("tells the editor to save now", () => {
     Story.make(NotePageNoDeps, { id: note.id }, (s) =>
       s.loaded("note", note)
+        // The button is in the Collapsible's `summary` slot. A parent's
+        // story shows the content it passed to a child's slots, but not
+        // the child's own view.
         .click("Save now")
         // A story renders no children, so what `update` sent them is data.
         .sent((sent) =>
@@ -129,7 +151,7 @@ describe("NotesIndex", () => {
     const pinned = HtmlQuery.role("complementary", { name: "Pinned" })
     Story.make(NotesIndexNoDeps, {}, (s) =>
       // Load steps take the loader's name. `loaded` writes the result to
-      // the `notes` slot, as the runtime would, and re-renders the view.
+      // the `notes` loader's state, as the runtime would, and re-renders the view.
       s.loaded("notes", [note])
         // A drop with a hand-written payload. `HtmlStory.drop` picks the
         // target the browser host would, and throws when none accepts the
@@ -194,7 +216,7 @@ it.layer(Layer.mergeAll(Notes.layerMemory([note]), TestHost.layer()), { buildPer
 )
 
 // ---------------------------------------------------------------------------
-// Runtime: the whole app, across child slots, Layers and the Router.
+// Runtime: the whole app, across children, Layers and the Router.
 // ---------------------------------------------------------------------------
 
 // The app is tested as it ships, so its components keep their own domain
@@ -246,6 +268,7 @@ it.layer(AppTest, { buildPerTest: true })("App", (it) => {
       const result = yield* ssr(App, Router.props(AppRoute))
       assert.include(result.html, "Milk")
       // The paths of the instances that adopted the server's state.
-      assert.include(result.adopted, "/App/NotePage[/notes/n1]/NoteEditor[Editor[n1]]")
+      // The editor sits in the Collapsible's `body` slot, under its path.
+      assert.include(result.adopted, "/App/NotePage[/notes/n1]/Collapsible[note]/[body]/NoteEditor[Editor[n1]]")
     }))
 })

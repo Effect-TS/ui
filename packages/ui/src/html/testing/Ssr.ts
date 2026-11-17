@@ -19,7 +19,7 @@
  * - the client fetched a hydrated entry into its cache inside the fetch-free
  *   window, unless the render was `static`. A caller-only fetch, which
  *   stores nothing, is allowed;
- * - a slot was still waiting for its Layer when the budget was spent;
+ * - an instance was still waiting for its Layer when the budget was spent;
  * - a problem was reported, on either side.
  *
  * **Example** (Checking a page hydrates)
@@ -125,6 +125,23 @@ export class SsrError extends Data.TaggedError("SsrError")<{
   }
 }
 
+/**
+ * Whether a marker path is a placed slot's, such as `/Page/Card[c]/[body]`. A key or slot name
+ * escapes `]/`, and a component's name escapes `[`, so only a slot's segment starts with one.
+ */
+const isSlotPath = (path: string): boolean => path[path.lastIndexOf("]/") + 2] === "["
+
+/**
+ * The instance that adopts a node: the innermost around it. A slot's content is placed by the
+ * instance whose view placed the slot, so it adopts with that instance's render.
+ */
+const ownerOf = (paths: ReadonlyArray<string>): string => {
+  for (let index = paths.length - 1; index > 0; index--) {
+    if (!isSlotPath(paths[index]!)) return paths[index]!
+  }
+  return paths[0]!
+}
+
 /** A node the server rendered, and the paths of the instances around it, innermost last. */
 interface ServerNode {
   readonly node: globalThis.Node
@@ -224,7 +241,7 @@ const stepLimit = 10_000
  * tree's own sleepers, a fetch or a Layer build, until the render is idle or
  * `budget` (default 500 ms) is spent. Once the server's Scope has closed the
  * clock is set to exactly the start plus `budget`, and the client mounts
- * there. While a slot waits for its Layer before adopting, the client steps
+ * there. While an instance waits for its Layer before adopting, the client steps
  * the clock the same way, for up to `budget` more, and then fails naming the
  * waiting paths. A Layer that sleeps on a clock other than the one it is
  * given is not seen: either phase then spends its whole budget before it
@@ -397,9 +414,8 @@ export const ssr = <
         if (entry._tag === "Mounted" && entry.adopted) adoptedNow.add(entry.path)
       }
       unjudged = unjudged.filter(({ node, paths }) => {
-        const owner = paths[paths.length - 1]!
-        if (!adoptedNow.has(owner)) return true
-        if (!container.contains(node)) rebuilt.add(owner)
+        if (!adoptedNow.has(ownerOf(paths))) return true
+        if (!container.contains(node)) rebuilt.add(paths[paths.length - 1]!)
         return false
       })
     }
@@ -448,7 +464,7 @@ export const ssr = <
         )
       })
     }
-    // `adopted` can resume before the flush that adopted the last slot commits; its nodes are claimed by now.
+    // `adopted` can resume before the flush that adopted the last instance commits; its nodes are claimed by now.
     judge()
 
     // -- checks ---------------------------------------------------------------
@@ -462,16 +478,16 @@ export const ssr = <
         problems.push(`${path}: the client didn't adopt the server's Model`)
         continue
       }
-      // The adopted slots are logged right after the adoption, one entry per slot the server wrote.
-      const slots: Record<string, unknown> = {}
+      // The adopted loader state is logged right after the adoption, one entry per loader the server wrote.
+      const loaderState: Record<string, unknown> = {}
       for (const later of log.slice(log.indexOf(entry) + 1)) {
         if (later.path !== path) continue
         if (later._tag !== "LoaderChanged") break
-        slots[later.name] = later.slot
+        loaderState[later.name] = later.state
       }
       const encoded = runtime.stateCodecOf(entry.component).encode(
         entry.model,
-        { ...loaders.boundOf(entry.component)?.empty, ...slots }
+        { ...loaders.boundOf(entry.component)?.empty, ...loaderState }
       )
       const json = encoded._tag === "Some" ? JSON.stringify(encoded.value) : undefined
       if (json !== JSON.stringify(state[path])) {
@@ -483,7 +499,7 @@ export const ssr = <
     for (const path of rebuilt) problems.push(`${path}: the client rebuilt the server's nodes instead of adopting them`)
     // Every server node outside a deferred instance is judged: one whose instance never adopted under
     // the path its markers carry was not adopted either.
-    for (const path of new Set(unjudged.map(({ paths }) => paths[paths.length - 1]!))) {
+    for (const path of new Set(unjudged.map(({ paths }) => ownerOf(paths)))) {
       problems.push(`${path}: no instance adopted the server's nodes under this path`)
     }
     for (const path of markersLeft(container)) problems.push(`${path}: its markers are still in the document`)

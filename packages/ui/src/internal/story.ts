@@ -21,7 +21,14 @@ import type { Story } from "../testing/Story.ts"
 import * as View from "../View.ts"
 import * as loaders from "./loaders.ts"
 import { isNoop } from "./noop.ts"
-import { checkAuthorRefs, checkChildPaths, segment } from "./paths.ts"
+import {
+  checkAuthorPlacements,
+  checkAuthorRefs,
+  checkChildPaths,
+  checkContentPaths,
+  segment,
+  slotSegment
+} from "./paths.ts"
 import * as schedule from "./schedule.ts"
 
 /** @internal */
@@ -31,7 +38,7 @@ export type Fields<Props, Model, Msg, Events> =
     | "component"
     | "props"
     | "model"
-    | "slots"
+    | "loaderState"
     | "pending"
     | "emitted"
     | "sent"
@@ -43,30 +50,53 @@ export type Fields<Props, Model, Msg, Events> =
   & { readonly childModels?: ReadonlyMap<string, unknown> | undefined }
 
 // -- headless children ------------------------------------------------------
-// A story shows a headless child expanded: its slot's closure, run against the parts of the
+// A story shows a headless child expanded: the closure it was declared with, run against the parts of the
 // child's `init` Model or of the Model `givenChild` set. No runtime is involved.
 /** @internal */
 export const childModels = new WeakMap<object, ReadonlyMap<string, unknown>>()
-// The slots an expansion replaced, by the expanded root: `childEmit` and `childFailure` still find them.
-const expandedSlots = new WeakMap<object, ReadonlyArray<View.Child<any, any>>>()
+// The children an expansion replaced, by the expanded root: `childEmit` and `childFailure` still find them.
+const expandedChildren = new WeakMap<object, ReadonlyArray<View.Child<any, any>>>()
+
+// What a story of a slotted component passed for its slots, by the component `withSlots` made.
+const storySlots = new WeakMap<object, Readonly<Record<string, View.Input<never, any>>>>()
 
 const expandRoot = <Msg>(
   view: View.Node<Msg, any>,
   name: string,
-  given: ReadonlyMap<string, unknown> | undefined
+  given: ReadonlyMap<string, unknown> | undefined,
+  filled: Readonly<Record<string, View.Input<never, any>>> | undefined
 ): View.Node<Msg, any> => {
-  const slots: Array<View.Child<any, any>> = []
-  // As the runtime does: two child slots at one path fail the view or the closure that holds them, and
-  // so do two slots with one ref key across the view and the closures it gives its headless children.
+  const replaced: Array<View.Child<any, any>> = []
+  // As the runtime does: two children at one path fail the view or the closure that holds them, and
+  // so do two children with one ref key across the view and the closures it gives its headless children.
+  // Nor can two of them place one slot.
   const written = [checkChildPaths("/" + name, view)]
-  const expand = (node: View.Node<any, any>, path: string, depth: number): View.Node<any, any> => {
+  // Content is shown under `children`, where a query looks, at the path the runtime gives it.
+  // `own`: the story's component wrote it, so its refs count with the component's. Content the story
+  // passed for its slots was written by a parent, and so were the closures in it.
+  const content = (input: View.Input<any, any>, path: string, depth: number, own: boolean) => {
+    const nodes = View.children([input])
+    const paths = checkContentPaths(path, nodes)
+    if (own) written.push(paths)
+    return nodes.map((child) => expand(child, path, depth, own))
+  }
+  const expand = (node: View.Node<any, any>, path: string, depth: number, own: boolean): View.Node<any, any> => {
     switch (node._tag) {
       case "Text":
         return node
+      case "Outlet": {
+        // The story's component placing a slot: it shows what the story passed.
+        const input = filled?.[node.name]
+        if (input === undefined) return node
+        return { ...node, children: content(input, "/" + name + "/" + slotSegment(node.name), 1, false) } as View.Node<
+          any,
+          any
+        >
+      }
       case "Element": {
         let changed = false
         const children = node.children.map((child) => {
-          const next = expand(child, path, depth)
+          const next = expand(child, path, depth, own)
           if (next !== child) changed = true
           return next
         })
@@ -74,20 +104,31 @@ const expandRoot = <Msg>(
       }
       case "Child": {
         const component = node.component as unknown as Component.Headless.Any
+        if (node.slots !== undefined) {
+          // A child's view isn't run, but what the parent passed for its slots is the parent's.
+          const childPath = path + "/" + segment(node)
+          const shown: Array<View.Node<any, any>> = []
+          for (const slot in node.slots) {
+            shown.push(...content(node.slots[slot], childPath + "/" + slotSegment(slot), depth + 1, own))
+          }
+          return { ...node, children: shown } as View.Node<any, any>
+        }
         if (node.view === undefined || component.parts === undefined) return node
-        slots.push(node)
+        replaced.push(node)
         const childPath = path + "/" + segment(node)
         const model = given?.has(node.key) ? given.get(node.key) : component.init(node.props).model
         const parts = component.parts(model, node.props, { owner: { path: childPath, depth: depth + 1 } })
         const tree = View.toNode(node.view(parts))
-        written.push(checkChildPaths(childPath, tree))
-        return expand(tree, childPath, depth + 1)
+        const paths = checkChildPaths(childPath, tree)
+        if (own) written.push(paths)
+        return expand(tree, childPath, depth + 1, own)
       }
     }
   }
-  const expanded = expand(view, "/" + name, 0)
+  const expanded = expand(view, "/" + name, 0, true)
   checkAuthorRefs("/" + name, written)
-  if (slots.length > 0) expandedSlots.set(expanded, slots)
+  checkAuthorPlacements("/" + name, written)
+  if (replaced.length > 0) expandedChildren.set(expanded, replaced)
   return expanded
 }
 
@@ -103,16 +144,21 @@ export const record = <Props, Model, Msg, Events>(
 ): Story<Props, Model, Msg, Events> => {
   let rendered: View.Node<Msg, any> | undefined
   const view = () => {
-    return rendered ??= expandRoot(render(), fields.component.definition.name, fields.childModels)
+    return rendered ??= expandRoot(
+      render(),
+      fields.component.definition.name,
+      fields.childModels,
+      storySlots.get(fields.component)
+    )
   }
-  // A view value is a `Query` tree; a child slot is a node with no tag or text.
+  // A view value is a `Query` tree; a child is a node with no tag or text.
   const root = () => view() as Query.Node
-  const context = () => boundOf(fields.component)?.context(fields.model, fields.props, fields.slots)
+  const context = () => boundOf(fields.component)?.context(fields.model, fields.props, fields.loaderState)
   const story: Story<Props, Model, Msg, Events> = {
     component: fields.component,
     props: fields.props,
     model: fields.model,
-    slots: fields.slots,
+    loaderState: fields.loaderState,
     loaded: () => context()?.loaded ?? {},
     pending: fields.pending,
     emitted: fields.emitted,
@@ -123,7 +169,7 @@ export const record = <Props, Model, Msg, Events>(
     defaultPrevented: fields.defaultPrevented,
     view,
     subscriptions: () =>
-      (fields.component.subscriptions?.(fields.model, fields.props, fields.slots) ?? []).map((sub) => sub.key),
+      (fields.component.subscriptions?.(fields.model, fields.props, fields.loaderState) ?? []).map((sub) => sub.key),
     loaders: () => {
       const bound = boundOf(fields.component)
       if (bound === undefined) return []
@@ -154,7 +200,7 @@ export const update = <Props, Model, Msg, Events>(
     component: story.component,
     props: story.props,
     model: story.model,
-    slots: story.slots,
+    loaderState: story.loaderState,
     pending: story.pending,
     emitted: story.emitted,
     sent: story.sent,
@@ -166,12 +212,13 @@ export const update = <Props, Model, Msg, Events>(
     childModels: childModels.get(story),
     ...patch
   }
-  // A defect in `view` fails the step that changed the Model, the slots, the props or what's pending.
-  const view = fields.model === story.model && fields.slots === story.slots && fields.props === story.props &&
+  // A defect in `view` fails the step that changed the Model, the loader state, the props or what's pending.
+  const view =
+    fields.model === story.model && fields.loaderState === story.loaderState && fields.props === story.props &&
       fields.pending === story.pending && fields.loadingMore === story.loadingMore &&
       fields.childModels === childModels.get(story)
-    ? story.view
-    : () => story.component.view(fields.model, fields.props, runningOf(fields.pending), fields.slots)
+      ? story.view
+      : () => story.component.view(fields.model, fields.props, runningOf(fields.pending), fields.loaderState)
   return record(fields, view)
 }
 
@@ -190,25 +237,25 @@ const loaderOf = (story: Story<any, any, any, any>, step: string, name: string):
   return entry
 }
 
-/** A loader's args for the story's Model, props and slots. */
+/** A loader's args for the story's Model, props and loader state. */
 const argsAt = (story: Story<any, any, any, any>, name: string) =>
-  boundOf(story.component)!.context(story.model, story.props, story.slots).argsOf(name)
+  boundOf(story.component)!.context(story.model, story.props, story.loaderState).argsOf(name)
 
 /**
- * Writes a loader's slot, then sends the message of its `onChange`, if any, as the runtime does.
+ * Writes a loader's state, then sends the message of its `onChange`, if any, as the runtime does.
  * A keyed loader's `onChange` also gets `changes`.
  */
-const writeSlot = (
+const writeLoaderState = (
   story: Story<any, any, any, any>,
   entry: loaders.Entry,
-  slot: unknown,
+  state: unknown,
   changes: ReadonlyArray<loaders.KeyedChange>
 ): Story<any, any, any, any> => {
   const bound = boundOf(story.component)!
   // As in the runtime, the same snapshot writes nothing.
-  if (Equal.equals((story.slots ?? bound.empty)[entry.name], slot)) return story
-  const out = update(story, { slots: { ...(story.slots ?? bound.empty), [entry.name]: slot } })
-  const message = bound.context(out.model, out.props, out.slots).changed(entry.name, changes)
+  if (Equal.equals((story.loaderState ?? bound.empty)[entry.name], state)) return story
+  const out = update(story, { loaderState: { ...(story.loaderState ?? bound.empty), [entry.name]: state } })
+  const message = bound.context(out.model, out.props, out.loaderState).changed(entry.name, changes)
   return message === undefined ? out : dispatch(out, message.value)
 }
 
@@ -217,7 +264,7 @@ type Build = (
   previous: Option.Option<AsyncResult.Success<any, any>>
 ) => AsyncResult.Success<any, any> | AsyncResult.Failure<any, any>
 
-/** Writes `result` to a single or list loader's slot at its current args. */
+/** Writes `result` to a single or list loader's state at its current args. */
 const loadStep = (
   story: Story<any, any, any, any>,
   step: string,
@@ -233,23 +280,23 @@ const loadStep = (
   }
   const result = build(storedAt(story, name, current.argsKey))
   const def = Loader.defOf(entry.read)
-  const slot = boundOf(story.component)!.slot(
+  const state = boundOf(story.component)!.state(
     entry,
     { args: current.args, argsKey: current.argsKey },
     result,
     patched,
     more ?? (def.list !== undefined && result._tag === "Success" ? moreOfPages(def, result.value) : undefined)
   )
-  return writeSlot(story, entry, slot, [])
+  return writeLoaderState(story, entry, state, [])
 }
 
-/** The slot's last Success at `argsKey`: its value, or a Failure's previous one. */
+/** The loader state's last Success at `argsKey`: its value, or a Failure's previous one. */
 const storedAt = (
   story: Story<any, any, any, any>,
   name: string,
   argsKey: string
 ): Option.Option<AsyncResult.Success<any, any>> => {
-  const data = Loader.snapshotData(story.slots?.[name])
+  const data = Loader.snapshotData(story.loaderState?.[name])
   const stored = data?.argsKey === argsKey ? data.result : undefined
   return stored === undefined
     ? Option.none()
@@ -259,32 +306,32 @@ const storedAt = (
 }
 
 /**
- * The slots `given` starts from, written with no `onChange` message. Each
+ * The loader state `given` starts from, written with no `onChange` message. Each
  * named loader holds its given results at the args it returns, and a keyed
  * loader that isn't named keeps the keys it held before that it still returns. Args can
  * read other loaders' results, so the writes repeat until none changes: the
- * result doesn't depend on the order of the names or on the slots held before.
+ * result doesn't depend on the order of the names or on the loader state held before.
  *
  * @internal
  */
-export const givenSlots = (
+export const givenLoaderState = (
   story: Story<any, any, any, any>,
   loaded: { readonly [name: string]: unknown },
   step: string
-): Component.Slots | undefined => {
+): Component.LoaderState | undefined => {
   for (const name of Object.keys(loaded)) loaderOf(story, step, name)
   const bound = boundOf(story.component)
-  if (bound === undefined) return story.slots
-  const before = story.slots ?? bound.empty
-  const slots: { [name: string]: unknown } = { ...before }
-  // The slot a loader should hold for the current slots, or undefined while a named loader is
+  if (bound === undefined) return story.loaderState
+  const before = story.loaderState ?? bound.empty
+  const loaderState: { [name: string]: unknown } = { ...before }
+  // The state a loader should hold for the current loader state, or undefined while a named loader is
   // disabled or doesn't return the given args.
   const target = (entry: loaders.Entry): unknown => {
-    const current = bound.context(story.model, story.props, { ...slots }).argsOf(entry.name)
+    const current = bound.context(story.model, story.props, { ...loaderState }).argsOf(entry.name)
     if (!Object.hasOwn(loaded, entry.name)) {
-      // From the slots held before: a key an earlier round dropped can come back once the args settle.
+      // From the loader state held before: a key an earlier round dropped can come back once the args settle.
       const held = Loader.snapshotMapData(before[entry.name])?.entries
-      return bound.slotMany(
+      return bound.stateMany(
         entry,
         current.entries!.flatMap((key) => {
           const stored = held?.get(key.argsKey)
@@ -302,13 +349,13 @@ export const givenSlots = (
         const result = "value" in load
           ? AsyncResult.success(load.value, { waiting: load.waiting, timestamp: 0 })
           : AsyncResult.failure(Cause.fail(load.error), { waiting: load.waiting })
-        snapshots.push(bound.slot(entry, key, result as any, false, undefined))
+        snapshots.push(bound.state(entry, key, result as any, false, undefined))
       }
-      return bound.slotMany(entry, snapshots)
+      return bound.stateMany(entry, snapshots)
     }
     if (current.argsKey === undefined) return undefined
     const value = loaded[entry.name]
-    return bound.slot(
+    return bound.state(
       entry,
       { args: current.args, argsKey: current.argsKey },
       AsyncResult.success(value, { timestamp: 0 }),
@@ -323,13 +370,13 @@ export const givenSlots = (
     changed = false
     for (const entry of written) {
       const next = target(entry)
-      if (next === undefined || Equal.equals(slots[entry.name], next)) continue
+      if (next === undefined || Equal.equals(loaderState[entry.name], next)) continue
       if (round > written.length) {
         throw new Error(
           `${step}: the loader "${entry.name}" doesn't settle: its args keep changing with the given results`
         )
       }
-      slots[entry.name] = next
+      loaderState[entry.name] = next
       changed = true
     }
   }
@@ -339,7 +386,7 @@ export const givenSlots = (
       `${step}: the loader "${unmet.name}" is disabled, or doesn't return the given args, for the Model and props`
     )
   }
-  return slots
+  return loaderState
 }
 
 /** Whether a page array has a next page, by the definition's `next`. */
@@ -397,7 +444,7 @@ const applyList = (story: Story<any, any, any, any>, list: Component.ListIssue):
   if (argsKey === undefined) return story
   const previous = storedAt(story, list.name, argsKey)
   const def = Loader.defOf(entry.read)
-  const data = Loader.snapshotData(story.slots?.[list.name])
+  const data = Loader.snapshotData(story.loaderState?.[list.name])
   if (list.op === "loadMore") {
     if (story.loadingMore.includes(list.name)) return story
     // At the end, or with nothing held at these args, nothing is written and nothing waits.
@@ -449,7 +496,7 @@ const keyedLoader = (
 }
 
 /**
- * Writes a keyed loader's slot as the runtime does: the stored keys the
+ * Writes a keyed loader's state as the runtime does: the stored keys the
  * loader still returns, with `loads` over them, and `changes` holds
  * `loads`.
  */
@@ -462,13 +509,13 @@ const writeKeyed = (
   >
 ): Story<any, any, any, any> => {
   const bound = boundOf(story.component)!
-  const held = Loader.snapshotMapData(story.slots?.[entry.name])?.entries
+  const held = Loader.snapshotMapData(story.loaderState?.[entry.name])?.entries
   const byKey = new Map(loads.map((load) => [load.argsKey, load]))
-  const slot = bound.slotMany(
+  const state = bound.stateMany(
     entry,
     keys.flatMap((key) => {
       const load = byKey.get(key.argsKey)
-      if (load !== undefined) return [bound.slot(entry, key, load.result as any, load.patched, undefined)]
+      if (load !== undefined) return [bound.state(entry, key, load.result as any, load.patched, undefined)]
       const stored = held?.get(key.argsKey)
       return stored === undefined ? [] : [stored]
     })
@@ -477,7 +524,7 @@ const writeKeyed = (
     const load = byKey.get(key.argsKey)
     return load === undefined ? [] : [{ args: key.args, result: load.result }]
   })
-  return writeSlot(story, entry, slot, changes)
+  return writeLoaderState(story, entry, state, changes)
 }
 
 /**
@@ -493,7 +540,7 @@ export const loadKeyedStep = (
 ): Story<any, any, any, any> => {
   const { entry, keys } = keyedLoader(story, step, name)
   const def = Loader.defOf(entry.read)
-  const held = Loader.snapshotMapData(story.slots?.[name])?.entries
+  const held = Loader.snapshotMapData(story.loaderState?.[name])?.entries
   const settled = new Set<string>()
   const written = writeKeyed(
     story,
@@ -521,7 +568,7 @@ export const loadKeyedStep = (
       }
     })
   )
-  // After the slot's write: the wait's own message comes second.
+  // After the loader state's write: the wait's own message comes second.
   return settleWaits(written, (awaited) => awaited.name === name && settled.has(def.argsKey(awaited.args)))
 }
 
@@ -529,8 +576,8 @@ export const loadKeyedStep = (
 const pruneRounds = 100
 
 /**
- * After a step: a keyed loader whose slot holds a key it no longer returns
- * gets the slot pruned, with no changes, as the runtime's drain writes it. A
+ * After a step: a keyed loader whose state holds a key it no longer returns
+ * gets its state pruned, with no changes, as the runtime's drain writes it. A
  * prune's `onChange` can change the key set again, so rounds run until none
  * is due, at most one write per loader per round. The runtime doesn't bound
  * them; a step throws after `pruneRounds`.
@@ -545,7 +592,7 @@ export const pruneKeyed = (story: Story<any, any, any, any>, module: string): St
     let pruned = false
     for (const entry of bound.entries) {
       if (!entry.keyed) continue
-      const held = Loader.snapshotMapData(out.slots?.[entry.name])
+      const held = Loader.snapshotMapData(out.loaderState?.[entry.name])
       if (held === undefined || held.entries.size === 0) continue
       const keys = argsAt(out, entry.name).entries!
       const declared = new Set(keys.map((key) => key.argsKey))
@@ -724,7 +771,7 @@ function* currentEntries(
 ): Generator<{ readonly loader: loaders.Entry; readonly entries: ReadonlyArray<loaders.Keyed> }> {
   const bound = boundOf(story.component)
   if (bound === undefined) return
-  const context = bound.context(story.model, story.props, story.slots)
+  const context = bound.context(story.model, story.props, story.loaderState)
   for (const loader of bound.entries) {
     const current = context.argsOf(loader.name)
     yield {
@@ -779,10 +826,10 @@ const registeredPatches = (
   if (command.optimistic.length === 0) return []
   const out: Array<{ readonly name: string; readonly argsKey: string }> = []
   for (const { entries, loader } of currentEntries(story)) {
-    const slot = story.slots?.[loader.name]
-    const held = loader.keyed ? Loader.snapshotMapData(slot)?.entries : undefined
+    const state = story.loaderState?.[loader.name]
+    const held = loader.keyed ? Loader.snapshotMapData(state)?.entries : undefined
     for (const { args, argsKey } of entries) {
-      const data = Loader.snapshotData(held !== undefined ? held.get(argsKey) : slot)
+      const data = Loader.snapshotData(held !== undefined ? held.get(argsKey) : state)
       if (data?.argsKey !== argsKey || data.result?._tag !== "Success") continue
       if (!Loader.invalidatesEntry({ invalidates: [], optimistic: command.optimistic }, loader.read, args)) continue
       out.push({ name: loader.name, argsKey })
@@ -856,13 +903,15 @@ export const dispatch = <Props, Model, Msg, Events>(
   // `undefined` is a handler's "no message", and `Component.noop` a Command's or a mount's.
   message === undefined || isNoop(message)
     ? story
-    : apply(story, story.component.update(story.model, message, story.props, story.slots))
+    : apply(story, story.component.update(story.model, message, story.props, story.loaderState))
 
 /** `node` and its ancestors in `root`, innermost first, or `undefined` when `node` isn't in `root`. */
 const pathTo = (root: View.Node<any, any>, node: Query.Node): Array<View.Node<any, any>> | undefined => {
   if (root === node) return [root]
-  if (root._tag !== "Element") return undefined
-  for (const child of root.children) {
+  // An element's children, or the content a story shows under a child or an outlet.
+  const children = (root as { readonly children?: ReadonlyArray<View.Node<any, any>> }).children
+  if (children === undefined) return undefined
+  for (const child of children) {
     const path = pathTo(child, node)
     if (path !== undefined) {
       path.push(root)
@@ -962,15 +1011,33 @@ export const withView = (
 ): Component.Component<any, any, any, any, any, any, any, any, any> => {
   const owner: View.Owner = { path: "/" + component.definition.name, depth: 0 }
   return Object.assign(Object.create(component), {
-    view: (model: unknown, props: unknown, running?: View.Running, slots?: Component.Slots) => {
+    view: (model: unknown, props: unknown, running?: View.Running, loaderState?: Component.LoaderState) => {
       const h = View.makeHelper(props, elements ?? component.elements(), running, owner.path)
-      return View.toNode(view(component.parts(model, props, { owner, running, loaded: slots }), h))
+      return View.toNode(view(component.parts(model, props, { owner, running, loaderState }), h))
     }
   })
 }
 
 /**
- * The child slots declared in a view, with the ones an expansion replaced.
+ * A component whose story passed `slots`: the content shows where its view places each slot.
+ *
+ * @internal
+ */
+export const withSlots = (
+  component: Component.Any,
+  slots: (h: any) => Readonly<Record<string, View.Input<never, any>>>,
+  elements: View.Vocabulary<any> | undefined
+): Component.Any => {
+  const made = Object.create(component)
+  storySlots.set(
+    made,
+    slots(View.makeHelper({}, elements ?? component.elements(), undefined, "/" + component.definition.name))
+  )
+  return made
+}
+
+/**
+ * The children declared in a view, with the ones an expansion replaced.
  *
  * @internal
  */
@@ -978,9 +1045,23 @@ export const children = <Msg>(
   view: View.Node<Msg, any>,
   component?: Component.Any | { readonly key: string }
 ): ReadonlyArray<View.Child<Msg, any>> =>
-  [...(expandedSlots.get(view) ?? []), ...View.nodes(view)].filter((node): node is View.Child<Msg, any> =>
+  [...(expandedChildren.get(view) ?? []), ...shownNodes(view)].filter((node): node is View.Child<Msg, any> =>
     node._tag === "Child" && (component === undefined || node.component === component)
   )
+
+/**
+ * `node` and the nodes below it, as a story shows them: the content it expanded under a child or an
+ * outlet, or, in a view it didn't expand, what a child's slots were passed.
+ */
+const shownNodes = function*(node: View.Node<any, any>): Generator<View.Node<any, any>> {
+  yield node
+  const shown = (node as { readonly children?: ReadonlyArray<View.Node<any, any>> }).children
+  if (shown !== undefined) {
+    for (const child of shown) yield* shownNodes(child)
+  } else if (node._tag === "Child") {
+    for (const child of View.slotNodes(node)) yield* shownNodes(child)
+  }
+}
 
 /** @internal */
 export const findChild = <Msg>(

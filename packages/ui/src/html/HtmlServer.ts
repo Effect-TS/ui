@@ -126,8 +126,8 @@ const serverHtmlHost: Context.Service.Shape<typeof Html.Host> = {
  * it, or that `Component.provide(..., { server: false })` keeps off the
  * server, renders its feature children's `fallback`, and the client builds
  * that instance fresh. A fetch that misses it isn't shipped, and the client
- * fetches it after hydration. A defect renders the slot's `fallback`, and
- * the client builds the slot fresh.
+ * fetches it after hydration. A defect renders the child's `fallback`, and
+ * the client builds the child fresh.
  *
  * `props` may be an Effect, such as `Router.props(AppRoute)` under
  * `Router.static`, run once before `init`. Its requirements are added to the

@@ -64,7 +64,7 @@ const dropped = (log: ReadonlyArray<MessageLog.Entry>) =>
   log.filter((entry): entry is MessageLog.SendDropped => entry._tag === "SendDropped")
 
 describe("$.send", () => {
-  it.effect("reaches the slot with the ref's key, among several of one component", () =>
+  it.effect("reaches the child with the ref's key, among several of one component", () =>
     provideHost(Effect.gen(function*() {
       const root = yield* TestHost.mount(List, { ids: ["a", "b", "c"] })
       yield* TestHost.settle
@@ -281,7 +281,7 @@ describe("Story and sends", () => {
     assert.lengthOf(steps.given(["a"]).current.sent, 0)
   })
 
-  it("finds a slot by its ref in childEmit, childFailure and fallback", () => {
+  it("finds a child by its ref in childEmit, childFailure and fallback", () => {
     const Message = Schema.TaggedUnion({ Saw: { what: Schema.String } })
     const EchoMessage = Schema.TaggedUnion({ Said: {} })
     const Echo = Component.define({

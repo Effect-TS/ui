@@ -154,9 +154,9 @@ const Actions = Menu.ref("Actions")
 const Spare = Menu.ref("Spare")
 
 /**
- * Sends to the Menu at `Actions`. Its closure renders a second slot with that ref: from the mount,
+ * Sends to the Menu at `Actions`. Its closure renders a second child with that ref: from the mount,
  * once `Twin` re-renders the view, or once the Menu opens and re-renders alone. `Swap` moves the
- * slot with the ref `Spare` between the view and the closure, in one render.
+ * child with the ref `Spare` between the view and the closure, in one render.
  */
 const Opener = Component.define({
   name: "Opener",
@@ -181,7 +181,7 @@ const Opener = Component.define({
         view: (m) =>
           h.p(
             m.open ? "shown" : "hidden",
-            // The closure is the parent's code, so a slot in it takes the parent's refs.
+            // The closure is the parent's code, so a child in it takes the parent's refs.
             (model.twin || (h.props.twin === "open" && m.open)) &&
               Menu(h, { ref: Actions, props: { items }, view: () => h.span("again") }),
             // Removed with its holder when the ref moves back to the view. The holder's Scope closes
@@ -208,7 +208,7 @@ const Opener = Component.define({
 })
 
 // ---------------------------------------------------------------------------
-// A feature slot in a closure, under a Layer that never finishes building
+// A feature child in a closure, under a Layer that never finishes building
 // ---------------------------------------------------------------------------
 
 class Badge extends Feature.Service<Badge>()("Badge", { props: Schema.Struct({}) }) {}
@@ -308,7 +308,7 @@ describe("headless components", () => {
       const root = yield* TestHost.mount(Picker, {})
       click(root, "Copy")
       yield* TestHost.settle
-      // Menu and Dialog each run their own update, and what they emit reaches whoever wrote their slots.
+      // Menu and Dialog each run their own update, and what they emit reaches whoever declared them.
       assert.deepStrictEqual(updates(root), [
         "/Picker/Dialog[confirm]/Menu[actions] DomEvent Pick",
         "/Picker Emit Picked",
@@ -355,7 +355,7 @@ describe("headless components", () => {
       assert.deepStrictEqual(updates(root), ["/Opener DomEvent Open", "/Opener/Menu[Actions] Send Toggle"])
     })))
 
-  describe("a ref on a slot in the view and on one in a closure", () => {
+  describe("a ref on a child in the view and on one in a closure", () => {
     const crashed = (twin: "never" | "mount" | "open") =>
       TestHost.mount(Opener, { twin }, { fallback: (_, h) => h.text("crashed") })
     const failed = (root: { readonly log: () => ReadonlyArray<MessageLog.Entry> }) =>

@@ -89,6 +89,13 @@ export const elements = <N extends Node>(root: N): ReadonlyArray<N> => {
   return out
 }
 
+/**
+ * The elements directly under `node`. A node with children but no tag, such
+ * as the content a story shows under a child's slots, is seen through.
+ */
+const childElements = (node: Node): ReadonlyArray<Node> =>
+  (node.children ?? []).flatMap((child) => child.tag !== undefined ? [child] : childElements(child))
+
 const make = (description: string, all: <N extends Node>(root: N) => ReadonlyArray<N>): Locator => ({
   description,
   all
@@ -106,10 +113,7 @@ export const text = (text: string, options?: { readonly exact?: boolean | undefi
   const matches = (node: Node) => options?.exact === true ? textOf(node).trim() === text : textOf(node).includes(text)
   return make(
     `text ${JSON.stringify(text)}`,
-    (root) =>
-      elements(root).filter((node) =>
-        matches(node) && !(node.children ?? []).some((child) => child.tag !== undefined && matches(child))
-      )
+    (root) => elements(root).filter((node) => matches(node) && !childElements(node).some(matches))
   )
 }
 

@@ -39,7 +39,7 @@ describe("Head", () => {
     assert.strictEqual(head.html.lang, "fr")
   })
 
-  it("unions class tokens in order of first contribution and keeps one data slot per name", () => {
+  it("unions class tokens in order of first contribution and keeps one data attribute per name", () => {
     const head = Head.merge(node(
       [Head.htmlClass("h-full  dark"), Head.bodyClass(["a b"]), Head.htmlData("data-theme", "light")],
       node([Head.htmlClass(["dark", "x"]), Head.htmlData("data-theme", "dark"), Head.bodyData("data-page", "")])
