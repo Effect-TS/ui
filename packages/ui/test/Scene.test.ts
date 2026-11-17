@@ -288,11 +288,21 @@ describe("Scene", () => {
     })
   })
 
-  it("has no send and no Model", () => {
+  it("has no send, no Model and no query results", () => {
     const s = Scene.start(Note, {})
     assert.isUndefined((s as any).send)
     assert.isUndefined((s as any).model)
     assert.notProperty(s.current, "model")
-    assert.notProperty(s.current, "loaded")
+    assert.notProperty(s.current, "results")
+    assert.notProperty(s.current, "queries")
+  })
+
+  it("lists the queries on the record from make, current and check", () => {
+    const names = (record: Scene.Scene<any, any, any, any>) => record.queryInfo().map((info) => info.name)
+    const final = Scene.make(Note, {}, (s) => {
+      assert.deepStrictEqual(names(s.current), ["author"])
+      s.check((scene) => assert.deepStrictEqual(names(scene), ["author"]))
+    })
+    assert.deepStrictEqual(names(final), ["author"])
   })
 })

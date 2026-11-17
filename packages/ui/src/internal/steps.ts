@@ -340,7 +340,7 @@ export const baseRecord = (state: engine.State<any, any, any, any>) => ({
   dropped: state.dropped,
   loadingMore: state.loadingMore,
   subscriptions: state.subscriptions,
-  queries: state.queries
+  queryInfo: state.queryInfo
 })
 
 /**
