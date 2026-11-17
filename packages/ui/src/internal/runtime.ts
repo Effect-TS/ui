@@ -159,8 +159,6 @@ interface RElement {
 interface RunningMount {
   readonly scope: Scope.Closeable
   readonly input: MountInput | undefined
-  /** The instance whose Scope the mount's is forked from. */
-  readonly under: Instance
 }
 
 /** The latest input a mount was rendered with. The PubSub keeps one value for each reader. */
@@ -975,6 +973,8 @@ const setup = (
     const rest = Scope.closeUnsafe(scope, Exit.void)
     if (rest === undefined || (Exit.isExit(rest) && Exit.isSuccess(rest))) return undefined
     const fiber = forkNow(ctx, Effect.uninterruptible(rest))
+    // Ended in the fork: nothing is left to wait for.
+    if (fiber.pollUnsafe() !== undefined) return undefined
     track(closing, fiber)
     return fiber
   }
@@ -984,7 +984,7 @@ const setup = (
    */
   const closeUnder = (owner: Instance | undefined, scope: Scope.Closeable) => {
     const fiber = closeScope(scope)
-    if (fiber === undefined || owner === undefined || owner.scope.state._tag === "Closed") return
+    if (fiber === undefined || owner === undefined || isClosed(owner.scope)) return
     if (owner.closes === undefined) {
       // Added after the instance's Layer and selection, so it runs before they close.
       addFinalizer(owner.scope, awaitOthers(owner.closes = new Set()))
@@ -1678,13 +1678,14 @@ const setup = (
   }
 
   // -- keyed provides ---------------------------------------------------------
-  /** A keyed provide's read point is due: the instance had an update, or new props, since the last. */
-  const keyDue = (inst: Instance): boolean => inst.selection?.due === true
+  /** The selection whose read point is due: the instance had an update, or new props, since the last. */
+  const dueSelection = (inst: Instance): Selection | undefined =>
+    inst.selection?.due === true ? inst.selection : undefined
+  /** The Env an instance's work runs against. After a handled Layer failure, the nearest with services. */
+  const workEnv = (inst: Instance): Env => inst.env.failure !== undefined ? settled(inst.env) : inst.env
   /** Runs `go` once the instance's Layer is ready. After a handled failure, against the parent's services. */
-  const againstEnv = (inst: Instance, go: (envCtx: Context.Context<any>) => void, failed?: () => void) => {
-    if (inst.env.failure !== undefined) go(settled(inst.env).ctx!)
-    else whenReady(inst.env, go, failed)
-  }
+  const againstEnv = (inst: Instance, go: (envCtx: Context.Context<any>) => void, failed?: () => void) =>
+    whenReady(workEnv(inst), go, failed)
   /**
    * Starts a Subscription or a loader once the instance's Layer is ready. After a handled failure it
    * runs against the parent's services, except under a keyed provide: there it was set up for the
@@ -1695,7 +1696,8 @@ const setup = (
   }
   /** As `againstEnv`, now or once a due read of the keys has picked the Env it binds to. */
   const onceSelected = (inst: Instance, go: (envCtx: Context.Context<any>) => void, failed?: () => void) => {
-    if (keyDue(inst)) inst.selection!.held.push(() => againstEnv(inst, go, failed))
+    const due = dueSelection(inst)
+    if (due !== undefined) due.held.push(() => againstEnv(inst, go, failed))
     else againstEnv(inst, go, failed)
   }
 
@@ -1746,11 +1748,8 @@ const setup = (
     const stopped = inst.runs.filter((run) => !selection.issued.has(run))
     // Queued and awaiting runs first, so stopping a running one promotes only a kept run.
     for (const run of stopped) if (run.status !== "running") dropRun(inst, run)
-    for (const run of stopped) {
-      if (run.done) continue
-      if (run.fiber !== undefined) waits.push(run.fiber)
-      dropRun(inst, run)
-    }
+    for (const run of stopped) if (!run.done) dropRun(inst, run)
+    // The runs asked to stop whose fibers haven't exited, just now or in an earlier flush.
     if (inst.stopping !== undefined) {
       for (const run of inst.stopping) if (run.fiber !== undefined) waits.push(run.fiber)
     }
@@ -2671,7 +2670,7 @@ const setup = (
         }
         inst.runs.push(run)
         // Issued before a keyed provide's due read: a change of key keeps it.
-        if (keyDue(inst)) inst.selection!.issued.add(run)
+        dueSelection(inst)?.issued.add(run)
         if (run.detached) detachedRuns.set(run, inst)
         if (run.status === "running") startRun(inst, run)
         return
@@ -2696,7 +2695,7 @@ const setup = (
    * is still open. A service with no build, such as a fake from `Layer.succeed`, is owned by the root.
    */
   const survives = (inst: Instance, run: Run): boolean => {
-    const env = inst.env.failure !== undefined ? settled(inst.env) : inst.env
+    const env = workEnv(inst)
     if (env.ctx === undefined || run.command.service === undefined) return false
     const build = ownerOf(env.ctx, run)
     return build === undefined ? !rootClosed : !build.closed
@@ -3045,8 +3044,9 @@ const setup = (
     if (inst.closed || inst.waiting || (subscriptions === undefined && bound === undefined)) return
     // A keyed provide's read is due: nothing starts against services that may be about to go. The read
     // syncs. Before the first view the watches follow the Model at once, and the read restarts them.
-    if (inst.mounting === undefined && keyDue(inst)) {
-      inst.selection!.skipped = true
+    const due = inst.mounting === undefined ? dueSelection(inst) : undefined
+    if (due !== undefined) {
+      due.skipped = true
       return
     }
     // Sample the root once for server checks, and loader components for their watches.
@@ -3809,7 +3809,7 @@ const setup = (
         })
       })
     )
-    return { scope: mountScope, input, under }
+    return { scope: mountScope, input }
   }
 
   /** A patch gives a running mount its element's new input, when it differs by `Equal`. */
@@ -3930,14 +3930,15 @@ const setup = (
       )
     }
     // The part is no longer applied to the element, which stays: its mount ends here.
-    if (running !== undefined) { for (const entry of running) if (!out.includes(entry)) stopMount(entry.running) }
+    if (running !== undefined) { for (const entry of running) if (!out.includes(entry)) stopMount(inst, entry.running) }
     return out.length === 0 ? undefined : out
   }
 
-  const stopMount = (running: RunningMount | undefined) => {
+  /** Ends a mount of an element `under` rendered: its Scope is forked from `under`'s. */
+  const stopMount = (under: Instance, running: RunningMount | undefined) => {
     if (running === undefined) return
     removedMounts.add(running.scope)
-    closeUnder(running.under, running.scope)
+    closeUnder(under, running.scope)
   }
 
   // -- create ---------------------------------------------------------------
@@ -5134,15 +5135,17 @@ const setup = (
         inst.children.delete(rendered.inst)
         headDirty = true
         releaseWatches(rendered.inst)
-        closeUnder(rendered.inst.parent, rendered.inst.scope)
+        closeUnder(inst, rendered.inst.scope)
         return
       }
       case "Fallback":
         return closeAll(inst, rendered.inner)
       case "Element": {
         // The element's `onMount` work ends with it.
-        stopMount(rendered.mount)
-        if (rendered.ownedMounts !== undefined) { for (const entry of rendered.ownedMounts) stopMount(entry.running) }
+        stopMount(inst, rendered.mount)
+        if (rendered.ownedMounts !== undefined) {
+          for (const entry of rendered.ownedMounts) stopMount(inst, entry.running)
+        }
         for (const child of rendered.children) closeAll(inst, child)
         return
       }
