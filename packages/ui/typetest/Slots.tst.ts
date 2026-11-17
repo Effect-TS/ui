@@ -38,6 +38,16 @@ declare const other: View.Helper<typeof OtherMsg.Type, unknown> & View.Tags<Html
 declare const either: { readonly body: View.Child<PageMsg, Clock> } | { readonly footer: string }
 declare const stray: { readonly body: string } | { readonly header: string }
 declare const undeclared: { readonly header: string }
+declare const extra: { readonly body: string; readonly header: string }
+interface SlotMap {
+  readonly body: View.Child<PageMsg, Clock>
+}
+declare const interfaceSlots: SlotMap
+interface ExtraMap {
+  readonly body: string
+  readonly header: string
+}
+declare const interfaceExtra: ExtraMap
 
 describe("slots", () => {
   it("types h.slots in the view, fragments and Component.Helper", () => {
@@ -116,15 +126,31 @@ describe("slots", () => {
     expect(Panel).type.not.toBeCallableWith(h, { key: "p", slots: undeclared })
   })
 
-  it("checks names and messages with the parent's message given, and takes no content that needs services", () => {
-    expect(Panel<PageMsg>(h, { key: "p", slots: { body: h.p("x") } })).type.toBe<View.Child<PageMsg, never>>()
-    expect(Panel<PageMsg>).type.not.toBeCallableWith(h, { key: "p", slots: { header: "x" } })
-    expect(Panel<PageMsg>).type.not.toBeCallableWith(h, {
-      key: "p",
-      slots: { body: other.button.onClick(OtherMsg.make({ _tag: "Other" })) }
-    })
-    // Its requirements can't be inferred once a type argument is given, so they aren't dropped.
-    expect(Panel<PageMsg>).type.not.toBeCallableWith(h, { key: "p", slots: { body: Ticker(h, { key: "t" }) } })
+  it("takes slots from a variable typed by an interface, and keeps its requirements", () => {
+    expect(Panel(h, { key: "p", slots: interfaceSlots })).type.toBe<View.Child<PageMsg, Clock>>()
+  })
+
+  it("rejects an undeclared name in a variable that also passes a declared one", () => {
+    expect(Panel).type.not.toBeCallableWith(h, { key: "p", slots: extra })
+    expect(Panel).type.not.toBeCallableWith(h, { key: "p", slots: interfaceExtra })
+  })
+
+  it("takes no slots when the parent's message is given and the slots map isn't", () => {
+    // `SC` isn't inferred once a type argument is given, so nothing could check the map's names or
+    // requirements, a literal's included.
+    expect(Panel<PageMsg>(h, { key: "p" })).type.toBe<View.Child<PageMsg, never>>()
+    expect(Panel<PageMsg>).type.not.toBeCallableWith(h, { key: "p", slots: { body: h.p("x") } })
+    expect(Panel<PageMsg>).type.not.toBeCallableWith(h, { key: "p", slots: extra })
+  })
+
+  it("checks a slots map given as a type argument", () => {
+    expect(Panel<PageMsg, never, SlotMap>(h, { key: "p", slots: interfaceSlots })).type.toBe<
+      View.Child<PageMsg, Clock>
+    >()
+    expect(Panel<PageMsg, never, { readonly body: string; readonly header: string }>).type.not
+      .toBeCallableWith(h, { key: "p", slots: extra })
+    expect(Panel<PageMsg, never, { readonly body: View.Child<typeof OtherMsg.Type, never> }>).type.not
+      .toBeCallableWith(h, { key: "p", slots: { body: other.button.onClick(OtherMsg.make({ _tag: "Other" })) } })
   })
 
   it("rejects slots on headless and feature calls, from a variable too", () => {

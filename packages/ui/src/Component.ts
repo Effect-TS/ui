@@ -705,18 +705,12 @@ export interface Mountable<in out Props, out Events, out R = never, in Rcv = nev
    * `Component.Any`, takes `props` even when it needs none.
    */
   // The type parameters don't depend on the component, so a union of
-  // components without slots is callable. With `Msg` given and `SC` not,
-  // `SC` can't be inferred: its default takes content that needs no
-  // services, as `RF`'s takes such a fallback.
-  <
-    Msg,
-    RF = never,
-    // Any names, so an undeclared one is inferred and `SlotOptions` rejects it: a constraint that
-    // failed would stand in for `SC`, and accept it.
-    const SC extends { readonly [K in string]?: View.Input<NoInfer<Msg>, any> } = {
-      readonly [K in Sl]?: View.Input<NoInfer<Msg>, never>
-    }
-  >(
+  // components without slots is callable. `SC` is the slots map as passed:
+  // `SlotOptions` checks its names and content, since a constraint that
+  // failed would stand in for it and accept the map. With `Msg` given and
+  // `SC` not, `SC` isn't inferred, and nothing could check the map's names
+  // or requirements, so the call takes no slots.
+  <Msg, RF = never, const SC extends object = never>(
     h: View.Helper<Msg, unknown>,
     options:
       & View.Child.Options<Props, Events, NoInfer<Msg>, Rcv>
@@ -726,7 +720,7 @@ export interface Mountable<in out Props, out Events, out R = never, in Rcv = nev
           | ((result: AsyncResult.Failure<never, unknown>) => View.Content<NoInfer<Msg>, RF>)
           | undefined
       }
-      & SlotOptions<Sl, SC>
+      & SlotOptions<Sl, SC, NoInfer<Msg>>
       // Erased props are required, so every component is a `Component.Any`:
       // its options must fit every component's, including one whose props
       // are required.
@@ -1162,13 +1156,16 @@ export type LoaderHelpers<L> = [keyof L] extends [never] ? {} : {
 export type SlotHelpers<Sl extends string> = [Sl] extends [never] ? {}
   : { readonly slots: { readonly [K in Sl]: View.Outlet } }
 
-// The `slots` a call takes: none for a component without slots, and only the declared names otherwise.
-// A conditional map's names are every branch's, so a branch can't pass a name the others don't.
-type SlotOptions<Sl extends string, SC> = [Sl] extends [never] ? { readonly slots?: never }
-  : { readonly slots?: SC & { readonly [K in Exclude<SlotNames<SC>, Sl>]?: never } }
+// The `slots` a call takes: none for a component without slots, and otherwise only the declared names,
+// each with content for the parent's messages.
+type SlotOptions<Sl extends string, SC, Msg> = [Sl] extends [never] ? { readonly slots?: never }
+  : { readonly slots?: SC & CheckedSlots<Sl, SC, Msg> }
 
-// Distributes over a conditional map, whose `keyof` holds only the names every branch has.
-type SlotNames<SC> = SC extends unknown ? keyof SC : never
+// Distributes over a conditional map, whose `keyof` holds only the names every branch has. Mapped over
+// the map's own keys, so an interface needs no index signature.
+type CheckedSlots<Sl extends string, SC, Msg> = SC extends unknown
+  ? { readonly [K in keyof SC]: K extends Sl ? View.Input<Msg, any> : never }
+  : never
 type SlotRequirements<SC> = SC extends unknown ? View.Requirements<SC[keyof SC]> : never
 
 /**
