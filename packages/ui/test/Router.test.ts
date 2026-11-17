@@ -1,4 +1,4 @@
-import { Command, Component, Head, Loader, type MessageLog, type Renderer, Route, Router } from "@effect/ui"
+import { Command, Component, Head, type MessageLog, Query, type Renderer, Route, Router } from "@effect/ui"
 import * as runtime from "@effect/ui/internal/runtime"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -106,7 +106,7 @@ describe("Router", { concurrent: false }, () => {
 
   it.effect("a subset ignores an initial location outside it without checking a later navigation", () => {
     const People = AppRoute.subset(["Person"])
-    const problems: Array<Loader.Problem.Any> = []
+    const problems: Array<Query.Problem.Any> = []
     return Effect.gen(function*() {
       const router = yield* Router.Router
       const messages: Array<typeof People.Type> = []
@@ -126,7 +126,7 @@ describe("Router", { concurrent: false }, () => {
       assert.deepStrictEqual(problems, [])
     }).pipe(
       Effect.provide(Router.memory({ routes: AppRoute })),
-      Effect.provideService(Loader.Problems, (problem) => problems.push(problem))
+      Effect.provideService(Query.Problems, (problem) => problems.push(problem))
     )
   })
 
@@ -394,7 +394,7 @@ describe("Router", { concurrent: false }, () => {
   })
 
   for (const fail of [false, true]) {
-    it.effect(`seeds a cold entry from a restored loader field, stale, and refetches it once (${fail ? "failure" : "success"})`, () => {
+    it.effect(`seeds a cold entry from a restored query field, stale, and refetches it once (${fail ? "failure" : "success"})`, () => {
       const { history, layer } = setup("/people/1")
       const page = Effect.gen(function*() {
         const root = yield* mount
@@ -420,9 +420,9 @@ describe("Router", { concurrent: false }, () => {
             const log = root.log()
             const index = log.findIndex((entry) => entry._tag === "Mounted" && entry.path === "/App/Person[/people/1]")
             assert.isTrue((log[index] as MessageLog.Mounted).adopted)
-            // The restored loader state is logged right after Mounted.
-            const changed = log[index + 1]
-            assert.isTrue(changed?._tag === "LoaderChanged" && changed.name === "person")
+            // The restored result is logged right after Mounted.
+            const result = log[index + 1]
+            assert.isTrue(result?._tag === "QueryChanged" && result.name === "person")
             assert.strictEqual(
               root.frames().at(-1),
               "HomePerson 1Person 2SlowBackBlockUnblockPerson 1Refreshingcount 0Rename"
@@ -430,7 +430,10 @@ describe("Router", { concurrent: false }, () => {
             assert.strictEqual(root.entry(GetPerson, { id: 1 })?.fetch, "running")
             yield* TestClock.adjust("10 millis")
             yield* TestHost.settle
-            assert.deepStrictEqual(root.fetches().map((fetch) => [fetch.read, fetch.trigger]), [["GetPerson", "watch"]])
+            assert.deepStrictEqual(root.fetches().map((fetch) => [fetch.query, fetch.trigger]), [[
+              "GetPerson",
+              "watch"
+            ]])
             assert.strictEqual(personFetches.count, 2)
             const entry = root.entry(GetPerson, { id: 1 })!
             if (fail) {
@@ -457,7 +460,7 @@ describe("Router", { concurrent: false }, () => {
     })
   }
 
-  it.effect("drops a loader state taken under a patch from the restored state", () => {
+  it.effect("drops a query result taken under a patch from the restored state", () => {
     const { history, layer } = setup("/people/1")
     const path = "/App/Person[/people/1]"
     return Effect.gen(function*() {
@@ -486,13 +489,13 @@ describe("Router", { concurrent: false }, () => {
           const restored = log[index] as MessageLog.Mounted
           assert.isDefined(restored)
           assert.isTrue(restored.adopted)
-          // The Model is restored; the loader state isn't (a restored loader state is logged right after Mounted), so the
-          // loader starts from loading, and the fetch fills it.
+          // The Model is restored; the result isn't (a restored result is logged right after Mounted), so the
+          // query starts from loading, and the fetch fills it.
           assert.strictEqual((restored.model as { readonly name: string }).name, "Renamed")
-          assert.notStrictEqual(log[index + 1]?._tag, "LoaderChanged")
+          assert.notStrictEqual(log[index + 1]?._tag, "QueryChanged")
           assert.isTrue(
             log.slice(index + 1).some((entry) =>
-              entry._tag === "LoaderChanged" && entry.path === path && entry.name === "person"
+              entry._tag === "QueryChanged" && entry.path === path && entry.name === "person"
             )
           )
           assert.isTrue(root.text().includes("Person 1"))
@@ -990,8 +993,8 @@ describe("Router.prefetch", { concurrent: false }, () => {
     )
   const mountApp = Effect.flatMap(Router.currentRoute(Routes), (route) => TestHost.mount(Prefetching.App, { route }))
   const fetched = (root: TestHost.TestRoot<any, any, any>) =>
-    root.fetches().map((fetch) => [`${fetch.read}${fetch.logKey}`, fetch.trigger, fetch.path])
-  const tags = (problems: ReadonlyArray<Loader.Problem.Any>) => problems.map((problem) => problem._tag)
+    root.fetches().map((fetch) => [`${fetch.query}${fetch.logKey}`, fetch.trigger, fetch.path])
+  const tags = (problems: ReadonlyArray<Query.Problem.Any>) => problems.map((problem) => problem._tag)
 
   it.effect("walks a page with no instance on intent, and drops a repeat for 30 seconds", () =>
     prefetching(
@@ -1007,14 +1010,14 @@ describe("Router.prefetch", { concurrent: false }, () => {
           ["GetPerson{\"id\":1}", "prefetch", "/App"],
           ["GetPerson{\"id\":2}", "prefetch", "/App"]
         ])
-        const missing = yield* TestHost.expectProblem("PrefetchReadNotProvided")
+        const missing = yield* TestHost.expectProblem("PrefetchQueryNotProvided")
         assert.deepStrictEqual(
           missing.map((
             problem
-          ) => [(problem as Router.PrefetchReadNotProvided).page, (problem as Router.PrefetchReadNotProvided).read]),
+          ) => [(problem as Router.PrefetchQueryNotProvided).page, (problem as Router.PrefetchQueryNotProvided).query]),
           [["Walked", "GetNote"]]
         )
-        // A throw stops that page's walk only, after its loaders ran.
+        // A throw stops that page's walk only, after its queries ran.
         yield* router.intent("/broken")
         assert.deepStrictEqual(fetched(root).slice(before + 2).map(([key]) => key), [
           "GetPerson{\"id\":3}",
@@ -1031,7 +1034,7 @@ describe("Router.prefetch", { concurrent: false }, () => {
         assert.deepStrictEqual(tags(yield* TestHost.problems), [])
         yield* TestClock.adjust("1 second")
         yield* router.intent("/walk")
-        assert.strictEqual((yield* TestHost.expectProblem("PrefetchReadNotProvided")).length, 1)
+        assert.strictEqual((yield* TestHost.expectProblem("PrefetchQueryNotProvided")).length, 1)
         yield* TestHost.settle
       })
     ))
@@ -1235,7 +1238,7 @@ describe("Router throttle", { concurrent: false }, () => {
     const { history, inner, writes } = recorded(url, fails)
     const flushes: Array<() => void> = []
     const cleanups: Array<string> = []
-    const problems: Array<Loader.Problem.Any> = []
+    const problems: Array<Query.Problem.Any> = []
     const layer = Router.make({
       routes: Routes,
       history,
@@ -1256,7 +1259,7 @@ describe("Router throttle", { concurrent: false }, () => {
         return effect
       }).pipe(
         Effect.provide(layer),
-        Effect.provideService(Loader.Problems, (problem) => {
+        Effect.provideService(Query.Problems, (problem) => {
           problems.push(problem)
         }),
         Effect.scoped
@@ -1429,7 +1432,7 @@ describe("Router throttle", { concurrent: false }, () => {
 
   it.effect("reports a same-page replace the history throws on without a throttle", () => {
     const { history } = recorded("/search", (url) => url.includes("q="))
-    const problems: Array<Loader.Problem.Any> = []
+    const problems: Array<Query.Problem.Any> = []
     return Effect.gen(function*() {
       const router = yield* Router.Router
       assert.strictEqual(yield* replaceQuery("a"), "navigated")
@@ -1437,7 +1440,7 @@ describe("Router throttle", { concurrent: false }, () => {
       assert.deepStrictEqual(problems.map((problem) => problem._tag), ["HistoryWriteFailed"])
     }).pipe(
       Effect.provide(Router.make({ routes: Routes, history })),
-      Effect.provideService(Loader.Problems, (problem) => {
+      Effect.provideService(Query.Problems, (problem) => {
         problems.push(problem)
       })
     )

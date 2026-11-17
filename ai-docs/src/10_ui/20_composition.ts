@@ -1,7 +1,7 @@
 /**
  * @title Composing components, data and Layers
  *
- * Load a note with a `Loader` read and show it with child components. The
+ * Load a note with a `Query` and show it with child components. The
  * page handles a child's events, provides Layers with `Component.provide`,
  * makes one child swappable with `Feature.Service`, and passes its editor
  * into another component's slot. This entry module
@@ -15,8 +15,8 @@ import "@effect/ui/html/register"
 // A page is one file under `pages/`, in the folder for its URL. It imports
 // what it is composed from out of the features:
 //
-// - `fixtures/pages/notes/NotePage.ts`: the page, its loader and its Layers
-// - `fixtures/notes/loaders/GetNote.ts`: the read behind the loader
+// - `fixtures/pages/notes/NotePage.ts`: the page, its query and its Layers
+// - `fixtures/notes/queries/GetNote.ts`: the `Query` the page shows
 // - `fixtures/notes/components/NoteEditor.ts`: a child by value
 // - `fixtures/notes/components/NoteActivity.ts`: a child by service
 // - `fixtures/notes/components/ActivityLog.ts`: that service's implementation
@@ -24,7 +24,7 @@ import "@effect/ui/html/register"
 //   fills with markup of its own
 import { NotePage } from "./fixtures/pages/notes/NotePage.ts"
 
-// `NotePage` provides its loader and feature Layers with
+// `NotePage` provides its query and feature Layers with
 // `Component.provide`, and the editor inside it provides its own command.
 // The plain name is always the component with its Layers provided, and
 // `NotePageNoDeps` is the one without. Only the HTTP client is left for the

@@ -1,11 +1,11 @@
-import { Loader } from "@effect/ui"
+import { Query } from "@effect/ui"
 import { Effect, Schema } from "effect"
 import { NoteResults, NoteSort, NotesTag } from "../domain/Note.ts"
 import { Notes } from "../services/Notes.ts"
 
-// A read keyed by the whole search, so each page and order is cached on its
+// A query keyed by the whole search, so each page and order is cached on its
 // own and going back to an earlier page shows it at once.
-export class SearchNotes extends Loader.Service<SearchNotes>()(
+export class SearchNotes extends Query.Service<SearchNotes>()(
   "notes/SearchNotes",
   {
     args: { q: Schema.String, page: Schema.Number, sort: NoteSort },

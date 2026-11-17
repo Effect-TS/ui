@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Command, Component, Loader, Route, Router } from "@effect/ui"
+import { Command, Component, Query, Route, Router } from "@effect/ui"
 import { BrowserHost, BrowserRouter, Html, HtmlServer } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, expect, it } from "@effect/vitest"
@@ -52,7 +52,8 @@ const ListPage = Component.define({
   init: () => ({}),
   update: (model, message, $) =>
     ListMessage.match(message, {
-      Typed: ({ value }) => $.run(Router.patchSearch(ListRoute, $.props.route, { q: value || undefined }).pipe(patched)),
+      Typed: ({ value }) =>
+        $.run(Router.patchSearch(ListRoute, $.props.route, { q: value || undefined }).pipe(patched)),
       Next: () =>
         $.run(
           Router.patchSearch(ListRoute, $.props.route, { page: $.props.route.search.page + 1 }, {
@@ -179,7 +180,7 @@ const hashRouter = Effect.suspend(() => {
 
 describe("BrowserRouter", { concurrent: false }, () => {
   it.effect("hydrates a server render when both sides take their props from their own Router", () => {
-    const problems: Array<Loader.Problem.Any> = []
+    const problems: Array<Query.Problem.Any> = []
     return Effect.gen(function*() {
       const rendered = yield* HtmlServer.renderToHtml(App, Router.props(AppRoute)).pipe(
         Effect.provide([People.layer, Router.static({ routes: AppRoute, url: "/people/1" })])
@@ -197,11 +198,11 @@ describe("BrowserRouter", { concurrent: false }, () => {
       assert.strictEqual(app.querySelector("h1"), heading)
       assert.strictEqual(heading?.textContent, "Person 1")
       assert.deepStrictEqual(problems, [])
-    }).pipe(Effect.provideService(Loader.Problems, (problem) => problems.push(problem)))
+    }).pipe(Effect.provideService(Query.Problems, (problem) => problems.push(problem)))
   })
 
   it.effect("exempts hydrated hash roots, but checks client-only hash roots", () => {
-    const problems: Array<Loader.Problem.Any> = []
+    const problems: Array<Query.Problem.Any> = []
     return Effect.gen(function*() {
       const rendered = yield* hashShell(App)
       const context = yield* hashRouter
@@ -224,11 +225,11 @@ describe("BrowserRouter", { concurrent: false }, () => {
       assert.strictEqual(client.model()?.route._tag, "Person")
       assert.strictEqual(problems.length, 1)
       assert.strictEqual(problems[0]._tag, "RouteMismatch")
-    }).pipe(Effect.provide(People.layer), Effect.provideService(Loader.Problems, (problem) => problems.push(problem)))
+    }).pipe(Effect.provide(People.layer), Effect.provideService(Query.Problems, (problem) => problems.push(problem)))
   })
 
   it.effect("exempts roots hydrated from a static render when only the search differs", () => {
-    const problems: Array<Loader.Problem.Any> = []
+    const problems: Array<Query.Problem.Any> = []
     const search = SearchRoute.make({ _tag: "Search", search: {} })
     const prerender = (url: string, route: typeof SearchRoute.Type, isStatic: boolean) =>
       HtmlServer.renderToHtml(SearchApp, { route }, { static: isStatic }).pipe(
@@ -269,11 +270,11 @@ describe("BrowserRouter", { concurrent: false }, () => {
       const fromOther = yield* hydrate(context, other)
       assert.deepStrictEqual(fromOther.model(), SearchRoute.make({ _tag: "Search", search: { q: "x" } }))
       assert.strictEqual(mismatches(), 2)
-    }).pipe(Effect.provideService(Loader.Problems, (problem) => problems.push(problem)))
+    }).pipe(Effect.provideService(Query.Problems, (problem) => problems.push(problem)))
   })
 
   it.effect("checks hash roots that cannot adopt a server Model", () => {
-    const problems: Array<Loader.Problem.Any> = []
+    const problems: Array<Query.Problem.Any> = []
     return Effect.gen(function*() {
       const Deferred = App.pipe(Component.provide(People.layer, { server: false }))
       const deferred = yield* hashShell(Deferred)
@@ -295,7 +296,7 @@ describe("BrowserRouter", { concurrent: false }, () => {
         assert.strictEqual(problems.filter((problem) => problem._tag === "RouteMismatch").length, 1)
         problems.length = 0
       }
-    }).pipe(Effect.provide(People.layer), Effect.provideService(Loader.Problems, (problem) => problems.push(problem)))
+    }).pipe(Effect.provide(People.layer), Effect.provideService(Query.Problems, (problem) => problems.push(problem)))
   })
 
   it.effect("navigates by link, back and forward, and the head and announcement follow", () =>

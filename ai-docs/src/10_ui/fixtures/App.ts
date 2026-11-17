@@ -54,7 +54,7 @@ export const App = Component.define({
         // `match` is exhaustive. Key each page by its path with `printPath`,
         // so a new path mounts a fresh page instead of reusing the old state.
         // `printPath` leaves out the search, so a search change updates the
-        // page in place with new props, and its loaders keep their last
+        // page in place with new props, and its queries keep their last
         // results. Keyed by `print`, the search page would remount on every
         // keystroke.
         //

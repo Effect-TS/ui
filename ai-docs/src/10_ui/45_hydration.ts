@@ -15,8 +15,8 @@ import { AppRoute } from "./fixtures/routes.ts"
 
 // Mount the same component with the same props, plus the server's state.
 // `Router.props` reads the route from the browser's URL. Each instance then
-// adopts the server's state, its Model and its loader state, and its DOM
-// nodes instead of rebuilding them. The reads the server shipped aren't
+// adopts the server's state, its Model and its query results, and its DOM
+// nodes instead of rebuilding them. The query results the server shipped aren't
 // fetched again.
 //
 // A Layer that can never be ready on the server, such as a live connection,

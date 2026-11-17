@@ -35,7 +35,7 @@
  * its whole route as props, typed by a one-case subset such as
  * `AppRoute.subset(["Search"])`, and reads `h.props.route.search`. A page
  * with no search can take picked fields, such as `{ id: route.params.id }`.
- * The page writes the search with `Router.patchSearch`, and a loader that
+ * The page writes the search with `Router.patchSearch`, and a query that
  * reads it can wait for typing to stop with its `debounce` option.
  *
  * **Example** (A root that follows the route)
@@ -101,7 +101,7 @@ import type * as Component from "./Component.ts"
 import type * as Head from "./Head.ts"
 import * as services from "./internal/services.ts"
 import { canonical, pairsWithout, withPairs } from "./internal/url.ts"
-import * as Loader from "./Loader.ts"
+import * as Query from "./Query.ts"
 import type * as Route from "./Route.ts"
 import * as Subscription from "./Subscription.ts"
 
@@ -637,7 +637,7 @@ export const subscription = <U extends Routes, Msg>(
   /** The message for a location, if any. `initial`: the first location this Subscription sees. */
   const messageOf = (
     router: Router,
-    report: (problem: Loader.Problem.Any) => void,
+    report: (problem: Query.Problem.Any) => void,
     root: services.RootHandle | undefined,
     location: Location,
     initial: boolean
@@ -662,7 +662,7 @@ export const subscription = <U extends Routes, Msg>(
   }
   const stream = Stream.unwrap(Effect.gen(function*() {
     const router = yield* Router
-    const report = yield* Loader.Problems
+    const report = yield* Query.Problems
     const root = (yield* services.CurrentRoot)()
     let first = true
     return router.changes.pipe(
@@ -681,7 +681,7 @@ export const subscription = <U extends Routes, Msg>(
     const router = Context.get(context as Context.Context<Router>, Router)
     const engine = engines.get(router)
     if (engine === undefined) return undefined
-    const report = Context.get(context as Context.Context<any>, Loader.Problems)
+    const report = Context.get(context as Context.Context<any>, Query.Problems)
     // Read at delivery: the root attaches to the Router after its first render.
     const root = Context.get(context, services.CurrentRoot)
     let first = true
@@ -708,7 +708,7 @@ export const subscription = <U extends Routes, Msg>(
   }
   return Object.assign(Subscription.make("@effect/ui/Router", stream), {
     [services.direct]: direct,
-    [services.onServer]: (ctx: Context.Context<never>, report: (problem: Loader.Problem.Any) => void) => {
+    [services.onServer]: (ctx: Context.Context<never>, report: (problem: Query.Problem.Any) => void) => {
       const router = Context.getOption(ctx as Context.Context<Router>, Router)
       if (Option.isNone(router)) return
       const route = routeOf(router.value, union, router.value.location())
@@ -725,7 +725,7 @@ const PageTypeId = "~@effect/ui/Router/Page" as const
 
 /**
  * A page a `Router.prefetch` handler names: a component and its props.
- * `R` is the reads the component's own loaders name.
+ * `R` is the services of the component's own queries.
  *
  * @stability experimental
  * @category models
@@ -738,23 +738,23 @@ export interface Page<out R = never> {
 }
 
 /**
- * The reads a component's own loaders name: what `Router.page` adds to the
+ * The reads a component's own queries name: what `Router.page` adds to the
  * declarer's requirements.
  *
  * @stability experimental
  * @category utility types
  * @since 0.1.0
  */
-export type PageRequirements<C> = C extends unknown ? Component.LoaderServices<Component.Loaders<C>> : never
+export type PageRequirements<C> = C extends unknown ? Component.QueryServices<Component.Queries<C>> : never
 
-// A `Mountable` has its Model erased, and with it the reads `Router.page` adds to the declarer. Checked
+// A `Mountable` has its Model erased, and with it the queries `Router.page` adds to the declarer. Checked
 // per member, so a union with one erased member is rejected too.
 type PageInput<C> = true extends (C extends unknown ? IsErased<Component.Model<C>> : never) ? ErasedPage : unknown
 
 type IsErased<M> = [M] extends [never] ? true : 0 extends (1 & M) ? true : false
 
 interface ErasedPage {
-  readonly "Router.page needs the component's Model to find its reads. Pass the component, not a Mountable":
+  readonly "Router.page needs the component's Model to find its queries. Pass the component, not a Mountable":
     unique symbol
 }
 
@@ -764,15 +764,15 @@ interface ErasedPage {
  * **Details**
  *
  * The props argument is left out when the component takes none, as with
- * a component call's `props`. The page's own reads join the declaring component's
- * requirements, so a read the page provides itself is a compile error at
+ * a component call's `props`. The page's own queries join the declaring component's
+ * requirements, so a query the page provides itself is a compile error at
  * `mount`: provide it at the declarer, or return `[]` for that route.
  *
  * **Gotchas**
  *
  * Accepts a component built with `Component.define`, with or without
  * `Component.provide`. Rejects features and `Component.Mountable` values,
- * whose erased Model hides their reads.
+ * whose erased Model hides their queries.
  *
  * @stability experimental
  * @category subscriptions
@@ -798,7 +798,7 @@ export type PrefetchMap<U extends Routes> = {
 }
 
 /**
- * The reads every page of a `Router.prefetch` map names.
+ * The queries every page of a `Router.prefetch` map names.
  *
  * @stability experimental
  * @category utility types
@@ -812,7 +812,7 @@ export type PrefetchRequirements<M> = {
 type PageRequirement<P> = P extends Page<infer R> ? R : never
 
 /**
- * Declares the reads of each route's pages, so they are fetched before the
+ * Declares the queries of each route's pages, so they are fetched before the
  * pages mount: on link intent and on navigation.
  *
  * **Details**
@@ -821,15 +821,15 @@ type PageRequirement<P> = P extends Page<infer R> ? R : never
  * the routes it is given: pass `AppRoute.subset(...)` to declare a section's
  * routes only, and return `[]` for a route with nothing to fetch. For each
  * page the runtime runs `init` with the page's props, discarding its
- * Commands, prefetches what its loaders would watch first, and walks its
- * initial view into its component children. A loader that waits on loaded
+ * Commands, prefetches what its queries would watch first, and walks its
+ * initial view into its component children. A query that waits on loaded
  * data is skipped, and so is a feature child.
  *
- * The declaration runs in the declaring instance's context, so the reads must
- * be provided at the declarer or above it. A read below the page that the
- * declarer can't see is skipped, and reported as `PrefetchReadNotProvided`
+ * The declaration runs in the declaring instance's context, so the queries must
+ * be provided at the declarer or above it. A query below the page that the
+ * declarer can't see is skipped, and reported as `PrefetchQueryNotProvided`
  * unless a `Component.provide` sits between the page and the component that
- * needs it. A throw from `init`, a loader or `view` during the walk stops
+ * needs it. A throw from `init`, a query or `view` during the walk stops
  * that page's walk and is reported as `PrefetchThrew`.
  *
  * It runs on `intent(href)`, which `BrowserRouter` calls on hover, focus
@@ -853,7 +853,7 @@ type PageRequirement<P> = P extends Page<infer R> ? R : never
  *
  * ```ts
  * import { Effect, Schema } from "effect"
- * import { Loader } from "@effect/ui"
+ * import { Query } from "@effect/ui"
  * import { Component, Route, Router } from "@effect/ui"
  *
  * const AppRoute = Route.union({
@@ -861,7 +861,7 @@ type PageRequirement<P> = P extends Page<infer R> ? R : never
  *   Person: Route.make("/people/:id", { params: { id: Schema.Number } })
  * })
  *
- * class GetPerson extends Loader.Service<GetPerson>()("GetPerson", {
+ * class GetPerson extends Query.Service<GetPerson>()("GetPerson", {
  *   args: { id: Schema.Number },
  *   success: Schema.String
  * }, Effect.succeed(({ id }) => Effect.succeed(`Person ${id}`))) {}
@@ -871,7 +871,7 @@ type PageRequirement<P> = P extends Page<infer R> ? R : never
  *   props: Schema.Struct({ id: Schema.Number }),
  *   model: Schema.Struct({}),
  *   message: Schema.Never,
- *   loaders: { person: { load: GetPerson, args: (_model, props) => ({ id: props.id }) } }
+ *   queries: { person: { query: GetPerson, args: (_model, props) => ({ id: props.id }) } }
  * }).make({
  *   init: () => ({}),
  *   update: (model) => model,
@@ -914,12 +914,12 @@ export class PrefetchThrew extends Data.TaggedClass("PrefetchThrew")<{
   readonly path: string
   /** The page's component name. */
   readonly page: string
-  /** What `init`, a loader or `view` threw. */
+  /** What `init`, a query or `view` threw. */
   readonly error: unknown
 }> {}
 
 /**
- * A read in a `Router.prefetch` walk is missing from the declarer's context,
+ * A query in a `Router.prefetch` walk is missing from the declarer's context,
  * with no `Component.provide` between the page and the component that needs
  * it. That read was skipped.
  *
@@ -927,14 +927,14 @@ export class PrefetchThrew extends Data.TaggedClass("PrefetchThrew")<{
  * @category problems
  * @since 0.1.0
  */
-export class PrefetchReadNotProvided extends Data.TaggedClass("PrefetchReadNotProvided")<{
+export class PrefetchQueryNotProvided extends Data.TaggedClass("PrefetchQueryNotProvided")<{
   readonly message: string
   /** The declaring instance's path. */
   readonly path: string
   /** The page's component name. */
   readonly page: string
-  /** The read's name. */
-  readonly read: string
+  /** The query's name. */
+  readonly query: string
 }> {}
 
 /**
@@ -967,8 +967,8 @@ export class PrefetchEntryNotWatched extends Data.TaggedClass("PrefetchEntryNotW
   readonly path: string
   /** The page's component name. */
   readonly page: string
-  /** The read's name. */
-  readonly read: string
+  /** The query's name. */
+  readonly query: string
   /** The entry's log key. */
   readonly logKey: string
 }> {}
@@ -1148,7 +1148,7 @@ const readState = (state: unknown): EntryState | undefined => {
 const writeState = (entry: EntryState): unknown => ({ [stateKey]: entry })
 
 /**
- * Writing the instances' saved state (each Model, plus its loader state) into
+ * Writing the instances' saved state (each Model, plus its query results) into
  * `history.state` threw, as a browser does when the state is too large. The
  * history entry was written with its index only, so the saved state survives
  * in memory and not across a reload.
@@ -1199,19 +1199,25 @@ const commandLayers = Layer.mergeAll(
  * settle timing; a host adds scroll, announcements and focus in `onSettled`.
  *
  * History restore: before leaving an entry, the Router saves the encoded
- * state of every mounted instance by path: its Model and loader state. It can't save only the page's
+ * state of every mounted instance by path: its Model and query results. It can't save only the page's
  * subtree, because which instances the navigation unmounts is only known
  * after it. On back and forward, an instance created for the entry adopts its
  * saved state, so only the re-keyed subtree is restored, and an instance that
  * stayed mounted keeps its own. As with hydration, `init` is replayed and
  * every one of its Commands runs.
  *
- * A restored loader state seeds the cache when its entry is cold, as after a
+ * A restored query result seeds the cache when its entry is cold, as after a
  * reload: the entry is stored stale, so the first frame shows the data with
  * `waiting: true` and one refetch runs. If the refetch fails, the data stays
- * as the Failure's previous Success. A warm entry is used as it is. A loader state
+ * as the Failure's previous Success. A warm entry is used as it is. A result
  * taken under an optimistic patch is never a seed: it is dropped from the
  * restored state and starts from loading.
+ *
+ * Saved state is decoded with the component's current Schemas, as one value.
+ * State that doesn't decode, such as state an older build wrote before its
+ * Model or state format changed, is dropped whole: the instance runs `init`
+ * as if nothing was saved, its saved Model is lost too, and its queries
+ * fetch afresh.
  *
  * The snapshot is kept in memory per entry. When a push leaves an entry, it's
  * also written into that entry's `state`, so it survives a reload. When back
@@ -1251,7 +1257,7 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       return yield* Effect.die(new Error(`The Router's routes don't parse the initial URL "${start.url}"`))
     }
     // The problems sink of the first mounted root, or the one where the Router is built.
-    const fallbackReport = yield* Loader.Problems
+    const fallbackReport = yield* Query.Problems
     let index = readState(start.state)?.index ?? 0
     const initialUrl = canonical(routes, resolved.value, startUrl)
     if (resolved.value.redirected || readState(start.state) === undefined || initialUrl !== startUrl) {

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Command, Component, Loader, MessageLog, type Renderer, Route, Router, View } from "@effect/ui"
+import { Command, Component, MessageLog, Query, type Renderer, Route, Router, View } from "@effect/ui"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, expect, it } from "@effect/vitest"
@@ -35,8 +35,8 @@ describe("BrowserHost", { concurrent: false }, () => {
     Effect.gen(function*() {
       const scope = yield* Scope.make()
       const context = yield* Layer.buildWithScope(BrowserHost.layer(), scope)
-      const visibility = Context.get(context, Loader.Visibility)
-      const connectivity = Context.get(context, Loader.Connectivity)
+      const visibility = Context.get(context, Query.Visibility)
+      const connectivity = Context.get(context, Query.Connectivity)
       const seen: Array<string> = []
       visibility.subscribe(() => seen.push(`visible ${visibility.get()}`))
       connectivity.subscribe(() => seen.push(`online ${connectivity.get()}`))

@@ -1,5 +1,5 @@
-import { Loader } from "@effect/ui"
-import { TestLoader } from "@effect/ui/testing"
+import { Query } from "@effect/ui"
+import { TestQuery } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Deferred, Effect, Equal, Exit, Fiber, Hash, Latch, Layer, Option, Schema, Scope } from "effect"
 import type { Duration } from "effect"
@@ -23,10 +23,10 @@ const show = (result: AsyncResult.AsyncResult<unknown, unknown>, patched = false
     ? "Failure(" + Option.getOrElse(Cause.findErrorOption(result.cause), () => "?") + ")"
     : "Initial") + (result.waiting ? " waiting" : "") + (patched ? " patched" : "")
 
-// A read whose fetcher takes 10 ms and returns what the server holds.
+// A query whose fetcher takes 10 ms and returns what the server holds.
 const makeUsers = (staleTime: Duration.Input = "30 seconds") => {
   const db = { calls: 0, name: "Ann", fail: false }
-  class GetUser extends Loader.Service<GetUser>()(
+  class GetUser extends Query.Service<GetUser>()(
     "users/GetUser",
     {
       args: { id: Schema.String },
@@ -43,12 +43,12 @@ const makeUsers = (staleTime: Duration.Input = "30 seconds") => {
       })
     )
   ) {}
-  return { db, GetUser, provide: Effect.provide(Layer.merge(GetUser.layer, TestLoader.layer())) }
+  return { db, GetUser, provide: Effect.provide(Layer.merge(GetUser.layer, TestQuery.layer())) }
 }
 
 const makeCount = (staleTime: Duration.Input = "30 seconds") => {
   const db = { calls: 0, count: 0 }
-  class GetCount extends Loader.Service<GetCount>()(
+  class GetCount extends Query.Service<GetCount>()(
     "counts/GetCount",
     {
       args: { id: Schema.String },
@@ -64,16 +64,16 @@ const makeCount = (staleTime: Duration.Input = "30 seconds") => {
       })
     )
   ) {}
-  return { db, GetCount, provide: Effect.provide(Layer.merge(GetCount.layer, TestLoader.layer())) }
+  return { db, GetCount, provide: Effect.provide(Layer.merge(GetCount.layer, TestQuery.layer())) }
 }
 
-// Watches the patched view, as a loader field does, and records what it emits.
-const watchPatched = Effect.fnUntraced(function*<R extends Loader.Read.Any>(read: R, args: Loader.Read.Args<R>) {
-  const cache = Loader.internals(yield* Loader.Cache)
+// Watches the patched view, as a query field does, and records what it emits.
+const watchPatched = Effect.fnUntraced(function*<R extends Query.Query.Any>(read: R, args: Query.Query.Args<R>) {
+  const cache = Query.internals(yield* Query.Cache)
   const fetcher = yield* (read as any) as Effect.Effect<(args: any) => Effect.Effect<any, any>>
   const seen: Array<string> = []
   const handle = cache.watch(
-    Loader.defOf(read),
+    Query.defOf(read),
     args,
     fetcher,
     (result, patched) => seen.push(show(result, patched)),
@@ -89,43 +89,43 @@ const watchPatched = Effect.fnUntraced(function*<R extends Loader.Read.Any>(read
 
 interface RunOptions {
   readonly command?: string
-  readonly invalidates?: ReadonlyArray<Loader.Target>
-  readonly optimistic?: ReadonlyArray<Loader.Patch>
+  readonly invalidates?: ReadonlyArray<Query.Target>
+  readonly optimistic?: ReadonlyArray<Query.Patch>
 }
 
 // Issues a run, as the @effect/ui runtime does: its patches register now, and `start` runs the body in it.
 const issue = Effect.fnUntraced(function*(options: RunOptions) {
-  const cache = Loader.internals(yield* Loader.Cache)
+  const cache = Query.internals(yield* Query.Cache)
   const handle = cache.beginRun({
     command: options.command ?? "Save",
-    invalidates: (options.invalidates ?? []) as ReadonlyArray<Loader.Target>,
-    optimistic: options.optimistic as ReadonlyArray<Loader.Patch> | undefined
+    invalidates: (options.invalidates ?? []) as ReadonlyArray<Query.Target>,
+    optimistic: options.optimistic as ReadonlyArray<Query.Patch> | undefined
   })
   return {
     handle,
-    start: <A, E, R>(body: Effect.Effect<A, E, R>, writes?: (success: A) => ReadonlyArray<Loader.Write>) =>
-      Effect.forkScoped(handle.run(body, writes as ((success: A) => ReadonlyArray<Loader.Write>) | undefined))
+    start: <A, E, R>(body: Effect.Effect<A, E, R>, writes?: (success: A) => ReadonlyArray<Query.Write>) =>
+      Effect.forkScoped(handle.run(body, writes as ((success: A) => ReadonlyArray<Query.Write>) | undefined))
   }
 })
 
 const run = <A, E, R>(
   options: RunOptions,
   body: Effect.Effect<A, E, R>,
-  writes?: (success: A) => ReadonlyArray<Loader.Write>
+  writes?: (success: A) => ReadonlyArray<Query.Write>
 ) => Effect.flatMap(issue(options), (issued) => issued.start(body, writes))
 
 const fetchLog = Effect.map(
-  TestLoader.fetches,
+  TestQuery.fetches,
   (fetches) =>
     fetches.map((fetch) => fetch.trigger + (fetch.restart ? " restart" : "") + (fetch.stored ? "" : " unstored"))
 )
 
-describe("Loader runs", () => {
+describe("Query runs", () => {
   describe("pure helpers", () => {
     const { GetUser } = makeUsers()
     const { GetCount } = makeCount()
-    const Tagged = Loader.Tag("tagged")
-    class GetTagged extends Loader.Service<GetTagged>()("tagged/GetTagged", {
+    const Tagged = Query.Tag("tagged")
+    class GetTagged extends Query.Service<GetTagged>()("tagged/GetTagged", {
       args: {},
       success: Schema.Number,
       error: Schema.Never,
@@ -140,24 +140,24 @@ describe("Loader runs", () => {
         GetCount.patch({ id: "b" }, () => -1),
         GetUser.patch({ id: "a" }, (user) => ({ ...user, name: "Bob" }))
       ]
-      assert.strictEqual(Loader.applyPatches(patches, GetCount, { id: "a" }, 1), 20)
-      assert.strictEqual(Loader.applyPatches(patches, GetCount, { id: "b" }, 1), -1)
-      assert.strictEqual(Loader.applyPatches(patches, GetCount, { id: "c" }, 1), 1)
+      assert.strictEqual(Query.applyPatches(patches, GetCount, { id: "a" }, 1), 20)
+      assert.strictEqual(Query.applyPatches(patches, GetCount, { id: "b" }, 1), -1)
+      assert.strictEqual(Query.applyPatches(patches, GetCount, { id: "c" }, 1), 1)
     })
 
     it("invalidatesEntry counts declared targets and those implied by patches", () => {
       const one = { invalidates: [GetUser.entry({ id: "1" })] }
-      assert.isTrue(Loader.invalidatesEntry(one, GetUser, { id: "1" }))
-      assert.isFalse(Loader.invalidatesEntry(one, GetUser, { id: "2" }))
-      assert.isTrue(Loader.invalidatesEntry({ invalidates: [GetUser] }, GetUser, { id: "2" }))
-      assert.isTrue(Loader.invalidatesEntry({ invalidates: [Tagged] }, GetTagged, {}))
-      assert.isFalse(Loader.invalidatesEntry({ invalidates: [Tagged] }, GetUser, { id: "1" }))
-      // A patch implies its entry; a patchAll the whole read.
+      assert.isTrue(Query.invalidatesEntry(one, GetUser, { id: "1" }))
+      assert.isFalse(Query.invalidatesEntry(one, GetUser, { id: "2" }))
+      assert.isTrue(Query.invalidatesEntry({ invalidates: [GetUser] }, GetUser, { id: "2" }))
+      assert.isTrue(Query.invalidatesEntry({ invalidates: [Tagged] }, GetTagged, {}))
+      assert.isFalse(Query.invalidatesEntry({ invalidates: [Tagged] }, GetUser, { id: "1" }))
+      // A patch implies its entry; a patchAll the whole query.
       const patched = { invalidates: [], optimistic: [GetCount.patch({ id: "a" }, (n) => n)] }
-      assert.isTrue(Loader.invalidatesEntry(patched, GetCount, { id: "a" }))
-      assert.isFalse(Loader.invalidatesEntry(patched, GetCount, { id: "b" }))
+      assert.isTrue(Query.invalidatesEntry(patched, GetCount, { id: "a" }))
+      assert.isFalse(Query.invalidatesEntry(patched, GetCount, { id: "b" }))
       const all = { invalidates: [], optimistic: [GetCount.patchAll((n) => n)] }
-      assert.isTrue(Loader.invalidatesEntry(all, GetCount, { id: "z" }))
+      assert.isTrue(Query.invalidatesEntry(all, GetCount, { id: "z" }))
     })
 
     it("a target's args that don't encode throw where the target is made", () => {
@@ -201,7 +201,7 @@ describe("Loader runs", () => {
             )
             yield* advance(50)
             assert.strictEqual(db.calls, 2)
-            const entry = yield* TestLoader.entry(GetUser, { id: "1" })
+            const entry = yield* TestQuery.entry(GetUser, { id: "1" })
             assert.isFalse(entry?.stale)
             assert.deepStrictEqual(entry?.patches, { live: 0, held: 0 })
           }).pipe(provide)
@@ -222,8 +222,8 @@ describe("Loader runs", () => {
         assert.strictEqual(yield* Fiber.join(fiber), "nope")
         assert.deepStrictEqual(yield* Fiber.join(other), { id: "1", name: "Ann" })
         assert.deepStrictEqual(yield* fetchLog, ["get", "get unstored"])
-        // The failed run invalidated the read: the unwatched entry is stale, and nothing fetched it.
-        assert.isTrue((yield* TestLoader.entry(GetUser, { id: "1" }))?.stale)
+        // The failed run invalidated the query: the unwatched entry is stale, and nothing fetched it.
+        assert.isTrue((yield* TestQuery.entry(GetUser, { id: "1" }))?.stale)
       }).pipe(provide)
     })
   })
@@ -245,7 +245,7 @@ describe("Loader runs", () => {
         yield* Fiber.join(firstFiber)
         // The first is held, the second still live: its refetch waits.
         assert.deepStrictEqual(
-          { ...(yield* TestLoader.entry(GetCount, { id: "a" })), stored: undefined, view: undefined },
+          { ...(yield* TestQuery.entry(GetCount, { id: "a" })), stored: undefined, view: undefined },
           {
             stored: undefined,
             view: undefined,
@@ -276,11 +276,11 @@ describe("Loader runs", () => {
           Effect.sleep(50).pipe(Effect.andThen(Effect.sync(() => db.count++)))
         )
         yield* advance(20)
-        yield* TestLoader.setVisible(false)
-        yield* TestLoader.setVisible(true)
+        yield* TestQuery.setVisible(false)
+        yield* TestQuery.setVisible(true)
         yield* advance(5)
         // Deferred, not fetched: a refetch landing now would show 2.
-        assert.strictEqual((yield* TestLoader.entry(GetCount, { id: "a" }))?.fetch, "held")
+        assert.strictEqual((yield* TestQuery.entry(GetCount, { id: "a" }))?.fetch, "held")
         yield* advance(30)
         yield* Fiber.join(fiber)
         yield* advance(10)
@@ -374,9 +374,9 @@ describe("Loader runs", () => {
         assert.deepStrictEqual(watcher.seen, ["Ann", "Bob patched", "Ann waiting", "Ann"])
 
         yield* Fiber.join(yield* run({ optimistic: [bob] }, Effect.void))
-        assert.deepStrictEqual((yield* TestLoader.entry(GetUser, { id: "1" }))?.patches, { live: 0, held: 1 })
+        assert.deepStrictEqual((yield* TestQuery.entry(GetUser, { id: "1" }))?.patches, { live: 0, held: 1 })
         yield* advance(10)
-        assert.deepStrictEqual((yield* TestLoader.entry(GetUser, { id: "1" }))?.patches, { live: 0, held: 0 })
+        assert.deepStrictEqual((yield* TestQuery.entry(GetUser, { id: "1" }))?.patches, { live: 0, held: 0 })
         assert.deepStrictEqual(watcher.seen.slice(4), ["Bob patched", "Bob waiting patched", "Ann"])
       }).pipe(provide)
     })
@@ -404,10 +404,10 @@ describe("Loader runs", () => {
         yield* Fiber.join(
           yield* run({ optimistic: [GetUser.patch({ id: "1" }, (user) => ({ ...user, name: "Bob" }))] }, Effect.void)
         )
-        const entry = yield* TestLoader.entry(GetUser, { id: "1" })
+        const entry = yield* TestQuery.entry(GetUser, { id: "1" })
         assert.deepStrictEqual([entry?.view._tag === "Success" && entry.view.value.name, entry?.patched], ["Bob", true])
         yield* advance("5 minutes")
-        assert.isUndefined(yield* TestLoader.entry(GetUser, { id: "1" }))
+        assert.isUndefined(yield* TestQuery.entry(GetUser, { id: "1" }))
       }).pipe(provide)
     })
 
@@ -426,15 +426,15 @@ describe("Loader runs", () => {
           ]
         }))
         assert.isTrue(Exit.hasDies(exit))
-        assert.deepStrictEqual((yield* TestLoader.entry(GetCount, { id: "a" }))?.patches, { live: 0, held: 0 })
+        assert.deepStrictEqual((yield* TestQuery.entry(GetCount, { id: "a" }))?.patches, { live: 0, held: 0 })
         // A cold entry, and an entry created after a patchAll was issued, hold no patch.
         yield* issue({ optimistic: [GetCount.patch({ id: "c" }, (n) => n + 1), GetCount.patchAll((n) => n + 1)] })
-        assert.isUndefined(yield* TestLoader.entry(GetCount, { id: "c" }))
-        assert.deepStrictEqual((yield* TestLoader.entry(GetCount, { id: "b" }))?.patches, { live: 1, held: 0 })
+        assert.isUndefined(yield* TestQuery.entry(GetCount, { id: "c" }))
+        assert.deepStrictEqual((yield* TestQuery.entry(GetCount, { id: "b" }))?.patches, { live: 1, held: 0 })
         const d = yield* GetCount.get({ id: "d" }).pipe(Effect.forkScoped)
         yield* advance(10)
         assert.strictEqual(yield* Fiber.join(d), 0)
-        assert.deepStrictEqual((yield* TestLoader.entry(GetCount, { id: "d" }))?.patched, false)
+        assert.deepStrictEqual((yield* TestQuery.entry(GetCount, { id: "d" }))?.patched, false)
       }).pipe(provide)
     })
 
@@ -454,15 +454,15 @@ describe("Loader runs", () => {
             })
           ]
         })
-        const [invalid] = yield* TestLoader.expectProblem("PatchInvalid")
-        assert.deepStrictEqual([invalid.read, invalid.logKey, invalid.command], [
+        const [invalid] = yield* TestQuery.expectProblem("PatchInvalid")
+        assert.deepStrictEqual([invalid.query, invalid.logKey, invalid.command], [
           "users/GetUser",
           `{"id":"1"}`,
           "Rename"
         ])
-        const [mutated] = yield* TestLoader.expectProblem("PatchMutated")
+        const [mutated] = yield* TestQuery.expectProblem("PatchMutated")
         assert.strictEqual(mutated.logKey, `{"id":"2"}`)
-        const entry = yield* TestLoader.entry(GetUser, { id: "1" })
+        const entry = yield* TestQuery.entry(GetUser, { id: "1" })
         assert.strictEqual(entry?.view._tag === "Success" && entry.view.value.name, 42 as unknown as string)
       }).pipe(provide)
     })
@@ -473,7 +473,7 @@ describe("Loader runs", () => {
         undefinedKey: { count: 1 },
         nan: { bad: NaN, count: 1 }
       }
-      class GetDoc extends Loader.Service<GetDoc>()(
+      class GetDoc extends Query.Service<GetDoc>()(
         "docs/GetDoc",
         {
           args: { id: Schema.String },
@@ -510,13 +510,13 @@ describe("Loader runs", () => {
             })
           ]
         })
-        const mutated = yield* TestLoader.expectProblem("PatchMutated")
+        const mutated = yield* TestQuery.expectProblem("PatchMutated")
         assert.deepStrictEqual(mutated.map((problem) => problem.logKey), [
           `{"id":"aliased"}`,
           `{"id":"undefinedKey"}`,
           `{"id":"nan"}`
         ])
-      }).pipe(Effect.provide(Layer.merge(GetDoc.layer, TestLoader.layer())))
+      }).pipe(Effect.provide(Layer.merge(GetDoc.layer, TestQuery.layer())))
     })
     it.effect("PatchMutated compares own data properties run after run, and runs none of the value's own code", () => {
       class Counter {
@@ -577,7 +577,7 @@ describe("Loader runs", () => {
         stored: new Stored(0),
         external: Object.defineProperty({}, "payload", { get: () => external, enumerable: true })
       }
-      class GetAny extends Loader.Service<GetAny>()(
+      class GetAny extends Query.Service<GetAny>()(
         "any/GetAny",
         { args: { id: Schema.String }, success: Schema.Any, error: Schema.Never, staleTime: "30 seconds" },
         Effect.sync(() => ({ id }) => Effect.sync(() => values[id]))
@@ -608,17 +608,17 @@ describe("Loader runs", () => {
         for (const id of Object.keys(values)) yield* GetAny.get({ id })
         // The first run is stopped: its patches go, and the server values keep the mutation.
         const { handle } = yield* issue({ optimistic: mutating })
-        const first = yield* TestLoader.expectProblem("PatchMutated")
+        const first = yield* TestQuery.expectProblem("PatchMutated")
         assert.deepStrictEqual(first.map((problem) => problem.logKey), reported)
         handle.finish({ _tag: "Stopped" })
         // The same patches on the same stored values are reported again.
         yield* issue({ optimistic: mutating })
-        const second = yield* TestLoader.expectProblem("PatchMutated")
+        const second = yield* TestQuery.expectProblem("PatchMutated")
         assert.deepStrictEqual(second.map((problem) => problem.logKey), reported)
         // The getter never stopped a run: the patch registered.
-        const hidden = yield* TestLoader.entry(GetAny, { id: "hidden" })
+        const hidden = yield* TestQuery.entry(GetAny, { id: "hidden" })
         assert.isTrue(hidden?.patched)
-      }).pipe(Effect.provide(Layer.merge(GetAny.layer, TestLoader.layer())))
+      }).pipe(Effect.provide(Layer.merge(GetAny.layer, TestQuery.layer())))
     })
     it.effect("PatchMutated never reads a getter, so a patch that changes nothing is never reported", () => {
       let computed = 0
@@ -635,7 +635,7 @@ describe("Loader runs", () => {
         // Reading a getter that memoizes into the value's own data changes the stored value.
         memoRead: new Lazy()
       }
-      class GetAny extends Loader.Service<GetAny>()(
+      class GetAny extends Query.Service<GetAny>()(
         "any/GetAny",
         { args: { id: Schema.String }, success: Schema.Any, error: Schema.Never, staleTime: "30 seconds" },
         Effect.sync(() => ({ id }) => Effect.sync(() => values[id]))
@@ -651,10 +651,10 @@ describe("Loader runs", () => {
             })
           ]
         })
-        const mutated = yield* TestLoader.expectProblem("PatchMutated")
+        const mutated = yield* TestQuery.expectProblem("PatchMutated")
         assert.deepStrictEqual(mutated.map((problem) => problem.logKey), [`{"id":"memoRead"}`])
         assert.strictEqual(computed, 1)
-      }).pipe(Effect.provide(Layer.merge(GetAny.layer, TestLoader.layer())))
+      }).pipe(Effect.provide(Layer.merge(GetAny.layer, TestQuery.layer())))
     })
     it.effect("PatchMutated runs none of the value's own code, and of a Proxy only the reflection traps", () => {
       // Every call into a value's own code counts here.
@@ -751,7 +751,7 @@ describe("Loader runs", () => {
         proxyDate: watch(new Date(0)),
         proxyMap: watch(new Map([["a", 1]]))
       }
-      class GetAny extends Loader.Service<GetAny>()(
+      class GetAny extends Query.Service<GetAny>()(
         "any/GetAny",
         { args: { id: Schema.String }, success: Schema.Any, error: Schema.Never, staleTime: "30 seconds" },
         Effect.sync(() => ({ id }) => Effect.sync(() => values[id]))
@@ -776,7 +776,7 @@ describe("Loader runs", () => {
             inPlace("proxyRecord", () => proxied.n++)
           ]
         })
-        const mutated = yield* TestLoader.expectProblem("PatchMutated")
+        const mutated = yield* TestQuery.expectProblem("PatchMutated")
         assert.deepStrictEqual(
           mutated.map((problem) => problem.logKey),
           ["besideOpaque", "besideEqualAccessor", "mutatedBytes", "proxyRecord"].map((id) => `{"id":"${id}"}`)
@@ -788,7 +788,7 @@ describe("Loader runs", () => {
           [...traps].filter((trap) => !["getPrototypeOf", "has", "ownKeys", "getOwnPropertyDescriptor"].includes(trap)),
           []
         )
-      }).pipe(Effect.provide(Layer.merge(GetAny.layer, TestLoader.layer())))
+      }).pipe(Effect.provide(Layer.merge(GetAny.layer, TestQuery.layer())))
     })
     it.effect("PatchMutated compares binary data by its bytes, each kind apart, so an unchanged NaN stays unchanged", () => {
       const values: Record<string, unknown> = {
@@ -806,7 +806,7 @@ describe("Loader runs", () => {
         nan64: new Float64Array([NaN]),
         nan32: new Float32Array([NaN, 1])
       }
-      class GetBinary extends Loader.Service<GetBinary>()(
+      class GetBinary extends Query.Service<GetBinary>()(
         "binary/GetBinary",
         { args: { id: Schema.String }, success: Schema.Any, error: Schema.Never, staleTime: "30 seconds" },
         Effect.sync(() => ({ id }) => Effect.sync(() => values[id]))
@@ -840,7 +840,7 @@ describe("Loader runs", () => {
             inPlace("nan32", () => {})
           ]
         })
-        const mutated = yield* TestLoader.expectProblem("PatchMutated")
+        const mutated = yield* TestQuery.expectProblem("PatchMutated")
         assert.deepStrictEqual(
           mutated.map((problem) => problem.logKey),
           [
@@ -856,7 +856,7 @@ describe("Loader runs", () => {
             "signedZero"
           ].map((id) => `{"id":"${id}"}`)
         )
-      }).pipe(Effect.provide(Layer.merge(GetBinary.layer, TestLoader.layer())))
+      }).pipe(Effect.provide(Layer.merge(GetBinary.layer, TestQuery.layer())))
     })
   })
 
@@ -877,7 +877,7 @@ describe("Loader runs", () => {
         assert.deepStrictEqual([(yield* Fiber.join(a)).name, (yield* Fiber.join(b)).name], ["Cid", "Cid"])
         // One request for both callers, never stored and invisible to the entry.
         assert.deepStrictEqual(yield* fetchLog, ["watch", "get unstored"])
-        const entry = yield* TestLoader.entry(GetUser, { id: "1" })
+        const entry = yield* TestQuery.entry(GetUser, { id: "1" })
         assert.strictEqual(entry?.stored._tag === "Success" && entry.stored.value.name, "Ann")
         assert.deepStrictEqual(watcher.seen, ["Ann", "Bob patched"])
       }).pipe(provide)
@@ -910,7 +910,7 @@ describe("Loader runs", () => {
       const log: Array<string> = []
       const gate = Deferred.makeUnsafe<void>()
       let calls = 0
-      class GetGated extends Loader.Service<GetGated>()(
+      class GetGated extends Query.Service<GetGated>()(
         "gated/GetGated",
         { args: { id: Schema.String }, success: Schema.String, error: Schema.Never, staleTime: "30 seconds" },
         Effect.sync(() => () =>
@@ -941,14 +941,14 @@ describe("Loader runs", () => {
         assert.deepStrictEqual(log, ["start 1", "start 2", "cleaned 2", "start 3"])
         yield* advance(10)
         assert.strictEqual(yield* Fiber.join(pending), "v3")
-      }).pipe(Effect.provide(Layer.merge(GetGated.layer, TestLoader.layer())))
+      }).pipe(Effect.provide(Layer.merge(GetGated.layer, TestQuery.layer())))
     })
 
     it.effect("a caller-only fetch moving to a surviving build starts once the one under the closed build has cleaned up", () => {
       const log: Array<string> = []
       const cleanup = Latch.makeUnsafe()
       let calls = 0
-      class GetGated extends Loader.Service<GetGated>()(
+      class GetGated extends Query.Service<GetGated>()(
         "gated/GetGated",
         { args: { id: Schema.String }, success: Schema.String, error: Schema.Never, staleTime: "30 seconds" },
         Effect.sync(() => () =>
@@ -984,7 +984,7 @@ describe("Loader runs", () => {
         // Both callers get the one answer.
         assert.deepStrictEqual([yield* Fiber.join(a), yield* Fiber.join(b)], ["v3", "v3"])
         assert.deepStrictEqual(yield* fetchLog, ["get", "get unstored", "get restart unstored"])
-      }).pipe(Effect.provide(TestLoader.layer()))
+      }).pipe(Effect.provide(TestQuery.layer()))
     })
   })
 
@@ -1027,7 +1027,7 @@ describe("Loader runs", () => {
             GetUser.set({ id: "3" }, { id: "3", name: "Written" })
           ])
         )
-        const one = yield* TestLoader.entry(GetUser, { id: "1" })
+        const one = yield* TestQuery.entry(GetUser, { id: "1" })
         assert.deepStrictEqual([one?.stored._tag === "Success" && one.stored.value.name, one?.stale], ["Cold", false])
         assert.deepStrictEqual(failing.seen, ["Failure(nope)", "Fixed"])
         // The fetch that began before the write restarts, so older data can't overwrite it.
@@ -1049,9 +1049,9 @@ describe("Loader runs", () => {
             GetUser.set({ id: "9" }, { id: "9", name: "New" })
           ])
         )
-        const problems = yield* TestLoader.expectProblem("UncoveredWrite")
+        const problems = yield* TestQuery.expectProblem("UncoveredWrite")
         assert.deepStrictEqual(problems.map((p) => [p.logKey, p.command]), [[`{"id":"1"}`, "Rename"]])
-        const entry = yield* TestLoader.entry(GetUser, { id: "1" })
+        const entry = yield* TestQuery.entry(GetUser, { id: "1" })
         assert.strictEqual(entry?.stored._tag === "Success" && entry.stored.value.name, "Bob")
       }).pipe(provide)
     })
@@ -1069,7 +1069,7 @@ describe("Loader runs", () => {
           }
         )
         assert.isTrue(Exit.hasDies(yield* Fiber.await(fiber)))
-        assert.deepStrictEqual((yield* TestLoader.entry(GetUser, { id: "1" }))?.patches, { live: 0, held: 1 })
+        assert.deepStrictEqual((yield* TestQuery.entry(GetUser, { id: "1" }))?.patches, { live: 0, held: 1 })
         yield* advance(10)
         assert.deepStrictEqual(watcher.seen, ["Ann", "Bob patched", "Bob waiting patched", "Ann"])
       }).pipe(provide)

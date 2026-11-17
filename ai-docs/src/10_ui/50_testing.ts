@@ -150,8 +150,8 @@ describe("NotesIndex", () => {
   it("pins a note dropped on the pinned list", () => {
     const pinned = HtmlLocator.role("complementary", { name: "Pinned" })
     Story.make(NotesIndexNoDeps, {}, (s) =>
-      // Load steps take the loader's name. `loaded` writes the result to
-      // the `notes` loader's state, as the runtime would, and re-renders the view.
+      // Load steps take the query's name. `loaded` writes the result to
+      // the `notes` query, as the runtime would, and re-renders the view.
       s.loaded("notes", [note])
         // A drop with a hand-written payload. `HtmlStory.drop` picks the
         // target the browser host would, and throws when none accepts the

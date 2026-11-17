@@ -1,5 +1,5 @@
-import { Loader } from "@effect/ui"
-import { TestLoader } from "@effect/ui/testing"
+import { Query } from "@effect/ui"
+import { TestQuery } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import {
   Cause,
@@ -24,7 +24,7 @@ const User = Schema.Struct({ id: Schema.String, name: Schema.String })
 type User = typeof User.Type
 type Seen = AsyncResult.AsyncResult<User, string>
 
-const Users = Loader.Tag("users")
+const Users = Query.Tag("users")
 
 // A few macrotasks: lets every fiber the cache forked run, and whatever those fork in turn.
 const flush = Effect.promise(async () => {
@@ -41,14 +41,14 @@ const show = (result: Seen): string =>
       (Option.isSome(result.previousSuccess) ? " previous" : "")
     : "Initial") + (result.waiting ? " waiting" : "")
 
-// A read whose fetcher takes 10 ms and does what `db.mode` says.
+// A query whose fetcher takes 10 ms and does what `db.mode` says.
 const makeUsers = (options: {
   readonly staleTime: Duration.Input
   readonly idleTimeToLive?: Duration.Input
-  readonly refetchInterval?: Loader.RefetchInterval<{ readonly id: string }, User, string>
+  readonly refetchInterval?: Query.RefetchInterval<{ readonly id: string }, User, string>
 }) => {
   const db = { calls: 0, name: "Ann", mode: "ok" as "ok" | "fail" | "die" | "interrupt" }
-  class GetUser extends Loader.Service<GetUser>()(
+  class GetUser extends Query.Service<GetUser>()(
     "users/GetUser",
     { args: { id: Schema.String }, success: User, error: Schema.String, tags: [Users], ...options },
     Effect.sync(() => ({ id }) =>
@@ -63,7 +63,7 @@ const makeUsers = (options: {
       })
     )
   ) {}
-  const provide = Effect.provide(Layer.merge(GetUser.layer, TestLoader.layer()))
+  const provide = Effect.provide(Layer.merge(GetUser.layer, TestQuery.layer()))
   return { db, GetUser, provide }
 }
 
@@ -78,11 +78,11 @@ const watch = Effect.fnUntraced(function*<R>(changes: Stream.Stream<Seen, never,
 })
 
 const triggers = Effect.map(
-  TestLoader.fetches,
+  TestQuery.fetches,
   (fetches) => fetches.map((fetch) => fetch.trigger + (fetch.restart ? " restart" : ""))
 )
 
-describe("Loader", () => {
+describe("Query", () => {
   it.effect("only the zero-to-one watcher transition fetches, and watchers share the fetch", () => {
     const { GetUser, db, provide } = makeUsers({ staleTime: "30 seconds" })
     return Effect.gen(function*() {
@@ -97,7 +97,7 @@ describe("Loader", () => {
       assert.deepStrictEqual(b.seen, ["Ann"])
 
       yield* advance("31 seconds")
-      assert.isTrue((yield* TestLoader.entry(GetUser, { id: "1" }))?.stale)
+      assert.isTrue((yield* TestQuery.entry(GetUser, { id: "1" }))?.stale)
       // A joining watcher never refetches, even over a stale entry.
       const c = yield* watch(GetUser.changes({ id: "1" }))
       yield* advance(20)
@@ -107,7 +107,7 @@ describe("Loader", () => {
       yield* a.stop
       yield* b.stop
       yield* c.stop
-      assert.strictEqual((yield* TestLoader.entry(GetUser, { id: "1" }))?.watchers, 0)
+      assert.strictEqual((yield* TestQuery.entry(GetUser, { id: "1" }))?.watchers, 0)
       // Zero-to-one over a stale entry serves the stale value at once and refetches.
       const d = yield* watch(GetUser.changes({ id: "1" }))
       assert.deepStrictEqual(d.seen, ["Ann waiting"])
@@ -120,8 +120,8 @@ describe("Loader", () => {
   it.effect("the last watcher abandoning its fetch interrupts it, unless a get or a prefetch joined it or a fetch it restarted", () => {
     const { GetUser, db, provide } = makeUsers({ staleTime: "30 seconds" })
     return Effect.gen(function*() {
-      const cache = Loader.internals(yield* Loader.Cache)
-      const def = Loader.defOf(GetUser)
+      const cache = Query.internals(yield* Query.Cache)
+      const def = Query.defOf(GetUser)
       const fetcher = (yield* GetUser) as unknown as (args: unknown) => Effect.Effect<any, any>
       const watchOne = (id: string) => cache.watch(def, { id }, fetcher, () => {})
       // Alone: the fetch goes, and the cold entry with it.
@@ -129,7 +129,7 @@ describe("Loader", () => {
       yield* flush
       alone.unregister(true)
       yield* advance(10)
-      assert.isUndefined(yield* TestLoader.entry(GetUser, { id: "1" }))
+      assert.isUndefined(yield* TestQuery.entry(GetUser, { id: "1" }))
       // Joined by a get, which still gets its value.
       const waited = watchOne("2")
       const got = yield* Effect.forkScoped(GetUser.get({ id: "2" }))
@@ -143,7 +143,7 @@ describe("Loader", () => {
       yield* flush
       prefetched.unregister(true)
       yield* advance(10)
-      assert.isTrue(AsyncResult.isSuccess((yield* TestLoader.entry(GetUser, { id: "3" }))!.stored))
+      assert.isTrue(AsyncResult.isSuccess((yield* TestQuery.entry(GetUser, { id: "3" }))!.stored))
       // The prefetch's claim carries over to the fetch an invalidation restarts it with.
       const restarted = watchOne("4")
       yield* GetUser.prefetch({ id: "4" })
@@ -151,14 +151,14 @@ describe("Loader", () => {
       yield* flush
       restarted.unregister(true)
       yield* advance(10)
-      assert.isTrue(AsyncResult.isSuccess((yield* TestLoader.entry(GetUser, { id: "4" }))!.stored))
+      assert.isTrue(AsyncResult.isSuccess((yield* TestQuery.entry(GetUser, { id: "4" }))!.stored))
       // Once that fetch settles the claim is spent: the next one a watcher starts is abandoned.
       yield* GetUser.invalidate({ id: "4" })
       const after = watchOne("4")
       yield* flush
       after.unregister(true)
       yield* advance(10)
-      assert.isTrue((yield* TestLoader.entry(GetUser, { id: "4" }))!.stale)
+      assert.isTrue((yield* TestQuery.entry(GetUser, { id: "4" }))!.stale)
       assert.strictEqual(db.calls, 5)
     }).pipe(provide)
   })
@@ -166,8 +166,8 @@ describe("Loader", () => {
   it.effect("under a hold, the zero-to-one decision waits for release and ignores the order of releases and registrations", () => {
     const { GetUser, db, provide } = makeUsers({ staleTime: "30 seconds" })
     return Effect.gen(function*() {
-      const cache = Loader.internals(yield* Loader.Cache)
-      const def = Loader.defOf(GetUser)
+      const cache = Query.internals(yield* Query.Cache)
+      const def = Query.defOf(GetUser)
       const fetcher = (yield* GetUser) as unknown as (args: unknown) => Effect.Effect<any, any>
       const watchOne = () => cache.watch(def, { id: "1" }, fetcher, () => {})
       const old = watchOne()
@@ -178,7 +178,7 @@ describe("Loader", () => {
       const next = watchOne()
       old.unregister()
       yield* flush
-      assert.strictEqual((yield* TestLoader.entry(GetUser, { id: "1" }))?.fetch, "none")
+      assert.strictEqual((yield* TestQuery.entry(GetUser, { id: "1" }))?.fetch, "none")
       release()
       assert.strictEqual(next.current().waiting, true)
       yield* advance(10)
@@ -199,8 +199,8 @@ describe("Loader", () => {
   it.effect("under a hold, a bare Failure is withheld: a swap clears it unseen, and a join gets it at release", () => {
     const { GetUser, db, provide } = makeUsers({ staleTime: "30 seconds" })
     return Effect.gen(function*() {
-      const cache = Loader.internals(yield* Loader.Cache)
-      const def = Loader.defOf(GetUser)
+      const cache = Query.internals(yield* Query.Cache)
+      const def = Query.defOf(GetUser)
       const fetcher = (yield* GetUser) as unknown as (args: unknown) => Effect.Effect<any, any>
       const seen: Array<string> = []
       const watchOne = (name: string) =>
@@ -242,8 +242,8 @@ describe("Loader", () => {
         for (const order of ["register first", "release first"] as const) {
           const { GetUser, db, provide } = makeUsers({ staleTime: "30 seconds" })
           const result = yield* Effect.gen(function*() {
-            const cache = Loader.internals(yield* Loader.Cache)
-            const def = Loader.defOf(GetUser)
+            const cache = Query.internals(yield* Query.Cache)
+            const def = Query.defOf(GetUser)
             const fetcher = (yield* GetUser) as unknown as (args: unknown) => Effect.Effect<any, any>
             const seen: Array<string> = []
             const watchOne = (name: string) =>
@@ -283,8 +283,8 @@ describe("Loader", () => {
         for (const order of ["register first", "release first"] as const) {
           const { GetUser, provide } = makeUsers({ staleTime: "30 seconds" })
           const result = yield* Effect.gen(function*() {
-            const cache = Loader.internals(yield* Loader.Cache)
-            const def = Loader.defOf(GetUser)
+            const cache = Query.internals(yield* Query.Cache)
+            const def = Query.defOf(GetUser)
             const fetcher = (yield* GetUser) as unknown as (args: unknown) => Effect.Effect<any, any>
             const seen: Array<string> = []
             cache.hydrate({ "users/GetUser": [["{\"id\":\"1\"}", 1, ["nope"], 0]] })
@@ -348,7 +348,7 @@ describe("Loader", () => {
         Exit.succeed(["Failure", "Failure"])
       )
       assert.strictEqual(show(yield* GetUser.peek({ id: "1" })), "Failure(nope) previous")
-      assert.isUndefined(yield* TestLoader.entry(GetUser, { id: "2" }))
+      assert.isUndefined(yield* TestQuery.entry(GetUser, { id: "2" }))
     }).pipe(provide)
   })
 
@@ -357,7 +357,7 @@ describe("Loader", () => {
     return Effect.gen(function*() {
       // peek neither creates an entry nor fetches.
       assert.deepStrictEqual(yield* GetUser.peek({ id: "1" }), AsyncResult.initial())
-      assert.isUndefined(yield* TestLoader.entry(GetUser, { id: "1" }))
+      assert.isUndefined(yield* TestQuery.entry(GetUser, { id: "1" }))
 
       yield* GetUser.prefetch({ id: "1" })
       assert.strictEqual(show(yield* GetUser.peek({ id: "1" })), "Initial waiting")
@@ -370,9 +370,9 @@ describe("Loader", () => {
       yield* GetUser.prefetch({ id: "1" })
       yield* advance("50 seconds")
       yield* GetUser.peek({ id: "1" })
-      assert.isDefined(yield* TestLoader.entry(GetUser, { id: "1" }))
+      assert.isDefined(yield* TestQuery.entry(GetUser, { id: "1" }))
       yield* advance("10 seconds")
-      assert.isUndefined(yield* TestLoader.entry(GetUser, { id: "1" }))
+      assert.isUndefined(yield* TestQuery.entry(GetUser, { id: "1" }))
 
       // A watched entry is never collected, and it outlives its last watcher by the idle time.
       const watcher = yield* watch(GetUser.changes({ id: "1" }))
@@ -381,13 +381,13 @@ describe("Loader", () => {
       yield* advance("59 seconds")
       assert.strictEqual(show(yield* GetUser.peek({ id: "1" })), "Ann")
       yield* advance("1 second")
-      assert.isUndefined(yield* TestLoader.entry(GetUser, { id: "1" }))
+      assert.isUndefined(yield* TestQuery.entry(GetUser, { id: "1" }))
 
       // A failed prefetch of an unwatched entry stores nothing.
       db.mode = "fail"
       yield* GetUser.prefetch({ id: "2" })
       yield* advance(10)
-      assert.isUndefined(yield* TestLoader.entry(GetUser, { id: "2" }))
+      assert.isUndefined(yield* TestQuery.entry(GetUser, { id: "2" }))
       assert.strictEqual(db.calls, 3)
     }).pipe(provide)
   })
@@ -401,24 +401,24 @@ describe("Loader", () => {
       // Going stale on its own fetches nothing.
       assert.strictEqual(db.calls, 1)
 
-      yield* TestLoader.setVisible(false)
-      yield* TestLoader.setOnline(false)
-      yield* TestLoader.setVisible(true)
+      yield* TestQuery.setVisible(false)
+      yield* TestQuery.setOnline(false)
+      yield* TestQuery.setVisible(true)
       yield* flush
       assert.strictEqual(db.calls, 1)
-      yield* TestLoader.setOnline(true)
+      yield* TestQuery.setOnline(true)
       yield* advance(10)
       assert.strictEqual(db.calls, 2)
 
       // A fresh entry isn't refetched.
-      yield* TestLoader.setVisible(false)
-      yield* TestLoader.setVisible(true)
+      yield* TestQuery.setVisible(false)
+      yield* TestQuery.setVisible(true)
       yield* flush
       assert.strictEqual(db.calls, 2)
 
       yield* advance("31 seconds")
-      yield* TestLoader.setVisible(false)
-      yield* TestLoader.setVisible(true)
+      yield* TestQuery.setVisible(false)
+      yield* TestQuery.setVisible(true)
       yield* advance(10)
       assert.deepStrictEqual(yield* triggers, ["watch", "connectivity", "visibility"])
     }).pipe(provide)
@@ -434,18 +434,18 @@ describe("Loader", () => {
       assert.deepStrictEqual(yield* triggers, ["watch", "interval"])
 
       // Hidden: the interval doesn't fire. Due on the edge: it fires at once.
-      yield* TestLoader.setVisible(false)
+      yield* TestQuery.setVisible(false)
       yield* advance("6 seconds")
       assert.strictEqual(db.calls, 2)
-      yield* TestLoader.setVisible(true)
+      yield* TestQuery.setVisible(true)
       yield* advance(10)
       assert.deepStrictEqual(yield* triggers, ["watch", "interval", "visibility"])
 
       // Not due on the edge: it sleeps for the remainder, counted from the last settle.
       yield* advance("2 seconds")
-      yield* TestLoader.setVisible(false)
+      yield* TestQuery.setVisible(false)
       yield* advance("1 second")
-      yield* TestLoader.setVisible(true)
+      yield* TestQuery.setVisible(true)
       yield* advance("1 second")
       assert.strictEqual(db.calls, 3)
       yield* advance("1 second")
@@ -476,8 +476,8 @@ describe("Loader", () => {
     return Effect.gen(function*() {
       yield* watch(GetUser.changes({ id: "1" }))
       yield* advance(10)
-      const [threw] = yield* TestLoader.expectProblem("IntervalThrew")
-      assert.strictEqual(threw.read, "users/GetUser")
+      const [threw] = yield* TestQuery.expectProblem("IntervalThrew")
+      assert.strictEqual(threw.query, "users/GetUser")
       assert.strictEqual(threw.logKey, `{"id":"1"}`)
       assert.strictEqual((threw.error as Error).message, "bad interval")
       yield* advance("10 seconds")
@@ -487,7 +487,7 @@ describe("Loader", () => {
       interval = () => 5
       yield* GetUser.invalidate({ id: "1" })
       yield* advance(10)
-      assert.strictEqual((yield* TestLoader.expectProblem("IntervalInvalid")).length, 1)
+      assert.strictEqual((yield* TestQuery.expectProblem("IntervalInvalid")).length, 1)
       yield* advance("10 seconds")
       assert.strictEqual(db.calls, 2)
 
@@ -497,7 +497,7 @@ describe("Loader", () => {
       yield* advance(10)
       yield* advance(500)
       assert.strictEqual(db.calls, 4)
-      assert.deepStrictEqual(yield* TestLoader.problems, [])
+      assert.deepStrictEqual(yield* TestQuery.problems, [])
     }).pipe(provide)
   })
 
@@ -506,19 +506,19 @@ describe("Loader", () => {
     return Effect.gen(function*() {
       // A never-fetched entry is a no-op.
       yield* GetUser.invalidate({ id: "9" })
-      assert.isUndefined(yield* TestLoader.entry(GetUser, { id: "9" }))
+      assert.isUndefined(yield* TestQuery.entry(GetUser, { id: "9" }))
 
       yield* GetUser.prefetch({ id: "1" })
       const watcher = yield* watch(GetUser.changes({ id: "2" }))
       yield* advance(10)
       assert.strictEqual(db.calls, 2)
 
-      // The whole read: the watched entry refetches now, the unwatched one on its next use.
+      // The whole query: the watched entry refetches now, the unwatched one on its next use.
       yield* GetUser.invalidate()
       yield* flush
       assert.strictEqual(db.calls, 3)
       assert.deepStrictEqual(watcher.seen, ["Ann", "Ann waiting"])
-      assert.isTrue((yield* TestLoader.entry(GetUser, { id: "1" }))?.stale)
+      assert.isTrue((yield* TestQuery.entry(GetUser, { id: "1" }))?.stale)
 
       // A fetch in flight is interrupted and restarted, and keeps its trigger.
       yield* GetUser.invalidate({ id: "2" })
@@ -539,12 +539,12 @@ describe("Loader", () => {
       yield* watch(GetUser.changes({ id: "1" }))
       yield* advance(10)
       // Targets get their public constructors with Commands. Until then a tag is only reachable here.
-      const cache = Loader.internals(yield* Loader.Cache)
+      const cache = Query.internals(yield* Query.Cache)
       cache.invalidate([{ _tag: "Tag", name: "nothing-lists-this" }])
       yield* advance(10)
       assert.strictEqual(db.calls, 1)
       // An entry hit twice in one application restarts once.
-      cache.invalidate([{ _tag: "Tag", name: Loader.Tag("users").name }, { _tag: "Tag", name: Users.name }])
+      cache.invalidate([{ _tag: "Tag", name: Query.Tag("users").name }, { _tag: "Tag", name: Users.name }])
       yield* advance(10)
       assert.deepStrictEqual(yield* triggers, ["watch", "invalidation"])
     }).pipe(provide)
@@ -579,19 +579,19 @@ describe("Loader", () => {
       yield* Scope.close(scopeB, Exit.void)
       yield* flush
       assert.deepStrictEqual(b.seen, ["Ann waiting", "Ann"])
-      const entry = yield* TestLoader.entry(GetUser, { id: "1" })
+      const entry = yield* TestQuery.entry(GetUser, { id: "1" })
       assert.deepStrictEqual([entry?.stale, entry?.fetch], [true, "none"])
       assert.isTrue(Exit.hasInterrupts(yield* Fiber.await(cold)))
-      assert.isUndefined(yield* TestLoader.entry(GetUser, { id: "2" }))
+      assert.isUndefined(yield* TestQuery.entry(GetUser, { id: "2" }))
       assert.strictEqual(db.calls, 4)
-    }).pipe(Effect.provide(TestLoader.layer()))
+    }).pipe(Effect.provide(TestQuery.layer()))
   })
 
   // The cleanups below wait on a Latch the test opens, so the order of events is the test's to set.
   it.effect("a fetch finishes its cleanup before its restart begins and before its build's resources are released", () => {
     const events: Array<string> = []
     const cleanup = Latch.makeUnsafe()
-    class Slow extends Loader.Service<Slow>()(
+    class Slow extends Query.Service<Slow>()(
       "Slow",
       {
         args: {},
@@ -633,12 +633,12 @@ describe("Loader", () => {
         "fetch cleaned up",
         "resource released"
       ])
-    }).pipe(Effect.provide(TestLoader.layer()))
+    }).pipe(Effect.provide(TestQuery.layer()))
   })
 
   it.effect("makeCache builds the cache when it runs and disposes it with its Scope", () => {
     let listeners = 0
-    const signal: Loader.Signal = {
+    const signal: Query.Signal = {
       get: () => true,
       subscribe: () => {
         listeners++
@@ -648,7 +648,7 @@ describe("Loader", () => {
       }
     }
     return Effect.gen(function*() {
-      const make = Loader.makeCache({ visibility: signal, connectivity: signal, report: () => {}, idleMs: 300_000 })
+      const make = Query.makeCache({ visibility: signal, connectivity: signal, report: () => {}, idleMs: 300_000 })
       assert.strictEqual(listeners, 0)
       const scope = yield* Scope.make()
       yield* make.pipe(Scope.provide(scope))
@@ -660,7 +660,7 @@ describe("Loader", () => {
 
   it.effect("makeCache disposes a cache whose build is interrupted", () => {
     let listeners = 0
-    const signal: Loader.Signal = {
+    const signal: Query.Signal = {
       get: () => true,
       subscribe: () => {
         listeners++
@@ -680,7 +680,7 @@ describe("Loader", () => {
     return Effect.gen(function*() {
       const scope = yield* Scope.make()
       const fiber = Effect.runFork(
-        Loader.makeCache({ visibility: signal, connectivity: signal, report: () => {}, idleMs: 300_000 }).pipe(
+        Query.makeCache({ visibility: signal, connectivity: signal, report: () => {}, idleMs: 300_000 }).pipe(
           Scope.provide(scope),
           Effect.provideService(Scheduler.Scheduler, scheduler)
         )
@@ -696,7 +696,7 @@ describe("Loader", () => {
   it.effect("a cache waits for its fetches' cleanup when it is disposed", () => {
     const events: Array<string> = []
     const cleanup = Latch.makeUnsafe()
-    class Slow extends Loader.Service<Slow>()(
+    class Slow extends Query.Service<Slow>()(
       "Slow",
       {
         args: {},
@@ -710,7 +710,7 @@ describe("Loader", () => {
     ) {}
     return Effect.gen(function*() {
       const scope = yield* Scope.make()
-      const cache = yield* Layer.buildWithScope(Layer.merge(Slow.layer, Loader.layer()), scope)
+      const cache = yield* Layer.buildWithScope(Layer.merge(Slow.layer, Query.layer()), scope)
       yield* Slow.prefetch({}).pipe(Effect.provideContext(cache))
       yield* flush
       const closing = yield* Effect.forkScoped(
@@ -735,9 +735,9 @@ describe("Loader", () => {
       yield* advance("5 seconds")
       yield* watcher.stop
       yield* Scope.close(scope, Exit.void)
-      const entry = yield* TestLoader.entry(GetUser, { id: "1" })
+      const entry = yield* TestQuery.entry(GetUser, { id: "1" })
       assert.deepStrictEqual([entry?.stale, entry?.fetch, db.calls], [false, "none", 2])
-    }).pipe(Effect.provide(TestLoader.layer()))
+    }).pipe(Effect.provide(TestQuery.layer()))
   })
 
   it.effect("fetch exits: a Fail is stored, an interrupt reverts and a defect reaches the watchers unstored", () => {
@@ -782,7 +782,7 @@ describe("Loader", () => {
       yield* advance(10)
       assert.deepStrictEqual(bare.seen, ["Failure(nope)"])
       yield* bare.stop
-      assert.isUndefined(yield* TestLoader.entry(GetUser, { id: "2" }))
+      assert.isUndefined(yield* TestQuery.entry(GetUser, { id: "2" }))
     }).pipe(provide)
   })
 
@@ -791,10 +791,10 @@ describe("Loader", () => {
     return Effect.gen(function*() {
       yield* watch(GetUser.changes({ id: "1" }))
       for (let i = 0; i < 9; i++) yield* GetUser.invalidate({ id: "1" })
-      assert.deepStrictEqual(yield* TestLoader.problems, [])
+      assert.deepStrictEqual(yield* TestQuery.problems, [])
       for (let i = 0; i < 5; i++) yield* GetUser.invalidate({ id: "1" })
-      const problems = yield* TestLoader.expectProblem("FetchRestarted")
-      assert.deepStrictEqual(problems.map((problem) => [problem.read, problem.logKey]), [[
+      const problems = yield* TestQuery.expectProblem("FetchRestarted")
+      assert.deepStrictEqual(problems.map((problem) => [problem.query, problem.logKey]), [[
         "users/GetUser",
         `{"id":"1"}`
       ]])
@@ -803,7 +803,7 @@ describe("Loader", () => {
       yield* advance(10)
       yield* GetUser.invalidate({ id: "1" })
       for (let i = 0; i < 10; i++) yield* GetUser.invalidate({ id: "1" })
-      assert.strictEqual((yield* TestLoader.expectProblem("FetchRestarted")).length, 1)
+      assert.strictEqual((yield* TestQuery.expectProblem("FetchRestarted")).length, 1)
     }).pipe(provide)
   })
 
@@ -817,15 +817,15 @@ describe("Loader", () => {
       assert.deepStrictEqual(yield* second.GetUser.get({ id: "1" }), { id: "1", name: "Ann" })
       yield* second.GetUser.peek({ id: "1" })
       assert.strictEqual(first.db.calls, 1)
-      const problems = yield* TestLoader.expectProblem("DuplicateName")
-      assert.deepStrictEqual(problems.map((problem) => problem.read), ["users/GetUser"])
+      const problems = yield* TestQuery.expectProblem("DuplicateName")
+      assert.deepStrictEqual(problems.map((problem) => problem.query), ["users/GetUser"])
       // One name is one service key, so both classes resolve to the one fetcher provided.
     }).pipe(first.provide)
   })
 
   it.effect("keys are canonical JSON of the encoded args, and the log key redacts", () => {
     let calls = 0
-    class Search extends Loader.Service<Search>()("Search", {
+    class Search extends Query.Service<Search>()("Search", {
       args: {
         token: Schema.Redacted(Schema.String),
         page: Schema.Number,
@@ -836,7 +836,7 @@ describe("Loader", () => {
       staleTime: "Infinity"
     }, Effect.sync(() => () => Effect.sync(() => ++calls))) {}
     // The args are the key, so they needn't be a struct.
-    class ById extends Loader.Service<ById>()("ById", {
+    class ById extends Query.Service<ById>()("ById", {
       args: Schema.Any,
       success: Schema.Number,
       error: Schema.Never,
@@ -853,7 +853,7 @@ describe("Loader", () => {
         yield* ById.get(1)
       ]
       assert.deepStrictEqual(results, [1, 1, 2, 3, 4])
-      assert.deepStrictEqual((yield* TestLoader.fetches).map((fetch) => fetch.logKey), [
+      assert.deepStrictEqual((yield* TestQuery.fetches).map((fetch) => fetch.logKey), [
         `{"filter":{"a":"a","b":"b"},"page":1,"token":{"~redacted":true}}`,
         `{"filter":{"a":"a","b":"b"},"page":1,"token":{"~redacted":true}}`,
         `"1"`,
@@ -867,7 +867,7 @@ describe("Loader", () => {
         }
       }
       const messages: Array<string> = []
-      const calls: ReadonlyArray<Effect.Effect<unknown, never, Search | ById | Loader.Cache>> = [
+      const calls: ReadonlyArray<Effect.Effect<unknown, never, Search | ById | Query.Cache>> = [
         Search.get({ token, page: "s3cret" as any }),
         ById.peek({ secret: 1n }),
         ById.prefetch(new Tagged()),
@@ -878,19 +878,19 @@ describe("Loader", () => {
         messages.push(Exit.isFailure(exit) ? (Cause.squash(exit.cause) as Error).message : "no throw")
       }
       assert.deepStrictEqual(messages, [
-        `[Loader] read "Search": the args don't encode with the read's args Schema`,
-        `[Loader] read "ById": the encoded args hold a value JSON can't carry (a bigint). Give the args Schema a JSON encoding.`,
-        `[Loader] read "ById": the encoded args hold a value JSON can't carry (a class instance). Give the args Schema a JSON encoding.`,
-        `[Loader] read "ById": the encoded args hold a value JSON can't carry (a non-finite number). Give the args Schema a JSON encoding.`
+        `[Query] "Search": the args don't encode with the query's args Schema`,
+        `[Query] "ById": the encoded args hold a value JSON can't carry (a bigint). Give the args Schema a JSON encoding.`,
+        `[Query] "ById": the encoded args hold a value JSON can't carry (a class instance). Give the args Schema a JSON encoding.`,
+        `[Query] "ById": the encoded args hold a value JSON can't carry (a non-finite number). Give the args Schema a JSON encoding.`
       ])
-    }).pipe(Effect.provide(Layer.mergeAll(Search.layer, ById.layer, TestLoader.layer())))
+    }).pipe(Effect.provide(Layer.mergeAll(Search.layer, ById.layer, TestQuery.layer())))
   })
 
   it.effect("an optional field of the args struct that is undefined is the same entry as a missing one", () => {
     let calls = 0
     const fetcher = Effect.sync(() => () => Effect.sync(() => ++calls))
     const options = { success: Schema.Number, error: Schema.Never, staleTime: "Infinity" } as const
-    class Search extends Loader.Service<Search>()("Search", {
+    class Search extends Query.Service<Search>()("Search", {
       ...options,
       args: {
         token: Schema.Redacted(Schema.String),
@@ -902,18 +902,18 @@ describe("Loader", () => {
       }
     }, fetcher) {}
     // The Schema decides what the args may be: this property may be missing, and may not be undefined.
-    class Exact extends Loader.Service<Exact>()("Exact", {
+    class Exact extends Query.Service<Exact>()("Exact", {
       ...options,
       args: { page: Schema.optionalKey(Schema.Number) }
     }, fetcher) {}
     // Two more ways to write a struct with optional fields. What isn't a field keeps its undefined.
-    class Rest extends Loader.Service<Rest>()("Rest", {
+    class Rest extends Query.Service<Rest>()("Rest", {
       ...options,
       args: Schema.StructWithRest(Schema.Struct({ id: Schema.Number, page: Schema.optional(Schema.Number) }), [
         Schema.Record(Schema.String, Schema.UndefinedOr(Schema.Number))
       ])
     }, fetcher) {}
-    class Keyed extends Loader.Service<Keyed>()("Keyed", {
+    class Keyed extends Query.Service<Keyed>()("Keyed", {
       ...options,
       args: Schema.Record(Schema.Literals(["a", "b"]), Schema.optional(Schema.Number))
     }, fetcher) {}
@@ -930,7 +930,7 @@ describe("Loader", () => {
         yield* Keyed.get({ b: 1 })
       ]
       assert.deepStrictEqual(results, [1, 1, 2, 3, 3, 4, 4])
-      assert.deepStrictEqual((yield* TestLoader.fetches).map((fetch) => fetch.read + " " + fetch.logKey), [
+      assert.deepStrictEqual((yield* TestQuery.fetches).map((fetch) => fetch.query + " " + fetch.logKey), [
         `Search {"cursor":null,"token":{"~redacted":true}}`,
         `Search {"cursor":null,"size":null,"token":{"~redacted":true}}`,
         `Rest {"extra":null,"id":1}`,
@@ -939,10 +939,10 @@ describe("Loader", () => {
       const exact = yield* Effect.exit(Exact.get({ page: undefined } as {}))
       assert.strictEqual(
         Exit.isFailure(exact) ? (Cause.squash(exact.cause) as Error).message : "no throw",
-        `[Loader] read "Exact": the args don't encode with the read's args Schema`
+        `[Query] "Exact": the args don't encode with the query's args Schema`
       )
     }).pipe(Effect.provide(
-      Layer.mergeAll(Search.layer, Exact.layer, Rest.layer, Keyed.layer, TestLoader.layer())
+      Layer.mergeAll(Search.layer, Exact.layer, Rest.layer, Keyed.layer, TestQuery.layer())
     ))
   })
 
@@ -950,14 +950,14 @@ describe("Loader", () => {
     const options = { success: Schema.Number, error: Schema.Never, staleTime: "Infinity" } as const
     const fetcher = Effect.succeed(() => Effect.succeed(1))
     // A check gets the args after the drop, so it treats undefined as it treats a missing property.
-    class Checked extends Loader.Service<Checked>()("Checked", {
+    class Checked extends Query.Service<Checked>()("Checked", {
       ...options,
       args: Schema.Struct({ page: Schema.optional(Schema.Number) }).check(
         Schema.makeFilter((args) => "page" in args)
       )
     }, fetcher) {}
     // The caller passes a number. This undefined is made by the Schema's own encoding, and JSON can't carry it.
-    class Encoded extends Loader.Service<Encoded>()("Encoded", {
+    class Encoded extends Query.Service<Encoded>()("Encoded", {
       ...options,
       args: Schema.Struct({ value: Schema.optionalKey(Schema.Unknown) }).pipe(
         Schema.decodeTo(
@@ -976,13 +976,13 @@ describe("Loader", () => {
       guarded.push(u)
       return u instanceof Date
     })
-    class Guarded extends Loader.Service<Guarded>()("Guarded", {
+    class Guarded extends Query.Service<Guarded>()("Guarded", {
       ...options,
       args: { when: Schema.optional(Stamp), until: Schema.optionalKey(Stamp) }
     }, fetcher) {}
     // What the drop leaves is handed on as it was defined, and args that lose nothing are handed on themselves.
     const seen: Array<unknown> = []
-    class Plain extends Loader.Service<Plain>()("Plain", {
+    class Plain extends Query.Service<Plain>()("Plain", {
       ...options,
       args: Schema.Struct({ id: Schema.String, page: Schema.optional(Schema.Number) }).check(
         Schema.makeFilter((args) => {
@@ -1006,10 +1006,10 @@ describe("Loader", () => {
         yield* thrown(Encoded.get(1)),
         yield* thrown(Guarded.get({ until: undefined } as {}))
       ], [
-        `[Loader] read "Checked": the args don't encode with the read's args Schema`,
-        `[Loader] read "Checked": the args don't encode with the read's args Schema`,
-        `[Loader] read "Encoded": the args don't encode with the read's args Schema`,
-        `[Loader] read "Guarded": the args don't encode with the read's args Schema`
+        `[Query] "Checked": the args don't encode with the query's args Schema`,
+        `[Query] "Checked": the args don't encode with the query's args Schema`,
+        `[Query] "Encoded": the args don't encode with the query's args Schema`,
+        `[Query] "Guarded": the args don't encode with the query's args Schema`
       ])
       assert.deepStrictEqual(guarded, [undefined])
       // The Schema reads `id`, which isn't enumerable, and never reads `broken`, which throws.
@@ -1036,7 +1036,7 @@ describe("Loader", () => {
       for (const args of [defined, same, getter, inherited]) yield* Plain.get(args)
       assert.strictEqual(seen[1], same)
       assert.strictEqual(reads, 1)
-      assert.deepStrictEqual((yield* TestLoader.fetches).map((fetch) => fetch.read + " " + fetch.logKey), [
+      assert.deepStrictEqual((yield* TestQuery.fetches).map((fetch) => fetch.query + " " + fetch.logKey), [
         `Checked {"page":1}`,
         `Guarded {}`,
         `Plain {"id":"1"}`,
@@ -1045,7 +1045,7 @@ describe("Loader", () => {
         `Plain {"id":"4","page":null}`
       ])
     }).pipe(Effect.provide(
-      Layer.mergeAll(Checked.layer, Encoded.layer, Guarded.layer, Plain.layer, TestLoader.layer())
+      Layer.mergeAll(Checked.layer, Encoded.layer, Guarded.layer, Plain.layer, TestQuery.layer())
     ))
   })
 
@@ -1055,11 +1055,11 @@ describe("Loader", () => {
     const options = { success: Schema.Number, error: Schema.Never, staleTime: "Infinity" } as const
     const Page = Schema.Struct({ page: Schema.optional(Schema.NullOr(Schema.Number)) })
     class Paged extends Schema.Class<Paged>("Paged")({ page: Schema.optional(Schema.Number) }) {}
-    class Nested extends Loader.Service<Nested>()("Nested", {
+    class Nested extends Query.Service<Nested>()("Nested", {
       ...options,
       args: { id: Schema.String, filter: Page }
     }, fetcher) {}
-    class Held extends Loader.Service<Held>()("Held", {
+    class Held extends Query.Service<Held>()("Held", {
       ...options,
       args: {
         union: Schema.Union([Page, Schema.String]),
@@ -1070,12 +1070,12 @@ describe("Loader", () => {
       }
     }, fetcher) {}
     // Args that are not themselves a struct are not looked into either.
-    class ByClass extends Loader.Service<ByClass>()("ByClass", { ...options, args: Paged }, fetcher) {}
-    class ByUnion extends Loader.Service<ByUnion>()("ByUnion", {
+    class ByClass extends Query.Service<ByClass>()("ByClass", { ...options, args: Paged }, fetcher) {}
+    class ByUnion extends Query.Service<ByUnion>()("ByUnion", {
       ...options,
       args: Schema.Union([Page, Schema.String])
     }, fetcher) {}
-    class BySuspend extends Loader.Service<BySuspend>()("BySuspend", {
+    class BySuspend extends Query.Service<BySuspend>()("BySuspend", {
       ...options,
       args: Schema.suspend(() => Page)
     }, fetcher) {}
@@ -1102,7 +1102,7 @@ describe("Loader", () => {
         yield* BySuspend.get(page)
       ]
       assert.deepStrictEqual(results, [1, 1, 2, 2, 3, 4, 5, 6, 7, 8])
-      assert.deepStrictEqual((yield* TestLoader.fetches).map((fetch) => fetch.read + " " + fetch.logKey), [
+      assert.deepStrictEqual((yield* TestQuery.fetches).map((fetch) => fetch.query + " " + fetch.logKey), [
         `Nested {"filter":{"page":null},"id":"a"}`,
         `Nested {"filter":{"page":null},"id":"b"}`,
         `Nested {"filter":{},"id":"a"}`,
@@ -1119,7 +1119,7 @@ describe("Loader", () => {
       ByClass.layer,
       ByUnion.layer,
       BySuspend.layer,
-      TestLoader.layer()
+      TestQuery.layer()
     )))
   })
 
@@ -1130,20 +1130,20 @@ describe("Loader", () => {
       readonly refetchInterval?: Duration.Input
     }) =>
     () =>
-      Loader.Service<any>()("Bad", {
+      Query.Service<any>()("Bad", {
         args: {},
         success: Schema.Number,
         error: Schema.Never,
         staleTime: 0,
         ...options
       }, Effect.succeed(() => Effect.succeed(1)))
-    assert.throws(define({ staleTime: -1 }), `[Loader] read "Bad": staleTime can't be negative`)
+    assert.throws(define({ staleTime: -1 }), `[Query] "Bad": staleTime can't be negative`)
     assert.throws(define({ staleTime: "-Infinity" }), "staleTime can't be negative")
     assert.throws(define({ idleTimeToLive: "-1 second" as Duration.Input }), "idleTimeToLive can't be negative")
     assert.throws(define({ refetchInterval: 0 }), `"500 millis"`)
     assert.throws(define({ refetchInterval: "0 seconds" }), "refetchInterval must be positive")
     assert.throws(define({ refetchInterval: 999 }), `"500 millis"`)
-    assert.throws(() => Loader.layer({ idleTimeToLive: -1 }), "[Loader] idleTimeToLive can't be negative")
+    assert.throws(() => Query.layer({ idleTimeToLive: -1 }), "[Query] idleTimeToLive can't be negative")
     // Zero and "Infinity" are legal where they mean something.
     assert.doesNotThrow(define({ staleTime: "Infinity", idleTimeToLive: 0, refetchInterval: "500 millis" }))
     assert.doesNotThrow(define({ refetchInterval: 1000 }))
@@ -1155,11 +1155,11 @@ describe("Loader", () => {
     return Effect.gen(function*() {
       const exit = yield* Effect.exit(
         Effect.andThen(first.GetUser.peek({ id: "1" }), second.GetUser.peek({ id: "1" })).pipe(
-          Effect.provide(TestLoader.layer())
+          Effect.provide(TestQuery.layer())
         )
       )
       const defect = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined
-      assert.instanceOf(defect, TestLoader.ProblemsError)
+      assert.instanceOf(defect, TestQuery.ProblemsError)
       assert.deepStrictEqual(defect.problems.map((problem) => problem._tag), ["DuplicateName"])
     })
   })

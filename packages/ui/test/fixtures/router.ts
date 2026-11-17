@@ -1,10 +1,10 @@
 /**
  * A two-page app on the Router: a root that holds the route, a home page, a
- * person page that reads its name through a loader, counts its visits (a
+ * person page that reads its name through a query, counts its visits (a
  * Command) and counts clicks, and a slow page whose provided Layer takes a
  * second to build.
  */
-import { Command, Component, Head, Loader, Route, Router } from "@effect/ui"
+import { Command, Component, Head, Query, Route, Router } from "@effect/ui"
 import { Context, Effect, Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 
@@ -40,7 +40,7 @@ export const Home = Component.define({
  */
 export const personFetches = { count: 0, delay: 0, fail: false }
 
-export class GetPerson extends Loader.Service<GetPerson>()(
+export class GetPerson extends Query.Service<GetPerson>()(
   "GetPerson",
   {
     args: { id: Schema.Number },
@@ -88,9 +88,9 @@ export const Person = Component.define({
     visits: Schema.Number
   }),
   message: PersonMessage,
-  loaders: {
+  queries: {
     person: {
-      load: GetPerson,
+      query: GetPerson,
       args: (_model, props) => ({ id: props.id }),
       onChange: (result) =>
         PersonMessage.make({ _tag: "Loaded", name: AsyncResult.isSuccess(result) ? result.value : "Loading" })
@@ -112,7 +112,7 @@ export const Person = Component.define({
     h.el(
       "div",
       h.el("h1", model.name),
-      h.loaded.person.waiting ? h.el("p", "Refreshing") : null,
+      h.queries.person.waiting ? h.el("p", "Refreshing") : null,
       h.el("button").on("click", PersonMessage.make({ _tag: "Bump" })).children(`count ${model.count}`),
       h.el("button").on("click", PersonMessage.make({ _tag: "Rename" })).children("Rename")
     )

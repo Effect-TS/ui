@@ -2,7 +2,7 @@ import { Command, Component, Head, Router } from "@effect/ui"
 import { Layer, Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { type NoteResults, NoteSort } from "../../notes/domain/Note.ts"
-import { SearchNotes } from "../../notes/loaders/SearchNotes.ts"
+import { SearchNotes } from "../../notes/queries/SearchNotes.ts"
 import { Notes } from "../../notes/services/Notes.ts"
 import { AppRoute } from "../../routes.ts"
 
@@ -24,13 +24,13 @@ export const SearchPageNoDeps = Component.define({
   // The page takes its whole route as props. The URL is the only copy of
   // the text, the order and the page number. The Model holds no draft of
   // them, so there is nothing to keep in sync with the URL. The results live
-  // in the loader's state, so the Model is empty.
+  // in the query's result, so the Model is empty.
   props: Schema.Struct({ route: SearchRoute }),
   model: Schema.Struct({}),
   message: SearchPageMessage,
-  loaders: {
+  queries: {
     results: {
-      load: SearchNotes,
+      query: SearchNotes,
       // Typing changes the args on every keystroke. `debounce` fetches once
       // they have held still for 300 ms. Args whose results are cached and
       // fresh, such as a page seen moments ago, show at once, and so does the
@@ -100,7 +100,7 @@ export const SearchPageNoDeps = Component.define({
           h.option.attr("value", "asc").children("A to Z"),
           h.option.attr("value", "desc").children("Z to A")
         ),
-      AsyncResult.match(h.loaded.results, {
+      AsyncResult.match(h.queries.results, {
         // While a fetch waits or runs, `h.previous` holds the last results,
         // so the list stays on screen instead of flashing a loading state.
         onInitial: () =>
@@ -115,9 +115,9 @@ export const SearchPageNoDeps = Component.define({
   }
 })
 
-// The page requires `PatchSearch` as well as its loader. `PatchSearch` is a
+// The page requires `PatchSearch` as well as its query. `PatchSearch` is a
 // navigation Command, which the Router Layer in the entry module provides
-// with the others, so only the loader is provided here.
+// with the others, so only the query is provided here.
 export const SearchPage = SearchPageNoDeps.pipe(
   Component.provide(SearchNotes.layer.pipe(Layer.provide(Notes.layerHttp)))
 )
