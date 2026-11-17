@@ -1,7 +1,7 @@
 /**
  * An app that declares its routes' reads with `Router.prefetch`: a sidebar
  * mounted on every route, a detail page, a page whose walk reaches a component
- * child, a feature child and two components whose read the declarer can't
+ * child through another's slot, a feature child and two components whose read the declarer can't
  * see, a page whose view throws, and a page whose Layer fails.
  */
 import { Component, Feature, Loader, Route, Router } from "@effect/ui"
@@ -57,9 +57,13 @@ export const Note = Component.define({
   view: (_, h) => h.el("p", "Note")
 })
 
+/** Places what its parent passes, so a walk reaches the parent's content through it. */
+export const Frame = Component.define({ name: "Frame", model: Schema.Null, message: Schema.Never, slots: ["body"] })
+  .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("section", h.slots.body) })
+
 export class Badge extends Feature.Service<Badge>()("test/Badge", { props: Schema.Struct({}) }) {}
 
-/** Reads person 1, and shows a card for person 2, a feature, and a note with and without a `provide`. */
+/** Reads person 1, and shows a card for person 2 in a frame's slot, a feature, and a note with and without a `provide`. */
 export const Walked = Component.define({
   name: "Walked",
   model: Schema.Struct({}),
@@ -71,7 +75,7 @@ export const Walked = Component.define({
   view: (_, h) =>
     h.el(
       "div",
-      Card(h, { key: "card", props: { id: 2 } }),
+      Frame(h, { key: "frame", slots: { body: Card(h, { key: "card", props: { id: 2 } }) } }),
       Badge.render(h, { key: "badge", fallback: () => h.text("") }),
       Note.pipe(Component.provide(GetNote.layer))(h, { key: "provided", props: { id: 1 } }),
       Note(h, { key: "bare", props: { id: 2 } })
