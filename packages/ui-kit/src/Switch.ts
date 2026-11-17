@@ -37,11 +37,13 @@
  * nesting may change. The slot comes after the root, so a row with the text
  * first reverses the label's flex direction.
  *
- * The switch's own attributes win over the consumer's: `data-scope`,
- * `data-part` and the state attributes on every element, the label's
- * `for`, and the root's `type`, `role`, `aria-checked`,
- * `aria-readonly`, `aria-required` and `disabled`. `on*` attributes
- * are dropped, as the switch owns the handlers.
+ * Names in `attributes` are HTML attribute names (`class`, not
+ * `className`), compared without case. The switch's own attributes win over
+ * the consumer's: `data-scope`, `data-part` and the state attributes on
+ * every element, the label's `for`, and the root's `type`, `role`,
+ * `aria-checked`, `aria-readonly`, `aria-required`, `aria-disabled` and
+ * `disabled`. `on*` attributes, and names with whitespace, quotes, `=`,
+ * `<`, `>` or `/`, are dropped.
  *
  * **Data attributes**
  *
@@ -76,9 +78,9 @@
  *
  * ```ts import.meta.vitest
  * import { Component } from "@effect/ui"
- * import { Html } from "@effect/ui/html"
+ * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Switch } from "@effect/ui-kit"
- * import { Schema } from "effect"
+ * import { Effect, Schema } from "effect"
  *
  * const SettingsMessage = Schema.TaggedUnion({ ToggledNotify: { checked: Schema.Boolean } })
  *
@@ -97,16 +99,23 @@
  *     h.div.class("setting").children(
  *       Switch(h, {
  *         key: "notify",
- *         props: { checked: model.notify, name: "notify" },
+ *         props: {
+ *           checked: model.notify,
+ *           name: "notify",
+ *           attributes: {
+ *             root: { class: "h-5 w-9 rounded-full bg-gray-300 data-[checked]:bg-blue-600" },
+ *             thumb: { class: "block size-4 rounded-full bg-white data-[checked]:translate-x-4" }
+ *           }
+ *         },
  *         onEmit: ({ checked }) => SettingsMessage.make({ _tag: "ToggledNotify", checked }),
- *         slots: { label: "Notifications" },
- *         attributes: {
- *           root: { class: "h-5 w-9 rounded-full bg-gray-300 data-[checked]:bg-blue-600" },
- *           thumb: { class: "block size-4 rounded-full bg-white data-[checked]:translate-x-4" }
- *         }
+ *         slots: { label: "Notifications" }
  *       })
  *     )
  * })
+ *
+ * // The classes land on the elements the switch draws.
+ * const { html } = await Effect.runPromise(HtmlServer.renderToHtml(Settings, {}))
+ * if (!html.includes('<span class="block size-4')) throw new Error("the thumb has no class")
  * ```
  *
  * @stability experimental
@@ -266,6 +275,8 @@ export const Switch = Component.define({
         "aria-checked": String(h.props.checked),
         "aria-readonly": h.props.readOnly === true ? "true" : undefined,
         "aria-required": h.props.required === true ? "true" : undefined,
+        // The native `disabled` reports it, and the switch decides it.
+        "aria-disabled": undefined,
         disabled: flag(h.props.disabled)
       })
         .onClick(Message.make({ _tag: "ClickedRoot" }))

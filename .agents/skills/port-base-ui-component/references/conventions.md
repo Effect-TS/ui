@@ -65,41 +65,6 @@ update the components that already follow them.
   elements, such as a form field, get neither. The tags and nesting can
   change, so consumers select by these and the state attributes.
 
-## Consumer attributes
-
-- Every component with a view takes one `attributes` prop: a struct with
-  an optional record of attributes for each styled element, keyed by its
-  `data-part`. Each record takes HTML attribute names and string values:
-
-  ```ts
-  attributes: {
-    root: { class: "h-5 w-9 rounded-full data-[checked]:bg-blue-600", "aria-label": "Mute" },
-    thumb: { class: "size-4 data-[checked]:translate-x-4" }
-  }
-  ```
-
-  This is how a consumer sets classes (utility classes included), `style`,
-  `id`, `data-*` and ARIA, and it's the way to name a control whose
-  name-carrying slot is left out. Don't add one-off props such as
-  `thumbClass` or `ariaLabel`.
-- Build the schema with `Attributes` from `src/internal/attributes.ts`,
-  and draw each element with `withAttributes(builder, props.attributes?.<part>, owned)`.
-  It writes the consumer's attributes, then the component's own (`owned`)
-  over them.
-- `owned` lists every attribute the component decides on that element,
-  whether it sets it or leaves it absent: `data-scope`, `data-part`,
-  the state attributes, and ARIA, `type`, `role` and native attributes
-  such as `disabled`. Write `undefined` for one the component leaves
-  absent, such as `aria-readonly` on a switch that isn't read-only, or
-  `for` on a `<label>` that wraps its control. A consumer can't set it.
-- The consumer passes no handlers: props are data, and `withAttributes`
-  drops `on*` attributes. The component's handlers are the only ones on
-  what it draws, and content with the consumer's own handlers goes in a
-  slot.
-- A component that owns a token list (`class`, `aria-describedby`)
-  that the consumer may add to must join the two, as headless parts do,
-  rather than replace the consumer's. Extend `withAttributes` for it when
-  the first such component needs it.
 - Markup the component needs to work, such as a form field or the
   `<label>` that names a control, is drawn by the view, so a consumer
   can't forget it. Only put an element where its content model allows it.
@@ -114,6 +79,52 @@ update the components that already follow them.
 - A slot's content belongs to the consumer: its handlers send the
   consumer's messages. Use a slot for content, and props for anything the
   component reads.
+
+## Consumer attributes
+
+- Every component with a view takes one `attributes` prop, inside
+  `props`: an optional record of attributes for each styled element,
+  keyed by its `data-part`, with HTML attribute names (`class`, not
+  `className`) and string values:
+
+  ```ts
+  Switch(h, {
+    key: "mute",
+    props: {
+      checked: model.mute,
+      attributes: {
+        root: { class: "h-5 w-9 rounded-full data-[checked]:bg-blue-600", "aria-label": "Mute" },
+        thumb: { class: "size-4 data-[checked]:translate-x-4" }
+      }
+    }
+  })
+  ```
+
+  It carries classes (utility classes included), `style`, `id`, `data-*`
+  and ARIA, and it names a control whose name-carrying slot is left out.
+  Don't add one-off props such as `thumbClass` or `ariaLabel`.
+- Build the schema with `Attributes` from `src/internal/attributes.ts`,
+  and draw each element with `withAttributes(builder, props.attributes?.<part>, owned)`.
+  It lowercases the consumer's names, drops `on*` names and malformed
+  ones, writes the rest, then writes `owned` over them.
+- `owned` lists, in lowercase, every attribute the component decides on
+  that element, whether it sets it or leaves it absent (`undefined`):
+  `data-scope`, `data-part`, the state attributes, `type`, `role`, and
+  every attribute that reports state the component decides, native or
+  ARIA (`disabled` and `aria-disabled`, `aria-checked`). A consumer can't
+  set them. The rest, such as `popovertarget`, are the consumer's choice.
+- The consumer passes no handlers. The component's handlers are the only
+  ones on what it draws, and content with the consumer's handlers goes in
+  a slot.
+- When a later component needs one of these, extend `withAttributes`
+  then, not before:
+  - It owns part of a token list (`class`, `aria-describedby`) or of
+    `style` that the consumer may add to: join the two, with the
+    component's last, rather than replace the consumer's.
+  - It references its own elements by `id` (`aria-controls`): use the
+    consumer's `id` when given, and `h.id` otherwise.
+  - It repeats a part (Slider thumbs, Radio items): per-item attributes
+    travel with that item's data in props.
 
 ## Headless parts
 

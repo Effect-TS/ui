@@ -61,7 +61,9 @@ Work top to bottom. Write the notes from steps 1 to 3 into the PR description.
    - `attributes`: a class on every styled element, an arbitrary attribute
      such as `aria-label`, and that consumer values for every owned
      attribute and an `onclick` don't get through, while the component's
-     handler still fires
+     handler still fires. Pass the owned names in another case too, and
+     check them in server HTML and on a client mount
+     (`test/html/<Name>.test.ts`, under happy-dom)
    - Select elements by `data-part` in tests, as consumers do.
    - Use `Story.make(C, props, { slots: (h) => ({ ... }) }, f)` for a
      component with slots, and a stand-in view with `Story.parts` for a
@@ -69,7 +71,9 @@ Work top to bottom. Write the notes from steps 1 to 3 into the PR description.
      guard) and check that a test fails.
 6. **Document and check.**
    - module JSDoc in the shape the conventions give, with one example
-     in a fence opened with `ts import.meta.vitest` so it runs as a doctest, and `@since`,
+     in a fence opened with `ts import.meta.vitest` so it runs as a doctest.
+     The example renders the component and checks one thing it shows, as
+     examples aren't type-checked. Add `@since`,
      `@category` and `@stability experimental` on every export
    - add the component to `packages/ui-kit/README.md`
    - a changeset: `"@effect/ui-kit": minor`

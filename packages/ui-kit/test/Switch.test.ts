@@ -90,7 +90,8 @@ describe("Switch", () => {
   it("takes the consumer's attributes on every element, and keeps its own attributes and click handler", () => {
     const attributes = {
       // Each owned name below is one the switch sets or leaves absent.
-      label: { class: "row", for: "elsewhere", "data-checked": "" },
+      // Names are compared without case.
+      label: { class: "row", FOR: "elsewhere", "Data-Checked": "" },
       root: {
         class: "track",
         id: "mute",
@@ -101,12 +102,16 @@ describe("Switch", () => {
         type: "submit",
         role: "checkbox",
         "aria-checked": "mixed",
-        "aria-readonly": "true",
-        disabled: "",
-        "data-part": "track",
-        onclick: "alert(1)"
+        "Aria-Readonly": "true",
+        "aria-disabled": "true",
+        Disabled: "",
+        "DATA-PART": "track",
+        onclick: "alert(1)",
+        // Malformed names, which would write a handler in server HTML.
+        "x onclick": "alert(2)",
+        "a\"><script": "alert(3)"
       },
-      thumb: { class: "knob", "data-scope": "slider", "data-disabled": "" }
+      thumb: { CLASS: "knob", "data-scope": "slider", "data-disabled": "" }
     }
     // No label slot: the root's `aria-label` names it.
     const story = Story.make(Switch, { checked: false, attributes }, (s) =>
