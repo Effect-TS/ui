@@ -129,7 +129,7 @@ describe("NotesIndex", () => {
     const pinned = HtmlQuery.role("complementary", { name: "Pinned" })
     Story.make(NotesIndexNoDeps, {}, (s) =>
       // Load steps take the loader's name. `loaded` writes the result to
-      // the `notes` slot, as the runtime would, and re-renders the view.
+      // the `notes` loader's state, as the runtime would, and re-renders the view.
       s.loaded("notes", [note])
         // A drop with a hand-written payload. `HtmlStory.drop` picks the
         // target the browser host would, and throws when none accepts the
@@ -194,7 +194,7 @@ it.layer(Layer.mergeAll(Notes.layerMemory([note]), TestHost.layer()), { buildPer
 )
 
 // ---------------------------------------------------------------------------
-// Runtime: the whole app, across child slots, Layers and the Router.
+// Runtime: the whole app, across children, Layers and the Router.
 // ---------------------------------------------------------------------------
 
 // The app is tested as it ships, so its components keep their own domain

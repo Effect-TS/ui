@@ -13,12 +13,12 @@
  *
  * - The later entry wins per identity, so a descendant overrides its
  *   ancestors and, between siblings, the later one wins.
- * - The title, `lang`, `dir` and `<link rel="canonical">` are single slots.
+ * - The title, `lang`, `dir` and `<link rel="canonical">` each have one entry.
  *   A meta tag is identified by its `key`, else its `name` or `property`; a
  *   link by its `key`, else `rel` plus `href`; a JSON-LD block by its `key`,
  *   else its canonical form.
  * - `class` tokens are unioned in the order they were first contributed, and
- *   `data-*` attributes have one slot per name.
+ *   `data-*` attributes have one entry per name.
  * - A `titleTemplate` applies to a title set by a descendant, never to its own
  *   instance's title. The winning title passes through its ancestors'
  *   templates outward, nearest first.
@@ -319,7 +319,7 @@ export const meta = (
  *
  * **Details**
  *
- * `rel="canonical"` is a single slot. Other links are identified by `key`,
+ * `rel="canonical"` has one entry. Other links are identified by `key`,
  * else by `rel` plus `href`.
  *
  * @stability experimental
@@ -580,7 +580,7 @@ export interface Tree {
 
 /**
  * The identity of a meta, link or JSON-LD entry: two entries with the same
- * identity fill the same slot.
+ * identity are the same entry, and the later one wins.
  *
  * @stability experimental
  * @category utils

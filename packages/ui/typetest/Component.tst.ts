@@ -250,7 +250,7 @@ describe("Component", () => {
     const ParentDef = Component.define({ name: "Parent", model: Schema.Null, message: ParentMessage })
     const todo = { id: "", title: "", done: false }
 
-    it("builds a slot typed by h's messages, requiring what the component does", () => {
+    it("builds a child typed by h's messages, requiring what the component does", () => {
       ParentDef.view((_, h) => {
         expect(TodoItem(h, { key: "t", props: { todo } })).type.toBe<View.Child<ParentMessage, SaveTodo>>()
         expect(TodoItem(h, { key: "t", props: { todo }, onEmit: (events) => ParentMessage.make(events) })).type
@@ -273,7 +273,7 @@ describe("Component", () => {
         view: (_, h) =>
           Counter(h, { key: "c", props: { initial: 0 }, fallback: () => TodoItem(h, { key: "t", props: { todo } }) })
       })
-      // As with any slot, the fallback's requirements come back as `NoInfer<SaveTodo>`.
+      // As with any child, the fallback's requirements come back as `NoInfer<SaveTodo>`.
       expect<Component.Requirements<typeof Parent>>().type.toBeAssignableTo<SaveTodo>()
       expect<Component.Requirements<typeof Parent>>().type.toBeAssignableFrom<SaveTodo>()
     })

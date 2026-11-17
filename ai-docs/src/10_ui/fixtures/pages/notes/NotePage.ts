@@ -13,7 +13,7 @@ export const NotePageMessage = Schema.TaggedUnion({
   SaveNow: {}
 })
 
-// A ref names a child slot so the page can send it messages. The note's id
+// A ref names a child so the page can send it messages. The note's id
 // goes in with `at`, so a new note still mounts a fresh editor.
 const Editor = NoteEditor.ref("Editor")
 
@@ -21,18 +21,18 @@ export const NotePageNoDeps = Component.define({
   name: "NotePage",
   props: Schema.Struct({ id: Schema.String }),
   // The Model holds no copy of the note. The runtime keeps each loader's
-  // last result in a slot beside the Model, and the Model plus the slots is
-  // the instance's state.
+  // last result in its state beside the Model, and the Model plus the loader
+  // state is the instance's state.
   model: Schema.Struct({ notice: Schema.String }),
   message: NotePageMessage,
   // Each loader names its read and returns the read's args, or `undefined`
   // to disable it. The runtime watches the read at those args and writes
-  // every change to the slot, which re-renders the page. No message or
+  // every change to the loader's state, which re-renders the page. No message or
   // `update` case is involved.
   loaders: { note: { load: GetNote, args: (_model, props) => ({ id: props.id }) } }
 }).make({
   init: () => ({ notice: "" }),
-  // `update` can read the slots too, as `$.loaded`.
+  // `update` can read the loader state too, as `$.loaded`.
   update: (model, message, $) =>
     NotePageMessage.match(message, {
       Saved: () => ({ ...model, notice: "Saved" }),
@@ -40,7 +40,7 @@ export const NotePageNoDeps = Component.define({
       // "Save now" is a one-shot instruction, so it's a send, not a prop.
       // State the editor shows, like the note, stays in its props. The
       // editor's `update` handles the message after this render, with the
-      // props from it. A send to a slot that isn't rendered, such as while
+      // props from it. A send to a child that isn't rendered, such as while
       // the note loads, is dropped and logged.
       SaveNow: () => $.send(Editor.at($.props.id), { _tag: "Save" })
     }),
@@ -51,7 +51,7 @@ export const NotePageNoDeps = Component.define({
     Head.title(AsyncResult.isSuccess(loaded.note) ? loaded.note.value.title : `Note ${props.id}`)
   ],
   view: (model, h) =>
-    // `h.loaded.note` is the loader's slot as an `AsyncResult`.
+    // `h.loaded.note` is the loader's state as an `AsyncResult`.
     AsyncResult.match(h.loaded.note, {
       onInitial: () => h.p("Loading note…"),
       onFailure: () => h.p("This note doesn't exist."),
@@ -63,7 +63,7 @@ export const NotePageNoDeps = Component.define({
             props: { note },
             // Maps the child's events to this component's messages.
             onEmit: () => NotePageMessage.make({ _tag: "Saved" }),
-            // Every slot is a failure boundary. A failed child shows
+            // Every child is a failure boundary. A failed child shows
             // `fallback` and stays down until its key changes.
             onFailure: () => NotePageMessage.make({ _tag: "EditorFailed" }),
             fallback: () => h.p("The editor is unavailable.")

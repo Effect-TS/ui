@@ -1,10 +1,11 @@
 /**
- * What a component builds from `loaders`: the loader slots an instance
+ * What a component builds from `loaders`: the loader state an instance
  * holds beside its Model, their Schema, the opened views of `h` and `$`,
  * and the watches the runtime registers.
  *
- * A slot holds a snapshot: the last settled result of the loader's read, at
- * the args it was taken for. The Model plus the slots is an instance's state.
+ * A loader's state is a snapshot: the last settled result of the loader's
+ * read, at the args it was taken for. The Model plus the loader state is an
+ * instance's state.
  *
  * @internal
  */
@@ -58,7 +59,7 @@ export interface Marker {
   /** `undefined`: the loader is disabled, and the marker is inert. */
   readonly args: unknown
   readonly argsKey: string | undefined
-  /** Set for one key of a keyed loader: its values are collected into the loader's slot. */
+  /** Set for one key of a keyed loader: its values are collected into the loader's state. */
   readonly keyed: boolean
   readonly debounce: number | undefined
 }
@@ -81,11 +82,11 @@ export interface KeyedChange {
 }
 
 /**
- * An instance's loader slots, by loader name.
+ * An instance's loader state, by loader name.
  *
  * @internal
  */
-export type Slots = Readonly<Record<string, unknown>>
+export type LoaderState = Readonly<Record<string, unknown>>
 
 /**
  * A component's bound `loaders`. `undefined` without any.
@@ -161,7 +162,7 @@ const openList = (
 }
 
 /**
- * A keyed slot opened at the loader's keys: an entry per key in its order,
+ * A keyed loader's state opened at the loader's keys: an entry per key in its order,
  * each the stored result or `Initial`, waiting, and `get` by args.
  */
 const openKeyed = (
@@ -244,7 +245,7 @@ type Current =
   | { readonly args: ReadonlyArray<unknown>; readonly argsKey: undefined; readonly entries: ReadonlyArray<Keyed> }
 
 /**
- * The views of one `(model, props, slots)`: each loader runs at most once,
+ * The views of one `(model, props, loaderState)`: each loader runs at most once,
  * and the watches, `loaded`, `previous` and `patched` share its args.
  *
  * @internal
@@ -258,51 +259,51 @@ export interface Context {
   /** The args of a loader: a keyed loader's are its unique args. */
   readonly argsOf: (name: string) => Current
   /**
-   * The message a loader's `onChange` returns for its slot as these views open
+   * The message a loader's `onChange` returns for its state as these views open
    * it, or `undefined` without `onChange`. A keyed loader's also gets `changes`.
    */
   readonly changed: (name: string, changes: ReadonlyArray<KeyedChange>) => { readonly value: unknown } | undefined
 }
 
 /**
- * The Schema of an instance's slots: a struct with each loader's slot Schema.
+ * The Schema of an instance's loader state: a struct with each loader's state Schema.
  *
  * @internal
  */
-export type SlotsSchema = Schema.Struct<{ readonly [name: string]: Schema.Codec<unknown, unknown> }>
+export type LoaderStateSchema = Schema.Struct<{ readonly [name: string]: Schema.Codec<unknown, unknown> }>
 
 /** @internal */
 export interface Bound {
   readonly entries: ReadonlyArray<Entry>
   readonly byName: ReadonlyMap<string, Entry>
-  /** Every slot empty: an instance's slots before a loader writes one. */
-  readonly empty: Slots
-  /** The Schema of the slots for page state and history: a field per loader, by name. */
-  readonly schema: SlotsSchema
+  /** Every loader empty: an instance's loader state before a loader writes one. */
+  readonly empty: LoaderState
+  /** The Schema of the loader state for page state and history: a field per loader, by name. */
+  readonly schema: LoaderStateSchema
   /**
-   * The Schema of the slots for the message log. It keeps `waiting` and a
+   * The Schema of the loader state for the message log. It keeps `waiting` and a
    * list's exact `more`, which `update` can read and page state drops.
    */
-  readonly logSchema: SlotsSchema
-  readonly context: (model: unknown, props: unknown, slots: Slots | undefined) => Context
-  /** A single or list loader's slot holding `result` at `entry`. */
-  readonly slot: (
+  readonly logSchema: LoaderStateSchema
+  readonly context: (model: unknown, props: unknown, loaderState: LoaderState | undefined) => Context
+  /** A single or list loader's state holding `result` at `entry`. */
+  readonly state: (
     entry: Entry,
     at: Keyed,
     result: AsyncResult.Success<any, any> | AsyncResult.Failure<any, any>,
     patched: boolean,
     more: Loader.More<any> | undefined
   ) => unknown
-  /** A keyed loader's slot holding `snapshots`, one per args key. */
-  readonly slotMany: (entry: Entry, snapshots: Iterable<unknown>) => unknown
+  /** A keyed loader's state holding `snapshots`, one per args key. */
+  readonly stateMany: (entry: Entry, snapshots: Iterable<unknown>) => unknown
 }
 
 interface State {
   readonly model: any
   readonly props: any
-  readonly slots: Slots
+  readonly loaderState: LoaderState
   readonly memo: Map<string, Current>
-  /** The opened keyed slots, built at the first read. */
+  /** The opened keyed loaders, built at the first read. */
   readonly opened: Map<string, unknown>
   readonly running: Array<string>
   loaded: any
@@ -373,16 +374,16 @@ export const bind = (component: string, loaders: unknown): Bound | undefined => 
           const state: State = this[stateKey]
           return entry.keyed
             ? keyed!(state, entry)
-            : read(state.slots[entry.name], argsOf(state, entry).argsKey, entry)
+            : read(state.loaderState[entry.name], argsOf(state, entry).argsKey, entry)
         }
       })
     }
     return proto
   }
-  const openSlot = (state: State, entry: Entry) => {
+  const openKeyedState = (state: State, entry: Entry) => {
     let opened = state.opened.get(entry.name)
     if (opened === undefined) {
-      opened = openKeyed(Loader.defOf(entry.read), state.slots[entry.name], argsOf(state, entry).entries!)
+      opened = openKeyed(Loader.defOf(entry.read), state.loaderState[entry.name], argsOf(state, entry).entries!)
       state.opened.set(entry.name, opened)
     }
     return opened
@@ -390,7 +391,7 @@ export const bind = (component: string, loaders: unknown): Bound | undefined => 
   const loadedProto = view((snapshot, argsKey, entry) => {
     const result = open(snapshot, argsKey)
     return entry.list ? openList(snapshot, result) : result
-  }, openSlot)
+  }, openKeyedState)
   const previousProto = view(previous, undefined)
   const patchedProto = view(patched, undefined)
   const viewOf = (proto: object, state: State) => {
@@ -424,8 +425,16 @@ export const bind = (component: string, loaders: unknown): Bound | undefined => 
         ...current.entries.map((one) => watchOf(one.args, one.argsKey, true))
       ]
     })
-  const make = (model: any, props: any, slots: Slots): Context => {
-    const state: State = { model, props, slots, memo: new Map(), opened: new Map(), running: [], loaded: undefined }
+  const make = (model: any, props: any, loaderState: LoaderState): Context => {
+    const state: State = {
+      model,
+      props,
+      loaderState,
+      memo: new Map(),
+      opened: new Map(),
+      running: [],
+      loaded: undefined
+    }
     const loaded = viewOf(loadedProto, state)
     state.loaded = loaded
     return {
@@ -441,7 +450,7 @@ export const bind = (component: string, loaders: unknown): Bound | undefined => 
       }
     }
   }
-  // One context per (model, props, slots), shared by the watches and the view of that triple.
+  // One context per (model, props, loaderState), shared by the watches and the view of that triple.
   const contexts = new WeakMap<
     object,
     { readonly model: unknown; readonly props: unknown; readonly context: Context }
@@ -450,17 +459,17 @@ export const bind = (component: string, loaders: unknown): Bound | undefined => 
     entries,
     byName,
     empty,
-    schema: Schema.Struct(fields) as unknown as SlotsSchema,
-    logSchema: Schema.Struct(logFields) as unknown as SlotsSchema,
-    context: (model, props, slots = empty) => {
-      const found = contexts.get(slots)
+    schema: Schema.Struct(fields) as unknown as LoaderStateSchema,
+    logSchema: Schema.Struct(logFields) as unknown as LoaderStateSchema,
+    context: (model, props, loaderState = empty) => {
+      const found = contexts.get(loaderState)
       if (found !== undefined && found.model === model && found.props === props) return found.context
-      const context = make(model, props, slots)
-      contexts.set(slots, { model, props, context })
+      const context = make(model, props, loaderState)
+      contexts.set(loaderState, { model, props, context })
       return context
     },
-    slot: (entry, at, result, patched, more) =>
+    state: (entry, at, result, patched, more) =>
       Loader.makeSnapshot(Loader.defOf(entry.read), entry.name, at, result, patched, more),
-    slotMany: (entry, snapshots) => Loader.makeSnapshotMap(Loader.defOf(entry.read), entry.name, snapshots)
+    stateMany: (entry, snapshots) => Loader.makeSnapshotMap(Loader.defOf(entry.read), entry.name, snapshots)
   }
 }

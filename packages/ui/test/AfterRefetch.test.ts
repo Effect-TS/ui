@@ -473,7 +473,7 @@ describe("Command.afterRefetch", () => {
         yield* tick
         app.order.length = 0
         renameOn(root, app, "Cy")
-        // Bob's onSuccess comes inside the update that cut it, after Cy's patch has reached the slot.
+        // Bob's onSuccess comes inside the update that cut it, after Cy's patch has reached the loader state.
         assert.deepStrictEqual(app.order.slice(0, 3), [
           "update a Rename Cy",
           "update a UserChanged",

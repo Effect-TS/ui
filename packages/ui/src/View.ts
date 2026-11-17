@@ -78,7 +78,7 @@ import type * as Renderer from "./Renderer.ts"
 export type H<Msg = never> = Helper<Msg, unknown> & Tags<Registered, Msg>
 
 /**
- * A node of a view: an element, text, or a child component slot.
+ * A node of a view: an element, text, or a child component.
  *
  * **Details**
  *
@@ -286,16 +286,16 @@ export type MountHint =
   "onMount's Effect ends with a message or Component.noop. A mount with nothing to send ends with Effect.as(Component.noop)"
 
 /**
- * A child component slot, declared by calling a component with the
+ * A child component, declared by calling a component with the
  * parent's `h`, `Editor(h, { key })`, or with a feature's `render`,
  * `Todos.render(h, { key, fallback })`.
  *
  * **Details**
  *
- * The runtime gives each slot its own instance, Model and Scope. Several
- * instances of one component are several slots with different keys. The child
+ * The runtime gives each child its own instance, Model and Scope. Several
+ * instances of one component are several children with different keys. The child
  * reports up through `onEmit`, checked against the parent's message type, and
- * every slot is a failure boundary: a failed child shows `fallback`, or
+ * every child is a failure boundary: a failed child shows `fallback`, or
  * nothing, until its key changes, and the parent's optional `onFailure` is
  * also messaged.
  *
@@ -307,19 +307,19 @@ export interface Child<out Msg, out R = never> {
   readonly _tag: "Child"
   /** A component value, or a feature service resolved from the instance's context when it mounts. */
   readonly component: Component.Any | Feature.Any
-  /** The slot's key: the ref's key for a slot rendered with a ref. */
+  /** The child's key: the ref's key for a child rendered with a ref. */
   readonly key: string
-  /** The ref the parent sends to this slot with, if it was rendered with one. */
+  /** The ref the parent sends to this child with, if it was rendered with one. */
   readonly ref: Component.Ref.Any | undefined
   readonly props: unknown
   readonly onEmit: (events: any) => Msg | undefined
-  /** What the slot shows while its child can't be shown. Required for a feature child. */
+  /** What shows in the child's place while it can't be shown. Required for a feature child. */
   readonly fallback:
     | ((result: AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>) => Content<Msg, any>)
     | undefined
   /** Also tells the parent that the child failed. */
   readonly onFailure: ((failure: AsyncResult.Failure<never, unknown>) => Msg | undefined) | undefined
-  /** A headless child's whole view, written by whoever declared the slot. */
+  /** A headless child's whole view, written by whoever declared the child. */
   readonly view: ((parts: any) => Content<Msg, any>) | undefined
   /** Phantom: the child's requirements surface in its parent's. */
   readonly "~R"?: (_: never) => R
@@ -333,17 +333,17 @@ export interface Child<out Msg, out R = never> {
  */
 export declare namespace Child {
   /**
-   * The options of a slot: what a component call and a feature's `render`
+   * The options of a child: what a component call and a feature's `render`
    * take. `props` may be left out when the component takes none.
    *
    * **Details**
    *
-   * A slot takes exactly one of `key` and `ref`. With a ref, the ref's key
-   * is the slot's key, and the parent can `$.send` to the slot. `Rcv` is
-   * what the component receives, and the ref must be a `Component.Ref.Slot`
+   * A child takes exactly one of `key` and `ref`. With a ref, the ref's key
+   * is the child's key, and the parent can `$.send` to the child. `Rcv` is
+   * what the component receives, and the ref must be a `Component.Ref.For`
    * of it: a ref made from a component also fits a provided copy of it or a
-   * feature implementation. An erased `Component.Ref.Any` names no slot:
-   * every typed ref fits it, so a slot that took it would take a ref the
+   * feature implementation. An erased `Component.Ref.Any` names no child:
+   * every typed ref fits it, so a child that took it would take a ref the
    * component doesn't receive.
    *
    * A component call adds one rule: a component whose props are erased,
@@ -359,21 +359,21 @@ export declare namespace Child {
         readonly ref?: undefined
       }
       | {
-        /** Names the slot, so the parent can send it messages. Its key is the slot's key. */
-        readonly ref: Component.Ref.Slot<Receives<Rcv>>
+        /** Names the child, so the parent can send it messages. Its key is the child's key. */
+        readonly ref: Component.Ref.For<Receives<Rcv>>
         readonly key?: undefined
       }
     )
     & {
       /** Handles the child's whole `events` union and returns `undefined` for the cases it ignores. */
       readonly onEmit?: ((events: Events) => Msg | undefined) | undefined
-      /** Also tells the parent that the child failed. The failure stays in the slot either way. */
+      /** Also tells the parent that the child failed. The failure stays in the child either way. */
       readonly onFailure?: ((failure: AsyncResult.Failure<never, unknown>) => Msg | undefined) | undefined
     }
     & ({} extends Props ? { readonly props?: Props | undefined } : { readonly props: Props })
 
   /**
-   * What a component or feature receives, as a slot checks a ref against
+   * What a component or feature receives, as a child checks a ref against
    * it: `Rcv`, or nothing when `Rcv` is `any`, as for an erased component or
    * `Feature.Any`.
    *
@@ -1519,7 +1519,7 @@ export const makeHelper = <Msg, Props, V extends Elements = never>(
 
 /**
  * The text of a view, with the text of every element concatenated in order.
- * Child slots contribute nothing.
+ * Children contribute nothing.
  *
  * @stability experimental
  * @category queries

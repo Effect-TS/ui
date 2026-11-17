@@ -170,7 +170,7 @@ const Tip = Component.define({
 
 const flaky = { throws: false }
 
-// The closure's second slot takes the ref `Actions` on the client only, at the path the server gave it.
+// The closure's second child takes the ref `Actions` on the client only, at the path the server gave it.
 const twin = { client: false }
 const TwinActions = Menu.ref("Actions")
 const Twin = Component.define({ name: "Twin", model: Schema.Null, message: Schema.Never, elements: Html }).make({
@@ -494,7 +494,7 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
       assert.strictEqual(app.querySelectorAll("button")[1]!.textContent, "More")
     }).pipe(Effect.scoped))
 
-  it.effect("an adopted render fails whoever gives a ref to a slot in its view and one in a closure", () =>
+  it.effect("an adopted render fails whoever gives a ref to a child in its view and one in a closure", () =>
     Effect.gen(function*() {
       twin.client = false
       const rendered = yield* HtmlServer.renderToHtml(TwinShell, {})
