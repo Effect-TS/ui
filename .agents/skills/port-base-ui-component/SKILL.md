@@ -13,8 +13,9 @@ from Base UI" in the module docs, and carry on.
 
 Read [references/conventions.md](references/conventions.md) before step 3.
 `Switch` (`packages/ui-kit/src/Switch.ts`) is the worked example. The
-headless component guide in `LLMS.md` and
-`ai-docs/src/10_ui/fixtures/kit/Listbox.ts` show the API it builds on.
+"Slots" and "Headless components" sections of `LLMS.md`, with
+`ai-docs/src/10_ui/fixtures/kit/Collapsible.ts` and
+`ai-docs/src/10_ui/fixtures/kit/Listbox.ts`, show the API it builds on.
 
 ## Checklist
 
@@ -37,8 +38,9 @@ Work top to bottom. Write the notes from steps 1 to 3 into the PR description.
    If it exists, note where it diverges from Base UI and why. It is the
    closest reference for the same ideas without React.
 3. **Decide the shape.** Using the conventions:
-   - headless component or pure view helper
-   - the parts, named after Base UI's, and the native tag each one accepts
+   - component with slots, headless component, or pure view helper
+   - the element for each Base UI part, and the slots the consumer fills,
+     or, for a headless component, the parts and the tags each accepts
    - the props (the controlled value and the options), the events, and the
      Model, which holds only interaction state the consumer never stores
    - the message and event names, as past-tense facts
@@ -52,9 +54,13 @@ Work top to bottom. Write the notes from steps 1 to 3 into the PR description.
      emits nothing
    - the ARIA and data attributes for each state, on every part that has them
    - the keyboard: fire `keydown` for the keys the component handles. For
-     keys a native element handles, assert that the part rejects other tags.
-     Use `Story.make` with a stand-in view and `Story.parts`. Break the code
-     once (for example, drop the disabled guard) and check that a test fails.
+     keys a native element handles, assert the element's tag
+   - the markup the component draws for itself, such as the form field, and
+     where each slot's content shows
+   - Use `Story.make(C, props, { slots: (h) => ({ ... }) }, f)` for a
+     component with slots, and a stand-in view with `Story.parts` for a
+     headless one. Break the code once (for example, drop the disabled
+     guard) and check that a test fails.
 6. **Document and check.**
    - module JSDoc in the shape the conventions give, with one example
      in a fence opened with `ts import.meta.vitest` so it runs as a doctest, and `@since`,

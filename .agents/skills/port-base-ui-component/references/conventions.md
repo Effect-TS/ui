@@ -13,7 +13,8 @@ update the components that already follow them.
   ```ts
   import { Switch } from "@effect/ui-kit"
 
-  view: (model, h) => Switch(h, { key: "notify", props: { checked: model.notify }, view: (s) => ... })
+  view: ;
+  ;((model, h) => Switch(h, { key: "notify", props: { checked: model.notify }, slots: { label: "Notify" } }))
   ```
 
   So `src/index.ts` is not a generated barrel: `pnpm codegen` would export
@@ -32,37 +33,60 @@ update the components that already follow them.
   `@effect/ui/html/Html`, `effect/Schema`); the lint rejects barrel imports
   there. Tests may use the barrels.
 
-## Headless component or pure view helper
+## Kind of component
 
-- A **headless component** (`Component.define(...).make({ parts })`) is the
-  default. Use it as soon as the component handles an event, owns
-  interaction state, runs a Command (focus, scroll), or needs an id.
+- A **component with a view and slots** (`Component.define({ slots })`,
+  finished with `view`) is the default. Use it as soon as the component
+  handles an event, owns interaction state, runs a Command (focus, scroll),
+  needs an id, or needs markup to work, such as a form field. The kit draws
+  every element, and the consumer passes what goes inside in named slots.
+- A **headless component** (`Component.define(...).make({ parts })`) is
+  for structure that named slots can't carry: the consumer draws a list of
+  its own rows or items (Listbox options, Tabs), or must choose the
+  elements. A definition can't have both `slots` and `parts`.
 - A **pure view helper** is a function that takes the consumer's `h` and
   returns markup or decorated builders. Use it only when the component adds
   attributes and handles no event: Separator, Meter, Progress. A helper
   writes onto the consumer's own builder, where a later `.onClick` from the
-  consumer replaces the helper's. Parts keep both handlers, the kit's first.
+  consumer replaces the helper's.
 
-## Parts
+## Markup and slots
 
-- One part per Base UI part, in camelCase: `Switch.Root` is `root`,
-  `Dialog.Popup` is `popup`.
-- Each part accepts the native tag that gives the behaviour for free:
-  `p.part("button", ...)` for anything pressable, so Space, Enter and
-  focus come from the browser and need no key handler. List several tags
-  only when Base UI supports them and the behaviour holds for each.
-- A part sets ARIA, data attributes, ids, refs and handlers, and nothing
-  visual. The consumer sets classes, styles, children and the accessible
+- One element per Base UI part, with the native tag that gives the
+  behaviour for free: a `<button type="button">` for anything pressable,
+  so Space, Enter and focus come from the browser and need no key handler.
+- The view sets ARIA, data attributes, ids, refs and handlers, and nothing
+  visual: no classes and no styles. The consumer styles each part through
+  a class of its own around the component, the part's role or tag, and
+  the data attributes.
+- Markup the component needs to work, such as a form field or the
+  `<label>` that names a control, is drawn by the view, so a consumer
+  can't forget it. Only put an element where its content model allows it.
+- Name a slot after what the consumer passes, not after a Base UI part:
+  `label`, `title`, `description`. Place each slot once per render. A
+  slot the consumer leaves out shows nothing, so the component must work
+  without it, apart from losing what it carries.
+- A slot's content belongs to the consumer: its handlers send the
+  consumer's messages. Use a slot for content, and props for anything the
+  component reads.
+
+## Headless parts
+
+When a component is headless:
+
+- One part per Base UI part, in camelCase: `Tabs.Tab` is `tab`,
+  `Select.Popup` is `popup`. Each accepts the native tag that gives the
+  behaviour for free, `p.part("button", ...)`, and lists several tags only
+  when Base UI supports them and the behaviour holds for each.
+- Parts keep the consumer's handlers as well as the kit's, the kit's
+  first. The consumer sets classes, styles, children and the accessible
   name.
-- Markup the component needs to work, such as a form field, must not be a
-  part the consumer can forget to draw. A part can't add children, so the
-  part it belongs to becomes a function in `parts` that applies the part
-  and appends that markup: `s.root(h.button, ...children)` returns the
-  finished button with the hidden input as its last child. Only put it
-  inside an element whose content model allows it (a hidden input may sit
-  in a `<button>`, a checkbox may not).
+- Markup the component needs to work must not be a part the consumer can
+  forget to draw. A part can't add children, so the part it belongs to
+  becomes a function in `parts` that applies the part and appends that
+  markup, `s.root(h.button, ...children)`.
 - `parts` also returns plain values for markup that depends on state, in
-  place of Base UI's `className(state)` functions: `s.checked`, `m.open`.
+  place of Base UI's `className(state)` functions: `m.open`.
 
 ## Messages and events
 
@@ -124,7 +148,8 @@ The details are in the JSDoc of `popover` and `modal` in
 The module JSDoc has, in order:
 
 1. one sentence on what it is, and the Base UI link
-2. **Anatomy**: a table of Base UI part, ui-kit part, element
+2. **Anatomy**: a table of Base UI part and element, with the slots
+   where the view places them, or the part names for a headless component
 3. **Data attributes**
 4. **Keyboard**
 5. **Differences from Base UI**: everything left out or changed
