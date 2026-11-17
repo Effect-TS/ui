@@ -147,6 +147,26 @@ closure runs whenever the consumer renders, so wrap a headless child in a
 small normal component when the consumer renders often. Test one with
 `Story.parts`, which needs no runtime.
 
+### Shared state
+
+A headless component with `shares: (model, props) => value` owns shared
+state: every component in its `view` closure, at any depth, can read the
+value. A reader lists the owners it reads in `shared: { tips: Provider }` and
+reads `h.shared.tips` or `p.shared.tips` in `view` or `parts`. Any
+`update` below the owner can call `$.send(Provider, message)` with one of the
+messages the owner `receives`. Reads and sends put
+`Component.Shared<typeof Provider>` in a component's requirements, and the
+owner's closure removes it, so a reader with no owner above it doesn't
+compile. The state is the owner's Model, so the log records every change. In
+a `Story`, `s.shared(Provider, value)` or
+`s.given(model, {}, [[Provider, value]])` gives readers a value, and sends to
+the owner are in `sent`.
+
+Every owner update re-runs its closure, and headless children in it
+re-render each time, so put normal components directly under an owner.
+Every reader re-renders when the shared value changes, so keep readers few
+and the shared value small.
+
 ### Organizing an app
 
 The examples below are one notes app. Each example is an entry module, for
@@ -242,6 +262,11 @@ client, not the services.
   but no markup, and draw it from a consumer that calls it with `h` and a
   `view` closure. This browser entry module mounts the consumer, which is in
   `fixtures/notes/components/NoteLinkPicker.ts`.
+- **[Shared state](./ai-docs/src/10_ui/23_shared-state.ts)**:
+  Share part of a headless component's state with every component below it:
+  a tooltip provider that knows which tooltip is open, tooltips that read it
+  and tell it when they're focused, and a story of one tooltip with no
+  provider mounted.
 - **[Routing and the document head](./ai-docs/src/10_ui/30_routing.ts)**:
   Define typed routes with `Route` and keep the current route in the root's
   Model. The app also sets the title and meta tags with `Head`. This entry
