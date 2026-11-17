@@ -72,7 +72,7 @@ describe("$.send", () => {
       yield* TestHost.settle
       assert.strictEqual(root.text(), "a3:0:b3:1:b3c3:0:")
       const [sent] = updates(root.log(), "/List")
-      assert.deepStrictEqual(sent.sends?.map((send) => [send.ref.key, send.message]), [["Row[b]", { _tag: "Clear" }]])
+      assert.deepStrictEqual(sent.sends?.map((send) => [send.ref?.key, send.message]), [["Row[b]", { _tag: "Clear" }]])
       const [received] = updates(root.log(), "/List/Item[Row[b]]")
       assert.deepStrictEqual(received.source, { _tag: "Send", path: "/List", seq: sent.seq })
       assert.deepStrictEqual(received.message, { _tag: "Clear" })
@@ -272,9 +272,9 @@ describe("Story and sends", () => {
   it("records what update sent, and resets it with given", () => {
     const steps = Story.start(List, { ids: ["a", "b"] })
       .send(ListMessage.make({ _tag: "Clear", id: "b" }))
-      .sent((sent) => assert.deepStrictEqual(sent.map((send) => send.ref.key), ["Row[b]"]))
+      .sent((sent) => assert.deepStrictEqual(sent.map((send) => send.ref?.key), ["Row[b]"]))
       .send(ListMessage.make({ _tag: "Add", id: "c" }))
-    assert.deepStrictEqual(steps.current.sent.map((send) => [send.ref.key, send.message]), [
+    assert.deepStrictEqual(steps.current.sent.map((send) => [send.ref?.key, send.message]), [
       ["Row[b]", { _tag: "Clear" }],
       ["Row[c]", { _tag: "Clear" }]
     ])
