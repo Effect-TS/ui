@@ -1,9 +1,23 @@
 // @vitest-environment happy-dom
-import { Head } from "@effect/ui"
-import { BrowserHost } from "@effect/ui/html"
+import { Component, Head } from "@effect/ui"
+import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
+import { Effect, Schema } from "effect"
 import { afterEach, describe, expect, it } from "vitest"
 
 const head = (...entries: ReadonlyArray<Head.Entry>) => Head.merge({ entries, children: [] })
+
+const render = (entries: ReadonlyArray<Head.Entry>) =>
+  Effect.runPromise(
+    HtmlServer.renderToHtml(
+      Component.define({ name: "HeadNames", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+        init: () => null,
+        update: (model) => model,
+        head: () => entries,
+        view: (_, h) => h.div
+      }),
+      {}
+    )
+  )
 
 const sync = () => {
   const warnings: Array<string> = []
@@ -23,6 +37,87 @@ afterEach(() => {
 })
 
 describe("BrowserHost head", () => {
+  it("validates head tag and document data names before serialization, adoption and updates", async () => {
+    const unsafe = ["x onclick", "x\"><script>alert(1)</script", "x'", "x=", "x/", "x<", "x>", "x\t", "x\n", "x\u0000"]
+    const injected = Object.fromEntries(unsafe.map((name) => [`data-${name}`, "alert(1)"]))
+    const unsafeData = unsafe.flatMap((name) => [
+      Head.htmlData(`data-${name}`, "alert(1)"),
+      Head.bodyData(`data-${name}`, "alert(1)")
+    ])
+    const linkAttributes = { rel: "alternate", href: "/first", ...injected, HREF: "/last", "data-EUI": "fake" }
+    const entries = [
+      Head.link(linkAttributes),
+      ...unsafeData,
+      Head.htmlData("data-THEME", "first"),
+      Head.htmlData("data-theme", "a\"<&"),
+      Head.bodyData("data-THEME", "first"),
+      Head.bodyData("data-theme", "a\"<&"),
+      Head.htmlData("data-EUI", "fake"),
+      Head.bodyData("data-EUI", "fake")
+    ]
+    const rendered = await render(entries)
+    const invalidOnly = await render(unsafeData)
+    expect(invalidOnly.htmlAttributes).toBe("")
+    expect(invalidOnly.bodyAttributes).toBe("")
+    expect(rendered.head).toBe("<link rel=\"alternate\" href=\"/last\" data-eui>")
+    expect(rendered.htmlAttributes).toBe("data-theme=\"a&quot;&lt;&amp;\" data-eui=\"data-theme\"")
+    expect(rendered.bodyAttributes).toBe(rendered.htmlAttributes)
+    for (const hydrate of [false, true]) {
+      const target = new DOMParser().parseFromString(
+        hydrate
+          ? `<html ${rendered.htmlAttributes}><head>${rendered.head}</head><body ${rendered.bodyAttributes}></body></html>`
+          : "<html data-theme=\"shell\"><head></head><body data-theme=\"shell\"></body></html>",
+        "text/html"
+      )
+      const before = target.head.firstElementChild
+      const warnings: Array<string> = []
+      const host = BrowserHost.makeHost(target, { warn: (message) => warnings.push(message) })
+      hosts.push(host)
+      host.head!(head(...entries))
+      const link = target.head.querySelector("link")!
+      if (hydrate) expect(link).toBe(before)
+      expect(link.getAttributeNames()).toEqual(["rel", "href", "data-eui"])
+      expect(link.getAttribute("href")).toBe("/last")
+      expect(target.querySelector("script")).toBeNull()
+      for (const element of [target.documentElement, target.body]) {
+        expect(element.getAttributeNames()).toEqual(["data-theme", "data-eui"])
+        expect(element.getAttribute("data-theme")).toBe("a\"<&")
+        expect(element.getAttribute("data-eui")).toBe("data-theme")
+      }
+      host.head!(head(Head.htmlData("data-THEME", "updated"), Head.bodyData("data-THEME", "updated")))
+      for (const element of [target.documentElement, target.body]) {
+        expect(element.getAttribute("data-theme")).toBe("updated")
+        expect(element.getAttribute("data-eui")).toBe("data-theme")
+      }
+      host.head!(Head.empty)
+      expect(target.head.children.length).toBe(0)
+      for (const element of [target.documentElement, target.body]) {
+        expect(element.getAttribute("data-theme")).toBe(hydrate ? null : "shell")
+        expect(element.hasAttribute("data-eui")).toBe(false)
+      }
+      host.head!(head(...unsafeData))
+      expect(target.documentElement.hasAttribute("data-eui")).toBe(false)
+      expect(target.body.hasAttribute("data-eui")).toBe(false)
+      expect(warnings).toEqual([])
+    }
+  })
+
+  it("escapes data names in the serialized ownership marker", async () => {
+    const entries = [Head.htmlData("data-a&copy;", "amp"), Head.bodyData("data-a&copy;", "amp")]
+    const rendered = await render(entries)
+    expect(rendered.htmlAttributes).toBe("data-a&copy;=\"amp\" data-eui=\"data-a&amp;copy;\"")
+    expect(rendered.bodyAttributes).toBe(rendered.htmlAttributes)
+    const { apply } = sync()
+    apply(head(...entries))
+    for (const element of [document.documentElement, document.body]) {
+      expect(element.getAttribute("data-a&copy;")).toBe("amp")
+      expect(element.getAttribute("data-eui")).toBe("data-a&copy;")
+    }
+    apply(Head.empty)
+    expect(document.documentElement.hasAttribute("data-a&copy;")).toBe(false)
+    expect(document.body.hasAttribute("data-a&copy;")).toBe(false)
+  })
+
   it("adopts the server's marked tags, so the first sync changes nothing", () => {
     document.head.innerHTML = `<title>Ada</title><meta name="description" content="About Ada" data-eui>` +
       `<script type="application/ld+json" data-eui>{"name":"Ada"}</script>`

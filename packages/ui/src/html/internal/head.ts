@@ -3,6 +3,7 @@
  * document, owning only marked tags plus `<title>` and `lang` / `dir`.
  */
 import * as Head from "../../Head.ts"
+import * as headAttributes from "./headAttributes.ts"
 
 type Warn = (message: string) => void
 
@@ -26,12 +27,15 @@ interface Wanted {
   readonly signature: string
 }
 
-const wanted = (tag: Wanted["tag"], attributes: ReadonlyArray<readonly [string, string]>, text: string): Wanted => ({
-  tag,
-  attributes,
-  text,
-  signature: `${tag}\u0000${attributes.map(([name, value]) => `${name}=${value}`).sort().join("\u0000")}\u0000${text}`
-})
+const wanted = (tag: Wanted["tag"], pairs: ReadonlyArray<readonly [string, string]>, text: string): Wanted => {
+  const attributes = headAttributes.normalize(pairs)
+  return {
+    tag,
+    attributes,
+    text,
+    signature: `${tag}\u0000${attributes.map(([name, value]) => `${name}=${value}`).sort().join("\u0000")}\u0000${text}`
+  }
+}
 
 const wantedOf = (head: Head.Head): Array<Wanted> => [
   ...head.meta.map((entry) => wanted("meta", Head.attributes(entry), "")),
@@ -112,11 +116,14 @@ export const make = (document: Document, warn: Warn): (head: Head.Head) => void 
       duplicates("meta", [entry.name !== undefined ? ["name", entry.name] : ["property", entry.property ?? ""]])
     }
     for (const entry of head.links) {
+      const attributes = new Map(headAttributes.normalize(Head.attributes(entry)))
+      const rel = attributes.get("rel") ?? ""
+      const href = attributes.get("href") ?? ""
       duplicates(
         "link",
-        entry.attributes.rel === "canonical"
+        rel === "canonical"
           ? [["rel", "canonical"]]
-          : [["rel", entry.attributes.rel], ["href", entry.attributes.href]]
+          : [["rel", rel], ["href", href]]
       )
     }
     if (head.jsonLd.length > 0 && unmarked("script", [["type", ldType]])) {
@@ -145,7 +152,7 @@ export const make = (document: Document, warn: Warn): (head: Head.Head) => void 
           warn(`Head: <${owner.element.localName}> is missing the class tokens ${tokens.join(" ")} the marker lists`)
         }
       }
-      for (const [name, value] of Object.entries(want.data)) {
+      for (const [name, value] of headAttributes.normalize(Object.entries(want.data))) {
         if (names.includes(name) && owner.element.getAttribute(name) !== value) {
           warn(`Head: <${owner.element.localName}> ${name} doesn't hold the value the marker lists`)
         }
@@ -180,9 +187,10 @@ export const make = (document: Document, warn: Warn): (head: Head.Head) => void 
     for (const token of tokens) if (!owner.element.classList.contains(token)) owner.element.classList.add(token)
     owner.tokens = tokens
     if (tokens.size > 0) set.push("class")
-    const data = new Set(Object.keys(want.data))
+    const pairs = headAttributes.normalize(Object.entries(want.data))
+    const data = new Set(pairs.map(([name]) => name))
     for (const name of owner.data) if (!data.has(name)) attribute(owner, name, undefined)
-    for (const name of data) attribute(owner, name, want.data[name])
+    for (const [name, value] of pairs) attribute(owner, name, value)
     owner.data = data
     set.push(...data)
     const marker = set.join(" ")
