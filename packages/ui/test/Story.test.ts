@@ -1,8 +1,8 @@
-import { Command, Component, Route, Router, View } from "@effect/ui"
+import { Command, Component, Route, Router, Subscription, View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Query, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Cause, Data, Effect, Layer, Option, Schema } from "effect"
+import { Cause, Data, Effect, Layer, Option, Schema, Stream } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import {
   Counter,
@@ -23,6 +23,37 @@ const todo = { id: "t1", title: "buy milk", done: false }
 const todos = [todo, { id: "t2", title: "write spec", done: false }]
 
 describe("Story", () => {
+  it("delivers model-derived messages and validates subscription lifetimes", () => {
+    const Message = Schema.TaggedUnion({ Set: { value: Schema.Number }, Stop: {} })
+    const Receiver = Component.define({
+      name: "Receiver",
+      model: Schema.Number,
+      message: Message,
+      receives: ["Set"]
+    }).make({
+      init: () => 1,
+      update: (_model, message) => message._tag === "Set" ? message.value : 0,
+      subscriptions: (model) => model > 0 ? [Subscription.make("tick", Stream.empty)] : [],
+      view: (model, h) => h.text(String(model))
+    })
+    const s = Story.start(Receiver, {})
+    s.send((model) => ({ _tag: "Set", value: model + 1 }))
+      .model((model) => assert.strictEqual(model, 2))
+      .receive({ _tag: "Set", value: 3 })
+      .model((model) => assert.strictEqual(model, 3))
+      .receive((model) => ({ _tag: "Set", value: model * 2 }))
+      .model((model) => assert.strictEqual(model, 6))
+      .subscriptions((keys) => assert.deepStrictEqual(keys, ["tick"]))
+    assert.throws(() => s.subscription("missing", { _tag: "Stop" }), /Story.subscription.*missing.*active keys:.*tick/)
+    assert.throws(
+      () => s.subscription("~loaded/users", { _tag: "Stop" }),
+      /Story.subscription.*loader watch.*active keys:.*tick/
+    )
+    s.subscription("tick", { _tag: "Stop" }).model((model) => assert.strictEqual(model, 0))
+    assert.throws(() => s.subscription("tick", { _tag: "Set", value: 10 }), /active keys: \[\]/)
+    s.model((model) => assert.strictEqual(model, 0))
+  })
+
   describe("Counter", () => {
     it("counts by clicking", () => {
       Story.make(Counter, { initial: 1 }, (s) =>
@@ -307,10 +338,8 @@ describe("Story", () => {
             const fallback = Story.fallback(view, "t1", failure)
             assert.strictEqual(View.textOf(fallback!), "buy milk failed")
           }))
-      assert.strictEqual(
-        Story.layerFailure(TodoList, failure),
-        undefined
-      )
+      Story.start(TodoList, { initial: todos }).layerFailed(failure)
+        .model((model) => assert.deepStrictEqual(model.failed, []))
     })
 
     it("applies Component.provide's onFailure", () => {
@@ -319,10 +348,8 @@ describe("Story", () => {
         () => Layer.effect(SaveTodo, Effect.fail("offline" as const)),
         { onFailure: () => TodoListMessage.make({ _tag: "RowFailed", id: "layer" }) }
       )
-      assert.deepStrictEqual(
-        Story.layerFailure(Provided, AsyncResult.failure(Cause.fail("offline"))),
-        TodoListMessage.make({ _tag: "RowFailed", id: "layer" })
-      )
+      Story.start(Provided, { initial: todos }).layerFailed(AsyncResult.failure(Cause.fail("offline")))
+        .model((model) => assert.deepStrictEqual(model.failed, ["layer"]))
     })
   })
 

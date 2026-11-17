@@ -63,6 +63,7 @@ import { pipeArguments } from "effect/Pipeable"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
 import type * as Component from "../Component.ts"
 import type * as Head from "../Head.ts"
+import { isWatchKey } from "../internal/loaders.ts"
 import { checkChildPaths, checkFallbackPaths } from "../internal/paths.ts"
 import * as replay from "../internal/replay.ts"
 import * as engine from "../internal/story.ts"
@@ -235,8 +236,8 @@ export interface Steps<C extends AnyComponent> extends Shared.Steps<C> {
     { readonly [K in keyof Component.Loaders<C>]: Component.LoadedOf<Component.Loaders<C>[K]> }
   >
 
-  /** Sends a message to `update`. */
-  send(message: Component.Message<C>): this
+  /** Sends a message to `update`. An updater is called with the current Model. */
+  send(message: Component.Message<C> | ((model: Component.Model<C>) => Component.Message<C>)): this
   /**
    * Clicks the one element `target` matches: the innermost element with a
    * `click` handler, that element or an ancestor, sends its message. A string
@@ -332,7 +333,25 @@ class StepsImpl implements Steps<AnyComponent> {
     return this.step(engine.update(this.current, { props }))
   }
   send(message: unknown): this {
+    return this.step(
+      engine.dispatch(this.current, typeof message === "function" ? message(this.current.model) : message)
+    )
+  }
+  receive(message: unknown): this {
+    return this.send(message)
+  }
+  subscription(key: string, message: unknown): this {
+    const keys = this.current.subscriptions()
+    if (isWatchKey(key) || !keys.includes(key)) {
+      const reason = isWatchKey(key) ? "is a loader watch" : "is inactive"
+      throw new Error(
+        "Story.subscription: " + JSON.stringify(key) + " " + reason + "; active keys: " + JSON.stringify(keys)
+      )
+    }
     return this.step(engine.dispatch(this.current, message))
+  }
+  layerFailed(failure: AsyncResult.Failure<never, any>): this {
+    return this.step(engine.dispatch(this.current, this.current.component.layerFailure?.(failure)))
   }
   click(target: string | Query.Locator): this {
     const locator = typeof target === "string" ? Query.text(target) : target
@@ -640,19 +659,6 @@ export const fallback = <Msg>(
   checkFallbackPaths(checkChildPaths("Story.fallback", view), slot, node)
   return node
 }
-
-/**
- * The message `Component.provide`'s `onFailure` maps a Layer failure to, or
- * `undefined` when the component has none.
- *
- * @stability experimental
- * @category queries
- * @since 0.1.0
- */
-export const layerFailure = <C extends Component.Any>(
-  component: C,
-  failure: AsyncResult.Failure<never, any>
-): Component.Message<C> | undefined => component.layerFailure?.(failure)
 
 /**
  * One instance's head entries for a Model and props, or for a story's Model,

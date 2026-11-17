@@ -19,6 +19,36 @@ declare const todoItem: Story.Steps<typeof TodoItem>
 declare const searchBox: Story.Steps<typeof SearchBox>
 
 describe("Story", () => {
+  it("restricts receive to public messages and infers model callbacks", () => {
+    const Message = Schema.TaggedUnion({ Set: { value: Schema.Number }, Reset: {} })
+    const Receiver = Component.define({
+      name: "Receiver",
+      model: Schema.Number,
+      message: Message,
+      receives: ["Set"]
+    }).make({
+      init: () => 0,
+      update: (_model, message) => message._tag === "Set" ? message.value : 0,
+      view: (model, h) => h.text(String(model))
+    })
+    const steps: Steps.Steps<typeof Receiver> = Story.start(Receiver, {})
+    steps.receive((model) => {
+      expect(model).type.toBe<number>()
+      return { _tag: "Set", value: model + 1 }
+    })
+    expect(steps.receive).type.toBeCallableWith({ _tag: "Set", value: 1 })
+    expect(steps.receive).type.not.toBeCallableWith({ _tag: "Reset" })
+    expect(steps.receive).type.not.toBeCallableWith((_model: number) => ({ _tag: "Reset" as const }))
+    expect(counter.receive).type.not.toBeCallableWith(CounterMessage.make({ _tag: "Increment" }))
+    expect(steps.subscription).type.toBeCallableWith("tick", { _tag: "Reset" })
+    expect(steps.subscription).type.not.toBeCallableWith("tick", { _tag: "Missing" })
+    counter.send((model) => {
+      expect(model).type.toBe<{ readonly count: number }>()
+      return { _tag: "Increment" }
+    })
+    expect(counter.send).type.not.toBeCallableWith((_model: { readonly count: number }) => "bad")
+  })
+
   it("types steps by the component", () => {
     const story = Story.make(Counter, { initial: 0 }, (s) =>
       s.model((model) => {
