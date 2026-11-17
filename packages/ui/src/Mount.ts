@@ -11,7 +11,9 @@
  * The body gets the host node, the args and a Stream of the args, and ends
  * with its own result. The view maps that result to a message with
  * `Mount.map`. A mount with nothing to tell the component ends with
- * `Component.noop`.
+ * `Component.noop`. A mount that reports as it goes, such as a widget's
+ * events, is defined with `Mount.makeStream`, and its body is a Stream of
+ * results.
  *
  * **Example** (A mount that follows its args)
  *
@@ -36,13 +38,13 @@
  * @stability experimental
  * @since 0.1.0
  */
-import type * as Effect from "effect/Effect"
+import * as Effect from "effect/Effect"
 import type * as Equivalence from "effect/Equivalence"
 import { dual } from "effect/Function"
 import * as Pipeable from "effect/Pipeable"
 import * as Predicate from "effect/Predicate"
 import * as Schema from "effect/Schema"
-import type * as Stream from "effect/Stream"
+import * as Stream from "effect/Stream"
 import type * as Types from "effect/Types"
 import type * as Command from "./Command.ts"
 
@@ -189,11 +191,16 @@ export interface Issued<out Msg, out R = never, in Node = unknown, in Source = M
    */
   readonly argsSchema: Schema.Top
   /**
-   * The definition's body, before any `map`.
+   * The definition's body, before any `map`, giving each result to `send`.
    *
    * @internal
    */
-  readonly run: (node: Node, args: any, changes: Stream.Stream<any>) => Effect.Effect<unknown, never, R>
+  readonly run: (
+    node: Node,
+    args: any,
+    changes: Stream.Stream<any>,
+    send: (result: any) => Effect.Effect<void>
+  ) => Effect.Effect<void, never, R>
   /**
    * Maps the definition's result to what this mount ends with, composing
    * every `map` applied since it was issued.
@@ -260,7 +267,7 @@ interface Fields {
   readonly name: string
   readonly args: unknown
   readonly argsSchema: Schema.Top
-  readonly run: (node: any, args: any, changes: Stream.Stream<any>) => Effect.Effect<unknown, never, any>
+  readonly run: Issued<any, any, any, any>["run"]
   readonly resolve: (result: any) => any
 }
 
@@ -344,13 +351,85 @@ export const make = <const Name extends string, const In extends Command.ArgsInp
     args: Command.ArgsOf<In>,
     changes: Stream.Stream<Command.ArgsOf<In>>
   ) => Effect.Effect<A, never, R>
-): Factory<Command.ArgsOf<In>, A, Node, R> => {
+): Factory<Command.ArgsOf<In>, A, Node, R> =>
+  define(name, options, (node, args, changes, send) => Effect.flatMap(run(node, args, changes), send))
+
+/**
+ * Defines a mount that sends a result for each value of a Stream, for as long
+ * as its element lives.
+ *
+ * **When to use**
+ *
+ * Use when the work behind a host node reports more than once, such as a
+ * chart's clicks, a map's moves or an editor's changes.
+ *
+ * **Details**
+ *
+ * As `make`, but the body returns a Stream. Each value goes through the
+ * `map` of the latest render and is sent to the component, and a value
+ * mapped to `Component.noop` sends nothing. The Stream runs in the mount's
+ * Scope, so a listener it adds with `Stream.callback` is removed when the
+ * element goes. When the Stream ends, the mount sends nothing more.
+ *
+ * In a story, each `mounted` step sends one value.
+ *
+ * **Example** (A widget's events)
+ *
+ * ```ts import.meta.vitest
+ * import { Mount } from "@effect/ui"
+ * import { Effect, Queue, Schema, Stream } from "effect"
+ *
+ * interface Editor {
+ *   readonly onChange: (f: (text: string) => void) => () => void
+ * }
+ * declare const createEditor: (node: HTMLElement, text: string) => Editor
+ *
+ * const Message = Schema.TaggedUnion({ Edited: { text: Schema.String } })
+ *
+ * const CodeEditor = Mount.makeStream(
+ *   "CodeEditor",
+ *   { args: { text: Schema.String } },
+ *   (node: HTMLElement, { text }) =>
+ *     Stream.callback<string>((queue) =>
+ *       Effect.acquireRelease(
+ *         Effect.sync(() => createEditor(node, text).onChange((text) => Queue.offerUnsafe(queue, text))),
+ *         (unsubscribe) => Effect.sync(unsubscribe)
+ *       )
+ *     )
+ * )
+ *
+ * // In a view
+ * const editor = CodeEditor({ text: "" }).pipe(Mount.map((text) => Message.make({ _tag: "Edited", text })))
+ * ```
+ *
+ * @stability experimental
+ * @category constructors
+ * @since 0.1.0
+ */
+export const makeStream = <
+  const Name extends string,
+  const In extends Command.ArgsInput,
+  A,
+  Node = unknown,
+  R = never
+>(
+  name: Name,
+  options: Options<In>,
+  run: (
+    node: Node,
+    args: Command.ArgsOf<In>,
+    changes: Stream.Stream<Command.ArgsOf<In>>
+  ) => Stream.Stream<A, never, R>
+): Factory<Command.ArgsOf<In>, A, Node, R> =>
+  define(name, options, (node, args, changes, send) => Stream.runForEach(run(node, args, changes), send))
+
+const define = (name: string, options: Options<Command.ArgsInput>, run: Fields["run"]): any => {
   const argsSchema = Schema.isSchema(options.args)
     ? options.args as Schema.Top
     : Schema.Struct(options.args as Schema.Struct.Fields)
   const factory = (args: unknown = {}) => makeIssued({ name, args, argsSchema, run, resolve: identity })
   Object.defineProperty(factory, "name", { value: name })
-  return Object.assign(factory, { [DefinitionTypeId]: DefinitionTypeId, args: argsSchema }) as any
+  return Object.assign(factory, { [DefinitionTypeId]: DefinitionTypeId, args: argsSchema })
 }
 
 /**

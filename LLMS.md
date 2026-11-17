@@ -167,6 +167,21 @@ re-render each time, so put normal components directly under an owner.
 Every reader re-renders when the shared value changes, so keep readers few
 and the shared value small.
 
+### Mounts
+
+Work that needs an element's host node, such as measuring it or hosting a
+chart, map or editor, is a mount. Define it once at module level, like a
+Command: `Mount.make(name, { args }, (node, args, changes) => effect)` for
+work that ends with one result, or `Mount.makeStream` for work that sends a
+result per event for as long as the element lives. Annotate `node` with the
+node the body needs. A view issues it with its args and maps the result to a
+message: `h.canvas.onMount(Draw({ points }).pipe(Mount.map(toMessage)))`.
+End a mount with nothing to send with `Component.noop`. An element takes one
+mount. Args with no real Schema, such as a callback, need `Schema.declare`.
+Mounts never run on the server or in `TestHost`. In a `Story`,
+`expectMount(Draw({ points }))` asserts on the rendered args, and
+`mounted(Draw, result)` sends what the body would have produced.
+
 ### Organizing an app
 
 The examples below are one notes app. Each example is an entry module, for
@@ -267,6 +282,10 @@ client, not the services.
   a tooltip provider that knows which tooltip is open, tooltips that read it
   and tell it when they're focused, and a story of one tooltip with no
   provider mounted.
+- **[Mounts](./ai-docs/src/10_ui/24_mounts.ts)**:
+  Start work with an element's host node: a mount that measures a box once,
+  a mount that hosts a third-party editor and reports each change, and a
+  story that names both by their definitions.
 - **[Routing and the document head](./ai-docs/src/10_ui/30_routing.ts)**:
   Define typed routes with `Route` and keep the current route in the root's
   Model. The app also sets the title and meta tags with `Head`. This entry

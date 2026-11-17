@@ -1180,6 +1180,9 @@ export class ElementBuilder<
    *
    * The body runs once per element. A later render's args reach it through
    * its `changes` Stream, when they differ by the args Schema's equivalence.
+   * A render that gives the element a mount of another definition stops the
+   * running one and starts the new one, and a render without a mount stops
+   * it.
    *
    * A defect fails the instance. It never runs on the server or on a host that
    * doesn't run mounts, such as `TestHost`, where a test sends the message
@@ -1188,10 +1191,13 @@ export class ElementBuilder<
    *
    * **Gotchas**
    *
-   * A mount ends with one message, so a running mount can't send messages as
-   * it goes. A body that is an `Effect<void>` doesn't compile here, because
-   * a `void` type can hold any value, which would be sent as a message. End
-   * a mount with nothing to send with `Effect.as(Component.noop)`.
+   * An element takes one mount: calling `onMount` again throws. A mount from
+   * `Mount.make` ends with one message. One that sends messages as it goes,
+   * such as a widget's events, is defined with `Mount.makeStream`.
+   *
+   * A body that is an `Effect<void>` doesn't compile here, because a `void`
+   * type can hold any value, which would be sent as a message. End a mount
+   * with nothing to send with `Effect.as(Component.noop)`.
    *
    * @since 0.1.0
    */
@@ -1206,6 +1212,11 @@ export class ElementBuilder<
    */
   onMount(mount: MountModule.Issued<Msg | Component.Noop | MountHint, any, HostNode, never>): never
   onMount(mount: Mount<Msg>): any {
+    if (this.mount !== undefined) {
+      throw new Error(
+        `onMount(${mount.name}): this element already has the mount ${this.mount.name}, and an element takes one`
+      )
+    }
     return withFields(this, { mount })
   }
 }

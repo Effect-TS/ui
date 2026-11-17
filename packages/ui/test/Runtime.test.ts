@@ -2693,6 +2693,80 @@ describe("Runtime", () => {
         Effect.provide(Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })),
         provideHost
       ))
+
+    it.effect("a render that adds, swaps or drops an element's mount starts and stops it", () =>
+      Effect.gen(function*() {
+        const events: Array<string> = []
+        const tracked = (name: string) =>
+          Mount.make(name, { args: {} }, () =>
+            Effect.gen(function*() {
+              events.push(`start ${name}`)
+              yield* Effect.addFinalizer(() => Effect.sync(() => events.push(`stop ${name}`)))
+              return yield* Effect.never
+            }))
+        const A = tracked("A")
+        const B = tracked("B")
+        const Swap = Component.define({ name: "Swap", model: Schema.String, message: Schema.String, elements: Tiny })
+          .make({
+            init: () => "none",
+            update: (_, message) => message,
+            view: (model, h) => {
+              const field = h.field.value(model)
+              return model === "A" ? field.onMount(A()) : model === "B" ? field.onMount(B()) : field
+            }
+          })
+        const root = yield* TestHost.mount(Swap, {})
+        yield* TestHost.settle
+        root.send("A")
+        yield* TestHost.settle
+        assert.deepStrictEqual(events, ["start A"])
+        root.send("B")
+        yield* TestHost.settle
+        assert.deepStrictEqual(events, ["start A", "stop A", "start B"])
+        root.send("none")
+        yield* TestHost.settle
+        assert.deepStrictEqual(events, ["start A", "stop A", "start B", "stop B"])
+      }).pipe(
+        Effect.provide(Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })),
+        provideHost
+      ))
+
+    it.effect("a stream mount sends each value through the Mount.map of the latest render", () =>
+      Effect.gen(function*() {
+        const first = yield* Deferred.make<string>()
+        const second = yield* Deferred.make<string>()
+        const Clicks = Mount.makeStream(
+          "Clicks",
+          { args: {} },
+          () => Stream.concat(Stream.fromEffect(Deferred.await(first)), Stream.fromEffect(Deferred.await(second)))
+        )
+        const Widget = Component.define({
+          name: "Widget",
+          model: Schema.Array(Schema.String),
+          message: Schema.String,
+          elements: Tiny
+        }).make({
+          init: () => [],
+          update: (model, message) => [...model, message],
+          view: (model, h) => h.field.onMount(Clicks().pipe(Mount.map((id) => `${id} after ${model.length}`)))
+        })
+        const root = yield* TestHost.mount(Widget, {})
+        yield* TestHost.settle
+        yield* Deferred.succeed(first, "a")
+        yield* TestHost.settle
+        yield* Deferred.succeed(second, "b")
+        yield* TestHost.settle
+        assert.deepStrictEqual(root.model(), ["a after 0", "b after 1"])
+      }).pipe(
+        Effect.provide(Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })),
+        provideHost
+      ))
+
+    it("an element takes one mount", () => {
+      const Focus = Mount.make("Focus", { args: {} }, () => Effect.succeed(Component.noop))
+      const Measure = Mount.make("Measure", { args: {} }, () => Effect.succeed(Component.noop))
+      assert.throws(() => Tiny.tags.field.onMount(Focus()).onMount(Measure()), /already has the mount Focus/)
+    })
   })
 
   it.effect("a removed element's mount that was waiting for its Layer never runs", () =>

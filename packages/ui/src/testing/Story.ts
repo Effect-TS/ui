@@ -445,7 +445,9 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    * A definition matches by name; an issued mount also matches the args, by
    * the args Schema's equivalence. `result` is the definition's own result,
    * before any `Mount.map`, which is replayed to produce the component's
-   * message. A mount that ends with `Component.noop` takes no result.
+   * message. A mount that ends with `Component.noop` takes no result. For a
+   * mount from `Mount.makeStream`, `result` is one value of its Stream, and
+   * each step sends one.
    *
    * Only the story's own component's mounts count: its elements', and those
    * of the parts it owns. Throws when no rendered mount matches, or when

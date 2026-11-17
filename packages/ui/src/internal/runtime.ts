@@ -131,7 +131,7 @@ interface RElement {
   v: View.Element<any, any>
   readonly node: unknown
   children: Array<Rendered>
-  readonly mount: RunningMount | undefined
+  mount: RunningMount | undefined
   /** The mounts of the element's owned layers, by owner and mount name. */
   ownedMounts: ReadonlyArray<OwnedMount> | undefined
 }
@@ -3362,25 +3362,23 @@ const setup = (
     afterCommit(() =>
       whenReady(env, (envCtx) => {
         if (inst.closed || removedMounts.has(mountScope)) return
+        const send = (result: unknown) =>
+          Effect.sync(() => {
+            // The latest render's map, so what it closes over is current.
+            const latest = running.mount
+            const message = latest.resolve(result as never)
+            // A result mapped to `Component.noop` sends nothing, and logs nothing.
+            if (isNoop(message)) return
+            inst.dispatch(message, {
+              _tag: "Mount",
+              name: latest.name,
+              args: latest.args,
+              argsSchema: latest.argsSchema
+            })
+          })
         const fiber = forkNow(
           withCache(Context.add(Context.add(envCtx, Scope.Scope, mountScope), services.Refs, refsOf(inst))),
-          Effect.flatMap(
-            Effect.suspend(() => mount.run(node, running.mount.args, changes)),
-            (result) =>
-              Effect.sync(() => {
-                // The latest render's map, so what it closes over is current.
-                const latest = running.mount
-                const message = latest.resolve(result as never)
-                // A mount that ends with `Component.noop` sends nothing, and logs nothing.
-                if (isNoop(message)) return
-                inst.dispatch(message, {
-                  _tag: "Mount",
-                  name: latest.name,
-                  args: latest.args,
-                  argsSchema: latest.argsSchema
-                })
-              })
-          )
+          Effect.suspend(() => mount.run(node, running.mount.args, changes, send))
         )
         interruptOnClose(mountScope, fiber)
         fiber.addObserver((exit) => {
@@ -3394,13 +3392,12 @@ const setup = (
   }
 
   /**
-   * A patch gives a running mount the mount its element now renders with: its map, and its args,
-   * published when they differ by the args Schema's equivalence. Another definition's mount is ignored.
+   * A patch gives a running mount the mount its element now renders with, issued by the same
+   * definition: its map, and its args, published when they differ by the args Schema's equivalence.
    */
-  const updateMount = (running: RunningMount | undefined, mount: View.Mount<any> | undefined) => {
-    if (running === undefined || mount === undefined) return
+  const updateMount = (running: RunningMount, mount: View.Mount<any>) => {
     const previous = running.mount
-    if (previous === mount || previous.name !== mount.name) return
+    if (previous === mount) return
     running.mount = mount
     if (running.pubsub === undefined || Mount.sameArgs(previous, mount)) return
     // `publishUnsafe` drops a value when the buffer is full. `publish` slides it out, and never suspends.
@@ -3504,7 +3501,7 @@ const setup = (
       const mount = layer.mount
       if (mount === undefined) continue
       const kept = running?.find((entry) => entry.owner === layer.owner && entry.name === mount.name)
-      if (kept !== undefined) updateMount(kept.running, mount)
+      if (kept?.running !== undefined) updateMount(kept.running, mount)
       out.push(
         kept ??
           {
@@ -3523,6 +3520,22 @@ const setup = (
     if (running === undefined) return
     removedMounts.add(running.scope)
     closeScope(running.scope)
+  }
+
+  /** The element's mount after a patch: kept for the same definition, else stopped and started anew. */
+  const patchMount = (
+    inst: Instance,
+    rendered: RElement,
+    mount: View.Mount<any> | undefined,
+    env: Env
+  ): RunningMount | undefined => {
+    const running = rendered.mount
+    if (running !== undefined && mount !== undefined && running.mount.name === mount.name) {
+      updateMount(running, mount)
+      return running
+    }
+    stopMount(running)
+    return mount === undefined ? undefined : startMount(inst.author, mount, rendered.node, env, inst)
   }
 
   // -- create ---------------------------------------------------------------
@@ -4497,8 +4510,9 @@ const setup = (
     }
     patchProps(node, prev.props, element.props)
     // A mount belongs to the element, not to one view run: it keeps running across patches, and
-    // gets each new input. An owned layer's mount belongs to its part: it runs while the part is applied.
-    if (rendered.mount !== undefined) updateMount(rendered.mount, element.mount)
+    // gets each new args. A mount of another definition replaces it. An owned layer's mount belongs
+    // to its part: it runs while the part is applied.
+    if (element.mount !== prev.mount) rendered.mount = patchMount(inst, rendered, element.mount, env)
     rendered.v = element
     if (element.owned !== prev.owned) {
       rendered.ownedMounts = startOwnedMounts(inst, element, rendered.node, env, rendered.ownedMounts ?? [])

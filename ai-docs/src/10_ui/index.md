@@ -154,6 +154,21 @@ re-render each time, so put normal components directly under an owner.
 Every reader re-renders when the shared value changes, so keep readers few
 and the shared value small.
 
+### Mounts
+
+Work that needs an element's host node, such as measuring it or hosting a
+chart, map or editor, is a mount. Define it once at module level, like a
+Command: `Mount.make(name, { args }, (node, args, changes) => effect)` for
+work that ends with one result, or `Mount.makeStream` for work that sends a
+result per event for as long as the element lives. Annotate `node` with the
+node the body needs. A view issues it with its args and maps the result to a
+message: `h.canvas.onMount(Draw({ points }).pipe(Mount.map(toMessage)))`.
+End a mount with nothing to send with `Component.noop`. An element takes one
+mount. Args with no real Schema, such as a callback, need `Schema.declare`.
+Mounts never run on the server or in `TestHost`. In a `Story`,
+`expectMount(Draw({ points }))` asserts on the rendered args, and
+`mounted(Draw, result)` sends what the body would have produced.
+
 ### Organizing an app
 
 The examples below are one notes app. Each example is an entry module, for
