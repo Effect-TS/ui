@@ -276,7 +276,12 @@ const Waiting = Component.define({
 const Field = Component.define({ name: "Field", model: Schema.Null, message: Schema.Never, elements: Html }).make({
   init: () => null,
   update: (model) => model,
-  parts: (_, p) => ({ input: p.part("input", (b) => b.class("field").attr("aria-describedby", "hint")) })
+  parts: (_, p) => ({
+    input: p.part(
+      "input",
+      (b) => b.class(undefined).class("field").attr("aria-describedby", undefined).attr("aria-describedby", "hint")
+    )
+  })
 })
 
 const Form = Component.define({ name: "Form", model: Schema.Null, message: Schema.Never, elements: Html }).make({
@@ -459,6 +464,62 @@ describe("headless components", () => {
       const input = root.get(Query.tag("input")) as TestHost.TestElement
       assert.strictEqual(input.attrs.class, "wide field")
       assert.strictEqual(input.attrs["aria-describedby"], "note hint")
+    })))
+
+  it.effect("a part removes consumer attributes explicitly, without touching attributes it leaves alone", () =>
+    provideHost(Effect.gen(function*() {
+      const Control = Component.define({
+        name: "Control",
+        props: Schema.Struct({ active: Schema.Boolean }),
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        parts: (_, p) => ({
+          root: p.part("button", (b) =>
+            b.disabled(p.props.active)
+              .attr("aria-readonly", p.props.active ? "true" : undefined)
+              .attr("data-checked", p.props.active ? "" : undefined)
+              .attr("title", undefined).attr("title", "part")
+              .attr("data-removed", "part").attr("data-removed", undefined)
+              .class("part"))
+        })
+      })
+      const Consumer = Component.define({
+        name: "Consumer",
+        model: Schema.Boolean,
+        message: Schema.Literal("toggle"),
+        elements: Html
+      }).make({
+        init: () => false,
+        update: (active) => !active,
+        view: (active, h) =>
+          h.div(
+            h.button.onClick("toggle").children("toggle"),
+            Control(h, {
+              key: "control",
+              props: { active },
+              view: (s) =>
+                s.root(
+                  h.button.disabled(true).attr("aria-readonly", "true").attr("data-checked", "")
+                    .attr("data-removed", "consumer").attr("title", "consumer")
+                    .attr("aria-label", "Keep me").class("consumer")
+                ).children("control")
+            })
+          )
+      })
+      const root = yield* TestHost.mount(Consumer, {})
+      const attrs = () => (root.get(Query.text("control", { exact: true })) as TestHost.TestElement).attrs
+      const kept = { title: "part", "aria-label": "Keep me", class: "consumer part" }
+      assert.deepStrictEqual(attrs(), kept)
+      click(root, "toggle")
+      yield* TestHost.settle
+      assert.deepStrictEqual(attrs(), { ...kept, disabled: "", "aria-readonly": "true", "data-checked": "" })
+      click(root, "toggle")
+      yield* TestHost.settle
+      assert.deepStrictEqual(attrs(), kept)
     })))
 
   it.effect("an element written by hand leaves owned out", () =>
