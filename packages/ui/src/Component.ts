@@ -1161,11 +1161,14 @@ export type SlotHelpers<Sl extends string> = [Sl] extends [never] ? {}
 type SlotOptions<Sl extends string, SC, Msg> = [Sl] extends [never] ? { readonly slots?: never }
   : { readonly slots?: SC & CheckedSlots<Sl, SC, Msg> }
 
-// Distributes over a conditional map, whose `keyof` holds only the names every branch has. Mapped over
-// the map's own keys, so an interface needs no index signature.
-type CheckedSlots<Sl extends string, SC, Msg> = SC extends unknown
-  ? { readonly [K in keyof SC]: K extends Sl ? View.Input<Msg, any> : never }
-  : never
+// One shape over the names of every branch of a conditional map, whose `keyof` holds only the names
+// every branch has: `SC` must fit it, so each branch is checked whole, and one can't pass by fitting
+// another's shape. Optional, as a name may be in one branch only. Mapped over the map's own keys, so an
+// interface needs no index signature.
+type CheckedSlots<Sl extends string, SC, Msg> = {
+  readonly [K in SlotNames<SC>]?: K extends Sl ? View.Input<Msg, any> : never
+}
+type SlotNames<SC> = SC extends unknown ? keyof SC : never
 type SlotRequirements<SC> = SC extends unknown ? View.Requirements<SC[keyof SC]> : never
 
 /**

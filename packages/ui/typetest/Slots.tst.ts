@@ -48,6 +48,14 @@ interface ExtraMap {
   readonly header: string
 }
 declare const interfaceExtra: ExtraMap
+// One branch's names are a subset of another's.
+declare const overlapping:
+  | { readonly body: View.Child<PageMsg, Clock> }
+  | { readonly body: string; readonly footer: string }
+declare const overlappingExtra: { readonly body: string } | { readonly body: string; readonly header: string }
+declare const overlappingForeign:
+  | { readonly body: string }
+  | { readonly body: string; readonly footer: View.Child<typeof OtherMsg.Type, never> }
 
 describe("slots", () => {
   it("types h.slots in the view, fragments and Component.Helper", () => {
@@ -151,6 +159,23 @@ describe("slots", () => {
       .toBeCallableWith(h, { key: "p", slots: extra })
     expect(Panel<PageMsg, never, { readonly body: View.Child<typeof OtherMsg.Type, never> }>).type.not
       .toBeCallableWith(h, { key: "p", slots: { body: other.button.onClick(OtherMsg.make({ _tag: "Other" })) } })
+  })
+
+  it("checks every branch of overlapping conditional maps, inferred or given as a type argument", () => {
+    expect(Panel(h, { key: "p", slots: overlapping })).type.toBe<View.Child<PageMsg, Clock>>()
+    expect(Panel<PageMsg, never, typeof overlapping>(h, { key: "p", slots: overlapping })).type.toBe<
+      View.Child<PageMsg, Clock>
+    >()
+    expect(Panel).type.not.toBeCallableWith(h, { key: "p", slots: overlappingExtra })
+    expect(Panel<PageMsg, never, typeof overlappingExtra>).type.not.toBeCallableWith(h, {
+      key: "p",
+      slots: overlappingExtra
+    })
+    expect(Panel).type.not.toBeCallableWith(h, { key: "p", slots: overlappingForeign })
+    expect(Panel<PageMsg, never, typeof overlappingForeign>).type.not.toBeCallableWith(h, {
+      key: "p",
+      slots: overlappingForeign
+    })
   })
 
   it("rejects slots on headless and feature calls, from a variable too", () => {
