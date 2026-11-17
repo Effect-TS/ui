@@ -11,7 +11,7 @@
  * @since 0.1.0
  */
 import type { Pipeable } from "effect/Pipeable"
-import type { AsyncResult } from "effect/reactivity"
+import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import type * as Command from "../Command.ts"
 import type * as Component from "../Component.ts"
 import type * as Loader from "../Loader.ts"
