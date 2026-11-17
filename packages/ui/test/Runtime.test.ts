@@ -3121,6 +3121,181 @@ describe("Runtime", () => {
         assert.deepStrictEqual(subscribed, ["a", "c"])
       })))
 
+    it.effect("a loader whose args leave out the key gets the cached entry after a key change, and one with the key fetches under the new selection", () =>
+      provideHost(Effect.gen(function*() {
+        for (const keyed of [false, true]) {
+          const fetches: Array<string> = []
+          class Read extends Loader.Service<Read>()(
+            `test/KeyedCached${keyed}`,
+            {
+              args: { room: Schema.String },
+              success: Schema.String,
+              error: Schema.Never,
+              staleTime: "30 seconds"
+            },
+            Greeter.useSync((greeter) => () =>
+              Effect.sync(() => fetches.push(greeter.room)).pipe(Effect.as(greeter.room))
+            )
+          ) {}
+          const Reading = Component.define({
+            name: "Reading",
+            model: Schema.String,
+            message: Schema.String,
+            loaders: { data: { load: Read, args: (room) => ({ room: keyed ? room : "any" }) } }
+          }).make({
+            init: () => "a",
+            update: (_, room) => room,
+            view: (room, h) => h.text(`${room}:${AsyncResult.isSuccess(h.loaded.data) ? h.loaded.data.value : "-"}`)
+          })
+          const Room = Component.provide(Reading, {
+            key: (_, room) => room,
+            layer: (room) => Read.layer.pipe(Layer.provide(Layer.succeed(Greeter, { room })))
+          })
+          const root = yield* TestHost.mount(Room, {})
+          yield* TestHost.settle
+          assert.strictEqual(root.text(), "a:a")
+          root.send("b")
+          yield* TestHost.settle
+          // The cache is the root's, by read and args: within staleTime the entry "a" fetched is reused.
+          assert.deepStrictEqual(
+            [root.text(), fetches],
+            keyed ? ["b:b", ["a", "b"]] : ["b:a", ["a"]],
+            JSON.stringify({ keyed })
+          )
+        }
+      })))
+
+    /** A service the parent provides, outside the keyed provide's selection. */
+    class Host extends Context.Service<Host, { readonly name: string }>()("test/KeyedHost") {}
+    /** Renders `child` under a parent that provides `Host`, with a fallback should `child` fail. */
+    const underHost = <L extends Layer.Layer<any, never, never>>(child: Component.Any, layer: L) =>
+      Component.provide(
+        Component.define({ name: "HostParent", model: Schema.Null, message: Schema.Never }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => h.el("div", (child as any)(h, { key: "child", props: {}, fallback: () => h.text("down") }))
+        }),
+        layer
+      )
+
+    it.effect("after a handled failed selection, a new Command that uses only the parent's services runs, and one that needs a selected service fails the instance", () =>
+      provideHost(Effect.gen(function*() {
+        const Act = Schema.TaggedUnion({
+          Move: { room: Schema.String },
+          Ping: {},
+          Need: {},
+          Done: { by: Schema.String },
+          Failed: {}
+        })
+        class Ping extends Command.Service<Ping>()(
+          "test/KeyedPing",
+          { args: {}, invalidates: () => [] },
+          Host.useSync((host) => () => Effect.succeed(Act.make({ _tag: "Done", by: host.name })))
+        ) {}
+        class Need extends Command.Service<Need>()(
+          "test/KeyedNeed",
+          { args: {}, invalidates: () => [] },
+          Greeter.useSync((greeter) => () => Effect.succeed(Act.make({ _tag: "Done", by: greeter.room })))
+        ) {}
+        const Acting = Component.define({
+          name: "Acting",
+          model: Schema.Struct({ room: Schema.String, done: Schema.Array(Schema.String) }),
+          message: Act
+        }).make({
+          init: ($) => $.set({ room: "a", done: [] }).run(Need.make()),
+          update: (model, message, $) =>
+            Act.match(message, {
+              // Waits for the new selection: interrupted if its build fails.
+              Move: ({ room }) => $.set({ ...model, room }).run(Need.make()),
+              Ping: () => $.set(model).run(Ping.make()),
+              Need: () => $.set(model).run(Need.make()),
+              Done: ({ by }) => ({ ...model, done: [...model.done, by] }),
+              Failed: () => ({ ...model, done: [...model.done, "!"] })
+            }),
+          view: (model, h) =>
+            h.el(
+              "div",
+              h.el("button").on("click", Act.make({ _tag: "Move", room: "b" })).children("move"),
+              h.el("button").on("click", Act.make({ _tag: "Ping" })).children("ping"),
+              h.el("button").on("click", Act.make({ _tag: "Need" })).children("need"),
+              `${model.room}:${model.done.join(",")}`
+            )
+        })
+        const Room = Component.provide(Acting, {
+          key: (_, model) => model.room,
+          layer: (room) =>
+            Need.layer.pipe(Layer.provide(
+              room === "b" ? Layer.effect(Greeter, Effect.fail("no room b")) : Layer.succeed(Greeter, { room })
+            ))
+        }, { onFailure: () => Act.make({ _tag: "Failed" }) })
+        const root = yield* TestHost.mount(
+          underHost(Room, Ping.layer.pipe(Layer.provideMerge(Layer.succeed(Host, { name: "parent" })))),
+          {}
+        )
+        const click = (label: string) =>
+          Query.fire(root.all(Query.tag("button")).find((button) => Query.textOf(button) === label)!, "click")
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "movepingneeda:a")
+        // The Command issued with the move waited for "b", whose build failed: it is interrupted.
+        click("move")
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "movepingneedb:a,!")
+        // Issued after the failure, with the key unchanged: it runs against the parent's services.
+        click("ping")
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "movepingneedb:a,!,parent")
+        // One that needs a selected service doesn't find it, and the instance fails.
+        click("need")
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "down")
+        const failed = root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
+        assert.strictEqual(failed.path, "/HostParent/Acting[child]")
+        assert.include(Cause.pretty(failed.cause), "test/KeyedNeed")
+      })))
+
+    it.effect("after a handled failed selection, a Subscription that uses only the parent's services waits too, and starts on the next selection", () =>
+      provideHost(Effect.gen(function*() {
+        const started: Array<string> = []
+        const Watching = Component.define({ name: "Watching", model: Schema.String, message: Schema.String }).make({
+          init: () => "a",
+          update: (room, message) => message === "failed" ? room : message,
+          subscriptions: (room) => [
+            Subscription.make(
+              "host",
+              Stream.unwrap(
+                Host.useSync((host) =>
+                  Stream.fromEffect(Effect.sync(() => started.push(`${host.name}@${room}`))).pipe(Stream.drain)
+                )
+              )
+            )
+          ],
+          view: (room, h) =>
+            h.el(
+              "div",
+              h.el("button").on("click", "b").children("b"),
+              h.el("button").on("click", "c").children("c"),
+              room
+            )
+        })
+        const Room = Component.provide(Watching, {
+          key: (_, room) => room,
+          layer: (room) => room === "b" ? Layer.effectDiscard(Effect.fail("no room b")) : Layer.empty
+        }, { onFailure: () => "failed" })
+        const root = yield* TestHost.mount(underHost(Room, Layer.succeed(Host, { name: "parent" })), {})
+        const click = (label: string) =>
+          Query.fire(root.all(Query.tag("button")).find((button) => Query.textOf(button) === label)!, "click")
+        yield* TestHost.settle
+        assert.deepStrictEqual(started, ["parent@a"])
+        click("b")
+        yield* TestHost.settle
+        // Stopped by the swap, and not started again while no selection is built.
+        assert.strictEqual(root.text(), "bcb")
+        assert.deepStrictEqual(started, ["parent@a"])
+        click("c")
+        yield* TestHost.settle
+        assert.deepStrictEqual(started, ["parent@a", "parent@c"])
+      })))
+
     it.effect("a key change interrupts a loader's fetch before the next selection is ready, unless another instance watches it", () =>
       provideHost(Effect.gen(function*() {
         const pending = yield* Deferred.make<void>()

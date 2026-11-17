@@ -2815,16 +2815,29 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F } ? "onFailure" ext
  * instance whose Model or props changed, and compared with `Equal.equals`, so
  * an update that leaves it equal calls nothing and builds nothing. On a change
  * the component keeps its Model. Its in-flight Commands are interrupted, its
- * Subscriptions and loaders restart, and its loader slots go back to their
- * initial state. The Commands issued in the flush that changed the key run
+ * Subscriptions and loaders restart, and its loader state goes back to its
+ * initial value. The Commands issued in the flush that changed the key run
  * against the new services. The previous selection is released once the new
- * one has built, and a selection still building is interrupted. A failed build
- * goes to `onFailure` or fails the instance, as at mount, and a later key
- * change builds again. After a handled failure, its Subscriptions and loaders
- * wait for that next selection. A keyed provide builds per instance and turns off
- * sharing for every provide on the component: share between instances with a
- * `LayerMap`. On the server the key is read from `init`'s Model; the client
- * reads it from the Model it hydrates or restores.
+ * one has built, and a selection still building is interrupted.
+ *
+ * A key change doesn't clear the loader cache. A cache entry is a read and its
+ * args, whichever selection fetched it, so a read whose args are unchanged gets
+ * the entry fetched under the old selection until its `staleTime` passes. A
+ * read whose data depends on the selection takes the selection in its args.
+ *
+ * A failed build goes to `onFailure` or fails the instance, as at mount, with
+ * no fallback to the previous selection. The Commands waiting for that build
+ * are interrupted. A later key change builds again; an unchanged key doesn't
+ * retry. Until then, a newly issued Command runs against the parent's
+ * services, as after a failure at mount, so one that needs a selected service
+ * fails the instance. Every Subscription and loader on the instance waits for
+ * the next selection, those that use only the parent's services included: work
+ * that must keep running goes on a component above the provide.
+ *
+ * A keyed provide builds per instance and turns off sharing for every provide
+ * on the component: share between instances with a `LayerMap`. On the server
+ * the key is read from `init`'s Model; the client reads it from the Model it
+ * hydrates or restores.
  *
  * Builds run in the background: the component renders from `init` at once and
  * its Commands and Subscriptions wait for the Layer. `onFailure` is required
