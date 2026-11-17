@@ -3,9 +3,9 @@
  * as escaped strings.
  */
 import * as Head from "../../Head.ts"
+import * as headAttributes from "../../internal/headAttributes.ts"
 import type * as Renderer from "../../Renderer.ts"
 import * as elements from "./elements.ts"
-import * as headAttributes from "./headAttributes.ts"
 import * as markers from "./markers.ts"
 
 // ---------------------------------------------------------------------------

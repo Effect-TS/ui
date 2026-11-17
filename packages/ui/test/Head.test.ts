@@ -50,6 +50,21 @@ describe("Head", () => {
     assert.deepStrictEqual(head.body.data, { "data-page": "" })
   })
 
+  it("lets later data aliases win within a node and across descendants", () => {
+    const head = Head.merge(node(
+      [
+        Head.htmlData("data-THEME", "first"),
+        Head.htmlData("data-theme", "middle"),
+        Head.htmlData("data-THEME", "last"),
+        Head.bodyData("data-PAGE", "first"),
+        Head.bodyData("data-page", "middle")
+      ],
+      node([Head.bodyData("data-PAGE", "last")])
+    ))
+    assert.deepStrictEqual(head.html.data, { "data-theme": "last" })
+    assert.deepStrictEqual(head.body.data, { "data-page": "last" })
+  })
+
   it("rejects the marker as a data name", () => {
     assert.throws(() => Head.htmlData("data-eui" as any, "x"), /marker/)
   })

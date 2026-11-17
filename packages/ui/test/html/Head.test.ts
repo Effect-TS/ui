@@ -49,9 +49,11 @@ describe("BrowserHost head", () => {
       Head.link(linkAttributes),
       ...unsafeData,
       Head.htmlData("data-THEME", "first"),
-      Head.htmlData("data-theme", "a\"<&"),
+      Head.htmlData("data-theme", "middle"),
+      Head.htmlData("data-THEME", "a\"<&"),
       Head.bodyData("data-THEME", "first"),
-      Head.bodyData("data-theme", "a\"<&"),
+      Head.bodyData("data-theme", "middle"),
+      Head.bodyData("data-THEME", "a\"<&"),
       Head.htmlData("data-EUI", "fake"),
       Head.bodyData("data-EUI", "fake")
     ]
@@ -100,6 +102,28 @@ describe("BrowserHost head", () => {
       expect(target.body.hasAttribute("data-eui")).toBe(false)
       expect(warnings).toEqual([])
     }
+  })
+
+  it("merges links by their normalized rel and href before rendering", async () => {
+    const canonical = { rel: "alternate", href: "/first", REL: "canonical" }
+    const alternate = { rel: "alternate", href: "/other", HREF: "/same", hreflang: "en" }
+    const entries = [
+      Head.link(canonical),
+      Head.link({ rel: "canonical", href: "/last" }),
+      Head.link(alternate),
+      Head.link({ rel: "alternate", href: "/same", hreflang: "fr" })
+    ]
+    const rendered = await render(entries)
+    expect(rendered.head).toBe(
+      "<link rel=\"canonical\" href=\"/last\" data-eui><link rel=\"alternate\" href=\"/same\" hreflang=\"fr\" data-eui>"
+    )
+    const { apply } = sync()
+    apply(head(...entries))
+    expect([...document.head.querySelectorAll("link")].map((link) => [
+      link.getAttribute("rel"),
+      link.getAttribute("href"),
+      link.getAttribute("hreflang")
+    ])).toEqual([["canonical", "/last", null], ["alternate", "/same", "fr"]])
   })
 
   it("escapes data names in the serialized ownership marker", async () => {

@@ -3,7 +3,7 @@
  * document, owning only marked tags plus `<title>` and `lang` / `dir`.
  */
 import * as Head from "../../Head.ts"
-import * as headAttributes from "./headAttributes.ts"
+import * as headAttributes from "../../internal/headAttributes.ts"
 
 type Warn = (message: string) => void
 
