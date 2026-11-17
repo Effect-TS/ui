@@ -48,23 +48,28 @@
  *     )
  * })
  *
- * Scene.make(TodoItem, { id: "t1" }, (s) =>
+ * Effect.gen(function*() {
+ *   const s = yield* Scene.make(TodoItem, { id: "t1" })
  *   s.click("save")
  *     .expect(Locator.text("saving")).toExist()
  *     .expectExact(SaveTodo.make({ id: "t1" }))
  *     .resolve(SaveTodo, Message.make({ _tag: "Saved" }))
- *     .expect(Locator.tag("button")).toHaveText("saved"))
+ *     .expect(Locator.tag("button")).toHaveText("saved")
+ * }).pipe(Effect.scoped, Effect.runSync)
  * ```
  *
  * @stability experimental
  * @since 0.1.0
  */
 import type * as Cause from "effect/Cause"
+import type * as Effect from "effect/Effect"
 import type * as AsyncResult from "effect/reactivity/AsyncResult"
+import type * as Scope from "effect/Scope"
 import type * as Component from "../Component.ts"
 import type * as Feature from "../Feature.ts"
 import { checkChildPaths, checkFallbackPaths } from "../internal/paths.ts"
 import * as internal from "../internal/scene.ts"
+import * as cursor from "../internal/steps.ts"
 import * as engine from "../internal/story.ts"
 import type * as Mount from "../Mount.ts"
 import * as View from "../View.ts"
@@ -188,6 +193,18 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Shared.Ste
     Component.Message<C>,
     Component.Events<C>
   >
+  /** Whether the last interaction cancelled its event's default, as `current.defaultPrevented` reports it. */
+  readonly defaultPrevented: boolean
+  /** The view after the last step. */
+  readonly view: View.Node<Component.Message<C>, any>
+  /** The view after the last step, as a `Locator.Node` tree. */
+  readonly root: Locator.Node
+  /** The one element matching `locator` in the current view. Throws when there's none or several. */
+  get(locator: Locator.Locator): Locator.Node
+  /** The one element matching `locator` in the current view, or `undefined`. Throws when there are several. */
+  query(locator: Locator.Locator): Locator.Node | undefined
+  /** Every element matching `locator` in the current view, in document order. */
+  all(locator: Locator.Locator): ReadonlyArray<Locator.Node>
 
   /**
    * Starts from any Model, as `Steps.Steps.given` does. `shared` sets the
@@ -273,7 +290,7 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Shared.Ste
    * Throws when no mount matches, or several do, listing the mounts.
    *
    * Under the acknowledgement rule a new mount is work in flight: it blocks
-   * the next message step and the end of `make` until `mounted` or
+   * the next message step and `make`'s end check until `mounted` or
    * `expectMount` names it, and a step that removes it before then throws.
    */
   mounted<D extends MountTarget>(target: D, ...result: MountedResult<D>): this
@@ -295,8 +312,6 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Shared.Ste
   expectIgnored(): this
   /** Asserts that the last interaction cancelled its event's default, or didn't with `false`. */
   expectDefaultPrevented(expected?: boolean): this
-  /** Checks the view. `f` throws to fail the test. */
-  view(f: (view: View.Node<Component.Message<C>, any>) => void): this
   /**
    * Checks a headless component's parts, the plain values a consumer's
    * closure reads, for the current Model and props. `f` throws to fail the
@@ -326,27 +341,25 @@ export declare namespace Steps {
 type VocabularyOf<C> = C extends { readonly "~V"?: infer V } ? V : never
 
 /**
- * Runs a scene: `init` with `props`, then the steps `f` calls on the
- * cursor.
+ * Starts a scene: `init` with `props`, as a cursor in a scope. The test
+ * calls steps on the cursor and reads the view from it.
  *
  * **Details**
  *
- * `f` doesn't need to return the cursor, so a chained arrow and a block of
- * statements both work. `make` returns the final scene so a test can read it.
- * At the end it throws on anything pending, kept or exempt included, on a
- * query with no result unless `keepPending` named it, and on any event,
- * send or ignored interaction not acknowledged.
+ * When the scope closes with a success, the end check runs: it fails on
+ * anything pending, kept or exempt included, on a query with no result
+ * unless `keepPending` named it, on a mount not acknowledged, and on any
+ * event, send or ignored interaction not acknowledged. When the scope closes
+ * with a failure the end check doesn't run, so a failed test reports only
+ * its own failure. `it.effect` from `@effect/vitest` provides the scope,
+ * which closes at the end of the test.
  *
  * @stability experimental
  * @category constructors
  * @since 0.1.0
  */
 export const make: {
-  <C extends AnyComponent>(
-    component: C,
-    props: Component.Props<C>,
-    f: (steps: Steps<C>) => void
-  ): Steps<C>["current"]
+  <C extends AnyComponent>(component: C, props: Component.Props<C>): Effect.Effect<Steps<C>, never, Scope.Scope>
   /**
    * A scene of a component with slots: `slots` stands in for what a parent
    * passes. Its `h` has no messages of its own, as a parent's content in a
@@ -364,9 +377,8 @@ export const make: {
       readonly slots: (
         h: View.Helper<never, unknown> & View.Tags<[V] extends [never] ? VocabularyOf<C> : V, never>
       ) => { readonly [K in Component.Slots<C>]?: View.Input<never, any> }
-    },
-    f: (steps: Steps<C>) => void
-  ): Steps<C>["current"]
+    }
+  ): Effect.Effect<Steps<C>, never, Scope.Scope>
   /**
    * A scene of a headless component: `view` stands in for a consumer's
    * closure. Its `h` has no messages of its own, so every handler in the
@@ -381,31 +393,27 @@ export const make: {
     options: {
       readonly elements?: View.Vocabulary<V> | undefined
       readonly view: (parts: Parts, h: View.Helper<never, Props> & View.Tags<V, never>) => View.Content<never, any>
-    },
-    f: (steps: Steps<Component.Component<string, Props, any, any, Events, R, V>, Parts>) => void
-  ): Scene<Props, any, any, Events>
-} = (component: any, props: any, ...rest: ReadonlyArray<any>): any =>
-  run(internal.SceneCursor, "Scene", component, props, rest)
+    }
+  ): Effect.Effect<Steps<Component.Component<string, Props, any, any, Events, R, V>, Parts>, never, Scope.Scope>
+} = function make(component: any, props: any, options?: any): any {
+  return run(make, internal.SceneCursor, "Scene", component, props, options)
+}
 
 /**
- * Runs `make` for a kind of scene: the cursor class, its module name for
- * errors, and the arguments `make` took.
+ * Starts `make` for a kind of scene: the `make` the test called, the
+ * cursor class, its module name for errors, and the arguments `make` took.
  *
  * @internal
  */
 export const run = (
+  make: Function,
   Ctor: new(module: string, state: engine.State<any, any, any, any>) => internal.SceneCursor,
   module: string,
   component: any,
   props: unknown,
-  rest: ReadonlyArray<any>
-): unknown => {
-  const f: (steps: unknown) => void = rest[rest.length - 1]
-  const steps = internal.begin(Ctor, module, component, props, rest.length === 1 ? undefined : rest[0])
-  f(steps)
-  steps.finish()
-  return steps.current
-}
+  options: any
+): Effect.Effect<internal.SceneCursor, never, Scope.Scope> =>
+  cursor.scoped(cursor.callSite(make), () => internal.begin(Ctor, module, component, props, options))
 
 /**
  * The cursor after `init`. Its steps follow the acknowledgement rule, but

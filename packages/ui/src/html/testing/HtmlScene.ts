@@ -55,18 +55,22 @@
  *     )
  * })
  *
- * HtmlScene.make(Weather, {}, (s) =>
+ * Effect.gen(function*() {
+ *   const s = yield* HtmlScene.make(Weather, {})
  *   s.type(HtmlLocator.label("Zip code"), "90210")
  *     // A submit button submits its form, with the fields read from the view.
  *     .click(HtmlLocator.role("button", { name: "Get Weather" }))
  *     .expectExact(FetchWeather.make({ zip: "90210" }))
  *     .resolve(FetchWeather, Message.make({ _tag: "Loaded", forecast: "sun" }))
- *     .expect(HtmlLocator.role("status")).toHaveText("sun"))
+ *     .expect(HtmlLocator.role("status")).toHaveText("sun")
+ * }).pipe(Effect.scoped, Effect.runSync)
  * ```
  *
  * @stability experimental
  * @since 0.1.0
  */
+import type * as Effect from "effect/Effect"
+import type * as Scope from "effect/Scope"
 import type * as Component from "../../Component.ts"
 import * as internal from "../../internal/scene.ts"
 import * as engine from "../../internal/story.ts"
@@ -559,20 +563,16 @@ const pathIn = (root: Locator.Node, node: Locator.Node): ReadonlyArray<Locator.N
 }
 
 /**
- * Runs an HTML scene: `init` with `props`, then the steps `f` calls on the
- * cursor. It takes what `Scene.make` takes, and checks the same things at
- * the end.
+ * Starts an HTML scene: `init` with `props`, as a cursor in a scope. It
+ * takes what `Scene.make` takes, and runs the same end check when the scope
+ * closes.
  *
  * @stability experimental
  * @category constructors
  * @since 0.1.0
  */
 export const make: {
-  <C extends AnyComponent>(
-    component: C,
-    props: Component.Props<C>,
-    f: (steps: Steps<C>) => void
-  ): Steps<C>["current"]
+  <C extends AnyComponent>(component: C, props: Component.Props<C>): Effect.Effect<Steps<C>, never, Scope.Scope>
   <C extends AnyComponent, V extends View.Elements = never>(
     component: C,
     props: Component.Props<C>,
@@ -581,20 +581,19 @@ export const make: {
       readonly slots: (
         h: View.Helper<never, unknown> & View.Tags<[V] extends [never] ? VocabularyOf<C> : V, never>
       ) => { readonly [K in Component.Slots<C>]?: View.Input<never, any> }
-    },
-    f: (steps: Steps<C>) => void
-  ): Steps<C>["current"]
+    }
+  ): Effect.Effect<Steps<C>, never, Scope.Scope>
   <Props, Events, Parts, R, Rcv, V extends View.Elements = never>(
     component: Component.Headless<Props, Events, Parts, R, Rcv>,
     props: Props,
     options: {
       readonly elements?: View.Vocabulary<V> | undefined
       readonly view: (parts: Parts, h: View.Helper<never, Props> & View.Tags<V, never>) => View.Content<never, any>
-    },
-    f: (steps: Steps<Component.Component<string, Props, any, any, Events, R, V>, Parts>) => void
-  ): Scene.Scene<Props, any, any, Events>
-} = (component: any, props: any, ...rest: ReadonlyArray<any>): any =>
-  Scene.run(StepsImpl, "HtmlScene", component, props, rest)
+    }
+  ): Effect.Effect<Steps<Component.Component<string, Props, any, any, Events, R, V>, Parts>, never, Scope.Scope>
+} = function make(component: any, props: any, options?: any): any {
+  return Scene.run(make, StepsImpl, "HtmlScene", component, props, options)
+}
 
 /**
  * The cursor after `init`. Its steps follow the acknowledgement rule, but

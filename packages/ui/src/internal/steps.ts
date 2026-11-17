@@ -5,8 +5,11 @@
  * @internal
  */
 import * as Cause from "effect/Cause"
+import * as Effect from "effect/Effect"
+import * as Exit from "effect/Exit"
 import { pipeArguments } from "effect/Pipeable"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
+import type * as Scope from "effect/Scope"
 import type * as Component from "../Component.ts"
 import type * as Steps from "../testing/Steps.ts"
 import { isWatchKey } from "./queries.ts"
@@ -48,6 +51,24 @@ export abstract class Cursor {
       stateOf.set(this.projected, this.state)
     }
     return this.projected
+  }
+  get pending(): ReadonlyArray<unknown> {
+    return this.state.pending
+  }
+  get interrupted(): ReadonlyArray<unknown> {
+    return this.state.interrupted
+  }
+  get dropped(): ReadonlyArray<unknown> {
+    return this.state.dropped
+  }
+  get loadingMore(): ReadonlyArray<string> {
+    return this.state.loadingMore
+  }
+  get subscriptions(): ReadonlyArray<string> {
+    return this.state.subscriptions()
+  }
+  get queryInfo(): ReadonlyArray<Steps.QueryInfo> {
+    return this.state.queryInfo()
   }
   pipe() {
     return pipeArguments(this, arguments)
@@ -280,14 +301,6 @@ export abstract class Cursor {
   keepPending(target: Steps.Target | string): this {
     return this.replace(engine.keep(this.state, target, this.name("keepPending")))
   }
-  subscriptions(f: (keys: ReadonlyArray<string>) => void): this {
-    f(this.state.subscriptions())
-    return this
-  }
-  queryInfo(f: (info: ReadonlyArray<Steps.QueryInfo>) => void): this {
-    f(this.state.queryInfo())
-    return this
-  }
   check(f: (current: any) => void): this {
     f(this.current)
     return this
@@ -324,6 +337,44 @@ export abstract class Cursor {
     return this
   }
 }
+
+/**
+ * Where a test called `make`: a stack trace that starts at the caller of `fn`, where the engine
+ * supports it, so an end check that fails in a finalizer can point at the test.
+ *
+ * @internal
+ */
+export const callSite = (fn: Function): Error => {
+  const site = new Error()
+  ;(Error as { captureStackTrace?: (target: object, fn: Function) => void }).captureStackTrace?.(site, fn)
+  return site
+}
+
+/**
+ * A cursor as a scoped Effect: `begin` makes it, and the scope's finalizer runs the end check once
+ * the scope closes with a success. A failed test already has its failure, so the end check doesn't add
+ * a second one. The finalizer runs after the test's own code has returned, so its error takes the stack
+ * of `site`, where the test called `make`.
+ *
+ * @internal
+ */
+export const scoped = <S extends Cursor>(site: Error, begin: () => S): Effect.Effect<S, never, Scope.Scope> =>
+  Effect.acquireRelease(
+    Effect.sync(begin),
+    (steps, exit) =>
+      Exit.isSuccess(exit)
+        ? Effect.sync(() => {
+          try {
+            steps.finish()
+          } catch (error) {
+            if (error instanceof Error && site.stack !== undefined) {
+              error.stack = `${error.name}: ${error.message}\n${site.stack.split("\n").slice(1).join("\n")}`
+            }
+            throw error
+          }
+        })
+        : Effect.void
+  )
 
 /**
  * The record every kind shares, from the engine's.

@@ -23,9 +23,10 @@
  *   throws while an event or a send isn't acknowledged with `emitted` or
  *   `sent`, or, in a Scene, while an ignored interaction isn't acknowledged
  *   with `expectIgnored`.
- * - `make` throws at the end on anything pending, kept or exempt included,
- *   on a query with no result unless it was kept, and on any output not
- *   acknowledged. A `start` cursor gets the checks before each step only.
+ * - `make`'s end check, which runs when its scope closes, fails on anything
+ *   pending, kept or exempt included, on a query with no result unless it
+ *   was kept, and on any output not acknowledged. A `start` cursor gets the
+ *   checks before each step only.
  * - `given` after an acting step throws rather than discard pending work,
  *   a query with no result it would disable, or unacknowledged outputs.
  *   Before any acting step it replaces what `init` produced.
@@ -225,7 +226,7 @@ type AnyComponent =
  * **Example** (A check shared by every kind of test)
  *
  * ```ts import.meta.vitest
- * import { Schema } from "effect"
+ * import { Effect, Schema } from "effect"
  * import { Component } from "@effect/ui"
  * import { Steps, Story } from "@effect/ui/testing"
  *
@@ -245,8 +246,11 @@ type AnyComponent =
  *     if (current.emitted.length > 0) throw new Error("emitted")
  *   })
  *
- * const story = Story.make(Counter, {}, (s) => s.pipe(quiet).send(Message.make({ _tag: "Increment" })))
- * console.log(story.model.count) // 1
+ * Effect.gen(function*() {
+ *   const s = yield* Story.make(Counter, {})
+ *   s.pipe(quiet).send(Message.make({ _tag: "Increment" }))
+ *   console.log(s.model.count) // 1
+ * }).pipe(Effect.scoped, Effect.runSync)
  * ```
  *
  * @stability experimental
@@ -282,6 +286,18 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
     Component.Message<C>,
     Component.Events<C>
   >
+  /** Commands issued but not yet resolved, oldest first, after the last step. */
+  readonly pending: this["current"]["pending"]
+  /** Commands interrupted by `switch` or by an interrupt Command, after the last step. */
+  readonly interrupted: this["current"]["interrupted"]
+  /** Commands ignored by `mode: "drop"`, after the last step. */
+  readonly dropped: this["current"]["dropped"]
+  /** The infinite queries with a load more pending, after the last step. */
+  readonly loadingMore: ReadonlyArray<string>
+  /** The Subscription keys the current Model and props ask for, without the query watches. Nothing runs. */
+  readonly subscriptions: ReadonlyArray<string>
+  /** Each of the component's queries, with its `Query`'s name and the args it returns for the current Model and props. */
+  readonly queryInfo: ReadonlyArray<QueryInfo>
 
   /**
    * Starts from any Model. An updater is called with the current Model:
@@ -457,14 +473,10 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    * **Details**
    *
    * A query's mark ends when its args change, since that starts a new fetch.
-   * A kept query with no result passes the end of `make`; a kept Command or
+   * A kept query with no result passes `make`'s end check; a kept Command or
    * load more doesn't. Throws when nothing pending matches.
    */
   keepPending(target: Target | (keyof Component.Queries<C> & string)): this
-  /** Checks the Subscription keys the current Model and props ask for. `f` throws to fail the test. */
-  subscriptions(f: (keys: ReadonlyArray<string>) => void): this
-  /** Checks the queries and their current args. `f` throws to fail the test. */
-  queryInfo(f: (info: ReadonlyArray<QueryInfo>) => void): this
   /** Checks the whole record, as the kind of test records it. `f` throws to fail the test. */
   check(f: (current: this["current"]) => void): this
 
