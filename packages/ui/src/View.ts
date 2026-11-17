@@ -40,6 +40,44 @@ import type * as Feature from "./Feature.ts"
 import type * as Renderer from "./Renderer.ts"
 
 /**
+ * The view helper for reusable pure view functions, without a component
+ * definition. `Msg` defaults to `never` for views that emit no messages.
+ *
+ * **Details**
+ *
+ * Includes the app's registered vocabulary (for example, import
+ * `@effect/ui/html/register` for HTML tags). Props remain `unknown` and
+ * component-specific loaders are not included. Use `Component.Helper<D>` instead
+ * when a function needs a definition's props, loaders or custom elements.
+ *
+ * **Example** (A reusable button)
+ *
+ * ```ts import.meta.vitest
+ * import "@effect/ui/html/register"
+ * import { Component, View } from "@effect/ui"
+ * import { Schema } from "effect"
+ *
+ * const Button = <Msg>(h: View.H<Msg>, label: string, message: Msg) =>
+ *   h.button.onClick(message).children(label)
+ *
+ * export const Counter = Component.define({
+ *   name: "Counter",
+ *   model: Schema.Number,
+ *   message: Schema.Literal("Increment")
+ * }).make({
+ *   init: () => 0,
+ *   update: (count) => count + 1,
+ *   view: (count, h) => Button(h, String(count), "Increment")
+ * })
+ * ```
+ *
+ * @stability experimental
+ * @category utility types
+ * @since 0.1.0
+ */
+export type H<Msg = never> = Helper<Msg, unknown> & Tags<Registered, Msg>
+
+/**
  * A node of a view: an element, text, or a child component slot.
  *
  * **Details**
@@ -363,7 +401,7 @@ interface ErasedReceives {
  * Use to type the children a shared view helper passes on. Leaving `R` out
  * accepts only children that need no service, so a child that needs one
  * fails at the call site. To pass on whatever the children need, take them
- * as a generic tuple, as in the example: the element adds their
+ * with a generic `Children` constraint, as in the example: the element adds their
  * requirements to its own.
  *
  * **Gotchas**
@@ -374,20 +412,13 @@ interface ErasedReceives {
  * **Example** (A view helper that keeps its children's requirements)
  *
  * ```ts
- * import { Schema } from "effect"
- * import { Component, View } from "@effect/ui"
+ * import "@effect/ui/html/register"
+ * import type { View } from "@effect/ui"
  *
- * const Msg = Schema.TaggedUnion({ Close: {} })
- * const PageDef = Component.define({
- *   name: "Page",
- *   model: Schema.Null,
- *   message: Msg
- * })
- *
- * const card = <const C extends ReadonlyArray<View.Input<typeof Msg.Type, any>>>(
- *   h: Component.Helper<typeof PageDef>,
- *   ...children: C
- * ) => h.el("section").children(...children)
+ * const Field = <M, C extends View.Children<M>>(h: View.H<M>, options: {
+ *   readonly label: string
+ *   readonly children: C
+ * }) => h.label.children(options.label, h.div.class("control").children(options.children))
  * ```
  *
  * @stability experimental
@@ -400,7 +431,20 @@ export type Input<Msg, R = never> =
   | false
   | null
   | undefined
-  | ReadonlyArray<Content<Msg, R> | string | false | null | undefined>
+  | Children<Msg, R>
+
+/**
+ * A readonly array of children. Use `C extends View.Children<Msg>` for a
+ * wrapper's children option to preserve each child's requirements, and pass
+ * that option directly to `.children(options.children)` without spreading it.
+ * The default requirement is `any` for generic constraints, not annotations:
+ * annotating a value as `Children<Msg>` erases its requirements.
+ *
+ * @stability experimental
+ * @category utility types
+ * @since 0.1.0
+ */
+export type Children<Msg, R = any> = ReadonlyArray<Content<Msg, R> | string | false | null | undefined>
 
 /**
  * What a view, a child and a fallback may return: a node, or an element

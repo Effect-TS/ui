@@ -34,6 +34,33 @@ renders the slot with a ref from `Child.ref("Name")`, and its `update` calls
 `$.send(ref, message)`. Don't send what the child shows: that belongs in its
 props.
 
+### Stateless view wrappers
+
+Name view functions in CapitalCase, like components (for example, `Card` and `Field`).
+
+Use `View.H<M>` with `@effect/ui/html/register` for shared HTML view
+functions. No separate HTML helper type is needed. When the root is the hole,
+return its builder and let the caller add children: `Card(h).children(...)`.
+This needs no children generic. For a nested hole, use an options object
+and keep its children inferred through `C`:
+
+```ts
+import "@effect/ui/html/register"
+import type { View } from "@effect/ui"
+
+const Card = <M>(h: View.H<M>) => h.section.class("card")
+
+const Field = <M, C extends View.Children<M>>(h: View.H<M>, options: {
+  readonly label: string
+  readonly children: C
+}) => h.label.children(options.label, h.div.class("control").children(options.children))
+```
+
+Pass `children: [child, otherChild]`. The unspread array retains the union
+of its children's service requirements. `View.Children<M>` is a generic
+constraint, not a parameter annotation: annotating children directly with it
+erases requirements. `View.Input<M>` instead rejects service-requiring children.
+
 ### Loading data
 
 A component declares the reads it shows in `loaders`, by name. Each entry
@@ -170,6 +197,11 @@ client, not the services.
   page handles a child's events, provides Layers with `Component.provide`,
   and makes one child swappable with `Feature.Service`. This entry module
   mounts the page, which is in `fixtures/pages/notes/NotePage.ts`.
+- **[Reusing view functions with children](./ai-docs/src/10_ui/21_view-functions.ts)**:
+  Name view functions in CapitalCase, like components.
+  Use a plain function for a stateless wrapper. Return the builder when
+  its root is the hole, so callers add children without a children generic.
+  For a nested hole, take an options object with a generic children field.
 - **[Headless components](./ai-docs/src/10_ui/22_headless-components.ts)**:
   Build a filterable listbox that owns its state, keyboard handling and ARIA
   but no markup, and draw it from a consumer that calls it with `h` and a
