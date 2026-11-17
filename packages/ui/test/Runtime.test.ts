@@ -1009,6 +1009,49 @@ describe("Runtime", () => {
         assert.strictEqual(root.text(), "gone")
       })))
 
+    it.effect("a Command issued just before its instance is removed doesn't begin while the instance's Layer cleans up", () =>
+      provideHost(Effect.gen(function*() {
+        const gate = yield* Deferred.make<void>()
+        const entered = yield* Deferred.make<void>()
+        const events: Array<string> = []
+        const Write = Command.make("test/ScheduledWrite", { args: {} }, () =>
+          Effect.sync(() => {
+            events.push("work")
+            return Component.noop
+          }))
+        const Child = Component.provide(
+          Component.define({ name: "Child", model: Schema.Null, message: Schema.Null }).make({
+            init: () => null,
+            update: (m, _, $) => $.set(m).run(Write()),
+            view: (_, h) => h.el("button").on("click", null).children("write")
+          }),
+          () =>
+            Layer.effectDiscard(Effect.addFinalizer(() =>
+              Effect.andThen(
+                Effect.sync(() => events.push("closing")),
+                Effect.andThen(Deferred.succeed(entered, undefined), Deferred.await(gate))
+              )
+            ))
+        )
+        const Parent = Component.define({ name: "Parent", model: Schema.Boolean, message: Schema.Boolean }).make({
+          init: () => true,
+          update: (_, shown) => shown,
+          view: (shown, h) => shown ? Child(h, { key: "child", props: {} }) : h.text("gone")
+        })
+        const root = yield* TestHost.mount(Parent, {})
+        yield* TestHost.settle
+        // The removal renders before the Command's fiber takes its first step on the scheduler.
+        root.send(false)
+        Query.fire(root.get(Query.tag("button")), "click")
+        yield* TestHost.settle
+        yield* Deferred.await(entered)
+        assert.deepStrictEqual(events, ["closing"])
+        yield* Deferred.succeed(gate, undefined)
+        yield* TestHost.settle
+        assert.deepStrictEqual(events, ["closing"])
+        assert.strictEqual(root.text(), "gone")
+      })))
+
     it.effect("the Layer build that owns a detached run ends it when it closes", () =>
       provideHost(Effect.gen(function*() {
         const server = makeServer()

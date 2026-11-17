@@ -2824,8 +2824,9 @@ const setup = (
         command.name,
         { attributes: { path: inst.path, mode: command.mode } },
         (span): Effect.Effect<unknown, unknown, any> => {
-          // Stopped before the first step: the work never begins.
-          if (run.done) return Effect.interrupt
+          // Stopped before the first step, or its instance started closing while the fork waited for
+          // the scheduler: the work never begins. A detached run whose owner is open still does.
+          if (run.done || (inst.closed && !survives(inst, run))) return Effect.interrupt
           // Kept on the run as well, for the end entries of a run that sends no message.
           run.spanId = span.spanId
           run.traceId = span.traceId
