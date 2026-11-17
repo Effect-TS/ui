@@ -154,6 +154,17 @@ const isEmpty = (record: object): boolean => {
   return true
 }
 
+/** An HTML element's attributes under the names `setAttr` gives them, the later of two aliases winning. */
+const canonicalAttrs = (attrs: Readonly<Record<string, string>>): Readonly<Record<string, string>> => {
+  // No prototype, so `__PROTO__` folds to a name that is kept like any other.
+  const out: Record<string, string> = Object.create(null)
+  for (const name in attrs) {
+    const normalized = elements.attributeName(name, false)
+    if (normalized !== undefined) out[normalized] = attrs[name]!
+  }
+  return out
+}
+
 const modifiers = (event: Event) => {
   const e = event as KeyboardEvent
   return { shift: e.shiftKey === true, ctrl: e.ctrlKey === true, alt: e.altKey === true, meta: e.metaKey === true }
@@ -760,14 +771,14 @@ export const makeHost = (
       if (t.data !== text) t.data = text
     },
     normalizeAttrs(node, attrs) {
-      // SVG names are case-sensitive. Empty records need no normalization.
-      if (attrs === View.noFields || (node as globalThis.Element).namespaceURI === SVG) return attrs
-      const out: Record<string, string> = Object.create(null)
+      // Nearly every record is canonical already, and is diffed as it is.
       for (const name in attrs) {
-        const normalized = elements.attributeName(name, false)
-        if (normalized !== undefined) out[normalized] = attrs[name]!
+        if (elements.attributeName(name, false) !== name) {
+          // SVG names are case-sensitive, so they have no aliases; `setAttr` drops the unsafe ones.
+          return (node as globalThis.Element).namespaceURI === SVG ? attrs : canonicalAttrs(attrs)
+        }
       }
-      return out
+      return attrs
     },
     setAttr(node, name, value) {
       const element = node as globalThis.Element

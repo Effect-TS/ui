@@ -70,16 +70,15 @@ describe("HtmlServer", { concurrent: false }, () => {
       }).make({
         init: () => false,
         update: (_, message) => message,
-        view: (remove, h) =>
-          h.div.children(
-            names.reduce(
-              (element, name) => element.attr(name, remove ? undefined : "alert(1)"),
-              h.div.attr("data-safe", remove ? "updated" : "a\"<&")
-            ).children("hi"),
-            names.reduce((element, name) => element.attr(name, remove ? undefined : "alert(1)"), h.el("x-safe"))
-              .children(),
-            names.reduce((element, name) => element.attr(name, remove ? undefined : "alert(1)"), h.el("svg")).children()
+        view: (remove, h) => {
+          const unsafe = <E extends { attr(name: string, value: string | undefined): E }>(element: E): E =>
+            names.reduce((element, name) => element.attr(name, remove ? undefined : "alert(1)"), element)
+          return h.div.children(
+            unsafe(h.div.attr("data-safe", remove ? "updated" : "a\"<&")).children("hi"),
+            unsafe(h.el("x-safe")),
+            unsafe(h.el("svg"))
           )
+        }
       })
       const rendered = yield* HtmlServer.renderToHtml(Page, {})
       expect(rendered.html).toBe(
@@ -91,17 +90,14 @@ describe("HtmlServer", { concurrent: false }, () => {
         const root = yield* BrowserHost.mountEffect(Page, {}, app, hydrate ? { state: rendered.state } : undefined)
         if (hydrate) expect(app.firstElementChild).toBe(before)
         const elements = app.firstElementChild!.children
-        expect(elements[0]!.getAttributeNames()).toEqual(["data-safe"])
+        const attributeNames = () => Array.from(elements, (element) => element.getAttributeNames())
+        expect(attributeNames()).toEqual([["data-safe"], [], []])
         expect(elements[0]!.getAttribute("data-safe")).toBe("a\"<&")
-        expect(elements[1]!.getAttributeNames()).toEqual([])
-        expect(elements[2]!.getAttributeNames()).toEqual([])
         expect(app.querySelector("script")).toBeNull()
         root.send(true)
         yield* tick
-        expect(elements[0]!.getAttributeNames()).toEqual(["data-safe"])
+        expect(attributeNames()).toEqual([["data-safe"], [], []])
         expect(elements[0]!.getAttribute("data-safe")).toBe("updated")
-        expect(elements[1]!.getAttributeNames()).toEqual([])
-        expect(elements[2]!.getAttributeNames()).toEqual([])
       }
     }).pipe(Effect.scoped))
 
@@ -148,6 +144,16 @@ describe("HtmlServer", { concurrent: false }, () => {
 
   it.effect("keeps winning HTML aliases through updates and removals without folding SVG attributes", () =>
     Effect.gen(function*() {
+      // What each step sets, and what the elements then hold. The HTML parser folds
+      // SVG names, so both case-sensitive SVG attributes are checked after an update.
+      const steps = [
+        { loser: "0", winner: "winner", html: "winner", svg: "0" }, // As mounted.
+        { loser: "1", winner: "winner", html: "winner", svg: "1" }, // Change the losing alias.
+        { loser: undefined, winner: "winner", html: "winner", svg: null }, // Remove the losing alias.
+        { loser: "1", winner: "winner", html: "winner", svg: "1" }, // Restore it without changing the winner.
+        { loser: "1", winner: undefined, html: "1", svg: "1" }, // Remove the winner, revealing the losing alias.
+        { loser: undefined, winner: undefined, html: null, svg: null } // Remove the final alias.
+      ] as const
       const Page = Component.define({
         name: "AttributeUpdates",
         model: Schema.Number,
@@ -157,8 +163,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => 0,
         update: (_, message) => message,
         view: (step, h) => {
-          const loser = step === 2 || step === 5 ? undefined : step === 0 ? "0" : "1"
-          const winner = step < 4 ? "winner" : undefined
+          const { loser, winner } = steps[step]!
           return h.div.children(
             h.div.attr("DATA-X", loser).attr("data-x", winner),
             h.el("x-safe").attr("DATA-X", loser).attr("data-x", winner),
@@ -172,23 +177,15 @@ describe("HtmlServer", { concurrent: false }, () => {
         const before = app.firstElementChild
         const root = yield* BrowserHost.mountEffect(Page, {}, app, hydrate ? { state: rendered.state } : undefined)
         if (hydrate) expect(app.firstElementChild).toBe(before)
-        const steps = [
-          [1, "winner", "1"], // Change the losing alias.
-          [2, "winner", null], // Remove the losing alias.
-          [3, "winner", "1"], // Restore it without changing the winner.
-          [4, "1", "1"], // Remove the winner, revealing the unchanged losing alias.
-          [5, null, null] // Remove the final alias.
-        ] as const
-        // The HTML parser folds SVG names. Check both case-sensitive SVG attributes
-        // after the client has updated them.
-        for (const [step, htmlValue, svgValue] of steps) {
+        for (let step = 1; step < steps.length; step++) {
           root.send(step)
           yield* tick
+          const { html, svg } = steps[step]!
           const children = app.firstElementChild!.children
-          expect(children[0]!.getAttribute("data-x")).toBe(htmlValue)
-          expect(children[1]!.getAttribute("data-x")).toBe(htmlValue)
+          expect(children[0]!.getAttribute("data-x")).toBe(html)
+          expect(children[1]!.getAttribute("data-x")).toBe(html)
           expect(children[2]!.getAttribute("viewBox")).toBe("0 0 10 10")
-          expect(children[2]!.getAttribute("viewbox")).toBe(svgValue)
+          expect(children[2]!.getAttribute("viewbox")).toBe(svg)
         }
       }
     }).pipe(Effect.scoped))
