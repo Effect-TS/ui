@@ -3,6 +3,7 @@
  * as escaped strings.
  */
 import * as Head from "../../Head.ts"
+import * as headAttributes from "../../internal/headAttributes.ts"
 import type * as Renderer from "../../Renderer.ts"
 import * as elements from "./elements.ts"
 import * as markers from "./markers.ts"
@@ -152,7 +153,9 @@ export const toHtml = (nodes: ReadonlyArray<ServerNode>, selectValue?: string): 
 // ---------------------------------------------------------------------------
 
 const tag = (name: string, pairs: ReadonlyArray<readonly [string, string]>): string =>
-  `<${name}${pairs.map(([key, value]) => ` ${key}="${escapeAttribute(value)}"`).join("")} ${Head.marker}>`
+  `<${name}${
+    headAttributes.normalize(pairs).map(([key, value]) => ` ${key}="${escapeAttribute(value)}"`).join("")
+  } ${Head.marker}>`
 
 /** @internal */
 export const headTags = (head: Head.Head): string => {
@@ -180,8 +183,10 @@ export const bodyOwned = (head: Head.Head): ReadonlyArray<readonly [string, stri
 
 /** Escaped attributes, plus the marker listing their names; empty when the head sets none. */
 /** @internal */
-export const attributes = (pairs: ReadonlyArray<readonly [string, string]>): string =>
-  pairs.length === 0 ? "" : [
-    ...pairs.map(([name, value]) => `${name}="${escapeAttribute(value)}"`),
-    `${Head.marker}="${pairs.map(([name]) => name).join(" ")}"`
+export const attributes = (pairs: ReadonlyArray<readonly [string, string]>): string => {
+  const normalized = headAttributes.normalize(pairs)
+  return normalized.length === 0 ? "" : [
+    ...normalized.map(([name, value]) => `${name}="${escapeAttribute(value)}"`),
+    `${Head.marker}="${escapeAttribute(normalized.map(([name]) => name).join(" "))}"`
   ].join(" ")
+}
