@@ -2,7 +2,6 @@
  * @title Reusing view functions with children
  *
  * Name view functions in CapitalCase, like components.
- *
  * Use a plain function for a stateless wrapper. Return the builder when
  * its root is the hole, so callers add children without a children generic.
  * For a nested hole, take an options object with a generic children field.

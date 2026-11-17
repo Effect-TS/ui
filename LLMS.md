@@ -199,7 +199,6 @@ client, not the services.
   mounts the page, which is in `fixtures/pages/notes/NotePage.ts`.
 - **[Reusing view functions with children](./ai-docs/src/10_ui/21_view-functions.ts)**:
   Name view functions in CapitalCase, like components.
-
   Use a plain function for a stateless wrapper. Return the builder when
   its root is the hole, so callers add children without a children generic.
   For a nested hole, take an options object with a generic children field.
