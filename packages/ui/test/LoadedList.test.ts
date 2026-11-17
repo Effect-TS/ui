@@ -1,6 +1,6 @@
 import { Command, Component, Loader, MessageLog, Route, Router } from "@effect/ui"
 import { Html, HtmlServer } from "@effect/ui/html"
-import { Query, Story, TestHost } from "@effect/ui/testing"
+import { Locator, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Effect, Layer, Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
@@ -329,7 +329,7 @@ describe("Loaded lists", () => {
         Option.some([pageAt(0, 1)])
       )
     }
-    final.get(Query.text("failed", { exact: true }))
+    final.get(Locator.text("failed", { exact: true }))
   })
 
   it("Story: given starts a list loader from its pages, with more from the last page", () => {
@@ -340,10 +340,10 @@ describe("Loaded lists", () => {
     })
     Story.make(app.Chat, { room: "r" }, (s) =>
       s.given({}, { messages: [pageAt(0, 1), pageAt(1, 2)] })
-        .check((story) => story.get(Query.text("r0,r1 /2 Available", { exact: true })))
+        .check((story) => story.get(Locator.text("r0,r1 /2 Available", { exact: true })))
         .given({}, { messages: [pageAt(0, 1), pageAt(1, null)] })
         .check((story) => {
-          story.get(Query.text("r0,r1 /2 End", { exact: true }))
+          story.get(Locator.text("r0,r1 /2 End", { exact: true }))
           const messages = story.loaded().messages
           assert.deepStrictEqual(AsyncResult.isSuccess(messages) ? messages.value.more : undefined, { _tag: "End" })
         }))
@@ -356,7 +356,7 @@ describe("Loaded lists", () => {
       next
     })
     const shows = (text: string) => (story: Story.Story<any, any, any, any>) => {
-      story.get(Query.text(text, { exact: true }))
+      story.get(Locator.text(text, { exact: true }))
     }
     Story.make(app.Chat, { room: "r" }, (s) =>
       s.loaded("messages", [pageAt(0, 1)])
@@ -421,7 +421,7 @@ describe("Loaded lists", () => {
       yield* hosted(Effect.gen(function*() {
         const root = yield* mount
         yield* page
-        Query.fire(root.get(Query.text("r0 /1 Available", { exact: true })), "click")
+        Locator.fire(root.get(Locator.text("r0 /1 Available", { exact: true })), "click")
         yield* page
         assert.strictEqual(root.text(), "r0,r1 /2 Available")
         root.send(ShellMessage.make({ _tag: "Go" }))

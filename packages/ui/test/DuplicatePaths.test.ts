@@ -1,5 +1,5 @@
 import { Component, type MessageLog } from "@effect/ui"
-import { Query, Story, TestHost } from "@effect/ui/testing"
+import { Locator, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Effect, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
@@ -335,7 +335,7 @@ describe("duplicate child paths", () => {
           const root = yield* TestHost.mount(Parent, { nested: ["a"], ref })
           yield* TestHost.settle
           assert.strictEqual(root.text(), "faulty")
-          Query.fire(root.get(Query.text("faulty", { exact: true })), "click")
+          Locator.fire(root.get(Locator.text("faulty", { exact: true })), "click")
           yield* TestHost.settle
           assert.strictEqual(root.text(), "a")
           root.send(ParentMessage.make({ _tag: "Bump" }))
@@ -348,7 +348,7 @@ describe("duplicate child paths", () => {
         provideHost(Effect.gen(function*() {
           const root = yield* TestHost.mount(Root, { nested: ["a", "a"], ref })
           yield* TestHost.settle
-          Query.fire(root.get(Query.text("faulty", { exact: true })), "click")
+          Locator.fire(root.get(Locator.text("faulty", { exact: true })), "click")
           yield* TestHost.settle
           console.log(
             JSON.stringify(

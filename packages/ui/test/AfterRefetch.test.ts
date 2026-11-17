@@ -1,5 +1,5 @@
 import { Command, Component, Loader, MessageLog } from "@effect/ui"
-import { Query, Story, TestHost } from "@effect/ui/testing"
+import { Locator, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Layer, Option, Schema } from "effect"
 import type { Duration } from "effect"
@@ -248,7 +248,7 @@ describe("Command.afterRefetch", () => {
         yield* TestClock.adjust("20 millis")
         assert.strictEqual(root.text(), "a=Ann;b=Bea;")
         app.db.fail.add("2")
-        Query.fire(root.get(Query.text("a=Ann;", { exact: true })), "click")
+        Locator.fire(root.get(Locator.text("a=Ann;", { exact: true })), "click")
         yield* tick
         assert.deepStrictEqual(commandLog(root), [{ _tag: "CommandAwaiting", entries: [user1, user2] }])
         yield* tick
@@ -531,7 +531,7 @@ describe("Command.afterRefetch", () => {
         const root = yield* TestHost.mount(app.List, { cards: ["a:1"] })
         yield* tick
         app.db.delay.set("1", 1000)
-        Query.fire(root.get(Query.text("a=Ann;", { exact: true })), "click")
+        Locator.fire(root.get(Locator.text("a=Ann;", { exact: true })), "click")
         yield* tick
         app.order.length = 0
         root.send(app.ListMessage.make({ _tag: "Set", cards: [] }))
@@ -837,7 +837,7 @@ describe("Command.afterRefetch", () => {
               ["awaiting", [{ name: "user", args: { id: "1" } }]]
             ])
             // h.isRunning stays true through the wait.
-            assert.isDefined(story.query(Query.text("saving")))
+            assert.isDefined(story.query(Locator.text("saving")))
             assert.deepStrictEqual(story.model.done, [])
             app.order.length = 0
           })

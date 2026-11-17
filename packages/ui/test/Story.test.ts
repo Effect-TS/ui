@@ -1,6 +1,6 @@
 import { Command, Component, Route, Router, View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Query, Story } from "@effect/ui/testing"
+import { Locator, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Data, Effect, Layer, Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
@@ -55,9 +55,9 @@ describe("Story", () => {
 
     it("the record answers locator queries over the view", () => {
       const story = Story.start(Counter, { initial: 3 }).current
-      assert.strictEqual(Query.textOf(story.get(Query.tag("span"))), "3")
-      assert.lengthOf(story.all(Query.tag("button")), 2)
-      assert.isUndefined(story.query(Query.text("missing")))
+      assert.strictEqual(Locator.textOf(story.get(Locator.tag("span"))), "3")
+      assert.lengthOf(story.all(Locator.tag("button")), 2)
+      assert.isUndefined(story.query(Locator.text("missing")))
       assert.strictEqual<unknown>(story.root, story.view())
     })
   })
@@ -90,14 +90,14 @@ describe("Story", () => {
 
     it("fire sends the payload to the element the locator matches", () => {
       Story.make(Form, {}, (s) =>
-        s.fire(Query.testId("name"), "input", { value: "Ada" })
+        s.fire(Locator.testId("name"), "input", { value: "Ada" })
           .model((model) => assert.strictEqual(model.value, "Ada")))
     })
 
     it("click bubbles from the matched element to the nearest ancestor that handles it", () => {
       Story.make(Form, {}, (s) =>
-        s.click(Query.text("Save", { exact: true }))
-          .click(Query.tag("span"))
+        s.click(Locator.text("Save", { exact: true }))
+          .click(Locator.tag("span"))
           .model((model) => assert.strictEqual(model.presses, 2)))
     })
 
@@ -112,7 +112,7 @@ describe("Story", () => {
         /Story\.click: nothing handles "click" at text "plain"/
       )
       assert.throws(
-        () => Story.start(Form, {}).fire(Query.testId("name"), "change"),
+        () => Story.start(Form, {}).fire(Locator.testId("name"), "change"),
         /Story\.fire: nothing handles "change"/
       )
     })
@@ -141,7 +141,7 @@ describe("Story", () => {
           )
       })
       const keyDown = (key: string) => (s: Story.Steps<typeof Composer>) =>
-        s.fire(Query.tag("textarea"), "keydown", { key })
+        s.fire(Locator.tag("textarea"), "keydown", { key })
       Story.make(Composer, {}, (s) => {
         s.pipe(keyDown("Enter"))
           // Checks read the record without making a new one.
@@ -153,13 +153,13 @@ describe("Story", () => {
           .pipe(keyDown("a"))
           .check((story) => assert.isFalse(story.defaultPrevented))
         // A form's submission is always cancelled, whatever its handler returns, and with no handler.
-        s.fire(Query.text("Ignored"), "submit")
+        s.fire(Locator.text("Ignored"), "submit")
         assert.isTrue(s.current.defaultPrevented)
-        s.fire(Query.text("Unhandled"), "submit")
+        s.fire(Locator.text("Unhandled"), "submit")
         assert.isTrue(s.current.defaultPrevented)
         assert.strictEqual(s.current.model, 3)
         // "always" cancels whatever the handler returns.
-        s.fire(Query.text("Menu"), "contextmenu")
+        s.fire(Locator.text("Menu"), "contextmenu")
         assert.isTrue(s.current.defaultPrevented)
       })
     })
@@ -511,7 +511,7 @@ describe("Story", () => {
   })
 
   describe("loaders", () => {
-    const text = (story: { readonly root: Query.Node }) => Query.textOf(story.root)
+    const text = (story: { readonly root: Locator.Node }) => Locator.textOf(story.root)
     const page = (n: number, names: ReadonlyArray<string>) => ({
       page: n,
       pages: 2,

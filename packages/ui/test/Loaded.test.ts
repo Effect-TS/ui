@@ -1,5 +1,5 @@
 import { Command, Component, Loader, MessageLog } from "@effect/ui"
-import { Query, TestHost } from "@effect/ui/testing"
+import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Layer, Option, Redacted, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
@@ -820,7 +820,7 @@ describe("Loaded", () => {
         const root = yield* TestHost.mount(Host, {})
         yield* load
         yield* TestClock.adjust("31 seconds")
-        Query.fire(root.get(Query.text("bad", { exact: true })), "click")
+        Locator.fire(root.get(Locator.text("bad", { exact: true })), "click")
         yield* TestHost.settle
         // Hold is still cleaning up, and the fallback's watch was a zero-to-one. Read now and checked
         // after the cleanup, so a failure doesn't leave the close waiting on the clock.
@@ -986,7 +986,7 @@ describe("Loaded", () => {
         const root = yield* TestHost.mount(app.List, { cards: ["a:1", "b:1"] })
         yield* load
         app.order.length = 0
-        Query.fire(root.get(Query.text("a=Ann", { exact: true })), "click")
+        Locator.fire(root.get(Locator.text("a=Ann", { exact: true })), "click")
         yield* TestHost.settle
         // Both instances get the patched slot (and its onChange) before the one flush that renders the issuing update.
         assert.deepStrictEqual(app.order, [

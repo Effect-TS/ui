@@ -1,7 +1,7 @@
 import { Component, View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { HtmlStory } from "@effect/ui/html/testing"
-import { Query, Story } from "@effect/ui/testing"
+import { Locator, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Schema } from "effect"
 import { Dialog, type Item, Menu } from "./fixtures/headless.ts"
@@ -43,11 +43,11 @@ const Toolbar = Component.define({
     })
 })
 
-const filter = Query.attr("aria-label", "Filter actions")
-const labels = (story: { readonly all: (locator: Query.Locator) => ReadonlyArray<Query.Node> }) =>
-  story.all(Query.tag("li")).map(Query.textOf)
+const filter = Locator.attr("aria-label", "Filter actions")
+const labels = (story: { readonly all: (locator: Locator.Locator) => ReadonlyArray<Locator.Node> }) =>
+  story.all(Locator.tag("li")).map(Locator.textOf)
 
-const trigger = Query.text("Actions")
+const trigger = Locator.text("Actions")
 
 /** A consumer's closure for the author's stories: the least markup the Menu's parts need. */
 const standIn = {
@@ -102,7 +102,7 @@ describe("headless components in a story", () => {
           assert.strictEqual(active(story), "a")
           assert.strictEqual(
             story.get(filter).attrs?.["aria-activedescendant"],
-            story.get(Query.text("Archive")).attrs?.id
+            story.get(Locator.text("Archive")).attrs?.id
           )
         })
         .fire(filter, "keydown", { key: "Enter" })
@@ -150,7 +150,7 @@ describe("headless components in a story", () => {
   it("ids of one instance differ whenever the name or the key does", () => {
     Story.make(Ids, {}, (s) => {
       s.check((story) => {
-        const ids = story.all(Query.tag("span")).map((span) => span.attrs?.id)
+        const ids = story.all(Locator.tag("span")).map((span) => span.attrs?.id)
         assert.strictEqual(new Set(ids).size, 3, ids.join(" "))
       })
     })
@@ -170,7 +170,7 @@ describe("headless components in a story", () => {
         )
     }, (s) => {
       s.click("Actions")
-        .check((story) => assert.strictEqual(story.get(Query.text("Actions")).attrs?.["aria-expanded"], "true"))
+        .check((story) => assert.strictEqual(story.get(Locator.text("Actions")).attrs?.["aria-expanded"], "true"))
         .fire(filter, "input", { value: "co", checked: false })
         .check((story) => {
           const m = Story.parts(Menu, story)
@@ -189,12 +189,12 @@ describe("headless components in a story", () => {
     Story.make(Toolbar, {}, (s) => {
       // Expanded from the Menu's init Model.
       s.check((story) => {
-        assert.strictEqual(story.get(Query.text("Actions")).attrs?.["aria-expanded"], "false")
+        assert.strictEqual(story.get(Locator.text("Actions")).attrs?.["aria-expanded"], "false")
         assert.deepStrictEqual(labels(story), ["Archive", "Block", "Copy"])
       })
       s.givenChild("actions", { open: true, query: "co", active: "c", typed: "", focused: [] })
         .check((story) => {
-          assert.strictEqual(story.get(Query.text("Actions")).attrs?.["aria-expanded"], "true")
+          assert.strictEqual(story.get(Locator.text("Actions")).attrs?.["aria-expanded"], "true")
           assert.deepStrictEqual(labels(story), ["Copy"])
         })
         // The row has the Menu's layer and the Toolbar's: the story runs the Toolbar's.
@@ -213,7 +213,7 @@ describe("headless components in a story", () => {
       parts: (_, p) => ({ root: p.part((b) => b.attr("role", "button")) })
     })
     Story.make(Neutral, {}, { elements: Html, view: (p, h) => p.root(h.button).children("neutral") }, (s) => {
-      s.check((story) => assert.strictEqual(story.get(Query.text("neutral")).tag, "button"))
+      s.check((story) => assert.strictEqual(story.get(Locator.text("neutral")).tag, "button"))
     })
   })
 
@@ -311,7 +311,7 @@ describe("headless components in a story", () => {
       })
     })
     const story = Story.make(Zone, {}, { elements: Html, view: (p, h) => p.zone(h.div).children("zone") }, (s) => {
-      s.pipe(HtmlStory.drop(Query.text("zone"), { data: { "text/plain": "milk" } }))
+      s.pipe(HtmlStory.drop(Locator.text("zone"), { data: { "text/plain": "milk" } }))
     })
     assert.strictEqual(story.model, "milk")
     assert.isTrue(story.defaultPrevented)

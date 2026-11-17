@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { Component } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
-import { HtmlQuery, ssr } from "@effect/ui/html/testing"
+import { HtmlLocator, ssr } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
@@ -307,7 +307,7 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
       const press = (label: string, key: string) =>
         Effect.andThen(
           Effect.sync(() =>
-            HtmlQuery.getByRole(app, "textbox", { name: label }).dispatchEvent(
+            HtmlLocator.getByRole(app, "textbox", { name: label }).dispatchEvent(
               new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })
             )
           ),
@@ -329,7 +329,7 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
       yield* tick
       const dialog = app.querySelector("dialog")!
       assert.strictEqual(dialog.getAttribute("aria-labelledby"), app.querySelector("h2")!.id)
-      HtmlQuery.click(app.querySelector("button")!)
+      HtmlLocator.click(app.querySelector("button")!)
       yield* tick
       assert.isTrue(dialog.open)
       dialog.dispatchEvent(new Event("cancel", { cancelable: true }))
@@ -391,7 +391,7 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
       const app = yield* container
       const root = yield* BrowserHost.mountEffect(Picker, {}, app)
       yield* tick
-      const copy = HtmlQuery.getByRole(app, "menuitem", { name: "Copy", hidden: true })
+      const copy = HtmlLocator.getByRole(app, "menuitem", { name: "Copy", hidden: true })
       const event = new MouseEvent("click", { bubbles: true, cancelable: true })
       copy.dispatchEvent(event)
       yield* tick
@@ -413,7 +413,7 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
       assert.strictEqual(trigger.getAttribute("class"), "btn")
       assert.strictEqual(trigger.getAttribute("aria-expanded"), "false")
 
-      HtmlQuery.click(trigger)
+      HtmlLocator.click(trigger)
       yield* tick
       yield* settle
       assert.strictEqual(trigger.getAttribute("aria-expanded"), "true")
@@ -485,7 +485,7 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
         serverIds
       )
       // And live: the part's handler reaches the Menu.
-      HtmlQuery.click(trigger)
+      HtmlLocator.click(trigger)
       yield* tick
       assert.strictEqual(trigger.getAttribute("aria-expanded"), "true")
       assert.isTrue(stub.showing.has(popup))
