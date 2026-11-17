@@ -766,22 +766,14 @@ const expandRoot = <Msg>(
 /**
  * Defers rendering until the view is first read, after the step's keyed
  * prunes settle. This skips intermediate records the runtime wouldn't render.
+ * `render` gives the expanded view.
  */
 const record = <Props, Model, Msg, Events>(
   fields: Fields<Props, Model, Msg, Events>,
   render: () => View.Node<Msg, any>
 ): Story<Props, Model, Msg, Events> => {
   let rendered: View.Node<Msg, any> | undefined
-  const view = () => {
-    return rendered ??= expandRoot(
-      render(),
-      fields.component.definition.name,
-      fields.childModels,
-      storySlots.get(fields.component),
-      fields.shared,
-      rootOwners(fields.component, fields.model, fields.props)
-    )
-  }
+  const view = () => rendered ??= render()
   // A view value is a `Query` tree; a child is a node with no tag or text.
   const root = () => view() as Query.Node
   const context = () => boundOf(fields.component)?.context(fields.model, fields.props, fields.loaderState)
@@ -845,14 +837,27 @@ const update = <Props, Model, Msg, Events>(
     ...patch
   }
   // A defect in `view` fails the step that changed the Model, the loader state, the props or what's pending.
+  // An unchanged view is kept as expanded: expanding it again would rebuild slot content without the
+  // owners whose nodes the first expansion replaced.
   const view =
     fields.model === story.model && fields.loaderState === story.loaderState && fields.props === story.props &&
       fields.pending === story.pending && fields.loadingMore === story.loadingMore &&
       fields.childModels === childModels.get(story) && fields.shared === sharedGiven.get(story)
       ? story.view
-      : () => viewOfFields(fields)
+      : () => expandedView(fields)
   return record(fields, view)
 }
+
+/** The story's view: the component's own, with its headless children and slot content expanded. */
+const expandedView = (fields: Fields<any, any, any, any>): View.Node<any, any> =>
+  expandRoot(
+    viewOfFields(fields),
+    fields.component.definition.name,
+    fields.childModels,
+    storySlots.get(fields.component),
+    fields.shared,
+    rootOwners(fields.component, fields.model, fields.props)
+  )
 
 /** The story's component's own view, before its headless children are expanded. */
 const viewOfFields = (fields: Fields<any, any, any, any>): View.Node<any, any> =>
@@ -1919,7 +1924,7 @@ export const start = <C extends AnyComponent>(component: C, props: Component.Pro
     loadingMore: [],
     defaultPrevented: false
   }
-  const empty = record(fields, () => viewOfFields(fields))
+  const empty = record(fields, () => expandedView(fields))
   return new StepsImpl(apply(empty, first)) as Steps<C>
 }
 

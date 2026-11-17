@@ -41,7 +41,11 @@ const Tip = Component.define({
 
 /** A headless reader: its part is the open tip. */
 const Trigger = Component.define({ name: "Trigger", model: Schema.Null, message: TipMessage, shared: { tips: Tips } })
-  .make({ init: () => null, update: (model) => model, parts: (_, p) => ({ open: p.shared.tips.open }) })
+  .make({
+    init: () => null,
+    update: (model) => model,
+    parts: (_, p) => ({ open: p.shared.tips.open, label: p.shared.tips.label })
+  })
 
 /** Tips with a Tip and a Trigger in its closure. Its Model is the label it passes to Tips. */
 const App = Component.define({
@@ -195,8 +199,21 @@ describe("shared state in a Story", () => {
     assert.strictEqual(Query.textOf(story.root), "a")
   })
 
+  // A story with no steps keeps the view it expanded, where the owner placing the slot is already gone.
+  it("gives slot content the owner that places it", () => {
+    const Frame = Component.define({ name: "Frame", model: Schema.Null, message: TipMessage, slots: ["body"] }).make({
+      init: () => null,
+      update: (model) => model,
+      view: (_, h) => Tips(h, { key: "tips", props: { label: "placed" }, view: () => h.slots.body })
+    })
+    const story = Story.make(Frame, {}, {
+      slots: (h) => ({ body: Trigger(h, { key: "t", view: (parts) => h.el("i", parts.label) }) })
+    }, () => {})
+    assert.strictEqual(Query.textOf(story.root), "placed")
+  })
+
   it("gives the parts of a headless reader the shared value", () => {
-    assert.deepStrictEqual(Story.parts(Trigger, { model: null, props: {} }), { open: null })
+    assert.deepStrictEqual(Story.parts(Trigger, { model: null, props: {} }), { open: null, label: "" })
   })
 
   it("takes the values of owners with required props from shared steps or given, and throws naming a missing one", () => {
