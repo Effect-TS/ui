@@ -579,6 +579,17 @@ describe("Story", () => {
       )
     })
 
+    it("loaded and loadFailed name the Story step in their errors", () => {
+      assert.throws(
+        () => Story.make(users.RenameForm, { id: "1" }, (s) => s.loaded("draft" as any, "x")),
+        /^Story\.loaded: "draft" is not a loader of /
+      )
+      assert.throws(
+        () => Story.make(users.RenameForm, { id: "1" }, (s) => s.loadFailed("draft" as any, "x")),
+        /^Story\.loadFailed: "draft" is not a loader of /
+      )
+    })
+
     const TeamMessage = Schema.TaggedUnion({ UserChanged: {}, Bump: {} })
     const renders: Array<string> = []
     const Team = Component.define({

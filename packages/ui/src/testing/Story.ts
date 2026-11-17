@@ -646,7 +646,7 @@ class StepsImpl implements Steps<AnyComponent> {
     return this.step(
       engine.settleStep(
         this.current,
-        "loaded",
+        "Story.loaded",
         name,
         options?.patched === true,
         options?.waiting === true,
@@ -673,7 +673,7 @@ class StepsImpl implements Steps<AnyComponent> {
     return this.step(
       engine.settleStep(
         this.current,
-        "loadFailed",
+        "Story.loadFailed",
         name,
         false,
         options?.waiting === true,
