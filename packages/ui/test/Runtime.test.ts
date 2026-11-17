@@ -1,4 +1,4 @@
-import { Command, Component, Feature, Loader, MessageLog, Renderer, Subscription } from "@effect/ui"
+import { Command, Component, Feature, Loader, MessageLog, Mount, Renderer, Subscription } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import * as runtime from "@effect/ui/internal/runtime"
 import { Query, Story, TestHost } from "@effect/ui/testing"
@@ -24,7 +24,7 @@ import {
 import { AsyncResult } from "effect/reactivity"
 import { TestClock } from "effect/testing"
 import { Counter, CounterMessage } from "./fixtures/components.ts"
-import { Tiny } from "./fixtures/vocabulary.ts"
+import { Tiny, type TinyField } from "./fixtures/vocabulary.ts"
 
 const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(TestHost.layer()))
 const tags = (root: { readonly log: () => ReadonlyArray<MessageLog.Entry> }, path?: string) =>
@@ -2493,6 +2493,12 @@ describe("Runtime", () => {
     it.effect("onMount runs with the element's node on hosts that run mounts", () =>
       Effect.gen(function*() {
         const Msg = Schema.TaggedUnion({ Mounted: { tag: Schema.String } })
+        const ReadTag = Mount.make(
+          "ReadTag",
+          { args: { token: Schema.Redacted(Schema.String) } },
+          (node: TinyField) => Effect.succeed((node as unknown as TestHost.TestElement).tag)
+        )
+        const token = Redacted.make("secret")
         const Auto = Component.define({
           name: "Auto",
           model: Schema.String,
@@ -2504,17 +2510,22 @@ describe("Runtime", () => {
           view: (tag, h) =>
             h.box(
               h.label(tag),
-              h.field.onMount(
-                "focus",
-                (node) => Effect.succeed(Msg.make({ _tag: "Mounted", tag: (node as any).tag }))
-              )
+              h.field.onMount(ReadTag({ token }).pipe(Mount.map((tag) => Msg.make({ _tag: "Mounted", tag }))))
             )
         })
         const root = yield* TestHost.mount(Auto, {})
         yield* TestHost.settle
         assert.strictEqual(root.text(), "field")
         const update = root.log().find((entry) => entry._tag === "Update") as MessageLog.Update
-        assert.deepStrictEqual(update.source, { _tag: "Mount", name: "focus" })
+        assert.deepStrictEqual(update.source, {
+          _tag: "Mount",
+          name: "ReadTag",
+          args: { token },
+          argsSchema: ReadTag.args
+        })
+        // The Wire encodes the args through the definition's Schema, redacted.
+        const wire = MessageLog.makeEncoder().encode(update) as Extract<MessageLog.Wire, { _tag: "Update" }>
+        assert.deepStrictEqual(wire.source, { _tag: "Mount", name: "ReadTag", args: { token: { "~redacted": true } } })
       }).pipe(
         Effect.provide(Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })),
         provideHost
@@ -2530,7 +2541,8 @@ describe("Runtime", () => {
         }).make({
           init: () => "waiting",
           update: (_, message) => message,
-          view: (text, h) => h.box(h.label(text), h.field.onMount("focus", () => Effect.succeed("mounted")))
+          view: (text, h) =>
+            h.box(h.label(text), h.field.onMount(Mount.make("Focus", { args: {} }, () => Effect.succeed("mounted"))()))
         })
         const root = yield* TestHost.mount(Auto, {})
         yield* TestHost.settle
@@ -2540,12 +2552,15 @@ describe("Runtime", () => {
     it.effect("a mount that ends with Component.noop sends nothing and logs no update", () =>
       Effect.gen(function*() {
         let ran = 0
+        const Focus = Mount.make("Focus", { args: {} }, () =>
+          Effect.sync(() =>
+            void ran++
+          ).pipe(Effect.as(Component.noop)))
         const Quiet = Component.define({ name: "Quiet", model: Schema.Null, message: Schema.Never, elements: Tiny })
           .make({
             init: () => null,
             update: (model) => model,
-            view: (_, h) =>
-              h.box(h.field.onMount("focus", () => Effect.sync(() => void ran++).pipe(Effect.as(Component.noop))))
+            view: (_, h) => h.box(h.field.onMount(Focus()))
           })
         const root = yield* TestHost.mount(Quiet, {})
         yield* TestHost.settle
@@ -2556,12 +2571,23 @@ describe("Runtime", () => {
         provideHost
       ))
 
-    it.effect("an input mount runs once, sees each new input by Equal, and its Scope closes with the element", () =>
+    it.effect("a mount runs once, sees each new args by their Schema, and its Scope closes with the element", () =>
       Effect.gen(function*() {
         const Msg = Schema.TaggedUnion({ Set: { n: Schema.Number }, Touch: {}, Hide: {} })
         const runs: Array<number> = []
         const seen: Array<number> = []
         let closed = 0
+        const Draw = Mount.make(
+          "Draw",
+          { args: { n: Schema.Number } },
+          (_node, args, changes) =>
+            Effect.gen(function*() {
+              runs.push(args.n)
+              yield* Effect.addFinalizer(() => Effect.sync(() => closed++))
+              yield* Stream.runForEach(changes, ({ n }) => Effect.sync(() => seen.push(n)))
+              return Component.noop
+            })
+        )
         const Chart = Component.define({
           name: "Chart",
           model: Schema.Struct({ n: Schema.Number, touches: Schema.Number, shown: Schema.Boolean }),
@@ -2579,13 +2605,7 @@ describe("Runtime", () => {
             h.box(
               h.label(`touches ${model.touches}`),
               model.shown
-                ? h.field.onMount("draw", model.n, (_node, changes) =>
-                  Effect.gen(function*() {
-                    runs.push(model.n)
-                    yield* Effect.addFinalizer(() => Effect.sync(() => closed++))
-                    yield* Stream.runForEach(changes, (n) => Effect.sync(() => seen.push(n)))
-                    return Component.noop
-                  }))
+                ? h.field.onMount(Draw({ n: model.n }))
                 : null
             )
         })
@@ -2594,7 +2614,7 @@ describe("Runtime", () => {
         assert.deepStrictEqual(seen, [0])
         root.send(Msg.make({ _tag: "Set", n: 1 }))
         yield* TestHost.settle
-        // A render whose input is equal gives no new value.
+        // A render whose args are equal gives no new value.
         root.send(Msg.make({ _tag: "Touch" }))
         yield* TestHost.settle
         assert.strictEqual(root.text(), "touches 1")
@@ -2612,10 +2632,40 @@ describe("Runtime", () => {
         provideHost
       ))
 
-    it.effect("an input mount that is busy while two inputs arrive gets the latest one", () =>
+    it.effect("a mount's result goes through the Mount.map of the latest render", () =>
+      Effect.gen(function*() {
+        const gate = yield* Deferred.make<void>()
+        const Wait = Mount.make("Wait", { args: {} }, () => Effect.as(Deferred.await(gate), "done"))
+        const Late = Component.define({ name: "Late", model: Schema.String, message: Schema.String, elements: Tiny })
+          .make({
+            init: () => "first",
+            update: (_, message) => message,
+            view: (model, h) => h.field.onMount(Wait().pipe(Mount.map((result) => `${result} after ${model}`)))
+          })
+        const root = yield* TestHost.mount(Late, {})
+        yield* TestHost.settle
+        root.send("second")
+        yield* TestHost.settle
+        yield* Deferred.succeed(gate, undefined)
+        yield* TestHost.settle
+        assert.strictEqual(root.model(), "done after second")
+      }).pipe(
+        Effect.provide(Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })),
+        provideHost
+      ))
+
+    it.effect("a mount that is busy while two args arrive gets the latest one", () =>
       Effect.gen(function*() {
         const gate = yield* Deferred.make<void>()
         const seen: Array<number> = []
+        const Draw = Mount.make("Draw", { args: { n: Schema.Number } }, (_node, _args, changes) =>
+          Stream.runForEach(changes, ({ n }) =>
+            Effect.gen(function*() {
+              seen.push(n)
+              if (n === 0) {
+                yield* Deferred.await(gate)
+              }
+            })).pipe(Effect.as(Component.noop)))
         const Chart = Component.define({
           name: "SlowChart",
           model: Schema.Number,
@@ -2623,17 +2673,12 @@ describe("Runtime", () => {
           elements: Tiny
         })
           .make({
-            init: () => 0,
-            update: (_, n) => n,
+            init: () =>
+              0,
+            update: (_, n) =>
+              n,
             view: (n, h) =>
-              h.field.onMount("draw", n, (_node, changes) =>
-                Stream.runForEach(changes, (value) =>
-                  Effect.gen(function*() {
-                    seen.push(value)
-                    if (value === 0) {
-                      yield* Deferred.await(gate)
-                    }
-                  })).pipe(Effect.as(Component.noop)))
+              h.field.onMount(Draw({ n }))
           })
         const root = yield* TestHost.mount(Chart, {})
         yield* TestHost.settle
@@ -2653,6 +2698,11 @@ describe("Runtime", () => {
   it.effect("a removed element's mount that was waiting for its Layer never runs", () =>
     Effect.gen(function*() {
       let mounts = 0
+      const Count = Mount.make("Count", { args: {} }, () =>
+        Effect.sync(() => {
+          mounts++
+          return false
+        }))
       class Slow extends Context.Service<Slow, number>()("test/SlowMount") {}
       const App = Component.provide(
         Component.define({
@@ -2666,11 +2716,7 @@ describe("Runtime", () => {
             h.el(
               "main",
               shown ?
-                h.el("input").onMount("count", () =>
-                  Effect.sync(() => {
-                    mounts++
-                    return false
-                  })) :
+                h.el("input").onMount(Count()) :
                 null
             )
         }),

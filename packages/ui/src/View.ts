@@ -31,12 +31,11 @@
  * @stability experimental
  * @since 0.1.0
  */
-import type * as Effect from "effect/Effect"
 import type * as AsyncResult from "effect/reactivity/AsyncResult"
-import type * as Stream from "effect/Stream"
 import * as Command from "./Command.ts"
 import type * as Component from "./Component.ts"
 import type * as Feature from "./Feature.ts"
+import type * as MountModule from "./Mount.ts"
 import type * as Renderer from "./Renderer.ts"
 
 /**
@@ -279,38 +278,31 @@ export interface Element<out Msg, out R = never> {
 }
 
 /**
- * What `onMount` stores: a name shown in the tree, the work to run with the
- * host's node once the element is committed, and the input it was given, if
- * any.
+ * What `onMount` stores: the issued mount, with its name, its args and the
+ * map from its result to a message.
  *
  * **Details**
  *
- * `run` gets the node and a Stream of the input's values. The input is
- * present only when `onMount` was given one, so a story can check the
- * value the view rendered with `"input" in mount`. Without one, the Stream
- * is empty.
+ * It's data: a story reads `name` and `args` off it without running the
+ * body. See `Mount.make`.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface Mount<out Msg> {
-  readonly name: string
-  readonly run: (node: any, changes: Stream.Stream<any>) => Effect.Effect<Msg | Component.Noop, never, any>
-  /** The input given to `onMount(name, input, run)`. */
-  readonly input?: unknown
-}
+export type Mount<Msg> = MountModule.Issued<Msg | Component.Noop, any, any, never>
 
 /**
- * The text of the type error `onMount` gives for an Effect that doesn't end
- * with a message or `Component.noop`, such as an `Effect<void>`.
+ * The text of the type error `onMount` gives for a mount that doesn't end
+ * with a message or `Component.noop`, such as one whose body is an
+ * `Effect<void>` or whose result hasn't been mapped.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
 export type MountHint =
-  "onMount's Effect ends with a message or Component.noop. A mount with nothing to send ends with Effect.as(Component.noop)"
+  "onMount's mount ends with a message or Component.noop. Map its result with Mount.map, or end its body with Effect.as(Component.noop)"
 
 /**
  * A child component, declared by calling a component with the
@@ -1173,20 +1165,21 @@ export class ElementBuilder<
     return out
   }
   /**
-   * Runs `run` with this element's host node after it's committed, in a Scope
-   * that closes when the element goes and survives patches. A message it
-   * ends with comes back to the component, and one that ends with
+   * Starts `mount` with this element's host node after it's committed, in a
+   * Scope that closes when the element goes and survives patches. A message
+   * it ends with comes back to the component, and one that ends with
    * `Component.noop` sends nothing and logs no `Update`. Its requirements
    * join the component's.
    *
    * **Details**
    *
-   * `run` runs once per element, so it doesn't see a later render's values.
-   * With an `input`, `run` also gets `changes`: a Stream that starts with
-   * the current input and gives each new one, when a render's input differs
-   * by `Equal`. A reader that falls behind gets only the latest value. To
-   * redo work for every value, run it over the Stream:
-   * `Stream.runForEach(changes, (data) => draw(node, data))`.
+   * `mount` is an issued mount: a definition from `Mount.make` called with
+   * its args, and mapped to the component's message with `Mount.map` when
+   * its result isn't one. A mount whose body needs another kind of host node
+   * than this element's doesn't compile.
+   *
+   * The body runs once per element. A later render's args reach it through
+   * its `changes` Stream, when they differ by the args Schema's equivalence.
    *
    * A defect fails the instance. It never runs on the server or on a host that
    * doesn't run mounts, such as `TestHost`, where a test sends the message
@@ -1195,22 +1188,15 @@ export class ElementBuilder<
    *
    * **Gotchas**
    *
-   * A mount returns one message, so a running mount can't send messages as
-   * it goes. Its Effect ends with a message or `Component.noop`: an
-   * `Effect<void>` doesn't compile, because a `void` type can hold any value,
-   * which would be sent as a message. End a mount with nothing to send with
-   * `Effect.as(Component.noop)`.
+   * A mount ends with one message, so a running mount can't send messages as
+   * it goes. A body that is an `Effect<void>` doesn't compile here, because
+   * a `void` type can hold any value, which would be sent as a message. End
+   * a mount with nothing to send with `Effect.as(Component.noop)`.
    *
    * @since 0.1.0
    */
   onMount<R2>(
-    name: string,
-    run: (node: HostNode) => Effect.Effect<Msg | Component.Noop, never, R2>
-  ): ElementBuilder<Msg, R | R2, Handlers, HostNode, Tag>
-  onMount<I, R2>(
-    name: string,
-    input: I,
-    run: (node: HostNode, changes: Stream.Stream<I>) => Effect.Effect<Msg | Component.Noop, never, R2>
+    mount: MountModule.Issued<Msg | Component.Noop, R2, HostNode, never>
   ): ElementBuilder<Msg, R | R2, Handlers, HostNode, Tag>
   /**
    * Rejects any other mount result, with a type error that says what to end
@@ -1218,19 +1204,9 @@ export class ElementBuilder<
    *
    * @since 0.1.0
    */
-  onMount(
-    name: string,
-    run: (node: HostNode) => Effect.Effect<Msg | Component.Noop | MountHint, never, any>
-  ): never
-  onMount<I>(
-    name: string,
-    input: I,
-    run: (node: HostNode, changes: Stream.Stream<I>) => Effect.Effect<Msg | Component.Noop | MountHint, never, any>
-  ): never
-  onMount(name: string, ...args: ReadonlyArray<any>): any {
-    return withFields(this, {
-      mount: args.length === 1 ? { name, run: args[0] } : { name, input: args[0], run: args[1] }
-    })
+  onMount(mount: MountModule.Issued<Msg | Component.Noop | MountHint, any, HostNode, never>): never
+  onMount(mount: Mount<Msg>): any {
+    return withFields(this, { mount })
   }
 }
 
@@ -1259,13 +1235,7 @@ export class ContainerBuilder<
    * @since 0.1.0
    */
   override onMount<R2>(
-    name: string,
-    run: (node: HostNode) => Effect.Effect<Msg | Component.Noop, never, R2>
-  ): ContainerBuilder<Msg, R | R2, Handlers, HostNode, Tag>
-  override onMount<I, R2>(
-    name: string,
-    input: I,
-    run: (node: HostNode, changes: Stream.Stream<I>) => Effect.Effect<Msg | Component.Noop, never, R2>
+    mount: MountModule.Issued<Msg | Component.Noop, R2, HostNode, never>
   ): ContainerBuilder<Msg, R | R2, Handlers, HostNode, Tag>
   /**
    * Rejects any other mount result, with a type error that says what to end
@@ -1273,17 +1243,9 @@ export class ContainerBuilder<
    *
    * @since 0.1.0
    */
-  override onMount(
-    name: string,
-    run: (node: HostNode) => Effect.Effect<Msg | Component.Noop | MountHint, never, any>
-  ): never
-  override onMount<I>(
-    name: string,
-    input: I,
-    run: (node: HostNode, changes: Stream.Stream<I>) => Effect.Effect<Msg | Component.Noop | MountHint, never, any>
-  ): never
-  override onMount(name: string, ...args: ReadonlyArray<any>): any {
-    return (super.onMount as any)(name, ...args)
+  override onMount(mount: MountModule.Issued<Msg | Component.Noop | MountHint, any, HostNode, never>): never
+  override onMount(mount: Mount<Msg>): any {
+    return (super.onMount as any)(mount)
   }
   /**
    * Ends the chain with the element's children: nodes, builders, text,

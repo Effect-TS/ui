@@ -1,5 +1,4 @@
-import { Component } from "@effect/ui"
-import type { View } from "@effect/ui"
+import { Component, Mount } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { HtmlStory } from "@effect/ui/html/testing"
 import { Query, Story } from "@effect/ui/testing"
@@ -41,20 +40,41 @@ describe("HtmlStory", () => {
     })
   })
 
-  it("the view value holds an onMount input, for a story to check", () => {
+  it("a story names a mount by its definition, checks its args and ends it with the definition's result", () => {
+    const Message = Schema.TaggedUnion({ Add: { point: Schema.Number }, Drawn: { width: Schema.Number } })
+    const DrawChart = Mount.make(
+      "DrawChart",
+      { args: { points: Schema.Array(Schema.Number) } },
+      (canvas: HTMLCanvasElement) => Effect.sync(() => canvas.width)
+    )
     const Chart = Component.define({
       name: "Chart",
-      model: Schema.Array(Schema.Number),
-      message: Schema.Never,
+      model: Schema.Struct({ points: Schema.Array(Schema.Number), width: Schema.Number }),
+      message: Message,
       elements: Html
     }).make({
-      init: () => [1, 2],
-      update: (points) => points,
-      view: (points, h) => h.div.onMount("draw", points, () => Effect.succeed(Component.noop)).children("chart")
+      init: () => ({ points: [1, 2], width: 0 }),
+      update: (model, message) =>
+        Message.match(message, {
+          Add: ({ point }) => ({ ...model, points: [...model.points, point] }),
+          Drawn: ({ width }) => ({ ...model, width })
+        }),
+      view: (model, h) =>
+        h.canvas.onMount(
+          DrawChart({ points: model.points }).pipe(Mount.map((width) => Message.make({ _tag: "Drawn", width })))
+        )
     })
-    const story = Story.make(Chart, {}, () => {})
-    const mount = (story.view() as View.Element<never, never>).mount
-    assert.strictEqual(mount?.name, "draw")
-    assert.deepStrictEqual(mount?.input, [1, 2])
+    Story.make(Chart, {}, (s) => {
+      s.expectMount(DrawChart({ points: [1, 2] }))
+        .send(Message.make({ _tag: "Add", point: 3 }))
+        .expectMount(DrawChart({ points: [1, 2, 3] }))
+        // The definition's own result: the view's Mount.map makes the message.
+        .mounted(DrawChart, 300)
+        .model((model) => assert.strictEqual(model.width, 300))
+      assert.throws(
+        () => s.expectMount(DrawChart({ points: [] })),
+        /Story\.expectMount: no rendered mount matches DrawChart\(\{"points":\[\]\}\); mounts: DrawChart\(\{"points":\[1,2,3\]\}\)/
+      )
+    })
   })
 })

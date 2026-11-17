@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component } from "@effect/ui"
+import { Component, Mount } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { HtmlQuery, ssr } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
@@ -124,6 +124,15 @@ const Toolbar = Component.define({
 
 const mounts: Array<string> = []
 
+const PlaceAnchor = Mount.make("PlaceAnchor", { args: {} }, (node: HTMLElement) =>
+  Effect.as(
+    Effect.acquireRelease(
+      Effect.sync(() => mounts.push("start " + node.textContent)),
+      () => Effect.sync(() => mounts.push("stop"))
+    ),
+    "placed" as const
+  ))
+
 const Anchor = Component.define({
   name: "Anchor",
   model: Schema.Number,
@@ -134,15 +143,7 @@ const Anchor = Component.define({
   update: (count) => count + 1,
   parts: (count, p) => ({
     count,
-    anchor: p.part("button", (b) =>
-      b.attr("data-anchored", "").onMount("anchor", (node) =>
-        Effect.as(
-          Effect.acquireRelease(
-            Effect.sync(() => mounts.push("start " + node.textContent)),
-            () => Effect.sync(() => mounts.push("stop"))
-          ),
-          "placed" as const
-        )))
+    anchor: p.part("button", (b) => b.attr("data-anchored", "").onMount(PlaceAnchor()))
   })
 })
 

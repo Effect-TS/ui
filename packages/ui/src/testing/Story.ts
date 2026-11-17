@@ -69,7 +69,7 @@ import * as Command from "../Command.ts"
 import type * as Component from "../Component.ts"
 import type * as Head from "../Head.ts"
 import * as loaders from "../internal/loaders.ts"
-import { isNoop } from "../internal/noop.ts"
+import { isNoop, noop } from "../internal/noop.ts"
 import {
   checkAuthorPlacements,
   checkAuthorRefs,
@@ -82,6 +82,7 @@ import {
 import * as schedule from "../internal/schedule.ts"
 import * as Loader from "../Loader.ts"
 import * as MessageLog from "../MessageLog.ts"
+import * as Mount from "../Mount.ts"
 import * as View from "../View.ts"
 import * as Query from "./Query.ts"
 
@@ -268,6 +269,25 @@ export type Target =
  */
 export type StreamTarget = Command.Definition<any, any, true, any, any> | Command.Issued<any, any, never, "Stream">
 
+/**
+ * A rendered mount's definition, or an issued mount to also match the args.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type MountTarget = Mount.Definition.Any | Mount.Any
+
+/**
+ * The result argument of the `mounted` step: the definition's own result,
+ * and none for a mount that ends with `Component.noop`.
+ *
+ * @stability experimental
+ * @category utility types
+ * @since 0.1.0
+ */
+export type MountedResult<D> = [Mount.Result<D>] extends [Component.Noop] ? [] : [result: Mount.Result<D>]
+
 // A component with no messages has `Msg = never`, and its `update` can't take `any`, so it needs its own member.
 // `Rcv` is invariant, and `any` doesn't stand for `never`, so one that receives nothing needs its own members too.
 type AnyComponent =
@@ -416,6 +436,27 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    * reader sends it is in `sent`.
    */
   shared<O extends Component.Headless.Any>(owner: O, value: Component.Shared.Value<O>): this
+  /**
+   * Ends the one rendered mount matching `target` with the result its body
+   * would have produced, and sends the message.
+   *
+   * **Details**
+   *
+   * A definition matches by name; an issued mount also matches the args, by
+   * the args Schema's equivalence. `result` is the definition's own result,
+   * before any `Mount.map`, which is replayed to produce the component's
+   * message. A mount that ends with `Component.noop` takes no result.
+   *
+   * Only the story's own component's mounts count: its elements', and those
+   * of the parts it owns. Throws when no rendered mount matches, or when
+   * several do, and lists the rendered mounts.
+   */
+  mounted<D extends MountTarget>(target: D, ...result: MountedResult<D>): this
+  /**
+   * Asserts that exactly one rendered mount is `mount`: the same definition,
+   * with the args the view last rendered equal to its args.
+   */
+  expectMount(mount: Mount.Any): this
 
   /**
    * Resolves the oldest running Command matching `target` with the result it
@@ -1592,6 +1633,40 @@ const fireAt = <Props, Model, Msg, Events>(
   return { story: out, prevented }
 }
 
+const describeMount = (mount: Mount.Any): string =>
+  `${mount.name}(${JSON.stringify(MessageLog.encodeArgs(mount.argsSchema, mount.args))})`
+
+/** The mounts the story's own component rendered: its elements', and those of the parts it owns. */
+const mountsOf = (story: Story<any, any, any, any>): Array<View.Mount<any>> => {
+  const own = "/" + story.component.definition.name
+  const out: Array<View.Mount<any>> = []
+  const walk = (node: View.Node<any, any>): void => {
+    if (node._tag !== "Element") return
+    if (node.mount !== undefined) out.push(node.mount)
+    for (const layer of node.owned ?? []) {
+      if (layer.owner.path === own && layer.mount !== undefined) out.push(layer.mount)
+    }
+    for (const child of node.children) walk(child)
+  }
+  walk(story.view())
+  return out
+}
+
+const findMount = (story: Story<any, any, any, any>, target: MountTarget, step: string): View.Mount<any> => {
+  const rendered = mountsOf(story)
+  const found = rendered.filter((mount) =>
+    Mount.isDefinition(target) ? mount.name === target.name : Mount.sameArgs(mount, target)
+  )
+  if (found.length === 1) return found[0]!
+  const wanted = Mount.isDefinition(target) ? target.name : describeMount(target)
+  const list = rendered.length === 0 ? "nothing" : rendered.map(describeMount).join(", ")
+  throw new Error(
+    found.length === 0
+      ? `Story.${step}: no rendered mount matches ${wanted}; mounts: ${list}`
+      : `Story.${step}: ${found.length} rendered mounts match ${wanted}; mounts: ${list}`
+  )
+}
+
 // Pending Commands are stored with their Source erased; `findRunning` matched `target`, so
 // `result` is the Source of this entry's Command.
 const resolveWith = (entry: Pending<any>, result: unknown): any =>
@@ -1676,6 +1751,15 @@ class StepsImpl implements Steps<AnyComponent> {
     // Nothing to settle and no default to reset: only what readers see changes.
     this.current = update(this.current, { shared: withShared(this.current, [[owner, value]], "shared") })
     renderSharing(this.current)
+    return this
+  }
+  mounted(target: MountTarget, result: unknown = noop): this {
+    const mount = findMount(this.current, target, "mounted")
+    // `findMount` matched `target`, so `result` is the Source of this mount.
+    return this.step(dispatch(this.current, (mount.resolve as (result: unknown) => any)(result)))
+  }
+  expectMount(mount: Mount.Any): this {
+    findMount(this.current, mount, "expectMount")
     return this
   }
 

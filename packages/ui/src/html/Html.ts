@@ -109,9 +109,9 @@ import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Option from "effect/Option"
 import * as Schema from "effect/Schema"
-import type * as Stream from "effect/Stream"
 import * as Command from "../Command.ts"
 import type * as Component from "../Component.ts"
+import type * as Mount from "../Mount.ts"
 import * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
 
@@ -526,13 +526,7 @@ export class VoidElement<
    * @since 0.1.0
    */
   override onMount<R2>(
-    name: string,
-    run: (node: Node) => Effect.Effect<Msg | Component.Noop, never, R2>
-  ): VoidElement<Msg, R | R2, E, Node, Tag>
-  override onMount<I, R2>(
-    name: string,
-    input: I,
-    run: (node: Node, changes: Stream.Stream<I>) => Effect.Effect<Msg | Component.Noop, never, R2>
+    mount: Mount.Issued<Msg | Component.Noop, R2, Node, never>
   ): VoidElement<Msg, R | R2, E, Node, Tag>
   /**
    * Rejects any other mount result, with a type error that says what to end
@@ -540,17 +534,9 @@ export class VoidElement<
    *
    * @since 0.1.0
    */
-  override onMount(
-    name: string,
-    run: (node: Node) => Effect.Effect<Msg | Component.Noop | View.MountHint, never, any>
-  ): never
-  override onMount<I>(
-    name: string,
-    input: I,
-    run: (node: Node, changes: Stream.Stream<I>) => Effect.Effect<Msg | Component.Noop | View.MountHint, never, any>
-  ): never
-  override onMount(name: string, ...args: ReadonlyArray<any>): any {
-    return (super.onMount as any)(name, ...args)
+  override onMount(mount: Mount.Issued<Msg | Component.Noop | View.MountHint, any, Node, never>): never
+  override onMount(mount: View.Mount<Msg>): any {
+    return (super.onMount as any)(mount)
   }
   /**
    * Sets the `id` attribute.
@@ -998,13 +984,7 @@ export class Element<
    * @since 0.1.0
    */
   override onMount<R2>(
-    name: string,
-    run: (node: Node) => Effect.Effect<Msg | Component.Noop, never, R2>
-  ): Element<Msg, R | R2, E, Node, Tag>
-  override onMount<I, R2>(
-    name: string,
-    input: I,
-    run: (node: Node, changes: Stream.Stream<I>) => Effect.Effect<Msg | Component.Noop, never, R2>
+    mount: Mount.Issued<Msg | Component.Noop, R2, Node, never>
   ): Element<Msg, R | R2, E, Node, Tag>
   /**
    * Rejects any other mount result, with a type error that says what to end
@@ -1012,17 +992,9 @@ export class Element<
    *
    * @since 0.1.0
    */
-  override onMount(
-    name: string,
-    run: (node: Node) => Effect.Effect<Msg | Component.Noop | View.MountHint, never, any>
-  ): never
-  override onMount<I>(
-    name: string,
-    input: I,
-    run: (node: Node, changes: Stream.Stream<I>) => Effect.Effect<Msg | Component.Noop | View.MountHint, never, any>
-  ): never
-  override onMount(name: string, ...args: ReadonlyArray<any>): any {
-    return (super.onMount as any)(name, ...args)
+  override onMount(mount: Mount.Issued<Msg | Component.Noop | View.MountHint, any, Node, never>): never
+  override onMount(mount: View.Mount<Msg>): any {
+    return (super.onMount as any)(mount)
   }
   /**
    * Ends the chain with the element's children: nodes, builders, text,

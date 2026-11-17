@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Command, Component, Loader, MessageLog, type Renderer, Route, Router, View } from "@effect/ui"
+import { Command, Component, Loader, MessageLog, Mount, type Renderer, Route, Router, View } from "@effect/ui"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { HtmlQuery } from "@effect/ui/html/testing"
 import { assert, expect, it } from "@effect/vitest"
@@ -1332,6 +1332,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       Measured: { some: Schema.Boolean },
       Mounted: { tag: Schema.String }
     })
+    const ReadTag = Mount.make("ReadTag", { args: {} }, (element: HTMLElement) => Effect.succeed(element.localName))
     const Refs = Component.define({
       name: "Refs",
       model: Schema.Array(Schema.String),
@@ -1352,7 +1353,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       view: (_, h) =>
         h.div(
           h.input.attr("aria-label", "Field").ref(Field)
-            .onMount("tag", (element) => Effect.succeed(Message.make({ _tag: "Mounted", tag: element.localName })))
+            .onMount(ReadTag().pipe(Mount.map((tag) => Message.make({ _tag: "Mounted", tag }))))
         )
     })
 

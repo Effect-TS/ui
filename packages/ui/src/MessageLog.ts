@@ -131,8 +131,9 @@ export interface Issued {
  * Subscription. `Emit` is a child's emit, pointing at the child's entry.
  * `Send` is a parent's `$.send`, or a descendant's `$.send` to an owner of
  * shared state, pointing at the sender's entry.
- * `Mount` is an `onMount` result, and `Dispatch` is a message sent from
- * outside the tree, such as `TestHost`'s `root.send`.
+ * `Mount` is an `onMount` result, with the mount's name and the args its
+ * element last rendered with, and `Dispatch` is a message sent from outside
+ * the tree, such as `TestHost`'s `root.send`.
  *
  * @stability experimental
  * @category models
@@ -150,7 +151,13 @@ export type Source =
   | { readonly _tag: "Subscription"; readonly key: string }
   | { readonly _tag: "Emit"; readonly path: string; readonly seq: number }
   | { readonly _tag: "Send"; readonly path: string; readonly seq: number }
-  | { readonly _tag: "Mount"; readonly name: string }
+  | {
+    readonly _tag: "Mount"
+    readonly name: string
+    readonly args: unknown
+    /** The mount's args Schema, which the Wire encodes `args` through. */
+    readonly argsSchema: Schema.Top
+  }
   | { readonly _tag: "Dispatch" }
 
 /**
@@ -645,7 +652,7 @@ const SourceWire = Schema.Union([
   Schema.TaggedStruct("Subscription", { key: Schema.String }),
   Schema.TaggedStruct("Emit", { path: Schema.String, seq: Schema.Number }),
   Schema.TaggedStruct("Send", { path: Schema.String, seq: Schema.Number }),
-  Schema.TaggedStruct("Mount", { name: Schema.String }),
+  Schema.TaggedStruct("Mount", { name: Schema.String, args: Schema.Json }),
   Schema.TaggedStruct("Dispatch", {})
 ])
 
@@ -656,7 +663,7 @@ const SourceWire = Schema.Union([
  * **Details**
  *
  * Models, messages, props and events are encoded through the component's
- * Schemas, and a send's message through its ref's or its owner's `receives`. Command args are encoded through the Command's `args` Schema,
+ * Schemas, and a send's message through its ref's or its owner's `receives`. Command args and a mount's args are encoded through the definition's `args` Schema,
  * field by field, and a field that doesn't encode falls back to a structural
  * encoding, best effort: a value with no JSON form becomes
  * `{ "~unserialisable": "<kind>" }`, a `Redacted` becomes
@@ -979,6 +986,8 @@ const encodeSource = (source: Source): typeof SourceWire.Type => {
   switch (source._tag) {
     case "Command":
       return { ...source, spanId: source.spanId ?? null, traceId: source.traceId ?? null }
+    case "Mount":
+      return { _tag: "Mount", name: source.name, args: encodeArgs(source.argsSchema, source.args) }
     default:
       return source
   }

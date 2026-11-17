@@ -3,9 +3,8 @@
  * `label` that can, and a void `field` with a value, an input event and its
  * own node type for refs and mounts.
  */
-import type { Component } from "@effect/ui"
+import type { Component, Mount } from "@effect/ui"
 import { View } from "@effect/ui"
-import type { Effect, Stream } from "effect"
 
 export interface TinyField {
   readonly _tag: "Field"
@@ -22,25 +21,11 @@ export class TinyVoid<out Msg, out R = never, in out Handlers = Record<string, u
     return this.prop("value", value)
   }
   override onMount<R2>(
-    name: string,
-    run: (node: Node) => Effect.Effect<Msg | Component.Noop, never, R2>
+    mount: Mount.Issued<Msg | Component.Noop, R2, Node, never>
   ): TinyVoid<Msg, R | R2, Handlers, Node>
-  override onMount<I, R2>(
-    name: string,
-    input: I,
-    run: (node: Node, changes: Stream.Stream<I>) => Effect.Effect<Msg | Component.Noop, never, R2>
-  ): TinyVoid<Msg, R | R2, Handlers, Node>
-  override onMount(
-    name: string,
-    run: (node: Node) => Effect.Effect<Msg | Component.Noop | View.MountHint, never, any>
-  ): never
-  override onMount<I>(
-    name: string,
-    input: I,
-    run: (node: Node, changes: Stream.Stream<I>) => Effect.Effect<Msg | Component.Noop | View.MountHint, never, any>
-  ): never
-  override onMount(name: string, ...args: ReadonlyArray<any>): any {
-    return (super.onMount as any)(name, ...args)
+  override onMount(mount: Mount.Issued<Msg | Component.Noop | View.MountHint, any, Node, never>): never
+  override onMount(mount: View.Mount<Msg>): any {
+    return (super.onMount as any)(mount)
   }
 }
 
@@ -48,25 +33,11 @@ export class TinyElement<out Msg, out R = never, in out Handlers = Record<string
   extends TinyVoid<Msg, R, Handlers, Node>
 {
   override onMount<R2>(
-    name: string,
-    run: (node: Node) => Effect.Effect<Msg | Component.Noop, never, R2>
+    mount: Mount.Issued<Msg | Component.Noop, R2, Node, never>
   ): TinyElement<Msg, R | R2, Handlers, Node>
-  override onMount<I, R2>(
-    name: string,
-    input: I,
-    run: (node: Node, changes: Stream.Stream<I>) => Effect.Effect<Msg | Component.Noop, never, R2>
-  ): TinyElement<Msg, R | R2, Handlers, Node>
-  override onMount(
-    name: string,
-    run: (node: Node) => Effect.Effect<Msg | Component.Noop | View.MountHint, never, any>
-  ): never
-  override onMount<I>(
-    name: string,
-    input: I,
-    run: (node: Node, changes: Stream.Stream<I>) => Effect.Effect<Msg | Component.Noop | View.MountHint, never, any>
-  ): never
-  override onMount(name: string, ...args: ReadonlyArray<any>): any {
-    return (super.onMount as any)(name, ...args)
+  override onMount(mount: Mount.Issued<Msg | Component.Noop | View.MountHint, any, Node, never>): never
+  override onMount(mount: View.Mount<Msg>): any {
+    return (super.onMount as any)(mount)
   }
   children<const C extends ReadonlyArray<View.Input<Msg, any>>>(
     ...inputs: C

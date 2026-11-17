@@ -1,8 +1,8 @@
-import { Command, Component, Route, Router, View } from "@effect/ui"
+import { Command, Component, Mount, Route, Router, View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Query, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Cause, Data, Effect, Layer, Option, Schema } from "effect"
+import { Cause, Data, Effect, Layer, Option, Redacted, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import {
   Counter,
@@ -764,6 +764,110 @@ describe("Story", () => {
         { initial: 0 },
         (s) => s.given({ count: 3 }, {}).check((story) => assert.strictEqual(story.model.count, 3))
       )
+    })
+  })
+
+  describe("mounts", () => {
+    const Measure = Mount.make(
+      "Measure",
+      { args: { id: Schema.String } },
+      (node: HTMLElement) => Effect.sync(() => node.clientWidth)
+    )
+    const Hello = Mount.make("Hello", { args: {} }, () => Effect.succeed(Component.noop))
+    const Rows = Component.define({
+      name: "Rows",
+      model: Schema.Array(Schema.String),
+      message: Schema.String,
+      elements: Html
+    }).make({
+      init: (): ReadonlyArray<string> => [],
+      update: (log, message) => [...log, message],
+      view: (_, h) =>
+        h.ul.onMount(Hello()).children(
+          ["a", "b"].map((id) =>
+            h.li.key(id).onMount(Measure({ id }).pipe(Mount.map((width) => `${id} is ${width}`))).children(id)
+          )
+        )
+    })
+
+    it("mounted ends the one mount that rendered with the given args, through its Mount.map", () => {
+      Story.make(Rows, {}, (s) => {
+        s.mounted(Measure({ id: "b" }), 40)
+          .mounted(Measure({ id: "a" }), 20)
+          .model((log) => assert.deepStrictEqual(log, ["b is 40", "a is 20"]))
+      })
+    })
+
+    it("mounted takes no result for a mount that ends with Component.noop, and sends nothing", () => {
+      Story.make(Rows, {}, (s) => {
+        s.mounted(Hello).mounted(Hello()).model((log) => assert.deepStrictEqual(log, []))
+      })
+    })
+
+    it("a definition that several rendered mounts share throws, listing them", () => {
+      Story.make(Rows, {}, (s) => {
+        assert.throws(
+          () => s.mounted(Measure, 40),
+          /Story\.mounted: 2 rendered mounts match Measure; mounts: Hello\(\{\}\), Measure\(\{"id":"a"\}\), Measure\(\{"id":"b"\}\)/
+        )
+        assert.throws(
+          () => s.expectMount(Measure({ id: "c" })),
+          /Story\.expectMount: no rendered mount matches Measure\(\{"id":"c"\}\); mounts: Hello/
+        )
+      })
+      Story.make(Counter, { initial: 0 }, (s) => {
+        assert.throws(() => s.mounted(Hello), /Story\.mounted: no rendered mount matches Hello; mounts: nothing/)
+      })
+    })
+
+    it("args compare by their Schema, and a redacted arg stays out of the failure message", () => {
+      const Connect = Mount.make(
+        "Connect",
+        { args: { token: Schema.Redacted(Schema.String) } },
+        () => Effect.succeed(Component.noop)
+      )
+      const Socket = Component.define({ name: "Socket", model: Schema.Null, message: Schema.Never, elements: Html })
+        .make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => h.div.onMount(Connect({ token: Redacted.make("secret") }))
+        })
+      Story.make(Socket, {}, (s) => {
+        // Two Redacted values aren't Equal, but the Schema's equivalence compares what they hold.
+        s.expectMount(Connect({ token: Redacted.make("secret") }))
+        let message = ""
+        try {
+          s.expectMount(Connect({ token: Redacted.make("other") }))
+        } catch (error) {
+          message = String(error)
+        }
+        assert.include(message, "no rendered mount matches Connect(")
+        assert.notInclude(message, "secret")
+        assert.notInclude(message, "other")
+      })
+    })
+
+    it("an author's story ends the mount of a part it owns", () => {
+      const Place = Mount.make("Place", { args: {} }, (node: HTMLElement) => Effect.sync(() => node.clientWidth))
+      const Anchor = Component.define({
+        name: "Anchor",
+        model: Schema.Number,
+        message: Schema.Number,
+        elements: Html
+      }).make({
+        init: () => 0,
+        update: (_, width) => width,
+        parts: (_, p) => ({
+          anchor: p.part("button", (b) => b.onMount(Place().pipe(Mount.map((width) => width * 2))))
+        })
+      })
+      const story = Story.make(
+        Anchor,
+        {},
+        { elements: Html, view: (p, h) => p.anchor(h.button).children("target") },
+        (s) => s.mounted(Place, 21)
+      )
+      assert.strictEqual(story.model, 42)
     })
   })
 })
