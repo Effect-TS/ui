@@ -1630,7 +1630,7 @@ export const canonical = (u: unknown): string => {
  *   internal slots and read through the built-in getters and methods called
  *   directly, which read nothing through the object.
  * - An array is copied by element, read through its own property descriptors.
- *   An accessor element is not read, and its slot holds a marker.
+ *   An accessor element is not read, and a marker stands in its place.
  * - Any other object becomes a prototype-less record of its own data
  *   properties, non-enumerable and symbol keys included, without its `Hash`
  *   method. An accessor is never read, and nothing inherited is copied.
@@ -1673,7 +1673,7 @@ const materialize = (u: unknown, seen = new Map<object, unknown>()): unknown => 
         ? undefined
         : "value" in descriptor
         ? materialize(descriptor.value, seen)
-        : accessorSlot
+        : accessorMarker
     }
     return out
   }
@@ -1726,7 +1726,7 @@ const standIn = (u: object): object => {
 }
 const typedArrayKey = Symbol("@effect/ui/Loader/typedArray")
 /** Where an array has an accessor element: it is never read. */
-const accessorSlot = Symbol("@effect/ui/Loader/accessor")
+const accessorMarker = Symbol("@effect/ui/Loader/accessor")
 
 // The built-in getters and methods, called directly: they read internal slots and nothing through the object, and
 // throw on an object without the slot, a `Proxy` included.
@@ -2570,7 +2570,7 @@ const SnapshotTypeId = "~@effect/ui/Loader/Snapshot"
 
 /**
  * What a snapshot holds. A snapshot is what @effect/ui keeps in an instance's
- * loader slot, beside its Model: it is internal, and never part of a Model or
+ * loader state, beside its Model: it is internal, and never part of a Model or
  * a message.
  */
 interface SnapshotData {
@@ -2634,7 +2634,7 @@ const settledMap = (
   success: (u: unknown) => Effect.Effect<unknown, SchemaIssue.Issue>,
   error: (u: unknown) => Effect.Effect<unknown, SchemaIssue.Issue>
 ): Effect.Effect<Settled, SchemaIssue.Issue> => {
-  // `waiting` is carried over, so a check of a slot keeps it. The JSON codec never sets it, so a decoded
+  // `waiting` is carried over, so a check of a loader's state keeps it. The JSON codec never sets it, so a decoded
   // snapshot is never waiting.
   const waiting = result.waiting
   if (result._tag === "Success") {
@@ -2660,9 +2660,9 @@ const settledMap = (
 }
 
 /**
- * The Schema of a loader slot that holds a snapshot of a read. Its type
+ * The Schema of a loader's state that holds a snapshot of a read. Its type
  * parameters are the read's `args`, `success` and `error` Schemas, so a walk
- * over the slots' AST, such as the log's redaction, reaches what a snapshot
+ * over the loader state's AST, such as the log's redaction, reaches what a snapshot
  * holds. On the wire a snapshot is a tuple: `[]` when empty,
  * `[argsKey, 0, value, timestamp, patched]` for a Success, and
  * `[argsKey, 1, [error, ...], [value, timestamp] | null]` for a Failure with
@@ -2690,7 +2690,7 @@ export const snapshotSchema = (
       [def.args.ast, def.success.ast, def.error.ast],
       snapshotRun(def, label, true),
       {
-        expected: "a loader slot " + quote(label) + " of " + quote(def.name),
+        expected: "a loader state " + quote(label) + " of " + quote(def.name),
         toCodecJson: snapshotJson(def, label, log)
       } as Schema.Annotations.Annotations,
       undefined,
@@ -2730,7 +2730,7 @@ const snapshotRun = (def: ReadDef, label: string, decoding: boolean) => {
         Effect.all([
           args(data.args, options),
           // A patched value is used as it is: a patch that fails `success` is reported as `PatchInvalid`, and a
-          // check of a slot mustn't throw on it.
+          // check of a loader's state mustn't throw on it.
           settledMap(result, (u) => data.patched ? Effect.succeed(u) : success(u, options), (u) => error(u, options)),
           // A failed load more holds a typed error too, which the message log's form carries.
           data.more?._tag === "Failed"
@@ -2755,7 +2755,7 @@ const snapshotRun = (def: ReadDef, label: string, decoding: boolean) => {
 }
 
 /**
- * The JSON form of a snapshot, built from the read's Schemas as a walk over the slots passes them: the
+ * The JSON form of a snapshot, built from the read's Schemas as a walk over the loader state passes them: the
  * tuple Schema and the two steps between a tuple and a snapshot.
  */
 const snapshotWire = (
@@ -2966,7 +2966,7 @@ export const snapshotMapData = (u: unknown): SnapshotMapData | undefined =>
   u instanceof SnapshotMapImpl ? u[SnapshotMapTypeId] : undefined
 
 /**
- * The Schema of a keyed loader slot: one snapshot per args key. On the wire
+ * The Schema of a keyed loader's state: one snapshot per args key. On the wire
  * it is an array of `snapshotSchema`'s tuples, in no meaningful order, and a
  * duplicate args key is a decode error. `log` is as for `snapshotSchema`.
  *
@@ -3021,7 +3021,7 @@ export const snapshotMapSchema = (
       [def.args.ast, def.success.ast, def.error.ast],
       makeRun(true),
       {
-        expected: "a keyed loader slot " + quote(label) + " of " + quote(def.name),
+        expected: "a keyed loader state " + quote(label) + " of " + quote(def.name),
         toCodecJson
       } as Schema.Annotations.Annotations,
       undefined,

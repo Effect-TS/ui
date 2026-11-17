@@ -35,7 +35,7 @@ const makeList = (layout: "siblings" | "nested") =>
         : h.el("div", keys.map((key) => h.el("ul", Row(h, { key, props: { label: key } }))))
   })
 
-/** Holds the list in a slot with a fallback, so the list's failure shows instead of crashing the root. */
+/** Holds the list as a child with a fallback, so the list's failure shows instead of crashing the root. */
 const makePage = (layout: "siblings" | "nested") => {
   const List = makeList(layout)
   return Component.define({
@@ -157,7 +157,7 @@ describe("duplicate child paths", () => {
     )
   })
 
-  describe("in a slot's fallback", () => {
+  describe("in a child's fallback", () => {
     const Broken = Component.define({ name: "Broken", model: Schema.Null, message: Schema.Never }).make({
       init: () => {
         throw new Error("broken")
@@ -175,7 +175,7 @@ describe("duplicate child paths", () => {
     const ParentMessage = Schema.TaggedUnion({ Bump: {} })
 
     /**
-     * A `Row` per sibling key, then two `Broken` slots, `b` and `c`, whose
+     * A `Row` per sibling key, then two `Broken` children, `b` and `c`, whose
      * fallbacks show a `Row` per `first` and `second` key, each under its own
      * element. `Bump` re-renders it.
      */
@@ -210,7 +210,7 @@ describe("duplicate child paths", () => {
         error: "renders two children at Row[a], in the fallback of Broken[b]"
       },
       {
-        name: "a child at a sibling slot's path",
+        name: "a child at a sibling child's path",
         siblings: ["a"],
         first: ["a"],
         second: [],
@@ -330,7 +330,7 @@ describe("duplicate child paths", () => {
 
     for (const ref of [false, true]) {
       const by = ref ? "ref" : "key"
-      it.effect(`let a failed slot's fallback reuse the slot's own ${by}, render after render`, () =>
+      it.effect(`let a failed child's fallback reuse the child's own ${by}, render after render`, () =>
         provideHost(Effect.gen(function*() {
           const root = yield* TestHost.mount(Parent, { nested: ["a"], ref })
           yield* TestHost.settle

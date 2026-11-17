@@ -3,7 +3,8 @@
  *
  * Load a note with a `Loader` read and show it with child components. The
  * page handles a child's events, provides Layers with `Component.provide`,
- * and makes one child swappable with `Feature.Service`. This entry module
+ * makes one child swappable with `Feature.Service`, and passes its editor
+ * into another component's slot. This entry module
  * mounts the page, which is in `fixtures/pages/notes/NotePage.ts`.
  */
 import { BrowserHost } from "@effect/ui/html"
@@ -19,6 +20,8 @@ import "@effect/ui/html/register"
 // - `fixtures/notes/components/NoteEditor.ts`: a child by value
 // - `fixtures/notes/components/NoteActivity.ts`: a child by service
 // - `fixtures/notes/components/ActivityLog.ts`: that service's implementation
+// - `fixtures/kit/Collapsible.ts`: a component with slots, which the page
+//   fills with markup of its own
 import { NotePage } from "./fixtures/pages/notes/NotePage.ts"
 
 // `NotePage` provides its loader and feature Layers with

@@ -52,7 +52,7 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
     )?.path
   if (path === undefined) throw new Error(`${label}: the log has no entry for ${component.definition.name}`)
   const all = stateful.filter((entry) => entry.path === path)
-  // The replay starts at the first Model. Props and slots written before it are in that Update's record, or
+  // The replay starts at the first Model. Props and loader state written before it are in that Update's record, or
   // belong to an earlier mount.
   const start = all.findIndex((entry) => entry._tag === "Update" || entry._tag === "Mounted")
   if (start === -1) throw new Error(`${label}: the log has no entry for ${path}`)
@@ -61,13 +61,13 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
     | MessageLog.Mounted
     | Extract<MessageLog.Wire, { _tag: "Update" | "Mounted" }>
   const bound = loaders.boundOf(component)
-  const slotOf = (entry: MessageLog.LoaderChanged | Extract<MessageLog.Wire, { _tag: "LoaderChanged" }>) => {
-    if (typeof entry.component !== "string") return entry.slot
+  const stateOf = (entry: MessageLog.LoaderChanged | Extract<MessageLog.Wire, { _tag: "LoaderChanged" }>) => {
+    if (typeof entry.component !== "string") return entry.state
     const schema = bound?.logSchema.fields[entry.name]
     if (schema === undefined) {
       throw new Error(`${label}: entry #${entry.seq} (${path}) writes "${entry.name}", which isn't a loader`)
     }
-    return decodeWith(entry, `loader "${entry.name}"`, schema, entry.slot)
+    return decodeWith(entry, `loader "${entry.name}"`, schema, entry.state)
   }
 
   const decoders = new Map<Schema.Top, (value: unknown) => unknown>()
@@ -97,7 +97,7 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
   const read = (entry: typeof first) => {
     if (typeof entry.component !== "string") {
       return {
-        loaded: entry._tag === "Update" ? (entry as MessageLog.Update).loaded : undefined,
+        loaderState: entry._tag === "Update" ? (entry as MessageLog.Update).loaderState : undefined,
         props: entry.props as Props,
         model: entry.model as Model,
         events: entry.events as ReadonlyArray<Events>,
@@ -109,8 +109,8 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
     }
     const wire = entry as Extract<MessageLog.Wire, { _tag: "Update" | "Mounted" }>
     return {
-      loaded: wire._tag === "Update" && wire.loaded !== undefined && bound !== undefined
-        ? decodeWith(entry, "loaded", bound.logSchema, wire.loaded) as Component.Slots
+      loaderState: wire._tag === "Update" && wire.loaderState !== undefined && bound !== undefined
+        ? decodeWith(entry, "loaderState", bound.logSchema, wire.loaderState) as Component.LoaderState
         : undefined,
       props: decode(entry, "props", wire.props) as Props,
       model: decode(entry, "model", wire.model) as Model,
@@ -129,21 +129,21 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
   const initial = read(first)
   let model = initial.model
   let props: unknown = initial.props
-  let slots: Component.Slots | undefined = initial.loaded
+  let loaderState: Component.LoaderState | undefined = initial.loaderState
   let replayed = 0
   const result = (divergence: Divergence<Model, Msg, Events> | undefined): Replay<Model, Msg, Events, any, any> => {
-    const reached = { model, props, slots }
+    const reached = { model, props, loaderState }
     return {
       path,
       ...reached,
-      loaded: () => bound?.context(reached.model, reached.props, reached.slots).loaded ?? {},
+      loaded: () => bound?.context(reached.model, reached.props, reached.loaderState).loaded ?? {},
       replayed,
       divergence
     }
   }
   for (const entry of all.slice(start + 1)) {
     if (entry._tag === "LoaderChanged") {
-      slots = { ...(slots ?? bound?.empty), [entry.name]: slotOf(entry) }
+      loaderState = { ...(loaderState ?? bound?.empty), [entry.name]: stateOf(entry) }
       continue
     }
     if (entry._tag === "PropsChanged") {
@@ -152,16 +152,16 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
     }
     const recorded = read(entry)
     if (entry._tag === "Mounted") {
-      // Mounted again at the same path: the replay starts over from it, with every slot empty.
+      // Mounted again at the same path: the replay starts over from it, with every loader empty.
       model = recorded.model
       props = recorded.props
-      slots = undefined
+      loaderState = undefined
       continue
     }
     // The Update's record is what `update` read, so it holds even when earlier entries were evicted.
     props = recorded.props
-    if (recorded.loaded !== undefined) slots = recorded.loaded
-    const next = component.update(model, recorded.message as Msg, recorded.props as Props, slots)
+    if (recorded.loaderState !== undefined) loaderState = recorded.loaderState
+    const next = component.update(model, recorded.message as Msg, recorded.props as Props, loaderState)
     replayed++
     const recomputed = {
       model: next.model,

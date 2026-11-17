@@ -10,7 +10,7 @@ import { TestClock } from "effect/testing"
 
 /**
  * A component with one loader and no `onChange`: the runtime writes the
- * loader's slot, the view shows it, and `update` reads it through
+ * loader's state, the view shows it, and `update` reads it through
  * `$.loaded`. Fresh per test: the fetch count is closed over.
  */
 const makeApp = () => {
@@ -53,7 +53,7 @@ const makeApp = () => {
     }
   }).make({
     init: () => ({ clicks: 0, last: "none" }),
-    // What the loader holds when the click is handled, so a replay only reproduces it with the slots.
+    // What the loader holds when the click is handled, so a replay only reproduces it with the loader state.
     update: (model, message, $) =>
       NoteMessage.match(message, {
         Click: () => ({
@@ -171,12 +171,12 @@ describe("a loader without onChange", { concurrent: false }, () => {
         yield* load
         assert.strictEqual(root.text(), "Note 1clicks 0")
         assert.strictEqual(app.server.calls, 1)
-        // The slot is written by the runtime: one LoaderChanged entry holding the Success, and no update.
+        // The loader state is written by the runtime: one LoaderChanged entry holding the Success, and no update.
         assert.deepStrictEqual(
           loaderChanges(root.log(), "/Note").map((entry) => [
             entry.name,
             entry.component.definition.name,
-            Loader.snapshotData(entry.slot)?.result?._tag
+            Loader.snapshotData(entry.state)?.result?._tag
           ]),
           [["note", "Note", "Success"]]
         )
@@ -189,32 +189,32 @@ describe("a loader without onChange", { concurrent: false }, () => {
     )
   })
 
-  it.effect("hydrates the server's { model, loaded } state without refetching", () => {
+  it.effect("hydrates the server's { model, loaderState } state without refetching", () => {
     const app = makeApp()
     return Effect.gen(function*() {
       const result = yield* ssr(app.Note, { id: "1" })
-      // The page state of a component with loaders: its Model and its slots, a slot as its snapshot tuple.
+      // The page state of a component with loaders: its Model and its loader state, each loader as its snapshot tuple.
       const state = result.state["/Note"] as {
         readonly model: unknown
-        readonly loaded: { readonly note: ReadonlyArray<unknown> }
+        readonly loaderState: { readonly note: ReadonlyArray<unknown> }
       }
-      assert.deepStrictEqual(Object.keys(state).sort(), ["loaded", "model"])
+      assert.deepStrictEqual(Object.keys(state).sort(), ["loaderState", "model"])
       assert.deepStrictEqual(state.model, { clicks: 0, last: "none" })
-      assert.deepStrictEqual(Object.keys(state.loaded), ["note"])
-      assert.deepStrictEqual(state.loaded.note.slice(0, 3), [`{"id":"1"}`, 0, "Note 1"])
+      assert.deepStrictEqual(Object.keys(state.loaderState), ["note"])
+      assert.deepStrictEqual(state.loaderState.note.slice(0, 3), [`{"id":"1"}`, 0, "Note 1"])
       assert.deepStrictEqual(result.adopted, ["/Note"])
       // Only the server fetched.
       assert.deepStrictEqual(result.root.fetches(), [])
       assert.strictEqual(app.server.calls, 1)
       assert.strictEqual(result.container.textContent, "Note 1clicks 0")
-      // The hydrated slot is logged once, right after Mounted; the watch's first value equals it, so it isn't
+      // The hydrated loader state is logged once, right after Mounted; the watch's first value equals it, so it isn't
       // written again.
       const index = result.log.findIndex((entry) => entry._tag === "Mounted" && entry.path === "/Note")
       assert.isTrue((result.log[index] as MessageLog.Mounted).adopted)
       assert.strictEqual(result.log[index + 1]?._tag, "LoaderChanged")
       assert.strictEqual(loaderChanges(result.log, "/Note").length, 1)
       assert.deepStrictEqual(updates(result.log, "/Note"), [])
-      // update sees the hydrated slot.
+      // update sees the hydrated loader state.
       result.root.send(app.NoteMessage.make({ _tag: "Click" }))
       yield* TestHost.settle
       assert.deepStrictEqual(result.root.model(), { clicks: 1, last: "Note 1" })
@@ -226,7 +226,7 @@ describe("a loader without onChange", { concurrent: false }, () => {
     ) as Effect.Effect<void, unknown>
   })
 
-  it.effect("restores the Model and slot from history.state, seeding the cold cache, and refetches once", () => {
+  it.effect("restores the Model and loader state from history.state, seeding the cold cache, and refetches once", () => {
     const app = makeApp()
     const history = Router.memoryHistory("/notes/1")
     const path = "/App/Note[/notes/1]"
@@ -248,12 +248,12 @@ describe("a loader without onChange", { concurrent: false }, () => {
       }))
       assert.strictEqual(app.server.calls, 1)
 
-      // The entry's history.state holds the instance's { model, loaded }.
+      // The entry's history.state holds the instance's { model, loaderState }.
       history.go(-1)
       const saved = Object.values(history.current().state as Record<string, { readonly snapshot: any }>)[0]
         .snapshot[path]
       assert.deepStrictEqual(saved.model, { clicks: 1, last: "Note 1" })
-      assert.deepStrictEqual(saved.loaded.note.slice(0, 3), [`{"id":"1"}`, 0, "Note 1"])
+      assert.deepStrictEqual(saved.loaderState.note.slice(0, 3), [`{"id":"1"}`, 0, "Note 1"])
       history.go(1)
 
       // As after a reload: a new Router and a cold cache, then back.
@@ -262,7 +262,7 @@ describe("a loader without onChange", { concurrent: false }, () => {
         yield* TestHost.settle
         history.go(-1)
         yield* TestHost.settle
-        // The restored slot shows at once, stale, while one refetch runs.
+        // The restored loader state shows at once, stale, while one refetch runs.
         assert.strictEqual(root.text(), "Note 1clicks 1")
         const log = root.log()
         const index = log.findIndex((entry) => entry._tag === "Mounted" && entry.path === path)
@@ -283,7 +283,7 @@ describe("a loader without onChange", { concurrent: false }, () => {
     })
   })
 
-  it.effect("replays from the MessageLog with Story.fromLog, update reading the logged slots as $.loaded", () => {
+  it.effect("replays from the MessageLog with Story.fromLog, update reading the logged loader state as $.loaded", () => {
     const app = makeApp()
     return run(
       app.layer,
@@ -303,7 +303,7 @@ describe("a loader without onChange", { concurrent: false }, () => {
         assert.strictEqual(replay.replayed, 3)
         assert.deepStrictEqual(replay.model, { clicks: 3, last: "Note 1" })
 
-        // Through the Wire: each Update's slots are decoded with the loaders' Schemas.
+        // Through the Wire: each Update's loader state is decoded with the loaders' Schemas.
         const encoder = MessageLog.makeEncoder()
         const fromWire = Story.fromLog(app.Note, log.map(encoder.encode))
         assert.isUndefined(fromWire.divergence)
@@ -312,7 +312,7 @@ describe("a loader without onChange", { concurrent: false }, () => {
     )
   })
 
-  it.effect("replays a bounded log whose slot writes were evicted", () => {
+  it.effect("replays a bounded log whose loader state writes were evicted", () => {
     const app = makeApp()
     return run(
       app.layer,
@@ -324,7 +324,7 @@ describe("a loader without onChange", { concurrent: false }, () => {
         click(root, "clicks 1")
         yield* TestHost.settle
         const log = root.log()
-        // What a ring buffer keeps once Mounted and the slot's only LoaderChanged have been evicted.
+        // What a ring buffer keeps once Mounted and the loader's only LoaderChanged have been evicted.
         const first = log.findIndex((entry) => entry._tag === "Update" && entry.path === "/Note")
         const bounded = log.slice(first)
         assert.deepStrictEqual(loaderChanges(bounded, "/Note"), [])
@@ -334,7 +334,7 @@ describe("a loader without onChange", { concurrent: false }, () => {
         assert.isUndefined(replay.divergence)
         assert.strictEqual(replay.replayed, 1)
         assert.deepStrictEqual(replay.model, { clicks: 2, last: "Note 1" })
-        // The first Update's record gives the slots back, so the final state has the note.
+        // The first Update's record gives the loader state back, so the final state has the note.
         assert.strictEqual(noteOf(replay), "Note 1")
         const fromWire = Story.fromLog(app.Note, bounded.map(MessageLog.makeEncoder().encode))
         assert.isUndefined(fromWire.divergence)
@@ -353,7 +353,7 @@ describe("a loader without onChange", { concurrent: false }, () => {
         yield* load
         root.send(app.NoteMessage.make({ _tag: "Touch" }))
         yield* TestHost.settle
-        // The refetch is in flight: the slot keeps the value, waiting.
+        // The refetch is in flight: the loader state keeps the value, waiting.
         click(root, "clicks 0")
         yield* TestHost.settle
         assert.deepStrictEqual(root.model(), { clicks: 1, last: "Note 1 (waiting)" })
@@ -376,13 +376,13 @@ describe("a loader without onChange", { concurrent: false }, () => {
     )
   })
 
-  it.effect("replay ends with the slots a load wrote after the last message, live and through the Wire", () => {
+  it.effect("replay ends with the loader state a load wrote after the last message, live and through the Wire", () => {
     const app = makeApp()
     return run(
       app.layer,
       Effect.gen(function*() {
         const root = yield* TestHost.mount(app.Note, { id: "1" })
-        // Nothing is loaded yet: the replay ends with the slot empty.
+        // Nothing is loaded yet: the replay ends with the loader empty.
         assert.strictEqual(noteOf(Story.fromLog(app.Note, root.log())), "Initial")
         click(root, "clicks 0")
         yield* TestHost.settle
@@ -425,7 +425,7 @@ describe("a loader without onChange", { concurrent: false }, () => {
     )
   })
 
-  it.effect("a Mounted entry at the same path starts the slots over", () => {
+  it.effect("a Mounted entry at the same path starts the loader state over", () => {
     const app = makeApp()
     return Effect.gen(function*() {
       const first = yield* run(
@@ -436,7 +436,7 @@ describe("a loader without onChange", { concurrent: false }, () => {
           return root.log()
         })
       )
-      // A second mount on a cold cache: the earlier session's slot isn't carried over.
+      // A second mount on a cold cache: the earlier session's loader state isn't carried over.
       const second = yield* run(app.layer, Effect.map(TestHost.mount(app.Note, { id: "2" }), (root) => root.log()))
       const replay = Story.fromLog(app.Note, [...first, ...second])
       assert.strictEqual(noteOf(Story.fromLog(app.Note, first)), "Note 1")
@@ -466,7 +466,7 @@ describe("a loader without onChange", { concurrent: false }, () => {
         root.send(app.setId("2"))
         yield* load
         assert.strictEqual(root.text(), "Note 2clicks 0")
-        // The props are logged before the slot write they cause.
+        // The props are logged before the loader state write they cause.
         assert.deepStrictEqual(
           root.log().filter((entry) => entry.path === path).map((entry) => entry._tag).filter((tag) =>
             tag === "PropsChanged" || tag === "LoaderChanged"
@@ -480,7 +480,7 @@ describe("a loader without onChange", { concurrent: false }, () => {
           assert.strictEqual(noteOf(replay), "Note 2")
         }
 
-        // Disabling writes no slot: only the props show that the loader is off.
+        // Disabling writes no loader state: only the props show that the loader is off.
         root.send(app.setId(""))
         yield* load
         assert.strictEqual(root.text(), "loadingclicks 0")
@@ -493,7 +493,7 @@ describe("a loader without onChange", { concurrent: false }, () => {
     )
   })
 
-  it.effect("a divergence returns the props and slots the diverging update read", () => {
+  it.effect("a divergence returns the props and loader state the diverging update read", () => {
     const app = makeApp()
     return run(
       app.layer,
@@ -516,7 +516,7 @@ describe("a loader without onChange", { concurrent: false }, () => {
           ]
         ) {
           assert.deepStrictEqual(replay.divergence?.recomputed.model, { clicks: 1, last: "Note 2" })
-          // The Model before the message, with the props and slots it was sent with.
+          // The Model before the message, with the props and loader state it was sent with.
           assert.deepStrictEqual(replay.model, { clicks: 0, last: "none" })
           assert.deepStrictEqual(replay.props, { id: "2" })
           assert.strictEqual(noteOf(replay), "Note 2")
@@ -525,7 +525,7 @@ describe("a loader without onChange", { concurrent: false }, () => {
     )
   })
 
-  it("Story.head opens the loaders at the props it is given, with every slot empty", () => {
+  it("Story.head opens the loaders at the props it is given, with every loader empty", () => {
     const app = makeApp()
     // The loader's args read the props, so head needs them to open it.
     assert.deepStrictEqual(Story.head(app.Note, { clicks: 0, last: "none" }, { id: "1" }), [Head.title("Note")])

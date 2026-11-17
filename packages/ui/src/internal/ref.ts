@@ -1,5 +1,5 @@
 /**
- * Component refs: how a parent names a child slot it sends messages to.
+ * Component refs: how a parent names a child it sends messages to.
  *
  * @internal
  */

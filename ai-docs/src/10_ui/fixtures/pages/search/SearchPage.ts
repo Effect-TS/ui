@@ -24,7 +24,7 @@ export const SearchPageNoDeps = Component.define({
   // The page takes its whole route as props. The URL is the only copy of
   // the text, the order and the page number. The Model holds no draft of
   // them, so there is nothing to keep in sync with the URL. The results live
-  // in the loader's slot, so the Model is empty.
+  // in the loader's state, so the Model is empty.
   props: Schema.Struct({ route: SearchRoute }),
   model: Schema.Struct({}),
   message: SearchPageMessage,

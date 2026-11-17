@@ -238,16 +238,16 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    *
    * **Details**
    *
-   * `given` never runs `update`. Loaders keep their slots, except that a
+   * `given` never runs `update`. Loaders keep their state, except that a
    * keyed loader drops the stored keys it no longer returns, with no
    * `onChange` message. Later steps send `onChange` as usual.
    *
    * `loaded` starts the loaders it names from loaded results: a Success
    * value, a list loader's page array, or a keyed loader's entries as
-   * `loadedMany` takes them. Each slot is written at the args the loader
+   * `loadedMany` takes them. Each loader's state is written at the args the loader
    * returns for the new Model and the given results, so a loader whose args
    * read another's result follows the new one, whatever the order of the keys
-   * and whatever the slots held before. The view renders once. It throws if a
+   * and whatever the loader state held before. The view renders once. It throws if a
    * named loader is disabled, or a keyed entry's args aren't ones the loader
    * returns.
    */
@@ -279,7 +279,7 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    * A Command issued with `Command.afterRefetch` becomes `awaiting` on the
    * component's own loaders its declared targets match, less those its
    * `writes` store, and sends at once when there are none. A `loaded` or
-   * `loadFailed` step on the last of them writes the loader's slot, then
+   * `loadFailed` step on the last of them writes the loader's state, then
    * sends this one. `waitExpired` ends the wait by budget. Under `mode: "queue"`
    * a message also waits for the earlier ones of its group.
    */
@@ -303,7 +303,7 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
   waitExpired(target: Target): this
 
   /**
-   * Loads a loader with a Success: writes its slot at the loader's current
+   * Loads a loader with a Success: writes its state at the loader's current
    * args, then sends the message of its `onChange`, if any. Throws when the
    * loader is disabled. For a list loader `value` is the page array, and
    * unless `waiting` it settles a pending load more.
@@ -314,7 +314,7 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    * `Command.afterRefetch` wait on the loader. It throws while a running or
    * queued Command's patch is live on the loader, since no fetch settles
    * under a live patch: only a `patched` value is written then. As in the
-   * cache, a patch is live only when the slot held a Success at issue.
+   * cache, a patch is live only when the loader's state held a Success at issue.
    */
   loaded<N extends Component.SingleNames<Component.Loaders<C>>>(
     name: N,
@@ -333,7 +333,7 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
   ): this
   /**
    * Loads a loader with a typed failure, as `loaded` does. The failure keeps
-   * the slot's last Success as `previousSuccess` when it holds one at the
+   * the loader state's last Success as `previousSuccess` when it holds one at the
    * loader's current args. Unless `waiting`, it settles a list loader's
    * pending load more.
    */
@@ -369,7 +369,7 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
   ): this
   /**
    * Loads several keys of a `loadMany` loader in one write, as the runtime
-   * writes a first emission or a batch: the slot holds the loader's stored
+   * writes a first emission or a batch: its state holds the loader's stored
    * keys and these, and `onChange`'s `changes` holds these. Throws on args
    * the loader doesn't currently return.
    */

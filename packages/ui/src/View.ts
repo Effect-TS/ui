@@ -40,7 +40,45 @@ import type * as Feature from "./Feature.ts"
 import type * as Renderer from "./Renderer.ts"
 
 /**
- * A node of a view: an element, text, or a child component slot.
+ * The view helper for reusable pure view functions, without a component
+ * definition. `Msg` defaults to `never` for views that emit no messages.
+ *
+ * **Details**
+ *
+ * Includes the app's registered vocabulary (for example, import
+ * `@effect/ui/html/register` for HTML tags). Props remain `unknown` and
+ * component-specific loaders are not included. Use `Component.Helper<D>` instead
+ * when a function needs a definition's props, loaders or custom elements.
+ *
+ * **Example** (A reusable button)
+ *
+ * ```ts import.meta.vitest
+ * import "@effect/ui/html/register"
+ * import { Component, View } from "@effect/ui"
+ * import { Schema } from "effect"
+ *
+ * const Button = <Msg>(h: View.H<Msg>, label: string, message: Msg) =>
+ *   h.button.onClick(message).children(label)
+ *
+ * export const Counter = Component.define({
+ *   name: "Counter",
+ *   model: Schema.Number,
+ *   message: Schema.Literal("Increment")
+ * }).make({
+ *   init: () => 0,
+ *   update: (count) => count + 1,
+ *   view: (count, h) => Button(h, String(count), "Increment")
+ * })
+ * ```
+ *
+ * @stability experimental
+ * @category utility types
+ * @since 0.1.0
+ */
+export type H<Msg = never> = Helper<Msg, unknown> & Tags<Registered, Msg>
+
+/**
+ * A node of a view: an element, text, or a child component.
  *
  * **Details**
  *
@@ -52,7 +90,34 @@ import type * as Renderer from "./Renderer.ts"
  * @category models
  * @since 0.1.0
  */
-export type Node<Msg, R = never> = Element<Msg, R> | Text | Child<Msg, R>
+export type Node<Msg, R = never> = Element<Msg, R> | Text | Child<Msg, R> | Outlet
+
+/**
+ * Where a component places what its parent passed for one of its slots:
+ * `h.slots.body`.
+ *
+ * **Details**
+ *
+ * An outlet is opaque: the view that places it can't read the content. The
+ * content keeps its own nodes, so an element key in it can't clash with the
+ * outlet's siblings, and the outlet is keyed by its slot's name among them.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Outlet {
+  readonly _tag: "Outlet"
+  /** The slot's name. */
+  readonly name: string
+  /**
+   * Set when the outlet sits in an element that can't hold text: the error a
+   * content with text fails its author with.
+   *
+   * @internal
+   */
+  readonly noText?: string | undefined
+}
 
 /**
  * A text node.
@@ -248,16 +313,16 @@ export type MountHint =
   "onMount's Effect ends with a message or Component.noop. A mount with nothing to send ends with Effect.as(Component.noop)"
 
 /**
- * A child component slot, declared by calling a component with the
+ * A child component, declared by calling a component with the
  * parent's `h`, `Editor(h, { key })`, or with a feature's `render`,
  * `Todos.render(h, { key, fallback })`.
  *
  * **Details**
  *
- * The runtime gives each slot its own instance, Model and Scope. Several
- * instances of one component are several slots with different keys. The child
+ * The runtime gives each child its own instance, Model and Scope. Several
+ * instances of one component are several children with different keys. The child
  * reports up through `onEmit`, checked against the parent's message type, and
- * every slot is a failure boundary: a failed child shows `fallback`, or
+ * every child is a failure boundary: a failed child shows `fallback`, or
  * nothing, until its key changes, and the parent's optional `onFailure` is
  * also messaged.
  *
@@ -269,20 +334,22 @@ export interface Child<out Msg, out R = never> {
   readonly _tag: "Child"
   /** A component value, or a feature service resolved from the instance's context when it mounts. */
   readonly component: Component.Any | Feature.Any
-  /** The slot's key: the ref's key for a slot rendered with a ref. */
+  /** The child's key: the ref's key for a child rendered with a ref. */
   readonly key: string
-  /** The ref the parent sends to this slot with, if it was rendered with one. */
+  /** The ref the parent sends to this child with, if it was rendered with one. */
   readonly ref: Component.Ref.Any | undefined
   readonly props: unknown
   readonly onEmit: (events: any) => Msg | undefined
-  /** What the slot shows while its child can't be shown. Required for a feature child. */
+  /** What shows in the child's place while it can't be shown. Required for a feature child. */
   readonly fallback:
     | ((result: AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>) => Content<Msg, any>)
     | undefined
   /** Also tells the parent that the child failed. */
   readonly onFailure: ((failure: AsyncResult.Failure<never, unknown>) => Msg | undefined) | undefined
-  /** A headless child's whole view, written by whoever declared the slot. */
+  /** A headless child's whole view, written by whoever declared the child. */
   readonly view: ((parts: any) => Content<Msg, any>) | undefined
+  /** What the parent passed for each of the child's slots. */
+  readonly slots: Readonly<Record<string, Input<any, any>>> | undefined
   /** Phantom: the child's requirements surface in its parent's. */
   readonly "~R"?: (_: never) => R
 }
@@ -295,17 +362,17 @@ export interface Child<out Msg, out R = never> {
  */
 export declare namespace Child {
   /**
-   * The options of a slot: what a component call and a feature's `render`
+   * The options of a child: what a component call and a feature's `render`
    * take. `props` may be left out when the component takes none.
    *
    * **Details**
    *
-   * A slot takes exactly one of `key` and `ref`. With a ref, the ref's key
-   * is the slot's key, and the parent can `$.send` to the slot. `Rcv` is
-   * what the component receives, and the ref must be a `Component.Ref.Slot`
+   * A child takes exactly one of `key` and `ref`. With a ref, the ref's key
+   * is the child's key, and the parent can `$.send` to the child. `Rcv` is
+   * what the component receives, and the ref must be a `Component.Ref.For`
    * of it: a ref made from a component also fits a provided copy of it or a
-   * feature implementation. An erased `Component.Ref.Any` names no slot:
-   * every typed ref fits it, so a slot that took it would take a ref the
+   * feature implementation. An erased `Component.Ref.Any` names no child:
+   * every typed ref fits it, so a child that took it would take a ref the
    * component doesn't receive.
    *
    * A component call adds one rule: a component whose props are erased,
@@ -321,21 +388,21 @@ export declare namespace Child {
         readonly ref?: undefined
       }
       | {
-        /** Names the slot, so the parent can send it messages. Its key is the slot's key. */
-        readonly ref: Component.Ref.Slot<Receives<Rcv>>
+        /** Names the child, so the parent can send it messages. Its key is the child's key. */
+        readonly ref: Component.Ref.For<Receives<Rcv>>
         readonly key?: undefined
       }
     )
     & {
       /** Handles the child's whole `events` union and returns `undefined` for the cases it ignores. */
       readonly onEmit?: ((events: Events) => Msg | undefined) | undefined
-      /** Also tells the parent that the child failed. The failure stays in the slot either way. */
+      /** Also tells the parent that the child failed. The failure stays in the child either way. */
       readonly onFailure?: ((failure: AsyncResult.Failure<never, unknown>) => Msg | undefined) | undefined
     }
     & ({} extends Props ? { readonly props?: Props | undefined } : { readonly props: Props })
 
   /**
-   * What a component or feature receives, as a slot checks a ref against
+   * What a component or feature receives, as a child checks a ref against
    * it: `Rcv`, or nothing when `Rcv` is `any`, as for an erased component or
    * `Feature.Any`.
    *
@@ -363,7 +430,7 @@ interface ErasedReceives {
  * Use to type the children a shared view helper passes on. Leaving `R` out
  * accepts only children that need no service, so a child that needs one
  * fails at the call site. To pass on whatever the children need, take them
- * as a generic tuple, as in the example: the element adds their
+ * with a generic `Children` constraint, as in the example: the element adds their
  * requirements to its own.
  *
  * **Gotchas**
@@ -374,20 +441,13 @@ interface ErasedReceives {
  * **Example** (A view helper that keeps its children's requirements)
  *
  * ```ts
- * import { Schema } from "effect"
- * import { Component, View } from "@effect/ui"
+ * import "@effect/ui/html/register"
+ * import type { View } from "@effect/ui"
  *
- * const Msg = Schema.TaggedUnion({ Close: {} })
- * const PageDef = Component.define({
- *   name: "Page",
- *   model: Schema.Null,
- *   message: Msg
- * })
- *
- * const card = <const C extends ReadonlyArray<View.Input<typeof Msg.Type, any>>>(
- *   h: Component.Helper<typeof PageDef>,
- *   ...children: C
- * ) => h.el("section").children(...children)
+ * const Field = <M, C extends View.Children<M>>(h: View.H<M>, options: {
+ *   readonly label: string
+ *   readonly children: C
+ * }) => h.label.children(options.label, h.div.class("control").children(options.children))
  * ```
  *
  * @stability experimental
@@ -400,7 +460,20 @@ export type Input<Msg, R = never> =
   | false
   | null
   | undefined
-  | ReadonlyArray<Content<Msg, R> | string | false | null | undefined>
+  | Children<Msg, R>
+
+/**
+ * A readonly array of children. Use `C extends View.Children<Msg>` for a
+ * wrapper's children option to preserve each child's requirements, and pass
+ * that option directly to `.children(options.children)` without spreading it.
+ * The default requirement is `any` for generic constraints, not annotations:
+ * annotating a value as `Children<Msg>` erases its requirements.
+ *
+ * @stability experimental
+ * @category utility types
+ * @since 0.1.0
+ */
+export type Children<Msg, R = any> = ReadonlyArray<Content<Msg, R> | string | false | null | undefined>
 
 /**
  * What a view, a child and a fallback may return: a node, or an element
@@ -422,7 +495,7 @@ export type Content<Msg, R = never> = Node<Msg, R> | ElementBuilder<Msg, R, any,
  * @since 0.1.0
  */
 export type Requirements<T> = 0 extends 1 & T ? any : T extends string | false | null | undefined ? never
-: T extends Text ? never
+: T extends Text | Outlet ? never
 : T extends ReadonlyArray<infer E> ? Requirements<E>
 : T extends Child<infer _Msg, infer R> ? R
 : T extends Element<infer _Msg, infer R> ? R
@@ -1437,14 +1510,22 @@ class NoTextBuilder<Msg> extends ContainerBuilder<Msg> {
     ...inputs: C
   ): Element<Msg, Requirements<C[number]>> {
     const node = super.children(...inputs)
-    if (node.children.some((child) => child._tag === "Text")) {
-      throw new Error(
-        `<${this.tag}> can't hold text in the ${this.vocabulary} vocabulary; text goes inside ${
-          this.textParents.join(", ")
-        }`
-      )
+    let message: string | undefined
+    const children = node.children as Array<Node<Msg, any>>
+    for (let index = 0; index < children.length; index++) {
+      const child = children[index]!
+      if (child._tag === "Text") throw new Error(message ??= this.noTextMessage())
+      // An outlet's content isn't known yet, so the runtime checks it when it builds the content.
+      if (child._tag === "Outlet") {
+        children[index] = { _tag: "Outlet", name: child.name, noText: message ??= this.noTextMessage() }
+      }
     }
     return node
+  }
+  private noTextMessage(): string {
+    return `<${this.tag}> can't hold text in the ${this.vocabulary} vocabulary; text goes inside ${
+      this.textParents.join(", ")
+    }`
   }
 }
 
@@ -1475,7 +1556,8 @@ export const makeHelper = <Msg, Props, V extends Elements = never>(
 
 /**
  * The text of a view, with the text of every element concatenated in order.
- * Child slots contribute nothing.
+ * A child contributes the text of what its parent passed for its slots, in
+ * the order they were passed, and nothing of its own view.
  *
  * @stability experimental
  * @category queries
@@ -1488,12 +1570,16 @@ export const textOf = (node: Node<any, any>): string => {
     case "Element":
       return node.children.map(textOf).join("")
     case "Child":
+      return slotNodes(node).map(textOf).join("")
+    case "Outlet":
       return ""
   }
 }
 
 /**
- * Every node of a view in document order, the root first.
+ * Every node of a view in document order, the root first. A child is
+ * followed by what its parent passed for its slots, in the order they were
+ * passed.
  *
  * @stability experimental
  * @category queries
@@ -1503,5 +1589,22 @@ export const nodes = function*<Msg>(node: Node<Msg, any>): Generator<Node<Msg, a
   yield node
   if (node._tag === "Element") {
     for (const child of node.children) yield* nodes(child)
+  } else if (node._tag === "Child") {
+    for (const child of slotNodes(node)) yield* nodes(child)
   }
+}
+
+const noNodes: ReadonlyArray<never> = []
+
+/**
+ * The nodes a child's parent passed for its slots, in the order they were
+ * passed.
+ *
+ * @internal
+ */
+export const slotNodes = <Msg>(child: Child<Msg, any>): ReadonlyArray<Node<Msg, any>> => {
+  if (child.slots === undefined) return noNodes
+  const out: Array<Node<Msg, any>> = []
+  for (const name in child.slots) out.push(...children<Msg>([child.slots[name]]))
+  return out
 }

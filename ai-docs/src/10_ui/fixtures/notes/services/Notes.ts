@@ -37,7 +37,7 @@ export class Notes extends Context.Service<Notes, {
       const list = client.get("/notes").pipe(
         Effect.flatMap(HttpClientResponse.schemaBodyJson(Schema.Array(Note))),
         // The list has no typed error, so a failure is a defect and fails
-        // the slot that reads it.
+        // the component that reads it.
         Effect.orDie
       )
 

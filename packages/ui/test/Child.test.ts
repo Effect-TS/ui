@@ -58,26 +58,26 @@ describe("a component call", () => {
     assert.includeMembers(Object.keys(Listbox), ["definition", "parts"])
   })
 
-  it("builds a slot with a key", () => {
+  it("builds a child with a key", () => {
     const onEmit = (events: typeof RowEvents.Type) => ParentMessage.make({ _tag: "Changed", text: events.text })
-    const slot = Row(h, { key: "a", props: { id: "a" }, onEmit })
-    assert.strictEqual(slot._tag, "Child")
-    assert.strictEqual(slot.component, Row)
-    assert.strictEqual(slot.key, "a")
-    assert.isUndefined(slot.ref)
-    assert.deepStrictEqual(slot.props, { id: "a" })
-    assert.strictEqual(slot.onEmit, onEmit)
-    assert.isUndefined(slot.fallback)
-    assert.isUndefined(slot.onFailure)
-    assert.isUndefined(slot.view)
+    const child = Row(h, { key: "a", props: { id: "a" }, onEmit })
+    assert.strictEqual(child._tag, "Child")
+    assert.strictEqual(child.component, Row)
+    assert.strictEqual(child.key, "a")
+    assert.isUndefined(child.ref)
+    assert.deepStrictEqual(child.props, { id: "a" })
+    assert.strictEqual(child.onEmit, onEmit)
+    assert.isUndefined(child.fallback)
+    assert.isUndefined(child.onFailure)
+    assert.isUndefined(child.view)
   })
 
   it("takes the ref's key with a ref, and defaults props and onEmit", () => {
     const Draft = Row.ref("Draft").at(1)
-    const slot = Listbox(h, { ref: Listbox.ref("Menu"), view: () => h.el("ul") })
-    assert.strictEqual(slot.key, "Menu")
-    assert.deepStrictEqual(slot.props, {})
-    assert.isUndefined(slot.onEmit({}))
+    const child = Listbox(h, { ref: Listbox.ref("Menu"), view: () => h.el("ul") })
+    assert.strictEqual(child.key, "Menu")
+    assert.deepStrictEqual(child.props, {})
+    assert.isUndefined(child.onEmit({}))
     const row = Row(h, { ref: Draft, props: { id: "a" } })
     assert.strictEqual(row.key, "Draft[1]")
     assert.strictEqual(row.ref, Draft)
@@ -91,13 +91,13 @@ describe("a component call", () => {
 
   it("keeps a headless component's view", () => {
     const view = () => h.el("ul")
-    const slot = Listbox(h, { key: "l", view })
+    const child = Listbox(h, { key: "l", view })
     assert.isTrue(Component.isHeadless(Listbox))
     assert.strictEqual(typeof Listbox, "function")
     assert.strictEqual(Listbox.definition, ListboxDef)
     assert.strictEqual(Listbox.definition.name, "Listbox")
-    assert.strictEqual(slot.component, Listbox as unknown)
-    assert.strictEqual(slot.view, view)
+    assert.strictEqual(child.component, Listbox as unknown)
+    assert.strictEqual(child.view, view)
   })
 
   it("works on a provided component, which is a new callable component", () => {
@@ -116,16 +116,16 @@ describe("a component call", () => {
 })
 
 describe("a feature's render", () => {
-  it("builds a slot for the service", () => {
+  it("builds a child for the service", () => {
     const fallback = () => h.el("p", "loading")
-    const slot = Todos.render(h, { key: "t", fallback })
-    assert.strictEqual(slot.component, Todos)
-    assert.strictEqual(slot.key, "t")
-    assert.strictEqual(slot.fallback, fallback)
+    const child = Todos.render(h, { key: "t", fallback })
+    assert.strictEqual(child.component, Todos)
+    assert.strictEqual(child.key, "t")
+    assert.strictEqual(child.fallback, fallback)
     const Main = Todos.ref("Main")
     assert.strictEqual(Todos.render(h, { ref: Main, fallback }).key, "Main")
     assert.throws(() => Todos.render(h, { fallback } as any), /exactly one of key and ref/)
-    // Detached, it still builds a slot for the feature.
+    // Detached, it still builds a child for the feature.
     const render = Todos.render
     assert.strictEqual(render(h, { key: "d", fallback }).key, "d")
   })

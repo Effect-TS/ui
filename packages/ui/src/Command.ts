@@ -1451,7 +1451,7 @@ type AwaitsRefetchOf<R, K> = [K] extends ["Effect"] ? [R] extends [never] ? {
  * - `h.isRunning` stays true through the wait. Under `queue` the next run
  *   starts when the body exits, and messages keep issue order; under
  *   `drop` a waiting run still counts as running.
- * - Each awaited entry emits when it settles, so its loader's slot is
+ * - Each awaited entry emits when it settles, so its loader's state is
  *   written before the success, in one render, for the last entry to
  *   settle. Two entries settling apart can briefly show a patched row next
  *   to the refetched one.
