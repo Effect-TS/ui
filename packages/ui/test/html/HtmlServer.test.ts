@@ -1067,6 +1067,70 @@ describe("HtmlServer", { concurrent: false }, () => {
       expect(result.container.textContent).toBe("gonewaiting")
     })))
 
+  it.effect("an instance removed while it waits logs Waiting, then Unmounted, and nothing once its Layer would be ready", () =>
+    Effect.gen(function*() {
+      class Slow extends Context.Service<Slow, string>()("test/Slow") {}
+      class GetText extends Loader.Service<GetText>()("GetText", {
+        args: {},
+        success: Schema.String,
+        error: Schema.Never,
+        staleTime: "30 seconds"
+      }, Effect.succeed(() => Effect.succeed("loaded"))) {}
+      const Panel = Component.define({
+        name: "Panel",
+        props: Schema.Struct({ id: Schema.String }),
+        model: Schema.Struct({ label: Schema.String }),
+        message: Schema.Never,
+        elements: Html,
+        loaders: { text: { load: GetText, args: () => ({}) } }
+      }).make({
+        init: ($) => ({ label: `panel ${$.props.id}` }),
+        update: (model) => model,
+        view: (model, h) => h.p(model.label)
+      }).pipe(Component.provide(Layer.effect(Slow, Effect.as(Effect.sleep("50 millis"), "ready"))))
+      const Page = Component.define({
+        name: "Page",
+        model: Schema.Boolean,
+        message: Schema.Boolean,
+        elements: Html
+      }).make({
+        init: () => true,
+        update: (_, show) => show,
+        view: (show, h) => h.div(show ? Panel(h, { key: "p", props: { id: "a" } }) : h.p("gone"))
+      })
+
+      const fiber = yield* Effect.forkChild(HtmlServer.renderToHtml(Page, {}).pipe(Effect.provide(GetText.layer)))
+      yield* TestClock.adjust("50 millis")
+      const rendered = yield* Fiber.join(fiber)
+      const app = yield* container(rendered.html)
+      expect(app.textContent).toBe("panel a")
+      const log = MessageLog.makeMemory({ size: 1000 })
+      const root = yield* BrowserHost.mountEffect(Page, {}, app, { state: rendered.state }).pipe(
+        Effect.provideService(MessageLog.MessageLog, log),
+        Effect.provide(GetText.layer)
+      )
+      // Removed while its Layer is still building, which then gets the time it would have needed.
+      root.send(false)
+      yield* tick
+      expect(app.textContent).toBe("gone")
+      yield* TestClock.adjust("50 millis")
+      yield* tick
+
+      const panel = log.entries().filter((entry) => entry.path === "/Page/Panel[p]")
+      expect(panel.map((entry) => entry._tag)).toEqual(["Waiting", "LayerPending", "Unmounted"])
+      expect(new Set(panel.map((entry) => entry.instance)).size).toBe(1)
+      // The only entry that says what the server's nodes showed: it crosses the Wire whole.
+      const wire = MessageLog.makeEncoder().encode(panel[0]!) as Extract<MessageLog.Wire, { _tag: "Waiting" }>
+      expect(wire.props).toEqual({ id: "a" })
+      expect(wire.model).toEqual({ label: "panel a" })
+      expect((wire.loaderState as { readonly text: ReadonlyArray<unknown> }).text.slice(0, 3)).toEqual([
+        "{}",
+        0,
+        "loaded"
+      ])
+      expect(Schema.decodeUnknownSync(MessageLog.Wire)(JSON.parse(JSON.stringify(wire)))).toEqual(wire)
+    }).pipe(Effect.scoped))
+
   it.effect("reports the template results the client's merge computed, without calling templates again", () =>
     hosted(Effect.gen(function*() {
       const Leaf = Component.define({

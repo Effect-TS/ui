@@ -445,6 +445,69 @@ describe("a loader without onChange", { concurrent: false }, () => {
     })
   })
 
+  it.effect("entries of two instances at one path replay apart, and the result is the later instance's", () => {
+    const app = makeApp()
+    /** A Note under a Shell, with what it logged, as the instance with this number. */
+    const session = (
+      instance: number,
+      steps: (root: TestHost.TestRoot<any, any, any>) => Effect.Effect<void, unknown, any>
+    ) =>
+      run(
+        app.layer,
+        Effect.gen(function*() {
+          const root = yield* TestHost.mount(app.Shell, {})
+          yield* load
+          yield* steps(root)
+          const path = noteMount(root.log()).path
+          const log = root.log().filter((entry) => entry.path === path).map((entry) => ({ ...entry, instance }))
+          return { path, log, update: log.map((entry) => entry._tag).lastIndexOf("Update") }
+        })
+      )
+    return Effect.gen(function*() {
+      // The older one is clicked twice with note 1, then given id 3.
+      const older = yield* session(1, (root) =>
+        Effect.gen(function*() {
+          click(root, "clicks 0")
+          yield* TestHost.settle
+          click(root, "clicks 1")
+          yield* TestHost.settle
+          root.send(app.setId("3"))
+          yield* load
+        }))
+      // The newer one is given id 2, then clicked.
+      const newer = yield* session(2, (root) =>
+        Effect.gen(function*() {
+          root.send(app.setId("2"))
+          yield* load
+          click(root, "clicks 0")
+          yield* TestHost.settle
+        }))
+      // The older one's second click, and then its props and load, are logged after the newer one mounted.
+      // Woven by hand: today's runtime logs none of these for an instance once the next has mounted at its path.
+      const late = older.log.slice(older.update + 1)
+      assert.includeMembers(late.map((entry) => entry._tag), ["PropsChanged", "LoaderChanged"])
+      const log = [
+        ...older.log.slice(0, older.update),
+        ...newer.log.slice(0, newer.update),
+        older.log[older.update],
+        newer.log[newer.update],
+        ...late
+      ]
+      for (
+        const replay of [
+          Story.fromLog(app.Note, log, { path: newer.path }),
+          Story.fromLog(app.Note, log.map(MessageLog.makeEncoder().encode), { path: newer.path })
+        ]
+      ) {
+        assert.isUndefined(replay.divergence)
+        assert.strictEqual(replay.replayed, 3)
+        assert.deepStrictEqual(replay.model, { clicks: 1, last: "Note 2" })
+        assert.deepStrictEqual(replay.props, { id: "2" })
+        assert.strictEqual(noteOf(replay), "Note 2")
+      }
+    })
+  })
+
   it.effect("replay follows props from the parent: a new id's load, then disabling the loader, live and through the Wire", () => {
     const app = makeApp()
     return run(
