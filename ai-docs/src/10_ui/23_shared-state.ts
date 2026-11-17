@@ -9,7 +9,7 @@
 import { Component } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Locator, Scene } from "@effect/ui/testing"
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 
 // ---------------------------------------------------------------------------
 // The owner: a headless component with `shares`
@@ -127,7 +127,9 @@ export const Toolbar = Component.define({
 // The reader sees the provider's default, `shares(init(props).model, props)`,
 // until `shared` gives it a value. Sends to the owner are in `sent` until a
 // `sent` step acknowledges them, and the scene never runs the owner's `update`.
-export const focused = Scene.make(Tooltip, { label: "B", tip: "Bold" }, (s) => {
+// A test runs this with `it.effect`, which provides the scope `Scene.make` needs.
+export const focused = Effect.gen(function*() {
+  const s = yield* Scene.make(Tooltip, { label: "B", tip: "Bold" })
   s.fire(Locator.text("B"), "focus")
   const [enter] = s.current.sent
   console.log(enter?.owner?.definition.name) // "TooltipProvider"
