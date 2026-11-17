@@ -100,40 +100,13 @@ import * as Loader from "../Loader.ts"
 import * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
 import * as Html from "./Html.ts"
+import * as elements from "./internal/elements.ts"
 import * as headSync from "./internal/head.ts"
 import * as markers from "./internal/markers.ts"
 import * as server from "./internal/server.ts"
 import * as submit from "./internal/submit.ts"
 
 const SVG = "http://www.w3.org/2000/svg"
-
-const svgTags: ReadonlySet<string> = new Set([
-  "svg",
-  "g",
-  "path",
-  "circle",
-  "ellipse",
-  "line",
-  "polyline",
-  "polygon",
-  "rect",
-  "text",
-  "tspan",
-  "textPath",
-  "defs",
-  "use",
-  "symbol",
-  "clipPath",
-  "mask",
-  "pattern",
-  "marker",
-  "linearGradient",
-  "radialGradient",
-  "stop",
-  "filter",
-  "image",
-  "foreignObject"
-])
 
 /** Events that don't bubble: only the element they happen on gets them. */
 const ownEvents: ReadonlySet<string> = new Set([
@@ -179,6 +152,17 @@ const isEmpty = (record: object): boolean => {
   if (record === View.noFields) return true
   for (const _ in record) return false
   return true
+}
+
+/** An HTML element's attributes under the names `setAttr` gives them, the later of two aliases winning. */
+const canonicalAttrs = (attrs: Readonly<Record<string, string>>): Readonly<Record<string, string>> => {
+  // No prototype, so `__PROTO__` folds to a name that is kept like any other.
+  const out: Record<string, string> = Object.create(null)
+  for (const name in attrs) {
+    const normalized = elements.attributeName(name, false)
+    if (normalized !== undefined) out[normalized] = attrs[name]!
+  }
+  return out
 }
 
 const modifiers = (event: Event) => {
@@ -779,15 +763,28 @@ export const makeHost = (
   return {
     createElement(tag) {
       freshMayBeForm = tag.length === 4 && (tag === "form" || tag.toLowerCase() === "form")
-      return fresh = svgTags.has(tag) ? document.createElementNS(SVG, tag) : document.createElement(tag)
+      return fresh = elements.svgTags.has(tag) ? document.createElementNS(SVG, tag) : document.createElement(tag)
     },
     createText: (text) => document.createTextNode(text),
     setText(node, text) {
       const t = node as globalThis.Text
       if (t.data !== text) t.data = text
     },
+    normalizeAttrs(node, attrs) {
+      // Nearly every record is canonical already, and is diffed as it is.
+      for (const name in attrs) {
+        if (elements.attributeName(name, false) !== name) {
+          // SVG names are case-sensitive, so they have no aliases; `setAttr` drops the unsafe ones.
+          return (node as globalThis.Element).namespaceURI === SVG ? attrs : canonicalAttrs(attrs)
+        }
+      }
+      return attrs
+    },
     setAttr(node, name, value) {
       const element = node as globalThis.Element
+      const normalized = elements.attributeName(name, element.namespaceURI === SVG)
+      if (normalized === undefined) return
+      name = normalized
       if (value === undefined) element.removeAttribute(name)
       else element.setAttribute(name, value)
     },

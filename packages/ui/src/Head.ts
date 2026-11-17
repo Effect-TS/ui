@@ -44,6 +44,7 @@
  * @stability experimental
  * @since 0.1.0
  */
+import * as headAttributes from "./internal/headAttributes.ts"
 
 /**
  * One head entry, as a component's `head` option returns it.
@@ -265,7 +266,7 @@ export type JsonLdValue<A extends object> =
  * @category constants
  * @since 0.1.0
  */
-export const marker = "data-eui"
+export const marker = headAttributes.marker
 
 /**
  * Sets the document title.
@@ -594,12 +595,14 @@ export const identity = (entry: Meta | Link | JsonLd): string => {
         : entry.name !== undefined
         ? `meta name:${entry.name}`
         : `meta property:${entry.property}`
-    case "Link":
-      return entry.attributes.rel === "canonical"
+    case "Link": {
+      const normalized = new Map(headAttributes.normalize(attributes(entry)))
+      return normalized.get("rel") === "canonical"
         ? "link canonical"
         : entry.key !== undefined
         ? `link key:${entry.key}`
-        : `link ${entry.attributes.rel} ${entry.attributes.href}`
+        : `link ${normalized.get("rel")} ${normalized.get("href")}`
+    }
     case "JsonLd":
       return entry.key !== undefined ? `jsonld key:${entry.key}` : `jsonld ${entry.json}`
   }
@@ -700,12 +703,16 @@ export const merge = (tree: Tree): Head => {
         case "BodyClass":
           for (const token of entry.tokens) bodyClasses.add(token)
           break
-        case "HtmlData":
-          htmlDataMap.set(entry.name, entry.value)
+        case "HtmlData": {
+          const name = headAttributes.name(entry.name)
+          if (name !== undefined) htmlDataMap.set(name, entry.value)
           break
-        case "BodyData":
-          bodyDataMap.set(entry.name, entry.value)
+        }
+        case "BodyData": {
+          const name = headAttributes.name(entry.name)
+          if (name !== undefined) bodyDataMap.set(name, entry.value)
           break
+        }
       }
     }
     const inner = own === undefined ? templates : [own, ...templates]
