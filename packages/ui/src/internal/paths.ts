@@ -83,6 +83,20 @@ export const checkChildPaths = (path: string, tree: View.Node<any, any>): ChildP
 }
 
 /**
+ * `checkChildPaths` for what a parent passed for a slot: a list of nodes, at the path of the outlet
+ * that places them. The slots the content forwards aren't kept, since the tree that passed the content
+ * counted them.
+ *
+ * @internal
+ */
+export const checkContentPaths = (path: string, nodes: ReadonlyArray<View.Node<any, any>>): ChildPaths => {
+  const paths: ChildPaths = { path, paths: undefined, refs: undefined, placed: undefined }
+  for (const node of nodes) visit(paths, node, undefined, "")
+  paths.placed = undefined
+  return paths
+}
+
+/**
  * Adds the children of `tree` to `paths`, as rendered by the fallback of
  * `replaced`, or by the view without one. Throws on a path or ref key another
  * child holds. `replaced`'s own are free, since the child that failed there is
@@ -166,8 +180,9 @@ export const checkFallbackPaths = (
 }
 
 /**
- * Throws when two of `written`, the paths of one author's view and of each
- * closure it gave a headless child, hold children with refs of one key. The
+ * Throws when two of `written`, the paths of one author's view, of each
+ * closure it gave a headless child and of the content it passed for a child's
+ * slots, hold children with refs of one key. The
  * author wrote all of them, and a send finds a child by its ref's key alone,
  * across all of them. One view's own refs are checked as it renders.
  *
@@ -185,17 +200,15 @@ export const checkAuthorRefs = (path: string, written: ReadonlyArray<ChildPaths>
 }
 
 /**
- * Throws when two of `placing`, the paths of one author's view and of each
- * closure it gave a headless child, place one of its slots between them. Each
- * tree's own are checked as it renders. Content the author passes to a child is
- * left out: its view counted the slots it forwards there.
+ * Throws when two of `written`, as `checkAuthorRefs` takes them, place one of
+ * the author's slots between them. Each tree's own are checked as it renders.
  *
  * @internal
  */
-export const checkAuthorPlacements = (path: string, placing: ReadonlyArray<ChildPaths>): void => {
-  if (placing.length < 2) return
+export const checkAuthorPlacements = (path: string, written: ReadonlyArray<ChildPaths>): void => {
+  if (written.length < 2) return
   const taken = new Set<string>()
-  for (const paths of placing) {
+  for (const paths of written) {
     if (paths.placed === undefined) continue
     for (const name of paths.placed) {
       if (taken.has(name)) throw new Error(`${path} places its slot ${name} twice, in the view it gives ${paths.path}`)

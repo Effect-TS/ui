@@ -74,6 +74,7 @@ import {
   checkAuthorPlacements,
   checkAuthorRefs,
   checkChildPaths,
+  checkContentPaths,
   checkFallbackPaths,
   segment,
   slotSegment
@@ -571,10 +572,6 @@ const expandedChildren = new WeakMap<object, ReadonlyArray<View.Child<any, any>>
 // What a story of a slotted component passed for its slots, by the component `withSlots` made.
 const storySlots = new WeakMap<object, Readonly<Record<string, View.Input<never, any>>>>()
 
-/** A content's nodes under one element, for the walk that checks their paths. */
-const contentNode = (nodes: ReadonlyArray<View.Node<any, any>>): View.Node<any, any> =>
-  ({ _tag: "Element", children: nodes }) as unknown as View.Element<any, any>
-
 const expandRoot = <Msg>(
   view: View.Node<Msg, any>,
   name: string,
@@ -584,15 +581,14 @@ const expandRoot = <Msg>(
   const replaced: Array<View.Child<any, any>> = []
   // As the runtime does: two children at one path fail the view or the closure that holds them, and
   // so do two children with one ref key across the view and the closures it gives its headless children.
+  // Nor can two of them place one slot.
   const written = [checkChildPaths("/" + name, view)]
-  // The view and the closures it gives its headless children: two of them can't place one slot.
-  const placing = [written[0]!]
   // Content is shown under `children`, where a query looks, at the path the runtime gives it.
   // `own`: the story's component wrote it, so its refs count with the component's. Content the story
   // passed for its slots was written by a parent, and so were the closures in it.
   const content = (input: View.Input<any, any>, path: string, depth: number, own: boolean) => {
     const nodes = View.children([input])
-    const paths = checkChildPaths(path, contentNode(nodes))
+    const paths = checkContentPaths(path, nodes)
     if (own) written.push(paths)
     return nodes.map((child) => expand(child, path, depth, own))
   }
@@ -636,17 +632,14 @@ const expandRoot = <Msg>(
         const parts = component.parts(model, node.props, { owner: { path: childPath, depth: depth + 1 } })
         const tree = View.toNode(node.view(parts))
         const paths = checkChildPaths(childPath, tree)
-        if (own) {
-          written.push(paths)
-          placing.push(paths)
-        }
+        if (own) written.push(paths)
         return expand(tree, childPath, depth + 1, own)
       }
     }
   }
   const expanded = expand(view, "/" + name, 0, true)
   checkAuthorRefs("/" + name, written)
-  checkAuthorPlacements("/" + name, placing)
+  checkAuthorPlacements("/" + name, written)
   if (replaced.length > 0) expandedChildren.set(expanded, replaced)
   return expanded
 }
@@ -1806,10 +1799,8 @@ const shownNodes = function*(node: View.Node<any, any>): Generator<View.Node<any
   const shown = (node as { readonly children?: ReadonlyArray<View.Node<any, any>> }).children
   if (shown !== undefined) {
     for (const child of shown) yield* shownNodes(child)
-  } else if (node._tag === "Child" && node.slots !== undefined) {
-    for (const name in node.slots) {
-      for (const child of View.children([node.slots[name]])) yield* shownNodes(child)
-    }
+  } else if (node._tag === "Child") {
+    for (const child of View.slotNodes(node)) yield* shownNodes(child)
   }
 }
 

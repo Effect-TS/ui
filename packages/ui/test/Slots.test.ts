@@ -585,3 +585,47 @@ describe("checks on content", () => {
       provideHost
     ))
 })
+
+describe("content passed after the child mounted", () => {
+  it.effect("belongs to the parent, and resolves the parent's services", () =>
+    provideHost(Effect.gen(function*() {
+      const LateMsg = Schema.TaggedUnion({ Fill: {}, Hit: {} })
+      const Late = Component.provide(
+        Component.define({
+          name: "Late",
+          model: Schema.Struct({ filled: Schema.Boolean, hits: Schema.Number }),
+          message: LateMsg,
+          elements: Html
+        }).make({
+          init: () => ({ filled: false, hits: 0 }),
+          update: (model, msg) => msg._tag === "Fill" ? { ...model, filled: true } : { ...model, hits: model.hits + 1 },
+          view: (model, h) =>
+            h.div(
+              h.button.onClick(LateMsg.make({ _tag: "Fill" })).children("fill"),
+              h.output("hits " + model.hits),
+              model.filled
+                ? Panel(h, {
+                  key: "p",
+                  slots: {
+                    body: [
+                      h.button.onClick(LateMsg.make({ _tag: "Hit" })).children("hit"),
+                      Badge.render(h, { key: "content", fallback: () => h.span("no badge") })
+                    ]
+                  }
+                })
+                : Panel(h, { key: "p" })
+            )
+        }),
+        Badge.toLayer(badge("late's"))
+      )
+      const root = yield* TestHost.mount(Late, {})
+      yield* TestHost.settle
+      click(root, "fill")
+      yield* TestHost.settle
+      assert.include(root.text(), "late's")
+      click(root, "hit")
+      yield* TestHost.settle
+      assert.include(root.text(), "hits 1")
+      assert.deepStrictEqual(updates(root), ["/Late DomEvent Fill", "/Late DomEvent Hit"])
+    })))
+})

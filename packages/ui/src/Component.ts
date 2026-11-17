@@ -1246,9 +1246,7 @@ export type Receives<C> = C extends Mountable<infer _Props, infer _Events, infer
  * @category utility types
  * @since 0.1.0
  */
-export type Slots<C> = C extends { readonly [TypeId]: { readonly _Sl: Types.Contravariant<infer Sl extends string> } } ?
-  Sl
-  : never
+export type Slots<C> = C extends Mountable<infer _Props, infer _Events, infer _R, infer _Rcv, infer Sl> ? Sl : never
 
 /**
  * A `load` entry of `loaders`, as the types see it: one read, or a list
@@ -2149,8 +2147,9 @@ const finish = (
   if (parts !== undefined && definition.slots.length > 0) {
     throw new Error(`${definition.name} declares slots, so it needs a view to place them and can't take parts`)
   }
-  let outlets: Record<string, View.Outlet> | undefined
-  for (const name of definition.slots) (outlets ??= {})[name] = View.outlet(name)
+  // Made once, so a slot forwarded as another's content is the same value on every render.
+  const outlets: Record<string, View.Outlet> = {}
+  for (const name of definition.slots) outlets[name] = { _tag: "Outlet", name }
   return makeComponent(view === undefined ? HeadlessProto : Proto, {
     definition,
     props: definition.props,
@@ -2170,7 +2169,7 @@ const finish = (
           running,
           path ?? ("/" + definition.name)
         )
-        if (outlets !== undefined) h.slots = outlets
+        if (definition.slots.length > 0) h.slots = outlets
         if (bound !== undefined) {
           const context = bound.context(model, props, loaderState)
           h.loaded = context.loaded

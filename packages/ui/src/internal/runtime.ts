@@ -38,6 +38,7 @@ import {
   checkAuthorPlacements,
   checkAuthorRefs,
   checkChildPaths,
+  checkContentPaths,
   checkFallbackPaths,
   type ChildPaths,
   segment,
@@ -206,18 +207,15 @@ interface ROutlet {
 /** What a receiver's parent last passed for its slots, and the outlets that place them. */
 interface Slotted {
   values: Readonly<Record<string, View.Input<any, any>>> | undefined
-  /** Who wrote the content: the author of the tree the receiver's child node sits in. */
-  author: Instance
   /** The Env at the receiver's child node: the content resolves its services from it. */
-  env: Env
+  readonly env: Env
   readonly placed: Map<string, Instance>
 }
 
-/** An outlet instance: the slot of the receiver it shows, and the content it last rendered. */
+/** An outlet instance: the receiver's slots it shows one of, and the content it last rendered. */
 interface OutletOf {
-  readonly receiver: Instance
-  readonly name: string
-  /** The outlet node last placed, which carries the check its element needs. */
+  readonly slotted: Slotted
+  /** The outlet node last placed, which names the slot and carries the check its element needs. */
   view: View.Outlet
   content: unknown
 }
@@ -268,7 +266,7 @@ const outletOf = new WeakMap<Instance, OutletOf>()
  */
 const firstInOutlets = <A>(receiver: Instance, f: (out: Instance) => A | undefined): A | undefined => {
   // Read first: most components declare no slots, and this is cheaper than the map.
-  if (!(receiver.component.definition.slots?.length > 0)) return undefined
+  if (receiver.component.definition.slots.length === 0) return undefined
   const slotted = slottedBy.get(receiver)
   if (slotted === undefined) return undefined
   for (const out of slotted.placed.values()) {
@@ -653,8 +651,8 @@ type Plan =
     readonly children: ReadonlyArray<Plan> | undefined
   }
   | { readonly _tag: "Text"; readonly node: unknown }
+  // A child's range, or an outlet's.
   | { readonly _tag: "Child"; readonly range: Range }
-  | { readonly _tag: "Outlet"; readonly range: Range }
 
 // ---------------------------------------------------------------------------
 // mount
@@ -1582,7 +1580,7 @@ const setup = (
     onFailure: ((failure: AsyncResult.Failure<never, unknown>) => unknown) | undefined,
     range: Range | undefined,
     content?: ((parts: any) => View.Content<any, any>) | undefined,
-    slotted?: Slotted | undefined
+    slots?: Slotted["values"]
   ): Instance => {
     const scope = Scope.forkUnsafe(parent?.scope ?? rootScope, "sequential")
     const bound = loaders.boundOf(component)
@@ -1635,7 +1633,8 @@ const setup = (
     // Made outside this function, the closures the instance keeps hold it alone, and not the
     // locals of its mount: see `instanceHandlers`.
     instanceHandlers(inst, bound)
-    if (slotted !== undefined) slottedBy.set(inst, slotted)
+    // `parentEnv` is the Env at the child node, but for a feature's implementation, which is passed no slots.
+    if (component.definition.slots.length > 0) slottedBy.set(inst, { values: slots, env: parentEnv, placed: new Map() })
     inst.author = owner === undefined || parent === undefined ? inst : parent.author
     if (owner !== undefined) owners.set(owner, inst)
     if (recording > 0) {
@@ -3037,9 +3036,7 @@ const setup = (
             return
           case "Child":
             // What the parent passed for the child's slots is the parent's, whether the child places it.
-            if (node.slots !== undefined) {
-              for (const name in node.slots) for (const child of View.children([node.slots[name]])) visitNode(child)
-            }
+            for (const child of View.slotNodes(node)) visitNode(child)
             // A feature has no implementation until its Layer is built.
             if (Feature.isService(node.component)) return
             // A headless child's view is a closure over its parts, which this walk doesn't run.
@@ -3419,11 +3416,10 @@ const setup = (
     refChecks.delete(author)
     if (author.closed) return
     const written: Array<ChildPaths> = author.childPaths === undefined ? [] : [author.childPaths]
-    const placing: Array<ChildPaths> = author.childPaths === undefined ? [] : [author.childPaths]
-    closurePaths(author, written, placing)
+    closurePaths(author, written)
     try {
       checkAuthorRefs(author.path, written)
-      checkAuthorPlacements(author.path, placing)
+      checkAuthorPlacements(author.path, written)
     } catch (error) {
       failInstance(author, Cause.die(error), "view")
     }
@@ -3433,22 +3429,19 @@ const setup = (
    * children and the content its children place, at any depth. Only what's still in the tree counts,
    * since a removed child's Scope can close later.
    */
-  const closurePaths = (inst: Instance, out: Array<ChildPaths>, placing: Array<ChildPaths>) => {
+  const closurePaths = (inst: Instance, out: Array<ChildPaths>) => {
     for (const child of inst.children) {
       if (child.closed) continue
       if (child.owner === undefined) {
         firstInOutlets(child, (placed) => {
           if (placed.childPaths !== undefined) out.push(placed.childPaths)
-          closurePaths(placed, out, placing)
+          closurePaths(placed, out)
           return undefined
         })
         continue
       }
-      if (child.childPaths !== undefined) {
-        out.push(child.childPaths)
-        placing.push(child.childPaths)
-      }
-      closurePaths(child, out, placing)
+      if (child.childPaths !== undefined) out.push(child.childPaths)
+      closurePaths(child, out)
     }
   }
   const checkPendingRefs = () => {
@@ -3518,7 +3511,7 @@ const setup = (
 
   // -- outlets ----------------------------------------------------------------
   const outletComponent: Component.Any = {
-    definition: { name: "[outlet]" },
+    definition: { name: "[outlet]", slots: [] },
     head: undefined,
     subscriptions: undefined,
     layer: undefined,
@@ -3526,26 +3519,14 @@ const setup = (
     elements: () => undefined
   } as any
 
-  /** The receiver's slots, made empty the first time it places one its parent hasn't passed. */
-  const slottedOf = (receiver: Instance): Slotted => {
-    let slotted = slottedBy.get(receiver)
-    if (slotted === undefined) {
-      slotted = { values: undefined, author: receiver, env: receiver.env, placed: new Map() }
-      slottedBy.set(receiver, slotted)
-    }
-    return slotted
-  }
-
   /**
    * Places the slot `view` names, in the tree `inst` renders. Its receiver is the author of that tree,
    * the outlet instance's parent is `inst`, so the content lives as long as `inst` places it, and its
    * author is whoever wrote the content.
    */
   const createOutlet = (inst: Instance, view: View.Outlet, range?: Range): ROutlet => {
-    const receiver = inst.author
-    const slotted = slottedOf(receiver)
-    const out = makeOutlet(inst, receiver, slotted, view)
-    const views = checkedViews(out, view)
+    const out = makeOutlet(inst, view)
+    const views = checkedViews(out)
     try {
       const plan = range === undefined ? undefined : matchList(out, views, range.nodes)
       const rendered: Array<Rendered> = new Array(views.length)
@@ -3572,8 +3553,12 @@ const setup = (
     return { _tag: "Outlet", v: view, inst: out }
   }
 
-  const makeOutlet = (parent: Instance, receiver: Instance, slotted: Slotted, view: View.Outlet): Instance => {
-    const author = slotted.author
+  const makeOutlet = (parent: Instance, view: View.Outlet): Instance => {
+    const receiver = parent.author
+    const slotted = slottedBy.get(receiver)
+    if (slotted === undefined) throw new Error(`${receiver.path} places the slot ${view.name}, and declares no slots`)
+    // Who wrote the content: the author of the tree the receiver's child node sits in.
+    const author = receiver.parent === undefined ? receiver : receiver.parent.author
     const name = view.name
     const out: Instance = {
       path: outletPath(receiver, name),
@@ -3619,7 +3604,7 @@ const setup = (
       dispatch: author.dispatch,
       fire: author.fire
     }
-    outletOf.set(out, { receiver, name, view, content: undefined })
+    outletOf.set(out, { slotted, view, content: undefined })
     slotted.placed.set(name, out)
     scopeAddFinalizerUnsafe(out.scope, out, () => {
       out.closed = true
@@ -3632,38 +3617,36 @@ const setup = (
 
   const outletPath = (receiver: Instance, name: string): string => receiver.path + "/" + slotSegment(name)
 
-  /** The nodes an outlet shows: its slot's content, or one empty text node. */
-  const outletViews = (out: Instance): Array<View.Node<any, any>> => {
-    const outlet = outletOf.get(out)!
-    const content = slottedBy.get(outlet.receiver)?.values?.[outlet.name]
-    outlet.content = content
-    const views = content === undefined ? [] : View.children([content])
-    return views.length === 0 ? [emptyText] : views
-  }
+  /** What the receiver's parent last passed for the outlet's slot. */
+  const contentOf = (outlet: OutletOf): unknown => outlet.slotted.values?.[outlet.view.name]
+
+  /** Whether the outlet has to render: it was marked to, or its content isn't what it last rendered. */
+  const isStale = (out: Instance, outlet: OutletOf): boolean => dirty.has(out) || outlet.content !== contentOf(outlet)
 
   /**
-   * The outlet's nodes, once they pass the checks the reconcile can make before it builds them. A
-   * content that fails one shows nothing, and fails its author.
+   * The nodes an outlet shows: its slot's content, once it passes the checks the reconcile can make
+   * before it builds them, or one empty text node. A content that fails a check shows nothing, and
+   * fails its author.
    */
-  const checkedViews = (out: Instance, view: View.Outlet): Array<View.Node<any, any>> => {
-    let views = outletViews(out)
+  const checkedViews = (out: Instance): Array<View.Node<any, any>> => {
+    const outlet = outletOf.get(out)!
+    const content = outlet.content = contentOf(outlet)
     try {
-      if (view.noText !== undefined) {
-        if (views.some((node) => node._tag === "Text" && node !== emptyText)) {
-          throw new Error(out.path + ": " + view.noText)
-        }
+      let views = content === undefined ? [] : View.children([content as View.Input<any, any>])
+      const noText = outlet.view.noText
+      if (noText !== undefined) {
+        if (views.some((node) => node._tag === "Text")) throw new Error(out.path + ": " + noText)
         // A forwarded slot sits where this one does, so its content can't hold text either.
-        const noText = view.noText
         views = views.map((node) =>
           node._tag === "Outlet" && node.noText !== noText ? { _tag: "Outlet", name: node.name, noText } : node
         )
       }
-      out.childPaths = checkChildPaths(out.path, contentNode(views))
+      out.childPaths = checkContentPaths(out.path, views)
       out.clash = undefined
       checkKeys(out, views)
       // The author's refs are checked once its other trees are current too.
       refChecks.add(out.author)
-      return views
+      return views.length === 0 ? [emptyText] : views
     } catch (error) {
       contentFailed(out, error)
       out.childPaths = undefined
@@ -3680,12 +3663,9 @@ const setup = (
     defer(() => failInstance(author, Cause.die(error), "view"))
   }
 
-  /** The content's nodes under one element, for the walk that checks their paths. */
-  const contentNode = (views: Array<View.Node<any, any>>): View.Node<any, any> =>
-    ({ _tag: "Element", children: views }) as unknown as View.Element<any, any>
-
   const renderOutlet = (out: Instance) => {
-    const views = checkedViews(out, outletOf.get(out)!.view)
+    dirty.delete(out)
+    const views = checkedViews(out)
     try {
       const parentNode = host.parentOf(firstNodeOfList(out.rendered))!
       const ref = host.nextOf(lastNodeOfList(out.rendered))
@@ -3707,11 +3687,8 @@ const setup = (
 
   /** Re-renders the placed outlets whose content the parent changed. */
   const refreshOutlets = (slotted: Slotted) => {
-    const values = slotted.values
-    for (const [name, out] of slotted.placed) {
-      if (out.closed || (outletOf.get(out)!.content === values?.[name] && !dirty.has(out))) continue
-      dirty.delete(out)
-      renderOutlet(out)
+    for (const out of slotted.placed.values()) {
+      if (!out.closed && isStale(out, outletOf.get(out)!)) renderOutlet(out)
     }
   }
 
@@ -3769,7 +3746,7 @@ const setup = (
       view.onFailure,
       range,
       view.view,
-      view.slots === undefined ? undefined : { values: view.slots, author: inst.author, env, placed: new Map() }
+      view.slots
     )
     // Built fresh: the server's nodes go, and the parent places the new ones.
     if (range !== undefined && !range.claimed) removeRange(range)
@@ -3904,22 +3881,14 @@ const setup = (
           index++
           break
         }
-        case "Child": {
-          const path = `${inst.path}/${segment(view)}`
+        case "Child":
+        case "Outlet": {
+          // An outlet's content matches itself against the range, as a child does, and builds fresh if it can't.
+          const path = view._tag === "Child" ? `${inst.path}/${segment(view)}` : outletPath(inst.author, view.name)
           if (kind?._tag !== "Open" || kind.path !== path) return undefined
           const range = rangeFrom(node, path)
           if (range === undefined) return undefined
           out.push({ _tag: "Child", range })
-          index += range.nodes.length + 2
-          break
-        }
-        case "Outlet": {
-          // Its content matches itself against the range, as a child does, and builds fresh if it can't.
-          const path = outletPath(inst.author, view.name)
-          if (kind?._tag !== "Open" || kind.path !== path) return undefined
-          const range = rangeFrom(node, path)
-          if (range === undefined) return undefined
-          out.push({ _tag: "Outlet", range })
           index += range.nodes.length + 2
           break
         }
@@ -3960,7 +3929,7 @@ const setup = (
       case "Child":
         return createChild(inst, view, env, (plan as Extract<Plan, { _tag: "Child" }>).range)
       case "Outlet":
-        return createOutlet(inst, view, (plan as Extract<Plan, { _tag: "Outlet" }>).range)
+        return createOutlet(inst, view, (plan as Extract<Plan, { _tag: "Child" }>).range)
     }
   }
 
@@ -4413,13 +4382,10 @@ const setup = (
       case "Outlet": {
         const out = rendered.inst
         const outlet = outletOf.get(out)!
-        const changed = outlet.view.noText !== (view as View.Outlet).noText
-        outlet.view = view as View.Outlet
-        if (changed || dirty.has(out) || outlet.content !== slottedBy.get(outlet.receiver)?.values?.[outlet.name]) {
-          dirty.delete(out)
-          renderOutlet(out)
-        }
-        rendered.v = view as View.Outlet
+        // Moved between an element that holds text and one that can't: its content is checked again.
+        const moved = outlet.view.noText !== (view as View.Outlet).noText
+        outlet.view = rendered.v = view as View.Outlet
+        if (moved || isStale(out, outlet)) renderOutlet(out)
         return rendered
       }
       case "Child": {
@@ -4433,14 +4399,11 @@ const setup = (
         }
         instance.onEmit = child.onEmit
         instance.onFailure = child.onFailure
-        const slots = child.slots
-        const slottedBefore = slots !== undefined || rendered.v.slots !== undefined
-        if (slottedBefore) {
-          const slotted = slottedOf(instance)
-          slotted.values = slots
-          slotted.author = inst.author
-          slotted.env = env
-        }
+        // Read first: most children are passed no slots, and this is cheaper than the map.
+        const slotted = child.slots !== undefined || rendered.v.slots !== undefined
+          ? slottedBy.get(instance)
+          : undefined
+        if (slotted !== undefined) slotted.values = child.slots
         const changed = !propsEqual(child.props, instance.props)
         if (changed) {
           instance.props = child.props
@@ -4457,7 +4420,7 @@ const setup = (
           dirty.delete(instance)
           render(instance)
         }
-        if (slottedBefore && !instance.closed) refreshOutlets(slottedOf(instance))
+        if (slotted !== undefined && !instance.closed) refreshOutlets(slotted)
         rendered.v = child
         return rendered
       }

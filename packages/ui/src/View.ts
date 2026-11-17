@@ -119,19 +119,6 @@ export interface Outlet {
   readonly noText?: string | undefined
 }
 
-const outlets = new Map<string, Outlet>()
-
-/**
- * The outlet of the slot `name`. One value per name.
- *
- * @internal
- */
-export const outlet = (name: string): Outlet => {
-  let found = outlets.get(name)
-  if (found === undefined) outlets.set(name, found = { _tag: "Outlet", name })
-  return found
-}
-
 /**
  * A text node.
  *
@@ -1582,12 +1569,8 @@ export const textOf = (node: Node<any, any>): string => {
       return node.text
     case "Element":
       return node.children.map(textOf).join("")
-    case "Child": {
-      if (node.slots === undefined) return ""
-      let text = ""
-      for (const name in node.slots) text += children([node.slots[name]]).map(textOf).join("")
-      return text
-    }
+    case "Child":
+      return slotNodes(node).map(textOf).join("")
     case "Outlet":
       return ""
   }
@@ -1606,9 +1589,22 @@ export const nodes = function*<Msg>(node: Node<Msg, any>): Generator<Node<Msg, a
   yield node
   if (node._tag === "Element") {
     for (const child of node.children) yield* nodes(child)
-  } else if (node._tag === "Child" && node.slots !== undefined) {
-    for (const name in node.slots) {
-      for (const child of children<Msg>([node.slots[name] as Input<Msg, any>])) yield* nodes(child)
-    }
+  } else if (node._tag === "Child") {
+    for (const child of slotNodes(node)) yield* nodes(child)
   }
+}
+
+const noNodes: ReadonlyArray<never> = []
+
+/**
+ * The nodes a child's parent passed for its slots, in the order they were
+ * passed.
+ *
+ * @internal
+ */
+export const slotNodes = <Msg>(child: Child<Msg, any>): ReadonlyArray<Node<Msg, any>> => {
+  if (child.slots === undefined) return noNodes
+  const out: Array<Node<Msg, any>> = []
+  for (const name in child.slots) out.push(...children<Msg>([child.slots[name]]))
+  return out
 }
