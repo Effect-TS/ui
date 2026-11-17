@@ -71,6 +71,57 @@ import * as View from "../View.ts"
 import * as Query from "./Query.ts"
 import type * as Shared from "./Steps.ts"
 
+export type {
+  /**
+   * The same type as `Steps.AwaitedLoader`, which defines it.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  AwaitedLoader,
+  /**
+   * The same type as `Steps.KeyedLoad`, which defines it.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  KeyedLoad,
+  /**
+   * The same type as `Steps.LoaderInfo`, which defines it.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  LoaderInfo,
+  /**
+   * The same type as `Steps.Pending`, which defines it.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  Pending,
+  /**
+   * The same type as `Steps.StreamTarget`, which defines it.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  StreamTarget,
+  /**
+   * The same type as `Steps.Target`, which defines it.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  Target
+} from "./Steps.ts"
+
 /**
  * The state of one instance between steps, as a story records it. Immutable:
  * every step replaces the cursor's record with a new one.

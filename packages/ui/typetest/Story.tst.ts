@@ -1,4 +1,4 @@
-import { Command, Component } from "@effect/ui"
+import { Command, Component, type Loader } from "@effect/ui"
 import type { Steps } from "@effect/ui/testing"
 import { Story } from "@effect/ui/testing"
 import { Data, Effect, Schema, Stream } from "effect"
@@ -152,5 +152,17 @@ describe("Story", () => {
     expect(counter.fail).type.toBeCallableWith(matched, new SaveFailed({ reason: "disk full" }))
     expect(counter.fail).type.not.toBeCallableWith(Save, new Error("other"))
     expect(todoItem.fail).type.not.toBeCallableWith(SaveTodo, new Error("never fails"))
+  })
+})
+
+describe("Story's re-exports of the Steps types", () => {
+  it("resolve to the Steps types", () => {
+    type Read = Loader.Read<{ readonly id: string }, string, never>
+    expect<Story.Pending<CounterMessage>>().type.toBe<Steps.Pending<CounterMessage>>()
+    expect<Story.AwaitedLoader>().type.toBe<Steps.AwaitedLoader>()
+    expect<Story.LoaderInfo>().type.toBe<Steps.LoaderInfo>()
+    expect<Story.KeyedLoad<Read>>().type.toBe<Steps.KeyedLoad<Read>>()
+    expect<Story.Target>().type.toBe<Steps.Target>()
+    expect<Story.StreamTarget>().type.toBe<Steps.StreamTarget>()
   })
 })
