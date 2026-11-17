@@ -14,7 +14,8 @@ from Base UI" in the module docs, and carry on.
 Read [references/conventions.md](references/conventions.md) before step 3.
 `Switch` (`packages/ui-kit/src/Switch.ts` and its test) is the worked
 example. The "Headless components" section of `LLMS.md` and
-`ai-docs/src/10_ui/fixtures/kit/Listbox.ts` show the API it builds on.
+`ai-docs/src/10_ui/fixtures/kit/Listbox.ts` show the core API it builds on. The
+conventions say where ui-kit wraps it.
 
 ## Checklist
 
@@ -59,8 +60,10 @@ Work top to bottom. Put the notes from steps 1 to 3 in the PR description.
      owns loses, both when the part sets it and when the state leaves it
      absent, while the consumer's class and other attributes stay
 
-   Then break the code once (for example, drop the disabled guard) and
-   check that a test fails.
+   Add `packages/ui-kit/typetest/<Name>.tst.ts` for each part function: the
+   return type, the inferred message type and requirements, and the tags it
+   rejects. Then break the code (for example, drop the disabled guard, or
+   one name from a clear list) and check that a test fails.
 6. **Document and check.**
    - Write the module JSDoc in the shape the conventions give. The one
      example goes in a fence opened with `ts import.meta.vitest`, so it runs
@@ -72,6 +75,7 @@ Work top to bottom. Put the notes from steps 1 to 3 in the PR description.
    - Add a changeset: `"@effect/ui-kit": minor`.
    - Run each of these with `nix develop -c`: `pnpm lint`, `pnpm check`,
      `pnpm vitest run --project @effect/ui-kit`,
+     `pnpm test-types packages/ui-kit/typetest`,
      `pnpm doctest run packages/ui-kit/src/<Name>.ts`, `pnpm jsdocs --check`,
      `pnpm circular` and `pnpm ai-docgen`, which should leave `LLMS.md`
      unchanged.

@@ -14,10 +14,15 @@
  * | `Switch.Root`  | `root`  | `<button role="switch">`, with the hidden input |
  * | `Switch.Thumb` | `thumb` | `<span>` inside the root                        |
  *
- * `root` takes the button and its children as
- * `{ element, children }`, and adds the hidden `<input>` that carries the
- * form value as the last child, so a switch with a `name` can't be drawn
- * without it.
+ * `root` takes the button and its children as `{ element, children }`
+ * and returns the finished button. It adds the hidden `<input>` that
+ * carries the form value as the last child, so a switch with a `name`
+ * can't be drawn without it. `thumb` takes the `<span>` and returns it
+ * for more chaining.
+ *
+ * Naming the switch is the consumer's job: a `<label>` around the root or
+ * one pointing at its `id`, an `aria-label` or `aria-labelledby` on the
+ * button, or text inside it.
  *
  * **Data attributes**
  *
@@ -31,8 +36,8 @@
  * **Keyboard**
  *
  * The root is a native `<button>`, so Space and Enter toggle it and Tab
- * moves focus, without a key handler. A `<label>` around the root, or one
- * pointing at its `id`, names it and toggles it on click.
+ * moves focus, without a key handler. A click on a `<label>` that names
+ * it toggles it too.
  *
  * **Differences from Base UI**
  *
@@ -202,9 +207,9 @@ const field = (props: SwitchProps): View.Node<never> | undefined => {
 }
 
 // A part writes its attributes over the consumer's, but can't remove one
-// it leaves absent. Each part clears those from the consumer's builder
-// first, so a consumer's `disabled` or `data-checked` can't report a state
-// the props don't have.
+// it leaves absent (EFF-3911). Each part clears those from the consumer's
+// builder first, so a consumer's `disabled` or `data-checked` can't report
+// a state the props don't have.
 const stateAttributes = ["data-checked", "data-unchecked", "data-disabled", "data-readonly", "data-required"]
 const rootAttributes = ["disabled", "aria-disabled", "aria-readonly", "aria-required", ...stateAttributes]
 const clear = <B extends View.PartTarget<string>>(builder: B, names: ReadonlyArray<string>): B =>
@@ -234,11 +239,14 @@ export type SwitchButton<Msg, R> = Html.Element<Msg, R, Html.EventsOf<"button">,
  * read-only switch emits nothing. A handler the consumer adds to the root
  * runs after the switch's own.
  *
- * The switch's own attributes win over the consumer's: `type`, `role`,
- * `disabled`, the ARIA state (`aria-checked`, `aria-disabled`,
- * `aria-readonly`, `aria-required`) and the data attributes. That
- * includes the ones a state leaves absent, so a `disabled` on the
- * consumer's button is removed unless the `disabled` prop is set.
+ * The switch's own attributes win over the ones the consumer set on the
+ * builder it passes in: `type`, `role`, `disabled`, the ARIA state
+ * (`aria-checked`, `aria-disabled`, `aria-readonly`, `aria-required`)
+ * and the data attributes. That includes the ones a state leaves absent,
+ * so a `disabled` on the consumer's button is removed unless the
+ * `disabled` prop is set. `root` returns a finished element, so nothing
+ * can be added after it. `thumb` returns the chain, so an attribute the
+ * consumer chains after `s.thumb(...)` is the consumer's to answer for.
  *
  * @stability experimental
  * @category components

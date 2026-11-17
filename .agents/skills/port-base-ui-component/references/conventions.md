@@ -62,19 +62,25 @@ update the components that already follow it.
   when Base UI supports them and the behaviour holds for each.
 - A part sets ARIA, data attributes, ids, refs and handlers, and nothing
   visual. The consumer's handlers run after the part's.
-- **The part's attributes win.** A part writes its attributes over the
-  consumer's, but an attribute it leaves absent keeps the consumer's
-  value. So the part function first clears, from the consumer's builder,
-  every attribute it owns that some state leaves absent: `disabled`,
+- **The part's attributes win** over the ones the consumer set on the
+  builder it passes in. A part writes its attributes over the consumer's,
+  but an attribute it leaves absent keeps the consumer's value (EFF-3911).
+  So the part function first clears, from the consumer's builder, every
+  attribute it owns that some state leaves absent: `disabled`,
   `aria-disabled`, `aria-readonly`, the data attributes. Otherwise a
   consumer's `disabled` or `data-checked` reports a state the props
   don't have. Attributes the part doesn't decide, such as `aria-label`
-  or `popovertarget`, stay the consumer's.
+  or `popovertarget`, stay the consumer's. What the consumer chains onto
+  a part's result afterwards, and DOM properties set with `.prop`, are
+  the consumer's own doing, and the kit doesn't guard them.
 - **Markup the component needs to work**, such as a form field, must not be
   a part the consumer can forget to draw. A part can't add children, so
   the part it belongs to becomes a function in `parts` that applies the
-  part and appends that markup. Only put markup where the content model
-  allows it: a hidden input may sit in a `<button>`, a checkbox may not.
+  part and appends that markup. A part function has no `h`, so it builds
+  that markup from Html's element classes, as Switch's field does with
+  `View.toNode(new Html.VoidElement("input")...)`. Only put markup where
+  the content model allows it: a hidden input may sit in a `<button>`, a
+  checkbox may not.
 - **Call shape.** A part that only decorates a builder takes it as its one
   argument: `s.thumb(h.span)`. A part that takes anything more takes one
   options object, so the call site names each argument:
@@ -88,6 +94,22 @@ update the components that already follow it.
   name for anything else (`value`, `item`). Type `element` as the
   builders the part accepts, and keep the consumer's message type and the
   children's requirements inferred, as `Switch`'s `root` does.
+
+  A part that takes `children` appends them, with any markup it adds, and
+  returns the finished element (`s.root`). Any other part returns the
+  chain, so the consumer can still add children: a Tabs tab takes
+  `{ element, value }` and the consumer writes
+  `s.tab({ element: h.button, value: "a" }).children("Account")`.
+
+  `Listbox.ts` in `ai-docs` shows the core API, where extra arguments are
+  positional (`m.option(h.li, option)`). ui-kit wraps `p.part` to take
+  the options object.
+- **A wrapped part drops its mount's requirements** (EFF-3914). A headless
+  component's requirements come from the parts it returns, and a plain
+  function around `p.part` hides them, so a consumer can forget to
+  provide the service a part's `onMount` needs. If a part has such a
+  mount, use the workaround in EFF-3914, and check the requirement in the
+  component's typetest with `Component.Headless.Requirements`.
 - `parts` also returns plain values for markup that depends on state, in
   place of Base UI's `className(state)` functions: `s.checked`, `m.open`.
 

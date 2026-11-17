@@ -91,10 +91,14 @@ describe("Switch", () => {
       .attr("aria-checked", "mixed")
       .attr("aria-readonly", "true")
       .attr("aria-disabled", "true")
+      .attr("aria-required", "true")
+      .attr("data-checked", "")
       .attr("data-disabled", "")
+      .attr("data-readonly", "")
+      .attr("data-required", "")
 
-    // An enabled switch removes the consumer's `disabled`, `aria-disabled`,
-    // `aria-readonly` and `data-disabled`, as it doesn't report those states.
+    // An enabled, optional, unchecked switch removes every state attribute
+    // the consumer set, as it doesn't report those states.
     assert.deepStrictEqual(parts({ checked: false }).root({ element: element.disabled(true) }).attrs, {
       class: "switch",
       "aria-label": "Mute",
@@ -104,12 +108,29 @@ describe("Switch", () => {
       "data-unchecked": ""
     })
     // The thumb drops a state the switch doesn't have.
-    const thumb = parts({ checked: false }).thumb(h.span.class("thumb").attr("data-checked", ""))
+    const thumb = parts({ checked: false }).thumb(
+      h.span.class("thumb")
+        .attr("data-checked", "")
+        .attr("data-disabled", "")
+        .attr("data-readonly", "")
+        .attr("data-required", "")
+    )
     assert.deepStrictEqual(thumb.attrs, { class: "thumb", "data-unchecked": "" })
-    // A disabled switch keeps its own `disabled` over the consumer's removal.
-    const disabled = parts({ checked: true, disabled: true }).root({ element: element.disabled(false) })
-    assert.strictEqual(disabled.attrs.disabled, "")
-    assert.strictEqual(disabled.attrs["aria-checked"], "true")
+    // A disabled, checked switch keeps its own `disabled` over the
+    // consumer's removal, and removes the consumer's `data-unchecked`.
+    const disabled = parts({ checked: true, disabled: true }).root({
+      element: element.attr("data-unchecked", "").disabled(false)
+    })
+    assert.deepStrictEqual(disabled.attrs, {
+      class: "switch",
+      "aria-label": "Mute",
+      type: "button",
+      role: "switch",
+      "aria-checked": "true",
+      disabled: "",
+      "data-checked": "",
+      "data-disabled": ""
+    })
   })
 
   it("the root draws the form field after its children: value when on, and uncheckedValue or nothing when off", () => {
