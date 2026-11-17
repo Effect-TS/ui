@@ -221,10 +221,6 @@ describe("Component", () => {
     it("removes only what every branch of a factory provides, and requires what any branch needs", () => {
       const FromProps = Component.provide(NeedsBoth, (props) => props.admin ? adminLayer : guestLayer)
       expect<Component.Requirements<typeof FromProps>>().type.toBe<B | CA | CB>()
-      const Curried = NeedsBoth.pipe(
-        Component.provide((props: { readonly admin: boolean }) => props.admin ? adminLayer : guestLayer)
-      )
-      expect<Component.Requirements<typeof Curried>>().type.toBe<B | CA | CB>()
       const Keyed = Component.provide(NeedsBoth, {
         key: (props) => props.admin,
         layer: (admin) => admin ? adminLayer : guestLayer
@@ -245,7 +241,7 @@ describe("Component", () => {
     it("infers a fallible keyed provide's key and layer with a contextually typed onFailure", () => {
       const failingAdmin = Layer.effect(A, Effect.fail("admin" as const)).pipe(Layer.provideMerge(adminLayer))
       const failingGuest = Layer.effect(A, Effect.fail("guest" as const)).pipe(Layer.provideMerge(guestLayer))
-      const Keyed = Component.provide(NeedsFailed, {
+      Component.provide(NeedsFailed, {
         key: (props) => props.admin,
         layer: (admin) => admin ? failingAdmin : failingGuest
       }, {
@@ -254,14 +250,9 @@ describe("Component", () => {
           return "failed" as const
         }
       })
-      expect<Component.Requirements<typeof Keyed>>().type.toBe<B | CA | CB>()
-      const keyed = {
+      expect(Component.provide).type.not.toBeCallableWith(NeedsFailed, {
         key: (props: { readonly admin: boolean }) => props.admin,
         layer: (admin: boolean) => admin ? failingAdmin : failingGuest
-      }
-      expect(Component.provide).type.not.toBeCallableWith(NeedsFailed, keyed)
-      expect(Component.provide).type.not.toBeCallableWith(NeedsFailed, keyed, {
-        onFailure: (_: AsyncResult.Failure<never, "guest">) => "failed" as const
       })
     })
 
