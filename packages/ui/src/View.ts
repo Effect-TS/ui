@@ -823,6 +823,13 @@ export interface PartTarget<out Tag extends string> {
  */
 export type PartRequirements<P> = P extends { readonly "~R"?: (_: never) => infer R } ? R : never
 
+// Only a part's blank builder records removals. Ordinary builders keep their
+// string-only attrs and their fast copier; copies of a part patch keep this symbol.
+const partAttributeRemovals = Symbol("partAttributeRemovals")
+type PartPatch = {
+  [partAttributeRemovals]?: ReadonlyArray<string>
+}
+
 /**
  * Makes a part for one owner. `decorate` gets an empty builder of the
  * consumer's class and tag, so it never sees what the consumer set. Its
@@ -848,7 +855,7 @@ export const makePart = (
   const blank: ElementBuilder<any, any, any, any> = Object.assign(
     Object.create(Object.getPrototypeOf(builder)),
     blankFields,
-    { tag: builder.tag }
+    { tag: builder.tag, [partAttributeRemovals]: [] }
   )
   const patch = decorate(blank, ...args)
   if (!(patch instanceof ElementBuilder)) {
@@ -858,6 +865,10 @@ export const makePart = (
   if (patch.owned.length > 0) throw new Error(owner.path + ": a part can't apply another part")
   const attrs: Record<string, string> = { ...builder.attrs }
   const tokens: Record<string, string> = {}
+  for (const name of (patch as PartPatch)[partAttributeRemovals] ?? []) {
+    // Token lists are additive: a part can omit its own tokens, not the consumer's.
+    if (!tokenListAttributes.has(name)) delete attrs[name]
+  }
   for (const name in patch.attrs) {
     if (tokenListAttributes.has(name)) tokens[name] = patch.attrs[name]!
     else attrs[name] = patch.attrs[name]!
@@ -1094,7 +1105,11 @@ export class ElementBuilder<
    * @since 0.1.0
    */
   attr(name: string, value: string | undefined): this {
-    const out = copyBuilder(this) as Mutable<this>
+    const out = copyBuilder(this) as Mutable<this> & PartPatch
+    const removals = out[partAttributeRemovals]
+    if (value === undefined && removals !== undefined) {
+      out[partAttributeRemovals] = [...removals, name]
+    }
     const attrs = this.attrs
     if (attrs === noFields) {
       if (value !== undefined) out.attrs = assoc(attrs, name, value)
