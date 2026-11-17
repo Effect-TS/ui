@@ -54,6 +54,18 @@ describe("Story", () => {
     s.model((model) => assert.strictEqual(model, 0))
   })
 
+  it("subscription keys follow dependency keys and model changes", () => {
+    const steps = Story.start(SearchBox, {})
+    const tick = SearchMessage.make({ _tag: "Tick" })
+    assert.throws(() => steps.subscription("tick", tick), /Story.subscription.*tick.*inactive.*active keys:.*query/)
+    steps.subscription("query:\"\"", SearchMessage.make({ _tag: "Progress", percent: 50 }))
+      .subscription("tick", tick)
+      .model((model) => assert.strictEqual(model.ticks, 1))
+      .subscription("tick", SearchMessage.make({ _tag: "Progress", percent: 100 }))
+    assert.throws(() => steps.subscription("tick", tick), /active keys:.*query/)
+    assert.strictEqual(steps.current.model.ticks, 1)
+  })
+
   describe("Counter", () => {
     it("counts by clicking", () => {
       Story.make(Counter, { initial: 1 }, (s) =>
