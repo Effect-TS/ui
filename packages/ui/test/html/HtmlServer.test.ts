@@ -607,14 +607,21 @@ describe("HtmlServer", { concurrent: false }, () => {
       expect(rendered.state["~deferred"]).toEqual([])
       const app = yield* container(rendered.html)
       const button = app.querySelector("button")!
-      const root = yield* BrowserHost.mountEffect(Panel, {}, app, { state: rendered.state })
+      const log = MessageLog.makeMemory({ size: 1000 })
+      const root = yield* BrowserHost.mountEffect(Panel, {}, app, { state: rendered.state }).pipe(
+        Effect.provideService(MessageLog.MessageLog, log)
+      )
       button.click()
       yield* tick
       expect(button.textContent).toBe("0 server")
+      // The log says what is on screen while it waits: the server's Model, and no Model of its own.
+      expect(log.entries().map((entry) => entry._tag)).toEqual(["SessionStarted", "Waiting", "LayerPending"])
+      expect((log.entries()[1] as MessageLog.Waiting).model).toEqual({ mounted: false, clicks: 0 })
 
       yield* TestClock.adjust("50 millis")
       yield* root.adopted
       yield* tick
+      expect(log.entries().slice(3, 5).map((entry) => entry._tag)).toEqual(["LayerReady", "Mounted"])
       expect(app.querySelector("button")).toBe(button)
       expect(button.textContent).toBe("0 mounted")
       button.click()

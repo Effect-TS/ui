@@ -2311,42 +2311,62 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
   const sameEvents = Schema.toEquivalence(Schema.Array(component.events as Schema.Codec<Events, unknown>))
   const sameCommands = (a: ReadonlyArray<unknown>, b: ReadonlyArray<unknown>) => JSON.stringify(a) === JSON.stringify(b)
 
-  const initial = read(first)
-  let model = initial.model
-  let props: unknown = initial.props
-  let loaderState: Component.LoaderState | undefined = initial.loaderState
-  let replayed = 0
-  const result = (divergence: Divergence<Model, Msg, Events> | undefined): Replay<Model, Msg, Events, any, any> => {
-    const reached = { model, props, loaderState }
-    return {
-      path,
-      ...reached,
-      loaded: () => bound?.context(reached.model, reached.props, reached.loaderState).loaded ?? {},
-      replayed,
-      divergence
-    }
+  // A path can hold one instance after another, and the one leaving can still log after the next
+  // has mounted, so each instance's state is tracked by its number. The result is the last one's.
+  interface State {
+    model: Model
+    props: unknown
+    loaderState: Component.LoaderState | undefined
   }
+  const states = new Map<number, State>()
+  const begin = (entry: typeof first): State => {
+    const initial = read(entry)
+    const state = {
+      model: initial.model,
+      props: initial.props,
+      // A `Mounted` entry starts with every loader empty.
+      loaderState: entry._tag === "Mounted" ? undefined : initial.loaderState
+    }
+    states.set(entry.instance, state)
+    return state
+  }
+  let latest = begin(first)
+  let replayed = 0
+  const result = (
+    reached: State,
+    divergence: Divergence<Model, Msg, Events> | undefined
+  ): Replay<Model, Msg, Events, any, any> => ({
+    path,
+    ...reached,
+    loaded: () => bound?.context(reached.model, reached.props, reached.loaderState).loaded ?? {},
+    replayed,
+    divergence
+  })
   for (const entry of all.slice(start + 1)) {
+    const state = states.get(entry.instance)
     if (entry._tag === "LoaderChanged") {
-      loaderState = { ...(loaderState ?? bound?.empty), [entry.name]: stateOf(entry) }
+      // Without a Model yet, the write is in the instance's first surviving `Update`.
+      if (state !== undefined) {
+        state.loaderState = { ...(state.loaderState ?? bound?.empty), [entry.name]: stateOf(entry) }
+      }
       continue
     }
     if (entry._tag === "PropsChanged") {
-      props = typeof entry.component === "string" ? decode(entry, "props", entry.props) : entry.props
+      if (state !== undefined) {
+        state.props = typeof entry.component === "string" ? decode(entry, "props", entry.props) : entry.props
+      }
+      continue
+    }
+    if (state === undefined || entry._tag === "Mounted") {
+      // Mounted again at the same path: the replay starts over from it.
+      latest = begin(entry)
       continue
     }
     const recorded = read(entry)
-    if (entry._tag === "Mounted") {
-      // Mounted again at the same path: the replay starts over from it, with every loader empty.
-      model = recorded.model
-      props = recorded.props
-      loaderState = undefined
-      continue
-    }
     // The Update's record is what `update` read, so it holds even when earlier entries were evicted.
-    props = recorded.props
-    if (recorded.loaderState !== undefined) loaderState = recorded.loaderState
-    const next = component.update(model, recorded.message as Msg, recorded.props as Props, loaderState)
+    state.props = recorded.props
+    if (recorded.loaderState !== undefined) state.loaderState = recorded.loaderState
+    const next = component.update(state.model, recorded.message as Msg, recorded.props as Props, state.loaderState)
     replayed++
     const recomputed = {
       model: next.model,
@@ -2360,7 +2380,7 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
       !sameCommands(recomputed.commands, recorded.commands) || !sameCommands(recomputed.lists, recorded.lists) ||
       !sameCommands(recomputed.sends, recorded.sends)
     ) {
-      return result({
+      return result(state, {
         seq: entry.seq,
         message: recorded.message as Msg,
         recorded: {
@@ -2373,9 +2393,9 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
         recomputed
       })
     }
-    model = recomputed.model
+    state.model = recomputed.model
   }
-  return result(undefined)
+  return result(latest, undefined)
 }
 
 /**
@@ -2398,6 +2418,9 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
  * loader state. Each later `PropsChanged` entry sets the props and each
  * `LoaderChanged` entry writes its loader's state, so props from the parent and loads
  * that settled after the last message are in the result too.
+ *
+ * A path that mounted more than once is replayed instance by instance, each
+ * from its own entries, and the result is the state of the last one.
  *
  * It takes live entries or Wire frames. A Wire value sent as a placeholder,
  * such as a truncated Model, can't be decoded, and the error names the entry.

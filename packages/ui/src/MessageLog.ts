@@ -155,7 +155,15 @@ export type Source =
 
 /**
  * Fields every entry has: its number, its time from `Clock`, the session it
- * belongs to and the instance path it's about.
+ * belongs to, and the path and number of the instance it's about.
+ *
+ * **Details**
+ *
+ * `instance` tells two instances at one path apart. A path names a place in
+ * the tree, and a child can mount there again before the instance that was
+ * there has logged `Unmounted`. The number is unique in the session, and
+ * later instances have higher ones. It's `0` for `SessionStarted` and
+ * `FetchStarted`, which are about the tree and no one instance.
  *
  * @stability experimental
  * @category models
@@ -166,6 +174,7 @@ export interface Base {
   readonly at: number
   readonly session: string
   readonly path: string
+  readonly instance: number
 }
 
 /**
@@ -263,7 +272,42 @@ export interface LoaderChanged extends Base {
 }
 
 /**
- * A lifecycle step with nothing to add but the path.
+ * A hydrating instance is waiting for its provided Layer: it shows the nodes
+ * the server rendered, inert, and has no Model of its own yet.
+ *
+ * **Details**
+ *
+ * It's the instance's first entry, logged when the instance is created, with
+ * the props it was given and the Model and loader state the server rendered
+ * the path with. Its Layer entries follow. When the Layer is ready the
+ * instance logs `Mounted`, adopting that state. When the Layer fails and the
+ * component handles the failure, it logs `Mounted` with a Model from `init`.
+ * An instance removed while it waits logs `Unmounted` and never `Mounted`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Waiting extends Base {
+  readonly _tag: "Waiting"
+  readonly component: Component.Any
+  readonly props: unknown
+  /** The Model the server rendered the path with, which the nodes on screen show. */
+  readonly model: unknown
+  /** The loader state the server rendered the path with. Only a component with loaders has it. */
+  readonly loaderState?: Component.LoaderState | undefined
+}
+
+/**
+ * A lifecycle step with nothing to add but the instance.
+ *
+ * **Details**
+ *
+ * `Unmounted` is logged when the instance leaves the tree: from then on it
+ * takes no message, props or loader state, and its path is free. An
+ * instance removed with its parent logs its own entry before its parent's.
+ * Its Scope closes after, and its Commands log their ends as they exit,
+ * which can be later than this entry.
  *
  * @stability experimental
  * @category models
@@ -302,6 +346,10 @@ export interface SubscriptionChanged extends Base {
  * the interrupt Command or a handled Layer failure) and dispatched nothing.
  *
  * **Details**
+ *
+ * `CommandInterrupted` is logged when the run's fiber has exited, which is
+ * when `h.isRunning` stops counting it: a run whose cleanup is still going
+ * has no entry yet. A run that never got a fiber logs it when it's stopped.
  *
  * `spanId` and `traceId` are the run's span, `undefined` when its span never
  * began. They're here because a run that sends no message has no `Update`
@@ -431,15 +479,29 @@ export interface SendDropped extends Base {
  * An instance failed (`Failed`), or the root did (`Crashed`), with the real
  * Cause and where it happened.
  *
+ * **Details**
+ *
+ * `component` and `props` are the instance's, as of the failure. An instance
+ * that fails in `init`, or whose Layer fails before it mounts, has no
+ * `Mounted` entry, so this is the only entry that says what was there.
+ *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
 export interface Failed extends Base {
   readonly _tag: "Failed" | "Crashed"
+  readonly component: Component.Any
+  readonly props: unknown
   readonly source: FailureSource
   readonly name: string | undefined
   readonly cause: Cause.Cause<unknown>
+  /**
+   * When `update` threw: the message it was given and what sent it. A
+   * message whose `update` throws has no `Update` entry, so this is its
+   * only record.
+   */
+  readonly update?: { readonly message: unknown; readonly source: Source } | undefined
 }
 
 /**
@@ -499,6 +561,7 @@ export type Entry =
   | SessionStarted
   | Update
   | Mounted
+  | Waiting
   | PropsChanged
   | LoaderChanged
   | Lifecycle
@@ -608,7 +671,7 @@ export const fanout = <const Layers extends ReadonlyArray<Layer.Layer<never, any
  * @category Wire
  * @since 0.1.0
  */
-export const wireVersion = 1
+export const wireVersion = 2
 
 /**
  * Where a log comes from, as `Hello` reports it.
@@ -623,7 +686,8 @@ const Seq = {
   seq: Schema.Number,
   at: Schema.Number,
   session: Schema.String,
-  path: Schema.String
+  path: Schema.String,
+  instance: Schema.Number
 }
 const IssuedWire = Schema.Struct({ seq: Schema.Number, index: Schema.Number })
 const CommandWire = Schema.Struct({
@@ -698,6 +762,13 @@ export const Wire = Schema.Union([
     events: Schema.Array(Schema.Json),
     adopted: Schema.Boolean
   }),
+  Schema.TaggedStruct("Waiting", {
+    ...Seq,
+    component: Schema.String,
+    props: Schema.Json,
+    model: Schema.Json,
+    loaderState: Schema.optionalKey(Schema.Json)
+  }),
   Schema.TaggedStruct("PropsChanged", { ...Seq, component: Schema.String, props: Schema.Json }),
   Schema.TaggedStruct("LoaderChanged", { ...Seq, component: Schema.String, name: Schema.String, state: Schema.Json }),
   Schema.Struct({ _tag: Schema.Literals(["Unmounted", "LayerPending", "LayerReady"]), ...Seq }),
@@ -736,9 +807,12 @@ export const Wire = Schema.Union([
   Schema.Struct({
     _tag: Schema.Literals(["Failed", "Crashed"]),
     ...Seq,
+    component: Schema.String,
+    props: Schema.Json,
     source: Schema.String,
     name: Schema.NullOr(Schema.String),
-    cause: CauseWire
+    cause: CauseWire,
+    update: Schema.optionalKey(Schema.Struct({ message: Schema.Json, source: SourceWire }))
   }),
   Schema.TaggedStruct("FetchStarted", {
     ...Seq,
@@ -878,6 +952,17 @@ export const makeEncoder = (options?: {
             events: entry.events.map((emitted) => through(entry.component, "events", emitted) as Schema.Json),
             adopted: entry.adopted
           }
+        case "Waiting":
+          return {
+            ...base(entry),
+            _tag: "Waiting",
+            component: entry.component.definition.name,
+            props: through(entry.component, "props", entry.props) as Schema.Json,
+            model: capped(entry.component, "model", entry.model),
+            ...(entry.loaderState === undefined ? undefined : {
+              loaderState: encodeLoaderState(entry.component, entry.loaderState)
+            })
+          }
         case "PropsChanged":
           return {
             ...base(entry),
@@ -910,9 +995,17 @@ export const makeEncoder = (options?: {
           return {
             ...base(entry),
             _tag: entry._tag,
+            component: entry.component.definition.name,
+            props: through(entry.component, "props", entry.props) as Schema.Json,
             source: entry.source,
             name: entry.name ?? null,
-            cause: encodeCause(entry.cause)
+            cause: encodeCause(entry.cause),
+            ...(entry.update === undefined ? undefined : {
+              update: {
+                message: capped(entry.component, "message", entry.update.message),
+                source: encodeSource(entry.update.source)
+              }
+            })
           }
         case "SessionStarted":
           return { ...base(entry), _tag: "SessionStarted", app: entry.app }
@@ -973,7 +1066,13 @@ export const makeEncoder = (options?: {
   }
 }
 
-const base = (entry: Base) => ({ seq: entry.seq, at: entry.at, session: entry.session, path: entry.path })
+const base = (entry: Base) => ({
+  seq: entry.seq,
+  at: entry.at,
+  session: entry.session,
+  path: entry.path,
+  instance: entry.instance
+})
 
 const encodeSource = (source: Source): typeof SourceWire.Type => {
   switch (source._tag) {

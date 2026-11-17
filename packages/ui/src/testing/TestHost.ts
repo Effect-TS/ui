@@ -876,9 +876,9 @@ export const formatLog = (entries: ReadonlyArray<MessageLog.Entry>): string =>
         return `${head}${entry.commands.length === 0 ? "" : ` -> ${entry.commands.map((c) => c.name).join(", ")}`}`
       case "Failed":
       case "Crashed":
-        return `${head} in ${entry.source}${entry.name === undefined ? "" : ` (${entry.name})`}: ${
-          entry.cause.toString().split("\n")[0]
-        }`
+        return `${head} in ${entry.source}${entry.name === undefined ? "" : ` (${entry.name})`}${
+          entry.update === undefined ? "" : ` of ${summary(entry.update.message)}`
+        }: ${entry.cause.toString().split("\n")[0]}`
       case "SubscriptionStarted":
       case "SubscriptionStopped":
         return `${head} ${entry.key}`
