@@ -439,8 +439,8 @@ describe("Story", () => {
           .model((model) => assert.strictEqual(model.outcome, "navigated")))
     })
 
-    it("a query patch is named by its class, issued with the patch, and resolves with its own outcome", () => {
-      const Routes = Route.union({ Search: Route.make("/search", { query: { q: Schema.optional(Schema.String) } }) })
+    it("a search patch is named by its class, issued with the patch, and resolves with its own outcome", () => {
+      const Routes = Route.union({ Search: Route.make("/search", { search: { q: Schema.optional(Schema.String) } }) })
       const BoxMessage = Schema.TaggedUnion({
         Typed: { value: Schema.String },
         Patched: { outcome: Schema.Literals(["navigated", "blocked", "stale"]) }
@@ -456,7 +456,7 @@ describe("Story", () => {
           BoxMessage.match(message, {
             Typed: ({ value }) =>
               $.run(
-                Router.patchQuery(Routes, $.props.route, { q: value || undefined }).pipe(
+                Router.patchSearch(Routes, $.props.route, { q: value || undefined }).pipe(
                   Command.map((outcome) => BoxMessage.make({ _tag: "Patched", outcome }))
                 )
               ),
@@ -467,8 +467,8 @@ describe("Story", () => {
       const route = Routes.make({ _tag: "Search" })
       Story.make(Box, { route }, (s) =>
         s.send(BoxMessage.make({ _tag: "Typed", value: "ada" }))
-          .expectExact(Router.patchQuery(Routes, route, { q: "ada" }))
-          .resolve(Router.PatchQuery, "stale")
+          .expectExact(Router.patchSearch(Routes, route, { q: "ada" }))
+          .resolve(Router.PatchSearch, "stale")
           .model((model) => assert.strictEqual(model.outcome, "stale")))
     })
   })

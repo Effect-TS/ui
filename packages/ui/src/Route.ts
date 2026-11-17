@@ -1,10 +1,10 @@
 /**
  * Route definitions: a flat union of routes, each a path template with
- * `params` and `query` Schemas, plus a parser and a printer that agree.
+ * `params` and `search` Schemas, plus a parser and a printer that agree.
  *
  * A route union is a `Schema.TaggedUnion`, so a route value such as
- * `{ _tag: "Person", params: { id: 1 }, query: {} }` can be a root's props and
- * a page's props. Parsing decodes path and query strings through each route's
+ * `{ _tag: "Person", params: { id: 1 }, search: {} }` can be a root's props and
+ * a page's props. Parsing decodes path and search strings through each route's
  * Schemas with `Schema.toCodecStringTree`, so `params: { id: Schema.Number }`
  * works directly, and printing encodes through the same Schemas.
  *
@@ -16,16 +16,16 @@
  *   declaration order. Between equal templates, the first declared wins.
  * - If a path param fails to decode, matching falls through to the next
  *   route, so `/people/:id` with a Number and `/people/:slug` with a String
- *   can coexist. If a required query field fails to decode, the URL is a 404:
+ *   can coexist. If a required search field fails to decode, the URL is a 404:
  *   the result is the catch-all `"/*"` route, with no fall-through.
  * - A trailing slash is stripped, a printed path never has one, and matching
  *   is case-sensitive.
  * - Redirects take part in the ranking like routes, and `parse` resolves
  *   them, so the server and the client agree.
  *
- * **Query**
+ * **Search**
  *
- * - A query field that decodes when its key is absent, such as
+ * - A search field that decodes when its key is absent, such as
  *   `Schema.optional(Schema.String)` or a field with
  *   `Schema.withDecodingDefaultKey`, is treated as absent when its value
  *   fails to decode or its key is repeated. `resolve` names such keys in
@@ -52,14 +52,14 @@
  *     Home: Route.make("/"),
  *     Person: Route.make("/people/:id", {
  *       params: { id: Schema.Number },
- *       query: { tab: Schema.optional(Schema.String) }
+ *       search: { tab: Schema.optional(Schema.String) }
  *     }),
  *     NotFound: Route.make("/*")
  *   },
- *   Route.redirect("/old/:id", (params) => ({ _tag: "Person", params: { id: Number(params.id) }, query: {} }))
+ *   Route.redirect("/old/:id", (params) => ({ _tag: "Person", params: { id: Number(params.id) }, search: {} }))
  * )
  *
- * Option.getOrThrow(AppRoute.parse("/people/1?tab=posts")).query // => { tab: "posts" }
+ * Option.getOrThrow(AppRoute.parse("/people/1?tab=posts")).search // => { tab: "posts" }
  * AppRoute.print(AppRoute.make({ _tag: "Person", params: { id: 2 } })) // => "/people/2"
  * Option.getOrThrow(AppRoute.parse("/old/3")).params // => { id: 3 }
  * Option.getOrThrow(AppRoute.parse("/nope"))._tag // => "NotFound"
@@ -94,7 +94,7 @@ export type PathParams<Path extends string> = Path extends `${string}:${infer Re
 
 /**
  * A route definition: a path template and the Schemas of its params and
- * query.
+ * search.
  *
  * @stability experimental
  * @category models
@@ -103,12 +103,12 @@ export type PathParams<Path extends string> = Path extends `${string}:${infer Re
 export interface Route<
   out Path extends string,
   out Params extends Schema.Struct.Fields,
-  out Query extends Schema.Struct.Fields
+  out Search extends Schema.Struct.Fields
 > {
   readonly [TypeId]: typeof TypeId
   readonly path: Path
   readonly params: Params
-  readonly query: Query
+  readonly search: Search
 }
 
 /**
@@ -128,18 +128,18 @@ export type Any = Route<string, Schema.Struct.Fields, Schema.Struct.Fields>
  * @category utility types
  * @since 0.1.0
  */
-export type ParamFields<R> = R extends Route<infer Path, infer Params, infer _Query>
+export type ParamFields<R> = R extends Route<infer Path, infer Params, infer _Search>
   ? Path extends `${string}*` ? Params & { readonly "*": Schema.String } : Params
   : never
 
 /**
- * The `query` fields of a route value.
+ * The `search` fields of a route value.
  *
  * @stability experimental
  * @category utility types
  * @since 0.1.0
  */
-export type QueryFields<R> = R extends Route<infer _Path, infer _Params, infer Query> ? Query : never
+export type SearchFields<R> = R extends Route<infer _Path, infer _Params, infer Search> ? Search : never
 
 /**
  * A field as a route value holds it: a field with a decoding default, such
@@ -157,7 +157,7 @@ export type MakeField<S extends Schema.Constraint> = S extends {
   : S
 
 /**
- * A params or query Struct, each field as `MakeField` gives it, which `make`
+ * A params or search Struct, each field as `MakeField` gives it, which `make`
  * fills in, defaults included, when no field needs a value.
  *
  * @stability experimental
@@ -170,7 +170,7 @@ export type FieldsSchema<Fields extends Schema.Struct.Fields> = {} extends
   : Schema.Struct<{ readonly [K in keyof Fields]: MakeField<Fields[K]> }>
 
 /**
- * A redirect: a template whose raw params and query map to a route value.
+ * A redirect: a template whose raw params and search map to a route value.
  *
  * @stability experimental
  * @category models
@@ -181,14 +181,14 @@ export interface Redirect {
   readonly path: string
   readonly to: (
     params: Readonly<Record<string, string>>,
-    query: Readonly<Record<string, string | ReadonlyArray<string>>>
+    search: Readonly<Record<string, string | ReadonlyArray<string>>>
   ) => { readonly _tag: string }
 }
 
 /**
  * What `resolve` returns: the route a URL resolves to, whether a redirect or
  * a normalisation (such as a trailing slash) changed the URL, whether the
- * route is the union's catch-all `"/*"` route, and the query keys that were
+ * route is the union's catch-all `"/*"` route, and the search keys that were
  * dropped because their values failed to decode.
  *
  * **Details**
@@ -196,7 +196,7 @@ export interface Redirect {
  * The server answers a changed URL with a permanent redirect to
  * `print(route)`, a non-empty `invalid` with a temporary one, since the same
  * URL may be valid later, and a `notFound` route with a 404. `notFound` is
- * true whether the catch-all matched the path or a required query field that
+ * true whether the catch-all matched the path or a required search field that
  * failed to decode fell back to it. A union without a catch-all never sets
  * it, because such URLs don't resolve.
  *
@@ -208,7 +208,7 @@ export interface Resolved<A> {
   readonly route: A
   readonly redirected: boolean
   readonly notFound: boolean
-  /** The query keys treated as absent, because their values failed to decode or were repeated. */
+  /** The search keys treated as absent, because their values failed to decode or were repeated. */
   readonly invalid: ReadonlyArray<string>
 }
 
@@ -225,25 +225,25 @@ export interface Union<Routes extends Record<string, Any>> extends
     {
       readonly [K in keyof Routes & string]: Schema.TaggedStruct<K, {
         readonly params: FieldsSchema<ParamFields<Routes[K]>>
-        readonly query: FieldsSchema<QueryFields<Routes[K]>>
+        readonly search: FieldsSchema<SearchFields<Routes[K]>>
       }>
     }
   >
 {
   /** The route definitions, by tag. */
   readonly routes: Routes
-  /** Parses a URL path, with its query, into a route value, resolving redirects. */
+  /** Parses a URL path, with its search, into a route value, resolving redirects. */
   readonly parse: (url: string) => Option.Option<this["Type"]>
   /** Like `parse`, and also reports whether the URL was redirected or normalised. */
   readonly resolve: (url: string) => Option.Option<Resolved<this["Type"]>>
   /**
    * Prints a route value as an absolute URL path under the base, with its
-   * query. A param equal to its field's decoding default is left out.
+   * search. A param equal to its field's decoding default is left out.
    */
   readonly print: (route: this["Type"]) => string
   /**
-   * Prints a route value's path under the base, without its query: the key
-   * of a page that updates in place when only the query changes.
+   * Prints a route value's path under the base, without its search: the key
+   * of a page that updates in place when only the search changes.
    */
   readonly printPath: (route: this["Type"]) => string
   /** A union of some of the routes, for a section's props. It shares the base path. */
@@ -304,18 +304,18 @@ type Declared<Fields extends Schema.Struct.Fields> = string extends keyof Fields
 
 /**
  * Defines a route from a path template and the Schemas of its params and
- * query.
+ * search.
  *
  * **Details**
  *
  * Every `:name` in the template must have a Schema in `params`, which is a
  * compile error otherwise. A trailing `*` captures the rest of the path, as
- * the `"*"` param. Params and query decode from URL strings through
+ * the `"*"` param. Params and search decode from URL strings through
  * `Schema.toCodecStringTree`, so a `Schema.Number` param parses `"42"`. A
- * query field that is neither optional nor defaulted makes the route a 404
+ * search field that is neither optional nor defaulted makes the route a 404
  * when it's missing or fails to decode.
  *
- * Give a query field a default with the Schema API, as
+ * Give a search field a default with the Schema API, as
  * `Schema.Number.pipe(Schema.withDecodingDefaultKey(Effect.succeed(1)))`:
  * its type is then `number`, an absent or invalid param decodes to the
  * default, `print` leaves the param out while it holds the default, and the
@@ -328,29 +328,29 @@ type Declared<Fields extends Schema.Struct.Fields> = string extends keyof Fields
 export const make = <
   const Path extends string,
   const Params extends Schema.Struct.Fields = {},
-  const Query extends Schema.Struct.Fields = {}
+  const Search extends Schema.Struct.Fields = {}
 >(
   path: Path,
   ...[options]: [PathParams<Path>] extends [never] ?
-    [options?: { readonly params?: Params | undefined; readonly query?: Query | undefined }]
+    [options?: { readonly params?: Params | undefined; readonly search?: Search | undefined }]
     : [
       options: {
         readonly params: Params & { readonly [K in PathParams<Path>]: Schema.Constraint }
-        readonly query?: Query | undefined
+        readonly search?: Search | undefined
       }
     ]
-): Route<Path, Declared<Params>, Declared<Query>> => {
+): Route<Path, Declared<Params>, Declared<Search>> => {
   const params = (options?.params ?? {}) as Declared<Params>
   for (const segment of parseTemplate(path)) {
     if (segment._tag === "Param" && !(segment.name in params)) {
       throw new Error(`Route "${path}" has no Schema for its :${segment.name} param`)
     }
   }
-  return { [TypeId]: TypeId, path, params, query: (options?.query ?? {}) as Declared<Query> }
+  return { [TypeId]: TypeId, path, params, search: (options?.search ?? {}) as Declared<Search> }
 }
 
 /**
- * A redirect for a route union: a template whose raw string params and query
+ * A redirect for a route union: a template whose raw string params and search
  * map to a route value.
  *
  * **Details**
@@ -367,7 +367,7 @@ export const redirect = <const Path extends string>(
   path: Path,
   to: (
     params: { readonly [K in PathParams<Path>]: string },
-    query: Readonly<Record<string, string | ReadonlyArray<string>>>
+    search: Readonly<Record<string, string | ReadonlyArray<string>>>
   ) => { readonly _tag: string }
 ): Redirect => {
   parseTemplate(path)
@@ -386,28 +386,28 @@ const decodeComponent = (text: string): string | undefined => {
   }
 }
 
-type RawQuery = Record<string, string | Array<string>>
+type RawSearch = Record<string, string | Array<string>>
 
-const parseQuery = (search: string): RawQuery | undefined => {
-  // No prototype, so keys such as `constructor` or `__proto__` are plain query keys.
-  const query: RawQuery = Object.create(null)
-  if (search === "") return query
-  for (const pair of search.split("&")) {
+const parseSearch = (input: string): RawSearch | undefined => {
+  // No prototype, so keys such as `constructor` or `__proto__` are plain search keys.
+  const search: RawSearch = Object.create(null)
+  if (input === "") return search
+  for (const pair of input.split("&")) {
     if (pair === "") continue
     const at = pair.indexOf("=")
     const key = decodeComponent((at < 0 ? pair : pair.slice(0, at)).replaceAll("+", " "))
     const value = decodeComponent((at < 0 ? "" : pair.slice(at + 1)).replaceAll("+", " "))
     if (key === undefined || value === undefined) return undefined
-    const found = Object.hasOwn(query, key) ? query[key] : undefined
-    query[key] = found === undefined ? value : typeof found === "string" ? [found, value] : [...found, value]
+    const found = Object.hasOwn(search, key) ? search[key] : undefined
+    search[key] = found === undefined ? value : typeof found === "string" ? [found, value] : [...found, value]
   }
-  return query
+  return search
 }
 
-const printQuery = (query: unknown): string => {
-  if (typeof query !== "object" || query === null) return ""
+const printSearch = (search: unknown): string => {
+  if (typeof search !== "object" || search === null) return ""
   const parts: Array<string> = []
-  for (const [key, value] of Object.entries(query)) {
+  for (const [key, value] of Object.entries(search)) {
     for (const item of Array.isArray(value) ? value : [value]) {
       if (typeof item === "string") parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(item)}`)
     }
@@ -434,8 +434,8 @@ interface Entry {
     | {
       readonly tag: string
       readonly decodeParams: (raw: unknown) => Option.Option<unknown>
-      readonly decodeQuery: (
-        raw: RawQuery
+      readonly decodeSearch: (
+        raw: RawSearch
       ) => Option.Option<{ readonly value: unknown; readonly invalid: ReadonlyArray<string> }>
     }
     | undefined
@@ -505,8 +505,8 @@ const fieldsSchema = (fields: Schema.Struct.Fields): Schema.Top => {
 const paramFieldsOf = (route: Any): Schema.Struct.Fields =>
   route.path.endsWith("*") ? { ...route.params, "*": Schema.String } : route.params
 
-/** A query field as the parser and the printer see it. */
-interface QueryField {
+/** A search field as the parser and the printer see it. */
+interface SearchField {
   readonly key: string
   /**
    * Decodes `{ [key]: raw }` to `{ [key]: value }`. An optional or defaulted field also decodes
@@ -517,7 +517,7 @@ interface QueryField {
   readonly omit: unknown
 }
 
-const queryFieldOf = (key: string, field: Schema.Constraint): QueryField => {
+const searchFieldOf = (key: string, field: Schema.Constraint): SearchField => {
   const codec = Schema.toCodecStringTree(Schema.Struct({ [key]: field })) as unknown as Schema.Codec<object, unknown>
   // The default as it is now, once: `print` leaves out a param equal to this one.
   const absent = decodeAbsent(codec)
@@ -542,14 +542,14 @@ const sameEncoded = (a: unknown, b: unknown): boolean =>
  * as absent when the field is optional or defaulted, and makes the URL a 404 otherwise. Absence is
  * decoded for each URL, since a default is an Effect.
  */
-const decodeQuery = (
-  fields: ReadonlyArray<QueryField>,
-  query: RawQuery
+const decodeSearch = (
+  fields: ReadonlyArray<SearchField>,
+  search: RawSearch
 ): Option.Option<{ readonly value: unknown; readonly invalid: ReadonlyArray<string> }> => {
   const entries: Array<[string, unknown]> = []
   const invalid: Array<string> = []
   for (const field of fields) {
-    const raw = Object.hasOwn(query, field.key) ? query[field.key] : undefined
+    const raw = Object.hasOwn(search, field.key) ? search[field.key] : undefined
     let decoded = field.decode(raw === undefined ? {} : { [field.key]: raw })
     if (Option.isNone(decoded) && typeof raw === "string") decoded = field.decode({ [field.key]: [raw] })
     if (Option.isNone(decoded) && raw !== undefined) {
@@ -579,23 +579,23 @@ const build = (
   const cases: Record<string, Schema.Struct.Fields> = {}
   const entries: Array<Entry> = []
   const pathPrinters: Record<string, (route: any) => string> = {}
-  const queryPrinters: Record<string, (route: any) => string> = {}
+  const searchPrinters: Record<string, (route: any) => string> = {}
   let notFound: string | undefined
   let order = 0
   for (const [tag, route] of Object.entries(routes)) {
     const paramFields = paramFieldsOf(route)
-    cases[tag] = { params: fieldsSchema(paramFields), query: fieldsSchema(route.query) }
+    cases[tag] = { params: fieldsSchema(paramFields), search: fieldsSchema(route.search) }
     const segments = parseTemplate(route.path)
     if (route.path === "/*" && notFound === undefined) notFound = tag
     const paramsCodec = Schema.toCodecStringTree(Schema.Struct(paramFields)) as unknown as Schema.Codec<
       unknown,
       unknown
     >
-    const queryCodec = Schema.toCodecStringTree(Schema.Struct(route.query)) as unknown as Schema.Codec<
+    const searchCodec = Schema.toCodecStringTree(Schema.Struct(route.search)) as unknown as Schema.Codec<
       unknown,
       unknown
     >
-    const queryFields = Object.entries(route.query).map(([key, field]) => queryFieldOf(key, field))
+    const searchFields = Object.entries(route.search).map(([key, field]) => searchFieldOf(key, field))
     entries.push({
       segments,
       rank: rankOf(segments),
@@ -603,12 +603,12 @@ const build = (
       route: {
         tag,
         decodeParams: Schema.decodeUnknownOption(paramsCodec),
-        decodeQuery: (query) => decodeQuery(queryFields, query)
+        decodeSearch: (search) => decodeSearch(searchFields, search)
       },
       redirect: undefined
     })
     const encodeParams = Schema.encodeUnknownSync(paramsCodec)
-    const encodeQuery = Schema.encodeUnknownSync(queryCodec)
+    const encodeSearch = Schema.encodeUnknownSync(searchCodec)
     pathPrinters[tag] = (value) => {
       const params = encodeParams(value.params ?? {}) as Record<string, string>
       const path = segments.map((segment) =>
@@ -620,12 +620,12 @@ const build = (
       ).filter((part, index, all) => !(part === "" && index === all.length - 1 && index > 0)).join("/")
       return baseRef.value === "#" ? `#/${path}` : `${baseRef.value}/${path}`.replace(/(.)\/$/, "$1")
     }
-    queryPrinters[tag] = (value) => {
-      const encoded = encodeQuery(value.query ?? {}) as Record<string, unknown>
-      for (const field of queryFields) {
+    searchPrinters[tag] = (value) => {
+      const encoded = encodeSearch(value.search ?? {}) as Record<string, unknown>
+      for (const field of searchFields) {
         if (field.omit !== undefined && sameEncoded(encoded[field.key], field.omit)) delete encoded[field.key]
       }
-      return printQuery(encoded)
+      return printSearch(encoded)
     }
   }
   for (const redirect of redirects) {
@@ -643,9 +643,9 @@ const build = (
     const url = inFragment ? href.slice(1) : href
     const hashAt = url.indexOf("#")
     const withoutHash = hashAt < 0 ? url : url.slice(0, hashAt)
-    const queryAt = withoutHash.indexOf("?")
-    let path = queryAt < 0 ? withoutHash : withoutHash.slice(0, queryAt)
-    const search = queryAt < 0 ? "" : withoutHash.slice(queryAt + 1)
+    const searchAt = withoutHash.indexOf("?")
+    let path = searchAt < 0 ? withoutHash : withoutHash.slice(0, searchAt)
+    const searchString = searchAt < 0 ? "" : withoutHash.slice(searchAt + 1)
     const base = inFragment ? "" : baseRef.value
     if (base !== "") {
       if (path !== base && !path.startsWith(`${base}/`)) return Option.none()
@@ -661,32 +661,32 @@ const build = (
         input.push(decoded)
       }
     }
-    const query = parseQuery(search)
+    const search = parseSearch(searchString)
     const fallback = (): Option.Option<Resolved<any>> =>
       notFound === undefined ? Option.none() : Option.some({
-        route: union.make({ _tag: notFound, params: { "*": input.join("/") }, query: {} } as any),
+        route: union.make({ _tag: notFound, params: { "*": input.join("/") }, search: {} } as any),
         redirected: false,
         notFound: true,
         invalid: []
       })
-    if (query === undefined) return fallback()
+    if (search === undefined) return fallback()
     for (const entry of entries) {
       const raw = matchShape(entry.segments, input)
       if (raw === undefined) continue
       if (entry.redirect !== undefined) {
-        const route = entry.redirect.to(raw, query)
+        const route = entry.redirect.to(raw, search)
         return Option.some({ route, redirected: true, notFound: route._tag === notFound, invalid: [] })
       }
       const route = entry.route!
       const params = route.decodeParams(raw)
       if (Option.isNone(params)) continue
-      const decodedQuery = route.decodeQuery(query)
-      if (Option.isNone(decodedQuery)) return fallback()
+      const decodedSearch = route.decodeSearch(search)
+      if (Option.isNone(decodedSearch)) return fallback()
       return Option.some({
-        route: { _tag: route.tag, params: params.value, query: decodedQuery.value.value },
+        route: { _tag: route.tag, params: params.value, search: decodedSearch.value.value },
         redirected: trimmed !== path,
         notFound: route.tag === notFound,
-        invalid: decodedQuery.value.invalid
+        invalid: decodedSearch.value.invalid
       })
     }
     return Option.none()
@@ -697,7 +697,7 @@ const build = (
     resolve,
     parse: (url: string) => Option.map(resolve(url), (resolved) => resolved.route),
     print: (route: { readonly _tag: string }) =>
-      printerOf(pathPrinters, route)(route) + queryPrinters[route._tag]!(route),
+      printerOf(pathPrinters, route)(route) + searchPrinters[route._tag]!(route),
     printPath: (route: { readonly _tag: string }) => printerOf(pathPrinters, route)(route),
     subset: (tags: ReadonlyArray<string>) =>
       build(Object.fromEntries(tags.map((tag) => [tag, routes[tag]!])), [], baseRef),
@@ -714,13 +714,13 @@ const build = (
  * **Details**
  *
  * The result is a `Schema.TaggedUnion` whose values are
- * `{ _tag, params, query }`, with `make`, `match`, `guards` and `isAnyOf`,
+ * `{ _tag, params, search }`, with `make`, `match`, `guards` and `isAnyOf`,
  * plus `parse`, `resolve`, `print`, `printPath` and `subset`. `make` fills
- * in `params` and `query` when no field needs a value, and a field's decoding
+ * in `params` and `search` when no field needs a value, and a field's decoding
  * default when it's left out.
  *
  * Declare a catch-all `"/*"` route, conventionally `NotFound`: it ranks
- * last, and a required query field that fails to decode resolves to it, so `parse` returns
+ * last, and a required search field that fails to decode resolves to it, so `parse` returns
  * a route for every URL under the base and the Model never holds an
  * `Option`. Without one, `parse` returns `Option.none()` for such URLs.
  *

@@ -8,7 +8,7 @@ import { AppRoute } from "../../routes.ts"
 
 // A one-case subset of the union types the page's props. Its values are
 // route values of `AppRoute`, so the page can pass its route to
-// `patchQuery`.
+// `patchSearch`.
 const SearchRoute = AppRoute.subset(["Search"])
 
 const noteUrl = (id: string) => AppRoute.print(AppRoute.make({ _tag: "Note", params: { id } }))
@@ -37,7 +37,7 @@ export const SearchPageNoDeps = Component.define({
       // first fetch at mount.
       debounce: "300 millis",
       args: (_model, props) => {
-        const { page, q, sort } = props.route.query
+        const { page, q, sort } = props.route.search
         return { q: q ?? "", page, sort }
       }
     }
@@ -46,28 +46,28 @@ export const SearchPageNoDeps = Component.define({
   init: () => ({}),
   update: (_model, message, $) =>
     SearchPageMessage.match(message, {
-      // `patchQuery` writes some of the query and keeps the rest. It
+      // `patchSearch` writes some of the search and keeps the rest. It
       // replaces the history entry by default, so typing doesn't fill the
       // back button. `undefined` removes a param or resets it to its
       // default, so a new search starts on page 1. The new route comes back
       // as props, through the root, so the Command sends nothing.
       Typed: ({ text }) =>
         $.run(
-          Router.patchQuery(AppRoute, $.props.route, { q: text || undefined, page: undefined }).pipe(Command.asNoop)
+          Router.patchSearch(AppRoute, $.props.route, { q: text || undefined, page: undefined }).pipe(Command.asNoop)
         ),
       Sorted: ({ sort }) =>
-        $.run(Router.patchQuery(AppRoute, $.props.route, { sort, page: undefined }).pipe(Command.asNoop)),
+        $.run(Router.patchSearch(AppRoute, $.props.route, { sort, page: undefined }).pipe(Command.asNoop)),
       // A page change is worth a history entry, so it pushes, and it
       // scrolls to the top like a new page would. Unlike a link to
       // `?page=2`, it isn't announced and focus stays on the button.
       PageChosen: ({ page }) =>
         $.run(
-          Router.patchQuery(AppRoute, $.props.route, { page }, { history: "push", scroll: true }).pipe(Command.asNoop)
+          Router.patchSearch(AppRoute, $.props.route, { page }, { history: "push", scroll: true }).pipe(Command.asNoop)
         )
     }),
   head: () => [Head.title("Search notes")],
   view: (_model, h) => {
-    const { page, q, sort } = h.props.route.query
+    const { page, q, sort } = h.props.route.search
 
     const resultsView = (results: NoteResults) =>
       h.div(
@@ -87,7 +87,7 @@ export const SearchPageNoDeps = Component.define({
 
     return h.section(
       h.h1("Search notes"),
-      // The field's value is read from the query. The route changes in the
+      // The field's value is read from the search. The route changes in the
       // same render as the keystroke, so the field keeps what the user typed
       // and where the caret is. The browser Router writes the address bar at
       // most every 200 ms, to stay under the browsers' limits on history
@@ -115,7 +115,7 @@ export const SearchPageNoDeps = Component.define({
   }
 })
 
-// The page requires `PatchQuery` as well as its loader. `PatchQuery` is a
+// The page requires `PatchSearch` as well as its loader. `PatchSearch` is a
 // navigation Command, which the Router Layer in the entry module provides
 // with the others, so only the loader is provided here.
 export const SearchPage = SearchPageNoDeps.pipe(

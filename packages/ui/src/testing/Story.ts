@@ -2,7 +2,7 @@
  * Story tests drive one component instance step by step: pure, with no
  * runtime, no Layers and no host.
  *
- * A story covers `init`, `update` and queries over the instance's view value.
+ * A story covers `init`, `update` and locators over the instance's view value.
  * Commands stay pending as data until a step resolves them with the message
  * they would have produced, so no service is needed. A child is a leaf:
  * anything that crosses into one is a runtime test.

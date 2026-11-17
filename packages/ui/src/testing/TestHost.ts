@@ -489,7 +489,7 @@ export const layer = (options?: {
  *
  * **Details**
  *
- * `mount` hands back a `TestRoot`, which adds the test host's node queries.
+ * `mount` hands back a `TestRoot`, which adds the test host's node lookups.
  * `Ssr.ssr` hands back this part only, since its client renders into a real
  * document.
  *
@@ -528,7 +528,7 @@ export interface Root<out Model, in Msg, out Events> {
 }
 
 /**
- * A tree mounted on `TestHost`, with queries over its nodes.
+ * A tree mounted on `TestHost`, with lookups over its nodes.
  *
  * @stability experimental
  * @category models

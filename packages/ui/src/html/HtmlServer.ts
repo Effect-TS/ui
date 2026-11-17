@@ -137,7 +137,7 @@ const serverHtmlHost: Context.Service.Shape<typeof Html.Host> = {
  * data's age is unknown. The client then hydrates every entry stale: it is
  * invalidated at hydration, and refetched once, unless its read's
  * `staleTime` is `"Infinity"`. There is no fetch-free window. A page
- * prerendered without a query, such as `/search`, may be served for
+ * prerendered without search params, such as `/search`, may be served for
  * `/search?q=x`: `Router.subscription` then delivers the Router's route
  * without reporting `RouteMismatch`. The default is HTML rendered per
  * request, whose entries hydrate fresh.
@@ -149,7 +149,7 @@ const serverHtmlHost: Context.Service.Shape<typeof Html.Host> = {
  *
  * Route status is the app's: resolve the URL with `AppRoute.resolve` first,
  * answer a `notFound` route with a 404, a `redirected` one with a
- * permanent redirect, and one with `invalid` query keys with a temporary
+ * permanent redirect, and one with `invalid` search keys with a temporary
  * one, even when it's also `redirected`. `HtmlServerHttp.layerHttp` does
  * this for an app served through `HttpRouter`.
  *

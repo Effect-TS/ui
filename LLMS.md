@@ -275,7 +275,7 @@ client, not the services.
 - **[Search, filters and pagination in the URL](./ai-docs/src/10_ui/35_url-state.ts)**:
   Keep a search page's text, order and page number in the query, so a link
   or a reload shows the same results. The page reads them from its route,
-  writes them with `Router.patchQuery`, and fetches with a debounced loader.
+  writes them with `Router.patchSearch`, and fetches with a debounced loader.
   This entry module mounts the routed app. The page is in
   `fixtures/pages/search/SearchPage.ts`.
 - **[Rendering on the server](./ai-docs/src/10_ui/40_server-rendering.ts)**:

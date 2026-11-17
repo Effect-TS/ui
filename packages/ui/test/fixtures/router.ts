@@ -15,7 +15,7 @@ export const AppRoute = Route.union(
     Slow: Route.make("/slow"),
     NotFound: Route.make("/*")
   },
-  Route.redirect("/old/:id", (params) => ({ _tag: "Person", params: { id: Number(params.id) }, query: {} }))
+  Route.redirect("/old/:id", (params) => ({ _tag: "Person", params: { id: Number(params.id) }, search: {} }))
 )
 export type AppRoute = typeof AppRoute.Type
 
