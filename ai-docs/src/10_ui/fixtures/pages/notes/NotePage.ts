@@ -103,7 +103,9 @@ export const NotePageNoDeps = Component.define({
 //   The root keeps platform Layers: the Router, the HTTP client, logging.
 // - A Layer value is built once and shared by the instances using it. Pass
 //   `{ local: true }` or a function of props for state each instance owns.
-// - Nothing is rebuilt when props change. Re-key the component instead.
+// - Nothing is rebuilt when props change. Re-key the component instead, or
+//   pass `{ key: (props, model) => key, layer: (key) => Layer }` to select
+//   the Layer again when the key changes, which remounts everything below.
 // - A Layer that can fail needs `{ onFailure: (failure) => message }`.
 export const NotePage = NotePageNoDeps.pipe(
   Component.provide([

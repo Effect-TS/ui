@@ -1,6 +1,7 @@
 import { Command, Component, Feature, type Loader, type View } from "@effect/ui"
 import { Context, Effect, Layer, Schema, Scope } from "effect"
 import type { KeyValueStore } from "effect/persistence"
+import type { AsyncResult } from "effect/reactivity"
 import { describe, expect, it } from "tstyche"
 import { Counter, SaveTodo, Todo, TodoItem, TodoItemEvents, TodoItemMessage } from "../test/fixtures/components.ts"
 
@@ -30,6 +31,20 @@ declare const NeedsRuntime: Component.Component<
   any
 >
 declare const runtimeLayer: Layer.Layer<A | Loader.Cache | Scope.Scope | typeof Loader.Visibility>
+
+declare const NeedsBoth: Component.Component<"NeedsBoth", { readonly admin: boolean }, {}, never, never, A | B, any>
+// Two Layers a factory chooses between: only `A` is in both, and each needs a service of its own.
+declare const adminLayer: Layer.Layer<A | B, never, CA>
+declare const guestLayer: Layer.Layer<A, never, CB>
+declare const NeedsFailed: Component.Component<
+  "NeedsFailed",
+  { readonly admin: boolean },
+  {},
+  "failed",
+  never,
+  A | B,
+  any
+>
 
 describe("Component", () => {
   describe("Requirements", () => {
@@ -185,6 +200,34 @@ describe("Component", () => {
       expect<Component.Props<typeof FromProps>>().type.toBe<{ readonly todo: Todo }>()
     })
 
+    it("infers a keyed provide's key from props and the Model, gives it to layer, and rejects local", () => {
+      const Keyed = Component.provide(TodoItem, {
+        key: (props, model) => {
+          expect(props).type.toBe<{ readonly todo: Todo }>()
+          expect(model).type.toBe<{ readonly saving: boolean }>()
+          return props.todo.id
+        },
+        layer: (id) => {
+          expect(id).type.toBe<string>()
+          return SaveTodo.layer
+        }
+      })
+      expect<Component.Requirements<typeof Keyed>>().type.toBe<KeyValueStore.KeyValueStore>()
+      const keyed = { key: (props: { readonly todo: Todo }) => props.todo.id, layer: (_: string) => SaveTodo.layer }
+      expect(Component.provide).type.toBeCallableWith(TodoItem, keyed, { server: false })
+      expect(Component.provide).type.not.toBeCallableWith(TodoItem, keyed, { local: true })
+    })
+
+    it("removes only what every branch of a factory provides, and requires what any branch needs", () => {
+      const FromProps = Component.provide(NeedsBoth, (props) => props.admin ? adminLayer : guestLayer)
+      expect<Component.Requirements<typeof FromProps>>().type.toBe<B | CA | CB>()
+      const Keyed = Component.provide(NeedsBoth, {
+        key: (props) => props.admin,
+        layer: (admin) => admin ? adminLayer : guestLayer
+      })
+      expect<Component.Requirements<typeof Keyed>>().type.toBe<B | CA | CB>()
+    })
+
     it("requires onFailure when the Layer can fail", () => {
       const failing = Layer.effect(SaveTodo, Effect.fail("offline" as const))
       expect(Component.provide).type.not.toBeCallableWith(TodoItem, failing)
@@ -193,6 +236,24 @@ describe("Component", () => {
         onFailure: () => TodoItemMessage.make({ _tag: "SaveFailed", reason: "offline" })
       })
       expect(Component.provide).type.not.toBeCallableWith(failing)
+    })
+
+    it("infers a fallible keyed provide's key and layer with a contextually typed onFailure", () => {
+      const failingAdmin = Layer.effect(A, Effect.fail("admin" as const)).pipe(Layer.provideMerge(adminLayer))
+      const failingGuest = Layer.effect(A, Effect.fail("guest" as const)).pipe(Layer.provideMerge(guestLayer))
+      Component.provide(NeedsFailed, {
+        key: (props) => props.admin,
+        layer: (admin) => admin ? failingAdmin : failingGuest
+      }, {
+        onFailure: (failure) => {
+          expect(failure).type.toBe<AsyncResult.Failure<never, "admin" | "guest">>()
+          return "failed" as const
+        }
+      })
+      expect(Component.provide).type.not.toBeCallableWith(NeedsFailed, {
+        key: (props: { readonly admin: boolean }) => props.admin,
+        layer: (admin: boolean) => admin ? failingAdmin : failingGuest
+      })
     })
 
     it("never removes a service the runtime owns", () => {
