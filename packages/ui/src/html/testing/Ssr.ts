@@ -60,7 +60,6 @@ import type * as Scope from "effect/Scope"
 import * as TestClock from "effect/testing/TestClock"
 import type * as Component from "../../Component.ts"
 import * as Head from "../../Head.ts"
-import * as componentQueries from "../../internal/queries.ts"
 import * as runtime from "../../internal/runtime.ts"
 import * as MessageLog from "../../MessageLog.ts"
 import * as Query from "../../Query.ts"
@@ -478,17 +477,7 @@ export const ssr = <
         problems.push(`${path}: the client didn't adopt the server's Model`)
         continue
       }
-      // The adopted results are logged right after the adoption, one entry per result the server wrote.
-      const results: Record<string, unknown> = {}
-      for (const later of log.slice(log.indexOf(entry) + 1)) {
-        if (later.path !== path) continue
-        if (later._tag !== "QueryChanged") break
-        results[later.name] = later.result
-      }
-      const encoded = runtime.stateCodecOf(entry.component).encode(
-        entry.model,
-        { ...componentQueries.boundOf(entry.component)?.empty, ...results }
-      )
+      const encoded = runtime.stateCodecOf(entry.component).encode(entry.model, entry.queries)
       const json = encoded._tag === "Some" ? JSON.stringify(encoded.value) : undefined
       if (json !== JSON.stringify(state[path])) {
         problems.push(

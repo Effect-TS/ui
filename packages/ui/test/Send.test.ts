@@ -97,7 +97,7 @@ describe("$.send", () => {
       yield* TestHost.settle
       assert.strictEqual(root.text(), "a2:1:a2b2:2:b2")
       assert.deepStrictEqual(
-        root.log().filter((entry) => entry._tag === "Update" && entry.path !== "/List").map((entry) => entry.path),
+        root.log().flatMap((entry) => entry._tag === "Update" && entry.path !== "/List" ? [entry.path] : []),
         ["/List/Item[Row[b]]", "/List/Item[Row[a]]", "/List/Item[Row[b]]"]
       )
     })))
@@ -233,7 +233,7 @@ describe("$.send", () => {
       const failed = root.log().filter((entry): entry is MessageLog.Failed => entry._tag === "Failed")
       assert.lengthOf(failed, 1)
       assert.strictEqual(failed[0].path, "/Page/Loop[l]")
-      assert.strictEqual(failed[0].source, "send")
+      assert.strictEqual(failed[0].in, "send")
       assert.include(Cause.pretty(failed[0].cause), "/Page/Loop[l] sent to its children")
     })))
 

@@ -99,8 +99,8 @@ name and write its result. To start from fetched data without sending
 `onChange`'s message, pass the results to `given`:
 `s.given(model, { note })`. The `MessageLog` records each result write as a
 `QueryChanged` entry, and an `Update` entry only for an `onChange` message.
-Each `Update` entry records the results `update` read, so `Story.fromLog`
-replays `$.queries` as it was. New props from a parent are logged as a
+Each `Mounted` and `Update` entry records the results, restored or hydrated
+ones included, so `Story.fromLog` replays `$.queries` as it was. New props from a parent are logged as a
 `PropsChanged` entry, so the result's `props` and `queries()` hold what the
 instance ended with.
 

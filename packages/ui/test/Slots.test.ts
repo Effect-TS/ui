@@ -17,7 +17,7 @@ const updates = (root: Root) =>
   )
 const unmounted = (root: Root) => root.log().flatMap((entry) => entry._tag === "Unmounted" ? [entry.path] : [])
 const failures = (root: Root) =>
-  root.log().flatMap((entry) => entry._tag === "Failed" ? [entry.path + " " + entry.source] : [])
+  root.log().flatMap((entry) => entry._tag === "Failed" ? [entry.path + " " + entry.in] : [])
 
 const define = <const Name extends string>(name: Name) =>
   Component.define({ name, model: Schema.Null, message: Schema.Never, elements: Html })
@@ -107,7 +107,11 @@ describe("slots", () => {
       yield* TestHost.settle
       assert.include(root.text(), "changed 1failed")
       assert.include(root.text(), "editor down")
-      assert.deepStrictEqual(updates(root), [editorPath + " DomEvent Type", "/Page Emit Changed", "/Page Emit Failed"])
+      assert.deepStrictEqual(updates(root), [
+        editorPath + " DomEvent Type",
+        "/Page Emit Changed",
+        "/Page Failure Failed"
+      ])
       assert.deepStrictEqual(failures(root), [editorPath + " update"])
     })))
 

@@ -1,4 +1,5 @@
 import { Command, Component, Head, type MessageLog, Query, type Renderer, Route, Router } from "@effect/ui"
+import * as componentQueries from "@effect/ui/internal/queries"
 import * as runtime from "@effect/ui/internal/runtime"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -50,13 +51,12 @@ describe("Router", { concurrent: false }, () => {
               return entry._tag
           }
         })
-        assert.deepStrictEqual(entries.slice(0, 7), [
+        assert.deepStrictEqual(entries.slice(0, 6), [
           "Update /App Go(DomEvent)",
           "Update /App ChangedRoute(Subscription)",
           "Update /App Navigated(Command)",
           "CommandEnded @effect/ui/Router/Push",
           "Mounted /App/Person[/people/1]",
-          "SubscriptionStarted",
           "Unmounted /App/Home[/]"
         ])
       })
@@ -158,7 +158,7 @@ describe("Router", { concurrent: false }, () => {
       assert.strictEqual(router.location().url, "/other")
       assert.strictEqual(healthy.text(), "Other")
       const failed = broken.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
-      assert.strictEqual(failed.source, "subscription")
+      assert.strictEqual(failed.in, "subscription")
       assert.isUndefined(broken.model())
     }).pipe(Effect.provide(Router.memory({ routes })), Effect.provide(TestHost.layer()))
   })
@@ -418,11 +418,13 @@ describe("Router", { concurrent: false }, () => {
             // The new cache is cold: the restored snapshot seeds it, so the page mounts with the data,
             // stale, while one refetch runs.
             const log = root.log()
-            const index = log.findIndex((entry) => entry._tag === "Mounted" && entry.path === "/App/Person[/people/1]")
-            assert.isTrue((log[index] as MessageLog.Mounted).adopted)
-            // The restored result is logged right after Mounted.
-            const result = log[index + 1]
-            assert.isTrue(result?._tag === "QueryChanged" && result.name === "person")
+            const mounted = log.find((entry): entry is MessageLog.Mounted =>
+              entry._tag === "Mounted" && entry.path === "/App/Person[/people/1]"
+            )!
+            assert.isTrue(mounted.adopted)
+            // Mounted holds the restored result.
+            const person = mounted.queries?.person
+            assert.notStrictEqual(person, componentQueries.boundOf(mounted.component)!.empty.person)
             assert.strictEqual(
               root.frames().at(-1),
               "HomePerson 1Person 2SlowBackBlockUnblockPerson 1Refreshingcount 0Rename"
@@ -993,7 +995,7 @@ describe("Router.prefetch", { concurrent: false }, () => {
     )
   const mountApp = Effect.flatMap(Router.currentRoute(Routes), (route) => TestHost.mount(Prefetching.App, { route }))
   const fetched = (root: TestHost.TestRoot<any, any, any>) =>
-    root.fetches().map((fetch) => [`${fetch.query}${fetch.logKey}`, fetch.trigger, fetch.path])
+    root.fetches().map((fetch) => [`${fetch.query}${fetch.logKey}`, fetch.trigger])
   const tags = (problems: ReadonlyArray<Query.Problem.Any>) => problems.map((problem) => problem._tag)
 
   it.effect("walks a page with no instance on intent, and drops a repeat for 30 seconds", () =>
@@ -1007,8 +1009,8 @@ describe("Router.prefetch", { concurrent: false }, () => {
         yield* router.intent("/walk")
         // The page's read and its component child's. The feature is skipped, and so is the note behind a provide.
         assert.deepStrictEqual(fetched(root).slice(before), [
-          ["GetPerson{\"id\":1}", "prefetch", "/App"],
-          ["GetPerson{\"id\":2}", "prefetch", "/App"]
+          ["GetPerson{\"id\":1}", "prefetch"],
+          ["GetPerson{\"id\":2}", "prefetch"]
         ])
         const missing = yield* TestHost.expectProblem("PrefetchQueryNotProvided")
         assert.deepStrictEqual(
@@ -1055,8 +1057,8 @@ describe("Router.prefetch", { concurrent: false }, () => {
         yield* router.back
         yield* TestHost.settle
         assert.deepStrictEqual(fetched(root).filter(([key]) => key !== "GetPerson{\"id\":0}"), [
-          ["GetPerson{\"id\":1}", "watch", "/App"],
-          ["GetPerson{\"id\":2}", "prefetch", "/App"]
+          ["GetPerson{\"id\":1}", "watch"],
+          ["GetPerson{\"id\":2}", "prefetch"]
         ])
         assert.deepStrictEqual(Prefetching.probe.seen, ["/people/1"])
       })

@@ -428,7 +428,7 @@ export type HostOf<V> = [V] extends [never] ? never : V extends View.Elements ? 
  * provided Layers run in it, and closing the Scope unmounts the tree. Every
  * child is a failure boundary: a failed child shows its `fallback` until
  * its key changes. When the root itself fails, `fallback` is shown in its place
- * and the log records `Crashed`.
+ * and the log records the root's `Failed` and `Unmounted`.
  *
  * Mounting requires the root vocabulary's host marker, so mounting a root on
  * the wrong host is a type error. Nested components are checked when they

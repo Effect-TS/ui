@@ -2281,27 +2281,27 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
   const read = (entry: typeof first) => {
     if (typeof entry.component !== "string") {
       return {
-        queries: entry._tag === "Update" ? (entry as MessageLog.Update).queries : undefined,
+        results: (entry as MessageLog.Update | MessageLog.Mounted).queries,
         props: entry.props as Props,
         model: entry.model as Model,
         events: entry.events as ReadonlyArray<Events>,
         commands: (entry as MessageLog.Update).commands.map(MessageLog.encodeCommand),
-        lists: entry._tag === "Update" ? entry.lists ?? [] : [],
-        sends: entry._tag === "Update" ? ((entry as MessageLog.Update).sends ?? []).map(MessageLog.encodeSend) : [],
+        lists: entry._tag === "Update" ? entry.lists : [],
+        sends: entry._tag === "Update" ? (entry as MessageLog.Update).sends.map(MessageLog.encodeSend) : [],
         message: entry._tag === "Update" ? entry.message as Msg : undefined
       }
     }
     const wire = entry as Extract<MessageLog.Wire, { _tag: "Update" | "Mounted" }>
     return {
-      queries: wire._tag === "Update" && wire.queries !== undefined && bound !== undefined
+      results: wire.queries !== undefined && bound !== undefined
         ? decodeWith(entry, "queries", bound.logSchema, wire.queries) as Component.Results
         : undefined,
       props: decode(entry, "props", wire.props) as Props,
       model: decode(entry, "model", wire.model) as Model,
       events: wire.events.map((emitted) => decode(entry, "events", emitted)) as ReadonlyArray<Events>,
       commands: wire.commands,
-      lists: wire._tag === "Update" ? wire.lists ?? [] : [],
-      sends: wire._tag === "Update" ? wire.sends ?? [] : [],
+      lists: wire._tag === "Update" ? wire.lists : [],
+      sends: wire._tag === "Update" ? wire.sends : [],
       message: wire._tag === "Update" ? decode(entry, "message", wire.message) as Msg : undefined
     }
   }
@@ -2310,42 +2310,57 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
   const sameEvents = Schema.toEquivalence(Schema.Array(component.events as Schema.Codec<Events, unknown>))
   const sameCommands = (a: ReadonlyArray<unknown>, b: ReadonlyArray<unknown>) => JSON.stringify(a) === JSON.stringify(b)
 
-  const initial = read(first)
-  let model = initial.model
-  let props: unknown = initial.props
-  let results: Component.Results | undefined = initial.queries
-  let replayed = 0
-  const result = (divergence: Divergence<Model, Msg, Events> | undefined): Replay<Model, Msg, Events, any, any> => {
-    const reached = { model, props, results }
-    return {
-      path,
-      ...reached,
-      queries: () => bound?.context(reached.model, reached.props, reached.results).queries ?? {},
-      replayed,
-      divergence
-    }
+  // A path can hold one instance after another, and the one leaving can still log after the next
+  // has mounted, so each instance's state is tracked by its number. The result is the last one's.
+  interface State {
+    model: Model
+    props: unknown
+    results: Component.Results | undefined
   }
+  const states = new Map<number, State>()
+  const begin = (entry: typeof first): State => {
+    const initial = read(entry)
+    const state = { model: initial.model, props: initial.props, results: initial.results }
+    states.set(entry.instance, state)
+    return state
+  }
+  let latest = begin(first)
+  let replayed = 0
+  const result = (
+    reached: State,
+    divergence: Divergence<Model, Msg, Events> | undefined
+  ): Replay<Model, Msg, Events, any, any> => ({
+    path,
+    ...reached,
+    queries: () => bound?.context(reached.model, reached.props, reached.results).queries ?? {},
+    replayed,
+    divergence
+  })
   for (const entry of all.slice(start + 1)) {
+    const state = states.get(entry.instance)
     if (entry._tag === "QueryChanged") {
-      results = { ...(results ?? bound?.empty), [entry.name]: resultOf(entry) }
+      // Without a Model yet, the write is in the instance's first surviving `Update`.
+      if (state !== undefined) {
+        state.results = { ...(state.results ?? bound?.empty), [entry.name]: resultOf(entry) }
+      }
       continue
     }
     if (entry._tag === "PropsChanged") {
-      props = typeof entry.component === "string" ? decode(entry, "props", entry.props) : entry.props
+      if (state !== undefined) {
+        state.props = typeof entry.component === "string" ? decode(entry, "props", entry.props) : entry.props
+      }
+      continue
+    }
+    if (state === undefined || entry._tag === "Mounted") {
+      // Mounted again at the same path: the replay starts over from it.
+      latest = begin(entry)
       continue
     }
     const recorded = read(entry)
-    if (entry._tag === "Mounted") {
-      // Mounted again at the same path: the replay starts over from it, with every result empty.
-      model = recorded.model
-      props = recorded.props
-      results = undefined
-      continue
-    }
     // The Update's record is what `update` read, so it holds even when earlier entries were evicted.
-    props = recorded.props
-    if (recorded.queries !== undefined) results = recorded.queries
-    const next = component.update(model, recorded.message as Msg, recorded.props as Props, results)
+    state.props = recorded.props
+    if (recorded.results !== undefined) state.results = recorded.results
+    const next = component.update(state.model, recorded.message as Msg, recorded.props as Props, state.results)
     replayed++
     const recomputed = {
       model: next.model,
@@ -2359,7 +2374,7 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
       !sameCommands(recomputed.commands, recorded.commands) || !sameCommands(recomputed.lists, recorded.lists) ||
       !sameCommands(recomputed.sends, recorded.sends)
     ) {
-      return result({
+      return result(state, {
         seq: entry.seq,
         message: recorded.message as Msg,
         recorded: {
@@ -2372,9 +2387,9 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
         recomputed
       })
     }
-    model = recomputed.model
+    state.model = recomputed.model
   }
-  return result(undefined)
+  return result(latest, undefined)
 }
 
 /**
@@ -2392,11 +2407,13 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
  * `Schema.toEquivalence`, and Commands by their Wire encoding.
  *
  * The props and results are tracked with the Model, so the result is the state
- * the instance ended with. They start from the first entry: a `Mounted`
- * entry's props and empty results, or an `Update` entry's recorded props and
- * results. Each later `PropsChanged` entry sets the props and each
+ * the instance ended with. They start from the first entry's: a `Mounted`
+ * entry's or an `Update` entry's recorded props and results. Each later `PropsChanged` entry sets the props and each
  * `QueryChanged` entry writes its result, so props from the parent and loads
  * that settled after the last message are in the result too.
+ *
+ * A path that mounted more than once is replayed instance by instance, each
+ * from its own entries, and the result is the state of the last one.
  *
  * It takes live entries or Wire frames. A Wire value sent as a placeholder,
  * such as a truncated Model, can't be decoded, and the error names the entry.

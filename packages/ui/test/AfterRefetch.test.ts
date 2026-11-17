@@ -185,14 +185,15 @@ const commandLog = (root: Root) =>
       case "CommandAwaiting":
         return [{ _tag: entry._tag, entries: entry.entries }]
       case "CommandEnded":
-      case "CommandInterrupted":
         return [{
           _tag: entry._tag,
           ...(entry.waitEnded === undefined
             ? undefined
             : { waitEnded: entry.waitEnded, outstanding: entry.outstanding }),
-          ...(entry._tag === "CommandEnded" && entry.silent === true ? { silent: true } : undefined)
+          ...(entry.silent ? { silent: true } : undefined)
         }]
+      case "CommandInterrupted":
+        return [{ _tag: entry._tag }]
       case "CommandDropped":
         return [{ _tag: entry._tag, reason: entry.reason }]
       default:

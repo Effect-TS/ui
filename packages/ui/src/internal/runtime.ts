@@ -330,7 +330,7 @@ interface Run {
   /** Whether the run's own `Command.afterRefetch` wait is going on. */
   waiting: boolean
   /** How the run's own wait ended, and what it still awaited then. */
-  waited: Pick<MessageLog.CommandSettled, "waitEnded" | "outstanding"> | undefined
+  waited: Pick<MessageLog.CommandEnded, "waitEnded" | "outstanding"> | undefined
   /** Stops the budget's sleep and the cache's callback. */
   cancelWait: (() => void) | undefined
 }
@@ -343,7 +343,7 @@ interface SubscriptionRun {
 /** One query's cache watcher, registered from its watch marker. */
 interface WatchRun {
   marker: componentQueries.Marker
-  /** The key the log shows: the Subscription key with the log key in place of the args key. */
+  /** The name a failure of the watcher is logged with: the Subscription key with the log key in place of the args key. */
   readonly logKey: string
   handle: ReturnType<ReturnType<typeof Query.internals>["watch"]> | undefined
   released: boolean
@@ -421,6 +421,8 @@ export interface Instance {
   readonly runs: Array<Run>
   // The collections below are made on their first entry: most instances never hold one, and an
   // empty Map or Set costs about 150 bytes.
+  /** `Unmounted` is logged: the instance left the tree, though its Scope may still be closing. */
+  left: boolean
   /** Runs asked to stop whose fibers haven't exited: `h.isRunning` still counts them. */
   stopping: Set<Run> | undefined
   /**
@@ -701,7 +703,13 @@ const ignoreEvents = () => undefined
  */
 const noHead: Head.Head = { ...Head.empty }
 
-type Draft = MessageLog.Entry extends infer E ? E extends MessageLog.Entry ? Omit<E, "seq" | "at" | "session"> : never
+/** An entry about an instance, without what `record` adds. */
+type Draft = MessageLog.InstanceEntry extends infer E
+  ? E extends MessageLog.InstanceEntry ? Omit<E, keyof MessageLog.InstanceBase> : never
+  : never
+/** An entry about the tree, without what `recordTree` adds. */
+type TreeDraft = Exclude<MessageLog.Entry, MessageLog.InstanceEntry> extends infer E
+  ? E extends MessageLog.Entry ? Omit<E, keyof MessageLog.Base> : never
   : never
 
 let sessions = 0
@@ -935,9 +943,25 @@ const setup = (
 
   // -- log ------------------------------------------------------------------
   let seq = 0
-  const record = (draft: Draft): number => {
+  /** Logs an entry about the tree, and returns its number. */
+  const recordTree = (draft: TreeDraft): number => {
     if (!log.enabled) return -1
     const entry = { ...draft, seq: ++seq, at: clock.currentTimeMillisUnsafe(), session } as MessageLog.Entry
+    log.record(entry)
+    return entry.seq
+  }
+  /** Logs an entry about `inst`, and returns its number. */
+  const record = (inst: Instance, draft: Draft): number => {
+    if (!log.enabled) return -1
+    const entry = {
+      ...draft,
+      seq: ++seq,
+      at: clock.currentTimeMillisUnsafe(),
+      session,
+      path: inst.path,
+      instance: inst.born,
+      component: inst.component
+    } as MessageLog.Entry
     log.record(entry)
     return entry.seq
   }
@@ -1047,9 +1071,9 @@ const setup = (
     }
     return out
   }
-  // Every fetch the cache starts is logged against the root.
+  // Every fetch the cache starts is logged, as an entry about the tree.
   const offFetch = cache.onFetch((event) => {
-    if (!frozen) record({ _tag: "FetchStarted", path: `/${component.definition.name}`, ...event })
+    if (!frozen) recordTree({ _tag: "FetchStarted", ...event })
   })
   // On the server a fetch in flight holds the response, so one that ends may make the tree idle.
   const offFetchEnd = server === undefined ? undefined : cache.onFetchEnd(() => checkIdle())
@@ -1364,16 +1388,29 @@ const setup = (
   // -- failure --------------------------------------------------------------
   const guard = <A>(
     inst: Instance,
-    source: MessageLog.FailureSource,
+    where: MessageLog.FailedIn,
     f: () => A,
     name?: string
   ): A | undefined => {
     try {
       return f()
     } catch (error) {
-      failInstance(inst, Cause.die(error), source, name)
+      failInstance(inst, Cause.die(error), where, name)
       return undefined
     }
+  }
+
+  /**
+   * Logs `Unmounted` for an instance leaving the tree and for everything under it, children first.
+   * Called before the Scope closes: a close can be held open by a Command's cleanup long after the
+   * path is free, and a new instance can mount there meanwhile.
+   */
+  const leave = (inst: Instance) => {
+    if (inst.left) return
+    inst.left = true
+    for (const child of inst.children) leave(child)
+    // An outlet is a place in its receiver's view, not an instance the log knows.
+    if (inst.component !== outletComponent) record(inst, { _tag: "Unmounted" })
   }
 
   /**
@@ -1398,6 +1435,7 @@ const setup = (
       // Before the Scope closes: a Command's cleanup can hold the close open, and a fallback or
       // replacement created meanwhile must see the count without this instance's watchers.
       releaseWatches(inst)
+      leave(inst)
       closeUnder(inst.parent, inst.scope)
     })
     inst.parent?.children.delete(inst)
@@ -1406,23 +1444,30 @@ const setup = (
   const failInstance = (
     inst: Instance,
     cause: Cause.Cause<unknown>,
-    source: MessageLog.FailureSource,
-    name?: string
+    where: MessageLog.FailedIn,
+    name?: string,
+    update?: MessageLog.Failed["update"]
   ) => {
     if (inst.closed) return
     // Failing in the flush it mounted in, its head merge included, keeps it out of the adoption snapshot.
     if (inst.snapshot !== undefined && !inst.snapshot.settled) inst.snapshot.failed = true
-    const failedSeq = record({ _tag: "Failed", path: inst.path, source, name, cause })
+    const failedSeq = record(inst, {
+      _tag: "Failed",
+      props: inst.props,
+      in: where,
+      name,
+      cause,
+      ...(update === undefined ? undefined : { update })
+    })
     forkNow(
       ctx,
-      Effect.logError(`${inst.path} failed in ${source}${name === undefined ? "" : ` (${name})`}`, cause)
+      Effect.logError(`${inst.path} failed in ${where}${name === undefined ? "" : ` (${name})`}`, cause)
     )
     inst.failure = cause
     headDirty = true
     close(inst)
     const parent = inst.parent
     if (parent === undefined) {
-      record({ _tag: "Crashed", path: inst.path, source, name, cause })
       showRootFallback(inst, cause)
       return
     }
@@ -1432,7 +1477,7 @@ const setup = (
       const author = parent.author
       defer(() => {
         const message = guard(author, "onFailure", () => onFailure(AsyncResult.failure(cause)))
-        if (message !== undefined) author.dispatch(message, { _tag: "Emit", path: inst.path, seq: failedSeq })
+        if (message !== undefined) author.dispatch(message, { _tag: "Failure", path: inst.path, seq: failedSeq })
       })
     }
     markDirty(parent)
@@ -1453,7 +1498,7 @@ const setup = (
       )
       rootFallbackNodes.push(node)
     } catch (error) {
-      record({ _tag: "Crashed", path: root.path, source: "fallback", name: undefined, cause: Cause.die(error) })
+      record(root, { _tag: "Failed", props: root.props, in: "fallback", name: undefined, cause: Cause.die(error) })
     }
   }
   /** The root fallback runs with no instance: plain nodes, no handlers, no children. */
@@ -1776,7 +1821,6 @@ const setup = (
 
   /** Builds a selection made after mount, logged and counted as a build at mount is. */
   const startSelection = (inst: Instance, selection: Selection, own: Env) => {
-    const path = inst.path
     const keys = selection.keys
     const stamp = ++builds
     let pending = false
@@ -1787,11 +1831,11 @@ const setup = (
       settle?.()
       lastFailedBuild = Math.max(lastFailedBuild, stamp)
       if (inst.closed || inst.env !== own) return
-      record({ _tag: "LayerFailed", path, cause })
+      record(inst, { _tag: "LayerFailed", cause })
       ownFailed(inst, own, cause)
     }
     const ready = () => {
-      if (!inst.closed && pending) record({ _tag: "LayerReady", path })
+      if (!inst.closed && pending) record(inst, { _tag: "LayerReady" })
     }
     const release = () => releaseRetired(selection)
     whenReady(own, release, release)
@@ -1806,7 +1850,7 @@ const setup = (
     )
     if (failed || own.ctx !== undefined || own.failure !== undefined) return
     pending = true
-    record({ _tag: "LayerPending", path })
+    record(inst, { _tag: "LayerPending" })
     settle = countBuilding(own, selection.scope)
   }
 
@@ -1865,7 +1909,7 @@ const setup = (
   const stopSubscriptions = (inst: Instance, waits: Array<Fiber.Fiber<unknown, unknown>>) => {
     if (inst.subscriptions !== undefined) {
       for (const [key, running] of inst.subscriptions) {
-        record({ _tag: "SubscriptionStopped", path: inst.path, key })
+        record(inst, { _tag: "SubscriptionStopped", key })
         if (running.fiber !== undefined) waits.push(running.fiber)
         closeUnder(inst, running.scope)
       }
@@ -1873,7 +1917,6 @@ const setup = (
     }
     if (inst.watches !== undefined) {
       for (const running of inst.watches.values()) {
-        record({ _tag: "SubscriptionStopped", path: inst.path, key: running.logKey })
         // Abandoned: a fetch it started that nothing else waits for is interrupted now, while the old
         // services are alive. A fetch another watcher, a `get` or a prefetch still needs runs on.
         releaseWatch(running, true)
@@ -1895,7 +1938,7 @@ const setup = (
     for (const entry of bound.entries) {
       const result = bound.empty[entry.name]
       if (results[entry.name] !== result) {
-        record({ _tag: "QueryChanged", path: inst.path, component: inst.component, name: entry.name, result })
+        record(inst, { _tag: "QueryChanged", name: entry.name, result })
       }
     }
   }
@@ -1920,16 +1963,16 @@ const setup = (
     handlers.dispatch = (message, source) => {
       if (inst.closed || inst.waiting || frozen) return
       const component = inst.component
-      const next = guard(
-        inst,
-        "update",
-        () => component.update(inst.model, message as never, inst.props, inst.results)
-      )
+      let next: ReturnType<typeof component.update>
+      try {
+        next = component.update(inst.model, message as never, inst.props, inst.results)
+      } catch (error) {
+        // No `Update` is logged for it, so the failure carries the message.
+        return failInstance(inst, Cause.die(error), "update", undefined, { message, source })
+      }
       if (next === undefined) return
-      const entrySeq = record({
+      const entrySeq = record(inst, {
         _tag: "Update",
-        path: inst.path,
-        component,
         source,
         message,
         props: inst.props,
@@ -1937,7 +1980,7 @@ const setup = (
         commands: next.commands,
         events: next.events,
         lists: next.lists ?? [],
-        ...(next.sends === undefined || next.sends.length === 0 ? undefined : { sends: next.sends }),
+        sends: next.sends ?? [],
         // What `update` saw in `$.queries`, so a replay from any surviving entry sees it too.
         ...(bound === undefined ? undefined : { queries: inst.results ?? bound.empty })
       })
@@ -1955,7 +1998,7 @@ const setup = (
     }
 
     // Descendants, Subscriptions and mounts use child Scopes forked later, so they close first. Then
-    // Commands stop, and once they have exited, `Unmounted` is logged. One finalizer, run as the Scope
+    // Commands stop, and the close waits for them to exit. One finalizer, run as the Scope
     // closes: a Scope that holds nothing else needs no Map, and a close with no run to wait for
     // ends without a fiber.
     const finalizer = () => {
@@ -1997,9 +2040,9 @@ const setup = (
     dirty.delete(inst)
     recorded.delete(inst)
     inst.watched = undefined
-    // Normally done already by whoever closed the Scope, in the patcher's pre-pass.
+    // Both normally done already by whoever closed the Scope.
     releaseWatches(inst)
-    record({ _tag: "Unmounted", path: inst.path })
+    leave(inst)
     // A child that closes while it waits no longer holds up adoption.
     if (inst.waiting) {
       inst.waiting = false
@@ -2056,6 +2099,7 @@ const setup = (
         : { entries: [], children: [], settled: false, failed: false },
       deferred: false,
       runs: [],
+      left: false,
       stopping: undefined,
       closes: undefined,
       subscriptions: undefined,
@@ -2086,12 +2130,12 @@ const setup = (
       recorded.add(inst)
     }
 
-    // Entries about the Layer wait until `Mounted` is logged.
+    // Entries about the Layer wait until the instance's first entry, `Mounted` or `Waiting`, is logged.
     let buffering = true
     const early: Array<() => void> = []
     const lifecycle = (draft: Draft) => {
-      if (buffering) early.push(() => record(draft))
-      else record(draft)
+      if (buffering) early.push(() => record(inst, draft))
+      else record(inst, draft)
     }
     const logEarly = () => {
       buffering = false
@@ -2205,12 +2249,12 @@ const setup = (
           lastFailedBuild = Math.max(lastFailedBuild, buildStamp)
           // `init` failed, or a keyed provide has selected again since.
           if (inst.closed || inst.env !== own) return
-          lifecycle({ _tag: "LayerFailed", path, cause })
+          lifecycle({ _tag: "LayerFailed", cause })
           if (component.layerFailure === undefined && constructing) failedEarly = cause
           else ownFailed(inst, own, cause, logEarly)
         }
         const ready = () => {
-          if (!inst.closed && pending) lifecycle({ _tag: "LayerReady", path })
+          if (!inst.closed && pending) lifecycle({ _tag: "LayerReady" })
         }
         if (inst.closed) {
           // `init` failed before a keyed provide could select: nothing is built.
@@ -2221,7 +2265,7 @@ const setup = (
         }
         if (!inst.closed && own.ctx === undefined && own.failure === undefined && failedEarly === undefined) {
           pending = true
-          lifecycle({ _tag: "LayerPending", path })
+          lifecycle({ _tag: "LayerPending" })
           settleBuild = countBuilding(own, buildScope)
         }
       }
@@ -2241,25 +2285,16 @@ const setup = (
         inst.model = Option.isSome(adopted) ? adopted.value.model : first.model
         inst.results = Option.isSome(adopted) ? adopted.value.results : undefined
         inst.adoptsChildren = Option.isSome(serverModel)
-        mountedSeq = record({
+        mountedSeq = record(inst, {
           _tag: "Mounted",
-          path,
-          component,
           props: inst.props,
           model: inst.model,
+          // Restored or hydrated results, so a replay of the log starts from them.
+          ...(bound === undefined ? undefined : { queries: inst.results ?? bound.empty }),
           commands: first.commands,
           events: first.events,
           adopted: Option.isSome(adopted)
         })
-        // Restored or hydrated results, so a replay of the log starts from them.
-        if (bound !== undefined && inst.results !== undefined) {
-          for (const entry of bound.entries) {
-            const result = inst.results[entry.name]
-            if (result !== bound.empty[entry.name]) {
-              record({ _tag: "QueryChanged", path, component, name: entry.name, result })
-            }
-          }
-        }
       }
       logEarly()
       if (first === undefined) return
@@ -2331,6 +2366,14 @@ const setup = (
       inst.env.ctx === undefined && inst.env.failure === undefined
     ) {
       const raw: Rendered = { _tag: "Text", v: emptyText, node: undefined }
+      // Its first entry: `Mounted` comes when the Layer is ready, and the Layer's entries come as they happen.
+      record(inst, {
+        _tag: "Waiting",
+        props: inst.props,
+        model: fromServer.value.model,
+        ...(bound === undefined ? undefined : { queries: fromServer.value.results ?? bound.empty })
+      })
+      logEarly()
       inst.waiting = true
       waiting++
       range.claimed = true
@@ -2579,7 +2622,7 @@ const setup = (
         ? "waiting"
         : undefined
       if (reason !== undefined) {
-        record({ _tag: "SendDropped", path: inst.path, ref: send.ref.key, issued, reason })
+        record(inst, { _tag: "SendDropped", ref: send.ref.key, issued, reason })
         continue
       }
       ;(child as RChild).inst.dispatch(send.message, { _tag: "Send", path: inst.path, seq: issued.seq })
@@ -2622,7 +2665,7 @@ const setup = (
       // No Command runs on the server. `init`'s are dropped silently, since the client reruns them when
       // it adopts. One from `update`, an interrupt included, is logged and reported.
       if (initIndex !== undefined) return
-      record({ _tag: "CommandDropped", path: inst.path, name: command.name, issued, reason: "server" })
+      record(inst, { _tag: "CommandDropped", name: command.name, issued, reason: "server" })
       report(
         new Command.ServerCommandIssued({
           path: inst.path,
@@ -2684,7 +2727,7 @@ const setup = (
         return
       }
       case "drop": {
-        record({ _tag: "CommandDropped", path: inst.path, name: command.name, issued, reason: "mode" })
+        record(inst, { _tag: "CommandDropped", name: command.name, issued, reason: "mode" })
         return
       }
     }
@@ -2760,11 +2803,14 @@ const setup = (
     const fiber = run.fiber
     if (fiber === undefined) {
       run.handle?.finish({ _tag: "Stopped" })
+      recordInterrupted(inst, run)
     } else if (fiber.pollUnsafe() === undefined) {
+      // Logged by `ended`, once the fiber has exited: `h.isRunning` counts the run until then.
       ;(inst.stopping ??= new Set()).add(run)
       fiber.interruptUnsafe()
+    } else {
+      recordInterrupted(inst, run)
     }
-    recordInterrupted(inst, run)
     if (!inst.closed) markDirty(inst)
     promote(inst, run)
   }
@@ -2880,8 +2926,11 @@ const setup = (
     // Only acts when the work never began.
     run.handle?.finish({ _tag: "Stopped" })
     offClose?.()
-    // A stopped run sent no message, so `h.isRunning` ends here.
-    if (inst.stopping?.delete(run) === true && !inst.closed) markDirty(inst)
+    // A stopped run sent no message, so `h.isRunning` ends here, and the log says so.
+    if (inst.stopping?.delete(run) === true) {
+      recordInterrupted(inst, run)
+      if (!inst.closed) markDirty(inst)
+    }
     if (run.done) return
     const interrupted = Exit.isFailure(exit) && !Cause.hasDies(exit.cause) && !Cause.hasFails(exit.cause)
     const waits = command._tag === "Effect" && command.afterRefetch !== undefined && Exit.isSuccess(exit)
@@ -2956,7 +3005,7 @@ const setup = (
       run.waited = { waitEnded: "nothing", outstanding: [] }
       return
     }
-    record({ _tag: "CommandAwaiting", path: inst.path, name: run.command.name, issued: run.issued, entries: awaited })
+    record(inst, { _tag: "CommandAwaiting", name: run.command.name, issued: run.issued, entries: awaited })
     run.waiting = true
     const budget = run.command.afterRefetch!
     if (handle.outstanding().length === 0) return endWait(run, "settled")
@@ -3012,21 +3061,19 @@ const setup = (
     if (!inst.closed) markDirty(inst)
   }
   const recordEnded = (inst: Instance, run: Run) =>
-    record({
+    record(inst, {
       _tag: "CommandEnded",
-      path: inst.path,
       name: run.command.name,
       issued: run.issued,
       detached: run.detached,
       spanId: run.spanId,
       traceId: run.traceId,
-      ...(run.silent === true ? { silent: true } : undefined),
+      silent: run.silent === true,
       ...run.waited
     })
   const recordInterrupted = (inst: Instance, run: Run) =>
-    record({
+    record(inst, {
       _tag: "CommandInterrupted",
-      path: inst.path,
       name: run.command.name,
       issued: run.issued,
       detached: run.detached,
@@ -3141,14 +3188,14 @@ const setup = (
     for (const [key, running] of subscriptions) {
       if (byKey.has(key)) continue
       subscriptions.delete(key)
-      record({ _tag: "SubscriptionStopped", path: inst.path, key })
+      record(inst, { _tag: "SubscriptionStopped", key })
       closeUnder(inst, running.scope)
     }
     for (const [key, subscription] of byKey) {
       if (subscriptions.has(key)) continue
       const running: SubscriptionRun = { scope: Scope.forkUnsafe(inst.scope, "sequential"), fiber: undefined }
       subscriptions.set(key, running)
-      record({ _tag: "SubscriptionStarted", path: inst.path, key })
+      record(inst, { _tag: "SubscriptionStarted", key })
       const go = (envCtx: Context.Context<any>) => {
         if (inst.closed || subscriptions.get(key) !== running) return
         const source: MessageLog.Source = { _tag: "Subscription", key }
@@ -3203,7 +3250,6 @@ const setup = (
     for (const [key, running] of watches) {
       if (markers.has(key)) continue
       watches.delete(key)
-      record({ _tag: "SubscriptionStopped", path: inst.path, key: running.logKey })
       // A debounced query's old args are obsolete: their fetch goes, unless another reader still needs it.
       releaseWatch(running, running.marker.debounce !== undefined)
       if (running.marker.keyed) {
@@ -3228,7 +3274,6 @@ const setup = (
       const running: WatchRun = { marker, logKey, handle: undefined, released: false, debounce: undefined }
       holdsWatchers = true
       watches.set(key, running)
-      record({ _tag: "SubscriptionStarted", path: inst.path, key: logKey })
       // A disabled query: the marker is inert.
       if (marker.argsKey === undefined) continue
       inst.watched?.add(entryKey(def.name, marker.argsKey))
@@ -3424,7 +3469,7 @@ const setup = (
     // The same snapshot, as when a watcher's first value is what the server or history already gave.
     if (Equal.equals((inst.results ?? bound.empty)[query.name], result)) return
     inst.results = { ...(inst.results ?? bound.empty), [query.name]: result }
-    record({ _tag: "QueryChanged", path: inst.path, component: inst.component, name: query.name, result })
+    const changedSeq = record(inst, { _tag: "QueryChanged", name: query.name, result })
     const mounting = inst.mounting !== undefined
     if (!mounting) markDirty(inst)
     syncSubscriptions(inst, mounting)
@@ -3435,7 +3480,7 @@ const setup = (
       () => bound.context(inst.model, inst.props, inst.results).changed(query.name, changes),
       key
     )
-    if (message !== undefined) inst.dispatch(message.value, { _tag: "Subscription", key })
+    if (message !== undefined) inst.dispatch(message.value, { _tag: "Query", name: query.name, seq: changedSeq })
   }
   const releaseWatch = (running: WatchRun, abandon = false) => {
     if (running.released) return
@@ -4183,6 +4228,7 @@ const setup = (
       snapshot: undefined,
       deferred: false,
       runs: [],
+      left: false,
       stopping: undefined,
       closes: undefined,
       subscriptions: undefined,
@@ -5006,7 +5052,7 @@ const setup = (
           instance.props = child.props
           if (instance.selection !== undefined) instance.selection.due = true
           // Before the result writes the new props cause, so a replay opens them against these props.
-          record({ _tag: "PropsChanged", path: instance.path, component: instance.component, props: child.props })
+          record(instance, { _tag: "PropsChanged", props: child.props })
           // Watches first: new args over a settled entry write its value before this render, and the
           // keyed queries' results are written before it too.
           syncSubscriptions(instance)
@@ -5150,6 +5196,7 @@ const setup = (
         inst.children.delete(rendered.inst)
         headDirty = true
         releaseWatches(rendered.inst)
+        leave(rendered.inst)
         closeUnder(inst, rendered.inst.scope)
         return
       }
@@ -5184,7 +5231,7 @@ const setup = (
   }
 
   // -- root -----------------------------------------------------------------
-  record({ _tag: "SessionStarted", path: `/${component.definition.name}`, app: component.definition.name })
+  recordTree({ _tag: "SessionStarted", app: component.definition.name })
   // Registered before the root instance forks its Scope from `rootScope`: finalizers run in
   // reverse, so every instance Scope (and its Layers' finalizers) closes before the nodes go.
   let rootRendered: () => ReadonlyArray<Rendered> = () => []
@@ -5229,6 +5276,8 @@ const setup = (
   if (rootRange !== undefined && !rootRange.claimed) removeRange(rootRange)
   rootRendered = () => root.rendered
   rootInstance = root
+  // Added after the root forked its Scope, so it runs before that Scope closes.
+  addFinalizer(rootScope, Effect.sync(() => leave(root)))
   if (root.failure === undefined) place(container, root.rendered, rootRef)
   started = true
   if (waiting === 0 && !adoptedDone) {

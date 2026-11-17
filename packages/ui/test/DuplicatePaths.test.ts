@@ -76,7 +76,7 @@ describe("duplicate child paths", () => {
         assert.strictEqual(root.text(), "failed")
         const failed = failure(root.log())
         assert.strictEqual(failed.path, "/Page/List[l]")
-        assert.strictEqual(failed.source, "view")
+        assert.strictEqual(failed.in, "view")
         assert.include(Cause.pretty(failed.cause), "/Page/List[l] renders two children at Row[a]")
         // No row of the failed list stays mounted.
         assert.deepStrictEqual(
@@ -97,7 +97,7 @@ describe("duplicate child paths", () => {
         assert.strictEqual(crashed._tag, "RootCrashed")
         assert.strictEqual(root.text(), "crashed")
         const failed = failure(root.log())
-        assert.strictEqual(failed.source, "view")
+        assert.strictEqual(failed.in, "view")
         assert.include(Cause.pretty(failed.cause), "/List renders two children at Row[b]")
       })))
   }
@@ -234,7 +234,7 @@ describe("duplicate child paths", () => {
             entry._tag === "Failed" && entry.path === "/Root/Parent[p]"
           )
           assert.lengthOf(failed, 1)
-          assert.strictEqual(failed[0].source, "view")
+          assert.strictEqual(failed[0].in, "view")
           assert.include(Cause.pretty(failed[0].cause), `/Root/Parent[p] ${error}`)
         })))
     }
@@ -360,7 +360,7 @@ describe("duplicate child paths", () => {
           assert.strictEqual(root.text(), "parent-failed")
           const failed = parentFailures(root)
           assert.lengthOf(failed, 1)
-          assert.strictEqual(failed[0].source, "view")
+          assert.strictEqual(failed[0].in, "view")
           assert.include(
             Cause.pretty(failed[0].cause),
             "/Root/Parent[p] renders two children at Row[a], in the fallback of Row[a]"

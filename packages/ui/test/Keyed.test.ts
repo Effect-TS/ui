@@ -226,21 +226,16 @@ describe("Keyed query fields", () => {
         ])
         assert.deepStrictEqual(app.db.batches, [3])
         assert.strictEqual(root.entry(app.GetUser, { id: "2" })?.watchers, 1)
-        // One Subscription key per unique key.
-        assert.deepStrictEqual(
-          root.log().flatMap((entry) => entry._tag === "SubscriptionStarted" ? [entry.key] : []),
-          ["1", "2", "3"].map((id) => `~query/users:${JSON.stringify(JSON.stringify({ id }))}`)
+        // The result's write is logged, then the Update of its onChange message, which points at it.
+        const written = root.log().filter((entry) =>
+          entry._tag === "QueryChanged" || (entry._tag === "Update" && entry.source._tag === "Query")
         )
-        // The result's write is logged, then the Update of its onChange message.
-        const written = root.log().flatMap((entry) =>
-          entry._tag === "QueryChanged" ?
-            [entry._tag] :
-            entry._tag === "Update" && entry.source._tag === "Subscription" &&
-              entry.source.key.startsWith("~query/users")
-            ? [entry._tag]
-            : []
-        )
-        assert.deepStrictEqual(written, ["QueryChanged", "Update"])
+        assert.deepStrictEqual(written.map((entry) => entry._tag), ["QueryChanged", "Update"])
+        assert.deepStrictEqual((written[1] as MessageLog.Update).source, {
+          _tag: "Query",
+          name: "users",
+          seq: written[0].seq
+        })
       })
     )
   })
@@ -711,7 +706,7 @@ describe("Keyed query fields", () => {
         assert.deepStrictEqual(app.db.batches, [3])
         assert.strictEqual(root.text(), "b: 1=Ann 2=Bea")
         const failed = root.log().find((entry): entry is MessageLog.Failed => entry._tag === "Failed")
-        assert.deepStrictEqual([failed?.path, failed?.source, failed?.name], [
+        assert.deepStrictEqual([failed?.path, failed?.in, failed?.name], [
           "/List/Board[a]",
           "subscription",
           `~query/users:${JSON.stringify(JSON.stringify({ id: "boom" }))}`
@@ -856,7 +851,7 @@ describe("Keyed results", () => {
         yield* TestHost.settle
         assert.strictEqual(root.text(), "host")
         const failed = root.log().find((entry): entry is MessageLog.Failed => entry._tag === "Failed")
-        assert.deepStrictEqual([failed?.path, failed?.source], ["/Host/Bad[bad]", "subscription"])
+        assert.deepStrictEqual([failed?.path, failed?.in], ["/Host/Bad[bad]", "subscription"])
         assert.include(TestHost.formatLog(root.log()), "is a queryMany query, and its args must return an array")
       })
     )
@@ -909,7 +904,7 @@ describe("Keyed redaction", () => {
         const wire = JSON.stringify(root.log().map((entry) => MessageLog.makeEncoder().encode(entry)))
         assert.notInclude(wire, "tok-")
         assert.notInclude(wire, "secret-of")
-        assert.include(wire, "SubscriptionStarted")
+        assert.include(wire, "FetchStarted")
         assert.include(wire, "QueryChanged")
         assert.notInclude(TestHost.formatLog(root.log()), "tok-")
       })
@@ -1211,13 +1206,8 @@ describe("Keyed history restore", () => {
           const mounted = log.findIndex((entry) => entry._tag === "Mounted" && entry.path === "/Shell/Board[board]")
           const restored = log[mounted] as MessageLog.Mounted
           assert.isTrue(restored.adopted)
-          // The restored result is logged right after Mounted.
-          const seeded = log[mounted + 1]
-          assert.strictEqual(seeded._tag, "QueryChanged")
-          assert.deepStrictEqual(
-            heldIds(app.Board, (seeded as MessageLog.QueryChanged).result),
-            ["2"]
-          )
+          // Mounted holds the restored results.
+          assert.deepStrictEqual(heldIds(app.Board, restored.queries?.users), ["2"])
           // Key 2 is seeded stale and shows while it refetches; key 1 starts from loading.
           assert.isTrue(root.text().includes("a: 1=… 2=Bea…"))
           yield* load

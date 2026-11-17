@@ -28,7 +28,9 @@ import { Tiny } from "./fixtures/vocabulary.ts"
 
 const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(TestHost.layer()))
 const tags = (root: { readonly log: () => ReadonlyArray<MessageLog.Entry> }, path?: string) =>
-  root.log().filter((entry) => path === undefined || entry.path === path).map((entry) => entry._tag)
+  root.log().filter((entry) => path === undefined || ("path" in entry && entry.path === path)).map((entry) =>
+    entry._tag
+  )
 const click = (root: TestHost.TestRoot<any, any, any>, text: string) =>
   Locator.fire(root.get(Locator.text(text, { exact: true })), "click")
 
@@ -136,7 +138,7 @@ describe("Runtime", () => {
         yield* TestHost.settle
         assert.strictEqual(root.text(), "c:0a:0d:0")
         assert.deepStrictEqual(items().slice(0, 2), [c, a])
-        assert.deepStrictEqual(tags(root, "/List/Row[b]").slice(-2), ["CommandInterrupted", "Unmounted"])
+        assert.deepStrictEqual(tags(root, "/List/Row[b]").slice(-2), ["Unmounted", "CommandInterrupted"])
         assert.sameMembers(root.pending().map((p) => p.path), ["/List/Row[c]", "/List/Row[a]", "/List/Row[d]"])
       })))
 
@@ -172,10 +174,13 @@ describe("Runtime", () => {
         root.send(true)
         yield* TestHost.settle
         assert.strictEqual(root.text(), "a:0")
-        assert.deepStrictEqual(
-          tags(root, "/Wrap/Row[a]").filter((tag) => tag === "Mounted" || tag === "Unmounted"),
-          ["Mounted", "Mounted", "Unmounted"]
+        const rows = root.log().filter((entry): entry is MessageLog.Mounted | MessageLog.Unmounted =>
+          (entry._tag === "Mounted" || entry._tag === "Unmounted") && entry.path === "/Wrap/Row[a]"
         )
+        assert.deepStrictEqual(rows.map((entry) => entry._tag), ["Mounted", "Mounted", "Unmounted"])
+        // One path, two instances: the number says which of them unmounted.
+        assert.notStrictEqual(rows[0].instance, rows[1].instance)
+        assert.strictEqual(rows[2].instance, rows[0].instance)
         // The new row's Command, which the parent finds through its children.
         assert.deepStrictEqual(root.pending().map((p) => p.path), ["/Wrap/Row[a]"])
       })))
@@ -360,7 +365,7 @@ describe("Runtime", () => {
         assert.strictEqual(crashed._tag, "RootCrashed")
         assert.strictEqual(root.text(), "down")
         const failed = root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
-        assert.strictEqual(failed.source, "view")
+        assert.strictEqual(failed.in, "view")
         assert.include(Cause.pretty(failed.cause), "/Fill: two siblings share the key li[a]")
       })))
 
@@ -381,7 +386,7 @@ describe("Runtime", () => {
         assert.strictEqual(root.text(), "before down")
         assert.deepStrictEqual(root.all(Locator.tag("li")), [])
         const failed = root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
-        assert.strictEqual(failed.source, "view")
+        assert.strictEqual(failed.in, "view")
         assert.include(Cause.pretty(failed.cause), "/Parent/Twice[t]: two siblings share the key li[a]")
       })))
 
@@ -498,7 +503,7 @@ describe("Runtime", () => {
         const crashed = yield* Effect.flip(TestHost.settle)
         assert.strictEqual(crashed._tag, "RootCrashed")
         const failed = root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
-        assert.strictEqual(failed.source, "view")
+        assert.strictEqual(failed.in, "view")
         assert.include(Cause.pretty(failed.cause), "/Rows: two siblings share the key li[a]")
       })))
   })
@@ -551,7 +556,7 @@ describe("Runtime", () => {
         assert.deepStrictEqual(root.model(), { failures: 1, attempt: 0 })
         const failed = root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
         assert.strictEqual(failed.path, "/Page/Bomb[bomb-0]")
-        assert.strictEqual(failed.source, "update")
+        assert.strictEqual(failed.in, "update")
 
         click(root, "+")
         yield* TestHost.settle
@@ -590,7 +595,7 @@ describe("Runtime", () => {
         yield* TestHost.settle
         assert.strictEqual(root.text(), "before down")
         const failed = root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
-        assert.strictEqual(failed.source, "view")
+        assert.strictEqual(failed.in, "view")
       })))
 
     it.effect("a crashed root shows mount's fallback", () =>
@@ -601,7 +606,21 @@ describe("Runtime", () => {
         assert.strictEqual(crashed._tag, "RootCrashed")
         assert.strictEqual(root.text(), "Something went wrong")
         assert.isUndefined(root.model())
-        assert.includeMembers(tags(root), ["Failed", "Crashed"])
+        // The root has no parent, so its Failed entry is all a crash needs.
+        assert.deepStrictEqual(tags(root, "/Page").slice(-2), ["Failed", "Unmounted"])
+      })))
+
+    it.effect("a root fallback that throws is logged as a failure of the root, in fallback", () =>
+      provideHost(Effect.gen(function*() {
+        const root = yield* TestHost.mount(Page, {}, {
+          fallback: () => {
+            throw new Error("fallback broke")
+          }
+        })
+        root.send("not a message" as any)
+        yield* Effect.flip(TestHost.settle)
+        const failed = root.log().filter((entry): entry is MessageLog.Failed => entry._tag === "Failed")
+        assert.deepStrictEqual(failed.map((entry) => `${entry.path} ${entry.in}`), ["/Page update", "/Page fallback"])
       })))
 
     it.effect("a defect in a Command fails its instance", () =>
@@ -630,7 +649,7 @@ describe("Runtime", () => {
         yield* TestHost.settle
         assert.strictEqual(root.text(), "parent")
         const failed = root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
-        assert.deepStrictEqual([failed.source, failed.name], ["command", "Explode"])
+        assert.deepStrictEqual([failed.in, failed.name], ["command", "Explode"])
       })))
   })
 
@@ -664,7 +683,7 @@ describe("Runtime", () => {
         yield* TestHost.settle
         assert.strictEqual(root.text(), "down alive")
         const failed = root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
-        assert.deepStrictEqual([failed.path, failed.source], ["/Parent/Leaf[c]", "layer"])
+        assert.deepStrictEqual([failed.path, failed.in], ["/Parent/Leaf[c]", "layer"])
       })))
 
     it.effect("with onFailure, a throwing factory becomes a message", () =>
@@ -935,7 +954,7 @@ describe("Runtime", () => {
         assert.include(root.text(), "count 2")
         assert.strictEqual(server.requests, 3)
         assert.deepStrictEqual(root.pending(), [])
-        const editor = root.log().filter((entry) => entry.path === "/Page/Editor[editor]")
+        const editor = root.log().filter((entry) => "path" in entry && entry.path === "/Page/Editor[editor]")
         const unmounted = editor.findIndex((entry) => entry._tag === "Unmounted")
         assert.deepStrictEqual(editor.slice(unmounted).map((entry) => entry._tag), [
           "Unmounted",
@@ -943,7 +962,7 @@ describe("Runtime", () => {
           "CommandEnded"
         ])
         assert.isTrue(
-          editor.slice(unmounted + 1).every((entry) => (entry as MessageLog.CommandSettled).detached)
+          editor.slice(unmounted + 1).every((entry) => (entry as MessageLog.CommandEnded).detached)
         )
       })))
 
@@ -1069,7 +1088,7 @@ describe("Runtime", () => {
         assert.deepStrictEqual(root.pending(), [])
         const last = root.log().filter((entry) => entry._tag === "CommandInterrupted")
         assert.deepStrictEqual(
-          last.map((entry) => (entry as MessageLog.CommandSettled).detached),
+          last.map((entry) => entry.detached),
           [true]
         )
         // A started run invalidates however it exits.
@@ -1450,7 +1469,7 @@ describe("Runtime", () => {
         assert.strictEqual(root.text(), "hello from 1,hello from 2")
         const changes = root.log().filter((entry) =>
           entry._tag === "SubscriptionStarted" || entry._tag === "SubscriptionStopped"
-        ) as ReadonlyArray<MessageLog.SubscriptionChanged>
+        ) as ReadonlyArray<MessageLog.SubscriptionStarted | MessageLog.SubscriptionStopped>
         assert.deepStrictEqual(changes.map((entry) => entry._tag), [
           "SubscriptionStarted",
           "SubscriptionStopped",
@@ -1993,6 +2012,80 @@ describe("Runtime", () => {
         assert.strictEqual(diverged.divergence?.seq, wire[2].seq)
       })))
 
+    it.effect("a message whose update throws is on its Failed entry, and crosses the Wire", () =>
+      provideHost(Effect.gen(function*() {
+        const Message = Schema.TaggedUnion({ Break: { why: Schema.String } })
+        const Fragile = Component.define({
+          name: "Fragile",
+          props: Schema.Struct({ id: Schema.String }),
+          model: Schema.Null,
+          message: Message
+        }).make({
+          init: () => null,
+          update: (_, message) => {
+            throw new Error(message.why)
+          },
+          view: (_, h) => h.text("fragile")
+        })
+        const root = yield* TestHost.mount(Fragile, { id: "a" })
+        const message = Message.make({ _tag: "Break", why: "boom" })
+        root.send(message)
+        yield* Effect.exit(TestHost.settle)
+        assert.notInclude(tags(root), "Update")
+        const failed = root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
+        assert.deepStrictEqual(failed.update, { message, source: { _tag: "Dispatch" } })
+        const wire = MessageLog.makeEncoder().encode(failed) as Extract<MessageLog.Wire, { _tag: "Failed" }>
+        assert.deepStrictEqual(wire.update, { message: { _tag: "Break", why: "boom" }, source: { _tag: "Dispatch" } })
+        assert.deepStrictEqual(wire.props, { id: "a" })
+        assert.deepStrictEqual(Schema.decodeUnknownSync(MessageLog.Wire)(JSON.parse(JSON.stringify(wire))), wire)
+      })))
+
+    it.effect("an instance logs Unmounted as it leaves the tree, and a Command's end once its fiber has exited", () =>
+      provideHost(Effect.gen(function*() {
+        const hold = Deferred.makeUnsafe<void>()
+        const slow = Deferred.makeUnsafe<void>()
+        const Message = Schema.TaggedUnion({ Close: {}, Done: {} })
+        const done = Command.map(() => Message.make({ _tag: "Done" }))
+        // Its Command can't be interrupted, so its close stays open until `hold` is done.
+        const Holder = Component.define({ name: "Holder", model: Schema.Null, message: Message }).make({
+          init: ($) =>
+            $.set(null).run(
+              Command.make("test/Hold", { args: {} }, () => Effect.uninterruptible(Deferred.await(hold)))().pipe(done)
+            ),
+          update: (model) => model,
+          view: (_, h) => h.text("holder")
+        })
+        const Middle = Component.define({ name: "Middle", model: Schema.Number, message: Message }).make({
+          init: ($) => $.set(0).run(Command.make("test/Slow", { args: {} }, () => Deferred.await(slow))().pipe(done)),
+          update: (model, message) => message._tag === "Done" ? model + 1 : model,
+          view: (model, h) => h.el("div", String(model), Holder(h, { key: "h", props: {} }))
+        })
+        const Top = Component.define({ name: "Top", model: Schema.Boolean, message: Message }).make({
+          init: () => true,
+          update: (open, message) => message._tag === "Close" ? false : open,
+          view: (open, h) => h.el("div", open ? Middle(h, { key: "m", props: {} }) : null)
+        })
+        const root = yield* TestHost.mount(Top, {})
+        yield* TestHost.settle
+        root.send(Message.make({ _tag: "Close" }))
+        yield* TestHost.settle
+        // Both are out of the tree, child first, though the child's Command is still running.
+        assert.deepStrictEqual(
+          root.log().filter((entry) => entry._tag === "Unmounted").map((entry) => entry.path),
+          ["/Top/Middle[m]/Holder[h]", "/Top/Middle[m]"]
+        )
+        assert.deepStrictEqual(tags(root, "/Top/Middle[m]/Holder[h]"), ["Mounted", "Unmounted"])
+
+        // The parent's Scope waits for the child's close. Its Command ends meanwhile, and its message is dropped.
+        Deferred.doneUnsafe(slow, Exit.void)
+        yield* TestHost.settle
+        assert.deepStrictEqual(tags(root, "/Top/Middle[m]"), ["Mounted", "Unmounted", "CommandEnded"])
+
+        Deferred.doneUnsafe(hold, Exit.void)
+        yield* TestHost.settle
+        assert.deepStrictEqual(tags(root, "/Top/Middle[m]/Holder[h]"), ["Mounted", "Unmounted", "CommandInterrupted"])
+      })))
+
     it("the Wire encodes args through their Schema, redacted, with a structural fallback per field", () => {
       const Send = Command.make(
         "Send",
@@ -2319,6 +2412,7 @@ describe("Runtime", () => {
         at: 0,
         session: "s",
         path: "/Counter",
+        instance: 1,
         component: Counter,
         props: { initial: 123456789 },
         model: { count: 123456789 },
@@ -2340,13 +2434,16 @@ describe("Runtime", () => {
         at: 0,
         session: "s",
         path: "/Counter",
+        instance: 1,
         component: Counter,
         source: { _tag: "Dispatch" },
         message: CounterMessage.make({ _tag: "Increment" }),
         props: { initial: 1 },
         model: { count: 1 },
         commands: [],
-        events: []
+        events: [],
+        lists: [],
+        sends: []
       }
       assert.deepStrictEqual((encoder.encode(entry) as any).message, { "~truncated": 20 })
       assert.deepStrictEqual((encoder.encode(entry) as any).model, { count: 1 })
@@ -2358,7 +2455,6 @@ describe("Runtime", () => {
         seq: 3,
         at: 10,
         session: "s",
-        path: "/App",
         query: "users/GetUser",
         logKey: `{"id":"1"}`,
         trigger: "visibility",
@@ -2398,6 +2494,7 @@ describe("Runtime", () => {
         at: 0,
         session: "s",
         path: "/Secret",
+        instance: 1,
         component: Secret,
         source: { _tag: "Dispatch" },
         message: { _tag: "Login", password: Redacted.make("hunter2") },
@@ -2410,7 +2507,9 @@ describe("Runtime", () => {
           users: [new User({ name: "ada", pin: Redacted.make(1234) })]
         },
         commands: [],
-        events: [Redacted.make("e")]
+        events: [Redacted.make("e")],
+        lists: [],
+        sends: []
       }
       const wire = MessageLog.makeEncoder({ onWarning: (warning) => warnings.push(warning) }).encode(entry) as any
       assert.deepStrictEqual(wire.message, { _tag: "Login", password: placeholder })
@@ -2464,6 +2563,7 @@ describe("Runtime", () => {
         at: 0,
         session: "s",
         path: "/Secrets",
+        instance: 1,
         component: Secrets,
         props: {},
         model,
@@ -2486,7 +2586,7 @@ describe("Runtime", () => {
       const other = MessageLog.makeMemory()
       const log = MessageLog.fanoutAll([memory, other, MessageLog.noop])
       for (let seq = 1; seq <= 3; seq++) {
-        log.record({ _tag: "Unmounted", seq, at: 0, session: "s", path: "/x" })
+        log.record({ _tag: "Unmounted", seq, at: 0, session: "s", path: "/x", instance: 1, component: Counter })
       }
       assert.deepStrictEqual(memory.entries().map((entry) => entry.seq), [2, 3])
       assert.deepStrictEqual(other.entries().map((entry) => entry.seq), [1, 2, 3])
@@ -2509,7 +2609,7 @@ describe("Runtime", () => {
         })
         const root = yield* TestHost.mount(Loose, {})
         const failed = root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
-        assert.strictEqual(failed.source, "view")
+        assert.strictEqual(failed.in, "view")
         assert.include(String(failed.cause), "text goes inside label")
       })))
 
@@ -2555,7 +2655,10 @@ describe("Runtime", () => {
         const root = yield* TestHost.mount(Outer, {})
         assert.strictEqual(root.text(), "outer unsupported")
         const failed = root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
-        assert.deepStrictEqual([failed.path, failed.source], ["/Outer/Inner[i]", "init"])
+        assert.deepStrictEqual([failed.path, failed.in], ["/Outer/Inner[i]", "init"])
+        // It never logged `Mounted`, so the failure says what was there.
+        assert.strictEqual(failed.component, Inner)
+        assert.deepStrictEqual(failed.props, {})
       }).pipe(
         Effect.provide(Renderer.layer({ ...TestHost.makeHost(), elements: ["html"] })),
         provideHost

@@ -298,12 +298,10 @@ describe("HtmlServer", { concurrent: false }, () => {
         const result = yield* ssr(App, Router.props(AppRoute)).pipe(Effect.provide([People.layer, router]))
         expect(result.adopted).toEqual(["/App", "/App/Person[/people/1]"])
         expect(result.misses).toEqual([])
-        // The bio is hydrated, so the client doesn't fetch it. The hydrated result is logged once, and the
+        // The bio is hydrated, so the client doesn't fetch it. The hydrated result is on Mounted, and the
         // watch's first value equals it, so it isn't written again.
         expect(result.root.fetches()).toEqual([])
-        expect(
-          result.log.filter((entry) => entry._tag === "QueryChanged").map((entry) => [entry.path, entry.name])
-        ).toEqual([["/App/Person[/people/1]", "bio"]])
+        expect(result.log.filter((entry) => entry._tag === "QueryChanged")).toEqual([])
         expect(result.log.some((entry) => entry._tag === "Update" && entry.path === "/App/Person[/people/1]")).toBe(
           false
         )
@@ -607,14 +605,21 @@ describe("HtmlServer", { concurrent: false }, () => {
       expect(rendered.state["~deferred"]).toEqual([])
       const app = yield* container(rendered.html)
       const button = app.querySelector("button")!
-      const root = yield* BrowserHost.mountEffect(Panel, {}, app, { state: rendered.state })
+      const log = MessageLog.makeMemory({ size: 1000 })
+      const root = yield* BrowserHost.mountEffect(Panel, {}, app, { state: rendered.state }).pipe(
+        Effect.provideService(MessageLog.MessageLog, log)
+      )
       button.click()
       yield* tick
       expect(button.textContent).toBe("0 server")
+      // The log says what is on screen while it waits: the server's Model, and no Model of its own.
+      expect(log.entries().map((entry) => entry._tag)).toEqual(["SessionStarted", "Waiting", "LayerPending"])
+      expect((log.entries()[1] as MessageLog.Waiting).model).toEqual({ mounted: false, clicks: 0 })
 
       yield* TestClock.adjust("50 millis")
       yield* root.adopted
       yield* tick
+      expect(log.entries().slice(3, 5).map((entry) => entry._tag)).toEqual(["LayerReady", "Mounted"])
       expect(app.querySelector("button")).toBe(button)
       expect(button.textContent).toBe("0 mounted")
       button.click()
@@ -745,7 +750,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       )
       expect(app.querySelector("main")!.innerHTML).toBe("<p>failed</p>")
       const failed = log.entries().filter((entry) => entry._tag === "Failed")
-      expect(failed).toEqual([expect.objectContaining({ path: "/Page/List[l]", source: "view" })])
+      expect(failed).toEqual([expect.objectContaining({ path: "/Page/List[l]", in: "view" })])
       expect(log.entries().filter((entry) => entry._tag === "Mounted").map((entry) => entry.path)).toEqual([
         "/Page",
         "/Page/List[l]"
@@ -1096,6 +1101,72 @@ describe("HtmlServer", { concurrent: false }, () => {
       expect(result.container.textContent).toBe("gonewaiting")
     })))
 
+  it.effect("an instance removed while it waits logs Waiting, then Unmounted, and nothing once its Layer would be ready", () =>
+    Effect.gen(function*() {
+      class Slow extends Context.Service<Slow, string>()("test/Slow") {}
+      class GetText extends Query.Service<GetText>()("GetText", {
+        args: {},
+        success: Schema.String,
+        error: Schema.Never,
+        staleTime: "30 seconds"
+      }, Effect.succeed(() => Effect.succeed("loaded"))) {}
+      const Panel = Component.define({
+        name: "Panel",
+        props: Schema.Struct({ id: Schema.String }),
+        model: Schema.Struct({ label: Schema.String }),
+        message: Schema.Never,
+        elements: Html,
+        queries: { text: { query: GetText, args: () => ({}) } }
+      }).make({
+        init: ($) => ({ label: `panel ${$.props.id}` }),
+        update: (model) => model,
+        view: (model, h) => h.p(model.label)
+      }).pipe(Component.provide(Layer.effect(Slow, Effect.as(Effect.sleep("50 millis"), "ready"))))
+      const Page = Component.define({
+        name: "Page",
+        model: Schema.Boolean,
+        message: Schema.Boolean,
+        elements: Html
+      }).make({
+        init: () => true,
+        update: (_, show) => show,
+        view: (show, h) => h.div(show ? Panel(h, { key: "p", props: { id: "a" } }) : h.p("gone"))
+      })
+
+      const fiber = yield* Effect.forkChild(HtmlServer.renderToHtml(Page, {}).pipe(Effect.provide(GetText.layer)))
+      yield* TestClock.adjust("50 millis")
+      const rendered = yield* Fiber.join(fiber)
+      const app = yield* container(rendered.html)
+      expect(app.textContent).toBe("panel a")
+      const log = MessageLog.makeMemory({ size: 1000 })
+      const root = yield* BrowserHost.mountEffect(Page, {}, app, { state: rendered.state }).pipe(
+        Effect.provideService(MessageLog.MessageLog, log),
+        Effect.provide(GetText.layer)
+      )
+      // Removed while its Layer is still building, which then gets the time it would have needed.
+      root.send(false)
+      yield* tick
+      expect(app.textContent).toBe("gone")
+      yield* TestClock.adjust("50 millis")
+      yield* tick
+
+      const panel = log.entries().filter((entry): entry is MessageLog.InstanceEntry =>
+        "path" in entry && entry.path === "/Page/Panel[p]"
+      )
+      expect(panel.map((entry) => entry._tag)).toEqual(["Waiting", "LayerPending", "Unmounted"])
+      expect(new Set(panel.map((entry) => entry.instance)).size).toBe(1)
+      // The only entry that says what the server's nodes showed: it crosses the Wire whole.
+      const wire = MessageLog.makeEncoder().encode(panel[0]!) as Extract<MessageLog.Wire, { _tag: "Waiting" }>
+      expect(wire.props).toEqual({ id: "a" })
+      expect(wire.model).toEqual({ label: "panel a" })
+      expect((wire.queries as { readonly text: ReadonlyArray<unknown> }).text.slice(0, 3)).toEqual([
+        "{}",
+        0,
+        "loaded"
+      ])
+      expect(Schema.decodeUnknownSync(MessageLog.Wire)(JSON.parse(JSON.stringify(wire)))).toEqual(wire)
+    }).pipe(Effect.scoped))
+
   it.effect("reports the template results the client's merge computed, without calling templates again", () =>
     hosted(Effect.gen(function*() {
       const Leaf = Component.define({
@@ -1310,14 +1381,10 @@ describe("HtmlServer queries", { concurrent: false }, () => {
         GetItem: expect.arrayContaining([["{\"id\":1}", 0, "Item 1", 0], ["{\"id\":404}", 1, ["missing"], 0]])
       })
       expect((result.state["~query"] as any).GetItem).toHaveLength(2)
-      // The client adopts both entries without fetching, and each instance's hydrated results are logged once.
+      // The client adopts both entries without fetching, and each instance's hydrated results are on its Mounted.
       expect(calls).toEqual([1, 404])
       expect(result.root.fetches()).toEqual([])
-      expect(result.log.filter((entry) => entry._tag === "QueryChanged").map((entry) => entry.path)).toEqual([
-        "/Page/Item[a]",
-        "/Page/Item[b]",
-        "/Page/Item[c]"
-      ])
+      expect(result.log.filter((entry) => entry._tag === "QueryChanged")).toEqual([])
       expect(result.log.some((entry) => entry._tag === "Update")).toBe(false)
       expect(result.container.textContent).toBe("Item 1Item 1failed")
     })))

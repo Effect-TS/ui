@@ -207,12 +207,12 @@ describe("a query without onChange", { concurrent: false }, () => {
       assert.deepStrictEqual(result.root.fetches(), [])
       assert.strictEqual(app.server.calls, 1)
       assert.strictEqual(result.container.textContent, "Note 1clicks 0")
-      // The hydrated result is logged once, right after Mounted; the watch's first value equals it, so it isn't
-      // written again.
+      // Mounted holds the hydrated results, so a replay from it alone has the note. The watch's first value
+      // equals it, so it isn't written again.
       const index = result.log.findIndex((entry) => entry._tag === "Mounted" && entry.path === "/Note")
       assert.isTrue((result.log[index] as MessageLog.Mounted).adopted)
-      assert.strictEqual(result.log[index + 1]?._tag, "QueryChanged")
-      assert.strictEqual(queryChanges(result.log, "/Note").length, 1)
+      assert.strictEqual(noteOf(Story.fromLog(app.Note, result.log.slice(index, index + 1))), "Note 1")
+      assert.strictEqual(queryChanges(result.log, "/Note").length, 0)
       assert.deepStrictEqual(updates(result.log, "/Note"), [])
       // update sees the hydrated result.
       result.root.send(app.NoteMessage.make({ _tag: "Click" }))
@@ -267,8 +267,8 @@ describe("a query without onChange", { concurrent: false }, () => {
         const log = root.log()
         const index = log.findIndex((entry) => entry._tag === "Mounted" && entry.path === path)
         assert.isTrue((log[index] as MessageLog.Mounted).adopted)
-        const restored = log[index + 1]
-        assert.isTrue(restored?._tag === "QueryChanged" && restored.name === "note")
+        // Mounted holds the restored results.
+        assert.strictEqual(noteOf(Story.fromLog(app.Note, log.slice(index, index + 1))), "Note 1")
         assert.strictEqual(root.entry(app.GetNote, { id: "1" })?.fetch, "running")
         yield* TestClock.adjust("10 millis")
         yield* TestHost.settle
@@ -440,10 +440,13 @@ describe("a query without onChange", { concurrent: false }, () => {
         yield* load
         assert.strictEqual(root.text(), "Note 1clicks 1")
         const log = root.log()
-        assert.deepStrictEqual(log.filter((entry) => entry.path === "/Note").map((entry) => entry._tag).slice(-2), [
-          "Update",
-          "QueryChanged"
-        ])
+        assert.deepStrictEqual(
+          log.filter((entry) => "path" in entry && entry.path === "/Note").map((entry) => entry._tag).slice(-2),
+          [
+            "Update",
+            "QueryChanged"
+          ]
+        )
         for (
           const replay of [
             Story.fromLog(app.Note, log),
@@ -494,6 +497,72 @@ describe("a query without onChange", { concurrent: false }, () => {
     })
   })
 
+  it.effect("entries of two instances at one path replay apart, and the result is the later instance's", () => {
+    const app = makeApp()
+    /** A Note under a Shell, with what it logged, as the instance with this number. */
+    const session = (
+      instance: number,
+      steps: (root: TestHost.TestRoot<any, any, any>) => Effect.Effect<void, unknown, any>
+    ) =>
+      run(
+        app.layer,
+        Effect.gen(function*() {
+          const root = yield* TestHost.mount(app.Shell, {})
+          yield* load
+          yield* steps(root)
+          const path = noteMount(root.log()).path
+          const log = root.log().filter((entry) => "path" in entry && entry.path === path).map((entry) => ({
+            ...entry,
+            instance
+          }))
+          return { path, log, update: log.map((entry) => entry._tag).lastIndexOf("Update") }
+        })
+      )
+    return Effect.gen(function*() {
+      // The older one is clicked twice with note 1, then given id 3.
+      const older = yield* session(1, (root) =>
+        Effect.gen(function*() {
+          click(root, "clicks 0")
+          yield* TestHost.settle
+          click(root, "clicks 1")
+          yield* TestHost.settle
+          root.send(app.setId("3"))
+          yield* load
+        }))
+      // The newer one is given id 2, then clicked.
+      const newer = yield* session(2, (root) =>
+        Effect.gen(function*() {
+          root.send(app.setId("2"))
+          yield* load
+          click(root, "clicks 0")
+          yield* TestHost.settle
+        }))
+      // The older one's second click, and then its props and load, are logged after the newer one mounted.
+      // Woven by hand: today's runtime logs none of these for an instance once the next has mounted at its path.
+      const late = older.log.slice(older.update + 1)
+      assert.includeMembers(late.map((entry) => entry._tag), ["PropsChanged", "QueryChanged"])
+      const log = [
+        ...older.log.slice(0, older.update),
+        ...newer.log.slice(0, newer.update),
+        older.log[older.update],
+        newer.log[newer.update],
+        ...late
+      ]
+      for (
+        const replay of [
+          Story.fromLog(app.Note, log, { path: newer.path }),
+          Story.fromLog(app.Note, log.map(MessageLog.makeEncoder().encode), { path: newer.path })
+        ]
+      ) {
+        assert.isUndefined(replay.divergence)
+        assert.strictEqual(replay.replayed, 3)
+        assert.deepStrictEqual(replay.model, { clicks: 1, last: "Note 2" })
+        assert.deepStrictEqual(replay.props, { id: "2" })
+        assert.strictEqual(noteOf(replay), "Note 2")
+      }
+    })
+  })
+
   it.effect("replay follows props from the parent: a new id's load, then disabling the query, live and through the Wire", () => {
     const app = makeApp()
     return run(
@@ -517,8 +586,8 @@ describe("a query without onChange", { concurrent: false }, () => {
         assert.strictEqual(root.text(), "Note 2clicks 0")
         // The props are logged before the result write they cause.
         assert.deepStrictEqual(
-          root.log().filter((entry) => entry.path === path).map((entry) => entry._tag).filter((tag) =>
-            tag === "PropsChanged" || tag === "QueryChanged"
+          root.log().flatMap((entry) =>
+            (entry._tag === "PropsChanged" || entry._tag === "QueryChanged") && entry.path === path ? [entry._tag] : []
           ),
           ["QueryChanged", "PropsChanged", "QueryChanged"]
         )

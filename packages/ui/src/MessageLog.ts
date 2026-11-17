@@ -91,7 +91,7 @@ export const MessageLog: Context.Reference<MessageLog> = Context.Reference<Messa
  * @category models
  * @since 0.1.0
  */
-export type FailureSource =
+export type FailedIn =
   | "init"
   | "update"
   | "view"
@@ -126,13 +126,20 @@ export interface Issued {
  *
  * **Details**
  *
- * `DomEvent` is a view handler, such as a click. `Command` is a Command's result, pointing at
- * the entry that issued it and at its span. `Subscription` is a keyed
- * Subscription. `Emit` is a child's emit, pointing at the child's entry.
- * `Send` is a parent's `$.send`, or a descendant's `$.send` to an owner of
- * shared state, pointing at the sender's entry.
- * `Mount` is an `onMount` result, and `Dispatch` is a message sent from
- * outside the tree, such as `TestHost`'s `root.send`.
+ * `DomEvent` is a view handler, such as a click. `Command` is a Command's
+ * result, pointing at the entry that issued it and at its span.
+ * `Subscription` is a keyed Subscription. `Query` is a query's
+ * `onChange`, pointing at the `QueryChanged` entry it saw. `Emit` is a
+ * child's emit, pointing at the child's entry. `Failure` is a parent's
+ * `onFailure` for a child that failed, pointing at the child's `Failed`
+ * entry. `Send` is a parent's `$.send`, or a descendant's `$.send` to an
+ * owner of shared state, pointing at the sender's entry. `Mount` is an
+ * `onMount` result, and `Dispatch` is a message sent from outside the tree,
+ * such as `TestHost`'s `root.send`.
+ *
+ * `Emit`, `Failure` and `Send` name the other instance's path as well as
+ * its entry, so a ring buffer that has dropped that entry still says where
+ * the message came from.
  *
  * @stability experimental
  * @category models
@@ -148,14 +155,16 @@ export type Source =
     readonly traceId: string | undefined
   }
   | { readonly _tag: "Subscription"; readonly key: string }
+  | { readonly _tag: "Query"; readonly name: string; readonly seq: number }
   | { readonly _tag: "Emit"; readonly path: string; readonly seq: number }
+  | { readonly _tag: "Failure"; readonly path: string; readonly seq: number }
   | { readonly _tag: "Send"; readonly path: string; readonly seq: number }
   | { readonly _tag: "Mount"; readonly name: string }
   | { readonly _tag: "Dispatch" }
 
 /**
- * Fields every entry has: its number, its time from `Clock`, the session it
- * belongs to and the instance path it's about.
+ * Fields every entry has: its number, its time from `Clock`, and the session
+ * it belongs to.
  *
  * @stability experimental
  * @category models
@@ -165,7 +174,31 @@ export interface Base {
   readonly seq: number
   readonly at: number
   readonly session: string
+}
+
+/**
+ * Fields every entry about an instance has: its path, its number and its
+ * component.
+ *
+ * **Details**
+ *
+ * `instance` tells two instances at one path apart. A path names a place in
+ * the tree, and a child can mount there again before the instance that was
+ * there has logged `Unmounted`. The number is unique in the session, and
+ * later instances have higher ones.
+ *
+ * `component` is on every entry, so an entry still names its component
+ * when the instance's first entry has left a ring buffer. Its Schemas encode
+ * the entry's values for the Wire.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface InstanceBase extends Base {
   readonly path: string
+  readonly instance: number
+  readonly component: Component.Any
 }
 
 /**
@@ -173,24 +206,27 @@ export interface Base {
  * it saw, the Model after it, and the Commands, events, load mores, resets
  * and sends it returned.
  *
+ * **Details**
+ *
+ * It holds the instance's whole state, so a replay can start from any
+ * `Update` a ring buffer still has.
+ *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface Update extends Base {
+export interface Update extends InstanceBase {
   readonly _tag: "Update"
-  /** The component, whose Schemas encode the values for the Wire. */
-  readonly component: Component.Any
   readonly source: Source
   readonly message: unknown
   readonly props: unknown
   readonly model: unknown
   readonly commands: ReadonlyArray<Command.Command<any, any>>
   readonly events: ReadonlyArray<unknown>
-  /** The `$.loadMore` and `$.reset` calls, in order. The wire omits it when empty. */
-  readonly lists?: ReadonlyArray<Component.ListIssue> | undefined
-  /** The `$.send` calls, in order. The wire omits it when empty. */
-  readonly sends?: ReadonlyArray<Component.Send> | undefined
+  /** The `$.loadMore` and `$.reset` calls, in order. */
+  readonly lists: ReadonlyArray<Component.ListIssue>
+  /** The `$.send` calls, in order. */
+  readonly sends: ReadonlyArray<Component.Send>
   /**
    * The query results `update` read as `$.queries`, by query name: what
    * `Story.fromLog` gives it back, as it gives back `props`. Only a
@@ -201,17 +237,25 @@ export interface Update extends Base {
 
 /**
  * An instance mounted: its props, the Model from `init` (or adopted from the
- * server), and the Commands `init` returned.
+ * server or from history), its query results, and the Commands `init`
+ * returned.
+ *
+ * **Details**
+ *
+ * `queries` is what the instance starts with: the server's or history's
+ * results when it adopted them, and every query empty otherwise. Only a
+ * component with queries has it. The first values of its watches come after,
+ * as `QueryChanged` entries.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface Mounted extends Base {
+export interface Mounted extends InstanceBase {
   readonly _tag: "Mounted"
-  readonly component: Component.Any
   readonly props: unknown
   readonly model: unknown
+  readonly queries?: Component.Results | undefined
   readonly commands: ReadonlyArray<Command.Command<any, any>>
   readonly events: ReadonlyArray<unknown>
   readonly adopted: boolean
@@ -231,10 +275,8 @@ export interface Mounted extends Base {
  * @category models
  * @since 0.1.0
  */
-export interface PropsChanged extends Base {
+export interface PropsChanged extends InstanceBase {
   readonly _tag: "PropsChanged"
-  /** The component, whose props Schema encodes them for the Wire. */
-  readonly component: Component.Any
   readonly props: unknown
 }
 
@@ -245,32 +287,86 @@ export interface PropsChanged extends Base {
  *
  * **Details**
  *
- * An instance mounted with restored or hydrated results logs one entry per
- * non-empty result right after `Mounted`. A query with `onChange` logs this
- * entry before the `Update` of the message it returns.
+ * A query with `onChange` logs this entry before the `Update` of the
+ * message it returns, whose source points at it.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface QueryChanged extends Base {
+export interface QueryChanged extends InstanceBase {
   readonly _tag: "QueryChanged"
-  /** The component, whose query Schemas encode the result for the Wire. */
-  readonly component: Component.Any
   /** The query's name in `queries`. */
   readonly name: string
   readonly result: unknown
 }
 
 /**
- * A lifecycle step with nothing to add but the path.
+ * A hydrating instance is waiting for its provided Layer: it shows the nodes
+ * the server rendered, inert, and has no Model of its own yet.
+ *
+ * **Details**
+ *
+ * It's the instance's first entry, logged when the instance is created, with
+ * the props it was given and the Model and query results the server rendered
+ * the path with. Its Layer entries follow. When the Layer is ready the
+ * instance logs `Mounted`, adopting that state. When the Layer fails and the
+ * component handles the failure, it logs `Mounted` with a Model from `init`.
+ * An instance removed while it waits logs `Unmounted` and never `Mounted`.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface Lifecycle extends Base {
-  readonly _tag: "Unmounted" | "LayerPending" | "LayerReady"
+export interface Waiting extends InstanceBase {
+  readonly _tag: "Waiting"
+  readonly props: unknown
+  /** The Model the server rendered the path with, which the nodes on screen show. */
+  readonly model: unknown
+  /** The query results the server rendered the path with. Only a component with queries has them. */
+  readonly queries?: Component.Results | undefined
+}
+
+/**
+ * An instance left the tree: from then on it takes no message, props or
+ * query results, and its path is free.
+ *
+ * **Details**
+ *
+ * An instance removed with its parent logs its own entry before its
+ * parent's. Its Scope closes after, and its Commands log their ends as they
+ * exit, which can be later than this entry.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Unmounted extends InstanceBase {
+  readonly _tag: "Unmounted"
+}
+
+/**
+ * An instance's provided Layer is still building once the instance is
+ * created. Its Commands, Subscriptions and mounts, and its descendants', wait
+ * for it.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface LayerPending extends InstanceBase {
+  readonly _tag: "LayerPending"
+}
+
+/**
+ * The Layer an earlier `LayerPending` waited for is built.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface LayerReady extends InstanceBase {
+  readonly _tag: "LayerReady"
 }
 
 /**
@@ -280,26 +376,38 @@ export interface Lifecycle extends Base {
  * @category models
  * @since 0.1.0
  */
-export interface LayerFailed extends Base {
+export interface LayerFailed extends InstanceBase {
   readonly _tag: "LayerFailed"
   readonly cause: Cause.Cause<unknown>
 }
 
 /**
- * A Subscription's key started or stopped.
+ * A Subscription's key started. A query's watch isn't a Subscription here:
+ * its fetches are `FetchStarted` entries and its values `QueryChanged`.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface SubscriptionChanged extends Base {
-  readonly _tag: "SubscriptionStarted" | "SubscriptionStopped"
+export interface SubscriptionStarted extends InstanceBase {
+  readonly _tag: "SubscriptionStarted"
   readonly key: string
 }
 
 /**
- * A Command run ended with a result, or was interrupted (by unmount, `switch`,
- * the interrupt Command or a handled Layer failure) and dispatched nothing.
+ * A Subscription's key stopped.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface SubscriptionStopped extends InstanceBase {
+  readonly _tag: "SubscriptionStopped"
+  readonly key: string
+}
+
+/**
+ * A Command run ended with a result.
  *
  * **Details**
  *
@@ -311,8 +419,8 @@ export interface SubscriptionChanged extends Base {
  * @category models
  * @since 0.1.0
  */
-export interface CommandSettled extends Base {
-  readonly _tag: "CommandEnded" | "CommandInterrupted"
+export interface CommandEnded extends InstanceBase {
+  readonly _tag: "CommandEnded"
   readonly name: string
   readonly issued: Issued
   /**
@@ -327,14 +435,14 @@ export interface CommandSettled extends Base {
   /** The run's trace id, or `undefined` when its span never began. */
   readonly traceId: string | undefined
   /**
-   * On `CommandEnded` only: `true` when the run had at least one result (its
-   * Effect's result, each Stream element, a typed failure `onFailure` mapped)
-   * and every one was `Component.noop`, so it ended without a message by
-   * design. Absent when it sent any message, when a Stream ended with no
-   * elements, and when a detached run ended after its instance closed, since
-   * its result wasn't mapped.
+   * `true` when the run had at least one result (its Effect's result, each
+   * Stream element, a typed failure `onFailure` mapped) and every one was
+   * `Component.noop`, so it ended without a message by design. `false` when
+   * it sent any message, when a Stream ended with no elements, and when a
+   * detached run ended after its instance closed, since its result wasn't
+   * mapped.
    */
-  readonly silent?: true | undefined
+  readonly silent: boolean
   /**
    * For a run issued with `Command.afterRefetch` that succeeded, how its wait
    * ended: `"settled"` when every awaited entry refetched, `"nothing"` when
@@ -346,6 +454,32 @@ export interface CommandSettled extends Base {
   readonly waitEnded?: WaitEnded | undefined
   /** With `waitEnded`: the awaited entries still refetching when the wait was cut. */
   readonly outstanding?: ReadonlyArray<AwaitedEntry> | undefined
+}
+
+/**
+ * A Command run was interrupted (by unmount, `switch`, the interrupt Command
+ * or a handled Layer failure) and dispatched nothing.
+ *
+ * **Details**
+ *
+ * It's logged when the run's fiber has exited, which is when `h.isRunning`
+ * stops counting it: a run whose cleanup is still going has no entry yet. A
+ * run that never got a fiber logs it when it's stopped.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface CommandInterrupted extends InstanceBase {
+  readonly _tag: "CommandInterrupted"
+  readonly name: string
+  readonly issued: Issued
+  /** As on `CommandEnded`. */
+  readonly detached: boolean
+  /** The run's span id, or `undefined` when its span never began. */
+  readonly spanId: string | undefined
+  /** The run's trace id, or `undefined` when its span never began. */
+  readonly traceId: string | undefined
 }
 
 /**
@@ -380,7 +514,7 @@ export interface AwaitedEntry {
  * @category models
  * @since 0.1.0
  */
-export interface CommandAwaiting extends Base {
+export interface CommandAwaiting extends InstanceBase {
   readonly _tag: "CommandAwaiting"
   readonly name: string
   readonly issued: Issued
@@ -396,7 +530,7 @@ export interface CommandAwaiting extends Base {
  * @category models
  * @since 0.1.0
  */
-export interface CommandDropped extends Base {
+export interface CommandDropped extends InstanceBase {
   readonly _tag: "CommandDropped"
   readonly name: string
   readonly issued: Issued
@@ -420,7 +554,7 @@ export interface CommandDropped extends Base {
  * @category models
  * @since 0.1.0
  */
-export interface SendDropped extends Base {
+export interface SendDropped extends InstanceBase {
   readonly _tag: "SendDropped"
   readonly ref: string
   readonly issued: Issued
@@ -428,22 +562,38 @@ export interface SendDropped extends Base {
 }
 
 /**
- * An instance failed (`Failed`), or the root did (`Crashed`), with the real
- * Cause and where it happened.
+ * An instance failed, with the real Cause and where it happened.
+ *
+ * **Details**
+ *
+ * `props` are the instance's, as of the failure. An instance that fails in
+ * `init`, or whose Layer fails before it mounts, has no `Mounted` entry, so
+ * this is the only entry that says what was there.
+ *
+ * A failed root is the instance with no parent: its `Failed` entry is
+ * followed by its `Unmounted`. When the root `fallback` given to `mount`
+ * throws, the root logs a second `Failed` after that, `in` `"fallback"`.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface Failed extends Base {
-  readonly _tag: "Failed" | "Crashed"
-  readonly source: FailureSource
+export interface Failed extends InstanceBase {
+  readonly _tag: "Failed"
+  readonly props: unknown
+  readonly in: FailedIn
   readonly name: string | undefined
   readonly cause: Cause.Cause<unknown>
+  /**
+   * When `update` threw: the message it was given and what sent it. A
+   * message whose `update` throws has no `Update` entry, so this is its
+   * only record.
+   */
+  readonly update?: { readonly message: unknown; readonly source: Source } | undefined
 }
 
 /**
- * A `mount` or a server render started. `path` is the root's path.
+ * A `mount` or a server render started.
  *
  * @stability experimental
  * @category models
@@ -455,7 +605,7 @@ export interface SessionStarted extends Base {
 }
 
 /**
- * The query cache started a fetch. `path` is the root's path.
+ * The query cache started a fetch.
  *
  * **Details**
  *
@@ -489,27 +639,39 @@ export interface FetchStarted extends Base {
 }
 
 /**
- * Any log entry.
+ * Any entry about one instance.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export type Entry =
-  | SessionStarted
-  | Update
+export type InstanceEntry =
+  | Waiting
   | Mounted
+  | Update
   | PropsChanged
   | QueryChanged
-  | Lifecycle
+  | LayerPending
+  | LayerReady
   | LayerFailed
-  | SubscriptionChanged
-  | CommandSettled
+  | Failed
+  | Unmounted
   | CommandAwaiting
+  | CommandEnded
+  | CommandInterrupted
   | CommandDropped
   | SendDropped
-  | Failed
-  | FetchStarted
+  | SubscriptionStarted
+  | SubscriptionStopped
+
+/**
+ * Any log entry: one about the tree, or one about an instance.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type Entry = SessionStarted | FetchStarted | InstanceEntry
 
 /**
  * A ring buffer log whose entries can be read back.
@@ -608,7 +770,7 @@ export const fanout = <const Layers extends ReadonlyArray<Layer.Layer<never, any
  * @category Wire
  * @since 0.1.0
  */
-export const wireVersion = 1
+export const wireVersion = 3
 
 /**
  * Where a log comes from, as `Hello` reports it.
@@ -619,11 +781,16 @@ export const wireVersion = 1
  */
 export type WireHost = "browser" | "server" | "test"
 
-const Seq = {
+const BaseWire = {
   seq: Schema.Number,
   at: Schema.Number,
-  session: Schema.String,
-  path: Schema.String
+  session: Schema.String
+}
+const InstanceWire = {
+  ...BaseWire,
+  path: Schema.String,
+  instance: Schema.Number,
+  component: Schema.String
 }
 const IssuedWire = Schema.Struct({ seq: Schema.Number, index: Schema.Number })
 const CommandWire = Schema.Struct({
@@ -643,11 +810,21 @@ const SourceWire = Schema.Union([
     traceId: Schema.NullOr(Schema.String)
   }),
   Schema.TaggedStruct("Subscription", { key: Schema.String }),
+  Schema.TaggedStruct("Query", { name: Schema.String, seq: Schema.Number }),
   Schema.TaggedStruct("Emit", { path: Schema.String, seq: Schema.Number }),
+  Schema.TaggedStruct("Failure", { path: Schema.String, seq: Schema.Number }),
   Schema.TaggedStruct("Send", { path: Schema.String, seq: Schema.Number }),
   Schema.TaggedStruct("Mount", { name: Schema.String }),
   Schema.TaggedStruct("Dispatch", {})
 ])
+const RunWire = {
+  ...InstanceWire,
+  name: Schema.String,
+  issued: IssuedWire,
+  detached: Schema.Boolean,
+  spanId: Schema.NullOr(Schema.String),
+  traceId: Schema.NullOr(Schema.String)
+}
 
 /**
  * The versioned, one-way Schema of what a log sends: a `Hello` once per
@@ -662,7 +839,7 @@ const SourceWire = Schema.Union([
  * `{ "~unserialisable": "<kind>" }`, a `Redacted` becomes
  * `{ "~redacted": true }`, and a Model or message over `maxEntryBytes` becomes
  * `{ "~truncated": bytes }`. A Cause is sent as `Cause.pretty` plus its
- * reasons, best effort.
+ * reasons, best effort. An entry's `component` is sent as its name.
  *
  * @stability experimental
  * @category Wire
@@ -670,78 +847,9 @@ const SourceWire = Schema.Union([
  */
 export const Wire = Schema.Union([
   Schema.TaggedStruct("Hello", { version: Schema.Number, host: Schema.Literals(["browser", "server", "test"]) }),
-  Schema.TaggedStruct("SessionStarted", { ...Seq, app: Schema.String }),
-  Schema.TaggedStruct("Update", {
-    ...Seq,
-    component: Schema.String,
-    source: SourceWire,
-    message: Schema.Json,
-    props: Schema.Json,
-    model: Schema.Json,
-    commands: Schema.Array(CommandWire),
-    events: Schema.Array(Schema.Json),
-    lists: Schema.optionalKey(
-      Schema.Array(Schema.Struct({ name: Schema.String, op: Schema.Literals(["loadMore", "reset"]) }))
-    ),
-    sends: Schema.optionalKey(Schema.Array(Schema.Union([
-      Schema.Struct({ ref: Schema.String, message: Schema.Json }),
-      Schema.Struct({ owner: Schema.String, message: Schema.Json })
-    ]))),
-    queries: Schema.optionalKey(Schema.Json)
-  }),
-  Schema.TaggedStruct("Mounted", {
-    ...Seq,
-    component: Schema.String,
-    props: Schema.Json,
-    model: Schema.Json,
-    commands: Schema.Array(CommandWire),
-    events: Schema.Array(Schema.Json),
-    adopted: Schema.Boolean
-  }),
-  Schema.TaggedStruct("PropsChanged", { ...Seq, component: Schema.String, props: Schema.Json }),
-  Schema.TaggedStruct("QueryChanged", { ...Seq, component: Schema.String, name: Schema.String, result: Schema.Json }),
-  Schema.Struct({ _tag: Schema.Literals(["Unmounted", "LayerPending", "LayerReady"]), ...Seq }),
-  Schema.TaggedStruct("LayerFailed", { ...Seq, cause: CauseWire }),
-  Schema.Struct({ _tag: Schema.Literals(["SubscriptionStarted", "SubscriptionStopped"]), ...Seq, key: Schema.String }),
-  Schema.Struct({
-    _tag: Schema.Literals(["CommandEnded", "CommandInterrupted"]),
-    ...Seq,
-    name: Schema.String,
-    issued: IssuedWire,
-    detached: Schema.Boolean,
-    spanId: Schema.NullOr(Schema.String),
-    traceId: Schema.NullOr(Schema.String),
-    silent: Schema.optionalKey(Schema.Literal(true)),
-    waitEnded: Schema.optionalKey(Schema.Literals(["settled", "nothing", "budget", "switch", "interrupt", "closed"])),
-    outstanding: Schema.optionalKey(Schema.Array(AwaitedEntryWire))
-  }),
-  Schema.TaggedStruct("CommandAwaiting", {
-    ...Seq,
-    name: Schema.String,
-    issued: IssuedWire,
-    entries: Schema.Array(AwaitedEntryWire)
-  }),
-  Schema.TaggedStruct("CommandDropped", {
-    ...Seq,
-    name: Schema.String,
-    issued: IssuedWire,
-    reason: Schema.Literals(["mode", "server"])
-  }),
-  Schema.TaggedStruct("SendDropped", {
-    ...Seq,
-    ref: Schema.String,
-    issued: IssuedWire,
-    reason: Schema.Literals(["unrendered", "failed", "fallback", "waiting"])
-  }),
-  Schema.Struct({
-    _tag: Schema.Literals(["Failed", "Crashed"]),
-    ...Seq,
-    source: Schema.String,
-    name: Schema.NullOr(Schema.String),
-    cause: CauseWire
-  }),
+  Schema.TaggedStruct("SessionStarted", { ...BaseWire, app: Schema.String }),
   Schema.TaggedStruct("FetchStarted", {
-    ...Seq,
+    ...BaseWire,
     query: Schema.String,
     logKey: Schema.String,
     trigger: Schema.Literals([
@@ -760,7 +868,78 @@ export const Wire = Schema.Union([
     stored: Schema.Boolean,
     page: Schema.optionalKey(Schema.Number),
     cursor: Schema.optionalKey(Schema.Json)
-  })
+  }),
+  Schema.TaggedStruct("Waiting", {
+    ...InstanceWire,
+    props: Schema.Json,
+    model: Schema.Json,
+    queries: Schema.optionalKey(Schema.Json)
+  }),
+  Schema.TaggedStruct("Mounted", {
+    ...InstanceWire,
+    props: Schema.Json,
+    model: Schema.Json,
+    queries: Schema.optionalKey(Schema.Json),
+    commands: Schema.Array(CommandWire),
+    events: Schema.Array(Schema.Json),
+    adopted: Schema.Boolean
+  }),
+  Schema.TaggedStruct("Update", {
+    ...InstanceWire,
+    source: SourceWire,
+    message: Schema.Json,
+    props: Schema.Json,
+    model: Schema.Json,
+    queries: Schema.optionalKey(Schema.Json),
+    commands: Schema.Array(CommandWire),
+    events: Schema.Array(Schema.Json),
+    lists: Schema.Array(Schema.Struct({ name: Schema.String, op: Schema.Literals(["loadMore", "reset"]) })),
+    sends: Schema.Array(Schema.Union([
+      Schema.Struct({ ref: Schema.String, message: Schema.Json }),
+      Schema.Struct({ owner: Schema.String, message: Schema.Json })
+    ]))
+  }),
+  Schema.TaggedStruct("PropsChanged", { ...InstanceWire, props: Schema.Json }),
+  Schema.TaggedStruct("QueryChanged", { ...InstanceWire, name: Schema.String, result: Schema.Json }),
+  Schema.TaggedStruct("LayerPending", InstanceWire),
+  Schema.TaggedStruct("LayerReady", InstanceWire),
+  Schema.TaggedStruct("LayerFailed", { ...InstanceWire, cause: CauseWire }),
+  Schema.TaggedStruct("Failed", {
+    ...InstanceWire,
+    props: Schema.Json,
+    in: Schema.String,
+    name: Schema.NullOr(Schema.String),
+    cause: CauseWire,
+    update: Schema.optionalKey(Schema.Struct({ message: Schema.Json, source: SourceWire }))
+  }),
+  Schema.TaggedStruct("Unmounted", InstanceWire),
+  Schema.TaggedStruct("CommandAwaiting", {
+    ...InstanceWire,
+    name: Schema.String,
+    issued: IssuedWire,
+    entries: Schema.Array(AwaitedEntryWire)
+  }),
+  Schema.TaggedStruct("CommandEnded", {
+    ...RunWire,
+    silent: Schema.Boolean,
+    waitEnded: Schema.optionalKey(Schema.Literals(["settled", "nothing", "budget", "switch", "interrupt", "closed"])),
+    outstanding: Schema.optionalKey(Schema.Array(AwaitedEntryWire))
+  }),
+  Schema.TaggedStruct("CommandInterrupted", RunWire),
+  Schema.TaggedStruct("CommandDropped", {
+    ...InstanceWire,
+    name: Schema.String,
+    issued: IssuedWire,
+    reason: Schema.Literals(["mode", "server"])
+  }),
+  Schema.TaggedStruct("SendDropped", {
+    ...InstanceWire,
+    ref: Schema.String,
+    issued: IssuedWire,
+    reason: Schema.Literals(["unrendered", "failed", "fallback", "waiting"])
+  }),
+  Schema.TaggedStruct("SubscriptionStarted", { ...InstanceWire, key: Schema.String }),
+  Schema.TaggedStruct("SubscriptionStopped", { ...InstanceWire, key: Schema.String })
 ])
 
 /**
@@ -828,11 +1007,17 @@ export const makeEncoder = (options?: {
       return { "~unserialisable": "encode" }
     }
   }
-  const encodeQueries = (component: Component.Any, results: Component.Results): Schema.Json => {
+  const encodeQueries = (
+    component: Component.Any,
+    results: Component.Results | undefined
+  ): { readonly queries?: Schema.Json } => {
+    if (results === undefined) return {}
     const schema = (component["~queries"] as componentQueries.Bound | undefined)?.logSchema
-    return schema === undefined
-      ? { "~unserialisable": "encode" }
-      : cap(encodeWith(schema, `${component.definition.name}.queries`, results) as Schema.Json)
+    return {
+      queries: schema === undefined
+        ? { "~unserialisable": "encode" }
+        : cap(encodeWith(schema, `${component.definition.name}.queries`, results) as Schema.Json)
+    }
   }
   // A message can carry a query's whole result, so messages are capped like Models and query results.
   const capped = (component: Component.Any, field: "model" | "message", value: unknown): Schema.Json =>
@@ -842,54 +1027,80 @@ export const makeEncoder = (options?: {
     const bytes = utf8Length(JSON.stringify(encoded))
     return bytes > maxEntryBytes ? { "~truncated": bytes } : encoded
   }
+  const props = (entry: { readonly component: Component.Any; readonly props: unknown }) =>
+    through(entry.component, "props", entry.props) as Schema.Json
+  const events = (entry: { readonly component: Component.Any; readonly events: ReadonlyArray<unknown> }) =>
+    entry.events.map((emitted) => through(entry.component, "events", emitted) as Schema.Json)
+  const run = (entry: CommandEnded | CommandInterrupted) => ({
+    ...instanceBase(entry),
+    name: entry.name,
+    issued: entry.issued,
+    detached: entry.detached,
+    spanId: entry.spanId ?? null,
+    traceId: entry.traceId ?? null
+  })
   return {
     encode(entry) {
       switch (entry._tag) {
-        case "Update":
+        case "SessionStarted":
+          return { _tag: "SessionStarted", ...base(entry), app: entry.app }
+        case "FetchStarted":
           return {
+            _tag: "FetchStarted",
             ...base(entry),
-            _tag: "Update",
-            component: entry.component.definition.name,
-            source: encodeSource(entry.source),
-            message: capped(entry.component, "message", entry.message),
-            props: through(entry.component, "props", entry.props) as Schema.Json,
+            query: entry.query,
+            logKey: entry.logKey,
+            trigger: entry.trigger,
+            restart: entry.restart,
+            inWindow: entry.inWindow,
+            stored: entry.stored,
+            ...(entry.page === undefined ? undefined : { page: entry.page }),
+            ...(entry.cursor === undefined ? undefined : { cursor: entry.cursor })
+          }
+        case "Waiting":
+          return {
+            _tag: "Waiting",
+            ...instanceBase(entry),
+            props: props(entry),
             model: capped(entry.component, "model", entry.model),
-            commands: entry.commands.map(encodeCommand),
-            events: entry.events.map((emitted) => through(entry.component, "events", emitted) as Schema.Json),
-            ...(entry.lists === undefined || entry.lists.length === 0 ? undefined : { lists: entry.lists }),
-            ...(entry.sends === undefined || entry.sends.length === 0 ? undefined : {
-              sends: entry.sends.map((send) => {
-                const encoded = encodeSend(send)
-                return { ...encoded, message: cap(encoded.message) }
-              })
-            }),
-            ...(entry.queries === undefined ? undefined : { queries: encodeQueries(entry.component, entry.queries) })
+            ...encodeQueries(entry.component, entry.queries)
           }
         case "Mounted":
           return {
-            ...base(entry),
             _tag: "Mounted",
-            component: entry.component.definition.name,
-            props: through(entry.component, "props", entry.props) as Schema.Json,
+            ...instanceBase(entry),
+            props: props(entry),
             model: capped(entry.component, "model", entry.model),
+            ...encodeQueries(entry.component, entry.queries),
             commands: entry.commands.map(encodeCommand),
-            events: entry.events.map((emitted) => through(entry.component, "events", emitted) as Schema.Json),
+            events: events(entry),
             adopted: entry.adopted
           }
-        case "PropsChanged":
+        case "Update":
           return {
-            ...base(entry),
-            _tag: "PropsChanged",
-            component: entry.component.definition.name,
-            props: through(entry.component, "props", entry.props) as Schema.Json
+            _tag: "Update",
+            ...instanceBase(entry),
+            source: encodeSource(entry.source),
+            message: capped(entry.component, "message", entry.message),
+            props: props(entry),
+            model: capped(entry.component, "model", entry.model),
+            ...encodeQueries(entry.component, entry.queries),
+            commands: entry.commands.map(encodeCommand),
+            events: events(entry),
+            lists: entry.lists,
+            sends: entry.sends.map((send) => {
+              const encoded = encodeSend(send)
+              return { ...encoded, message: cap(encoded.message) }
+            })
           }
+        case "PropsChanged":
+          return { _tag: "PropsChanged", ...instanceBase(entry), props: props(entry) }
         case "QueryChanged": {
           const schema = (entry.component["~queries"] as componentQueries.Bound | undefined)?.logSchema
             .fields[entry.name]
           return {
-            ...base(entry),
             _tag: "QueryChanged",
-            component: entry.component.definition.name,
+            ...instanceBase(entry),
             name: entry.name,
             result: schema === undefined
               ? { "~unserialisable": "encode" }
@@ -902,77 +1113,76 @@ export const makeEncoder = (options?: {
               )
           }
         }
+        case "LayerPending":
+        case "LayerReady":
+        case "Unmounted":
+          return { _tag: entry._tag, ...instanceBase(entry) }
         case "LayerFailed":
-          return { ...base(entry), _tag: "LayerFailed", cause: encodeCause(entry.cause) }
+          return { _tag: "LayerFailed", ...instanceBase(entry), cause: encodeCause(entry.cause) }
         case "Failed":
-        case "Crashed":
           return {
-            ...base(entry),
-            _tag: entry._tag,
-            source: entry.source,
+            _tag: "Failed",
+            ...instanceBase(entry),
+            props: props(entry),
+            in: entry.in,
             name: entry.name ?? null,
-            cause: encodeCause(entry.cause)
-          }
-        case "SessionStarted":
-          return { ...base(entry), _tag: "SessionStarted", app: entry.app }
-        case "SubscriptionStarted":
-        case "SubscriptionStopped":
-          return { ...base(entry), _tag: entry._tag, key: entry.key }
-        case "CommandEnded":
-        case "CommandInterrupted":
-          return {
-            ...base(entry),
-            _tag: entry._tag,
-            name: entry.name,
-            issued: entry.issued,
-            detached: entry.detached,
-            spanId: entry.spanId ?? null,
-            traceId: entry.traceId ?? null,
-            ...(entry.silent === true ? { silent: true as const } : undefined),
-            ...(entry.waitEnded === undefined ? undefined : { waitEnded: entry.waitEnded }),
-            ...(entry.outstanding === undefined ? undefined : { outstanding: entry.outstanding })
+            cause: encodeCause(entry.cause),
+            ...(entry.update === undefined ? undefined : {
+              update: {
+                message: capped(entry.component, "message", entry.update.message),
+                source: encodeSource(entry.update.source)
+              }
+            })
           }
         case "CommandAwaiting":
           return {
-            ...base(entry),
             _tag: "CommandAwaiting",
+            ...instanceBase(entry),
             name: entry.name,
             issued: entry.issued,
             entries: entry.entries
           }
+        case "CommandEnded":
+          return {
+            _tag: "CommandEnded",
+            ...run(entry),
+            silent: entry.silent,
+            ...(entry.waitEnded === undefined ? undefined : { waitEnded: entry.waitEnded }),
+            ...(entry.outstanding === undefined ? undefined : { outstanding: entry.outstanding })
+          }
+        case "CommandInterrupted":
+          return { _tag: "CommandInterrupted", ...run(entry) }
         case "CommandDropped":
           return {
-            ...base(entry),
             _tag: "CommandDropped",
+            ...instanceBase(entry),
             name: entry.name,
             issued: entry.issued,
             reason: entry.reason
           }
         case "SendDropped":
-          return { ...base(entry), _tag: "SendDropped", ref: entry.ref, issued: entry.issued, reason: entry.reason }
-        case "Unmounted":
-        case "LayerPending":
-        case "LayerReady":
-          return { ...base(entry), _tag: entry._tag }
-        case "FetchStarted":
           return {
-            ...base(entry),
-            _tag: "FetchStarted",
-            query: entry.query,
-            logKey: entry.logKey,
-            trigger: entry.trigger,
-            restart: entry.restart,
-            inWindow: entry.inWindow,
-            stored: entry.stored,
-            ...(entry.page === undefined ? undefined : { page: entry.page }),
-            ...(entry.cursor === undefined ? undefined : { cursor: entry.cursor })
+            _tag: "SendDropped",
+            ...instanceBase(entry),
+            ref: entry.ref,
+            issued: entry.issued,
+            reason: entry.reason
           }
+        case "SubscriptionStarted":
+        case "SubscriptionStopped":
+          return { _tag: entry._tag, ...instanceBase(entry), key: entry.key }
       }
     }
   }
 }
 
-const base = (entry: Base) => ({ seq: entry.seq, at: entry.at, session: entry.session, path: entry.path })
+const base = (entry: Base) => ({ seq: entry.seq, at: entry.at, session: entry.session })
+const instanceBase = (entry: InstanceBase) => ({
+  ...base(entry),
+  path: entry.path,
+  instance: entry.instance,
+  component: entry.component.definition.name
+})
 
 const encodeSource = (source: Source): typeof SourceWire.Type => {
   switch (source._tag) {
