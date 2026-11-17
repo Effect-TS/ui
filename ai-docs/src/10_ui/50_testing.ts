@@ -141,7 +141,7 @@ describe("NotePage", () => {
         .click("Save now")
         // A story renders no children, so what `update` sent them is data.
         .sent((sent) =>
-          assert.deepStrictEqual(sent.map((send) => [send.ref.key, send.message]), [["Editor[n1]", { _tag: "Save" }]])
+          assert.deepStrictEqual(sent.map((send) => [send.ref?.key, send.message]), [["Editor[n1]", { _tag: "Save" }]])
         ))
   })
 })

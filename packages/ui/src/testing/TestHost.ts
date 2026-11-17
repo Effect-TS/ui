@@ -865,7 +865,11 @@ export const formatLog = (entries: ReadonlyArray<MessageLog.Entry>): string =>
         const events = entry.events.length === 0 ? "" : ` events ${entry.events.map(summary).join(", ")}`
         const sends = entry.sends === undefined || entry.sends.length === 0
           ? ""
-          : ` sends ${entry.sends.map((send) => `${send.ref.key} ${summary(send.message)}`).join(", ")}`
+          : ` sends ${
+            entry.sends.map((send) =>
+              `${send.ref !== undefined ? send.ref.key : send.owner.definition.name} ${summary(send.message)}`
+            ).join(", ")
+          }`
         return `${head} ${summary(entry.message)} (${from})${commands}${events}${sends}`
       }
       case "Mounted":

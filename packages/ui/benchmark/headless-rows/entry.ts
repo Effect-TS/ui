@@ -1,4 +1,4 @@
-import { Component } from "@effect/ui"
+import { Component, type View } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { Effect, Exit, Schema, Scope } from "effect"
 
@@ -118,7 +118,153 @@ const Wrapped = Component.define(app).make({
   view: (rows, h) => h.ul.children(rows.map((row) => WrappedRow(h, { key: row.id, props: { row } })))
 })
 
-const variants = { plain: Plain, normal: Normal, headless: Headless, wrapped: Wrapped }
+// -- under an owner of shared state ---------------------------------------------------------------
+// The same rows inside a Provider's `view` closure. Every Provider update re-runs the closure, so
+// these measure what a Provider update costs with each shape of subtree under it. `touch` changes
+// the Provider's Model but not what it shares; `open` changes what it shares.
+
+const ProviderMessage = Schema.TaggedUnion({ Touch: {}, Open: { id: Schema.String } })
+const Provider = Component.define({
+  name: "Provider",
+  model: Schema.Struct({ open: Schema.NullOr(Schema.String), touches: Schema.Number }),
+  message: ProviderMessage,
+  receives: ["Touch", "Open"],
+  shares: (model) => ({ open: model.open }),
+  elements: Html
+}).make({
+  init: () => ({ open: null, touches: 0 }),
+  update: (model, message) =>
+    ProviderMessage.match(message, {
+      Touch: () => ({ ...model, touches: model.touches + 1 }),
+      Open: ({ id }) => ({ ...model, open: model.open === id ? null : id })
+    }),
+  parts: (model) => model
+})
+
+/** Sends to the Provider from inside its closure: a normal component with no props, so it's skipped. */
+const Poker = Component.define({ name: "Poker", model: Schema.Null, message: ProviderMessage, elements: Html })
+  .make({
+    init: () => null,
+    update: (model, message, $) => $.set(model).send(Provider, message),
+    view: (_, h) =>
+      h.div(
+        h.button.class("poke-touch").onClick(ProviderMessage.make({ _tag: "Touch" })).children("touch"),
+        h.button.class("poke-open").onClick(ProviderMessage.make({ _tag: "Open", id: "r0" })).children("open")
+      )
+  })
+
+const AppDef = Component.define(app)
+type H = Component.Helper<typeof AppDef>
+
+/** What every owner variant puts around its rows: the Provider, its state, and the Poker. */
+const underProvider = <RV>(h: H, rows: () => View.Content<AppMessage, RV>) =>
+  Provider(h, {
+    key: "tips",
+    view: (state) =>
+      h.div(
+        h.span.class("touches").children(String(state.touches)),
+        h.span.class("open").children(String(state.open)),
+        Poker(h, { key: "poke" }),
+        rows()
+      )
+  })
+
+/** headless rows written straight into the Provider's closure: every Provider update re-renders each. */
+const OwnerHeadless = Component.define(app).make({
+  init,
+  update,
+  view: (rows, h) =>
+    underProvider(h, () =>
+      h.ul.children(rows.map((row) =>
+        Disclosure(h, {
+          key: row.id,
+          view: (d) =>
+            h.li.class("row").attr("data-done", row.done ? "" : undefined).children(
+              d.trigger(h.button).children(row.label),
+              h.span(row.done ? "done" : "todo"),
+              d.panel(h.div).children("details")
+            )
+        })
+      )))
+})
+
+/** A normal row component per row in the closure: each is skipped on equal props. */
+const OwnerWrapped = Component.define(app).make({
+  init,
+  update,
+  view: (rows, h) =>
+    underProvider(h, () => h.ul.children(rows.map((row) => WrappedRow(h, { key: row.id, props: { row } }))))
+})
+
+/** The guidance: one normal component directly under the Provider, holding the headless rows. */
+const Body = Component.define({
+  name: "Body",
+  props: Schema.Struct({ rows: Schema.Array(Row) }),
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+}).make({
+  init: () => null,
+  update: (model) => model,
+  view: (_, h) =>
+    h.ul.children(h.props.rows.map((row) =>
+      Disclosure(h, {
+        key: row.id,
+        view: (d) =>
+          h.li.class("row").attr("data-done", row.done ? "" : undefined).children(
+            d.trigger(h.button).children(row.label),
+            h.span(row.done ? "done" : "todo"),
+            d.panel(h.div).children("details")
+          )
+      })
+    ))
+})
+const OwnerBoundary = Component.define(app).make({
+  init,
+  update,
+  view: (rows, h) => underProvider(h, () => Body(h, { key: "body", props: { rows } }))
+})
+
+/** Wrapped rows that each read the Provider: every row re-renders when what it shares changes. */
+const ReaderRow = Component.define({
+  name: "Row",
+  props: Schema.Struct({ row: Row }),
+  model: Schema.Null,
+  message: Schema.Never,
+  shared: { tips: Provider },
+  elements: Html
+}).make({
+  init: () => null,
+  update: (model) => model,
+  view: (_, h) =>
+    Disclosure(h, {
+      key: "d",
+      view: (d) =>
+        h.li.class("row").attr("data-done", h.props.row.done ? "" : undefined)
+          .attr("data-open", h.shared.tips.open === h.props.row.id ? "" : undefined).children(
+            d.trigger(h.button).children(h.props.row.label),
+            h.span(h.props.row.done ? "done" : "todo"),
+            d.panel(h.div).children("details")
+          )
+    })
+})
+const OwnerReaders = Component.define(app).make({
+  init,
+  update,
+  view: (rows, h) =>
+    underProvider(h, () => h.ul.children(rows.map((row) => ReaderRow(h, { key: row.id, props: { row } }))))
+})
+
+const variants = {
+  plain: Plain,
+  normal: Normal,
+  headless: Headless,
+  wrapped: Wrapped,
+  "owner-headless": OwnerHeadless,
+  "owner-wrapped": OwnerWrapped,
+  "owner-boundary": OwnerBoundary,
+  "owner-readers": OwnerReaders
+}
 
 // -- what a figure is --------------------------------------------------------------------------
 // Wall-clock time on an otherwise idle page, from just before the message is sent (or the mount
@@ -194,6 +340,29 @@ const pass = async (name: keyof typeof variants, count: number, repeats: number)
     row.querySelector("button")!.click()
     click.push((await settle(() => row.outerHTML !== before, name + " click")) - start)
   }
+  // A Provider update from the Poker: one that keeps what it shares, then one that changes it.
+  const touch: Array<number> = []
+  const open: Array<number> = []
+  const poke = container.querySelector<HTMLButtonElement>("button.poke-touch")
+  if (poke !== null) {
+    const touches = () => container.querySelector(".touches")!.textContent
+    const opened = () => container.querySelector(".open")!.textContent
+    for (let i = 0; i < repeats; i++) {
+      const before = touches()
+      start = performance.now()
+      poke.click()
+      touch.push((await settle(() => touches() !== before, name + " touch")) - start)
+    }
+    for (let i = 0; i < repeats; i++) {
+      const before = opened()
+      start = performance.now()
+      container.querySelector<HTMLButtonElement>("button.poke-open")!.click()
+      open.push((await settle(() => opened() !== before, name + " open")) - start)
+      if (name === "owner-readers") {
+        check(container.querySelectorAll("li.row[data-open]").length === (opened() === "r0" ? 1 : 0), "readers follow")
+      }
+    }
+  }
   const updateHops = hops
   check(updateHops === 0, name + ": an update rendered later than the first microtask")
   await Effect.runPromise(Scope.close(scope, Exit.void))
@@ -224,6 +393,8 @@ const pass = async (name: keyof typeof variants, count: number, repeats: number)
     toggle: median(toggle),
     reverse: median(reverse),
     click: median(click),
+    touch: touch.length === 0 ? undefined : median(touch),
+    open: open.length === 0 ? undefined : median(open),
     mountHops,
     updateHops
   }
