@@ -146,6 +146,53 @@ describe("HtmlServer", { concurrent: false }, () => {
       }
     }).pipe(Effect.scoped))
 
+  it.effect("keeps winning HTML aliases through updates and removals without folding SVG attributes", () =>
+    Effect.gen(function*() {
+      const Page = Component.define({
+        name: "AttributeUpdates",
+        model: Schema.Number,
+        message: Schema.Number,
+        elements: Html
+      }).make({
+        init: () => 0,
+        update: (_, message) => message,
+        view: (step, h) => {
+          const loser = step === 2 || step === 5 ? undefined : step === 0 ? "0" : "1"
+          const winner = step < 4 ? "winner" : undefined
+          return h.div.children(
+            h.div.attr("DATA-X", loser).attr("data-x", winner),
+            h.el("x-safe").attr("DATA-X", loser).attr("data-x", winner),
+            h.el("svg").attr("viewBox", "0 0 10 10").attr("viewbox", loser)
+          )
+        }
+      })
+      const rendered = yield* HtmlServer.renderToHtml(Page, {})
+      for (const hydrate of [false, true]) {
+        const app = yield* container(hydrate ? rendered.html : "")
+        const before = app.firstElementChild
+        const root = yield* BrowserHost.mountEffect(Page, {}, app, hydrate ? { state: rendered.state } : undefined)
+        if (hydrate) expect(app.firstElementChild).toBe(before)
+        const steps = [
+          [1, "winner", "1"], // Change the losing alias.
+          [2, "winner", null], // Remove the losing alias.
+          [3, "winner", "1"], // Restore it without changing the winner.
+          [4, "1", "1"], // Remove the winner, revealing the unchanged losing alias.
+          [5, null, null] // Remove the final alias.
+        ] as const
+        // The HTML parser folds SVG names. Check both case-sensitive SVG attributes
+        // after the client has updated them.
+        for (const [step, htmlValue, svgValue] of steps) {
+          root.send(step)
+          yield* tick
+          const children = app.firstElementChild!.children
+          expect(children[0]!.getAttribute("data-x")).toBe(htmlValue)
+          expect(children[1]!.getAttribute("data-x")).toBe(htmlValue)
+          expect(children[2]!.getAttribute("viewBox")).toBe("0 0 10 10")
+          expect(children[2]!.getAttribute("viewbox")).toBe(svgValue)
+        }
+      }
+    }).pipe(Effect.scoped))
+
   it.effect("samples root subscriptions once on the server without building Streams, and surfaces throws", () =>
     Effect.gen(function*() {
       let sampled = 0

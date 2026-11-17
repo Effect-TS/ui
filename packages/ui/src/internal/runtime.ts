@@ -4446,6 +4446,10 @@ const setup = (
     prev: Readonly<Record<string, string>>,
     next: Readonly<Record<string, string>>
   ) => {
+    if (host.normalizeAttrs !== undefined) {
+      prev = host.normalizeAttrs(node, prev)
+      next = host.normalizeAttrs(node, next)
+    }
     for (const name in prev) {
       if (typeof next[name] !== "string") host.setAttr(node, name, undefined)
     }

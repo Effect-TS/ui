@@ -114,6 +114,15 @@ export interface Host<Node> {
   readonly elements: ReadonlyArray<string> | "any"
   readonly controlled: ReadonlySet<string>
   readonly runsMounts: boolean
+  /**
+   * Canonicalizes attribute records before incremental diffing. Hosts whose
+   * attribute names have aliases use this to compare their effective values,
+   * so updating or removing a losing alias does not change the winning one.
+   * Mounting still writes through `setAttr`, which must use the same rules.
+   */
+  readonly normalizeAttrs?:
+    | ((node: Node, attrs: Readonly<Record<string, string>>) => Readonly<Record<string, string>>)
+    | undefined
   readonly commit?: (() => void) | undefined
   readonly head?: ((head: Head.Head) => void) | undefined
   readonly hydration?: Hydration<Node> | undefined
