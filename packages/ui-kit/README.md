@@ -1,6 +1,6 @@
 # @effect/ui-kit
 
-Unstyled components for [`@effect/ui`](../ui), ported from [Base UI](https://base-ui.com/). Each one owns the behaviour, ARIA and data attributes. Most draw their own unstyled markup and take your content in named slots. You style each element by passing classes and other attributes for it in the `attributes` prop, or from a stylesheet through its `data-part` and state attributes.
+Unstyled components for [`@effect/ui`](../ui), ported from [Base UI](https://base-ui.com/). Each one is headless: it owns the behaviour, ARIA, data attributes and any form field, and you draw the markup with your own `h` builders and style it.
 
 ```ts
 import { Switch } from "@effect/ui-kit"
@@ -8,16 +8,13 @@ import { Switch } from "@effect/ui-kit"
 // In a view:
 Switch(h, {
   key: "notify",
-  props: {
-    checked: model.notify,
-    name: "notify",
-    attributes: {
-      root: { class: "h-5 w-9 rounded-full bg-gray-300 data-[checked]:bg-blue-600" },
-      thumb: { class: "block size-4 rounded-full bg-white data-[checked]:translate-x-4" }
-    }
-  },
+  props: { checked: model.notify, name: "notify" },
   onEmit: ({ checked }) => Message.make({ _tag: "ToggledNotify", checked }),
-  slots: { label: "Notifications" }
+  view: (s) =>
+    h.label(
+      s.root({ element: h.button.class("switch"), children: [s.thumb(h.span.class("thumb"))] }),
+      "Notifications"
+    )
 })
 ```
 

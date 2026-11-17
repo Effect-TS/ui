@@ -1,39 +1,34 @@
+import type { Component } from "@effect/ui"
+import { View } from "@effect/ui"
 import { Switch, type SwitchProps } from "@effect/ui-kit"
+import { Html } from "@effect/ui/html"
 import { Query, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 
-// The documented styling hooks, which the tests select by.
-const part = (name: string) => Query.attr("data-part", name)
-const root = part("root")
-const styled = ["label", "root", "thumb"]
-const label = { slots: () => ({ label: "Notifications" }) }
+// The least markup the parts need: a labelled root with a thumb. The form
+// field comes with the root.
+const standIn = {
+  elements: Html,
+  view: (
+    s: Component.Headless.Parts<typeof Switch>,
+    h: View.Helper<never, SwitchProps> & View.Tags<Html.Elements, never>
+  ) => h.label(s.root({ element: h.button, children: [s.thumb(h.span)] }), "Notifications")
+}
 
-// The state attributes on every styled part, as `[part, attribute]` pairs.
-const flags = (story: Pick<Story.Story<SwitchProps, unknown, unknown, unknown>, "get">, names: ReadonlyArray<string>) =>
-  styled.flatMap((name) => {
-    const attrs = story.get(part(name)).attrs
-    assert.strictEqual(attrs?.["data-scope"], "switch")
-    return names.filter((flag) => attrs?.[flag] === "").map((flag) => `${name} ${flag}`)
-  })
+const root = Query.attr("role", "switch")
+const thumb = Query.tag("span")
+const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
 describe("Switch", () => {
-  it("a click asks for the other value, and every part shows the value it was given", () => {
-    const story = Story.make(Switch, { checked: false }, label, (s) => {
+  it("a click asks for the other value, and the root and thumb show the value they were given", () => {
+    const story = Story.make(Switch, { checked: false }, standIn, (s) => {
       s.check((story) => {
-        // The label around the root names it with the slot's content.
-        const outer = story.get(part("label"))
-        assert.strictEqual(outer.tag, "label")
-        assert.strictEqual(Query.textOf(outer), "Notifications")
-        assert.strictEqual(outer.children?.[0], story.get(root))
-        // A native button, so Space, Enter and Tab need no key handler.
-        assert.strictEqual(story.get(root).tag, "button")
-        assert.strictEqual(story.get(root).attrs?.type, "button")
-        assert.strictEqual(story.get(root).attrs?.["aria-checked"], "false")
-        assert.deepStrictEqual(flags(story, ["data-checked", "data-unchecked"]), [
-          "label data-unchecked",
-          "root data-unchecked",
-          "thumb data-unchecked"
-        ])
+        const attrs = story.get(root).attrs
+        assert.strictEqual(attrs?.type, "button")
+        assert.strictEqual(attrs?.["aria-checked"], "false")
+        assert.strictEqual(attrs?.["data-unchecked"], "")
+        assert.isUndefined(attrs?.["data-checked"])
+        assert.strictEqual(story.get(thumb).attrs?.["data-unchecked"], "")
       })
         .fire(root, "click")
         // Nothing changes until the consumer passes the new value back.
@@ -41,11 +36,9 @@ describe("Switch", () => {
         .props({ checked: true })
         .check((story) => {
           assert.strictEqual(story.get(root).attrs?.["aria-checked"], "true")
-          assert.deepStrictEqual(flags(story, ["data-checked", "data-unchecked"]), [
-            "label data-checked",
-            "root data-checked",
-            "thumb data-checked"
-          ])
+          assert.strictEqual(story.get(root).attrs?.["data-checked"], "")
+          assert.strictEqual(story.get(thumb).attrs?.["data-checked"], "")
+          assert.isUndefined(story.get(thumb).attrs?.["data-unchecked"])
         })
         .fire(root, "click")
     })
@@ -56,15 +49,12 @@ describe("Switch", () => {
   })
 
   it("a disabled or read-only switch ignores clicks, and only a disabled one leaves the tab order", () => {
-    const states = ["data-disabled", "data-readonly", "data-required"]
-    const story = Story.make(Switch, { checked: false, disabled: true }, label, (s) => {
+    const story = Story.make(Switch, { checked: false, disabled: true }, standIn, (s) => {
       s.check((story) => {
-        assert.strictEqual(story.get(root).attrs?.disabled, "")
-        assert.deepStrictEqual(flags(story, states), [
-          "label data-disabled",
-          "root data-disabled",
-          "thumb data-disabled"
-        ])
+        const attrs = story.get(root).attrs
+        assert.strictEqual(attrs?.disabled, "")
+        assert.strictEqual(attrs?.["data-disabled"], "")
+        assert.strictEqual(story.get(thumb).attrs?.["data-disabled"], "")
       })
         .fire(root, "click")
         .props({ checked: false, readOnly: true, required: true })
@@ -72,92 +62,65 @@ describe("Switch", () => {
           const attrs = story.get(root).attrs
           assert.isUndefined(attrs?.disabled)
           assert.strictEqual(attrs?.["aria-readonly"], "true")
+          assert.strictEqual(attrs?.["data-readonly"], "")
           assert.strictEqual(attrs?.["aria-required"], "true")
-          assert.deepStrictEqual(flags(story, states), [
-            "label data-readonly",
-            "label data-required",
-            "root data-readonly",
-            "root data-required",
-            "thumb data-readonly",
-            "thumb data-required"
-          ])
+          assert.strictEqual(attrs?.["data-required"], "")
+          const thumbAttrs = story.get(thumb).attrs
+          assert.isUndefined(thumbAttrs?.["data-disabled"])
+          assert.strictEqual(thumbAttrs?.["data-readonly"], "")
+          assert.strictEqual(thumbAttrs?.["data-required"], "")
         })
         .fire(root, "click")
     })
     assert.deepStrictEqual(story.emitted, [])
   })
 
-  it("takes the consumer's attributes on every element, and keeps its own attributes and click handler", () => {
-    const attributes = {
-      // Each owned name below is one the switch sets or leaves absent.
-      // Names are compared without case.
-      label: { class: "row", FOR: "elsewhere", "Data-Checked": "" },
-      root: {
-        class: "track",
-        id: "mute",
-        style: "width:2rem",
-        "aria-label": "Mute",
-        "aria-describedby": "mute-help",
-        "data-testid": "mute",
-        type: "submit",
-        role: "checkbox",
-        "aria-checked": "mixed",
-        "Aria-Readonly": "true",
-        "aria-disabled": "true",
-        Disabled: "",
-        "DATA-PART": "track",
-        onclick: "alert(1)",
-        // Malformed names, which would write a handler in server HTML.
-        "x onclick": "alert(2)",
-        "a\"><script": "alert(3)"
-      },
-      thumb: { CLASS: "knob", "data-scope": "slider", "data-disabled": "" }
-    }
-    // No label slot: the root's `aria-label` names it.
-    const story = Story.make(Switch, { checked: false, attributes }, (s) =>
-      s.check((story) => {
-        assert.deepStrictEqual(story.get(part("label")).attrs, {
-          class: "row",
-          "data-scope": "switch",
-          "data-part": "label",
-          "data-unchecked": ""
-        })
-        assert.deepStrictEqual(story.get(root).attrs, {
-          class: "track",
-          id: "mute",
-          style: "width:2rem",
-          "aria-label": "Mute",
-          "aria-describedby": "mute-help",
-          "data-testid": "mute",
-          "data-scope": "switch",
-          "data-part": "root",
-          "data-unchecked": "",
-          type: "button",
-          role: "switch",
-          "aria-checked": "false"
-        })
-        assert.deepStrictEqual(story.get(part("thumb")).attrs, {
-          class: "knob",
-          "data-scope": "switch",
-          "data-part": "thumb",
-          "data-unchecked": ""
-        })
-      }).fire(root, "click"))
-    assert.deepStrictEqual(story.emitted, [{ _tag: "Toggled", checked: true }])
+  it("the root takes only a native button, which toggles on Space and Enter by itself", () => {
+    const s = Story.parts(Switch, { model: {}, props: { checked: false } })
+    assert.strictEqual(s.root({ element: h.button }).tag, "button")
+    assert.throws(() => s.root({ element: h.span as any }), /a part for <button> was given <span>/)
   })
 
-  it("draws the form field: value when on, and uncheckedValue or nothing when off", () => {
+  it("the root keeps the consumer's attributes, but the switch's own win, present or absent", () => {
+    const parts = (props: SwitchProps) => Story.parts(Switch, { model: {}, props })
+    const element = h.button
+      .class("switch")
+      .attr("aria-label", "Mute")
+      .attr("type", "submit")
+      .attr("role", "checkbox")
+      .attr("aria-checked", "mixed")
+      .attr("aria-readonly", "true")
+      .attr("aria-disabled", "true")
+      .attr("data-disabled", "")
+
+    // An enabled switch removes the consumer's `disabled`, `aria-disabled`,
+    // `aria-readonly` and `data-disabled`, as it doesn't report those states.
+    assert.deepStrictEqual(parts({ checked: false }).root({ element: element.disabled(true) }).attrs, {
+      class: "switch",
+      "aria-label": "Mute",
+      type: "button",
+      role: "switch",
+      "aria-checked": "false",
+      "data-unchecked": ""
+    })
+    // The thumb drops a state the switch doesn't have.
+    const thumb = parts({ checked: false }).thumb(h.span.class("thumb").attr("data-checked", ""))
+    assert.deepStrictEqual(thumb.attrs, { class: "thumb", "data-unchecked": "" })
+    // A disabled switch keeps its own `disabled` over the consumer's removal.
+    const disabled = parts({ checked: true, disabled: true }).root({ element: element.disabled(false) })
+    assert.strictEqual(disabled.attrs.disabled, "")
+    assert.strictEqual(disabled.attrs["aria-checked"], "true")
+  })
+
+  it("the root draws the form field after its children: value when on, and uncheckedValue or nothing when off", () => {
     const field = (props: SwitchProps) => {
-      let value: string | null = null
-      Story.make(Switch, props, label, (s) =>
-        s.check((story) => {
-          const input = story.query(Query.tag("input"))
-          if (input === undefined) return
-          assert.strictEqual(input.attrs?.type, "hidden")
-          assert.strictEqual(input.attrs?.name, "notify")
-          value = input.attrs?.value ?? null
-        }))
-      return value
+      const button = Story.parts(Switch, { model: {}, props }).root({ element: h.button, children: ["label"] })
+      const last = button.children[button.children.length - 1]!
+      if (last._tag !== "Element") return null
+      assert.strictEqual(last.tag, "input")
+      assert.strictEqual(last.attrs.type, "hidden")
+      assert.strictEqual(last.attrs.name, "notify")
+      return last.attrs.value
     }
     assert.strictEqual(field({ checked: true, name: "notify" }), "on")
     assert.strictEqual(field({ checked: true, name: "notify", value: "yes" }), "yes")
