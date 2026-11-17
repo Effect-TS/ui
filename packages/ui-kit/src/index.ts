@@ -1,8 +1,22 @@
 /**
- * Components for `@effect/ui`. The package has none yet.
+ * Unstyled components for `@effect/ui`, ported from Base UI.
+ *
+ * Each component is exported by its own name, so
+ * `import { Switch } from "@effect/ui-kit"` is the component itself, called
+ * as `Switch(h, { ... })`. Its module, such as `@effect/ui-kit/Switch`,
+ * holds the same exports.
  *
  * @stability experimental
  * @since 0.1.0
  */
 
-// @barrel: Auto-generated exports. Do not edit manually.
+// Not a generated barrel: `pnpm codegen` would export each module as a
+// namespace, and a namespace can't be called. Add each new module here with
+// `export *`, in alphabetical order. Its exports carry the component's name,
+// such as `SwitchProps`, so they never collide.
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
+export * from "./Switch.ts"
