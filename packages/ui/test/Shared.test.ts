@@ -1,13 +1,13 @@
 import { Component, MessageLog } from "@effect/ui"
 import * as services from "@effect/ui/internal/services"
-import { Query, Story, TestHost } from "@effect/ui/testing"
+import { Locator, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 
 const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.scoped, Effect.provide(TestHost.layer()))
 const click = (root: TestHost.TestRoot<any, any, any>, text: string) =>
-  Query.fire(root.get(Query.text(text, { exact: true })), "click")
+  Locator.fire(root.get(Locator.text(text, { exact: true })), "click")
 const updatesAt = (log: ReadonlyArray<MessageLog.Entry>, path: string) =>
   log.filter((entry): entry is MessageLog.Update => entry._tag === "Update" && entry.path === path)
 
@@ -190,13 +190,13 @@ describe("shared state in a Story", () => {
       ["Tips", { _tag: "Enter", id: "a" }]
     ])
     // The story never runs the owner's update.
-    assert.strictEqual(Query.textOf(story.root), "a:closed")
+    assert.strictEqual(Locator.textOf(story.root), "a:closed")
   })
 
   it("reads the expanded Model of an owner in the story's own view", () => {
     const story = Story.make(App, {}, (s) => s.givenChild("tips", "a"))
     // Trigger is expanded; Tip is a normal child, so a slot with no text.
-    assert.strictEqual(Query.textOf(story.root), "a")
+    assert.strictEqual(Locator.textOf(story.root), "a")
   })
 
   // A story with no steps keeps the view it expanded, where the owner placing the slot is already gone.
@@ -209,7 +209,7 @@ describe("shared state in a Story", () => {
     const story = Story.make(Frame, {}, {
       slots: (h) => ({ body: Trigger(h, { key: "t", view: (parts) => h.el("i", parts.label) }) })
     }, () => {})
-    assert.strictEqual(Query.textOf(story.root), "placed")
+    assert.strictEqual(Locator.textOf(story.root), "placed")
   })
 
   it("gives the parts of a headless reader the shared value", () => {
@@ -229,8 +229,8 @@ describe("shared state in a Story", () => {
     const B = required("B")
     const Sum = Component.define({ name: "Sum", model: Schema.Null, message: TipMessage, shared: { a: A, b: B } })
       .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p", String(h.shared.a + h.shared.b)) })
-    assert.strictEqual(Query.textOf(Story.make(Sum, {}, (s) => s.shared(A, 1).shared(B, 2)).root), "3")
-    assert.strictEqual(Query.textOf(Story.make(Sum, {}, (s) => s.given(null, {}, [[A, 1], [B, 2]])).root), "3")
+    assert.strictEqual(Locator.textOf(Story.make(Sum, {}, (s) => s.shared(A, 1).shared(B, 2)).root), "3")
+    assert.strictEqual(Locator.textOf(Story.make(Sum, {}, (s) => s.given(null, {}, [[A, 1], [B, 2]])).root), "3")
     assert.throws(() => Story.make(Sum, {}, (s) => s.shared(A, 1)), /\.shared\(B, value\)/)
   })
 })

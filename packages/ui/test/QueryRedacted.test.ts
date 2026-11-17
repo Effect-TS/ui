@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, Loader } from "@effect/ui"
+import { Component, Query } from "@effect/ui"
 import { Html, HtmlServer } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
@@ -7,25 +7,25 @@ import { assert, it } from "@effect/vitest"
 import { Effect, Layer, Redacted, Schema } from "effect"
 
 it.effect("omits reads with Redacted args, success or error schemas from the server cache", () => {
-  class Args extends Loader.Service<Args>()("secret/Args", {
+  class Args extends Query.Service<Args>()("secret/Args", {
     args: { token: Schema.Redacted(Schema.String) },
     success: Schema.String,
     error: Schema.Never,
     staleTime: Infinity
   }, Effect.succeed(() => Effect.succeed("ok"))) {}
-  class Success extends Loader.Service<Success>()("secret/Success", {
+  class Success extends Query.Service<Success>()("secret/Success", {
     args: {},
     success: Schema.Redacted(Schema.String),
     error: Schema.Never,
     staleTime: Infinity
   }, Effect.succeed(() => Effect.succeed(Redacted.make("success-secret")))) {}
-  class Error extends Loader.Service<Error>()("secret/Error", {
+  class Error extends Query.Service<Error>()("secret/Error", {
     args: { fail: Schema.Boolean },
     success: Schema.String,
     error: Schema.Redacted(Schema.String),
     staleTime: Infinity
   }, Effect.succeed(({ fail }) => fail ? Effect.fail(Redacted.make("error-secret")) : Effect.succeed("ok"))) {}
-  class Optional extends Loader.Service<Optional>()("secret/Optional", {
+  class Optional extends Query.Service<Optional>()("secret/Optional", {
     args: { token: Schema.optional(Schema.Redacted(Schema.String)) },
     success: Schema.String,
     error: Schema.Never,
@@ -36,13 +36,13 @@ it.effect("omits reads with Redacted args, success or error schemas from the ser
     model: Schema.Struct({}),
     message: Schema.Never,
     elements: Html,
-    loaders: {
-      args: { load: Args, args: () => ({ token: Redacted.make("args-secret") }) },
-      success: { load: Success, args: () => ({}) },
-      keyed: { loadMany: Args, args: () => [{ token: Redacted.make("keyed-secret") }] },
-      error: { load: Error, args: () => ({ fail: true }) },
-      unusedError: { load: Error, args: () => ({ fail: false }) },
-      absent: { load: Optional, args: () => ({}) }
+    queries: {
+      args: { query: Args, args: () => ({ token: Redacted.make("args-secret") }) },
+      success: { query: Success, args: () => ({}) },
+      keyed: { queryMany: Args, args: () => [{ token: Redacted.make("keyed-secret") }] },
+      error: { query: Error, args: () => ({ fail: true }) },
+      unusedError: { query: Error, args: () => ({ fail: false }) },
+      absent: { query: Optional, args: () => ({}) }
     }
   }).make({ init: () => ({}), update: (model) => model, view: (_, h) => h.div("safe") })
   return Effect.gen(function*() {
@@ -53,7 +53,7 @@ it.effect("omits reads with Redacted args, success or error schemas from the ser
     }
     // Even absent optional secrets and a successful read with a Redacted error
     // schema are excluded: eligibility is static, not value-dependent.
-    assert.deepStrictEqual(rendered.state["~loader"], {})
+    assert.deepStrictEqual(rendered.state["~query"], {})
     yield* TestHost.settle
     assert.lengthOf(rendered.root.fetches(), 6)
   }).pipe(
@@ -73,7 +73,7 @@ const Tree: Schema.Codec<Tree> = Schema.Struct({
 
 const hydrationCase = <A>(name: string, schema: Schema.Codec<A>, value: A, excluded = false) => {
   it.effect("hydrates " + name + " according to its schema", () => {
-    class Read extends Loader.Service<Read>()("read/" + name, {
+    class Read extends Query.Service<Read>()("read/" + name, {
       args: {},
       success: schema,
       error: Schema.Never,
@@ -84,16 +84,16 @@ const hydrationCase = <A>(name: string, schema: Schema.Codec<A>, value: A, exclu
       model: Schema.Struct({ value: schema }),
       message: Schema.Never,
       elements: Html,
-      loaders: { value: { load: Read, args: () => ({}) } }
+      queries: { value: { query: Read, args: () => ({}) } }
     }).make({ init: () => ({ value }), update: (model) => model, view: (_, h) => h.div("safe") })
     return Effect.gen(function*() {
       const rendered = yield* ssr(App, {})
       assert.notInclude(rendered.html + HtmlServer.serializeState(rendered.state), "recursive-secret")
       assert.deepStrictEqual(rendered.adopted, excluded ? [] : ["/App"])
       if (excluded) {
-        assert.deepStrictEqual(rendered.state["~loader"], {})
+        assert.deepStrictEqual(rendered.state["~query"], {})
       } else {
-        assert.property(rendered.state["~loader"], "read/" + name)
+        assert.property(rendered.state["~query"], "read/" + name)
       }
       yield* TestHost.settle
       assert.lengthOf(rendered.root.fetches(), excluded ? 1 : 0)

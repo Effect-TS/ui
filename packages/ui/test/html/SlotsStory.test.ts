@@ -1,6 +1,6 @@
 import { Component, View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Query, Story } from "@effect/ui/testing"
+import { Locator, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Schema } from "effect"
 
@@ -54,8 +54,8 @@ describe("slots in a story", () => {
         .childEmit("n", { _tag: "Saved", text: "hi" }))
     assert.deepStrictEqual(story.model, { bumps: 1, saved: "hi" })
     // The child's own view isn't run: only what the parent passed shows.
-    assert.strictEqual(Query.textOf(story.view() as Query.Node), "bumps 1bump")
-    assert.deepStrictEqual(story.all(Query.text("bump")).map((node) => node.tag), ["button"])
+    assert.strictEqual(Locator.textOf(story.view() as Locator.Node), "bumps 1bump")
+    assert.deepStrictEqual(story.all(Locator.text("bump")).map((node) => node.tag), ["button"])
     assert.deepStrictEqual(Story.children(story.view(), Note).map((child) => child.key), ["n"])
   })
 
@@ -63,8 +63,8 @@ describe("slots in a story", () => {
     const story = Story.make(Panel, {}, {
       slots: (h) => ({ title: "hello", body: [h.em("the body"), Note(h, { key: "n" })] })
     }, () => {})
-    assert.strictEqual(Query.textOf(story.get(Query.tag("h2"))), "hello")
-    assert.strictEqual(Query.textOf(story.get(Query.tag("section"))), "hellopanel's ownthe body")
+    assert.strictEqual(Locator.textOf(story.get(Locator.tag("h2"))), "hello")
+    assert.strictEqual(Locator.textOf(story.get(Locator.tag("section"))), "hellopanel's ownthe body")
     assert.deepStrictEqual(Story.children(story.view(), Note).map((child) => child.key), ["n"])
   })
 

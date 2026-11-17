@@ -17,7 +17,7 @@
  * ```ts import.meta.vitest
  * import { Effect, Schema } from "effect"
  * import { Component } from "@effect/ui"
- * import { Query, TestHost } from "@effect/ui/testing"
+ * import { Locator, TestHost } from "@effect/ui/testing"
  *
  * const Msg = Schema.TaggedUnion({ Increment: {} })
  *
@@ -33,7 +33,7 @@
  *
  * const program = Effect.gen(function*() {
  *   const root = yield* TestHost.mount(Counter, {})
- *   Query.fire(root.get(Query.text("0")), "click")
+ *   Locator.fire(root.get(Locator.text("0")), "click")
  *   yield* TestHost.settle
  *   return root.text()
  * }).pipe(Effect.scoped, Effect.provide(TestHost.layer()))
@@ -61,13 +61,13 @@ import * as Feature from "../Feature.ts"
 import type * as Head from "../Head.ts"
 import * as Executor from "../internal/executor.ts"
 import * as runtime from "../internal/runtime.ts"
-import * as Loader from "../Loader.ts"
 import * as MessageLog from "../MessageLog.ts"
+import * as Query from "../Query.ts"
 import * as Renderer from "../Renderer.ts"
 import * as Subscription from "../Subscription.ts"
 import type * as View from "../View.ts"
-import * as Query from "./Query.ts"
-import * as TestLoader from "./TestLoader.ts"
+import * as Locator from "./Locator.ts"
+import * as TestQuery from "./TestQuery.ts"
 
 /**
  * An element on the test host.
@@ -84,7 +84,7 @@ import * as TestLoader from "./TestLoader.ts"
  * @category models
  * @since 0.1.0
  */
-export interface TestElement extends Query.Firable {
+export interface TestElement extends Locator.Firable {
   readonly _tag: "Element"
   readonly tag: string
   readonly attrs: Record<string, string>
@@ -110,7 +110,7 @@ export interface TestElement extends Query.Firable {
  * @category models
  * @since 0.1.0
  */
-export interface TestText extends Query.Firable {
+export interface TestText extends Locator.Firable {
   readonly _tag: "Text"
   readonly tag?: undefined
   text: string
@@ -271,16 +271,16 @@ export interface TestHost {
   readonly budget: number
   /** Adds a mounted tree to `pending` and `settle`, until the returned function is called. */
   readonly register: (tree: Tree) => () => void
-  /** The settable `Loader.Visibility` every mount gets. */
-  readonly visibility: Loader.Signal & { readonly set: (value: boolean) => void }
-  /** The settable `Loader.Connectivity` every mount gets. */
-  readonly connectivity: Loader.Signal & { readonly set: (value: boolean) => void }
+  /** The settable `Query.Visibility` every mount gets. */
+  readonly visibility: Query.Signal & { readonly set: (value: boolean) => void }
+  /** The settable `Query.Connectivity` every mount gets. */
+  readonly connectivity: Query.Signal & { readonly set: (value: boolean) => void }
   /** The problems reported and not yet taken. */
-  readonly problems: () => ReadonlyArray<Loader.Problem.Any>
+  readonly problems: () => ReadonlyArray<Query.Problem.Any>
   /** Collects a problem. Every mount's cache reports here. */
-  readonly report: (problem: Loader.Problem.Any) => void
+  readonly report: (problem: Query.Problem.Any) => void
   /** Takes every problem with this tag. Throws when there is none. */
-  readonly expectProblem: (tag: string) => ReadonlyArray<Loader.Problem.Any>
+  readonly expectProblem: (tag: string) => ReadonlyArray<Query.Problem.Any>
   /** Wraps a `Clock` so that a woken sleeper drains the test scheduler. */
   readonly drainingClock: (clock: Clock.Clock, context: Context.Context<never>) => Clock.Clock
   /** The trees mounted on this host. */
@@ -341,10 +341,10 @@ export interface PendingFetch {
   readonly _tag: "Fetch"
   /** The root's path. */
   readonly path: string
-  readonly read: string
+  readonly query: string
   readonly logKey: string
   readonly status: "running" | "held"
-  readonly trigger: Loader.Trigger
+  readonly trigger: Query.Trigger
 }
 
 /**
@@ -378,7 +378,7 @@ export const TestHost: Context.Service<TestHost, TestHost> = Context.Service<Tes
  * they give up (100,000 by default), and `logSize` the size of the log's ring
  * buffer, unbounded by default.
  *
- * The Layer owns settable `Loader.Visibility` and `Loader.Connectivity`, both
+ * The Layer owns settable `Query.Visibility` and `Query.Connectivity`, both
  * starting true, and collects the problems every mounted cache reports.
  *
  * **Gotchas**
@@ -400,7 +400,7 @@ export const layer = (options?: {
     const log = MessageLog.makeMemory({ size: options?.logSize ?? Infinity })
     const trees = new Set<Tree>()
     const budget = options?.budget ?? 100_000
-    let problems: Array<Loader.Problem.Any> = []
+    let problems: Array<Query.Problem.Any> = []
     let draining = false
     // Re-entrant calls return at once: the outer drain runs what they would.
     const drain = (n: number): boolean => {
@@ -412,7 +412,7 @@ export const layer = (options?: {
         draining = false
       }
     }
-    const report = (problem: Loader.Problem.Any) => {
+    const report = (problem: Query.Problem.Any) => {
       problems.push(problem)
     }
     const drainingClock = (clock: Clock.Clock, context: Context.Context<never>): Clock.Clock => {
@@ -455,8 +455,8 @@ export const layer = (options?: {
           trees.delete(tree)
         }
       },
-      visibility: Loader.makeSignal(true),
-      connectivity: Loader.makeSignal(true),
+      visibility: Query.makeSignal(true),
+      connectivity: Query.makeSignal(true),
       problems: () => problems.slice(),
       report,
       expectProblem: (tag) => {
@@ -474,7 +474,7 @@ export const layer = (options?: {
       trees: () => trees
     }
     yield* Effect.addFinalizer(() =>
-      Effect.suspend(() => problems.length === 0 ? Effect.void : Effect.die(new TestLoader.ProblemsError({ problems })))
+      Effect.suspend(() => problems.length === 0 ? Effect.void : Effect.die(new TestQuery.ProblemsError({ problems })))
     )
     return Context.make(TestHost, service).pipe(
       Context.add(Renderer.Renderer, { host }),
@@ -489,7 +489,7 @@ export const layer = (options?: {
  *
  * **Details**
  *
- * `mount` hands back a `TestRoot`, which adds the test host's node queries.
+ * `mount` hands back a `TestRoot`, which adds the test host's node lookups.
  * `Ssr.ssr` hands back this part only, since its client renders into a real
  * document.
  *
@@ -514,13 +514,13 @@ export interface Root<out Model, in Msg, out Events> {
   /** Every fetch the tree's cache started, oldest first: the log's `FetchStarted` entries. */
   readonly fetches: () => ReadonlyArray<MessageLog.FetchStarted>
   /**
-   * A read-only view of the cache's entry for a read and arguments, or
+   * A query-only view of the cache's entry for a query and arguments, or
    * `undefined` when it has none. It doesn't create the entry or keep it alive.
    */
-  readonly entry: <R extends Loader.Read.Any>(
+  readonly entry: <R extends Query.Query.Any>(
     read: R,
-    args: Loader.Read.Args<R>
-  ) => TestLoader.Entry<Loader.Read.Success<R>, Loader.Read.Error<R>> | undefined
+    args: Query.Query.Args<R>
+  ) => TestQuery.Entry<Query.Query.Success<R>, Query.Query.Error<R>> | undefined
   /** The tree's merged document head, as last given to the host. */
   readonly head: () => Head.Head
   /** The `frames` projection after each commit, without consecutive repeats. */
@@ -528,7 +528,7 @@ export interface Root<out Model, in Msg, out Events> {
 }
 
 /**
- * A tree mounted on `TestHost`, with queries over its nodes.
+ * A tree mounted on `TestHost`, with lookups over its nodes.
  *
  * @stability experimental
  * @category models
@@ -539,9 +539,9 @@ export interface TestRoot<out Model, in Msg, out Events> extends Root<Model, Msg
   readonly container: TestElement
   /** The text of everything mounted. */
   readonly text: () => string
-  readonly all: (locator: Query.Locator) => ReadonlyArray<TestNode>
-  readonly query: (locator: Query.Locator) => TestNode | undefined
-  readonly get: (locator: Query.Locator) => TestNode
+  readonly all: (locator: Locator.Locator) => ReadonlyArray<TestNode>
+  readonly query: (locator: Locator.Locator) => TestNode | undefined
+  readonly get: (locator: Locator.Locator) => TestNode
 }
 
 /**
@@ -554,7 +554,7 @@ export interface TestRoot<out Model, in Msg, out Events> extends Root<Model, Msg
  * Layer builds wait for `settle`. The test host shows every vocabulary, so
  * any root mounts.
  *
- * The mount uses the host's `Loader.Visibility`, `Loader.Connectivity` and
+ * The mount uses the host's `Query.Visibility`, `Query.Connectivity` and
  * problem collector even if a nearer provide overrides them. Its `Clock`
  * drains the test scheduler whenever a sleeper wakes, so `TestClock.adjust`
  * runs the awakened work without waiting for `settle`.
@@ -589,7 +589,7 @@ export const mount = <
         h: View.Helper<never, {}> & View.Tags<V, never>
       ) => View.Content<never, RF>)
       | undefined
-    readonly loader?: Renderer.LoaderOptions | undefined
+    readonly query?: Renderer.QueryOptions | undefined
     readonly frames?: ((root: TestRoot<Model, Msg, Events>) => string) | undefined
   }
 ): Effect.Effect<TestRoot<Model, Msg, Events>, never, R | RF | RP | TestHost | Scope.Scope> =>
@@ -609,18 +609,18 @@ export const mount = <
     yield* Effect.addFinalizer(() => Effect.sync(offCommit))
     const root = yield* runtime.mount(component, props, container, options as any).pipe(
       Effect.provideService(Clock.Clock, testHost.drainingClock(Context.get(outer, Clock.Clock), outer)),
-      Effect.provideService(Loader.Visibility, testHost.visibility),
-      Effect.provideService(Loader.Connectivity, testHost.connectivity),
-      Effect.provideService(Loader.Problems, testHost.report)
+      Effect.provideService(Query.Visibility, testHost.visibility),
+      Effect.provideService(Query.Connectivity, testHost.connectivity),
+      Effect.provideService(Query.Problems, testHost.report)
     )
     const neutral = yield* register(testHost, root, testHost.log, () => frames.slice())
     testRoot = {
       ...neutral,
       container,
-      text: () => Query.textOf(container),
-      all: (locator) => Query.all(container as TestNode, locator),
-      query: (locator) => Query.query(container as TestNode, locator),
-      get: (locator) => Query.get(container as TestNode, locator)
+      text: () => Locator.textOf(container),
+      all: (locator) => Locator.all(container as TestNode, locator),
+      query: (locator) => Locator.query(container as TestNode, locator),
+      get: (locator) => Locator.get(container as TestNode, locator)
     }
     frame()
     return testRoot
@@ -656,7 +656,7 @@ export const register = (
       log: entries,
       pending,
       fetches: () => entries().filter((entry): entry is MessageLog.FetchStarted => entry._tag === "FetchStarted"),
-      entry: (read, args) => root.cache.inspect(Loader.defOf(read), args) as any,
+      entry: (read, args) => root.cache.inspect(Query.defOf(read), args) as any,
       head: root.head,
       frames
     }
@@ -718,7 +718,7 @@ const nextMacrotask = Effect.callback<void>((resume) => {
  * @category combinators
  * @since 0.1.0
  */
-export const settle: Effect.Effect<void, SettleError | RootCrashed | TestLoader.ProblemsError, TestHost> = Effect
+export const settle: Effect.Effect<void, SettleError | RootCrashed | TestQuery.ProblemsError, TestHost> = Effect
   .gen(function*() {
     const testHost = yield* TestHost
     yield* drainAll(testHost)
@@ -727,7 +727,7 @@ export const settle: Effect.Effect<void, SettleError | RootCrashed | TestLoader.
       if (cause !== undefined) return yield* new RootCrashed({ path: tree.path, cause })
     }
     const problems = testHost.problems()
-    if (problems.length > 0) return yield* new TestLoader.ProblemsError({ problems })
+    if (problems.length > 0) return yield* new TestQuery.ProblemsError({ problems })
   })
 
 const drainAll = Effect.fnUntraced(function*(testHost: TestHost) {
@@ -767,10 +767,10 @@ const drainAll = Effect.fnUntraced(function*(testHost: TestHost) {
 const describePending = (pending: Pending): string =>
   pending._tag === "Command"
     ? `  ${pending.path} ${pending.name} (${pending.status}${pending.detached ? ", detached" : ""})`
-    : `  ${pending.path} fetch ${pending.read} ${pending.logKey} (${pending.status}, ${pending.trigger})`
+    : `  ${pending.path} fetch ${pending.query} ${pending.logKey} (${pending.status}, ${pending.trigger})`
 
 /**
- * Sets the host's `Loader.Visibility`, which every mount on it reads. It
+ * Sets the host's `Query.Visibility`, which every mount on it reads. It
  * starts true. Going from false to true, while online, refetches every
  * watched entry that is stale or whose interval elapsed.
  *
@@ -782,7 +782,7 @@ export const setVisible = (visible: boolean): Effect.Effect<void, never, TestHos
   TestHost.useSync((testHost) => testHost.visibility.set(visible))
 
 /**
- * Sets the host's `Loader.Connectivity`, which every mount on it reads. It
+ * Sets the host's `Query.Connectivity`, which every mount on it reads. It
  * starts true. Going from false to true, while visible, refetches every
  * watched entry that is stale or whose interval elapsed.
  *
@@ -800,7 +800,7 @@ export const setOnline = (online: boolean): Effect.Effect<void, never, TestHost>
  * @category testing
  * @since 0.1.0
  */
-export const problems: Effect.Effect<ReadonlyArray<Loader.Problem.Any>, never, TestHost> = TestHost.useSync(
+export const problems: Effect.Effect<ReadonlyArray<Query.Problem.Any>, never, TestHost> = TestHost.useSync(
   (testHost) => testHost.problems()
 )
 
@@ -818,8 +818,8 @@ export const problems: Effect.Effect<ReadonlyArray<Loader.Problem.Any>, never, T
  */
 export const expectProblem = <Tag extends string>(tag: Tag): Effect.Effect<
   ReadonlyArray<
-    [Extract<Loader.Problem | DrainExhausted, { readonly _tag: Tag }>] extends [never] ? Loader.Problem.Any
-      : Extract<Loader.Problem | DrainExhausted, { readonly _tag: Tag }>
+    [Extract<Query.Problem | DrainExhausted, { readonly _tag: Tag }>] extends [never] ? Query.Problem.Any
+      : Extract<Query.Problem | DrainExhausted, { readonly _tag: Tag }>
   >,
   never,
   TestHost
@@ -889,14 +889,14 @@ export const formatLog = (entries: ReadonlyArray<MessageLog.Entry>): string =>
         }`
       case "CommandAwaiting":
         return `${head} ${entry.name} on ${
-          entry.entries.map((awaited) => `${awaited.read} ${awaited.logKey}`).join(", ")
+          entry.entries.map((awaited) => `${awaited.query} ${awaited.logKey}`).join(", ")
         }`
       case "CommandDropped":
         return `${head} ${entry.name} (${entry.reason})`
       case "SendDropped":
         return `${head} ${entry.ref} (${entry.reason})`
       case "FetchStarted":
-        return `${head} ${entry.read} ${entry.logKey} (${entry.trigger}${entry.restart ? ", restart" : ""})`
+        return `${head} ${entry.query} ${entry.logKey} (${entry.trigger}${entry.restart ? ", restart" : ""})`
       default:
         return head
     }

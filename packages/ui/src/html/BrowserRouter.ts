@@ -18,9 +18,9 @@
  * which no Layer build begun since is still pending), the router scrolls,
  * announces the page in a live region and moves focus. A push goes to the top
  * or to its `#hash` element, and back and forward restore the saved position.
- * A quiet navigation (see `Router.Settled`), such as `Router.patchQuery`,
+ * A quiet navigation (see `Router.Settled`), such as `Router.patchSearch`,
  * stays on the page: nothing is announced and focus stays. Back and forward
- * still restore the saved position, and a `patchQuery` given
+ * still restore the saved position, and a `patchSearch` given
  * `{ scroll: true }` scrolls to the top.
  *
  * **Example** (A two-page app)
@@ -137,7 +137,7 @@ export interface Options {
  * after 50 ms of hover or focus on the Effect `Clock`, or immediately on
  * touch. Only links a click would follow count.
  *
- * Replaces that stay on the page, such as a `Router.patchQuery` per
+ * Replaces that stay on the page, such as a `Router.patchSearch` per
  * keystroke, are written to `window.history` at most once per 200 ms on the
  * Effect `Clock`, to stay under the browsers' rate limits. The route changes
  * at once; the address bar gets the latest URL at the end of the interval, or
@@ -433,9 +433,9 @@ const make = (options: Options, inFragment: boolean): Layer.Layer<Router.Service
       const action = submitter?.getAttribute("formaction") ?? form.getAttribute("action") ?? ""
       const url = new URL(action, document.baseURI)
       const data = new FormData(form, submitter ?? undefined)
-      const query = new URLSearchParams()
-      for (const [name, value] of data) if (typeof value === "string") query.append(name, value)
-      url.search = query.toString()
+      const search = new URLSearchParams()
+      for (const [name, value] of data) if (typeof value === "string") search.append(name, value)
+      url.search = search.toString()
       url.hash = ""
       const href = local(url)
       // The host already stopped the browser's submission, so the Router makes it: a full page

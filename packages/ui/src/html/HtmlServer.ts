@@ -2,14 +2,14 @@
  * Server rendering for `@effect/ui`: renders a component tree to HTML that
  * `BrowserHost.mount` hydrates.
  *
- * `renderToHtml` builds provided Layers and fetches loader data once per key
+ * `renderToHtml` builds provided Layers and fetches query data once per key
  * in a per-request cache. Rendering waits until nothing is in flight or the
  * `budget` is spent, then serialises once. No Command runs on the server.
- * Only loader-watch Subscriptions run; other Subscriptions and `onMount`
+ * Only query-watch Subscriptions run; other Subscriptions and `onMount`
  * work wait for the client.
  *
  * The result holds the body markup, the `state` the client adopts, with the
- * loader entries that settled, the root's Model (for the response status),
+ * query entries that settled, the root's Model (for the response status),
  * and the document head as escaped strings. The page puts them together;
  * `serializeState` makes the state safe to embed in a `<script>`.
  *
@@ -77,7 +77,7 @@ import * as server from "./internal/server.ts"
  *
  * `html` is the body markup for the app's container. `state` maps each
  * instance's path to its Schema-encoded Model, plus `~deferred`, the
- * settled loader entries under `~loader`, and `~static` for a static render;
+ * settled query entries under `~query`, and `~static` for a static render;
  * pass it to `BrowserHost.mount`. `model` is the root's Model
  * after the server run, for app code that sets the status (a 404 for a
  * missing record), or `undefined` if the root failed. `head` holds the
@@ -135,9 +135,9 @@ const serverHtmlHost: Context.Service.Shape<typeof Html.Host> = {
  *
  * `static: true` is for HTML built at deploy or held in a CDN, where the
  * data's age is unknown. The client then hydrates every entry stale: it is
- * invalidated at hydration, and refetched once, unless its read's
+ * invalidated at hydration, and refetched once, unless its query's
  * `staleTime` is `"Infinity"`. There is no fetch-free window. A page
- * prerendered without a query, such as `/search`, may be served for
+ * prerendered without search params, such as `/search`, may be served for
  * `/search?q=x`: `Router.subscription` then delivers the Router's route
  * without reporting `RouteMismatch`. The default is HTML rendered per
  * request, whose entries hydrate fresh.
@@ -149,7 +149,7 @@ const serverHtmlHost: Context.Service.Shape<typeof Html.Host> = {
  *
  * Route status is the app's: resolve the URL with `AppRoute.resolve` first,
  * answer a `notFound` route with a 404, a `redirected` one with a
- * permanent redirect, and one with `invalid` query keys with a temporary
+ * permanent redirect, and one with `invalid` search keys with a temporary
  * one, even when it's also `redirected`. `HtmlServerHttp.layerHttp` does
  * this for an app served through `HttpRouter`.
  *

@@ -1,7 +1,7 @@
-import { Command, Component, Feature, Loader, MessageLog, Renderer, Subscription } from "@effect/ui"
+import { Command, Component, Feature, MessageLog, Query, Renderer, Subscription } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import * as runtime from "@effect/ui/internal/runtime"
-import { Query, Story, TestHost } from "@effect/ui/testing"
+import { Locator, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import {
   Cause,
@@ -30,7 +30,7 @@ const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Eff
 const tags = (root: { readonly log: () => ReadonlyArray<MessageLog.Entry> }, path?: string) =>
   root.log().filter((entry) => path === undefined || entry.path === path).map((entry) => entry._tag)
 const click = (root: TestHost.TestRoot<any, any, any>, text: string) =>
-  Query.fire(root.get(Query.text(text, { exact: true })), "click")
+  Locator.fire(root.get(Locator.text(text, { exact: true })), "click")
 
 // ---------------------------------------------------------------------------
 // A keyed list whose rows hold a Command open until they unmount
@@ -116,7 +116,7 @@ describe("Runtime", () => {
         const root = yield* TestHost.mount(List, { ids: ["a", "b", "c"] })
         yield* TestHost.settle
         const testHost = yield* TestHost.TestHost
-        const items = () => root.all(Query.tag("li"))
+        const items = () => root.all(Locator.tag("li"))
         const [a, b, c] = items()
         assert.strictEqual(root.text(), "a:0b:0c:0")
         assert.deepStrictEqual(root.pending().map((p) => p.path), ["/List/Row[a]", "/List/Row[b]", "/List/Row[c]"])
@@ -211,7 +211,7 @@ describe("Runtime", () => {
         const root = yield* TestHost.mount(Rows, {})
         yield* TestHost.settle
         const testHost = yield* TestHost.TestHost
-        const items = () => root.all(Query.tag("li"))
+        const items = () => root.all(Locator.tag("li"))
         const [head, a, b, c, d] = items()
         testHost.host.clearOperations()
         root.send(RowsMessage.make({ _tag: "Show", ids: ["a", "d", "c", "b"] }))
@@ -279,7 +279,7 @@ describe("Runtime", () => {
         const root = yield* TestHost.mount(Rows, {})
         yield* TestHost.settle
         const testHost = yield* TestHost.TestHost
-        const items = () => root.all(Query.tag("li"))
+        const items = () => root.all(Locator.tag("li"))
         const before = items()
         const structural = () =>
           testHost.host.operations().filter((op) =>
@@ -313,7 +313,7 @@ describe("Runtime", () => {
         const root = yield* TestHost.mount(Tail, {}, { fallback: (_, h) => h.el("h1", "down") })
         yield* TestHost.settle
         const testHost = yield* TestHost.TestHost
-        const items = () => root.all(Query.tag("li"))
+        const items = () => root.all(Locator.tag("li"))
         const [a, b] = items()
 
         testHost.host.clearOperations()
@@ -379,7 +379,7 @@ describe("Runtime", () => {
         const root = yield* TestHost.mount(Parent, {})
         yield* TestHost.settle
         assert.strictEqual(root.text(), "before down")
-        assert.deepStrictEqual(root.all(Query.tag("li")), [])
+        assert.deepStrictEqual(root.all(Locator.tag("li")), [])
         const failed = root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
         assert.strictEqual(failed.source, "view")
         assert.include(Cause.pretty(failed.cause), "/Parent/Twice[t]: two siblings share the key li[a]")
@@ -429,7 +429,7 @@ describe("Runtime", () => {
         const root = yield* TestHost.mount(Rows, {})
         yield* TestHost.settle
         const testHost = yield* TestHost.TestHost
-        const items = () => root.all(Query.tag("li"))
+        const items = () => root.all(Locator.tag("li"))
         const [head, a, b, c, d] = items()
         // Without `foot`, which has no key and is made again where the count changes.
         const moves = () => testHost.host.operations().filter((op) => op.startsWith("insert <li>")).length - 1
@@ -461,7 +461,7 @@ describe("Runtime", () => {
       provideHost(Effect.gen(function*() {
         const root = yield* TestHost.mount(Rows, {})
         yield* TestHost.settle
-        const items = () => root.all(Query.tag("li"))
+        const items = () => root.all(Locator.tag("li"))
         // A fixed sequence of pseudo-random lists over a small alphabet, so keys come and go and move.
         let seed = 12345
         const random = (below: number) => {
@@ -546,7 +546,7 @@ describe("Runtime", () => {
         const root = yield* TestHost.mount(Page, {})
         click(root, "bomb")
         yield* TestHost.settle
-        assert.strictEqual((root.get(Query.tag("main")) as TestHost.TestElement).children.length, 2)
+        assert.strictEqual((root.get(Locator.tag("main")) as TestHost.TestElement).children.length, 2)
         assert.strictEqual(root.text(), "bomb failed-0+")
         assert.deepStrictEqual(root.model(), { failures: 1, attempt: 0 })
         const failed = root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
@@ -798,11 +798,11 @@ describe("Runtime", () => {
   })
 
   describe("run owners", () => {
-    // The server behind the fake API, and the requests that reached the read's fetcher.
+    // The server behind the fake API, and the requests that reached the query's fetcher.
     const makeServer = () => ({ count: 0, requests: 0, interrupted: 0 })
     type Server = ReturnType<typeof makeServer>
 
-    class GetCount extends Loader.Service<GetCount>()("test/GetCount", {
+    class GetCount extends Query.Service<GetCount>()("test/GetCount", {
       args: { id: Schema.String },
       success: Schema.Number,
       error: Schema.Never,
@@ -1042,7 +1042,7 @@ describe("Runtime", () => {
         yield* TestHost.settle
         // The removal renders before the Command's fiber takes its first step on the scheduler.
         root.send(false)
-        Query.fire(root.get(Query.tag("button")), "click")
+        Locator.fire(root.get(Locator.tag("button")), "click")
         yield* TestHost.settle
         yield* Deferred.await(entered)
         assert.deepStrictEqual(events, ["closing"])
@@ -1395,14 +1395,14 @@ describe("Runtime", () => {
         assert.strictEqual(server.requests, 1)
       })))
 
-    it.effect("the loader mount option sets how long an unwatched entry stays", () =>
+    it.effect("the query mount option sets how long an unwatched entry stays", () =>
       provideHost(Effect.gen(function*() {
         const server = makeServer()
         const App = Component.provide(
           page(Editor),
           Layer.mergeAll(fetcher(server), commands(server))
         )
-        const root = yield* TestHost.mount(App, {}, { loader: { idleTimeToLive: "1 second" } })
+        const root = yield* TestHost.mount(App, {}, { query: { idleTimeToLive: "1 second" } })
         yield* TestHost.settle
         root.send(PageMsg.make({ _tag: "Watch", on: false }))
         yield* TestHost.settle
@@ -1511,11 +1511,11 @@ describe("Runtime", () => {
           view: (text, h) => h.el("div", Label(h, { key: "l", props: { text } }))
         })
         const root = yield* TestHost.mount(Host, {})
-        const span = root.get(Query.tag("span"))
+        const span = root.get(Locator.tag("span"))
         root.send(Msg.make({ _tag: "Rename", text: "two" }))
         yield* TestHost.settle
         assert.strictEqual(root.text(), "two")
-        assert.strictEqual(root.get(Query.tag("span")), span)
+        assert.strictEqual(root.get(Locator.tag("span")), span)
         // The new props are logged, and no Update: update never sees them.
         assert.deepStrictEqual(tags(root, "/Host/Label[l]"), ["Mounted", "PropsChanged"])
         const changed = root.log().find((entry) => entry._tag === "PropsChanged")
@@ -1953,7 +1953,7 @@ describe("Runtime", () => {
         const root = yield* TestHost.mount(Shell, {}).pipe(Effect.provide(stub.layer))
         yield* TestHost.settle
         assert.deepStrictEqual(stub.props(), [{ label: "new" }])
-        assert.isDefined(root.query(Query.attr("data-stub", "test/Badge")))
+        assert.isDefined(root.query(Locator.attr("data-stub", "test/Badge")))
         stub.emit("ping")
         yield* TestHost.settle
         assert.deepStrictEqual(root.model(), ["ping"])
@@ -2359,7 +2359,7 @@ describe("Runtime", () => {
         at: 10,
         session: "s",
         path: "/App",
-        read: "users/GetUser",
+        query: "users/GetUser",
         logKey: `{"id":"1"}`,
         trigger: "visibility",
         restart: false,
@@ -2583,14 +2583,14 @@ describe("Runtime", () => {
             )
         })
         const root = yield* TestHost.mount(Form, {})
-        const field = root.get(Query.tag("field")) as TestHost.TestElement
+        const field = root.get(Locator.tag("field")) as TestHost.TestElement
         // The user edits the live value; the next patch puts the Model's value back.
         field.props.value = "edited"
         click(root, "0")
         yield* TestHost.settle
         assert.strictEqual(field.props.value, "a")
         field.props.value = "b"
-        Query.fire(field, "input", { value: "b" })
+        Locator.fire(field, "input", { value: "b" })
         yield* TestHost.settle
         assert.strictEqual(field.props.value, "B")
       })))
@@ -2821,14 +2821,14 @@ describe("Runtime", () => {
 
   it.effect("Renderer.mount stopped at any yield point leaves nothing behind once its Scope closes", () =>
     Effect.gen(function*() {
-      // No TestHost executor: the mount runs on the scheduler below throughout, the loader cache's build included.
+      // No TestHost executor: the mount runs on the scheduler below throughout, the query cache's build included.
       const host = TestHost.makeHost()
       // The mount is interrupted and its Scope closes after it exits, or while it's pending. Or the Scope
       // closes under a pending mount that isn't interrupted, which then mounts nothing.
       for (const mode of ["interrupt, then close", "interrupt and close", "close"] as const) {
         for (let at = 1;; at++) {
           let listeners = 0
-          const signal: Loader.Signal = {
+          const signal: Query.Signal = {
             get: () => true,
             subscribe: () => {
               listeners++
@@ -2847,8 +2847,8 @@ describe("Runtime", () => {
             Renderer.mount(Counter, { initial: 1 }, container).pipe(
               Scope.provide(scope),
               Effect.provide(Renderer.layer(host)),
-              Effect.provideService(Loader.Visibility, signal),
-              Effect.provideService(Loader.Connectivity, signal),
+              Effect.provideService(Query.Visibility, signal),
+              Effect.provideService(Query.Connectivity, signal),
               Effect.provideService(Scheduler.Scheduler, scheduler)
             )
           )
@@ -2890,7 +2890,7 @@ describe("Runtime", () => {
             makeDispatcher: () => dispatcher
           }
           let listeners = 0
-          const signal: Loader.Signal = {
+          const signal: Query.Signal = {
             get: () => true,
             subscribe: () => {
               listeners++
@@ -2936,12 +2936,12 @@ describe("Runtime", () => {
             ))
           )
           const mounted = yield* Effect.exit(
-            Renderer.mount(App, {}, container, { state: { "~loader": "malformed" } }).pipe(
+            Renderer.mount(App, {}, container, { state: { "~query": "malformed" } }).pipe(
               Scope.provide(scope),
               Effect.provide(Renderer.layer(host)),
-              Effect.provideService(Loader.Visibility, signal),
-              Effect.provideService(Loader.Connectivity, signal),
-              Effect.provideService(Loader.Problems, () => {
+              Effect.provideService(Query.Visibility, signal),
+              Effect.provideService(Query.Connectivity, signal),
+              Effect.provideService(Query.Problems, () => {
                 if (site === "Problems") close()
               })
             )
@@ -2975,10 +2975,10 @@ describe("Runtime", () => {
       const testHost = yield* TestHost.TestHost
       const container = testHost.host.createElement("#app") as TestHost.TestElement
       const root = yield* Renderer.mount(Counter, { initial: 7 }, container)
-      assert.strictEqual(Query.textOf(container), "-7+")
+      assert.strictEqual(Locator.textOf(container), "-7+")
       root.send(CounterMessage.make({ _tag: "Decrement" }))
       yield* TestHost.settle
-      assert.strictEqual(Query.textOf(container), "-6+")
+      assert.strictEqual(Locator.textOf(container), "-6+")
       assert.isAbove(testHost.host.commits(), 1)
     })))
 
@@ -3206,7 +3206,7 @@ describe("Runtime", () => {
           const root = yield* TestHost.mount(Lobby, {})
           yield* TestHost.settle
           assert.strictEqual(root.text(), "a:aa:a")
-          Query.fire(root.all(Query.tag("button"))[0], "click")
+          Locator.fire(root.all(Locator.tag("button"))[0], "click")
           yield* TestHost.settle
           assert.strictEqual(root.text(), "b:aba:a")
           assert.deepStrictEqual(events, ["built a", "built b"])
@@ -3327,9 +3327,9 @@ describe("Runtime", () => {
         }).pipe(Effect.provideService(Host, { name: "parent" }))
       ))
 
-    it.effect("a key change keeps the loader cache: a read gets the old selection's entry unless the key is in its args", () =>
+    it.effect("a key change keeps the query cache: a query gets the old selection's entry unless the key is in its args", () =>
       provideHost(Effect.gen(function*() {
-        class Read extends Loader.Service<Read>()("test/KeyedRead", {
+        class Read extends Query.Service<Read>()("test/KeyedRead", {
           args: { room: Schema.String },
           success: Schema.String,
           error: Schema.Never,
@@ -3341,14 +3341,14 @@ describe("Runtime", () => {
           name: "Reading",
           model: Schema.String,
           message: Schema.String,
-          loaders: {
-            fixed: { load: Read, args: () => ({ room: "any" }) },
-            byRoom: { load: Read, args: (room) => ({ room }) }
+          queries: {
+            fixed: { query: Read, args: () => ({ room: "any" }) },
+            byRoom: { query: Read, args: (room) => ({ room }) }
           }
         }).make({
           init: () => "a",
           update: (_, room) => room,
-          view: (room, h) => h.text(`${room}:${value(h.loaded.fixed)}${value(h.loaded.byRoom)}`)
+          view: (room, h) => h.text(`${room}:${value(h.queries.fixed)}${value(h.queries.byRoom)}`)
         })
         const Room = Component.provide(Reading, {
           key: (_, room) => room,
@@ -3500,7 +3500,7 @@ describe("Runtime", () => {
         const scope = yield* Scope.make()
         const root = yield* TestHost.mount(Parent, {}).pipe(Scope.provide(scope))
         yield* TestHost.settle
-        Query.fire(root.get(Query.tag("button")), "click")
+        Locator.fire(root.get(Locator.tag("button")), "click")
         yield* TestHost.settle
         yield* Deferred.await(entered)
         yield* Deferred.succeed(gate, undefined)
@@ -3571,7 +3571,7 @@ describe("Runtime", () => {
         })
         const root = yield* TestHost.mount(Parent, {})
         yield* TestHost.settle
-        Query.fire(root.get(Query.tag("button")), "click")
+        Locator.fire(root.get(Locator.tag("button")), "click")
         yield* TestHost.settle
         yield* Deferred.await(entered)
         assert.deepStrictEqual(events, ["build 1"])

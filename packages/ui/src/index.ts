@@ -33,13 +33,13 @@ export * as Head from "./Head.ts"
  * @stability experimental
  * @since 0.1.0
  */
-export * as Loader from "./Loader.ts"
+export * as MessageLog from "./MessageLog.ts"
 
 /**
  * @stability experimental
  * @since 0.1.0
  */
-export * as MessageLog from "./MessageLog.ts"
+export * as Query from "./Query.ts"
 
 /**
  * @stability experimental

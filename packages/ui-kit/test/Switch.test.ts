@@ -2,7 +2,7 @@ import type { Component } from "@effect/ui"
 import { View } from "@effect/ui"
 import { Switch, type SwitchProps } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
-import { Query, Story } from "@effect/ui/testing"
+import { Locator, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 
 // The least markup the parts need: a labelled root with a thumb. The form
@@ -15,8 +15,8 @@ const standIn = {
   ) => h.label(s.root({ element: h.button, children: [s.thumb(h.span)] }), "Notifications")
 }
 
-const root = Query.attr("role", "switch")
-const thumb = Query.tag("span")
+const root = Locator.attr("role", "switch")
+const thumb = Locator.tag("span")
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
 describe("Switch", () => {

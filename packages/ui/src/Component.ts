@@ -69,10 +69,10 @@ import type * as Types from "effect/Types"
 import * as Command from "./Command.ts"
 import type * as Head from "./Head.ts"
 import * as child from "./internal/child.ts"
-import * as loaders from "./internal/loaders.ts"
 import * as internalNoop from "./internal/noop.ts"
+import * as componentQueries from "./internal/queries.ts"
 import * as childRef from "./internal/ref.ts"
-import type * as Loader from "./Loader.ts"
+import type * as Query from "./Query.ts"
 import type * as Subscription from "./Subscription.ts"
 import * as View from "./View.ts"
 
@@ -225,7 +225,7 @@ export interface Next<out Model, out Msg, out Events, out R = never> {
   readonly model: Model
   readonly commands: ReadonlyArray<Command.Command<Msg | Noop, R>>
   readonly events: ReadonlyArray<Events>
-  /** The load mores and resets of list loaders `update` issued, in order. */
+  /** The load mores and resets of infinite queries `update` issued, in order. */
   readonly lists?: ReadonlyArray<ListIssue> | undefined
   /** The messages `update` sent to its direct children and to owners above it, in order. */
   readonly sends?: ReadonlyArray<Send> | undefined
@@ -565,7 +565,7 @@ export type SharedHelpers<SR> = [keyof SR] extends [never] ? {} : {
 export type SharedRequirements<SR> = { readonly [K in keyof SR]: Shared<SR[K]> }[keyof SR]
 
 /**
- * A `$.loadMore(name)` or `$.reset(name)` an `update` issued, by loader
+ * A `$.loadMore(name)` or `$.reset(name)` an `update` issued, by query
  * name.
  *
  * @stability experimental
@@ -639,17 +639,17 @@ export interface Step<in out Model, in out Msg, in out Events, out R = never, L 
   /** Reports to the parent. */
   emit(...emitted: ReadonlyArray<Events>): Step<Model, Msg, Events, R, L>
   /**
-   * Loads the next page of a list loader. The runtime takes the args from the
-   * loader, after this `update`'s Model. The page arrives in the loader's
-   * state, and nothing is issued for a disabled loader.
+   * Loads the next page of an infinite query. The runtime takes the args from the
+   * query, after this `update`'s Model. The page arrives in the query's
+   * result, and nothing is issued for a disabled query.
    */
-  loadMore(name: ListNames<L>): Step<Model, Msg, Events, R, L>
+  loadMore(name: InfiniteNames<L>): Step<Model, Msg, Events, R, L>
   /**
-   * Drops a list loader's pages after the first, then refetches it. Every
+   * Drops an infinite query's pages after the first, then refetches it. Every
    * held page is saved in `history.state` on navigation, so this is how a
    * long list keeps that small.
    */
-  reset(name: ListNames<L>): Step<Model, Msg, Events, R, L>
+  reset(name: InfiniteNames<L>): Step<Model, Msg, Events, R, L>
   /**
    * Sends `message` to the direct child rendered with `ref`, once the render
    * this `update` causes is done, in the same flush. The child's `update`
@@ -688,7 +688,7 @@ export interface Step<in out Model, in out Msg, in out Events, out R = never, L 
 
 /**
  * `$` in `update`: a step holding the current Model, plus the current props
- * and what the loaders hold.
+ * and what the queries hold.
  *
  * **Details**
  *
@@ -704,8 +704,8 @@ export interface Update<in out Model, in out Msg, in out Events, out Props, L = 
   extends Step<Model, Msg, Events, never, L>
 {
   readonly props: Props
-  /** The loaders' results, as `h.loaded` shows them for the Model before this `update`. */
-  readonly loaded: { readonly [K in keyof L]: LoadedOf<L[K]> }
+  /** The queries' results, as `h.queries` shows them for the Model before this `update`. */
+  readonly queries: { readonly [K in keyof L]: QueryResultOf<L[K]> }
   /**
    * Runs update functions one after another, each with the message this
    * `update` received.
@@ -720,7 +720,7 @@ export interface Update<in out Model, in out Msg, in out Events, out Props, L = 
    * It is a left fold. Each function gets the Model the previous one returned
    * and a `$` holding that Model, so a Command it runs sees the earlier
    * changes. The Commands, emitted events, `loadMore` and `reset` of every
-   * function are kept, in call order. `$.props` and `$.loaded` are the same
+   * function are kept, in call order. `$.props` and `$.queries` are the same
    * for each, as they were when this `update` started. `R` is the union of
    * the functions' requirements.
    */
@@ -806,7 +806,7 @@ const UpdateProto = {
     const lists = [...this.lists]
     const sends = [...this.sends]
     for (const update of updates) {
-      const next = toNext(update(model, msg, makeUpdate(model, this.props, this.loaded, msg)))
+      const next = toNext(update(model, msg, makeUpdate(model, this.props, this.queries, msg)))
       model = next.model
       commands.push(...next.commands)
       emitted.push(...next.events)
@@ -818,7 +818,7 @@ const UpdateProto = {
 }
 
 // `$` holds the message being handled, for `combine`.
-const makeUpdate = (model: unknown, props: unknown, loaded: unknown, message: unknown): Update<any, any, any, any> =>
+const makeUpdate = (model: unknown, props: unknown, queries: unknown, message: unknown): Update<any, any, any, any> =>
   Object.assign(Object.create(UpdateProto), {
     model,
     commands: [],
@@ -826,7 +826,7 @@ const makeUpdate = (model: unknown, props: unknown, loaded: unknown, message: un
     lists: [],
     sends: [],
     props,
-    loaded,
+    queries,
     "~message": message
   })
 
@@ -914,35 +914,24 @@ export interface Mountable<in out Props, out Events, out R = never, in Rcv = nev
   readonly message: Schema.Codec<any, any>
   readonly events: Schema.Codec<Events, any>
   readonly init: (props: Props) => Next<any, any, Events, R>
-  /** `loaderState` is the instance's loader state. Without it every loader is empty. */
-  readonly update: (
-    model: any,
-    msg: never,
-    props: Props,
-    loaderState?: LoaderState | undefined
-  ) => Next<any, any, Events, R>
+  /** `queries` is the instance's query results. Without it every result is empty. */
+  readonly update: (model: any, msg: never, props: Props, queries?: Results | undefined) => Next<any, any, Events, R>
   /** `running` answers `h.isRunning` for the instance being rendered. Without it nothing is running. */
   readonly view: (
     model: any,
     props: Props,
     running?: ((name: string, groupKey: string | undefined) => boolean) | undefined,
-    loaderState?: LoaderState | undefined,
+    queries?: Results | undefined,
     /** The instance's path, which `h.id` derives ids from. Without it, the root path `/<name>`. */
     path?: string | undefined,
     /** Answers `h.shared`: an owner's current value. Without it, a component that reads shared state throws. */
     shared?: SharedLookup | undefined
   ) => View.Node<any, R>
   readonly subscriptions:
-    | ((
-      model: any,
-      props: Props,
-      loaderState?: LoaderState | undefined
-    ) => ReadonlyArray<Subscription.Subscription<any, R>>)
+    | ((model: any, props: Props, queries?: Results | undefined) => ReadonlyArray<Subscription.Subscription<any, R>>)
     | undefined
-  /** The instance's document head entries, a pure function of its Model, props and loaders. */
-  readonly head:
-    | ((model: any, props: Props, loaderState?: LoaderState | undefined) => ReadonlyArray<Head.Entry>)
-    | undefined
+  /** The instance's document head entries, a pure function of its Model, props and queries. */
+  readonly head: ((model: any, props: Props, queries?: Results | undefined) => ReadonlyArray<Head.Entry>) | undefined
   /** The component's vocabulary: its `elements` override, else the registered one. Read lazily. */
   readonly elements: () => View.Vocabulary<any> | undefined
   /**
@@ -961,20 +950,19 @@ export interface Mountable<in out Props, out Events, out R = never, in Rcv = nev
   readonly sharedLayer: Layer.Layer<any, any, any> | undefined
   /** `false` when a `provide` opted out of the server: the server never builds the Layer and defers the instance. */
   readonly layerOnServer: boolean
-  /** The bound `loaders`, read by the runtime and `Story`. `undefined` without any. */
-  readonly "~loaders": unknown
+  /** The bound `queries`, read by the runtime and `Story`. `undefined` without any. */
+  readonly "~queries": unknown
 }
 
 /**
- * An instance's loader state: what each loader's read last returned, by
- * loader name. Opaque: only the runtime and
- * `Story` build and read it.
+ * An instance's query results, by query name. Opaque: only the runtime and
+ * `Story` build and read them.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export type LoaderState = { readonly [name: string]: unknown }
+export type Results = { readonly [name: string]: unknown }
 
 /**
  * Helper types for `Mountable`.
@@ -1027,17 +1015,12 @@ export interface Component<
   /** A ref for this component's children, so a parent can send them messages. */
   readonly ref: (name: string) => Ref.Of<Rcv>
   readonly init: (props: Props) => Next<Model, Msg, Events, R>
-  readonly update: (
-    model: Model,
-    msg: Msg,
-    props: Props,
-    loaderState?: LoaderState | undefined
-  ) => Next<Model, Msg, Events, R>
+  readonly update: (model: Model, msg: Msg, props: Props, queries?: Results | undefined) => Next<Model, Msg, Events, R>
   readonly view: (
     model: Model,
     props: Props,
     running?: ((name: string, groupKey: string | undefined) => boolean) | undefined,
-    loaderState?: LoaderState | undefined,
+    queries?: Results | undefined,
     path?: string | undefined,
     shared?: SharedLookup | undefined
   ) => View.Node<Msg, R>
@@ -1045,11 +1028,11 @@ export interface Component<
     | ((
       model: Model,
       props: Props,
-      loaderState?: LoaderState | undefined
+      queries?: Results | undefined
     ) => ReadonlyArray<Subscription.Subscription<Msg, R>>)
     | undefined
   readonly head:
-    | ((model: Model, props: Props, loaderState?: LoaderState | undefined) => ReadonlyArray<Head.Entry>)
+    | ((model: Model, props: Props, queries?: Results | undefined) => ReadonlyArray<Head.Entry>)
     | undefined
   readonly layerFailure: ((failure: AsyncResult.Failure<never, any>) => Msg) | undefined
   readonly "~V"?: V
@@ -1117,7 +1100,7 @@ export type HeadlessTypeId = typeof HeadlessTypeId
  * closure is part of the consumer's view, and its own `update` renders only
  * the closure. When the consumer renders often, wrap the headless child in a
  * small normal component of its own. `Router.prefetch` doesn't walk into
- * closures, so it never prefetches the reads of children declared there.
+ * closures, so it never prefetches the queries of children declared there.
  *
  * @stability experimental
  * @category models
@@ -1171,26 +1154,15 @@ export interface Headless<in out Props, out Events, out Parts, out R = never, in
   /** A ref for a child of this component, which a parent renders it with to send it messages. */
   readonly ref: (name: string) => Ref.Of<Rcv>
   readonly init: (props: Props) => Next<any, any, Events, R>
-  readonly update: (
-    model: any,
-    msg: never,
-    props: Props,
-    loaderState?: LoaderState | undefined
-  ) => Next<any, any, Events, R>
+  readonly update: (model: any, msg: never, props: Props, queries?: Results | undefined) => Next<any, any, Events, R>
   /** The parts for one render: plain values and decorators stamped with `owner`. */
   readonly parts: (model: any, props: Props, context: PartsContext) => Parts
   readonly subscriptions:
-    | ((
-      model: any,
-      props: Props,
-      loaderState?: LoaderState | undefined
-    ) => ReadonlyArray<Subscription.Subscription<any, R>>)
+    | ((model: any, props: Props, queries?: Results | undefined) => ReadonlyArray<Subscription.Subscription<any, R>>)
     | undefined
-  readonly head:
-    | ((model: any, props: Props, loaderState?: LoaderState | undefined) => ReadonlyArray<Head.Entry>)
-    | undefined
+  readonly head: ((model: any, props: Props, queries?: Results | undefined) => ReadonlyArray<Head.Entry>) | undefined
   readonly elements: () => View.Vocabulary<any> | undefined
-  readonly "~loaders": unknown
+  readonly "~queries": unknown
 }
 
 /**
@@ -1205,7 +1177,7 @@ export interface Headless<in out Props, out Events, out Parts, out R = never, in
 export interface PartsContext {
   readonly owner: View.Owner
   readonly running?: ((name: string, groupKey: string | undefined) => boolean) | undefined
-  readonly loaderState?: LoaderState | undefined
+  readonly queries?: Results | undefined
   /** Answers `p.shared`: an owner's current value. Without it, a component that reads shared state throws. */
   readonly shared?: SharedLookup | undefined
 }
@@ -1316,33 +1288,33 @@ export type PartTag<T> = T extends { readonly "~Tag"?: infer Tag extends string 
   : never
 
 /**
- * What `h` gains in `view` for a component with loaders.
+ * What `h` gains in `view` for a component with queries.
  *
  * **Details**
  *
- * `loaded` holds each loader's result, as `$.loaded` does in `update`.
+ * `queries` holds each query's result, as `$.queries` does in `update`.
  *
- * `previous` holds, per single or list loader, the Success value its loader state
- * holds for args other than the loader's current ones. It's `Some` only while
- * the loader is enabled, so it is `None` whenever `h.loaded` has the stored
+ * `previous` holds, per single or infinite query, the Success value its result
+ * holds for args other than the query's current ones. It's `Some` only while
+ * the query is enabled, so it is `None` whenever `h.queries` has the stored
  * result.
  *
- * `patched` tells, per single or list loader, whether the value includes an
+ * `patched` tells, per single or infinite query, whether the value includes an
  * optimistic patch the server hasn't confirmed. It is per entry, not per
  * instance.
  *
- * `previous` and `patched` have no `loadMany` loader.
+ * `previous` and `patched` have no `queryMany` query.
  *
  * @stability experimental
  * @category utility types
  * @since 0.1.0
  */
-export type LoaderHelpers<L> = [keyof L] extends [never] ? {} : {
-  readonly loaded: { readonly [K in keyof L]: LoadedOf<L[K]> }
+export type QueryHelpers<L> = [keyof L] extends [never] ? {} : {
+  readonly queries: { readonly [K in keyof L]: QueryResultOf<L[K]> }
   readonly previous: {
-    readonly [K in SingleNames<L>]: L[K] extends Load<infer R> ?
-      R extends Loader.ListRead.Any ? Option.Option<Omit<LoadedList<R>, "more">>
-      : Option.Option<Loader.Read.Success<R>>
+    readonly [K in SingleNames<L>]: L[K] extends QueryOne<infer R> ?
+      R extends Query.InfiniteQuery.Any ? Option.Option<Omit<InfiniteData<R>, "more">>
+      : Option.Option<Query.Query.Success<R>>
       : never
   }
   readonly patched: { readonly [K in SingleNames<L>]: boolean }
@@ -1457,122 +1429,125 @@ export type Receives<C> = C extends Mountable<infer _Props, infer _Events, infer
 export type Slots<C> = C extends Mountable<infer _Props, infer _Events, infer _R, infer _Rcv, infer Sl> ? Sl : never
 
 /**
- * A `load` entry of `loaders`, as the types see it: one read, or a list
- * when the read is a `Loader.ListService`.
+ * A `query` entry of `queries`, as the types see it: one query, or a list
+ * of pages when the query is a `Query.InfiniteService`.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface Load<out R extends Loader.Read.Any> {
-  readonly _tag: "Load"
-  readonly read: R
+export interface QueryOne<out R extends Query.Query.Any> {
+  readonly _tag: "QueryOne"
+  readonly query: R
 }
 
 /**
- * A `loadMany` entry of `loaders`, as the types see it: one read at many
+ * A `queryMany` entry of `queries`, as the types see it: one query at many
  * args.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface LoadMany<out R extends Loader.Read.Any> {
-  readonly _tag: "LoadMany"
-  readonly read: R
+export interface QueryMany<out R extends Query.Query.Any> {
+  readonly _tag: "QueryMany"
+  readonly query: R
 }
 
 /**
- * A component's loaders, as the types see them: per name in `loaders`, a
- * `Load` or a `LoadMany`.
+ * A component's queries, as the types see them: per name in `queries`, a
+ * `QueryOne` or a `QueryMany`.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export type LoaderSpec = { readonly [name: string]: Load<any> | LoadMany<any> }
+export type QuerySpec = { readonly [name: string]: QueryOne<any> | QueryMany<any> }
 
-// A `load` beside a `loadMany` in one entry, or a list read under `loadMany`, is rejected.
-type OneRead<M> = [M] extends [Loader.Read.Any] ? { readonly "~error": "an entry takes one of load and loadMany" }
+// A `query` beside a `queryMany` in one entry, or an infinite query under `queryMany`, is rejected.
+type OneQuery<M> = [M] extends [Query.Query.Any] ? { readonly "~error": "an entry takes one of query and queryMany" }
   : unknown
-type KeyedRead<R> = [R] extends [Loader.ListRead.Any] ? { readonly "~error": "a list read takes load, not loadMany" }
+type ManyQuery<R> = [R] extends [Query.InfiniteQuery.Any] ?
+  { readonly "~error": "an infinite query takes query, not queryMany" }
   : unknown
 
 /**
- * The loaders of a component.
+ * The queries of a component.
  *
  * @stability experimental
  * @category utility types
  * @since 0.1.0
  */
-export type Loaders<C> = C extends { readonly "~L"?: infer L } ? [L] extends [LoaderSpec] ? L : {} : {}
+export type Queries<C> = C extends { readonly "~L"?: infer L } ? [L] extends [QuerySpec] ? L : {} : {}
 
 /**
- * The names of the single and list loaders: those `h.previous` and
+ * The names of the single and infinite queries: those `h.previous` and
  * `h.patched` have.
  *
  * @stability experimental
  * @category utility types
  * @since 0.1.0
  */
-export type SingleNames<L> = { readonly [K in keyof L]: L[K] extends Load<any> ? K : never }[keyof L] & string
+export type SingleNames<L> = { readonly [K in keyof L]: L[K] extends QueryOne<any> ? K : never }[keyof L] & string
 
 /**
- * The names of the list loaders: `$.loadMore` and `$.reset` take one.
+ * The names of the infinite queries: `$.loadMore` and `$.reset` take one.
  *
  * @stability experimental
  * @category utility types
  * @since 0.1.0
  */
-export type ListNames<L> =
-  & { readonly [K in keyof L]: L[K] extends Load<infer R> ? R extends Loader.ListRead.Any ? K : never : never }[keyof L]
+export type InfiniteNames<L> =
+  & {
+    readonly [K in keyof L]: L[K] extends QueryOne<infer R> ? R extends Query.InfiniteQuery.Any ? K : never : never
+  }[keyof L]
   & string
 
 /**
- * The names of the `loadMany` loaders.
+ * The names of the `queryMany` queries.
  *
  * @stability experimental
  * @category utility types
  * @since 0.1.0
  */
-export type KeyedNames<L> = { readonly [K in keyof L]: L[K] extends LoadMany<any> ? K : never }[keyof L] & string
+export type KeyedNames<L> = { readonly [K in keyof L]: L[K] extends QueryMany<any> ? K : never }[keyof L] & string
 
 /**
- * The services a component's loaders add to its requirements: the reads
+ * The services a component's queries add to its requirements: the queries
  * themselves, never what their fetchers use.
  *
  * @stability experimental
  * @category utility types
  * @since 0.1.0
  */
-export type LoaderServices<L> = ServiceOf<L[keyof L]>
+export type QueryServices<L> = ServiceOf<L[keyof L]>
 
-type ServiceOf<D> = D extends { readonly read: { readonly Identifier: infer Self } } ? Self : never
+type ServiceOf<D> = D extends { readonly query: { readonly Identifier: infer Self } } ? Self : never
 
 /**
- * One loader as `h.loaded`, `$.loaded`, and the `loaded` argument of `head`,
- * `subscriptions` and a loader's `args` open it.
+ * One query as `h.queries`, `$.queries`, and the `queries` argument of `head`,
+ * `subscriptions` and a query's `args` open it.
  *
  * **Details**
  *
- * A single loader opens to an `AsyncResult` of its read's success and error,
- * a list loader to an `AsyncResult` of its `LoadedList`, and a `loadMany`
- * loader to its entries in the order of its args. A single or list loader
- * holds the result its loader state took at the loader's current args, and otherwise
- * `Initial`, waiting while the loader is enabled.
+ * A single query opens to an `AsyncResult` of its `Query`'s success and error,
+ * an infinite query to an `AsyncResult` of its `InfiniteData`, and a `queryMany`
+ * query to its entries in the order of its args. A single or infinite query
+ * holds the result it took at the query's current args, and otherwise
+ * `Initial`, waiting while the query is enabled.
  *
  * @stability experimental
  * @category utility types
  * @since 0.1.0
  */
-export type LoadedOf<D> = D extends LoadMany<infer R> ? KeyedLoaded<R>
-  : D extends Load<infer R> ?
-    R extends Loader.ListRead.Any ? AsyncResult.AsyncResult<LoadedList<R>, Loader.Read.Error<R>>
-    : AsyncResult.AsyncResult<Loader.Read.Success<R>, Loader.Read.Error<R>>
+export type QueryResultOf<D> = D extends QueryMany<infer R> ? KeyedResults<R>
+  : D extends QueryOne<infer R> ?
+    R extends Query.InfiniteQuery.Any ? AsyncResult.AsyncResult<InfiniteData<R>, Query.Query.Error<R>>
+    : AsyncResult.AsyncResult<Query.Query.Success<R>, Query.Query.Error<R>>
   : never
 
 /**
- * A list loader as `h.loaded` opens it, inside its `AsyncResult`.
+ * An infinite query as `h.queries` opens it, inside its `AsyncResult`.
  *
  * **Details**
  *
@@ -1584,81 +1559,81 @@ export type LoadedOf<D> = D extends LoadMany<infer R> ? KeyedLoaded<R>
  * @category models
  * @since 0.1.0
  */
-export interface LoadedList<R extends Loader.ListRead.Any> {
-  readonly items: ReadonlyArray<Loader.ListRead.Item<R>>
-  readonly pages: ReadonlyArray<Loader.ListRead.Page<R>>
-  readonly more: Loader.More<Loader.Read.Error<R>>
+export interface InfiniteData<R extends Query.InfiniteQuery.Any> {
+  readonly items: ReadonlyArray<Query.InfiniteQuery.Item<R>>
+  readonly pages: ReadonlyArray<Query.InfiniteQuery.Page<R>>
+  readonly more: Query.More<Query.Query.Error<R>>
 }
 
 /**
- * One entry of a `loadMany` loader as `h.loaded` opens it: the args from
- * the loader, the opened result and whether the value includes an
+ * One entry of a `queryMany` query as `h.queries` opens it: the args from
+ * the query, the opened result and whether the value includes an
  * unconfirmed patch.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface KeyedEntry<R extends Loader.Read.Any> {
-  readonly args: Loader.Read.Args<R>
-  readonly result: AsyncResult.AsyncResult<Loader.Read.Success<R>, Loader.Read.Error<R>>
+export interface KeyedEntry<R extends Query.Query.Any> {
+  readonly args: Query.Query.Args<R>
+  readonly result: AsyncResult.AsyncResult<Query.Query.Success<R>, Query.Query.Error<R>>
   readonly patched: boolean
 }
 
 /**
- * A `loadMany` loader as `h.loaded` opens it: an entry per unique args the
- * loader returns, in its order, and `get` to find one entry by its args.
+ * A `queryMany` query as `h.queries` opens it: an entry per unique args the
+ * query returns, in its order, and `get` to find one entry by its args.
  *
  * **Details**
  *
  * A key with no settled result opens as `Initial`, waiting. `get` is `None`
- * for args the loader doesn't currently return. Entries carry no key: write
+ * for args the query doesn't currently return. Entries carry no key: write
  * each row's `.key(...)` by hand.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface KeyedLoaded<R extends Loader.Read.Any> extends ReadonlyArray<KeyedEntry<R>> {
-  readonly get: (args: Loader.Read.Args<R>) => Option.Option<KeyedEntry<R>>
+export interface KeyedResults<R extends Query.Query.Any> extends ReadonlyArray<KeyedEntry<R>> {
+  readonly get: (args: Query.Query.Args<R>) => Option.Option<KeyedEntry<R>>
 }
 
 /**
- * One key of a `loadMany` loader whose result changed, as its `onChange`
+ * One key of a `queryMany` query whose result changed, as its `onChange`
  * gets it.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface KeyedChange<R extends Loader.Read.Any> {
-  readonly args: Loader.Read.Args<R>
-  readonly result: AsyncResult.AsyncResult<Loader.Read.Success<R>, Loader.Read.Error<R>>
+export interface KeyedChange<R extends Query.Query.Any> {
+  readonly args: Query.Query.Args<R>
+  readonly result: AsyncResult.AsyncResult<Query.Query.Success<R>, Query.Query.Error<R>>
 }
 
 /**
- * What a loader's `args` returns: the args of a `load`'s read, or
- * `undefined` to disable it, and an array of args for a `loadMany`, empty
+ * What a query's `args` returns: the args of a `query` entry's Query, or
+ * `undefined` to disable it, and an array of args for a `queryMany`, empty
  * to watch nothing.
  *
  * @stability experimental
  * @category utility types
  * @since 0.1.0
  */
-export type ArgsFor<S, M> = M extends Loader.Read.Any ? ReadonlyArray<Loader.Read.Args<M>>
-  : Loader.Read.Args<S> | undefined
+export type ArgsFor<S, M> = M extends Query.Query.Any ? ReadonlyArray<Query.Query.Args<M>>
+  : Query.Query.Args<S> | undefined
 
 /**
- * A loader's `onChange`: a `load`'s gets its result as `h.loaded` opens it,
- * and a `loadMany`'s gets its entries and the keys whose result changed.
+ * A query's `onChange`: a `query` entry's gets its result as `h.queries` opens it,
+ * and a `queryMany`'s gets its entries and the keys whose result changed.
  *
  * @stability experimental
  * @category utility types
  * @since 0.1.0
  */
-export type OnChange<S, M, Msg> = M extends Loader.Read.Any
-  ? (loaded: KeyedLoaded<M>, changes: ReadonlyArray<KeyedChange<M>>) => Msg
-  : S extends Loader.Read.Any ? (result: LoadedOf<Load<S>>) => Msg
+export type OnChange<S, M, Msg> = M extends Query.Query.Any
+  ? (results: KeyedResults<M>, changes: ReadonlyArray<KeyedChange<M>>) => Msg
+  : S extends Query.Query.Any ? (result: QueryResultOf<QueryOne<S>>) => Msg
   : never
 
 /**
@@ -1742,7 +1717,7 @@ type TagOf<Msg> = Msg extends { readonly _tag: infer T extends string } ? T : ne
 type Tagged<Msg, T> = Extract<Msg, { readonly _tag: T }>
 
 /**
- * What `define` returns: a component's name, Schemas, loaders and
+ * What `define` returns: a component's name, Schemas, queries and
  * vocabulary. `update`, `view` and `fragment` written in pieces are typed
  * against it, and `make` finishes the component.
  *
@@ -1780,7 +1755,7 @@ export interface Definition<
   readonly events: Schema.Codec<Events, any>
   /** The Schema of the cases of `message` listed in `receives`. */
   readonly receives: Schema.Codec<Rcv, any>
-  readonly loaders: unknown
+  readonly queries: unknown
   readonly elements: View.Vocabulary<V> | undefined
   /** The names of the slots a parent may fill. */
   readonly slots: ReadonlyArray<Sl>
@@ -1806,11 +1781,11 @@ export interface Definition<
   view<UV extends View.Content<Msg, any>>(
     view: (
       model: Model,
-      h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>
+      h: View.Helper<Msg, Props> & View.Tags<V, Msg> & QueryHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>
     ) => UV
   ): (
     model: Model,
-    h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>
+    h: View.Helper<Msg, Props> & View.Tags<V, Msg> & QueryHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>
   ) => UV
   /**
    * A view fragment: a function that takes `h` first and any other
@@ -1818,11 +1793,11 @@ export interface Definition<
    */
   fragment<Args extends ReadonlyArray<unknown>, Out>(
     fragment: (
-      h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>,
+      h: View.Helper<Msg, Props> & View.Tags<V, Msg> & QueryHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>,
       ...args: Args
     ) => Out
   ): (
-    h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>,
+    h: View.Helper<Msg, Props> & View.Tags<V, Msg> & QueryHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>,
     ...args: Args
   ) => Out
   /**
@@ -1851,20 +1826,20 @@ export interface Definition<
       }
     /** A headless component has no view to place slots in, so a definition with slots can't take `parts`. */
     readonly parts: [Sl] extends [never] ?
-      (model: Model, p: PartsHelper<Msg, Props, V> & LoaderHelpers<L> & SharedHelpers<SR>) => Parts
+      (model: Model, p: PartsHelper<Msg, Props, V> & QueryHelpers<L> & SharedHelpers<SR>) => Parts
       : never
     readonly subscriptions?:
       | ((
         model: Model,
         props: Props,
-        loaded: { readonly [K in keyof L]: LoadedOf<L[K]> }
+        queries: { readonly [K in keyof L]: QueryResultOf<L[K]> }
       ) => ReadonlyArray<Sub | false | null | undefined>)
       | undefined
     readonly head?:
       | ((
         model: Model,
         props: Props,
-        loaded: { readonly [K in keyof L]: LoadedOf<L[K]> }
+        queries: { readonly [K in keyof L]: QueryResultOf<L[K]> }
       ) => ReadonlyArray<Head.Entry>)
       | undefined
   }): Headless<
@@ -1877,7 +1852,7 @@ export interface Definition<
       | StepRequirements<UR[keyof UR]>
       | View.PartRequirements<Parts[keyof Parts]>
       | Subscription.Requirements<Sub>
-      | LoaderServices<L>
+      | QueryServices<L>
       | SharedRequirements<SR>,
       Command.FrameworkService
     >,
@@ -1908,20 +1883,20 @@ export interface Definition<
         }
       readonly view: (
         model: Model,
-        h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>
+        h: View.Helper<Msg, Props> & View.Tags<V, Msg> & QueryHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>
       ) => UV
       readonly subscriptions?:
         | ((
           model: Model,
           props: Props,
-          loaded: { readonly [K in keyof L]: LoadedOf<L[K]> }
+          queries: { readonly [K in keyof L]: QueryResultOf<L[K]> }
         ) => ReadonlyArray<Sub | false | null | undefined>)
         | undefined
       readonly head?:
         | ((
           model: Model,
           props: Props,
-          loaded: { readonly [K in keyof L]: LoadedOf<L[K]> }
+          queries: { readonly [K in keyof L]: QueryResultOf<L[K]> }
         ) => ReadonlyArray<Head.Entry>)
         | undefined
     } & OwnersAreHeadless<SV>
@@ -1937,7 +1912,7 @@ export interface Definition<
       | StepRequirements<UR[keyof UR]>
       | View.Requirements<UV>
       | Subscription.Requirements<Sub>
-      | LoaderServices<L>
+      | QueryServices<L>
       | SharedRequirements<SR>,
       Command.FrameworkService
     >,
@@ -1963,7 +1938,7 @@ export declare namespace Definition {
    *
    * The Schemas are erased. The component itself carries them typed, and a
    * `Definition` can't be typed exactly here, since a component is covariant
-   * in its events and loaders and a definition isn't.
+   * in its events and queries and a definition isn't.
    *
    * @stability experimental
    * @category models
@@ -1976,7 +1951,7 @@ export declare namespace Definition {
     readonly message: Schema.Codec<any, any>
     readonly events: Schema.Codec<any, any>
     readonly receives: Schema.Codec<any, any>
-    readonly loaders: unknown
+    readonly queries: unknown
     readonly elements: View.Vocabulary<any> | undefined
     readonly slots: ReadonlyArray<string>
     /** The owners whose shared state the component reads, by local name. */
@@ -2041,12 +2016,12 @@ export type Helper<D> = D extends Definition<
   infer Sl,
   infer SR,
   infer _SV
-> ? View.Helper<Msg, P> & View.Tags<V, Msg> & LoaderHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>
+> ? View.Helper<Msg, P> & View.Tags<V, Msg> & QueryHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>
   : never
 
 /**
  * Defines a component, in two steps. `define` takes the name, the Schemas,
- * `loaders` and `elements`, and `make` on the definition it returns takes
+ * `queries` and `elements`, and `make` on the definition it returns takes
  * `init`, `update`, `view`, `subscriptions` and `head`.
  *
  * **Details**
@@ -2054,8 +2029,8 @@ export type Helper<D> = D extends Definition<
  * The first step holds what nothing is inferred from, so update functions
  * and views written outside the component are typed against the definition.
  * Typing them against `typeof` the component would be circular, because the
- * component's requirements are read off what `update` returns. `loaders`
- * types `$.loaded` and `h.loaded`, and `elements` the tags on `h`, so both
+ * component's requirements are read off what `update` returns. `queries`
+ * types `$.queries` and `h.queries`, and `elements` the tags on `h`, so both
  * belong to the first step. A definition is named with a `Def` suffix and
  * usually stays unexported. A component written in one piece chains the two
  * steps.
@@ -2076,34 +2051,34 @@ export type Helper<D> = D extends Definition<
  * while their key is listed, and falsy entries are skipped. `elements`
  * overrides the registered vocabulary for this component.
  *
- * `loaders` declares the reads the component shows, by name. Each entry is
- * `{ load: Read, args }` for one read, a list when `Read` is a
- * `Loader.ListService`, or `{ loadMany: Read, args }` for one read at many
- * args. `args` gets the Model, the props and the other loaders' results,
- * and returns the read's args, `undefined` to disable it, or for
- * `loadMany` an array of args. The runtime watches each read at those args
- * and keeps what it last returned in the loader's state, beside the Model:
- * the Model plus the loader state is an instance's state. A loader state that changes
- * re-renders the instance. `h.loaded`, `$.loaded` in `update`, and the
- * `loaded` argument of `head` and `subscriptions` open the loader state, by
- * loader name. Each read is added to `R`.
+ * `queries` declares the queries the component shows, by name. Each entry is
+ * `{ query: Q, args }` for one query, a list of pages when `Q` is a
+ * `Query.InfiniteService`, or `{ queryMany: Q, args }` for one query at many
+ * args. `args` gets the Model, the props and the other queries' results,
+ * and returns the query's args, `undefined` to disable it, or for
+ * `queryMany` an array of args. The runtime watches each query at those args
+ * and keeps what it last returned as the query's result, beside the Model:
+ * the Model plus the results is an instance's state. A result that changes
+ * re-renders the instance. `h.queries`, `$.queries` in `update`, and the
+ * `queries` argument of `head` and `subscriptions` open the results, by
+ * query name. Each query is added to `R`.
  *
  * An entry's `debounce` delays a fetch for changed args by a
  * `Duration.Input` on the Clock. Only a fetch waits: the first args at
  * mount, the server render, args whose cache entry is fresh or already being
  * fetched, and a change to `undefined` go through at once. While the fetch
- * waits, `h.loaded` is `Initial`, waiting, and `h.previous` holds the last
- * value. Args that change again restart the wait. A `loadMany` loader's new
+ * waits, `h.queries` is `Initial`, waiting, and `h.previous` holds the last
+ * value. Args that change again restart the wait. A `queryMany` query's new
  * keys wait each on their own.
  *
- * An entry's `onChange` returns a message to send when its state changes, for
- * a component that has to react in `update`. A `load` loader's gets its
- * result as `h.loaded` opens it, and a `loadMany` loader's gets its entries
- * and the keys whose result changed. The state is written first, and the
- * message's `update` sees it in `$.loaded`.
+ * An entry's `onChange` returns a message to send when its result changes, for
+ * a component that has to react in `update`. A `query` entry's gets its
+ * result as `h.queries` opens it, and a `queryMany` query's gets its entries
+ * and the keys whose result changed. The result is written first, and the
+ * message's `update` sees it in `$.queries`.
  *
  * `head` returns the instance's document head entries (see `Head`). It's a
- * pure function of the Model, the props and the loaders' results, like a
+ * pure function of the Model, the props and the queries' results, like a
  * view, and runs again when any of them changes. The entries live and die
  * with the instance, and a child's `fallback` contributes none.
  *
@@ -2129,7 +2104,7 @@ export type Helper<D> = D extends Definition<
  *
  * **Gotchas**
  *
- * An instance whose `model` Schema, or a loader's success, error or args
+ * An instance whose `model` Schema, or a query's success, error or args
  * Schema, holds a `Schema.Redacted` anywhere never has its state written as
  * JSON. The server defers it and its subtree to the client, and logs a
  * warning once per component, and the Router keeps no history entry for it.
@@ -2172,16 +2147,16 @@ export type Helper<D> = D extends Definition<
  * import { Component } from "@effect/ui"
  * import { Effect, Schema } from "effect"
  * import { AsyncResult } from "effect/reactivity"
-import { Loader } from "@effect/ui"
+import { Query } from "@effect/ui"
  *
- * class GetUser extends Loader.Service<GetUser>()("GetUser", {
+ * class GetUser extends Query.Service<GetUser>()("GetUser", {
  *   args: { id: Schema.String },
  *   success: Schema.Struct({ name: Schema.String, teamId: Schema.String }),
  *   error: Schema.Never,
  *   staleTime: "1 minute"
  * }, Effect.succeed(({ id }) => Effect.succeed({ name: `User ${id}`, teamId: "t1" }))) {}
  *
- * class GetTeam extends Loader.Service<GetTeam>()("GetTeam", {
+ * class GetTeam extends Query.Service<GetTeam>()("GetTeam", {
  *   args: { id: Schema.String },
  *   success: Schema.Struct({ title: Schema.String }),
  *   error: Schema.Never,
@@ -2193,24 +2168,24 @@ import { Loader } from "@effect/ui"
  *   props: Schema.Struct({ id: Schema.String }),
  *   model: Schema.Struct({}),
  *   message: Schema.Never,
- *   loaders: {
- *     user: { load: GetUser, args: (_model, props) => ({ id: props.id }) },
+ *   queries: {
+ *     user: { query: GetUser, args: (_model, props) => ({ id: props.id }) },
  *     // Disabled until the user has loaded.
  *     team: {
- *       load: GetTeam,
- *       args: (_model, _props, loaded) =>
- *         AsyncResult.isSuccess(loaded.user) ? { id: loaded.user.value.teamId } : undefined
+ *       query: GetTeam,
+ *       args: (_model, _props, queries) =>
+ *         AsyncResult.isSuccess(queries.user) ? { id: queries.user.value.teamId } : undefined
  *     }
  *   }
  * }).make({
  *   init: () => ({}),
  *   update: (model) => model,
  *   view: (_model, h) =>
- *     AsyncResult.match(h.loaded.user, {
+ *     AsyncResult.match(h.queries.user, {
  *       onInitial: () => h.el("p", "Loading…"),
  *       onFailure: () => h.el("p", "No such user"),
  *       onSuccess: ({ value }) =>
- *         h.el("p", value.name, AsyncResult.isSuccess(h.loaded.team) ? ` of ${h.loaded.team.value.title}` : "")
+ *         h.el("p", value.name, AsyncResult.isSuccess(h.queries.team) ? ` of ${h.queries.team.value.title}` : "")
  *     })
  * })
  * ```
@@ -2298,10 +2273,10 @@ export const define = <
   Events = never,
   S = {},
   M = {},
-  // The loaders as `Load` and `LoadMany` entries, by name. Nothing infers it, so it's always this default.
+  // The queries as `QueryOne` and `QueryMany` entries, by name. Nothing infers it, so it's always this default.
   L = {
-    readonly [K in keyof S]: M[K & keyof M] extends Loader.Read.Any ? LoadMany<M[K & keyof M]>
-      : S[K] extends Loader.Read.Any ? Load<S[K]>
+    readonly [K in keyof S]: M[K & keyof M] extends Query.Query.Any ? QueryMany<M[K & keyof M]>
+      : S[K] extends Query.Query.Any ? QueryOne<S[K]>
       : never
   },
   V extends View.Elements = View.Registered,
@@ -2318,22 +2293,22 @@ export const define = <
     readonly events?: Schema.Codec<Events, any> | undefined
     /** The tags of `message` a parent may send with `$.send`. None by default. */
     readonly receives?: ReadonlyArray<Tags> | undefined
-    /** The reads the component shows, by name. */
-    readonly loaders?:
+    /** The queries the component shows, by name. */
+    readonly queries?:
       | (
         & {
           readonly [K in keyof S]: {
-            readonly load?: S[K] & OneRead<M[K & keyof M]>
+            readonly query?: S[K] & OneQuery<M[K & keyof M]>
             readonly args: (
               model: Model,
               props: Props,
-              loaded: { readonly [P in Exclude<keyof NoInfer<L>, K>]: LoadedOf<NoInfer<L>[P]> }
+              queries: { readonly [P in Exclude<keyof NoInfer<L>, K>]: QueryResultOf<NoInfer<L>[P]> }
             ) => ArgsFor<S[K], M[K & keyof M]>
             readonly debounce?: Duration.Input | undefined
             readonly onChange?: OnChange<S[K], M[K & keyof M], NoInfer<Msg>> | undefined
           }
         }
-        & { readonly [K in keyof M]: { readonly loadMany?: M[K] & KeyedRead<M[K]> } }
+        & { readonly [K in keyof M]: { readonly queryMany?: M[K] & ManyQuery<M[K]> } }
       )
       | undefined
     readonly elements?: View.Vocabulary<V> | undefined
@@ -2356,7 +2331,7 @@ export const define = <
     message: options.message,
     events: options.events ?? (Schema.Never as any),
     receives: receivesOf(options.message, options.receives ?? []) as Schema.Codec<any, any>,
-    loaders: options.loaders,
+    queries: options.queries,
     elements: options.elements,
     slots: options.slots ?? [],
     shared: options.shared,
@@ -2365,7 +2340,7 @@ export const define = <
     update: ((...args: ReadonlyArray<any>) => {
       const update: AnyUpdate = args[args.length - 1]
       return (model: unknown, msg: unknown, $: Update<any, any, any, any>) =>
-        update(model, msg, makeUpdate(model, $.props, $.loaded, msg))
+        update(model, msg, makeUpdate(model, $.props, $.queries, msg))
     }) as any,
     view: (view) => view,
     fragment: (fragment) => fragment,
@@ -2393,15 +2368,15 @@ const finish = (
       | ((
         model: any,
         props: any,
-        loaded: any
+        queries: any
       ) => ReadonlyArray<Subscription.Subscription<any, any> | false | null | undefined>)
       | undefined
-    readonly head?: ((model: any, props: any, loaded: any) => ReadonlyArray<Head.Entry>) | undefined
+    readonly head?: ((model: any, props: any, queries: any) => ReadonlyArray<Head.Entry>) | undefined
   }
 ): Any => {
-  const bound = loaders.bind(definition.name, definition.loaders)
-  const open = (model: unknown, props: unknown, loaderState: LoaderState | undefined): any =>
-    bound === undefined ? {} : bound.context(model, props, loaderState).loaded
+  const bound = componentQueries.bind(definition.name, definition.queries)
+  const open = (model: unknown, props: unknown, results: Results | undefined): any =>
+    bound === undefined ? {} : bound.context(model, props, results).queries
   const update = options.update
   // A record dispatches on the message's `_tag`.
   const updateFn: AnyUpdate = typeof update === "function"
@@ -2432,15 +2407,15 @@ const finish = (
     events: definition.events,
     receives: definition.receives,
     init: (props: unknown) => toNext(options.init(makeInit(props))),
-    update: (model: unknown, msg: unknown, props: unknown, loaderState?: LoaderState) =>
-      toNext(updateFn(model, msg, makeUpdate(model, props, open(model, props, loaderState), msg))),
+    update: (model: unknown, msg: unknown, props: unknown, results?: Results) =>
+      toNext(updateFn(model, msg, makeUpdate(model, props, open(model, props, results), msg))),
     view: view === undefined
       ? undefined
       : (
         model: unknown,
         props: unknown,
         running?: View.Running,
-        loaderState?: LoaderState,
+        results?: Results,
         path?: string,
         shared?: SharedLookup
       ) => {
@@ -2452,8 +2427,8 @@ const finish = (
         )
         if (definition.slots.length > 0) h.slots = outlets
         if (bound !== undefined) {
-          const context = bound.context(model, props, loaderState)
-          h.loaded = context.loaded
+          const context = bound.context(model, props, results)
+          h.queries = context.queries
           h.previous = context.previous
           h.patched = context.patched
         }
@@ -2477,8 +2452,8 @@ const finish = (
               : View.makePart(owner, typeof args[0] === "string" ? [args[0]] : args[0], args[1])
         }
         if (bound !== undefined) {
-          const opened = bound.context(model, props, context.loaderState)
-          p.loaded = opened.loaded
+          const opened = bound.context(model, props, context.queries)
+          p.queries = opened.queries
           p.previous = opened.previous
           p.patched = opened.patched
         }
@@ -2487,19 +2462,18 @@ const finish = (
       },
     subscriptions: subscriptions === undefined
       ? undefined
-      : (model: unknown, props: unknown, loaderState?: LoaderState) =>
-        subscriptions(model, props, open(model, props, loaderState)).filter((entry) => !!entry),
+      : (model: unknown, props: unknown, results?: Results) =>
+        subscriptions(model, props, open(model, props, results)).filter((entry) => !!entry),
     head: head === undefined
       ? undefined
-      : (model: unknown, props: unknown, loaderState?: LoaderState) =>
-        head(model, props, open(model, props, loaderState)),
+      : (model: unknown, props: unknown, results?: Results) => head(model, props, open(model, props, results)),
     elements: () => elements ?? View.registeredElements(),
     layer: undefined,
     layerKeys: undefined,
     layerFailure: undefined,
     sharedLayer: undefined,
     layerOnServer: true,
-    "~loaders": bound
+    "~queries": bound
   })
 }
 
@@ -2578,9 +2552,9 @@ export type Provided<C, ROut, RIn> = C extends
 
 /**
  * Services the runtime owns or reads once at mount: the framework services,
- * among them the loader cache, and the cache's three references, plus the
- * shared state of owners above a component. A `provide` Layer can't supply
- * them, so it never removes them from a component's requirements.
+ * among them the query cache, and the cache's three references. A `provide`
+ * Layer can't supply them, so it never removes them from a component's
+ * requirements.
  *
  * @stability experimental
  * @category utility types
@@ -2588,9 +2562,9 @@ export type Provided<C, ROut, RIn> = C extends
  */
 export type RuntimeService =
   | Command.FrameworkService
-  | typeof Loader.Visibility
-  | typeof Loader.Connectivity
-  | typeof Loader.Problems
+  | typeof Query.Visibility
+  | typeof Query.Connectivity
+  | typeof Query.Problems
   | Shared.Any
 
 /**
@@ -2815,22 +2789,22 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F } ? "onFailure" ext
  * instance whose Model or props changed, and compared with `Equal.equals`, so
  * an update that leaves it equal calls nothing and builds nothing. On a change
  * the component keeps its Model. Its in-flight Commands are interrupted, its
- * Subscriptions and loaders restart, and its loader state goes back to its
+ * Subscriptions and queries restart, and its query results go back to their
  * initial value. The Commands issued in the flush that changed the key run
  * against the new services. The previous selection is released once the new
  * one has built, and a selection still building is interrupted.
  *
- * A key change doesn't clear the loader cache. A cache entry is a read and its
- * args, whichever selection fetched it, so a read whose args are unchanged gets
+ * A key change doesn't clear the query cache. A cache entry is a query and its
+ * args, whichever selection fetched it, so a query whose args are unchanged gets
  * the entry fetched under the old selection until its `staleTime` passes. A
- * read whose data depends on the selection takes the selection in its args.
+ * query whose data depends on the selection takes the selection in its args.
  *
  * A failed build goes to `onFailure` or fails the instance, as at mount, with
  * no fallback to the previous selection. The Commands waiting for that build
  * are interrupted. A later key change builds again; an unchanged key doesn't
  * retry. Until then, a newly issued Command runs against the parent's
  * services, as after a failure at mount, so one that needs a selected service
- * fails the instance. Every Subscription and loader on the instance waits for
+ * fails the instance. Every Subscription and query on the instance waits for
  * the next selection, those that use only the parent's services included: work
  * that must keep running goes on a component above the provide.
  *

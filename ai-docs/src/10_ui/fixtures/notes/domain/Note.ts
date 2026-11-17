@@ -1,4 +1,4 @@
-import { Loader } from "@effect/ui"
+import { Query } from "@effect/ui"
 import { Schema } from "effect"
 
 export const Note = Schema.Struct({
@@ -27,6 +27,6 @@ export class NoteSaveError extends Schema.TaggedError<NoteSaveError>()("NoteSave
   reason: Schema.String
 }) {}
 
-// The invalidation tag every read of notes belongs to. A Command that changes
-// a note invalidates the tag, and every read carrying it refetches.
-export const NotesTag = Loader.Tag("notes")
+// The invalidation tag every query of notes belongs to. A Command that changes
+// a note invalidates the tag, and every query carrying it refetches.
+export const NotesTag = Query.Tag("notes")
