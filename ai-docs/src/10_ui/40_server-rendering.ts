@@ -54,7 +54,7 @@ const Pages = layerHttp(App, {
   // `head`, `htmlAttributes` and `bodyAttributes` come from the components'
   // `head` and are already escaped. `serializeState` makes the state safe
   // inside a script tag, which `JSON.stringify` doesn't. The state holds
-  // every instance's state, its Model and its loaders' slots, and every
+  // every instance's state, its Model and its loader state, and every
   // settled read, so treat all of it as public.
   document: (page) =>
     `<!doctype html>

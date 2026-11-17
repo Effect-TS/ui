@@ -1,5 +1,5 @@
 /**
- * The child slot record a component call and a feature's `render` build.
+ * The child record a component call and a feature's `render` build.
  *
  * @internal
  */
@@ -25,9 +25,9 @@ export const make = (
   component: Component.Any | Component.Headless.Any | Feature.Any,
   options: Options
 ): View.Child<any, any> => {
-  // A slot with a key and a ref would have two identities that can disagree.
+  // A child with a key and a ref would have two identities that can disagree.
   if ((options.key === undefined) === (options.ref === undefined)) {
-    throw new Error("A child slot takes exactly one of key and ref")
+    throw new Error("A child takes exactly one of key and ref")
   }
   return {
     _tag: "Child",

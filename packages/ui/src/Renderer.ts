@@ -4,7 +4,7 @@
  *
  * Rendering is a virtual DOM bounded by components. A message re-runs only the
  * view of the instance that received it, and the diff against its last view
- * stops at a child slot: a child's nodes belong to the child, and the parent only
+ * stops at a child: a child's nodes belong to the child, and the parent only
  * places, moves or removes them. A child re-renders only when its props change,
  * compared shallowly. Dirty instances render in one flush, parents before
  * children.
@@ -132,15 +132,15 @@ export interface Host<Node> {
  * such as an HTML `textarea`, is marked `textOnly`: the server writes only
  * its text, and hydration adopts the element but builds its children fresh.
  *
- * `adopted`, if given, is called once every slot has adopted, with the head
+ * `adopted`, if given, is called once every instance has adopted, with the head
  * the tree had at adoption: each instance's entries and child instances as
- * they were when it mounted (a waiting slot's when it adopted), merged in
+ * they were when it mounted (a waiting child's when it adopted), merged in
  * tree order. An instance that failed in the flush it mounted in, a title
  * template that throws included, contributes nothing, as on the server.
  * Updates since then, including removed instances, don't count. Title
  * templates reuse the results the client's live merges computed. A template
  * no live merge ever applied to that title, because an ancestor rendered
- * again while the slot holding the title waited, is called once for the
+ * again while the child holding the title waited, is called once for the
  * report; with `head` pure, as it must be, that gives the adoption-time
  * result. Because `head` is pure and the Model is adopted, the head equals
  * the server's merged head, so a host or a test can check one against the
@@ -175,7 +175,7 @@ export interface Hydration<Node> {
  *
  * `~deferred` lists instances the client builds fresh instead of adopting:
  * a provided Layer that missed the budget or was kept off the server, and a
- * slot that failed. A deferred path covers its subtree.
+ * child that failed. A deferred path covers its subtree.
  *
  * `~loader` holds every entry that settled on the server, a typed Failure
  * included, by read name and args key. The client's cache hydrates from it,
@@ -205,7 +205,7 @@ export interface State {
 
 /**
  * A node of a server-rendered tree. A `Range` is one instance's nodes, or
- * the `fallback` of a slot, under its path.
+ * the `fallback` of a child, under its path.
  *
  * @stability experimental
  * @category models
@@ -384,7 +384,7 @@ export interface Root<out Model, in Msg> {
   /** Sends a message to the root, as if from outside the tree. */
   readonly send: (message: Msg) => void
   /**
-   * Completes once every slot has adopted the server's nodes, at once
+   * Completes once every instance has adopted the server's nodes, at once
    * without hydration. Head sync and the router's announcements start with
    * the commit of the flush that finished adoption, which may still be
    * running when this completes, so don't expect the document head to show
@@ -411,13 +411,13 @@ export type HostOf<V> = [V] extends [never] ? never : V extends View.Elements ? 
  *
  * Every instance gets its own child Scope. Commands, Subscriptions and
  * provided Layers run in it, and closing the Scope unmounts the tree. Every
- * child slot is a failure boundary: a failed child shows its `fallback` until
+ * child is a failure boundary: a failed child shows its `fallback` until
  * its key changes. When the root itself fails, `fallback` is shown in its place
  * and the log records `Crashed`.
  *
  * Mounting requires the root vocabulary's host marker, so mounting a root on
  * the wrong host is a type error. Nested components are checked when they
- * mount, and a mismatch fails their slot.
+ * mount, and a mismatch fails that child.
  *
  * `props` is the root's props or an Effect of them, such as
  * `Router.props(AppRoute)`. An Effect is run once, before `init`, and its

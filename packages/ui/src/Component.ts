@@ -232,7 +232,7 @@ export interface Next<out Model, out Msg, out Events, out R = never> {
 }
 
 /**
- * A `$.send(ref, message)` an `update` issued: the ref of the child slot it
+ * A `$.send(ref, message)` an `update` issued: the ref of the child it
  * goes to, and the message.
  *
  * @stability experimental
@@ -263,7 +263,7 @@ export const RefTypeId: "~@effect/ui/Component/Ref" = childRef.TypeId
 export type RefTypeId = typeof RefTypeId
 
 /**
- * A name for a child slot, so its parent can send it messages with
+ * A name for a child, so its parent can send it messages with
  * `$.send`.
  *
  * **When to use**
@@ -274,10 +274,10 @@ export type RefTypeId = typeof RefTypeId
  *
  * **Details**
  *
- * `Editor.ref("Draft")` makes a ref for `Editor`'s slots, and
- * `Todos.ref("Main")` one for a feature's. A parent renders the slot with
+ * `Editor.ref("Draft")` makes a ref for `Editor` children, and
+ * `Todos.ref("Main")` one for a feature's. A parent renders the child with
  * `Editor(h, { ref: Draft, props })` in place of a `key`: the ref's
- * key is the slot's key, so the child's path segment is `Editor[Draft]`.
+ * key is the child's key, so the child's path segment is `Editor[Draft]`.
  * `at` derives a ref for one row of a list: `Row.at(id)` has the key
  * `Row[id]`, as `Renderer.ref`'s `at` does. Two refs with different names
  * never share a key.
@@ -287,7 +287,7 @@ export type RefTypeId = typeof RefTypeId
  * is what a parent may send, so no annotation can widen it, and no ref for
  * fewer messages stands in for one for more. Every ref is a `Ref.Any`, the
  * erased form, which keeps the key and takes no message. A send is matched
- * to a slot by the ref's key, among the sender's direct children only. A
+ * to a child by the ref's key, among the sender's direct children only. A
  * child forwards
  * with its own `$.send`, and answers through `events`.
  *
@@ -299,7 +299,7 @@ export interface Ref<in out Rcv> {
   readonly [RefTypeId]: { readonly _Rcv: Types.Invariant<Rcv> }
   /** The name the ref was made with. */
   readonly name: string
-  /** The name plus any `at` keys: the key of the slot it names. */
+  /** The name plus any `at` keys: the key of the child it names. */
   readonly key: string
   /** The Schema of the messages the child receives. */
   readonly receives: Schema.Codec<Rcv, any>
@@ -323,10 +323,10 @@ export declare namespace Ref {
    *
    * Every `Ref` fits `Ref.Any`, but `Ref.Any` fits no `Ref`, so it can't be
    * annotated back into one, and `$.send` takes nothing through it or its
-   * `at` rows. It names no slot either: every typed ref fits
-   * it, so a slot that took it would skip the receives check. It keeps its
+   * `at` rows. It names no child either: every typed ref fits
+   * it, so a child that took it would skip the receives check. It keeps its
    * `key`, so `Story.childEmit`, `childFailure` and `Story.fallback` find a
-   * slot by it.
+   * child by it.
    * `View.Child`'s `ref`, `Step`'s `sends`, what `isRef` narrows to,
    * and the refs of `Feature.Any` and of a component whose receives are
    * `any` are erased.
@@ -339,7 +339,7 @@ export declare namespace Ref {
     readonly [RefTypeId]: { readonly _Rcv: unknown }
     /** The name the ref was made with. */
     readonly name: string
-    /** The name plus any `at` keys: the key of the slot it names. */
+    /** The name plus any `at` keys: the key of the child it names. */
     readonly key: string
     /** The Schema of the messages the child receives. */
     readonly receives: Schema.Codec<unknown, unknown>
@@ -360,18 +360,18 @@ export declare namespace Ref {
   }
 
   /**
-   * The ref a slot of a component or feature that receives `Rcv` takes:
+   * The ref a child of a component or feature that receives `Rcv` takes:
    * one whose messages the component all receives, or one that takes no
    * message, such as the ref of a feature whose `receives` is
    * `Schema.Unknown`. A ref made from a component also fits a provided copy
    * of it or a feature implementation that receives more. `Ref.Any` fits no
-   * slot.
+   * child.
    *
    * @stability experimental
    * @category models
    * @since 0.1.0
    */
-  export type Slot<Rcv> = Within<Rcv> | Ref<unknown>
+  export type For<Rcv> = Within<Rcv> | Ref<unknown>
 
   /**
    * The ref a component or a feature that receives `Rcv` hands out:
@@ -479,7 +479,7 @@ export interface Step<in out Model, in out Msg, in out Events, out R = never, L 
   /**
    * Loads the next page of a list loader. The runtime takes the args from the
    * loader, after this `update`'s Model. The page arrives in the loader's
-   * slot, and nothing is issued for a disabled loader.
+   * state, and nothing is issued for a disabled loader.
    */
   loadMore(name: ListNames<L>): Step<Model, Msg, Events, R, L>
   /**
@@ -499,7 +499,7 @@ export interface Step<in out Model, in out Msg, in out Events, out R = never, L 
    * as a tagged literal `{ _tag: "Clear" }`: the whole Message, as
    * `Message.make` returns it, doesn't fit unless the child receives every
    * case. A send
-   * to a slot that isn't rendered, whose child failed, or that can't take
+   * to a child that isn't rendered, that failed, or that can't take
    * messages yet, such as a feature on its `fallback`, is dropped and logged
    * as `SendDropped`, and the parent isn't told. `init` can't send: what a
    * child needs at mount is a prop.
@@ -696,7 +696,7 @@ const toNext = (result: unknown): Next<any, any, any, any> =>
  */
 export interface Mountable<in out Props, out Events, out R = never, in Rcv = never> extends Pipeable.Pipeable {
   /**
-   * Declares a slot of this component in a parent's view, from the parent's
+   * Declares a child of this component in a parent's view, from the parent's
    * `h`, which types `onEmit`, `onFailure` and `fallback` against the
    * parent's message type. The component's requirements, and the fallback's,
    * surface in the parent's. A component whose props are erased, such as a
@@ -709,7 +709,7 @@ export interface Mountable<in out Props, out Events, out R = never, in Rcv = nev
     options:
       & View.Child.Options<Props, Events, NoInfer<Msg>, Rcv>
       & {
-        /** Shown if the child fails, until its key changes. Without it, the slot is blank. */
+        /** Shown if the child fails, until its key changes. Without it, the child is blank. */
         readonly fallback?:
           | ((result: AsyncResult.Failure<never, unknown>) => View.Content<NoInfer<Msg>, RF>)
           | undefined
@@ -727,22 +727,33 @@ export interface Mountable<in out Props, out Events, out R = never, in Rcv = nev
   readonly message: Schema.Codec<any, any>
   readonly events: Schema.Codec<Events, any>
   readonly init: (props: Props) => Next<any, any, Events, R>
-  /** `loaded` is the instance's loader slots. Without it every slot is empty. */
-  readonly update: (model: any, msg: never, props: Props, loaded?: Slots | undefined) => Next<any, any, Events, R>
+  /** `loaderState` is the instance's loader state. Without it every loader is empty. */
+  readonly update: (
+    model: any,
+    msg: never,
+    props: Props,
+    loaderState?: LoaderState | undefined
+  ) => Next<any, any, Events, R>
   /** `running` answers `h.isRunning` for the instance being rendered. Without it nothing is running. */
   readonly view: (
     model: any,
     props: Props,
     running?: ((name: string, groupKey: string | undefined) => boolean) | undefined,
-    loaded?: Slots | undefined,
+    loaderState?: LoaderState | undefined,
     /** The instance's path, which `h.id` derives ids from. Without it, the root path `/<name>`. */
     path?: string | undefined
   ) => View.Node<any, R>
   readonly subscriptions:
-    | ((model: any, props: Props, loaded?: Slots | undefined) => ReadonlyArray<Subscription.Subscription<any, R>>)
+    | ((
+      model: any,
+      props: Props,
+      loaderState?: LoaderState | undefined
+    ) => ReadonlyArray<Subscription.Subscription<any, R>>)
     | undefined
   /** The instance's document head entries, a pure function of its Model, props and loaders. */
-  readonly head: ((model: any, props: Props, loaded?: Slots | undefined) => ReadonlyArray<Head.Entry>) | undefined
+  readonly head:
+    | ((model: any, props: Props, loaderState?: LoaderState | undefined) => ReadonlyArray<Head.Entry>)
+    | undefined
   /** The component's vocabulary: its `elements` override, else the registered one. Read lazily. */
   readonly elements: () => View.Vocabulary<any> | undefined
   /** Set by `provide`: the Layer built for each instance, in its Scope. Descendants inherit its services. */
@@ -758,14 +769,15 @@ export interface Mountable<in out Props, out Events, out R = never, in Rcv = nev
 }
 
 /**
- * An instance's loader slots, by loader name. Opaque: only the runtime and
- * `Story` build and read them.
+ * An instance's loader state: what each loader's read last returned, by
+ * loader name. Opaque: only the runtime and
+ * `Story` build and read it.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export type Slots = { readonly [name: string]: unknown }
+export type LoaderState = { readonly [name: string]: unknown }
 
 /**
  * Helper types for `Mountable`.
@@ -813,21 +825,32 @@ export interface Component<
   readonly message: Schema.Codec<Msg, any>
   /** The Schema of the messages a parent may send: the cases of `message` listed in `receives`. */
   readonly receives: Schema.Codec<Rcv, any>
-  /** A ref for this component's slots, so a parent can send them messages. */
+  /** A ref for this component's children, so a parent can send them messages. */
   readonly ref: (name: string) => Ref.Of<Rcv>
   readonly init: (props: Props) => Next<Model, Msg, Events, R>
-  readonly update: (model: Model, msg: Msg, props: Props, loaded?: Slots | undefined) => Next<Model, Msg, Events, R>
+  readonly update: (
+    model: Model,
+    msg: Msg,
+    props: Props,
+    loaderState?: LoaderState | undefined
+  ) => Next<Model, Msg, Events, R>
   readonly view: (
     model: Model,
     props: Props,
     running?: ((name: string, groupKey: string | undefined) => boolean) | undefined,
-    loaded?: Slots | undefined,
+    loaderState?: LoaderState | undefined,
     path?: string | undefined
   ) => View.Node<Msg, R>
   readonly subscriptions:
-    | ((model: Model, props: Props, loaded?: Slots | undefined) => ReadonlyArray<Subscription.Subscription<Msg, R>>)
+    | ((
+      model: Model,
+      props: Props,
+      loaderState?: LoaderState | undefined
+    ) => ReadonlyArray<Subscription.Subscription<Msg, R>>)
     | undefined
-  readonly head: ((model: Model, props: Props, loaded?: Slots | undefined) => ReadonlyArray<Head.Entry>) | undefined
+  readonly head:
+    | ((model: Model, props: Props, loaderState?: LoaderState | undefined) => ReadonlyArray<Head.Entry>)
+    | undefined
   readonly layerFailure: ((failure: AsyncResult.Failure<never, any>) => Msg) | undefined
   readonly "~V"?: V
   readonly "~L"?: L
@@ -862,11 +885,11 @@ export type HeadlessTypeId = typeof HeadlessTypeId
  *
  * The `view` closure given to the call is the consumer's code. A child
  * declared in it, its `onEmit` and `onFailure` messages, and a fallback in
- * it all belong to the consumer, and a slot in it takes the consumer's refs.
- * A ref's key names one slot across the consumer's view and every closure it
+ * it all belong to the consumer, and a child in it takes the consumer's refs.
+ * A ref's key names one child across the consumer's view and every closure it
  * wrote: a render that puts it on two fails the consumer with the source
- * `view`, whether the view or a closure rendered. A closure that throws fails the headless child's slot, logged with the
- * source `content`, and the slot shows its fallback.
+ * `view`, whether the view or a closure rendered. A closure that throws fails the headless child, logged with the
+ * source `content`, and the child shows its fallback.
  *
  * A part applied to an element adds a layer that the headless instance
  * owns. When the element's event fires, each layer's handler runs and its
@@ -904,7 +927,7 @@ export interface Headless<in out Props, out Events, out Parts, out R = never, in
   extends Pipeable.Pipeable
 {
   /**
-   * Declares a slot of this component in a parent's view, from the parent's
+   * Declares a child of this component in a parent's view, from the parent's
    * `h`. `view` is the child's whole view, built from its parts. Its
    * requirements, the view's and the fallback's surface in the parent's.
    */
@@ -913,7 +936,7 @@ export interface Headless<in out Props, out Events, out Parts, out R = never, in
     options:
       & View.Child.Options<Props, Events, NoInfer<Msg>, Rcv>
       & {
-        /** Shown if the child fails, until its key changes. Without it, the slot is blank. */
+        /** Shown if the child fails, until its key changes. Without it, the child is blank. */
         readonly fallback?:
           | ((result: AsyncResult.Failure<never, unknown>) => View.Content<NoInfer<Msg>, RF>)
           | undefined
@@ -940,16 +963,27 @@ export interface Headless<in out Props, out Events, out Parts, out R = never, in
   readonly events: Schema.Codec<Events, any>
   /** The Schema of the messages a parent may send: the cases of `message` listed in `receives`. */
   readonly receives: Schema.Codec<Rcv, any>
-  /** A ref for a slot of this component, which a parent renders it with to send it messages. */
+  /** A ref for a child of this component, which a parent renders it with to send it messages. */
   readonly ref: (name: string) => Ref.Of<Rcv>
   readonly init: (props: Props) => Next<any, any, Events, R>
-  readonly update: (model: any, msg: never, props: Props, loaded?: Slots | undefined) => Next<any, any, Events, R>
+  readonly update: (
+    model: any,
+    msg: never,
+    props: Props,
+    loaderState?: LoaderState | undefined
+  ) => Next<any, any, Events, R>
   /** The parts for one render: plain values and decorators stamped with `owner`. */
   readonly parts: (model: any, props: Props, context: PartsContext) => Parts
   readonly subscriptions:
-    | ((model: any, props: Props, loaded?: Slots | undefined) => ReadonlyArray<Subscription.Subscription<any, R>>)
+    | ((
+      model: any,
+      props: Props,
+      loaderState?: LoaderState | undefined
+    ) => ReadonlyArray<Subscription.Subscription<any, R>>)
     | undefined
-  readonly head: ((model: any, props: Props, loaded?: Slots | undefined) => ReadonlyArray<Head.Entry>) | undefined
+  readonly head:
+    | ((model: any, props: Props, loaderState?: LoaderState | undefined) => ReadonlyArray<Head.Entry>)
+    | undefined
   readonly elements: () => View.Vocabulary<any> | undefined
   readonly "~loaders": unknown
 }
@@ -966,7 +1000,7 @@ export interface Headless<in out Props, out Events, out Parts, out R = never, in
 export interface PartsContext {
   readonly owner: View.Owner
   readonly running?: ((name: string, groupKey: string | undefined) => boolean) | undefined
-  readonly loaded?: Slots | undefined
+  readonly loaderState?: LoaderState | undefined
 }
 
 /**
@@ -1069,7 +1103,7 @@ export type PartTag<T> = T extends { readonly "~Tag"?: infer Tag extends string 
  *
  * `loaded` holds each loader's result, as `$.loaded` does in `update`.
  *
- * `previous` holds, per single or list loader, the Success value its slot
+ * `previous` holds, per single or list loader, the Success value its loader state
  * holds for args other than the loader's current ones. It's `Some` only while
  * the loader is enabled, so it is `None` whenever `h.loaded` has the stored
  * result.
@@ -1265,7 +1299,7 @@ type ServiceOf<D> = D extends { readonly read: { readonly Identifier: infer Self
  * A single loader opens to an `AsyncResult` of its read's success and error,
  * a list loader to an `AsyncResult` of its `LoadedList`, and a `loadMany`
  * loader to its entries in the order of its args. A single or list loader
- * holds the result its slot took at the loader's current args, and otherwise
+ * holds the result its loader state took at the loader's current args, and otherwise
  * `Initial`, waiting while the loader is enabled.
  *
  * @stability experimental
@@ -1400,7 +1434,7 @@ const HeadlessProto = Object.assign(Object.create(Function.prototype), {
   ref: Proto.ref
 })
 
-// A callable component: calling it declares a slot of it. The function's own
+// A callable component: calling it declares a child of it. The function's own
 // `name` is left alone. Its fields are defined, not assigned: a function given
 // more than 15 properties by assignment, or a new `name`, switches to slow,
 // dictionary-mode properties, and the runtime reads them on every instance.
@@ -1713,10 +1747,10 @@ export type Helper<D> = D extends
  * args. `args` gets the Model, the props and the other loaders' results,
  * and returns the read's args, `undefined` to disable it, or for
  * `loadMany` an array of args. The runtime watches each read at those args
- * and keeps what it last returned in the loader's slot, beside the Model:
- * the Model plus the slots is an instance's state. A slot that changes
+ * and keeps what it last returned in the loader's state, beside the Model:
+ * the Model plus the loader state is an instance's state. A loader state that changes
  * re-renders the instance. `h.loaded`, `$.loaded` in `update`, and the
- * `loaded` argument of `head` and `subscriptions` open the slots, by
+ * `loaded` argument of `head` and `subscriptions` open the loader state, by
  * loader name. Each read is added to `R`.
  *
  * An entry's `debounce` delays a fetch for changed args by a
@@ -1727,16 +1761,16 @@ export type Helper<D> = D extends
  * value. Args that change again restart the wait. A `loadMany` loader's new
  * keys wait each on their own.
  *
- * An entry's `onChange` returns a message to send when its slot changes, for
+ * An entry's `onChange` returns a message to send when its state changes, for
  * a component that has to react in `update`. A `load` loader's gets its
  * result as `h.loaded` opens it, and a `loadMany` loader's gets its entries
- * and the keys whose result changed. The slot is written first, and the
+ * and the keys whose result changed. The state is written first, and the
  * message's `update` sees it in `$.loaded`.
  *
  * `head` returns the instance's document head entries (see `Head`). It's a
  * pure function of the Model, the props and the loaders' results, like a
  * view, and runs again when any of them changes. The entries live and die
- * with the instance, and a slot's `fallback` contributes none.
+ * with the instance, and a child's `fallback` contributes none.
  *
  * `update` is a function over the whole message type, or a record with a
  * function for every `_tag` of the message, which gets that tag's member and
@@ -1970,8 +2004,8 @@ const finish = (
   }
 ): Any => {
   const bound = loaders.bind(definition.name, definition.loaders)
-  const open = (model: unknown, props: unknown, slots: Slots | undefined): any =>
-    bound === undefined ? {} : bound.context(model, props, slots).loaded
+  const open = (model: unknown, props: unknown, loaderState: LoaderState | undefined): any =>
+    bound === undefined ? {} : bound.context(model, props, loaderState).loaded
   const update = options.update
   // A record dispatches on the message's `_tag`.
   const updateFn: AnyUpdate = typeof update === "function"
@@ -1990,11 +2024,11 @@ const finish = (
     events: definition.events,
     receives: definition.receives,
     init: (props: unknown) => toNext(options.init(makeInit(props))),
-    update: (model: unknown, msg: unknown, props: unknown, slots?: Slots) =>
-      toNext(updateFn(model, msg, makeUpdate(model, props, open(model, props, slots), msg))),
+    update: (model: unknown, msg: unknown, props: unknown, loaderState?: LoaderState) =>
+      toNext(updateFn(model, msg, makeUpdate(model, props, open(model, props, loaderState), msg))),
     view: view === undefined
       ? undefined
-      : (model: unknown, props: unknown, running?: View.Running, slots?: Slots, path?: string) => {
+      : (model: unknown, props: unknown, running?: View.Running, loaderState?: LoaderState, path?: string) => {
         const h: any = View.makeHelper(
           props,
           elements ?? View.registeredElements(),
@@ -2002,7 +2036,7 @@ const finish = (
           path ?? ("/" + definition.name)
         )
         if (bound !== undefined) {
-          const context = bound.context(model, props, slots)
+          const context = bound.context(model, props, loaderState)
           h.loaded = context.loaded
           h.previous = context.previous
           h.patched = context.patched
@@ -2026,7 +2060,7 @@ const finish = (
               : View.makePart(owner, typeof args[0] === "string" ? [args[0]] : args[0], args[1])
         }
         if (bound !== undefined) {
-          const opened = bound.context(model, props, context.loaded)
+          const opened = bound.context(model, props, context.loaderState)
           p.loaded = opened.loaded
           p.previous = opened.previous
           p.patched = opened.patched
@@ -2035,11 +2069,12 @@ const finish = (
       },
     subscriptions: subscriptions === undefined
       ? undefined
-      : (model: unknown, props: unknown, slots?: Slots) =>
-        subscriptions(model, props, open(model, props, slots)).filter((entry) => !!entry),
+      : (model: unknown, props: unknown, loaderState?: LoaderState) =>
+        subscriptions(model, props, open(model, props, loaderState)).filter((entry) => !!entry),
     head: head === undefined
       ? undefined
-      : (model: unknown, props: unknown, slots?: Slots) => head(model, props, open(model, props, slots)),
+      : (model: unknown, props: unknown, loaderState?: LoaderState) =>
+        head(model, props, open(model, props, loaderState)),
     elements: () => elements ?? View.registeredElements(),
     layer: undefined,
     layerFailure: undefined,

@@ -30,7 +30,7 @@ Declare a child component by calling it with the parent's `h`:
 A parent passes a child state through props, and a child answers through
 `events`. A one-shot instruction, such as "save now" or "clear your draft",
 is a send: the child lists the tags it accepts in `receives`, the parent
-renders the slot with a ref from `Child.ref("Name")`, and its `update` calls
+renders the child with a ref from `Child.ref("Name")`, and its `update` calls
 `$.send(ref, message)`. Don't send what the child shows: that belongs in its
 props.
 
@@ -77,26 +77,26 @@ loaders: {
 }
 ```
 
-The runtime watches each read and keeps its last result in a slot beside the
-Model. A slot that changes re-renders the instance, without a message. The
-Model holds what the user did, and never a copy of loaded data. The Model plus
-the slots is the instance's state: the server ships it and the history entry
-keeps it as `{ model, loaded }`, so a hydrated or restored instance starts
+The runtime watches each read and keeps its last result in the loader's state,
+beside the Model. A loader state that changes re-renders the instance, without
+a message. The Model holds what the user did, and never a copy of loaded data.
+The Model plus the loader state is the instance's state: the server ships it
+and the history entry keeps it as `{ model, loaderState }`, so a hydrated or restored instance starts
 with the results it had.
 
-Every function of the component can read the slots, by loader name:
+Every function of the component can read the loader state, by loader name:
 `h.loaded` in `view`, `$.loaded` in `update`, and the `loaded` argument of
 `head(model, props, loaded)` and `subscriptions(model, props, loaded)`. Give an entry
 an `onChange` only when `update` has to react to a new result, such as
 moving focus once a read fails. It returns a message, which `update` gets
-after the slot is written.
+after the loader's state is written.
 
 In tests, `Story` load steps such as `loaded("note", note)` take the loader's
-name and write its slot. To start from loaded data without sending
+name and write its loader state. To start from loaded data without sending
 `onChange`'s message, pass the results to `given`:
-`s.given(model, { note })`. The `MessageLog` records each slot write as a
+`s.given(model, { note })`. The `MessageLog` records each loader state write as a
 `LoaderChanged` entry, and an `Update` entry only for an `onChange` message.
-Each `Update` entry records the slots `update` read, so `Story.fromLog`
+Each `Update` entry records the loader state `update` read, so `Story.fromLog`
 replays `$.loaded` as it was. New props from a parent are logged as a
 `PropsChanged` entry, so the result's `props` and `loaded()` hold what the
 instance ended with.

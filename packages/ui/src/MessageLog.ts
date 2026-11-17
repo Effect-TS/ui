@@ -167,7 +167,7 @@ export interface Base {
 }
 
 /**
- * One `update` call: the message, what sent it, the props and loader slots
+ * One `update` call: the message, what sent it, the props and loader state
  * it saw, the Model after it, and the Commands, events, load mores, resets
  * and sends it returned.
  *
@@ -190,11 +190,11 @@ export interface Update extends Base {
   /** The `$.send` calls, in order. The wire omits it when empty. */
   readonly sends?: ReadonlyArray<Component.Send> | undefined
   /**
-   * The loader slots `update` read as `$.loaded`, by loader name: what
+   * The loader state `update` read as `$.loaded`, by loader name: what
    * `Story.fromLog` gives it back, as it gives back `props`. Only a
-   * component with loaders has them.
+   * component with loaders has it.
    */
-  readonly loaded?: Component.Slots | undefined
+  readonly loaderState?: Component.LoaderState | undefined
 }
 
 /**
@@ -222,7 +222,7 @@ export interface Mounted extends Base {
  *
  * **Details**
  *
- * It's logged before the slot writes the new props cause. Props equal to the
+ * It's logged before the loader state writes the new props cause. Props equal to the
  * current ones log nothing.
  *
  * @stability experimental
@@ -237,14 +237,14 @@ export interface PropsChanged extends Base {
 }
 
 /**
- * A loader's slot changed: the runtime wrote what the loader's read last
- * returned at its args. `slot` is opaque. `Story.fromLog` applies it to
- * reach the slots the instance ended with.
+ * A loader's state changed: the runtime wrote what the loader's read last
+ * returned at its args. `state` is opaque. `Story.fromLog` applies it to
+ * reach the loader state the instance ended with.
  *
  * **Details**
  *
- * An instance mounted with restored or hydrated slots logs one entry per
- * non-empty slot right after `Mounted`. A loader with `onChange` logs this
+ * An instance mounted with restored or hydrated loader state logs one entry
+ * per non-empty loader right after `Mounted`. A loader with `onChange` logs this
  * entry before the `Update` of the message it returns.
  *
  * @stability experimental
@@ -253,11 +253,11 @@ export interface PropsChanged extends Base {
  */
 export interface LoaderChanged extends Base {
   readonly _tag: "LoaderChanged"
-  /** The component, whose loader Schemas encode the slot for the Wire. */
+  /** The component, whose loader Schemas encode the state for the Wire. */
   readonly component: Component.Any
   /** The loader's name in `loaders`. */
   readonly name: string
-  readonly slot: unknown
+  readonly state: unknown
 }
 
 /**
@@ -403,16 +403,16 @@ export interface CommandDropped extends Base {
 
 /**
  * A `$.send` that reached no child: `path` is the sender's, `ref` the key
- * of the slot it named, and `issued` the sender's `Update` entry and the
+ * of the child it named, and `issued` the sender's `Update` entry and the
  * send's index in its `sends`.
  *
  * **Details**
  *
- * The reason is `unrendered` when no slot of the sender's last render has
- * the ref, `failed` when the child there failed, `fallback` when the slot
+ * The reason is `unrendered` when no child of the sender's last render has
+ * the ref, `failed` when that child failed, `fallback` when the child
  * shows a feature's `fallback` because its Layer is building or failed, and
- * `waiting` when the slot waits for its Layer before it adopts the server's
- * nodes. The message isn't kept for a later instance at that slot.
+ * `waiting` when the child waits for its Layer before it adopts the server's
+ * nodes. The message isn't kept for a later instance at that child's path.
  *
  * @stability experimental
  * @category models
@@ -682,7 +682,7 @@ export const Wire = Schema.Union([
       Schema.Array(Schema.Struct({ name: Schema.String, op: Schema.Literals(["loadMore", "reset"]) }))
     ),
     sends: Schema.optionalKey(Schema.Array(Schema.Struct({ ref: Schema.String, message: Schema.Json }))),
-    loaded: Schema.optionalKey(Schema.Json)
+    loaderState: Schema.optionalKey(Schema.Json)
   }),
   Schema.TaggedStruct("Mounted", {
     ...Seq,
@@ -694,7 +694,7 @@ export const Wire = Schema.Union([
     adopted: Schema.Boolean
   }),
   Schema.TaggedStruct("PropsChanged", { ...Seq, component: Schema.String, props: Schema.Json }),
-  Schema.TaggedStruct("LoaderChanged", { ...Seq, component: Schema.String, name: Schema.String, slot: Schema.Json }),
+  Schema.TaggedStruct("LoaderChanged", { ...Seq, component: Schema.String, name: Schema.String, state: Schema.Json }),
   Schema.Struct({ _tag: Schema.Literals(["Unmounted", "LayerPending", "LayerReady"]), ...Seq }),
   Schema.TaggedStruct("LayerFailed", { ...Seq, cause: CauseWire }),
   Schema.Struct({ _tag: Schema.Literals(["SubscriptionStarted", "SubscriptionStopped"]), ...Seq, key: Schema.String }),
@@ -823,13 +823,13 @@ export const makeEncoder = (options?: {
       return { "~unserialisable": "encode" }
     }
   }
-  const encodeLoaded = (component: Component.Any, loaded: Component.Slots): Schema.Json => {
+  const encodeLoaderState = (component: Component.Any, loaderState: Component.LoaderState): Schema.Json => {
     const schema = (component["~loaders"] as loaders.Bound | undefined)?.logSchema
     return schema === undefined
       ? { "~unserialisable": "encode" }
-      : cap(encodeWith(schema, `${component.definition.name}.loaders`, loaded) as Schema.Json)
+      : cap(encodeWith(schema, `${component.definition.name}.loaders`, loaderState) as Schema.Json)
   }
-  // A message can carry a loader's whole result, so messages are capped like Models and slots.
+  // A message can carry a loader's whole result, so messages are capped like Models and loader state.
   const capped = (component: Component.Any, field: "model" | "message", value: unknown): Schema.Json =>
     cap(through(component, field, value) as Schema.Json)
   const cap = (encoded: Schema.Json): Schema.Json => {
@@ -858,7 +858,9 @@ export const makeEncoder = (options?: {
                 return { ref: encoded.ref, message: cap(encoded.message) }
               })
             }),
-            ...(entry.loaded === undefined ? undefined : { loaded: encodeLoaded(entry.component, entry.loaded) })
+            ...(entry.loaderState === undefined ? undefined : {
+              loaderState: encodeLoaderState(entry.component, entry.loaderState)
+            })
           }
         case "Mounted":
           return {
@@ -885,13 +887,13 @@ export const makeEncoder = (options?: {
             _tag: "LoaderChanged",
             component: entry.component.definition.name,
             name: entry.name,
-            slot: schema === undefined
+            state: schema === undefined
               ? { "~unserialisable": "encode" }
               : cap(
                 encodeWith(
                   schema,
                   `${entry.component.definition.name}.loaders.${entry.name}`,
-                  entry.slot
+                  entry.state
                 ) as Schema.Json
               )
           }

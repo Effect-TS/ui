@@ -648,7 +648,7 @@ describe("Runtime", () => {
       throw new Error("factory broke")
     }
 
-    it.effect("a throwing factory fails the child's own slot", () =>
+    it.effect("a throwing factory fails only that child", () =>
       provideHost(Effect.gen(function*() {
         const Child = Component.provide(Leaf, broken)
         const Parent = Component.define({
@@ -2425,7 +2425,7 @@ describe("Runtime", () => {
         assert.include(String(failed.cause), "text goes inside label")
       })))
 
-    it.effect("a nested component whose vocabulary the host doesn't show fails its slot", () =>
+    it.effect("a nested component whose vocabulary the host doesn't show fails as a child", () =>
       Effect.gen(function*() {
         const Inner = Component.define({
           name: "Inner",

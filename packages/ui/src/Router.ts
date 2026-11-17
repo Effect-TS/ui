@@ -1148,7 +1148,7 @@ const readState = (state: unknown): EntryState | undefined => {
 const writeState = (entry: EntryState): unknown => ({ [stateKey]: entry })
 
 /**
- * Writing the instances' saved state (each Model, plus its loader slots) into
+ * Writing the instances' saved state (each Model, plus its loader state) into
  * `history.state` threw, as a browser does when the state is too large. The
  * history entry was written with its index only, so the saved state survives
  * in memory and not across a reload.
@@ -1199,17 +1199,17 @@ const commandLayers = Layer.mergeAll(
  * settle timing; a host adds scroll, announcements and focus in `onSettled`.
  *
  * History restore: before leaving an entry, the Router saves the encoded
- * state of every mounted instance by path: its Model and loader slots. It can't save only the page's
+ * state of every mounted instance by path: its Model and loader state. It can't save only the page's
  * subtree, because which instances the navigation unmounts is only known
  * after it. On back and forward, an instance created for the entry adopts its
  * saved state, so only the re-keyed subtree is restored, and an instance that
  * stayed mounted keeps its own. As with hydration, `init` is replayed and
  * every one of its Commands runs.
  *
- * A restored loader slot seeds the cache when its entry is cold, as after a
+ * A restored loader state seeds the cache when its entry is cold, as after a
  * reload: the entry is stored stale, so the first frame shows the data with
  * `waiting: true` and one refetch runs. If the refetch fails, the data stays
- * as the Failure's previous Success. A warm entry is used as it is. A slot
+ * as the Failure's previous Success. A warm entry is used as it is. A loader state
  * taken under an optimistic patch is never a seed: it is dropped from the
  * restored state and starts from loading.
  *
