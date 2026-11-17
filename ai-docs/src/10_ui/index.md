@@ -83,8 +83,8 @@ name and write its loader state. To start from loaded data without sending
 `onChange`'s message, pass the results to `given`:
 `s.given(model, { note })`. The `MessageLog` records each loader state write as a
 `LoaderChanged` entry, and an `Update` entry only for an `onChange` message.
-Each `Update` entry records the loader state `update` read, so `Story.fromLog`
-replays `$.loaded` as it was. New props from a parent are logged as a
+Each `Mounted` and `Update` entry records the loader state, restored or
+hydrated state included, so `Story.fromLog` replays `$.loaded` as it was. New props from a parent are logged as a
 `PropsChanged` entry, so the result's `props` and `loaded()` hold what the
 instance ended with.
 

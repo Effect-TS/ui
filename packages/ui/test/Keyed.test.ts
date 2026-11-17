@@ -226,21 +226,16 @@ describe("Keyed loader fields", () => {
         ])
         assert.deepStrictEqual(app.db.batches, [3])
         assert.strictEqual(root.entry(app.GetUser, { id: "2" })?.watchers, 1)
-        // One Subscription key per unique key.
-        assert.deepStrictEqual(
-          root.log().flatMap((entry) => entry._tag === "SubscriptionStarted" ? [entry.key] : []),
-          ["1", "2", "3"].map((id) => `~loaded/users:${JSON.stringify(JSON.stringify({ id }))}`)
+        // The loader state's write is logged, then the Update of its onChange message, which points at it.
+        const written = root.log().filter((entry) =>
+          entry._tag === "LoaderChanged" || (entry._tag === "Update" && entry.source._tag === "Loader")
         )
-        // The loader state's write is logged, then the Update of its onChange message.
-        const written = root.log().flatMap((entry) =>
-          entry._tag === "LoaderChanged" ?
-            [entry._tag] :
-            entry._tag === "Update" && entry.source._tag === "Subscription" &&
-              entry.source.key.startsWith("~loaded/users")
-            ? [entry._tag]
-            : []
-        )
-        assert.deepStrictEqual(written, ["LoaderChanged", "Update"])
+        assert.deepStrictEqual(written.map((entry) => entry._tag), ["LoaderChanged", "Update"])
+        assert.deepStrictEqual((written[1] as MessageLog.Update).source, {
+          _tag: "Loader",
+          name: "users",
+          seq: written[0].seq
+        })
       })
     )
   })
@@ -711,7 +706,7 @@ describe("Keyed loader fields", () => {
         assert.deepStrictEqual(app.db.batches, [3])
         assert.strictEqual(root.text(), "b: 1=Ann 2=Bea")
         const failed = root.log().find((entry): entry is MessageLog.Failed => entry._tag === "Failed")
-        assert.deepStrictEqual([failed?.path, failed?.source, failed?.name], [
+        assert.deepStrictEqual([failed?.path, failed?.in, failed?.name], [
           "/List/Board[a]",
           "subscription",
           `~loaded/users:${JSON.stringify(JSON.stringify({ id: "boom" }))}`
@@ -853,7 +848,7 @@ describe("Keyed loader state", () => {
         yield* TestHost.settle
         assert.strictEqual(root.text(), "host")
         const failed = root.log().find((entry): entry is MessageLog.Failed => entry._tag === "Failed")
-        assert.deepStrictEqual([failed?.path, failed?.source], ["/Host/Bad[bad]", "subscription"])
+        assert.deepStrictEqual([failed?.path, failed?.in], ["/Host/Bad[bad]", "subscription"])
         assert.include(TestHost.formatLog(root.log()), "is a loadMany loader, and its args must return an array")
       })
     )
@@ -906,7 +901,7 @@ describe("Keyed redaction", () => {
         const wire = JSON.stringify(root.log().map((entry) => MessageLog.makeEncoder().encode(entry)))
         assert.notInclude(wire, "tok-")
         assert.notInclude(wire, "secret-of")
-        assert.include(wire, "SubscriptionStarted")
+        assert.include(wire, "FetchStarted")
         assert.include(wire, "LoaderChanged")
         assert.notInclude(TestHost.formatLog(root.log()), "tok-")
       })
@@ -1208,13 +1203,8 @@ describe("Keyed history restore", () => {
           const mounted = log.findIndex((entry) => entry._tag === "Mounted" && entry.path === "/Shell/Board[board]")
           const restored = log[mounted] as MessageLog.Mounted
           assert.isTrue(restored.adopted)
-          // The restored loader state is logged right after Mounted.
-          const seeded = log[mounted + 1]
-          assert.strictEqual(seeded._tag, "LoaderChanged")
-          assert.deepStrictEqual(
-            heldIds(app.Board, (seeded as MessageLog.LoaderChanged).state),
-            ["2"]
-          )
+          // Mounted holds the restored loader state.
+          assert.deepStrictEqual(heldIds(app.Board, restored.loaderState?.users), ["2"])
           // Key 2 is seeded stale and shows while it refetches; key 1 starts from loading.
           assert.isTrue(root.text().includes("a: 1=… 2=Bea…"))
           yield* load

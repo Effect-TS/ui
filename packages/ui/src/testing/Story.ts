@@ -2282,27 +2282,27 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
   const read = (entry: typeof first) => {
     if (typeof entry.component !== "string") {
       return {
-        loaderState: entry._tag === "Update" ? (entry as MessageLog.Update).loaderState : undefined,
+        loaderState: (entry as MessageLog.Update | MessageLog.Mounted).loaderState,
         props: entry.props as Props,
         model: entry.model as Model,
         events: entry.events as ReadonlyArray<Events>,
         commands: (entry as MessageLog.Update).commands.map(MessageLog.encodeCommand),
-        lists: entry._tag === "Update" ? entry.lists ?? [] : [],
-        sends: entry._tag === "Update" ? ((entry as MessageLog.Update).sends ?? []).map(MessageLog.encodeSend) : [],
+        lists: entry._tag === "Update" ? entry.lists : [],
+        sends: entry._tag === "Update" ? (entry as MessageLog.Update).sends.map(MessageLog.encodeSend) : [],
         message: entry._tag === "Update" ? entry.message as Msg : undefined
       }
     }
     const wire = entry as Extract<MessageLog.Wire, { _tag: "Update" | "Mounted" }>
     return {
-      loaderState: wire._tag === "Update" && wire.loaderState !== undefined && bound !== undefined
+      loaderState: wire.loaderState !== undefined && bound !== undefined
         ? decodeWith(entry, "loaderState", bound.logSchema, wire.loaderState) as Component.LoaderState
         : undefined,
       props: decode(entry, "props", wire.props) as Props,
       model: decode(entry, "model", wire.model) as Model,
       events: wire.events.map((emitted) => decode(entry, "events", emitted)) as ReadonlyArray<Events>,
       commands: wire.commands,
-      lists: wire._tag === "Update" ? wire.lists ?? [] : [],
-      sends: wire._tag === "Update" ? wire.sends ?? [] : [],
+      lists: wire._tag === "Update" ? wire.lists : [],
+      sends: wire._tag === "Update" ? wire.sends : [],
       message: wire._tag === "Update" ? decode(entry, "message", wire.message) as Msg : undefined
     }
   }
@@ -2321,12 +2321,7 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
   const states = new Map<number, State>()
   const begin = (entry: typeof first): State => {
     const initial = read(entry)
-    const state = {
-      model: initial.model,
-      props: initial.props,
-      // A `Mounted` entry starts with every loader empty.
-      loaderState: entry._tag === "Mounted" ? undefined : initial.loaderState
-    }
+    const state = { model: initial.model, props: initial.props, loaderState: initial.loaderState }
     states.set(entry.instance, state)
     return state
   }
@@ -2413,9 +2408,8 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
  * `Schema.toEquivalence`, and Commands by their Wire encoding.
  *
  * The props and loader state are tracked with the Model, so the result is the state
- * the instance ended with. They start from the first entry: a `Mounted`
- * entry's props and empty loader state, or an `Update` entry's recorded props and
- * loader state. Each later `PropsChanged` entry sets the props and each
+ * the instance ended with. They start from the first entry's: a `Mounted`
+ * entry's or an `Update` entry's recorded props and loader state. Each later `PropsChanged` entry sets the props and each
  * `LoaderChanged` entry writes its loader's state, so props from the parent and loads
  * that settled after the last message are in the result too.
  *

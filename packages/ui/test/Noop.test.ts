@@ -93,7 +93,7 @@ describe("Component.noop", () => {
       yield* TestHost.settle
       assert.deepStrictEqual(root.model(), ["Fire", "Got 0"])
       const [entry] = ended(root)
-      assert.isUndefined(entry.silent)
+      assert.isFalse(entry.silent)
       const update = root.log().find((entry) => entry._tag === "Update" && entry.source._tag === "Command")
       assert.isDefined(update)
       if (update?._tag !== "Update" || update.source._tag !== "Command") return
@@ -117,7 +117,7 @@ describe("Component.noop", () => {
       yield* TestHost.settle
       assert.deepStrictEqual(root.model(), ["Fire", "Got 1", "Got 2"])
       // Some elements had a message, so the run isn't silent.
-      assert.isUndefined(ended(root)[0].silent)
+      assert.isFalse(ended(root)[0].silent)
     })))
 
   it.effect("a Stream whose every element is silent is silent, and an empty Stream isn't", () =>
@@ -129,7 +129,7 @@ describe("Component.noop", () => {
       assert.deepStrictEqual(root.model(), ["Fire", "Fire"])
       assert.deepStrictEqual(ended(root).map((entry) => [entry.name, entry.silent]), [
         ["AllQuiet", true],
-        ["Empty", undefined]
+        ["Empty", false]
       ])
     })))
 
@@ -143,7 +143,7 @@ describe("Component.noop", () => {
       yield* TestClock.adjust("60 millis")
       yield* TestHost.settle
       assert.deepStrictEqual(root.model(), ["Queue", "Queue", "Queue", "Got 0", "Got 2"])
-      assert.deepStrictEqual(ended(root).map((entry) => entry.silent), [undefined, true, undefined])
+      assert.deepStrictEqual(ended(root).map((entry) => entry.silent), [false, true, false])
       assert.deepStrictEqual(root.pending(), [])
     })))
 
@@ -207,7 +207,7 @@ describe("Component.noop", () => {
       assert.deepStrictEqual(root.pending(), [])
       assert.strictEqual(mapped, 0)
       const [entry] = ended(root)
-      assert.deepStrictEqual([entry.name, entry.detached, entry.silent], ["test/Slow", true, undefined])
+      assert.deepStrictEqual([entry.name, entry.detached, entry.silent], ["test/Slow", true, false])
       assert.strictEqual(typeof entry.spanId, "string")
       assert.strictEqual(typeof entry.traceId, "string")
     })))

@@ -141,7 +141,7 @@ describe("Head", () => {
       assert.strictEqual(root.text(), "down")
       assert.strictEqual(root.head().title, "App")
       const failed = root.log().filter((entry): entry is MessageLog.Failed => entry._tag === "Failed")
-      assert.deepStrictEqual(failed.map((entry) => [entry.path, entry.source]), [["/App/Layout[layout]", "head"]])
+      assert.deepStrictEqual(failed.map((entry) => [entry.path, entry.in]), [["/App/Layout[layout]", "head"]])
     }).pipe(Effect.provide(TestHost.layer())))
 
   it.effect("clears the head when the root's title template throws", () =>

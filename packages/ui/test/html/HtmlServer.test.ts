@@ -298,12 +298,10 @@ describe("HtmlServer", { concurrent: false }, () => {
         const result = yield* ssr(App, Router.props(AppRoute)).pipe(Effect.provide([People.layer, router]))
         expect(result.adopted).toEqual(["/App", "/App/Person[/people/1]"])
         expect(result.misses).toEqual([])
-        // The bio is hydrated, so the client doesn't fetch it. The hydrated loader state is logged once, and the
+        // The bio is hydrated, so the client doesn't fetch it. The hydrated loader state is on Mounted, and the
         // watch's first value equals it, so it isn't written again.
         expect(result.root.fetches()).toEqual([])
-        expect(
-          result.log.filter((entry) => entry._tag === "LoaderChanged").map((entry) => [entry.path, entry.name])
-        ).toEqual([["/App/Person[/people/1]", "bio"]])
+        expect(result.log.filter((entry) => entry._tag === "LoaderChanged")).toEqual([])
         expect(result.log.some((entry) => entry._tag === "Update" && entry.path === "/App/Person[/people/1]")).toBe(
           false
         )
@@ -716,7 +714,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       )
       expect(app.querySelector("main")!.innerHTML).toBe("<p>failed</p>")
       const failed = log.entries().filter((entry) => entry._tag === "Failed")
-      expect(failed).toEqual([expect.objectContaining({ path: "/Page/List[l]", source: "view" })])
+      expect(failed).toEqual([expect.objectContaining({ path: "/Page/List[l]", in: "view" })])
       expect(log.entries().filter((entry) => entry._tag === "Mounted").map((entry) => entry.path)).toEqual([
         "/Page",
         "/Page/List[l]"
@@ -1116,7 +1114,9 @@ describe("HtmlServer", { concurrent: false }, () => {
       yield* TestClock.adjust("50 millis")
       yield* tick
 
-      const panel = log.entries().filter((entry) => entry.path === "/Page/Panel[p]")
+      const panel = log.entries().filter((entry): entry is MessageLog.InstanceEntry =>
+        "path" in entry && entry.path === "/Page/Panel[p]"
+      )
       expect(panel.map((entry) => entry._tag)).toEqual(["Waiting", "LayerPending", "Unmounted"])
       expect(new Set(panel.map((entry) => entry.instance)).size).toBe(1)
       // The only entry that says what the server's nodes showed: it crosses the Wire whole.
@@ -1345,14 +1345,10 @@ describe("HtmlServer loaders", { concurrent: false }, () => {
         GetItem: expect.arrayContaining([["{\"id\":1}", 0, "Item 1", 0], ["{\"id\":404}", 1, ["missing"], 0]])
       })
       expect((result.state["~loader"] as any).GetItem).toHaveLength(2)
-      // The client adopts both entries without fetching, and each instance's hydrated loader state is logged once.
+      // The client adopts both entries without fetching, and each instance's hydrated loader state is on its Mounted.
       expect(calls).toEqual([1, 404])
       expect(result.root.fetches()).toEqual([])
-      expect(result.log.filter((entry) => entry._tag === "LoaderChanged").map((entry) => entry.path)).toEqual([
-        "/Page/Item[a]",
-        "/Page/Item[b]",
-        "/Page/Item[c]"
-      ])
+      expect(result.log.filter((entry) => entry._tag === "LoaderChanged")).toEqual([])
       expect(result.log.some((entry) => entry._tag === "Update")).toBe(false)
       expect(result.container.textContent).toBe("Item 1Item 1failed")
     })))

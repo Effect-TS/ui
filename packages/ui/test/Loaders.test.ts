@@ -207,12 +207,12 @@ describe("a loader without onChange", { concurrent: false }, () => {
       assert.deepStrictEqual(result.root.fetches(), [])
       assert.strictEqual(app.server.calls, 1)
       assert.strictEqual(result.container.textContent, "Note 1clicks 0")
-      // The hydrated loader state is logged once, right after Mounted; the watch's first value equals it, so it isn't
-      // written again.
+      // Mounted holds the hydrated loader state, so a replay from it alone has the note. The watch's first value
+      // equals it, so it isn't written again.
       const index = result.log.findIndex((entry) => entry._tag === "Mounted" && entry.path === "/Note")
       assert.isTrue((result.log[index] as MessageLog.Mounted).adopted)
-      assert.strictEqual(result.log[index + 1]?._tag, "LoaderChanged")
-      assert.strictEqual(loaderChanges(result.log, "/Note").length, 1)
+      assert.strictEqual(noteOf(Story.fromLog(app.Note, result.log.slice(index, index + 1))), "Note 1")
+      assert.strictEqual(loaderChanges(result.log, "/Note").length, 0)
       assert.deepStrictEqual(updates(result.log, "/Note"), [])
       // update sees the hydrated loader state.
       result.root.send(app.NoteMessage.make({ _tag: "Click" }))
@@ -267,8 +267,8 @@ describe("a loader without onChange", { concurrent: false }, () => {
         const log = root.log()
         const index = log.findIndex((entry) => entry._tag === "Mounted" && entry.path === path)
         assert.isTrue((log[index] as MessageLog.Mounted).adopted)
-        const restored = log[index + 1]
-        assert.isTrue(restored?._tag === "LoaderChanged" && restored.name === "note")
+        // Mounted holds the restored loader state.
+        assert.strictEqual(noteOf(Story.fromLog(app.Note, log.slice(index, index + 1))), "Note 1")
         assert.strictEqual(root.entry(app.GetNote, { id: "1" })?.fetch, "running")
         yield* TestClock.adjust("10 millis")
         yield* TestHost.settle
@@ -391,10 +391,13 @@ describe("a loader without onChange", { concurrent: false }, () => {
         yield* load
         assert.strictEqual(root.text(), "Note 1clicks 1")
         const log = root.log()
-        assert.deepStrictEqual(log.filter((entry) => entry.path === "/Note").map((entry) => entry._tag).slice(-2), [
-          "Update",
-          "LoaderChanged"
-        ])
+        assert.deepStrictEqual(
+          log.filter((entry) => "path" in entry && entry.path === "/Note").map((entry) => entry._tag).slice(-2),
+          [
+            "Update",
+            "LoaderChanged"
+          ]
+        )
         for (
           const replay of [
             Story.fromLog(app.Note, log),
@@ -459,7 +462,10 @@ describe("a loader without onChange", { concurrent: false }, () => {
           yield* load
           yield* steps(root)
           const path = noteMount(root.log()).path
-          const log = root.log().filter((entry) => entry.path === path).map((entry) => ({ ...entry, instance }))
+          const log = root.log().filter((entry) => "path" in entry && entry.path === path).map((entry) => ({
+            ...entry,
+            instance
+          }))
           return { path, log, update: log.map((entry) => entry._tag).lastIndexOf("Update") }
         })
       )
@@ -531,8 +537,8 @@ describe("a loader without onChange", { concurrent: false }, () => {
         assert.strictEqual(root.text(), "Note 2clicks 0")
         // The props are logged before the loader state write they cause.
         assert.deepStrictEqual(
-          root.log().filter((entry) => entry.path === path).map((entry) => entry._tag).filter((tag) =>
-            tag === "PropsChanged" || tag === "LoaderChanged"
+          root.log().flatMap((entry) =>
+            (entry._tag === "PropsChanged" || entry._tag === "LoaderChanged") && entry.path === path ? [entry._tag] : []
           ),
           ["LoaderChanged", "PropsChanged", "LoaderChanged"]
         )

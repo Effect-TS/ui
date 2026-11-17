@@ -60,7 +60,6 @@ import type * as Scope from "effect/Scope"
 import * as TestClock from "effect/testing/TestClock"
 import type * as Component from "../../Component.ts"
 import * as Head from "../../Head.ts"
-import * as loaders from "../../internal/loaders.ts"
 import * as runtime from "../../internal/runtime.ts"
 import * as Loader from "../../Loader.ts"
 import * as MessageLog from "../../MessageLog.ts"
@@ -478,17 +477,7 @@ export const ssr = <
         problems.push(`${path}: the client didn't adopt the server's Model`)
         continue
       }
-      // The adopted loader state is logged right after the adoption, one entry per loader the server wrote.
-      const loaderState: Record<string, unknown> = {}
-      for (const later of log.slice(log.indexOf(entry) + 1)) {
-        if (later.path !== path) continue
-        if (later._tag !== "LoaderChanged") break
-        loaderState[later.name] = later.state
-      }
-      const encoded = runtime.stateCodecOf(entry.component).encode(
-        entry.model,
-        { ...loaders.boundOf(entry.component)?.empty, ...loaderState }
-      )
+      const encoded = runtime.stateCodecOf(entry.component).encode(entry.model, entry.loaderState)
       const json = encoded._tag === "Some" ? JSON.stringify(encoded.value) : undefined
       if (json !== JSON.stringify(state[path])) {
         problems.push(

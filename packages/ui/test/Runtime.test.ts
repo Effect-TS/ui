@@ -28,7 +28,9 @@ import { Tiny } from "./fixtures/vocabulary.ts"
 
 const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(TestHost.layer()))
 const tags = (root: { readonly log: () => ReadonlyArray<MessageLog.Entry> }, path?: string) =>
-  root.log().filter((entry) => path === undefined || entry.path === path).map((entry) => entry._tag)
+  root.log().filter((entry) => path === undefined || ("path" in entry && entry.path === path)).map((entry) =>
+    entry._tag
+  )
 const click = (root: TestHost.TestRoot<any, any, any>, text: string) =>
   Query.fire(root.get(Query.text(text, { exact: true })), "click")
 
@@ -172,8 +174,8 @@ describe("Runtime", () => {
         root.send(true)
         yield* TestHost.settle
         assert.strictEqual(root.text(), "a:0")
-        const rows = root.log().filter((entry) =>
-          entry.path === "/Wrap/Row[a]" && (entry._tag === "Mounted" || entry._tag === "Unmounted")
+        const rows = root.log().filter((entry): entry is MessageLog.Mounted | MessageLog.Unmounted =>
+          (entry._tag === "Mounted" || entry._tag === "Unmounted") && entry.path === "/Wrap/Row[a]"
         )
         assert.deepStrictEqual(rows.map((entry) => entry._tag), ["Mounted", "Mounted", "Unmounted"])
         // One path, two instances: the number says which of them unmounted.
@@ -363,7 +365,7 @@ describe("Runtime", () => {
         assert.strictEqual(crashed._tag, "RootCrashed")
         assert.strictEqual(root.text(), "down")
         const failed = root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
-        assert.strictEqual(failed.source, "view")
+        assert.strictEqual(failed.in, "view")
         assert.include(Cause.pretty(failed.cause), "/Fill: two siblings share the key li[a]")
       })))
 
@@ -384,7 +386,7 @@ describe("Runtime", () => {
         assert.strictEqual(root.text(), "before down")
         assert.deepStrictEqual(root.all(Query.tag("li")), [])
         const failed = root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
-        assert.strictEqual(failed.source, "view")
+        assert.strictEqual(failed.in, "view")
         assert.include(Cause.pretty(failed.cause), "/Parent/Twice[t]: two siblings share the key li[a]")
       })))
 
@@ -501,7 +503,7 @@ describe("Runtime", () => {
         const crashed = yield* Effect.flip(TestHost.settle)
         assert.strictEqual(crashed._tag, "RootCrashed")
         const failed = root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
-        assert.strictEqual(failed.source, "view")
+        assert.strictEqual(failed.in, "view")
         assert.include(Cause.pretty(failed.cause), "/Rows: two siblings share the key li[a]")
       })))
   })
@@ -554,7 +556,7 @@ describe("Runtime", () => {
         assert.deepStrictEqual(root.model(), { failures: 1, attempt: 0 })
         const failed = root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
         assert.strictEqual(failed.path, "/Page/Bomb[bomb-0]")
-        assert.strictEqual(failed.source, "update")
+        assert.strictEqual(failed.in, "update")
 
         click(root, "+")
         yield* TestHost.settle
@@ -593,7 +595,7 @@ describe("Runtime", () => {
         yield* TestHost.settle
         assert.strictEqual(root.text(), "before down")
         const failed = root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
-        assert.strictEqual(failed.source, "view")
+        assert.strictEqual(failed.in, "view")
       })))
 
     it.effect("a crashed root shows mount's fallback", () =>
@@ -604,7 +606,21 @@ describe("Runtime", () => {
         assert.strictEqual(crashed._tag, "RootCrashed")
         assert.strictEqual(root.text(), "Something went wrong")
         assert.isUndefined(root.model())
-        assert.includeMembers(tags(root), ["Failed", "Crashed"])
+        // The root has no parent, so its Failed entry is all a crash needs.
+        assert.deepStrictEqual(tags(root, "/Page").slice(-2), ["Failed", "Unmounted"])
+      })))
+
+    it.effect("a root fallback that throws is logged as a failure of the root, in fallback", () =>
+      provideHost(Effect.gen(function*() {
+        const root = yield* TestHost.mount(Page, {}, {
+          fallback: () => {
+            throw new Error("fallback broke")
+          }
+        })
+        root.send("not a message" as any)
+        yield* Effect.flip(TestHost.settle)
+        const failed = root.log().filter((entry): entry is MessageLog.Failed => entry._tag === "Failed")
+        assert.deepStrictEqual(failed.map((entry) => `${entry.path} ${entry.in}`), ["/Page update", "/Page fallback"])
       })))
 
     it.effect("a defect in a Command fails its instance", () =>
@@ -633,7 +649,7 @@ describe("Runtime", () => {
         yield* TestHost.settle
         assert.strictEqual(root.text(), "parent")
         const failed = root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
-        assert.deepStrictEqual([failed.source, failed.name], ["command", "Explode"])
+        assert.deepStrictEqual([failed.in, failed.name], ["command", "Explode"])
       })))
   })
 
@@ -667,7 +683,7 @@ describe("Runtime", () => {
         yield* TestHost.settle
         assert.strictEqual(root.text(), "down alive")
         const failed = root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
-        assert.deepStrictEqual([failed.path, failed.source], ["/Parent/Leaf[c]", "layer"])
+        assert.deepStrictEqual([failed.path, failed.in], ["/Parent/Leaf[c]", "layer"])
       })))
 
     it.effect("with onFailure, a throwing factory becomes a message", () =>
@@ -938,7 +954,7 @@ describe("Runtime", () => {
         assert.include(root.text(), "count 2")
         assert.strictEqual(server.requests, 3)
         assert.deepStrictEqual(root.pending(), [])
-        const editor = root.log().filter((entry) => entry.path === "/Page/Editor[editor]")
+        const editor = root.log().filter((entry) => "path" in entry && entry.path === "/Page/Editor[editor]")
         const unmounted = editor.findIndex((entry) => entry._tag === "Unmounted")
         assert.deepStrictEqual(editor.slice(unmounted).map((entry) => entry._tag), [
           "Unmounted",
@@ -946,7 +962,7 @@ describe("Runtime", () => {
           "CommandEnded"
         ])
         assert.isTrue(
-          editor.slice(unmounted + 1).every((entry) => (entry as MessageLog.CommandSettled).detached)
+          editor.slice(unmounted + 1).every((entry) => (entry as MessageLog.CommandEnded).detached)
         )
       })))
 
@@ -967,7 +983,7 @@ describe("Runtime", () => {
         assert.deepStrictEqual(root.pending(), [])
         const last = root.log().filter((entry) => entry._tag === "CommandInterrupted")
         assert.deepStrictEqual(
-          last.map((entry) => (entry as MessageLog.CommandSettled).detached),
+          last.map((entry) => entry.detached),
           [true]
         )
         // A started run invalidates however it exits.
@@ -1348,7 +1364,7 @@ describe("Runtime", () => {
         assert.strictEqual(root.text(), "hello from 1,hello from 2")
         const changes = root.log().filter((entry) =>
           entry._tag === "SubscriptionStarted" || entry._tag === "SubscriptionStopped"
-        ) as ReadonlyArray<MessageLog.SubscriptionChanged>
+        ) as ReadonlyArray<MessageLog.SubscriptionStarted | MessageLog.SubscriptionStopped>
         assert.deepStrictEqual(changes.map((entry) => entry._tag), [
           "SubscriptionStarted",
           "SubscriptionStopped",
@@ -1913,7 +1929,7 @@ describe("Runtime", () => {
         assert.notInclude(tags(root), "Update")
         const failed = root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
         assert.deepStrictEqual(failed.update, { message, source: { _tag: "Dispatch" } })
-        const wire = MessageLog.makeEncoder().encode(failed) as Extract<MessageLog.Wire, { _tag: "Failed" | "Crashed" }>
+        const wire = MessageLog.makeEncoder().encode(failed) as Extract<MessageLog.Wire, { _tag: "Failed" }>
         assert.deepStrictEqual(wire.update, { message: { _tag: "Break", why: "boom" }, source: { _tag: "Dispatch" } })
         assert.deepStrictEqual(wire.props, { id: "a" })
         assert.deepStrictEqual(Schema.decodeUnknownSync(MessageLog.Wire)(JSON.parse(JSON.stringify(wire))), wire)
@@ -2320,7 +2336,9 @@ describe("Runtime", () => {
         props: { initial: 1 },
         model: { count: 1 },
         commands: [],
-        events: []
+        events: [],
+        lists: [],
+        sends: []
       }
       assert.deepStrictEqual((encoder.encode(entry) as any).message, { "~truncated": 20 })
       assert.deepStrictEqual((encoder.encode(entry) as any).model, { count: 1 })
@@ -2332,8 +2350,6 @@ describe("Runtime", () => {
         seq: 3,
         at: 10,
         session: "s",
-        path: "/App",
-        instance: 0,
         read: "users/GetUser",
         logKey: `{"id":"1"}`,
         trigger: "visibility",
@@ -2386,7 +2402,9 @@ describe("Runtime", () => {
           users: [new User({ name: "ada", pin: Redacted.make(1234) })]
         },
         commands: [],
-        events: [Redacted.make("e")]
+        events: [Redacted.make("e")],
+        lists: [],
+        sends: []
       }
       const wire = MessageLog.makeEncoder({ onWarning: (warning) => warnings.push(warning) }).encode(entry) as any
       assert.deepStrictEqual(wire.message, { _tag: "Login", password: placeholder })
@@ -2463,7 +2481,7 @@ describe("Runtime", () => {
       const other = MessageLog.makeMemory()
       const log = MessageLog.fanoutAll([memory, other, MessageLog.noop])
       for (let seq = 1; seq <= 3; seq++) {
-        log.record({ _tag: "Unmounted", seq, at: 0, session: "s", path: "/x", instance: 1 })
+        log.record({ _tag: "Unmounted", seq, at: 0, session: "s", path: "/x", instance: 1, component: Counter })
       }
       assert.deepStrictEqual(memory.entries().map((entry) => entry.seq), [2, 3])
       assert.deepStrictEqual(other.entries().map((entry) => entry.seq), [1, 2, 3])
@@ -2486,7 +2504,7 @@ describe("Runtime", () => {
         })
         const root = yield* TestHost.mount(Loose, {})
         const failed = root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
-        assert.strictEqual(failed.source, "view")
+        assert.strictEqual(failed.in, "view")
         assert.include(String(failed.cause), "text goes inside label")
       })))
 
@@ -2532,7 +2550,7 @@ describe("Runtime", () => {
         const root = yield* TestHost.mount(Outer, {})
         assert.strictEqual(root.text(), "outer unsupported")
         const failed = root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
-        assert.deepStrictEqual([failed.path, failed.source], ["/Outer/Inner[i]", "init"])
+        assert.deepStrictEqual([failed.path, failed.in], ["/Outer/Inner[i]", "init"])
         // It never logged `Mounted`, so the failure says what was there.
         assert.strictEqual(failed.component, Inner)
         assert.deepStrictEqual(failed.props, {})

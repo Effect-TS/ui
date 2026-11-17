@@ -310,7 +310,7 @@ interface Run {
   /** Whether the run's own `Command.afterRefetch` wait is going on. */
   waiting: boolean
   /** How the run's own wait ended, and what it still awaited then. */
-  waited: Pick<MessageLog.CommandSettled, "waitEnded" | "outstanding"> | undefined
+  waited: Pick<MessageLog.CommandEnded, "waitEnded" | "outstanding"> | undefined
   /** Stops the budget's sleep and the cache's callback. */
   cancelWait: (() => void) | undefined
 }
@@ -323,7 +323,7 @@ interface SubscriptionRun {
 /** One loader's cache watcher, registered from its watch marker. */
 interface WatchRun {
   marker: loaders.Marker
-  /** The key the log shows: the Subscription key with the log key in place of the args key. */
+  /** The name a failure of the watcher is logged with: the Subscription key with the log key in place of the args key. */
   readonly logKey: string
   handle: ReturnType<ReturnType<typeof Loader.internals>["watch"]> | undefined
   released: boolean
@@ -630,8 +630,13 @@ const ignoreEvents = () => undefined
  */
 const noHead: Head.Head = { ...Head.empty }
 
-type Draft = MessageLog.Entry extends infer E
-  ? E extends MessageLog.Entry ? Omit<E, "seq" | "at" | "session" | "path" | "instance"> : never
+/** An entry about an instance, without what `record` adds. */
+type Draft = MessageLog.InstanceEntry extends infer E
+  ? E extends MessageLog.InstanceEntry ? Omit<E, keyof MessageLog.InstanceBase> : never
+  : never
+/** An entry about the tree, without what `recordTree` adds. */
+type TreeDraft = Exclude<MessageLog.Entry, MessageLog.InstanceEntry> extends infer E
+  ? E extends MessageLog.Entry ? Omit<E, keyof MessageLog.Base> : never
   : never
 
 let sessions = 0
@@ -865,16 +870,24 @@ const setup = (
 
   // -- log ------------------------------------------------------------------
   let seq = 0
-  /** Logs an entry about `inst`, or about the tree when there is none, and returns its number. */
-  const record = (inst: Instance | undefined, draft: Draft): number => {
+  /** Logs an entry about the tree, and returns its number. */
+  const recordTree = (draft: TreeDraft): number => {
+    if (!log.enabled) return -1
+    const entry = { ...draft, seq: ++seq, at: clock.currentTimeMillisUnsafe(), session } as MessageLog.Entry
+    log.record(entry)
+    return entry.seq
+  }
+  /** Logs an entry about `inst`, and returns its number. */
+  const record = (inst: Instance, draft: Draft): number => {
     if (!log.enabled) return -1
     const entry = {
       ...draft,
       seq: ++seq,
       at: clock.currentTimeMillisUnsafe(),
       session,
-      path: inst === undefined ? `/${component.definition.name}` : inst.path,
-      instance: inst === undefined ? 0 : inst.born
+      path: inst.path,
+      instance: inst.born,
+      component: inst.component
     } as MessageLog.Entry
     log.record(entry)
     return entry.seq
@@ -957,9 +970,9 @@ const setup = (
     }
     return out
   }
-  // Every fetch the cache starts is logged against the root.
+  // Every fetch the cache starts is logged, as an entry about the tree.
   const offFetch = cache.onFetch((event) => {
-    if (!frozen) record(undefined, { _tag: "FetchStarted", ...event })
+    if (!frozen) recordTree({ _tag: "FetchStarted", ...event })
   })
   // On the server a fetch in flight holds the response, so one that ends may make the tree idle.
   const offFetchEnd = server === undefined ? undefined : cache.onFetchEnd(() => checkIdle())
@@ -1274,14 +1287,14 @@ const setup = (
   // -- failure --------------------------------------------------------------
   const guard = <A>(
     inst: Instance,
-    source: MessageLog.FailureSource,
+    where: MessageLog.FailedIn,
     f: () => A,
     name?: string
   ): A | undefined => {
     try {
       return f()
     } catch (error) {
-      failInstance(inst, Cause.die(error), source, name)
+      failInstance(inst, Cause.die(error), where, name)
       return undefined
     }
   }
@@ -1323,32 +1336,30 @@ const setup = (
   const failInstance = (
     inst: Instance,
     cause: Cause.Cause<unknown>,
-    source: MessageLog.FailureSource,
+    where: MessageLog.FailedIn,
     name?: string,
     update?: MessageLog.Failed["update"]
   ) => {
     if (inst.closed) return
     // Failing in the flush it mounted in, its head merge included, keeps it out of the adoption snapshot.
     if (inst.snapshot !== undefined && !inst.snapshot.settled) inst.snapshot.failed = true
-    const failed = {
-      component: inst.component,
+    const failedSeq = record(inst, {
+      _tag: "Failed",
       props: inst.props,
-      source,
+      in: where,
       name,
       cause,
       ...(update === undefined ? undefined : { update })
-    }
-    const failedSeq = record(inst, { _tag: "Failed", ...failed })
+    })
     forkNow(
       ctx,
-      Effect.logError(`${inst.path} failed in ${source}${name === undefined ? "" : ` (${name})`}`, cause)
+      Effect.logError(`${inst.path} failed in ${where}${name === undefined ? "" : ` (${name})`}`, cause)
     )
     inst.failure = cause
     headDirty = true
     close(inst)
     const parent = inst.parent
     if (parent === undefined) {
-      record(inst, { _tag: "Crashed", ...failed })
       showRootFallback(inst, cause)
       return
     }
@@ -1358,7 +1369,7 @@ const setup = (
       const author = parent.author
       defer(() => {
         const message = guard(author, "onFailure", () => onFailure(AsyncResult.failure(cause)))
-        if (message !== undefined) author.dispatch(message, { _tag: "Emit", path: inst.path, seq: failedSeq })
+        if (message !== undefined) author.dispatch(message, { _tag: "Failure", path: inst.path, seq: failedSeq })
       })
     }
     markDirty(parent)
@@ -1379,14 +1390,7 @@ const setup = (
       )
       rootFallbackNodes.push(node)
     } catch (error) {
-      record(root, {
-        _tag: "Crashed",
-        component: root.component,
-        props: root.props,
-        source: "fallback",
-        name: undefined,
-        cause: Cause.die(error)
-      })
+      record(root, { _tag: "Failed", props: root.props, in: "fallback", name: undefined, cause: Cause.die(error) })
     }
   }
   /** The root fallback runs with no instance: plain nodes, no handlers, no children. */
@@ -1550,7 +1554,6 @@ const setup = (
       if (next === undefined) return
       const entrySeq = record(inst, {
         _tag: "Update",
-        component,
         source,
         message,
         props: inst.props,
@@ -1558,7 +1561,7 @@ const setup = (
         commands: next.commands,
         events: next.events,
         lists: next.lists ?? [],
-        ...(next.sends === undefined || next.sends.length === 0 ? undefined : { sends: next.sends }),
+        sends: next.sends ?? [],
         // What `update` saw in `$.loaded`, so a replay from any surviving entry sees it too.
         ...(bound === undefined ? undefined : { loaderState: inst.loaderState ?? bound.empty })
       })
@@ -1855,22 +1858,14 @@ const setup = (
         inst.adoptsChildren = Option.isSome(serverModel)
         mountedSeq = record(inst, {
           _tag: "Mounted",
-          component,
           props: inst.props,
           model: inst.model,
+          // Restored or hydrated loader state, so a replay of the log starts from them.
+          ...(bound === undefined ? undefined : { loaderState: inst.loaderState ?? bound.empty }),
           commands: first.commands,
           events: first.events,
           adopted: Option.isSome(adopted)
         })
-        // Restored or hydrated loader state, so a replay of the log starts from them.
-        if (bound !== undefined && inst.loaderState !== undefined) {
-          for (const entry of bound.entries) {
-            const state = inst.loaderState[entry.name]
-            if (state !== bound.empty[entry.name]) {
-              record(inst, { _tag: "LoaderChanged", component, name: entry.name, state })
-            }
-          }
-        }
       }
       logEarly()
       if (first === undefined) return
@@ -1942,7 +1937,6 @@ const setup = (
       // Its first entry: `Mounted` comes when the Layer is ready, and the Layer's entries come as they happen.
       record(inst, {
         _tag: "Waiting",
-        component,
         props: inst.props,
         model: fromServer.value.model,
         ...(bound === undefined ? undefined : { loaderState: fromServer.value.loaderState ?? bound.empty })
@@ -2637,7 +2631,7 @@ const setup = (
       detached: run.detached,
       spanId: run.spanId,
       traceId: run.traceId,
-      ...(run.silent === true ? { silent: true } : undefined),
+      silent: run.silent === true,
       ...run.waited
     })
   const recordInterrupted = (inst: Instance, run: Run) =>
@@ -2813,7 +2807,6 @@ const setup = (
     for (const [key, running] of watches) {
       if (markers.has(key)) continue
       watches.delete(key)
-      record(inst, { _tag: "SubscriptionStopped", key: running.logKey })
       // A debounced loader's old args are obsolete: their fetch goes, unless another reader still needs it.
       releaseWatch(running, running.marker.debounce !== undefined)
       if (running.marker.keyed) {
@@ -2838,7 +2831,6 @@ const setup = (
       const running: WatchRun = { marker, logKey, handle: undefined, released: false, debounce: undefined }
       holdsWatchers = true
       watches.set(key, running)
-      record(inst, { _tag: "SubscriptionStarted", key: logKey })
       // A disabled loader: the marker is inert.
       if (marker.argsKey === undefined) continue
       inst.watched?.add(entryKey(def.name, marker.argsKey))
@@ -3037,7 +3029,7 @@ const setup = (
     // The same snapshot, as when a watcher's first value is what the server or history already gave.
     if (Equal.equals((inst.loaderState ?? bound.empty)[loader.name], state)) return
     inst.loaderState = { ...(inst.loaderState ?? bound.empty), [loader.name]: state }
-    record(inst, { _tag: "LoaderChanged", component: inst.component, name: loader.name, state })
+    const changedSeq = record(inst, { _tag: "LoaderChanged", name: loader.name, state })
     const mounting = inst.mounting !== undefined
     if (!mounting) markDirty(inst)
     syncSubscriptions(inst, mounting)
@@ -3048,7 +3040,7 @@ const setup = (
       () => bound.context(inst.model, inst.props, inst.loaderState).changed(loader.name, changes),
       key
     )
-    if (message !== undefined) inst.dispatch(message.value, { _tag: "Subscription", key })
+    if (message !== undefined) inst.dispatch(message.value, { _tag: "Loader", name: loader.name, seq: changedSeq })
   }
   const releaseWatch = (running: WatchRun, abandon = false) => {
     if (running.released) return
@@ -4613,7 +4605,7 @@ const setup = (
         if (changed) {
           instance.props = child.props
           // Before the loader state writes the new props cause, so a replay opens them against these props.
-          record(instance, { _tag: "PropsChanged", component: instance.component, props: child.props })
+          record(instance, { _tag: "PropsChanged", props: child.props })
           // Watches first: new args over a settled entry write its value before this render, and the
           // keyed loaders' states are written before it too.
           syncSubscriptions(instance)
@@ -4790,7 +4782,7 @@ const setup = (
   }
 
   // -- root -----------------------------------------------------------------
-  record(undefined, { _tag: "SessionStarted", app: component.definition.name })
+  recordTree({ _tag: "SessionStarted", app: component.definition.name })
   // Registered before the root instance forks its Scope from `rootScope`: finalizers run in
   // reverse, so every instance Scope (and its Layers' finalizers) closes before the nodes go.
   let rootRendered: () => ReadonlyArray<Rendered> = () => []

@@ -13,7 +13,7 @@ const updates = (root: { readonly log: () => ReadonlyArray<MessageLog.Entry> }) 
     entry._tag === "Update" ? [entry.path + " " + entry.source._tag + " " + (entry.message as any)._tag] : []
   )
 const failures = (root: { readonly log: () => ReadonlyArray<MessageLog.Entry> }) =>
-  root.log().flatMap((entry) => entry._tag === "Failed" ? [entry.path + " " + entry.source] : [])
+  root.log().flatMap((entry) => entry._tag === "Failed" ? [entry.path + " " + entry.in] : [])
 
 const items: ReadonlyArray<Item> = [
   { id: "a", label: "Archive" },
@@ -343,7 +343,7 @@ describe("headless components", () => {
         "/Shell/Board[board] Emit Rang",
         "/Shell/Board[board]/Menu[actions]/Bell[bell] DomEvent Ring",
         "/Shell/Board[board] Emit Rang",
-        "/Shell/Board[board] Emit Failed"
+        "/Shell/Board[board] Failure Failed"
       ])
       assert.deepStrictEqual(failures(root), ["/Shell/Board[board]/Menu[actions]/Bell[bell] update"])
       assert.include(root.text(), "bell down")
@@ -365,7 +365,7 @@ describe("headless components", () => {
       TestHost.mount(Opener, { twin }, { fallback: (_, h) => h.text("crashed") })
     const failed = (root: { readonly log: () => ReadonlyArray<MessageLog.Entry> }) =>
       root.log().flatMap((entry) =>
-        entry._tag === "Failed" ? [entry.path + " " + entry.source + " " + Cause.squash(entry.cause)] : []
+        entry._tag === "Failed" ? [entry.path + " " + entry.in + " " + Cause.squash(entry.cause)] : []
       )
     const twice =
       "/Opener view Error: /Opener renders two children with the ref Actions, in the view it gives /Opener/Menu[Actions]"

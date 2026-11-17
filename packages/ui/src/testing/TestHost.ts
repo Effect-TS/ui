@@ -844,7 +844,7 @@ const summary = (value: unknown): string => {
  */
 export const formatLog = (entries: ReadonlyArray<MessageLog.Entry>): string =>
   entries.map((entry) => {
-    const head = `  #${entry.seq} ${entry.path} ${entry._tag}`
+    const head = `  #${entry.seq}${"path" in entry ? ` ${entry.path}` : ""} ${entry._tag}`
     switch (entry._tag) {
       case "Update": {
         const source = entry.source
@@ -854,8 +854,12 @@ export const formatLog = (entries: ReadonlyArray<MessageLog.Entry>): string =>
           ? `command ${source.name}`
           : source._tag === "Subscription"
           ? `subscription ${source.key}`
+          : source._tag === "Loader"
+          ? `loader ${source.name}`
           : source._tag === "Emit"
           ? `emit from ${source.path}`
+          : source._tag === "Failure"
+          ? `failure of ${source.path}`
           : source._tag === "Send"
           ? `send from ${source.path}`
           : source._tag === "Mount"
@@ -863,7 +867,7 @@ export const formatLog = (entries: ReadonlyArray<MessageLog.Entry>): string =>
           : "dispatch"
         const commands = entry.commands.length === 0 ? "" : ` -> ${entry.commands.map((c) => c.name).join(", ")}`
         const events = entry.events.length === 0 ? "" : ` events ${entry.events.map(summary).join(", ")}`
-        const sends = entry.sends === undefined || entry.sends.length === 0
+        const sends = entry.sends.length === 0
           ? ""
           : ` sends ${
             entry.sends.map((send) =>
@@ -875,18 +879,18 @@ export const formatLog = (entries: ReadonlyArray<MessageLog.Entry>): string =>
       case "Mounted":
         return `${head}${entry.commands.length === 0 ? "" : ` -> ${entry.commands.map((c) => c.name).join(", ")}`}`
       case "Failed":
-      case "Crashed":
-        return `${head} in ${entry.source}${entry.name === undefined ? "" : ` (${entry.name})`}${
+        return `${head} in ${entry.in}${entry.name === undefined ? "" : ` (${entry.name})`}${
           entry.update === undefined ? "" : ` of ${summary(entry.update.message)}`
         }: ${entry.cause.toString().split("\n")[0]}`
       case "SubscriptionStarted":
       case "SubscriptionStopped":
         return `${head} ${entry.key}`
       case "CommandEnded":
-      case "CommandInterrupted":
-        return `${head} ${entry.name}${entry.silent === true ? " (silent)" : ""}${
+        return `${head} ${entry.name}${entry.silent ? " (silent)" : ""}${
           entry.waitEnded === undefined ? "" : ` (wait ${entry.waitEnded})`
         }`
+      case "CommandInterrupted":
+        return `${head} ${entry.name}`
       case "CommandAwaiting":
         return `${head} ${entry.name} on ${
           entry.entries.map((awaited) => `${awaited.read} ${awaited.logKey}`).join(", ")

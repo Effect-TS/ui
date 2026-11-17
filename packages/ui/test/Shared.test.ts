@@ -154,7 +154,7 @@ describe("shared state", () => {
       yield* TestHost.settle
       assert.strictEqual(root.text(), "broken")
       const failed = root.log().filter((entry): entry is MessageLog.Failed => entry._tag === "Failed")
-      assert.deepStrictEqual(failed.map((entry) => entry.source), ["shares"])
+      assert.deepStrictEqual(failed.map((entry) => entry.in), ["shares"])
     })))
 
   it.effect("leaves an owner out of the history snapshot and never restores it", () =>
