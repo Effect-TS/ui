@@ -947,6 +947,68 @@ describe("Runtime", () => {
         )
       })))
 
+    it.effect("a removed branch doesn't start a queued Stream Command while a sibling's cleanup holds its close", () =>
+      provideHost(Effect.gen(function*() {
+        const finish = yield* Deferred.make<void>()
+        const gate = yield* Deferred.make<void>()
+        const entered = yield* Deferred.make<void>()
+        const calls: Array<number> = []
+        // Not detached, though its service is a Layer above the branch that stays open.
+        class Watch extends Command.Service<Watch>()(
+          "test/QueuedStream",
+          { args: { n: Schema.Number }, stream: true, mode: "queue" },
+          Effect.succeed(({ n }) =>
+            Stream.fromEffect(Effect.andThen(
+              Effect.sync(() => calls.push(n)),
+              Effect.as(n === 1 ? Deferred.await(finish) : Effect.void, Component.noop)
+            ))
+          )
+        ) {}
+        const Queue = Component.define({ name: "Queue", model: Schema.Null, message: Schema.Never }).make({
+          init: ($) => $.set(null).run(Watch.make({ n: 1 })).run(Watch.make({ n: 2 })),
+          update: (m) => m,
+          view: (_, h) => h.text("")
+        })
+        // Closes before the queue, as it mounted after it, and holds the branch's close open.
+        const Blocker = Component.provide(
+          Component.define({ name: "Blocker", model: Schema.Null, message: Schema.Never }).make({
+            init: () => null,
+            update: (m) => m,
+            view: (_, h) => h.text("")
+          }),
+          () =>
+            Layer.effectDiscard(
+              Effect.addFinalizer(() => Effect.andThen(Deferred.succeed(entered, undefined), Deferred.await(gate)))
+            )
+        )
+        const Branch = Component.define({ name: "Branch", model: Schema.Null, message: Schema.Never }).make({
+          init: () => null,
+          update: (m) => m,
+          view: (_, h) => h.el("div", Queue(h, { key: "queue", props: {} }), Blocker(h, { key: "blocker", props: {} }))
+        })
+        const Parent = Component.provide(
+          Component.define({ name: "Parent", model: Schema.Boolean, message: Schema.Boolean }).make({
+            init: () => true,
+            update: (_, shown) => shown,
+            view: (shown, h) => shown ? Branch(h, { key: "branch", props: {} }) : h.text("gone")
+          }),
+          Watch.layer
+        )
+        const root = yield* TestHost.mount(Parent, {})
+        yield* TestHost.settle
+        root.send(false)
+        yield* TestHost.settle
+        yield* Deferred.await(entered)
+        // The running one ends while the close is held: the queued one is stopped, not started.
+        yield* Deferred.succeed(finish, undefined)
+        yield* TestHost.settle
+        assert.deepStrictEqual(calls, [1])
+        yield* Deferred.succeed(gate, undefined)
+        yield* TestHost.settle
+        assert.deepStrictEqual(calls, [1])
+        assert.strictEqual(root.text(), "gone")
+      })))
+
     it.effect("the Layer build that owns a detached run ends it when it closes", () =>
       provideHost(Effect.gen(function*() {
         const server = makeServer()

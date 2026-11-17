@@ -1985,7 +1985,7 @@ const setup = (
     if (inst.runs.length === 0) return waits
     for (const run of inst.runs.slice()) {
       // An awaiting run's message is dropped with its instance, and the run ends here.
-      if (run.status === "awaiting" || !(run.detached && survives(inst, run))) waits.push(stopAndAwait(inst, run))
+      if (run.status === "awaiting" || !survives(inst, run)) waits.push(stopAndAwait(inst, run))
     }
     if (inst.runs.length > 0) orphans.add(inst)
     return waits
@@ -2697,12 +2697,13 @@ const setup = (
   }
 
   /**
-   * Whether a detached run goes on without its instance: the Layer build that provides its service
-   * is still open. A service with no build, such as a fake from `Layer.succeed`, is owned by the root.
+   * Whether a run goes on without its instance: it is detached, and the Layer build that provides its
+   * service is still open. A service with no build, such as a fake from `Layer.succeed`, is owned by
+   * the root.
    */
   const survives = (inst: Instance, run: Run): boolean => {
     const env = workEnv(inst)
-    if (env.ctx === undefined || run.command.service === undefined) return false
+    if (!run.detached || env.ctx === undefined || run.command.service === undefined) return false
     const build = ownerOf(env.ctx, run)
     return build === undefined ? !rootClosed : !build.closed
   }
