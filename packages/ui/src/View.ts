@@ -377,7 +377,7 @@ interface ErasedReceives {
  * import "@effect/ui/html/register"
  * import { Component, View } from "@effect/ui"
  *
- * const field = <M, C extends View.Children<M>>(h: Component.H<M>, options: {
+ * const Field = <M, C extends View.Children<M>>(h: Component.H<M>, options: {
  *   readonly label: string
  *   readonly children: C
  * }) => h.label.children(options.label, h.div.class("control").children(options.children))

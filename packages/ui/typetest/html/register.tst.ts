@@ -53,8 +53,8 @@ class Clock extends Context.Service<Clock, {}>()("Clock") {}
 class Logger extends Context.Service<Logger, {}>()("Logger") {}
 
 it("shared wrappers preserve unspread options.children requirements across components", () => {
-  const card = <M>(h: Component.H<M>) => h.section.class("card")
-  const field = <M, C extends View.Children<M>>(h: Component.H<M>, options: {
+  const Card = <M>(h: Component.H<M>) => h.section.class("card")
+  const Field = <M, C extends View.Children<M>>(h: Component.H<M>, options: {
     readonly label: string
     readonly children: C
   }) => h.label.children(options.label, h.div.class("control").children(options.children))
@@ -64,13 +64,13 @@ it("shared wrappers preserve unspread options.children requirements across compo
     view: (_, h) => {
       const clock = {} as View.Node<Msg, Clock>
       const logger = {} as View.Node<Msg, Logger>
-      expect(field(h, { label: "Empty", children: [] })).type.toBe<View.Element<Msg, never>>()
-      expect(field(h, { label: "Text", children: ["text", false, null, undefined, h.br] })).type.toBe<
+      expect(Field(h, { label: "Empty", children: [] })).type.toBe<View.Element<Msg, never>>()
+      expect(Field(h, { label: "Text", children: ["text", false, null, undefined, h.br] })).type.toBe<
         View.Element<Msg, never>
       >()
       const children = [clock, logger] as const
-      expect(field(h, { label: "Services", children })).type.toBe<View.Element<Msg, Clock | Logger>>()
-      return card(h).children(field(h, { label: "Services", children: [clock, logger] }))
+      expect(Field(h, { label: "Services", children })).type.toBe<View.Element<Msg, Clock | Logger>>()
+      return Card(h).children(Field(h, { label: "Services", children: [clock, logger] }))
     }
   })
   expect<Component.Requirements<typeof Page>>().type.toBe<Clock | Logger>()
@@ -84,7 +84,7 @@ it("shared wrappers preserve unspread options.children requirements across compo
     init: () => null,
     update: (model) => model,
     view: (_, h) =>
-      field(h, { label: h.props.title, children: [h.button.onClick("clicked"), {} as View.Node<string, Logger>] })
+      Field(h, { label: h.props.title, children: [h.button.onClick("clicked"), {} as View.Node<string, Logger>] })
   })
   expect<Component.Requirements<typeof Other>>().type.toBe<Logger>()
 })
