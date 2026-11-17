@@ -1,5 +1,5 @@
 import { Component, Feature, type View } from "@effect/ui"
-import { Story, TestHost } from "@effect/ui/testing"
+import { Scene, Story, TestHost } from "@effect/ui/testing"
 import { Context, Effect, Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { describe, expect, it } from "tstyche"
@@ -215,7 +215,7 @@ describe("$.send", () => {
       expect(Editor).type.not.toBeCallableWith(h, { ref: stored })
       expect(Todos.render).type.not.toBeCallableWith(h, { ref: stored, fallback: () => h.el("p") })
       expect(Editor).type.not.toBeCallableWith(h, { ref: anyFeature.ref("M") })
-      expect(Story.fallback(Editor(h, { ref: Draft }), anyFeature.ref("M"), AsyncResult.initial())).type
+      expect(Scene.fallback(Editor(h, { ref: Draft }), anyFeature.ref("M"), AsyncResult.initial())).type
         .not.toRaiseError()
       return h.el("p")
     })
@@ -224,7 +224,8 @@ describe("$.send", () => {
       expect($.send).type.not.toBeCallableWith(anyFeature.ref("M").at(1), { _tag: "Clear" })
       return model
     })
-    expect(Story.start(Editor, {}).childEmit(anyFeature.ref("M"), {})).type.not.toRaiseError()
+    // Editor emits nothing, so its events are `never`: only the key is under test.
+    expect(Scene.start(Editor, {}).childEmit(Editor, anyFeature.ref("M"), {} as never)).type.not.toRaiseError()
   })
 
   it("isn't available in init", () => {
@@ -570,10 +571,10 @@ describe("Feature receives", () => {
 })
 
 describe("a component that receives", () => {
-  it("mounts, and runs in a story", () => {
+  it("mounts, and runs in a story and a scene", () => {
     expect(TestHost.mount(Editor, {})).type.not.toRaiseError()
     expect(Story.make(Editor, {}, (s) => s.send(EditorMessage.make({ _tag: "Clear" })))).type.not.toRaiseError()
-    expect(Story.start(Editor, {}).childEmit(Draft, {})).type.not.toRaiseError()
-    expect(Story.start(Editor, {}).childEmit(Plain.ref("P"), {})).type.not.toRaiseError()
+    expect(Scene.start(Editor, {}).childEmit(Editor, Draft, {} as never)).type.not.toRaiseError()
+    expect(Scene.start(Editor, {}).childEmit(Plain, Plain.ref("P"), {} as never)).type.not.toRaiseError()
   })
 })

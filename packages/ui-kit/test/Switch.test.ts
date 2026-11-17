@@ -2,7 +2,7 @@ import type { Component } from "@effect/ui"
 import { View } from "@effect/ui"
 import { Switch, type SwitchProps } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
-import { Locator, Story } from "@effect/ui/testing"
+import { Locator, Scene, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 
 // The least markup the parts need: a labelled root with a thumb. The form
@@ -21,7 +21,7 @@ const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
 describe("Switch", () => {
   it("a click asks for the other value, and the root and thumb show the value they were given", () => {
-    const story = Story.make(Switch, { checked: false }, standIn, (s) => {
+    Scene.make(Switch, { checked: false }, standIn, (s) => {
       s.check((story) => {
         const attrs = story.get(root).attrs
         assert.strictEqual(attrs?.type, "button")
@@ -31,6 +31,7 @@ describe("Switch", () => {
         assert.strictEqual(story.get(thumb).attrs?.["data-unchecked"], "")
       })
         .fire(root, "click")
+        .emitted({ _tag: "Toggled", checked: true })
         // Nothing changes until the consumer passes the new value back.
         .check((story) => assert.strictEqual(story.get(root).attrs?.["aria-checked"], "false"))
         .props({ checked: true })
@@ -41,15 +42,12 @@ describe("Switch", () => {
           assert.isUndefined(story.get(thumb).attrs?.["data-unchecked"])
         })
         .fire(root, "click")
+        .emitted({ _tag: "Toggled", checked: false })
     })
-    assert.deepStrictEqual(story.emitted, [
-      { _tag: "Toggled", checked: true },
-      { _tag: "Toggled", checked: false }
-    ])
   })
 
   it("a disabled or read-only switch ignores clicks, and only a disabled one leaves the tab order", () => {
-    const story = Story.make(Switch, { checked: false, disabled: true }, standIn, (s) => {
+    const story = Scene.make(Switch, { checked: false, disabled: true }, standIn, (s) => {
       s.check((story) => {
         const attrs = story.get(root).attrs
         assert.strictEqual(attrs?.disabled, "")

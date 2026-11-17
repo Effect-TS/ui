@@ -133,9 +133,9 @@ nothing. A child in a slot gets a path under the slot, such as
 
 Use slots when the child owns the frame and its state, and the parent owns
 what goes inside. Use a headless component when the parent draws all the
-markup. A component can't have both `slots` and `parts`. In a story, a
-parent's view shows the content it passes, and a story of the slotted
-component passes its own with `Story.make(Collapsible, props, { slots: (h) => ({ ... }) }, f)`.
+markup. A component can't have both `slots` and `parts`. In a scene, a
+parent's view shows the content it passes, and a scene of the slotted
+component passes its own with `Scene.make(Collapsible, props, { slots: (h) => ({ ... }) }, f)`.
 
 ### Headless components
 
@@ -148,7 +148,8 @@ so children declared in it report to the consumer. Pass rows as Schema data in
 props, and keep richer row content in the closure, looked up by id. The
 closure runs whenever the consumer renders, so wrap a headless child in a
 small normal component when the consumer renders often. Test one with
-`Story.parts`, which needs no runtime.
+`Story.parts`, which needs no runtime, and render it in a `Scene`, which
+runs it with a stand-in view for the consumer.
 
 ### Shared state
 
@@ -161,14 +162,31 @@ messages the owner `receives`. Reads and sends put
 `Component.Shared<typeof Provider>` in a component's requirements, and the
 owner's closure removes it, so a reader with no owner above it doesn't
 compile. The state is the owner's Model, so the log records every change. In
-a `Story`, `s.shared(Provider, value)` or
-`s.given(model, {}, [[Provider, value]])` gives readers a value, and sends to
-the owner are in `sent`.
+a `Scene`, `s.shared(Provider, value)` or
+`s.given(model, {}, [[Provider, value]])` gives readers a value, and each send
+to the owner is acknowledged with `s.sent(Provider, message)`.
 
 Every owner update re-runs its closure, and headless children in it
 re-render each time, so put normal components directly under an owner.
 Every reader re-renders when the shared value changes, so keep readers few
 and the shared value small.
+
+### Mounts
+
+Work that needs an element's host node, such as measuring it or hosting a
+chart, map or editor, is a mount. Define it once at module level, like a
+Command: `Mount.make(name, { args }, (node, args, changes) => effect)` for
+work that ends with one result, or `Mount.makeStream` for work that sends a
+result per event for as long as the element lives. Annotate `node` with the
+node the body needs. A view issues it with its args and maps the result to a
+message: `h.canvas.onMount(Draw({ points }).pipe(Mount.map(toMessage)))`.
+End a mount with nothing to send with `Component.noop`. An element takes one
+mount. Args with no real Schema, such as a callback, need `Schema.declare`.
+Mounts never run on the server or in `TestHost`. A `Scene` tracks the mounts
+in its view: `expectMount(Draw({ points }))` asserts on the rendered args and
+acknowledges the mount running, and `mounted(Draw, result)` sends what the body
+would have produced. A mount nothing acknowledged fails the next message step
+and the end of the test.
 
 ### Organizing an app
 
@@ -268,8 +286,12 @@ client, not the services.
 - **[Shared state](./ai-docs/src/10_ui/23_shared-state.ts)**:
   Share part of a headless component's state with every component below it:
   a tooltip provider that knows which tooltip is open, tooltips that read it
-  and tell it when they're focused, and a story of one tooltip with no
+  and tell it when they're focused, and a scene of one tooltip with no
   provider mounted.
+- **[Mounts](./ai-docs/src/10_ui/24_mounts.ts)**:
+  Start work with an element's host node: a mount that measures a box once,
+  a mount that hosts a third-party editor and reports each change, and a
+  scene that names both by their definitions.
 - **[Routing and the document head](./ai-docs/src/10_ui/30_routing.ts)**:
   Define typed routes with `Route` and keep the current route in the root's
   Model. The app also sets the title and meta tags with `Head`. This entry
@@ -290,6 +312,6 @@ client, not the services.
   Hydrate what the server rendered with `BrowserHost`. This is the browser
   entry module of the server-rendered app, served as `/client.js`.
 - **[Testing @effect/ui components](./ai-docs/src/10_ui/50_testing.ts)**:
-  Test a component as a pure `Story`, a Command against a fake Layer, and a
-  whole tree on `TestHost`. The last test renders on the server and hydrates
+  Test a component's logic as a `Story` and its view as a `Scene`, a Command
+  against a fake Layer, and a whole tree on `TestHost`. The last test renders on the server and hydrates
   with `ssr`.

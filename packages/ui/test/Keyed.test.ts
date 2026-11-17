@@ -1,5 +1,5 @@
 import { Command, Component, MessageLog, Query, Route, Router } from "@effect/ui"
-import { Locator, Story, TestHost } from "@effect/ui/testing"
+import { Locator, Scene, type Steps, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Exit, Layer, Option, Redacted, Request, RequestResolver, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
@@ -915,15 +915,23 @@ describe("Keyed redaction", () => {
 describe("Story keyed steps", () => {
   it("loads keys one at a time or many in one write, and writes the prune itself", () => {
     const app = makeApp()
+    Scene.make(app.Board, { tag: "a", ids: ["1", "2"] }, (s) =>
+      s
+        .loadedMany("users", [{ args: { id: "1" }, value: { id: "1", name: "Ann" } }, {
+          args: { id: "2" },
+          error: "gone"
+        }])
+        .expect(Locator.tag("p")).toHaveText("a: 1=Ann 2=failed")
+        .loaded("users", { id: "2" }, { id: "2", name: "Bea" }, { patched: true })
+        .expect(Locator.tag("p")).toHaveText("a: 1=Ann 2=Bea~"))
+    app.order.length = 0
     Story.make(app.Board, { tag: "a", ids: ["1", "2"] }, (s) =>
       s
         .loadedMany("users", [{ args: { id: "1" }, value: { id: "1", name: "Ann" } }, {
           args: { id: "2" },
           error: "gone"
         }])
-        .check((story) => assert.strictEqual(Locator.textOf(story.get(Locator.tag("p"))), "a: 1=Ann 2=failed"))
         .loaded("users", { id: "2" }, { id: "2", name: "Bea" }, { patched: true })
-        .check((story) => assert.strictEqual(Locator.textOf(story.get(Locator.tag("p"))), "a: 1=Ann 2=Bea~"))
         .loadFailed("users", { id: "1" }, "gone", { waiting: true })
         .check((story) => {
           const [ann] = tuples(app.Board, "users", story.results?.users)
@@ -1000,7 +1008,10 @@ const makeSelection = (app: ReturnType<typeof makeApp>) => {
       const row = h.queries.users.get({ id: model.selected })
       if (Option.isNone(row)) throw new Error(`no row for the selection ${model.selected}`)
       const result = row.value.result
-      return h.el("p", AsyncResult.isSuccess(result) ? result.value.name : "…")
+      // A click shows the first id only, so a scene can make the change.
+      return h.el("p").on("click", Message.make({ _tag: "Show", ids: ["1"] })).children(
+        AsyncResult.isSuccess(result) ? result.value.name : "…"
+      )
     }
   })
   return { Message, Selection }
@@ -1024,21 +1035,23 @@ describe("Keyed selection repaired by the prune handler", () => {
     )
   })
 
-  it("Story renders the step once its prunes have settled, as the runtime does", () => {
+  it("Scene renders the step once its prunes have settled, as the runtime does", () => {
     const app = makeApp()
     const { Message, Selection } = makeSelection(app)
+    const loadBoth = <S extends Steps.Steps.Any>(s: S): S =>
+      s.loadedMany("users", [
+        { args: { id: "1" }, value: { id: "1", name: "Ann" } },
+        { args: { id: "2" }, value: { id: "2", name: "Bea" } }
+      ])
+    Scene.make(Selection, {}, (s) =>
+      s.pipe(loadBoth)
+        .expect(Locator.tag("p")).toHaveText("Bea")
+        .click("Bea")
+        .expect(Locator.tag("p")).toHaveText("Ann"))
     Story.make(Selection, {}, (s) =>
-      s
-        .loadedMany("users", [
-          { args: { id: "1" }, value: { id: "1", name: "Ann" } },
-          { args: { id: "2" }, value: { id: "2", name: "Bea" } }
-        ])
-        .check((story) => assert.strictEqual(Locator.textOf(story.get(Locator.tag("p"))), "Bea"))
+      s.pipe(loadBoth)
         .send(Message.make({ _tag: "Show", ids: ["1"] }))
-        .check((story) => {
-          assert.strictEqual(Locator.textOf(story.get(Locator.tag("p"))), "Ann")
-          assert.deepStrictEqual(heldIds(Selection, story.results?.users), ["1"])
-        }))
+        .check((story) => assert.deepStrictEqual(heldIds(Selection, story.results?.users), ["1"])))
   })
 })
 

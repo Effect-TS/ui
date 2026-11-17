@@ -1,6 +1,6 @@
 import { Component, View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Locator, Story } from "@effect/ui/testing"
+import { Locator, Scene } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Schema } from "effect"
 
@@ -35,37 +35,40 @@ const Page = Component.define({
   update: (model, msg) => msg._tag === "Bump" ? { ...model, bumps: model.bumps + 1 } : { ...model, saved: msg.text },
   // An element around the child: a query sees through the child to the content under it.
   view: (model, h) =>
-    h.main(Panel(h, {
-      key: "p",
-      slots: {
-        title: "bumps " + model.bumps,
-        body: [
-          h.button.onClick(PageMsg.make({ _tag: "Bump" })).children("bump"),
-          Note(h, { key: "n", onEmit: (event) => PageMsg.make({ _tag: "Saved", text: event.text }) })
-        ]
-      }
-    }))
+    h.main(
+      Panel(h, {
+        key: "p",
+        slots: {
+          title: "bumps " + model.bumps,
+          body: [
+            h.button.onClick(PageMsg.make({ _tag: "Bump" })).children("bump"),
+            Note(h, { key: "n", onEmit: (event) => PageMsg.make({ _tag: "Saved", text: event.text }) })
+          ]
+        }
+      }),
+      h.output(model.saved)
+    )
 })
 
 describe("slots in a story", () => {
   it("a parent's story shows its content, handles its events and finds its children", () => {
-    const story = Story.make(Page, {}, (s) =>
+    const story = Scene.make(Page, {}, (s) =>
       s.click("bump")
-        .childEmit("n", { _tag: "Saved", text: "hi" }))
-    assert.deepStrictEqual(story.model, { bumps: 1, saved: "hi" })
+        .childEmit(Note, "n", { _tag: "Saved", text: "hi" })
+        .expect(Locator.tag("output")).toHaveText("hi"))
     // The child's own view isn't run: only what the parent passed shows.
-    assert.strictEqual(Locator.textOf(story.view() as Locator.Node), "bumps 1bump")
+    assert.strictEqual(Locator.textOf(story.view() as Locator.Node), "bumps 1bumphi")
     assert.deepStrictEqual(story.all(Locator.text("bump")).map((node) => node.tag), ["button"])
-    assert.deepStrictEqual(Story.children(story.view(), Note).map((child) => child.key), ["n"])
+    assert.deepStrictEqual(Scene.children(story.view(), Note).map((child) => child.key), ["n"])
   })
 
   it("a slotted component's story shows what it was passed where the view places each slot", () => {
-    const story = Story.make(Panel, {}, {
+    const story = Scene.make(Panel, {}, {
       slots: (h) => ({ title: "hello", body: [h.em("the body"), Note(h, { key: "n" })] })
     }, () => {})
     assert.strictEqual(Locator.textOf(story.get(Locator.tag("h2"))), "hello")
     assert.strictEqual(Locator.textOf(story.get(Locator.tag("section"))), "hellopanel's ownthe body")
-    assert.deepStrictEqual(Story.children(story.view(), Note).map((child) => child.key), ["n"])
+    assert.deepStrictEqual(Scene.children(story.view(), Note).map((child) => child.key), ["n"])
   })
 
   it("a ref key in the view and in content fails the story, as it fails the parent", () => {
@@ -79,7 +82,7 @@ describe("slots in a story", () => {
             Panel(h, { key: "p", slots: { body: Note(h, { ref: Note.ref("N") }) } })
           )
       })
-    assert.throws(() => Story.make(Twice, {}, () => {}).view(), /N/)
+    assert.throws(() => Scene.make(Twice, {}, () => {}).view(), /N/)
   })
 })
 
@@ -102,14 +105,18 @@ describe("headless closures in slot content", () => {
       .make({
         init: () => "",
         update: (_, text) => text,
-        view: (_, h) =>
+        view: (text, h) =>
           Panel(h, {
             key: "p",
-            slots: { body: Headless(h, { key: "h", view: () => Note(h, { key: "n", onEmit: (event) => event.text }) }) }
+            slots: {
+              title: h.output(text),
+              body: Headless(h, { key: "h", view: () => Note(h, { key: "n", onEmit: (event) => event.text }) })
+            }
           })
       })
-    const story = Story.make(Parent, {}, (s) => s.childEmit("n", { _tag: "Saved", text: "hi" }))
-    assert.strictEqual(story.model, "hi")
+    Scene.make(Parent, {}, (s) =>
+      s.childEmit(Note, "n", { _tag: "Saved", text: "hi" })
+        .expect(Locator.tag("output")).toHaveText("hi"))
   })
 
   it("refs in content a parent passed don't clash with the receiver's own", () => {
@@ -124,9 +131,9 @@ describe("headless closures in slot content", () => {
       update: (model) => model,
       view: (_, h) => h.div(Note(h, { ref: Note.ref("N") }), h.slots.body)
     })
-    const story = Story.make(Receiver, {}, {
+    const story = Scene.make(Receiver, {}, {
       slots: (h) => ({ body: Headless(h, { key: "ext", view: () => Note(h, { ref: Note.ref("N") }) }) })
     }, () => {})
-    assert.strictEqual(Story.children(story.view(), Note).length, 2)
+    assert.strictEqual(Scene.children(story.view(), Note).length, 2)
   })
 })

@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
-import { HtmlLocator } from "@effect/ui/html/testing"
-import { Locator, Story, TestHost } from "@effect/ui/testing"
+import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
+import { Locator, Scene, TestHost } from "@effect/ui/testing"
 import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
 import { Confirm } from "./fixtures/confirm.ts"
-import { Menu, MenuMessage } from "./fixtures/popover.ts"
+import { Menu } from "./fixtures/popover.ts"
 import { TodoApp, TodoAppMessage, TodoItem } from "./fixtures/todos.ts"
 
 const el = (
@@ -74,7 +74,7 @@ describe("HtmlLocator", () => {
       Effect.gen(function*() {
         const dialog = HtmlLocator.role("dialog", { name: "Delete note?" })
         const keep = HtmlLocator.role("button", { name: "Keep" })
-        Story.make(Confirm, { state: "closed", acceptEscape: false }, (s) => {
+        Scene.make(Confirm, { state: "closed", acceptEscape: false }, (s) => {
           s.check((story) => {
             expect(story.query(dialog)).toBeUndefined()
             expect(story.query(keep)).toBeUndefined()
@@ -123,13 +123,14 @@ describe("HtmlLocator", () => {
       Effect.gen(function*() {
         const menu = HtmlLocator.role("menu", { name: "Menu" })
         const rename = HtmlLocator.role("button", { name: "Rename" })
-        Story.make(Menu, { mode: "auto", open: false, follow: true }, (s) => {
+        Scene.make(Menu, { mode: "auto", open: false, follow: true }, (s) => {
           s.check((story) => {
             expect(story.query(menu)).toBeUndefined()
             expect(story.query(rename)).toBeUndefined()
             expect(HtmlLocator.popoverState(story.get(HtmlLocator.role("menu", { hidden: true })))).toBe("closed")
           })
-            .send(MenuMessage.make({ _tag: "Set", open: true }))
+            // A parent opening it, as `Set` would: nothing in the view sends that.
+            .given((model) => ({ ...model, open: true }))
             .check((story) => expect(HtmlLocator.popoverState(story.get(menu))).toBe("open"))
             // A light dismiss, as the browser host reports it; the Model follows.
             .fire(menu, "toggle", { open: false, newState: "closed", oldState: "open" })
@@ -191,21 +192,21 @@ describe("HtmlLocator", () => {
   })
 
   describe("trees", () => {
-    it("a story's view value, field values included", () => {
-      const story = Story.make(
+    it("a scene's view value, field values included", () => {
+      const scene = HtmlScene.make(
         TodoApp,
         {},
-        (s) => s.send(TodoAppMessage.make({ _tag: "Draft", value: "Read" }))
+        (s) => s.type(HtmlLocator.role("textbox", { name: "New todo" }), "Read")
       )
       // `.value(text)` sets a property, so the attributes don't hold it.
-      const field = story.get(HtmlLocator.role("textbox", { name: "New todo" }))
+      const field = scene.get(HtmlLocator.role("textbox", { name: "New todo" }))
       expect(field.attrs?.value).toBeUndefined()
       expect(HtmlLocator.value(field)).toBe("Read")
-      const item = Story.make(TodoItem, { todo: { id: "1", title: "Read", done: true } }, () => {})
+      const item = Scene.make(TodoItem, { todo: { id: "1", title: "Read", done: true } }, () => {})
       expect(HtmlLocator.checked(item.get(HtmlLocator.role("checkbox", { name: "Read" })))).toBe(true)
       expect(HtmlLocator.checked(item.get(HtmlLocator.role("button")))).toBeUndefined()
-      expect(HtmlLocator.getByRole(story.root, "button", { name: "Clear done" })).toBeDefined()
-      expect(story.all(Locator.inside(Locator.tag("form"), HtmlLocator.role("button")))).toHaveLength(1)
+      expect(HtmlLocator.getByRole(scene.root, "button", { name: "Clear done" })).toBeDefined()
+      expect(scene.all(Locator.inside(Locator.tag("form"), HtmlLocator.role("button")))).toHaveLength(1)
     })
 
     it.effect("a TestHost tree, checked state included", () =>

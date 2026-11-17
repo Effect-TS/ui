@@ -1,6 +1,6 @@
 import { Command, Component, MessageLog, Query, Route, Router } from "@effect/ui"
 import { Html, HtmlServer } from "@effect/ui/html"
-import { Locator, Story, TestHost } from "@effect/ui/testing"
+import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Effect, Layer, Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
@@ -62,13 +62,17 @@ const makeApp = () => {
         Refresh: () => $.reset("messages")
       }),
     view: (_model, h) =>
-      h.el("p").on("click", ChatMessage.make({ _tag: "More" })).children(
-        AsyncResult.match(h.queries.messages, {
-          onInitial: () => "loading",
-          onFailure: () => "failed",
-          onSuccess: ({ value: { items, more, pages } }) =>
-            items.map((message) => message.text).join(",") + " /" + pages.length + " " + more._tag
-        })
+      h.el("div").children(
+        h.el("p").on("click", ChatMessage.make({ _tag: "More" })).children(
+          AsyncResult.match(h.queries.messages, {
+            onInitial: () => "loading",
+            onFailure: () => "failed",
+            onSuccess: ({ value: { items, more, pages } }) =>
+              items.map((message) => message.text).join(",") + " /" + pages.length + " " + more._tag
+          })
+        ),
+        // No text, so the view's text stays the list's.
+        h.el("button").attr("data-testid", "refresh").on("click", ChatMessage.make({ _tag: "Refresh" }))
       )
   })
   return { db, ListMessages, ChatMessage, Chat, layer: ListMessages.layer }
@@ -329,7 +333,15 @@ describe("Infinite queries", () => {
         Option.some([pageAt(0, 1)])
       )
     }
-    final.get(Locator.text("failed", { exact: true }))
+    // The view shows the Failure, and still does after the reset.
+    Scene.make(app.Chat, { room: "r" }, (s) =>
+      s.loaded("messages", [pageAt(0, 1), pageAt(1, 2)], { waiting: true })
+        .click("r0,r1 /2 Available")
+        .loaded("messages", [pageAt(0, 1), pageAt(1, 2)], { waiting: true })
+        .loadFailed("messages", "nope")
+        .expect(Locator.text("failed", { exact: true })).toExist()
+        .click(Locator.testId("refresh"))
+        .expect(Locator.text("failed", { exact: true })).toExist())
   })
 
   it("Story: given starts an infinite query from its pages, with more from the last page", () => {
@@ -338,12 +350,14 @@ describe("Infinite queries", () => {
       messages: [{ id: "m" + index, text: "r" + index }],
       next
     })
-    Story.make(app.Chat, { room: "r" }, (s) =>
+    Scene.make(app.Chat, { room: "r" }, (s) =>
       s.given({}, { messages: [pageAt(0, 1), pageAt(1, 2)] })
-        .check((story) => story.get(Locator.text("r0,r1 /2 Available", { exact: true })))
+        .expect(Locator.text("r0,r1 /2 Available", { exact: true })).toExist()
         .given({}, { messages: [pageAt(0, 1), pageAt(1, null)] })
+        .expect(Locator.text("r0,r1 /2 End", { exact: true })).toExist())
+    Story.make(app.Chat, { room: "r" }, (s) =>
+      s.given({}, { messages: [pageAt(0, 1), pageAt(1, null)] })
         .check((story) => {
-          story.get(Locator.text("r0,r1 /2 End", { exact: true }))
           const messages = story.queries().messages
           assert.deepStrictEqual(AsyncResult.isSuccess(messages) ? messages.value.more : undefined, { _tag: "End" })
         }))
@@ -355,28 +369,44 @@ describe("Infinite queries", () => {
       messages: [{ id: "m" + index, text: "r" + index }],
       next
     })
-    const shows = (text: string) => (story: Story.Story<any, any, any, any>) => {
-      story.get(Locator.text(text, { exact: true }))
-    }
+    const shows = (text: string) => <S extends Scene.Steps.Any>(s: S): S =>
+      s.expect(Locator.text(text, { exact: true })).toExist()
+    Scene.make(app.Chat, { room: "r" }, (s) =>
+      s.loaded("messages", [pageAt(0, 1)])
+        .pipe(shows("r0 /1 Available"))
+        .click("r0 /1 Available")
+        .check((scene) => assert.deepStrictEqual(scene.loadingMore, ["messages"]))
+        .pipe(shows("r0 /1 Loading"))
+        .loadedMore("messages", pageAt(1, 2))
+        .pipe(shows("r0,r1 /2 Available"))
+        .click("r0,r1 /2 Available")
+        .loadMoreFailed("messages", "nope")
+        .pipe(shows("r0,r1 /2 Failed"))
+        // The reset keeps the first page and makes more available again.
+        .click(Locator.testId("refresh"))
+        .pipe(shows("r0 /1 Available")))
+    // The same steps in a story, which reads the query's pages.
     Story.make(app.Chat, { room: "r" }, (s) =>
       s.loaded("messages", [pageAt(0, 1)])
-        .check(shows("r0 /1 Available"))
         .send(app.ChatMessage.make({ _tag: "More" }))
         .check((story) => assert.deepStrictEqual(story.loadingMore, ["messages"]))
-        .check(shows("r0 /1 Loading"))
         .loadedMore("messages", pageAt(1, 2))
-        .check(shows("r0,r1 /2 Available"))
         .send(app.ChatMessage.make({ _tag: "More" }))
         .loadMoreFailed("messages", "nope")
-        .check(shows("r0,r1 /2 Failed"))
         .send(app.ChatMessage.make({ _tag: "Refresh" }))
-        .check(shows("r0 /1 Available")))
+        .check((story) => {
+          const messages = story.queries().messages
+          assert.deepStrictEqual(
+            AsyncResult.isSuccess(messages) ? [messages.value.pages, messages.value.more] : undefined,
+            [[pageAt(0, 1)], { _tag: "Available" }]
+          )
+        }))
     assert.throws(
       () =>
         Story.make(app.Chat, { room: "r" }, (s) => {
           s.loaded("messages", [pageAt(0, 1)]).send(app.ChatMessage.make({ _tag: "More" }))
         }),
-      /a load more still pending at the end on "messages"/
+      /a load more of "messages" is pending/
     )
     assert.throws(
       () =>

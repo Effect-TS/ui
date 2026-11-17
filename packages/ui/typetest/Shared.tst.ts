@@ -1,6 +1,6 @@
 import { Component } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Story } from "@effect/ui/testing"
+import { Scene } from "@effect/ui/testing"
 import { Layer, Schema } from "effect"
 import { describe, expect, it } from "tstyche"
 
@@ -108,8 +108,8 @@ describe("shared state", () => {
     })
   })
 
-  it("checks a story's shared values against their owner", () => {
-    const steps = Story.start(Tip, { id: "a" })
+  it("checks a scene's shared values against their owner", () => {
+    const steps = Scene.start(Tip, { id: "a" })
     expect(steps.shared(Tips, { open: "a" })).type.not.toRaiseError()
     expect(steps.given(null, {}, [[Tips, { open: "a" }]])).type.not.toRaiseError()
     expect(steps.shared).type.not.toBeCallableWith(Tips, { open: 1 })
@@ -117,7 +117,7 @@ describe("shared state", () => {
     expect(steps.given).type.not.toBeCallableWith(null, {}, [[Tips, { open: 1 }]])
   })
 
-  it("takes an owner as a story's component", () => {
-    expect(Story.make(Tips, {}, { elements: Html, view: (_, h) => h.span() }, () => {})).type.not.toRaiseError()
+  it("takes an owner as a scene's component", () => {
+    expect(Scene.make(Tips, {}, { elements: Html, view: (_, h) => h.span() }, () => {})).type.not.toRaiseError()
   })
 })

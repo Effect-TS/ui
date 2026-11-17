@@ -1,5 +1,5 @@
 import { Component, Feature, MessageLog } from "@effect/ui"
-import { Locator, Story, TestHost } from "@effect/ui/testing"
+import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Effect, Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
@@ -269,16 +269,27 @@ describe("$.send", () => {
 })
 
 describe("Story and sends", () => {
-  it("records what update sent, and resets it with given", () => {
+  it("records what update sent until sent acknowledges it, and given throws rather than discard it", () => {
     const steps = Story.start(List, { ids: ["a", "b"] })
       .send(ListMessage.make({ _tag: "Clear", id: "b" }))
-      .sent((sent) => assert.deepStrictEqual(sent.map((send) => send.ref?.key), ["Row[b]"]))
-      .send(ListMessage.make({ _tag: "Add", id: "c" }))
     assert.deepStrictEqual(steps.current.sent.map((send) => [send.ref?.key, send.message]), [
-      ["Row[b]", { _tag: "Clear" }],
+      ["Row[b]", { _tag: "Clear" }]
+    ])
+    // An unacknowledged send blocks the next acting step.
+    assert.throws(
+      () => steps.send(ListMessage.make({ _tag: "Add", id: "c" })),
+      /Story\.send: earlier work isn't settled or acknowledged:\n {2}- \{"_tag":"Clear"\} to Row\[b\] was sent/
+    )
+    // sent asserts the oldest send, then drops it from the record.
+    assert.throws(() => steps.sent(Row.at("a"), { _tag: "Clear" }), /Story\.sent: expected/)
+    assert.lengthOf(steps.sent(Row.at("b"), { _tag: "Clear" }).current.sent, 0)
+    // The record holds only what isn't acknowledged: the new send, not the earlier one.
+    steps.send(ListMessage.make({ _tag: "Add", id: "c" }))
+    assert.deepStrictEqual(steps.current.sent.map((send) => [send.ref?.key, send.message]), [
       ["Row[c]", { _tag: "Clear" }]
     ])
-    assert.lengthOf(steps.given(["a"]).current.sent, 0)
+    assert.throws(() => steps.given(["a"]), /Story\.given: given would discard work not settled or acknowledged/)
+    assert.deepStrictEqual(steps.sent(Row.at("c"), { _tag: "Clear" }).given(["a"]).current.model, ["a"])
   })
 
   it("finds a child by its ref in childEmit, childFailure and fallback", () => {
@@ -294,22 +305,29 @@ describe("Story and sends", () => {
     const Page = Component.define({ name: "Page", model: Schema.Array(Schema.String), message: Message }).make({
       init: () => [],
       update: (seen, message) => [...seen, message.what],
-      view: (_, h) =>
-        Echo(h, {
-          ref: Mine,
-          onEmit: () => Message.make({ _tag: "Saw", what: "emit" }),
-          onFailure: () => Message.make({ _tag: "Saw", what: "failure" }),
-          fallback: () => h.text("gone")
-        })
+      view: (seen, h) =>
+        h.el("div", [
+          h.el("p", seen.join(",")),
+          Echo(h, {
+            ref: Mine,
+            onEmit: () => Message.make({ _tag: "Saw", what: "emit" }),
+            onFailure: () => Message.make({ _tag: "Saw", what: "failure" }),
+            fallback: () => h.text("gone")
+          })
+        ])
     })
-    const story = Story.make(
+    const scene = Scene.make(
       Page,
       {},
-      (s) => s.childEmit(Mine, { _tag: "Said" }).childFailure(Mine, Cause.die("x"))
+      (s) =>
+        s.childEmit(Echo, Mine, { _tag: "Said" }).childFailure(Mine, Cause.die("x"))
+          .expect(Locator.tag("p")).toHaveText("emit,failure")
     )
-    assert.deepStrictEqual(story.model, ["emit", "failure"])
-    assert.deepStrictEqual(Story.fallback(story.view(), Mine, AsyncResult.initial()), { _tag: "Text", text: "gone" })
-    assert.throws(() => Story.start(Page, {}).childEmit(Echo.ref("Other"), {}), /no child with the ref Other/)
+    assert.deepStrictEqual(Scene.fallback(scene.view(), Mine, AsyncResult.initial()), { _tag: "Text", text: "gone" })
+    assert.throws(
+      () => Scene.start(Page, {}).childEmit(Echo, Echo.ref("Other"), { _tag: "Said" }),
+      /no child with the ref Other/
+    )
   })
 
   it.effect("fromLog reports a divergence when a send changes, from entries and from the Wire", () =>

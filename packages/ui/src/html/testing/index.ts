@@ -1,7 +1,7 @@
 /**
- * Test helpers for `@effect/ui/html`: `HtmlLocator`, `HtmlStory`'s steps for HTML
- * behaviour such as dropping on a drop target, and `ssr`, which renders on
- * the server, hydrates and checks the two agree.
+ * Test helpers for `@effect/ui/html`: `HtmlLocator`, `HtmlScene`, a `Scene` with
+ * steps for what a user does in a browser, and `ssr`, which renders on the
+ * server, hydrates and checks the two agree.
  *
  * @stability experimental
  * @since 0.1.0
@@ -28,7 +28,7 @@ export * as HtmlLocator from "./HtmlLocator.ts"
  * @stability experimental
  * @since 0.1.0
  */
-export * as HtmlStory from "./HtmlStory.ts"
+export * as HtmlScene from "./HtmlScene.ts"
 
 /**
  * @stability experimental

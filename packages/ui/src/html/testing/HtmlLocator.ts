@@ -2,10 +2,11 @@
  * Locates elements by ARIA role and accessible name, computed from tags and
  * attributes, so a test finds elements the way assistive technology does.
  *
- * The same lookups run over a story's view value, a `TestHost` tree and a
- * real DOM tree. `role` returns a `Locator`, so it combines with
- * `Locator.inside` on the first two. On the DOM, `click`, `input`, `keyDown`
- * and `submit` act as the user would, through real DOM events.
+ * The same lookups run over a scene's view value, a `TestHost` tree and a
+ * real DOM tree. `role`, `label` and `placeholder` return a `Locator`, so
+ * they combine with `Locator.inside` on the first two. On the DOM, `click`,
+ * `type`, `keydown` and `submit` act as the user would, through real DOM
+ * events.
  *
  * Hidden elements (`hidden`, `aria-hidden="true"`, `<input type="hidden">`)
  * and everything inside them are left out unless `hidden: true` is passed.
@@ -35,7 +36,7 @@
  * @stability experimental
  * @since 0.1.0
  */
-import type * as Locator from "../../testing/Locator.ts"
+import * as Locator from "../../testing/Locator.ts"
 
 // ---------------------------------------------------------------------------
 // trees
@@ -601,6 +602,79 @@ export const role = (role: string, options?: RoleOptions): Locator.Locator => ({
 // ---------------------------------------------------------------------------
 
 /**
+ * The form fields labelled `text`: by a `<label>` around them or naming
+ * their `id` in `for`, by `aria-labelledby`, or by `aria-label`. The label's
+ * text is trimmed and must equal `text`, or contain it with
+ * `{ exact: false }`.
+ *
+ * **Example** (A field by its label)
+ *
+ * ```ts import.meta.vitest
+ * import { HtmlLocator } from "@effect/ui/html/testing"
+ * import { Locator } from "@effect/ui/testing"
+ *
+ * const tree = {
+ *   tag: "form",
+ *   children: [
+ *     { tag: "label", attrs: { for: "zip" }, children: [{ text: "Zip code" }] },
+ *     { tag: "input", attrs: { id: "zip" } }
+ *   ]
+ * }
+ *
+ * console.log(Locator.get(tree, HtmlLocator.label("Zip code")) === tree.children[1]) // true
+ * ```
+ *
+ * @stability experimental
+ * @category locators
+ * @since 0.1.0
+ */
+export const label = (text: string, options?: { readonly exact?: boolean | undefined }): Locator.Locator => {
+  const matches = (label: string) => options?.exact === false ? label.includes(text) : label.trim() === text
+  return {
+    description: `label ${JSON.stringify(text)}`,
+    all: <N extends Locator.Node>(root: N): ReadonlyArray<N> => {
+      const all = Locator.elements(root)
+      const byId = new Map(all.flatMap((node) => node.attrs?.id === undefined ? [] : [[node.attrs.id, node] as const]))
+      const found = new Set<Locator.Node>()
+      for (const node of all) {
+        if (node.tag === "label" && matches(Locator.textOf(node))) {
+          const target = node.attrs?.for
+          if (target !== undefined) {
+            const field = byId.get(target)
+            if (field !== undefined) found.add(field)
+          } else {
+            const field = Locator.elements(node).find((inner) => inner !== node && labelable.has(inner.tag!))
+            if (field !== undefined) found.add(field)
+          }
+        }
+        const label = node.attrs?.["aria-label"]
+        if (label !== undefined && matches(label)) found.add(node)
+        const by = node.attrs?.["aria-labelledby"]
+        if (by !== undefined) {
+          const named = by.split(/\s+/).flatMap((id) => {
+            const other = byId.get(id)
+            return other === undefined ? [] : [Locator.textOf(other)]
+          }).join(" ")
+          if (matches(named)) found.add(node)
+        }
+      }
+      return all.filter((node) => found.has(node))
+    }
+  }
+}
+
+const labelable: ReadonlySet<string> = new Set(["input", "select", "textarea", "button", "meter", "output", "progress"])
+
+/**
+ * The elements whose `placeholder` is `text`.
+ *
+ * @stability experimental
+ * @category locators
+ * @since 0.1.0
+ */
+export const placeholder = (text: string): Locator.Locator => Locator.attr("placeholder", text)
+
+/**
  * Whether a dialog is closed, open, or open as a modal. It reads a story's
  * view or a `TestHost` tree, where `.modal(true)` sets `open` to `"modal"`,
  * or a DOM dialog, which is a modal when it matches `:modal`. A DOM without
@@ -638,7 +712,7 @@ export const dialogState = (node: unknown): "closed" | "open" | "modal" => {
 
 /**
  * Reads a form field's current value: its `value` property, else its
- * `value` attribute. It reads a story's view, a `TestHost` tree or a DOM
+ * `value` attribute. It reads a scene's view, a `TestHost` tree or a DOM
  * element, and returns `undefined` for an element with neither.
  *
  * **When to use**
@@ -670,7 +744,7 @@ export const value = (node: unknown): string | undefined => {
 /**
  * Reads whether a checkbox or radio button is checked: `aria-checked` when
  * the element sets it, else an input's `checked` property, else its
- * `checked` attribute. It reads a story's view, a `TestHost` tree or a DOM
+ * `checked` attribute. It reads a scene's view, a `TestHost` tree or a DOM
  * element, and returns `undefined` for an element that can't be checked.
  *
  * **When to use**
@@ -697,7 +771,7 @@ export const value = (node: unknown): string | undefined => {
 export const checked = (node: unknown): boolean | undefined => isChecked(readerOf(node), node)
 
 /**
- * Whether a popover is showing. It reads a story's view or a `TestHost`
+ * Whether a popover is showing. It reads a scene's view or a `TestHost`
  * tree, where `.popover(mode, open)` sets `popoverOpen`, or a DOM element,
  * through `:popover-open`.
  *
@@ -737,7 +811,7 @@ export const click = (element: globalThis.Element): void => {
  * @category actions
  * @since 0.1.0
  */
-export const input = (element: globalThis.Element, value: string): void => {
+export const type = (element: globalThis.Element, value: string): void => {
   const field = element as HTMLInputElement
   const view = field.ownerDocument.defaultView
   field.value = value
@@ -756,7 +830,7 @@ export const input = (element: globalThis.Element, value: string): void => {
  * @category actions
  * @since 0.1.0
  */
-export const keyDown = (
+export const keydown = (
   element: globalThis.Element,
   key: string,
   modifiers?: {

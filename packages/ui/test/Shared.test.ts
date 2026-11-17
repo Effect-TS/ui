@@ -1,6 +1,6 @@
 import { Component, MessageLog } from "@effect/ui"
 import * as services from "@effect/ui/internal/services"
-import { Locator, Story, TestHost } from "@effect/ui/testing"
+import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 
@@ -183,33 +183,37 @@ describe("shared state", () => {
     }).pipe(provideHost))
 })
 
-describe("shared state in a Story", () => {
+describe("shared state in a Scene", () => {
   it("gives a reader the default of an owner whose props are optional, and keeps its sends in sent", () => {
-    const story = Story.make(Tip, { id: "a" }, (s) => s.click("a:closed"))
-    assert.deepStrictEqual(story.sent.map((send) => [send.owner?.definition.name, send.message]), [
-      ["Tips", { _tag: "Enter", id: "a" }]
-    ])
-    // The story never runs the owner's update.
-    assert.strictEqual(Locator.textOf(story.root), "a:closed")
+    const scene = Scene.make(Tip, { id: "a" }, (s) =>
+      s.click("a:closed")
+        .check((current) =>
+          assert.deepStrictEqual(current.sent.map((send) => [send.owner?.definition.name, send.message]), [
+            ["Tips", { _tag: "Enter", id: "a" }]
+          ])
+        )
+        .sent(Tips, { _tag: "Enter", id: "a" }))
+    // The scene never runs the owner's update.
+    assert.strictEqual(Locator.textOf(scene.root), "a:closed")
   })
 
-  it("reads the expanded Model of an owner in the story's own view", () => {
-    const story = Story.make(App, {}, (s) => s.givenChild("tips", "a"))
+  it("reads the expanded Model of an owner in the scene's own view", () => {
+    const scene = Scene.make(App, {}, (s) => s.givenChild("tips", "a"))
     // Trigger is expanded; Tip is a normal child, so a slot with no text.
-    assert.strictEqual(Locator.textOf(story.root), "a")
+    assert.strictEqual(Locator.textOf(scene.root), "a")
   })
 
-  // A story with no steps keeps the view it expanded, where the owner placing the slot is already gone.
+  // A scene with no steps keeps the view it expanded, where the owner placing the slot is already gone.
   it("gives slot content the owner that places it", () => {
     const Frame = Component.define({ name: "Frame", model: Schema.Null, message: TipMessage, slots: ["body"] }).make({
       init: () => null,
       update: (model) => model,
       view: (_, h) => Tips(h, { key: "tips", props: { label: "placed" }, view: () => h.slots.body })
     })
-    const story = Story.make(Frame, {}, {
+    const scene = Scene.make(Frame, {}, {
       slots: (h) => ({ body: Trigger(h, { key: "t", view: (parts) => h.el("i", parts.label) }) })
     }, () => {})
-    assert.strictEqual(Locator.textOf(story.root), "placed")
+    assert.strictEqual(Locator.textOf(scene.root), "placed")
   })
 
   it("gives the parts of a headless reader the shared value", () => {
@@ -229,8 +233,8 @@ describe("shared state in a Story", () => {
     const B = required("B")
     const Sum = Component.define({ name: "Sum", model: Schema.Null, message: TipMessage, shared: { a: A, b: B } })
       .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p", String(h.shared.a + h.shared.b)) })
-    assert.strictEqual(Locator.textOf(Story.make(Sum, {}, (s) => s.shared(A, 1).shared(B, 2)).root), "3")
-    assert.strictEqual(Locator.textOf(Story.make(Sum, {}, (s) => s.given(null, {}, [[A, 1], [B, 2]])).root), "3")
-    assert.throws(() => Story.make(Sum, {}, (s) => s.shared(A, 1)), /\.shared\(B, value\)/)
+    assert.strictEqual(Locator.textOf(Scene.make(Sum, {}, (s) => s.shared(A, 1).shared(B, 2)).root), "3")
+    assert.strictEqual(Locator.textOf(Scene.make(Sum, {}, (s) => s.given(null, {}, [[A, 1], [B, 2]])).root), "3")
+    assert.throws(() => Scene.make(Sum, {}, (s) => s.shared(A, 1)), /\.shared\(B, value\)/)
   })
 })

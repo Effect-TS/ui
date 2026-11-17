@@ -1,7 +1,7 @@
 import { Component, View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { HtmlStory } from "@effect/ui/html/testing"
-import { Locator, Story } from "@effect/ui/testing"
+import { HtmlScene } from "@effect/ui/html/testing"
+import { Locator, Scene, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Schema } from "effect"
 import { Dialog, type Item, Menu } from "./fixtures/headless.ts"
@@ -22,25 +22,28 @@ const Toolbar = Component.define({
 }).make({
   init: () => [],
   update: (log, message) => [...log, message._tag + " " + message.id],
-  view: (_, h) =>
-    Menu(h, {
-      key: "actions",
-      props: { items },
-      onEmit: (event) => ToolbarMessage.make({ _tag: "Picked", id: event.id }),
-      view: (m) =>
-        h.div(
-          m.trigger(h.button).children("Actions"),
-          m.popup(h.div).children(
-            m.input(h.input.attr("aria-label", "Filter actions")),
-            m.visible.length === 0 && h.p("No actions found."),
-            h.ul.children(m.visible.map((item) =>
-              m.item(h.li.key(item.id), item)
-                .onClick(ToolbarMessage.make({ _tag: "Clicked", id: item.id }))
-                .children(item.label)
-            ))
+  view: (log, h) =>
+    h.div(
+      Menu(h, {
+        key: "actions",
+        props: { items },
+        onEmit: (event) => ToolbarMessage.make({ _tag: "Picked", id: event.id }),
+        view: (m) =>
+          h.div(
+            m.trigger(h.button).children("Actions"),
+            m.popup(h.div).children(
+              m.input(h.input.attr("aria-label", "Filter actions")),
+              m.visible.length === 0 && h.p("No actions found."),
+              h.ul.children(m.visible.map((item) =>
+                m.item(h.li.key(item.id), item)
+                  .onClick(ToolbarMessage.make({ _tag: "Clicked", id: item.id }))
+                  .children(item.label)
+              ))
+            )
           )
-        )
-    })
+      }),
+      h.output(log.join(", "))
+    )
 })
 
 const filter = Locator.attr("aria-label", "Filter actions")
@@ -78,9 +81,9 @@ const Ids = Component.define({ name: "Ids", model: Schema.Null, message: Schema.
 
 describe("headless components in a story", () => {
   it("arrow keys skip a disabled row and wrap, and typeahead on the trigger reads the labels and starts over", () => {
-    const active = (story: { readonly model: unknown; readonly props: { readonly items: ReadonlyArray<Item> } }) =>
+    const active = (story: { readonly props: { readonly items: ReadonlyArray<Item> } }) =>
       Story.parts(Menu, story).active
-    const story = Story.make(Menu, { items }, standIn, (s) => {
+    Scene.make(Menu, { items }, standIn, (s) => {
       // Block is disabled, so typing its first letter moves nowhere.
       s.fire(trigger, "keydown", { key: "b" })
         .check((story) => assert.isNull(active(story)))
@@ -106,12 +109,12 @@ describe("headless components in a story", () => {
           )
         })
         .fire(filter, "keydown", { key: "Enter" })
+        .emitted({ _tag: "Picked", id: "a" })
     })
-    assert.deepStrictEqual(story.emitted, [{ _tag: "Picked", id: "a" }])
   })
 
   it("an item that new props removed is no longer active, and Enter picks nothing", () => {
-    const story = Story.make(Menu, { items }, standIn, (s) => {
+    const story = Scene.make(Menu, { items }, standIn, (s) => {
       s.fire(filter, "keydown", { key: "ArrowUp" })
         .check((story) => assert.strictEqual(Story.parts(Menu, story).active, "c"))
         .props({ items: [items[0]!] })
@@ -148,7 +151,7 @@ describe("headless components in a story", () => {
   })
 
   it("ids of one instance differ whenever the name or the key does", () => {
-    Story.make(Ids, {}, (s) => {
+    Scene.make(Ids, {}, (s) => {
       s.check((story) => {
         const ids = story.all(Locator.tag("span")).map((span) => span.attrs?.id)
         assert.strictEqual(new Set(ids).size, 3, ids.join(" "))
@@ -158,7 +161,7 @@ describe("headless components in a story", () => {
 
   it("an author's story runs the component with a stand-in view, and reads its parts", () => {
     // The stand-in view is written in place here, where its parameters need no annotation.
-    const story = Story.make(Menu, { items }, {
+    const story = Scene.make(Menu, { items }, {
       elements: Html,
       view: (m, h) =>
         h.div(
@@ -180,13 +183,13 @@ describe("headless components in a story", () => {
         })
         .fire(filter, "keydown", { key: "Enter" })
         .check((story) => assert.isTrue(story.defaultPrevented))
+        .emitted({ _tag: "Picked", id: "c" })
     })
-    assert.deepStrictEqual(story.emitted, [{ _tag: "Picked", id: "c" }])
     assert.isFalse(Story.parts(Menu, story).open)
   })
 
   it("a consumer's story shows the child expanded, and runs only the consumer's layer", () => {
-    Story.make(Toolbar, {}, (s) => {
+    Scene.make(Toolbar, {}, (s) => {
       // Expanded from the Menu's init Model.
       s.check((story) => {
         assert.strictEqual(story.get(Locator.text("Actions")).attrs?.["aria-expanded"], "false")
@@ -199,8 +202,8 @@ describe("headless components in a story", () => {
         })
         // The row has the Menu's layer and the Toolbar's: the story runs the Toolbar's.
         .click("Copy")
-        .childEmit("actions", { _tag: "Picked", id: "c" })
-        .model((log) => assert.deepStrictEqual(log, ["Clicked c", "Picked c"]))
+        .childEmit(Menu, "actions", { _tag: "Picked", id: "c" })
+        .expect(Locator.tag("output")).toHaveText("Clicked c, Picked c")
       // Only the Menu handles a click on its trigger, and a story doesn't run the Menu's update.
       assert.throws(() => s.click("Actions"), /only \/Toolbar\/Menu\[actions\] handles "click"/)
     })
@@ -212,7 +215,7 @@ describe("headless components in a story", () => {
       update: (model) => model,
       parts: (_, p) => ({ root: p.part((b) => b.attr("role", "button")) })
     })
-    Story.make(Neutral, {}, { elements: Html, view: (p, h) => p.root(h.button).children("neutral") }, (s) => {
+    Scene.make(Neutral, {}, { elements: Html, view: (p, h) => p.root(h.button).children("neutral") }, (s) => {
       s.check((story) => assert.strictEqual(story.get(Locator.text("neutral")).tag, "button"))
     })
   })
@@ -226,18 +229,18 @@ describe("headless components in a story", () => {
     }).make({
       init: () => 0,
       update: (count, message) => count + (message === "one" ? 1 : 10),
-      parts: (_, p) => ({
+      parts: (count, p) => ({
+        count,
         one: p.part("button", (b) => b.onClick("one", { preventDefault: true })),
         ten: p.part("button", (b) => b.onClick("ten"))
       })
     })
-    const story = Story.make(Dual, {}, {
+    const story = Scene.make(Dual, {}, {
       elements: Html,
       view: (p, h) => p.ten(p.one(h.button)).onClick(() => undefined, { preventDefault: false }).children("both")
     }, (s) => {
-      s.click("both")
+      s.click("both").parts((p) => assert.strictEqual(p.count, 11))
     })
-    assert.strictEqual(story.model, 11)
     assert.isTrue(story.defaultPrevented)
   })
 
@@ -257,10 +260,10 @@ describe("headless components in a story", () => {
           { key: "g", view: (p) => p.link(h.a).onClick(Clicked.make({ _tag: "Clicked" })).children("go") }
         )
     })
-    const story = Story.make(Page, {}, (s) => {
-      s.click("go")
+    const story = Scene.make(Page, {}, (s) => {
+      // Clicked is Page's only message.
+      s.click("go").expectHandled()
     })
-    assert.strictEqual(story.model, 1)
     assert.isTrue(story.defaultPrevented)
   })
 
@@ -278,13 +281,14 @@ describe("headless components in a story", () => {
     }).make({
       init: () => 0,
       update: (count, message) => count + (message === "one" ? 1 : message === "ten" ? 10 : 100),
-      parts: (_, p) => ({
+      parts: (count, p) => ({
+        count,
         one: p.part("div", (b) => b.onClick("one", { preventDefault: true })),
         ten: p.part("div", (b) => b.onClick("ten")),
         hundred: p.part("button", (b) => b.onClick("hundred"))
       })
     })
-    Story.make(Outer, {}, {
+    Scene.make(Outer, {}, {
       elements: Html,
       view: (p, h) =>
         p.ten(p.one(h.div)).children(
@@ -293,12 +297,10 @@ describe("headless components in a story", () => {
         )
     }, (s) => {
       s.click("hit")
-      s.check((story) => {
-        assert.strictEqual(story.model, 11)
-        assert.isTrue(story.defaultPrevented)
-      })
+      s.parts((p) => assert.strictEqual(p.count, 11))
+      s.check((story) => assert.isTrue(story.defaultPrevented))
       s.click("inside")
-      s.check((story) => assert.strictEqual(story.model, 111))
+      s.parts((p) => assert.strictEqual(p.count, 111))
     })
   })
 
@@ -306,14 +308,15 @@ describe("headless components in a story", () => {
     const Zone = Component.define({ name: "Zone", model: Schema.String, message: Schema.String, elements: Html }).make({
       init: () => "",
       update: (_, message) => message,
-      parts: (_, p) => ({
+      parts: (dropped, p) => ({
+        dropped,
         zone: p.part("div", (b) => b.onDrop((payload) => payload.data["text/plain"], { accepts: ["text/plain"] }))
       })
     })
-    const story = Story.make(Zone, {}, { elements: Html, view: (p, h) => p.zone(h.div).children("zone") }, (s) => {
-      s.pipe(HtmlStory.drop(Locator.text("zone"), { data: { "text/plain": "milk" } }))
+    const story = HtmlScene.make(Zone, {}, { elements: Html, view: (p, h) => p.zone(h.div).children("zone") }, (s) => {
+      s.drop(Locator.text("zone"), { data: { "text/plain": "milk" } })
+        .parts((p) => assert.strictEqual(p.dropped, "milk"))
     })
-    assert.strictEqual(story.model, "milk")
     assert.isTrue(story.defaultPrevented)
   })
 })

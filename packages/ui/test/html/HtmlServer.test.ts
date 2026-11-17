@@ -1,5 +1,16 @@
 // @vitest-environment happy-dom
-import { Command, Component, Feature, Head, MessageLog, Query, type Renderer, Router, Subscription } from "@effect/ui"
+import {
+  Command,
+  Component,
+  Feature,
+  Head,
+  MessageLog,
+  Mount,
+  Query,
+  type Renderer,
+  Router,
+  Subscription
+} from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
@@ -11,6 +22,9 @@ import { describe, vi } from "vitest"
 import { Confirm, ConfirmMessage } from "./fixtures/confirm.ts"
 import { Menu, popoverStub } from "./fixtures/popover.ts"
 import { App, AppRoute, People } from "./fixtures/routed.ts"
+
+/** A mount that ends with `message`. */
+const mountSending = <A>(name: string, message: A) => Mount.make(name, { args: {} }, () => Effect.succeed(message))()
 
 const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))
 
@@ -533,8 +547,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       }).make({
         init: ($) => $.set(0).run(Log()),
         update: (count, _, $) => $.set(count + 1).run(Log()),
-        view: (count, h) =>
-          h.p.onMount("go", () => Effect.succeed(Message.make({ _tag: "Go" }))).children(String(count))
+        view: (count, h) => h.p.onMount(mountSending("Go", Message.make({ _tag: "Go" }))).children(String(count))
       })
       // An event from a child drives the parent's update twice on the server.
       const Child = Component.define({
@@ -594,7 +607,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         view: (model, h) =>
           h.button
             .onClick(Message.make({ _tag: "Clicked" }))
-            .onMount("mounted", () => Effect.succeed(Message.make({ _tag: "Mounted" }))).children(
+            .onMount(mountSending("Mounted", Message.make({ _tag: "Mounted" }))).children(
               `${model.clicks} ${model.mounted ? "mounted" : "server"}`
             )
       }).pipe(Component.provide(Layer.effect(Store, Effect.as(Effect.sleep("50 millis"), "ready"))))
@@ -909,7 +922,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         view: (mounted, h) =>
           mounted
             ? h.div("mounted")
-            : h.p.onMount("swap", () => Effect.succeed(Message.make({ _tag: "Mounted" }))).children("server")
+            : h.p.onMount(mountSending("Swap", Message.make({ _tag: "Mounted" }))).children("server")
       })
       const result = yield* ssr(Swap, {})
       yield* TestHost.settle
@@ -975,10 +988,9 @@ describe("HtmlServer", { concurrent: false }, () => {
         update: () => "mounted",
         head: (title) => [Head.title(title)],
         view: (_, h) =>
-          h.div.onMount(
-            "title",
-            () => Effect.succeed(Message.make({ _tag: "Mounted" }))
-          ).children(Waiting(h, { key: "w", props: {} }))
+          h.div.onMount(mountSending("Title", Message.make({ _tag: "Mounted" }))).children(
+            Waiting(h, { key: "w", props: {} })
+          )
       })
       const result = yield* ssr(Titled, {})
       expect(result.adopted).toEqual(["/Titled", "/Titled/Waiting[w]"])
@@ -1089,7 +1101,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => true,
         update: () => false,
         view: (showTitled, h) =>
-          h.div.onMount("hide", () => Effect.succeed(Message.make({ _tag: "Mounted" }))).children(
+          h.div.onMount(mountSending("Hide", Message.make({ _tag: "Mounted" }))).children(
             showTitled ? Titled(h, { key: "t", props: {} }) : h.p("gone"),
             Waiting(h, { key: "w", props: {} })
           )

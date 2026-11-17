@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Command, Component, MessageLog, Query, type Renderer, Route, Router, View } from "@effect/ui"
+import { Command, Component, MessageLog, Mount, Query, type Renderer, Route, Router, View } from "@effect/ui"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, expect, it } from "@effect/vitest"
@@ -68,7 +68,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         const add = HtmlLocator.getByRole(app, "button", { name: "Add" })
 
         for (const title of ["Buy milk", "Walk the dog", "Write docs"]) {
-          HtmlLocator.input(field, title)
+          HtmlLocator.type(field, title)
           yield* tick
           HtmlLocator.click(add)
           yield* tick
@@ -109,7 +109,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(TodoApp, {}, app)
         const field = HtmlLocator.getByRole(app, "textbox", { name: "New todo" })
-        HtmlLocator.input(field, "Ship it")
+        HtmlLocator.type(field, "Ship it")
         yield* tick
         HtmlLocator.submit(field)
         yield* tick
@@ -124,12 +124,12 @@ describe("BrowserHost", { concurrent: false }, () => {
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(TodoApp, {}, app)
         const field = HtmlLocator.getByRole(app, "textbox", { name: "New todo" }) as HTMLInputElement
-        HtmlLocator.input(field, "Short title")
+        HtmlLocator.type(field, "Short title")
         yield* tick
         expect(field.value).toBe("Short title")
 
         const tooLong = "x".repeat(maxTitle + 1)
-        HtmlLocator.input(field, tooLong)
+        HtmlLocator.type(field, tooLong)
         expect(field.value).toBe(tooLong)
         yield* tick
         expect(root.model()!.draft).toBe("Short title")
@@ -170,8 +170,8 @@ describe("BrowserHost", { concurrent: false }, () => {
         const select = HtmlLocator.getByRole(app, "combobox", { name: "Pick" }) as HTMLSelectElement
         expect(select.value).toBe("b")
 
-        HtmlLocator.input(ignored, "typed")
-        HtmlLocator.input(unhandled, "typed")
+        HtmlLocator.type(ignored, "typed")
+        HtmlLocator.type(unhandled, "typed")
         select.value = "a"
         select.dispatchEvent(new Event("change", { bubbles: true }))
         yield* tick
@@ -227,10 +227,10 @@ describe("BrowserHost", { concurrent: false }, () => {
         const app = yield* container
         yield* BrowserHost.mountEffect(TodoApp, {}, app)
         const field = HtmlLocator.getByRole(app, "textbox", { name: "New todo" }) as HTMLInputElement
-        HtmlLocator.input(field, "abcdef")
+        HtmlLocator.type(field, "abcdef")
         yield* tick
         field.setSelectionRange(2, 2)
-        HtmlLocator.input(field, "abXcdef")
+        HtmlLocator.type(field, "abXcdef")
         field.setSelectionRange(3, 3)
         yield* tick
         expect(field.value).toBe("abXcdef")
@@ -494,7 +494,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Events, {}, app)
-        HtmlLocator.keyDown(HtmlLocator.getByRole(app, "textbox", { name: "Keys" }), "Enter", { shift: true })
+        HtmlLocator.keydown(HtmlLocator.getByRole(app, "textbox", { name: "Keys" }), "Enter", { shift: true })
         yield* tick
         expect(root.model()).toEqual(["key Enter shift"])
       }).pipe(Effect.scoped))
@@ -1332,6 +1332,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       Measured: { some: Schema.Boolean },
       Mounted: { tag: Schema.String }
     })
+    const ReadTag = Mount.make("ReadTag", { args: {} }, (element: HTMLElement) => Effect.succeed(element.localName))
     const Refs = Component.define({
       name: "Refs",
       model: Schema.Array(Schema.String),
@@ -1352,7 +1353,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       view: (_, h) =>
         h.div(
           h.input.attr("aria-label", "Field").ref(Field)
-            .onMount("tag", (element) => Effect.succeed(Message.make({ _tag: "Mounted", tag: element.localName })))
+            .onMount(ReadTag().pipe(Mount.map((tag) => Message.make({ _tag: "Mounted", tag }))))
         )
     })
 
@@ -1422,7 +1423,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(app.childNodes.length).toBe(0)
         // A detached node from the old tree no longer reaches it.
         app.appendChild(field)
-        HtmlLocator.input(field, "late")
+        HtmlLocator.type(field, "late")
         yield* tick
         expect(root.model()?.draft ?? "").toBe("")
       }).pipe(Effect.scoped))
@@ -1451,7 +1452,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         const app = yield* container
         const scope = yield* Scope.make()
         yield* Layer.buildWithScope(BrowserHost.mount(TodoApp, {}, app), scope)
-        HtmlLocator.input(HtmlLocator.getByRole(app, "textbox", { name: "New todo" }), "Buy milk")
+        HtmlLocator.type(HtmlLocator.getByRole(app, "textbox", { name: "New todo" }), "Buy milk")
         yield* tick
         HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name: "Add" }))
         yield* tick

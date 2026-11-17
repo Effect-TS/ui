@@ -1,5 +1,6 @@
-import { Command, Component } from "@effect/ui"
-import { Story } from "@effect/ui/testing"
+import { Command, Component, type Query } from "@effect/ui"
+import type { Steps } from "@effect/ui/testing"
+import { Scene, Story } from "@effect/ui/testing"
 import { Data, Effect, Schema, Stream } from "effect"
 import { describe, expect, it } from "tstyche"
 import type { SearchBox, TodoItem } from "../test/fixtures/components.ts"
@@ -16,8 +17,50 @@ import {
 declare const counter: Story.Steps<typeof Counter>
 declare const todoItem: Story.Steps<typeof TodoItem>
 declare const searchBox: Story.Steps<typeof SearchBox>
+const increment = CounterMessage.make({ _tag: "Increment" })
 
 describe("Story", () => {
+  it("has no view surface: a story drives update with messages, not clicks", () => {
+    expect(counter).type.not.toHaveProperty("click")
+    expect(counter).type.not.toHaveProperty("mounted")
+  })
+
+  it("a scene drives the view: it has no send and no Model", () => {
+    const scene = Scene.start(Counter, { initial: 0 })
+    expect(scene).type.not.toHaveProperty("send")
+    expect(scene.current).type.not.toHaveProperty("model")
+  })
+
+  it("restricts receive to public messages and infers model callbacks", () => {
+    const Message = Schema.TaggedUnion({ Set: { value: Schema.Number }, Reset: {} })
+    const Receiver = Component.define({
+      name: "Receiver",
+      model: Schema.Number,
+      message: Message,
+      receives: ["Set"]
+    }).make({
+      init: () => 0,
+      update: (_model, message) => message._tag === "Set" ? message.value : 0,
+      view: (model, h) => h.text(String(model))
+    })
+    const steps: Steps.Steps<typeof Receiver> = Story.start(Receiver, {})
+    steps.receive((model) => {
+      expect(model).type.toBe<number>()
+      return { _tag: "Set", value: model + 1 }
+    })
+    expect(steps.receive).type.toBeCallableWith({ _tag: "Set", value: 1 })
+    expect(steps.receive).type.not.toBeCallableWith({ _tag: "Reset" })
+    expect(steps.receive).type.not.toBeCallableWith((_model: number) => ({ _tag: "Reset" as const }))
+    expect(counter.receive).type.not.toBeCallableWith(CounterMessage.make({ _tag: "Increment" }))
+    expect(steps.subscription).type.toBeCallableWith("tick", { _tag: "Reset" })
+    expect(steps.subscription).type.not.toBeCallableWith("tick", { _tag: "Missing" })
+    counter.send((model) => {
+      expect(model).type.toBe<{ readonly count: number }>()
+      return { _tag: "Increment" }
+    })
+    expect(counter.send).type.not.toBeCallableWith((_model: { readonly count: number }) => "bad")
+  })
+
   it("types steps by the component", () => {
     const story = Story.make(Counter, { initial: 0 }, (s) =>
       s.model((model) => {
@@ -39,23 +82,33 @@ describe("Story", () => {
     expect(Story.make).type.toBeCallableWith(
       Counter,
       { initial: 0 },
-      (s: Story.Steps<typeof Counter>) => s.click("+").click("+")
+      (s: Story.Steps<typeof Counter>) => s.send(increment).send(increment)
     )
     expect(Story.make).type.toBeCallableWith(Counter, { initial: 0 }, (s: Story.Steps<typeof Counter>) => {
-      s.click("+")
+      s.send(increment)
     })
   })
 
   it("a shared step needs no explicit generics", () => {
-    const twice = (s: Story.Steps<typeof Counter>) => s.click("+").click("+")
+    const twice = (s: Story.Steps<typeof Counter>) => s.send(increment).send(increment)
     expect(counter.pipe(twice)).type.toBe<Story.Steps<typeof Counter>>()
     expect(todoItem.pipe).type.not.toBeCallableWith(twice)
   })
 
   it("a step over any component keeps the caller's type", () => {
-    const clickPlus = <S extends Story.Steps.Any>(s: S): S => s.click("+")
-    expect(clickPlus(counter)).type.toBe<Story.Steps<typeof Counter>>()
-    expect(counter.pipe(clickPlus).current.model).type.toBe<{ readonly count: number }>()
+    const sendIncrement = <S extends Story.Steps.Any>(s: S): S => s.send(increment)
+    expect(sendIncrement(counter)).type.toBe<Story.Steps<typeof Counter>>()
+    expect(counter.pipe(sendIncrement).current.model).type.toBe<{ readonly count: number }>()
+  })
+
+  it("a step over the shared steps keeps the caller's type", () => {
+    const quiet = <S extends Steps.Steps.Any>(s: S): S => s.expectNone()
+    expect(quiet(counter)).type.toBe<Story.Steps<typeof Counter>>()
+    expect(quiet(counter).send).type.toBeCallableWith(CounterMessage.make({ _tag: "Increment" }))
+    expect(counter.pipe(quiet).current.model).type.toBe<{ readonly count: number }>()
+    counter.check((story) => {
+      expect(story.model).type.toBe<{ readonly count: number }>()
+    })
   })
 
   it("a component with no messages is a story, with its types kept", () => {
@@ -141,5 +194,17 @@ describe("Story", () => {
     expect(counter.fail).type.toBeCallableWith(matched, new SaveFailed({ reason: "disk full" }))
     expect(counter.fail).type.not.toBeCallableWith(Save, new Error("other"))
     expect(todoItem.fail).type.not.toBeCallableWith(SaveTodo, new Error("never fails"))
+  })
+})
+
+describe("Story's re-exports of the Steps types", () => {
+  it("resolve to the Steps types", () => {
+    type Read = Query.Query<{ readonly id: string }, string, never>
+    expect<Story.Pending<CounterMessage>>().type.toBe<Steps.Pending<CounterMessage>>()
+    expect<Story.AwaitedQuery>().type.toBe<Steps.AwaitedQuery>()
+    expect<Story.QueryInfo>().type.toBe<Steps.QueryInfo>()
+    expect<Story.KeyedLoad<Read>>().type.toBe<Steps.KeyedLoad<Read>>()
+    expect<Story.Target>().type.toBe<Steps.Target>()
+    expect<Story.StreamTarget>().type.toBe<Steps.StreamTarget>()
   })
 })

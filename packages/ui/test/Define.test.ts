@@ -53,12 +53,7 @@ describe("Component.define", () => {
       s.send(Message.make({ _tag: "Step" }))
         .model((model) => assert.deepStrictEqual(model, { n: 4, seen: ["Step", "Step"] }))
         .expectExact(Log.make({ n: 2 }), Log.make({ n: 4 }))
-        .emitted((emitted) =>
-          assert.deepStrictEqual(emitted, [
-            Events.make({ _tag: "Stepped", n: 2 }),
-            Events.make({ _tag: "Stepped", n: 4 })
-          ])
-        )
+        .emitted(Events.make({ _tag: "Stepped", n: 2 }), Events.make({ _tag: "Stepped", n: 4 }))
         .resolve(Log.make({ n: 2 }), Message.make({ _tag: "Logged", n: 2 }))
         .resolve(Log.make({ n: 4 }), Message.make({ _tag: "Logged", n: 4 })))
   })
@@ -66,6 +61,7 @@ describe("Component.define", () => {
   it("a record update dispatches by _tag", () => {
     Story.make(Counter, { by: 1 }, (s) =>
       s.send(Message.make({ _tag: "Step" }))
+        .emitted(Events.make({ _tag: "Stepped", n: 1 }), Events.make({ _tag: "Stepped", n: 2 }))
         .resolve(Log.make({ n: 1 }), Message.make({ _tag: "Logged", n: 1 }))
         .resolve(Log.make({ n: 2 }), Message.make({ _tag: "Logged", n: 2 }))
         .model((model) => assert.deepStrictEqual(model.seen, ["Step", "Step", "logged 1", "logged 2"])))
@@ -75,6 +71,7 @@ describe("Component.define", () => {
     Story.make(ByHand, { by: 1 }, (s) =>
       s.send(Message.make({ _tag: "Step" }))
         .model((model) => assert.deepStrictEqual(model.seen, ["Logged"]))
+        .emitted(Events.make({ _tag: "Stepped", n: 1 }))
         .resolve(Log.make({ n: 1 }), Message.make({ _tag: "Logged", n: 1 })))
   })
 })

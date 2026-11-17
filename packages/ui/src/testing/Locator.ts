@@ -34,7 +34,7 @@
  * **Details**
  *
  * `props` holds the typed values set with `.prop`, such as a field's
- * `value` and `checked`, which aren't attributes. A story's view value and a
+ * `value` and `checked`, which aren't attributes. A scene's view value and a
  * `TestHost` tree both have them, and a vocabulary's readers, such as
  * `HtmlLocator.value`, read them.
  *
@@ -223,8 +223,8 @@ export interface Firable extends Node {
  * **Details**
  *
  * Payloads are plain data shaped by the vocabulary, such as `{ value }` for
- * `input`. A story's view value has no host, so story tests use the
- * `fire` and `click` steps of `Story.Steps` instead.
+ * `input`. A scene's view value has no host, so scene tests use the
+ * `fire` and `click` steps of `Scene.Steps` instead.
  *
  * @stability experimental
  * @category events

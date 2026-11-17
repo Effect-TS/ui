@@ -1,5 +1,5 @@
 import { Command, Component, MessageLog, Query } from "@effect/ui"
-import { Locator, Story, TestHost } from "@effect/ui/testing"
+import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Layer, Option, Schema } from "effect"
 import type { Duration } from "effect"
@@ -837,8 +837,6 @@ describe("Command.afterRefetch", () => {
             assert.deepStrictEqual(story.pending.map((entry) => [entry.status, entry.awaiting]), [
               ["awaiting", [{ name: "user", args: { id: "1" } }]]
             ])
-            // h.isRunning stays true through the wait.
-            assert.isDefined(story.query(Locator.text("saving")))
             assert.deepStrictEqual(story.model.done, [])
             app.order.length = 0
           })
@@ -851,6 +849,15 @@ describe("Command.afterRefetch", () => {
             assert.deepStrictEqual(story.model.done, ["Bob"])
           })
           .expectNone())
+      // h.isRunning stays true through the wait.
+      Scene.make(app.Card, { id: "1", tag: "a" }, (s) =>
+        s
+          .loaded("user", ann)
+          .click(Locator.tag("p"))
+          .resolve(app.RenameUser, "Bob")
+          .expect(Locator.text("saving")).toExist()
+          .loaded("user", { id: "1", name: "Bob" })
+          .expect(Locator.tag("p")).toHaveText("a=Bob [Bob];"))
     })
 
     it("an empty set sends at once, fail sends at once, and waitExpired ends a wait by budget", () => {
@@ -867,6 +874,7 @@ describe("Command.afterRefetch", () => {
       const unwatched = makeApp({ invalidates: "unwatched" })
       Story.make(unwatched.Card, { id: "1", tag: "a" }, (s) =>
         s
+          .loaded("user", ann)
           .send(unwatched.CardMessage.make({ _tag: "Rename", name: "Bob" }))
           .resolve(unwatched.RenameUser, "Bob")
           .model((model) => assert.deepStrictEqual(model.done, ["Bob"])))
@@ -919,6 +927,7 @@ describe("Command.afterRefetch", () => {
     it("loaded on a query that was cold when a Command was issued doesn't throw: its patch never registered", () => {
       Story.make(app.Card, { id: "1", tag: "a" }, (s) =>
         s
+          .keepPending("user")
           .send(app.CardMessage.make({ _tag: "Rename", name: "Bob" }))
           .loaded("user", ann)
           .resolve(app.RenameUser, "Bob")
