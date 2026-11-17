@@ -183,3 +183,23 @@ export const checkAuthorRefs = (path: string, written: ReadonlyArray<ChildPaths>
     }
   }
 }
+
+/**
+ * Throws when two of `placing`, the paths of one author's view and of each
+ * closure it gave a headless child, place one of its slots between them. Each
+ * tree's own are checked as it renders. Content the author passes to a child is
+ * left out: its view counted the slots it forwards there.
+ *
+ * @internal
+ */
+export const checkAuthorPlacements = (path: string, placing: ReadonlyArray<ChildPaths>): void => {
+  if (placing.length < 2) return
+  const taken = new Set<string>()
+  for (const paths of placing) {
+    if (paths.placed === undefined) continue
+    for (const name of paths.placed) {
+      if (taken.has(name)) throw new Error(`${path} places its slot ${name} twice, in the view it gives ${paths.path}`)
+      taken.add(name)
+    }
+  }
+}

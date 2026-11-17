@@ -89,3 +89,76 @@ describe("View queries", () => {
     assert.deepStrictEqual(tags, ["div", "a", "Child", "b", "c", "b", "d"])
   })
 })
+
+describe("headless closures in slot content", () => {
+  const Leaf = Component.define({
+    name: "Leaf",
+    model: Schema.Number,
+    message: Schema.Never,
+    events: Schema.Literal("hi"),
+    elements: Html
+  }).make({ init: () => 5, update: (n) => n, view: (n, h) => h.em(String(n)) })
+  const Headless = Component.define({ name: "Headless", model: Schema.Null, message: Schema.Never, elements: Html })
+    .make({ init: () => null, update: (model) => model, parts: () => ({}) })
+
+  it("childEmit finds a child a headless closure renders in content the story's component passes", () => {
+    const Parent = Component.define({
+      name: "Parent",
+      model: Schema.Number,
+      message: Schema.Literal("hi"),
+      elements: Html
+    })
+      .make({
+        init: () => 0,
+        update: (n) => n + 1,
+        view: (_, h) =>
+          Panel(h, {
+            key: "p",
+            slots: { body: Headless(h, { key: "h", view: () => Leaf(h, { key: "leaf", onEmit: () => "hi" }) }) }
+          })
+      })
+    const story = Story.make(Parent, {}, (s) => s.childEmit("leaf", "hi"))
+    assert.strictEqual(story.model, 1)
+  })
+
+  it("Story.children finds a child passed through a story's slots", () => {
+    const story = Story.make(Panel, {}, { slots: (h) => ({ body: Leaf(h, { key: "leaf" }) }) }, () => {})
+    assert.strictEqual(Story.children(story.view(), Leaf).length, 1)
+  })
+
+  it("refs in content a parent passed don't clash with the receiver's own", () => {
+    const Receiver = Component.define({
+      name: "Receiver",
+      model: Schema.Null,
+      message: Schema.Never,
+      elements: Html,
+      slots: ["body"]
+    }).make({
+      init: () => null,
+      update: (model) => model,
+      view: (_, h) => h.div(Leaf(h, { ref: Leaf.ref("N") }), h.slots.body)
+    })
+    const story = Story.make(Receiver, {}, {
+      slots: (h) => ({ body: Headless(h, { key: "ext", view: () => Leaf(h, { ref: Leaf.ref("N") }) }) })
+    }, () => {})
+    assert.strictEqual(Story.children(story.view(), Leaf).length, 2)
+  })
+
+  it("a slot placed in the view and in a headless child's closure fails the story, as it fails the receiver", () => {
+    const Twice = Component.define({
+      name: "Twice",
+      model: Schema.Null,
+      message: Schema.Never,
+      elements: Html,
+      slots: ["body"]
+    }).make({
+      init: () => null,
+      update: (model) => model,
+      view: (_, h) => h.div(h.slots.body, Headless(h, { key: "h", view: () => h.slots.body }))
+    })
+    assert.throws(
+      () => Story.make(Twice, {}, { slots: () => ({ body: "body" }) }, () => {}).view(),
+      /\/Twice places its slot body twice/
+    )
+  })
+})

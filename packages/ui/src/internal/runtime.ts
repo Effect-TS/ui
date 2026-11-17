@@ -34,7 +34,15 @@ import * as View from "../View.ts"
 import * as Executor from "./executor.ts"
 import * as loaders from "./loaders.ts"
 import { isNoop } from "./noop.ts"
-import { checkAuthorRefs, checkChildPaths, checkFallbackPaths, type ChildPaths, segment, slotSegment } from "./paths.ts"
+import {
+  checkAuthorPlacements,
+  checkAuthorRefs,
+  checkChildPaths,
+  checkFallbackPaths,
+  type ChildPaths,
+  segment,
+  slotSegment
+} from "./paths.ts"
 import * as schedule from "./schedule.ts"
 import { holdsRedacted } from "./schemaRedact.ts"
 import { scopeAddFinalizerUnsafe } from "./scope.ts"
@@ -3411,9 +3419,11 @@ const setup = (
     refChecks.delete(author)
     if (author.closed) return
     const written: Array<ChildPaths> = author.childPaths === undefined ? [] : [author.childPaths]
-    closurePaths(author, written)
+    const placing: Array<ChildPaths> = author.childPaths === undefined ? [] : [author.childPaths]
+    closurePaths(author, written, placing)
     try {
       checkAuthorRefs(author.path, written)
+      checkAuthorPlacements(author.path, placing)
     } catch (error) {
       failInstance(author, Cause.die(error), "view")
     }
@@ -3423,19 +3433,22 @@ const setup = (
    * children and the content its children place, at any depth. Only what's still in the tree counts,
    * since a removed child's Scope can close later.
    */
-  const closurePaths = (inst: Instance, out: Array<ChildPaths>) => {
+  const closurePaths = (inst: Instance, out: Array<ChildPaths>, placing: Array<ChildPaths>) => {
     for (const child of inst.children) {
       if (child.closed) continue
       if (child.owner === undefined) {
         firstInOutlets(child, (placed) => {
           if (placed.childPaths !== undefined) out.push(placed.childPaths)
-          closurePaths(placed, out)
+          closurePaths(placed, out, placing)
           return undefined
         })
         continue
       }
-      if (child.childPaths !== undefined) out.push(child.childPaths)
-      closurePaths(child, out)
+      if (child.childPaths !== undefined) {
+        out.push(child.childPaths)
+        placing.push(child.childPaths)
+      }
+      closurePaths(child, out, placing)
     }
   }
   const checkPendingRefs = () => {
@@ -3553,6 +3566,7 @@ const setup = (
       contentFailed(out, error)
       out.rendered = [{ _tag: "Text", v: emptyText, node: host.createText("") }]
     }
+    failClash(out)
     if (inst.children === noChildren) inst.children = new Set()
     inst.children.add(out)
     return { _tag: "Outlet", v: view, inst: out }
@@ -3632,12 +3646,20 @@ const setup = (
    * content that fails one shows nothing, and fails its author.
    */
   const checkedViews = (out: Instance, view: View.Outlet): Array<View.Node<any, any>> => {
-    const views = outletViews(out)
+    let views = outletViews(out)
     try {
-      if (view.noText !== undefined && views.some((node) => node._tag === "Text" && node !== emptyText)) {
-        throw new Error(out.path + ": " + view.noText)
+      if (view.noText !== undefined) {
+        if (views.some((node) => node._tag === "Text" && node !== emptyText)) {
+          throw new Error(out.path + ": " + view.noText)
+        }
+        // A forwarded slot sits where this one does, so its content can't hold text either.
+        const noText = view.noText
+        views = views.map((node) =>
+          node._tag === "Outlet" && node.noText !== noText ? { _tag: "Outlet", name: node.name, noText } : node
+        )
       }
       out.childPaths = checkChildPaths(out.path, contentNode(views))
+      out.clash = undefined
       checkKeys(out, views)
       // The author's refs are checked once its other trees are current too.
       refChecks.add(out.author)
@@ -3672,6 +3694,15 @@ const setup = (
     } catch (error) {
       contentFailed(out, error)
     }
+    failClash(out)
+  }
+
+  /** A fallback in the content that clashed with its paths fails the content's author, as `throwClash` fails a view's. */
+  const failClash = (out: Instance) => {
+    const clash = out.clash
+    if (clash === undefined) return
+    out.clash = undefined
+    contentFailed(out, clash)
   }
 
   /** Re-renders the placed outlets whose content the parent changed. */
@@ -4656,8 +4687,11 @@ const setup = (
       // can come before the drain gets to them.
       if (inst.keyed !== undefined && inst.keyed.size > 0) drainKeyed(inst)
       if (inst.closed || inst.failure !== undefined || inst.waiting) return
-      const encoded = stateCodecOf(inst.component).encode(inst.model, inst.loaderState)
-      if (Option.isSome(encoded)) out[inst.path] = encoded.value
+      // An outlet has no state of its own, only the children of the content it places.
+      if (inst.component !== outletComponent) {
+        const encoded = stateCodecOf(inst.component).encode(inst.model, inst.loaderState)
+        if (Option.isSome(encoded)) out[inst.path] = encoded.value
+      }
       for (const child of inst.children) visit(child)
     }
     visit(root)

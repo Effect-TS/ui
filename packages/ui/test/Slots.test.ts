@@ -1,4 +1,4 @@
-import { Command, Component, Feature, type MessageLog, Renderer } from "@effect/ui"
+import { Command, Component, Feature, type MessageLog, Renderer, Route, Router } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Query, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -432,4 +432,156 @@ describe("slots", () => {
         assert.deepStrictEqual(failures(root), ["/Top/Writer[w] view"])
       })))
   })
+})
+
+describe("checks on content", () => {
+  const Frame = Component.define({
+    name: "Frame",
+    model: Schema.Null,
+    message: Schema.Never,
+    elements: Html,
+    slots: ["body"]
+  })
+  const Leaf = Component.define({ name: "Leaf", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+    init: () => null,
+    update: (model) => model,
+    view: (_, h) => h.p("leaf")
+  })
+  const Broken = Component.define({ name: "Broken", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+    init: () => {
+      throw new Error("broke")
+    },
+    update: (model) => model,
+    view: (_, h) => h.p("broken")
+  })
+  const Headless = Component.define({ name: "Headless", model: Schema.Null, message: Schema.Never, elements: Html })
+    .make({ init: () => null, update: (model) => model, parts: () => ({}) })
+  const holding = (Writer: Component.Mountable<{}, never>) =>
+    Component.define({ name: "Top", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+      init: () => null,
+      update: (model) => model,
+      view: (_, h) => Writer(h, { key: "w", fallback: () => h.p("writer down") })
+    })
+
+  it.effect("a fallback in content that clashes with a sibling's path fails the content's author", () =>
+    provideHost(Effect.gen(function*() {
+      const Body = Frame.make({ init: () => null, update: (model) => model, view: (_, h) => h.div(h.slots.body) })
+      const Writer = Component.define({ name: "Writer", model: Schema.Null, message: Schema.Never, elements: Html })
+        .make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) =>
+            Body(h, {
+              key: "f",
+              slots: { body: [Leaf(h, { key: "a" }), Broken(h, { key: "b", fallback: () => Leaf(h, { key: "a" }) })] }
+            })
+        })
+      const root = yield* TestHost.mount(holding(Writer), {})
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "writer down")
+      assert.include(failures(root), "/Top/Writer[w] view")
+    })))
+
+  it.effect("a forwarded slot keeps the text restriction of where it's placed, and fails the text's author", () =>
+    provideHost(Effect.gen(function*() {
+      const Inner = Component.define({
+        name: "Inner",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Tiny,
+        slots: ["inner"]
+      }).make({ init: () => null, update: (model) => model, view: (_, h) => h.el("box", h.slots.inner) })
+      const Outer = Component.define({
+        name: "Outer",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Tiny,
+        slots: ["body"]
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => Inner(h, { key: "i", slots: { inner: h.slots.body } })
+      })
+      const Writer = Component.define({ name: "Writer", model: Schema.Null, message: Schema.Never, elements: Tiny })
+        .make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => Outer(h, { key: "o", slots: { body: "loose" } })
+        })
+      const Top = Component.define({ name: "Top", model: Schema.Null, message: Schema.Never, elements: Tiny }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => Writer(h, { key: "w", fallback: () => h.label("writer down") })
+      })
+      const root = yield* TestHost.mount(Top, {})
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "writer down")
+      assert.deepStrictEqual(failures(root), ["/Top/Writer[w] view"])
+    })))
+
+  it.effect("placing a slot in the view and in a headless child's closure fails the receiver", () =>
+    provideHost(Effect.gen(function*() {
+      const Twice = Frame.make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => h.div(h.slots.body, Headless(h, { key: "h", view: () => h.slots.body }))
+      })
+      const Writer = Component.define({ name: "Writer", model: Schema.Null, message: Schema.Never, elements: Html })
+        .make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => Twice(h, { key: "f", slots: { body: "body" }, fallback: () => h.p("child down") })
+        })
+      const root = yield* TestHost.mount(Writer, {})
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "child down")
+      assert.deepStrictEqual(failures(root), ["/Writer/Frame[f] view"])
+    })))
+
+  it.effect("a slot placed once by the view and once in content it forwards through a headless closure is fine", () =>
+    provideHost(Effect.gen(function*() {
+      const Inner = Frame.make({ init: () => null, update: (model) => model, view: (_, h) => h.div(h.slots.body) })
+      const Forward = Component.define({
+        name: "Forward",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html,
+        slots: ["body", "aside"]
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) =>
+          h.div(
+            h.slots.aside,
+            Inner(h, { key: "i", slots: { body: Headless(h, { key: "h", view: () => h.slots.body }) } })
+          )
+      })
+      const Writer = Component.define({ name: "Writer", model: Schema.Null, message: Schema.Never, elements: Html })
+        .make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => Forward(h, { key: "f", slots: { body: "body", aside: "aside" } })
+        })
+      const root = yield* TestHost.mount(Writer, {})
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "asidebody")
+      assert.deepStrictEqual(failures(root), [])
+    })))
+
+  it.effect("navigating away from a view with a placed slot succeeds", () =>
+    Effect.gen(function*() {
+      const Body = Frame.make({ init: () => null, update: (model) => model, view: (_, h) => h.div(h.slots.body) })
+      const Page = Component.define({ name: "Page", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => Body(h, { key: "f", slots: { body: Leaf(h, { key: "leaf" }) } })
+      })
+      yield* TestHost.mount(Page, {})
+      yield* TestHost.settle
+      const router = yield* Router.Router
+      assert.strictEqual(yield* router.navigate("/next"), "navigated")
+    }).pipe(
+      Effect.provide(Router.memory({ routes: Route.union({ Home: Route.make("/"), Next: Route.make("/next") }) })),
+      provideHost
+    ))
 })

@@ -705,8 +705,18 @@ export interface Mountable<in out Props, out Events, out R = never, in Rcv = nev
    * `Component.Any`, takes `props` even when it needs none.
    */
   // The type parameters don't depend on the component, so a union of
-  // components without slots is callable.
-  <Msg, RF = never, const SC extends { readonly [K in Sl]?: View.Input<NoInfer<Msg>, any> } = {}>(
+  // components without slots is callable. With `Msg` given and `SC` not,
+  // `SC` can't be inferred: its default takes content that needs no
+  // services, as `RF`'s takes such a fallback.
+  <
+    Msg,
+    RF = never,
+    // Any names, so an undeclared one is inferred and `SlotOptions` rejects it: a constraint that
+    // failed would stand in for `SC`, and accept it.
+    const SC extends { readonly [K in string]?: View.Input<NoInfer<Msg>, any> } = {
+      readonly [K in Sl]?: View.Input<NoInfer<Msg>, never>
+    }
+  >(
     h: View.Helper<Msg, unknown>,
     options:
       & View.Child.Options<Props, Events, NoInfer<Msg>, Rcv>
@@ -721,7 +731,7 @@ export interface Mountable<in out Props, out Events, out R = never, in Rcv = nev
       // its options must fit every component's, including one whose props
       // are required.
       & (0 extends 1 & Props ? { readonly props: Props } : {})
-  ): View.Child<Msg, R | NoInfer<RF> | View.Requirements<SC[keyof SC]>>
+  ): View.Child<Msg, R | NoInfer<RF> | SlotRequirements<SC>>
   readonly [TypeId]: Mountable.Variance<Props, Events, R, Rcv, Sl>
   /** What `define` returned. `provide` keeps it, so `definition.name` is the name the component was defined with. */
   readonly definition: Definition.Any
@@ -951,6 +961,8 @@ export interface Headless<in out Props, out Events, out Parts, out R = never, in
          * whenever the parent or the child renders.
          */
         readonly view: (parts: Parts) => View.Content<NoInfer<Msg>, RV>
+        /** A headless child has no slots: its `view` is the parent's, and shows what the parent would pass. */
+        readonly slots?: never
       }
   ): View.Child<Msg, R | RV | NoInfer<RF>>
   readonly [HeadlessTypeId]: {
@@ -1151,8 +1163,13 @@ export type SlotHelpers<Sl extends string> = [Sl] extends [never] ? {}
   : { readonly slots: { readonly [K in Sl]: View.Outlet } }
 
 // The `slots` a call takes: none for a component without slots, and only the declared names otherwise.
+// A conditional map's names are every branch's, so a branch can't pass a name the others don't.
 type SlotOptions<Sl extends string, SC> = [Sl] extends [never] ? { readonly slots?: never }
-  : { readonly slots?: SC & { readonly [K in Exclude<keyof SC, Sl>]: never } }
+  : { readonly slots?: SC & { readonly [K in Exclude<SlotNames<SC>, Sl>]?: never } }
+
+// Distributes over a conditional map, whose `keyof` holds only the names every branch has.
+type SlotNames<SC> = SC extends unknown ? keyof SC : never
+type SlotRequirements<SC> = SC extends unknown ? View.Requirements<SC[keyof SC]> : never
 
 /**
  * Any component.

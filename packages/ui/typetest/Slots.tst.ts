@@ -1,4 +1,4 @@
-import { Component, type View } from "@effect/ui"
+import { Component, Feature, type View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Context, Effect, Layer, Schema } from "effect"
 import { describe, expect, it } from "tstyche"
@@ -34,6 +34,10 @@ type PageMsg = typeof PageMsg.Type
 const OtherMsg = Schema.TaggedUnion({ Other: {} })
 declare const h: View.Helper<PageMsg, unknown> & View.Tags<Html.Elements, PageMsg>
 declare const other: View.Helper<typeof OtherMsg.Type, unknown> & View.Tags<Html.Elements, typeof OtherMsg.Type>
+
+declare const either: { readonly body: View.Child<PageMsg, Clock> } | { readonly footer: string }
+declare const stray: { readonly body: string } | { readonly header: string }
+declare const undeclared: { readonly header: string }
 
 describe("slots", () => {
   it("types h.slots in the view, fragments and Component.Helper", () => {
@@ -104,6 +108,32 @@ describe("slots", () => {
   it("keeps a slotted component a Component.Any", () => {
     expect<typeof Panel>().type.toBeAssignableTo<Component.Any>()
     expect<typeof Panel>().type.not.toBeAssignableTo<Component.Mountable<{}, never, never, never, "body" | "header">>()
+  })
+
+  it("keeps every branch's requirements, and checks every branch's names, in a conditional map", () => {
+    expect(Panel(h, { key: "p", slots: either })).type.toBe<View.Child<PageMsg, Clock>>()
+    expect(Panel).type.not.toBeCallableWith(h, { key: "p", slots: stray })
+    expect(Panel).type.not.toBeCallableWith(h, { key: "p", slots: undeclared })
+  })
+
+  it("checks names and messages with the parent's message given, and takes no content that needs services", () => {
+    expect(Panel<PageMsg>(h, { key: "p", slots: { body: h.p("x") } })).type.toBe<View.Child<PageMsg, never>>()
+    expect(Panel<PageMsg>).type.not.toBeCallableWith(h, { key: "p", slots: { header: "x" } })
+    expect(Panel<PageMsg>).type.not.toBeCallableWith(h, {
+      key: "p",
+      slots: { body: other.button.onClick(OtherMsg.make({ _tag: "Other" })) }
+    })
+    // Its requirements can't be inferred once a type argument is given, so they aren't dropped.
+    expect(Panel<PageMsg>).type.not.toBeCallableWith(h, { key: "p", slots: { body: Ticker(h, { key: "t" }) } })
+  })
+
+  it("rejects slots on headless and feature calls, from a variable too", () => {
+    const Headless = Component.define({ name: "Headless", model: Schema.Null, message: Schema.Never, elements: Html })
+      .make({ init: () => null, update: (model) => model, parts: () => ({}) })
+    class Badge extends Feature.Service<Badge>()("typetest/slots/Badge", { props: Schema.Struct({}) }) {}
+    const options = { key: "p", slots: { body: "x" }, view: () => h.p("x"), fallback: () => h.p("wait") }
+    expect(Headless).type.not.toBeCallableWith(h, options)
+    expect(Badge.render).type.not.toBeCallableWith(h, options)
   })
 
   it("rejects parts on a definition with slots", () => {

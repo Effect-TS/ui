@@ -120,6 +120,8 @@ export interface Service<in out Self, in out Props, in out Events, in out Receiv
       readonly fallback: (
         result: AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>
       ) => View.Content<NoInfer<Msg>, RF>
+      /** A feature takes no slots: its implementation may not declare them, and its parent can't see. */
+      readonly slots?: never
     }
   ): View.Child<Msg, Self | NoInfer<RF>>
   /**

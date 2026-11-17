@@ -70,7 +70,14 @@ import type * as Component from "../Component.ts"
 import type * as Head from "../Head.ts"
 import * as loaders from "../internal/loaders.ts"
 import { isNoop } from "../internal/noop.ts"
-import { checkAuthorRefs, checkChildPaths, checkFallbackPaths, segment, slotSegment } from "../internal/paths.ts"
+import {
+  checkAuthorPlacements,
+  checkAuthorRefs,
+  checkChildPaths,
+  checkFallbackPaths,
+  segment,
+  slotSegment
+} from "../internal/paths.ts"
 import * as schedule from "../internal/schedule.ts"
 import * as Loader from "../Loader.ts"
 import * as MessageLog from "../MessageLog.ts"
@@ -578,15 +585,18 @@ const expandRoot = <Msg>(
   // As the runtime does: two children at one path fail the view or the closure that holds them, and
   // so do two children with one ref key across the view and the closures it gives its headless children.
   const written = [checkChildPaths("/" + name, view)]
+  // The view and the closures it gives its headless children: two of them can't place one slot.
+  const placing = [written[0]!]
   // Content is shown under `children`, where a query looks, at the path the runtime gives it.
-  // `own`: the story's component wrote it, so its refs count with the component's.
+  // `own`: the story's component wrote it, so its refs count with the component's. Content the story
+  // passed for its slots was written by a parent, and so were the closures in it.
   const content = (input: View.Input<any, any>, path: string, depth: number, own: boolean) => {
     const nodes = View.children([input])
     const paths = checkChildPaths(path, contentNode(nodes))
     if (own) written.push(paths)
-    return nodes.map((child) => expand(child, path, depth))
+    return nodes.map((child) => expand(child, path, depth, own))
   }
-  const expand = (node: View.Node<any, any>, path: string, depth: number): View.Node<any, any> => {
+  const expand = (node: View.Node<any, any>, path: string, depth: number, own: boolean): View.Node<any, any> => {
     switch (node._tag) {
       case "Text":
         return node
@@ -602,7 +612,7 @@ const expandRoot = <Msg>(
       case "Element": {
         let changed = false
         const children = node.children.map((child) => {
-          const next = expand(child, path, depth)
+          const next = expand(child, path, depth, own)
           if (next !== child) changed = true
           return next
         })
@@ -615,7 +625,7 @@ const expandRoot = <Msg>(
           const childPath = path + "/" + segment(node)
           const shown: Array<View.Node<any, any>> = []
           for (const slot in node.slots) {
-            shown.push(...content(node.slots[slot], childPath + "/" + slotSegment(slot), depth + 1, true))
+            shown.push(...content(node.slots[slot], childPath + "/" + slotSegment(slot), depth + 1, own))
           }
           return { ...node, children: shown } as View.Node<any, any>
         }
@@ -625,13 +635,18 @@ const expandRoot = <Msg>(
         const model = given?.has(node.key) ? given.get(node.key) : component.init(node.props).model
         const parts = component.parts(model, node.props, { owner: { path: childPath, depth: depth + 1 } })
         const tree = View.toNode(node.view(parts))
-        written.push(checkChildPaths(childPath, tree))
-        return expand(tree, childPath, depth + 1)
+        const paths = checkChildPaths(childPath, tree)
+        if (own) {
+          written.push(paths)
+          placing.push(paths)
+        }
+        return expand(tree, childPath, depth + 1, own)
       }
     }
   }
-  const expanded = expand(view, "/" + name, 0)
+  const expanded = expand(view, "/" + name, 0, true)
   checkAuthorRefs("/" + name, written)
+  checkAuthorPlacements("/" + name, placing)
   if (replaced.length > 0) expandedChildren.set(expanded, replaced)
   return expanded
 }
@@ -1778,9 +1793,25 @@ export const children = <Msg>(
   view: View.Node<Msg, any>,
   component?: Component.Any | { readonly key: string }
 ): ReadonlyArray<View.Child<Msg, any>> =>
-  [...(expandedChildren.get(view) ?? []), ...View.nodes(view)].filter((node): node is View.Child<Msg, any> =>
+  [...(expandedChildren.get(view) ?? []), ...shownNodes(view)].filter((node): node is View.Child<Msg, any> =>
     node._tag === "Child" && (component === undefined || node.component === component)
   )
+
+/**
+ * `node` and the nodes below it, as a story shows them: the content it expanded under a child or an
+ * outlet, or, in a view it didn't expand, what a child's slots were passed.
+ */
+const shownNodes = function*(node: View.Node<any, any>): Generator<View.Node<any, any>> {
+  yield node
+  const shown = (node as { readonly children?: ReadonlyArray<View.Node<any, any>> }).children
+  if (shown !== undefined) {
+    for (const child of shown) yield* shownNodes(child)
+  } else if (node._tag === "Child" && node.slots !== undefined) {
+    for (const name in node.slots) {
+      for (const child of View.children([node.slots[name]])) yield* shownNodes(child)
+    }
+  }
+}
 
 /**
  * A headless component with `view` as its consumer, as a component a story
