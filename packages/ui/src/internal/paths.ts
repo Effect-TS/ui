@@ -27,6 +27,14 @@ export const childName = (component: Component.Any | Feature.Any): string =>
 export const segment = (view: View.Child<any, any>): string =>
   escapeName(childName(view.component)) + "[" + escapeKey(view.key) + "]"
 
+/**
+ * The path segment of a placed slot: its name in brackets, escaped as a key is. No child's segment
+ * starts with a bracket, since a component's name escapes one.
+ *
+ * @internal
+ */
+export const slotSegment = (name: string): string => "[" + escapeKey(name) + "]"
+
 // Most names and keys need no escaping, so the regular expressions run only for those that do.
 const escapeName = (name: string): string =>
   name.includes("%") || name.includes("[") ? name.replace(/[%[]/g, escapeChar) : name
@@ -51,6 +59,8 @@ export interface ChildPaths {
    */
   paths: Map<string, Map<string, View.Child<any, any>>> | undefined
   refs: Map<string, View.Child<any, any>> | undefined
+  /** The slots the view places, its own outlets and those it forwards to its children. */
+  placed: Set<string> | undefined
 }
 
 const failure = (path: string, what: string): never => {
@@ -67,8 +77,22 @@ const failure = (path: string, what: string): never => {
  * @internal
  */
 export const checkChildPaths = (path: string, tree: View.Node<any, any>): ChildPaths => {
-  const paths: ChildPaths = { path, paths: undefined, refs: undefined }
+  const paths: ChildPaths = { path, paths: undefined, refs: undefined, placed: undefined }
   visit(paths, tree, undefined, "")
+  return paths
+}
+
+/**
+ * `checkChildPaths` for what a parent passed for a slot: a list of nodes, at the path of the outlet
+ * that places them. The slots the content forwards aren't kept, since the tree that passed the content
+ * counted them.
+ *
+ * @internal
+ */
+export const checkContentPaths = (path: string, nodes: ReadonlyArray<View.Node<any, any>>): ChildPaths => {
+  const paths: ChildPaths = { path, paths: undefined, refs: undefined, placed: undefined }
+  for (const node of nodes) visit(paths, node, undefined, "")
+  paths.placed = undefined
   return paths
 }
 
@@ -90,7 +114,9 @@ const visit = (
     for (let index = 0; index < children.length; index++) {
       const child = children[index]!
       // Text and an element with no children hold no child: most of a view, passed over without a call.
-      if (child._tag === "Child" || (child._tag === "Element" && child.children.length > 0)) {
+      if (
+        child._tag === "Child" || child._tag === "Outlet" || (child._tag === "Element" && child.children.length > 0)
+      ) {
         visit(paths, child, replaced, where)
       }
     }
@@ -109,6 +135,30 @@ const visit = (
       if (refHolder !== undefined && refHolder !== replaced) failure(paths.path, `with the ref ${ref.key}${where}`)
       refs.set(ref.key, node)
     }
+    if (node.slots !== undefined) { for (const name in node.slots) visitPlaced(paths, node.slots[name]) }
+  } else if (node._tag === "Outlet") {
+    place(paths, node.name)
+  }
+}
+
+const place = (paths: ChildPaths, name: string): void => {
+  const placed = paths.placed ??= new Set()
+  if (placed.has(name)) throw new Error(`${paths.path} places its slot ${name} twice`)
+  placed.add(name)
+}
+
+/** Counts the outlets in what a view passes to a child's slot: placing them there forwards them. */
+const visitPlaced = (paths: ChildPaths, input: unknown): void => {
+  if (input === null || typeof input !== "object") return
+  if (Array.isArray(input)) {
+    for (const item of input) visitPlaced(paths, item)
+    return
+  }
+  const node = input as View.Node<any, any>
+  if (node._tag === "Outlet") place(paths, node.name)
+  else if (node._tag === "Element") { for (const child of node.children) visitPlaced(paths, child) }
+  else if (node._tag === "Child" && node.slots !== undefined) {
+    for (const name in node.slots) visitPlaced(paths, node.slots[name])
   }
 }
 
@@ -130,8 +180,9 @@ export const checkFallbackPaths = (
 }
 
 /**
- * Throws when two of `written`, the paths of one author's view and of each
- * closure it gave a headless child, hold children with refs of one key. The
+ * Throws when two of `written`, the paths of one author's view, of each
+ * closure it gave a headless child and of the content it passed for a child's
+ * slots, hold children with refs of one key. The
  * author wrote all of them, and a send finds a child by its ref's key alone,
  * across all of them. One view's own refs are checked as it renders.
  *
@@ -144,6 +195,24 @@ export const checkAuthorRefs = (path: string, written: ReadonlyArray<ChildPaths>
     for (const key of paths.refs.keys()) {
       if (taken.has(key)) failure(path, `with the ref ${key}, in the view it gives ${paths.path}`)
       taken.add(key)
+    }
+  }
+}
+
+/**
+ * Throws when two of `written`, as `checkAuthorRefs` takes them, place one of
+ * the author's slots between them. Each tree's own are checked as it renders.
+ *
+ * @internal
+ */
+export const checkAuthorPlacements = (path: string, written: ReadonlyArray<ChildPaths>): void => {
+  if (written.length < 2) return
+  const taken = new Set<string>()
+  for (const paths of written) {
+    if (paths.placed === undefined) continue
+    for (const name of paths.placed) {
+      if (taken.has(name)) throw new Error(`${path} places its slot ${name} twice, in the view it gives ${paths.path}`)
+      taken.add(name)
     }
   }
 }

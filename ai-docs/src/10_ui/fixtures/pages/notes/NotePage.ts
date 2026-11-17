@@ -1,6 +1,7 @@
 import { Component, Head } from "@effect/ui"
 import { Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
+import { Collapsible } from "../../kit/Collapsible.ts"
 import { ActivityLog } from "../../notes/components/ActivityLog.ts"
 import { NoteActivity } from "../../notes/components/NoteActivity.ts"
 import { NoteEditor } from "../../notes/components/NoteEditor.ts"
@@ -57,21 +58,37 @@ export const NotePageNoDeps = Component.define({
       onFailure: () => h.p("This note doesn't exist."),
       onSuccess: ({ value: note }) =>
         h.article(
-          h.button.attr("type", "button").onClick(NotePageMessage.make({ _tag: "SaveNow" })).children("Save now"),
-          NoteEditor(h, {
-            ref: Editor.at(note.id),
-            props: { note },
-            // Maps the child's events to this component's messages.
-            onEmit: () => NotePageMessage.make({ _tag: "Saved" }),
-            // Every child is a failure boundary. A failed child shows
-            // `fallback` and stays down until its key changes.
-            onFailure: () => NotePageMessage.make({ _tag: "EditorFailed" }),
-            fallback: () => h.p("The editor is unavailable.")
-          }),
-          NoteActivity.render(h, {
-            key: "activity",
-            props: { noteId: note.id },
-            fallback: (result) => h.p(AsyncResult.isInitial(result) ? "Loading activity…" : "No activity.")
+          // The Collapsible draws the frame and opens and closes the body.
+          // Each slot's content is this page's: written with this `h`, so
+          // the button sends `SaveNow` here, the editor's events and failure
+          // map to this page's messages, `$.send` reaches the editor by its
+          // ref, and `NoteActivity` is resolved from this page's Layers.
+          // The editor's path is `.../Collapsible[note]/[body]/NoteEditor[...]`.
+          Collapsible(h, {
+            key: "note",
+            slots: {
+              summary: [
+                h.h2(note.title),
+                h.button.attr("type", "button").onClick(NotePageMessage.make({ _tag: "SaveNow" })).children("Save now")
+              ],
+              body: [
+                NoteEditor(h, {
+                  ref: Editor.at(note.id),
+                  props: { note },
+                  // Maps the child's events to this component's messages.
+                  onEmit: () => NotePageMessage.make({ _tag: "Saved" }),
+                  // Every child is a failure boundary. A failed child shows
+                  // `fallback` and stays down until its key changes.
+                  onFailure: () => NotePageMessage.make({ _tag: "EditorFailed" }),
+                  fallback: () => h.p("The editor is unavailable.")
+                }),
+                NoteActivity.render(h, {
+                  key: "activity",
+                  props: { noteId: note.id },
+                  fallback: (result) => h.p(AsyncResult.isInitial(result) ? "Loading activity…" : "No activity.")
+                })
+              ]
+            }
           }),
           model.notice !== "" && h.p.attr("role", "status").children(model.notice)
         )

@@ -88,6 +88,39 @@ replays `$.loaded` as it was. New props from a parent are logged as a
 `PropsChanged` entry, so the result's `props` and `loaded()` hold what the
 instance ended with.
 
+### Slots
+
+A component with a `view` can take markup from its parent in named slots.
+List the names in `define` with `slots: ["summary", "body"]`, and place
+each one in `view` with `h.slots.body`, once per render. The parent passes
+the content when it declares the child, written with its own `h`:
+
+```ts
+Collapsible(h, {
+  key: "note",
+  slots: {
+    summary: h.h2(note.title),
+    body: NoteEditor(h, { ref: Editor.at(note.id), props: { note }, onEmit: () => Saved })
+  }
+})
+```
+
+The content is the parent's. Its handlers send the parent's messages, its
+children's events and failures map to the parent's messages, the parent's
+`$.send` and refs reach into it, and its services come from where the
+parent declared the child, not from the child's Layers. A parent re-render
+updates the content without running the child's view. The child decides
+whether and where each slot shows. A slot it doesn't place isn't mounted,
+and a slot it places again mounts fresh. A slot the parent leaves out shows
+nothing. A child in a slot gets a path under the slot, such as
+`/NotePage/Collapsible[note]/[body]/NoteEditor[Editor[n1]]`.
+
+Use slots when the child owns the frame and its state, and the parent owns
+what goes inside. Use a headless component when the parent draws all the
+markup. A component can't have both `slots` and `parts`. In a story, a
+parent's view shows the content it passes, and a story of the slotted
+component passes its own with `Story.make(Collapsible, props, { slots: (h) => ({ ... }) }, f)`.
+
 ### Headless components
 
 A component finished with `parts` instead of `view` is headless: it keeps
@@ -116,6 +149,7 @@ fixtures/
   App.ts                      // root component, imports pages
   routes.ts                   // AppRoute
   kit/Listbox.ts              // headless components no feature owns
+  kit/Collapsible.ts          // a component with slots
   notes/
     domain/Note.ts            // Schema, errors, NotesTag
     services/Notes.ts         // service and its Layers
