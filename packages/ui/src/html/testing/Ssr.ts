@@ -125,6 +125,23 @@ export class SsrError extends Data.TaggedError("SsrError")<{
   }
 }
 
+/**
+ * Whether a marker path is a placed slot's, such as `/Page/Card[c]/[body]`. A key or slot name
+ * escapes `]/`, and a component's name escapes `[`, so only a slot's segment starts with one.
+ */
+const isSlotPath = (path: string): boolean => path[path.lastIndexOf("]/") + 2] === "["
+
+/**
+ * The instance that adopts a node: the innermost around it. A slot's content is placed by the
+ * instance whose view placed the slot, so it adopts with that instance's render.
+ */
+const ownerOf = (paths: ReadonlyArray<string>): string => {
+  for (let index = paths.length - 1; index > 0; index--) {
+    if (!isSlotPath(paths[index]!)) return paths[index]!
+  }
+  return paths[0]!
+}
+
 /** A node the server rendered, and the paths of the instances around it, innermost last. */
 interface ServerNode {
   readonly node: globalThis.Node
@@ -397,9 +414,8 @@ export const ssr = <
         if (entry._tag === "Mounted" && entry.adopted) adoptedNow.add(entry.path)
       }
       unjudged = unjudged.filter(({ node, paths }) => {
-        const owner = paths[paths.length - 1]!
-        if (!adoptedNow.has(owner)) return true
-        if (!container.contains(node)) rebuilt.add(owner)
+        if (!adoptedNow.has(ownerOf(paths))) return true
+        if (!container.contains(node)) rebuilt.add(paths[paths.length - 1]!)
         return false
       })
     }
@@ -483,7 +499,7 @@ export const ssr = <
     for (const path of rebuilt) problems.push(`${path}: the client rebuilt the server's nodes instead of adopting them`)
     // Every server node outside a deferred instance is judged: one whose instance never adopted under
     // the path its markers carry was not adopted either.
-    for (const path of new Set(unjudged.map(({ paths }) => paths[paths.length - 1]!))) {
+    for (const path of new Set(unjudged.map(({ paths }) => ownerOf(paths)))) {
       problems.push(`${path}: no instance adopted the server's nodes under this path`)
     }
     for (const path of markersLeft(container)) problems.push(`${path}: its markers are still in the document`)

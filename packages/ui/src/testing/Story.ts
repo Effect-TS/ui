@@ -70,7 +70,7 @@ import type * as Component from "../Component.ts"
 import type * as Head from "../Head.ts"
 import * as loaders from "../internal/loaders.ts"
 import { isNoop } from "../internal/noop.ts"
-import { checkAuthorRefs, checkChildPaths, checkFallbackPaths, segment } from "../internal/paths.ts"
+import { checkAuthorRefs, checkChildPaths, checkFallbackPaths, segment, slotSegment } from "../internal/paths.ts"
 import * as schedule from "../internal/schedule.ts"
 import * as Loader from "../Loader.ts"
 import * as MessageLog from "../MessageLog.ts"
@@ -561,19 +561,44 @@ const childModels = new WeakMap<object, ReadonlyMap<string, unknown>>()
 // The children an expansion replaced, by the expanded root: `childEmit` and `childFailure` still find them.
 const expandedChildren = new WeakMap<object, ReadonlyArray<View.Child<any, any>>>()
 
+// What a story of a slotted component passed for its slots, by the component `withSlots` made.
+const storySlots = new WeakMap<object, Readonly<Record<string, View.Input<never, any>>>>()
+
+/** A content's nodes under one element, for the walk that checks their paths. */
+const contentNode = (nodes: ReadonlyArray<View.Node<any, any>>): View.Node<any, any> =>
+  ({ _tag: "Element", children: nodes }) as unknown as View.Element<any, any>
+
 const expandRoot = <Msg>(
   view: View.Node<Msg, any>,
   name: string,
-  given: ReadonlyMap<string, unknown> | undefined
+  given: ReadonlyMap<string, unknown> | undefined,
+  filled: Readonly<Record<string, View.Input<never, any>>> | undefined
 ): View.Node<Msg, any> => {
   const replaced: Array<View.Child<any, any>> = []
   // As the runtime does: two children at one path fail the view or the closure that holds them, and
   // so do two children with one ref key across the view and the closures it gives its headless children.
   const written = [checkChildPaths("/" + name, view)]
+  // Content is shown under `children`, where a query looks, at the path the runtime gives it.
+  // `own`: the story's component wrote it, so its refs count with the component's.
+  const content = (input: View.Input<any, any>, path: string, depth: number, own: boolean) => {
+    const nodes = View.children([input])
+    const paths = checkChildPaths(path, contentNode(nodes))
+    if (own) written.push(paths)
+    return nodes.map((child) => expand(child, path, depth))
+  }
   const expand = (node: View.Node<any, any>, path: string, depth: number): View.Node<any, any> => {
     switch (node._tag) {
       case "Text":
         return node
+      case "Outlet": {
+        // The story's component placing a slot: it shows what the story passed.
+        const input = filled?.[node.name]
+        if (input === undefined) return node
+        return { ...node, children: content(input, "/" + name + "/" + slotSegment(node.name), 1, false) } as View.Node<
+          any,
+          any
+        >
+      }
       case "Element": {
         let changed = false
         const children = node.children.map((child) => {
@@ -585,6 +610,15 @@ const expandRoot = <Msg>(
       }
       case "Child": {
         const component = node.component as unknown as Component.Headless.Any
+        if (node.slots !== undefined) {
+          // A child's view isn't run, but what the parent passed for its slots is the parent's.
+          const childPath = path + "/" + segment(node)
+          const shown: Array<View.Node<any, any>> = []
+          for (const slot in node.slots) {
+            shown.push(...content(node.slots[slot], childPath + "/" + slotSegment(slot), depth + 1, true))
+          }
+          return { ...node, children: shown } as View.Node<any, any>
+        }
         if (node.view === undefined || component.parts === undefined) return node
         replaced.push(node)
         const childPath = path + "/" + segment(node)
@@ -612,7 +646,12 @@ const record = <Props, Model, Msg, Events>(
 ): Story<Props, Model, Msg, Events> => {
   let rendered: View.Node<Msg, any> | undefined
   const view = () => {
-    return rendered ??= expandRoot(render(), fields.component.definition.name, fields.childModels)
+    return rendered ??= expandRoot(
+      render(),
+      fields.component.definition.name,
+      fields.childModels,
+      storySlots.get(fields.component)
+    )
   }
   // A view value is a `Query` tree; a child is a node with no tag or text.
   const root = () => view() as Query.Node
@@ -1333,8 +1372,10 @@ const dispatch = <Props, Model, Msg, Events>(
 /** `node` and its ancestors in `root`, innermost first, or `undefined` when `node` isn't in `root`. */
 const pathTo = (root: View.Node<any, any>, node: Query.Node): Array<View.Node<any, any>> | undefined => {
   if (root === node) return [root]
-  if (root._tag !== "Element") return undefined
-  for (const child of root.children) {
+  // An element's children, or the content a story shows under a child or an outlet.
+  const children = (root as { readonly children?: ReadonlyArray<View.Node<any, any>> }).children
+  if (children === undefined) return undefined
+  for (const child of children) {
     const path = pathTo(child, node)
     if (path !== undefined) {
       path.push(root)
@@ -1635,6 +1676,25 @@ export const make: {
     f: (steps: Steps<C>) => void
   ): Steps<C>["current"]
   /**
+   * A story of a component with slots: `slots` stands in for what a parent
+   * passes. Its `h` has no messages of its own, as a parent's content in a
+   * story has nothing to send them to. `h` builds elements from
+   * `elements`, then the component's own vocabulary, then the registered
+   * one, and is typed with `elements`, or else the component's vocabulary. The content shows where the view places each slot, at the path the
+   * runtime gives it, such as `/Panel/[body]/Editor[e]`.
+   */
+  <C extends AnyComponent, V extends View.Elements = never>(
+    component: C,
+    props: Component.Props<C>,
+    options: {
+      readonly elements?: View.Vocabulary<V> | undefined
+      readonly slots: (
+        h: View.Helper<never, unknown> & View.Tags<[V] extends [never] ? VocabularyOf<C> : V, never>
+      ) => { readonly [K in Component.Slots<C>]?: View.Input<never, any> }
+    },
+    f: (steps: Steps<C>) => void
+  ): Steps<C>["current"]
+  /**
    * A story of a headless component: `view` stands in for a consumer's
    * closure. Its `h` has no messages of its own, so every handler in the
    * story is one of the component's parts'. `h` builds elements from
@@ -1657,7 +1717,14 @@ export const make: {
   ...rest: ReadonlyArray<any>
 ): any => {
   const f: (steps: Steps<any>) => void = rest[rest.length - 1]
-  const steps = start(rest.length === 2 ? withView(component, rest[0].view, rest[0].elements) : component, props)
+  const steps = start(
+    rest.length === 1
+      ? component
+      : rest[0].slots !== undefined
+      ? withSlots(component, rest[0].slots, rest[0].elements)
+      : withView(component, rest[0].view, rest[0].elements),
+    props
+  )
   f(steps)
   const story = steps.current
   if (story.pending.length > 0) {
@@ -1733,6 +1800,23 @@ const withView = (
       return View.toNode(view(component.parts(model, props, { owner, running, loaderState }), h))
     }
   })
+}
+
+/** The vocabulary a component's view builds from. */
+type VocabularyOf<C> = C extends { readonly "~V"?: infer V } ? V : never
+
+/** A component whose story passed `slots`: the content shows where its view places each slot. */
+const withSlots = (
+  component: AnyComponent,
+  slots: (h: any) => Readonly<Record<string, View.Input<never, any>>>,
+  elements: View.Vocabulary<any> | undefined
+): AnyComponent => {
+  const made = Object.create(component)
+  storySlots.set(
+    made,
+    slots(View.makeHelper({}, elements ?? component.elements(), undefined, "/" + component.definition.name))
+  )
+  return made
 }
 
 /**
