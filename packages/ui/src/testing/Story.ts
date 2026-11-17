@@ -449,8 +449,8 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    * mount from `Mount.makeStream`, `result` is one value of its Stream, and
    * each step sends one.
    *
-   * Only the story's own component's mounts count: its elements', and those
-   * of the parts it owns. Throws when no rendered mount matches, or when
+   * Only the story's own component's mounts count: its elements', those in
+   * content it passes to a child's slots, and those of the parts it owns. Throws when no rendered mount matches, or when
    * several do, and lists the rendered mounts.
    */
   mounted<D extends MountTarget>(target: D, ...result: MountedResult<D>): this
@@ -1638,19 +1638,27 @@ const fireAt = <Props, Model, Msg, Events>(
 const describeMount = (mount: Mount.Any): string =>
   `${mount.name}(${JSON.stringify(MessageLog.encodeArgs(mount.argsSchema, mount.args))})`
 
-/** The mounts the story's own component rendered: its elements', and those of the parts it owns. */
+/**
+ * The mounts the story's own component rendered: its elements', those in content it passed to a
+ * child's slots, and those of the parts it owns. Content the story passed for its own slots is a
+ * parent's: an outlet's.
+ */
 const mountsOf = (story: Story<any, any, any, any>): Array<View.Mount<any>> => {
   const own = "/" + story.component.definition.name
   const out: Array<View.Mount<any>> = []
-  const walk = (node: View.Node<any, any>): void => {
-    if (node._tag !== "Element") return
-    if (node.mount !== undefined) out.push(node.mount)
-    for (const layer of node.owned ?? []) {
-      if (layer.owner.path === own && layer.mount !== undefined) out.push(layer.mount)
+  const walk = (node: View.Node<any, any>, authored: boolean): void => {
+    if (node._tag === "Element") {
+      if (authored && node.mount !== undefined) out.push(node.mount)
+      for (const layer of node.owned ?? []) {
+        if (layer.owner.path === own && layer.mount !== undefined) out.push(layer.mount)
+      }
     }
-    for (const child of node.children) walk(child)
+    // A slotted child and an outlet show their content under `children`.
+    const shown = (node as { readonly children?: ReadonlyArray<View.Node<any, any>> }).children
+    if (shown === undefined) return
+    for (const child of shown) walk(child, authored && node._tag !== "Outlet")
   }
-  walk(story.view())
+  walk(story.view(), true)
   return out
 }
 
@@ -1755,10 +1763,13 @@ class StepsImpl implements Steps<AnyComponent> {
     renderSharing(this.current)
     return this
   }
-  mounted(target: MountTarget, result: unknown = noop): this {
+  mounted(target: MountTarget, ...result: ReadonlyArray<unknown>): this {
     const mount = findMount(this.current, target, "mounted")
     // `findMount` matched `target`, so `result` is the Source of this mount.
-    return this.step(dispatch(this.current, (mount.resolve as (result: unknown) => any)(result)))
+    // A mount that ends with `Component.noop` takes no result, but `undefined` given is a result.
+    return this.step(
+      dispatch(this.current, (mount.resolve as (result: unknown) => any)(result.length === 0 ? noop : result[0]))
+    )
   }
   expectMount(mount: Mount.Any): this {
     findMount(this.current, mount, "expectMount")

@@ -869,5 +869,37 @@ describe("Story", () => {
       )
       assert.strictEqual(story.model, 42)
     })
+
+    it("a parent's story finds the mounts in content it passes to a slot, and a slotted story doesn't find the story's", () => {
+      const Frame = Component.define({
+        name: "Frame",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html,
+        slots: ["body"]
+      }).make({ init: () => null, update: (model) => model, view: (_, h) => h.section(h.slots.body) })
+      const Page = Component.define({ name: "Page", model: Schema.String, message: Schema.String, elements: Html })
+        .make({
+          init: () => "",
+          update: (_, message) => message,
+          view: (_, h) =>
+            Frame(h, { key: "frame", slots: { body: h.div.onMount(Measure({ id: "body" }).pipe(Mount.map(String))) } })
+        })
+      assert.strictEqual(Story.make(Page, {}, (s) => s.mounted(Measure, 42)).model, "42")
+      Story.make(Frame, {}, { slots: (h) => ({ body: h.div.onMount(Hello()) }) }, (s) => {
+        assert.throws(() => s.mounted(Hello), /no rendered mount matches Hello; mounts: nothing/)
+      })
+    })
+
+    it("mounted sends an explicit undefined result through the Mount.map", () => {
+      const Done = Mount.make("Done", { args: {} }, () => Effect.succeed<number | undefined>(undefined))
+      const Flag = Component.define({ name: "Flag", model: Schema.Boolean, message: Schema.Boolean, elements: Html })
+        .make({
+          init: () => false,
+          update: (_, message) => message,
+          view: (_, h) => h.div.onMount(Done().pipe(Mount.map((value) => value === undefined)))
+        })
+      assert.strictEqual(Story.make(Flag, {}, (s) => s.mounted(Done, undefined)).model, true)
+    })
   })
 })
