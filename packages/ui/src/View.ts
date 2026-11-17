@@ -90,7 +90,47 @@ export type H<Msg = never> = Helper<Msg, unknown> & Tags<Registered, Msg>
  * @category models
  * @since 0.1.0
  */
-export type Node<Msg, R = never> = Element<Msg, R> | Text | Child<Msg, R>
+export type Node<Msg, R = never> = Element<Msg, R> | Text | Child<Msg, R> | Outlet
+
+/**
+ * Where a component places what its parent passed for one of its slots:
+ * `h.slots.body`.
+ *
+ * **Details**
+ *
+ * An outlet is opaque: the view that places it can't read the content. The
+ * content keeps its own nodes, so an element key in it can't clash with the
+ * outlet's siblings, and the outlet is keyed by its slot's name among them.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Outlet {
+  readonly _tag: "Outlet"
+  /** The slot's name. */
+  readonly name: string
+  /**
+   * Set when the outlet sits in an element that can't hold text: the error a
+   * content with text fails its author with.
+   *
+   * @internal
+   */
+  readonly noText?: string | undefined
+}
+
+const outlets = new Map<string, Outlet>()
+
+/**
+ * The outlet of the slot `name`. One value per name.
+ *
+ * @internal
+ */
+export const outlet = (name: string): Outlet => {
+  let found = outlets.get(name)
+  if (found === undefined) outlets.set(name, found = { _tag: "Outlet", name })
+  return found
+}
 
 /**
  * A text node.
@@ -321,6 +361,8 @@ export interface Child<out Msg, out R = never> {
   readonly onFailure: ((failure: AsyncResult.Failure<never, unknown>) => Msg | undefined) | undefined
   /** A headless child's whole view, written by whoever declared the child. */
   readonly view: ((parts: any) => Content<Msg, any>) | undefined
+  /** What the parent passed for each of the child's slots. */
+  readonly slots: Readonly<Record<string, Input<any, any>>> | undefined
   /** Phantom: the child's requirements surface in its parent's. */
   readonly "~R"?: (_: never) => R
 }
@@ -466,7 +508,7 @@ export type Content<Msg, R = never> = Node<Msg, R> | ElementBuilder<Msg, R, any,
  * @since 0.1.0
  */
 export type Requirements<T> = 0 extends 1 & T ? any : T extends string | false | null | undefined ? never
-: T extends Text ? never
+: T extends Text | Outlet ? never
 : T extends ReadonlyArray<infer E> ? Requirements<E>
 : T extends Child<infer _Msg, infer R> ? R
 : T extends Element<infer _Msg, infer R> ? R
@@ -1481,14 +1523,22 @@ class NoTextBuilder<Msg> extends ContainerBuilder<Msg> {
     ...inputs: C
   ): Element<Msg, Requirements<C[number]>> {
     const node = super.children(...inputs)
-    if (node.children.some((child) => child._tag === "Text")) {
-      throw new Error(
-        `<${this.tag}> can't hold text in the ${this.vocabulary} vocabulary; text goes inside ${
-          this.textParents.join(", ")
-        }`
-      )
+    let message: string | undefined
+    const children = node.children as Array<Node<Msg, any>>
+    for (let index = 0; index < children.length; index++) {
+      const child = children[index]!
+      if (child._tag === "Text") throw new Error(message ??= this.noTextMessage())
+      // An outlet's content isn't known yet, so the runtime checks it when it builds the content.
+      if (child._tag === "Outlet") {
+        children[index] = { _tag: "Outlet", name: child.name, noText: message ??= this.noTextMessage() }
+      }
     }
     return node
+  }
+  private noTextMessage(): string {
+    return `<${this.tag}> can't hold text in the ${this.vocabulary} vocabulary; text goes inside ${
+      this.textParents.join(", ")
+    }`
   }
 }
 
@@ -1519,7 +1569,8 @@ export const makeHelper = <Msg, Props, V extends Elements = never>(
 
 /**
  * The text of a view, with the text of every element concatenated in order.
- * Children contribute nothing.
+ * A child contributes the text of what its parent passed for its slots, in
+ * the order they were passed, and nothing of its own view.
  *
  * @stability experimental
  * @category queries
@@ -1531,13 +1582,21 @@ export const textOf = (node: Node<any, any>): string => {
       return node.text
     case "Element":
       return node.children.map(textOf).join("")
-    case "Child":
+    case "Child": {
+      if (node.slots === undefined) return ""
+      let text = ""
+      for (const name in node.slots) text += children([node.slots[name]]).map(textOf).join("")
+      return text
+    }
+    case "Outlet":
       return ""
   }
 }
 
 /**
- * Every node of a view in document order, the root first.
+ * Every node of a view in document order, the root first. A child is
+ * followed by what its parent passed for its slots, in the order they were
+ * passed.
  *
  * @stability experimental
  * @category queries
@@ -1547,5 +1606,9 @@ export const nodes = function*<Msg>(node: Node<Msg, any>): Generator<Node<Msg, a
   yield node
   if (node._tag === "Element") {
     for (const child of node.children) yield* nodes(child)
+  } else if (node._tag === "Child" && node.slots !== undefined) {
+    for (const name in node.slots) {
+      for (const child of children<Msg>([node.slots[name] as Input<Msg, any>])) yield* nodes(child)
+    }
   }
 }

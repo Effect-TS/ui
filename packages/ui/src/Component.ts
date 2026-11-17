@@ -694,7 +694,9 @@ const toNext = (result: unknown): Next<any, any, any, any> =>
  * @category models
  * @since 0.1.0
  */
-export interface Mountable<in out Props, out Events, out R = never, in Rcv = never> extends Pipeable.Pipeable {
+export interface Mountable<in out Props, out Events, out R = never, in Rcv = never, in Sl extends string = never>
+  extends Pipeable.Pipeable
+{
   /**
    * Declares a child of this component in a parent's view, from the parent's
    * `h`, which types `onEmit`, `onFailure` and `fallback` against the
@@ -703,8 +705,8 @@ export interface Mountable<in out Props, out Events, out R = never, in Rcv = nev
    * `Component.Any`, takes `props` even when it needs none.
    */
   // The type parameters don't depend on the component, so a union of
-  // components is callable.
-  <Msg, RF = never>(
+  // components without slots is callable.
+  <Msg, RF = never, const SC extends { readonly [K in Sl]?: View.Input<NoInfer<Msg>, any> } = {}>(
     h: View.Helper<Msg, unknown>,
     options:
       & View.Child.Options<Props, Events, NoInfer<Msg>, Rcv>
@@ -714,12 +716,13 @@ export interface Mountable<in out Props, out Events, out R = never, in Rcv = nev
           | ((result: AsyncResult.Failure<never, unknown>) => View.Content<NoInfer<Msg>, RF>)
           | undefined
       }
+      & SlotOptions<Sl, SC>
       // Erased props are required, so every component is a `Component.Any`:
       // its options must fit every component's, including one whose props
       // are required.
       & (0 extends 1 & Props ? { readonly props: Props } : {})
-  ): View.Child<Msg, R | NoInfer<RF>>
-  readonly [TypeId]: Mountable.Variance<Props, Events, R, Rcv>
+  ): View.Child<Msg, R | NoInfer<RF> | View.Requirements<SC[keyof SC]>>
+  readonly [TypeId]: Mountable.Variance<Props, Events, R, Rcv, Sl>
   /** What `define` returned. `provide` keeps it, so `definition.name` is the name the component was defined with. */
   readonly definition: Definition.Any
   readonly props: Schema.Codec<Props, any>
@@ -793,11 +796,12 @@ export declare namespace Mountable {
    * @category models
    * @since 0.1.0
    */
-  export interface Variance<in out Props, out Events, out R, in Rcv = never> {
+  export interface Variance<in out Props, out Events, out R, in Rcv = never, in Sl extends string = never> {
     readonly _Props: Types.Invariant<Props>
     readonly _Events: Types.Covariant<Events>
     readonly _R: Types.Covariant<R>
     readonly _Rcv: Types.Contravariant<Rcv>
+    readonly _Sl: Types.Contravariant<Sl>
   }
 }
 
@@ -817,8 +821,9 @@ export interface Component<
   out R = never,
   out V extends View.Elements = never,
   out L = {},
-  in out Rcv = never
-> extends Mountable<Props, Events, R, Rcv> {
+  in out Rcv = never,
+  in Sl extends string = never
+> extends Mountable<Props, Events, R, Rcv, Sl> {
   /** What `define` returned. `provide` keeps it, so `definition.name` is the name the component was defined with. */
   readonly definition: Definition.Of<Name>
   readonly model: Schema.Codec<Model, any>
@@ -1130,6 +1135,26 @@ export type LoaderHelpers<L> = [keyof L] extends [never] ? {} : {
 }
 
 /**
+ * What `h` gains in `view` for a component with slots: `h.slots.<name>`,
+ * the outlet that places what the parent passed for that slot.
+ *
+ * **Details**
+ *
+ * An outlet is opaque. It renders nothing when the parent passed nothing,
+ * and the view can't tell whether it did.
+ *
+ * @stability experimental
+ * @category utility types
+ * @since 0.1.0
+ */
+export type SlotHelpers<Sl extends string> = [Sl] extends [never] ? {}
+  : { readonly slots: { readonly [K in Sl]: View.Outlet } }
+
+// The `slots` a call takes: none for a component without slots, and only the declared names otherwise.
+type SlotOptions<Sl extends string, SC> = [Sl] extends [never] ? { readonly slots?: never }
+  : { readonly slots?: SC & { readonly [K in Exclude<keyof SC, Sl>]: never } }
+
+/**
  * Any component.
  *
  * @stability experimental
@@ -1196,6 +1221,17 @@ export type Message<C> = C extends
  * @since 0.1.0
  */
 export type Receives<C> = C extends Mountable<infer _Props, infer _Events, infer _R, infer Rcv> ? Rcv : never
+
+/**
+ * The names of the slots a component declares, `never` for one without slots.
+ *
+ * @stability experimental
+ * @category utility types
+ * @since 0.1.0
+ */
+export type Slots<C> = C extends { readonly [TypeId]: { readonly _Sl: Types.Contravariant<infer Sl extends string> } } ?
+  Sl
+  : never
 
 /**
  * A `load` entry of `loaders`, as the types see it: one read, or a list
@@ -1413,7 +1449,13 @@ export const isComponent = (u: unknown): u is Any => Predicate.hasProperty(u, Ty
 
 // A component is a function, so the prototypes keep `call`, `apply` and `bind`.
 const Proto = Object.assign(Object.create(Function.prototype), {
-  [TypeId]: { _Props: (_: never) => _, _Events: (_: never) => _, _R: (_: never) => _, _Rcv: (_: never) => _ },
+  [TypeId]: {
+    _Props: (_: never) => _,
+    _Events: (_: never) => _,
+    _R: (_: never) => _,
+    _Rcv: (_: never) => _,
+    _Sl: (_: never) => _
+  },
   pipe() {
     return Pipeable.pipeArguments(this, arguments)
   },
@@ -1482,7 +1524,17 @@ type Tagged<Msg, T> = Extract<Msg, { readonly _tag: T }>
  * @category models
  * @since 0.1.0
  */
-export interface Definition<Name extends string, Props, Model, Msg, Events, V extends View.Elements, L, Rcv = never> {
+export interface Definition<
+  Name extends string,
+  Props,
+  Model,
+  Msg,
+  Events,
+  V extends View.Elements,
+  L,
+  Rcv = never,
+  Sl extends string = never
+> {
   readonly name: Name
   readonly props: Schema.Codec<Props, any>
   readonly model: Schema.Codec<Model, any>
@@ -1492,6 +1544,8 @@ export interface Definition<Name extends string, Props, Model, Msg, Events, V ex
   readonly receives: Schema.Codec<Rcv, any>
   readonly loaders: unknown
   readonly elements: View.Vocabulary<V> | undefined
+  /** The names of the slots a parent may fill. */
+  readonly slots: ReadonlyArray<Sl>
   /**
    * A slice for one tag: `msg` is that tag's member, and so is the message
    * `$.combine` takes functions over. The slice returned takes any `$`, so
@@ -1508,15 +1562,18 @@ export interface Definition<Name extends string, Props, Model, Msg, Events, V ex
   ): (model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L>) => U
   /** A view, to pass as `view` or call from another view. */
   view<UV extends View.Content<Msg, any>>(
-    view: (model: Model, h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L>) => UV
-  ): (model: Model, h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L>) => UV
+    view: (model: Model, h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L> & SlotHelpers<Sl>) => UV
+  ): (model: Model, h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L> & SlotHelpers<Sl>) => UV
   /**
    * A view fragment: a function that takes `h` first and any other
    * arguments after it, called from a view as `fragment(h, ...args)`.
    */
   fragment<Args extends ReadonlyArray<unknown>, Out>(
-    fragment: (h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L>, ...args: Args) => Out
-  ): (h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L>, ...args: Args) => Out
+    fragment: (
+      h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L> & SlotHelpers<Sl>,
+      ...args: Args
+    ) => Out
+  ): (h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L> & SlotHelpers<Sl>, ...args: Args) => Out
   /**
    * Finishes a headless component: `parts` in place of `view`. Whoever
    * declares it, by calling it with `view`, writes the view from what
@@ -1541,7 +1598,9 @@ export interface Definition<Name extends string, Props, Model, Msg, Events, V ex
           $: Update<Model, Msg, Events, Props, L, Tagged<Msg, T>>
         ) => UR[T]
       }
-    readonly parts: (model: Model, p: PartsHelper<Msg, Props, V> & LoaderHelpers<L>) => Parts
+    /** A headless component has no view to place slots in, so a definition with slots can't take `parts`. */
+    readonly parts: [Sl] extends [never] ? (model: Model, p: PartsHelper<Msg, Props, V> & LoaderHelpers<L>) => Parts
+      : never
     readonly subscriptions?:
       | ((
         model: Model,
@@ -1592,7 +1651,10 @@ export interface Definition<Name extends string, Props, Model, Msg, Events, V ex
           $: Update<Model, Msg, Events, Props, L, Tagged<Msg, T>>
         ) => UR[T]
       }
-    readonly view: (model: Model, h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L>) => UV
+    readonly view: (
+      model: Model,
+      h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L> & SlotHelpers<Sl>
+    ) => UV
     readonly subscriptions?:
       | ((
         model: Model,
@@ -1624,7 +1686,8 @@ export interface Definition<Name extends string, Props, Model, Msg, Events, V ex
     >,
     V,
     L,
-    Rcv
+    Rcv,
+    Sl
   >
 }
 
@@ -1658,6 +1721,7 @@ export declare namespace Definition {
     readonly receives: Schema.Codec<any, any>
     readonly loaders: unknown
     readonly elements: View.Vocabulary<any> | undefined
+    readonly slots: ReadonlyArray<string>
   }
 
   /**
@@ -1705,8 +1769,8 @@ export declare namespace Definition {
  * @since 0.1.0
  */
 export type Helper<D> = D extends
-  Definition<infer _N, infer P, infer _M, infer Msg, infer _E, infer V, infer L, infer _Rcv> ?
-  View.Helper<Msg, P> & View.Tags<V, Msg> & LoaderHelpers<L>
+  Definition<infer _N, infer P, infer _M, infer Msg, infer _E, infer V, infer L, infer _Rcv, infer Sl> ?
+  View.Helper<Msg, P> & View.Tags<V, Msg> & LoaderHelpers<L> & SlotHelpers<Sl>
   : never
 
 /**
@@ -1925,7 +1989,8 @@ export const define = <
       : never
   },
   V extends View.Elements = View.Registered,
-  const Tags extends TagOf<Msg> = never
+  const Tags extends TagOf<Msg> = never,
+  const Sl extends string = never
 >(
   options: {
     readonly name: Name
@@ -1954,9 +2019,11 @@ export const define = <
       )
       | undefined
     readonly elements?: View.Vocabulary<V> | undefined
+    /** The names of the slots a parent may fill, each placed in `view` with `h.slots.<name>`. None by default. */
+    readonly slots?: ReadonlyArray<Sl> | undefined
   }
-): Definition<Name, Props, Model, Msg, Events, V, L, Tagged<Msg, Tags>> => {
-  const definition: Definition<Name, Props, Model, Msg, Events, V, L, Tagged<Msg, Tags>> = {
+): Definition<Name, Props, Model, Msg, Events, V, L, Tagged<Msg, Tags>, Sl> => {
+  const definition: Definition<Name, Props, Model, Msg, Events, V, L, Tagged<Msg, Tags>, Sl> = {
     name: options.name,
     props: options.props ?? (Schema.Struct({}) as any),
     model: options.model,
@@ -1965,6 +2032,7 @@ export const define = <
     receives: receivesOf(options.message, options.receives ?? []) as Schema.Codec<any, any>,
     loaders: options.loaders,
     elements: options.elements,
+    slots: options.slots ?? [],
     // A slice is the function given, with `$` bound to the Model and message it's called with.
     update: ((...args: ReadonlyArray<any>) => {
       const update: AnyUpdate = args[args.length - 1]
@@ -1987,7 +2055,7 @@ const receivesOf = (message: Schema.Codec<any, any>, tags: ReadonlyArray<string>
   )
 
 const finish = (
-  definition: Definition<string, any, any, any, any, any, any, any>,
+  definition: Definition<string, any, any, any, any, any, any, any, any>,
   options: {
     readonly init: ($: Init<any, any, any, any>) => unknown
     readonly update: AnyUpdate | { readonly [tag: string]: AnyUpdate }
@@ -2016,6 +2084,11 @@ const finish = (
   const elements = definition.elements
   const view = options.view
   const parts = options.parts
+  if (parts !== undefined && definition.slots.length > 0) {
+    throw new Error(`${definition.name} declares slots, so it needs a view to place them and can't take parts`)
+  }
+  let outlets: Record<string, View.Outlet> | undefined
+  for (const name of definition.slots) (outlets ??= {})[name] = View.outlet(name)
   return makeComponent(view === undefined ? HeadlessProto : Proto, {
     definition,
     props: definition.props,
@@ -2035,6 +2108,7 @@ const finish = (
           running,
           path ?? ("/" + definition.name)
         )
+        if (outlets !== undefined) h.slots = outlets
         if (bound !== undefined) {
           const context = bound.context(model, props, loaderState)
           h.loaded = context.loaded
@@ -2135,9 +2209,9 @@ export interface LocalOption {
  * @since 0.1.0
  */
 export type Provided<C, ROut, RIn> = C extends
-  Component<infer N, infer P, infer M, infer Msg, infer E, infer _R, infer V, infer L, infer Rcv>
-  ? Component<N, P, M, Msg, E, Exclude<Requirements<C>, Exclude<ROut, RuntimeService>> | RIn, V, L, Rcv>
-  : Mountable<Props<C>, Events<C>, Exclude<Requirements<C>, Exclude<ROut, RuntimeService>> | RIn, Receives<C>>
+  Component<infer N, infer P, infer M, infer Msg, infer E, infer _R, infer V, infer L, infer Rcv, infer Sl>
+  ? Component<N, P, M, Msg, E, Exclude<Requirements<C>, Exclude<ROut, RuntimeService>> | RIn, V, L, Rcv, Sl>
+  : Mountable<Props<C>, Events<C>, Exclude<Requirements<C>, Exclude<ROut, RuntimeService>> | RIn, Receives<C>, Slots<C>>
 
 /**
  * Services the runtime owns or reads once at mount: the framework services,

@@ -18,6 +18,7 @@ export interface Options {
   readonly fallback?: ((result: any) => View.Content<any, any>) | undefined
   readonly onFailure?: ((failure: AsyncResult.Failure<never, unknown>) => unknown) | undefined
   readonly view?: ((parts: any) => View.Content<any, any>) | undefined
+  readonly slots?: Readonly<Record<string, View.Input<any, any>>> | undefined
 }
 
 /** @internal */
@@ -38,7 +39,8 @@ export const make = (
     onEmit: options.onEmit ?? ignore,
     fallback: options.fallback,
     onFailure: options.onFailure,
-    view: options.view
+    view: options.view,
+    slots: options.slots
   }
 }
 
