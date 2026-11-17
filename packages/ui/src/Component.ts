@@ -1639,42 +1639,14 @@ export declare namespace Definition {
 }
 
 /**
- * The view helper for reusable pure view functions, without a component
- * definition. `Msg` defaults to `never` for views that emit no messages.
- *
- * **Details**
- *
- * Includes the app's registered vocabulary (for example, import
- * `@effect/ui/html/register` for HTML tags). Props remain `unknown` and
- * component-specific loaders are not included. Use {@link Helper} instead
- * when a function needs a definition's props, loaders or custom elements.
- *
- * **Example** (A reusable button)
- *
- * ```ts import.meta.vitest
- * import "@effect/ui/html/register"
- * import { Component } from "@effect/ui"
- * import { Schema } from "effect"
- *
- * const button = <Msg>(h: Component.H<Msg>, label: string, message: Msg) =>
- *   h.button.onClick(message).children(label)
- *
- * export const Counter = Component.define({
- *   name: "Counter",
- *   model: Schema.Number,
- *   message: Schema.Literal("Increment")
- * }).make({
- *   init: () => 0,
- *   update: (count) => count + 1,
- *   view: (count, h) => button(h, String(count), "Increment")
- * })
- * ```
+ * Compatibility alias for `View.H`, the helper for reusable pure view functions.
+ * Use {@link Helper} for a component definition's props, loaders or custom elements.
  *
  * @stability experimental
  * @category utility types
  * @since 0.1.0
  */
-export type H<Msg = never> = View.Helper<Msg, unknown> & View.Tags<View.Registered, Msg>
+export type H<Msg = never> = View.H<Msg>
 
 /**
  * `h` in the view of a definition, for a function that takes it without

@@ -6,8 +6,10 @@ import { Context, Schema } from "effect"
 import { describe, expect, it } from "tstyche"
 
 describe("@effect/ui/html/register", () => {
-  it("types reusable pure views with Component.H", () => {
-    const button = <Msg>(h: Component.H<Msg>, message: Msg) => {
+  it("types reusable pure views with View.H", () => {
+    expect<Component.H>().type.toBe<View.H>()
+    expect<Component.H<"Save">>().type.toBe<View.H<"Save">>()
+    const Button = <Msg>(h: View.H<Msg>, message: Msg) => {
       expect(h.props).type.toBe<unknown>()
       expect(h.button).type.toBe<Html.Tags<Msg>["button"]>()
       return h.button.onClick(message).children("Save")
@@ -18,8 +20,8 @@ describe("@effect/ui/html/register", () => {
       model: Schema.Number,
       message: Schema.Literal("Save")
     }).view((_, h) => {
-      expect(button<"Save">).type.not.toBeCallableWith(h, "Delete")
-      return button(h, "Save")
+      expect(Button<"Save">).type.not.toBeCallableWith(h, "Delete")
+      return Button(h, "Save")
     })
   })
 
@@ -28,7 +30,7 @@ describe("@effect/ui/html/register", () => {
   })
 
   it("gives a component without `elements` the HTML tags", () => {
-    const label = (h: Component.H, text: string) => {
+    const Label = (h: View.H, text: string) => {
       expect(h.span).type.toBe<Html.Tags<never>["span"]>()
       return h.span(text)
     }
@@ -41,7 +43,7 @@ describe("@effect/ui/html/register", () => {
       update: (model) => model,
       view: (_, h) => {
         expect(h.p).type.toBe<Html.Tags<never>["p"]>()
-        return h.p(label(h, "Hello"))
+        return h.p(Label(h, "Hello"))
       }
     })
   })
@@ -53,8 +55,8 @@ class Clock extends Context.Service<Clock, {}>()("Clock") {}
 class Logger extends Context.Service<Logger, {}>()("Logger") {}
 
 it("shared wrappers preserve unspread options.children requirements across components", () => {
-  const Card = <M>(h: Component.H<M>) => h.section.class("card")
-  const Field = <M, C extends View.Children<M>>(h: Component.H<M>, options: {
+  const Card = <M>(h: View.H<M>) => h.section.class("card")
+  const Field = <M, C extends View.Children<M>>(h: View.H<M>, options: {
     readonly label: string
     readonly children: C
   }) => h.label.children(options.label, h.div.class("control").children(options.children))

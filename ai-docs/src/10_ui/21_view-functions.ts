@@ -8,15 +8,15 @@
  */
 import { Component, type View } from "@effect/ui"
 import { Schema } from "effect"
-// Component.H uses the app's registered vocabulary, not one definition.
+// View.H uses the app's registered vocabulary, not one definition.
 // oxlint-disable-next-line no-unassigned-import
 import "@effect/ui/html/register"
 
-const Card = <M>(h: Component.H<M>) => h.section.class("card")
+const Card = <M>(h: View.H<M>) => h.section.class("card")
 
 // Keep C inferred: View.Input<M> rejects children needing services, while
 // annotating children as View.Children<M> erases their requirements.
-const Field = <M, C extends View.Children<M>>(h: Component.H<M>, options: {
+const Field = <M, C extends View.Children<M>>(h: View.H<M>, options: {
   readonly label: string
   readonly children: C
 }) => h.label.children(options.label, h.div.class("control").children(options.children))

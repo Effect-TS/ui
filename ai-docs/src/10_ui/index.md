@@ -25,7 +25,7 @@ props.
 
 Name view functions in CapitalCase, like components (for example, `Card` and `Field`).
 
-Use `Component.H<M>` with `@effect/ui/html/register` for shared HTML view
+Use `View.H<M>` with `@effect/ui/html/register` for shared HTML view
 functions. No separate HTML helper type is needed. When the root is the hole,
 return its builder and let the caller add children: `Card(h).children(...)`.
 This needs no children generic. For a nested hole, use an options object
@@ -33,11 +33,11 @@ and keep its children inferred through `C`:
 
 ```ts
 import "@effect/ui/html/register"
-import { Component, View } from "@effect/ui"
+import type { View } from "@effect/ui"
 
-const Card = <M>(h: Component.H<M>) => h.section.class("card")
+const Card = <M>(h: View.H<M>) => h.section.class("card")
 
-const Field = <M, C extends View.Children<M>>(h: Component.H<M>, options: {
+const Field = <M, C extends View.Children<M>>(h: View.H<M>, options: {
   readonly label: string
   readonly children: C
 }) => h.label.children(options.label, h.div.class("control").children(options.children))

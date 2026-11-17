@@ -40,6 +40,44 @@ import type * as Feature from "./Feature.ts"
 import type * as Renderer from "./Renderer.ts"
 
 /**
+ * The view helper for reusable pure view functions, without a component
+ * definition. `Msg` defaults to `never` for views that emit no messages.
+ *
+ * **Details**
+ *
+ * Includes the app's registered vocabulary (for example, import
+ * `@effect/ui/html/register` for HTML tags). Props remain `unknown` and
+ * component-specific loaders are not included. Use `Component.Helper<D>` instead
+ * when a function needs a definition's props, loaders or custom elements.
+ *
+ * **Example** (A reusable button)
+ *
+ * ```ts import.meta.vitest
+ * import "@effect/ui/html/register"
+ * import { Component, View } from "@effect/ui"
+ * import { Schema } from "effect"
+ *
+ * const Button = <Msg>(h: View.H<Msg>, label: string, message: Msg) =>
+ *   h.button.onClick(message).children(label)
+ *
+ * export const Counter = Component.define({
+ *   name: "Counter",
+ *   model: Schema.Number,
+ *   message: Schema.Literal("Increment")
+ * }).make({
+ *   init: () => 0,
+ *   update: (count) => count + 1,
+ *   view: (count, h) => Button(h, String(count), "Increment")
+ * })
+ * ```
+ *
+ * @stability experimental
+ * @category utility types
+ * @since 0.1.0
+ */
+export type H<Msg = never> = Helper<Msg, unknown> & Tags<Registered, Msg>
+
+/**
  * A node of a view: an element, text, or a child component slot.
  *
  * **Details**
@@ -375,9 +413,9 @@ interface ErasedReceives {
  *
  * ```ts
  * import "@effect/ui/html/register"
- * import { Component, View } from "@effect/ui"
+ * import type { View } from "@effect/ui"
  *
- * const Field = <M, C extends View.Children<M>>(h: Component.H<M>, options: {
+ * const Field = <M, C extends View.Children<M>>(h: View.H<M>, options: {
  *   readonly label: string
  *   readonly children: C
  * }) => h.label.children(options.label, h.div.class("control").children(options.children))

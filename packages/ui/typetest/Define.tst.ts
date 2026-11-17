@@ -1,3 +1,4 @@
+import type { View } from "@effect/ui"
 import { Command, Component, Loader } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Effect, Schema } from "effect"
@@ -51,8 +52,11 @@ const touch = NoteDef.update((model) => ({ ...model, edits: model.edits + 1 }))
 
 describe("Component.define", () => {
   it("H supports pure views without a registered vocabulary", () => {
-    const row = <Msg>(h: Component.H<Msg>, label: string) => h.el("li", label)
-    NoteDef.view((model, h) => h.ul(row(h, model.body)))
+    expect<Component.H>().type.toBe<View.H>()
+    expect<Component.H<Message>>().type.toBe<View.H<Message>>()
+    expect<View.H<Message>>().type.toBe<View.Helper<Message, unknown>>()
+    const Row = <Msg>(h: View.H<Msg>, label: string) => h.el("li", label)
+    NoteDef.view((model, h) => h.ul(Row(h, model.body)))
   })
 
   it("types an untagged update over the whole message, from the definition", () => {
