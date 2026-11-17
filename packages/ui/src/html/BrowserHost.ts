@@ -759,6 +759,16 @@ export const makeHost = (
       const t = node as globalThis.Text
       if (t.data !== text) t.data = text
     },
+    normalizeAttrs(node, attrs) {
+      // SVG names are case-sensitive. Empty records need no normalization.
+      if (attrs === View.noFields || (node as globalThis.Element).namespaceURI === SVG) return attrs
+      const out: Record<string, string> = Object.create(null)
+      for (const name in attrs) {
+        const normalized = elements.attributeName(name, false)
+        if (normalized !== undefined) out[normalized] = attrs[name]!
+      }
+      return out
+    },
     setAttr(node, name, value) {
       const element = node as globalThis.Element
       const normalized = elements.attributeName(name, element.namespaceURI === SVG)
