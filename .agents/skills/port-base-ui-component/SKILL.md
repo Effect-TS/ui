@@ -57,6 +57,9 @@ Work top to bottom. Write the notes from steps 1 to 3 into the PR description.
      keys a native element handles, assert the element's tag
    - the markup the component draws for itself, such as the form field, and
      where each slot's content shows
+   - the `data-scope` and `data-part` on every styled element, and the
+     accessible name from props when a slot that carries it is left out
+   - Select elements by `data-part` in tests, as consumers do.
    - Use `Story.make(C, props, { slots: (h) => ({ ... }) }, f)` for a
      component with slots, and a stand-in view with `Story.parts` for a
      headless one. Break the code once (for example, drop the disabled

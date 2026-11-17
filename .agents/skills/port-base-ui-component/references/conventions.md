@@ -13,8 +13,8 @@ update the components that already follow them.
   ```ts
   import { Switch } from "@effect/ui-kit"
 
-  view: ;
-  ;((model, h) => Switch(h, { key: "notify", props: { checked: model.notify }, slots: { label: "Notify" } }))
+  // In a view:
+  Switch(h, { key: "notify", props: { checked: model.notify }, slots: { label: "Notify" } })
   ```
 
   So `src/index.ts` is not a generated barrel: `pnpm codegen` would export
@@ -56,9 +56,16 @@ update the components that already follow them.
   behaviour for free: a `<button type="button">` for anything pressable,
   so Space, Enter and focus come from the browser and need no key handler.
 - The view sets ARIA, data attributes, ids, refs and handlers, and nothing
-  visual: no classes and no styles. The consumer styles each part through
-  a class of its own around the component, the part's role or tag, and
-  the data attributes.
+  visual: no classes and no styles.
+- Every element the consumer may style gets `data-scope="<name>"`, the
+  component's name in kebab-case, and `data-part="<part>"`, the Base UI
+  part in kebab-case (`root`, `thumb`), or a name for an element Base UI
+  doesn't have (`label`). These and the state attributes are the styling
+  contract, so the tags and nesting can change: consumers select
+  `[data-scope="switch"][data-part="thumb"]` inside a class of their own
+  around the component. The scope keeps a part of one component from
+  matching a part of another nested in it. Hidden elements, such as a form
+  field, get neither.
 - Markup the component needs to work, such as a form field or the
   `<label>` that names a control, is drawn by the view, so a consumer
   can't forget it. Only put an element where its content model allows it.
@@ -66,6 +73,10 @@ update the components that already follow them.
   `label`, `title`, `description`. Place each slot once per render. A
   slot the consumer leaves out shows nothing, so the component must work
   without it, apart from losing what it carries.
+- A slot is optional, so when it carries a control's accessible name the
+  control also takes `aria-label` and `aria-labelledby` props, plus
+  `aria-describedby` and `id`, set on the control as given. A switch
+  named by a table header, or an icon-only one, has no slot text.
 - A slot's content belongs to the consumer: its handlers send the
   consumer's messages. Use a slot for content, and props for anything the
   component reads.
@@ -136,12 +147,15 @@ The details are in the JSDoc of `popover` and `modal` in
 
 ## Data attributes and ARIA
 
-- Base UI's names, on the parts Base UI puts them on.
+- Base UI's names, on the parts Base UI puts them on, and on any styled
+  element the kit adds around them, such as Switch's `<label>`.
 - Present with an empty value, or absent: `.attr("data-checked", on ? "" : undefined)`.
 - Attributes that come from a Field or Form context wait for those
   components.
 - ARIA follows Base UI's source, not just its docs page. Prefer a native
   attribute (`disabled`) where Base UI's native mode uses one.
+- A prop that sets an HTML attribute as given keeps the attribute's name:
+  `"aria-label"`, `id`.
 
 ## Docs
 
@@ -150,9 +164,10 @@ The module JSDoc has, in order:
 1. one sentence on what it is, and the Base UI link
 2. **Anatomy**: a table of Base UI part and element, with the slots
    where the view places them, or the part names for a headless component
-3. **Data attributes**
-4. **Keyboard**
-5. **Differences from Base UI**: everything left out or changed
-6. one `**Example**` that runs as a doctest
+3. **Styling**: the `data-scope` and `data-part` of each element
+4. **Data attributes**
+5. **Keyboard**
+6. **Differences from Base UI**: everything left out or changed
+7. one `**Example**` that runs as a doctest
 
 Each export has `@stability experimental`, `@category` and `@since`.
