@@ -178,7 +178,7 @@ export interface Direct {
 /**
  * Whether a Command is a navigation, which the runtime runs in the deferred
  * work of the flush that issued it rather than on the scheduler: `Push`,
- * `Replace`, `PatchQuery`, `Back`, `Forward` and `Load`, whose names
+ * `Replace`, `PatchSearch`, `Back`, `Forward` and `Load`, whose names
  * share the prefix.
  *
  * @internal

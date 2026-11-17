@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
-import { Command, Component, Loader, MessageLog, type Renderer, Route, Router, View } from "@effect/ui"
+import { Command, Component, MessageLog, Query, type Renderer, Route, Router, View } from "@effect/ui"
 import { BrowserHost, Html } from "@effect/ui/html"
-import { HtmlQuery } from "@effect/ui/html/testing"
+import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, expect, it } from "@effect/vitest"
 import { Context, Effect, Exit, Layer, Option, Schema, Scope } from "effect"
 import { describe, vi } from "vitest"
@@ -35,8 +35,8 @@ describe("BrowserHost", { concurrent: false }, () => {
     Effect.gen(function*() {
       const scope = yield* Scope.make()
       const context = yield* Layer.buildWithScope(BrowserHost.layer(), scope)
-      const visibility = Context.get(context, Loader.Visibility)
-      const connectivity = Context.get(context, Loader.Connectivity)
+      const visibility = Context.get(context, Query.Visibility)
+      const connectivity = Context.get(context, Query.Connectivity)
       const seen: Array<string> = []
       visibility.subscribe(() => seen.push(`visible ${visibility.get()}`))
       connectivity.subscribe(() => seen.push(`online ${connectivity.get()}`))
@@ -64,43 +64,43 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(TodoApp, {}, app)
-        const field = HtmlQuery.getByRole(app, "textbox", { name: "New todo" }) as HTMLInputElement
-        const add = HtmlQuery.getByRole(app, "button", { name: "Add" })
+        const field = HtmlLocator.getByRole(app, "textbox", { name: "New todo" }) as HTMLInputElement
+        const add = HtmlLocator.getByRole(app, "button", { name: "Add" })
 
         for (const title of ["Buy milk", "Walk the dog", "Write docs"]) {
-          HtmlQuery.input(field, title)
+          HtmlLocator.input(field, title)
           yield* tick
-          HtmlQuery.click(add)
+          HtmlLocator.click(add)
           yield* tick
         }
         expect(field.value).toBe("")
-        const list = HtmlQuery.getByRole(app, "list", { name: "Todos" })
-        expect(HtmlQuery.queryAllByRole(list, "listitem").map((item) => item.textContent)).toEqual([
+        const list = HtmlLocator.getByRole(app, "list", { name: "Todos" })
+        expect(HtmlLocator.queryAllByRole(list, "listitem").map((item) => item.textContent)).toEqual([
           "Buy milk×",
           "Walk the dog×",
           "Write docs×"
         ])
-        expect(HtmlQuery.getByRole(app, "button", { name: "Clear done" }).hasAttribute("disabled")).toBe(true)
+        expect(HtmlLocator.getByRole(app, "button", { name: "Clear done" }).hasAttribute("disabled")).toBe(true)
 
         // Toggling a row keeps every row's nodes.
-        const before = HtmlQuery.queryAllByRole(list, "listitem")
-        const walk = HtmlQuery.getByRole(app, "checkbox", { name: "Walk the dog" }) as HTMLInputElement
-        HtmlQuery.click(walk)
+        const before = HtmlLocator.queryAllByRole(list, "listitem")
+        const walk = HtmlLocator.getByRole(app, "checkbox", { name: "Walk the dog" }) as HTMLInputElement
+        HtmlLocator.click(walk)
         yield* tick
         expect(walk.checked).toBe(true)
         expect(root.model()!.todos.map((todo) => todo.done)).toEqual([false, true, false])
-        expect(HtmlQuery.queryAllByRole(list, "listitem")).toEqual(before)
+        expect(HtmlLocator.queryAllByRole(list, "listitem")).toEqual(before)
         expect(before[1]!.className).toBe("done")
-        expect(HtmlQuery.queryAllByRole(app, "checkbox", { checked: true })).toEqual([walk])
+        expect(HtmlLocator.queryAllByRole(app, "checkbox", { checked: true })).toEqual([walk])
         expect(app.textContent).toContain("2 items left")
 
-        HtmlQuery.click(HtmlQuery.getByRole(app, "button", { name: "Delete Buy milk" }))
+        HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name: "Delete Buy milk" }))
         yield* tick
-        expect(HtmlQuery.queryAllByRole(list, "listitem")).toEqual([before[1], before[2]])
+        expect(HtmlLocator.queryAllByRole(list, "listitem")).toEqual([before[1], before[2]])
 
-        HtmlQuery.click(HtmlQuery.getByRole(app, "button", { name: "Clear done" }))
+        HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name: "Clear done" }))
         yield* tick
-        expect(HtmlQuery.queryAllByRole(list, "listitem")).toEqual([before[2]])
+        expect(HtmlLocator.queryAllByRole(list, "listitem")).toEqual([before[2]])
         expect(app.textContent).toContain("1 item left")
       }).pipe(Effect.scoped))
 
@@ -108,13 +108,13 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(TodoApp, {}, app)
-        const field = HtmlQuery.getByRole(app, "textbox", { name: "New todo" })
-        HtmlQuery.input(field, "Ship it")
+        const field = HtmlLocator.getByRole(app, "textbox", { name: "New todo" })
+        HtmlLocator.input(field, "Ship it")
         yield* tick
-        HtmlQuery.submit(field)
+        HtmlLocator.submit(field)
         yield* tick
         expect(root.model()!.todos.map((todo) => todo.title)).toEqual(["Ship it"])
-        expect(HtmlQuery.getByRole(app, "checkbox", { name: "Ship it" })).toBeDefined()
+        expect(HtmlLocator.getByRole(app, "checkbox", { name: "Ship it" })).toBeDefined()
       }).pipe(Effect.scoped))
   })
 
@@ -123,13 +123,13 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(TodoApp, {}, app)
-        const field = HtmlQuery.getByRole(app, "textbox", { name: "New todo" }) as HTMLInputElement
-        HtmlQuery.input(field, "Short title")
+        const field = HtmlLocator.getByRole(app, "textbox", { name: "New todo" }) as HTMLInputElement
+        HtmlLocator.input(field, "Short title")
         yield* tick
         expect(field.value).toBe("Short title")
 
         const tooLong = "x".repeat(maxTitle + 1)
-        HtmlQuery.input(field, tooLong)
+        HtmlLocator.input(field, tooLong)
         expect(field.value).toBe(tooLong)
         yield* tick
         expect(root.model()!.draft).toBe("Short title")
@@ -165,13 +165,13 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         const app = yield* container
         yield* BrowserHost.mountEffect(Form, {}, app)
-        const ignored = HtmlQuery.getByRole(app, "textbox", { name: "Ignored" }) as HTMLInputElement
-        const unhandled = HtmlQuery.getByRole(app, "textbox", { name: "Unhandled" }) as HTMLTextAreaElement
-        const select = HtmlQuery.getByRole(app, "combobox", { name: "Pick" }) as HTMLSelectElement
+        const ignored = HtmlLocator.getByRole(app, "textbox", { name: "Ignored" }) as HTMLInputElement
+        const unhandled = HtmlLocator.getByRole(app, "textbox", { name: "Unhandled" }) as HTMLTextAreaElement
+        const select = HtmlLocator.getByRole(app, "combobox", { name: "Pick" }) as HTMLSelectElement
         expect(select.value).toBe("b")
 
-        HtmlQuery.input(ignored, "typed")
-        HtmlQuery.input(unhandled, "typed")
+        HtmlLocator.input(ignored, "typed")
+        HtmlLocator.input(unhandled, "typed")
         select.value = "a"
         select.dispatchEvent(new Event("change", { bubbles: true }))
         yield* tick
@@ -184,8 +184,8 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         const app = yield* container
         yield* BrowserHost.mountEffect(Form, {}, app)
-        const box = HtmlQuery.getByRole(app, "checkbox", { name: "Agree" }) as HTMLInputElement
-        HtmlQuery.click(box)
+        const box = HtmlLocator.getByRole(app, "checkbox", { name: "Agree" }) as HTMLInputElement
+        HtmlLocator.click(box)
         yield* tick
         expect(box.checked).toBe(false)
       }).pipe(Effect.scoped))
@@ -213,9 +213,9 @@ describe("BrowserHost", { concurrent: false }, () => {
         })
         const app = yield* container
         yield* BrowserHost.mountEffect(Resettable, {}, app)
-        const name = HtmlQuery.getByRole(app, "textbox", { name: "Name" }) as HTMLInputElement
-        const agree = HtmlQuery.getByRole(app, "checkbox", { name: "Agree" }) as HTMLInputElement
-        const pick = HtmlQuery.getByRole(app, "combobox", { name: "Pick" }) as HTMLSelectElement
+        const name = HtmlLocator.getByRole(app, "textbox", { name: "Name" }) as HTMLInputElement
+        const agree = HtmlLocator.getByRole(app, "checkbox", { name: "Agree" }) as HTMLInputElement
+        const pick = HtmlLocator.getByRole(app, "combobox", { name: "Pick" }) as HTMLSelectElement
         app.querySelector("form")!.reset()
         expect([name.value, agree.checked, pick.value]).toEqual(["", false, "a"])
         yield* tick
@@ -226,11 +226,11 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         const app = yield* container
         yield* BrowserHost.mountEffect(TodoApp, {}, app)
-        const field = HtmlQuery.getByRole(app, "textbox", { name: "New todo" }) as HTMLInputElement
-        HtmlQuery.input(field, "abcdef")
+        const field = HtmlLocator.getByRole(app, "textbox", { name: "New todo" }) as HTMLInputElement
+        HtmlLocator.input(field, "abcdef")
         yield* tick
         field.setSelectionRange(2, 2)
-        HtmlQuery.input(field, "abXcdef")
+        HtmlLocator.input(field, "abXcdef")
         field.setSelectionRange(3, 3)
         yield* tick
         expect(field.value).toBe("abXcdef")
@@ -240,14 +240,14 @@ describe("BrowserHost", { concurrent: false }, () => {
 
   describe("a field bound to the URL", () => {
     const SearchRoute = Route.union({
-      Search: Route.make("/search", { query: { q: Schema.optional(Schema.String) } }),
+      Search: Route.make("/search", { search: { q: Schema.optional(Schema.String) } }),
       NotFound: Route.make("/*")
     })
     const SearchMessage = Schema.TaggedUnion({
       Typed: { value: Schema.String },
       Patched: { outcome: Schema.Literals(["navigated", "blocked", "stale"]) }
     })
-    // The query is the only copy of the text: the page's Model holds none. Digits are rejected.
+    // The search is the only copy of the text: the page's Model holds none. Digits are rejected.
     const SearchPage = Component.define({
       name: "SearchPage",
       props: Schema.Struct({ route: SearchRoute.subset(["Search"]) }),
@@ -262,14 +262,14 @@ describe("BrowserHost", { concurrent: false }, () => {
             /\d/.test(value)
               ? model
               : $.run(
-                Router.patchQuery(SearchRoute, $.props.route, { q: value || undefined }).pipe(
+                Router.patchSearch(SearchRoute, $.props.route, { q: value || undefined }).pipe(
                   Command.map((outcome) => SearchMessage.make({ _tag: "Patched", outcome }))
                 )
               ),
           Patched: () => model
         }),
       view: (_, h) =>
-        h.input.attr("aria-label", "Search").value(h.props.route.query.q ?? "").onInput(({ value }) =>
+        h.input.attr("aria-label", "Search").value(h.props.route.search.q ?? "").onInput(({ value }) =>
           SearchMessage.make({ _tag: "Typed", value })
         )
     })
@@ -310,7 +310,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       return Effect.gen(function*() {
         const app = yield* container
         yield* BrowserHost.mountEffect(SearchApp, Router.props(SearchRoute), app)
-        const field = HtmlQuery.getByRole(app, "textbox", { name: "Search" }) as HTMLInputElement
+        const field = HtmlLocator.getByRole(app, "textbox", { name: "Search" }) as HTMLInputElement
         const native = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!
         const writes: Array<string> = []
         Object.defineProperty(field, "value", {
@@ -445,8 +445,8 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Events, {}, app)
-        HtmlQuery.click(HtmlQuery.getByRole(app, "button", { name: "Inner" }))
-        HtmlQuery.click(HtmlQuery.getByRole(app, "button", { name: "Plain" }))
+        HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name: "Inner" }))
+        HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name: "Plain" }))
         yield* tick
         expect(root.model()).toEqual(["click inner", "click outer"])
       }).pipe(Effect.scoped))
@@ -471,12 +471,12 @@ describe("BrowserHost", { concurrent: false }, () => {
         })
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Toggle, {}, app)
-        const button = HtmlQuery.getByRole(app, "button", { name: "Go" })
-        HtmlQuery.click(button)
+        const button = HtmlLocator.getByRole(app, "button", { name: "Go" })
+        HtmlLocator.click(button)
         yield* tick
-        HtmlQuery.click(HtmlQuery.getByRole(app, "button", { name: "Go" }))
+        HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name: "Go" }))
         yield* tick
-        assert.strictEqual(HtmlQuery.getByRole(app, "button", { name: "Go" }), button)
+        assert.strictEqual(HtmlLocator.getByRole(app, "button", { name: "Go" }), button)
         expect(root.model()).toEqual(["inner", "outer"])
       }).pipe(Effect.scoped))
 
@@ -484,8 +484,8 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Events, {}, app)
-        ;(HtmlQuery.getByRole(app, "textbox", { name: "Focus me" }) as HTMLInputElement).focus()
-        ;(HtmlQuery.getByRole(app, "textbox", { name: "Keys" }) as HTMLInputElement).focus()
+        ;(HtmlLocator.getByRole(app, "textbox", { name: "Focus me" }) as HTMLInputElement).focus()
+        ;(HtmlLocator.getByRole(app, "textbox", { name: "Keys" }) as HTMLInputElement).focus()
         yield* tick
         expect(root.model()).toEqual(["focus keys"])
       }).pipe(Effect.scoped))
@@ -494,7 +494,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Events, {}, app)
-        HtmlQuery.keyDown(HtmlQuery.getByRole(app, "textbox", { name: "Keys" }), "Enter", { shift: true })
+        HtmlLocator.keyDown(HtmlLocator.getByRole(app, "textbox", { name: "Keys" }), "Enter", { shift: true })
         yield* tick
         expect(root.model()).toEqual(["key Enter shift"])
       }).pipe(Effect.scoped))
@@ -574,7 +574,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         })
         const app = yield* container
         yield* BrowserHost.mountEffect(Composer, {}, app)
-        const field = HtmlQuery.getByRole(app, "textbox", { name: "Message" })
+        const field = HtmlLocator.getByRole(app, "textbox", { name: "Message" })
         const fire = (next: Event) => {
           event = next
           field.dispatchEvent(next)
@@ -615,7 +615,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         })
         const app = yield* container
         yield* BrowserHost.mountEffect(Prototype, {}, app)
-        HtmlQuery.submit(app.querySelector("form")!)
+        HtmlLocator.submit(app.querySelector("form")!)
         const { entries, fields } = seen[0]!
         expect(Object.keys(fields)).toEqual(["constructor", "__proto__", "toString"])
         expect([fields.constructor, fields["__proto__"], fields.toString]).toEqual(["a", "b", "c"])
@@ -954,13 +954,13 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(dialog()!.open).toBe(true)
         // `method="dialog"` doesn't close it: the submission is the app's, and the Model closes it.
         const form = app.querySelector("form")!
-        form.requestSubmit(HtmlQuery.getByRole(app, "button", { name: "Delete" }) as HTMLButtonElement)
+        form.requestSubmit(HtmlLocator.getByRole(app, "button", { name: "Delete" }) as HTMLButtonElement)
         yield* tick
         expect(calls).toEqual(["showModal Delete note?", "close Delete note?"])
         expect(dialog()!.open).toBe(false)
         expect(dialog()!.returnValue).toBe("")
         expect(root.model()!.log).toEqual(["delete", "closed"])
-        expect(HtmlQuery.dialogState(dialog())).toBe("closed")
+        expect(HtmlLocator.dialogState(dialog())).toBe("closed")
       }).pipe(Effect.scoped))
 
     it.effect("Escape is the Model's: rejected stays open, a forced close reopens, accepted closes", () =>
@@ -1004,7 +1004,7 @@ describe("BrowserHost", { concurrent: false }, () => {
 
         root.send(ConfirmMessage.make({ _tag: "Mode", state: "modal" }))
         yield* tick
-        HtmlQuery.click(HtmlQuery.getByRole(app, "button", { name: "Remove" }))
+        HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name: "Remove" }))
         yield* tick
         expect(dialog()).toBeNull()
         // Later commits have nothing to show; showModal on the detached dialog would throw.
@@ -1103,7 +1103,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         const { calls } = yield* dialogCalls
         const { app, root } = yield* mountConfirm({ state: "modal", acceptEscape: false })
-        HtmlQuery.click(HtmlQuery.getByRole(app, "button", { name: "Remove" }))
+        HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name: "Remove" }))
         yield* tick
         expect(calls).toEqual(["showModal Delete note?", "close Delete note?"])
         expect(root.model()!.log).toEqual([])
@@ -1127,7 +1127,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         })
         const drawer = yield* container
         yield* BrowserHost.mountEffect(Drawer, {}, drawer)
-        HtmlQuery.click(HtmlQuery.getByRole(drawer, "button", { name: "Close" }))
+        HtmlLocator.click(HtmlLocator.getByRole(drawer, "button", { name: "Close" }))
         yield* tick
         expect(calls).toEqual(["showModal Outer", "showModal Inner", "close Inner", "close Outer"])
 
@@ -1365,7 +1365,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         root.send(Message.make({ _tag: "FocusMissing" }))
         root.send(Message.make({ _tag: "Measure" }))
         yield* tick
-        expect(document.activeElement).toBe(HtmlQuery.getByRole(app, "textbox", { name: "Field" }))
+        expect(document.activeElement).toBe(HtmlLocator.getByRole(app, "textbox", { name: "Field" }))
         expect(root.model()).toEqual(["mounted input", "found true", "found false", "measured true"])
       }).pipe(Effect.scoped))
   })
@@ -1417,12 +1417,12 @@ describe("BrowserHost", { concurrent: false }, () => {
         const app = yield* container
         const scope = yield* Scope.make()
         const root = yield* BrowserHost.mountEffect(TodoApp, {}, app).pipe(Scope.provide(scope))
-        const field = HtmlQuery.getByRole(app, "textbox", { name: "New todo" })
+        const field = HtmlLocator.getByRole(app, "textbox", { name: "New todo" })
         yield* Scope.close(scope, Exit.void)
         expect(app.childNodes.length).toBe(0)
         // A detached node from the old tree no longer reaches it.
         app.appendChild(field)
-        HtmlQuery.input(field, "late")
+        HtmlLocator.input(field, "late")
         yield* tick
         expect(root.model()?.draft ?? "").toBe("")
       }).pipe(Effect.scoped))
@@ -1438,7 +1438,7 @@ describe("BrowserHost", { concurrent: false }, () => {
             Effect.map((root) => new WeakRef(root.model()!)),
             Scope.provide(scope)
           )
-          const field = HtmlQuery.getByRole(app, "textbox", { name: "New todo" })
+          const field = HtmlLocator.getByRole(app, "textbox", { name: "New todo" })
           yield* Scope.close(scope, Exit.void)
           yield* collectGarbage
           expect(model.deref()).toBeUndefined()
@@ -1451,12 +1451,12 @@ describe("BrowserHost", { concurrent: false }, () => {
         const app = yield* container
         const scope = yield* Scope.make()
         yield* Layer.buildWithScope(BrowserHost.mount(TodoApp, {}, app), scope)
-        HtmlQuery.input(HtmlQuery.getByRole(app, "textbox", { name: "New todo" }), "Buy milk")
+        HtmlLocator.input(HtmlLocator.getByRole(app, "textbox", { name: "New todo" }), "Buy milk")
         yield* tick
-        HtmlQuery.click(HtmlQuery.getByRole(app, "button", { name: "Add" }))
+        HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name: "Add" }))
         yield* tick
-        const list = HtmlQuery.getByRole(app, "list", { name: "Todos" })
-        expect(HtmlQuery.queryAllByRole(list, "listitem").map((item) => item.textContent)).toEqual(["Buy milk×"])
+        const list = HtmlLocator.getByRole(app, "list", { name: "Todos" })
+        expect(HtmlLocator.queryAllByRole(list, "listitem").map((item) => item.textContent)).toEqual(["Buy milk×"])
         yield* Scope.close(scope, Exit.void)
         expect(app.childNodes.length).toBe(0)
       }).pipe(Effect.scoped))

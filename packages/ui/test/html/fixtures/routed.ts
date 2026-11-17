@@ -1,9 +1,9 @@
 /**
  * The routed example: a root that holds the route, a home page, a person
- * page that reads its bio through a loader, a search route and a slow page
+ * page that reads its bio through a query, a search route and a slow page
  * whose provided Layer takes a second to build.
  */
-import { Component, Head, Loader, Route, Router } from "@effect/ui"
+import { Component, Head, Query, Route, Router } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Context, Effect, Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
@@ -11,7 +11,7 @@ import { AsyncResult } from "effect/reactivity"
 export const AppRoute = Route.union({
   Home: Route.make("/"),
   Person: Route.make("/people/:id", { params: { id: Schema.Number } }),
-  Search: Route.make("/search", { query: { q: Schema.String } }),
+  Search: Route.make("/search", { search: { q: Schema.String } }),
   Slow: Route.make("/slow"),
   NotFound: Route.make("/*")
 })
@@ -37,7 +37,7 @@ export class People extends Context.Service<People, {
 }
 
 /** Route data: read on the server, so the page's HTML holds it. */
-export class GetBio extends Loader.Service<GetBio>()("GetBio", {
+export class GetBio extends Query.Service<GetBio>()("GetBio", {
   args: { id: Schema.Number },
   success: Schema.String,
   error: Schema.Never,
@@ -50,7 +50,7 @@ export const Person = Component.define({
   model: Schema.Struct({ id: Schema.Number }),
   message: Schema.Never,
   elements: Html,
-  loaders: { bio: { load: GetBio, args: (_model, props) => ({ id: props.id }) } }
+  queries: { bio: { query: GetBio, args: (_model, props) => ({ id: props.id }) } }
 }).make({
   init: ($) => ({ id: $.props.id }),
   update: (model) => model,
@@ -62,7 +62,7 @@ export const Person = Component.define({
   view: (model, h) =>
     h.div(
       h.h1(`Person ${model.id}`),
-      h.p.attr("id", "bio").children(AsyncResult.isSuccess(h.loaded.bio) ? h.loaded.bio.value : "Loading")
+      h.p.attr("id", "bio").children(AsyncResult.isSuccess(h.queries.bio) ? h.queries.bio.value : "Loading")
     )
 }).pipe(Component.provide(GetBio.layer))
 
@@ -132,7 +132,7 @@ export const App = Component.define({
       AppRoute.match(route, {
         Home: (route) => Home(h, { key: AppRoute.print(route), props: {} }),
         Person: (route) => Person(h, { key: AppRoute.print(route), props: { id: route.params.id } }),
-        Search: (route) => h.h1(`Search ${route.query.q}`),
+        Search: (route) => h.h1(`Search ${route.search.q}`),
         Slow: (route) => Slow(h, { key: AppRoute.print(route), props: {} }),
         NotFound: () => h.h1("Not found")
       })

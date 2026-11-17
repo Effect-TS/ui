@@ -13,7 +13,7 @@
  * - the server's merged head differs from the client's first merge. JSON-LD
  *   is compared canonically, `class` as a set and `data-*` per name;
  * - the head sync warns about the server's document;
- * - a shipped loader entry doesn't decode and encode back as it was shipped,
+ * - a shipped query entry doesn't decode and encode back as it was shipped,
  *   args key included, once the state has been through
  *   `HtmlServer.serializeState` and `JSON.parse`;
  * - the client fetched a hydrated entry into its cache inside the fetch-free
@@ -60,10 +60,10 @@ import type * as Scope from "effect/Scope"
 import * as TestClock from "effect/testing/TestClock"
 import type * as Component from "../../Component.ts"
 import * as Head from "../../Head.ts"
-import * as loaders from "../../internal/loaders.ts"
+import * as componentQueries from "../../internal/queries.ts"
 import * as runtime from "../../internal/runtime.ts"
-import * as Loader from "../../Loader.ts"
 import * as MessageLog from "../../MessageLog.ts"
+import * as Query from "../../Query.ts"
 import * as Renderer from "../../Renderer.ts"
 import * as TestHost from "../../testing/TestHost.ts"
 import type * as View from "../../View.ts"
@@ -86,7 +86,7 @@ import * as server from "../internal/server.ts"
  * fetches. `adopted` lists the paths whose Model the client adopted. `log`
  * is the client's log up to adoption and `serverLog` the server's, both
  * unbounded unless `logSize` says otherwise. `commands` lists all `init`
- * Commands run by adopted instances, by position. `misses` lists loader
+ * Commands run by adopted instances, by position. `misses` lists query
  * entries the server's cache had in flight when the budget
  * was spent, or never started with a budget of 0. The client fetches those.
  *
@@ -106,12 +106,12 @@ export interface Ssr<out Model, in Msg, out Events = never> {
   readonly log: ReadonlyArray<MessageLog.Entry>
   readonly serverLog: ReadonlyArray<MessageLog.Entry>
   readonly commands: ReadonlyArray<{ readonly path: string; readonly name: string; readonly index: number }>
-  readonly misses: ReadonlyArray<{ readonly read: string; readonly logKey: string }>
+  readonly misses: ReadonlyArray<{ readonly query: string; readonly logKey: string }>
 }
 
 /**
  * Hydration didn't adopt what the server rendered, or a check around it
- * failed. `problems` lists each one, by path, head identity or read.
+ * failed. `problems` lists each one, by path, head identity or query.
  *
  * @stability experimental
  * @category errors
@@ -234,10 +234,10 @@ const stepLimit = 10_000
  * the server's markup, for `root.frames()`. It defaults to the container's
  * text.
  *
- * `budget` and `static` are passed to the server render, and `loader` to
+ * `budget` and `static` are passed to the server render, and `query` to
  * the client mount only: the server's cache is per request. With `static`
  * there is no fetch-free window, so its check is skipped; an entry is then
- * stale at hydration, and refetched, unless its read's `staleTime` is
+ * stale at hydration, and refetched, unless its query's `staleTime` is
  * `"Infinity"`.
  *
  * **Gotchas**
@@ -265,7 +265,7 @@ export const ssr = <
   options?: {
     readonly budget?: Duration.Input | undefined
     readonly static?: boolean | undefined
-    readonly loader?: Renderer.LoaderOptions | undefined
+    readonly query?: Renderer.QueryOptions | undefined
     readonly logSize?: number | undefined
     readonly frames?: ((container: globalThis.Element) => string) | undefined
   }
@@ -330,8 +330,8 @@ export const ssr = <
     // -- server ---------------------------------------------------------------
     const start = now()
     const serverLog = MessageLog.makeMemory({ size: logSize })
-    let serverCache: ReturnType<typeof Loader.internals> | undefined
-    let misses: ReadonlyArray<{ readonly read: string; readonly logKey: string }> = []
+    let serverCache: ReturnType<typeof Query.internals> | undefined
+    let misses: ReadonlyArray<{ readonly query: string; readonly logKey: string }> = []
     const serverFiber = yield* runtime.prerender(component, props, {
       budget,
       elements: [Html.name],
@@ -344,7 +344,7 @@ export const ssr = <
       Effect.provideService(MessageLog.MessageLog, serverLog),
       Effect.provideService(Html.Host, BrowserHost.htmlHost),
       Effect.provideService(Clock.Clock, tracking),
-      Effect.provideService(Loader.Problems, testHost.report),
+      Effect.provideService(Query.Problems, testHost.report),
       Effect.forkChild
     )
     const serverDone = () => serverFiber.pollUnsafe() !== undefined
@@ -362,7 +362,7 @@ export const ssr = <
     // The state as the client reads it from the page.
     const state = JSON.parse(HtmlServer.serializeState(rendered.state)) as Renderer.State
     if (serverCache !== undefined) {
-      for (const problem of serverCache.checkWire(state["~loader"] ?? {})) problems.push(`~loader: ${problem}`)
+      for (const problem of serverCache.checkWire(state["~query"] ?? {})) problems.push(`~query: ${problem}`)
     }
     const html = server.toHtml(rendered.nodes)
     const page = `<!doctype html><html ${server.attributes(server.htmlOwned(rendered.head))}><head>${
@@ -419,15 +419,15 @@ export const ssr = <
         frame()
       }
     }
-    const mounted = yield* runtime.mount(component, props, container, { state, loader: options?.loader }).pipe(
+    const mounted = yield* runtime.mount(component, props, container, { state, query: options?.query }).pipe(
       Effect.provideContext(
         Context.make(Renderer.Renderer, { host: recording }).pipe(
           Context.add(Html.Host, BrowserHost.htmlHost),
           Context.add(MessageLog.MessageLog, clientLog),
           Context.add(Clock.Clock, tracking),
-          Context.add(Loader.Visibility, testHost.visibility),
-          Context.add(Loader.Connectivity, testHost.connectivity),
-          Context.add(Loader.Problems, testHost.report)
+          Context.add(Query.Visibility, testHost.visibility),
+          Context.add(Query.Connectivity, testHost.connectivity),
+          Context.add(Query.Problems, testHost.report)
         )
       )
     ) as Effect.Effect<runtime.Root & Renderer.Root<any, any>, never, Exclude<R | RP, Html.Host> | Scope.Scope>
@@ -462,16 +462,16 @@ export const ssr = <
         problems.push(`${path}: the client didn't adopt the server's Model`)
         continue
       }
-      // The adopted slots are logged right after the adoption, one entry per slot the server wrote.
-      const slots: Record<string, unknown> = {}
+      // The adopted results are logged right after the adoption, one entry per result the server wrote.
+      const results: Record<string, unknown> = {}
       for (const later of log.slice(log.indexOf(entry) + 1)) {
         if (later.path !== path) continue
-        if (later._tag !== "LoaderChanged") break
-        slots[later.name] = later.slot
+        if (later._tag !== "QueryChanged") break
+        results[later.name] = later.result
       }
       const encoded = runtime.stateCodecOf(entry.component).encode(
         entry.model,
-        { ...loaders.boundOf(entry.component)?.empty, ...slots }
+        { ...componentQueries.boundOf(entry.component)?.empty, ...results }
       )
       const json = encoded._tag === "Some" ? JSON.stringify(encoded.value) : undefined
       if (json !== JSON.stringify(state[path])) {
@@ -492,7 +492,7 @@ export const ssr = <
       for (const entry of log) {
         // A caller-only fetch (`stored: false`) is allowed: only a fetch the cache stores defeats hydration.
         if (entry._tag === "FetchStarted" && entry.inWindow && entry.stored) {
-          problems.push(`${entry.read} ${entry.logKey}: fetched inside the fetch-free window (${entry.trigger})`)
+          problems.push(`${entry.query} ${entry.logKey}: fetched inside the fetch-free window (${entry.trigger})`)
         }
       }
     }

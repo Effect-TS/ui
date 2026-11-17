@@ -12,7 +12,7 @@ export interface NoteSearch {
 // The number of notes on one page of search results.
 export const pageSize = 20
 
-// All of the UI's I/O goes through this service. Commands and loader reads
+// All of the UI's I/O goes through this service. Commands and queries
 // capture it, so a component's `update` and `view` never name it.
 export class Notes extends Context.Service<Notes, {
   readonly list: Effect.Effect<ReadonlyArray<Note>>
@@ -37,7 +37,7 @@ export class Notes extends Context.Service<Notes, {
       const list = client.get("/notes").pipe(
         Effect.flatMap(HttpClientResponse.schemaBodyJson(Schema.Array(Note))),
         // The list has no typed error, so a failure is a defect and fails
-        // the slot that reads it.
+        // the component that queries it.
         Effect.orDie
       )
 

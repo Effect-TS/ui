@@ -1,13 +1,13 @@
-import { Loader } from "@effect/ui"
+import { Query } from "@effect/ui"
 import { Effect, Schema } from "effect"
 import { Note, NoteNotFound, NotesTag } from "../domain/Note.ts"
 import { Notes } from "../services/Notes.ts"
 
-// A read is data loaded by its arguments and cached, so components watching
+// A query is data loaded by its arguments and cached, so components watching
 // the same note share one entry and one fetch. Like a `Command.Service`, it
 // captures `Notes` when its Layer is built. `SaveNote` invalidates
 // `NotesTag`, so a save refetches it.
-export class GetNote extends Loader.Service<GetNote>()(
+export class GetNote extends Query.Service<GetNote>()(
   "notes/GetNote",
   {
     args: { id: Schema.String },

@@ -1,23 +1,23 @@
 /**
- * Queries by ARIA role and accessible name, computed from tags and
+ * Locates elements by ARIA role and accessible name, computed from tags and
  * attributes, so a test finds elements the way assistive technology does.
  *
- * The same queries run over a story's view value, a `TestHost` tree and a
- * real DOM tree. `role` is a `Query` locator, so it combines with
- * `Query.inside` on the first two. On the DOM, `click`, `input`, `keyDown`
+ * The same lookups run over a story's view value, a `TestHost` tree and a
+ * real DOM tree. `role` returns a `Locator`, so it combines with
+ * `Locator.inside` on the first two. On the DOM, `click`, `input`, `keyDown`
  * and `submit` act as the user would, through real DOM events.
  *
  * Hidden elements (`hidden`, `aria-hidden="true"`, `<input type="hidden">`)
  * and everything inside them are left out unless `hidden: true` is passed.
  *
- * On a structural tree a match is typed `Query.Node`, since it can be any
- * node of the tree. On `TestHost`, `root.all(HtmlQuery.role(...))` keeps the
+ * On a structural tree a match is typed `Locator.Node`, since it can be any
+ * node of the tree. On `TestHost`, `root.all(HtmlLocator.role(...))` keeps the
  * host's node type. On the DOM a match is an `HTMLElement`.
  *
  * **Example** (Finding a button by its name)
  *
  * ```ts import.meta.vitest
- * import { HtmlQuery } from "@effect/ui/html/testing"
+ * import { HtmlLocator } from "@effect/ui/html/testing"
  *
  * const tree = {
  *   tag: "form",
@@ -28,20 +28,20 @@
  *   ]
  * }
  *
- * console.log(HtmlQuery.getByRole(tree, "button", { name: "Add" }) === tree.children[2]) // true
- * console.log(HtmlQuery.nameOf(tree, HtmlQuery.getByRole(tree, "textbox"))) // "New todo"
+ * console.log(HtmlLocator.getByRole(tree, "button", { name: "Add" }) === tree.children[2]) // true
+ * console.log(HtmlLocator.nameOf(tree, HtmlLocator.getByRole(tree, "textbox"))) // "New todo"
  * ```
  *
  * @stability experimental
  * @since 0.1.0
  */
-import type * as Query from "../../testing/Query.ts"
+import type * as Locator from "../../testing/Locator.ts"
 
 // ---------------------------------------------------------------------------
 // trees
 // ---------------------------------------------------------------------------
 
-/** One way to read a tree: the structural `Query.Node` shape or the DOM. */
+/** One way to read a tree: the structural `Locator.Node` shape or the DOM. */
 interface Reader<N> {
   readonly isElement: (node: N) => boolean
   readonly tag: (node: N) => string
@@ -65,7 +65,7 @@ const domReader: Reader<globalThis.Node> = {
   text: (node) => node.nodeType === 3 ? (node as globalThis.Text).data : undefined
 }
 
-const structuralReader: Reader<Query.Node> = {
+const structuralReader: Reader<Locator.Node> = {
   isElement: (node) => node.tag !== undefined,
   tag: (node) => node.tag!,
   attr: (node, name) => node.attrs?.[name],
@@ -519,7 +519,7 @@ const select = <N>(index: Index<N>, role: string, options: RoleOptions | undefin
  */
 export const queryAllByRole: {
   (root: globalThis.Node, role: string, options?: RoleOptions): ReadonlyArray<HTMLElement>
-  (root: Query.Node, role: string, options?: RoleOptions): ReadonlyArray<Query.Node>
+  (root: Locator.Node, role: string, options?: RoleOptions): ReadonlyArray<Locator.Node>
 } = (root: any, role: string, options?: RoleOptions): ReadonlyArray<any> => select(buildIndex(root), role, options)
 
 /**
@@ -532,15 +532,15 @@ export const queryAllByRole: {
  */
 export const getByRole: {
   (root: globalThis.Node, role: string, options?: RoleOptions): HTMLElement
-  (root: Query.Node, role: string, options?: RoleOptions): Query.Node
+  (root: Locator.Node, role: string, options?: RoleOptions): Locator.Node
 } = (root: any, role: string, options?: RoleOptions): any => {
   const index = buildIndex(root)
   const found = select(index, role, options)
   if (found.length === 1) return found[0]
   if (found.length > 1) {
-    throw new Error(`HtmlQuery: ${found.length} elements have ${describeOptions(role, options)}`)
+    throw new Error(`HtmlLocator: ${found.length} elements have ${describeOptions(role, options)}`)
   }
-  throw new Error(`HtmlQuery: nothing has ${describeOptions(role, options)}. Roles here:\n${describeIndex(index)}`)
+  throw new Error(`HtmlLocator: nothing has ${describeOptions(role, options)}. Roles here:\n${describeIndex(index)}`)
 }
 
 const describeIndex = <N>(index: Index<N>): string => {
@@ -561,7 +561,7 @@ const describeIndex = <N>(index: Index<N>): string => {
  */
 export const roleOf: {
   (root: globalThis.Node, node: globalThis.Node): string | undefined
-  (root: Query.Node, node: Query.Node): string | undefined
+  (root: Locator.Node, node: Locator.Node): string | undefined
 } = (root: any, node: any): string | undefined => buildIndex(root).byNode.get(node)?.role
 
 /**
@@ -576,7 +576,7 @@ export const roleOf: {
  */
 export const nameOf: {
   (root: globalThis.Node, node: globalThis.Node): string
-  (root: Query.Node, node: Query.Node): string
+  (root: Locator.Node, node: Locator.Node): string
 } = (root: any, node: any): string => {
   const index = buildIndex(root)
   const entry = index.byNode.get(node)
@@ -584,14 +584,14 @@ export const nameOf: {
 }
 
 /**
- * A `Query` locator for elements with role `role` and matching `options`, to
- * combine with `Query.inside` and the other locators.
+ * A `Locator` for elements with role `role` and matching `options`, to
+ * combine with `Locator.inside` and the other locators.
  *
  * @stability experimental
  * @category locators
  * @since 0.1.0
  */
-export const role = (role: string, options?: RoleOptions): Query.Locator => ({
+export const role = (role: string, options?: RoleOptions): Locator.Locator => ({
   description: describeOptions(role, options),
   all: (root) => select(buildIndex(root), role, options)
 })
@@ -609,11 +609,11 @@ export const role = (role: string, options?: RoleOptions): Query.Locator => ({
  * **Example** (Checking a confirm dialog)
  *
  * ```ts
- * import { HtmlQuery } from "@effect/ui/html/testing"
+ * import { HtmlLocator } from "@effect/ui/html/testing"
  *
  * declare const story: { get: (locator: unknown) => unknown }
- * const dialog = story.get(HtmlQuery.role("dialog", { name: "Delete note?" }))
- * console.log(HtmlQuery.dialogState(dialog)) // "modal"
+ * const dialog = story.get(HtmlLocator.role("dialog", { name: "Delete note?" }))
+ * console.log(HtmlLocator.dialogState(dialog)) // "modal"
  * ```
  *
  * @stability experimental
@@ -631,7 +631,7 @@ export const dialogState = (node: unknown): "closed" | "open" | "modal" => {
     }
   }
   const reader = structuralReader
-  const element = node as Query.Node
+  const element = node as Locator.Node
   if (reader.prop(element, "open") === "modal") return "modal"
   return dialogOpen(reader, element) ? "open" : "closed"
 }
@@ -649,11 +649,11 @@ export const dialogState = (node: unknown): "closed" | "open" | "modal" => {
  * **Example** (Checking a search field)
  *
  * ```ts
- * import { HtmlQuery } from "@effect/ui/html/testing"
+ * import { HtmlLocator } from "@effect/ui/html/testing"
  *
  * declare const story: { get: (locator: unknown) => unknown }
- * const field = story.get(HtmlQuery.role("searchbox", { name: "Search" }))
- * console.log(HtmlQuery.value(field)) // "effect"
+ * const field = story.get(HtmlLocator.role("searchbox", { name: "Search" }))
+ * console.log(HtmlLocator.value(field)) // "effect"
  * ```
  *
  * @see {@link checked} for a checkbox or radio button
@@ -682,11 +682,11 @@ export const value = (node: unknown): string | undefined => {
  * **Example** (Checking a done box)
  *
  * ```ts
- * import { HtmlQuery } from "@effect/ui/html/testing"
+ * import { HtmlLocator } from "@effect/ui/html/testing"
  *
  * declare const story: { get: (locator: unknown) => unknown }
- * const done = story.get(HtmlQuery.role("checkbox", { name: "Done" }))
- * console.log(HtmlQuery.checked(done)) // true
+ * const done = story.get(HtmlLocator.role("checkbox", { name: "Done" }))
+ * console.log(HtmlLocator.checked(done)) // true
  * ```
  *
  * @see {@link value} for a field's text
@@ -704,11 +704,11 @@ export const checked = (node: unknown): boolean | undefined => isChecked(readerO
  * **Example** (Checking a menu)
  *
  * ```ts
- * import { HtmlQuery } from "@effect/ui/html/testing"
+ * import { HtmlLocator } from "@effect/ui/html/testing"
  *
  * declare const story: { get: (locator: unknown) => unknown }
- * const menu = story.get(HtmlQuery.role("menu", { hidden: true }))
- * console.log(HtmlQuery.popoverState(menu)) // "closed"
+ * const menu = story.get(HtmlLocator.role("menu", { hidden: true }))
+ * console.log(HtmlLocator.popoverState(menu)) // "closed"
  * ```
  *
  * @stability experimental
@@ -793,7 +793,7 @@ export const submit = (element: globalThis.Element): void => {
   const form = element.localName === "form"
     ? element as HTMLFormElement
     : (element as HTMLInputElement).form ?? element.closest("form")
-  if (form === null) throw new Error("HtmlQuery.submit: the element isn't in a form")
+  if (form === null) throw new Error("HtmlLocator.submit: the element isn't in a form")
   if (typeof form.requestSubmit === "function") form.requestSubmit()
   else {
     const view = form.ownerDocument.defaultView

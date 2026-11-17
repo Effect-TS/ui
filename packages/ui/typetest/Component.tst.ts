@@ -1,4 +1,4 @@
-import { Command, Component, Feature, type Loader, type View } from "@effect/ui"
+import { Command, Component, Feature, type Query, type View } from "@effect/ui"
 import { Context, Effect, Layer, Schema, Scope } from "effect"
 import type { KeyValueStore } from "effect/persistence"
 import { describe, expect, it } from "tstyche"
@@ -26,10 +26,10 @@ declare const NeedsRuntime: Component.Component<
   {},
   never,
   never,
-  A | Loader.Cache | Scope.Scope,
+  A | Query.Cache | Scope.Scope,
   any
 >
-declare const runtimeLayer: Layer.Layer<A | Loader.Cache | Scope.Scope | typeof Loader.Visibility>
+declare const runtimeLayer: Layer.Layer<A | Query.Cache | Scope.Scope | typeof Query.Visibility>
 
 describe("Component", () => {
   describe("Requirements", () => {
@@ -197,7 +197,7 @@ describe("Component", () => {
 
     it("never removes a service the runtime owns", () => {
       const Provided = Component.provide(NeedsRuntime, runtimeLayer)
-      expect<Component.Requirements<typeof Provided>>().type.toBe<Loader.Cache | Scope.Scope>()
+      expect<Component.Requirements<typeof Provided>>().type.toBe<Query.Cache | Scope.Scope>()
     })
   })
 

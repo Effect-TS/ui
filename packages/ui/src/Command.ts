@@ -21,7 +21,7 @@
  *   `Layer.succeed(DeleteTodo, ({ id }) => ...)`. Its body may fail with a
  *   typed error, which the issue site maps to a message with `Command.match`.
  *
- * A `Command.Service` declares what it does to the loader cache:
+ * A `Command.Service` declares what it does to the query cache:
  * `invalidates`, `optimistic` and `writes` are optional. Omitting
  * `invalidates` means the run invalidates nothing.
  *
@@ -66,7 +66,7 @@ import * as Stream from "effect/Stream"
 import type * as Types from "effect/Types"
 import type * as Component from "./Component.ts"
 import * as internalNoop from "./internal/noop.ts"
-import * as Loader from "./Loader.ts"
+import * as Query from "./Query.ts"
 import type * as Renderer from "./Renderer.ts"
 
 /**
@@ -244,7 +244,7 @@ export interface Options<In extends ArgsInput, G extends string> {
  * Host packages widen this interface by module augmentation, the same way an
  * app registers its element vocabulary. The runtime provides these services
  * when a Command runs, so they're removed from `R`. The core lists `Scope`,
- * `Renderer.Refs` and the loader cache, and host packages add their host
+ * `Renderer.Refs` and the query cache, and host packages add their host
  * marker.
  *
  * **Example** (Registering a host's framework service)
@@ -268,7 +268,7 @@ export interface Options<In extends ArgsInput, G extends string> {
 export interface FrameworkServices {
   readonly Scope: Scope.Scope
   readonly Refs: Renderer.Refs
-  readonly Cache: Loader.Cache
+  readonly Cache: Query.Cache
 }
 
 /**
@@ -296,7 +296,7 @@ export type CapturesServices<R> = [Exclude<R, FrameworkService>] extends [never]
   }
 
 /**
- * What a Command declares about the loader cache, computed from its args when
+ * What a Command declares about the query cache, computed from its args when
  * it's issued. A story test reads these off the issued Command without a
  * cache. `make` Commands declare nothing.
  *
@@ -306,14 +306,14 @@ export type CapturesServices<R> = [Exclude<R, FrameworkService>] extends [never]
  */
 export interface Declared {
   /** What the run invalidates when its fiber exits, however it exits. */
-  readonly invalidates: ReadonlyArray<Loader.Target>
+  readonly invalidates: ReadonlyArray<Query.Target>
   /** The optimistic patches, registered when the Command is issued. */
-  readonly optimistic: ReadonlyArray<Loader.Patch>
+  readonly optimistic: ReadonlyArray<Query.Patch>
   /**
    * The writes a success stores, or `undefined` without `writes`. Takes the
    * body's own success.
    */
-  readonly writes: ((success: any) => ReadonlyArray<Loader.Write>) | undefined
+  readonly writes: ((success: any) => ReadonlyArray<Query.Write>) | undefined
   /**
    * The budget given to `Command.afterRefetch`, or `undefined` when a success
    * is delivered without waiting for refetches.
@@ -737,9 +737,9 @@ export declare namespace Service {
    * @since 0.1.0
    */
   export interface Options<In extends ArgsInput, A, G extends string> extends CommandOptions<In, G> {
-    readonly invalidates?: ((args: ArgsOf<In>) => ReadonlyArray<Loader.Target>) | undefined
-    readonly optimistic?: ((args: ArgsOf<In>) => ReadonlyArray<Loader.Patch>) | undefined
-    readonly writes?: ((success: A, args: ArgsOf<In>) => ReadonlyArray<Loader.Write>) | undefined
+    readonly invalidates?: ((args: ArgsOf<In>) => ReadonlyArray<Query.Target>) | undefined
+    readonly optimistic?: ((args: ArgsOf<In>) => ReadonlyArray<Query.Patch>) | undefined
+    readonly writes?: ((success: A, args: ArgsOf<In>) => ReadonlyArray<Query.Write>) | undefined
   }
 }
 
@@ -857,7 +857,7 @@ const makeGroup = (
     const picked: Record<string, unknown> = {}
     const source = (args ?? {}) as Record<string, unknown>
     for (const field of group) if (Object.hasOwn(source, field)) picked[field] = source[field]
-    return { key: Loader.canonical(encode(picked)), schema: pickSchema, picked }
+    return { key: Query.canonical(encode(picked)), schema: pickSchema, picked }
   }
 }
 
@@ -927,7 +927,7 @@ export const groupKeyOf = (definition: Definition.Any, group: unknown): string |
  * services, which are removed from `R`. A body that requires anything else
  * doesn't compile, and the error names `FrameworkService` rather than the
  * missing service. With `stream: true` the body returns a `Stream` instead.
- * A `make` Command declares nothing about the loader cache, and its runs end
+ * A `make` Command declares nothing about the query cache, and its runs end
  * with the issuing instance.
  *
  * **Gotchas**
@@ -1023,7 +1023,7 @@ export const make: {
  * **When to use**
  *
  * Use when a Command needs a non-framework service, such as a store or HTTP
- * client, including mutations of data a loader reads.
+ * client, including mutations of data a query reads.
  *
  * **Details**
  *
@@ -1042,7 +1042,7 @@ export const make: {
  * messages with `Command.match({ onSuccess, onFailure })`. A body that can't
  * fail issues a Command directly, mapped with `Command.map`.
  *
- * The options declare what a run does to the loader cache, from the args:
+ * The options declare what a run does to the query cache, from the args:
  * `invalidates` (optional), `optimistic` patches, live from issue, and
  * `writes` of the success. The runtime applies them when the run's fiber
  * exits, before its message is sent.
@@ -1451,7 +1451,7 @@ type AwaitsRefetchOf<R, K> = [K] extends ["Effect"] ? [R] extends [never] ? {
  * - `h.isRunning` stays true through the wait. Under `queue` the next run
  *   starts when the body exits, and messages keep issue order; under
  *   `drop` a waiting run still counts as running.
- * - Each awaited entry emits when it settles, so its loader's slot is
+ * - Each awaited entry emits when it settles, so its query's result is
  *   written before the success, in one render, for the last entry to
  *   settle. Two entries settling apart can briefly show a patched row next
  *   to the refetched one.
@@ -1541,7 +1541,7 @@ export const interrupt = <Args, G extends string>(
  *
  * **Details**
  *
- * Data the server renders comes from a loader: a read fetched by the
+ * Data the server renders comes from a query: a query fetched by the
  * server's per-request cache. `init`'s Commands are dropped silently, since
  * the client runs them when it adopts the Model.
  *

@@ -40,8 +40,8 @@ import * as HtmlServer from "./HtmlServer.ts"
  *
  * Per request it resolves the URL with `routes`. A URL that doesn't resolve
  * is a 404, and a redirected or normalised one is a 301 to
- * `routes.print(route)`, or a 302 when query params were also dropped as
- * invalid. A URL with query params dropped as invalid is a 302 to the same
+ * `routes.print(route)`, or a 302 when search params were also dropped as
+ * invalid. A URL with search params dropped as invalid is a 302 to the same
  * URL without them, keeping the others as written. Otherwise it renders with `HtmlServer.renderToHtml` under
  * `Router.static` at the URL, with `Router.props(routes)` as the props,
  * the same props the client hydrates with. The response is

@@ -6,7 +6,7 @@
  * `TestHost`), `Router.static` (server rendering) and, in
  * `@effect/ui/html`, `BrowserRouter.layer` and `BrowserRouter.layerHash`.
  * Each provides the `Router` service and the navigation Commands, `Push`,
- * `Replace`, `PatchQuery`, `Back`, `Forward` and `Load`. A component
+ * `Replace`, `PatchSearch`, `Back`, `Forward` and `Load`. A component
  * that navigates has them in its requirements, so a missing Router is a
  * compile error at `mount`.
  *
@@ -23,19 +23,19 @@
  *
  * Pages are chosen with the union's exhaustive `match` and keyed by their
  * path, `AppRoute.printPath(route)`. A new path mounts a fresh page, and a
- * change to the query alone updates the page in place:
+ * change to the search alone updates the page in place:
  * `SearchPage(h, { key: AppRoute.printPath(route), props: { route } })`.
  * A page that should start over when a param changes adds the param to its
  * key.
  *
- * **View state in the query**
+ * **View state in search params**
  *
  * A value such as a search box's text or a page number can live in the
- * query alone, with no copy in any Model. A page that uses its query takes
+ * search alone, with no copy in any Model. A page that uses its search takes
  * its whole route as props, typed by a one-case subset such as
- * `AppRoute.subset(["Search"])`, and reads `h.props.route.query`. A page
- * with no query can take picked fields, such as `{ id: route.params.id }`.
- * The page writes the query with `Router.patchQuery`, and a loader that
+ * `AppRoute.subset(["Search"])`, and reads `h.props.route.search`. A page
+ * with no search can take picked fields, such as `{ id: route.params.id }`.
+ * The page writes the search with `Router.patchSearch`, and a query that
  * reads it can wait for typing to stop with its `debounce` option.
  *
  * **Example** (A root that follows the route)
@@ -101,12 +101,12 @@ import type * as Component from "./Component.ts"
 import type * as Head from "./Head.ts"
 import * as services from "./internal/services.ts"
 import { canonical, pairsWithout, withPairs } from "./internal/url.ts"
-import * as Loader from "./Loader.ts"
+import * as Query from "./Query.ts"
 import type * as Route from "./Route.ts"
 import * as Subscription from "./Subscription.ts"
 
 /**
- * Where the Router is: the route, its printed URL (path and query, under the
+ * Where the Router is: the route, its printed URL (path and search, under the
  * base) and its `#hash`, and the navigation that got there.
  *
  * @stability experimental
@@ -143,7 +143,7 @@ export type Action = "initial" | "push" | "replace" | "pop"
 export type Outcome = "navigated" | "blocked"
 
 /**
- * What `patchQuery` returns: `"stale"` when the Router's path no longer
+ * What `patchSearch` returns: `"stale"` when the Router's path no longer
  * matches the held route, `"blocked"` from `Router.static` only, else
  * `"navigated"`.
  *
@@ -154,14 +154,14 @@ export type Outcome = "navigated" | "blocked"
 export type PatchOutcome = Outcome | "stale"
 
 /**
- * The patch `patchQuery` takes for a route value: any of its query fields,
+ * The patch `patchSearch` takes for a route value: any of its search fields,
  * where `undefined` removes the param, or resets it to its default.
  *
  * @stability experimental
  * @category utility types
  * @since 0.1.0
  */
-export type QueryPatch<R> = [R] extends [{ readonly query: infer Q }] ? { readonly [K in keyof Q]?: Q[K] | undefined }
+export type SearchPatch<R> = [R] extends [{ readonly search: infer Q }] ? { readonly [K in keyof Q]?: Q[K] | undefined }
   : never
 
 /**
@@ -189,11 +189,11 @@ export interface Router {
   readonly push: (route: { readonly _tag: string }) => Effect.Effect<Outcome>
   readonly replace: (route: { readonly _tag: string }) => Effect.Effect<Outcome>
   /**
-   * Applies `patch` to the current route's query, if the Router's path still
-   * matches `route`'s: see `Router.patchQuery`. `history` defaults to
+   * Applies `patch` to the current route's search, if the Router's path still
+   * matches `route`'s: see `Router.patchSearch`. `history` defaults to
    * `"replace"`.
    */
-  readonly patchQuery: (
+  readonly patchSearch: (
     route: { readonly _tag: string },
     patch: Readonly<Record<string, unknown>>,
     options?: {
@@ -305,8 +305,8 @@ export const push = <U extends Routes>(
  *
  * Typed like `push`. A replace that stays on the page, with the same tag and
  * pathname, settles quietly: it isn't announced and leaves focus and scroll
- * alone. A query that a page writes as the user types is better written with
- * `patchQuery`. The component requires `Replace`.
+ * alone. A search that a page writes as the user types is better written with
+ * `patchSearch`. The component requires `Replace`.
  *
  * @stability experimental
  * @category commands
@@ -317,25 +317,25 @@ export const replace = <U extends Routes>(
   route: U["Type"]
 ): Command.Issued<Outcome, Replace, Outcome, "Effect"> => Replace.make({ route })
 
-/** A query patch: the args Schema of `PatchQuery`. The log encodes it structurally. */
-const QueryPatchValue = Schema.declare(
+/** A search patch: the args Schema of `PatchSearch`. The log encodes it structurally. */
+const SearchPatchValue = Schema.declare(
   (u: unknown): u is Readonly<Record<string, unknown>> => typeof u === "object" && u !== null && !Array.isArray(u)
 )
 
 /**
- * The Command behind `patchQuery`. Use `patchQuery`, which types the patch;
+ * The Command behind `patchSearch`. Use `patchSearch`, which types the patch;
  * the class is what a Layer fake or a story's `resolve` step names.
  *
  * @stability experimental
  * @category commands
  * @since 0.1.0
  */
-export class PatchQuery extends Command.Service<PatchQuery>()(
-  "@effect/ui/Router/PatchQuery",
+export class PatchSearch extends Command.Service<PatchSearch>()(
+  "@effect/ui/Router/PatchSearch",
   {
     args: {
       route: RouteValue,
-      patch: QueryPatchValue,
+      patch: SearchPatchValue,
       history: Schema.Literals(["push", "replace"]),
       scroll: Schema.Boolean
     }
@@ -346,11 +346,11 @@ export class PatchQuery extends Command.Service<PatchQuery>()(
     readonly patch: Readonly<Record<string, unknown>>
     readonly history: "push" | "replace"
     readonly scroll: boolean
-  }) => router.patchQuery(route, patch, { history, scroll }))
+  }) => router.patchSearch(route, patch, { history, scroll }))
 ) {}
 
 /**
- * Writes some of the current route's query params, keeping the rest.
+ * Writes some of the current route's search params, keeping the rest.
  *
  * **When to use**
  *
@@ -359,9 +359,9 @@ export class PatchQuery extends Command.Service<PatchQuery>()(
  *
  * **Details**
  *
- * `route` is the route the page holds, and `patch` is typed by its query
+ * `route` is the route the page holds, and `patch` is typed by its search
  * fields: `undefined` removes a param, or resets it to its default. When the
- * Command runs, the patch applies to the Router's current query; the held
+ * Command runs, the patch applies to the Router's current search; the held
  * route only names the path, so two patches issued in one round trip both
  * land. If the Router's path no longer matches the held route, the Command
  * does nothing and returns `"stale"`.
@@ -375,28 +375,28 @@ export class PatchQuery extends Command.Service<PatchQuery>()(
  * announces nothing and leaves focus alone. It leaves scroll alone too,
  * unless `{ scroll: true }` asks it to scroll to the top. A push still runs
  * the `Router.prefetch` declarations. `Router.blocked` doesn't block it.
- * The component requires `PatchQuery`.
+ * The component requires `PatchSearch`.
  *
  * **Gotchas**
  *
- * Key the page by `printPath`, not `print`: a page keyed by its query
+ * Key the page by `printPath`, not `print`: a page keyed by its search
  * remounts on every patch and loses its Model. If a block held when the patch
- * ran is gone when it settles, `PatchQueryLostBlock` is reported.
+ * ran is gone when it settles, `PatchSearchLostBlock` is reported.
  *
- * **Example** (A search box bound to the query)
+ * **Example** (A search box bound to the URL)
  *
  * ```ts
  * import { Command, Route, Router } from "@effect/ui"
  * import { Schema } from "effect"
  *
  * const AppRoute = Route.union({
- *   Search: Route.make("/search", { query: { q: Schema.optional(Schema.String) } }),
+ *   Search: Route.make("/search", { search: { q: Schema.optional(Schema.String) } }),
  *   NotFound: Route.make("/*")
  * })
  * const SearchRoute = AppRoute.subset(["Search"])
  *
  * const typed = (route: typeof SearchRoute.Type, text: string) =>
- *   Router.patchQuery(AppRoute, route, { q: text || undefined }).pipe(Command.asNoop)
+ *   Router.patchSearch(AppRoute, route, { q: text || undefined }).pipe(Command.asNoop)
  * ```
  *
  * @see {@link replace} to navigate to a whole route value instead
@@ -404,16 +404,16 @@ export class PatchQuery extends Command.Service<PatchQuery>()(
  * @category commands
  * @since 0.1.0
  */
-export const patchQuery = <U extends Routes, R extends U["Type"]>(
+export const patchSearch = <U extends Routes, R extends U["Type"]>(
   _routes: U,
   route: R,
-  patch: NoInfer<QueryPatch<R>>,
+  patch: NoInfer<SearchPatch<R>>,
   options?: {
     readonly history?: "push" | "replace" | undefined
     readonly scroll?: boolean | undefined
   } | undefined
-): Command.Issued<PatchOutcome, PatchQuery, PatchOutcome, "Effect"> =>
-  PatchQuery.make({
+): Command.Issued<PatchOutcome, PatchSearch, PatchOutcome, "Effect"> =>
+  PatchSearch.make({
     route,
     patch: patch as Readonly<Record<string, unknown>>,
     history: options?.history ?? "replace",
@@ -464,8 +464,8 @@ export class Load extends Command.Service<Load>()("@effect/ui/Router/Load", {
  * browser can't be blocked, only reverted: the Router moves back to the
  * entry it was on, announces nothing and leaves focus alone.
  *
- * Writes within the page aren't blocked: `PatchQuery`, and back and forward
- * between entries of the same page that differ in their query only. So a
+ * Writes within the page aren't blocked: `PatchSearch`, and back and forward
+ * between entries of the same page that differ in their search only. So a
  * search box on a page with unsaved changes still types, and the user can
  * go back after `?page=2`. The block is
  * held while `subscriptions` returns it, so the Model says when, and it's
@@ -496,7 +496,7 @@ export const blocked = (key: string): Subscription.Subscription<never, Router> =
  * @category models
  * @since 0.1.0
  */
-export type Services = Router | Push | Replace | PatchQuery | Back | Forward | Load
+export type Services = Router | Push | Replace | PatchSearch | Back | Forward | Load
 
 // ---------------------------------------------------------------------------
 // Subscription
@@ -592,7 +592,7 @@ export const props = <U extends Routes>(routes: U): Effect.Effect<{ readonly rou
  * tag and printed URL match that route. Otherwise it is delivered, and a
  * `RouteMismatch` is reported if the Router has not navigated (sequence 0).
  * Hydrated hash roots skip that report, and so do roots hydrated from a
- * `static: true` render whose route differs from the Router's in its query
+ * `static: true` render whose route differs from the Router's in its search
  * only, as a page prerendered at `/search` and opened at `/search?q=x`.
  * Later locations are always delivered.
  * The key stays stable as the held route changes. A subset only sees its own
@@ -602,7 +602,7 @@ export const props = <U extends Routes>(routes: U): Effect.Effect<{ readonly rou
  * A navigation Command such as `Router.push` runs in the flush its `update`
  * caused, and this Subscription delivers the new route from inside it. The
  * root and its pages render the new route in that flush, so a field whose
- * value is read from the query keeps what the user typed and where the caret
+ * value is read from the search keeps what the user typed and where the caret
  * is. A navigation issued from `init` while the root mounts runs after it has
  * mounted.
  *
@@ -622,7 +622,7 @@ export const subscription = <U extends Routes, Msg>(
   const union: Route.AnyUnion = routes
   const have = union.print(held)
   const same = (route: { readonly _tag: string }) => route._tag === held._tag && union.print(route) === have
-  /** Whether the route differs from the held one in its query only. */
+  /** Whether the route differs from the held one in its search only. */
   const samePath = (route: { readonly _tag: string }) =>
     route._tag === held._tag && union.printPath(route) === union.printPath(held)
   const mismatch = (route: { readonly _tag: string }) => {
@@ -637,7 +637,7 @@ export const subscription = <U extends Routes, Msg>(
   /** The message for a location, if any. `initial`: the first location this Subscription sees. */
   const messageOf = (
     router: Router,
-    report: (problem: Loader.Problem.Any) => void,
+    report: (problem: Query.Problem.Any) => void,
     root: services.RootHandle | undefined,
     location: Location,
     initial: boolean
@@ -647,7 +647,7 @@ export const subscription = <U extends Routes, Msg>(
     if (initial) {
       if (same(route.value)) return Option.none()
       // A hydrated hash root rendered a shell, and a root hydrated from a static render was prerendered
-      // without the query: neither could hold the Router's route.
+      // without the search: neither could hold the Router's route.
       const exempt = root?.hydrated === true &&
         (router.routes.base() === "#" || (root.static && samePath(route.value)))
       if (location.seq === 0 && !exempt) {
@@ -662,7 +662,7 @@ export const subscription = <U extends Routes, Msg>(
   }
   const stream = Stream.unwrap(Effect.gen(function*() {
     const router = yield* Router
-    const report = yield* Loader.Problems
+    const report = yield* Query.Problems
     const root = (yield* services.CurrentRoot)()
     let first = true
     return router.changes.pipe(
@@ -681,7 +681,7 @@ export const subscription = <U extends Routes, Msg>(
     const router = Context.get(context as Context.Context<Router>, Router)
     const engine = engines.get(router)
     if (engine === undefined) return undefined
-    const report = Context.get(context as Context.Context<any>, Loader.Problems)
+    const report = Context.get(context as Context.Context<any>, Query.Problems)
     // Read at delivery: the root attaches to the Router after its first render.
     const root = Context.get(context, services.CurrentRoot)
     let first = true
@@ -708,7 +708,7 @@ export const subscription = <U extends Routes, Msg>(
   }
   return Object.assign(Subscription.make("@effect/ui/Router", stream), {
     [services.direct]: direct,
-    [services.onServer]: (ctx: Context.Context<never>, report: (problem: Loader.Problem.Any) => void) => {
+    [services.onServer]: (ctx: Context.Context<never>, report: (problem: Query.Problem.Any) => void) => {
       const router = Context.getOption(ctx as Context.Context<Router>, Router)
       if (Option.isNone(router)) return
       const route = routeOf(router.value, union, router.value.location())
@@ -725,7 +725,7 @@ const PageTypeId = "~@effect/ui/Router/Page" as const
 
 /**
  * A page a `Router.prefetch` handler names: a component and its props.
- * `R` is the reads the component's own loaders name.
+ * `R` is the services of the component's own queries.
  *
  * @stability experimental
  * @category models
@@ -738,23 +738,23 @@ export interface Page<out R = never> {
 }
 
 /**
- * The reads a component's own loaders name: what `Router.page` adds to the
+ * The reads a component's own queries name: what `Router.page` adds to the
  * declarer's requirements.
  *
  * @stability experimental
  * @category utility types
  * @since 0.1.0
  */
-export type PageRequirements<C> = C extends unknown ? Component.LoaderServices<Component.Loaders<C>> : never
+export type PageRequirements<C> = C extends unknown ? Component.QueryServices<Component.Queries<C>> : never
 
-// A `Mountable` has its Model erased, and with it the reads `Router.page` adds to the declarer. Checked
+// A `Mountable` has its Model erased, and with it the queries `Router.page` adds to the declarer. Checked
 // per member, so a union with one erased member is rejected too.
 type PageInput<C> = true extends (C extends unknown ? IsErased<Component.Model<C>> : never) ? ErasedPage : unknown
 
 type IsErased<M> = [M] extends [never] ? true : 0 extends (1 & M) ? true : false
 
 interface ErasedPage {
-  readonly "Router.page needs the component's Model to find its reads. Pass the component, not a Mountable":
+  readonly "Router.page needs the component's Model to find its queries. Pass the component, not a Mountable":
     unique symbol
 }
 
@@ -764,15 +764,15 @@ interface ErasedPage {
  * **Details**
  *
  * The props argument is left out when the component takes none, as with
- * a component call's `props`. The page's own reads join the declaring component's
- * requirements, so a read the page provides itself is a compile error at
+ * a component call's `props`. The page's own queries join the declaring component's
+ * requirements, so a query the page provides itself is a compile error at
  * `mount`: provide it at the declarer, or return `[]` for that route.
  *
  * **Gotchas**
  *
  * Accepts a component built with `Component.define`, with or without
  * `Component.provide`. Rejects features and `Component.Mountable` values,
- * whose erased Model hides their reads.
+ * whose erased Model hides their queries.
  *
  * @stability experimental
  * @category subscriptions
@@ -798,7 +798,7 @@ export type PrefetchMap<U extends Routes> = {
 }
 
 /**
- * The reads every page of a `Router.prefetch` map names.
+ * The queries every page of a `Router.prefetch` map names.
  *
  * @stability experimental
  * @category utility types
@@ -812,7 +812,7 @@ export type PrefetchRequirements<M> = {
 type PageRequirement<P> = P extends Page<infer R> ? R : never
 
 /**
- * Declares the reads of each route's pages, so they are fetched before the
+ * Declares the queries of each route's pages, so they are fetched before the
  * pages mount: on link intent and on navigation.
  *
  * **Details**
@@ -821,15 +821,15 @@ type PageRequirement<P> = P extends Page<infer R> ? R : never
  * the routes it is given: pass `AppRoute.subset(...)` to declare a section's
  * routes only, and return `[]` for a route with nothing to fetch. For each
  * page the runtime runs `init` with the page's props, discarding its
- * Commands, prefetches what its loaders would watch first, and walks its
- * initial view into its component children. A loader that waits on loaded
+ * Commands, prefetches what its queries would watch first, and walks its
+ * initial view into its component children. A query that waits on loaded
  * data is skipped, and so is a feature child.
  *
- * The declaration runs in the declaring instance's context, so the reads must
- * be provided at the declarer or above it. A read below the page that the
- * declarer can't see is skipped, and reported as `PrefetchReadNotProvided`
+ * The declaration runs in the declaring instance's context, so the queries must
+ * be provided at the declarer or above it. A query below the page that the
+ * declarer can't see is skipped, and reported as `PrefetchQueryNotProvided`
  * unless a `Component.provide` sits between the page and the component that
- * needs it. A throw from `init`, a loader or `view` during the walk stops
+ * needs it. A throw from `init`, a query or `view` during the walk stops
  * that page's walk and is reported as `PrefetchThrew`.
  *
  * It runs on `intent(href)`, which `BrowserRouter` calls on hover, focus
@@ -853,7 +853,7 @@ type PageRequirement<P> = P extends Page<infer R> ? R : never
  *
  * ```ts
  * import { Effect, Schema } from "effect"
- * import { Loader } from "@effect/ui"
+ * import { Query } from "@effect/ui"
  * import { Component, Route, Router } from "@effect/ui"
  *
  * const AppRoute = Route.union({
@@ -861,7 +861,7 @@ type PageRequirement<P> = P extends Page<infer R> ? R : never
  *   Person: Route.make("/people/:id", { params: { id: Schema.Number } })
  * })
  *
- * class GetPerson extends Loader.Service<GetPerson>()("GetPerson", {
+ * class GetPerson extends Query.Service<GetPerson>()("GetPerson", {
  *   args: { id: Schema.Number },
  *   success: Schema.String
  * }, Effect.succeed(({ id }) => Effect.succeed(`Person ${id}`))) {}
@@ -871,7 +871,7 @@ type PageRequirement<P> = P extends Page<infer R> ? R : never
  *   props: Schema.Struct({ id: Schema.Number }),
  *   model: Schema.Struct({}),
  *   message: Schema.Never,
- *   loaders: { person: { load: GetPerson, args: (_model, props) => ({ id: props.id }) } }
+ *   queries: { person: { query: GetPerson, args: (_model, props) => ({ id: props.id }) } }
  * }).make({
  *   init: () => ({}),
  *   update: (model) => model,
@@ -914,12 +914,12 @@ export class PrefetchThrew extends Data.TaggedClass("PrefetchThrew")<{
   readonly path: string
   /** The page's component name. */
   readonly page: string
-  /** What `init`, a loader or `view` threw. */
+  /** What `init`, a query or `view` threw. */
   readonly error: unknown
 }> {}
 
 /**
- * A read in a `Router.prefetch` walk is missing from the declarer's context,
+ * A query in a `Router.prefetch` walk is missing from the declarer's context,
  * with no `Component.provide` between the page and the component that needs
  * it. That read was skipped.
  *
@@ -927,14 +927,14 @@ export class PrefetchThrew extends Data.TaggedClass("PrefetchThrew")<{
  * @category problems
  * @since 0.1.0
  */
-export class PrefetchReadNotProvided extends Data.TaggedClass("PrefetchReadNotProvided")<{
+export class PrefetchQueryNotProvided extends Data.TaggedClass("PrefetchQueryNotProvided")<{
   readonly message: string
   /** The declaring instance's path. */
   readonly path: string
   /** The page's component name. */
   readonly page: string
-  /** The read's name. */
-  readonly read: string
+  /** The query's name. */
+  readonly query: string
 }> {}
 
 /**
@@ -967,8 +967,8 @@ export class PrefetchEntryNotWatched extends Data.TaggedClass("PrefetchEntryNotW
   readonly path: string
   /** The page's component name. */
   readonly page: string
-  /** The read's name. */
-  readonly read: string
+  /** The query's name. */
+  readonly query: string
   /** The entry's log key. */
   readonly logKey: string
 }> {}
@@ -1012,7 +1012,7 @@ export interface History {
  * Every navigation settles. A quiet one stays on the page, and the host
  * neither announces it nor moves focus. These are quiet:
  *
- * - a `patchQuery`, replace or push;
+ * - a `patchSearch`, replace or push;
  * - a replace to the same page: the same tag and pathname;
  * - back and forward between entries of the same page.
  *
@@ -1038,7 +1038,7 @@ export interface Settled {
   readonly quiet: boolean
   /**
    * Whether the host scrolls: always for a loud navigation and for back and
-   * forward, and for a quiet push or replace only when `patchQuery` was given
+   * forward, and for a quiet push or replace only when `patchSearch` was given
    * `{ scroll: true }`.
    */
   readonly scroll: boolean
@@ -1065,7 +1065,7 @@ export interface Options {
   /** Called before the Router leaves the history entry at `index`. */
   readonly onLeave?: ((index: number) => void) | undefined
   /**
-   * Throttles the replaces that stay on the page, such as a `patchQuery` per
+   * Throttles the replaces that stay on the page, such as a `patchSearch` per
    * keystroke, to stay under the browser's rate limit on history calls. The
    * first is written at once, and then the latest one at the end of each
    * `interval`. The Router's location changes at once either way.
@@ -1092,8 +1092,8 @@ export class RouteMismatch extends Data.TaggedClass("RouteMismatch")<{
 }> {}
 
 /**
- * Reports that a block held when `patchQuery` ran was gone when the
- * navigation settled, as when a page keyed by its query remounts on the
+ * Reports that a block held when `patchSearch` ran was gone when the
+ * navigation settled, as when a page keyed by its search remounts on the
  * patch and loses its Model. It can also fire when the Model releases the
  * block in response to the new route.
  *
@@ -1101,7 +1101,7 @@ export class RouteMismatch extends Data.TaggedClass("RouteMismatch")<{
  * @category problems
  * @since 0.1.0
  */
-export class PatchQueryLostBlock extends Data.TaggedClass("PatchQueryLostBlock")<{
+export class PatchSearchLostBlock extends Data.TaggedClass("PatchSearchLostBlock")<{
   readonly message: string
   /** The keys of the blocks that were released. */
   readonly keys: ReadonlyArray<string>
@@ -1148,7 +1148,7 @@ const readState = (state: unknown): EntryState | undefined => {
 const writeState = (entry: EntryState): unknown => ({ [stateKey]: entry })
 
 /**
- * Writing the instances' saved state (each Model, plus its loader slots) into
+ * Writing the instances' saved state (each Model, plus its query results) into
  * `history.state` threw, as a browser does when the state is too large. The
  * history entry was written with its index only, so the saved state survives
  * in memory and not across a reload.
@@ -1182,7 +1182,7 @@ interface UnionInternals {
 const commandLayers = Layer.mergeAll(
   Push.layer,
   Replace.layer,
-  PatchQuery.layer,
+  PatchSearch.layer,
   Back.layer,
   Forward.layer,
   Load.layer
@@ -1199,19 +1199,25 @@ const commandLayers = Layer.mergeAll(
  * settle timing; a host adds scroll, announcements and focus in `onSettled`.
  *
  * History restore: before leaving an entry, the Router saves the encoded
- * state of every mounted instance by path: its Model and loader slots. It can't save only the page's
+ * state of every mounted instance by path: its Model and query results. It can't save only the page's
  * subtree, because which instances the navigation unmounts is only known
  * after it. On back and forward, an instance created for the entry adopts its
  * saved state, so only the re-keyed subtree is restored, and an instance that
  * stayed mounted keeps its own. As with hydration, `init` is replayed and
  * every one of its Commands runs.
  *
- * A restored loader slot seeds the cache when its entry is cold, as after a
+ * A restored query result seeds the cache when its entry is cold, as after a
  * reload: the entry is stored stale, so the first frame shows the data with
  * `waiting: true` and one refetch runs. If the refetch fails, the data stays
- * as the Failure's previous Success. A warm entry is used as it is. A slot
+ * as the Failure's previous Success. A warm entry is used as it is. A result
  * taken under an optimistic patch is never a seed: it is dropped from the
  * restored state and starts from loading.
+ *
+ * Saved state is decoded with the component's current Schemas, as one value.
+ * State that doesn't decode, such as state an older build wrote before its
+ * Model or state format changed, is dropped whole: the instance runs `init`
+ * as if nothing was saved, its saved Model is lost too, and its queries
+ * fetch afresh.
  *
  * The snapshot is kept in memory per entry. When a push leaves an entry, it's
  * also written into that entry's `state`, so it survives a reload. When back
@@ -1251,7 +1257,7 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       return yield* Effect.die(new Error(`The Router's routes don't parse the initial URL "${start.url}"`))
     }
     // The problems sink of the first mounted root, or the one where the Router is built.
-    const fallbackReport = yield* Loader.Problems
+    const fallbackReport = yield* Query.Problems
     let index = readState(start.state)?.index ?? 0
     const initialUrl = canonical(routes, resolved.value, startUrl)
     if (resolved.value.redirected || readState(start.state) === undefined || initialUrl !== startUrl) {
@@ -1273,7 +1279,7 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       since: number | undefined
       /** The checks of the declarations the navigation ran, run when it settles. */
       readonly checks: ReadonlyArray<services.PrefetchCheck>
-      /** The blocks held when a `patchQuery` ran, checked when it settles. */
+      /** The blocks held when a `patchSearch` ran, checked when it settles. */
       readonly blocks: ReadonlyArray<string>
     } | undefined
     let reverting = 0
@@ -1290,7 +1296,7 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       options.onLeave?.(index)
       snapshots.set(index, snapshot())
     }
-    const report = (problem: SnapshotWriteFailed | PatchQueryLostBlock | HistoryWriteFailed) => {
+    const report = (problem: SnapshotWriteFailed | PatchSearchLostBlock | HistoryWriteFailed) => {
       const root = primary()
       try {
         if (root !== undefined) root.report(problem)
@@ -1515,18 +1521,18 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       replace: boolean,
       scroll: boolean
     ): PatchOutcome => {
-      const at = current.route as { readonly _tag: string; readonly params?: unknown; readonly query?: unknown }
+      const at = current.route as { readonly _tag: string; readonly params?: unknown; readonly search?: unknown }
       if (at._tag !== held._tag || routes.printPath(at) !== routes.printPath(held)) return "stale"
       const union = routes as Route.AnyUnion & UnionInternals
-      const declared = new Set(Object.keys(union.routes[at._tag]?.query ?? {}))
-      const query: Record<string, unknown> = { ...(at.query as Record<string, unknown> | undefined) }
+      const declared = new Set(Object.keys(union.routes[at._tag]?.search ?? {}))
+      const search: Record<string, unknown> = { ...(at.search as Record<string, unknown> | undefined) }
       for (const [key, value] of Object.entries(patch)) {
         if (!declared.has(key)) continue
-        if (value === undefined) delete query[key]
-        else query[key] = value
+        if (value === undefined) delete search[key]
+        else search[key] = value
       }
       // `make` fills in the default of a param the patch removed.
-      const route = union.make({ _tag: at._tag, params: at.params, query })
+      const route = union.make({ _tag: at._tag, params: at.params, search })
       // Params the route doesn't declare follow the declared ones, as written.
       const url = withPairs(routes.print(route), pairsWithout(current.url, declared))
       if (url === current.url) return "navigated"
@@ -1622,11 +1628,11 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
         const lost = Array.from(new Set(done.blocks)).filter((key) => !blocks.has(key))
         if (lost.length > 0) {
           report(
-            new PatchQueryLostBlock({
+            new PatchSearchLostBlock({
               keys: lost,
-              message: `[@effect/ui] a block held when Router.patchQuery ran is gone now it has settled: ${
+              message: `[@effect/ui] a block held when Router.patchSearch ran is gone now it has settled: ${
                 lost.join(", ")
-              }. A page keyed by its query remounts on every patch; key it by printPath instead.`
+              }. A page keyed by its search remounts on every patch; key it by printPath instead.`
             })
           )
         }
@@ -1649,8 +1655,8 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       navigate: (href, navigateOptions) => Effect.sync(() => navigate(href, navigateOptions?.replace === true)),
       push: (route) => Effect.sync(() => navigate(routes.print(route) as string, false)),
       replace: (route) => Effect.sync(() => navigate(routes.print(route) as string, true)),
-      patchQuery: (route, query, patchOptions) =>
-        Effect.sync(() => patch(route, query, patchOptions?.history !== "push", patchOptions?.scroll === true)),
+      patchSearch: (route, search, patchOptions) =>
+        Effect.sync(() => patch(route, search, patchOptions?.history !== "push", patchOptions?.scroll === true)),
       back: Effect.sync(() => {
         if (blocks.size > 0) return "blocked"
         flush()
@@ -1816,7 +1822,7 @@ const static_ = (options: { readonly routes: Route.AnyUnion; readonly url: strin
           navigate: () => blocked,
           push: () => blocked,
           replace: () => blocked,
-          patchQuery: () => blocked,
+          patchSearch: () => blocked,
           back: blocked,
           forward: blocked,
           load: () => blocked,

@@ -9,7 +9,7 @@
  * @stability experimental
  * @since 0.1.0
  */
-export * as Query from "./Query.ts"
+export * as Locator from "./Locator.ts"
 
 /**
  * @stability experimental
@@ -27,4 +27,4 @@ export * as TestHost from "./TestHost.ts"
  * @stability experimental
  * @since 0.1.0
  */
-export * as TestLoader from "./TestLoader.ts"
+export * as TestQuery from "./TestQuery.ts"

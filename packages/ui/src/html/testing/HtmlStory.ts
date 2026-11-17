@@ -15,7 +15,7 @@
  * import { HtmlStory } from "@effect/ui/html/testing"
  * import { Schema } from "effect"
  * import { Component } from "@effect/ui"
- * import { Query, Story } from "@effect/ui/testing"
+ * import { Locator, Story } from "@effect/ui/testing"
  *
  * const Message = Schema.TaggedUnion({ Dropped: { id: Schema.String } })
  *
@@ -35,20 +35,20 @@
  * })
  *
  * const story = Story.make(Done, {}, (s) =>
- *   s.pipe(HtmlStory.drop(Query.tag("ul"), { data: { "application/x-todo": "t1" } })))
+ *   s.pipe(HtmlStory.drop(Locator.tag("ul"), { data: { "application/x-todo": "t1" } })))
  * console.log(story.model, story.defaultPrevented) // ["t1"] true
  * ```
  *
  * @stability experimental
  * @since 0.1.0
  */
-import type * as Query from "../../testing/Query.ts"
+import type * as Locator from "../../testing/Locator.ts"
 import type * as Story from "../../testing/Story.ts"
 import type * as View from "../../View.ts"
 import type * as Html from "../Html.ts"
 
 /** `node` and its ancestors in `root`, innermost first, or `undefined` when `node` isn't in `root`. */
-const pathTo = (root: View.Node<any, any>, node: Query.Node): Array<View.Node<any, any>> | undefined => {
+const pathTo = (root: View.Node<any, any>, node: Locator.Node): Array<View.Node<any, any>> | undefined => {
   if (root === node) return [root]
   if (root._tag !== "Element") return undefined
   for (const child of root.children) {
@@ -80,7 +80,10 @@ const pathTo = (root: View.Node<any, any>, node: Query.Node): Array<View.Node<an
  * @since 0.1.0
  */
 export const drop =
-  (locator: Query.Locator, payload?: Partial<Html.DropPayload> | undefined) => <S extends Story.Steps.Any>(s: S): S => {
+  (locator: Locator.Locator, payload?: Partial<Html.DropPayload> | undefined) =>
+  <S extends Story.Steps.Any>(
+    s: S
+  ): S => {
     const full: Html.DropPayload = { data: {}, files: [], x: 0, y: 0, width: 0, height: 0, ...payload }
     const types = Object.keys(full.data).concat(full.files.length > 0 ? ["Files"] : [])
     const lower = types.map((type) => type.toLowerCase())
@@ -110,9 +113,9 @@ export const drop =
       )
     }
     // Matches the target itself, so the drop doesn't go on to an inner `onDrop` that doesn't accept it.
-    const exactly: Query.Locator = {
+    const exactly: Locator.Locator = {
       description: `the drop target at ${locator.description}`,
-      all: <N extends Query.Node>() => [target as unknown as N]
+      all: <N extends Locator.Node>() => [target as unknown as N]
     }
     s.fire(exactly, "drop", full)
     return s

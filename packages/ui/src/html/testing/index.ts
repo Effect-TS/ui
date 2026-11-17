@@ -1,5 +1,5 @@
 /**
- * Test helpers for `@effect/ui/html`: `HtmlQuery`, `HtmlStory`'s steps for HTML
+ * Test helpers for `@effect/ui/html`: `HtmlLocator`, `HtmlStory`'s steps for HTML
  * behaviour such as dropping on a drop target, and `ssr`, which renders on
  * the server, hydrates and checks the two agree.
  *
@@ -22,7 +22,7 @@ export {
  * @stability experimental
  * @since 0.1.0
  */
-export * as HtmlQuery from "./HtmlQuery.ts"
+export * as HtmlLocator from "./HtmlLocator.ts"
 
 /**
  * @stability experimental
