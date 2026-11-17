@@ -1,31 +1,31 @@
 /**
- * A keyed data cache. Each read is a class service with a name, argument and
+ * A keyed data cache. Each query is a class service with a name, argument and
  * result Schemas, a freshness duration, and a fetcher. The cache keeps one
  * entry per read and arguments, shares in-flight fetches, refetches stale
  * entries on demand, and collects unused entries.
  *
- * A read's fetcher is built once per Layer build and captures the services it
- * uses, so `get` requires the read and cache, not the fetcher's dependencies.
+ * A query's fetcher is built once per Layer build and captures the services it
+ * uses, so `get` requires the query and cache, not the fetcher's dependencies.
  * Replace a fetcher with `Layer.succeed(GetUser, (args) => ...)` for a fake.
  *
- * Plain Effect code provides the cache with `Loader.layer()`. Every time-based
+ * Plain Effect code provides the cache with `Query.layer()`. Every time-based
  * rule runs on the `Clock`, so `TestClock` drives it, and
- * `@effect/ui/testing/TestLoader` is the harness for tests.
+ * `@effect/ui/testing/TestQuery` is the harness for tests.
  *
  * Server dehydration omits entries whose args, success or error Schema holds
  * a `Schema.Redacted`, even when the current value contains no secret. The
  * client fetches omitted entries instead of hydrating them. Ordinary entries
  * still dehydrate and hydrate through their JSON codecs.
  *
- * **Example** (Defining a read and sharing its fetch)
+ * **Example** (Defining a query and sharing its fetch)
  *
  * ```ts import.meta.vitest
  * import { Effect, Layer, Schema } from "effect"
- * import { Loader } from "@effect/ui"
+ * import { Query } from "@effect/ui"
  *
  * let requests = 0
  *
- * class GetUser extends Loader.Service<GetUser>()("users/GetUser", {
+ * class GetUser extends Query.Service<GetUser>()("users/GetUser", {
  *   args: { id: Schema.String },
  *   success: Schema.Struct({ id: Schema.String, name: Schema.String }),
  *   error: Schema.Never,
@@ -39,7 +39,7 @@
  *   })
  *   const c = yield* GetUser.get({ id: "1" })
  *   return [a.name, b.name, c.name, requests]
- * }).pipe(Effect.provide(Layer.merge(GetUser.layer, Loader.layer())))
+ * }).pipe(Effect.provide(Layer.merge(GetUser.layer, Query.layer())))
  *
  * await Effect.runPromise(program) // => ["User 1", "User 1", "User 1", 1]
  * ```
@@ -72,22 +72,22 @@ import type * as Types from "effect/Types"
 import { holdsRedacted, redactAST } from "./internal/schemaRedact.ts"
 
 /**
- * Identifies a read: a class made by `Service`.
+ * Identifies a query: a class made by `Service`.
  *
  * @stability experimental
  * @category type IDs
  * @since 0.1.0
  */
-export const TypeId: TypeId = "~@effect/ui/Loader"
+export const TypeId: TypeId = "~@effect/ui/Query"
 
 /**
- * Identifies a read: a class made by `Service`.
+ * Identifies a query: a class made by `Service`.
  *
  * @stability experimental
  * @category type IDs
  * @since 0.1.0
  */
-export type TypeId = "~@effect/ui/Loader"
+export type TypeId = "~@effect/ui/Query"
 
 /**
  * How often a watched entry refetches: a duration, or a function of the last
@@ -112,26 +112,26 @@ export type RefetchInterval<Args, A, E> =
   ) => Duration.Input | undefined)
 
 /**
- * What every read has in common: its name, and the types of its arguments,
+ * What every query has in common: its name, and the types of its arguments,
  * its result and its error.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface Read<in out Args, in out A, in out E> {
-  readonly [TypeId]: Read.Variance<Args, A, E>
+export interface Query<in out Args, in out A, in out E> {
+  readonly [TypeId]: Query.Variance<Args, A, E>
 }
 
 /**
- * Helper types for `Read`.
+ * Helper types for `Query`.
  *
  * @stability experimental
  * @since 0.1.0
  */
-export declare namespace Read {
+export declare namespace Query {
   /**
-   * Phantom variance for a read's arguments, result and error.
+   * Phantom variance for a query's arguments, result and error.
    *
    * @category models
    * @since 0.1.0
@@ -143,46 +143,46 @@ export declare namespace Read {
   }
 
   /**
-   * Any read.
+   * Any query.
    *
    * @category models
    * @since 0.1.0
    */
-  export type Any = Read<any, any, any> | Read<any, any, never>
+  export type Any = Query<any, any, any> | Query<any, any, never>
 
   /**
-   * The arguments of a read.
+   * The arguments of a query.
    *
    * @category utility types
    * @since 0.1.0
    */
-  export type Args<R> = R extends Read<infer Args, infer _A, infer _E> ? Args : never
+  export type Args<R> = R extends Query<infer Args, infer _A, infer _E> ? Args : never
 
   /**
-   * The result of a read.
+   * The result of a query.
    *
    * @category utility types
    * @since 0.1.0
    */
-  export type Success<R> = R extends Read<infer _Args, infer A, infer _E> ? A : never
+  export type Success<R> = R extends Query<infer _Args, infer A, infer _E> ? A : never
 
   /**
-   * The error of a read.
+   * The error of a query.
    *
    * @category utility types
    * @since 0.1.0
    */
-  export type Error<R> = R extends Read<infer _Args, infer _A, infer E> ? E : never
+  export type Error<R> = R extends Query<infer _Args, infer _A, infer E> ? E : never
 }
 
 /**
- * A read class, as returned by `Service`.
+ * A query class, as returned by `Service`.
  *
  * **Details**
  *
- * It's a `Context.Service` whose value is the read's fetcher. `layer` builds
+ * It's a `Context.Service` whose value is the query's fetcher. `layer` builds
  * the fetcher, and the static methods look the cache up, so they require the
- * cache and, where they may fetch, the read itself.
+ * cache and, where they may fetch, the query itself.
  *
  * @stability experimental
  * @category models
@@ -196,7 +196,7 @@ export interface Service<
   in out E,
   out LE,
   out LR
-> extends Context.ServiceClass<Self, Name, (args: Args) => Effect.Effect<A, E>>, Read<Args, A, E> {
+> extends Context.ServiceClass<Self, Name, (args: Args) => Effect.Effect<A, E>>, Query<Args, A, E> {
   /**
    * The fetcher's Layer. It requires what the fetcher captured. A fetch runs
    * under the build that asked for it, and is interrupted when that build's
@@ -247,20 +247,20 @@ export interface Service<
    */
   peek(args: Args): Effect.Effect<AsyncResult.AsyncResult<A, E>, never, Cache>
   /** One entry, as an invalidation target. */
-  entry(args: Args): EntryTarget<Read<Args, A, E>>
+  entry(args: Args): EntryTarget<Query<Args, A, E>>
   /**
    * An optimistic patch of one entry, applied over its server value while the
    * run that declares it is queued or running. It implies invalidation of
    * the entry.
    */
-  patch(args: Args, f: (value: A) => A): Patch<Read<Args, A, E>>
+  patch(args: Args, f: (value: A) => A): Patch<Query<Args, A, E>>
   /**
-   * An optimistic patch of every entry of the read that holds a Success when
-   * the run is issued. It implies invalidation of the whole read.
+   * An optimistic patch of every entry of the query that holds a Success when
+   * the run is issued. It implies invalidation of the whole query.
    */
-  patchAll(f: (value: A, args: Args) => A): Patch<Read<Args, A, E>>
+  patchAll(f: (value: A, args: Args) => A): Patch<Query<Args, A, E>>
   /** A write of a run's result into one entry, for a Command's `writes`. */
-  set(args: Args, value: A): Write<Read<Args, A, E>>
+  set(args: Args, value: A): Write<Query<Args, A, E>>
 }
 
 /**
@@ -295,19 +295,19 @@ export declare namespace Service {
 }
 
 /**
- * Defines a read: a class service with a name, its options, and an Effect
+ * Defines a query: a class service with a name, its options, and an Effect
  * that builds its fetcher.
  *
  * **When to use**
  *
  * Use when data is loaded by its arguments and shared: every caller of the
- * same read with the same arguments sees one entry and one fetch.
+ * same query with the same arguments sees one entry and one fetch.
  *
  * **Details**
  *
  * - `args` is a fields record or any Schema. The cache derives an entry's key
- *   from the encoded arguments, so a read with no arguments writes `args: {}`.
- * - `success` and `error` are required Schemas. A read that can't fail
+ *   from the encoded arguments, so a query with no arguments writes `args: {}`.
+ * - `success` and `error` are required Schemas. A query that can't fail
  *   writes `error: Schema.Never`.
  * - `staleTime` is required. Zero means always stale and `"Infinity"` means
  *   never stale by age. A stale entry is still served at once; it refetches
@@ -316,7 +316,7 @@ export declare namespace Service {
  * - `idleTimeToLive` is how long an entry nothing watches stays in the cache.
  *   It overrides the cache's default of 5 minutes.
  * - `refetchInterval` polls an entry while it's watched.
- * - `tags` lists the invalidation tags the read belongs to.
+ * - `tags` lists the invalidation tags the query belongs to.
  *
  * The fetcher's Effect runs once per Layer build and returns the function
  * that fetches. Retries go inside the fetcher, with `Effect.retry`: the cache
@@ -327,7 +327,7 @@ export declare namespace Service {
  * - The definition throws on a negative `staleTime` or `idleTimeToLive`, and
  *   on a constant `refetchInterval` that is zero, negative or a bare number
  *   under 1000.
- * - Calling a read throws when its arguments don't encode, or encode to
+ * - Calling a query throws when its arguments don't encode, or encode to
  *   something JSON can't carry.
  * - `{ id }` and `{ id, page: 1 }` are two entries, even when a default makes
  *   them one request.
@@ -362,17 +362,17 @@ export declare namespace Service {
  * - The fetcher gets the arguments of the call that created the entry, so it
  *   can see either form.
  *
- * **Example** (A read that captures a service)
+ * **Example** (A query that captures a service)
  *
  * ```ts import.meta.vitest
  * import { Context, Effect, Layer, Schema } from "effect"
- * import { Loader } from "@effect/ui"
+ * import { Query } from "@effect/ui"
  *
  * class UsersApi extends Context.Service<UsersApi, {
  *   readonly name: (id: string) => Effect.Effect<string>
  * }>()("UsersApi") {}
  *
- * class GetUserName extends Loader.Service<GetUserName>()("users/GetUserName", {
+ * class GetUserName extends Query.Service<GetUserName>()("users/GetUserName", {
  *   args: { id: Schema.String },
  *   success: Schema.String,
  *   error: Schema.Never,
@@ -384,7 +384,7 @@ export declare namespace Service {
  *
  * const layer = GetUserName.layer.pipe(
  *   Layer.provide(Layer.succeed(UsersApi, { name: (id) => Effect.succeed(`user-${id}`) })),
- *   Layer.merge(Loader.layer())
+ *   Layer.merge(Query.layer())
  * )
  *
  * await Effect.runPromise(GetUserName.get({ id: "1" }).pipe(Effect.provide(layer))) // => "user-1"
@@ -434,21 +434,21 @@ export const Service: <Self>() => <
   fetcher: Effect.Effect<Fetcher, any, any>
 ): any => {
   const def = makeDef(name, options)
-  const ReadService = readClass(def, fetcher)
-  return class extends ReadService {
+  const QueryService = queryClass(def, fetcher)
+  return class extends QueryService {
     static set(args: unknown, value: unknown) {
-      return write(ReadService, args, value)
+      return write(QueryService, args, value)
     }
   }
 }
 
 /**
- * The class every read is: the fetcher's service, its Layer and the statics
- * that look the cache up. A list read adds its own.
+ * The class every query is: the fetcher's service, its Layer and the statics
+ * that look the cache up. An infinite query adds its own.
  */
-const readClass = (def: ReadDef, fetcher: Effect.Effect<Fetcher, any, any>) => {
+const queryClass = (def: QueryDef, fetcher: Effect.Effect<Fetcher, any, any>) => {
   const Base = Context.Service<any, Fetcher>()(def.name)
-  class ReadService extends Base {
+  class QueryService extends Base {
     static readonly [TypeId]: any = def
     static readonly layer = Layer.effect(
       Base,
@@ -470,7 +470,7 @@ const readClass = (def: ReadDef, fetcher: Effect.Effect<Fetcher, any, any>) => {
     static invalidate(args?: unknown) {
       return withCache((cache) =>
         Effect.sync(() =>
-          cache.invalidate([args === undefined ? ReadService : entryTarget(ReadService, args)], {
+          cache.invalidate([args === undefined ? QueryService : entryTarget(QueryService, args)], {
             byHand: true
           })
         )
@@ -504,16 +504,16 @@ const readClass = (def: ReadDef, fetcher: Effect.Effect<Fetcher, any, any>) => {
       return withCache((cache) => Effect.sync(() => cache.peek(def, args)))
     }
     static entry(args: unknown) {
-      return entryTarget(ReadService, args)
+      return entryTarget(QueryService, args)
     }
     static patch(args: unknown, f: (value: any) => any) {
-      return patchOne(ReadService, args, f)
+      return patchOne(QueryService, args, f)
     }
     static patchAll(f: (value: any, args: any) => any) {
-      return patchAll(ReadService, f)
+      return patchAll(QueryService, f)
     }
   }
-  return ReadService
+  return QueryService
 }
 
 const withCache = <A, E, R>(
@@ -528,25 +528,25 @@ const fetcherOf = (context: Context.Context<never>, service: Context.Key<any, Fe
   Context.getUnsafe(context, service)
 
 /**
- * Identifies a list read: a class made by `ListService`.
+ * Identifies an infinite query: a class made by `InfiniteService`.
  *
  * @stability experimental
  * @category type IDs
  * @since 0.1.0
  */
-export const ListTypeId: ListTypeId = "~@effect/ui/Loader/List"
+export const InfiniteTypeId: InfiniteTypeId = "~@effect/ui/Query/Infinite"
 
 /**
- * Identifies a list read: a class made by `ListService`.
+ * Identifies an infinite query: a class made by `InfiniteService`.
  *
  * @stability experimental
  * @category type IDs
  * @since 0.1.0
  */
-export type ListTypeId = "~@effect/ui/Loader/List"
+export type InfiniteTypeId = "~@effect/ui/Query/Infinite"
 
 /**
- * A list read: a read whose entry holds every page loaded so far, as an
+ * An infinite query: a query whose entry holds every page loaded so far, as an
  * array. Its result is the page array, so `peek`, `changes` and `get`
  * return the pages, and a patch maps them one page at a time.
  *
@@ -554,19 +554,21 @@ export type ListTypeId = "~@effect/ui/Loader/List"
  * @category models
  * @since 0.1.0
  */
-export interface ListRead<in out Args, in out Page, in out Item, in out E> extends Read<Args, ReadonlyArray<Page>, E> {
-  readonly [ListTypeId]: ListRead.Variance<Page, Item>
+export interface InfiniteQuery<in out Args, in out Page, in out Item, in out E>
+  extends Query<Args, ReadonlyArray<Page>, E>
+{
+  readonly [InfiniteTypeId]: InfiniteQuery.Variance<Page, Item>
 }
 
 /**
- * Helper types for `ListRead`.
+ * Helper types for `InfiniteQuery`.
  *
  * @stability experimental
  * @since 0.1.0
  */
-export declare namespace ListRead {
+export declare namespace InfiniteQuery {
   /**
-   * Phantom variance for a list read's page and item.
+   * Phantom variance for an infinite query's page and item.
    *
    * @category models
    * @since 0.1.0
@@ -577,28 +579,28 @@ export declare namespace ListRead {
   }
 
   /**
-   * Any list read.
+   * Any infinite query.
    *
    * @category models
    * @since 0.1.0
    */
-  export type Any = ListRead<any, any, any, any> | ListRead<any, any, any, never>
+  export type Any = InfiniteQuery<any, any, any, any> | InfiniteQuery<any, any, any, never>
 
   /**
-   * The page of a list read.
+   * The page of an infinite query.
    *
    * @category utility types
    * @since 0.1.0
    */
-  export type Page<R> = R extends ListRead<infer _Args, infer Page, infer _Item, infer _E> ? Page : never
+  export type Page<R> = R extends InfiniteQuery<infer _Args, infer Page, infer _Item, infer _E> ? Page : never
 
   /**
-   * The item of a list read: what its `items` returns for a page.
+   * The item of an infinite query: what its `items` returns for a page.
    *
    * @category utility types
    * @since 0.1.0
    */
-  export type Item<R> = R extends ListRead<infer _Args, infer _Page, infer Item, infer _E> ? Item : never
+  export type Item<R> = R extends InfiniteQuery<infer _Args, infer _Page, infer Item, infer _E> ? Item : never
 }
 
 /**
@@ -625,7 +627,7 @@ export type More<E> =
   | { readonly _tag: "Failed"; readonly error: E }
 
 /**
- * What a list read's `loadMore` resolves with: every page held once the
+ * What an infinite query's `loadMore` resolves with: every page held once the
  * load ended, and whether there is a next one.
  *
  * @stability experimental
@@ -638,20 +640,20 @@ export interface LoadedMore<Page> {
 }
 
 /**
- * A list read class, as returned by `ListService`.
+ * An infinite query class, as returned by `InfiniteService`.
  *
  * **Details**
  *
- * It's a `Context.Service` whose value is the read's fetcher, which takes
+ * It's a `Context.Service` whose value is the query's fetcher, which takes
  * the arguments and the cursor of the page to load, `None` for the first.
- * Its result is the page array. It has the statics of a read, except `set`,
+ * Its result is the page array. It has the statics of a query, except `set`,
  * and adds `loadMore`, `reset` and `items`.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface ListService<
+export interface InfiniteService<
   in out Self,
   in out Name extends string,
   in out Args,
@@ -663,14 +665,14 @@ export interface ListService<
   out LR
 > extends
   Context.ServiceClass<Self, Name, (args: Args, cursor: Option.Option<Cursor>) => Effect.Effect<Page, E>>,
-  ListRead<Args, Page, Item, E>
+  InfiniteQuery<Args, Page, Item, E>
 {
-  /** The fetcher's Layer, as for any read. */
+  /** The fetcher's Layer, as for any query. */
   readonly layer: Layer.Layer<Self, LE, LR>
   /**
    * Returns the held pages when they're fresh, and otherwise loads the list
    * again from the first page, as many pages as it holds, joining a load in
-   * flight. As for any read, a call waiting on a load that reverts is
+   * flight. As for any query, a call waiting on a load that reverts is
    * interrupted.
    */
   get(args: Args): Effect.Effect<ReadonlyArray<Page>, E, Self | Cache>
@@ -679,9 +681,9 @@ export interface ListService<
    * ones included, it only keeps the entry from being collected.
    */
   prefetch(args: Args): Effect.Effect<void, never, Self | Cache>
-  /** Marks one list, or every list of the read, stale, as for any read. */
+  /** Marks one list, or every list of the query, stale, as for any query. */
   invalidate(args?: Args): Effect.Effect<void, never, Cache>
-  /** Watches a list and emits its page array, as `changes` does for any read. */
+  /** Watches a list and emits its page array, as `changes` does for any query. */
   changes(args: Args): Stream.Stream<AsyncResult.AsyncResult<ReadonlyArray<Page>, E>, never, Self | Cache>
   /** Reads a list's page array without loading anything. */
   peek(args: Args): Effect.Effect<AsyncResult.AsyncResult<ReadonlyArray<Page>, E>, never, Cache>
@@ -709,29 +711,29 @@ export interface ListService<
    */
   items(pages: ReadonlyArray<Page>): ReadonlyArray<Item>
   /** One list, as an invalidation target. */
-  entry(args: Args): EntryTarget<ListRead<Args, Page, Item, E>>
+  entry(args: Args): EntryTarget<InfiniteQuery<Args, Page, Item, E>>
   /**
    * An optimistic patch of one list, applied to each held page. It can't
    * change the page count, and implies invalidation of the list.
    */
-  patch(args: Args, f: (page: Page, index: number) => Page): Patch<ListRead<Args, Page, Item, E>>
+  patch(args: Args, f: (page: Page, index: number) => Page): Patch<InfiniteQuery<Args, Page, Item, E>>
   /**
-   * An optimistic patch of every list of the read that holds pages when the
+   * An optimistic patch of every list of the query that holds pages when the
    * run is issued, applied to each page. It implies invalidation of the whole
    * read.
    */
-  patchAll(f: (page: Page, args: Args, index: number) => Page): Patch<ListRead<Args, Page, Item, E>>
+  patchAll(f: (page: Page, args: Args, index: number) => Page): Patch<InfiniteQuery<Args, Page, Item, E>>
 }
 
 /**
- * Defines a list read: a read that holds every page of an accumulating list
+ * Defines an infinite query: a query that holds every page of an accumulating list
  * in one entry, and loads more of them on request.
  *
  * **When to use**
  *
  * Use when a new page appends to what the screen shows, such as an infinite
  * feed or a "load more" button, on a cursor API or an offset one. When a new
- * page replaces the old one, use an ordinary read with the page in its args
+ * page replaces the old one, use an ordinary query with the page in its args
  * and `h.previous`, even on a cursor API.
  *
  * **Details**
@@ -745,7 +747,7 @@ export interface ListService<
  *   list has ended. It must be pure. The cursor is never stored.
  * - The fetcher takes the arguments and the cursor, `None` for the first
  *   page.
- * - The other options are a read's. `staleTime` counts from the end of the
+ * - The other options are a query's. `staleTime` counts from the end of the
  *   last load that started at the first page: loading more changes no
  *   timestamp.
  *
@@ -768,28 +770,28 @@ export interface ListService<
  * - Write `items` before `key`. TypeScript infers the item type from the
  *   first of the two it reads, so with `key` first an item is `unknown`.
  * - A refetch of a list of 30 pages is 30 requests, one after the other.
- * - Every list read with the same arguments shares its page count, which
+ * - Every infinite query with the same arguments shares its page count, which
  *   only goes up until `reset` or the entry is collected.
  * - The server renders the first page only, so the page size is the one
  *   lever on how much of a list a server render shows.
  * - Every page a list field holds is saved in `history.state` on each
  *   navigation. `$.reset` drops the pages after the first, and is the way
  *   to keep that small.
- * - For replacement pagination with an ordinary read, reset the cursor when
+ * - For replacement pagination with an ordinary query, reset the cursor when
  *   a filter changes, or the new filter opens at the old cursor.
  *
  * **Example** (A list of messages)
  *
  * ```ts import.meta.vitest
  * import { Effect, Layer, Option, Schema } from "effect"
- * import { Loader } from "@effect/ui"
+ * import { Query } from "@effect/ui"
  *
  * const Page = Schema.Struct({
  *   messages: Schema.Array(Schema.Struct({ id: Schema.String, text: Schema.String })),
  *   next: Schema.NullOr(Schema.Number)
  * })
  *
- * class ListMessages extends Loader.ListService<ListMessages>()("chat/ListMessages", {
+ * class ListMessages extends Query.InfiniteService<ListMessages>()("chat/ListMessages", {
  *   args: { room: Schema.String },
  *   page: Page,
  *   items: (page) => page.messages,
@@ -810,7 +812,7 @@ export interface ListService<
  *   yield* ListMessages.get({ room: "a" })
  *   const { pages, hasMore } = yield* ListMessages.loadMore({ room: "a" })
  *   return [ListMessages.items(pages).map((message) => message.text), hasMore]
- * }).pipe(Effect.provide(Layer.merge(ListMessages.layer, Loader.layer())))
+ * }).pipe(Effect.provide(Layer.merge(ListMessages.layer, Query.layer())))
  *
  * await Effect.runPromise(program) // => [["message 0", "message 1"], true]
  * ```
@@ -819,7 +821,7 @@ export interface ListService<
  * @category constructors
  * @since 0.1.0
  */
-export const ListService: <Self>() => <
+export const InfiniteService: <Self>() => <
   const Name extends string,
   const Args extends Service.NoServices | { readonly [x: string]: Service.NoServices },
   PageSchema extends Service.NoServices,
@@ -856,7 +858,7 @@ export const ListService: <Self>() => <
     LE,
     LR
   >
-) => ListService<
+) => InfiniteService<
   Self,
   Name,
   Service.ArgsType<Args>,
@@ -890,13 +892,13 @@ export const ListService: <Self>() => <
     next: options.next,
     cursor: options.cursor
   })
-  const ReadService = readClass(def, fetcher)
-  return class extends ReadService {
-    static readonly [ListTypeId]: any = ListTypeId
+  const QueryService = queryClass(def, fetcher)
+  return class extends QueryService {
+    static readonly [InfiniteTypeId]: any = InfiniteTypeId
     static loadMore(args: unknown) {
       return withCache((cache, context) =>
         Effect.callback<any, any>((resume) => {
-          const cancel = cache.loadMore(def, args, fetcherOf(context, ReadService), resume)
+          const cancel = cache.loadMore(def, args, fetcherOf(context, QueryService), resume)
           return Effect.sync(cancel)
         })
       )
@@ -905,14 +907,14 @@ export const ListService: <Self>() => <
       return withCache((cache) => Effect.sync(() => cache.reset(def, args)))
     }
     static items(pages: ReadonlyArray<unknown>) {
-      return listItems(def, pages)
+      return infiniteItems(def, pages)
     }
     static override patch(args: unknown, f: (page: any, index: number) => any) {
-      return patchOne(ReadService, args, (pages: ReadonlyArray<unknown>) => pages.map((page, i) => f(page, i)))
+      return patchOne(QueryService, args, (pages: ReadonlyArray<unknown>) => pages.map((page, i) => f(page, i)))
     }
     static override patchAll(f: (page: any, args: any, index: number) => any) {
       return patchAll(
-        ReadService,
+        QueryService,
         (pages: ReadonlyArray<unknown>, args: unknown) => pages.map((page, i) => f(page, args, i))
       )
     }
@@ -925,7 +927,7 @@ export const ListService: <Self>() => <
  *
  * @internal
  */
-export const listItems = (def: ReadDef, pages: ReadonlyArray<unknown>): ReadonlyArray<unknown> => {
+export const infiniteItems = (def: QueryDef, pages: ReadonlyArray<unknown>): ReadonlyArray<unknown> => {
   const list = def.list!
   const seen = new Set<string>()
   const out: Array<unknown> = []
@@ -942,7 +944,7 @@ export const listItems = (def: ReadDef, pages: ReadonlyArray<unknown>): Readonly
 
 /**
  * A declared invalidation tag. A tag is a plain name, so two
- * `Loader.Tag("users")` calls are one tag.
+ * `Query.Tag("users")` calls are one tag.
  *
  * @stability experimental
  * @category models
@@ -954,12 +956,12 @@ export interface Tag {
 }
 
 /**
- * Declares an invalidation tag, to list in a read's `tags`.
+ * Declares an invalidation tag, to list in a query's `tags`.
  *
  * **When to use**
  *
- * Use to invalidate several reads together, such as everything that shows a
- * user, without naming each read where the invalidation happens.
+ * Use to invalidate several queries together, such as everything that shows a
+ * user, without naming each query where the invalidation happens.
  *
  * @stability experimental
  * @category constructors
@@ -968,29 +970,29 @@ export interface Tag {
 export const Tag = (name: string): Tag => ({ _tag: "Tag", name })
 
 /**
- * One entry of a read, as an invalidation target. Built by a read's `entry`.
+ * One entry of a query, as an invalidation target. Built by a query's `entry`.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface EntryTarget<R extends Read.Any = Read.Any> {
+export interface EntryTarget<R extends Query.Any = Query.Any> {
   readonly _tag: "Entry"
-  readonly read: R
-  readonly args: Read.Args<R>
+  readonly query: R
+  readonly args: Query.Args<R>
 }
 
 /**
- * What a run invalidates: a whole read, one entry or a tag.
+ * What a run invalidates: a whole query, one entry or a tag.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export type Target = Read.Any | EntryTarget | Tag
+export type Target = Query.Any | EntryTarget | Tag
 
 /**
- * An optimistic patch, built by a read's `patch` or `patchAll`. It is a
+ * An optimistic patch, built by a query's `patch` or `patchAll`. It is a
  * pure function from a server value to the value to show.
  *
  * **Details**
@@ -1004,32 +1006,32 @@ export type Target = Read.Any | EntryTarget | Tag
  * @category models
  * @since 0.1.0
  */
-export type Patch<R extends Read.Any = Read.Any> =
+export type Patch<R extends Query.Any = Query.Any> =
   | {
     readonly _tag: "Patch"
-    readonly read: R
-    readonly args: Read.Args<R>
-    readonly patch: (value: Read.Success<R>) => Read.Success<R>
+    readonly query: R
+    readonly args: Query.Args<R>
+    readonly patch: (value: Query.Success<R>) => Query.Success<R>
   }
   | {
     readonly _tag: "PatchAll"
-    readonly read: R
-    readonly patch: (value: Read.Success<R>, args: Read.Args<R>) => Read.Success<R>
+    readonly query: R
+    readonly patch: (value: Query.Success<R>, args: Query.Args<R>) => Query.Success<R>
   }
 
 /**
- * A write of a run's result into one entry, built by a read's `set`. A
+ * A write of a run's result into one entry, built by a query's `set`. A
  * Command's `writes` is the only place one is used.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface Write<R extends Read.Any = Read.Any> {
+export interface Write<R extends Query.Any = Query.Any> {
   readonly _tag: "Set"
-  readonly read: R
-  readonly args: Read.Args<R>
-  readonly value: Read.Success<R>
+  readonly query: R
+  readonly args: Query.Args<R>
+  readonly value: Query.Success<R>
 }
 
 /**
@@ -1045,9 +1047,9 @@ export interface Write<R extends Read.Any = Read.Any> {
  *
  * ```ts import.meta.vitest
  * import { Effect, Schema } from "effect"
- * import { Loader } from "@effect/ui"
+ * import { Query } from "@effect/ui"
  *
- * class GetCount extends Loader.Service<GetCount>()("counts/GetCount", {
+ * class GetCount extends Query.Service<GetCount>()("counts/GetCount", {
  *   args: { id: Schema.String },
  *   success: Schema.Number,
  *   error: Schema.Never,
@@ -1055,23 +1057,23 @@ export interface Write<R extends Read.Any = Read.Any> {
  * }, Effect.succeed(() => Effect.succeed(0))) {}
  *
  * const patches = [GetCount.patch({ id: "a" }, (n) => n + 1)]
- * Loader.applyPatches(patches, GetCount, { id: "a" }, 1) // => 2
- * Loader.applyPatches(patches, GetCount, { id: "b" }, 1) // => 1
+ * Query.applyPatches(patches, GetCount, { id: "a" }, 1) // => 2
+ * Query.applyPatches(patches, GetCount, { id: "b" }, 1) // => 1
  * ```
  *
  * @stability experimental
  * @category utils
  * @since 0.1.0
  */
-export const applyPatches = <R extends Read.Any>(
+export const applyPatches = <R extends Query.Any>(
   patches: ReadonlyArray<Patch>,
-  read: R,
-  args: Read.Args<R>,
-  value: Read.Success<R>
-): Read.Success<R> => {
-  const def = defOf(read)
+  query: R,
+  args: Query.Args<R>,
+  value: Query.Success<R>
+): Query.Success<R> => {
+  const def = defOf(query)
   const argsKey = def.argsKey(args)
-  for (const patch of patches) value = applyPatch(patch, def.name, argsKey, args, value) as Read.Success<R>
+  for (const patch of patches) value = applyPatch(patch, def.name, argsKey, args, value) as Query.Success<R>
   return value
 }
 
@@ -1094,11 +1096,11 @@ export const applyPatches = <R extends Read.Any>(
  *
  * ```ts import.meta.vitest
  * import { Effect, Schema } from "effect"
- * import { Loader } from "@effect/ui"
+ * import { Query } from "@effect/ui"
  *
- * const Users = Loader.Tag("users")
+ * const Users = Query.Tag("users")
  *
- * class GetUser extends Loader.Service<GetUser>()("users/GetUser", {
+ * class GetUser extends Query.Service<GetUser>()("users/GetUser", {
  *   args: { id: Schema.String },
  *   success: Schema.String,
  *   error: Schema.Never,
@@ -1106,23 +1108,23 @@ export const applyPatches = <R extends Read.Any>(
  *   tags: [Users]
  * }, Effect.succeed(({ id }) => Effect.succeed(id))) {}
  *
- * Loader.invalidatesEntry({ invalidates: [Users] }, GetUser, { id: "1" }) // => true
- * Loader.invalidatesEntry({ invalidates: [GetUser.entry({ id: "1" })] }, GetUser, { id: "2" }) // => false
+ * Query.invalidatesEntry({ invalidates: [Users] }, GetUser, { id: "1" }) // => true
+ * Query.invalidatesEntry({ invalidates: [GetUser.entry({ id: "1" })] }, GetUser, { id: "2" }) // => false
  * ```
  *
  * @stability experimental
  * @category utils
  * @since 0.1.0
  */
-export const invalidatesEntry = <R extends Read.Any>(
+export const invalidatesEntry = <R extends Query.Any>(
   run: {
     readonly invalidates: ReadonlyArray<Target>
     readonly optimistic?: ReadonlyArray<Patch> | undefined
   },
-  read: R,
-  args: Read.Args<R>
+  query: R,
+  args: Query.Args<R>
 ): boolean => {
-  const def = defOf(read)
+  const def = defOf(query)
   return targetsHit(compileTargets(run.invalidates, run.optimistic), def.name, def.tags, def.argsKey(args))
 }
 
@@ -1141,8 +1143,8 @@ export const invalidatesEntry = <R extends Read.Any>(
  *   true, and a watched entry was stale or its interval had elapsed.
  * - `interval`: a watched entry's `refetchInterval` fired.
  * - `invalidation`: an invalidation hit a watched entry.
- * - `loadMore`: a list read's `loadMore`.
- * - `reset`: a list read's `reset` hit a watched list.
+ * - `loadMore`: an infinite query's `loadMore`.
+ * - `reset`: an infinite query's `reset` hit a watched list.
  *
  * @stability experimental
  * @category models
@@ -1190,7 +1192,7 @@ export interface Signal {
  * @since 0.1.0
  */
 export const Visibility: Context.Reference<Signal> = Context.Reference<Signal>(
-  "@effect/ui/Loader/Visibility",
+  "@effect/ui/Query/Visibility",
   { defaultValue: () => alwaysTrue }
 )
 
@@ -1211,12 +1213,12 @@ export const Visibility: Context.Reference<Signal> = Context.Reference<Signal>(
  * @since 0.1.0
  */
 export const Connectivity: Context.Reference<Signal> = Context.Reference<Signal>(
-  "@effect/ui/Loader/Connectivity",
+  "@effect/ui/Query/Connectivity",
   { defaultValue: () => alwaysTrue }
 )
 
 /**
- * A second read was defined under a name already in the cache. The first
+ * A second query was defined under a name already in the cache. The first
  * definition wins: it pins the Schemas, the stale and idle times, the interval
  * and the tags.
  *
@@ -1226,7 +1228,7 @@ export const Connectivity: Context.Reference<Signal> = Context.Reference<Signal>
  */
 export class DuplicateName extends Data.TaggedClass("DuplicateName")<{
   readonly message: string
-  readonly read: string
+  readonly query: string
 }> {}
 
 /**
@@ -1239,7 +1241,7 @@ export class DuplicateName extends Data.TaggedClass("DuplicateName")<{
  */
 export class IntervalThrew extends Data.TaggedClass("IntervalThrew")<{
   readonly message: string
-  readonly read: string
+  readonly query: string
   readonly logKey: string
   readonly error: unknown
 }> {}
@@ -1254,7 +1256,7 @@ export class IntervalThrew extends Data.TaggedClass("IntervalThrew")<{
  */
 export class IntervalInvalid extends Data.TaggedClass("IntervalInvalid")<{
   readonly message: string
-  readonly read: string
+  readonly query: string
   readonly logKey: string
 }> {}
 
@@ -1268,7 +1270,7 @@ export class IntervalInvalid extends Data.TaggedClass("IntervalInvalid")<{
  */
 export class FetchRestarted extends Data.TaggedClass("FetchRestarted")<{
   readonly message: string
-  readonly read: string
+  readonly query: string
   readonly logKey: string
 }> {}
 
@@ -1283,7 +1285,7 @@ export class FetchRestarted extends Data.TaggedClass("FetchRestarted")<{
  */
 export class PageRepeated extends Data.TaggedClass("PageRepeated")<{
   readonly message: string
-  readonly read: string
+  readonly query: string
   readonly logKey: string
 }> {}
 
@@ -1297,12 +1299,12 @@ export class PageRepeated extends Data.TaggedClass("PageRepeated")<{
  */
 export class DuplicateKeyInPage extends Data.TaggedClass("DuplicateKeyInPage")<{
   readonly message: string
-  readonly read: string
+  readonly query: string
   readonly logKey: string
 }> {}
 
 /**
- * A patch made a value the read's `success` Schema rejects, the first time it
+ * A patch made a value the query's `success` Schema rejects, the first time it
  * was applied. The value is used as is.
  *
  * @stability experimental
@@ -1311,7 +1313,7 @@ export class DuplicateKeyInPage extends Data.TaggedClass("DuplicateKeyInPage")<{
  */
 export class PatchInvalid extends Data.TaggedClass("PatchInvalid")<{
   readonly message: string
-  readonly read: string
+  readonly query: string
   readonly logKey: string
   readonly command: string
 }> {}
@@ -1322,7 +1324,7 @@ export class PatchInvalid extends Data.TaggedClass("PatchInvalid")<{
  *
  * **Details**
  *
- * The cache encodes the server value with the read's `success` Schema before
+ * The cache encodes the server value with the query's `success` Schema before
  * a run's patches are first applied and after, and compares snapshots of the
  * two encodings with `Equal.equals`. The check sees everything the Schema
  * encodes. Where the Schema passes a value through as it is, as `Schema.Any`
@@ -1348,7 +1350,7 @@ export class PatchInvalid extends Data.TaggedClass("PatchInvalid")<{
  */
 export class PatchMutated extends Data.TaggedClass("PatchMutated")<{
   readonly message: string
-  readonly read: string
+  readonly query: string
   readonly logKey: string
   readonly command: string
 }> {}
@@ -1363,13 +1365,13 @@ export class PatchMutated extends Data.TaggedClass("PatchMutated")<{
  */
 export class UncoveredWrite extends Data.TaggedClass("UncoveredWrite")<{
   readonly message: string
-  readonly read: string
+  readonly query: string
   readonly logKey: string
   readonly command: string
 }> {}
 
 /**
- * A read's own `invalidate` was called on a per-request server cache, where
+ * A query's own `invalidate` was called on a per-request server cache, where
  * an entry settles once. Nothing changes.
  *
  * @stability experimental
@@ -1378,7 +1380,7 @@ export class UncoveredWrite extends Data.TaggedClass("UncoveredWrite")<{
  */
 export class InvalidateIgnored extends Data.TaggedClass("InvalidateIgnored")<{
   readonly message: string
-  readonly read: string | undefined
+  readonly query: string | undefined
 }> {}
 
 /**
@@ -1391,7 +1393,7 @@ export class InvalidateIgnored extends Data.TaggedClass("InvalidateIgnored")<{
  */
 export class EncodeFailed extends Data.TaggedClass("EncodeFailed")<{
   readonly message: string
-  readonly read: string
+  readonly query: string
   readonly logKey: string
 }> {}
 
@@ -1408,7 +1410,7 @@ export class HydrationMalformed extends Data.TaggedClass("HydrationMalformed")<{
 }> {}
 
 /**
- * A hydrated entry's arguments or value failed to decode when its read
+ * A hydrated entry's arguments or value failed to decode when its query
  * registered. The entry is cold. `logKey` is there only when the arguments
  * decoded.
  *
@@ -1418,7 +1420,7 @@ export class HydrationMalformed extends Data.TaggedClass("HydrationMalformed")<{
  */
 export class HydrationDecodeFailed extends Data.TaggedClass("HydrationDecodeFailed")<{
   readonly message: string
-  readonly read: string
+  readonly query: string
   readonly part: "value" | "args"
   /** Only when `part` is `"value"`: decoded args are what a log key is built from. */
   readonly logKey: string | undefined
@@ -1429,7 +1431,7 @@ export class HydrationDecodeFailed extends Data.TaggedClass("HydrationDecodeFail
  *
  * **Details**
  *
- * A problem names its read and the entry's log key, which is the entry's key
+ * A problem names its query and the entry's log key, which is the entry's key
  * built with every `Schema.Redacted` argument redacted. It never carries a
  * value or the key itself.
  *
@@ -1492,21 +1494,21 @@ export declare namespace Problem {
  */
 export const Problems: Context.Reference<(problem: Problem.Any) => void> = Context.Reference<
   (problem: Problem.Any) => void
->("@effect/ui/Loader/Problems", {
+>("@effect/ui/Query/Problems", {
   // oxlint-disable-next-line no-console
   defaultValue: () => (problem) => console.warn(problem.message)
 })
 
 /**
- * The cache service used by reads.
+ * The cache service used by queries.
  *
  * @stability experimental
  * @category services
  * @since 0.1.0
  */
 export class Cache extends Context.Service<Cache, {
-  readonly "~@effect/ui/Loader/Cache": "~@effect/ui/Loader/Cache"
-}>()("@effect/ui/Loader/Cache") {}
+  readonly "~@effect/ui/Query/Cache": "~@effect/ui/Query/Cache"
+}>()("@effect/ui/Query/Cache") {}
 
 /**
  * Layer that provides a cache for plain Effect code.
@@ -1514,7 +1516,7 @@ export class Cache extends Context.Service<Cache, {
  * **Details**
  *
  * `idleTimeToLive` is how long an entry stays once nothing watches it, 5
- * minutes by default; a read can override it. The cache takes `Visibility`,
+ * minutes by default; a query can override it. The cache takes `Visibility`,
  * `Connectivity`, `Problems` and the `Clock` from where the Layer is built,
  * and is disposed with the Layer's Scope: fetches in flight are interrupted,
  * and the close waits for their cleanup.
@@ -1553,9 +1555,9 @@ export const layer = (options?: {
 // Type ids
 // -----------------------------------------------------------------------------
 
-const CacheTypeId = "~@effect/ui/Loader/Cache"
+const CacheTypeId = "~@effect/ui/Query/Cache"
 
-const BuildTypeId = "~@effect/ui/Loader/Build"
+const BuildTypeId = "~@effect/ui/Query/Build"
 
 // -----------------------------------------------------------------------------
 // Keys
@@ -1724,9 +1726,9 @@ const standIn = (u: object): object => {
   }
   return out
 }
-const typedArrayKey = Symbol("@effect/ui/Loader/typedArray")
+const typedArrayKey = Symbol("@effect/ui/Query/typedArray")
 /** Where an array has an accessor element: it is never read. */
-const accessorSlot = Symbol("@effect/ui/Loader/accessor")
+const accessorSlot = Symbol("@effect/ui/Query/accessor")
 
 // The built-in getters and methods, called directly: they read internal slots and nothing through the object, and
 // throw on an object without the slot, a `Proxy` included.
@@ -1939,15 +1941,15 @@ const addListener = <A>(listeners: Set<A>, listener: A): () => void => {
 const restartLimit = 10
 
 // -----------------------------------------------------------------------------
-// Read definitions
+// Query definitions
 // -----------------------------------------------------------------------------
 
 type Settled = AsyncResult.Success<any, any> | AsyncResult.Failure<any, any>
 
 /**
- * The data of a read. A read's identity is this object, not its class.
+ * The data of a query. A query's identity is this object, not its class.
  */
-interface ReadDef {
+interface QueryDef {
   readonly name: string
   readonly args: Schema.Top
   readonly success: Schema.Top
@@ -1963,9 +1965,9 @@ interface ReadDef {
   readonly normalize: (args: unknown) => unknown
   /** The key through the redacting args codec. Never throws. */
   readonly logKey: (args: unknown, argsKey: string) => string
-  /** The JSON codecs of the read's Schemas, built on first use. Each throws on a value that doesn't fit. */
-  readonly codec: () => ReadCodec
-  /** Set on a list read. Its `success` is the page array. */
+  /** The JSON codecs of the query's Schemas, built on first use. Each throws on a value that doesn't fit. */
+  readonly codec: () => QueryCodec
+  /** Set on an infinite query. Its `success` is the page array. */
   readonly list: ListDef | undefined
 }
 
@@ -1977,7 +1979,7 @@ interface ListDef {
   readonly encodeCursor: (cursor: unknown) => unknown
 }
 
-interface ReadCodec {
+interface QueryCodec {
   readonly encodeSuccess: (value: unknown) => unknown
   readonly decodeSuccess: (encoded: unknown) => unknown
   readonly encodeError: (error: unknown) => unknown
@@ -1990,7 +1992,7 @@ interface ReadCodec {
 
 const jsonCodec = (schema: Schema.Top) => Schema.toCodecJson(schema as Schema.Codec<unknown, unknown>)
 
-const makeCodec = (args: Schema.Top, success: Schema.Top, error: Schema.Top): ReadCodec => {
+const makeCodec = (args: Schema.Top, success: Schema.Top, error: Schema.Top): QueryCodec => {
   const successJson = jsonCodec(success)
   const errorJson = jsonCodec(error)
   const argsJson = jsonCodec(args)
@@ -2010,7 +2012,7 @@ const quote = (name: string): string => JSON.stringify(name)
 const nonNegative = (name: string, field: string, input: Duration.Input): number => {
   const duration = Duration.fromInputUnsafe(input)
   if (Duration.isNegative(duration)) {
-    throw new Error("[Loader] read " + quote(name) + ": " + field + " can't be negative")
+    throw new Error("[Query] " + quote(name) + ": " + field + " can't be negative")
   }
   return Duration.toMillis(duration)
 }
@@ -2028,7 +2030,7 @@ const parseInterval = (input: Duration.Input): number | "invalid" => {
 }
 
 /**
- * Builds a read's data, and throws on what a definition may not say.
+ * Builds a query's data, and throws on what a definition may not say.
  */
 const makeDef = (name: string, options: {
   readonly args: Schema.Top | Schema.Struct.Fields
@@ -2043,19 +2045,19 @@ const makeDef = (name: string, options: {
   readonly key: (item: any) => string
   readonly next: (lastPage: any, allPages: any) => Option.Option<any>
   readonly cursor: Schema.Top
-}): ReadDef => {
+}): QueryDef => {
   const staleMs = nonNegative(name, "staleTime", options.staleTime)
   const idleMs = options.idleTimeToLive === undefined
     ? undefined
     : nonNegative(name, "idleTimeToLive", options.idleTimeToLive)
-  let refetchInterval: ReadDef["refetchInterval"]
+  let refetchInterval: QueryDef["refetchInterval"]
   if (typeof options.refetchInterval === "function") {
     refetchInterval = options.refetchInterval
   } else if (options.refetchInterval !== undefined) {
     const ms = parseInterval(options.refetchInterval)
     if (ms === "invalid") {
       throw new Error(
-        "[Loader] read " + quote(name) + ": refetchInterval must be positive, and not a bare number under 1000. " +
+        "[Query] " + quote(name) + ": refetchInterval must be positive, and not a bare number under 1000. " +
           subSecondHint
       )
     }
@@ -2078,13 +2080,13 @@ const makeDef = (name: string, options: {
       encoded = encode(value)
     } catch {
       // The Schema issue prints the value, so it isn't passed on.
-      throw new Error("[Loader] read " + quote(name) + ": the args don't encode with the read's args Schema")
+      throw new Error("[Query] " + quote(name) + ": the args don't encode with the query's args Schema")
     }
     try {
       return canonical(encoded)
     } catch (leaf) {
       throw new Error(
-        "[Loader] read " + quote(name) + ": the encoded args hold a value JSON can't carry (" +
+        "[Query] " + quote(name) + ": the encoded args hold a value JSON can't carry (" +
           (leaf instanceof NonJsonLeaf ? leaf.kind : "unknown") + "). Give the args Schema a JSON encoding.",
         { cause: leaf }
       )
@@ -2141,14 +2143,14 @@ const makeListDef = (options: {
  */
 export const cacheIdleMs = (input: Duration.Input | undefined): number => {
   const duration = Duration.fromInputUnsafe(input ?? "5 minutes")
-  if (Duration.isNegative(duration)) throw new Error("[Loader] idleTimeToLive can't be negative")
+  if (Duration.isNegative(duration)) throw new Error("[Query] idleTimeToLive can't be negative")
   return Duration.toMillis(duration)
 }
 
 /** @internal */
-export const defOf = (read: { readonly [TypeId]: unknown }): ReadDef => read[TypeId] as ReadDef
+export const defOf = (query: { readonly [TypeId]: unknown }): QueryDef => query[TypeId] as QueryDef
 
-const isRead = <T>(u: T): u is Extract<T, { readonly [TypeId]: unknown }> =>
+const isQuery = <T>(u: T): u is Extract<T, { readonly [TypeId]: unknown }> =>
   (typeof u === "function" || (typeof u === "object" && u !== null)) && TypeId in u
 
 // -----------------------------------------------------------------------------
@@ -2165,36 +2167,40 @@ const ArgsKey = "~argsKey"
 // The args key a target, patch or write was built with.
 const argsKeyOf = (x: { readonly _tag: "Entry" | "Patch" | "Set" }): string => (x as any)[ArgsKey]
 
-const entryTarget = (read: Read.Any, args: unknown): EntryTarget =>
-  ({ _tag: "Entry", read, args, [ArgsKey]: defOf(read).argsKey(args) }) as EntryTarget
+const entryTarget = (query: Query.Any, args: unknown): EntryTarget =>
+  ({ _tag: "Entry", query, args, [ArgsKey]: defOf(query).argsKey(args) }) as EntryTarget
 
-const patchOne = (read: Read.Any, args: unknown, patch: (value: any) => any): Patch =>
-  ({ _tag: "Patch", read, args, patch, [ArgsKey]: defOf(read).argsKey(args) }) as Patch
+const patchOne = (query: Query.Any, args: unknown, patch: (value: any) => any): Patch =>
+  ({ _tag: "Patch", query, args, patch, [ArgsKey]: defOf(query).argsKey(args) }) as Patch
 
-const patchAll = (read: Read.Any, patch: (value: any, args: any) => any): Patch => ({ _tag: "PatchAll", read, patch })
+const patchAll = (query: Query.Any, patch: (value: any, args: any) => any): Patch => ({
+  _tag: "PatchAll",
+  query,
+  patch
+})
 
-const write = (read: Read.Any, args: unknown, value: unknown): Write =>
-  ({ _tag: "Set", read, args, value, [ArgsKey]: defOf(read).argsKey(args) }) as Write
+const write = (query: Query.Any, args: unknown, value: unknown): Write =>
+  ({ _tag: "Set", query, args, value, [ArgsKey]: defOf(query).argsKey(args) }) as Write
 
 /**
  * A run's declarations compiled for matching: the reads it names whole, the
  * entries it names one by one, and its tags.
  */
 interface Targets {
-  readonly reads: ReadonlySet<string>
+  readonly queries: ReadonlySet<string>
   readonly entries: ReadonlyMap<string, ReadonlySet<string>>
   readonly tags: ReadonlySet<string>
 }
 
 /**
  * Declared targets plus those implied by patches: one entry for `patch`, the
- * whole read for `patchAll`.
+ * whole query for `patchAll`.
  */
 const compileTargets = (
   invalidates: ReadonlyArray<Target>,
   optimistic: ReadonlyArray<Patch> = []
 ): Targets => {
-  const reads = new Set<string>()
+  const queries = new Set<string>()
   const entries = new Map<string, Set<string>>()
   const tags = new Set<string>()
   const addEntry = (name: string, argsKey: string): void => {
@@ -2203,15 +2209,15 @@ const compileTargets = (
     keys.add(argsKey)
   }
   for (const target of invalidates) {
-    if (isRead(target)) reads.add(defOf(target).name)
-    else if (target._tag === "Entry") addEntry(defOf(target.read).name, argsKeyOf(target))
+    if (isQuery(target)) queries.add(defOf(target).name)
+    else if (target._tag === "Entry") addEntry(defOf(target.query).name, argsKeyOf(target))
     else tags.add(target.name)
   }
   for (const patch of optimistic) {
-    if (patch._tag === "Patch") addEntry(defOf(patch.read).name, argsKeyOf(patch))
-    else reads.add(defOf(patch.read).name)
+    if (patch._tag === "Patch") addEntry(defOf(patch.query).name, argsKeyOf(patch))
+    else queries.add(defOf(patch.query).name)
   }
-  return { reads, entries, tags }
+  return { queries, entries, tags }
 }
 
 /**
@@ -2224,7 +2230,7 @@ const targetsHit = (
   tags: ReadonlyArray<string> | undefined,
   argsKey: string
 ): boolean => {
-  if (targets.reads.has(name) || targets.entries.get(name)?.has(argsKey) === true) return true
+  if (targets.queries.has(name) || targets.entries.get(name)?.has(argsKey) === true) return true
   if (targets.tags.size === 0) return false
   if (tags === undefined) return true
   return tags.some((tag) => targets.tags.has(tag))
@@ -2235,7 +2241,7 @@ const targetsHit = (
  * of another entry leaves it as it is.
  */
 const applyPatch = (patch: Patch, name: string, argsKey: string, args: unknown, value: unknown): unknown => {
-  if (defOf(patch.read).name !== name) return value
+  if (defOf(patch.query).name !== name) return value
   if (patch._tag === "PatchAll") return patch.patch(value, args)
   return argsKeyOf(patch) === argsKey ? patch.patch(value) : value
 }
@@ -2244,12 +2250,12 @@ const applyPatch = (patch: Patch, name: string, argsKey: string, args: unknown, 
 // Builds: which Layer build owns a fetch
 // -----------------------------------------------------------------------------
 
-/** A list read's fetcher takes the cursor as well. */
+/** An infinite query's fetcher takes the cursor as well. */
 type Fetcher = (args: any, cursor?: any) => Effect.Effect<any, any>
 
 /**
- * One Layer build of a read's service. The service value is a plain function,
- * so a fake is `Layer.succeed(Read, fn)`; a function from a real build carries
+ * One Layer build of a query's service. The service value is a plain function,
+ * so a fake is `Layer.succeed(Query, fn)`; a function from a real build carries
  * its build, and a fake gets one per cache that never closes.
  */
 interface Build {
@@ -2291,7 +2297,7 @@ const closeBuild = (build: Build): Effect.Effect<void> =>
 // -----------------------------------------------------------------------------
 
 interface FetchEvent {
-  readonly read: string
+  readonly query: string
   readonly logKey: string
   readonly trigger: Trigger
   /** True when this start replaces an interrupted fetch. It keeps the trigger. */
@@ -2303,9 +2309,9 @@ interface FetchEvent {
    * stored: a run reading back its own target, or a `get` under a live patch.
    */
   readonly stored: boolean
-  /** On a list read: the index of the page this request loads. */
+  /** On an infinite query: the index of the page this request loads. */
   readonly page?: number
-  /** On a list read: the encoded cursor of the page, absent for the first. */
+  /** On an infinite query: the encoded cursor of the page, absent for the first. */
   readonly cursor?: Schema.Json
 }
 
@@ -2315,7 +2321,7 @@ interface WatchHandle {
   readonly current: () => AsyncResult.AsyncResult<any, any>
   /** The patched view right now, and whether it includes an unconfirmed patch. */
   readonly patchedView: () => PatchedView
-  /** On a list read, whether it holds more pages to load. `undefined` otherwise. */
+  /** On an infinite query, whether it holds more pages to load. `undefined` otherwise. */
   readonly more: () => More<any> | undefined
   /**
    * Drops the watcher count synchronously. Idempotent. With `abandon`, the
@@ -2332,7 +2338,7 @@ interface PatchedView {
 
 interface EntryInfo {
   readonly stored: AsyncResult.AsyncResult<any, any>
-  /** The server state with every patch applied: what a loader field shows. */
+  /** The server state with every patch applied: what a query field shows. */
   readonly view: AsyncResult.AsyncResult<any, any>
   /** Whether `view` includes an unconfirmed patch. */
   readonly patched: boolean
@@ -2343,7 +2349,7 @@ interface EntryInfo {
   /** The trigger of the fetch in flight, or the one a held fetch will start with. */
   readonly trigger: Trigger | undefined
   readonly patches: { readonly live: number; readonly held: number }
-  /** On a list read only: whether it holds more pages to load. */
+  /** On an infinite query only: whether it holds more pages to load. */
   readonly more?: More<any> | undefined
 }
 
@@ -2364,8 +2370,8 @@ type RunExit =
  */
 export interface RunHandle {
   readonly command: string
-  /** The predicate of `Loader.invalidatesEntry` over the run's declarations. */
-  readonly invalidates: (def: ReadDef, argsKey: string) => boolean
+  /** The predicate of `Query.invalidatesEntry` over the run's declarations. */
+  readonly invalidates: (def: QueryDef, argsKey: string) => boolean
   /** The work begins. A queued run is issued before it starts. */
   readonly start: () => void
   readonly isStarted: () => boolean
@@ -2410,12 +2416,12 @@ export interface RunHandle {
  * @internal
  */
 export interface AwaitedEntry {
-  readonly read: string
+  readonly query: string
   readonly logKey: string
 }
 
 /**
- * The `state["~loader"]` payload: entries by read name, as tagged tuples.
+ * The `state["~query"]` payload: entries by query name, as tagged tuples.
  */
 type Dehydrated = Record<
   string,
@@ -2427,12 +2433,12 @@ type Dehydrated = Record<
 
 /**
  * The synchronous API of a cache, for the generated statics, the @effect/ui
- * runtime and the test harnesses. The value of `Loader.Cache` is one of these.
+ * runtime and the test harnesses. The value of `Query.Cache` is one of these.
  */
 interface CacheInternals {
   readonly [CacheTypeId]: typeof CacheTypeId
-  /** Hands the cache a read's definition. Its hydrated entries are decoded now. */
-  readonly register: (def: ReadDef) => void
+  /** Hands the cache a query's definition. Its hydrated entries are decoded now. */
+  readonly register: (def: QueryDef) => void
   /**
    * Registers a watcher. The count rises and the zero-to-one fetch decision is
    * made here, but the fetcher starts one scheduler step later and `onChange`
@@ -2441,7 +2447,7 @@ interface CacheInternals {
    * otherwise the server value, and `patched` is always false.
    */
   readonly watch: (
-    def: ReadDef,
+    def: QueryDef,
     args: unknown,
     fetcher: Fetcher,
     onChange: (result: Settled, patched: boolean, more: More<any> | undefined) => void,
@@ -2466,22 +2472,22 @@ interface CacheInternals {
    */
   readonly hold: () => () => void
   /** The server value. Doesn't create the entry or reset its idle timer. */
-  readonly peek: (def: ReadDef, args: unknown) => AsyncResult.AsyncResult<any, any>
+  readonly peek: (def: QueryDef, args: unknown) => AsyncResult.AsyncResult<any, any>
   /** `run` is the caller's, from `CurrentRun`. */
-  readonly get: (def: ReadDef, args: unknown, fetcher: Fetcher, run: RunHandle | undefined) => Effect.Effect<any, any>
-  readonly prefetch: (def: ReadDef, args: unknown, fetcher: Fetcher) => void
+  readonly get: (def: QueryDef, args: unknown, fetcher: Fetcher, run: RunHandle | undefined) => Effect.Effect<any, any>
+  readonly prefetch: (def: QueryDef, args: unknown, fetcher: Fetcher) => void
   /**
    * A list's load more. `resume` gets the pages and whether there is more
    * once the walk or append reaching the next page ends. Returns the cancel.
    */
   readonly loadMore: (
-    def: ReadDef,
+    def: QueryDef,
     args: unknown,
     fetcher: Fetcher,
     resume: (exit: Exit.Exit<LoadedMore<any>, any>) => void
   ) => () => void
   /** A list's reset: drops the pages after the first, then invalidates. */
-  readonly reset: (def: ReadDef, args: unknown) => void
+  readonly reset: (def: QueryDef, args: unknown) => void
   /**
    * One synchronous batch: an entry hit twice restarts once. `byHand` is a
    * read's own `invalidate`, which a settle-once cache reports and ignores.
@@ -2503,13 +2509,13 @@ interface CacheInternals {
   }) => RunHandle
   /**
    * Interrupts every fetch in flight and every pending `get`, and returns
-   * every settled entry for `~loader`. An entry that can't be encoded is
+   * every settled entry for `~query`. An entry that can't be encoded is
    * left out and reported. Entries whose args, success or error Schema holds
    * a `Schema.Redacted` are left out without an encoding diagnostic; the client fetches them.
    */
   readonly dehydrate: () => Dehydrated
   /**
-   * Holds the `~loader` payload's entries raw until their read registers.
+   * Holds the `~query` payload's entries raw until their query registers.
    * Opens the fetch-free window unless `static`, where every entry has an
    * unknown age instead.
    */
@@ -2526,7 +2532,7 @@ interface CacheInternals {
   readonly onFetch: (listener: (event: FetchEvent) => void) => () => void
   /** Called once a stored fetch has ended and its entry has emitted. */
   readonly onFetchEnd: (listener: () => void) => () => void
-  readonly inspect: (def: ReadDef, args: unknown) => EntryInfo | undefined
+  readonly inspect: (def: QueryDef, args: unknown) => EntryInfo | undefined
   /** The stored fetches in flight, and those held until a live patch's run exits. */
   readonly pending: () => ReadonlyArray<PendingFetch>
   /**
@@ -2534,9 +2540,9 @@ interface CacheInternals {
    * fetches off, that a watcher or `get` waits on. An entry whose fetcher
    * died isn't one: its fetch ended.
    */
-  readonly misses: () => ReadonlyArray<{ readonly read: string; readonly logKey: string }>
+  readonly misses: () => ReadonlyArray<{ readonly query: string; readonly logKey: string }>
   /**
-   * Decodes every entry of a `~loader` payload with the reads this cache
+   * Decodes every entry of a `~query` payload with the queries this cache
    * knows, args key included, and encodes it again. Returns a line per entry
    * that doesn't come back as it was shipped.
    */
@@ -2544,7 +2550,7 @@ interface CacheInternals {
 }
 
 interface PendingFetch {
-  readonly read: string
+  readonly query: string
   readonly logKey: string
   readonly status: "running" | "held"
   readonly trigger: Trigger
@@ -2558,7 +2564,7 @@ export const internals = (cache: { readonly [CacheTypeId]: unknown }): CacheInte
  * `get` in the body can tell its run's own targets.
  */
 const CurrentRun: Context.Reference<RunHandle | undefined> = Context.Reference<RunHandle | undefined>(
-  "@effect/ui/Loader/CurrentRun",
+  "@effect/ui/Query/CurrentRun",
   { defaultValue: () => undefined }
 )
 
@@ -2566,15 +2572,15 @@ const CurrentRun: Context.Reference<RunHandle | undefined> = Context.Reference<R
 // Snapshots
 // -----------------------------------------------------------------------------
 
-const SnapshotTypeId = "~@effect/ui/Loader/Snapshot"
+const SnapshotTypeId = "~@effect/ui/Query/Snapshot"
 
 /**
  * What a snapshot holds. A snapshot is what @effect/ui keeps in an instance's
- * loader slot, beside its Model: it is internal, and never part of a Model or
+ * query result, beside its Model: it is internal, and never part of a Model or
  * a message.
  */
 interface SnapshotData {
-  readonly def: ReadDef
+  readonly def: QueryDef
   readonly label: string
   /** `undefined` only for the empty snapshot. */
   readonly argsKey: string | undefined
@@ -2583,7 +2589,7 @@ interface SnapshotData {
   readonly result: Settled | undefined
   /** The value includes an unconfirmed patch. Only ever true over a Success. */
   readonly patched: boolean
-  /** A list's: whether it holds more pages. `undefined` for any other read, and the empty snapshot. */
+  /** A list's: whether it holds more pages. `undefined` for any other query, and the empty snapshot. */
   readonly more: More<any> | undefined
 }
 
@@ -2607,7 +2613,7 @@ class SnapshotImpl implements Equal.Equal {
 
 /** @internal */
 export const makeSnapshot = (
-  def: ReadDef,
+  def: QueryDef,
   label: string,
   entry: { readonly args: unknown; readonly argsKey: string } | undefined,
   result: Settled | undefined,
@@ -2660,8 +2666,8 @@ const settledMap = (
 }
 
 /**
- * The Schema of a loader slot that holds a snapshot of a read. Its type
- * parameters are the read's `args`, `success` and `error` Schemas, so a walk
+ * The Schema of a query result that holds a snapshot of a query. Its type
+ * parameters are the query's `args`, `success` and `error` Schemas, so a walk
  * over the slots' AST, such as the log's redaction, reaches what a snapshot
  * holds. On the wire a snapshot is a tuple: `[]` when empty,
  * `[argsKey, 0, value, timestamp, patched]` for a Success, and
@@ -2675,22 +2681,22 @@ const settledMap = (
  *
  * With `log`, a settled tuple ends with `[waiting, more]` too: the message
  * log replays `update`, which can read both, so its form keeps what page
- * state drops. `more` is `null` for a read that isn't a list.
+ * state drops. `more` is `null` for a query that isn't a list.
  *
  * @internal
  */
 export const snapshotSchema = (
-  read: { readonly [TypeId]: unknown },
+  query: { readonly [TypeId]: unknown },
   label: string,
   log = false
 ): Schema.Top => {
-  const def = defOf(read)
+  const def = defOf(query)
   return Schema.make(
     new SchemaAST.Declaration(
       [def.args.ast, def.success.ast, def.error.ast],
       snapshotRun(def, label, true),
       {
-        expected: "a loader slot " + quote(label) + " of " + quote(def.name),
+        expected: "a query result " + quote(label) + " of " + quote(def.name),
         toCodecJson: snapshotJson(def, label, log)
       } as Schema.Annotations.Annotations,
       undefined,
@@ -2702,14 +2708,14 @@ export const snapshotSchema = (
   )
 }
 
-const isSnapshotOf = (def: ReadDef, label: string) => (u: unknown): u is SnapshotImpl =>
+const isSnapshotOf = (def: QueryDef, label: string) => (u: unknown): u is SnapshotImpl =>
   u instanceof SnapshotImpl && u[SnapshotTypeId].def.name === def.name && u[SnapshotTypeId].label === label
 
-const snapshotIssue = (def: ReadDef, message: string) =>
+const snapshotIssue = (def: QueryDef, message: string) =>
   new SchemaIssue.InvalidValue({ message: "a snapshot of " + quote(def.name) + ": " + message })
 
-/** Checks a snapshot against the read's Schemas, the type parameters. */
-const snapshotRun = (def: ReadDef, label: string, decoding: boolean) => {
+/** Checks a snapshot against the query's Schemas, the type parameters. */
+const snapshotRun = (def: QueryDef, label: string, decoding: boolean) => {
   const is = isSnapshotOf(def, label)
   return (typeParameters: ReadonlyArray<SchemaAST.AST>) => {
     const [args, success, error] = typeParameters.map((ast) =>
@@ -2755,11 +2761,11 @@ const snapshotRun = (def: ReadDef, label: string, decoding: boolean) => {
 }
 
 /**
- * The JSON form of a snapshot, built from the read's Schemas as a walk over the slots passes them: the
+ * The JSON form of a snapshot, built from the query's Schemas as a walk over the slots passes them: the
  * tuple Schema and the two steps between a tuple and a snapshot.
  */
 const snapshotWire = (
-  def: ReadDef,
+  def: QueryDef,
   label: string,
   [args, success, error]: ReadonlyArray<Schema.Top>,
   log: boolean
@@ -2900,7 +2906,7 @@ const snapshotWire = (
 }
 
 /** The JSON codec of a snapshot. */
-const snapshotJson = (def: ReadDef, label: string, log: boolean) => (typeParameters: ReadonlyArray<Schema.Top>) => {
+const snapshotJson = (def: QueryDef, label: string, log: boolean) => (typeParameters: ReadonlyArray<Schema.Top>) => {
   const wire = snapshotWire(def, label, typeParameters, log)
   return Schema.link<SnapshotImpl>()(
     wire.tuple,
@@ -2912,11 +2918,11 @@ const snapshotJson = (def: ReadDef, label: string, log: boolean) => (typeParamet
 // Snapshot maps
 // -----------------------------------------------------------------------------
 
-const SnapshotMapTypeId = "~@effect/ui/Loader/SnapshotMap"
+const SnapshotMapTypeId = "~@effect/ui/Query/SnapshotMap"
 
 /** What a snapshot map holds: one settled snapshot per args key. */
 interface SnapshotMapData {
-  readonly def: ReadDef
+  readonly def: QueryDef
   readonly label: string
   readonly entries: ReadonlyMap<string, SnapshotImpl>
 }
@@ -2949,7 +2955,7 @@ class SnapshotMapImpl implements Equal.Equal {
  * @internal
  */
 export const makeSnapshotMap = (
-  def: ReadDef,
+  def: QueryDef,
   label: string,
   snapshots: Iterable<unknown>
 ): SnapshotMapImpl => {
@@ -2966,18 +2972,18 @@ export const snapshotMapData = (u: unknown): SnapshotMapData | undefined =>
   u instanceof SnapshotMapImpl ? u[SnapshotMapTypeId] : undefined
 
 /**
- * The Schema of a keyed loader slot: one snapshot per args key. On the wire
+ * The Schema of a keyed query result: one snapshot per args key. On the wire
  * it is an array of `snapshotSchema`'s tuples, in no meaningful order, and a
  * duplicate args key is a decode error. `log` is as for `snapshotSchema`.
  *
  * @internal
  */
 export const snapshotMapSchema = (
-  read: { readonly [TypeId]: unknown },
+  query: { readonly [TypeId]: unknown },
   label: string,
   log = false
 ): Schema.Top => {
-  const def = defOf(read)
+  const def = defOf(query)
   const is = (u: unknown): u is SnapshotMapImpl =>
     u instanceof SnapshotMapImpl && u[SnapshotMapTypeId].def.name === def.name &&
     u[SnapshotMapTypeId].label === label
@@ -3021,7 +3027,7 @@ export const snapshotMapSchema = (
       [def.args.ast, def.success.ast, def.error.ast],
       makeRun(true),
       {
-        expected: "a keyed loader slot " + quote(label) + " of " + quote(def.name),
+        expected: "a keyed query result " + quote(label) + " of " + quote(def.name),
         toCodecJson
       } as Schema.Annotations.Annotations,
       undefined,
@@ -3041,7 +3047,7 @@ interface Watcher {
   readonly onChange: (result: Settled, patched: boolean, more: More<any> | undefined) => void
   readonly onDefect: ((cause: Cause.Cause<never>) => void) | undefined
   readonly build: Build
-  /** On a list read, the `More` it last saw. */
+  /** On an infinite query, the `More` it last saw. */
   lastMore: More<any> | undefined
   /** Gets the patched view, not the server value. */
   readonly patched: boolean
@@ -3070,7 +3076,7 @@ interface FetchRec {
   readonly trigger: Trigger
   readonly build: Build
   fiber: Fiber.Fiber<any, any> | undefined
-  /** On a list read: an append of one page, instead of a walk from the first. */
+  /** On an infinite query: an append of one page, instead of a walk from the first. */
   readonly append: boolean
 }
 
@@ -3134,7 +3140,7 @@ interface PatchRec {
 type RawTuple = Dehydrated[string][number]
 
 interface Entry {
-  readonly def: ReadDef
+  readonly def: QueryDef
   readonly argsKey: string
   readonly args: unknown
   logKey: string | undefined
@@ -3175,7 +3181,7 @@ interface Entry {
   reached: number
   /** Hydrated, and nothing has fetched or written it since. Only means something while the window is open. */
   hydrated: boolean
-  // -- list reads only --
+  // -- infinite queries only --
   /** The page count a running or owed walk loads to. */
   target: number | undefined
   /** A trigger that arrived during an append, run as a walk when it ends. */
@@ -3288,7 +3294,7 @@ const isRawTuple = (u: unknown): u is RawTuple =>
   Array.isArray(u) && u.length === 4 && typeof u[0] === "string" && typeof u[3] === "number" &&
   (u[1] === 0 || (u[1] === 1 && Array.isArray(u[2])))
 
-/** The `~loader` payload by read name and args key, or `undefined` when it isn't the tuple shape. */
+/** The `~query` payload by query name and args key, or `undefined` when it isn't the tuple shape. */
 const parseRaw = (input: unknown): Map<string, Map<string, RawTuple>> | undefined => {
   if (typeof input !== "object" || input === null || Array.isArray(input)) return undefined
   const out = new Map<string, Map<string, RawTuple>>()
@@ -3320,7 +3326,7 @@ export const makeCache = (options: {
   readonly idleMs: number
   /**
    * The server's per-request mode: an entry settles at most once and is never
-   * stale after, every settle is stored, a read's own `invalidate` is ignored
+   * stale after, every settle is stored, a query's own `invalidate` is ignored
    * and reported, and no idle timer, interval or host edge runs.
    */
   readonly settleOnce?: boolean | undefined
@@ -3346,8 +3352,8 @@ const buildCache = (
   const settleOnce = options.settleOnce === true
   const fetches = options.fetches !== false
 
-  const reads = new Map<string, ReadDef>()
-  const duplicates = new WeakSet<ReadDef>()
+  const queries = new Map<string, QueryDef>()
+  const duplicates = new WeakSet<QueryDef>()
   const index = new Map<string, Map<string, Entry>>()
   // Builds made for fakes, and every build this cache listens to.
   const fakeBuilds = new WeakMap<Fetcher, Build>()
@@ -3361,7 +3367,7 @@ const buildCache = (
   const sharedFetches = new Set<Shared>()
   // The awaited sets still waiting on an entry.
   const awaits = new Set<Await>()
-  // Hydrated entries whose read hasn't registered yet.
+  // Hydrated entries whose query hasn't registered yet.
   let raw = new Map<string, Map<string, RawTuple>>()
   let hydratedAt = 0
   let hydratedStatic = false
@@ -3420,11 +3426,11 @@ const buildCache = (
   }
 
   // -- registry and index -----------------------------------------------------
-  /** First wins: the first definition under a name pins everything about the read. */
-  const register = (def: ReadDef): ReadDef => {
-    const existing = reads.get(def.name)
+  /** First wins: the first definition under a name pins everything about the query. */
+  const register = (def: QueryDef): QueryDef => {
+    const existing = queries.get(def.name)
     if (existing === undefined) {
-      reads.set(def.name, def)
+      queries.set(def.name, def)
       decodeRaw(def)
       return def
     }
@@ -3432,8 +3438,8 @@ const buildCache = (
       duplicates.add(def)
       report(
         new DuplicateName({
-          read: def.name,
-          message: "[Loader] a second read named " + quote(def.name) +
+          query: def.name,
+          message: "[Query] a second query named " + quote(def.name) +
             " was registered in one cache. The first definition wins."
         })
       )
@@ -3445,8 +3451,8 @@ const buildCache = (
     for (const byKey of index.values()) for (const entry of byKey.values()) out.push(entry)
     return out
   }
-  const lookup = (def: ReadDef, argsKey: string): Entry | undefined => index.get(def.name)?.get(argsKey)
-  const ensureEntry = (def: ReadDef, args: unknown, argsKey = def.argsKey(args)): Entry => {
+  const lookup = (def: QueryDef, argsKey: string): Entry | undefined => index.get(def.name)?.get(argsKey)
+  const ensureEntry = (def: QueryDef, args: unknown, argsKey = def.argsKey(args)): Entry => {
     const found = lookup(def, argsKey)
     if (found !== undefined) return found
     const entry: Entry = {
@@ -3610,7 +3616,7 @@ const buildCache = (
   ): void => {
     if (fetchListeners.size === 0) return
     notify(fetchListeners, {
-      read: entry.def.name,
+      query: entry.def.name,
       logKey: logKeyOf(entry),
       trigger,
       restart,
@@ -3693,10 +3699,10 @@ const buildCache = (
       const logKey = logKeyOf(entry)
       report(
         new IntervalThrew({
-          read: entry.def.name,
+          query: entry.def.name,
           logKey,
           error,
-          message: "[Loader] refetchInterval of " + quote(entry.def.name) + " threw at " + logKey +
+          message: "[Query] refetchInterval of " + quote(entry.def.name) + " threw at " + logKey +
             ". There is no interval until the next settle."
         })
       )
@@ -3708,9 +3714,9 @@ const buildCache = (
       const logKey = logKeyOf(entry)
       report(
         new IntervalInvalid({
-          read: entry.def.name,
+          query: entry.def.name,
           logKey,
-          message: "[Loader] refetchInterval of " + quote(entry.def.name) +
+          message: "[Query] refetchInterval of " + quote(entry.def.name) +
             " returned zero, a negative or a bare number under 1000 at " + logKey +
             ". There is no interval until the next settle. " + subSecondHint
         })
@@ -3813,7 +3819,7 @@ const buildCache = (
    * interrupt is its exit. `next`, `items` and `key` throwing are defects.
    */
   const walk = (
-    def: ReadDef,
+    def: QueryDef,
     args: unknown,
     logKey: () => string,
     build: Build,
@@ -3838,9 +3844,9 @@ const buildCache = (
               const at = logKey()
               report(
                 new PageRepeated({
-                  read: def.name,
+                  query: def.name,
                   logKey: at,
-                  message: "[Loader] a walk of " + quote(def.name) + " at " + at + " got page " + index +
+                  message: "[Query] a walk of " + quote(def.name) + " at " + at + " got page " + index +
                     " with a cursor it already used. Check the list's next."
                 })
               )
@@ -3869,7 +3875,7 @@ const buildCache = (
       const next = list.next(pages[pages.length - 1], pages)
       return Option.isNone(next) ? ended(false) : step(next, true)
     })
-  const checkPage = (def: ReadDef, logKey: () => string, page: unknown): void => {
+  const checkPage = (def: QueryDef, logKey: () => string, page: unknown): void => {
     const list = def.list!
     const seen = new Set<string>()
     for (const item of list.items(page)) {
@@ -3881,9 +3887,9 @@ const buildCache = (
       const at = logKey()
       report(
         new DuplicateKeyInPage({
-          read: def.name,
+          query: def.name,
           logKey: at,
-          message: "[Loader] a page of " + quote(def.name) + " at " + at +
+          message: "[Query] a page of " + quote(def.name) + " at " + at +
             " holds two items with one key. The first is kept."
         })
       )
@@ -3895,7 +3901,7 @@ const buildCache = (
    * failure on any of them fails the callers, as a caller-only fetch's does.
    */
   const callerWalk = (
-    def: ReadDef,
+    def: QueryDef,
     args: unknown,
     logKey: () => string,
     build: Build,
@@ -4017,9 +4023,9 @@ const buildCache = (
       const logKey = logKeyOf(entry)
       report(
         new FetchRestarted({
-          read: entry.def.name,
+          query: entry.def.name,
           logKey,
-          message: "[Loader] the fetch of " + quote(entry.def.name) + " at " + logKey + " was restarted " +
+          message: "[Query] the fetch of " + quote(entry.def.name) + " at " + logKey + " was restarted " +
             restartLimit + " times in a row without settling."
         })
       )
@@ -4453,7 +4459,7 @@ const buildCache = (
           if (existing !== undefined) return emitFetch(existing, "get", false, false, page)
           if (fetchListeners.size === 0) return
           notify<FetchEvent>(fetchListeners, {
-            read: registered.name,
+            query: registered.name,
             logKey: logKey(),
             trigger: "get",
             restart: false,
@@ -4571,11 +4577,11 @@ const buildCache = (
   }
 
   // -- invalidation -----------------------------------------------------------
-  /** Naming a read registers it, so its hydrated entries are decoded and matched exactly. */
+  /** Naming a query registers it, so its hydrated entries are decoded and matched exactly. */
   const registerTargets = (targets: ReadonlyArray<Target>): void => {
     for (const target of targets) {
-      if (isRead(target)) register(defOf(target))
-      else if (target._tag === "Entry") register(defOf(target.read))
+      if (isQuery(target)) register(defOf(target))
+      else if (target._tag === "Entry") register(defOf(target.query))
     }
   }
   /** Target resolution, written over the predicate: every entry it hits. A tag drops every raw entry. */
@@ -4612,16 +4618,16 @@ const buildCache = (
     registerTargets(targets)
     if (settleOnce) {
       if (invalidateOptions?.byHand === true) {
-        const named = targets.find((target) => isRead(target) || target._tag === "Entry")
-        const read = named === undefined
+        const named = targets.find((target) => isQuery(target) || target._tag === "Entry")
+        const query = named === undefined
           ? undefined
-          : isRead(named)
+          : isQuery(named)
           ? defOf(named).name
-          : defOf((named as EntryTarget).read).name
+          : defOf((named as EntryTarget).query).name
         report(
           new InvalidateIgnored({
-            read,
-            message: "[Loader] invalidate" + (read === undefined ? "" : " of " + quote(read)) +
+            query,
+            message: "[Query] invalidate" + (query === undefined ? "" : " of " + quote(query)) +
               " was called on a per-request server cache, where it does nothing."
           })
         )
@@ -4698,7 +4704,7 @@ const buildCache = (
   const applyWrites = (run: Run, writes: ReadonlyArray<Write>, skipped: Set<Entry>): Set<Entry> => {
     const fresh = new Set<Entry>()
     for (const set of writes) {
-      const def = register(defOf(set.read))
+      const def = register(defOf(set.query))
       const argsKey = argsKeyOf(set)
       const existing = lookup(def, argsKey)
       if (
@@ -4707,10 +4713,10 @@ const buildCache = (
         const logKey = logKeyOf(existing)
         report(
           new UncoveredWrite({
-            read: def.name,
+            query: def.name,
             logKey,
             command: run.command,
-            message: "[Loader] " + quote(run.command) + " wrote " + quote(def.name) + " at " + logKey +
+            message: "[Query] " + quote(run.command) + " wrote " + quote(def.name) + " at " + logKey +
               ", which neither its invalidates nor a patch covers. The write applies."
           })
         )
@@ -4744,7 +4750,7 @@ const buildCache = (
     // A patch over an entry with no Success isn't registered, silently.
     const planned: Array<{ readonly entry: Entry; readonly patch: Patch }> = []
     for (const patch of optimistic) {
-      const def = register(defOf(patch.read))
+      const def = register(defOf(patch.query))
       if (patch._tag === "Patch") {
         const entry = lookup(def, argsKeyOf(patch))
         if (entry !== undefined && entry.result?._tag === "Success") planned.push({ entry, patch })
@@ -4791,11 +4797,11 @@ const buildCache = (
       if (invalid.has(entry)) {
         report(
           new PatchInvalid({
-            read: entry.def.name,
+            query: entry.def.name,
             logKey,
             command: run.command,
-            message: "[Loader] a patch of " + quote(run.command) + " on " + quote(entry.def.name) + " at " + logKey +
-              " made a value the read's success Schema rejects. It is used as is."
+            message: "[Query] a patch of " + quote(run.command) + " on " + quote(entry.def.name) + " at " + logKey +
+              " made a value the query's success Schema rejects. It is used as is."
           })
         )
       }
@@ -4806,10 +4812,10 @@ const buildCache = (
         if (after !== undefined && !equalsOrTrue(encoded.encoded, after.encoded)) {
           report(
             new PatchMutated({
-              read: entry.def.name,
+              query: entry.def.name,
               logKey,
               command: run.command,
-              message: "[Loader] a patch of " + quote(run.command) + " on " + quote(entry.def.name) + " at " +
+              message: "[Query] a patch of " + quote(run.command) + " on " + quote(entry.def.name) + " at " +
                 logKey + " changed the value it was given. A patch must return a new value."
             })
           )
@@ -4843,7 +4849,7 @@ const buildCache = (
     let awaited: Await | undefined
     let awaitedEntries: ReadonlyArray<AwaitedEntry> | undefined
     let appliedAt: number | undefined
-    const entryRef = (entry: Entry): AwaitedEntry => ({ read: entry.def.name, logKey: logKeyOf(entry) })
+    const entryRef = (entry: Entry): AwaitedEntry => ({ query: entry.def.name, logKey: logKeyOf(entry) })
     const handle: RunHandle = {
       command: run.command,
       run: (body, writes) => runBody(handle, body, writes),
@@ -4914,8 +4920,8 @@ const buildCache = (
   }
 
   // -- hydration --------------------------------------------------------------
-  /** Decodes the raw hydrated entries of a read that just registered. */
-  function decodeRaw(def: ReadDef): void {
+  /** Decodes the raw hydrated entries of a query that just registered. */
+  function decodeRaw(def: QueryDef): void {
     const byKey = raw.get(def.name)
     if (byKey === undefined) return
     raw.delete(def.name)
@@ -4928,10 +4934,10 @@ const buildCache = (
       } catch {
         report(
           new HydrationDecodeFailed({
-            read: def.name,
+            query: def.name,
             part: "args",
             logKey: undefined,
-            message: "[Loader] the args of a hydrated entry of " + quote(def.name) +
+            message: "[Query] the args of a hydrated entry of " + quote(def.name) +
               " failed to decode. The entry is cold."
           })
         )
@@ -4951,10 +4957,10 @@ const buildCache = (
         const logKey = def.logKey(args, argsKey)
         report(
           new HydrationDecodeFailed({
-            read: def.name,
+            query: def.name,
             part: "value",
             logKey,
-            message: "[Loader] a hydrated entry of " + quote(def.name) + " at " + logKey +
+            message: "[Query] a hydrated entry of " + quote(def.name) + " at " + logKey +
               " failed to decode. The entry is cold."
           })
         )
@@ -4973,7 +4979,7 @@ const buildCache = (
     if (disposed) return
     const parsed = parseRaw(input)
     if (parsed === undefined) {
-      report(new HydrationMalformed({ message: "[Loader] the ~loader state isn't the tuple shape. It was ignored." }))
+      report(new HydrationMalformed({ message: "[Query] the ~query state isn't the tuple shape. It was ignored." }))
       return
     }
     hydratedAt = now()
@@ -4982,7 +4988,7 @@ const buildCache = (
     raw = parsed
     // Reads the cache has already seen decode at once.
     for (const name of Array.from(raw.keys())) {
-      const def = reads.get(name)
+      const def = queries.get(name)
       if (def !== undefined) decodeRaw(def)
     }
   }
@@ -5038,9 +5044,9 @@ const buildCache = (
         const logKey = logKeyOf(entry)
         report(
           new EncodeFailed({
-            read: entry.def.name,
+            query: entry.def.name,
             logKey,
-            message: "[Loader] the entry of " + quote(entry.def.name) + " at " + logKey +
+            message: "[Query] the entry of " + quote(entry.def.name) + " at " + logKey +
               " failed to encode. It was left out, and the client fetches it."
           })
         )
@@ -5050,12 +5056,12 @@ const buildCache = (
   }
   const checkWire: CacheInternals["checkWire"] = (input) => {
     const parsed = parseRaw(input)
-    if (parsed === undefined) return ["the ~loader state isn't the tuple shape"]
+    if (parsed === undefined) return ["the ~query state isn't the tuple shape"]
     const out: Array<string> = []
     for (const [name, byKey] of parsed) {
-      const def = reads.get(name)
+      const def = queries.get(name)
       if (def === undefined) {
-        out.push("the read " + quote(name) + " shipped entries, and this cache doesn't know it")
+        out.push("the query " + quote(name) + " shipped entries, and this cache doesn't know it")
         continue
       }
       const codec = def.codec()
@@ -5158,12 +5164,12 @@ const buildCache = (
     onFetch: (listener) => addListener(fetchListeners, listener),
     onFetchEnd: (listener) => addListener(fetchEndListeners, listener),
     misses: () => {
-      const out: Array<{ readonly read: string; readonly logKey: string }> = []
+      const out: Array<{ readonly query: string; readonly logKey: string }> = []
       for (const entry of allEntries()) {
         if (entry.result !== undefined) continue
         const missed = entry.fetch !== undefined ||
           (!fetches && (entry.watchers.size > 0 || entry.waiters.size > 0))
-        if (missed) out.push({ read: entry.def.name, logKey: logKeyOf(entry) })
+        if (missed) out.push({ query: entry.def.name, logKey: logKeyOf(entry) })
       }
       return out
     },
@@ -5174,7 +5180,7 @@ const buildCache = (
         const trigger = entry.fetch?.trigger ?? entry.deferred
         if (trigger === undefined) continue
         out.push({
-          read: entry.def.name,
+          query: entry.def.name,
           logKey: logKeyOf(entry),
           status: entry.fetch !== undefined ? "running" : "held",
           trigger

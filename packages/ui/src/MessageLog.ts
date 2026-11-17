@@ -37,11 +37,11 @@ import type * as SchemaAST from "effect/SchemaAST"
 import * as Socket from "effect/socket/Socket"
 import type * as Command from "./Command.ts"
 import type * as Component from "./Component.ts"
-import type * as loaders from "./internal/loaders.ts"
+import type * as componentQueries from "./internal/queries.ts"
 import { getIndexSignatureKeys } from "./internal/schemaAST.ts"
 import { holdsRedacted, redactAST } from "./internal/schemaRedact.ts"
-import type * as Loader from "./Loader.ts"
-import { canonical } from "./Loader.ts"
+import type * as Query from "./Query.ts"
+import { canonical } from "./Query.ts"
 
 /**
  * The service the runtime records entries to.
@@ -167,7 +167,7 @@ export interface Base {
 }
 
 /**
- * One `update` call: the message, what sent it, the props and loader slots
+ * One `update` call: the message, what sent it, the props and query results
  * it saw, the Model after it, and the Commands, events, load mores, resets
  * and sends it returned.
  *
@@ -190,11 +190,11 @@ export interface Update extends Base {
   /** The `$.send` calls, in order. The wire omits it when empty. */
   readonly sends?: ReadonlyArray<Component.Send> | undefined
   /**
-   * The loader slots `update` read as `$.loaded`, by loader name: what
+   * The query results `update` read as `$.queries`, by query name: what
    * `Story.fromLog` gives it back, as it gives back `props`. Only a
-   * component with loaders has them.
+   * component with queries has them.
    */
-  readonly loaded?: Component.Slots | undefined
+  readonly queries?: Component.Results | undefined
 }
 
 /**
@@ -217,12 +217,12 @@ export interface Mounted extends Base {
 
 /**
  * A mounted instance got new props from its parent, without a re-key. Its
- * loaders' args can read them, so `Story.fromLog` applies it to reach the
+ * queries' args can read them, so `Story.fromLog` applies it to reach the
  * state the instance ended with.
  *
  * **Details**
  *
- * It's logged before the slot writes the new props cause. Props equal to the
+ * It's logged before the result writes the new props cause. Props equal to the
  * current ones log nothing.
  *
  * @stability experimental
@@ -237,27 +237,27 @@ export interface PropsChanged extends Base {
 }
 
 /**
- * A loader's slot changed: the runtime wrote what the loader's read last
+ * A query's result changed: the runtime wrote what the query last
  * returned at its args. `slot` is opaque. `Story.fromLog` applies it to
  * reach the slots the instance ended with.
  *
  * **Details**
  *
- * An instance mounted with restored or hydrated slots logs one entry per
- * non-empty slot right after `Mounted`. A loader with `onChange` logs this
+ * An instance mounted with restored or hydrated results logs one entry per
+ * non-empty result right after `Mounted`. A query with `onChange` logs this
  * entry before the `Update` of the message it returns.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface LoaderChanged extends Base {
-  readonly _tag: "LoaderChanged"
-  /** The component, whose loader Schemas encode the slot for the Wire. */
+export interface QueryChanged extends Base {
+  readonly _tag: "QueryChanged"
+  /** The component, whose query Schemas encode the slot for the Wire. */
   readonly component: Component.Any
-  /** The loader's name in `loaders`. */
+  /** The query's name in `queries`. */
   readonly name: string
-  readonly slot: unknown
+  readonly result: unknown
 }
 
 /**
@@ -356,7 +356,7 @@ export interface CommandSettled extends Base {
 export type WaitEnded = "settled" | "nothing" | "budget" | "switch" | "interrupt" | "closed"
 
 /**
- * An entry a `Command.afterRefetch` run waits for: the read's name and the
+ * An entry a `Command.afterRefetch` run waits for: the query's name and the
  * entry's log key.
  *
  * @stability experimental
@@ -364,7 +364,7 @@ export type WaitEnded = "settled" | "nothing" | "budget" | "switch" | "interrupt
  * @since 0.1.0
  */
 export interface AwaitedEntry {
-  readonly read: string
+  readonly query: string
   readonly logKey: string
 }
 
@@ -453,7 +453,7 @@ export interface SessionStarted extends Base {
 }
 
 /**
- * The loader cache started a fetch. `path` is the root's path.
+ * The query cache started a fetch. `path` is the root's path.
  *
  * **Details**
  *
@@ -465,9 +465,9 @@ export interface SessionStarted extends Base {
  * result goes to `get` callers only. A caller that joins a fetch in flight
  * logs nothing.
  *
- * A list read logs each page it requests as its own entry: `page` is the
+ * An infinite query logs each page it requests as its own entry: `page` is the
  * page's index, from 0, and `cursor` the cursor encoded by the list's
- * `cursor` Schema, absent for the first page. A read that isn't a list has
+ * `cursor` Schema, absent for the first page. A query that isn't a list has
  * neither.
  *
  * @stability experimental
@@ -476,9 +476,9 @@ export interface SessionStarted extends Base {
  */
 export interface FetchStarted extends Base {
   readonly _tag: "FetchStarted"
-  readonly read: string
+  readonly query: string
   readonly logKey: string
-  readonly trigger: Loader.Trigger
+  readonly trigger: Query.Trigger
   readonly restart: boolean
   readonly inWindow: boolean
   readonly stored: boolean
@@ -498,7 +498,7 @@ export type Entry =
   | Update
   | Mounted
   | PropsChanged
-  | LoaderChanged
+  | QueryChanged
   | Lifecycle
   | LayerFailed
   | SubscriptionChanged
@@ -630,7 +630,7 @@ const CommandWire = Schema.Struct({
   group: Schema.NullOr(Schema.String),
   args: Schema.Json
 })
-const AwaitedEntryWire = Schema.Struct({ read: Schema.String, logKey: Schema.String })
+const AwaitedEntryWire = Schema.Struct({ query: Schema.String, logKey: Schema.String })
 const CauseWire = Schema.Struct({ pretty: Schema.String, reasons: Schema.Array(Schema.Json) })
 const SourceWire = Schema.Union([
   Schema.TaggedStruct("DomEvent", { name: Schema.String }),
@@ -682,7 +682,7 @@ export const Wire = Schema.Union([
       Schema.Array(Schema.Struct({ name: Schema.String, op: Schema.Literals(["loadMore", "reset"]) }))
     ),
     sends: Schema.optionalKey(Schema.Array(Schema.Struct({ ref: Schema.String, message: Schema.Json }))),
-    loaded: Schema.optionalKey(Schema.Json)
+    queries: Schema.optionalKey(Schema.Json)
   }),
   Schema.TaggedStruct("Mounted", {
     ...Seq,
@@ -694,7 +694,7 @@ export const Wire = Schema.Union([
     adopted: Schema.Boolean
   }),
   Schema.TaggedStruct("PropsChanged", { ...Seq, component: Schema.String, props: Schema.Json }),
-  Schema.TaggedStruct("LoaderChanged", { ...Seq, component: Schema.String, name: Schema.String, slot: Schema.Json }),
+  Schema.TaggedStruct("QueryChanged", { ...Seq, component: Schema.String, name: Schema.String, result: Schema.Json }),
   Schema.Struct({ _tag: Schema.Literals(["Unmounted", "LayerPending", "LayerReady"]), ...Seq }),
   Schema.TaggedStruct("LayerFailed", { ...Seq, cause: CauseWire }),
   Schema.Struct({ _tag: Schema.Literals(["SubscriptionStarted", "SubscriptionStopped"]), ...Seq, key: Schema.String }),
@@ -737,7 +737,7 @@ export const Wire = Schema.Union([
   }),
   Schema.TaggedStruct("FetchStarted", {
     ...Seq,
-    read: Schema.String,
+    query: Schema.String,
     logKey: Schema.String,
     trigger: Schema.Literals([
       "watch",
@@ -823,13 +823,13 @@ export const makeEncoder = (options?: {
       return { "~unserialisable": "encode" }
     }
   }
-  const encodeLoaded = (component: Component.Any, loaded: Component.Slots): Schema.Json => {
-    const schema = (component["~loaders"] as loaders.Bound | undefined)?.logSchema
+  const encodeQueries = (component: Component.Any, results: Component.Results): Schema.Json => {
+    const schema = (component["~queries"] as componentQueries.Bound | undefined)?.logSchema
     return schema === undefined
       ? { "~unserialisable": "encode" }
-      : cap(encodeWith(schema, `${component.definition.name}.loaders`, loaded) as Schema.Json)
+      : cap(encodeWith(schema, `${component.definition.name}.queries`, results) as Schema.Json)
   }
-  // A message can carry a loader's whole result, so messages are capped like Models and slots.
+  // A message can carry a query's whole result, so messages are capped like Models and slots.
   const capped = (component: Component.Any, field: "model" | "message", value: unknown): Schema.Json =>
     cap(through(component, field, value) as Schema.Json)
   const cap = (encoded: Schema.Json): Schema.Json => {
@@ -858,7 +858,7 @@ export const makeEncoder = (options?: {
                 return { ref: encoded.ref, message: cap(encoded.message) }
               })
             }),
-            ...(entry.loaded === undefined ? undefined : { loaded: encodeLoaded(entry.component, entry.loaded) })
+            ...(entry.queries === undefined ? undefined : { queries: encodeQueries(entry.component, entry.queries) })
           }
         case "Mounted":
           return {
@@ -878,20 +878,21 @@ export const makeEncoder = (options?: {
             component: entry.component.definition.name,
             props: through(entry.component, "props", entry.props) as Schema.Json
           }
-        case "LoaderChanged": {
-          const schema = (entry.component["~loaders"] as loaders.Bound | undefined)?.logSchema.fields[entry.name]
+        case "QueryChanged": {
+          const schema = (entry.component["~queries"] as componentQueries.Bound | undefined)?.logSchema
+            .fields[entry.name]
           return {
             ...base(entry),
-            _tag: "LoaderChanged",
+            _tag: "QueryChanged",
             component: entry.component.definition.name,
             name: entry.name,
-            slot: schema === undefined
+            result: schema === undefined
               ? { "~unserialisable": "encode" }
               : cap(
                 encodeWith(
                   schema,
-                  `${entry.component.definition.name}.loaders.${entry.name}`,
-                  entry.slot
+                  `${entry.component.definition.name}.queries.${entry.name}`,
+                  entry.result
                 ) as Schema.Json
               )
           }
@@ -952,7 +953,7 @@ export const makeEncoder = (options?: {
           return {
             ...base(entry),
             _tag: "FetchStarted",
-            read: entry.read,
+            query: entry.query,
             logKey: entry.logKey,
             trigger: entry.trigger,
             restart: entry.restart,

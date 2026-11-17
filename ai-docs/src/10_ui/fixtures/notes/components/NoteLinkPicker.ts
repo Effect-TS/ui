@@ -2,7 +2,7 @@ import { Component } from "@effect/ui"
 import { Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { Listbox } from "../../kit/Listbox.ts"
-import { ListNotes } from "../loaders/ListNotes.ts"
+import { ListNotes } from "../queries/ListNotes.ts"
 import { Notes } from "../services/Notes.ts"
 
 export const NoteLinkPickerMessage = Schema.TaggedUnion({ Picked: { id: Schema.String } })
@@ -26,12 +26,12 @@ export const NoteLinkPickerNoDeps = Component.define({
   model: Schema.Struct({ linked: Schema.NullOr(Schema.String) }),
   message: NoteLinkPickerMessage,
   events: NoteLinkPickerEvents,
-  loaders: { notes: { load: ListNotes, args: () => ({}) } }
+  queries: { notes: { query: ListNotes, args: () => ({}) } }
 }).make({
   init: () => ({ linked: null }),
   update: (_model, { id }, $) => $.set({ linked: id }).emit(NoteLinkPickerEvents.make({ _tag: "Linked", id })),
   view: (model, h) =>
-    AsyncResult.match(h.loaded.notes, {
+    AsyncResult.match(h.queries.notes, {
       onInitial: () => h.p("Loading notes…"),
       onFailure: () => h.p("The notes couldn't be loaded."),
       onSuccess: ({ value }) => {
@@ -55,7 +55,7 @@ export const NoteLinkPickerNoDeps = Component.define({
           // first and this component's last.
           //
           // `Router.prefetch` doesn't walk into closures, so it never
-          // prefetches the reads of a child placed in one.
+          // prefetches the queries of a child placed in one.
           view: (m) =>
             h.div.class("link-picker").children(
               m.trigger(h.button).children(

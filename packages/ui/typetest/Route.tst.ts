@@ -1,4 +1,4 @@
-import { Command, Component, Feature, Head, Loader, Route, Router, type Subscription } from "@effect/ui"
+import { Command, Component, Feature, Head, Query, Route, Router, type Subscription } from "@effect/ui"
 import { TestHost } from "@effect/ui/testing"
 import { Effect, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
@@ -137,9 +137,9 @@ describe("Router", () => {
     }).make({
       init: () => ({}),
       update: (model) => model,
-      head: (_model, props, loaded) => {
+      head: (_model, props, queries) => {
         expect(props).type.toBe<{ readonly title: string }>()
-        expect(loaded).type.toBe<{}>()
+        expect(queries).type.toBe<{}>()
         return [Head.title(props.title)]
       },
       view: (_, h) => h.text("")
@@ -148,7 +148,7 @@ describe("Router", () => {
   })
 })
 
-class GetPerson extends Loader.Service<GetPerson>()(
+class GetPerson extends Query.Service<GetPerson>()(
   "typetest/GetPerson",
   { args: { id: Schema.Number }, success: Schema.String, error: Schema.Never, staleTime: "1 minute" },
   Effect.succeed(({ id }) => Effect.succeed(`Person ${id}`))
@@ -159,11 +159,11 @@ const PersonPage = Component.define({
   props: Schema.Struct({ id: Schema.Number }),
   model: Schema.Struct({}),
   message: Schema.Never,
-  loaders: { person: { load: GetPerson, args: (_model, props) => ({ id: props.id }) } }
+  queries: { person: { query: GetPerson, args: (_model, props) => ({ id: props.id }) } }
 }).make({
   init: () => ({}),
   update: (model) => model,
-  view: (_, h) => h.text(AsyncResult.isSuccess(h.loaded.person) ? h.loaded.person.value : "person")
+  view: (_, h) => h.text(AsyncResult.isSuccess(h.queries.person) ? h.queries.person.value : "person")
 })
 
 const HomePage = Component.define({
@@ -210,7 +210,7 @@ describe("Router.prefetch", () => {
     const Hoisted = Declarer.pipe(Component.provide(GetPerson.layer))
     expect<Component.Requirements<typeof Hoisted>>().type.toBe<Router.Router>()
     expect(Router.page(PersonPage, { id: 1 })).type.toBe<Router.Page<GetPerson>>()
-    // Provided, it is still a component, and still names its reads.
+    // Provided, it is still a component, and still names its queries.
     expect(Router.page(PersonPage.pipe(Component.provide(GetPerson.layer)), { id: 1 })).type.toBe<
       Router.Page<GetPerson>
     >()

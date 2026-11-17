@@ -96,7 +96,7 @@ import * as Layer from "effect/Layer"
 import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import type * as Scope from "effect/Scope"
 import type * as Component from "../Component.ts"
-import * as Loader from "../Loader.ts"
+import * as Query from "../Query.ts"
 import * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
 import * as Html from "./Html.ts"
@@ -962,8 +962,8 @@ export const htmlHost: Context.Service.Shape<typeof Html.Host> = {
 // Visibility follows `visibilitychange` only, never the window's `focus`. Connectivity
 // starts true and follows `online` and `offline` on the document's own window.
 const signals = (document: Document) => {
-  const visibility = Loader.makeSignal(document.visibilityState !== "hidden")
-  const connectivity = Loader.makeSignal(true)
+  const visibility = Query.makeSignal(document.visibilityState !== "hidden")
+  const connectivity = Query.makeSignal(true)
   const view = document.defaultView
   const onVisibility = () => visibility.set(document.visibilityState !== "hidden")
   const onOnline = () => connectivity.set(true)
@@ -984,7 +984,7 @@ const signals = (document: Document) => {
 
 /**
  * Provides the DOM host as the `Renderer`, `Html.Host`, and the document's
- * `Loader.Visibility` and `Loader.Connectivity`, for the life of the Layer.
+ * `Query.Visibility` and `Query.Connectivity`, for the life of the Layer.
  *
  * **Details**
  *
@@ -1007,8 +1007,8 @@ export const layer = (options?: {
     yield* Effect.addFinalizer(() => Effect.sync(signal.dispose))
     return Context.make(Renderer.Renderer, { host }).pipe(
       Context.add(Html.Host, htmlHost),
-      Context.add(Loader.Visibility, signal.visibility),
-      Context.add(Loader.Connectivity, signal.connectivity)
+      Context.add(Query.Visibility, signal.visibility),
+      Context.add(Query.Connectivity, signal.connectivity)
     )
   }))
 
@@ -1040,7 +1040,7 @@ export interface MountOptions<V extends View.Elements, RF = never> {
     | undefined
   /** The `state` of `HtmlServer.renderToHtml`, to hydrate the server's HTML. */
   readonly state?: Renderer.State | undefined
-  readonly loader?: Renderer.LoaderOptions | undefined
+  readonly query?: Renderer.QueryOptions | undefined
 }
 
 /**

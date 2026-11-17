@@ -1,5 +1,5 @@
-import { Component, Loader, Renderer } from "@effect/ui"
-import * as loaders from "@effect/ui/internal/loaders"
+import { Component, Query, Renderer } from "@effect/ui"
+import * as componentQueries from "@effect/ui/internal/queries"
 import * as runtime from "@effect/ui/internal/runtime"
 import * as services from "@effect/ui/internal/services"
 import { TestHost } from "@effect/ui/testing"
@@ -11,30 +11,30 @@ import { Effect, Logger, Option, Redacted, Schema } from "effect"
  * the history snapshot, the server's page state, and decoding either.
  */
 
-class GetToken extends Loader.Service<GetToken>()(
+class GetToken extends Query.Service<GetToken>()(
   "test/GetToken",
   { args: {}, success: Schema.Redacted(Schema.String), error: Schema.Never, staleTime: "1 minute" },
   Effect.succeed(() => Effect.succeed(Redacted.make("loaded-secret")))
 ) {}
 
-class GetByKey extends Loader.Service<GetByKey>()(
+class GetByKey extends Query.Service<GetByKey>()(
   "test/GetByKey",
   { args: { key: Schema.Redacted(Schema.String) }, success: Schema.String, error: Schema.Never, staleTime: "1 minute" },
   Effect.succeed(() => Effect.succeed("ok"))
 ) {}
 
-class GetFailing extends Loader.Service<GetFailing>()(
+class GetFailing extends Query.Service<GetFailing>()(
   "test/GetFailing",
   { args: {}, success: Schema.String, error: Schema.Redacted(Schema.String), staleTime: "1 minute" },
   Effect.succeed(() => Effect.fail(Redacted.make("error-secret")))
 ) {}
 
-/** A Redacted in a read's args, in its error, and in a keyed read's args. */
+/** A Redacted in a query's args, in its error, and in a keyed query's args. */
 const ByArgs = Component.define({
   name: "ByArgs",
   model: Schema.Number,
   message: Schema.Never,
-  loaders: { value: { load: GetByKey, args: () => ({ key: Redacted.make("args-secret") }) } }
+  queries: { value: { query: GetByKey, args: () => ({ key: Redacted.make("args-secret") }) } }
 }).make({
   init: () => 0,
   update: (n) => n,
@@ -44,7 +44,7 @@ const ByError = Component.define({
   name: "ByError",
   model: Schema.Number,
   message: Schema.Never,
-  loaders: { value: { load: GetFailing, args: () => ({}) } }
+  queries: { value: { query: GetFailing, args: () => ({}) } }
 }).make({
   init: () => 0,
   update: (n) => n,
@@ -54,7 +54,7 @@ const ByKeys = Component.define({
   name: "ByKeys",
   model: Schema.Number,
   message: Schema.Never,
-  loaders: { value: { loadMany: GetByKey, args: () => [{ key: Redacted.make("keyed-secret") }] } }
+  queries: { value: { queryMany: GetByKey, args: () => [{ key: Redacted.make("keyed-secret") }] } }
 }).make({
   init: () => 0,
   update: (n) => n,
@@ -75,7 +75,7 @@ const Loaded = Component.define({
   name: "Loaded",
   model: Schema.Number,
   message: Schema.Never,
-  loaders: { token: { load: GetToken, args: () => ({}) } }
+  queries: { token: { query: GetToken, args: () => ({}) } }
 }).make({
   init: () => 0,
   update: (n) => n,
@@ -99,14 +99,14 @@ const SecretTree: Schema.Codec<SecretTree, unknown> = Schema.Struct({
 
 /** The state an older build, without the Redacted check, would have written for `component`. */
 const legacyState = (component: Component.Any, model: unknown) => {
-  const bound = loaders.boundOf(component)!
+  const bound = componentQueries.boundOf(component)!
   const codec = Schema.toCodecJson(
     Schema.Struct({
       model: (component as Component.Component<any, any, any, any, any, any, any>).model,
-      loaded: bound.schema
+      queries: bound.schema
     })
   )
-  return Schema.encodeUnknownSync(codec)({ model, loaded: bound.empty })
+  return Schema.encodeUnknownSync(codec)({ model, queries: bound.empty })
 }
 
 const Plain = Component.define({ name: "Plain", model: Schema.Number, message: Schema.Never }).make({
@@ -115,7 +115,7 @@ const Plain = Component.define({ name: "Plain", model: Schema.Number, message: S
   view: (n, h) => h.text(String(n))
 })
 
-const LoaderPage = Component.define({ name: "LoaderPage", model: Schema.Null, message: Schema.Never }).make({
+const QueryPage = Component.define({ name: "QueryPage", model: Schema.Null, message: Schema.Never }).make({
   init: () => null,
   update: (model) => model,
   view: (_, h) =>
@@ -162,7 +162,7 @@ const mountWith = (hooks: services.RootHooks) =>
   )
 
 describe("Redacted state", () => {
-  it.effect("leaves a Model or a loader result holding a Redacted out of the history snapshot", () =>
+  it.effect("leaves a Model or a query result holding a Redacted out of the history snapshot", () =>
     Effect.gen(function*() {
       const history = historyHooks()
       const root = yield* mountWith(history.hooks)
@@ -211,20 +211,20 @@ describe("Redacted state", () => {
       assert.deepStrictEqual(warnings.map((message) => String(message).split(":")[0]), ["Secret", "Loaded"])
     }))
 
-  it.effect("finds a Redacted in a loader's args, error or keyed args, and leaves its page state out", () =>
+  it.effect("finds a Redacted in a query's args, error or keyed args, and leaves its page state out", () =>
     Effect.gen(function*() {
       for (const part of [ByArgs, ByError, ByKeys]) assert.isTrue(runtime.stateCodecOf(part).redacted)
-      const rendered = yield* Renderer.prerender(LoaderPage, {}).pipe(
+      const rendered = yield* Renderer.prerender(QueryPage, {}).pipe(
         Effect.provide([GetByKey.layer, GetFailing.layer]),
         Effect.provide(Logger.layer([]))
       )
       assert.deepStrictEqual(rendered.state["~deferred"], [
-        "/LoaderPage/ByArgs[args]",
-        "/LoaderPage/ByError[error]",
-        "/LoaderPage/ByKeys[keys]"
+        "/QueryPage/ByArgs[args]",
+        "/QueryPage/ByError[error]",
+        "/QueryPage/ByKeys[keys]"
       ])
       const paths = Object.fromEntries(Object.entries(rendered.state).filter(([key]) => key.startsWith("/")))
-      assert.deepStrictEqual(Object.keys(paths), ["/LoaderPage", "/LoaderPage/Plain[plain]"])
+      assert.deepStrictEqual(Object.keys(paths), ["/QueryPage", "/QueryPage/Plain[plain]"])
       assert.notInclude(JSON.stringify(paths), "secret")
     }))
 

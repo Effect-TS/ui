@@ -1,4 +1,4 @@
-import { Command, Component, Feature, Loader, MessageLog, Renderer, Subscription } from "@effect/ui"
+import { Command, Component, Feature, MessageLog, Query, Renderer, Subscription } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import * as runtime from "@effect/ui/internal/runtime"
 import { Locator, Story, TestHost } from "@effect/ui/testing"
@@ -798,11 +798,11 @@ describe("Runtime", () => {
   })
 
   describe("run owners", () => {
-    // The server behind the fake API, and the requests that reached the read's fetcher.
+    // The server behind the fake API, and the requests that reached the query's fetcher.
     const makeServer = () => ({ count: 0, requests: 0, interrupted: 0 })
     type Server = ReturnType<typeof makeServer>
 
-    class GetCount extends Loader.Service<GetCount>()("test/GetCount", {
+    class GetCount extends Query.Service<GetCount>()("test/GetCount", {
       args: { id: Schema.String },
       success: Schema.Number,
       error: Schema.Never,
@@ -1290,14 +1290,14 @@ describe("Runtime", () => {
         assert.strictEqual(server.requests, 1)
       })))
 
-    it.effect("the loader mount option sets how long an unwatched entry stays", () =>
+    it.effect("the query mount option sets how long an unwatched entry stays", () =>
       provideHost(Effect.gen(function*() {
         const server = makeServer()
         const App = Component.provide(
           page(Editor),
           Layer.mergeAll(fetcher(server), commands(server))
         )
-        const root = yield* TestHost.mount(App, {}, { loader: { idleTimeToLive: "1 second" } })
+        const root = yield* TestHost.mount(App, {}, { query: { idleTimeToLive: "1 second" } })
         yield* TestHost.settle
         root.send(PageMsg.make({ _tag: "Watch", on: false }))
         yield* TestHost.settle
@@ -2254,7 +2254,7 @@ describe("Runtime", () => {
         at: 10,
         session: "s",
         path: "/App",
-        read: "users/GetUser",
+        query: "users/GetUser",
         logKey: `{"id":"1"}`,
         trigger: "visibility",
         restart: false,
@@ -2716,14 +2716,14 @@ describe("Runtime", () => {
 
   it.effect("Renderer.mount stopped at any yield point leaves nothing behind once its Scope closes", () =>
     Effect.gen(function*() {
-      // No TestHost executor: the mount runs on the scheduler below throughout, the loader cache's build included.
+      // No TestHost executor: the mount runs on the scheduler below throughout, the query cache's build included.
       const host = TestHost.makeHost()
       // The mount is interrupted and its Scope closes after it exits, or while it's pending. Or the Scope
       // closes under a pending mount that isn't interrupted, which then mounts nothing.
       for (const mode of ["interrupt, then close", "interrupt and close", "close"] as const) {
         for (let at = 1;; at++) {
           let listeners = 0
-          const signal: Loader.Signal = {
+          const signal: Query.Signal = {
             get: () => true,
             subscribe: () => {
               listeners++
@@ -2742,8 +2742,8 @@ describe("Runtime", () => {
             Renderer.mount(Counter, { initial: 1 }, container).pipe(
               Scope.provide(scope),
               Effect.provide(Renderer.layer(host)),
-              Effect.provideService(Loader.Visibility, signal),
-              Effect.provideService(Loader.Connectivity, signal),
+              Effect.provideService(Query.Visibility, signal),
+              Effect.provideService(Query.Connectivity, signal),
               Effect.provideService(Scheduler.Scheduler, scheduler)
             )
           )
@@ -2785,7 +2785,7 @@ describe("Runtime", () => {
             makeDispatcher: () => dispatcher
           }
           let listeners = 0
-          const signal: Loader.Signal = {
+          const signal: Query.Signal = {
             get: () => true,
             subscribe: () => {
               listeners++
@@ -2831,12 +2831,12 @@ describe("Runtime", () => {
             ))
           )
           const mounted = yield* Effect.exit(
-            Renderer.mount(App, {}, container, { state: { "~loader": "malformed" } }).pipe(
+            Renderer.mount(App, {}, container, { state: { "~query": "malformed" } }).pipe(
               Scope.provide(scope),
               Effect.provide(Renderer.layer(host)),
-              Effect.provideService(Loader.Visibility, signal),
-              Effect.provideService(Loader.Connectivity, signal),
-              Effect.provideService(Loader.Problems, () => {
+              Effect.provideService(Query.Visibility, signal),
+              Effect.provideService(Query.Connectivity, signal),
+              Effect.provideService(Query.Problems, () => {
                 if (site === "Problems") close()
               })
             )

@@ -4,7 +4,7 @@
  * child, a feature child and two components whose read the declarer can't
  * see, a page whose view throws, and a page whose Layer fails.
  */
-import { Component, Feature, Loader, Route, Router } from "@effect/ui"
+import { Component, Feature, Query, Route, Router } from "@effect/ui"
 import { Context, Effect, Layer, Schema } from "effect"
 import { GetPerson } from "./router.ts"
 
@@ -19,8 +19,8 @@ export const Routes = Route.union({
 })
 export type Routes = typeof Routes.Type
 
-/** A read the app never provides at the declarer. */
-export class GetNote extends Loader.Service<GetNote>()("GetNote", {
+/** A query the app never provides at the declarer. */
+export class GetNote extends Query.Service<GetNote>()("GetNote", {
   args: { id: Schema.Number },
   success: Schema.String,
   error: Schema.Never,
@@ -33,7 +33,7 @@ const reader = <const Name extends string>(name: Name) =>
     props: Schema.Struct({ id: Schema.Number }),
     model: Schema.Struct({}),
     message: Schema.Never,
-    loaders: { person: { load: GetPerson, args: (_model, props) => ({ id: props.id }) } }
+    queries: { person: { query: GetPerson, args: (_model, props) => ({ id: props.id }) } }
   }).make({
     init: () => ({}),
     update: (model) => model,
@@ -50,7 +50,7 @@ export const Note = Component.define({
   props: Schema.Struct({ id: Schema.Number }),
   model: Schema.Struct({}),
   message: Schema.Never,
-  loaders: { note: { load: GetNote, args: (_model, props) => ({ id: props.id }) } }
+  queries: { note: { query: GetNote, args: (_model, props) => ({ id: props.id }) } }
 }).make({
   init: () => ({}),
   update: (model) => model,
@@ -64,7 +64,7 @@ export const Walked = Component.define({
   name: "Walked",
   model: Schema.Struct({}),
   message: Schema.Never,
-  loaders: { person: { load: GetPerson, args: () => ({ id: 1 }) } }
+  queries: { person: { query: GetPerson, args: () => ({ id: 1 }) } }
 }).make({
   init: () => ({}),
   update: (model) => model,
@@ -83,7 +83,7 @@ export const Broken = Component.define({
   name: "Broken",
   model: Schema.Struct({}),
   message: Schema.Never,
-  loaders: { person: { load: GetPerson, args: () => ({ id: 3 }) } }
+  queries: { person: { query: GetPerson, args: () => ({ id: 3 }) } }
 }).make({
   init: () => ({}),
   update: (model) => model,

@@ -1,4 +1,4 @@
-import { Command, Component, Loader } from "@effect/ui"
+import { Command, Component, Query } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Effect, Schema } from "effect"
 import type { AsyncResult } from "effect/reactivity"
@@ -6,7 +6,7 @@ import { describe, expect, it } from "tstyche"
 
 const User = Schema.Struct({ id: Schema.String, name: Schema.String })
 
-class GetUser extends Loader.Service<GetUser>()(
+class GetUser extends Query.Service<GetUser>()(
   "typetest/define/GetUser",
   { args: { id: Schema.String }, success: User, error: Schema.String, staleTime: "1 minute" },
   Effect.succeed(({ id }) => Effect.succeed({ id, name: "Ann" }))
@@ -42,7 +42,7 @@ const NoteDef = Component.define({
   message: Message,
   events: Events,
   elements: Html,
-  loaders: { user: { load: GetUser, args: (_model, props) => ({ id: props.id }) } }
+  queries: { user: { query: GetUser, args: (_model, props) => ({ id: props.id }) } }
 })
 
 const save = NoteDef.update((model, _msg, $) => $.set(model).run(Save.make()))
@@ -55,7 +55,7 @@ describe("Component.define", () => {
       expect(model).type.toBe<Model>()
       expect(msg).type.toBe<Message>()
       expect($.props).type.toBe<{ readonly id: string }>()
-      expect($.loaded.user).type.toBe<AsyncResult.AsyncResult<typeof User.Type, string>>()
+      expect($.queries.user).type.toBe<AsyncResult.AsyncResult<typeof User.Type, string>>()
       return model
     })
   })
@@ -71,11 +71,11 @@ describe("Component.define", () => {
     expect(NoteDef.update).type.not.toBeCallableWith("Deleted", (model: Model) => model)
   })
 
-  it("types h from the definition, with its loaders and elements", () => {
+  it("types h from the definition, with its queries and elements", () => {
     NoteDef.view((model, h) => {
       expect(model).type.toBe<Model>()
       expect(h.props).type.toBe<{ readonly id: string }>()
-      expect(h.loaded.user).type.toBe<AsyncResult.AsyncResult<typeof User.Type, string>>()
+      expect(h.queries.user).type.toBe<AsyncResult.AsyncResult<typeof User.Type, string>>()
       return h.p(model.body)
     })
   })
@@ -95,7 +95,7 @@ describe("Component.define", () => {
           Message,
           typeof Events.Type,
           { readonly id: string },
-          { readonly user: Component.Load<typeof GetUser> },
+          { readonly user: Component.QueryOne<typeof GetUser> },
           { readonly _tag: "SaveClicked" }
         >
       >()
@@ -163,11 +163,11 @@ describe("Component.define", () => {
     })
   })
 
-  it("fragment types h from the definition, with its loaders and elements, and infers the other arguments", () => {
+  it("fragment types h from the definition, with its queries and elements, and infers the other arguments", () => {
     const row = NoteDef.fragment((h, label: string, count: number) => {
       expect(h).type.toBe<Component.Helper<typeof NoteDef>>()
       expect(h.props).type.toBe<{ readonly id: string }>()
-      expect(h.loaded.user).type.toBe<AsyncResult.AsyncResult<typeof User.Type, string>>()
+      expect(h.queries.user).type.toBe<AsyncResult.AsyncResult<typeof User.Type, string>>()
       return h.li(`${label} ${count}`)
     })
     expect<Parameters<typeof row>>().type.toBe<[h: Component.Helper<typeof NoteDef>, label: string, count: number]>()
@@ -179,7 +179,7 @@ describe("Component.define", () => {
 
   it("Helper types a view fragment that takes more than the Model", () => {
     const row = (h: Component.Helper<typeof NoteDef>, label: string) => {
-      expect(h.loaded.user).type.toBe<AsyncResult.AsyncResult<typeof User.Type, string>>()
+      expect(h.queries.user).type.toBe<AsyncResult.AsyncResult<typeof User.Type, string>>()
       return h.li(label)
     }
     NoteDef.view((model, h) => h.ul(row(h, model.body)))

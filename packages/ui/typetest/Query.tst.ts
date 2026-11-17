@@ -1,4 +1,4 @@
-import { Loader } from "@effect/ui"
+import { Query } from "@effect/ui"
 import { Context, Effect, Layer, Option, Schema, type Stream } from "effect"
 import type { AsyncResult } from "effect/reactivity"
 import { describe, expect, it } from "tstyche"
@@ -9,7 +9,7 @@ const User = Schema.Struct({ id: Schema.String, name: Schema.String })
 type User = typeof User.Type
 class NotFound extends Schema.TaggedError<NotFound>()("NotFound", {}) {}
 
-class GetUser extends Loader.Service<GetUser>()(
+class GetUser extends Query.Service<GetUser>()(
   "GetUser",
   {
     args: { id: Schema.String },
@@ -28,7 +28,7 @@ class GetUser extends Loader.Service<GetUser>()(
   })
 ) {}
 
-class Count extends Loader.Service<Count>()("Count", {
+class Count extends Query.Service<Count>()("Count", {
   args: Schema.String,
   success: Schema.Number,
   error: Schema.Never,
@@ -38,22 +38,22 @@ class Count extends Loader.Service<Count>()("Count", {
 declare const fetcher: Effect.Effect<(args: {}) => Effect.Effect<string>>
 declare const needsApi: Effect.Effect<(args: {}) => Effect.Effect<string, never, Api>>
 
-describe("Loader", () => {
+describe("Query", () => {
   it("a read's statics require the read and the cache, never what its fetcher uses", () => {
-    expect(GetUser.get({ id: "1" })).type.toBe<Effect.Effect<User, NotFound, GetUser | Loader.Cache>>()
-    expect(GetUser.prefetch({ id: "1" })).type.toBe<Effect.Effect<void, never, GetUser | Loader.Cache>>()
+    expect(GetUser.get({ id: "1" })).type.toBe<Effect.Effect<User, NotFound, GetUser | Query.Cache>>()
+    expect(GetUser.prefetch({ id: "1" })).type.toBe<Effect.Effect<void, never, GetUser | Query.Cache>>()
     expect(GetUser.changes({ id: "1" })).type.toBe<
-      Stream.Stream<AsyncResult.AsyncResult<User, NotFound>, never, GetUser | Loader.Cache>
+      Stream.Stream<AsyncResult.AsyncResult<User, NotFound>, never, GetUser | Query.Cache>
     >()
     expect(GetUser.peek({ id: "1" })).type.toBe<
-      Effect.Effect<AsyncResult.AsyncResult<User, NotFound>, never, Loader.Cache>
+      Effect.Effect<AsyncResult.AsyncResult<User, NotFound>, never, Query.Cache>
     >()
-    expect(GetUser.invalidate()).type.toBe<Effect.Effect<void, never, Loader.Cache>>()
+    expect(GetUser.invalidate()).type.toBe<Effect.Effect<void, never, Query.Cache>>()
     expect(GetUser.layer).type.toBe<Layer.Layer<GetUser, never, Api>>()
   })
 
   it("args are a fields record or any Schema", () => {
-    expect(Count.get).type.toBe<(args: string) => Effect.Effect<number, never, Count | Loader.Cache>>()
+    expect(Count.get).type.toBe<(args: string) => Effect.Effect<number, never, Count | Query.Cache>>()
     expect(GetUser.get).type.not.toBeCallableWith({ id: 1 })
     expect(GetUser.get).type.not.toBeCallableWith()
   })
@@ -64,8 +64,8 @@ describe("Loader", () => {
 
   it("a fetcher can't keep a requirement of its own", () => {
     const options = { args: {}, success: Schema.String, error: Schema.Never, staleTime: 0 } as const
-    expect(Loader.Service<any>()).type.toBeCallableWith("Ok", options, fetcher)
-    expect(Loader.Service<any>()).type.not.toBeCallableWith("Bad", options, needsApi)
+    expect(Query.Service<any>()).type.toBeCallableWith("Ok", options, fetcher)
+    expect(Query.Service<any>()).type.not.toBeCallableWith("Bad", options, needsApi)
   })
 
   it("patches and writes are typed by their read", () => {
@@ -81,23 +81,23 @@ describe("Loader", () => {
     expect(GetUser.patch).type.not.toBeCallableWith({ id: "1" }, (user: User) => user.name)
     expect(GetUser.set).type.toBeCallableWith({ id: "1" }, { id: "1", name: "Ann" })
     expect(GetUser.set).type.not.toBeCallableWith({ id: "1" }, { id: "1" })
-    expect(Loader.applyPatches([], Count, "a", 1)).type.toBe<number>()
+    expect(Query.applyPatches([], Count, "a", 1)).type.toBe<number>()
   })
 
   it("reads, entries and tags are targets; patches of any read are patches", () => {
-    const targets: ReadonlyArray<Loader.Target> = [GetUser, Count.entry("a"), Loader.Tag("users")]
-    const patches: ReadonlyArray<Loader.Patch> = [GetUser.patch({ id: "1" }, (user) => user), Count.patchAll((n) => n)]
-    const writes: ReadonlyArray<Loader.Write> = [Count.set("a", 1)]
-    expect(Loader.invalidatesEntry({ invalidates: targets, optimistic: patches }, GetUser, { id: "1" })).type.toBe<
+    const targets: ReadonlyArray<Query.Target> = [GetUser, Count.entry("a"), Query.Tag("users")]
+    const patches: ReadonlyArray<Query.Patch> = [GetUser.patch({ id: "1" }, (user) => user), Count.patchAll((n) => n)]
+    const writes: ReadonlyArray<Query.Write> = [Count.set("a", 1)]
+    expect(Query.invalidatesEntry({ invalidates: targets, optimistic: patches }, GetUser, { id: "1" })).type.toBe<
       boolean
     >()
-    expect(writes).type.toBe<ReadonlyArray<Loader.Write>>()
+    expect(writes).type.toBe<ReadonlyArray<Query.Write>>()
   })
 })
 
 const Page = Schema.Struct({ users: Schema.Array(User), next: Schema.NullOr(Schema.Number) })
 
-class ListUsers extends Loader.ListService<ListUsers>()("ListUsers", {
+class ListUsers extends Query.InfiniteService<ListUsers>()("ListUsers", {
   args: { team: Schema.String },
   page: Page,
   items: (page) => page.users,
@@ -108,17 +108,17 @@ class ListUsers extends Loader.ListService<ListUsers>()("ListUsers", {
   staleTime: "1 minute"
 }, Effect.succeed((_args, _cursor) => Effect.succeed({ users: [], next: null }))) {}
 
-describe("ListService", () => {
+describe("InfiniteService", () => {
   it("infers the page, item, cursor and error from the definition", () => {
-    expect<Loader.ListRead.Page<typeof ListUsers>>().type.toBe<typeof Page.Type>()
-    expect<Loader.ListRead.Item<typeof ListUsers>>().type.toBe<User>()
-    expect<Loader.Read.Success<typeof ListUsers>>().type.toBe<ReadonlyArray<typeof Page.Type>>()
-    expect<Loader.Read.Error<typeof ListUsers>>().type.toBe<NotFound>()
+    expect<Query.InfiniteQuery.Page<typeof ListUsers>>().type.toBe<typeof Page.Type>()
+    expect<Query.InfiniteQuery.Item<typeof ListUsers>>().type.toBe<User>()
+    expect<Query.Query.Success<typeof ListUsers>>().type.toBe<ReadonlyArray<typeof Page.Type>>()
+    expect<Query.Query.Error<typeof ListUsers>>().type.toBe<NotFound>()
     expect(ListUsers.items([])).type.toBe<ReadonlyArray<User>>()
   })
 
   it("types the fetcher's cursor by the cursor Schema", () => {
-    Loader.ListService<"Fetcher">()(
+    Query.InfiniteService<"Fetcher">()(
       "Fetcher",
       {
         args: { team: Schema.String },
@@ -139,7 +139,7 @@ describe("ListService", () => {
 
   // The documented gotcha: inference reads the object in order, so `key` written before `items` sees no item type.
   it("leaves the item unknown in key when key comes before items", () => {
-    Loader.ListService<"KeyFirst">()("KeyFirst", {
+    Query.InfiniteService<"KeyFirst">()("KeyFirst", {
       args: { team: Schema.String },
       page: Page,
       key: (user) => {
@@ -156,7 +156,7 @@ describe("ListService", () => {
 
   it("is a target and a patch target", () => {
     expect(
-      Loader.invalidatesEntry(
+      Query.invalidatesEntry(
         {
           invalidates: [ListUsers, ListUsers.entry({ team: "t" })],
           optimistic: [ListUsers.patch({ team: "t" }, (page) => page), ListUsers.patchAll((page) => page)]

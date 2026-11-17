@@ -1,4 +1,4 @@
-import { Command, Component, Loader, MessageLog } from "@effect/ui"
+import { Command, Component, MessageLog, Query } from "@effect/ui"
 import { Locator, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Layer, Option, Schema } from "effect"
@@ -9,13 +9,13 @@ import { TestClock } from "effect/testing"
 const User = Schema.Struct({ id: Schema.String, name: Schema.String })
 
 /**
- * A card per user over a read whose fetch takes `db.delay` ms per id, and a
+ * A card per user over a query whose fetch takes `db.delay` ms per id, and a
  * rename that takes 10 ms, issued with `Command.afterRefetch(budget)`.
  */
 const makeApp = (options?: {
   readonly mode?: Command.Mode | undefined
   readonly budget?: Duration.Input | undefined
-  /** `self`: the card's own entry. `all`: every entry of the read. `unwatched`: an entry nobody watches. */
+  /** `self`: the card's own entry. `all`: every entry of the query. `unwatched`: an entry nobody watches. */
   readonly invalidates?: "self" | "all" | "unwatched" | undefined
   /** `false`: issue the rename without `Command.afterRefetch`. */
   readonly wait?: false | undefined
@@ -33,7 +33,7 @@ const makeApp = (options?: {
   }
   const order: Array<string> = []
 
-  class GetUser extends Loader.Service<GetUser>()(
+  class GetUser extends Query.Service<GetUser>()(
     "users/GetUser",
     { args: { id: Schema.String }, success: User, error: Schema.String, staleTime: "30 seconds" },
     Effect.succeed(({ id }) =>
@@ -99,9 +99,9 @@ const makeApp = (options?: {
     props: Schema.Struct({ id: Schema.String, tag: Schema.String }),
     model: Schema.Struct({ done: Schema.Array(Schema.String) }),
     message: CardMessage,
-    loaders: {
+    queries: {
       user: {
-        load: GetUser,
+        query: GetUser,
         args: (_model, props) => ({ id: props.id }),
         onChange: () => CardMessage.make({ _tag: "UserChanged" })
       }
@@ -123,7 +123,7 @@ const makeApp = (options?: {
       })
     },
     view: (model, h) => {
-      const text = AsyncResult.match(h.loaded.user, {
+      const text = AsyncResult.match(h.queries.user, {
         onInitial: () => "loading",
         onSuccess: (success) => success.value.name + (h.patched.user ? "~" : "") + (success.waiting ? "…" : ""),
         onFailure: () => "failed"
@@ -202,14 +202,14 @@ const commandLog = (root: Root) =>
 
 const statuses = (root: Root) => root.pending().flatMap((pending) => pending._tag === "Command" ? [pending.status] : [])
 
-const user1: MessageLog.AwaitedEntry = { read: "users/GetUser", logKey: "{\"id\":\"1\"}" }
-const user2: MessageLog.AwaitedEntry = { read: "users/GetUser", logKey: "{\"id\":\"2\"}" }
+const user1: MessageLog.AwaitedEntry = { query: "users/GetUser", logKey: "{\"id\":\"1\"}" }
+const user2: MessageLog.AwaitedEntry = { query: "users/GetUser", logKey: "{\"id\":\"2\"}" }
 
 const renameOn = (root: { readonly send: (message: any) => void }, app: ReturnType<typeof makeApp>, name: string) =>
   root.send(app.CardMessage.make({ _tag: "Rename", name }))
 
 describe("Command.afterRefetch", () => {
-  it.effect("holds onSuccess until the refetch settles, after the loader's onChange message and in the same render", () => {
+  it.effect("holds onSuccess until the refetch settles, after the query's onChange message and in the same render", () => {
     const app = makeApp()
     return run(
       app.layer,
@@ -372,7 +372,7 @@ describe("Command.afterRefetch", () => {
     )
   })
 
-  it.effect("a loadMany loader: the last key's onChange message, then onSuccess, then one view", () => {
+  it.effect("a queryMany query: the last key's onChange message, then onSuccess, then one view", () => {
     const app = makeApp({ invalidates: "all" })
     const BoardMessage = Schema.TaggedUnion({ Changed: {}, Rename: {}, Renamed: {} })
     const order: Array<string> = []
@@ -380,9 +380,9 @@ describe("Command.afterRefetch", () => {
       name: "Board",
       model: Schema.Struct({ renamed: Schema.Boolean }),
       message: BoardMessage,
-      loaders: {
+      queries: {
         users: {
-          loadMany: app.GetUser,
+          queryMany: app.GetUser,
           args: () => [{ id: "1" }, { id: "2" }],
           onChange: (_loaded, changes) => {
             order.push(`changes ${changes.map((change) => change.args.id).join(",")}`)
@@ -410,7 +410,7 @@ describe("Command.afterRefetch", () => {
         })
       },
       view: (model, h) => {
-        const text = h.loaded.users.map(({ result }) =>
+        const text = h.queries.users.map(({ result }) =>
           AsyncResult.match(result, {
             onInitial: () => "…",
             onSuccess: (success) => success.value.name + (success.waiting ? "…" : ""),
@@ -739,7 +739,7 @@ describe("Command.afterRefetch", () => {
     const Item = Schema.Struct({ id: Schema.String })
     const Page = Schema.Struct({ items: Schema.Array(Item), next: Schema.NullOr(Schema.Number) })
     const db = { version: 0 }
-    class ListItems extends Loader.ListService<ListItems>()(
+    class ListItems extends Query.InfiniteService<ListItems>()(
       "items/ListItems",
       {
         args: {},
@@ -773,7 +773,7 @@ describe("Command.afterRefetch", () => {
       name: "ItemsView",
       model: Schema.Struct({ touched: Schema.Boolean }),
       message: ItemsMessage,
-      loaders: { items: { load: ListItems, args: () => ({}) } }
+      queries: { items: { query: ListItems, args: () => ({}) } }
     }).make({
       init: () => ({ touched: false }),
       update: (model, message, $) =>
@@ -791,7 +791,7 @@ describe("Command.afterRefetch", () => {
       view: (model, h) =>
         h.el(
           "p",
-          AsyncResult.match(h.loaded.items, {
+          AsyncResult.match(h.queries.items, {
             onInitial: () => "loading",
             onFailure: () => "failed",
             onSuccess: ({ value: { items } }) => items.map((item) => item.id).join(",")
@@ -810,7 +810,7 @@ describe("Command.afterRefetch", () => {
         yield* tick
         assert.deepStrictEqual(commandLog(root), [{
           _tag: "CommandAwaiting",
-          entries: [{ read: "items/ListItems", logKey: "{}" }]
+          entries: [{ query: "items/ListItems", logKey: "{}" }]
         }])
         // The walk's first page is in, and the held pages show until it swaps.
         yield* tick
@@ -826,7 +826,7 @@ describe("Command.afterRefetch", () => {
     const app = makeApp()
     const ann = { id: "1", name: "Ann" }
 
-    it("resolve awaits the component's own loaders, and loaded sends the loader's onChange message, then onSuccess", () => {
+    it("resolve awaits the component's own queries, and loaded sends the query's onChange message, then onSuccess", () => {
       Story.make(app.Card, { id: "1", tag: "a" }, (s) =>
         s
           .loaded("user", ann)
@@ -915,7 +915,7 @@ describe("Command.afterRefetch", () => {
       assert.strictEqual(story.dropped.length, 1)
     })
 
-    it("loaded on a loader that was cold when a Command was issued doesn't throw: its patch never registered", () => {
+    it("loaded on a query that was cold when a Command was issued doesn't throw: its patch never registered", () => {
       Story.make(app.Card, { id: "1", tag: "a" }, (s) =>
         s
           .send(app.CardMessage.make({ _tag: "Rename", name: "Bob" }))
@@ -924,7 +924,7 @@ describe("Command.afterRefetch", () => {
           .check((story) => assert.deepStrictEqual(story.pending.map((entry) => entry.status), ["awaiting"]))
           .loaded("user", { id: "1", name: "Bob" })
           .model((model) => assert.deepStrictEqual(model.done, ["Bob"])))
-      // Nor does a loader that held only a Failure.
+      // Nor does a query that held only a Failure.
       Story.make(app.Card, { id: "1", tag: "a" }, (s) =>
         s
           .loadFailed("user", "down")
@@ -934,7 +934,7 @@ describe("Command.afterRefetch", () => {
           .loaded("user", { id: "1", name: "Bob" }))
     })
 
-    it("loaded throws on a loader a running Command patches, unless the value is patched", () => {
+    it("loaded throws on a query a running Command patches, unless the value is patched", () => {
       assert.throws(
         () =>
           Story.make(app.Card, { id: "1", tag: "a" }, (s) =>

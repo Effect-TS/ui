@@ -1,5 +1,5 @@
 /**
- * The redacting walk shared by the message log and the loader's log keys, and
+ * The redacting walk shared by the message log and the query's log keys, and
  * the check that keeps a `Schema.Redacted` out of serialised state.
  *
  * @internal

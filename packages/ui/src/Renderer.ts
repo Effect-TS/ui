@@ -168,7 +168,7 @@ export interface Hydration<Node> {
 
 /**
  * What a server render hands the client: each instance's Schema-encoded
- * Model by path, the paths to build fresh, and the loader entries the
+ * Model by path, the paths to build fresh, and the query entries the
  * server's per-request cache settled.
  *
  * **Details**
@@ -177,18 +177,18 @@ export interface Hydration<Node> {
  * a provided Layer that missed the budget or was kept off the server, and a
  * slot that failed. A deferred path covers its subtree.
  *
- * `~loader` holds every entry that settled on the server, a typed Failure
- * included, by read name and args key. The client's cache hydrates from it,
+ * `~query` holds every entry that settled on the server, a typed Failure
+ * included, by query name and args key. The client's cache hydrates from it,
  * so a watch over a shipped entry doesn't fetch while the hydration window is
  * open. An entry still in flight at the budget isn't shipped, and the client
  * fetches it. `~static` is set by a render with `static: true`.
  *
  * **Gotchas**
  *
- * Read data is public: a read's success, error and args are in the state
+ * Query data is public: a query's success, error and args are in the state
  * even when no view renders them.
  *
- * An instance whose Model or loader Schemas hold a `Schema.Redacted` is
+ * An instance whose Model or query Schemas hold a `Schema.Redacted` is
  * never in the state: it's deferred, so the client builds it and its
  * subtree fresh, and the server logs a warning once per component.
  *
@@ -199,7 +199,7 @@ export interface Hydration<Node> {
 export interface State {
   readonly [path: string]: unknown
   readonly "~deferred"?: ReadonlyArray<string> | undefined
-  readonly "~loader"?: unknown
+  readonly "~query"?: unknown
   readonly "~static"?: boolean | undefined
 }
 
@@ -433,7 +433,7 @@ export type HostOf<V> = [V] extends [never] ? never : V extends View.Elements ? 
  * keeps the server's nodes, inert, until the Layer is ready; `adopted`
  * completes when none is left waiting.
  *
- * The cache hydrates from the state's `~loader` entries. Until `adopted`
+ * The cache hydrates from the state's `~query` entries. Until `adopted`
  * completes or the Router first navigates, a watch, `get` or `prefetch` over
  * a hydrated entry doesn't fetch, even when it is stale. The first emission
  * of each watch after adoption is delivered to `update`, and the view
@@ -471,20 +471,20 @@ export const mount: <
       ) => View.Content<never, RF>)
       | undefined
     readonly state?: State | undefined
-    readonly loader?: LoaderOptions | undefined
+    readonly query?: QueryOptions | undefined
   }
 ) => Effect.Effect<Root<Model, Msg>, never, R | RF | RP | HostOf<V> | Renderer | Scope.Scope> = runtime.mount as any
 
 /**
- * Cache-wide options for the loader cache a mount owns. The app never
+ * Cache-wide options for the query cache a mount owns. The app never
  * provides the cache, so they go through `mount`.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface LoaderOptions {
-  /** How long an entry stays once nothing watches it. 5 minutes by default; a read can override it. */
+export interface QueryOptions {
+  /** How long an entry stays once nothing watches it. 5 minutes by default; a query can override it. */
   readonly idleTimeToLive?: Duration.Input | undefined
 }
 
@@ -495,13 +495,13 @@ export interface LoaderOptions {
  * **Details**
  *
  * The tree renders synchronously. Provided Layers are built, and data comes
- * from loaders: a per-request cache fetches each key at most once, ignores
+ * from queries: a per-request cache fetches each key at most once, ignores
  * `staleTime`, and dispatches each watch when its entry settles, so a watch
- * message that changes a loader's args fetches the next key in the same
+ * message that changes a query's args fetches the next key in the same
  * render. No Command runs: `init`'s are dropped silently, and one from
  * `update` is dropped, logged as `CommandDropped` with reason `"server"`
  * and reported as `Command.ServerCommandIssued`. Events are applied, so a
- * child can change its parent. Subscriptions other than loader watches, and
+ * child can change its parent. Subscriptions other than query watches, and
  * `onMount` work, never run.
  *
  * Rendering waits until nothing is in flight or `budget` (default 500 ms) is
@@ -515,7 +515,7 @@ export interface LoaderOptions {
  *
  * `static: true` is for HTML built at deploy or held in a CDN. It is written
  * into the state, and the client hydrates every entry with an unknown age: an
- * entry is stale, and refetches once, unless its read's `staleTime` is
+ * entry is stale, and refetches once, unless its query's `staleTime` is
  * `"Infinity"`, and there is no fetch-free window.
  *
  * `elements` lists the vocabularies the server renders, by name, as a host's

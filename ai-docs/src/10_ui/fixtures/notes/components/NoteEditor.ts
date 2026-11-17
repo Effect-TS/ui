@@ -45,7 +45,7 @@ export class SaveNote extends Command.Service<SaveNote>()(
 
 // The editor is large, so it is written in pieces. `Component.define`
 // takes what nothing is inferred from: the name and the Schemas, plus
-// `loaders` and `elements` when a component has them. The update slices
+// `queries` and `elements` when a component has them. The update slices
 // and the view below are typed against it, and `make` finishes the
 // component. Typing them against the finished component instead is circular,
 // because its requirements are read off what `update` returns. The

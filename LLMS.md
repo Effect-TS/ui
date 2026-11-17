@@ -16,11 +16,11 @@ purposes. In practice, you would not include these comments in your code.
 `@effect/ui` is a frontend framework whose apps are composed with Layers. You
 describe a component with Schemas for its props, Model, messages and events,
 and with pure `init`, `update` and `view` functions. Side effects are Commands
-and Subscriptions that the runtime runs for you, and data comes from `Loader`
+and Subscriptions that the runtime runs for you, and data comes from `Query`
 reads, also in `@effect/ui`. `@effect/ui/html` adds the HTML elements, the
 browser host and router, and server rendering.
 
-A `Command.Service` may omit `invalidates` when it invalidates no reads.
+A `Command.Service` may omit `invalidates` when it invalidates no queries.
 Provide a feature implementation with `NoteActivity.toLayer(ActivityLog)`.
 Declare a child component by calling it with the parent's `h`:
 `NoteEditor(h, { key, props, onEmit })`. Render a feature service with its
@@ -36,42 +36,45 @@ props.
 
 ### Loading data
 
-A component declares the reads it shows in `loaders`, by name. Each entry
-names a read and returns its args from the Model, the props and the other
-loaders' results, or `undefined` to disable it:
+A component declares the queries it shows in `queries`, by name. Each entry
+names a `Query` and returns its args from the Model, the props and the other
+queries' results, or `undefined` to disable it:
 
 ```ts
-loaders: {
-  note: { load: GetNote, args: (_model, props) => ({ id: props.id }) },
+queries: {
+  note: { query: GetNote, args: (_model, props) => ({ id: props.id }) },
   // Waits for the args to hold still before it fetches.
-  results: { load: SearchNotes, debounce: "300 millis", args: (model) => ({ q: model.q }) },
-  // One read at many args, one entry per args.
-  authors: { loadMany: GetUser, args: (_model, props) => props.authorIds.map((id) => ({ id })) }
+  results: { query: SearchNotes, debounce: "300 millis", args: (model) => ({ q: model.q }) },
+  // One query at many args, one entry per args.
+  authors: { queryMany: GetUser, args: (_model, props) => props.authorIds.map((id) => ({ id })) }
 }
 ```
 
-The runtime watches each read and keeps its last result in a slot beside the
-Model. A slot that changes re-renders the instance, without a message. The
-Model holds what the user did, and never a copy of loaded data. The Model plus
-the slots is the instance's state: the server ships it and the history entry
-keeps it as `{ model, loaded }`, so a hydrated or restored instance starts
+The runtime watches each query and keeps its last result beside the Model. A
+result that changes re-renders the instance, without a message. The Model
+holds what the user did, and never a copy of fetched data. The Model plus the
+results is the instance's state: the server ships it and the history entry
+keeps it as `{ model, queries }`, so a hydrated or restored instance starts
 with the results it had.
 
-Every function of the component can read the slots, by loader name:
-`h.loaded` in `view`, `$.loaded` in `update`, and the `loaded` argument of
-`head(model, props, loaded)` and `subscriptions(model, props, loaded)`. Give an entry
+Every function of the component can read the results, by query name:
+`h.queries` in `view`, `$.queries` in `update`, and the `queries` argument of
+`head(model, props, queries)` and `subscriptions(model, props, queries)`. Give an entry
 an `onChange` only when `update` has to react to a new result, such as
-moving focus once a read fails. It returns a message, which `update` gets
-after the slot is written.
+moving focus once a query fails. It returns a message, which `update` gets
+after the result is written.
 
-In tests, `Story` load steps such as `loaded("note", note)` take the loader's
-name and write its slot. To start from loaded data without sending
+The cache never retries a failed fetch: a fetcher that should retry does so
+itself.
+
+In tests, `Story` steps such as `loaded("note", note)` take the query's
+name and write its result. To start from fetched data without sending
 `onChange`'s message, pass the results to `given`:
-`s.given(model, { note })`. The `MessageLog` records each slot write as a
-`LoaderChanged` entry, and an `Update` entry only for an `onChange` message.
-Each `Update` entry records the slots `update` read, so `Story.fromLog`
-replays `$.loaded` as it was. New props from a parent are logged as a
-`PropsChanged` entry, so the result's `props` and `loaded()` hold what the
+`s.given(model, { note })`. The `MessageLog` records each result write as a
+`QueryChanged` entry, and an `Update` entry only for an `onChange` message.
+Each `Update` entry records the results `update` read, so `Story.fromLog`
+replays `$.queries` as it was. New props from a parent are logged as a
+`PropsChanged` entry, so the result's `props` and `queries()` hold what the
 instance ended with.
 
 ### Headless components
@@ -105,9 +108,9 @@ fixtures/
   notes/
     domain/Note.ts            // Schema, errors, NotesTag
     services/Notes.ts         // service and its Layers
-    loaders/ListNotes.ts
-    loaders/GetNote.ts
-    loaders/SearchNotes.ts
+    queries/ListNotes.ts
+    queries/GetNote.ts
+    queries/SearchNotes.ts
     components/NoteEditor.ts  // NoteEditor and its SaveNote command
     components/NoteActivity.ts
     components/ActivityLog.ts
@@ -120,7 +123,7 @@ fixtures/
 ```
 
 A second feature is a sibling of `notes/`, with its own `domain`, `services`,
-`loaders` and `components` folders. Pages import features, but features never
+`queries` and `components` folders. Pages import features, but features never
 import pages. Keep `AppRoute` in `routes.ts`, outside `pages/` and separate
 from `App.ts`; pages can then build links without importing the root component
 that imports them.
@@ -134,11 +137,11 @@ folder follows the URL, not the feature the page uses.
 
 A command belongs in the file of the component that runs it, not in a shared
 `commands/` folder. When two components need the same write, share the service
-method and give each component its own command. Loaders have their own folder
+method and give each component its own command. Queries have their own folder
 because pages, multiple components and server rendering all read them.
 
 A component provides the domain Layers it needs in its own file, with
-`Component.provide`: its commands, its loaders and the services they capture.
+`Component.provide`: its commands, its queries and the services they capture.
 The plain name, such as `NotePage`, is the component with those Layers
 provided, and it is the one parents and entry modules use. The component
 without them is exported as `NotePageNoDeps`, for a test that provides its
@@ -166,7 +169,7 @@ client, not the services.
   entry module, which mounts it with `BrowserHost`. The editor is in
   `fixtures/notes/components/NoteEditor.ts`.
 - **[Composing components, data and Layers](./ai-docs/src/10_ui/20_composition.ts)**:
-  Load a note with a `Loader` read and show it with child components. The
+  Load a note with a `Query` read and show it with child components. The
   page handles a child's events, provides Layers with `Component.provide`,
   and makes one child swappable with `Feature.Service`. This entry module
   mounts the page, which is in `fixtures/pages/notes/NotePage.ts`.
@@ -181,9 +184,9 @@ client, not the services.
   module mounts it with `BrowserRouter`. The routes are in
   `fixtures/routes.ts` and the root component is in `fixtures/App.ts`.
 - **[Search, filters and pagination in the URL](./ai-docs/src/10_ui/35_url-state.ts)**:
-  Keep a search page's text, order and page number in the query, so a link
+  Keep a search page's text, order and page number in the search, so a link
   or a reload shows the same results. The page reads them from its route,
-  writes them with `Router.patchSearch`, and fetches with a debounced loader.
+  writes them with `Router.patchSearch`, and fetches with a debounced query.
   This entry module mounts the routed app. The page is in
   `fixtures/pages/search/SearchPage.ts`.
 - **[Rendering on the server](./ai-docs/src/10_ui/40_server-rendering.ts)**:

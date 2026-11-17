@@ -1,5 +1,5 @@
 /**
- * The experiments of the loader spec's worked example (§5.7), run on the app
+ * The experiments of the query spec's worked example (§5.7), run on the app
  * in `fixtures/users.ts`.
  */
 import { Component, Router } from "@effect/ui"
@@ -41,7 +41,7 @@ const rename = (root: Root, name: string) => {
 }
 /** The card's heading: the user's name as the card shows it. */
 const cardName = (root: Root) => Locator.textOf(root.get(Locator.tag("h2")))
-const fetchesOf = (root: Root, read: string) => root.fetches().filter((fetch) => fetch.read === read)
+const fetchesOf = (root: Root, read: string) => root.fetches().filter((fetch) => fetch.query === read)
 const count = (text: string, part: string) => text.split(part).length - 1
 
 /** The list page and the detail page side by side. */

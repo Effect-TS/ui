@@ -15,7 +15,7 @@ import { AppRoute } from "./fixtures/routes.ts"
 
 // Mount the same component with the same props, plus the server's state.
 // `Router.props` reads the route from the browser's URL. Each instance then
-// adopts the server's state, its Model and its loaders' slots, and its DOM
+// adopts the server's state, its Model and its queries' slots, and its DOM
 // nodes instead of rebuilding them. The reads the server shipped aren't
 // fetched again.
 //

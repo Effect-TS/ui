@@ -3,7 +3,7 @@
  *
  * Keep a search page's text, order and page number in the search, so a link
  * or a reload shows the same results. The page reads them from its route,
- * writes them with `Router.patchSearch`, and fetches with a debounced loader.
+ * writes them with `Router.patchSearch`, and fetches with a debounced query.
  * This entry module mounts the routed app. The page is in
  * `fixtures/pages/search/SearchPage.ts`.
  */
@@ -21,8 +21,8 @@ import "@effect/ui/html/register"
 //   its path with `AppRoute.printPath`
 // - `fixtures/pages/search/SearchPage.ts`: the page, which takes its whole
 //   route as props, writes the search with `Router.patchSearch` and fetches
-//   with a loader's `debounce` option
-// - `fixtures/notes/loaders/SearchNotes.ts`: the read behind the results,
+//   with a query's `debounce` option
+// - `fixtures/notes/queries/SearchNotes.ts`: the query behind the results,
 //   keyed by the whole search
 import { App } from "./fixtures/App.ts"
 import { AppRoute } from "./fixtures/routes.ts"

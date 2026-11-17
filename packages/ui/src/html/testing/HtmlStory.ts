@@ -80,7 +80,10 @@ const pathTo = (root: View.Node<any, any>, node: Locator.Node): Array<View.Node<
  * @since 0.1.0
  */
 export const drop =
-  (locator: Locator.Locator, payload?: Partial<Html.DropPayload> | undefined) => <S extends Story.Steps.Any>(s: S): S => {
+  (locator: Locator.Locator, payload?: Partial<Html.DropPayload> | undefined) =>
+  <S extends Story.Steps.Any>(
+    s: S
+  ): S => {
     const full: Html.DropPayload = { data: {}, files: [], x: 0, y: 0, width: 0, height: 0, ...payload }
     const types = Object.keys(full.data).concat(full.files.length > 0 ? ["Files"] : [])
     const lower = types.map((type) => type.toLowerCase())

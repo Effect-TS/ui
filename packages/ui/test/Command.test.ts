@@ -1,4 +1,4 @@
-import { Command, Component, Loader } from "@effect/ui"
+import { Command, Component, Query } from "@effect/ui"
 import * as schedule from "@effect/ui/internal/schedule"
 import { assert, describe, it } from "@effect/vitest"
 import { Data, Effect, Exit, Layer, Schema, Stream } from "effect"
@@ -67,14 +67,14 @@ describe("Command", () => {
         "Rename",
         {
           args: { id: Schema.String, name: Schema.String },
-          invalidates: ({ id }) => [Loader.Tag(`user:${id}`)],
+          invalidates: ({ id }) => [Query.Tag(`user:${id}`)],
           optimistic: ({ id, name }) => [{ id, name }] as any,
           writes: (success: string, { id }) => [{ id, success }] as any
         },
         Effect.succeed(({ name }: { readonly name: string }) => Effect.succeed(name.toUpperCase()))
       ) {}
       const command = Rename.make({ id: "u1", name: "ada" })
-      assert.deepStrictEqual(command.invalidates, [Loader.Tag("user:u1")])
+      assert.deepStrictEqual(command.invalidates, [Query.Tag("user:u1")])
       assert.deepStrictEqual(command.optimistic as unknown, [{ id: "u1", name: "ada" }])
       assert.deepStrictEqual(command.writes?.("ADA") as unknown, [{ id: "u1", success: "ADA" }])
     })

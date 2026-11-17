@@ -1,7 +1,7 @@
 import { Component, Head } from "@effect/ui"
 import { Layer, Match, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
-import { ListNotes } from "../notes/loaders/ListNotes.ts"
+import { ListNotes } from "../notes/queries/ListNotes.ts"
 import { Notes } from "../notes/services/Notes.ts"
 import { AppRoute } from "../routes.ts"
 
@@ -19,11 +19,11 @@ const NoteType = "application/x-note"
 export const NotesIndexNoDeps = Component.define({
   name: "NotesIndex",
   // The Model holds only what the user did here. The notes live in the
-  // `notes` loader's slot, which the runtime keeps beside the Model.
+  // `notes` query's slot, which the runtime keeps beside the Model.
   model: Schema.Struct({ pinned: Schema.Array(Schema.String), over: Schema.Boolean }),
   message: NotesIndexMessage,
-  // `ListNotes` takes no args, so this read is the same for every instance.
-  loaders: { notes: { load: ListNotes, args: () => ({}) } }
+  // `ListNotes` takes no args, so this query is the same for every instance.
+  queries: { notes: { query: ListNotes, args: () => ({}) } }
 }).make({
   init: () => ({ pinned: [], over: false }),
   update: (model, message) =>
@@ -35,7 +35,7 @@ export const NotesIndexNoDeps = Component.define({
   // order, and the later entry wins.
   head: () => [Head.title("All notes"), Head.meta({ name: "description", content: "Every note you wrote" })],
   view: (model, h) =>
-    AsyncResult.match(h.loaded.notes, {
+    AsyncResult.match(h.queries.notes, {
       onInitial: () => h.p("Loading notes…"),
       onFailure: () => h.p("The notes couldn't be loaded."),
       // Links are plain anchors with a printed route. The browser Router
