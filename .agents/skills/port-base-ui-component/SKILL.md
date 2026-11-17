@@ -41,7 +41,7 @@ Work top to bottom. Write the notes from steps 1 to 3 into the PR description.
    - component with slots, headless component, or pure view helper
    - the element for each Base UI part, and the slots the consumer fills,
      or, for a headless component, the parts and the tags each accepts
-   - the props (the controlled value and the options), the events, and the
+   - the props (the controlled value, the options and `attributes`), the events, and the
      Model, which holds only interaction state the consumer never stores
    - the message and event names, as past-tense facts
    - which Base UI features you leave out, and why
@@ -57,8 +57,11 @@ Work top to bottom. Write the notes from steps 1 to 3 into the PR description.
      keys a native element handles, assert the element's tag
    - the markup the component draws for itself, such as the form field, and
      where each slot's content shows
-   - the `data-scope` and `data-part` on every styled element, and the
-     accessible name from props when a slot that carries it is left out
+   - the `data-scope` and `data-part` on every styled element
+   - `attributes`: a class on every styled element, an arbitrary attribute
+     such as `aria-label`, and that consumer values for every owned
+     attribute and an `onclick` don't get through, while the component's
+     handler still fires
    - Select elements by `data-part` in tests, as consumers do.
    - Use `Story.make(C, props, { slots: (h) => ({ ... }) }, f)` for a
      component with slots, and a stand-in view with `Story.parts` for a

@@ -87,23 +87,58 @@ describe("Switch", () => {
     assert.deepStrictEqual(story.emitted, [])
   })
 
-  it("without the label slot, the root takes its name and description from props", () => {
-    const named = {
-      checked: false,
-      id: "mute",
-      "aria-label": "Mute",
-      "aria-labelledby": "row-3",
-      "aria-describedby": "mute-help"
+  it("takes the consumer's attributes on every element, and keeps its own attributes and click handler", () => {
+    const attributes = {
+      // Each owned name below is one the switch sets or leaves absent.
+      label: { class: "row", for: "elsewhere", "data-checked": "" },
+      root: {
+        class: "track",
+        id: "mute",
+        style: "width:2rem",
+        "aria-label": "Mute",
+        "aria-describedby": "mute-help",
+        "data-testid": "mute",
+        type: "submit",
+        role: "checkbox",
+        "aria-checked": "mixed",
+        "aria-readonly": "true",
+        disabled: "",
+        "data-part": "track",
+        onclick: "alert(1)"
+      },
+      thumb: { class: "knob", "data-scope": "slider", "data-disabled": "" }
     }
-    Story.make(Switch, named, (s) =>
+    // No label slot: the root's `aria-label` names it.
+    const story = Story.make(Switch, { checked: false, attributes }, (s) =>
       s.check((story) => {
-        const attrs = story.get(root).attrs
-        assert.strictEqual(attrs?.id, "mute")
-        assert.strictEqual(attrs?.["aria-label"], "Mute")
-        assert.strictEqual(attrs?.["aria-labelledby"], "row-3")
-        assert.strictEqual(attrs?.["aria-describedby"], "mute-help")
-        assert.strictEqual(Query.textOf(story.get(part("label"))), "")
-      }))
+        assert.deepStrictEqual(story.get(part("label")).attrs, {
+          class: "row",
+          "data-scope": "switch",
+          "data-part": "label",
+          "data-unchecked": ""
+        })
+        assert.deepStrictEqual(story.get(root).attrs, {
+          class: "track",
+          id: "mute",
+          style: "width:2rem",
+          "aria-label": "Mute",
+          "aria-describedby": "mute-help",
+          "data-testid": "mute",
+          "data-scope": "switch",
+          "data-part": "root",
+          "data-unchecked": "",
+          type: "button",
+          role: "switch",
+          "aria-checked": "false"
+        })
+        assert.deepStrictEqual(story.get(part("thumb")).attrs, {
+          class: "knob",
+          "data-scope": "switch",
+          "data-part": "thumb",
+          "data-unchecked": ""
+        })
+      }).fire(root, "click"))
+    assert.deepStrictEqual(story.emitted, [{ _tag: "Toggled", checked: true }])
   })
 
   it("draws the form field: value when on, and uncheckedValue or nothing when off", () => {

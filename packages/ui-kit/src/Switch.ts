@@ -21,19 +21,27 @@
  * other control, as a `<label>` labels only its first control. The switch
  * draws the form field itself, so a switch with a `name` always submits.
  *
- * A switch without the `label` slot needs a name from props instead:
- * `aria-label` for an icon-only switch, `aria-labelledby` for one named
- * by a heading or a table header, or `id` for a `<label for>` elsewhere.
+ * A switch without the `label` slot takes its name from the root's
+ * attributes instead: `attributes: { root: { "aria-label": "Mute" } }` for
+ * an icon-only switch, `"aria-labelledby"` for one named by a heading or a
+ * table header, or an `id` for a `<label for>` elsewhere.
  *
  * **Styling**
  *
- * The switch sets no classes. Each element it draws for styling has
- * `data-scope="switch"` and a `data-part`, so select the thumb as
- * `[data-scope="switch"][data-part="thumb"]`, inside a class of the
- * consumer's own around the switch, and style each state with the data
- * attributes below. These attributes are the styling contract: the tags
- * and nesting may change. The slot comes after the root, so a row with the
- * text first reverses the label's flex direction.
+ * The switch sets no classes. Pass classes, styles and other attributes
+ * for each element in `attributes`, by its `data-part`:
+ * `attributes: { root: { class: "..." }, thumb: { class: "..." } }`. Each
+ * element also has `data-scope="switch"`, its `data-part` and the state
+ * attributes below, so a stylesheet can select
+ * `[data-scope="switch"][data-part="thumb"][data-checked]`. The tags and
+ * nesting may change. The slot comes after the root, so a row with the text
+ * first reverses the label's flex direction.
+ *
+ * The switch's own attributes win over the consumer's: `data-scope`,
+ * `data-part` and the state attributes on every element, the label's
+ * `for`, and the root's `type`, `role`, `aria-checked`,
+ * `aria-readonly`, `aria-required` and `disabled`. `on*` attributes
+ * are dropped, as the switch owns the handlers.
  *
  * **Data attributes**
  *
@@ -55,8 +63,9 @@
  * - The value is always controlled. There is no `defaultChecked`: keep the
  *   value in the consumer's Model.
  * - The root is always a native `<button>`, Base UI's `nativeButton` mode,
- *   inside a `<label>` the switch draws. There is no `className` or
- *   `render`: style the switch through its data attributes.
+ *   inside a `<label>` the switch draws. In place of `className`,
+ *   `style` and `render`, `attributes` takes strings for each element:
+ *   no state functions and no handlers.
  * - The form value is a hidden input, so `required` sets `aria-required`
  *   and `data-required` but doesn't block a form submission.
  * - Field state (`data-valid`, `data-invalid`, `data-dirty`,
@@ -90,7 +99,11 @@
  *         key: "notify",
  *         props: { checked: model.notify, name: "notify" },
  *         onEmit: ({ checked }) => SettingsMessage.make({ _tag: "ToggledNotify", checked }),
- *         slots: { label: "Notifications" }
+ *         slots: { label: "Notifications" },
+ *         attributes: {
+ *           root: { class: "h-5 w-9 rounded-full bg-gray-300 data-[checked]:bg-blue-600" },
+ *           thumb: { class: "block size-4 rounded-full bg-white data-[checked]:translate-x-4" }
+ *         }
  *       })
  *     )
  * })
@@ -102,6 +115,7 @@
 import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Schema from "effect/Schema"
+import { Attributes, withAttributes } from "./internal/attributes.ts"
 
 /**
  * The props of a `Switch`, Base UI's Root props without the React ones.
@@ -114,10 +128,9 @@ import * as Schema from "effect/Schema"
  * - `readOnly`: ignores clicks but stays focusable, and sets
  *   `aria-readonly`.
  * - `required`: sets `aria-required` and `data-required`.
- * - `id`, `aria-label`, `aria-labelledby` and `aria-describedby`: set on
- *   the root as given, to name or describe the switch from outside the
- *   `label` slot. An `aria-label` or `aria-labelledby` replaces the
- *   slot's text as the switch's name.
+ * - `attributes`: the consumer's attributes for the `label`, `root` and
+ *   `thumb` elements, by HTML name, such as `class`, `style`, `id` or
+ *   `aria-label`. The switch's own attributes win over them.
  * - `name`, `value` and `uncheckedValue`: the form field. An on switch
  *   submits `value`, `"on"` by default. An off switch submits
  *   `uncheckedValue`, or nothing when it is unset. A disabled switch, or
@@ -135,10 +148,11 @@ export const SwitchProps = Schema.Struct({
   name: Schema.optional(Schema.String),
   value: Schema.optional(Schema.String),
   uncheckedValue: Schema.optional(Schema.String),
-  id: Schema.optional(Schema.String),
-  "aria-label": Schema.optional(Schema.String),
-  "aria-labelledby": Schema.optional(Schema.String),
-  "aria-describedby": Schema.optional(Schema.String)
+  attributes: Schema.optional(Schema.Struct({
+    label: Schema.optional(Attributes),
+    root: Schema.optional(Attributes),
+    thumb: Schema.optional(Attributes)
+  }))
 })
 
 /**
@@ -181,23 +195,25 @@ const interactive = (props: SwitchProps): boolean => props.disabled !== true && 
 // A data attribute is present, with an empty value, or absent.
 const flag = (on: boolean | undefined): string | undefined => on === true ? "" : undefined
 
-// The styling hooks: the part's name and the state attributes, the same on
-// every part so each can be styled on its own.
-// A root builder such as `h.button` is callable, and `attr` returns its
-// chain type, so this returns that.
-const state = <B extends { readonly attr: (name: string, value: string | undefined) => any }>(
+// What the switch writes on one element, over the consumer's attributes
+// for it: the part's name and the state attributes, the same on every
+// element so each can be styled on its own, and `own`.
+const draw = <B extends { readonly attr: (name: string, value: string | undefined) => any }>(
   builder: B,
   part: "label" | "root" | "thumb",
-  props: SwitchProps
+  props: SwitchProps,
+  own?: Readonly<Record<string, string | undefined>>
 ): ReturnType<B["attr"]> =>
-  builder
-    .attr("data-scope", "switch")
-    .attr("data-part", part)
-    .attr("data-checked", flag(props.checked))
-    .attr("data-unchecked", flag(!props.checked))
-    .attr("data-disabled", flag(props.disabled))
-    .attr("data-readonly", flag(props.readOnly))
-    .attr("data-required", flag(props.required))
+  withAttributes(builder, props.attributes?.[part], {
+    "data-scope": "switch",
+    "data-part": part,
+    "data-checked": flag(props.checked),
+    "data-unchecked": flag(!props.checked),
+    "data-disabled": flag(props.disabled),
+    "data-readonly": flag(props.readOnly),
+    "data-required": flag(props.required),
+    ...own
+  })
 
 // What the form submits for these props, or nothing, like a checkbox: an off
 // switch without an `uncheckedValue` and a disabled one submit nothing.
@@ -210,7 +226,7 @@ const submitted = (props: SwitchProps): string | undefined =>
 
 /**
  * A switch. Call it with the consumer's `h`, and pass its visible name in
- * the `label` slot, or name it with `aria-label` or `aria-labelledby`.
+ * the `label` slot, or an `aria-label` in `attributes.root`.
  *
  * **Details**
  *
@@ -241,21 +257,19 @@ export const Switch = Component.define({
     }),
   view: (_model, h) => {
     const value = submitted(h.props)
-    return state(h.label, "label", h.props).children(
-      state(h.button, "root", h.props)
+    // A `for` would point the label at another control.
+    return draw(h.label, "label", h.props, { for: undefined }).children(
+      draw(h.button, "root", h.props, {
         // Inside a form a button submits by default.
-        .attr("type", "button")
-        .attr("role", "switch")
-        .attr("id", h.props.id)
-        .attr("aria-label", h.props["aria-label"])
-        .attr("aria-labelledby", h.props["aria-labelledby"])
-        .attr("aria-describedby", h.props["aria-describedby"])
-        .attr("aria-checked", String(h.props.checked))
-        .attr("aria-readonly", h.props.readOnly === true ? "true" : undefined)
-        .attr("aria-required", h.props.required === true ? "true" : undefined)
-        .disabled(h.props.disabled === true)
+        type: "button",
+        role: "switch",
+        "aria-checked": String(h.props.checked),
+        "aria-readonly": h.props.readOnly === true ? "true" : undefined,
+        "aria-required": h.props.required === true ? "true" : undefined,
+        disabled: flag(h.props.disabled)
+      })
         .onClick(Message.make({ _tag: "ClickedRoot" }))
-        .children(state(h.span, "thumb", h.props)),
+        .children(draw(h.span, "thumb", h.props)),
       value !== undefined && h.input.attr("type", "hidden").attr("name", h.props.name).attr("value", value),
       h.slots.label
     )
