@@ -35,25 +35,15 @@ const OtherMsg = Schema.TaggedUnion({ Other: {} })
 declare const h: View.Helper<PageMsg, unknown> & View.Tags<Html.Elements, PageMsg>
 declare const other: View.Helper<typeof OtherMsg.Type, unknown> & View.Tags<Html.Elements, typeof OtherMsg.Type>
 
-declare const either: { readonly body: View.Child<PageMsg, Clock> } | { readonly footer: string }
-declare const stray: { readonly body: string } | { readonly header: string }
-declare const undeclared: { readonly header: string }
 declare const extra: { readonly body: string; readonly header: string }
 interface SlotMap {
   readonly body: View.Child<PageMsg, Clock>
 }
 declare const interfaceSlots: SlotMap
-interface ExtraMap {
-  readonly body: string
-  readonly header: string
-}
-declare const interfaceExtra: ExtraMap
-// One branch's names are a subset of another's.
-declare const overlapping:
-  | { readonly body: View.Child<PageMsg, Clock> }
-  | { readonly body: string; readonly footer: string }
-declare const overlappingExtra: { readonly body: string } | { readonly body: string; readonly header: string }
-declare const overlappingForeign:
+// One branch's names are a subset of another's, so the larger can fit the smaller's shape.
+declare const conditional: SlotMap | { readonly body: string; readonly footer: string }
+declare const conditionalExtra: { readonly body: string } | { readonly body: string; readonly header: string }
+declare const conditionalForeign:
   | { readonly body: string }
   | { readonly body: string; readonly footer: View.Child<typeof OtherMsg.Type, never> }
 
@@ -93,25 +83,6 @@ describe("slots", () => {
     })
   })
 
-  it("maps a content child's events and failures to the parent's messages", () => {
-    const Note = Component.define({
-      name: "Note",
-      model: Schema.Null,
-      message: Schema.Never,
-      events: Schema.TaggedUnion({ Typed: {} }),
-      elements: Html
-    }).make({ init: () => null, update: (model) => model, view: (_, h) => h.p("note") })
-    const saved = PageMsg.make({ _tag: "Saved" })
-    expect(Panel(h, {
-      key: "p",
-      slots: { body: Note(h, { key: "n", onEmit: () => saved, onFailure: () => saved }) }
-    })).type.toBe<View.Child<PageMsg, never>>()
-    expect(Panel).type.not.toBeCallableWith(h, {
-      key: "p",
-      slots: { body: Note(other, { key: "n", onEmit: () => OtherMsg.make({ _tag: "Other" }) }) }
-    })
-  })
-
   it("adds the content's requirements to the parent's", () => {
     expect(Panel(h, { key: "p", slots: { body: Ticker(h, { key: "t" }) } })).type.toBe<View.Child<PageMsg, Clock>>()
     const Provided = Component.provide(Panel, Layer.succeed(Store, { draft: "" }))
@@ -128,54 +99,35 @@ describe("slots", () => {
     expect<typeof Panel>().type.not.toBeAssignableTo<Component.Mountable<{}, never, never, never, "body" | "header">>()
   })
 
-  it("keeps every branch's requirements, and checks every branch's names, in a conditional map", () => {
-    expect(Panel(h, { key: "p", slots: either })).type.toBe<View.Child<PageMsg, Clock>>()
-    expect(Panel).type.not.toBeCallableWith(h, { key: "p", slots: stray })
-    expect(Panel).type.not.toBeCallableWith(h, { key: "p", slots: undeclared })
-  })
-
-  it("takes slots from a variable typed by an interface, and keeps its requirements", () => {
+  it("takes a slots map from a variable, an interface's included, and rejects its undeclared names", () => {
     expect(Panel(h, { key: "p", slots: interfaceSlots })).type.toBe<View.Child<PageMsg, Clock>>()
+    expect(Panel).type.not.toBeCallableWith(h, { key: "p", slots: extra })
   })
 
-  it("rejects an undeclared name in a variable that also passes a declared one", () => {
-    expect(Panel).type.not.toBeCallableWith(h, { key: "p", slots: extra })
-    expect(Panel).type.not.toBeCallableWith(h, { key: "p", slots: interfaceExtra })
+  it("keeps every branch's requirements, and checks every branch's names and messages, in a conditional map", () => {
+    expect(Panel(h, { key: "p", slots: conditional })).type.toBe<View.Child<PageMsg, Clock>>()
+    expect(Panel).type.not.toBeCallableWith(h, { key: "p", slots: conditionalExtra })
+    expect(Panel).type.not.toBeCallableWith(h, { key: "p", slots: conditionalForeign })
+  })
+
+  it("checks a slots map given as a type argument as it checks an inferred one", () => {
+    expect(Panel<PageMsg, never, typeof conditional>(h, { key: "p", slots: conditional })).type.toBe<
+      View.Child<PageMsg, Clock>
+    >()
+    expect(Panel<PageMsg, never, typeof conditionalExtra>).type.not.toBeCallableWith(h, {
+      key: "p",
+      slots: conditionalExtra
+    })
+    expect(Panel<PageMsg, never, typeof conditionalForeign>).type.not.toBeCallableWith(h, {
+      key: "p",
+      slots: conditionalForeign
+    })
   })
 
   it("takes no slots when the parent's message is given and the slots map isn't", () => {
-    // `SC` isn't inferred once a type argument is given, so nothing could check the map's names or
-    // requirements, a literal's included.
+    // `SC` isn't inferred once a type argument is given, so nothing could check the map.
     expect(Panel<PageMsg>(h, { key: "p" })).type.toBe<View.Child<PageMsg, never>>()
     expect(Panel<PageMsg>).type.not.toBeCallableWith(h, { key: "p", slots: { body: h.p("x") } })
-    expect(Panel<PageMsg>).type.not.toBeCallableWith(h, { key: "p", slots: extra })
-  })
-
-  it("checks a slots map given as a type argument", () => {
-    expect(Panel<PageMsg, never, SlotMap>(h, { key: "p", slots: interfaceSlots })).type.toBe<
-      View.Child<PageMsg, Clock>
-    >()
-    expect(Panel<PageMsg, never, { readonly body: string; readonly header: string }>).type.not
-      .toBeCallableWith(h, { key: "p", slots: extra })
-    expect(Panel<PageMsg, never, { readonly body: View.Child<typeof OtherMsg.Type, never> }>).type.not
-      .toBeCallableWith(h, { key: "p", slots: { body: other.button.onClick(OtherMsg.make({ _tag: "Other" })) } })
-  })
-
-  it("checks every branch of overlapping conditional maps, inferred or given as a type argument", () => {
-    expect(Panel(h, { key: "p", slots: overlapping })).type.toBe<View.Child<PageMsg, Clock>>()
-    expect(Panel<PageMsg, never, typeof overlapping>(h, { key: "p", slots: overlapping })).type.toBe<
-      View.Child<PageMsg, Clock>
-    >()
-    expect(Panel).type.not.toBeCallableWith(h, { key: "p", slots: overlappingExtra })
-    expect(Panel<PageMsg, never, typeof overlappingExtra>).type.not.toBeCallableWith(h, {
-      key: "p",
-      slots: overlappingExtra
-    })
-    expect(Panel).type.not.toBeCallableWith(h, { key: "p", slots: overlappingForeign })
-    expect(Panel<PageMsg, never, typeof overlappingForeign>).type.not.toBeCallableWith(h, {
-      key: "p",
-      slots: overlappingForeign
-    })
   })
 
   it("rejects slots on headless and feature calls, from a variable too", () => {

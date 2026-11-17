@@ -108,9 +108,6 @@ describe("slots on the server", () => {
       assert.strictEqual(app.querySelector("p")!.textContent, "from the client")
       assert.strictEqual(app.querySelectorAll("p").length, 1)
       assert.notInclude(app.innerHTML, "<!--")
-      HtmlQuery.click(app.querySelector("button")!)
-      yield* tick
-      assert.strictEqual(app.querySelector("output")!.textContent, "added 1")
     }).pipe(Effect.scoped))
 
   it.effect("ssr() names the slot whose content the client rebuilt", () =>

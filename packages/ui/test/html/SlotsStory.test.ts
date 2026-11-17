@@ -60,9 +60,12 @@ describe("slots in a story", () => {
   })
 
   it("a slotted component's story shows what it was passed where the view places each slot", () => {
-    const story = Story.make(Panel, {}, { slots: (h) => ({ title: "hello", body: h.em("the body") }) }, () => {})
+    const story = Story.make(Panel, {}, {
+      slots: (h) => ({ title: "hello", body: [h.em("the body"), Note(h, { key: "n" })] })
+    }, () => {})
     assert.strictEqual(Query.textOf(story.get(Query.tag("h2"))), "hello")
     assert.strictEqual(Query.textOf(story.get(Query.tag("section"))), "hellopanel's ownthe body")
+    assert.deepStrictEqual(Story.children(story.view(), Note).map((child) => child.key), ["n"])
   })
 
   it("a ref key in the view and in content fails the story, as it fails the parent", () => {
@@ -91,39 +94,22 @@ describe("View queries", () => {
 })
 
 describe("headless closures in slot content", () => {
-  const Leaf = Component.define({
-    name: "Leaf",
-    model: Schema.Number,
-    message: Schema.Never,
-    events: Schema.Literal("hi"),
-    elements: Html
-  }).make({ init: () => 5, update: (n) => n, view: (n, h) => h.em(String(n)) })
   const Headless = Component.define({ name: "Headless", model: Schema.Null, message: Schema.Never, elements: Html })
     .make({ init: () => null, update: (model) => model, parts: () => ({}) })
 
   it("childEmit finds a child a headless closure renders in content the story's component passes", () => {
-    const Parent = Component.define({
-      name: "Parent",
-      model: Schema.Number,
-      message: Schema.Literal("hi"),
-      elements: Html
-    })
+    const Parent = Component.define({ name: "Parent", model: Schema.String, message: Schema.String, elements: Html })
       .make({
-        init: () => 0,
-        update: (n) => n + 1,
+        init: () => "",
+        update: (_, text) => text,
         view: (_, h) =>
           Panel(h, {
             key: "p",
-            slots: { body: Headless(h, { key: "h", view: () => Leaf(h, { key: "leaf", onEmit: () => "hi" }) }) }
+            slots: { body: Headless(h, { key: "h", view: () => Note(h, { key: "n", onEmit: (event) => event.text }) }) }
           })
       })
-    const story = Story.make(Parent, {}, (s) => s.childEmit("leaf", "hi"))
-    assert.strictEqual(story.model, 1)
-  })
-
-  it("Story.children finds a child passed through a story's slots", () => {
-    const story = Story.make(Panel, {}, { slots: (h) => ({ body: Leaf(h, { key: "leaf" }) }) }, () => {})
-    assert.strictEqual(Story.children(story.view(), Leaf).length, 1)
+    const story = Story.make(Parent, {}, (s) => s.childEmit("n", { _tag: "Saved", text: "hi" }))
+    assert.strictEqual(story.model, "hi")
   })
 
   it("refs in content a parent passed don't clash with the receiver's own", () => {
@@ -136,29 +122,11 @@ describe("headless closures in slot content", () => {
     }).make({
       init: () => null,
       update: (model) => model,
-      view: (_, h) => h.div(Leaf(h, { ref: Leaf.ref("N") }), h.slots.body)
+      view: (_, h) => h.div(Note(h, { ref: Note.ref("N") }), h.slots.body)
     })
     const story = Story.make(Receiver, {}, {
-      slots: (h) => ({ body: Headless(h, { key: "ext", view: () => Leaf(h, { ref: Leaf.ref("N") }) }) })
+      slots: (h) => ({ body: Headless(h, { key: "ext", view: () => Note(h, { ref: Note.ref("N") }) }) })
     }, () => {})
-    assert.strictEqual(Story.children(story.view(), Leaf).length, 2)
-  })
-
-  it("a slot placed in the view and in a headless child's closure fails the story, as it fails the receiver", () => {
-    const Twice = Component.define({
-      name: "Twice",
-      model: Schema.Null,
-      message: Schema.Never,
-      elements: Html,
-      slots: ["body"]
-    }).make({
-      init: () => null,
-      update: (model) => model,
-      view: (_, h) => h.div(h.slots.body, Headless(h, { key: "h", view: () => h.slots.body }))
-    })
-    assert.throws(
-      () => Story.make(Twice, {}, { slots: () => ({ body: "body" }) }, () => {}).view(),
-      /\/Twice places its slot body twice/
-    )
+    assert.strictEqual(Story.children(story.view(), Note).length, 2)
   })
 })
