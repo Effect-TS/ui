@@ -118,6 +118,6 @@ describe("shared state", () => {
   })
 
   it("takes an owner as a scene's component", () => {
-    expect(Scene.make(Tips, {}, { elements: Html, view: (_, h) => h.span() }, () => {})).type.not.toRaiseError()
+    expect(Scene.make(Tips, {}, { elements: Html, view: (_, h) => h.span() })).type.not.toRaiseError()
   })
 })

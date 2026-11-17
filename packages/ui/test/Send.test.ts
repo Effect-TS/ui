@@ -292,43 +292,40 @@ describe("Story and sends", () => {
     assert.deepStrictEqual(steps.sent(Row.at("c"), { _tag: "Clear" }).given(["a"]).current.model, ["a"])
   })
 
-  it("finds a child by its ref in childEmit, childFailure and fallback", () => {
-    const Message = Schema.TaggedUnion({ Saw: { what: Schema.String } })
-    const EchoMessage = Schema.TaggedUnion({ Said: {} })
-    const Echo = Component.define({
-      name: "Echo",
-      model: Schema.Null,
-      message: EchoMessage,
-      events: EchoMessage
-    }).make({ init: () => null, update: (model) => model, view: (_, h) => h.text("echo") })
-    const Mine = Echo.ref("Mine")
-    const Page = Component.define({ name: "Page", model: Schema.Array(Schema.String), message: Message }).make({
-      init: () => [],
-      update: (seen, message) => [...seen, message.what],
-      view: (seen, h) =>
-        h.el("div", [
-          h.el("p", seen.join(",")),
-          Echo(h, {
-            ref: Mine,
-            onEmit: () => Message.make({ _tag: "Saw", what: "emit" }),
-            onFailure: () => Message.make({ _tag: "Saw", what: "failure" }),
-            fallback: () => h.text("gone")
-          })
-        ])
-    })
-    const scene = Scene.make(
-      Page,
-      {},
-      (s) =>
-        s.childEmit(Echo, Mine, { _tag: "Said" }).childFailure(Mine, Cause.die("x"))
-          .expect(Locator.tag("p")).toHaveText("emit,failure")
-    )
-    assert.deepStrictEqual(Scene.fallback(scene.view(), Mine, AsyncResult.initial()), { _tag: "Text", text: "gone" })
-    assert.throws(
-      () => Scene.start(Page, {}).childEmit(Echo, Echo.ref("Other"), { _tag: "Said" }),
-      /no child with the ref Other/
-    )
-  })
+  it.effect("finds a child by its ref in childEmit, childFailure and fallback", () =>
+    Effect.gen(function*() {
+      const Message = Schema.TaggedUnion({ Saw: { what: Schema.String } })
+      const EchoMessage = Schema.TaggedUnion({ Said: {} })
+      const Echo = Component.define({
+        name: "Echo",
+        model: Schema.Null,
+        message: EchoMessage,
+        events: EchoMessage
+      }).make({ init: () => null, update: (model) => model, view: (_, h) => h.text("echo") })
+      const Mine = Echo.ref("Mine")
+      const Page = Component.define({ name: "Page", model: Schema.Array(Schema.String), message: Message }).make({
+        init: () => [],
+        update: (seen, message) => [...seen, message.what],
+        view: (seen, h) =>
+          h.el("div", [
+            h.el("p", seen.join(",")),
+            Echo(h, {
+              ref: Mine,
+              onEmit: () => Message.make({ _tag: "Saw", what: "emit" }),
+              onFailure: () => Message.make({ _tag: "Saw", what: "failure" }),
+              fallback: () => h.text("gone")
+            })
+          ])
+      })
+      const s = yield* Scene.make(Page, {})
+      s.childEmit(Echo, Mine, { _tag: "Said" }).childFailure(Mine, Cause.die("x"))
+        .expect(Locator.tag("p")).toHaveText("emit,failure")
+      assert.deepStrictEqual(Scene.fallback(s.view, Mine, AsyncResult.initial()), { _tag: "Text", text: "gone" })
+      assert.throws(
+        () => Scene.start(Page, {}).childEmit(Echo, Echo.ref("Other"), { _tag: "Said" }),
+        /no child with the ref Other/
+      )
+    }))
 
   it.effect("fromLog reports a divergence when a send changes, from entries and from the Wire", () =>
     provideHost(Effect.gen(function*() {

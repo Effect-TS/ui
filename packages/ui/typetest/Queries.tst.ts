@@ -261,20 +261,19 @@ describe("debounce", () => {
 
 describe("Story query steps", () => {
   it("take a query name and its read's success or error", () => {
-    Story.make(Card, { id: "1" }, (s) =>
-      s
-        .loaded("user", { id: "1", name: "Ann", teamId: "t" })
-        .loadFailed("user", "missing")
-        .loaded("team", { id: "t", title: "T" }, { waiting: true, patched: true })
-        // @ts-expect-error Argument of type '"n"' is not assignable to parameter
-        .loaded("n", 1)
-        // @ts-expect-error 'title' does not exist
-        .loaded("user", { id: "t", title: "T" })
-        // @ts-expect-error Argument of type '"missing"' is not assignable to parameter of type 'never'
-        .loadFailed("team", "missing")
-        // @ts-expect-error Argument of type '"other"' is not assignable
-        .loadFailed("other", "missing"))
-    const story = Story.make(Card, { id: "1" }, (s) => s.loaded("user", { id: "1", name: "Ann", teamId: "t" }))
+    Story.start(Card, { id: "1" })
+      .loaded("user", { id: "1", name: "Ann", teamId: "t" })
+      .loadFailed("user", "missing")
+      .loaded("team", { id: "t", title: "T" }, { waiting: true, patched: true })
+      // @ts-expect-error Argument of type '"n"' is not assignable to parameter
+      .loaded("n", 1)
+      // @ts-expect-error 'title' does not exist
+      .loaded("user", { id: "t", title: "T" })
+      // @ts-expect-error Argument of type '"missing"' is not assignable to parameter of type 'never'
+      .loadFailed("team", "missing")
+      // @ts-expect-error Argument of type '"other"' is not assignable
+      .loadFailed("other", "missing")
+    const story = Story.start(Card, { id: "1" }).loaded("user", { id: "1", name: "Ann", teamId: "t" }).current
     expect(story).type.toBe<
       Story.Story<
         { readonly id: string },
@@ -293,14 +292,13 @@ describe("Story query steps", () => {
   })
 
   it("given takes queries results by query name", () => {
-    Story.make(Card, { id: "1" }, (s) =>
-      s
-        .given((model) => model, { user: { id: "1", name: "Ann", teamId: "t" }, team: { id: "t", title: "T" } })
-        .given((model) => model, { team: { id: "t", title: "T" } })
-        // @ts-expect-error 'title' does not exist
-        .given((model) => model, { user: { id: "t", title: "T" } })
-        // @ts-expect-error 'n' does not exist
-        .given((model) => model, { n: 1 }))
+    Story.start(Card, { id: "1" })
+      .given((model) => model, { user: { id: "1", name: "Ann", teamId: "t" }, team: { id: "t", title: "T" } })
+      .given((model) => model, { team: { id: "t", title: "T" } })
+      // @ts-expect-error 'title' does not exist
+      .given((model) => model, { user: { id: "t", title: "T" } })
+      // @ts-expect-error 'n' does not exist
+      .given((model) => model, { n: 1 })
   })
 
   it("fromLog types the replay's props and queries results", () => {
@@ -457,21 +455,20 @@ describe("Keyed queries", () => {
   })
 
   it("take the Story's keyed steps, typed by the query", () => {
-    Story.make(List, {}, (s) =>
-      s
-        .send(ListMessage.make({ _tag: "Show", ids: ["1", "2"] }))
-        .loaded("users", { id: "1" }, { id: "1", name: "Ann", teamId: "t" })
-        .loadFailed("users", { id: "2" }, "missing", { waiting: true })
-        .loadedMany("users", [
-          { args: { id: "1" }, value: { id: "1", name: "Ann", teamId: "t" }, patched: true },
-          { args: { id: "2" }, error: "missing" }
-        ])
-        // @ts-expect-error not assignable
-        .loaded("users", { id: "1", name: "Ann", teamId: "t" })
-        // @ts-expect-error not assignable
-        .loadedMany("users", [{ args: { id: 1 }, value: { id: "1", name: "Ann", teamId: "t" } }])
-        // @ts-expect-error not assignable
-        .loadedMany("others", []))
+    Story.start(List, {})
+      .send(ListMessage.make({ _tag: "Show", ids: ["1", "2"] }))
+      .loaded("users", { id: "1" }, { id: "1", name: "Ann", teamId: "t" })
+      .loadFailed("users", { id: "2" }, "missing", { waiting: true })
+      .loadedMany("users", [
+        { args: { id: "1" }, value: { id: "1", name: "Ann", teamId: "t" }, patched: true },
+        { args: { id: "2" }, error: "missing" }
+      ])
+      // @ts-expect-error not assignable
+      .loaded("users", { id: "1", name: "Ann", teamId: "t" })
+      // @ts-expect-error not assignable
+      .loadedMany("users", [{ args: { id: 1 }, value: { id: "1", name: "Ann", teamId: "t" } }])
+      // @ts-expect-error not assignable
+      .loadedMany("others", [])
   })
 })
 
@@ -616,18 +613,17 @@ describe("List queries", () => {
 
   it("take the Story's list steps, typed by the page and error", () => {
     const page = { messages: [{ id: "m0", text: "a" }], next: null }
-    Story.make(Chat, { room: "r" }, (s) =>
-      s
-        .loaded("messages", [page])
-        .send(ChatMessage.make({ _tag: "More" }))
-        .loadedMore("messages", page)
-        .send(ChatMessage.make({ _tag: "More" }))
-        .loadMoreFailed("messages", "nope")
-        // @ts-expect-error Argument of type '"user"' is not assignable to parameter of type '"messages"'
-        .loadedMore("user", page)
-        // @ts-expect-error Argument of type '"missing"' is not assignable to parameter of type '"messages"'
-        .loadMoreFailed("missing", "nope")
-        // @ts-expect-error Argument of type 'number' is not assignable to parameter of type 'string'
-        .loadMoreFailed("messages", 1))
+    Story.start(Chat, { room: "r" })
+      .loaded("messages", [page])
+      .send(ChatMessage.make({ _tag: "More" }))
+      .loadedMore("messages", page)
+      .send(ChatMessage.make({ _tag: "More" }))
+      .loadMoreFailed("messages", "nope")
+      // @ts-expect-error Argument of type '"user"' is not assignable to parameter of type '"messages"'
+      .loadedMore("user", page)
+      // @ts-expect-error Argument of type '"missing"' is not assignable to parameter of type '"messages"'
+      .loadMoreFailed("missing", "nope")
+      // @ts-expect-error Argument of type 'number' is not assignable to parameter of type 'string'
+      .loadMoreFailed("messages", 1)
   })
 })
