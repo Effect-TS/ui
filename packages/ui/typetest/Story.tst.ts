@@ -1,4 +1,5 @@
 import { Command, Component } from "@effect/ui"
+import type { Steps } from "@effect/ui/testing"
 import { Story } from "@effect/ui/testing"
 import { Data, Effect, Schema, Stream } from "effect"
 import { describe, expect, it } from "tstyche"
@@ -56,6 +57,16 @@ describe("Story", () => {
     const clickPlus = <S extends Story.Steps.Any>(s: S): S => s.click("+")
     expect(clickPlus(counter)).type.toBe<Story.Steps<typeof Counter>>()
     expect(counter.pipe(clickPlus).current.model).type.toBe<{ readonly count: number }>()
+  })
+
+  it("a step over the shared steps keeps the caller's type", () => {
+    const quiet = <S extends Steps.Steps.Any>(s: S): S => s.expectNone()
+    expect(quiet(counter)).type.toBe<Story.Steps<typeof Counter>>()
+    expect(quiet(counter).send).type.toBeCallableWith(CounterMessage.make({ _tag: "Increment" }))
+    expect(counter.pipe(quiet).current.model).type.toBe<{ readonly count: number }>()
+    counter.check((story) => {
+      expect(story.model).type.toBe<{ readonly count: number }>()
+    })
   })
 
   it("a component with no messages is a story, with its types kept", () => {
