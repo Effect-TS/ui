@@ -250,14 +250,19 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    * and whatever the loader state held before. The view renders once. It throws if a
    * named loader is disabled, or a keyed entry's args aren't ones the loader
    * returns.
+   *
+   * `shared` sets the values owners share, as `shared` steps would, in the
+   * same render: `[[Provider, value], [Other, value]]`. Values given before
+   * and not listed are kept.
    */
-  given(
+  given<const O extends ReadonlyArray<Component.Headless.Any> = []>(
     model: Component.Model<C> | ((model: Component.Model<C>) => Component.Model<C>),
     loaded?: {
       readonly [K in keyof Component.Loaders<C>]?: Component.Loaders<C>[K] extends Component.LoadMany<infer R>
         ? ReadonlyArray<KeyedLoad<R>>
         : Loader.Read.Success<ReadOf<Component.Loaders<C>[K]>>
-    }
+    },
+    shared?: { readonly [K in keyof O]: readonly [owner: O[K], value: Component.Shared.Value<O[K]>] }
   ): this
   /**
    * Changes the props. A props change never reaches `update`: it re-renders the

@@ -106,6 +106,7 @@ export type FailureSource =
   | "onFailure"
   | "head"
   | "send"
+  | "shares"
 
 /**
  * Which Command run an entry is about: the `seq` of the entry that issued it
@@ -128,7 +129,8 @@ export interface Issued {
  * `DomEvent` is a view handler, such as a click. `Command` is a Command's result, pointing at
  * the entry that issued it and at its span. `Subscription` is a keyed
  * Subscription. `Emit` is a child's emit, pointing at the child's entry.
- * `Send` is a parent's `$.send`, pointing at the parent's entry.
+ * `Send` is a parent's `$.send`, or a descendant's `$.send` to an owner of
+ * shared state, pointing at the sender's entry.
  * `Mount` is an `onMount` result, and `Dispatch` is a message sent from
  * outside the tree, such as `TestHost`'s `root.send`.
  *
@@ -654,7 +656,7 @@ const SourceWire = Schema.Union([
  * **Details**
  *
  * Models, messages, props and events are encoded through the component's
- * Schemas, and a send's message through its ref's `receives`. Command args are encoded through the Command's `args` Schema,
+ * Schemas, and a send's message through its ref's or its owner's `receives`. Command args are encoded through the Command's `args` Schema,
  * field by field, and a field that doesn't encode falls back to a structural
  * encoding, best effort: a value with no JSON form becomes
  * `{ "~unserialisable": "<kind>" }`, a `Redacted` becomes
@@ -681,7 +683,10 @@ export const Wire = Schema.Union([
     lists: Schema.optionalKey(
       Schema.Array(Schema.Struct({ name: Schema.String, op: Schema.Literals(["loadMore", "reset"]) }))
     ),
-    sends: Schema.optionalKey(Schema.Array(Schema.Struct({ ref: Schema.String, message: Schema.Json }))),
+    sends: Schema.optionalKey(Schema.Array(Schema.Union([
+      Schema.Struct({ ref: Schema.String, message: Schema.Json }),
+      Schema.Struct({ owner: Schema.String, message: Schema.Json })
+    ]))),
     loaderState: Schema.optionalKey(Schema.Json)
   }),
   Schema.TaggedStruct("Mounted", {
@@ -855,7 +860,7 @@ export const makeEncoder = (options?: {
             ...(entry.sends === undefined || entry.sends.length === 0 ? undefined : {
               sends: entry.sends.map((send) => {
                 const encoded = encodeSend(send)
-                return { ref: encoded.ref, message: cap(encoded.message) }
+                return { ...encoded, message: cap(encoded.message) }
               })
             }),
             ...(entry.loaderState === undefined ? undefined : {
@@ -1006,18 +1011,24 @@ const encodeGroup = (command: Command.Command<any, any>): string | null => {
 }
 
 /**
- * Encodes a `$.send` as the ref's key and the message, through the ref's
- * `receives` Schema the way `encodeArgs` encodes Command args: redacted,
- * with a structural fallback for what doesn't encode.
+ * Encodes a `$.send` as the ref's key, or for a send to an owner of shared
+ * state the owner's definition name, and the message. The message goes
+ * through the ref's or the owner's `receives` Schema the way `encodeArgs`
+ * encodes Command args: redacted, with a structural fallback for what doesn't
+ * encode.
  *
  * @stability experimental
  * @category Wire
  * @since 0.1.0
  */
-export const encodeSend = (send: Component.Send): { readonly ref: string; readonly message: Schema.Json } => ({
-  ref: send.ref.key,
-  message: encodeArgs(send.ref.receives, send.message)
-})
+export const encodeSend = (
+  send: Component.Send
+):
+  | { readonly ref: string; readonly message: Schema.Json }
+  | { readonly owner: string; readonly message: Schema.Json } =>
+  send.ref !== undefined
+    ? { ref: send.ref.key, message: encodeArgs(send.ref.receives, send.message) }
+    : { owner: send.owner.definition.name, message: encodeArgs(send.owner.receives, send.message) }
 
 /** The redacting codec of `ast`, or `null` when it has none. */
 const encoderOf = memoize((ast: SchemaAST.AST): ((value: unknown) => unknown) | null => {

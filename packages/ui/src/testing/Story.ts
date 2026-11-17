@@ -270,6 +270,26 @@ export interface Steps<C extends AnyComponent> extends Shared.Steps<C> {
    * of its `init` Model. The story never runs the child's `update`.
    */
   givenChild(key: string, model: unknown): this
+  /**
+   * Sets the value `owner` shares with the readers in the story, in place of
+   * the one they'd see otherwise.
+   *
+   * **Details**
+   *
+   * `owner` is a headless component with `shares`, and the value is keyed by
+   * it, not by a reader's local name: one step reaches the story's component
+   * and every headless child the story expands. The value is kept until the
+   * next `shared` step or `given` that sets one for `owner`.
+   *
+   * Without it, a reader sees the expanded Model of the nearest `owner` in the
+   * story's own view, or else `shares(init(props).model, props)` with no props
+   * when every prop of `owner` is optional. Otherwise rendering throws, naming
+   * this step, but not in a `shared` step: `shared` steps in a row can give
+   * several owners' values. The next step of another kind, a query or the end
+   * of `Story.make` throws. The story never runs `owner`'s `update`: what a
+   * reader sends it is in `sent`.
+   */
+  shared<O extends Component.Headless.Any>(owner: O, value: Component.Shared.Value<O>): this
 
   /** Checks the Model. `f` throws to fail the test. */
   model(f: (model: Component.Model<C>) => void): this
@@ -298,7 +318,8 @@ class StepsImpl implements Steps<AnyComponent> {
   current: Story<any, any, any, any, any>
   constructor(current: Story<any, any, any, any, any>) {
     this.current = current
-    current.view()
+    // A missing shared value can't be given before the first step.
+    engine.renderSharing(current)
   }
   pipe() {
     return pipeArguments(this, arguments)
@@ -314,7 +335,11 @@ class StepsImpl implements Steps<AnyComponent> {
     return this
   }
 
-  given(model: unknown, loaded?: { readonly [name: string]: unknown }): this {
+  given(
+    model: unknown,
+    loaded?: { readonly [name: string]: unknown },
+    shared: ReadonlyArray<readonly [Component.Headless.Any, unknown]> = []
+  ): this {
     const next = typeof model === "function" ? model(this.current.model) : model
     const out = engine.update(this.current, {
       model: next,
@@ -323,7 +348,8 @@ class StepsImpl implements Steps<AnyComponent> {
       sent: [],
       interrupted: [],
       dropped: [],
-      loadingMore: []
+      loadingMore: [],
+      shared: engine.withShared(this.current, shared, "Story.given")
     })
     // Settled here, with no onChange message: the step's own prune then has nothing to write.
     return this.step(engine.update(out, { loaderState: engine.givenLoaderState(out, loaded ?? {}, "Story.given") }))
@@ -376,6 +402,14 @@ class StepsImpl implements Steps<AnyComponent> {
     const given = new Map(engine.childModels.get(this.current))
     given.set(key, model)
     return this.step(engine.update(this.current, { childModels: given }))
+  }
+  shared(owner: Component.Headless.Any, value: unknown): this {
+    // Nothing to settle and no default to reset: only what readers see changes.
+    this.current = engine.update(this.current, {
+      shared: engine.withShared(this.current, [[owner, value]], "Story.shared")
+    })
+    engine.renderSharing(this.current)
+    return this
   }
 
   resolve(target: Shared.Target, result: unknown): this {
@@ -595,6 +629,8 @@ export const make: {
   )
   f(steps)
   const story = steps.current
+  // A story with no steps hasn't rendered since `start`, which lets a missing shared value pass.
+  story.view()
   if (story.pending.length > 0) {
     throw new Error(`Story.make: Commands still pending at the end: ${engine.describePending(story.pending)}`)
   }
@@ -617,7 +653,7 @@ export const make: {
  */
 export const start = <C extends AnyComponent>(component: C, props: Component.Props<C>): Steps<C> => {
   const first = component.init(props)
-  const empty = engine.record<any, any, any, any>({
+  const fields: engine.Fields<any, any, any, any> = {
     // The record is stored with its types erased; `Steps<C>` restores them.
     component: component as Component.Component<any, any, any, any, any, any, any, any, never>,
     props,
@@ -630,7 +666,8 @@ export const start = <C extends AnyComponent>(component: C, props: Component.Pro
     dropped: [],
     loadingMore: [],
     defaultPrevented: false
-  }, () => component.view(first.model, props, engine.runningOf([]), undefined))
+  }
+  const empty = engine.record(fields, () => engine.expandedView(fields))
   return new StepsImpl(engine.apply(empty, first)) as Steps<C>
 }
 
@@ -654,6 +691,11 @@ type VocabularyOf<C> = C extends { readonly "~V"?: infer V } ? V : never
  * The parts of a headless component for a story's Model and props: the
  * plain values a consumer's closure would read.
  *
+ * **Details**
+ *
+ * A reader of shared state reads what the story's `shared` steps gave, or
+ * else each owner's default, as the story's own view does.
+ *
  * @stability experimental
  * @category queries
  * @since 0.1.0
@@ -661,7 +703,11 @@ type VocabularyOf<C> = C extends { readonly "~V"?: infer V } ? V : never
 export const parts = <Props, Events, Parts, R, Rcv>(
   component: Component.Headless<Props, Events, Parts, R, Rcv>,
   story: { readonly model: unknown; readonly props: Props }
-): Parts => component.parts(story.model, story.props, { owner: { path: "/" + component.definition.name, depth: 0 } })
+): Parts =>
+  component.parts(story.model, story.props, {
+    owner: { path: "/" + component.definition.name, depth: 0 },
+    shared: engine.sharedLookup(engine.sharedGiven.get(story), engine.rootOwners(component, story.model, story.props))
+  })
 
 /**
  * What the child with `key` shows for `result`: its `fallback` evaluated with an

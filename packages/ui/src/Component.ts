@@ -227,21 +227,54 @@ export interface Next<out Model, out Msg, out Events, out R = never> {
   readonly events: ReadonlyArray<Events>
   /** The load mores and resets of list loaders `update` issued, in order. */
   readonly lists?: ReadonlyArray<ListIssue> | undefined
-  /** The messages `update` sent to its direct children, in order. */
+  /** The messages `update` sent to its direct children and to owners above it, in order. */
   readonly sends?: ReadonlyArray<Send> | undefined
 }
 
 /**
- * A `$.send(ref, message)` an `update` issued: the ref of the child it
- * goes to, and the message.
+ * A `$.send` an `update` issued: to the child slot a ref names, or to the
+ * nearest owner of shared state above the sender.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface Send {
-  readonly ref: Ref.Any
-  readonly message: unknown
+export type Send = Send.ToChild | Send.ToOwner
+
+/**
+ * The two kinds of `Send`.
+ *
+ * @stability experimental
+ * @since 0.1.0
+ */
+export declare namespace Send {
+  /**
+   * A `$.send(ref, message)`: the ref of the child slot it goes to, and the
+   * message.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  export interface ToChild {
+    readonly ref: Ref.Any
+    readonly owner?: undefined
+    readonly message: unknown
+  }
+
+  /**
+   * A `$.send(Owner, message)`: the owner component, whose nearest instance
+   * above the sender gets the message, and the message.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  export interface ToOwner {
+    readonly owner: Headless.Any
+    readonly ref?: undefined
+    readonly message: unknown
+  }
 }
 
 /**
@@ -403,6 +436,135 @@ export const isRef = (u: unknown): u is Ref.Any => Predicate.hasProperty(u, RefT
 type SendMessage<Rcv> = unknown extends Rcv ? never : Rcv
 
 /**
+ * Identifies the requirement a reader or sender of shared state carries.
+ *
+ * @stability experimental
+ * @category type ids
+ * @since 0.1.0
+ */
+export const SharedTypeId = "~@effect/ui/Component/Shared" as const
+
+/**
+ * Identifies the requirement a reader or sender of shared state carries.
+ *
+ * @stability experimental
+ * @category type ids
+ * @since 0.1.0
+ */
+export type SharedTypeId = typeof SharedTypeId
+
+/**
+ * The requirement that reading or sending to an owner of shared state puts
+ * in a component's `R`: `Component.Shared<typeof Provider>`.
+ *
+ * **When to use**
+ *
+ * Use to name the requirement in an annotation, or to check that a
+ * component needs an owner above it.
+ *
+ * **Details**
+ *
+ * An owner is a headless component with `shares`. A component that lists it
+ * in `shared` to read its value, or that calls `$.send(Owner, message)`,
+ * carries `Shared<typeof Owner>`. Declaring the reader inside the owner's
+ * `view` closure removes it, so a reader with no owner above it doesn't
+ * compile. `provide` never removes it.
+ *
+ * It is `never` for a component that isn't an owner.
+ *
+ * @stability experimental
+ * @category utility types
+ * @since 0.1.0
+ */
+export type Shared<C> = C extends Headless<infer _P, infer _E, infer _Parts, infer _R, infer _Rcv, infer Sh> ? Sh
+  : never
+
+/**
+ * Types for shared state.
+ *
+ * @stability experimental
+ * @since 0.1.0
+ */
+export declare namespace Shared {
+  /**
+   * The requirement of an owner named `Name` that shares `Value` and
+   * receives `Rcv`. `make` builds it from the definition, and
+   * `Shared<typeof Owner>` reads it back.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  export interface Of<in out Name extends string, in out Value, in out Rcv> {
+    readonly [SharedTypeId]: {
+      readonly _Name: Types.Invariant<Name>
+      readonly _Value: Types.Invariant<Value>
+      readonly _Rcv: Types.Invariant<Rcv>
+    }
+  }
+
+  /**
+   * Any shared-state requirement.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  export type Any = Of<any, any, any>
+
+  /**
+   * The value an owner shares: what its `shares` returns.
+   *
+   * @stability experimental
+   * @category utility types
+   * @since 0.1.0
+   */
+  export type Value<C> = Shared<C> extends infer S ? S extends Of<infer _Name, infer V, infer _Rcv> ? V : never : never
+
+  /**
+   * The messages an owner receives, which `$.send(Owner, message)` takes.
+   *
+   * @stability experimental
+   * @category utility types
+   * @since 0.1.0
+   */
+  export type Receives<C> = Shared<C> extends infer S ? S extends Of<infer _Name, infer _V, infer Rcv> ? Rcv : never
+    : never
+}
+
+/**
+ * What a reader's `shared` option lists: owners, by the local name `h.shared`
+ * and `p.shared` read them under.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type SharedReads = { readonly [name: string]: Headless.Any }
+
+/**
+ * What `h` in `view` and `p` in `parts` gain for a component that reads
+ * shared state: `shared`, each owner's current value under its local name.
+ *
+ * @stability experimental
+ * @category utility types
+ * @since 0.1.0
+ */
+export type SharedHelpers<SR> = [keyof SR] extends [never] ? {} : {
+  readonly shared: { readonly [K in keyof SR]: Shared.Value<SR[K]> }
+}
+
+/**
+ * The requirements a component's `shared` option adds: one
+ * `Shared<typeof Owner>` per owner it reads.
+ *
+ * @stability experimental
+ * @category utility types
+ * @since 0.1.0
+ */
+export type SharedRequirements<SR> = { readonly [K in keyof SR]: Shared<SR[K]> }[keyof SR]
+
+/**
  * A `$.loadMore(name)` or `$.reset(name)` an `update` issued, by loader
  * name.
  *
@@ -505,6 +667,23 @@ export interface Step<in out Model, in out Msg, in out Events, out R = never, L 
    * child needs at mount is a prop.
    */
   send<Rcv>(ref: Ref<Rcv>, message: NoInfer<SendMessage<Rcv>>): Step<Model, Msg, Events, R, L>
+  /**
+   * Sends `message` to the nearest instance of `owner` above this one, as
+   * this `update` applies, before its emits are delivered. `owner` is a
+   * headless component with `shares`, and `message` one of the messages it
+   * `receives`.
+   *
+   * **Details**
+   *
+   * The sender needs no `shared` declaration: the step carries
+   * `Shared<typeof owner>` in `R`, as `run` carries a Command's
+   * requirements, so the sender compiles only where an owner is above it.
+   * The sends count against the same limit per flush as sends to children.
+   */
+  send<O extends Headless.Any>(
+    owner: O,
+    message: NoInfer<SendMessage<Shared.Receives<O>>>
+  ): Step<Model, Msg, Events, R | Shared<O>, L>
 }
 
 /**
@@ -601,8 +780,9 @@ const StepProto = {
   reset(this: Step<any, any, any, any>, name: string) {
     return makeStep(this.model, this.commands, this.emitted, [...this.lists, { name, op: "reset" }], this.sends)
   },
-  send(this: Step<any, any, any, any>, ref: Ref.Any, message: unknown) {
-    return makeStep(this.model, this.commands, this.emitted, this.lists, [...this.sends, { ref, message }])
+  send(this: Step<any, any, any, any>, target: Ref.Any | Headless.Any, message: unknown) {
+    const send: Send = isRef(target) ? { ref: target, message } : { owner: target as Headless.Any, message }
+    return makeStep(this.model, this.commands, this.emitted, this.lists, [...this.sends, send])
   }
 }
 
@@ -748,7 +928,9 @@ export interface Mountable<in out Props, out Events, out R = never, in Rcv = nev
     running?: ((name: string, groupKey: string | undefined) => boolean) | undefined,
     loaderState?: LoaderState | undefined,
     /** The instance's path, which `h.id` derives ids from. Without it, the root path `/<name>`. */
-    path?: string | undefined
+    path?: string | undefined,
+    /** Answers `h.shared`: an owner's current value. Without it, a component that reads shared state throws. */
+    shared?: SharedLookup | undefined
   ) => View.Node<any, R>
   readonly subscriptions:
     | ((
@@ -848,7 +1030,8 @@ export interface Component<
     props: Props,
     running?: ((name: string, groupKey: string | undefined) => boolean) | undefined,
     loaderState?: LoaderState | undefined,
-    path?: string | undefined
+    path?: string | undefined,
+    shared?: SharedLookup | undefined
   ) => View.Node<Msg, R>
   readonly subscriptions:
     | ((
@@ -932,13 +1115,15 @@ export type HeadlessTypeId = typeof HeadlessTypeId
  * @category models
  * @since 0.1.0
  */
-export interface Headless<in out Props, out Events, out Parts, out R = never, in out Rcv = never>
+export interface Headless<in out Props, out Events, out Parts, out R = never, in out Rcv = never, in Sh = never>
   extends Pipeable.Pipeable
 {
   /**
    * Declares a child of this component in a parent's view, from the parent's
    * `h`. `view` is the child's whole view, built from its parts. Its
    * requirements, the view's and the fallback's surface in the parent's.
+   * For an owner of shared state, the view's `Shared<typeof Owner>` is
+   * removed: the readers and senders in it have this owner above them.
    */
   <Msg, RV = never, RF = never>(
     h: View.Helper<Msg, unknown>,
@@ -958,13 +1143,14 @@ export interface Headless<in out Props, out Events, out Parts, out R = never, in
         /** A headless child has no slots: its `view` is the parent's, and shows what the parent would pass. */
         readonly slots?: never
       }
-  ): View.Child<Msg, R | RV | NoInfer<RF>>
+  ): View.Child<Msg, R | Exclude<RV, Sh> | NoInfer<RF>>
   readonly [HeadlessTypeId]: {
     readonly _Props: Types.Invariant<Props>
     readonly _Events: Types.Covariant<Events>
     readonly _Parts: Types.Covariant<Parts>
     readonly _R: Types.Covariant<R>
     readonly _Rcv: Types.Invariant<Rcv>
+    readonly _Sh: Types.Contravariant<Sh>
   }
   /** What `define` returned. `provide` keeps it, so `definition.name` is the name the component was defined with. */
   readonly definition: Definition.Any
@@ -1012,7 +1198,20 @@ export interface PartsContext {
   readonly owner: View.Owner
   readonly running?: ((name: string, groupKey: string | undefined) => boolean) | undefined
   readonly loaderState?: LoaderState | undefined
+  /** Answers `p.shared`: an owner's current value. Without it, a component that reads shared state throws. */
+  readonly shared?: SharedLookup | undefined
 }
+
+/**
+ * How a host answers `h.shared` and `p.shared`: the current value of the
+ * owner the reader lists, from the nearest instance above it in a running
+ * tree, or from what a story was given.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type SharedLookup = (owner: Headless.Any) => unknown
 
 /**
  * Helper types for `Headless`.
@@ -1028,7 +1227,8 @@ export declare namespace Headless {
    * @since 0.1.0
    */
   // `any` doesn't stand in for `never` in an invariant parameter, so one that receives nothing is listed apart.
-  export type Any = Headless<any, any, any, any, any> | Headless<any, any, any, any, never>
+  // What an owner shares is contravariant: `never` takes every owner, and every component that isn't one.
+  export type Any = Headless<any, any, any, any, any, never> | Headless<any, any, any, any, never, never>
   /**
    * The requirements of a headless component.
    *
@@ -1485,7 +1685,8 @@ const HeadlessProto = Object.assign(Object.create(Function.prototype), {
     _Events: (_: never) => _,
     _Parts: (_: never) => _,
     _R: (_: never) => _,
-    _Rcv: (_: never) => _
+    _Rcv: (_: never) => _,
+    _Sh: (_: never) => _
   },
   pipe: Proto.pipe,
   ref: Proto.ref
@@ -1515,6 +1716,18 @@ const makeComponent = (
  * @since 0.1.0
  */
 export const isHeadless = (u: unknown): u is Headless.Any => Predicate.hasProperty(u, HeadlessTypeId)
+
+// Only a headless component can own shared state: it wraps its readers with its `view` closure.
+type OwnersAreHeadless<SV> = [SV] extends [never] ? unknown : {
+  readonly "Only a headless component can share state: finish it with parts in place of view": never
+}
+
+// An owner listed in `shared` is a headless component with `shares`.
+type OwnersOnly<SR> = {
+  readonly [K in keyof SR]: [Shared<SR[K]>] extends [never] ?
+    "A component in shared must be a headless component with shares"
+    : SR[K]
+}
 
 // The tags of a message union, and the member with one tag.
 type TagOf<Msg> = Msg extends { readonly _tag: infer T extends string } ? T : never
@@ -1548,7 +1761,9 @@ export interface Definition<
   V extends View.Elements,
   L,
   Rcv = never,
-  Sl extends string = never
+  Sl extends string = never,
+  SR = {},
+  SV = never
 > {
   readonly name: Name
   readonly props: Schema.Codec<Props, any>
@@ -1561,6 +1776,10 @@ export interface Definition<
   readonly elements: View.Vocabulary<V> | undefined
   /** The names of the slots a parent may fill. */
   readonly slots: ReadonlyArray<Sl>
+  /** The owners whose shared state `view` or `parts` reads, by local name. */
+  readonly shared: SR | undefined
+  /** What an owner shares with the components below it, from its Model and props. */
+  readonly shares: ((model: Model, props: Props) => SV) | undefined
   /**
    * A slice for one tag: `msg` is that tag's member, and so is the message
    * `$.combine` takes functions over. The slice returned takes any `$`, so
@@ -1577,18 +1796,27 @@ export interface Definition<
   ): (model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L>) => U
   /** A view, to pass as `view` or call from another view. */
   view<UV extends View.Content<Msg, any>>(
-    view: (model: Model, h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L> & SlotHelpers<Sl>) => UV
-  ): (model: Model, h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L> & SlotHelpers<Sl>) => UV
+    view: (
+      model: Model,
+      h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>
+    ) => UV
+  ): (
+    model: Model,
+    h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>
+  ) => UV
   /**
    * A view fragment: a function that takes `h` first and any other
    * arguments after it, called from a view as `fragment(h, ...args)`.
    */
   fragment<Args extends ReadonlyArray<unknown>, Out>(
     fragment: (
-      h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L> & SlotHelpers<Sl>,
+      h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>,
       ...args: Args
     ) => Out
-  ): (h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L> & SlotHelpers<Sl>, ...args: Args) => Out
+  ): (
+    h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>,
+    ...args: Args
+  ) => Out
   /**
    * Finishes a headless component: `parts` in place of `view`. Whoever
    * declares it, by calling it with `view`, writes the view from what
@@ -1614,7 +1842,8 @@ export interface Definition<
         ) => UR[T]
       }
     /** A headless component has no view to place slots in, so a definition with slots can't take `parts`. */
-    readonly parts: [Sl] extends [never] ? (model: Model, p: PartsHelper<Msg, Props, V> & LoaderHelpers<L>) => Parts
+    readonly parts: [Sl] extends [never] ?
+      (model: Model, p: PartsHelper<Msg, Props, V> & LoaderHelpers<L> & SharedHelpers<SR>) => Parts
       : never
     readonly subscriptions?:
       | ((
@@ -1640,10 +1869,12 @@ export interface Definition<
       | StepRequirements<UR[keyof UR]>
       | View.PartRequirements<Parts[keyof Parts]>
       | Subscription.Requirements<Sub>
-      | LoaderServices<L>,
+      | LoaderServices<L>
+      | SharedRequirements<SR>,
       Command.FrameworkService
     >,
-    Rcv
+    Rcv,
+    [SV] extends [never] ? never : Shared.Of<Name, SV, Rcv>
   >
   /** Finishes the component. */
   make<
@@ -1655,36 +1886,38 @@ export interface Definition<
     },
     UV extends View.Content<Msg, any> = View.Node<Msg>,
     Sub extends Subscription.Subscription<Msg, any> = never
-  >(options: {
-    readonly init: ($: Init<Model, Msg, Events, Props>) => UI
-    readonly update:
-      | ((model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L>) => U)
-      | {
-        readonly [T in keyof UR]: (
+  >(
+    options: {
+      readonly init: ($: Init<Model, Msg, Events, Props>) => UI
+      readonly update:
+        | ((model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L>) => U)
+        | {
+          readonly [T in keyof UR]: (
+            model: Model,
+            msg: Tagged<Msg, T>,
+            $: Update<Model, Msg, Events, Props, L, Tagged<Msg, T>>
+          ) => UR[T]
+        }
+      readonly view: (
+        model: Model,
+        h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>
+      ) => UV
+      readonly subscriptions?:
+        | ((
           model: Model,
-          msg: Tagged<Msg, T>,
-          $: Update<Model, Msg, Events, Props, L, Tagged<Msg, T>>
-        ) => UR[T]
-      }
-    readonly view: (
-      model: Model,
-      h: View.Helper<Msg, Props> & View.Tags<V, Msg> & LoaderHelpers<L> & SlotHelpers<Sl>
-    ) => UV
-    readonly subscriptions?:
-      | ((
-        model: Model,
-        props: Props,
-        loaded: { readonly [K in keyof L]: LoadedOf<L[K]> }
-      ) => ReadonlyArray<Sub | false | null | undefined>)
-      | undefined
-    readonly head?:
-      | ((
-        model: Model,
-        props: Props,
-        loaded: { readonly [K in keyof L]: LoadedOf<L[K]> }
-      ) => ReadonlyArray<Head.Entry>)
-      | undefined
-  }): Component<
+          props: Props,
+          loaded: { readonly [K in keyof L]: LoadedOf<L[K]> }
+        ) => ReadonlyArray<Sub | false | null | undefined>)
+        | undefined
+      readonly head?:
+        | ((
+          model: Model,
+          props: Props,
+          loaded: { readonly [K in keyof L]: LoadedOf<L[K]> }
+        ) => ReadonlyArray<Head.Entry>)
+        | undefined
+    } & OwnersAreHeadless<SV>
+  ): Component<
     Name,
     Props,
     Model,
@@ -1696,7 +1929,8 @@ export interface Definition<
       | StepRequirements<UR[keyof UR]>
       | View.Requirements<UV>
       | Subscription.Requirements<Sub>
-      | LoaderServices<L>,
+      | LoaderServices<L>
+      | SharedRequirements<SR>,
       Command.FrameworkService
     >,
     V,
@@ -1737,6 +1971,10 @@ export declare namespace Definition {
     readonly loaders: unknown
     readonly elements: View.Vocabulary<any> | undefined
     readonly slots: ReadonlyArray<string>
+    /** The owners whose shared state the component reads, by local name. */
+    readonly shared: SharedReads | undefined
+    /** What the component shares as an owner, or `undefined` when it isn't one. */
+    readonly shares: ((model: any, props: any) => unknown) | undefined
   }
 
   /**
@@ -1783,9 +2021,19 @@ export declare namespace Definition {
  * @category utility types
  * @since 0.1.0
  */
-export type Helper<D> = D extends
-  Definition<infer _N, infer P, infer _M, infer Msg, infer _E, infer V, infer L, infer _Rcv, infer Sl> ?
-  View.Helper<Msg, P> & View.Tags<V, Msg> & LoaderHelpers<L> & SlotHelpers<Sl>
+export type Helper<D> = D extends Definition<
+  infer _N,
+  infer P,
+  infer _M,
+  infer Msg,
+  infer _E,
+  infer V,
+  infer L,
+  infer _Rcv,
+  infer Sl,
+  infer SR,
+  infer _SV
+> ? View.Helper<Msg, P> & View.Tags<V, Msg> & LoaderHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>
   : never
 
 /**
@@ -2050,7 +2298,9 @@ export const define = <
   },
   V extends View.Elements = View.Registered,
   const Tags extends TagOf<Msg> = never,
-  const Sl extends string = never
+  const Sl extends string = never,
+  SR extends SharedReads = {},
+  SV = never
 >(
   options: {
     readonly name: Name
@@ -2081,9 +2331,17 @@ export const define = <
     readonly elements?: View.Vocabulary<V> | undefined
     /** The names of the slots a parent may fill, each placed in `view` with `h.slots.<name>`. None by default. */
     readonly slots?: ReadonlyArray<Sl> | undefined
+    /** The owners whose shared state `view` or `parts` reads, by the name `h.shared` and `p.shared` use. */
+    readonly shared?: (SR & NoInfer<OwnersOnly<SR>>) | undefined
+    /**
+     * Makes a headless component an owner: what it shares with the components below it. Every
+     * owner update re-runs the owner's closure, so put normal components directly under it, and
+     * every reader re-renders when the value changes, so keep it small.
+     */
+    readonly shares?: ((model: Model, props: Props) => SV) | undefined
   }
-): Definition<Name, Props, Model, Msg, Events, V, L, Tagged<Msg, Tags>, Sl> => {
-  const definition: Definition<Name, Props, Model, Msg, Events, V, L, Tagged<Msg, Tags>, Sl> = {
+): Definition<Name, Props, Model, Msg, Events, V, L, Tagged<Msg, Tags>, Sl, SR, SV> => {
+  const definition: Definition<Name, Props, Model, Msg, Events, V, L, Tagged<Msg, Tags>, Sl, SR, SV> = {
     name: options.name,
     props: options.props ?? (Schema.Struct({}) as any),
     model: options.model,
@@ -2093,6 +2351,8 @@ export const define = <
     loaders: options.loaders,
     elements: options.elements,
     slots: options.slots ?? [],
+    shared: options.shared,
+    shares: options.shares,
     // A slice is the function given, with `$` bound to the Model and message it's called with.
     update: ((...args: ReadonlyArray<any>) => {
       const update: AnyUpdate = args[args.length - 1]
@@ -2115,7 +2375,7 @@ const receivesOf = (message: Schema.Codec<any, any>, tags: ReadonlyArray<string>
   )
 
 const finish = (
-  definition: Definition<string, any, any, any, any, any, any, any, any>,
+  definition: Definition.Any,
   options: {
     readonly init: ($: Init<any, any, any, any>) => unknown
     readonly update: AnyUpdate | { readonly [tag: string]: AnyUpdate }
@@ -2150,6 +2410,12 @@ const finish = (
   // Made once, so a slot forwarded as another's content is the same value on every render.
   const outlets: Record<string, View.Outlet> = {}
   for (const name of definition.slots) outlets[name] = { _tag: "Outlet", name }
+  if (definition.shares !== undefined && view !== undefined) {
+    throw new Error(
+      `${definition.name}: only a headless component can share state, so finish it with parts in place of view`
+    )
+  }
+  const reads = Object.entries(definition.shared ?? {})
   return makeComponent(view === undefined ? HeadlessProto : Proto, {
     definition,
     props: definition.props,
@@ -2162,7 +2428,14 @@ const finish = (
       toNext(updateFn(model, msg, makeUpdate(model, props, open(model, props, loaderState), msg))),
     view: view === undefined
       ? undefined
-      : (model: unknown, props: unknown, running?: View.Running, loaderState?: LoaderState, path?: string) => {
+      : (
+        model: unknown,
+        props: unknown,
+        running?: View.Running,
+        loaderState?: LoaderState,
+        path?: string,
+        shared?: SharedLookup
+      ) => {
         const h: any = View.makeHelper(
           props,
           elements ?? View.registeredElements(),
@@ -2176,6 +2449,7 @@ const finish = (
           h.previous = context.previous
           h.patched = context.patched
         }
+        if (reads.length > 0) h.shared = readShared(definition.name, reads, shared)
         return View.toNode(view(model, h))
       },
     parts: parts === undefined
@@ -2200,6 +2474,7 @@ const finish = (
           p.previous = opened.previous
           p.patched = opened.patched
         }
+        if (reads.length > 0) p.shared = readShared(definition.name, reads, context.shared)
         return parts(model, p)
       },
     subscriptions: subscriptions === undefined
@@ -2217,6 +2492,24 @@ const finish = (
     layerOnServer: true,
     "~loaders": bound
   })
+}
+
+// `h.shared` and `p.shared`: each listed owner's current value, by local name.
+const readShared = (
+  name: string,
+  reads: ReadonlyArray<readonly [name: string, owner: Headless.Any]>,
+  lookup: SharedLookup | undefined
+): { readonly [name: string]: unknown } => {
+  const out: { [name: string]: unknown } = {}
+  for (const [key, owner] of reads) {
+    if (lookup === undefined) {
+      throw new Error(
+        `${name} reads the shared state of ${owner.definition.name}, and nothing supplies it: render it below a ${owner.definition.name}`
+      )
+    }
+    out[key] = lookup(owner)
+  }
+  return out
 }
 
 /**
@@ -2276,9 +2569,9 @@ export type Provided<C, ROut, RIn> = C extends
 
 /**
  * Services the runtime owns or reads once at mount: the framework services,
- * among them the loader cache, and the cache's three references. A `provide`
- * Layer can't supply them, so it never removes them from a component's
- * requirements.
+ * among them the loader cache, and the cache's three references, plus the
+ * shared state of owners above a component. A `provide` Layer can't supply
+ * them, so it never removes them from a component's requirements.
  *
  * @stability experimental
  * @category utility types
@@ -2289,6 +2582,7 @@ export type RuntimeService =
   | typeof Loader.Visibility
   | typeof Loader.Connectivity
   | typeof Loader.Problems
+  | Shared.Any
 
 /**
  * What `provide` accepts: a Layer, an array of them, or a function of props
