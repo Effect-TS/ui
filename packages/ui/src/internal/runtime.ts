@@ -404,7 +404,11 @@ export interface Instance {
    */
   clash: unknown
   rendered: Array<Rendered>
-  closed: boolean
+  /**
+   * From the moment its Scope starts closing, not once it has: nothing new starts in a teardown
+   * that a Layer's async cleanup holds open, while that cleanup stays owned to its end.
+   */
+  readonly closed: boolean
   /** Hydration: the provided Layer is still building, so the server's nodes wait, inert. */
   waiting: boolean
   /** Hydration: whether this instance's children may adopt the server's Models. */
@@ -1971,7 +1975,6 @@ const setup = (
    * and for the instance's runs that were stopped earlier and haven't exited.
    */
   const stopRuns = (inst: Instance): Array<Effect.Effect<void>> => {
-    inst.closed = true
     const waits: Array<Effect.Effect<void>> = []
     if (inst.stopping !== undefined) {
       for (const run of inst.stopping) {
@@ -2040,7 +2043,9 @@ const setup = (
       childPaths: undefined,
       clash: undefined,
       rendered: [],
-      closed: false,
+      get closed() {
+        return isClosed(this.scope)
+      },
       waiting: false,
       adoptsChildren: false,
       snapshot: hydrating === undefined || hydration?.adopted === undefined
@@ -4163,7 +4168,9 @@ const setup = (
       childPaths: undefined,
       clash: undefined,
       rendered: [],
-      closed: false,
+      get closed() {
+        return isClosed(this.scope)
+      },
       waiting: false,
       // The content's children adopt the server's state when the instance placing it and the one that
       // wrote it both did.
@@ -4189,7 +4196,6 @@ const setup = (
     outletOf.set(out, { slotted, view, content: undefined })
     slotted.placed.set(name, out)
     scopeAddFinalizerUnsafe(out.scope, out, () => {
-      out.closed = true
       dirty.delete(out)
       if (slotted.placed.get(name) === out) slotted.placed.delete(name)
       return Effect.void

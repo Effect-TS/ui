@@ -3357,6 +3357,53 @@ describe("Runtime", () => {
         yield* Fiber.join(closed)
         assert.deepStrictEqual(events, ["clean", "release parent"])
       })))
+
+    it.effect("a keyed provide removed in the flush that changes its key, while its Layer cleans up, doesn't select again", () =>
+      provideHost(Effect.gen(function*() {
+        const gate = yield* Deferred.make<void>()
+        const entered = yield* Deferred.make<void>()
+        const events: Array<string> = []
+        const Counter = Component.define({
+          name: "Counter",
+          model: Schema.Number,
+          message: Schema.Null,
+          events: Schema.Null
+        })
+          .make({
+            init: () => 1,
+            update: (n, _, $) => $.set(n + 1).emit(null),
+            view: (n, h) => h.el("button").on("click", null).children(String(n))
+          })
+        const Child = Component.provide(Counter, {
+          key: (_, n) => n,
+          layer: (n) =>
+            Layer.effectDiscard(Effect.andThen(
+              Effect.sync(() => events.push(`build ${n}`)),
+              Effect.addFinalizer(() =>
+                Effect.andThen(Deferred.succeed(entered, undefined), Deferred.await(gate)).pipe(
+                  Effect.andThen(Effect.sync(() => events.push(`release ${n}`)))
+                )
+              )
+            ))
+        })
+        // The child's update changes its key and tells the parent, which removes it before it renders.
+        const Parent = Component.define({ name: "Parent", model: Schema.Boolean, message: Schema.Null }).make({
+          init: () => true,
+          update: () => false,
+          view: (shown, h) => shown ? Child(h, { key: "child", props: {}, onEmit: () => null }) : h.text("gone")
+        })
+        const scope = yield* Scope.make()
+        const root = yield* TestHost.mount(Parent, {}).pipe(Scope.provide(scope))
+        yield* TestHost.settle
+        Query.fire(root.get(Query.tag("button")), "click")
+        yield* TestHost.settle
+        yield* Deferred.await(entered)
+        yield* Deferred.succeed(gate, undefined)
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "gone")
+        yield* Scope.close(scope, Exit.void)
+        assert.deepStrictEqual(events, ["build 1", "release 1"])
+      })))
   })
 
   it.effect("each provided Layer build is stamped with the flush it began in", () =>
