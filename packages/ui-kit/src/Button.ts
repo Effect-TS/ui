@@ -1,59 +1,37 @@
 /**
- * A button that can stay focusable while disabled, ported from Base UI's
- * Button (https://base-ui.com/react/components/button).
- *
- * `Button` is a view function. It holds no state, so it is a function that
- * takes the caller's `h` and returns a `<button>` builder that gets its
- * `type`, disabled state and click handling when it is built. A press
- * sends the caller's `onPress` message straight to the caller's `update`,
- * and a disabled button sends nothing.
+ * A native button that can stay focusable while disabled. An enabled press
+ * sends the caller's `onPress` message to its `update` function.
  *
  * **Anatomy**
  *
- * | Base UI  | Element                                  |
- * | :------- | :--------------------------------------- |
- * | `Button` | `<button>`, from `element` or `h.button` |
+ * `Button` returns a single `<button>` builder. It uses `h.button` by
+ * default. Pass `element` to share the button with another part, such as
+ * a tooltip trigger. Chain classes, attributes and children on the result:
+ * `Button(h, { onPress }).class("save").children("Save")`.
  *
- * `Button` takes `{ element, props, onPress }` and returns the builder, so
- * the caller adds classes, attributes and children after it:
- * `Button(h, { onPress }).class("save").children("Save")`. Pass `element`
- * to stack a part on the same `<button>`, such as a tooltip trigger.
+ * **Keyboard and disabled state**
  *
- * **Data attributes**
+ * Space and Enter activate the button through the browser's native click
+ * behavior. A disabled button sends no press message, has an empty
+ * `data-disabled` attribute and normally leaves the tab order.
  *
- * Present with an empty value or absent:
+ * With `focusableWhenDisabled`, a disabled button uses `aria-disabled="true"`
+ * instead of the native `disabled` attribute and stays in the tab order.
+ * Once mounted, it cancels clicks, including those triggered by the keyboard.
+ * Before mount, `aria-disabled` alone does not prevent the native action:
+ * a server-rendered submit button can still submit its form.
+ * An enabled button has neither `aria-disabled` nor `data-disabled`.
  *
- * - `data-disabled`
+ * **Forms and click handlers**
  *
- * **Keyboard**
+ * `props.type` overrides the builder's `type` attribute and defaults to
+ * `"button"`. Sending `onPress` does not cancel an enabled button's
+ * native submit or reset action.
  *
- * The element is a native `<button>`, so Space and Enter press it and Tab
- * moves focus, without a key handler. A disabled button leaves the tab
- * order, unless `focusableWhenDisabled` is set.
- *
- * **Differences from Base UI**
- *
- * - The element is always a native `<button>`, Base UI's `nativeButton`
- *   mode, so there is no `nativeButton` prop and no key handling for other
- *   tags.
- * - It is a standalone button. It doesn't join Base UI's composite keyboard
- *   handling, as a `Toolbar.Button` does, where the composite owns the tab
- *   stop and Space presses the item on `keydown`.
- * - `type` is a prop, `"button"` by default, in place of the native
- *   attribute: `Button` owns it, so a `type` on `element` is replaced.
- * - The press is the `onPress` message in place of an `onClick` callback.
- *   A view function's handler replaces the consumer's, so an `element`
- *   that already handles click throws at render when `Button` would set
- *   one: with `onPress` or `focusableWhenDisabled`.
- * - `onPress` never cancels the native action: an enabled `"reset"` or
- *   `"submit"` button still resets or submits its form.
- * - A disabled, focusable button cancels the click that Space or Enter
- *   causes, not every key but Tab as Base UI does on `keydown`. The host
- *   cancels it once it has mounted the button: before then, in server
- *   rendered HTML, `aria-disabled` keeps the button focusable but nothing
- *   cancels a click, so a submit button can still submit its form.
- * - A disabled, focusable button has `aria-disabled="true"`, and an enabled
- *   one has no `aria-disabled` in place of `aria-disabled="false"`.
+ * With `onPress` or `focusableWhenDisabled: true`, a caller's `.onClick(...)`
+ * on `element` or chained after `Button(...)` throws at render in every state.
+ * A stacked headless part, such as a tooltip trigger, handles the same click
+ * on its own layer without clashing.
  *
  * **Example** (A save button that stays focusable while it saves)
  *
@@ -97,12 +75,12 @@ import type * as Html from "@effect/ui/html/Html"
 import { flag } from "./internal/attributes.ts"
 
 /**
- * The props of a `Button`, Base UI's props without the React ones.
+ * Options for the button's disabled state, focus behavior and form action.
  *
  * **Details**
  *
- * - `disabled`: the button sends nothing and gets the native `disabled`
- *   and `data-disabled`.
+ * - `disabled`: the button sends no press message and has `data-disabled`.
+ *   By default it also has the native `disabled` attribute.
  * - `focusableWhenDisabled`: a disabled button stays in the tab order, with
  *   `aria-disabled` in place of the native `disabled`, so focus stays on it
  *   while it is busy. Once mounted, it cancels its clicks, so a submit
