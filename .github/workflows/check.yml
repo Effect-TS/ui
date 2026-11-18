@@ -96,6 +96,50 @@ jobs:
       - run: pnpm build
       - run: pnpm check-dist-types
 
+  bundle-size:
+    name: Bundle size
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Install dependencies
+        uses: ./.github/actions/setup
+      - run: pnpm build
+      - name: Measure PR base
+        id: base
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --depth=1 origin "$BASE_SHA"
+          git worktree add --detach "$RUNNER_TEMP/bundle-base" "$BASE_SHA"
+          cd "$RUNNER_TEMP/bundle-base"
+          if ! jq -e '.scripts["bundle-size"]' package.json > /dev/null; then
+            echo "Base has no bundle-size script; reporting absolute sizes only."
+            exit 0
+          fi
+          unset GITHUB_STEP_SUMMARY
+          pnpm install --frozen-lockfile
+          pnpm build
+          pnpm bundle-size --json "$RUNNER_TEMP/base-size.json"
+          test -s "$RUNNER_TEMP/base-size.json"
+          echo "available=true" >> "$GITHUB_OUTPUT"
+      - name: Report bundle size
+        env:
+          HAS_BASE: ${{ steps.base.outputs.available }}
+        run: |
+          if [[ "$HAS_BASE" == true ]]; then
+            pnpm bundle-size --base "$RUNNER_TEMP/base-size.json"
+          else
+            pnpm bundle-size
+          fi
+
   test:
     name: Test (${{ matrix.runtime }})
     runs-on: ubuntu-latest

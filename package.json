@@ -7,6 +7,7 @@
     "clean": "node scripts/clean.mjs",
     "codegen": "pnpm --recursive --parallel --filter \"./packages/**/*\" run codegen",
     "codemod": "node scripts/codemod.mjs",
+    "bundle-size": "node packages/ui/benchmark/bundle-size/run.mjs",
     "build": "tsc -b tsconfig.packages.json && pnpm --recursive --parallel --filter \"./packages/*\" run build && node scripts/copy-ai-docs.mjs",
     "circular": "node scripts/circular.mjs",
     "test": "vitest",
