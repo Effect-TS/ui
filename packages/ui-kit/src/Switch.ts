@@ -61,10 +61,9 @@
  *   elements: Html
  * }).make({
  *   init: () => ({ notify: false }),
- *   update: (model, message) =>
- *     SettingsMessage.match(message, {
- *       ToggledNotify: ({ checked }) => ({ ...model, notify: checked })
- *     }),
+ *   update: {
+ *     ToggledNotify: (model, { checked }) => ({ ...model, notify: checked })
+ *   },
  *   view: (model, h) =>
  *     Switch(h, {
  *       props: { checked: model.notify, name: "notify" },

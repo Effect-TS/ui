@@ -50,10 +50,9 @@
  *   elements: Html
  * }).make({
  *   init: () => ({ saving: false }),
- *   update: (model, message) =>
- *     EditorMessage.match(message, {
- *       PressedSave: () => ({ ...model, saving: true })
- *     }),
+ *   update: {
+ *     PressedSave: (model) => ({ ...model, saving: true })
+ *   },
  *   view: (model, h) =>
  *     Button(h, {
  *       props: { disabled: model.saving, focusableWhenDisabled: true },

@@ -24,11 +24,10 @@ const Card = Component.define({
   elements: Html
 }).make({
   init: () => ({ clicked: "" }),
-  update: (_model, message) =>
-    CardMessage.match(message, {
-      PressedSave: () => ({ clicked: "save" }),
-      ClickedCard: () => ({ clicked: "card" })
-    }),
+  update: {
+    PressedSave: () => ({ clicked: "save" }),
+    ClickedCard: () => ({ clicked: "card" })
+  },
   view: (model, h) =>
     h.div.onClick(CardMessage.ClickedCard()).children(
       Button(h, {
