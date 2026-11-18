@@ -60,10 +60,9 @@
  * enabled the control points at the error's id, so draw `error` in every
  * field that can be invalid.
  *
- * A disabled field disables its control and the hidden inputs inside it,
- * so the control submits nothing. A control's own parts don't hear of it:
- * pass `disabled: f.disabled` to a checkbox whose indicator shows
- * `data-disabled`.
+ * A disabled field disables its control, which then submits nothing. A
+ * control's own parts don't hear of it: pass `disabled: f.disabled` to a
+ * checkbox whose indicator shows `data-disabled`.
  *
  * `touched` and `focused` are the field's own. Give the field another
  * `key` to start over, such as after the form is reset.
@@ -124,6 +123,7 @@ import * as View from "@effect/ui/View"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { flag } from "./internal/attributes.ts"
+import { withoutField } from "./internal/field.ts"
 
 /**
  * Props for the state a field reports on its parts.
@@ -168,14 +168,10 @@ export type FieldProps = typeof FieldProps.Type
 
 const Message = UiSchema.TaggedEnum({ FocusedControl: {}, BlurredControl: {} })
 
-// A disabled control submits nothing, and neither do the hidden inputs
-// inside it, such as the one a checkbox or a switch keeps its form value in.
-const unsubmitted = <Msg, R>(element: View.Element<Msg, R>): View.Element<Msg, R> =>
-  element.tag === "input" && element.attrs.type === "hidden"
-    ? { ...element, attrs: { ...element.attrs, disabled: "" } }
-    : element.children.length === 0
-    ? element
-    : { ...element, children: element.children.map((node) => node._tag === "Element" ? unsubmitted(node) : node) }
+// A control disabled while it has focus loses it without a blur event, so
+// the field reports the blur itself. Otherwise the focus would show again
+// once the field is enabled.
+const lostFocus = Subscription.make("lostFocus", Stream.make(Message.BlurredControl()))
 
 /**
  * A headless field. Call it with the consumer's `h`, the `props`, and a
@@ -206,10 +202,10 @@ const unsubmitted = <Msg, R>(element: View.Element<Msg, R>): View.Element<Msg, R
  *
  * A disabled field writes `disabled` and `data-disabled` on the control
  * when the element is built, so they win over what the consumer chains and
- * over another kit call on the same element. It also disables the hidden
- * inputs inside the control, so a checkbox or a switch drawn on it submits
- * nothing. An enabled field writes none of it, so the control keeps its
- * own.
+ * over another kit call on the same element. It also leaves out the hidden
+ * input a checkbox or a switch drawn on the control keeps its form value
+ * in, so a disabled field submits nothing. An enabled field does none of
+ * it, so the control keeps its own.
  *
  * `control` handles `focus` and `blur` on a layer of its own, so the
  * consumer's handlers for them, and another kit call's, still run. A
@@ -230,25 +226,20 @@ export const Field = Component.define({
   elements: Html
 }).make({
   init: () => ({ focused: false, touched: false }),
-  // A disabled field takes no focus, and losing it doesn't count as a visit.
   update: (model, message, $) =>
     Message.match(message, {
-      FocusedControl: () => $.props.disabled === true ? model : { ...model, focused: true },
+      FocusedControl: () => ({ ...model, focused: true }),
+      // Losing focus doesn't count as a visit while the field is disabled.
       BlurredControl: () => $.props.disabled === true ? { ...model, focused: false } : { focused: false, touched: true }
     }),
-  // A control disabled while it has focus loses it without a blur event, so
-  // the field reports the blur itself. Otherwise the focus would show again
-  // once the field is enabled.
-  subscriptions: (model, props) => [
-    model.focused && props.disabled === true &&
-    Subscription.make("lostFocus", Stream.make(Message.BlurredControl()))
-  ],
+  subscriptions: (model, props) => [model.focused && props.disabled === true && lostFocus],
   parts: (model, p) => {
     const disabled = p.props.disabled === true
     const invalid = p.props.invalid === true
     const valid = p.props.invalid === false
     const dirty = p.props.dirty === true
     const filled = p.props.filled === true
+    const described = p.props.described === true
     // A disabled control has no focus to show, from the render that
     // disables it.
     const focused = model.focused && !disabled
@@ -259,7 +250,7 @@ export const Field = Component.define({
     // An attribute a part sets to `undefined` is removed from the
     // consumer's builder too, so a consumer's `data-invalid` can't report
     // a state the field isn't in.
-    const validity = <B extends { readonly attr: (name: string, value: string | undefined) => B }>(builder: B): B =>
+    const flags = <B extends { readonly attr: (name: string, value: string | undefined) => B }>(builder: B): B =>
       builder
         .attr("data-valid", flag(valid))
         .attr("data-invalid", flag(invalid))
@@ -267,13 +258,11 @@ export const Field = Component.define({
         .attr("data-dirty", flag(dirty))
         .attr("data-filled", flag(filled))
         .attr("data-focused", flag(focused))
+    // With `data-disabled`, for every part but the control, which keeps
+    // its own unless the field is disabled.
     const state = <B extends { readonly attr: (name: string, value: string | undefined) => B }>(builder: B): B =>
-      validity(builder).attr("data-disabled", flag(disabled))
-    const describedBy = [
-      p.props.described === true ? descriptionId : undefined,
-      showsError ? errorId : undefined
-    ].filter((id) => id !== undefined).join(" ")
-    const description = p.part((b) => state(b).attr("id", descriptionId))
+      flags(builder).attr("data-disabled", flag(disabled))
+    const describedBy = [described && descriptionId, showsError && errorId].filter((id) => id !== false).join(" ")
     const error = p.part((b) => state(b).attr("id", errorId))
     return {
       disabled,
@@ -283,10 +272,10 @@ export const Field = Component.define({
       dirty,
       filled,
       focused,
-      root: p.part((b) => state(b)),
+      root: p.part(state),
       label: p.part("label", (b) => state(b).attr("for", controlId)),
       control: p.part(["input", "textarea", "select", "button"], (b) => {
-        const control = validity(b)
+        const control = flags(b)
           .attr("id", controlId)
           .attr("aria-invalid", showsError ? "true" : undefined)
           // A token list: added to the consumer's own.
@@ -297,17 +286,17 @@ export const Field = Component.define({
         // same element wrote its own and added its children. An enabled
         // field leaves all of it alone.
         return disabled
-          ? control.forward((node) => unsubmitted(View.build(node.attr("data-disabled", "").disabled(true), [])))
+          ? control.forward((node) => withoutField(View.build(node.attr("data-disabled", "").disabled(true), [])))
           : control
       }),
-      description: <B extends View.PartTarget<string>>(element: B): ReturnType<B["attr"]> => {
-        if (p.props.described !== true) {
+      description: p.part((b) => {
+        if (!described) {
           throw new Error(
             "Field: the description was drawn without the described prop, so the control doesn't point at it. Pass described: true"
           )
         }
-        return description(element)
-      },
+        return state(b).attr("id", descriptionId)
+      }),
       // Applied before it's dropped, so a wrong builder throws in every state.
       error: <B extends View.PartTarget<string>>(element: B): ReturnType<B["attr"]> | undefined => {
         const shown = error(element)

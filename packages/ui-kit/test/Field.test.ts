@@ -77,11 +77,9 @@ describe("Field", () => {
         .props({ described: true })
       assert.deepStrictEqual(shown(), [undefined, undefined])
 
-      // Events a disabled control was sent anyway report nothing.
+      // A blur a disabled control was sent anyway isn't a visit.
       s.props({ described: true, disabled: true })
-        .fire(control, "focus")
-      assert.throws(() => s.subscription("lostFocus", { _tag: "BlurredControl" }), /active keys: \[\]/)
-      s.fire(control, "blur")
+        .fire(control, "blur")
         .props({ described: true })
       assert.deepStrictEqual(shown(), [undefined, undefined])
     }))
@@ -163,22 +161,11 @@ describe("Field", () => {
     const controls = (field: FieldProps, disabled: boolean) => {
       const f = parts(field)
       const checkbox = Story.parts(Checkbox, { model: {}, props: { checked: false, disabled } })
-      let switched: View.Element<never> | undefined
-      Switch(h, {
-        props: { checked: false, disabled },
-        view: (s) => {
-          switched = View.build(s.root(f.control(h.button)), [])
-          return switched
-        }
-      })
       return [
-        View.build(
-          Input(h, { element: f.control(h.input), props: { value: "Ada", disabled }, onUpdate: () => undefined }),
-          []
-        ),
-        View.build(checkbox.root(f.control(h.button)), []),
-        switched!
-      ].map(({ attrs }) => [attrs.id, attrs.disabled, attrs["data-disabled"]])
+        Input(h, { element: f.control(h.input), props: { value: "Ada", disabled }, onUpdate: () => undefined }),
+        checkbox.root(f.control(h.button)),
+        Switch(h, { props: { checked: false, disabled }, view: (s) => s.root(f.control(h.button)) })
+      ].map(attrsOf).map((attrs) => [attrs.id, attrs.disabled, attrs["data-disabled"]])
     }
     const id = attrsOf(parts({}).control(h.input)).id
     assert.deepStrictEqual(controls({ disabled: true }, false), [[id, "", ""], [id, "", ""], [id, "", ""]])
@@ -205,7 +192,7 @@ describe("Field", () => {
           const field = (
             key: string,
             draw: (f: Component.Headless.Parts<typeof Field>) => View.Content<never>
-          ) => Field(h, { key, props: { disabled: h.props.disabled }, view: (f) => f.root(h.div).children(draw(f)) })
+          ) => Field(h, { key, props: { disabled: h.props.disabled }, view: draw })
           const props = { checked: true, name: "terms" }
           return h.form(
             field(

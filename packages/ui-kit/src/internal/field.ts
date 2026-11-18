@@ -33,3 +33,12 @@ export const field = (props: FieldProps): View.Node<never> | undefined => {
         .attr("value", value)
     )
 }
+
+// The control without that input, for a control something else disabled
+// after it read its own props, such as a field.
+export const withoutField = <Msg, R>(control: View.Element<Msg, R>): View.Element<Msg, R> => ({
+  ...control,
+  children: control.children.filter((node) =>
+    !(node._tag === "Element" && node.tag === "input" && node.attrs.type === "hidden")
+  )
+})
