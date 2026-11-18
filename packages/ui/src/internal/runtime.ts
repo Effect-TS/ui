@@ -54,6 +54,7 @@ import { scopeAddFinalizerUnsafe } from "./scope.ts"
 import * as serverHost from "./serverHost.ts"
 import * as services from "./services.ts"
 import * as sharedReads from "./shared.ts"
+import { serverFailure } from "./slotStatus.ts"
 import * as subscriptionKeys from "./subscriptions.ts"
 
 // ---------------------------------------------------------------------------
@@ -100,13 +101,6 @@ const pendingStatus: Status = { _tag: "Pending" }
 const rebuildingStatus: Status = { _tag: "Rebuilding" }
 const awaitingStatus: Status = { _tag: "Awaiting" }
 const readyStatus: Status = { _tag: "Ready" }
-/**
- * What a slot's `fallback` gets for a handled Layer failure on the server, and on a client that adopts
- * it. The server's cause isn't shipped, as it can hold what the page must not show, so both sides pass
- * this one: a fallback that shows its cause renders the same nodes on each, and the client adopts them.
- */
-const serverFailure = (): Cause.Cause<unknown> =>
-  Cause.die(new Error("[@effect/ui] A provided Layer failed on the server"))
 /** What a slot's `fallback` is passed for a status other than `Ready`. */
 const resultOf = (status: Status): AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown> =>
   status._tag === "Failed" ? AsyncResult.failure(status.cause) : AsyncResult.initial(true)
@@ -1023,11 +1017,30 @@ const setup = (
     log.record(entry)
     return entry.seq
   }
+  /** The last Layer entry each instance logged, so a selection that builds at once can say it's ready. */
+  const lastLayerEntry = new WeakMap<Instance, "LayerPending" | "LayerReady" | "LayerFailed">()
+  /**
+   * The provider whose Layer entries the feature slots in `inst`'s view read: the one above, `inst`
+   * included, whose own Env is the one `inst` renders with. None for an Env that is always ready.
+   */
+  const boundaryOf = (inst: Instance): number | undefined => {
+    for (let at: Instance | undefined = inst; at !== undefined; at = at.parent) {
+      if (at.component.layer !== undefined && at.env === inst.env) return at.born
+    }
+    return undefined
+  }
   /** Logs an entry about `inst`, and returns its number. */
   const record = (inst: Instance, draft: Draft, causedBy?: number): number => {
     if (!log.enabled) return -1
+    if (draft._tag === "LayerPending" || draft._tag === "LayerReady" || draft._tag === "LayerFailed") {
+      lastLayerEntry.set(inst, draft._tag)
+    }
+    const boundary = draft._tag === "Mounted" || draft._tag === "Waiting" || draft._tag === "Update"
+      ? boundaryOf(inst)
+      : undefined
     const entry = {
       ...draft,
+      ...(boundary === undefined ? undefined : { boundary }),
       ...number(causedBy),
       at: clock.currentTimeMillisUnsafe(),
       session,
@@ -1980,7 +1993,10 @@ const setup = (
       ownFailed(inst, own, cause)
     }
     const ready = () => {
-      if (!inst.closed && pending) record(inst, { _tag: "LayerReady" })
+      if (inst.closed) return
+      // One built at once logs no `LayerPending`, but the log's last Layer entry may be an earlier one's.
+      const last = lastLayerEntry.get(inst)
+      if (pending || (last !== undefined && last !== "LayerReady")) record(inst, { _tag: "LayerReady" })
     }
     const release = () => releaseRetired(selection)
     whenReady(own, release, release)
@@ -2408,7 +2424,9 @@ const setup = (
           lastFailedBuild = Math.max(lastFailedBuild, buildStamp)
           // `init` failed, or a keyed provide has selected again since.
           if (inst.closed || inst.env !== own) return
-          lifecycle({ _tag: "LayerFailed", cause })
+          // A handled failure on the server: its slots get `serverFailure`, not `cause`. See `ownFailed`.
+          const redacted = server !== undefined && component.layerFailure !== undefined
+          lifecycle({ _tag: "LayerFailed", cause, ...(redacted ? { redacted } : undefined) })
           if (component.layerFailure === undefined && constructing) failedEarly = cause
           else ownFailed(inst, own, cause, logEarly)
         }

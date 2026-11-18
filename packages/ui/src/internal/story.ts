@@ -14,7 +14,7 @@ import * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Schema from "effect/Schema"
 import * as Command from "../Command.ts"
 import type * as Component from "../Component.ts"
-import type * as Feature from "../Feature.ts"
+import * as Feature from "../Feature.ts"
 import * as MessageLog from "../MessageLog.ts"
 import * as Query from "../Query.ts"
 import * as Locator from "../testing/Locator.ts"
@@ -141,6 +141,14 @@ export type Fields<Props, Model, Msg, Events> =
   & {
     readonly childModels?: ReadonlyMap<string, unknown> | undefined
     readonly childStatus?: ReadonlyMap<string, SlotResult> | undefined
+    /**
+     * What every feature slot reads that the component's view declares, its slot content included, when
+     * its services aren't ready: a replay's Layer status. Not the slots in a `fallback`, which renders
+     * against the nearest settled services, nor those in content a parent passed.
+     */
+    readonly slotStatus?: SlotResult | undefined
+    /** `h.isRunning` when it isn't derived from `pending`: a replay's open runs. */
+    readonly running?: ((name: string, groupKey: string | undefined) => boolean) | undefined
     readonly shared?: ReadonlyMap<Component.Definition.Any, unknown> | undefined
     readonly collected?: Collected | undefined
   }
@@ -148,8 +156,12 @@ export type Fields<Props, Model, Msg, Events> =
 // What a failed slot without a `fallback` shows.
 const emptyText: View.Node<never, never> = { _tag: "Text", text: "" }
 
-/** What a slot's `fallback` is passed: `Initial` while it's pending, `Failure` once it failed. */
-type SlotResult = AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>
+/**
+ * What a slot's `fallback` is passed: `Initial` while it's pending, `Failure` once it failed.
+ *
+ * @internal
+ */
+export type SlotResult = AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>
 
 // -- headless children ------------------------------------------------------
 // A story shows a headless child expanded: the closure it was declared with, run against the parts of the
@@ -411,7 +423,8 @@ const expandRoot = <Msg>(
   filled: Readonly<Record<string, View.Input<never, any>>> | undefined,
   shared: Owners | undefined,
   root: Owners,
-  status: ReadonlyMap<string, SlotResult> | undefined
+  status: ReadonlyMap<string, SlotResult> | undefined,
+  slotStatus: SlotResult | undefined
 ): View.Node<Msg, any> => {
   const replaced: Array<View.Child<any, any>> = []
   const placed: Array<Occurrence> = []
@@ -422,12 +435,20 @@ const expandRoot = <Msg>(
   // Content is shown under `children`, where a query looks, at the path the runtime gives it.
   // `own`: the story's component wrote it, so its refs count with the component's. Content the story
   // passed for its slots was written by a parent, and so were the closures in it.
-  const content = (input: View.Input<any, any>, path: string, depth: number, own: boolean, owners: Owners) => {
+  // `reads`: what the feature slots there read, if their services aren't ready. See `Fields.slotStatus`.
+  const content = (
+    input: View.Input<any, any>,
+    path: string,
+    depth: number,
+    own: boolean,
+    owners: Owners,
+    reads: SlotResult | undefined
+  ) => {
     const nodes = View.children([input])
     const paths = checkContentPaths(path, nodes)
     if (own) written.push(paths)
     const scope = (label: string) => checkContentPaths(label, nodes)
-    return nodes.map((child) => expand(child, path, depth, own, owners, scope))
+    return nodes.map((child) => expand(child, path, depth, own, owners, scope, reads))
   }
   const expand = (
     node: View.Node<any, any>,
@@ -435,7 +456,8 @@ const expandRoot = <Msg>(
     depth: number,
     own: boolean,
     owners: Owners,
-    scope: (label: string) => ChildPaths
+    scope: (label: string) => ChildPaths,
+    reads: SlotResult | undefined
   ): View.Node<any, any> => {
     switch (node._tag) {
       case "Text":
@@ -446,7 +468,7 @@ const expandRoot = <Msg>(
         if (input === undefined) return node
         return {
           ...node,
-          children: content(input, "/" + name + "/" + slotSegment(node.name), 1, false, owners)
+          children: content(input, "/" + name + "/" + slotSegment(node.name), 1, false, owners, undefined)
         } as View.Node<
           any,
           any
@@ -455,7 +477,7 @@ const expandRoot = <Msg>(
       case "Element": {
         let changed = false
         const children = node.children.map((child) => {
-          const next = expand(child, path, depth, own, owners, scope)
+          const next = expand(child, path, depth, own, owners, scope, reads)
           if (next !== child) changed = true
           return next
         })
@@ -465,19 +487,27 @@ const expandRoot = <Msg>(
         const component = node.component as unknown as Component.Headless.Any
         const childPath = path + "/" + segment(node)
         placed.push({ child: node, path: childPath, scope })
-        const result = status?.get(childPath)
+        const result = status?.get(childPath) ?? (Feature.isService(node.component) ? reads : undefined)
         if (result !== undefined) {
           // The slot shows its `fallback`, whose children share the paths of the content that declared it.
+          // It renders against settled services, so the feature slots in it show.
           replaced.push(node)
           const shown = node.fallback === undefined ? emptyText : View.toNode(node.fallback(result))
-          return expand(shown, path, depth, own, owners, scope)
+          return expand(shown, path, depth, own, owners, scope, undefined)
         }
         if (node.slots !== undefined) {
           // A child's view isn't run, but what the parent passed for its slots is the parent's.
           const shown: Array<View.Node<any, any>> = []
           const lengths: Array<readonly [string, number]> = []
           for (const slot in node.slots) {
-            const placed = content(node.slots[slot], childPath + "/" + slotSegment(slot), depth + 1, own, owners)
+            const placed = content(
+              node.slots[slot],
+              childPath + "/" + slotSegment(slot),
+              depth + 1,
+              own,
+              owners,
+              reads
+            )
             shown.push(...placed)
             lengths.push([slot, placed.length])
           }
@@ -502,7 +532,8 @@ const expandRoot = <Msg>(
           depth + 1,
           own,
           ownersBelow(owners, component, model, node.props),
-          (label) => checkChildPaths(label, tree)
+          (label) => checkChildPaths(label, tree),
+          reads
         )
         // A copy per render: a closure may return a node it cached, and the identities are this render's.
         const out = { ...inner } as View.Node<any, any>
@@ -513,7 +544,7 @@ const expandRoot = <Msg>(
       }
     }
   }
-  const expanded = expand(view, "/" + name, 0, true, root, (label) => checkChildPaths(label, view))
+  const expanded = expand(view, "/" + name, 0, true, root, (label) => checkChildPaths(label, view), slotStatus)
   checkAuthorRefs("/" + name, written)
   checkAuthorPlacements("/" + name, written)
   if (replaced.length > 0) expandedChildren.set(expanded, replaced)
@@ -637,7 +668,8 @@ export const expandedView = (fields: Fields<any, any, any, any>): View.Node<any,
     storySlots.get(fields.component),
     fields.shared,
     rootOwners(fields.component, fields.model, fields.props),
-    fields.childStatus
+    fields.childStatus,
+    fields.slotStatus
   )
 
 /** The story's component's own view, before its headless children are expanded. */
@@ -645,7 +677,7 @@ const viewOfFields = (fields: Fields<any, any, any, any>): View.Node<any, any> =
   fields.component.view(
     fields.model,
     fields.props,
-    runningOf(fields.pending),
+    fields.running ?? runningOf(fields.pending),
     fields.results,
     undefined,
     sharedLookup(fields.shared, rootOwners(fields.component, fields.model, fields.props))

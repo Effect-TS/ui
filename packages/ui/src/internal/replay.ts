@@ -4,13 +4,72 @@
  *
  * @internal
  */
+import * as Cause from "effect/Cause"
+import * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Schema from "effect/Schema"
-import * as Command from "../Command.ts"
 import type * as Component from "../Component.ts"
 import * as MessageLog from "../MessageLog.ts"
 import type { Divergence, Replay } from "../testing/Story.ts"
 import type * as View from "../View.ts"
 import * as componentQueries from "./queries.ts"
+import { serverFailure } from "./slotStatus.ts"
+import * as engine from "./story.ts"
+
+/**
+ * What a replay reached beyond its public fields: what the feature slots its view declares read, and
+ * the runs `h.isRunning` sees.
+ */
+interface Reached {
+  readonly component: engine.Fields<any, any, any, any>["component"]
+  /** `undefined` while the services the slots read are ready. */
+  readonly slotStatus: engine.SlotResult | undefined
+  readonly running: (name: string, groupKey: string | undefined) => boolean
+}
+const reachedOf = new WeakMap<object, Reached>()
+
+/**
+ * The view at the state a replay reached, rendered as a Scene renders: its headless children and slot
+ * content expanded, its feature slots showing `fallback` while the Layer they read, by the logged
+ * `boundary`, wasn't ready, and `h.isRunning` true for each run issued and not logged as ended.
+ *
+ * Only tests call it: a caller-facing view of a replay is a separate API decision.
+ *
+ * @internal
+ */
+// oxlint-disable-next-line effect/no-unused-internal
+export const viewOf = (replay: Replay<any, any, any, any, any>): View.Node<any, any> => {
+  const reached = reachedOf.get(replay)
+  if (reached === undefined) throw new Error("viewOf: not a replay")
+  return engine.expandedView({
+    component: reached.component,
+    props: replay.props,
+    model: replay.model,
+    results: replay.results,
+    pending: [],
+    emitted: [],
+    sent: [],
+    interrupted: [],
+    loadingMore: [],
+    defaultPrevented: false,
+    ack: engine.noAck,
+    slotStatus: reached.slotStatus,
+    running: reached.running
+  })
+}
+
+/** A logged cause back as a Cause: a Wire frame holds its reasons as JSON. */
+const causeOf = (entry: MessageLog.LayerFailed | Extract<MessageLog.Wire, { _tag: "LayerFailed" }>) => {
+  if (entry.redacted === true) return serverFailure()
+  if (typeof entry.component !== "string") return (entry as MessageLog.LayerFailed).cause
+  const reasons = (entry as Extract<MessageLog.Wire, { _tag: "LayerFailed" }>).cause.reasons as ReadonlyArray<any>
+  return Cause.fromReasons(reasons.map((reason): Cause.Reason<unknown> =>
+    reason._tag === "Fail"
+      ? Cause.makeFailReason(reason.error)
+      : reason._tag === "Die"
+      ? Cause.makeDieReason(reason.defect)
+      : Cause.makeInterruptReason(reason.fiberId ?? undefined)
+  ))
+}
 
 const placeholders = ["~unserialisable", "~redacted", "~truncated"]
 const findPlaceholder = (value: unknown): string | undefined => {
@@ -72,12 +131,16 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
     "CommandInterrupted",
     "CommandDropped"
   ])
+  // A Layer entry is the provider's, at its own path: the instances whose `boundary` it is read it.
+  const layerTags = new Set(["LayerPending", "LayerReady", "LayerFailed"])
   const all = entries.filter((entry): entry is Stateful | Lifecycle =>
-    "path" in entry && entry.path === path && (stateful.includes(entry as Stateful) || lifecycleTags.has(entry._tag))
+    "path" in entry &&
+    (layerTags.has(entry._tag) ||
+      entry.path === path && (stateful.includes(entry as Stateful) || lifecycleTags.has(entry._tag)))
   )
   // The replay starts at the first Model. Props and query results written before it are in that Update's record, or
   // belong to an earlier mount.
-  const start = all.findIndex((entry) => entry._tag === "Update" || entry._tag === "Mounted")
+  const start = all.findIndex((entry) => (entry._tag === "Update" || entry._tag === "Mounted") && entry.path === path)
   if (start === -1) throw new Error(`${label}: the log has no entry for ${path}`)
   const first = all[start] as
     | MessageLog.Update
@@ -151,11 +214,14 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
 
   // A path can hold one instance after another, and the one leaving can still log after the next
   // has mounted, so each instance's state is tracked by its number. The result is the last one's.
+  // What each provider's Layer last logged, by its instance: `undefined` once ready.
+  const layers = new Map<number, engine.SlotResult | undefined>()
   interface State {
     model: Model
     props: unknown
     results: Component.Results | undefined
-    status: Replay<Model, Msg, Events>["status"]
+    // The provider whose Layer entries the instance's feature slots read, from its latest entry that says.
+    boundary: number | undefined
     // The runs issued and not logged as ended yet, by the entry and index that issued them.
     runs: Map<string, { readonly name: string; readonly group: string | null }>
   }
@@ -172,7 +238,7 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
       model: initial.model,
       props: initial.props,
       results: initial.results,
-      status: "Ready",
+      boundary: entry.boundary,
       runs: new Map()
     }
     issue(state, entry, initial.commands)
@@ -186,34 +252,36 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
     divergence: Divergence<Model, Msg, Events> | undefined
   ): Replay<Model, Msg, Events, any, any> => {
     const runs = [...reached.runs.values()]
-    return {
+    const out: Replay<Model, Msg, Events, any, any> = {
       path,
       model: reached.model,
       props: reached.props,
       results: reached.results,
       queries: () => bound?.context(reached.model, reached.props, reached.results).queries ?? {},
-      status: reached.status,
-      isRunning: (command, group) => {
-        const name = Command.nameOf(command)
-        const key = Command.groupKeyOf(command, group)
-        return runs.some((run) => run.name === name && (key === undefined || run.group === key))
-      },
       replayed,
       divergence
     }
+    reachedOf.set(out, {
+      component: component as any,
+      slotStatus: reached.boundary === undefined ? undefined : layers.get(reached.boundary),
+      running: (name, key) => runs.some((run) => run.name === name && (key === undefined || run.group === key))
+    })
+    return out
   }
+  // Before the first Model, only what the Layers logged counts: the slots read it from there on.
+  const fold = (entry: Stateful | Lifecycle) => {
+    if (entry._tag === "LayerPending") layers.set(entry.instance, AsyncResult.initial(true))
+    else if (entry._tag === "LayerReady") layers.set(entry.instance, undefined)
+    else if (entry._tag === "LayerFailed") layers.set(entry.instance, AsyncResult.failure(causeOf(entry)))
+  }
+  for (const entry of all.slice(0, start)) fold(entry)
   for (const entry of all.slice(start + 1)) {
+    if (entry._tag === "LayerPending" || entry._tag === "LayerReady" || entry._tag === "LayerFailed") {
+      fold(entry)
+      continue
+    }
     const state = states.get(entry.instance)
     switch (entry._tag) {
-      case "LayerPending":
-        if (state !== undefined) state.status = entry.status ?? "Pending"
-        continue
-      case "LayerReady":
-        if (state !== undefined) state.status = "Ready"
-        continue
-      case "LayerFailed":
-        if (state !== undefined) state.status = "Failed"
-        continue
       case "CommandEnded":
       case "CommandInterrupted":
       case "CommandDropped":
@@ -241,6 +309,7 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
     const recorded = read(entry)
     // The Update's record is what `update` read, so it holds even when earlier entries were evicted.
     state.props = recorded.props
+    state.boundary = entry.boundary
     if (recorded.results !== undefined) state.results = recorded.results
     const next = component.update(state.model, recorded.message as Msg, recorded.props as Props, state.results)
     replayed++

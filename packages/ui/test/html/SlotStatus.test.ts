@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
-import { Component, Feature, MessageLog, UiSchema } from "@effect/ui"
+import { Component, Feature, MessageLog, UiSchema, type View } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
+import * as replay from "@effect/ui/internal/replay"
+import { Story } from "@effect/ui/testing"
 import { expect, it } from "@effect/vitest"
 import { Cause, type Duration, Effect, Fiber, Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
@@ -26,6 +28,10 @@ const Page = Component.define({ name: "Page", model: Schema.String, message: Mes
 })
 const slot = "/Page/SlotStatus/HtmlEditor[e]"
 
+/** The text a view shows. */
+const textOf = (node: View.Node<any, any>): string =>
+  node._tag === "Text" ? node.text : node._tag === "Element" ? node.children.map(textOf).join("") : ""
+
 const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))
 const container = (html: string) =>
   Effect.acquireRelease(
@@ -37,10 +43,15 @@ const container = (html: string) =>
     (element) => Effect.sync(() => element.remove())
   )
 
-/** Renders `component` on the server, letting `elapsed` pass, then mounts it over the markup with a log. */
+/** Renders `component` on the server, letting `elapsed` pass, then mounts it over the markup. Each side has a log. */
 const hydrate = Effect.fnUntraced(
   function*(component: Component.Provided<typeof Page, Editor, never>, elapsed: Duration.Input) {
-    const fiber = yield* Effect.forkChild(HtmlServer.renderToHtml(component, {}, { budget: "50 millis" }))
+    const serverLog = MessageLog.makeMemory({ size: 1000 })
+    const fiber = yield* Effect.forkChild(
+      HtmlServer.renderToHtml(component, {}, { budget: "50 millis" }).pipe(
+        Effect.provideService(MessageLog.MessageLog, serverLog)
+      )
+    )
     yield* TestClock.adjust(elapsed)
     const rendered = yield* Fiber.join(fiber)
     const app = yield* container(rendered.html)
@@ -50,7 +61,7 @@ const hydrate = Effect.fnUntraced(
       Effect.provideService(MessageLog.MessageLog, log)
     )
     yield* tick
-    return { rendered, app, before, log }
+    return { rendered, app, before, log, serverLog }
   }
 )
 
@@ -85,7 +96,7 @@ describe("slot status after SSR", { concurrent: false }, () => {
         ),
         { onFailure: () => Message.Failed() }
       )
-      const { app, before, log, rendered } = yield* hydrate(Broken, "0 millis")
+      const { app, before, log, rendered, serverLog } = yield* hydrate(Broken, "0 millis")
       // The server's cause isn't in the page: both sides pass the fallback the same redacted one.
       expect(rendered.html).not.toContain("offline")
       expect(rendered.html).toContain("<p>Error: [@effect/ui] A provided Layer failed on the server</p>")
@@ -99,6 +110,16 @@ describe("slot status after SSR", { concurrent: false }, () => {
       expect(log.entries().filter((entry) => entry._tag === "LayerFailed").map((entry) => entry.path)).toEqual([
         "/Page"
       ])
+      // The server's log keeps the cause the handler got, and says the slots didn't get it, so a view
+      // replayed from it shows what the page did.
+      const failed = serverLog.entries().filter((entry) => entry._tag === "LayerFailed")
+      expect(failed.map((entry) => [entry.redacted, Cause.squash(entry.cause)])).toEqual([[true, "offline"]])
+      const encode = MessageLog.makeEncoder().encode
+      for (const entries of [serverLog.entries(), serverLog.entries().map(encode), log.entries()]) {
+        expect(textOf(replay.viewOf(Story.fromLog(Broken, entries)))).toBe(
+          "Error: [@effect/ui] A provided Layer failed on the server"
+        )
+      }
     }).pipe(Effect.scoped))
 
   it.effect("a slot the server rendered whose client Layer isn't ready reports that it awaits the client's Layer", () =>
