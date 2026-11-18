@@ -20,3 +20,4 @@ Switch(h, {
 ## Components
 
 - [Switch](src/Switch.ts): a controlled on/off setting.
+- [Tooltip](src/Tooltip.ts): a popup shown when its trigger is hovered or focused.
