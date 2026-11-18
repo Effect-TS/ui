@@ -16,21 +16,18 @@
  * | `Avatar.Image`    | `image`    | `<img>` inside the root, once shown |
  * | `Avatar.Fallback` | `fallback` | `<span>` inside the root, once shown |
  *
- Each part takes the consumer's element as `{ element }`, and the root
- * and the fallback take `children` beside it. Each returns a finished
- * element:
+ * Each part takes the consumer's builder and returns it, so the consumer
+ * goes on chaining and adds children with `.children(...)`:
  *
- * - `root({ element, children })` returns the `<span>`.
- * - `image({ element })` returns the `<img>` once the image has loaded, and
+ * - `root(h.span)` returns the `<span>`.
+ * - `image(h.img)` returns the `<img>` once the image has loaded, and
  *   `undefined` before.
- * - `fallback({ element, children })` returns the `<span>` while the image
- *   isn't loaded and the `fallbackDelay` has passed, and `undefined`
- *   otherwise.
+ * - `fallback(h.span)` returns the `<span>` while the image isn't loaded
+ *   and the `fallbackDelay` has passed, and `undefined` otherwise, so its
+ *   content goes on with `?.children(...)`.
  *
  * So the consumer draws both the image and the fallback, and at most one
- * shows. `root` also takes a bare builder, `s.root(h.span)`, and returns
- * the builder, so another part can stack on it as its `element`. The image
- * and the fallback don't, since they may be `undefined`.
+ * shows.
  *
  * Naming the picture is the consumer's job: an `alt` on the image, and
  * text in the fallback, or an `aria-label` on it for an icon.
@@ -81,13 +78,10 @@
  *       key: "avatar",
  *       props: { src: "/ada.png" },
  *       view: (s) =>
- *         s.root({
- *           element: h.span.class("avatar"),
- *           children: [
- *             s.image({ element: h.img.attr("alt", "Ada Lovelace") }),
- *             s.fallback({ element: h.span.class("initials"), children: ["AL"] })
- *           ]
- *         })
+ *         s.root(h.span.class("avatar")).children(
+ *           s.image(h.img.attr("alt", "Ada Lovelace")),
+ *           s.fallback(h.span.class("initials"))?.children("AL")
+ *         )
  *     })
  * })
  *
@@ -256,9 +250,9 @@ export const AvatarLoadImage = Mount.makeStream(
 const loadImage = (source: Source) =>
   AvatarLoadImage(source).pipe(Mount.map((report) => Message.make({ _tag: "ChangedImageStatus", ...report })))
 
-// Removed from the consumer's image before the part writes them, so they
-// come last and in this order: a browser may start fetching as soon as
-// `src` is set, so the request policy, `sizes` and `srcset` go before it.
+// Removed from the consumer's finished image before the part writes them,
+// so they come last and in this order: a browser may start fetching as soon
+// as `src` is set, so the request policy, `sizes` and `srcset` go before it.
 const imageAttributes = ["crossorigin", "referrerpolicy", "sizes", "srcset", "src"]
 
 /**
@@ -269,7 +263,7 @@ const imageAttributes = ["crossorigin", "referrerpolicy", "sizes", "srcset", "sr
  * @category models
  * @since 0.1.0
  */
-export type AvatarSpan<Msg, R> = Html.Element<Msg, R, Html.EventsOf<"span">, HTMLSpanElement, "span">
+export type AvatarSpan<Msg, R = never> = Html.Element<Msg, R, Html.EventsOf<"span">, HTMLSpanElement, "span">
 
 /**
  * An `<img>` the avatar's image accepts, from the consumer's `h.img`.
@@ -278,13 +272,13 @@ export type AvatarSpan<Msg, R> = Html.Element<Msg, R, Html.EventsOf<"span">, HTM
  * @category models
  * @since 0.1.0
  */
-export type AvatarImg<Msg, R> = Html.VoidElement<Msg, R, Html.EventsOf<"img">, HTMLImageElement, "img">
+export type AvatarImg<Msg, R = never> = Html.VoidElement<Msg, R, Html.EventsOf<"img">, HTMLImageElement, "img">
 
 /**
  * A headless avatar. Call it with the consumer's `h` and a `view` closure
- * that draws the root with `s.root({ element: h.span, children })`, with
- * the image, `s.image({ element: h.img })`, and the fallback,
- * `s.fallback({ element: h.span, children })`, as its children.
+ * that draws the root with `s.root(h.span)`, with the image,
+ * `s.image(h.img)`, and the fallback, `s.fallback(h.span)?.children(...)`,
+ * as its children.
  *
  * **Details**
  *
@@ -293,11 +287,12 @@ export type AvatarImg<Msg, R> = Html.VoidElement<Msg, R, Html.EventsOf<"img">, H
  * `fallbackDelay`. On the server, and on a host that doesn't run mounts,
  * the image never loads, so the fallback shows.
  *
- * The image's own attributes win over the ones the consumer set on the
- * builder it passes in: `src`, `srcset`, `sizes`, `crossorigin` and
- * `referrerpolicy`, including the ones the props leave out. They come
- * after the consumer's, with `src` last, because a browser may start
- * fetching as soon as `src` is set.
+ * The image's own attributes win over the consumer's, set before the part
+ * or chained after it: `src`, `srcset`, `sizes`, `crossorigin` and
+ * `referrerpolicy`, including the ones the props leave out. The image
+ * writes them when it's built, so the shown image is the one the root
+ * loaded. They come after the consumer's attributes, with `src` last,
+ * because a browser may start fetching as soon as `src` is set.
  *
  * @stability experimental
  * @category components
@@ -331,50 +326,34 @@ export const Avatar = Component.define({
     const source = sourceOf(p.props)
     const status = statusOf(model.report, source)
     const root = p.part("span", (b) => b.onMount(loadImage(source)))
-    const image = p.part("img", (b) =>
-      b.attr("crossorigin", source.crossOrigin)
-        .attr("referrerpolicy", source.referrerPolicy)
-        .attr("sizes", source.sizes)
-        .attr("srcset", source.srcSet)
-        .attr("src", source.src))
+    // Written when the image is built, after whatever the consumer chained,
+    // so the shown image is the one the root loaded, with `src` last.
+    const image = p.part(
+      "img",
+      (b) =>
+        b.forward((node) =>
+          imageAttributes.reduce((out, name) => out.attr(name, undefined), node)
+            .attr("crossorigin", source.crossOrigin)
+            .attr("referrerpolicy", source.referrerPolicy)
+            .attr("sizes", source.sizes)
+            .attr("srcset", source.srcSet)
+            .attr("src", source.src)
+        )
+    )
     const fallback = p.part("span", (b) => b)
     const showsFallback = status !== "loaded" && model.delayElapsed
-    function rootPart<Msg, R>(element: AvatarSpan<Msg, R>): AvatarSpan<Msg, R>
-    function rootPart<Msg, R, const C extends ReadonlyArray<View.Input<Msg, any>> = readonly []>(options: {
-      /** The consumer's `h.span`, with its classes, attributes and handlers. */
-      readonly element: AvatarSpan<Msg, R>
-      /** What goes inside the root: the image and the fallback. */
-      readonly children?: C | undefined
-    }): View.Element<Msg, R | View.Requirements<C[number]>>
-    // A builder gets the part and stays a chain, to be another call's
-    // `element`. The options object gets a finished element.
-    function rootPart(target: any): unknown {
-      return View.isElementBuilder(target)
-        ? root(target as AvatarSpan<unknown, unknown>)
-        : View.build(root(target.element), target.children ?? [])
-    }
     return {
       imageLoadingStatus: status,
-      root: rootPart,
-      // Each part is applied before it's dropped, so a wrong tag throws in
-      // every state.
-      image: <Msg, R>(options: {
-        /** The consumer's `h.img`, with its `alt`, classes, attributes and handlers. */
-        readonly element: AvatarImg<Msg, R>
-      }): View.Element<Msg, R> | undefined => {
-        const shown = image(imageAttributes.reduce((out, name) => out.attr(name, undefined), options.element))
-        return status === "loaded" ? View.build(shown, []) : undefined
+      root: View.wrapPart(root, <Msg, R = never>(element: AvatarSpan<Msg, R>): AvatarSpan<Msg, R> => root(element)),
+      // The image and the fallback are applied before they're dropped, so a
+      // wrong tag throws in every state.
+      image: <Msg, R = never>(element: AvatarImg<Msg, R>): AvatarImg<Msg, R> | undefined => {
+        const shown = image(element)
+        return status === "loaded" ? shown : undefined
       },
-      fallback: <Msg, R, const C extends ReadonlyArray<View.Input<Msg, any>> = readonly []>(
-        options: {
-          /** The consumer's `h.span`, with its classes, attributes and handlers. */
-          readonly element: AvatarSpan<Msg, R>
-          /** What goes inside the fallback, such as initials or an icon. */
-          readonly children?: C | undefined
-        }
-      ): View.Element<Msg, R | View.Requirements<C[number]>> | undefined => {
-        const shown = fallback(options.element)
-        return showsFallback ? View.build(shown, options.children ?? []) : undefined
+      fallback: <Msg, R = never>(element: AvatarSpan<Msg, R>): AvatarSpan<Msg, R> | undefined => {
+        const shown = fallback(element)
+        return showsFallback ? shown : undefined
       }
     }
   }

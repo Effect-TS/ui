@@ -12,10 +12,10 @@ const standIn = {
     s: Component.Headless.Parts<typeof Avatar>,
     h: View.Helper<never, AvatarProps> & View.Tags<Html.Elements, never>
   ) =>
-    s.root({
-      element: h.span.attr("data-status", s.imageLoadingStatus),
-      children: [s.image({ element: h.img }), s.fallback({ element: h.span.class("fallback"), children: ["AL"] })]
-    })
+    s.root(h.span.attr("data-status", s.imageLoadingStatus)).children(
+      s.image(h.img),
+      s.fallback(h.span.class("fallback"))?.children("AL")
+    )
 }
 
 const image = Locator.tag("img")
@@ -53,7 +53,7 @@ describe("Avatar", () => {
       assert.isDefined(s.query(fallback))
     }))
 
-  it("the image keeps the consumer's attributes, but its own win, present or absent, and come last with src after the rest", () => {
+  it("the image keeps the consumer's attributes, but its own win, present or absent, before the part or after, and come last with src after the rest", () => {
     const element = h.img
       .class("photo")
       .attr("alt", "Ada Lovelace")
@@ -62,10 +62,20 @@ describe("Avatar", () => {
       .attr("sizes", "10vw")
       .attr("crossorigin", "use-credentials")
       .attr("referrerpolicy", "origin")
-    const shown = (props: AvatarProps) =>
-      Story.parts(Avatar, { model: { report: { source: props, status: "loaded" }, delayElapsed: true }, props })
-        .image({ element })?.attrs
-    assert.deepStrictEqual(shown({ src: "/ada.png" }), { class: "photo", alt: "Ada Lovelace", src: "/ada.png" })
+    const shown = (props: AvatarProps) => {
+      const s = Story.parts(Avatar, {
+        model: { report: { source: props, status: "loaded" }, delayElapsed: true },
+        props
+      })
+      // A source attribute chained after the part loses too.
+      return View.build(s.image(element)!.attr("src", "/chained.png").attr("title", "Ada"), []).attrs
+    }
+    assert.deepStrictEqual(shown({ src: "/ada.png" }), {
+      class: "photo",
+      alt: "Ada Lovelace",
+      title: "Ada",
+      src: "/ada.png"
+    })
     const attrs = shown({
       src: "/ada.png",
       srcSet: "/ada.png 2x",
@@ -74,9 +84,10 @@ describe("Avatar", () => {
       referrerPolicy: "no-referrer"
     })
     // The host applies entries in order; setting src can start the fetch.
-    assert.deepStrictEqual(Object.entries(attrs!), [
+    assert.deepStrictEqual(Object.entries(attrs), [
       ["class", "photo"],
       ["alt", "Ada Lovelace"],
+      ["title", "Ada"],
       ["crossorigin", "anonymous"],
       ["referrerpolicy", "no-referrer"],
       ["sizes", "5vw"],
