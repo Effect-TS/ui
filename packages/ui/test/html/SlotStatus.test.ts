@@ -2,7 +2,7 @@
 import { Component, Feature, MessageLog, UiSchema } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { expect, it } from "@effect/vitest"
-import { type Duration, Effect, Fiber, Layer, Schema } from "effect"
+import { Cause, type Duration, Effect, Fiber, Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { TestClock } from "effect/testing"
 import { describe } from "vitest"
@@ -14,7 +14,9 @@ const EditorView = Component.define({ name: "EditorView", model: Schema.Null, me
     update: (model) => model,
     view: (_, h) => h.p("editor")
   })
-const shown = (result: AsyncResult.AsyncResult<never, unknown>) => AsyncResult.isFailure(result) ? "down" : "loading"
+// The failure branch shows its cause, so the server and the client must pass the same one.
+const shown = (result: AsyncResult.AsyncResult<never, unknown>) =>
+  AsyncResult.isFailure(result) ? String(Cause.squash(result.cause)) : "loading"
 
 const Message = UiSchema.TaggedEnum({ Failed: {} })
 const Page = Component.define({ name: "Page", model: Schema.String, message: Message, elements: Html }).make({
@@ -70,7 +72,7 @@ describe("slot status after SSR", { concurrent: false }, () => {
       expect(app.textContent).toBe("editor")
     }).pipe(Effect.scoped))
 
-  it.effect("a slot whose Layer failed on the server ships Failed, and the client adopts its failure branch", () =>
+  it.effect("a slot whose Layer failed on the server ships Failed, and the client adopts its failure branch, cause included", () =>
     Effect.gen(function*() {
       let builds = 0
       const Broken = Component.provide(
@@ -84,14 +86,16 @@ describe("slot status after SSR", { concurrent: false }, () => {
         { onFailure: () => Message.Failed() }
       )
       const { app, before, log, rendered } = yield* hydrate(Broken, "0 millis")
-      expect(rendered.html).toContain("<p>down</p>")
+      // The server's cause isn't in the page: both sides pass the fallback the same redacted one.
+      expect(rendered.html).not.toContain("offline")
+      expect(rendered.html).toContain("<p>Error: [@effect/ui] A provided Layer failed on the server</p>")
       expect(rendered.state["~deferred"]).toEqual([])
       expect(rendered.state["~status"]).toEqual({ "/Page": "Failed", [slot]: "Failed" })
       expect(rendered.state["/Page"]).toBe("failed")
       // The server built it once. The client adopts the failure without building it again.
       expect(builds).toBe(1)
       expect(app.querySelector("p")).toBe(before)
-      expect(app.textContent).toBe("down")
+      expect(app.textContent).toBe("Error: [@effect/ui] A provided Layer failed on the server")
       expect(log.entries().filter((entry) => entry._tag === "LayerFailed").map((entry) => entry.path)).toEqual([
         "/Page"
       ])

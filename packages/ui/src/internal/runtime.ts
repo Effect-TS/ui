@@ -101,11 +101,12 @@ const rebuildingStatus: Status = { _tag: "Rebuilding" }
 const awaitingStatus: Status = { _tag: "Awaiting" }
 const readyStatus: Status = { _tag: "Ready" }
 /**
- * The failure a client adopts for a Layer that failed on the server. The server's cause isn't shipped:
- * it can hold what the page must not show.
+ * What a slot's `fallback` gets for a handled Layer failure on the server, and on a client that adopts
+ * it. The server's cause isn't shipped, as it can hold what the page must not show, so both sides pass
+ * this one: a fallback that shows its cause renders the same nodes on each, and the client adopts them.
  */
-const serverFailure = (path: string): Cause.Cause<unknown> =>
-  Cause.die(new Error(`[@effect/ui] ${path}'s Layer failed on the server`))
+const serverFailure = (): Cause.Cause<unknown> =>
+  Cause.die(new Error("[@effect/ui] A provided Layer failed on the server"))
 /** What a slot's `fallback` is passed for a status other than `Ready`. */
 const resultOf = (status: Status): AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown> =>
   status._tag === "Failed" ? AsyncResult.failure(status.cause) : AsyncResult.initial(true)
@@ -935,8 +936,12 @@ const setup = (
   // Kept past adoption, which drops `hydrating`: the Router reads it when the root's first route arrives.
   const fromStatic = hydrating?.state["~static"] === true
   const adoptedWaiters: Array<() => void> = []
-  /** The status the server recorded at `path`, a provide's or a slot's, while hydrating. */
-  const shippedStatus = (path: string): "Pending" | "Failed" | undefined => hydrating?.state["~status"]?.[path]
+  /**
+   * The status the server recorded at `path`, a provide's or a slot's, while hydrating. `~status` is the
+   * runtime's own page metadata, not part of `Renderer.State`'s type.
+   */
+  const shippedStatus = (path: string): "Pending" | "Failed" | undefined =>
+    (hydrating?.state["~status"] as { readonly [path: string]: "Pending" | "Failed" } | undefined)?.[path]
   const settleWaiting = () => {
     // A reader below a held owner may have mounted, or gone.
     if (heldReports.size > 0) {
@@ -1849,7 +1854,7 @@ const setup = (
    * The instance's provided Layer failed once it was made. Unhandled, the instance fails. Handled, it
    * stays mounted and hears about it once: Feature children below show `fallback`, and Commands waiting
    * for the Layer are interrupted. The server ships the failure as the instance's status, and a client
-   * that adopts the instance starts from it. A selection a keyed provide has replaced in the meantime
+   * that adopts the instance starts from it. Slots on both sides get `serverFailure`, not the cause. A selection a keyed provide has replaced in the meantime
    * is not heard from.
    */
   const ownFailed = (inst: Instance, own: Env, cause: Cause.Cause<unknown>, before?: () => void) => {
@@ -1862,6 +1867,8 @@ const setup = (
       return
     }
     failEnv(own, cause)
+    // The page ships the status without its cause: the server's slots render what the client's will.
+    if (server !== undefined) own.status = { _tag: "Failed", cause: serverFailure() }
     defer(() => {
       if (inst.env !== own) return
       const message = guard(inst, "onFailure", () => handle(AsyncResult.failure(cause)))
@@ -2411,7 +2418,7 @@ const setup = (
         if (inst.closed) {
           // `init` failed before a keyed provide could select: nothing is built.
         } else if (adoptsFailure) {
-          const cause = serverFailure(path)
+          const cause = serverFailure()
           lifecycle({ _tag: "LayerFailed", cause })
           failEnv(own, cause)
         } else if (shared !== undefined) {
