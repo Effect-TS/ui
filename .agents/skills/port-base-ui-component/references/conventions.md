@@ -235,10 +235,18 @@ model.advanced
   consumer's last, so a handler the consumer set on `element` runs after
   the part's. A view function has no layer: its handler is the
   consumer's handler for that event and would replace one already on
-  `element`. So a view function throws at render when `element` already
-  handles an event it owns, as `Switch`'s root does for `click`. That
-  keeps a view function's behaviour from changing if it becomes a
-  component.
+  `element`. So a view function throws at render when it was given an
+  `on<Event>` and `element` already handles the event that option sets,
+  as `Switch`'s root does for `click` with `onToggle`. Decide by the
+  options and never by the state: a read-only switch sets no handler,
+  but a clash that waited for it to become editable would first show in
+  production. Without the option the function sets no handler, and the
+  consumer's stays. That keeps a view function's behaviour from changing
+  if it becomes a component.
+  - With no handler on an element, the host gives the event to the
+    nearest ancestor that handles it. So a click on a read-only control
+    reaches the row around it. Don't promise that for a natively
+    disabled one: the browser gives it no click.
 - **Cancelling.** `on<Event>` and `onEmit` say what to send. They never
   cancel the native event, and the consumer gets no option to. The kit
   cancels only when the props rule the native action out, with

@@ -70,8 +70,9 @@ Work top to bottom. Put the notes from steps 1 to 3 in the PR description.
    - precedence: on each part, a consumer value for every attribute the part
      owns loses, both when the part sets it and when the state leaves it
      absent, while the consumer's class and other attributes stay
-   - for a view function, an `element` that already handles an event the
-     function owns fails the render
+   - for a view function, an `element` that already handles an event
+     fails the render when the `on<Event>` option would replace it, in
+     every state, and keeps its handler without the option
 
    Add `packages/ui-kit/typetest/<Name>.tst.ts` for each part function: the
    return type of the options form and of the stacking form, the inferred

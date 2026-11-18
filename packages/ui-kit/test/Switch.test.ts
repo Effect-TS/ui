@@ -5,11 +5,11 @@ import { Locator, Scene } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 
-const SettingsMessage = Schema.TaggedUnion({ ToggledNotify: { checked: Schema.Boolean } })
+const SettingsMessage = Schema.TaggedUnion({ ToggledNotify: { checked: Schema.Boolean }, ClickedRow: {} })
 
 // A consumer that keeps the value in its Model and draws the least markup
 // the parts need: a labelled root with a thumb. The form field comes with
-// the root.
+// the root. The row around it counts the clicks the switch leaves alone.
 const Settings = Component.define({
   name: "Settings",
   props: Schema.Struct({
@@ -17,25 +17,31 @@ const Settings = Component.define({
     readOnly: Schema.optional(Schema.Boolean),
     required: Schema.optional(Schema.Boolean)
   }),
-  model: Schema.Struct({ notify: Schema.Boolean }),
+  model: Schema.Struct({ notify: Schema.Boolean, rowClicks: Schema.Number }),
   message: SettingsMessage,
   elements: Html
 }).make({
-  init: () => ({ notify: false }),
-  update: (_model, message) =>
+  init: () => ({ notify: false, rowClicks: 0 }),
+  update: (model, message) =>
     SettingsMessage.match(message, {
-      ToggledNotify: ({ checked }) => ({ notify: checked })
+      ToggledNotify: ({ checked }) => ({ ...model, notify: checked }),
+      ClickedRow: () => ({ ...model, rowClicks: model.rowClicks + 1 })
     }),
   view: (model, h) =>
-    Switch(h, {
-      props: { checked: model.notify, ...h.props },
-      onToggle: ({ checked }) => SettingsMessage.make({ _tag: "ToggledNotify", checked }),
-      view: (s) => h.label(s.root({ element: h.button, children: [s.thumb({ element: h.span })] }), "Notifications")
-    })
+    h.div.onClick(SettingsMessage.make({ _tag: "ClickedRow" })).children(
+      Switch(h, {
+        props: { checked: model.notify, ...h.props },
+        onToggle: ({ checked }) => SettingsMessage.make({ _tag: "ToggledNotify", checked }),
+        view: (s) => h.label(s.root({ element: h.button, children: [s.thumb({ element: h.span })] }), "Notifications")
+      }),
+      h.output(String(model.rowClicks))
+    )
 })
 
 const root = Locator.attr("role", "switch")
 const thumb = Locator.tag("span")
+const rowClicks = (s: { readonly get: (locator: Locator.Locator) => Locator.Node }) =>
+  s.get(Locator.tag("output")).children?.[0]?.text
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
 // The root a consumer gets for these props and this button.
@@ -59,16 +65,17 @@ describe("Switch", () => {
       assert.isUndefined(s.get(thumb).attrs?.["data-unchecked"])
       s.fire(root, "click")
       assert.strictEqual(s.get(root).attrs?.["aria-checked"], "false")
+      // The switch handled both clicks, so the row heard neither.
+      assert.strictEqual(rowClicks(s), "0")
     }))
 
-  it.effect("a disabled or read-only switch handles no click, and only a disabled one leaves the tab order", () =>
+  it.effect("a read-only switch leaves its click to the row around it, and only a disabled one leaves the tab order", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(Settings, { disabled: true })
       const disabled = s.get(root).attrs
       assert.strictEqual(disabled?.disabled, "")
       assert.strictEqual(disabled?.["data-disabled"], "")
       assert.strictEqual(s.get(thumb).attrs?.["data-disabled"], "")
-      assert.throws(() => s.fire(root, "click"), /nothing handles "click"/)
       s.props({ readOnly: true, required: true })
       const attrs = s.get(root).attrs
       assert.isUndefined(attrs?.disabled)
@@ -80,7 +87,9 @@ describe("Switch", () => {
       assert.isUndefined(thumbAttrs?.["data-disabled"])
       assert.strictEqual(thumbAttrs?.["data-readonly"], "")
       assert.strictEqual(thumbAttrs?.["data-required"], "")
-      assert.throws(() => s.fire(root, "click"), /nothing handles "click"/)
+      s.fire(root, "click")
+      assert.strictEqual(rowClicks(s), "1")
+      assert.strictEqual(s.get(root).attrs?.["aria-checked"], "false")
     }))
 
   it("the root keeps the consumer's attributes, but the switch's own win, present or absent", () => {
@@ -141,11 +150,15 @@ describe("Switch", () => {
     assert.deepStrictEqual(builder.children("on").attrs, finished.attrs)
   })
 
-  it("the root refuses a button that already handles the click it owns", () => {
-    assert.throws(
-      () => rootOf({ checked: false }, h.button.onClick(() => undefined)),
-      /Switch: the root's element already handles click/
-    )
+  it("the root keeps a consumer's click handler without onToggle, and refuses it with one in every state", () => {
+    const handler = () => undefined
+    const element = h.button.onClick(handler)
+    assert.strictEqual(rootOf({ checked: false }, element).handlers.click, handler)
+    const toggling = (props: SwitchProps) => () =>
+      Switch(h, { props, onToggle: () => undefined, view: (s) => s.root({ element }) })
+    assert.throws(toggling({ checked: false }), /Switch: the root's element already handles click/)
+    // A read-only switch sets no handler, but it would once it's editable.
+    assert.throws(toggling({ checked: false, readOnly: true }), /Switch: the root's element already handles click/)
   })
 
   it("the root draws the form field after its children: value when on, and uncheckedValue or nothing when off", () => {

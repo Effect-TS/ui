@@ -157,8 +157,10 @@ export type SwitchSpan<Msg, R = never> = Html.Element<Msg, R, Html.EventsOf<"spa
  *
  * `root` returns the finished button: set its classes, attributes and
  * other handlers on `element`, and pass what goes inside as `children`.
- * The root owns `click`, so an `element` that already handles it fails
- * the render: pass `onToggle` to the switch instead.
+ * A switch with an `onToggle` sets the button's click handler, so an
+ * `element` that already handles `click` fails the render, in every
+ * state. Without `onToggle` the switch sets none, and the consumer's
+ * click handler stays.
  *
  * `thumb` returns the finished span, or, applied to the span alone, the
  * builder for another kit call's `element`.
@@ -218,8 +220,10 @@ const state = <B extends { readonly attr: (name: string, value: string | undefin
  *
  * `onToggle` is what a click sends: it gets the value the user asked for,
  * which the consumer stores and passes back as `checked`. It never
- * cancels the click. A disabled or read-only switch, or one without
- * `onToggle`, sets no click handler, so a click reaches an ancestor's.
+ * cancels the click. A read-only switch, or one without `onToggle`, sets
+ * no click handler, so its click goes to the nearest ancestor that handles
+ * one. A disabled switch sets none either, and the browser gives a
+ * disabled button no click.
  *
  * The switch's own attributes win over the ones the consumer set on the
  * builders it passes in: `type`, `role`, `disabled`, the ARIA state
@@ -261,8 +265,12 @@ export const Switch = <Msg, A extends View.Content<Msg, any>>(
     readOnly: props.readOnly === true,
     required: props.required === true,
     root: ({ children, element }) => {
-      if (element.handlers.click !== undefined) {
-        throw new Error("Switch: the root's element already handles click. The switch owns it: pass onToggle instead")
+      // By `onToggle` alone, not by the state: a read-only switch sets no
+      // handler now, but the clash would only show once it became editable.
+      if (onToggle !== undefined && element.handlers.click !== undefined) {
+        throw new Error(
+          "Switch: the root's element already handles click, which onToggle would replace. Send the message from onToggle"
+        )
       }
       const root = state(element, props)
         // Inside a form a button submits by default.
