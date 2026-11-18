@@ -430,13 +430,6 @@ export interface CommandEnded extends InstanceBase {
   readonly _tag: "CommandEnded"
   readonly name: string
   readonly issued: Issued
-  /**
-   * Whether the run was detached: an Effect-shaped `Command.Service` run
-   * outside `switch`, owned by its Layer build. When its instance was gone
-   * by then, its result was discarded without being mapped, and this entry is
-   * all that reports it.
-   */
-  readonly detached: boolean
   /** The run's span id, or `undefined` when its span never began. */
   readonly spanId: string | undefined
   /** The run's trace id, or `undefined` when its span never began. */
@@ -445,9 +438,8 @@ export interface CommandEnded extends InstanceBase {
    * `true` when the run had at least one result (its Effect's result, each
    * Stream element, a typed failure `onFailure` mapped) and every one was
    * `Component.noop`, so it ended without a message by design. `false` when
-   * it sent any message, when a Stream ended with no elements, and when a
-   * detached run ended after its instance closed, since its result wasn't
-   * mapped.
+   * it sent any message, when a Stream ended with no elements, and when it
+   * ended while its instance was closing, since its result wasn't mapped.
    */
   readonly silent: boolean
   /**
@@ -470,8 +462,9 @@ export interface CommandEnded extends InstanceBase {
  * **Details**
  *
  * It's logged when the run's fiber has exited, which is when `h.isRunning`
- * stops counting it: a run whose cleanup is still going has no entry yet. A
- * run that never got a fiber logs it when it's stopped.
+ * stops counting it and a run queued behind it in its group starts: a run
+ * whose cleanup is still going has no entry yet. A run that never got a
+ * fiber logs it when it's stopped.
  *
  * @stability experimental
  * @category models
@@ -481,8 +474,6 @@ export interface CommandInterrupted extends InstanceBase {
   readonly _tag: "CommandInterrupted"
   readonly name: string
   readonly issued: Issued
-  /** As on `CommandEnded`. */
-  readonly detached: boolean
   /** The run's span id, or `undefined` when its span never began. */
   readonly spanId: string | undefined
   /** The run's trace id, or `undefined` when its span never began. */
@@ -529,9 +520,9 @@ export interface CommandAwaiting extends InstanceBase {
 }
 
 /**
- * A Command that never ran: dropped by its `mode`, or by the server, where
- * no Command runs. On the server only a Command from `update` is logged;
- * `init`'s are dropped silently, since the client runs them when it adopts.
+ * A Command that never ran: dropped by the server, where no Command runs.
+ * Only a Command from `update` is logged; `init`'s are dropped silently,
+ * since the client runs them when it adopts.
  *
  * @stability experimental
  * @category models
@@ -541,7 +532,7 @@ export interface CommandDropped extends InstanceBase {
   readonly _tag: "CommandDropped"
   readonly name: string
   readonly issued: Issued
-  readonly reason: "mode" | "server"
+  readonly reason: "server"
 }
 
 /**
@@ -777,7 +768,7 @@ export const fanout = <const Layers extends ReadonlyArray<Layer.Layer<never, any
  * @category Wire
  * @since 0.1.0
  */
-export const wireVersion = 3
+export const wireVersion = 4
 
 /**
  * Where a log comes from, as `Hello` reports it.
@@ -828,7 +819,6 @@ const RunWire = {
   ...InstanceWire,
   name: Schema.String,
   issued: IssuedWire,
-  detached: Schema.Boolean,
   spanId: Schema.NullOr(Schema.String),
   traceId: Schema.NullOr(Schema.String)
 }
@@ -937,7 +927,7 @@ export const Wire = Schema.Union([
     ...InstanceWire,
     name: Schema.String,
     issued: IssuedWire,
-    reason: Schema.Literals(["mode", "server"])
+    reason: Schema.Literal("server")
   }),
   Schema.TaggedStruct("SendDropped", {
     ...InstanceWire,
@@ -1042,7 +1032,6 @@ export const makeEncoder = (options?: {
     ...instanceBase(entry),
     name: entry.name,
     issued: entry.issued,
-    detached: entry.detached,
     spanId: entry.spanId ?? null,
     traceId: entry.traceId ?? null
   })

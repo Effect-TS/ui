@@ -17,8 +17,8 @@
  * - A message step (`receive`, `subscription`, `layerFailed`, Story's
  *   `send`, a Scene's interactions and child steps) throws while a Command
  *   or a load more is pending, or while an enabled query has no result at
- *   its args. A Command whose mode is `switch`, `drop` or `queue` doesn't
- *   block, nor does a stream Command, nor anything `keepPending` named.
+ *   its args. A Command whose mode is `switch` or `queue` doesn't block,
+ *   nor does a stream Command, nor anything `keepPending` named.
  * - Every acting step (a message step, a settle step, `props`, `given`)
  *   throws while an event or a send isn't acknowledged with `emitted` or
  *   `sent`, or, in a Scene, while an ignored interaction isn't acknowledged
@@ -108,11 +108,6 @@ export interface Record<Props, Model, Msg, Events> {
    * An awaiting run that is cut delivers its message instead, and isn't here.
    */
   readonly interrupted: ReadonlyArray<
-    | Command.Issued<Msg | Component.Noop, any, never, "Effect">
-    | Command.Issued<Msg | Component.Noop, any, never, "Stream">
-  >
-  /** Commands ignored by `mode: "drop"`. Nothing requires a test to read it. */
-  readonly dropped: ReadonlyArray<
     | Command.Issued<Msg | Component.Noop, any, never, "Effect">
     | Command.Issued<Msg | Component.Noop, any, never, "Stream">
   >
@@ -290,8 +285,6 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
   readonly pending: this["current"]["pending"]
   /** Commands interrupted by `switch` or by an interrupt Command, after the last step. */
   readonly interrupted: this["current"]["interrupted"]
-  /** Commands ignored by `mode: "drop"`, after the last step. */
-  readonly dropped: this["current"]["dropped"]
   /** The infinite queries with a load more pending, after the last step. */
   readonly loadingMore: ReadonlyArray<string>
   /** The Subscription keys the current Model and props ask for, without the query watches. Nothing runs. */

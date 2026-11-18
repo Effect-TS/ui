@@ -171,7 +171,7 @@ describe("Component.noop", () => {
       s.resolve(Quiet, Component.noop).expectNone()
     }))
 
-  it.effect("a detached run that ends after its instance closed doesn't map its result and isn't silent", () =>
+  it.effect("a Service run ends with its instance, even with its Layer provided above, and maps nothing", () =>
     run(Effect.gen(function*() {
       class Slow extends Command.Service<Slow>()(
         "test/Slow",
@@ -191,7 +191,6 @@ describe("Component.noop", () => {
         view: (_, h) => h.text("child")
       })
       const Close = Schema.TaggedUnion({ Close: {} })
-      // The service is provided above the child, so its run outlives the child.
       const Parent = Component.provide(
         Component.define({ name: "Parent", model: Schema.Boolean, message: Close }).make({
           init: () => true,
@@ -204,14 +203,14 @@ describe("Component.noop", () => {
       yield* TestHost.settle
       root.send(Close.make({ _tag: "Close" }))
       yield* TestHost.settle
-      assert.deepStrictEqual(root.pending().map((entry) => entry._tag === "Command" && entry.detached), [true])
+      assert.deepStrictEqual(root.pending(), [])
       yield* TestClock.adjust("1 second")
       yield* TestHost.settle
-      assert.deepStrictEqual(root.pending(), [])
       assert.strictEqual(mapped, 0)
-      const [entry] = ended(root)
-      assert.deepStrictEqual([entry.name, entry.detached, entry.silent], ["test/Slow", true, false])
-      assert.strictEqual(typeof entry.spanId, "string")
-      assert.strictEqual(typeof entry.traceId, "string")
+      assert.deepStrictEqual(ended(root), [])
+      assert.deepStrictEqual(
+        root.log().flatMap((entry) => entry._tag === "CommandInterrupted" ? [entry.name] : []),
+        ["test/Slow"]
+      )
     })))
 })

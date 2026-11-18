@@ -58,9 +58,6 @@ export abstract class Cursor {
   get interrupted(): ReadonlyArray<unknown> {
     return this.state.interrupted
   }
-  get dropped(): ReadonlyArray<unknown> {
-    return this.state.dropped
-  }
   get loadingMore(): ReadonlyArray<string> {
     return this.state.loadingMore
   }
@@ -136,7 +133,6 @@ export abstract class Cursor {
       emitted: [],
       sent: [],
       interrupted: [],
-      dropped: [],
       loadingMore: [],
       ack: { ...engine.noAck, acted: true },
       shared: engine.withShared(this.state, shared, step)
@@ -379,7 +375,6 @@ export const baseRecord = (state: engine.State<any, any, any, any>) => ({
   emitted: state.emitted,
   sent: state.sent,
   interrupted: state.interrupted,
-  dropped: state.dropped,
   loadingMore: state.loadingMore,
   subscriptions: state.subscriptions,
   queryInfo: state.queryInfo
@@ -402,7 +397,6 @@ export const initial = (component: Component.Any, props: unknown): engine.State<
     emitted: [],
     sent: [],
     interrupted: [],
-    dropped: [],
     loadingMore: [],
     defaultPrevented: false,
     ack: engine.noAck

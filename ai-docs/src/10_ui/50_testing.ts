@@ -54,7 +54,7 @@ const body = HtmlLocator.role("textbox", { name: "Body" })
 // the test moves on. A message step (`send`, `receive`, a click) throws
 // while a Command it could race is still running, a query has no result, or
 // an event, send or ignored click hasn't been acknowledged. A Command whose
-// mode is `switch`, `drop` or `queue`, or a stream, is meant to overlap the
+// mode is `switch` or `queue`, or a stream, is meant to overlap the
 // next message, so it doesn't block one. `keepPending` lets any other
 // Command overlap on purpose. `make`'s end check fails on anything left.
 // This is stricter than foldkit's stories: an ignored interaction and a query

@@ -294,12 +294,11 @@ describe("Command", () => {
     const done = () => Effect.succeed(Message.make({ _tag: "Done" }))
     const concurrent = Command.make("C", { args: {} }, done)
     const switching = Command.make("S", { args: {}, mode: "switch" }, done)
-    const dropping = Command.make("D", { args: {}, mode: "drop" }, done)
     const queueing = Command.make("Q", { args: { key: Schema.String }, mode: "queue", group: ["key"] }, done)
     const q = (key: string) => queueing({ key })
     const entry = (
       command: Command.Issued<any, any, any, "Effect">,
-      status: "running" | "queued" = "running"
+      status: schedule.Status = "running"
     ): schedule.Entry<string> => ({
       name: command.name,
       key: command.groupKey,
@@ -312,16 +311,25 @@ describe("Command", () => {
       assert.deepStrictEqual(schedule.schedule([entry(concurrent())], concurrent()), { action: "start", interrupt: [] })
     })
 
-    it("switch starts and interrupts the group, not other Commands", () => {
+    it("switch interrupts the group, not other Commands, and waits for the fibers it cut", () => {
       const other = entry(concurrent())
       const decision = schedule.schedule([entry(switching()), other, entry(switching(), "queued")], switching())
-      assert.strictEqual(decision.action, "start")
+      assert.strictEqual(decision.action, "queue")
       assert.deepStrictEqual(decision.interrupt.map((e) => e.value), ["S::running", "S::queued"])
+      assert.deepStrictEqual(schedule.schedule([other], switching()), { action: "start", interrupt: [] })
     })
 
-    it("drop ignores a new run while one is running", () => {
-      assert.strictEqual(schedule.schedule([entry(dropping())], dropping()).action, "drop")
-      assert.strictEqual(schedule.schedule([entry(dropping(), "queued")], dropping()).action, "start")
+    it("a stopping run holds its group until its fiber exits, and isn't interrupted again", () => {
+      const stopping = entry(q("a"), "stopping")
+      assert.strictEqual(schedule.schedule([stopping], q("a")).action, "queue")
+      assert.deepStrictEqual(schedule.schedule([entry(switching(), "stopping")], switching()), {
+        action: "queue",
+        interrupt: []
+      })
+      assert.deepStrictEqual(schedule.schedule([stopping], Command.interrupt(queueing)).interrupt, [])
+      const queued = entry(q("a"), "queued")
+      assert.strictEqual(schedule.next([stopping, queued], queued), undefined)
+      assert.strictEqual(schedule.next([queued], queued), queued)
     })
 
     it("queue waits per group, and the oldest queued run starts when the running one ends", () => {

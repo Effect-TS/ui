@@ -594,7 +594,7 @@ export interface InitStep<in out Model, in out Msg, in out Events, out R = never
   set(model: Model): InitStep<Model, Msg, Events, R>
   /** Changes the Model with a function of the current one. */
   modify(f: (model: Model) => Model): InitStep<Model, Msg, Events, R>
-  /** Runs Commands in this instance's Scope, as `Step.run` does. */
+  /** Runs Commands owned by this instance, as `Step.run` does. */
   run<const C extends ReadonlyArray<Command.Command<Msg | Noop, any>>>(
     ...commands: C
   ): InitStep<Model, Msg, Events, R | Command.Requirements<C[number]>>
@@ -629,7 +629,8 @@ export interface Step<in out Model, in out Msg, in out Events, out R = never, L 
   /** Changes the Model with a function of the current one. */
   modify(f: (model: Model) => Model): Step<Model, Msg, Events, R, L>
   /**
-   * Runs Commands in this instance's Scope. Their results come back as
+   * Runs Commands owned by this instance: each ends when the instance does,
+   * and gets a Scope of its own that closes with it. Their results come back as
    * messages, so a Command whose result isn't this component's message or
    * `Component.noop` is rejected. A result of `Component.noop` sends nothing.
    */

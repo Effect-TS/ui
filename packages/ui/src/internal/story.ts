@@ -51,7 +51,6 @@ export interface State<Props, Model, Msg, Events> {
   /** The sends not acknowledged yet, oldest first. */
   readonly sent: ReadonlyArray<Component.Send>
   readonly interrupted: ReadonlyArray<Pending<Msg>["command"]>
-  readonly dropped: ReadonlyArray<Pending<Msg>["command"]>
   readonly loadingMore: ReadonlyArray<string>
   readonly subscriptions: () => ReadonlyArray<string>
   readonly queryInfo: () => ReadonlyArray<QueryInfo>
@@ -129,7 +128,6 @@ export type Fields<Props, Model, Msg, Events> =
     | "emitted"
     | "sent"
     | "interrupted"
-    | "dropped"
     | "loadingMore"
     | "defaultPrevented"
     | "ack"
@@ -386,7 +384,6 @@ export const record = <Props, Model, Msg, Events>(
     emitted: fields.emitted,
     sent: fields.sent,
     interrupted: fields.interrupted,
-    dropped: fields.dropped,
     loadingMore: fields.loadingMore,
     defaultPrevented: fields.defaultPrevented,
     ack: fields.ack,
@@ -429,7 +426,6 @@ export const update = <Props, Model, Msg, Events>(
     emitted: story.emitted,
     sent: story.sent,
     interrupted: story.interrupted,
-    dropped: story.dropped,
     loadingMore: story.loadingMore,
     // A step sets it last, once it has settled: an interaction to what it did, any other step to `false`.
     defaultPrevented: story.defaultPrevented,
@@ -888,7 +884,8 @@ const toEntries = <Msg>(pending: ReadonlyArray<Pending<Msg>>): Array<schedule.En
 /**
  * Applies what `init` or `update` returned: the Model, the Commands through `schedule`, and the events.
  * As in the runtime, a cut run that awaits delivers its message inside this `update`, before the
- * Command that cut it is added.
+ * Command that cut it is added. A story runs no fiber, so a cut run has no cleanup: it leaves at once,
+ * and a run queued behind it starts.
  *
  * @internal
  */
@@ -919,11 +916,9 @@ export const apply = <Props, Model, Msg, Events>(
         const entry: Pending<Msg> = { command, status: decision.action === "start" ? "running" : "queued" }
         livePatches.set(entry, registeredPatches(out, command))
         out = update(out, { pending: [...out.pending, entry] })
+        if (entry.status === "queued") out = startNext(out, entry)
         break
       }
-      case "drop":
-        out = update(out, { dropped: [...out.dropped, command] })
-        break
       case "none":
         break
     }
@@ -940,6 +935,21 @@ const carryKept = <Msg>(ack: Ack<Msg>, replaced: ReadonlyMap<Pending<Msg>, Pendi
     ? ack
     : { ...ack, kept: ack.kept.map((entry) => replaced.get(entry) ?? entry) }
 
+/** Starts the next queued run of `entry`'s group, once nothing in the group runs. */
+const startNext = <Props, Model, Msg, Events>(
+  story: State<Props, Model, Msg, Events>,
+  entry: Pending<Msg>
+): State<Props, Model, Msg, Events> => {
+  const next = schedule.next(toEntries(story.pending), toEntries([entry])[0])?.value
+  if (next === undefined) return story
+  const running: Pending<Msg> = { command: next.command, status: "running" }
+  livePatches.set(running, livePatches.get(next) ?? [])
+  return update(story, {
+    pending: story.pending.map((other) => other === next ? running : other),
+    ack: carryKept(story.ack, new Map([[next, running]]))
+  })
+}
+
 /**
  * A run's fiber exited: with a message it is awaiting, on `awaiting` or behind an earlier message of
  * its queue, and without one it leaves. The next queued run of its group starts either way.
@@ -954,17 +964,8 @@ export const exited = <Props, Model, Msg, Events>(
   const awaiting: Pending<Msg> | undefined = held === undefined
     ? undefined
     : { command: entry.command, status: "awaiting", message: held.message, awaiting: held.awaiting }
-  const next = schedule.next(toEntries(story.pending.filter((other) => other !== entry)), toEntries([entry])[0])
-  const replaced = new Map<Pending<Msg>, Pending<Msg>>()
-  const pending = story.pending.flatMap((other): Array<Pending<Msg>> => {
-    if (other === entry) return awaiting === undefined ? [] : [awaiting]
-    if (other !== next?.value) return [other]
-    const running: Pending<Msg> = { command: other.command, status: "running" }
-    livePatches.set(running, livePatches.get(other) ?? [])
-    replaced.set(other, running)
-    return [running]
-  })
-  const out = update(story, { pending, ack: carryKept(story.ack, replaced) })
+  const pending = story.pending.flatMap((other) => other !== entry ? [other] : awaiting === undefined ? [] : [awaiting])
+  const out = startNext(update(story, { pending }), entry)
   return awaiting === undefined ? out : release(out, awaiting)
 }
 
@@ -1324,8 +1325,7 @@ const describeSend = (send: Component.Send): string =>
 
 /** Whether a Command's mode lets a message arrive while it runs: what such a mode is for. */
 const exempt = (entry: Pending<any>): boolean =>
-  entry.command._tag === "Stream" || entry.command.mode === "switch" || entry.command.mode === "drop" ||
-  entry.command.mode === "queue"
+  entry.command._tag === "Stream" || entry.command.mode === "switch" || entry.command.mode === "queue"
 
 const settleHint = (entry: Pending<any>): string =>
   entry.status === "awaiting"

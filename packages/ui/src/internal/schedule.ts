@@ -9,8 +9,9 @@ import type * as Command from "../Command.ts"
 
 /**
  * A run the scheduler knows about: a Command that is running, waiting to run,
- * or awaiting: its fiber has exited and its result hasn't been delivered. A
- * result of `Component.noop` is delivered as nothing, but awaits all the same.
+ * awaiting (its fiber has exited and its result hasn't been delivered), or
+ * stopping (it was stopped and its fiber hasn't exited). A result of
+ * `Component.noop` is delivered as nothing, but awaits all the same.
  *
  * @internal
  */
@@ -24,14 +25,16 @@ export interface Entry<A> {
 }
 
 /**
- * Where a run is: `running`, `queued` behind a running run of its group, or
- * `awaiting`: its fiber exited and its result (a message or `Component.noop`)
- * waits, on its own `Command.afterRefetch` wait or, under `queue`, behind an
- * earlier result of its group.
+ * Where a run is: `running`, `queued` behind a running or stopping run of its
+ * group, `awaiting`: its fiber exited and its result (a message or
+ * `Component.noop`) waits, on its own `Command.afterRefetch` wait or, under
+ * `queue`, behind an earlier result of its group, or `stopping`: it was
+ * stopped and its fiber, cleanup included, hasn't exited. A run is over when
+ * its fiber exits, so a stopping run still holds its group.
  *
  * @internal
  */
-export type Status = "running" | "queued" | "awaiting"
+export type Status = "running" | "queued" | "awaiting" | "stopping"
 
 /**
  * What to do with an issued Command, and which in-flight entries it interrupts.
@@ -39,23 +42,30 @@ export type Status = "running" | "queued" | "awaiting"
  * @internal
  */
 export interface Decision<A> {
-  readonly action: "start" | "queue" | "drop" | "none"
+  readonly action: "start" | "queue" | "none"
   readonly interrupt: ReadonlyArray<Entry<A>>
 }
 
 const sameGroup = <A>(entry: Entry<A>, name: string, key: string | undefined): boolean =>
   entry.name === name && entry.key === key
 
+/** Whether a run holds its group: its fiber hasn't exited. */
+const holds = <A>(entry: Entry<A>): boolean => entry.status === "running" || entry.status === "stopping"
+
 /**
  * Decides how an issued Command relates to the in-flight runs of its instance.
  *
  * Concurrency is grouped by Command name plus the group key of its `group`
- * fields. `concurrent` always starts. `switch` starts and interrupts the
- * group's running, queued and awaiting runs. `drop` is ignored while the
- * group has a running or awaiting run. `queue` waits while the group has a
- * running run: an awaiting one doesn't hold it. An `Interrupt` starts nothing
- * and interrupts every run with its name, or only those with its group key
- * when it has one.
+ * fields. `concurrent` always starts. `switch` interrupts the group's
+ * running, queued and awaiting runs, and waits until every fiber it cut has
+ * exited. `queue` waits while the group has a running or stopping run: an
+ * awaiting one doesn't hold it. An `Interrupt` starts nothing and interrupts
+ * every run with its name, or only those with its group key when it has one.
+ * A stopping run is never interrupted again.
+ *
+ * A run that waits is queued. The caller stops the interrupted runs and
+ * starts the queued run with `next` once nothing holds the group, at once
+ * when no run it cut had a fiber.
  *
  * @internal
  */
@@ -63,10 +73,11 @@ export const schedule = <A>(
   inFlight: ReadonlyArray<Entry<A>>,
   command: Command.Command<any, any>
 ): Decision<A> => {
+  const live = inFlight.filter((entry) => entry.status !== "stopping")
   if (command._tag === "Interrupt") {
     return {
       action: "none",
-      interrupt: inFlight.filter((entry) =>
+      interrupt: live.filter((entry) =>
         entry.name === command.name && (command.groupKey === undefined || entry.key === command.groupKey)
       )
     }
@@ -76,24 +87,25 @@ export const schedule = <A>(
     case "concurrent":
       return { action: "start", interrupt: [] }
     case "switch":
-      return { action: "start", interrupt: group }
-    case "drop":
-      return { action: group.some((entry) => entry.status !== "queued") ? "drop" : "start", interrupt: [] }
+      return {
+        action: group.some(holds) ? "queue" : "start",
+        interrupt: group.filter((entry) => entry.status !== "stopping")
+      }
     case "queue":
-      return { action: group.some((entry) => entry.status === "running") ? "queue" : "start", interrupt: [] }
+      return { action: group.some(holds) ? "queue" : "start", interrupt: [] }
   }
 }
 
 /**
- * Decides which queued run starts when a running one's fiber exits: the
- * oldest queued run of the same group, if `remaining` no longer has a
- * running one. An awaiting run doesn't hold the queue.
+ * The run that starts now in `run`'s group: the oldest queued one, once
+ * `inFlight` has no running or stopping run in the group. An awaiting run
+ * doesn't hold the queue.
  *
  * @internal
  */
-export const next = <A>(remaining: ReadonlyArray<Entry<A>>, ended: Entry<A>): Entry<A> | undefined => {
-  const group = remaining.filter((entry) => sameGroup(entry, ended.name, ended.key))
-  if (group.some((entry) => entry.status === "running")) return undefined
+export const next = <A>(inFlight: ReadonlyArray<Entry<A>>, run: Entry<A>): Entry<A> | undefined => {
+  const group = inFlight.filter((entry) => sameGroup(entry, run.name, run.key))
+  if (group.some(holds)) return undefined
   return group.find((entry) => entry.status === "queued")
 }
 

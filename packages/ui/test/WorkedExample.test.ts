@@ -225,7 +225,7 @@ describe("the worked example", () => {
     )
   })
 
-  it.effect("a queued save drains after its form unmounts", () => {
+  it.effect("a save ends with its form: the running one is interrupted and the queued one never starts", () => {
     const { deps, server } = setup("/users/1")
     return run(
       deps,
@@ -240,14 +240,12 @@ describe("the worked example", () => {
         click(root, "Close")
         yield* TestHost.settle
         assert.isUndefined(root.query(Locator.tag("form")))
-        assert.strictEqual(root.pending().length, 2)
-        yield* TestClock.adjust("100 millis")
-        yield* TestClock.adjust("100 millis")
-        yield* TestHost.settle
-        assert.strictEqual(server.calls.rename, 2)
-        assert.strictEqual(server.users.get("1")?.name, "C")
-        assert.strictEqual(cardName(root), "C")
         assert.deepStrictEqual(root.pending(), [])
+        yield* TestClock.adjust("200 millis")
+        yield* TestHost.settle
+        // Neither save reached the server: the first was cut mid-request.
+        assert.strictEqual(server.calls.rename, 0)
+        assert.notInclude(["B", "C"], server.users.get("1")?.name)
       })
     )
   })
