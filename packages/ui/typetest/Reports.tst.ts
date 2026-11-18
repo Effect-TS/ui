@@ -96,6 +96,40 @@ describe("reports", () => {
       Component.Shared.Of<typeof Provider> | Component.Shared.Of<typeof Plain>
     >()
   })
+  it("only makes sends to the optional owner optional", () => {
+    const B = Component.define({
+      name: "Provider",
+      model: Schema.Null,
+      message: TipMessage,
+      receives: ["Entered"],
+      shares: () => 1
+    }).make({ init: () => null, update: (model) => model, parts: () => ({}) })
+    const sender = Component.define({
+      name: "Sender",
+      model: Schema.Null,
+      message: TipMessage,
+      shared: { a: { owner: Provider, optional: true } }
+    })
+    const sendsA = sender.make({
+      init: () => null,
+      update: (_, __, $) => $.send(Provider, { _tag: "Completed" }),
+      view: (_, h) => h.text("")
+    })
+    const sendsB = sender.make({
+      init: () => null,
+      update: (_, __, $) => $.send(B, { _tag: "Entered" }),
+      parts: () => ({})
+    })
+    const widened = sender.make({
+      init: () => null,
+      update: (_, __, $): Component.Step<null, typeof TipMessage.Type, never, Component.Shared<"Provider">> =>
+        $.send(Provider, { _tag: "Completed" }),
+      view: (_, h) => h.text("")
+    })
+    expect<Component.Requirements<typeof widened>>().type.toBe<Component.Shared<"Provider">>()
+    expect<Component.Requirements<typeof sendsA>>().type.toBe<never>()
+    expect<Component.Headless.Requirements<typeof sendsB>>().type.toBe<Component.Shared.Of<typeof B>>()
+  })
   it("keeps a supplied map with a string index", () => {
     const reads: Readonly<Record<string, typeof Provider>> = { provider: Provider }
     const Indexed = Component.define({ name: "Indexed", model: Schema.Null, message: Schema.Never, shared: reads })

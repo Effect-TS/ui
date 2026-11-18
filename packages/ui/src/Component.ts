@@ -629,9 +629,7 @@ export type SharedRequirements<SR> = {
 }[keyof SR]
 
 /**
- * The requirements a component's `shared` option removes: the
- * `Shared.Of<typeof Owner>` of each optional owner, which `$.send(Owner, ...)`
- * would otherwise add.
+ * The named requirements corresponding to a component's optional shared owners.
  *
  * @stability experimental
  * @category utility types
@@ -640,6 +638,16 @@ export type SharedRequirements<SR> = {
 export type SharedOptional<SR> = {
   readonly [K in keyof SR]: IsOptional<SR[K]> extends true ? Shared.Of<SharedOwner<SR[K]>> : never
 }[keyof SR]
+
+// Retain the send target until make checks optional reads. A step annotated with just
+// Shared<Name> has lost this information, so it cannot be discharged by an optional read.
+type SendTarget<O> = { readonly "~@effect/ui/Component/SendTarget": Types.Invariant<O> }
+
+type OptionalTargets<SR> = {
+  readonly [K in keyof SR]: IsOptional<SR[K]> extends true ? SendTarget<SharedOwner<SR[K]>> : never
+}[keyof SR]
+
+type NamedRequirement<R> = R extends SendTarget<infer O> ? Shared.Of<O> : R
 
 /**
  * A `$.loadMore(name)` or `$.reset(name)` an `update` issued, by query
@@ -762,7 +770,7 @@ export interface Step<in out Model, in out Msg, in out Events, out R = never, L 
   send<O extends Headless.Any>(
     owner: O,
     message: NoInfer<SendMessage<Shared.Receives<O>>>
-  ): Step<Model, Msg, Events, R | Shared.Of<O>, L>
+  ): Step<Model, Msg, Events, R | (Shared.Of<O> & SendTarget<O>), L>
 }
 
 /**
@@ -811,7 +819,7 @@ export interface Update<in out Model, in out Msg, in out Events, out Props, L = 
         $: Update<Model, Msg, Events, Props, L, Cur>
       ) => Model | Step<Model, Msg, Events, any, L>
     >
-  >(...updates: F): Step<Model, Msg, Events, StepRequirements<ReturnType<F[number]>>, L>
+  >(...updates: F): Step<Model, Msg, Events, RawStepRequirements<ReturnType<F[number]>>, L>
 }
 
 /**
@@ -834,7 +842,9 @@ export interface Init<in out Model, in out Msg, in out Events, out Props> {
  * @category utility types
  * @since 0.1.0
  */
-export type StepRequirements<U> = U extends InitStep<infer _Model, infer _Msg, infer _Events, infer R> ? R : never
+export type StepRequirements<U> = NamedRequirement<RawStepRequirements<U>>
+
+type RawStepRequirements<U> = U extends InitStep<infer _Model, infer _Msg, infer _Events, infer R> ? R : never
 
 const StepProto = {
   [StepTypeId]: StepTypeId,
@@ -1978,7 +1988,7 @@ export interface Definition<
     Parts,
     Exclude<
       // A send to an optional owner needs none above: only this component's own steps drop it.
-      | Exclude<StepRequirements<UI> | StepRequirements<U> | StepRequirements<UR[keyof UR]>, SharedOptional<SR>>
+      | NamedRequirement<Exclude<RawStepRequirements<UI | U | UR[keyof UR]>, OptionalTargets<SR>>>
       | View.PartRequirements<Parts[keyof Parts]>
       | Subscription.Requirements<Sub>
       | QueryServices<L>
@@ -2039,7 +2049,7 @@ export interface Definition<
     Events,
     Exclude<
       // A send to an optional owner needs none above: only this component's own steps drop it.
-      | Exclude<StepRequirements<UI> | StepRequirements<U> | StepRequirements<UR[keyof UR]>, SharedOptional<SR>>
+      | NamedRequirement<Exclude<RawStepRequirements<UI | U | UR[keyof UR]>, OptionalTargets<SR>>>
       | View.Requirements<UV>
       | Subscription.Requirements<Sub>
       | QueryServices<L>
