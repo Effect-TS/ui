@@ -1,4 +1,4 @@
-import { Component, Feature, Mount, type View } from "@effect/ui"
+import { Component, Feature, Mount, View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { Locator, Scene } from "@effect/ui/testing"
@@ -323,7 +323,7 @@ describe("Scene", () => {
             init: () => null,
             update: (model) => model,
             view: (_, h) => {
-              const fresh = h.div.onMount(Hello()).children()
+              const fresh = View.build(h.div.onMount(Hello()), [])
               const tree = cache ? cached ??= fresh : fresh
               return Wrapper(h, { key: h.props.childKey, view: () => tree })
             }

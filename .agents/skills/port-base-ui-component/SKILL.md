@@ -45,8 +45,7 @@ Work top to bottom. Put the notes from steps 1 to 3 in the PR description.
      `view`
    - the parts, the tag each accepts, and the attributes and events each
      owns
-   - each part's options, and which parts add markup and so have no
-     stacking form
+   - each part's arguments, and the markup a part adds and where it goes
    - the props, and the events: `on<Event>` options for a view function,
      `<Name>Events` for a component
    - for a component, the Model, which holds only interaction state the
@@ -69,14 +68,16 @@ Work top to bottom. Put the notes from steps 1 to 3 in the PR description.
    - the markup a part function adds, such as the form field
    - precedence: on each part, a consumer value for every attribute the part
      owns loses, both when the part sets it and when the state leaves it
-     absent, while the consumer's class and other attributes stay
-   - for a view function, an `element` that already handles an event
-     fails the render when the `on<Event>` option would replace it, in
-     every state, and keeps its handler without the option
+     absent, while the consumer's class and other attributes stay. For a
+     view function's part, that holds for a value chained after the part too
+   - for a view function, an element that already handles an event fails
+     the render when the `on<Event>` option would replace it, in every
+     state, whether the handler was set before the part or chained after
+     it, and keeps its handler without the option
 
-   Add `packages/ui-kit/typetest/<Name>.tst.ts` for each part function: the
-   return type of the options form and of the stacking form, the inferred
-   message type and requirements, and the tags it rejects. Then break the
+   Add `packages/ui-kit/typetest/<Name>.tst.ts` for each part: the builder
+   it returns, the inferred message type and requirements, and the tags it
+   rejects. Then break the
    code (for example, drop the disabled guard, or
    the `undefined` a part writes for an absent state) and check that a test
    fails.

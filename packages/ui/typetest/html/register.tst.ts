@@ -65,12 +65,11 @@ it("shared wrappers preserve unspread options.children requirements across compo
     view: (_, h) => {
       const clock = {} as View.Node<Msg, Clock>
       const logger = {} as View.Node<Msg, Logger>
-      expect(Field(h, { label: "Empty", children: [] })).type.toBe<View.Element<Msg, never>>()
-      expect(Field(h, { label: "Text", children: ["text", false, null, undefined, h.br] })).type.toBe<
-        View.Element<Msg, never>
-      >()
+      type Label<R> = Html.Element<Msg, R, Html.EventsOf<"label">, HTMLLabelElement, "label">
+      expect(Field(h, { label: "Empty", children: [] })).type.toBe<Label<never>>()
+      expect(Field(h, { label: "Text", children: ["text", false, null, undefined, h.br] })).type.toBe<Label<never>>()
       const children = [clock, logger] as const
-      expect(Field(h, { label: "Services", children })).type.toBe<View.Element<Msg, Clock | Logger>>()
+      expect(Field(h, { label: "Services", children })).type.toBe<Label<Clock | Logger>>()
       return Card(h).children(Field(h, { label: "Services", children: [clock, logger] }))
     }
   })

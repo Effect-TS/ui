@@ -107,6 +107,18 @@ describe("headless components", () => {
   it("a part's mount requirements join the headless component's, and the closure's join the parent's", () => {
     expect<Component.Headless.Requirements<typeof Timed>>().type.toBe<Clock>()
     expect<Component.Headless.Requirements<typeof Menu>>().type.toBe<never>()
+    // So do the requirements of a child the part adds, and of what its `forward` adds.
+    const seen = () => new Html.Element<never>("i").onMount(MarkSeen().pipe(Mount.map(() => Component.noop)))
+    const Marked = Component.define({ name: "Marked", model: Schema.Null, message: Schema.Never, elements: Html })
+      .make({
+        init: () => null,
+        update: (model) => model,
+        parts: (_, p) => ({
+          inside: p.part("button", (b) => b.children(seen())),
+          around: p.part("button", (b) => b.forward((node) => new Html.Element<never>("div").children(node, seen())))
+        })
+      })
+    expect<Component.Headless.Requirements<typeof Marked>>().type.toBe<Tracker>()
     const App = Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
       update: (model) => model,

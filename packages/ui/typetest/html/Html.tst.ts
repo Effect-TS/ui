@@ -65,7 +65,9 @@ describe("Html", () => {
       init: () => "",
       update: (model) => model,
       view: (_, h) => {
-        expect(h.div(h.span("text"), "more")).type.toBe<View.Element<Msg, never>>()
+        expect(h.div(h.span("text"), "more")).type.toBe<
+          Html.Element<Msg, never, Html.EventsOf<"div">, HTMLDivElement, "div">
+        >()
         expect(h.div.class("box")).type.toBe<Html.Element<Msg, never, Html.EventsOf<"div">, HTMLDivElement, "div">>()
         expect(h.input).type.toBe<Html.VoidElement<Msg, never, Html.EventsOf<"input">, HTMLInputElement, "input">>()
         expect(h).type.not.toHaveProperty("script")
@@ -74,7 +76,7 @@ describe("Html", () => {
     })
   })
 
-  it("attributes come before children, in one place", () => {
+  it("children returns the builder, so more children and attributes can follow", () => {
     Component.define({
       name: "Order",
       model: Schema.String,
@@ -84,21 +86,24 @@ describe("Html", () => {
       init: () => "",
       update: (model) => model,
       view: (draft, h) => {
-        // The issue's example: attributes and handlers first, children last.
         const form = h.form.onSubmit(Msg.make({ _tag: "Sent", title: draft })).children(
           h.input.ref(Field).value(draft).onInput(({ value }) => Msg.make({ _tag: "Typed", value })),
           h.button.attr("type", "submit").children("Add"),
           h.span(draft),
           h.br
         )
-        expect(form).type.toBe<View.Element<Msg, never>>()
-        // Both terminal forms return a node with no chain methods.
-        expect(h.div("a")).type.not.toHaveProperty("class")
-        expect(h.div.children("a")).type.not.toHaveProperty("class")
-        expect(h.div("a")).type.not.toHaveProperty("attr")
-        expect(h.form.children()).type.not.toHaveProperty("onSubmit")
+        expect(form).type.toBe<Html.Element<Msg, never, Html.EventsOf<"form">, HTMLFormElement, "form">>()
+        // The shorthand and `children` both return the builder, with the children's requirements.
+        const needsClock = {} as View.Node<Msg, Clock>
+        expect(h.div("a").class("box").children(needsClock)).type.toBe<
+          Html.Element<Msg, Clock, Html.EventsOf<"div">, HTMLDivElement, "div">
+        >()
+        // It is content, not a node: nothing reads its children off it.
+        expect(h.div.children("a")).type.toBeAssignableTo<View.Content<Msg, never>>()
+        expect(h.div.children("a")).type.not.toHaveProperty("_tag")
         // A chained builder isn't callable: only the root is shorthand.
         expect(h.div).type.toBeCallableWith("a")
+        expect(h.div("a")).type.not.toBeAssignableTo<(...args: never) => unknown>()
         expect(h.div.class("box")).type.not.toBeAssignableTo<(...args: never) => unknown>()
         expect(h.div.class("box").children).type.toBeCallableWith("a", h.br, [h.span("b")], false, null, undefined)
         // Void tags take no children and aren't callable.
@@ -109,6 +114,39 @@ describe("Html", () => {
         // A builder is a valid child and a valid view without a terminal call.
         expect(h.ul.children).type.toBeCallableWith(h.li, h.li.key("a"))
         return h.div.class("root")
+      }
+    })
+  })
+
+  it("forward returns the builder's own class, with what it adds in the requirements", () => {
+    Component.define({
+      name: "Forward",
+      model: Schema.String,
+      message: Msg,
+      elements: Html
+    }).make({
+      init: () => "",
+      update: (model) => model,
+      view: (_, h) => {
+        const needsClock = {} as View.Node<Msg, Clock>
+        const framed = h.button.forward((node) => {
+          expect(node).type.toBe<Html.Element<Msg, never, Html.EventsOf<"button">, HTMLButtonElement, "button">>()
+          return h.div.class("frame").children(node, needsClock)
+        })
+        expect(framed).type.toBe<Html.Element<Msg, Clock, Html.EventsOf<"button">, HTMLButtonElement, "button">>()
+        expect(framed.attr("title", "Go").children("Go")).type.toBe<
+          Html.Element<Msg, Clock, Html.EventsOf<"button">, HTMLButtonElement, "button">
+        >()
+        // A void element keeps its class, and still takes no children.
+        const input = h.input.forward((node) => h.label.children("Amount", node))
+        expect(input.value("1")).type.toBe<
+          Html.VoidElement<Msg, never, Html.EventsOf<"input">, HTMLInputElement, "input">
+        >()
+        expect(input).type.not.toHaveProperty("children")
+        // The function returns an element: not text, and not a component's child.
+        expect(h.button.forward).type.not.toBeCallableWith(() => "Go")
+        expect(h.button.forward).type.not.toBeCallableWith(() => ({}) as View.Child<Msg, never>)
+        return framed
       }
     })
   })

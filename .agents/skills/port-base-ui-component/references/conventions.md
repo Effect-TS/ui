@@ -17,7 +17,7 @@ the components that already follow it.
   Switch(h, {
     props: { checked: model.notify },
     onToggle: ({ checked }) => Message.make({ _tag: "ToggledNotify", checked }),
-    view: (s) => h.label(s.root({ element: h.button, children: [s.thumb(h.span.class("thumb"))] }), "Notify")
+    view: (s) => h.label(s.root(h.button).children(s.thumb(h.span.class("thumb"))), "Notify")
   })
   ```
 
@@ -68,7 +68,7 @@ form submission both need an instance. A context that may or may not be
 above the component, such as Field, doesn't count: a reader of shared
 state doesn't compile without its owner above it, so an optional context
 reaches the control through a part on the consumer's builder,
-`s.root({ element: f.control(h.button) })`.
+`s.root(f.control(h.button))`.
 
 When a view function later needs state, keep its call. Put the headless
 component behind a function with the same options, so a consumer adds at
@@ -76,7 +76,10 @@ most a `key`.
 
 ## Call shape
 
-Both kinds take `h` and one options object, with the same field names:
+Both kinds take `h` and one options object, with the same field names, so
+a view function call reads like a component call. The parts inside a
+`view` closure are different: each takes the consumer's builder and
+returns it (see "Parts").
 
 ```ts
 // One element: the kit finishes it.
@@ -91,14 +94,14 @@ Button(h, {
 Switch(h, {
   props: { checked: model.notify },
   onToggle: ({ checked }) => Message.make({ _tag: "ToggledNotify", checked }),
-  view: (s) => s.root({ element: h.button, children: [s.thumb(h.span.class("thumb"))] })
+  view: (s) => s.root(h.button).children(s.thumb(h.span.class("thumb")))
 })
 
 // A component: core's `onEmit`, and a `key` when it needs one.
 Checkbox(h, {
   props: { checked: model.terms },
   onEmit: ({ checked }) => Message.make({ _tag: "ToggledTerms", checked }),
-  view: (s) => s.root({ element: h.button, children: [s.indicator({ element: h.span })] })
+  view: (s) => s.root(h.button).children(s.indicator(h.span))
 })
 ```
 
@@ -110,12 +113,14 @@ Checkbox(h, {
   the class, the consumer's attributes and handlers, and any other part
   already applied to it. A view function that draws one element with a
   fixed tag defaults it to `h.<tag>`, so `Button(h, { onPress, children })`
-  works. Everywhere the tag is the consumer's choice, and on every part,
-  `element` is required: the kit doesn't pick markup for the consumer.
-- `children` is what goes inside, as an array. **Children always go in
-  `children`, and the call returns a finished node.** Nobody calls
-  `.children()` on something the kit returned, so the kit can add markup
-  of its own later, such as a hidden input, without changing a call site.
+  works. Everywhere the tag is the consumer's choice, `element` is
+  required: the kit doesn't pick markup for the consumer.
+- `children` is what goes inside, as an array. **A view function call
+  takes its children in `children` and returns a finished node.** Nobody
+  calls `.children()` on what a view function call returned, so the
+  function can become a component, whose call returns a `View.Child`,
+  without changing a call site. A builder's `.children(...)` returns the
+  builder, so finish the node with `View.build(element, children)`.
 - `view` replaces `element` and `children` when the component has more
   than one element: `view: (parts) => ...` gets the parts, as a headless
   call does. Don't take a builder per part
@@ -180,27 +185,40 @@ model.advanced
   runtime. A view function's part is typed by its `element`.
 - A part sets ARIA, data attributes, ids, refs and handlers, and nothing
   visual.
-- **Call shape.** When a part takes just a builder and adds no markup, pass
-  the builder positionally. Use the decorated builder directly as a child.
-  For children, extra fields, or a part that adds markup, pass an options
-  object to get the finished node:
+- **Call shape.** A part takes the consumer's builder as its one argument
+  and returns it, with the part applied. The consumer goes on chaining,
+  and adds children with `.children(...)`:
 
   ```ts
-  s.root({ element: h.button.class("switch"), children: [s.thumb(h.span.class("thumb"))] })
-  s.tab({ element: h.button, value: "a", children: ["Account"] })
+  s.root(h.button.class("switch")).children(s.thumb(h.span.class("thumb")))
   ```
 
+  A part takes an options object only when it has more than one argument,
+  such as a tab's `value`. It still returns the builder, and `children` is
+  never a field of it:
+
+  ```ts
+  s.tab({ element: h.button, value: "a" }).children("Account")
+  ```
+
+  Each part has one form, with no overloads. A part that may not show
+  returns `undefined`, and the consumer writes
+  `s.fallback(h.span)?.children("AL")`. Apply the part before deciding, so
+  a wrong tag throws in every state.
+
   Use the same field names across components: `element` for the
-  consumer's builder, `children` for what goes inside, and the Base UI
-  name for anything else (`value`, `item`). Type `element` as the
-  builders the part accepts, and keep the children's requirements
-  inferred, as `SwitchParts` does.
+  consumer's builder, and the Base UI name for anything else (`value`,
+  `item`). Type a part by the builder it takes and returns,
+  `<R = never>(element: SwitchButton<Msg, R>) => SwitchButton<Msg, R>`,
+  as `SwitchParts` does.
 
   `Listbox.ts` in `ai-docs` shows the core API, where a part takes the
   builder and extra arguments positionally (`m.option(h.li, option)`).
-  ui-kit wraps `p.part` to take the options object.
-- **Stacking.** A part that adds no markup can also supply its decorated builder
-  as another kit call's `element`, so both share one element.
+  ui-kit wraps `p.part` to take the options object, with `View.wrapPart`.
+  A part with only the builder is the `p.part` itself.
+- **Stacking.** A part's result is a builder, so it is also another kit
+  call's `element`, and both share one element. Every part has this form,
+  including one that adds markup.
 
   ```ts
   Button(h, {
@@ -209,35 +227,51 @@ model.advanced
     children: ["B"]
   })
   ```
-
-  A part that adds markup can't offer that form, which is a compile
-  error, and it goes outermost. Don't show `.children()` on the builder
-  in docs or examples.
-- **The kit's attributes win** over the ones the consumer set on the
-  builder it passes in. A part or view function writes every attribute
-  it owns in every state, with `undefined` where the state leaves it
-  absent: `disabled`, `aria-readonly`, the data attributes.
+- **The kit's attributes win** over the consumer's. A part or view
+  function writes every attribute it owns in every state, with `undefined`
+  where the state leaves it absent: `disabled`, `aria-readonly`, the data
+  attributes.
   `.attr(name, undefined)` and `.disabled(false)` remove the consumer's
   value, in a headless part too. That includes an attribute the kit
   never sets but mustn't leave to the consumer, such as `aria-disabled`
   on a part that uses the native `disabled`. Otherwise a consumer's
   `disabled` or `data-checked` reports a state the props don't have.
+  - A part returns the builder, so the consumer can chain on it after the
+    part. A view function's part does its writes in `forward`, whose
+    function gets the builder as the consumer finished it, when the
+    element is built. So they win over what the consumer set before the
+    part and after it:
+
+    ```ts
+    const thumb = (element) => element.forward((node) => state(node, props))
+    ```
+
+    A headless part writes when it is applied, so it wins over what the
+    builder had. What a consumer chains after a headless part is the
+    consumer's to answer for. Write an attribute again in a `forward`
+    inside `p.part` when it mustn't be overridden.
   - Token lists such as `class` and `aria-describedby` merge, and a part
     can't remove the consumer's tokens.
   - An attribute the kit never names keeps the consumer's value, so the
     ones it doesn't decide, such as `aria-label` or `popovertarget`,
     stay the consumer's.
-  - When two kit calls share an element, the outer one writes last.
+  - When two kit calls share an element, a headless part writes first,
+    as it writes when it is applied. Of two headless parts, the outer
+    one writes last. Of two calls that write in `forward`, the inner one
+    writes last.
   - DOM properties set with `.prop` are the consumer's own doing, and
     the kit doesn't guard them.
 - **Handlers.** A headless part's handlers sit on a layer of their own.
   Every layer's handler runs, the deepest component's first and the
   consumer's last, so a handler the consumer set on `element` runs after
   the part's. A view function has no layer: its handler is the
-  consumer's handler for that event and would replace one already on
-  `element`. So a view function throws at render when it was given an
-  `on<Event>` and `element` already handles the event that option sets,
-  as `Switch`'s root does for `click` with `onToggle`. Decide by the
+  consumer's handler for that event and would replace the consumer's
+  own. So a view function throws at render when it was given an
+  `on<Event>` and the element already handles the event that option
+  sets, as `Switch`'s root does for `click` with `onToggle`. A part checks
+  in its `forward` function, `node.handlers.click`, which also sees a
+  handler chained after the part. A view function that draws one element
+  checks its `element`. Decide by the
   options and never by the state: a read-only switch sets no handler,
   but a clash that waited for it to become editable would first show in
   production. Without the option the function sets no handler, and the
@@ -256,15 +290,28 @@ model.advanced
   consumer who wants the press without the native action changes the
   props (`type: "button"`, `disabled`).
 - **Markup the component needs to work**, such as a form field, must not be
-  a part the consumer can forget to draw. The part it belongs to appends
-  it after the consumer's `children`, as `Switch`'s root does with its
-  hidden input. A headless part can't add children, so that part becomes
-  a function in `parts` that applies the part and appends the markup. A
-  part function has no `h`, so it builds the markup from Html's element
-  classes, as `internal/field.ts` does with
+  a part the consumer can forget to draw. The part it belongs to adds it
+  with `.children(...)` and returns the builder, so it comes before the
+  consumer's children, as `Switch`'s root does with its hidden input. A
+  headless part does the same inside `p.part`:
+
+  ```ts
+  root: p.part("button", (b) => b.attr("role", "checkbox").children(hidden))
+  ```
+
+  A part has no `h`, so it builds the markup from Html's element classes,
+  as `internal/field.ts` does with
   `View.toNode(new Html.VoidElement("input")...)`. Only put markup where
   the content model allows it: a hidden input may sit in a `<button>`, a
   checkbox may not.
+  - Markup that has to come after the consumer's children is added in
+    `forward`: `element.forward((node) => node.children(extra))`.
+  - Markup that has to go around the consumer's element is returned from
+    `forward`: `element.forward((node) => frame.children(node, extra))`.
+    The consumer's chain and children still land on their element, and a
+    key moves to the frame. Prefer markup inside: a wrapper is an element
+    the consumer can't style through the chain. When a wrapper is needed
+    and the consumer should style it, take its builder as an argument.
 - **A wrapped part drops its mount's requirements** (EFF-3914). A headless
   component's requirements come from the parts it returns, and a plain
   function around `p.part` hides them, so a consumer can forget to
@@ -346,8 +393,7 @@ The module JSDoc has, in order:
 1. one sentence on what the component is, with the Base UI link, then
    which kind it is
 2. **Anatomy**: a table of each Base UI part, its part name and element,
-   then a line on what each part's options take and whether it has the
-   stacking form
+   then a line on what each part takes and the markup it adds
 3. **Data attributes**
 4. **Keyboard**
 5. **Differences from Base UI**: everything left out or changed

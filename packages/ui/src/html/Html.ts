@@ -539,6 +539,18 @@ export class VoidElement<
     return (super.onMount as any)(mount)
   }
   /**
+   * Like `View.ElementBuilder.forward`, keeping the HTML methods.
+   *
+   * @since 0.1.0
+   */
+  override forward<R2 = never>(
+    place: (
+      node: VoidElement<Msg, R, E, Node, Tag>
+    ) => View.Element<Msg, R2> | View.ElementBuilder<Msg, R2, any, any>
+  ): VoidElement<Msg, R | R2, E, Node, Tag> {
+    return View.withForward(this, place) as any
+  }
+  /**
    * Sets the `id` attribute.
    *
    * @since 0.1.0
@@ -956,15 +968,15 @@ export class VoidElement<
 
 /**
  * The builder of an HTML element that takes children: a `VoidElement` plus
- * `children`, which ends the chain.
+ * `children`.
  *
  * **Details**
  *
  * On `h`, a tag's root builder is also callable as shorthand for
  * `children`, for an element with no attributes: `h.span(title)` is
- * `h.span.children(title)`. Either way the result is a node with no chain
- * methods, so attributes and handlers always come first:
- * `h.form.onSubmit(msg).children(...)`.
+ * `h.span.children(title)`. Either way the result is the builder, so more
+ * children and attributes can follow, and a second `children` adds after
+ * the first.
  *
  * @stability experimental
  * @category models
@@ -997,16 +1009,29 @@ export class Element<
     return (super.onMount as any)(mount)
   }
   /**
-   * Ends the chain with the element's children: nodes, builders, text,
-   * arrays to flatten, and holes (`false`, `null`, `undefined`). Their
-   * requirements join the element's.
+   * Adds children after the ones the builder holds, and returns the
+   * builder: nodes, builders, text, arrays to flatten, and holes (`false`,
+   * `null`, `undefined`). Their requirements join the element's.
    *
    * @since 0.1.0
    */
   children<const C extends ReadonlyArray<View.Input<Msg, any>>>(
     ...inputs: C
-  ): View.Element<Msg, R | View.Requirements<C[number]>> {
-    return View.buildOwned(this, inputs)
+  ): Element<Msg, R | View.Requirements<C[number]>, E, Node, Tag> {
+    return View.withContent(this, inputs) as any
+  }
+  /**
+   * Like `View.ElementBuilder.forward`, keeping the HTML methods and
+   * `children`.
+   *
+   * @since 0.1.0
+   */
+  override forward<R2 = never>(
+    place: (
+      node: Element<Msg, R, E, Node, Tag>
+    ) => View.Element<Msg, R2> | View.ElementBuilder<Msg, R2, any, any>
+  ): Element<Msg, R | R2, E, Node, Tag> {
+    return View.withForward(this, place) as any
   }
 }
 
