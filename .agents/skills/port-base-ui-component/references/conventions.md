@@ -125,9 +125,11 @@ Checkbox(h, {
   the message, like `.onClick(msg)`. One with a payload takes a function
   of the object a component's event would carry,
   `onToggle: ({ checked }) => msg`. Type the message `NoInfer<Msg>`, so
-  `Msg` comes from `h`. Left out, it sets no handler: the host gives an
-  event to the innermost element with a handler, so one that sends
-  nothing would swallow a click meant for an ancestor. A component keeps
+  `Msg` comes from `h`. Omitting `onPress` means Button sends no press
+  message. The consumer keeps its click handler only if no option reserves
+  the event. With `focusableWhenDisabled: true`, Button rejects a consumer
+  click handler even while enabled. When disabled, it installs a handler
+  that cancels the click without sending a message. A component keeps
   core's `onEmit`.
 - Type `h` by what the function needs from it: the tags it draws
   (`{ readonly button: ... }`), or `View.Helper<Msg, unknown>` when it
