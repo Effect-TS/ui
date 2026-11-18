@@ -471,6 +471,10 @@ export class Load extends Command.Service<Load>()("@effect/ui/Router/Load", {
  * held while `subscriptions` returns it, so the Model says when, and it's
  * released when the instance unmounts. It sends no messages.
  *
+ * The Subscription is named `@effect/ui/Router/blocked` and `key` is its
+ * dep, so `Router.blocked("form")` has the Subscription key
+ * `@effect/ui/Router/blocked:"form"`.
+ *
  * **Example** (Blocking navigation while a form is dirty)
  *
  * ```ts
@@ -485,8 +489,9 @@ export class Load extends Command.Service<Load>()("@effect/ui/Router/Load", {
  */
 export const blocked = (key: string): Subscription.Subscription<never, Router> =>
   Subscription.make(
-    `@effect/ui/Router/blocked/${key}`,
-    Stream.unwrap(Router.use((router) => Effect.as(router.block(key), Stream.never)))
+    "@effect/ui/Router/blocked",
+    key,
+    (key) => Stream.unwrap(Router.use((router) => Effect.as(router.block(key), Stream.never)))
   )
 
 /**

@@ -54,6 +54,7 @@ import { scopeAddFinalizerUnsafe } from "./scope.ts"
 import * as serverHost from "./serverHost.ts"
 import * as services from "./services.ts"
 import * as sharedReads from "./shared.ts"
+import * as subscriptionKeys from "./subscriptions.ts"
 
 // ---------------------------------------------------------------------------
 // Envs: the Context an instance resolves its services from
@@ -334,6 +335,9 @@ interface Run {
 }
 
 interface SubscriptionRun {
+  /** The name and deps the key was built from, for the entry that logs its stop. */
+  readonly name: string
+  readonly deps: ReadonlyArray<Subscription.Dep> | undefined
   readonly scope: Scope.Closeable
   fiber: Fiber.Fiber<unknown, unknown> | undefined
 }
@@ -1889,7 +1893,7 @@ const setup = (
   const stopSubscriptions = (inst: Instance, waits: Array<Fiber.Fiber<unknown, unknown>>) => {
     if (inst.subscriptions !== undefined) {
       for (const [key, running] of inst.subscriptions) {
-        record(inst, { _tag: "SubscriptionStopped", key })
+        record(inst, { _tag: "SubscriptionStopped", key, name: running.name, deps: running.deps })
         if (running.fiber !== undefined) waits.push(running.fiber)
         closeUnder(inst, running.scope)
       }
@@ -3244,7 +3248,15 @@ const setup = (
           "subscription",
           subscription.key
         )
-      } else if (!byKey.has(subscription.key)) byKey.set(subscription.key, subscription)
+      } else if (byKey.has(subscription.key)) {
+        // A key runs one Stream, so the second entry would never start, and nothing would say so.
+        return failInstance(
+          inst,
+          Cause.die(subscriptionKeys.duplicateKey(inst.path, subscription.key)),
+          "subscription",
+          subscription.key
+        )
+      } else byKey.set(subscription.key, subscription)
     }
     if (checkRoot) {
       for (const subscription of byKey.values()) {
@@ -3274,17 +3286,23 @@ const setup = (
     for (const [key, running] of subscriptions) {
       if (byKey.has(key)) continue
       subscriptions.delete(key)
-      record(inst, { _tag: "SubscriptionStopped", key })
+      record(inst, { _tag: "SubscriptionStopped", key, name: running.name, deps: running.deps })
       closeUnder(inst, running.scope)
     }
     for (const [key, subscription] of byKey) {
       if (subscriptions.has(key)) continue
-      const running: SubscriptionRun = { scope: Scope.forkUnsafe(inst.scope, "sequential"), fiber: undefined }
+      const { deps, name } = subscription
+      const running: SubscriptionRun = {
+        name,
+        deps,
+        scope: Scope.forkUnsafe(inst.scope, "sequential"),
+        fiber: undefined
+      }
       subscriptions.set(key, running)
-      record(inst, { _tag: "SubscriptionStarted", key })
+      record(inst, { _tag: "SubscriptionStarted", key, name, deps })
       const go = (envCtx: Context.Context<any>) => {
         if (inst.closed || subscriptions.get(key) !== running) return
-        const source: MessageLog.Source = { _tag: "Subscription", key }
+        const source: MessageLog.Source = { _tag: "Subscription", key, name, deps }
         const context = withCache(
           Context.add(Context.add(envCtx, Scope.Scope, running.scope), services.CurrentRoot, () => handle)
         )

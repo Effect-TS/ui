@@ -403,12 +403,15 @@ export const bind = (component: string, queries: unknown): Bound | undefined => 
   const watchesOf = (state: State) =>
     entries.flatMap((entry) => {
       const current = argsOf(state, entry)
+      const watchName = `~query/${entry.name}`
       const watchOf = (args: unknown, argsKey: string | undefined, keyed: boolean) => {
         const marker: Marker = { query: entry.query, name: entry.name, args, argsKey, keyed, debounce: entry.debounce }
         return {
           [Subscription.TypeId]: Subscription.TypeId,
           // New args are a new key, so the old watcher goes before the new one registers.
-          key: Subscription.keyOf(`~query/${entry.name}`, argsKey),
+          key: Subscription.keyOf(watchName, argsKey),
+          name: watchName,
+          deps: argsKey === undefined ? undefined : [argsKey],
           stream: Stream.never,
           [markerKey]: marker
         } as unknown as Subscription.Subscription<any, any>
@@ -419,7 +422,9 @@ export const bind = (component: string, queries: unknown): Bound | undefined => 
       return [
         {
           [Subscription.TypeId]: Subscription.TypeId,
-          key: Subscription.keyOf(`~query/${entry.name}`),
+          key: Subscription.keyOf(watchName),
+          name: watchName,
+          deps: undefined,
           stream: Stream.never,
           [groupKey]: group
         } as unknown as Subscription.Subscription<any, any>,

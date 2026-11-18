@@ -113,7 +113,11 @@ export interface Record<Props, Model, Msg, Events> {
   >
   /** The infinite queries with a load more `update` issued and no step has settled yet. */
   readonly loadingMore: ReadonlyArray<string>
-  /** The Subscription keys the current Model and props ask for, without the query watches. Nothing runs. */
+  /**
+   * The Subscription keys the current Model and props ask for, without the
+   * query watches. Nothing runs. Throws when two share a key, which fails
+   * the instance in the runtime.
+   */
   readonly subscriptions: () => ReadonlyArray<string>
   /** Each of the component's queries, with its `Query`'s name and the args it returns for the current Model and props. */
   readonly queryInfo: () => ReadonlyArray<QueryInfo>
@@ -294,7 +298,11 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
   readonly interrupted: this["current"]["interrupted"]
   /** The infinite queries with a load more pending, after the last step. */
   readonly loadingMore: ReadonlyArray<string>
-  /** The Subscription keys the current Model and props ask for, without the query watches. Nothing runs. */
+  /**
+   * The Subscription keys the current Model and props ask for, without the
+   * query watches. Nothing runs. Throws when two share a key, which fails
+   * the instance in the runtime.
+   */
   readonly subscriptions: ReadonlyArray<string>
   /** Each of the component's queries, with its `Query`'s name and the args it returns for the current Model and props. */
   readonly queryInfo: ReadonlyArray<QueryInfo>

@@ -548,6 +548,11 @@ describe("Router", { concurrent: false }, () => {
         yield* TestHost.settle
         click(root, "Block")
         yield* TestHost.settle
+        // The block's key is a dep, so every block has one name to group by.
+        const block = root.log().find((entry) =>
+          entry._tag === "SubscriptionStarted" && entry.name === "@effect/ui/Router/blocked"
+        ) as MessageLog.SubscriptionStarted
+        assert.deepStrictEqual([block.deps, block.key], [["editing"], "@effect/ui/Router/blocked:\"editing\""])
 
         click(root, "Person 2")
         click(root, "Back")
