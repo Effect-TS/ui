@@ -394,12 +394,10 @@ describe("Story", () => {
         assert.deepStrictEqual(s.model.items, ["ab"])
       }))
 
-    it.effect("a stream Command takes next and end, drop ignores a second start, and an interrupt stops it", () =>
+    it.effect("a stream Command takes next and end, and an interrupt stops it", () =>
       Effect.gen(function*() {
         const s = yield* Story.make(SearchBox, {})
         s.send(SearchMessage.make({ _tag: "Start" }))
-          .send(SearchMessage.make({ _tag: "Start" }))
-        assert.strictEqual(s.dropped.length, 1)
         s.next(Upload, SearchMessage.make({ _tag: "Progress", percent: 50 }))
         assert.strictEqual(s.model.percent, 50)
         assert.deepStrictEqual(s.subscriptions, ["tick", "query:\"\""])
@@ -925,12 +923,11 @@ describe("Story", () => {
     const edit = NoteMessage.make({ _tag: "Edit", text: "x" })
     const saved = NoteEvents.make({ _tag: "Saved", text: "" })
 
-    it.effect("a message step waits for a plain Command, and switch, queue, drop and stream Commands don't block it", () =>
+    it.effect("a message step waits for a plain Command, and switch, queue and stream Commands don't block it", () =>
       Effect.gen(function*() {
         const s = Story.start(Note, {})
           .send(NoteMessage.make({ _tag: "Find", text: "a" }))
           .send(NoteMessage.make({ _tag: "Sync" }))
-          .send(NoteMessage.make({ _tag: "Export" }))
           .send(NoteMessage.make({ _tag: "Follow" }))
           .send(NoteMessage.make({ _tag: "Save" }))
         assert.throws(

@@ -52,6 +52,7 @@
  * @stability experimental
  * @since 0.1.0
  */
+import type * as Cause from "effect/Cause"
 import * as Context from "effect/Context"
 import { TaggedClass } from "effect/Data"
 import * as Duration from "effect/Duration"
@@ -61,7 +62,7 @@ import * as Layer from "effect/Layer"
 import * as Pipeable from "effect/Pipeable"
 import * as Predicate from "effect/Predicate"
 import * as Schema from "effect/Schema"
-import * as Scope from "effect/Scope"
+import type * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
 import type * as Types from "effect/Types"
 import type * as Component from "./Component.ts"
@@ -132,14 +133,25 @@ export type UnmatchedTypeId = typeof UnmatchedTypeId
  *
  * Runs are grouped by instance, Command name and the `group` key. Within a
  * group, `concurrent` runs everything at once, `switch` interrupts the earlier
- * runs, `drop` ignores the new one, and `queue` starts it once the earlier runs
- * have ended.
+ * runs and starts the new one once their fibers have exited, cleanup
+ * included, and `queue` starts it once the earlier runs have ended. A cut run
+ * delivers nothing.
+ *
+ * A run is over when its fiber exits. One that was interrupted, by `switch`,
+ * `Command.interrupt` or its instance going, still holds its group and counts
+ * for `h.isRunning` until then, so a run queued behind it never overlaps its
+ * cleanup.
+ *
+ * There is no mode that ignores a new run while one is going: `update` would
+ * still apply the Model change it issued the run with. Keep what `update`
+ * needs to know in the Model, such as a `Submitting` state, and issue nothing
+ * while it holds.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export type Mode = "concurrent" | "switch" | "drop" | "queue"
+export type Mode = "concurrent" | "switch" | "queue"
 
 /**
  * What `args` accepts: a fields record or a `Schema.Struct`.
@@ -344,8 +356,7 @@ export interface Data extends Declared {
   readonly argsSchema: Schema.Top
   /**
    * The `Service` class the Command was issued by, `undefined` for a `make`
-   * Command. The runtime finds the Layer build that owns a detached run
-   * through it.
+   * Command.
    *
    * @internal
    */
@@ -788,32 +799,6 @@ const makeIssued = (fields: Fields, unmatched = false): any => {
 
 const noTargets: ReadonlyArray<never> = []
 
-/**
- * One build of a `Service`'s Layer: the owner of the detached runs issued
- * against it. A fake provided with `Layer.succeed` has none, and its runs are
- * owned by the root alone.
- *
- * @internal
- */
-export interface Build {
-  closed: boolean
-  /**
-   * Called once, when the build's Scope closes. Every listener is called before any returned Effect
-   * runs, and the close waits for those Effects. The returned function removes the listener.
-   */
-  readonly onClose: (listener: () => Effect.Effect<void>) => () => void
-}
-
-const builds = new WeakMap<object, Build>()
-
-/**
- * The build an implementation came from, or `undefined` for a fake.
- *
- * @internal
- */
-export const buildOf = (implementation: unknown): Build | undefined =>
-  typeof implementation === "function" ? builds.get(implementation) : undefined
-
 const argsSchemaOf = (args: ArgsInput): Schema.Struct<Schema.Struct.Fields> =>
   Schema.isSchema(args) ? args as Schema.Struct<Schema.Struct.Fields> : Schema.Struct(args as Schema.Struct.Fields)
 
@@ -927,8 +912,7 @@ export const groupKeyOf = (definition: Definition.Any, group: unknown): string |
  * services, which are removed from `R`. A body that requires anything else
  * doesn't compile, and the error names `FrameworkService` rather than the
  * missing service. With `stream: true` the body returns a `Stream` instead.
- * A `make` Command declares nothing about the query cache, and its runs end
- * with the issuing instance.
+ * A `make` Command declares nothing about the query cache.
  *
  * **Gotchas**
  *
@@ -1047,10 +1031,10 @@ export const make: {
  * `writes` of the success. The runtime applies them when the run's fiber
  * exits, before its message is sent.
  *
- * An Effect-shaped run outside `switch` is detached: it's owned by the Layer
- * build that provides the service and by the root, not by the issuing
- * instance, and it gets a Scope of its own. A save completes after its
- * instance unmounts, and its message is then dropped.
+ * Every run is owned by the instance that issued it and ends with it,
+ * whatever its kind or mode. A save that must outlive a page is issued by a
+ * component that outlives it, such as the layout, so its result and its
+ * failure reach an `update`.
  *
  * **Example** (Defining, issuing and faking a Command service)
  *
@@ -1141,37 +1125,7 @@ export const Service: <Self>() => {
     static readonly group = group
     static readonly args = argsSchema
     static readonly "~group" = groupOf
-    static readonly layer = Layer.effect(
-      Base,
-      Effect.gen(function*() {
-        const scope = yield* Effect.scope
-        const run = yield* implementation
-        // A new function per build, so two builds never share an identity.
-        const wrapped = (args: unknown) => run(args)
-        const listeners = new Set<() => Effect.Effect<void>>()
-        const build: Build = {
-          closed: false,
-          onClose: (listener) => {
-            listeners.add(listener)
-            return () => {
-              listeners.delete(listener)
-            }
-          }
-        }
-        builds.set(wrapped, build)
-        // Its runs stop before the implementation's own finalizers run, and the close waits for them.
-        yield* Scope.addFinalizer(
-          scope,
-          Effect.suspend(() => {
-            build.closed = true
-            const waits = Array.from(listeners, (listener) => listener())
-            listeners.clear()
-            return Effect.all(waits, { concurrency: "unbounded", discard: true })
-          })
-        )
-        return wrapped
-      })
-    )
+    static readonly layer = Layer.effect(Base, implementation)
     static make(args: any = {}) {
       const source = groupOf(args)
       return makeIssued({
@@ -1449,8 +1403,7 @@ type AwaitsRefetchOf<R, K> = [K] extends ["Effect"] ? [R] extends [never] ? {
  *   succeeds sends nothing. If the issuing instance closes during the wait,
  *   the message is dropped.
  * - `h.isRunning` stays true through the wait. Under `queue` the next run
- *   starts when the body exits, and messages keep issue order; under
- *   `drop` a waiting run still counts as running.
+ *   starts when the body exits, and messages keep issue order.
  * - Each awaited entry emits when it settles, so its query's result is
  *   written before the success, in one render, for the last entry to
  *   settle. Two entries settling apart can briefly show a patched row next
@@ -1498,9 +1451,11 @@ export const afterRefetch: {
  * **Details**
  *
  * It produces no message. An interrupted run dispatches nothing and is logged
- * as `CommandInterrupted`. With a pick of the Command's `group` fields, only
- * the runs of that group are interrupted. Without one, every run of the
- * Command the instance has is.
+ * as `CommandInterrupted` when its fiber exits. Until then it holds its group:
+ * a `queue` or `switch` run issued after the interrupt starts once the
+ * interrupted run's cleanup has finished. With a pick of the Command's `group`
+ * fields, only the runs of that group are interrupted. Without one, every run
+ * of the Command the instance has is.
  *
  * **Example** (Cancelling an upload)
  *
@@ -1555,4 +1510,27 @@ export class ServerCommandIssued extends TaggedClass("ServerCommandIssued")<{
   readonly path: string
   /** The Command's name. */
   readonly command: string
+}> {}
+
+/**
+ * A run that was stopped died before its fiber exited, such as in an
+ * `Effect.onInterrupt` cleanup or an uninterruptible part of its body.
+ *
+ * **Details**
+ *
+ * A stopped run delivers nothing, so the defect can't reach `update`, and it
+ * doesn't fail the instance or the run that replaced it. It's reported every
+ * time, and the log has the run's `CommandInterrupted` entry.
+ *
+ * @stability experimental
+ * @category problems
+ * @since 0.1.0
+ */
+export class CleanupFailed extends TaggedClass("CleanupFailed")<{
+  readonly message: string
+  /** The path of the instance that issued the run. */
+  readonly path: string
+  /** The Command's name. */
+  readonly command: string
+  readonly cause: Cause.Cause<unknown>
 }> {}

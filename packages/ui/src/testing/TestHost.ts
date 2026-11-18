@@ -312,9 +312,10 @@ export type Pending = PendingCommand | PendingFetch
 
 /**
  * A Command run still in flight: the instance that issued it, its name, and
- * whether it's `running`, `queued` or `awaiting`: its fiber exited and its
+ * whether it's `running`, `queued`, `awaiting` (its fiber exited and its
  * message waits, on a `Command.afterRefetch` wait or, under `queue`, behind
- * an earlier message of its group.
+ * an earlier message of its group) or `stopping` (it was interrupted and its
+ * fiber, cleanup included, hasn't exited).
  *
  * @stability experimental
  * @category models
@@ -325,8 +326,6 @@ export interface PendingCommand {
   readonly path: string
   readonly name: string
   readonly status: string
-  /** A detached run: owned by its Layer build, it may outlive its instance. */
-  readonly detached: boolean
 }
 
 /**
@@ -766,7 +765,7 @@ const drainAll = Effect.fnUntraced(function*(testHost: TestHost) {
 
 const describePending = (pending: Pending): string =>
   pending._tag === "Command"
-    ? `  ${pending.path} ${pending.name} (${pending.status}${pending.detached ? ", detached" : ""})`
+    ? `  ${pending.path} ${pending.name} (${pending.status})`
     : `  ${pending.path} fetch ${pending.query} ${pending.logKey} (${pending.status}, ${pending.trigger})`
 
 /**

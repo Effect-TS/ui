@@ -155,7 +155,7 @@ export const Search = Command.make(
 
 export const Upload = Command.make(
   "Upload",
-  { args: { name: Schema.String }, stream: true, mode: "drop", group: ["name"] },
+  { args: { name: Schema.String }, stream: true, mode: "queue", group: ["name"] },
   () => Stream.make(SearchMessage.make({ _tag: "Progress", percent: 100 }))
 )
 

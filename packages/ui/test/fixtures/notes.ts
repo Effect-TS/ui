@@ -36,8 +36,6 @@ export const NoteMessage = Schema.TaggedUnion({
   Line: { line: Schema.String },
   Sync: {},
   Synced: {},
-  Export: {},
-  Exported: {},
   Clear: {},
   Opened: { count: Schema.Number },
   Author: { id: Schema.String }
@@ -60,11 +58,6 @@ export const SyncNote = Command.make(
   "notes/SyncNote",
   { args: {}, mode: "queue" },
   () => Effect.succeed(NoteMessage.make({ _tag: "Synced" }))
-)
-export const ExportNote = Command.make(
-  "notes/ExportNote",
-  { args: {}, mode: "drop" },
-  () => Effect.succeed(NoteMessage.make({ _tag: "Exported" }))
 )
 export const FollowNotes = Command.make(
   "notes/FollowNotes",
@@ -107,8 +100,6 @@ export const Note = Component.define({
       Line: () => ({ ...model, lines: model.lines + 1 }),
       Sync: () => $.run(SyncNote({})),
       Synced: () => model,
-      Export: () => $.run(ExportNote({})),
-      Exported: () => model,
       Clear: () => $.send(BadgeRef, { _tag: "Clear" }),
       Opened: ({ count }) => ({ ...model, text: `opened ${count}` }),
       Author: ({ id }) => ({ ...model, author: id })

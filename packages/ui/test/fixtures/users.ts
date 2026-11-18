@@ -211,7 +211,7 @@ export const RenameForm = Component.define({
         Option.match(model.draft, {
           onNone: () => model,
           onSome: (name) =>
-            // No saving flag in the Model. The run is detached, so if this form unmounts neither
+            // No saving flag in the Model. The run ends with the form, so if it unmounts neither
             // message below arrives, and a flag set here would come back stuck from history.state.
             $.set({ ...model, draft: Option.none(), error: Option.none() }).run(
               RenameUser.make({ id: $.props.id, name }).pipe(Command.match({

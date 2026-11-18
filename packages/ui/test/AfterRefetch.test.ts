@@ -713,29 +713,6 @@ describe("Command.afterRefetch", () => {
     )
   })
 
-  it.effect("drop: a run that waits still counts as running", () => {
-    const app = makeApp({ mode: "drop" })
-    return run(
-      app.layer,
-      Effect.gen(function*() {
-        const root = yield* TestHost.mount(app.Card, { id: "1", tag: "a" })
-        yield* tick
-        renameOn(root, app, "Bob")
-        yield* tick
-        renameOn(root, app, "Cy")
-        yield* TestHost.settle
-        assert.deepStrictEqual(statuses(root), ["awaiting"])
-        yield* tick
-        assert.strictEqual(root.text(), "a=Bob [Bob];")
-        assert.deepStrictEqual(commandLog(root), [
-          { _tag: "CommandAwaiting", entries: [user1] },
-          { _tag: "CommandDropped", reason: "mode" },
-          { _tag: "CommandEnded", waitEnded: "settled", outstanding: [] }
-        ])
-      })
-    )
-  })
-
   it.effect("an infinite query: the wait ends when the walk swaps, not on its first page", () => {
     const Item = Schema.Struct({ id: Schema.String })
     const Page = Schema.Struct({ items: Schema.Array(Item), next: Schema.NullOr(Schema.Number) })
@@ -901,7 +878,7 @@ describe("Command.afterRefetch", () => {
         assert.deepStrictEqual(s.interrupted, [])
       }))
 
-    it.effect("queue and drop treat an awaiting run as the runtime does", () =>
+    it.effect("queue treats an awaiting run as the runtime does", () =>
       Effect.gen(function*() {
         const queued = makeApp({ mode: "queue" })
         const s = yield* Story.make(queued.Card, { id: "1", tag: "a" })
@@ -916,15 +893,6 @@ describe("Command.afterRefetch", () => {
         assert.deepStrictEqual(s.model.done, [])
         s.loaded("user", { id: "1", name: "Bob" })
         assert.deepStrictEqual(s.model.done, ["Bob", "failed "])
-        const dropping = makeApp({ mode: "drop" })
-        const d = yield* Story.make(dropping.Card, { id: "1", tag: "a" })
-        d
-          .loaded("user", ann)
-          .send(dropping.CardMessage.make({ _tag: "Rename", name: "Bob" }))
-          .resolve(dropping.RenameUser, "Bob")
-          .send(dropping.CardMessage.make({ _tag: "Rename", name: "Cy" }))
-          .loaded("user", { id: "1", name: "Bob" })
-        assert.strictEqual(d.dropped.length, 1)
       }))
 
     it.effect("loaded on a query that was cold when a Command was issued doesn't throw: its patch never registered", () =>

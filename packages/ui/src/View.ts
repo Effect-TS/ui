@@ -1460,11 +1460,12 @@ export interface Helper<Msg, Props> {
   /** A text node. The only way to put text in a native view. */
   text(text: string): Text
   /**
-   * Whether this instance has a run of the Command queued or running, of the
-   * group if a pick of its `group` fields is given. It ends when the run's
+   * Whether this instance has a run of the Command in flight, of the group if
+   * a pick of its `group` fields is given: queued, running, awaiting, or
+   * stopping until its fiber exits, cleanup included. It ends when the run's
    * message has been delivered, or at fiber exit for a run that sends none.
-   * Per instance and view only: `update` ignores a submit while saving with
-   * `mode: "drop"`.
+   * Per instance and view only: `update` can't read it, so what `update`
+   * decides on, such as ignoring a submit while saving, belongs in the Model.
    */
   isRunning<Args, G extends string>(
     command: Command.Definition<Args, any, boolean, any, G>,
