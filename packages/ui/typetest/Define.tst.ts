@@ -163,6 +163,31 @@ describe("Component.define", () => {
     expect<Component.Requirements<typeof Note>>().type.toBe<GetUser | Save>()
   })
 
+  it("infers headless requirements from an inline update handler", () => {
+    const Note = NoteDef.make({
+      init: () => ({ body: "", edits: 0 }),
+      update: { Edited: touch, SaveClicked: (model, _msg, $) => $.set(model).run(Save.make()), Saved: touch },
+      parts: (model) => ({ body: model.body })
+    })
+    expect<Component.Headless.Requirements<typeof Note>>().type.toBe<GetUser | Save>()
+  })
+
+  it("rejects the diagnostic string as a stale record entry", () => {
+    const init = () => ({ body: "", edits: 0 })
+    const update = {
+      Edited: touch,
+      SaveClicked: touch,
+      Saved: touch,
+      Deleted: "'Deleted' is not a tag of this component's message" as const
+    }
+    expect(NoteDef.make).type.not.toBeCallableWith({
+      init,
+      update,
+      view: (_: Model, h: Component.Helper<typeof NoteDef>) => h.p()
+    })
+    expect(NoteDef.make).type.not.toBeCallableWith({ init, update, parts: (model: Model) => ({ body: model.body }) })
+  })
+
   it("rejects a record with a missing tag", () => {
     expect(NoteDef.make).type.not.toBeCallableWith({
       init: () => ({ body: "", edits: 0 }),

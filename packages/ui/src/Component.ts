@@ -1843,7 +1843,9 @@ export interface SharesCollects<out Msg, in out Rp> {
 // The tags of a message union, and the member with one tag.
 type TagOf<Msg> = Msg extends { readonly _tag: infer T extends string } ? T : never
 type Tagged<Msg, T> = Extract<Msg, { readonly _tag: T }>
-type UnknownTag<T> = `'${T & string}' is not a tag of this component's message`
+type UnknownTag<T> = `'${T & string}' is not a tag of this component's message` & {
+  readonly _UnknownTag: unique symbol
+}
 
 /**
  * What `define` returns: a component's name, Schemas, queries and
