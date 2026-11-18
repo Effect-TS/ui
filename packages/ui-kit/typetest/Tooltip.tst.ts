@@ -1,5 +1,5 @@
 import { Component } from "@effect/ui"
-import { Tooltip } from "@effect/ui-kit"
+import { Tooltip, type TooltipProvider } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 import { describe, expect, it } from "tstyche"
@@ -11,6 +11,11 @@ type Button = Html.Element<Msg, never, Html.EventsOf<"button">, HTMLButtonElemen
 type Div = Html.Element<Msg, never, Html.EventsOf<"div">, HTMLDivElement, "div">
 
 describe("Tooltip", () => {
+  it("needs no provider: its read of a TooltipProvider is optional", () => {
+    expect<Component.Headless.Requirements<typeof Tooltip>>().type.toBe<never>()
+    expect<Component.Headless.Requirements<typeof TooltipProvider>>().type.toBe<never>()
+  })
+
   it("each part returns the builder it was given, with the consumer's message type", () => {
     Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
