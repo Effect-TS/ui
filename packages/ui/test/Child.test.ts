@@ -116,6 +116,18 @@ describe("a component call", () => {
 })
 
 describe("a feature's render", () => {
+  it("dispatches a toString event only to an own onEmit handler", () => {
+    class Text extends Feature.Service<Text>()("Text", {
+      props: Schema.Struct({}),
+      events: Schema.TaggedStruct("toString", {})
+    }) {}
+    const h = View.makeHelper<string, {}>({}, undefined)
+    const fallback = () => h.text("")
+    const event = { _tag: "toString" } as const
+    assert.isUndefined(Text.render(h, { fallback, onEmit: Object.create(Object.prototype) }).onEmit(event))
+    assert.strictEqual(Text.render(h, { fallback, onEmit: { toString: () => "handled" } }).onEmit(event), "handled")
+  })
+
   it("builds a child for the service", () => {
     const fallback = () => h.el("p", "loading")
     const child = Todos.render(h, { key: "t", fallback })

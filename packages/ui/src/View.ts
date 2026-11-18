@@ -389,7 +389,7 @@ export declare namespace Child {
    * @category models
    * @since 0.1.0
    */
-  export type Options<Props, Events, Msg, Rcv = never> =
+  export type Options<Props, Events, Msg, Rcv = never, Keys extends string = never> =
     & (
       | {
         /** The child's identity among its parent's children of one component. The empty string by default. */
@@ -404,10 +404,10 @@ export declare namespace Child {
     )
     & {
       /**
-       * Handle the child's events with a callback, or supply one handler per tag for tagged events.
+       * Handle the child's events with a callback, or supply one own handler per tag for a finite set of string tags.
        * Return a parent message to dispatch it, or `undefined` to ignore the event.
        */
-      readonly onEmit?: ((events: Events) => Msg | undefined) | EmitHandlers<Events, Msg> | undefined
+      readonly onEmit?: ((events: Events) => Msg | undefined) | EmitHandlers<Events, Msg, Keys> | undefined
       /** Also tells the parent that the child failed. The failure stays in the child either way. */
       readonly onFailure?: ((failure: AsyncResult.Failure<never, unknown>) => Msg | undefined) | undefined
     }
@@ -419,11 +419,19 @@ export declare namespace Child {
    * @category models
    * @since 0.1.0
    */
-  export type EmitHandlers<Events, Msg> = [Events] extends [never] ? never
+  export type EmitHandlers<Events, Msg, Keys extends string = never> = [Events] extends [never] ? never
     : [Events] extends [{ readonly _tag: string }]
-    // Reject a wide tag without testing against a type that depends on Events (see ErasedReceives).
-      ? [(tag: EventTag<Events>) => void] extends [(tag: string) => void] ? never
-      : { readonly [T in EventTag<Events>]: (event: Extract<Events, { readonly _tag: T }>) => Msg | undefined }
+    // Check against a fixed type so the conditional relates across Events (see ErasedReceives).
+      ? [IsOpenTag<EventTag<Events>>] extends [false] ?
+          & Record<Keys & EventTag<Events>, unknown>
+          & {
+            readonly [
+              // Keys are inferred from the supplied record; implicit Object methods are not among them.
+              T in EventTag<Events>
+            ]: T extends Exclude<InheritedKey, Keys> ? never
+              : (event: EventForTag<Events, T>) => Msg | undefined
+          }
+      : never
     : never
 
   /**
@@ -437,7 +445,17 @@ export declare namespace Child {
   export type Receives<Rcv> = [Rcv] extends [ErasedReceives] ? never : Rcv
 }
 
+// We need the names of Object methods, not the keys of the empty `object` type.
+// oxlint-disable-next-line typescript/no-wrapper-object-types
+type InheritedKey = keyof Object
+
 type EventTag<Events> = Events extends { readonly _tag: infer T extends string } ? T : never
+
+// Distribute before checking: an open key requires no property, even if another tag is literal.
+type IsOpenTag<K extends string> = K extends unknown ? {} extends Record<K, never> ? true : false : never
+
+// A single schema member can have several literal tags. Retain its payload for each matching tag.
+type EventForTag<E, T> = E extends { readonly _tag: T } ? E : E & { readonly _tag: T }
 
 // Only `any` and `never` extend it. A conditional on `[Rcv]` against a fixed
 // type, unlike `0 extends 1 & Rcv`, relates for two `Rcv`s, so it passes a

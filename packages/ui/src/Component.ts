@@ -970,10 +970,10 @@ export interface Mountable<in out Props, out Events, out R = never, in Rcv = nev
   // failed would stand in for it and accept the map. With `Msg` given and
   // `SC` not, `SC` isn't inferred, and nothing could check the map's names
   // or requirements, so the call takes no slots.
-  <Msg, RF = never, const SC extends object = never>(
+  <Msg, RF = never, const SC extends object = never, Keys extends string = never>(
     h: View.Helper<Msg, unknown>,
     options:
-      & View.Child.Options<Props, Events, NoInfer<Msg>, Rcv>
+      & View.Child.Options<Props, Events, NoInfer<Msg>, Rcv, Keys>
       & {
         /** Shown if the child fails, until its key changes. Without it, the child is blank. */
         readonly fallback?:
@@ -1203,10 +1203,10 @@ export interface Headless<
    * For an owner of shared state, the view's `Shared.Of<typeof Owner>` is
    * removed: the readers and senders in it have this owner above them.
    */
-  <Msg, RV = never, RF = never>(
+  <Msg, RV = never, RF = never, Keys extends string = never>(
     h: View.Helper<Msg, unknown>,
     options:
-      & View.Child.Options<Props, Events, NoInfer<Msg>, Rcv>
+      & View.Child.Options<Props, Events, NoInfer<Msg>, Rcv, Keys>
       & {
         /** Shown if the child fails, until its key changes. Without it, the child is blank. */
         readonly fallback?:
