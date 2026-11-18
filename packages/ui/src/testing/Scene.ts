@@ -14,7 +14,7 @@
  * `expectIgnored()`. A child is a leaf: `childEmit` stands in for what it
  * emits, and anything that crosses into one is a runtime test. A child step
  * names the child by its component, then by its key or ref when it has one:
- * `childEmit(Switch, event)`, `childEmit(TodoItem, "t1", event)`.
+ * `childEmit(Listbox, event)`, `childEmit(TodoItem, "t1", event)`.
  *
  * **Example** (Save, resolve its Command, see the result)
  *
