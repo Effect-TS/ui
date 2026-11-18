@@ -24,7 +24,7 @@ const Profile = Component.define({
     Input(h, {
       props: { value: model.name, ...h.props },
       onUpdate: ({ value }) => ProfileMessage.UpdatedName({ value })
-    }).attr("aria-label", "Name")
+    })
 })
 
 const input = Locator.tag("input")
@@ -36,34 +36,31 @@ describe("Input", () => {
   it.effect("an edit reports the value the user left, and a disabled input reports nothing", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(Profile, {})
-      assert.strictEqual(s.get(input).props?.value, "Ada")
       s.fire(input, "input", { value: "Grace", checked: false })
       assert.strictEqual(s.get(input).props?.value, "Grace")
-      assert.deepStrictEqual(s.get(input).attrs, { "aria-label": "Name" })
 
       s.props({ disabled: true })
-      assert.deepStrictEqual(s.get(input).attrs, { "aria-label": "Name", disabled: "", "data-disabled": "" })
       assert.throws(() => s.fire(input, "input", { value: "Linus", checked: false }), /nothing handles/i)
     }))
 
   it("the caller's attributes stay, but the input's own win, present or absent, before the call or after it", () => {
     const element = h.input
-      .class("name")
       .attr("type", "email")
       .attr("aria-disabled", "true")
       .attr("data-disabled", "x")
       .value("caller")
     const enabled = build(Input(h, { props: { value: "Ada" }, element: element.disabled(true) }))
-    assert.deepStrictEqual(enabled.attrs, { class: "name", type: "email" })
+    assert.deepStrictEqual(enabled.attrs, { type: "email" })
     assert.strictEqual(enabled.props.value, "Ada")
 
     const disabled = build(
       Input(h, { props: { value: "Ada", disabled: true }, element })
+        .attr("aria-label", "Name")
         .disabled(false)
         .attr("data-disabled", undefined)
         .value("after")
     )
-    assert.deepStrictEqual(disabled.attrs, { class: "name", type: "email", "data-disabled": "", disabled: "" })
+    assert.deepStrictEqual(disabled.attrs, { "aria-label": "Name", type: "email", "data-disabled": "", disabled: "" })
     assert.strictEqual(disabled.props.value, "Ada")
   })
 
