@@ -2514,9 +2514,21 @@ const setup = (
     return undefined
   }
   /**
+   * How an error ends when `nearestOwner` finds none. The types know an owner by its name, so a different
+   * component with that name may be above.
+   */
+  const ownerAbsent = (from: Instance | undefined, definition: Component.Definition.Any): string => {
+    for (let at = from; at !== undefined; at = at.parent) {
+      if (at.component.definition.name === definition.name) {
+        return `but a different component with the same name is above it at ${at.path}`
+      }
+    }
+    return `and no ${definition.name} is above it`
+  }
+  /**
    * A reader of shared state finds the owner of each definition it reads, once, at mount, and registers
-   * with it. An optional owner that isn't above is left out. Only a cast mounts a reader with no required
-   * owner above it, and it fails. An `onChange` starts from the value the reader mounts with.
+   * with it. An optional owner that isn't above is left out. A required owner must match by definition,
+   * not just by name. An `onChange` starts from the value the reader mounts with.
    */
   const findOwners = (inst: Instance) => {
     for (const read of sharedReads.readsOf(inst.component.definition)) {
@@ -2525,7 +2537,7 @@ const setup = (
       if (owner === undefined) {
         if (read.optional) continue
         throw new Error(
-          `${inst.path} reads the shared state of ${definition.name}, and no ${definition.name} is above it`
+          `${inst.path} reads the shared state of ${definition.name}, ${ownerAbsent(inst.parent, definition)}`
         )
       }
       ;(inst.owners ??= new Map()).set(definition, owner)
@@ -2681,8 +2693,8 @@ const setup = (
   }
   /**
    * Delivers `$.send(Owner, message)`s to the nearest owner of each above `inst`, in order. A send to an
-   * owner the sender reads as optional, with none above, is dropped. Only a cast sends to another owner
-   * that isn't above, and that fails the sender.
+   * owner the sender reads as optional, with none above, is dropped. A send to another owner that
+   * isn't above fails the sender.
    */
   const sendToOwners = (inst: Instance, sends: ReadonlyArray<Component.Send>, entrySeq: number) => {
     let counted = false
@@ -2705,7 +2717,7 @@ const setup = (
         continue
       }
       if (owner === undefined) {
-        const error = new Error(`${inst.path} sent to ${definition.name}, and no ${definition.name} is above it`)
+        const error = new Error(`${inst.path} sent to ${definition.name}, ${ownerAbsent(inst.parent, definition)}`)
         failInstance(inst, Cause.die(error), "send")
         return
       }

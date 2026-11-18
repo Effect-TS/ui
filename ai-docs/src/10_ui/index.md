@@ -239,9 +239,12 @@ value. A reader lists the owners it reads in
 `shared: { provider: TooltipProvider }` and reads `h.shared.provider` or
 `p.shared.provider` in `view` or `parts`. Any `update` below the owner can
 call `$.send(TooltipProvider, message)` with one of the messages the owner
-`receives`. Reads and sends put `Component.Shared<typeof TooltipProvider>`
+`receives`. Reads and sends put `Component.Shared<"TooltipProvider">`
 in a component's requirements, and the owner's closure removes it, so a
-reader with no owner above it doesn't compile. The state is the owner's
+reader with no owner of that name above it doesn't compile. Use distinct owner
+names: a different definition with the same name satisfies the type, but a
+required read still fails at mount. To name the requirement from the component,
+use `Component.Shared.Of<typeof TooltipProvider>`. The state is the owner's
 Model, so the log records every change. In a `Scene`,
 `s.shared(TooltipProvider, value)` or
 `s.given(model, {}, [[TooltipProvider, value]])` gives readers a value, and

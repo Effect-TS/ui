@@ -93,8 +93,36 @@ describe("reports", () => {
   it("drops optional requirements", () => {
     expect<Component.Requirements<typeof Tip>>().type.toBe<never>()
     expect<Component.Headless.Requirements<typeof Required>>().type.toBe<
-      Component.Shared<typeof Provider> | Component.Shared<typeof Plain>
+      Component.Shared.Of<typeof Provider> | Component.Shared.Of<typeof Plain>
     >()
+  })
+  it("only makes sends to the optional owner optional", () => {
+    const B = Component.define({
+      name: "Provider",
+      model: Schema.Null,
+      message: TipMessage,
+      receives: ["Entered"],
+      shares: () => 1
+    }).make({ init: () => null, update: (model) => model, parts: () => ({}) })
+    const sender = Component.define({
+      name: "Sender",
+      model: Schema.Null,
+      message: TipMessage,
+      shared: { a: { owner: Provider, optional: true } }
+    })
+    const sendsB = sender.make({
+      init: () => null,
+      update: (_, __, $) => $.send(B, { _tag: "Entered" }),
+      parts: () => ({})
+    })
+    const widened = sender.make({
+      init: () => null,
+      update: (_, __, $): Component.Step<null, typeof TipMessage.Type, never, Component.Shared<"Provider">> =>
+        $.send(Provider, { _tag: "Completed" }),
+      view: (_, h) => h.text("")
+    })
+    expect<Component.Requirements<typeof widened>>().type.toBe<Component.Shared<"Provider">>()
+    expect<Component.Headless.Requirements<typeof sendsB>>().type.toBe<Component.Shared<"Provider">>()
   })
   it("keeps a supplied map with a string index", () => {
     const reads: Readonly<Record<string, typeof Provider>> = { provider: Provider }
@@ -108,7 +136,7 @@ describe("reports", () => {
           return h.text("")
         }
       })
-    expect<Component.Requirements<typeof Indexed>>().type.toBe<Component.Shared<typeof Provider>>()
+    expect<Component.Requirements<typeof Indexed>>().type.toBe<Component.Shared.Of<typeof Provider>>()
   })
   it("keeps the required owner of a child below an optional read", () => {
     const Child = Component.define({
@@ -128,7 +156,7 @@ describe("reports", () => {
       update: (model, _, $) => $.set(model).send(Provider, { _tag: "Completed" }),
       view: (_, h) => Child(h, { key: "c" })
     })
-    expect<Component.Requirements<typeof Wrapper>>().type.toBe<Component.Shared<typeof Provider>>()
+    expect<Component.Requirements<typeof Wrapper>>().type.toBe<Component.Shared.Of<typeof Provider>>()
   })
   it("rejects collects without its onChange", () => {
     Component.define({

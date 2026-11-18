@@ -404,19 +404,15 @@ export const make: {
    * one. An event runs every part layer on its element, in the runtime's
    * order, and each layer's `preventDefault` applies to its own message.
    */
-  <Props, Events, Parts, R, Rcv, V extends View.Elements = never, Sh = never>(
-    component: Component.Headless<Props, Events, Parts, R, Rcv, Sh>,
+  <Props, Events, Parts, R, Rcv, V extends View.Elements = never, Rp = never>(
+    component: Component.Headless<Props, Events, Parts, R, Rcv, never, never, Rp>,
     props: Props,
     options: {
       readonly elements?: View.Vocabulary<V> | undefined
       readonly view: (parts: Parts, h: View.Helper<never, Props> & View.Tags<V, never>) => View.Content<never, any>
     }
   ): Effect.Effect<
-    Steps<
-      Component.Component<string, Props, any, any, Events, R, V>,
-      Parts,
-      Component.Shared.Report<Component.Headless<Props, Events, Parts, R, Rcv, Sh>>
-    >,
+    Steps<Component.Component<string, Props, any, any, Events, R, V>, Parts, Rp>,
     never,
     Scope.Scope
   >

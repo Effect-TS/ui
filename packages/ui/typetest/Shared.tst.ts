@@ -51,11 +51,11 @@ const Sender = Component.define({ name: "Sender", model: Schema.Null, message: T
   view: (_, h) => h.el("p")
 })
 
-type TipsShared = Component.Shared.Of<"TipsProvider", { open: string | null }, typeof TipMessage.Type>
+type TipsShared = Component.Shared<"TipsProvider">
 
 describe("shared state", () => {
   it("names an owner's requirement, which the owner itself doesn't carry", () => {
-    expect<Component.Shared<typeof TipsProvider>>().type.toBe<TipsShared>()
+    expect<Component.Shared.Of<typeof TipsProvider>>().type.toBe<TipsShared>()
     expect<Component.Requirements<typeof TipsProvider>>().type.toBe<never>()
     // Owners and other headless components alike.
     expect(TipsProvider).type.toBeAssignableTo<Component.Headless.Any>()

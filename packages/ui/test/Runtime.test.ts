@@ -74,6 +74,28 @@ const List = Component.define({
 })
 
 describe("Runtime", () => {
+  it.effect("rejects a different shared owner with the same name at mount", () =>
+    provideHost(Effect.gen(function*() {
+      const state = { model: Schema.Null, message: Schema.Never }
+      const impl = { init: () => null, update: () => null }
+      const provider = () =>
+        Component.define({ ...state, name: "Provider", shares: () => "value" }).make({ ...impl, parts: () => ({}) })
+      const Expected = provider()
+      const Other = provider()
+      const Reader = Component.define({ ...state, name: "Reader", shared: { value: Expected } }).make({
+        ...impl,
+        view: (_, h) => h.el("p", h.shared.value)
+      })
+      const App = Component.define({ ...state, name: "App" }).make({
+        ...impl,
+        view: (_, h) => Other(h, { key: "other", view: () => Reader(h, { key: "reader" }) })
+      })
+      const root = yield* TestHost.mount(App, {})
+      yield* TestHost.settle
+      const failed = root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
+      assert.include(Cause.pretty(failed.cause), "a different component with the same name is above it")
+    })))
+
   it.effect("renders, handles an event and re-renders after settle", () =>
     provideHost(Effect.gen(function*() {
       const root = yield* TestHost.mount(Counter, { initial: 1 })
