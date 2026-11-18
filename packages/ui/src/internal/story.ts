@@ -20,6 +20,7 @@ import * as Query from "../Query.ts"
 import * as Locator from "../testing/Locator.ts"
 import type { AwaitedQuery, KeyedLoad, Pending, QueryInfo, StreamTarget, Target } from "../testing/Steps.ts"
 import * as View from "../View.ts"
+import { sharedEqual } from "./equal.ts"
 import { isNoop } from "./noop.ts"
 import {
   checkAuthorPlacements,
@@ -34,6 +35,7 @@ import {
 import * as componentQueries from "./queries.ts"
 import * as childRef from "./ref.ts"
 import * as schedule from "./schedule.ts"
+import * as sharedReads from "./shared.ts"
 
 /**
  * One instance between steps, as the engine records it: everything a Story or
@@ -138,6 +140,7 @@ export type Fields<Props, Model, Msg, Events> =
   & {
     readonly childModels?: ReadonlyMap<string, unknown> | undefined
     readonly shared?: ReadonlyMap<Component.Definition.Any, unknown> | undefined
+    readonly reported?: Reported | undefined
   }
 
 // -- headless children ------------------------------------------------------
@@ -272,15 +275,108 @@ const sharedDefault = (owner: Component.Headless.Any): unknown => {
 }
 
 /**
- * `h.shared` and `p.shared` in a story: a given value, else the nearest owner above, else the default.
+ * `h.shared` and `p.shared` in a story: a given value, else the nearest owner above, else `undefined`
+ * for an optional read and the default for a required one.
  *
  * @internal
  */
-export const sharedLookup = (given: Owners | undefined, owners: Owners): Component.SharedLookup => (owner) => {
-  const definition = owner.definition
-  if (given?.has(definition)) return given.get(definition)
-  if (owners.has(definition)) return owners.get(definition)
-  return sharedDefault(owner)
+export const sharedLookup =
+  (given: Owners | undefined, owners: Owners): Component.SharedLookup => (owner, optional) => {
+    const definition = owner.definition
+    if (given?.has(definition)) return given.get(definition)
+    if (owners.has(definition)) return owners.get(definition)
+    return optional === true ? undefined : sharedDefault(owner)
+  }
+
+/** What the story's component reads of `owner`: a given value, or the default of a required read. */
+const sharedBefore = (
+  story: State<any, any, any, any>,
+  read: sharedReads.Read
+): { readonly value: unknown } | undefined => {
+  const given = sharedGiven.get(story)
+  if (given?.has(read.owner.definition)) return { value: given.get(read.owner.definition) }
+  if (read.optional) return undefined
+  try {
+    return { value: sharedDefault(read.owner) }
+  } catch (error) {
+    if (error instanceof MissingShared) return undefined
+    throw error
+  }
+}
+
+/**
+ * The `onChange` messages a new value of `owner` sends: one for each entry of the story's component
+ * that reads it with an `onChange`, when the value it read before differs. A first value of an
+ * optional owner sends nothing, since the runtime never sees an owner appear.
+ *
+ * @internal
+ */
+export const sharedMessages = (
+  story: State<any, any, any, any>,
+  owner: Component.Headless.Any,
+  value: unknown
+): ReadonlyArray<unknown> => {
+  const messages: Array<unknown> = []
+  for (const read of sharedReads.readsOf(story.component.definition)) {
+    if (read.onChange === undefined || read.owner.definition !== owner.definition) continue
+    const before = sharedBefore(story, read)
+    if (before !== undefined && !sharedEqual(before.value, value)) messages.push(read.onChange(value))
+  }
+  return messages
+}
+
+/** What an owner's `onReports` last returned in a story. */
+interface Reported {
+  readonly message: unknown
+}
+const reportedLast = new WeakMap<object, Reported>()
+
+/**
+ * Runs the story's component's `onReports` for `reports`, and sends its message when it differs from
+ * the last one, starting from its message for no reports.
+ *
+ * @internal
+ */
+export const withReports = (
+  story: State<any, any, any, any>,
+  reports: ReadonlyArray<unknown>,
+  step: string
+): State<any, any, any, any> => {
+  const definition = story.component.definition
+  if (definition.reports === undefined) {
+    throw new Error(`${step}: ${definition.name} takes no reports: its shares has no reports Schema`)
+  }
+  const onReports = definition.reports.onReports as (reports: ReadonlyArray<unknown>) => unknown
+  const last = reportedLast.get(story) ?? { message: onReports([]) }
+  const message = onReports(reports)
+  if (sharedEqual(last.message, message)) return story
+  return dispatch(update(story, { reported: { message } }), message)
+}
+
+/**
+ * What the story's component reports to each owner it reads, by the name `shared` lists it under. An
+ * optional owner with no value given is absent, and gets no report.
+ *
+ * @internal
+ */
+export const reportsOf = (story: State<any, any, any, any>): { readonly [name: string]: unknown } => {
+  const out: { [name: string]: unknown } = {}
+  const given = sharedGiven.get(story)
+  for (const read of sharedReads.readsOf(story.component.definition)) {
+    if (read.report === undefined || (read.optional && !given?.has(read.owner.definition))) continue
+    out[read.name] = read.report(story.model, story.props)
+  }
+  return out
+}
+
+/** A send to an owner the component reads as optional, with no value given for it, is dropped, as with no owner above. */
+const delivered = (story: State<any, any, any, any>, send: Component.Send): boolean => {
+  if (send.owner === undefined) return true
+  const definition = send.owner.definition
+  if (sharedGiven.get(story)?.has(definition)) return true
+  return !sharedReads.readsOf(story.component.definition).some((read) =>
+    read.optional && read.owner.definition === definition
+  )
 }
 
 const expandRoot = <Msg>(
@@ -445,6 +541,7 @@ export const record = <Props, Model, Msg, Events>(
   }
   if (fields.childModels !== undefined) childModels.set(story, fields.childModels)
   if (fields.shared !== undefined) sharedGiven.set(story, fields.shared)
+  if (fields.reported !== undefined) reportedLast.set(story, fields.reported)
   return story
 }
 
@@ -468,6 +565,7 @@ export const update = <Props, Model, Msg, Events>(
     ack: story.ack,
     childModels: childModels.get(story),
     shared: sharedGiven.get(story),
+    reported: reportedLast.get(story),
     ...patch
   }
   // A defect in `view` fails the step that changed the Model, the query results, the props or what's pending.
@@ -960,7 +1058,8 @@ export const apply = <Props, Model, Msg, Events>(
     }
   }
   out = update(out, { emitted: [...out.emitted, ...next.events] })
-  if (next.sends !== undefined && next.sends.length > 0) out = update(out, { sent: [...out.sent, ...next.sends] })
+  const sends = next.sends?.filter((send) => delivered(out, send)) ?? []
+  if (sends.length > 0) out = update(out, { sent: [...out.sent, ...sends] })
   for (const list of next.lists ?? []) out = applyList(out, list)
   return out
 }

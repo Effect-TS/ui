@@ -2,7 +2,7 @@ import { Component, MessageLog } from "@effect/ui"
 import * as services from "@effect/ui/internal/services"
 import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Schema } from "effect"
+import { Cause, Effect, Schema } from "effect"
 import { defect } from "./utils/scoped.ts"
 
 const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -273,4 +273,290 @@ describe("shared state in a Scene", () => {
         assert.match(message, /\.shared\(BProvider, value\)/)
       })
   )
+})
+
+// -- optional owners, reports and onChange ------------------------------------
+
+const GroupMessage = Schema.TaggedUnion({ ChangedOn: { on: Schema.Boolean }, Bumped: {} })
+
+/** An owner that is on while any reader reports `true`, and counts bumps. */
+const Group = Component.define({
+  name: "Group",
+  model: Schema.Struct({ on: Schema.Boolean, bumps: Schema.Number }),
+  message: GroupMessage,
+  receives: ["Bumped"],
+  shares: {
+    value: (model) => ({ on: model.on, bumps: model.bumps }),
+    reports: Schema.Boolean,
+    onReports: (reports) => GroupMessage.make({ _tag: "ChangedOn", on: reports.includes(true) })
+  }
+}).make({
+  init: () => ({ on: false, bumps: 0 }),
+  update: (model, message) =>
+    GroupMessage.match(message, {
+      ChangedOn: ({ on }) => ({ ...model, on }),
+      Bumped: () => ({ ...model, bumps: model.bumps + 1 })
+    }),
+  parts: (model) => ({ on: model.on })
+})
+
+const ReaderMessage = Schema.TaggedUnion({
+  Clicked: {},
+  ChangedGroup: { on: Schema.Boolean, bumps: Schema.Number }
+})
+
+/** Reports its Model, and answers what the group tells it with `answer`. */
+const makeReader = (answer: (told: boolean) => boolean) =>
+  Component.define({
+    name: "Reader",
+    model: Schema.Boolean,
+    message: ReaderMessage,
+    shared: {
+      group: {
+        owner: Group,
+        report: (on) => on,
+        onChange: (value) => ReaderMessage.make({ _tag: "ChangedGroup", ...value })
+      }
+    }
+  }).make({
+    init: () => false,
+    update: (on, message) => ReaderMessage.match(message, { Clicked: () => !on, ChangedGroup: ({ on }) => answer(on) }),
+    view: (_, h) => h.el("button").on("click", ReaderMessage.make({ _tag: "Clicked" })).children("reader")
+  })
+
+const GroupRef = Group.ref("Group")
+const PageMessage = Schema.TaggedUnion({ Bump: { times: Schema.Number } })
+const makePage = (Reader: ReturnType<typeof makeReader>) =>
+  Component.define({ name: "Page", model: Schema.Null, message: PageMessage }).make({
+    init: () => null,
+    update: (model, { times }, $) => {
+      let next = $.set(model)
+      for (let i = 0; i < times; i++) next = next.send(GroupRef, { _tag: "Bumped" })
+      return next
+    },
+    view: (_, h) => Group(h, { ref: GroupRef, fallback: () => h.text("looped"), view: () => Reader(h, { key: "r" }) })
+  })
+
+const group = "/Page/Group[Group]"
+const reader = group + "/Reader[r]"
+
+describe("optional owners, reports and onChange", () => {
+  it.effect("an optional reader with no owner reads undefined, and its send to the owner is dropped", () =>
+    provideHost(Effect.gen(function*() {
+      const Lone = Component.define({
+        name: "Lone",
+        model: Schema.Null,
+        message: TipMessage,
+        shared: { provider: { owner: TipsProvider, optional: true } }
+      }).make({
+        init: () => null,
+        update: (model, message, $) => $.set(model).send(TipsProvider, message),
+        view: (_, h) =>
+          h.el("button").on("click", TipMessage.make({ _tag: "Enter", id: "a" })).children(
+            h.shared.provider === undefined ? "alone" : "grouped"
+          )
+      })
+      const root = yield* TestHost.mount(Lone, {})
+      yield* TestHost.settle
+      click(root, "alone")
+      yield* TestHost.settle
+      const dropped = root.log().filter((entry): entry is MessageLog.SendDropped => entry._tag === "SendDropped")
+      assert.deepStrictEqual(dropped.map((entry) => [entry.ref, entry.reason]), [["TipsProvider", "absent"]])
+    })))
+
+  it.effect("an owner reads its readers' reports once the pass settles: a swap in one render sends nothing, an unmount does", () =>
+    provideHost(Effect.gen(function*() {
+      const Toggle = Component.define({
+        name: "Toggle",
+        props: Schema.Struct({ open: Schema.Boolean }),
+        model: Schema.Null,
+        message: Schema.Never,
+        shared: { group: { owner: Group, report: (_, props) => props.open } }
+      }).make({ init: () => null, update: (model) => model, view: (_, h) => h.text("") })
+      const Open = Schema.TaggedUnion({ Open: { which: Schema.String } })
+      const Bar = Component.define({ name: "Bar", model: Schema.String, message: Open }).make({
+        init: () => "a",
+        update: (_, { which }) => which,
+        view: (open, h) =>
+          Group(h, {
+            key: "g",
+            view: () =>
+              // `gone` unmounts the open "b", and its report goes with it.
+              h.el(
+                "div",
+                (open === "gone" ? ["a"] : ["a", "b"]).map((key) => Toggle(h, { key, props: { open: open === key } }))
+              )
+          })
+      })
+      const root = yield* TestHost.mount(Bar, {})
+      yield* TestHost.settle
+      root.send(Open.make({ _tag: "Open", which: "b" }))
+      yield* TestHost.settle
+      root.send(Open.make({ _tag: "Open", which: "gone" }))
+      yield* TestHost.settle
+      const updates = updatesAt(root.log(), "/Bar/Group[g]")
+      assert.deepStrictEqual(updates.map((entry) => [entry.message, entry.source]), [
+        [{ _tag: "ChangedOn", on: true }, { _tag: "Reported" }],
+        [{ _tag: "ChangedOn", on: false }, { _tag: "Reported" }]
+      ])
+    })))
+
+  it.effect("a reader's onChange gets the new value, pointing at the owner's entry that changed it", () =>
+    provideHost(Effect.gen(function*() {
+      const root = yield* TestHost.mount(makePage(makeReader((told) => told)), {})
+      yield* TestHost.settle
+      Locator.fire(root.get(Locator.text("reader")), "click")
+      yield* TestHost.settle
+      const [changed] = updatesAt(root.log(), group)
+      assert.deepStrictEqual(updatesAt(root.log(), reader).map((entry) => [entry.message, entry.source]), [
+        [{ _tag: "Clicked" }, { _tag: "DomEvent", name: "click" }],
+        [{ _tag: "ChangedGroup", on: true, bumps: 0 }, { _tag: "Shared", name: "group", path: group, seq: changed.seq }]
+      ])
+      assert.deepStrictEqual(updatesAt(root.log(), group).map((entry) => entry.message), [
+        { _tag: "ChangedOn", on: true }
+      ])
+    })))
+
+  it.effect("a report and a shared value that answer each other fail the owner", () =>
+    provideHost(Effect.gen(function*() {
+      // Reports the opposite of what it's told, so equality never stops the pair.
+      const root = yield* TestHost.mount(makePage(makeReader((told) => !told)), {})
+      yield* TestHost.settle
+      Locator.fire(root.get(Locator.text("reader")), "click")
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "looped")
+      const failed = root.log().filter((entry): entry is MessageLog.Failed => entry._tag === "Failed")
+      assert.deepStrictEqual(failed.map((entry) => [entry.path, entry.in]), [[group, "shares"]])
+      assert.include(Cause.pretty(failed[0].cause), "100 times in one flush")
+    })))
+
+  it.effect("150 changes before a render are one onChange message with the last value", () =>
+    provideHost(Effect.gen(function*() {
+      const root = yield* TestHost.mount(makePage(makeReader((told) => told)), {})
+      yield* TestHost.settle
+      root.send(PageMessage.make({ _tag: "Bump", times: 150 }))
+      yield* TestHost.settle
+      assert.lengthOf(updatesAt(root.log(), group), 150)
+      assert.deepStrictEqual(updatesAt(root.log(), reader).map((entry) => entry.message), [
+        { _tag: "ChangedGroup", on: false, bumps: 150 }
+      ])
+    })))
+})
+
+describe("onChange rounds and declarations", () => {
+  it.effect("a reader that changes the owner mid-round leaves the next reader's message pointing at its value's entry", () =>
+    provideHost(Effect.gen(function*() {
+      // Answers the first bump with another, inside the round that tells it.
+      const Replier = Component.define({
+        name: "Replier",
+        model: Schema.Null,
+        message: ReaderMessage,
+        shared: { group: { owner: Group, onChange: (value) => ReaderMessage.make({ _tag: "ChangedGroup", ...value }) } }
+      }).make({
+        init: () => null,
+        update: (model, message, $) =>
+          message._tag === "ChangedGroup" && message.bumps === 1 ? $.set(model).send(Group, { _tag: "Bumped" }) : model,
+        view: (_, h) => h.text("")
+      })
+      const Reader = makeReader((told) => told)
+      const Page = Component.define({ name: "Page", model: Schema.Null, message: PageMessage }).make({
+        init: () => null,
+        update: (model, _, $) => $.set(model).send(GroupRef, { _tag: "Bumped" }),
+        view: (_, h) =>
+          Group(h, { ref: GroupRef, view: () => h.el("div", Replier(h, { key: "a" }), Reader(h, { key: "r" })) })
+      })
+      const root = yield* TestHost.mount(Page, {})
+      yield* TestHost.settle
+      root.send(PageMessage.make({ _tag: "Bump", times: 1 }))
+      yield* TestHost.settle
+      const [first, second] = updatesAt(root.log(), group)
+      assert.deepStrictEqual(updatesAt(root.log(), reader).map((entry) => [entry.message, entry.source]), [
+        [{ _tag: "ChangedGroup", on: false, bumps: 1 }, { _tag: "Shared", name: "group", path: group, seq: first.seq }],
+        [{ _tag: "ChangedGroup", on: false, bumps: 2 }, { _tag: "Shared", name: "group", path: group, seq: second.seq }]
+      ])
+    })))
+
+  it("rejects two onChange for one owner, and takes aliases with one", () => {
+    const onChange = (value: { on: boolean; bumps: number }) => ReaderMessage.make({ _tag: "ChangedGroup", ...value })
+    assert.throws(
+      () =>
+        Component.define({
+          name: "Twice",
+          model: Schema.Null,
+          message: ReaderMessage,
+          shared: { a: { owner: Group, onChange }, b: { owner: Group, optional: true, onChange } }
+        }),
+      "Twice lists Group under a and b, each with an onChange"
+    )
+    Component.define({
+      name: "Aliased",
+      model: Schema.Null,
+      message: ReaderMessage,
+      shared: { a: { owner: Group, onChange }, b: Group, c: { owner: Group, report: () => true } }
+    })
+  })
+})
+
+describe("optional owners, reports and onChange in a Story", () => {
+  const OptionalReader = Component.define({
+    name: "OptionalReader",
+    model: Schema.Boolean,
+    message: ReaderMessage,
+    shared: {
+      group: {
+        owner: Group,
+        optional: true,
+        report: (on) => on,
+        onChange: (value) => ReaderMessage.make({ _tag: "ChangedGroup", ...value })
+      }
+    }
+  }).make({
+    init: () => false,
+    update: (on, message, $) =>
+      ReaderMessage.match(message, {
+        Clicked: () => $.set(!on).send(Group, { _tag: "Bumped" }),
+        ChangedGroup: ({ on }) => on
+      }),
+    view: (_, h) =>
+      h.el("button").on("click", ReaderMessage.make({ _tag: "Clicked" })).children(
+        h.shared.group === undefined ? "alone" : `bumps ${h.shared.group.bumps}`
+      )
+  })
+
+  it.effect("an optional owner is absent until given: no report, and a send to it is dropped", () =>
+    Effect.gen(function*() {
+      const s = yield* Scene.make(OptionalReader, {})
+      assert.strictEqual(Locator.textOf(s.root), "alone")
+      s.click("alone")
+      assert.deepStrictEqual(s.current.sent, [])
+      assert.deepStrictEqual(s.current.reports, {})
+    }))
+
+  it.effect("a shared step sends onChange when it changes a value the story had, and not for the first one", () =>
+    Effect.gen(function*() {
+      const s = yield* Story.make(OptionalReader, {})
+      // The first value of an optional owner: the reader mounted with it, so nothing is sent.
+      s.shared(Group, { on: true, bumps: 0 })
+      assert.strictEqual(s.model, false)
+      assert.deepStrictEqual(s.current.reports, { group: false })
+      s.shared(Group, { on: true, bumps: 1 })
+      assert.strictEqual(s.model, true)
+      // An equal value sends nothing.
+      s.send(ReaderMessage.make({ _tag: "ChangedGroup", on: false, bumps: 1 }))
+      s.shared(Group, { on: true, bumps: 1 })
+      assert.strictEqual(s.model, false)
+      // `given` supplies a value without sending.
+      s.given(false, {}, [[Group, { on: true, bumps: 2 }]])
+      assert.strictEqual(s.model, false)
+    }))
+
+  it.effect("reported sends the owner's onReports message when it differs from the last", () =>
+    Effect.gen(function*() {
+      const s = yield* Scene.make(Group, {}, { view: (parts, h) => h.el("p", parts.on ? "on" : "off") })
+      // The same message as for no reports.
+      s.reported([false, false])
+      assert.strictEqual(Locator.textOf(s.root), "off")
+      s.reported([false, true])
+      assert.strictEqual(Locator.textOf(s.root), "on")
+    }))
 })

@@ -348,12 +348,16 @@ export class SceneCursor extends Cursor {
       return engine.update(state, { childModels: given })
     })
   }
-  shared(owner: Component.Headless.Any, value: unknown): this {
-    // Nothing to settle or check: only what readers see changes.
-    const state = engine.update(this.state, {
-      shared: engine.withShared(this.state, [[owner, value]], this.name("shared"))
-    })
-    return this.replace(engine.renderSharing(state) ? trackMounts(state, this.name("shared")) : state)
+  reported(reports: ReadonlyArray<unknown>): this {
+    const step = this.name("reported")
+    return this.act("reported", "message", (state) => engine.withReports(state, reports, step))
+  }
+  protected override givenShared(
+    state: engine.State<any, any, any, any>,
+    step: string
+  ): engine.State<any, any, any, any> {
+    // Another `shared` step may give a value the view still misses.
+    return engine.renderSharing(state) ? trackMounts(state, step) : state
   }
   mounted(target: Mount.Definition.Any | Mount.Any, ...result: ReadonlyArray<unknown>): this {
     const step = this.name("mounted")

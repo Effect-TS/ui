@@ -1,0 +1,68 @@
+/**
+ * The equality props, shared values and reports change by: shallow for plain records, `Equal.equals`
+ * otherwise.
+ *
+ * @internal
+ */
+import * as Equal from "effect/Equal"
+
+/**
+ * Shallow per key, with `Equal.equals` only for values that differ by reference.
+ *
+ * @internal
+ */
+export const propsEqual = (a: unknown, b: unknown): boolean => {
+  if (a === b) return true
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return Equal.equals(a, b)
+  const keys = Object.keys(a)
+  if (keys.length !== Object.keys(b).length) return false
+  for (const key of keys) {
+    const x = (a as any)[key]
+    const y = (b as any)[key]
+    if (x !== y && (differsPlainly(x, y) || !Equal.equals(x, y))) return false
+  }
+  return true
+}
+
+const isPrimitive = (u: unknown): boolean => u === null || (typeof u !== "object" && typeof u !== "function")
+
+/**
+ * An object literal, or one with no prototype.
+ *
+ * @internal
+ */
+export const isPlainRecord = (value: unknown): value is object => {
+  if (typeof value !== "object" || value === null) return false
+  const proto = Object.getPrototypeOf(value)
+  return proto === Object.prototype || proto === null
+}
+
+/**
+ * Whether two plain objects have a field that differs as a primitive, so they can't be equal. It
+ * answers for the common change, a record with one field replaced, without the hashes `Equal.equals`
+ * takes of both. `false` leaves the answer to `Equal.equals`.
+ */
+const differsPlainly = (a: unknown, b: unknown): boolean => {
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false
+  if (Object.getPrototypeOf(a) !== Object.prototype || Object.getPrototypeOf(b) !== Object.prototype) return false
+  // An object with its own equality decides for itself.
+  if (Equal.symbol in a || Equal.symbol in b) return false
+  for (const key in a) {
+    if (!Object.hasOwn(b, key)) continue
+    const x = (a as any)[key]
+    const y = (b as any)[key]
+    // `NaN` is equal to itself for `Equal.equals`.
+    if (x !== y && isPrimitive(x) && isPrimitive(y) && (x === x || y === y)) return true
+  }
+  return false
+}
+
+/**
+ * A shared value, or what an owner's `onReports` returns: compared as props are when both are plain
+ * records, so one built anew each time is no change, and by `Equal.equals` otherwise, so a new Date of
+ * the same time isn't either.
+ *
+ * @internal
+ */
+export const sharedEqual = (a: unknown, b: unknown): boolean =>
+  isPlainRecord(a) && isPlainRecord(b) ? propsEqual(a, b) : Equal.equals(a, b)
