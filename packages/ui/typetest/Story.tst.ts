@@ -3,13 +3,14 @@ import type { Steps } from "@effect/ui/testing"
 import { Scene, Story } from "@effect/ui/testing"
 import { Data, Effect, Schema, type Scope, Stream } from "effect"
 import { describe, expect, it } from "tstyche"
-import type { SearchBox, TodoItem } from "../test/fixtures/components.ts"
+import type { SearchBox } from "../test/fixtures/components.ts"
 import {
   Counter,
   CounterMessage,
   SaveTodo,
   Search,
   SearchMessage,
+  TodoItem,
   TodoItemMessage,
   Upload
 } from "../test/fixtures/components.ts"
@@ -29,6 +30,15 @@ describe("Story", () => {
     const scene = Scene.start(Counter, { initial: 0 })
     expect(scene).type.not.toHaveProperty("send")
     expect(scene.current).type.not.toHaveProperty("model")
+  })
+
+  it("a scene's child steps take the component, then a key or ref only when the child has one", () => {
+    const scene = Scene.start(Counter, { initial: 0 })
+    const toggled = { _tag: "Toggled", done: true } as const
+    expect(scene.childEmit).type.toBeCallableWith(TodoItem, toggled)
+    expect(scene.childEmit).type.toBeCallableWith(TodoItem, "t1", toggled)
+    expect(scene.childEmit).type.not.toBeCallableWith(TodoItem, { _tag: "Missing" })
+    expect(scene.childEmit).type.not.toBeCallableWith("t1", toggled)
   })
 
   it("restricts receive to public messages and infers model callbacks", () => {

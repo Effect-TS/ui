@@ -4,6 +4,7 @@ import { HtmlLocator } from "@effect/ui/html/testing"
 import { Locator, Scene } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Effect, Redacted, Schema } from "effect"
+import { AsyncResult } from "effect/reactivity"
 import { Badge, BadgeRef, Note, NoteEvents, NoteMessage, SaveNote } from "./fixtures/notes.ts"
 import { defect } from "./utils/scoped.ts"
 
@@ -89,13 +90,18 @@ describe("Scene", () => {
     assert.throws(() => s.click(status), /^Scene\.click: nothing handles "click"/)
   })
 
-  it.effect("childEmit is typed by the child, and throws when the slot holds another component", () =>
+  it.effect("childEmit is typed by the child, and finds only a child of that component", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(Note, {})
       s.childEmit(Badge, BadgeRef, { _tag: "Opened", count: 2 }).expect(status).toHaveText("opened 2")
       assert.throws(
         () => Scene.start(Note, {}).childEmit(Note, BadgeRef, { _tag: "Saved", text: "" }),
-        /^Scene\.childEmit: the child at the ref Badge is Badge, not Note/
+        /^Scene\.childEmit: no child Note with the ref Badge; children: Badge\[Badge\] \(ref\)$/
+      )
+      // A string names a keyed child, never one rendered with a ref.
+      assert.throws(
+        () => Scene.start(Note, {}).childEmit(Badge, BadgeRef.key, { _tag: "Opened", count: 1 }),
+        /^Scene\.childEmit: no child Badge with key "Badge"/
       )
     }))
 
@@ -114,14 +120,109 @@ describe("Scene", () => {
       s.childEmit(Panel, "panel", { _tag: "Changed", to: "dark" }).expect(Locator.tag("p")).toHaveText("dark")
       assert.throws(
         () => Scene.start(Page, {}).childEmit(Badge, "panel", { _tag: "Opened", count: 1 }),
-        /^Scene\.childEmit: the child at "panel" is Panel, not Badge/
+        /^Scene\.childEmit: no child Badge with key "panel"; children: Panel\[panel\]$/
       )
     }))
+
+  it.effect("child steps find a child without a key by its component", () =>
+    Effect.gen(function*() {
+      const Page = Component.define({ name: "Page", model: Schema.String, message: Schema.String, elements: Html })
+        .make({
+          init: () => "",
+          update: (_, message) => message,
+          view: (seen, h) =>
+            h.div(
+              h.p(seen),
+              Note(h, { onEmit: () => "note", onFailure: () => "note failed" }),
+              Badge(h, { onEmit: () => "badge", onFailure: () => "badge failed", fallback: () => h.text("no badge") })
+            )
+        })
+      const s = yield* Scene.make(Page, {})
+      s.childEmit(Badge, { _tag: "Opened", count: 1 }).expect(Locator.tag("p")).toHaveText("badge")
+        .childFailure(Badge, Cause.fail("boom")).expect(Locator.tag("p")).toHaveText("badge failed")
+      assert.deepStrictEqual(Scene.fallback(s.view, Badge, AsyncResult.initial()), { _tag: "Text", text: "no badge" })
+      assert.throws(
+        () => Scene.start(Page, {}).childEmit(Badge, "b", { _tag: "Opened", count: 1 }),
+        /^Scene\.childEmit: no child Badge with key "b"; children: Note\[\], Badge\[\]$/
+      )
+    }))
+
+  describe("children in headless closures", () => {
+    const Toggled = Schema.TaggedUnion({ Toggled: {} })
+    const Disclosure = Component.define({ name: "Disclosure", model: Schema.Boolean, message: Toggled, elements: Html })
+      .make({
+        init: () => false,
+        update: (open) => !open,
+        parts: (open) => ({ open })
+      })
+    const Outer = Disclosure.ref("D")
+    const state = (open: boolean) => (open ? "open" : "closed")
+
+    it("givenChild sets the Model of the child it selects, and no other at another path", () => {
+      // The ref child's key is "D", and so is the keyed child in its closure.
+      const Page = Component.define({ name: "Page", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) =>
+          Disclosure(h, {
+            ref: Outer,
+            view: (outer) =>
+              h.div(
+                h.p(state(outer.open)),
+                Disclosure(h, { key: "D", view: (inner) => h.p(state(inner.open)) })
+              )
+          })
+      })
+      const texts = (s: Scene.Steps.Any) => s.all(Locator.tag("p")).map((node) => Locator.textOf(node))
+      assert.deepStrictEqual(texts(Scene.start(Page, {}).givenChild(Disclosure, Outer, true)), ["open", "closed"])
+      assert.deepStrictEqual(texts(Scene.start(Page, {}).givenChild(Disclosure, "D", true)), ["closed", "open"])
+    })
+
+    it("Scene.fallback checks a child's paths in the view that declared it", () => {
+      const Page = Component.define({ name: "Page", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) =>
+          h.div(
+            Disclosure(h, { key: "a", view: () => Badge(h, {}) }),
+            Disclosure(h, { key: "b", view: () => Badge(h, {}) }),
+            Note(h, { fallback: () => h.text("no note") })
+          )
+      })
+      const view = Scene.start(Page, {}).view
+      assert.deepStrictEqual(Scene.fallback(view, Note, AsyncResult.initial()), { _tag: "Text", text: "no note" })
+      // The root of a closure is declared by the closure, not by the view beside it.
+      const Root = Component.define({ name: "Root", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => h.div(Badge(h, {}), Disclosure(h, { view: () => Note(h, { fallback: () => Badge(h, {}) }) }))
+      })
+      const fallback = Scene.fallback(Scene.start(Root, {}).view, Note, AsyncResult.initial())
+      assert.strictEqual((fallback as View.Child<never, any>).component, Badge)
+    })
+
+    it("givenChild in one scene uses that scene's path for a child node another scene shows", () => {
+      // One cached child node: Top shows it in its own view, Nested in a closure.
+      let cached: View.Child<never, any> | undefined
+      const inner = (h: View.Helper<never, unknown>) =>
+        cached ??= Disclosure(h, { key: "inner", view: (parts) => h.el("p", state(parts.open)) })
+      const page = (name: string, nested: boolean) =>
+        Component.define({ name, model: Schema.Null, message: Schema.Never }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => nested ? Disclosure(h, { key: "outer", view: () => inner(h) }) : h.el("div", inner(h))
+        })
+      const top = Scene.start(page("Top", false), {})
+      void top.view
+      void Scene.start(page("Nested", true), {}).view
+      top.givenChild(Disclosure, "inner", true).expect(Locator.tag("p")).toHaveText("open")
+    })
+  })
 
   it.effect("childFailure sends what onFailure maps, and does nothing without one", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(Note, {})
-      s.childFailure(BadgeRef, Cause.fail("boom")).expect(status).toHaveText("")
+      s.childFailure(Badge, BadgeRef, Cause.fail("boom")).expect(status).toHaveText("")
     }))
 
   describe("mounts", () => {

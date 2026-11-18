@@ -56,13 +56,14 @@ export const matchers = {
 const describeExpected = (expected: unknown): string =>
   expected instanceof RegExp ? String(expected) : JSON.stringify(expected)
 
-/** A component's definition; a feature has none. */
-const childDefinition = (child: object): unknown => (child as { readonly definition?: unknown }).definition
+/** A child a scene step names. */
+type ChildTarget = Component.Any | Component.Headless.Any | Feature.Any
 
-/** The name a failure gives a child: its definition's, or a feature's. */
-const nameOf = (child: object): string =>
-  (child as { readonly definition?: { readonly name: string } }).definition?.name ??
-    (child as Partial<Record<Feature.TypeId, { readonly name: string }>>)["~@effect/ui/Feature"]?.name ?? "a child"
+/** The arguments after a child step's component: an optional key or ref, then the step's value. */
+type KeyAnd<A> = readonly [value: A] | readonly [key: string | Component.Ref.Any, value: A]
+
+const keyAnd = <A>(args: KeyAnd<A>): readonly [key: string | Component.Ref.Any | undefined, value: A] =>
+  args.length === 1 ? [undefined, args[0]] : args
 
 // ---------------------------------------------------------------------------
 // mounts
@@ -321,36 +322,29 @@ export class SceneCursor extends Cursor {
   fire(locator: Locator.Locator, event: string, payload: unknown = {}): this {
     return this.one("fire", locator, event, () => payload)
   }
-  childEmit(
-    child: Component.Any | Component.Headless.Any | Feature.Any,
-    key: string | Component.Ref.Any,
-    event: unknown
-  ): this {
+  childEmit(child: ChildTarget, ...args: KeyAnd<unknown>): this {
+    const [key, event] = keyAnd(args)
     return this.act("childEmit", "message", (state) => {
-      const step = this.name("childEmit")
-      const found = engine.findChild(state.view(), key, step)
-      const definition = childDefinition(found.component)
-      if (found.component !== child && (definition === undefined || definition !== childDefinition(child))) {
-        throw new Error(
-          `${step}: the child at ${typeof key === "string" ? `"${key}"` : `the ref ${key.key}`} is ${
-            nameOf(found.component)
-          }, not ${nameOf(child)}`
-        )
-      }
+      const found = engine.findChild(state.view(), child, key, this.name("childEmit")).child
       return engine.dispatch(state, found.onEmit(event))
     })
   }
-  childFailure(key: string | Component.Ref.Any, cause: Cause.Cause<unknown>): this {
+  childFailure(child: ChildTarget, ...args: KeyAnd<Cause.Cause<unknown>>): this {
+    const [key, cause] = keyAnd(args)
     return this.act("childFailure", "message", (state) => {
-      const found = engine.findChild(state.view(), key, this.name("childFailure"))
+      const found = engine.findChild(state.view(), child, key, this.name("childFailure")).child
       return engine.dispatch(state, found.onFailure?.(AsyncResult.failure(cause)))
     })
   }
-  givenChild(key: string, model: unknown): this {
-    engine.findChild(this.state.view(), key, this.name("givenChild"))
+  givenChild(child: Component.Headless.Any, ...args: KeyAnd<unknown>): this {
+    const [key, model] = keyAnd(args)
+    const step = this.name("givenChild")
+    // The Model is for the instance the step selected: the one at its path, as the runtime keys instances.
+    const path = engine.findChild(this.state.view(), child, key, step).path
+    if (path === undefined) throw new Error(`${step}: the child isn't one the scene expands`)
     return this.act("givenChild", "acting", (state) => {
       const given = new Map(engine.childModels.get(state))
-      given.set(key, model)
+      given.set(path, model)
       return engine.update(state, { childModels: given })
     })
   }

@@ -27,6 +27,19 @@ Declare a child component by calling it with the parent's `h`:
 `render`, `NoteActivity.render(h, { key, fallback })`, and include a
 `fallback` for loading or failure; a component child may omit it.
 
+A child's key names it among its parent's children of one component, and
+its path is `Name[key]`. Leave the key out when the parent renders one
+child of that component: `Listbox(h, { props, onEmit, view })` mounts at
+`Listbox[]`. Two children of one component, and every row in a list, each
+need their own key. A second unkeyed child fails the parent with an error
+that asks for a `key`, so a list of one unkeyed row works until a second
+row arrives. Two children at one path are one instance: in
+`cond ? Listbox(h, { props: a }) : Listbox(h, { props: b })` the Listbox
+keeps its Model when `cond` changes, so key each branch when that state
+shouldn't carry over. A `Scene` names a child by its component, then by its
+key or ref when it has one: `s.childEmit(Listbox, event)`,
+`s.childFailure(NoteEditor, Editor.at(id), cause)`.
+
 A parent passes a child state through props, and a child answers through
 `events`. A one-shot instruction, such as "save now" or "clear your draft",
 is a send: the child lists the tags it accepts in `receives`, the parent

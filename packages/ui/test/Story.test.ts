@@ -363,8 +363,8 @@ describe("Story", () => {
       Effect.gen(function*() {
         const failure = AsyncResult.failure<never, unknown>(Cause.die(new Error("boom")))
         const s = yield* Scene.make(TodoList, { initial: todos })
-        s.childFailure("t1", failure.cause)
-        const fallback = Scene.fallback(s.view, "t1", failure)
+        s.childFailure(TodoItem, "t1", failure.cause)
+        const fallback = Scene.fallback(s.view, TodoItem, "t1", failure)
         assert.strictEqual(View.textOf(fallback!), "buy milk failed")
         s.expect(Locator.text("rows failed: t1")).toExist()
         const story = Story.start(TodoList, { initial: todos }).layerFailed(failure)

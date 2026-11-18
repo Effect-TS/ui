@@ -12,7 +12,9 @@
  * and every step follows the acknowledgement rule described in `Steps`. An
  * interaction that no handler turned into a message must be followed by
  * `expectIgnored()`. A child is a leaf: `childEmit` stands in for what it
- * emits, and anything that crosses into one is a runtime test.
+ * emits, and anything that crosses into one is a runtime test. A child step
+ * names the child by its component, then by its key or ref when it has one:
+ * `childEmit(Listbox, event)`, `childEmit(TodoItem, "t1", event)`.
  *
  * **Example** (Save, resolve its Command, see the result)
  *
@@ -234,10 +236,24 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Shared.Ste
    */
   fire(locator: Locator.Locator, event: string, payload?: unknown): this
   /**
-   * Sends the message the parent's `onEmit` maps `event` from the child at
-   * `key` to, if any. `child` is the component the slot must hold: it
-   * types `event`, and the step throws when the slot holds another one. A
-   * ref finds the child rendered with it. A message step.
+   * Sends the message the parent's `onEmit` maps `event` from the child of
+   * `child` without a key to, if any. `child` types `event`. A message step.
+   *
+   * **Details**
+   *
+   * `child` is the component, a provided copy of it, or the feature
+   * service the child was rendered from. Throws when the view has no such
+   * child, or several, as two unkeyed children in different headless
+   * closures would be.
+   */
+  childEmit<Child extends Component.Any | Component.Headless.Any | Feature.Any>(
+    child: Child,
+    event: EventsOf<Child>
+  ): this
+  /**
+   * Sends the message the parent's `onEmit` maps `event` from the child of
+   * `child` at `key` to, if any. A string finds the child rendered with that
+   * key, and a ref the child rendered with it. A message step.
    */
   childEmit<Child extends Component.Any | Component.Headless.Any | Feature.Any>(
     child: Child,
@@ -245,16 +261,39 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Shared.Ste
     event: EventsOf<Child>
   ): this
   /**
-   * Sends the message the parent's `onFailure` maps a failure of the child at
-   * `key` to, if any. The failure is passed as an `AsyncResult.Failure`. A
-   * ref finds the child rendered with it. A message step.
+   * Sends the message the parent's `onFailure` maps a failure of the child
+   * of `child` without a key to, if any. The failure is passed as an
+   * `AsyncResult.Failure`. A message step.
    */
-  childFailure(key: string | Component.Ref.Any, cause: Cause.Cause<unknown>): this
+  childFailure(child: Component.Any | Component.Headless.Any | Feature.Any, cause: Cause.Cause<unknown>): this
   /**
-   * Sets the Model the headless child with `key` is expanded from, in place
-   * of its `init` Model. The scene never runs the child's `update`.
+   * Sends the message the parent's `onFailure` maps a failure of the child
+   * of `child` at `key` to, if any. A ref finds the child rendered with it.
+   * A message step.
    */
-  givenChild(key: string, model: unknown): this
+  childFailure(
+    child: Component.Any | Component.Headless.Any | Feature.Any,
+    key: string | Component.Ref.Any,
+    cause: Cause.Cause<unknown>
+  ): this
+  /**
+   * Sets the Model the headless child of `child` without a key is expanded
+   * from, in place of its `init` Model. The scene never runs the child's
+   * `update`.
+   *
+   * **Details**
+   *
+   * The Model is for the instance the step found, at its path: a child at
+   * another path keeps its own, even one with the same component and key in
+   * another closure, or one a later step renders.
+   */
+  givenChild(child: Component.Headless.Any, model: unknown): this
+  /**
+   * Sets the Model the headless child of `child` at `key` is expanded from.
+   * A string finds the child rendered with that key, and a ref the child
+   * rendered with it.
+   */
+  givenChild(child: Component.Headless.Any, key: string | Component.Ref.Any, model: unknown): this
   /**
    * Sets the value `owner` shares with the readers in the scene, in place of
    * the one they'd see otherwise.
@@ -433,27 +472,46 @@ export const children = <Msg>(
 ): ReadonlyArray<View.Child<Msg, any>> => engine.children(view, component)
 
 /**
- * What the child with `key` shows for `result`: its `fallback` evaluated with an
+ * What a child of `child` shows for `result`: its `fallback` evaluated with an
  * `AsyncResult.Initial` or `AsyncResult.Failure`, or `undefined` without one.
- * A ref finds the child rendered with it.
+ * The child is the one without a key, or the one at `key`; a ref finds the
+ * child rendered with it.
  * Throws, as the runtime fails the parent, if the fallback renders two
  * children at one path, or a child at the path or ref key of another child of
- * `view`. It sees one fallback, so it can't check two shown at once, as the
+ * the view, closure or slot content that declared the child. It sees one fallback, so it can't check two shown at once, as the
  * runtime does.
  *
  * @stability experimental
  * @category queries
  * @since 0.1.0
  */
-export const fallback = <Msg>(
+export const fallback: {
+  <Msg>(
+    view: View.Node<Msg, any>,
+    child: Component.Any | Component.Headless.Any | Feature.Any,
+    result: AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>
+  ): View.Node<Msg, any> | undefined
+  <Msg>(
+    view: View.Node<Msg, any>,
+    child: Component.Any | Component.Headless.Any | Feature.Any,
+    key: string | Component.Ref.Any,
+    result: AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>
+  ): View.Node<Msg, any> | undefined
+} = <Msg>(
   view: View.Node<Msg, any>,
-  key: string | Component.Ref.Any,
-  result: AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>
+  component: Component.Any | Component.Headless.Any | Feature.Any,
+  ...args: ReadonlyArray<any>
 ): View.Node<Msg, any> | undefined => {
-  const child = engine.findChild(view, key, "Scene.fallback")
+  const [key, result] = args.length === 1 ? [undefined, args[0]] : args
+  const { child, scope } = engine.findChild(view, component, key, "Scene.fallback")
   if (child.fallback === undefined) return undefined
   const node = View.toNode(child.fallback(result))
-  // As the runtime does: the fallback's children share the parent's paths.
-  checkFallbackPaths(checkChildPaths("Scene.fallback", view), child, node)
+  // As the runtime does: the fallback's children share the paths of the view, closure or slot content
+  // that declared the child. A view no scene expanded is one such view.
+  checkFallbackPaths(
+    scope?.("Scene.fallback") ?? checkChildPaths("Scene.fallback", view),
+    child,
+    node
+  )
   return node
 }

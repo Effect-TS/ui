@@ -187,7 +187,7 @@ describe("headless components in a story", () => {
       // Expanded from the Menu's init Model.
       assert.strictEqual(s.get(Locator.text("Actions")).attrs?.["aria-expanded"], "false")
       assert.deepStrictEqual(labels(s), ["Archive", "Block", "Copy"])
-      s.givenChild("actions", { open: true, query: "co", active: "c", typed: "", focused: [] })
+      s.givenChild(Menu, "actions", { open: true, query: "co", active: "c", typed: "", focused: [] })
       assert.strictEqual(s.get(Locator.text("Actions")).attrs?.["aria-expanded"], "true")
       assert.deepStrictEqual(labels(s), ["Copy"])
       // The row has the Menu's layer and the Toolbar's: the story runs the Toolbar's.

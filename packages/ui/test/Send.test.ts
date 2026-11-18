@@ -318,12 +318,12 @@ describe("Story and sends", () => {
           ])
       })
       const s = yield* Scene.make(Page, {})
-      s.childEmit(Echo, Mine, { _tag: "Said" }).childFailure(Mine, Cause.die("x"))
+      s.childEmit(Echo, Mine, { _tag: "Said" }).childFailure(Echo, Mine, Cause.die("x"))
         .expect(Locator.tag("p")).toHaveText("emit,failure")
-      assert.deepStrictEqual(Scene.fallback(s.view, Mine, AsyncResult.initial()), { _tag: "Text", text: "gone" })
+      assert.deepStrictEqual(Scene.fallback(s.view, Echo, Mine, AsyncResult.initial()), { _tag: "Text", text: "gone" })
       assert.throws(
         () => Scene.start(Page, {}).childEmit(Echo, Echo.ref("Other"), { _tag: "Said" }),
-        /no child with the ref Other/
+        /no child Echo with the ref Other/
       )
     }))
 
