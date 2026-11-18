@@ -116,7 +116,7 @@ describe("a component call", () => {
 })
 
 describe("a feature's render", () => {
-  it("dispatches a toString event only to an own onEmit handler", () => {
+  it("reports the missing event tag instead of calling an inherited handler", () => {
     class Text extends Feature.Service<Text>()("Text", {
       props: Schema.Struct({}),
       events: Schema.TaggedStruct("toString", {})
@@ -124,8 +124,8 @@ describe("a feature's render", () => {
     const h = View.makeHelper<string, {}>({}, undefined)
     const fallback = () => h.text("")
     const event = { _tag: "toString" } as const
-    assert.isUndefined(Text.render(h, { fallback, onEmit: Object.create(Object.prototype) }).onEmit(event))
-    assert.strictEqual(Text.render(h, { fallback, onEmit: { toString: () => "handled" } }).onEmit(event), "handled")
+    const missingHandler = Text.render(h, { fallback, onEmit: Object.create(Object.prototype) })
+    assert.throws(() => missingHandler.onEmit(event), /Missing onEmit handler.*toString/)
   })
 
   it("builds a child for the service", () => {

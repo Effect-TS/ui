@@ -41,7 +41,10 @@ export const make = (
     onEmit: typeof onEmit === "object"
       ? (event) => {
         const tag = event._tag
-        return Object.hasOwn(onEmit, tag) ? onEmit[tag](event) : undefined
+        if (!Object.hasOwn(onEmit, tag)) {
+          throw new Error(`Missing onEmit handler for event "${tag}"`)
+        }
+        return onEmit[tag](event)
       }
       : onEmit ?? ignore,
     fallback: options.fallback,
