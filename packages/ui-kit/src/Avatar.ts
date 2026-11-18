@@ -152,20 +152,23 @@ export type AvatarProps = typeof AvatarProps.Type
  */
 export type AvatarImageLoadingStatus = "loading" | "loaded" | "error"
 
-const Settled = Schema.Struct({
+const Report = Schema.Struct({
   source: Source,
-  status: Schema.Literals(["loaded", "error"])
+  status: Schema.Literals(["loading", "loaded", "error"])
 })
+type Report = typeof Report.Type
 
-// The last load that settled, for the source it loaded, so a new source is
-// loading until its own load settles. The fallback's delay passes once.
+// The mount's last report, for the source it was about. The mount reports
+// every source it gets, a missing one included, so a result never outlives
+// a change of source: going back to a source that loaded before is loading
+// until its new load settles. The fallback's delay passes once.
 const Model = Schema.Struct({
-  settled: Schema.NullOr(Settled),
+  report: Schema.NullOr(Report),
   delayElapsed: Schema.Boolean
 })
 
 const Message = Schema.TaggedUnion({
-  SettledImage: Settled.fields,
+  ChangedImageStatus: Report.fields,
   ElapsedFallbackDelay: {}
 })
 
@@ -180,17 +183,17 @@ const sameSource = (a: Source, b: Source): boolean =>
   a.src === b.src && a.srcSet === b.srcSet && a.sizes === b.sizes && a.crossOrigin === b.crossOrigin &&
   a.referrerPolicy === b.referrerPolicy
 
-const statusOf = (settled: typeof Settled.Type | null, source: Source): AvatarImageLoadingStatus =>
+const statusOf = (report: Report | null, source: Source): AvatarImageLoadingStatus =>
   !hasImage(source)
     ? "error"
-    : settled !== null && sameSource(settled.source, source)
-    ? settled.status
+    : report !== null && sameSource(report.source, source)
+    ? report.status
     : "loading"
 
 // Loads the source in an <img> that is never inserted, as Base UI does, and
 // reports how it settled. A cached image is complete at once.
 const load = (document: Document, source: Source) =>
-  Effect.callback<typeof Settled.Type>((resume) => {
+  Effect.callback<Report>((resume) => {
     const image = document.createElement("img")
     const settle = (status: "loaded" | "error") => resume(Effect.succeed({ source, status }))
     if (source.referrerPolicy !== undefined) image.referrerPolicy = source.referrerPolicy
@@ -209,8 +212,9 @@ const load = (document: Document, source: Source) =>
 
 /**
  * The root's mount: it loads each image source the root renders with, and
- * reports how each load settled, dropping the load of a source the root no
- * longer has.
+ * reports each one as `"loading"` and then how its load settled, dropping
+ * the load of a source the root no longer has. A missing source is
+ * reported as `"error"` at once.
  *
  * **When to use**
  *
@@ -227,11 +231,23 @@ export const AvatarLoadImage = Mount.makeStream(
   "AvatarLoadImage",
   { args: Source },
   (node: Element, _args, changes) =>
-    changes.pipe(Stream.switchMap((source) => Stream.fromEffect(load(node.ownerDocument, source))))
+    changes.pipe(Stream.switchMap((source): Stream.Stream<Report> =>
+      hasImage(source)
+        ? Stream.concat(
+          Stream.make({ source, status: "loading" as const }),
+          Stream.fromEffect(load(node.ownerDocument, source))
+        )
+        : Stream.make({ source, status: "error" as const })
+    ))
 )
 
 const loadImage = (source: Source) =>
-  AvatarLoadImage(source).pipe(Mount.map((settled) => Message.make({ _tag: "SettledImage", ...settled })))
+  AvatarLoadImage(source).pipe(Mount.map((report) => Message.make({ _tag: "ChangedImageStatus", ...report })))
+
+// Removed from the consumer's image before the part writes them, so they
+// come last and in this order: a browser may start fetching as soon as
+// `src` is set, so the request policy, `sizes` and `srcset` go before it.
+const imageAttributes = ["crossorigin", "referrerpolicy", "sizes", "srcset", "src"]
 
 /**
  * A `<span>` the avatar's root and fallback accept, from the consumer's
@@ -258,7 +274,9 @@ export type AvatarSpan<Msg, R> = Html.Element<Msg, R, Html.EventsOf<"span">, HTM
  *
  * The image's own attributes win over the ones the consumer set on the
  * builder it passes in: `src`, `srcset`, `sizes`, `crossorigin` and
- * `referrerpolicy`, including the ones the props leave out.
+ * `referrerpolicy`, including the ones the props leave out. They come
+ * after the consumer's, with `src` last, because a browser may start
+ * fetching as soon as `src` is set.
  *
  * @stability experimental
  * @category components
@@ -272,12 +290,12 @@ export const Avatar = Component.define({
   elements: Html
 }).make({
   init: ({ props }) => ({
-    settled: null,
+    report: null,
     delayElapsed: !(props.fallbackDelay !== undefined && props.fallbackDelay > 0)
   }),
   update: (model, message) =>
     Message.match(message, {
-      SettledImage: ({ source, status }) => ({ ...model, settled: { source, status } }),
+      ChangedImageStatus: ({ source, status }) => ({ ...model, report: { source, status } }),
       ElapsedFallbackDelay: () => ({ ...model, delayElapsed: true })
     }),
   subscriptions: (model, props) => [
@@ -290,14 +308,14 @@ export const Avatar = Component.define({
   ],
   parts: (model, p) => {
     const source = sourceOf(p.props)
-    const status = statusOf(model.settled, source)
-    const root = p.part("span", (b) => hasImage(source) ? b.onMount(loadImage(source)) : b)
+    const status = statusOf(model.report, source)
+    const root = p.part("span", (b) => b.onMount(loadImage(source)))
     const image = p.part("img", (b) =>
-      b.attr("src", source.src)
-        .attr("srcset", source.srcSet)
+      b.attr("crossorigin", source.crossOrigin)
+        .attr("referrerpolicy", source.referrerPolicy)
         .attr("sizes", source.sizes)
-        .attr("crossorigin", source.crossOrigin)
-        .attr("referrerpolicy", source.referrerPolicy))
+        .attr("srcset", source.srcSet)
+        .attr("src", source.src))
     const fallback = p.part("span", (b) => b)
     const showsFallback = status !== "loaded" && model.delayElapsed
     return {
@@ -306,7 +324,7 @@ export const Avatar = Component.define({
       // Each part is applied before it's dropped, so a wrong tag throws in
       // every state.
       image: <B extends View.PartTarget<"img">>(element: B): ReturnType<B["attr"]> | undefined => {
-        const shown = image(element)
+        const shown = image(imageAttributes.reduce((out: B, name) => out.attr(name, undefined), element))
         return status === "loaded" ? shown : undefined
       },
       fallback: <Msg, R, const C extends ReadonlyArray<View.Input<Msg, any>> = readonly []>(

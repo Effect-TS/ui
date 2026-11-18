@@ -47,9 +47,30 @@ describe("Avatar", () => {
       assert.isDefined(s.query(fallback))
     }))
 
+  it.effect("a source that loaded before is loading again when it comes back, until its new load settles", () =>
+    Effect.gen(function*() {
+      const s = yield* Scene.make(Avatar, { src: "/ada.png" }, standIn)
+      s.mounted(AvatarLoadImage({ src: "/ada.png" }), { source: { src: "/ada.png" }, status: "loaded" })
+      assert.isDefined(s.query(image))
+      // The mount reports the missing source, which replaces the old result.
+      s.props({})
+        .mounted(AvatarLoadImage({}), { source: {}, status: "error" })
+        .props({ src: "/ada.png" })
+      assert.isUndefined(s.query(image))
+      assert.isDefined(s.query(fallback))
+      s.mounted(AvatarLoadImage({ src: "/ada.png" }), { source: { src: "/ada.png" }, status: "loaded" })
+      assert.isDefined(s.query(image))
+      // A new source that hasn't settled replaces the old result too.
+      s.props({ src: "/grace.png" })
+        .mounted(AvatarLoadImage({ src: "/grace.png" }), { source: { src: "/grace.png" }, status: "loading" })
+        .props({ src: "/ada.png" })
+      assert.isUndefined(s.query(image))
+      assert.isDefined(s.query(fallback))
+    }))
+
   it("the parts report the image's status, which a load for another source doesn't settle", () => {
-    const status = (settled: unknown, props: AvatarProps) =>
-      Story.parts(Avatar, { model: { settled, delayElapsed: true }, props }).imageLoadingStatus
+    const status = (report: unknown, props: AvatarProps) =>
+      Story.parts(Avatar, { model: { report, delayElapsed: true }, props }).imageLoadingStatus
     assert.strictEqual(status(null, { src: "/ada.png" }), "loading")
     assert.strictEqual(status({ source: { src: "/ada.png" }, status: "loaded" }, { src: "/ada.png" }), "loaded")
     assert.strictEqual(status({ source: { src: "/ada.png" }, status: "loaded" }, { src: "/grace.png" }), "loading")
@@ -71,7 +92,7 @@ describe("Avatar", () => {
 
   it("the image takes only an <img>, and the root and the fallback only a <span>", () => {
     const s = Story.parts(Avatar, {
-      model: { settled: { source: { src: "/ada.png" }, status: "loaded" }, delayElapsed: true },
+      model: { report: { source: { src: "/ada.png" }, status: "loaded" }, delayElapsed: true },
       props: { src: "/ada.png" }
     })
     assert.throws(() => s.image(h.span as any), /a part for <img> was given <span>/)
@@ -79,7 +100,7 @@ describe("Avatar", () => {
     assert.throws(() => s.fallback({ element: h.div as any }), /a part for <span> was given <div>/)
   })
 
-  it("the image keeps the consumer's attributes, but its own win, present or absent", () => {
+  it("the image keeps the consumer's attributes, but its own win, present or absent, and come last with src after the rest", () => {
     const element = h.img
       .class("photo")
       .attr("alt", "Ada Lovelace")
@@ -89,7 +110,7 @@ describe("Avatar", () => {
       .attr("crossorigin", "use-credentials")
       .attr("referrerpolicy", "origin")
     const shown = (props: AvatarProps) =>
-      Story.parts(Avatar, { model: { settled: { source: props, status: "loaded" }, delayElapsed: true }, props })
+      Story.parts(Avatar, { model: { report: { source: props, status: "loaded" }, delayElapsed: true }, props })
         .image(element)?.attrs
     assert.deepStrictEqual(shown({ src: "/ada.png" }), { class: "photo", alt: "Ada Lovelace", src: "/ada.png" })
     assert.deepStrictEqual(
@@ -109,6 +130,20 @@ describe("Avatar", () => {
         crossorigin: "anonymous",
         referrerpolicy: "no-referrer"
       }
+    )
+    // The host sets attributes in this order, and a browser may fetch as
+    // soon as `src` is set.
+    assert.deepStrictEqual(
+      Object.keys(
+        shown({
+          src: "/ada.png",
+          srcSet: "/ada.png 2x",
+          sizes: "5vw",
+          crossOrigin: "anonymous",
+          referrerPolicy: "no-referrer"
+        })!
+      ),
+      ["class", "alt", "crossorigin", "referrerpolicy", "sizes", "srcset", "src"]
     )
   })
 })
