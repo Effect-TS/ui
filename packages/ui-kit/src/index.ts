@@ -19,6 +19,12 @@
  * @stability experimental
  * @since 0.1.0
  */
+export * from "./Avatar.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./Button.ts"
 
 /**
