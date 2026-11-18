@@ -573,7 +573,10 @@ describe("Feature receives", () => {
 describe("a component that receives", () => {
   it("mounts, and runs in a story and a scene", () => {
     expect(TestHost.mount(Editor, {})).type.not.toRaiseError()
-    expect(Story.make(Editor, {}, (s) => s.send(EditorMessage.make({ _tag: "Clear" })))).type.not.toRaiseError()
+    expect(Effect.gen(function*() {
+      const s = yield* Story.make(Editor, {})
+      s.send(EditorMessage.make({ _tag: "Clear" }))
+    })).type.not.toRaiseError()
     expect(Scene.start(Editor, {}).childEmit(Editor, Draft, {} as never)).type.not.toRaiseError()
     expect(Scene.start(Editor, {}).childEmit(Plain, Plain.ref("P"), {} as never)).type.not.toRaiseError()
   })

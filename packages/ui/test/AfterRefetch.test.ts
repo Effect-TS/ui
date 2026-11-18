@@ -827,140 +827,145 @@ describe("Command.afterRefetch", () => {
     const app = makeApp()
     const ann = { id: "1", name: "Ann" }
 
-    it("resolve awaits the component's own queries, and loaded sends the query's onChange message, then onSuccess", () => {
-      Story.make(app.Card, { id: "1", tag: "a" }, (s) =>
+    it.effect("resolve awaits the component's own queries, and loaded sends the query's onChange message, then onSuccess", () =>
+      Effect.gen(function*() {
+        const s = yield* Story.make(app.Card, { id: "1", tag: "a" })
         s
           .loaded("user", ann)
           .send(app.CardMessage.make({ _tag: "Rename", name: "Bob" }))
           .resolve(app.RenameUser, "Bob")
-          .check((story) => {
-            assert.deepStrictEqual(story.pending.map((entry) => [entry.status, entry.awaiting]), [
-              ["awaiting", [{ name: "user", args: { id: "1" } }]]
-            ])
-            assert.deepStrictEqual(story.model.done, [])
-            app.order.length = 0
-          })
-          .loaded("user", { id: "1", name: "Bob" })
-          .check((story) => {
-            assert.deepStrictEqual(app.order.filter((line) => line.startsWith("update")), [
-              "update a UserChanged",
-              "update a Renamed Bob"
-            ])
-            assert.deepStrictEqual(story.model.done, ["Bob"])
-          })
-          .expectNone())
-      // h.isRunning stays true through the wait.
-      Scene.make(app.Card, { id: "1", tag: "a" }, (s) =>
-        s
+        assert.deepStrictEqual(s.pending.map((entry) => [entry.status, entry.awaiting]), [
+          ["awaiting", [{ name: "user", args: { id: "1" } }]]
+        ])
+        assert.deepStrictEqual(s.model.done, [])
+        app.order.length = 0
+        s.loaded("user", { id: "1", name: "Bob" })
+        assert.deepStrictEqual(app.order.filter((line) => line.startsWith("update")), [
+          "update a UserChanged",
+          "update a Renamed Bob"
+        ])
+        assert.deepStrictEqual(s.model.done, ["Bob"])
+        s.expectNone()
+        // h.isRunning stays true through the wait.
+        const scene = yield* Scene.make(app.Card, { id: "1", tag: "a" })
+        scene
           .loaded("user", ann)
           .click(Locator.tag("p"))
           .resolve(app.RenameUser, "Bob")
           .expect(Locator.text("saving")).toExist()
           .loaded("user", { id: "1", name: "Bob" })
-          .expect(Locator.tag("p")).toHaveText("a=Bob [Bob];"))
-    })
+          .expect(Locator.tag("p")).toHaveText("a=Bob [Bob];")
+      }))
 
-    it("an empty set sends at once, fail sends at once, and waitExpired ends a wait by budget", () => {
-      Story.make(app.Card, { id: "2", tag: "b" }, (s) =>
+    it.effect("an empty set sends at once, fail sends at once, and waitExpired ends a wait by budget", () =>
+      Effect.gen(function*() {
+        const s = yield* Story.make(app.Card, { id: "2", tag: "b" })
         s
           .loaded("user", { id: "2", name: "Bea" })
           .send(app.CardMessage.make({ _tag: "Rename", name: "" }))
           .fail(app.RenameUser, "empty")
-          .model((model) => assert.deepStrictEqual(model.done, ["failed "]))
+        assert.deepStrictEqual(s.model.done, ["failed "])
+        s
           .send(app.CardMessage.make({ _tag: "Rename", name: "Cy" }))
           .resolve(app.RenameUser, "Cy")
           .waitExpired(app.RenameUser)
-          .model((model) => assert.deepStrictEqual(model.done, ["failed ", "Cy"])))
-      const unwatched = makeApp({ invalidates: "unwatched" })
-      Story.make(unwatched.Card, { id: "1", tag: "a" }, (s) =>
-        s
+        assert.deepStrictEqual(s.model.done, ["failed ", "Cy"])
+        const unwatched = makeApp({ invalidates: "unwatched" })
+        const u = yield* Story.make(unwatched.Card, { id: "1", tag: "a" })
+        u
           .loaded("user", ann)
           .send(unwatched.CardMessage.make({ _tag: "Rename", name: "Bob" }))
           .resolve(unwatched.RenameUser, "Bob")
-          .model((model) => assert.deepStrictEqual(model.done, ["Bob"])))
-      assert.throws(
-        () => Story.make(app.Card, { id: "1", tag: "a" }, (s) => s.waitExpired(app.RenameUser)),
-        /no users\/RenameUser is waiting/
-      )
-    })
+        assert.deepStrictEqual(u.model.done, ["Bob"])
+        const started = Story.start(app.Card, { id: "1", tag: "a" })
+        assert.throws(
+          () => started.waitExpired(app.RenameUser),
+          /no users\/RenameUser is waiting/
+        )
+      }))
 
-    it("a run cut by switch or Command.interrupt while awaiting delivers onSuccess and isn't interrupted", () => {
-      const switching = makeApp({ mode: "switch" })
-      const story = Story.make(switching.Card, { id: "1", tag: "a" }, (s) =>
+    it.effect("a run cut by switch or Command.interrupt while awaiting delivers onSuccess and isn't interrupted", () =>
+      Effect.gen(function*() {
+        const switching = makeApp({ mode: "switch" })
+        const s = yield* Story.make(switching.Card, { id: "1", tag: "a" })
         s
           .loaded("user", ann)
           .send(switching.CardMessage.make({ _tag: "Rename", name: "Bob" }))
           .resolve(switching.RenameUser, "Bob")
           .send(switching.CardMessage.make({ _tag: "Rename", name: "Cy" }))
-          .model((model) => assert.deepStrictEqual(model.done, ["Bob"]))
+        assert.deepStrictEqual(s.model.done, ["Bob"])
+        s
           .resolve(switching.RenameUser, "Cy")
           .send(switching.CardMessage.make({ _tag: "Stop" }))
-          .model((model) => assert.deepStrictEqual(model.done, ["Bob", "Cy"])))
-      assert.deepStrictEqual(story.interrupted, [])
-    })
+        assert.deepStrictEqual(s.model.done, ["Bob", "Cy"])
+        assert.deepStrictEqual(s.interrupted, [])
+      }))
 
-    it("queue and drop treat an awaiting run as the runtime does", () => {
-      const queued = makeApp({ mode: "queue" })
-      Story.make(queued.Card, { id: "1", tag: "a" }, (s) =>
+    it.effect("queue and drop treat an awaiting run as the runtime does", () =>
+      Effect.gen(function*() {
+        const queued = makeApp({ mode: "queue" })
+        const s = yield* Story.make(queued.Card, { id: "1", tag: "a" })
         s
           .loaded("user", ann)
           .send(queued.CardMessage.make({ _tag: "Rename", name: "Bob" }))
           .send(queued.CardMessage.make({ _tag: "Rename", name: "" }))
           .resolve(queued.RenameUser, "Bob")
-          .check((story) => assert.deepStrictEqual(story.pending.map((entry) => entry.status), ["awaiting", "running"]))
-          .fail(queued.RenameUser, "empty")
-          // The failure waits behind Bob's message.
-          .model((model) => assert.deepStrictEqual(model.done, []))
-          .loaded("user", { id: "1", name: "Bob" })
-          .model((model) => assert.deepStrictEqual(model.done, ["Bob", "failed "])))
-      const dropping = makeApp({ mode: "drop" })
-      const story = Story.make(dropping.Card, { id: "1", tag: "a" }, (s) =>
-        s
+        assert.deepStrictEqual(s.pending.map((entry) => entry.status), ["awaiting", "running"])
+        s.fail(queued.RenameUser, "empty")
+        // The failure waits behind Bob's message.
+        assert.deepStrictEqual(s.model.done, [])
+        s.loaded("user", { id: "1", name: "Bob" })
+        assert.deepStrictEqual(s.model.done, ["Bob", "failed "])
+        const dropping = makeApp({ mode: "drop" })
+        const d = yield* Story.make(dropping.Card, { id: "1", tag: "a" })
+        d
           .loaded("user", ann)
           .send(dropping.CardMessage.make({ _tag: "Rename", name: "Bob" }))
           .resolve(dropping.RenameUser, "Bob")
           .send(dropping.CardMessage.make({ _tag: "Rename", name: "Cy" }))
-          .loaded("user", { id: "1", name: "Bob" }))
-      assert.strictEqual(story.dropped.length, 1)
-    })
+          .loaded("user", { id: "1", name: "Bob" })
+        assert.strictEqual(d.dropped.length, 1)
+      }))
 
-    it("loaded on a query that was cold when a Command was issued doesn't throw: its patch never registered", () => {
-      Story.make(app.Card, { id: "1", tag: "a" }, (s) =>
+    it.effect("loaded on a query that was cold when a Command was issued doesn't throw: its patch never registered", () =>
+      Effect.gen(function*() {
+        const s = yield* Story.make(app.Card, { id: "1", tag: "a" })
         s
           .keepPending("user")
           .send(app.CardMessage.make({ _tag: "Rename", name: "Bob" }))
           .loaded("user", ann)
           .resolve(app.RenameUser, "Bob")
-          .check((story) => assert.deepStrictEqual(story.pending.map((entry) => entry.status), ["awaiting"]))
-          .loaded("user", { id: "1", name: "Bob" })
-          .model((model) => assert.deepStrictEqual(model.done, ["Bob"])))
-      // Nor does a query that held only a Failure.
-      Story.make(app.Card, { id: "1", tag: "a" }, (s) =>
-        s
+        assert.deepStrictEqual(s.pending.map((entry) => entry.status), ["awaiting"])
+        s.loaded("user", { id: "1", name: "Bob" })
+        assert.deepStrictEqual(s.model.done, ["Bob"])
+        // Nor does a query that held only a Failure.
+        const failed = yield* Story.make(app.Card, { id: "1", tag: "a" })
+        failed
           .loadFailed("user", "down")
           .send(app.CardMessage.make({ _tag: "Rename", name: "Bob" }))
           .loaded("user", ann)
           .resolve(app.RenameUser, "Bob")
-          .loaded("user", { id: "1", name: "Bob" }))
-    })
+          .loaded("user", { id: "1", name: "Bob" })
+      }))
 
-    it("loaded throws on a query a running Command patches, unless the value is patched", () => {
-      assert.throws(
-        () =>
-          Story.make(app.Card, { id: "1", tag: "a" }, (s) =>
-            s
+    it.effect("loaded throws on a query a running Command patches, unless the value is patched", () =>
+      Effect.gen(function*() {
+        const started = Story.start(app.Card, { id: "1", tag: "a" })
+        assert.throws(
+          () =>
+            started
               .loaded("user", ann)
               .send(app.CardMessage.make({ _tag: "Rename", name: "Bob" }))
-              .loaded("user", { id: "1", name: "Bob" })),
-        /"user" is under the optimistic patch of users\/RenameUser/
-      )
-      Story.make(app.Card, { id: "1", tag: "a" }, (s) =>
+              .loaded("user", { id: "1", name: "Bob" }),
+          /"user" is under the optimistic patch of users\/RenameUser/
+        )
+        const s = yield* Story.make(app.Card, { id: "1", tag: "a" })
         s
           .loaded("user", ann)
           .send(app.CardMessage.make({ _tag: "Rename", name: "Bob" }))
           .loaded("user", { id: "1", name: "Bob" }, { patched: true })
           .resolve(app.RenameUser, "Bob")
-          .loaded("user", { id: "1", name: "Bob" }))
-    })
+          .loaded("user", { id: "1", name: "Bob" })
+      }))
   })
 })

@@ -122,7 +122,7 @@ Use slots when the child owns the frame and its state, and the parent owns
 what goes inside. Use a headless component when the parent draws all the
 markup. A component can't have both `slots` and `parts`. In a scene, a
 parent's view shows the content it passes, and a scene of the slotted
-component passes its own with `Scene.make(Collapsible, props, { slots: (h) => ({ ... }) }, f)`.
+component passes its own with `yield* Scene.make(Collapsible, props, { slots: (h) => ({ ... }) })`.
 
 ### Headless components
 

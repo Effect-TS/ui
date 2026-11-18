@@ -30,20 +30,20 @@ const Board = Component.define({
 const log = Locator.tag("output")
 
 describe("HtmlScene", () => {
-  it("drop goes to the innermost target that accepts the drag, and throws when none does", () => {
-    HtmlScene.make(Board, {}, (s) => {
+  it.effect("drop goes to the innermost target that accepts the drag, and throws when none does", () =>
+    Effect.gen(function*() {
+      const s = yield* HtmlScene.make(Board, {})
       // The inner target doesn't accept a todo, so the outer one takes it.
       s.drop(Locator.text("Inner child"), { data: { "application/x-todo": "milk" } })
-        .check((scene) => assert.isTrue(scene.defaultPrevented))
-        .drop(Locator.text("Inner child"), { data: { "text/uri-list": "https://example.com" } })
+      assert.isTrue(s.defaultPrevented)
+      s.drop(Locator.text("Inner child"), { data: { "text/uri-list": "https://example.com" } })
         .drop(Locator.text("Plain"), { files: [new File(["x"], "a.txt")] })
         .expect(log).toHaveText("outer milk|inner|outer a.txt")
       assert.throws(
         () => s.drop(Locator.text("Plain"), { data: { "text/plain": "hello" } }),
         /HtmlScene\.drop: nothing at text "Plain" accepts "text\/plain"/
       )
-    })
-  })
+    }))
 
   it("a message step reports unacknowledged work before a lookup that fails", () => {
     const missing = Locator.text("Missing")
@@ -68,35 +68,36 @@ describe("HtmlScene", () => {
     }
   })
 
-  it("a scene names a mount by its definition, checks its args and ends it with the definition's result", () => {
-    const Message = Schema.TaggedUnion({ Add: { point: Schema.Number }, Drawn: { width: Schema.Number } })
-    const DrawChart = Mount.make(
-      "DrawChart",
-      { args: { points: Schema.Array(Schema.Number) } },
-      (canvas: HTMLCanvasElement) => Effect.sync(() => canvas.width)
-    )
-    const Chart = Component.define({
-      name: "Chart",
-      model: Schema.Struct({ points: Schema.Array(Schema.Number), width: Schema.Number }),
-      message: Message,
-      elements: Html
-    }).make({
-      init: () => ({ points: [1, 2], width: 0 }),
-      update: (model, message) =>
-        Message.match(message, {
-          Add: ({ point }) => ({ ...model, points: [...model.points, point] }),
-          Drawn: ({ width }) => ({ ...model, width })
-        }),
-      view: (model, h) =>
-        h.div(
-          h.canvas.onMount(
-            DrawChart({ points: model.points }).pipe(Mount.map((width) => Message.make({ _tag: "Drawn", width })))
-          ),
-          h.button.onClick(Message.make({ _tag: "Add", point: 3 })).children("Add"),
-          h.p(`width ${model.width}`)
-        )
-    })
-    HtmlScene.make(Chart, {}, (s) => {
+  it.effect("a scene names a mount by its definition, checks its args and ends it with the definition's result", () =>
+    Effect.gen(function*() {
+      const Message = Schema.TaggedUnion({ Add: { point: Schema.Number }, Drawn: { width: Schema.Number } })
+      const DrawChart = Mount.make(
+        "DrawChart",
+        { args: { points: Schema.Array(Schema.Number) } },
+        (canvas: HTMLCanvasElement) => Effect.sync(() => canvas.width)
+      )
+      const Chart = Component.define({
+        name: "Chart",
+        model: Schema.Struct({ points: Schema.Array(Schema.Number), width: Schema.Number }),
+        message: Message,
+        elements: Html
+      }).make({
+        init: () => ({ points: [1, 2], width: 0 }),
+        update: (model, message) =>
+          Message.match(message, {
+            Add: ({ point }) => ({ ...model, points: [...model.points, point] }),
+            Drawn: ({ width }) => ({ ...model, width })
+          }),
+        view: (model, h) =>
+          h.div(
+            h.canvas.onMount(
+              DrawChart({ points: model.points }).pipe(Mount.map((width) => Message.make({ _tag: "Drawn", width })))
+            ),
+            h.button.onClick(Message.make({ _tag: "Add", point: 3 })).children("Add"),
+            h.p(`width ${model.width}`)
+          )
+      })
+      const s = yield* HtmlScene.make(Chart, {})
       s.expectMount(DrawChart({ points: [1, 2] }))
         .click("Add")
         // The mount keeps running with the new args.
@@ -108,19 +109,20 @@ describe("HtmlScene", () => {
         () => s.expectMount(DrawChart({ points: [] })),
         /HtmlScene\.expectMount: no rendered mount matches DrawChart\(\{"points":\[\]\}\); mounts: DrawChart\(\{"points":\[1,2,3\]\}\)/
       )
-    })
-  })
+    }))
 
-  it("type, keydown, label and placeholder send what the browser host sends", () => {
-    HtmlScene.make(Settings, {}, (s) =>
+  it.effect("type, keydown, label and placeholder send what the browser host sends", () =>
+    Effect.gen(function*() {
+      const s = yield* HtmlScene.make(Settings, {})
       s.type(HtmlLocator.label("Zip code"), "10001")
         .expect(HtmlLocator.placeholder("90210")).toHaveValue("10001")
         .keydown(HtmlLocator.label("Zip code"), "Enter", { shift: true })
-        .expect(log).toHaveText("zip:10001|key:Enter+shift"))
-  })
+        .expect(log).toHaveText("zip:10001|key:Enter+shift")
+    }))
 
-  it("a submit button submits its form with the fields read from the view", () => {
-    HtmlScene.make(Settings, {}, (s) =>
+  it.effect("a submit button submits its form with the fields read from the view", () =>
+    Effect.gen(function*() {
+      const s = yield* HtmlScene.make(Settings, {})
       s.type(HtmlLocator.label("Zip code"), "10001")
         .click(HtmlLocator.role("checkbox", { name: "Agree" }))
         .click(HtmlLocator.role("button", { name: "Go" }))
@@ -128,11 +130,12 @@ describe("HtmlScene", () => {
         .expect(log).toHaveText("zip:10001|agree:true|submit:zip=10001&agree=on&via=go")
         // Submitting without a submitter.
         .submit(HtmlLocator.label("Zip code"))
-        .expect(log).toHaveText(/\|submit:zip=10001&agree=on$/))
-  })
+        .expect(log).toHaveText(/\|submit:zip=10001&agree=on$/)
+    }))
 
-  it("a checkbox fires input and change, and the matchers read fields", () => {
-    HtmlScene.make(Settings, {}, (s) =>
+  it.effect("a checkbox fires input and change, and the matchers read fields", () =>
+    Effect.gen(function*() {
+      const s = yield* HtmlScene.make(Settings, {})
       s.expect(HtmlLocator.label("Agree")).toBeChecked(false)
         .click(HtmlLocator.label("Agree"))
         .expect(HtmlLocator.label("Agree")).toBeChecked()
@@ -140,16 +143,19 @@ describe("HtmlScene", () => {
         .expect(log).toHaveText("agree:true|agree:false")
         .expect(HtmlLocator.label("Off")).toBeDisabled()
         .expect(HtmlLocator.label("Agree")).toBeDisabled(false)
-        .expect(HtmlLocator.label("Zip code")).toHaveAccessibleName("Zip code"))
-    const s = HtmlScene.start(Settings, {})
-    assert.throws(() => s.expect(HtmlLocator.label("Agree")).toBeChecked(), /toBeChecked\(\): it is unchecked/)
-    assert.throws(() => s.expect(HtmlLocator.label("Agree")).toBeDisabled(), /toBeDisabled\(\): it is enabled/)
-    assert.throws(() => s.expect(HtmlLocator.label("Zip code")).toHaveValue("1"), /toHaveValue\("1"\): its value is ""/)
-    assert.throws(
-      () => s.expect(HtmlLocator.label("Zip code")).toHaveAccessibleName("Zip"),
-      /toHaveAccessibleName\("Zip"\): its accessible name is "Zip code"/
-    )
-  })
+        .expect(HtmlLocator.label("Zip code")).toHaveAccessibleName("Zip code")
+      const started = HtmlScene.start(Settings, {})
+      assert.throws(() => started.expect(HtmlLocator.label("Agree")).toBeChecked(), /toBeChecked\(\): it is unchecked/)
+      assert.throws(() => started.expect(HtmlLocator.label("Agree")).toBeDisabled(), /toBeDisabled\(\): it is enabled/)
+      assert.throws(
+        () => started.expect(HtmlLocator.label("Zip code")).toHaveValue("1"),
+        /toHaveValue\("1"\): its value is ""/
+      )
+      assert.throws(
+        () => started.expect(HtmlLocator.label("Zip code")).toHaveAccessibleName("Zip"),
+        /toHaveAccessibleName\("Zip"\): its accessible name is "Zip code"/
+      )
+    }))
 
   it("clicking a disabled control throws", () => {
     const s = HtmlScene.start(Settings, {})
@@ -171,20 +177,21 @@ describe("HtmlScene", () => {
       HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name: "Go" }))
       yield* Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))
       const browser = app.querySelector("output")!.textContent
-      const scene = HtmlScene.make(Settings, {}, (s) =>
-        s.type(HtmlLocator.label("Zip code"), "10001")
-          .keydown(HtmlLocator.label("Zip code"), "Enter", { shift: true })
-          .click(HtmlLocator.role("checkbox", { name: "Agree" }))
-          .click(HtmlLocator.role("button", { name: "Go" })))
+      const s = yield* HtmlScene.make(Settings, {})
+      s.type(HtmlLocator.label("Zip code"), "10001")
+        .keydown(HtmlLocator.label("Zip code"), "Enter", { shift: true })
+        .click(HtmlLocator.role("checkbox", { name: "Agree" }))
+        .click(HtmlLocator.role("button", { name: "Go" }))
       assert.strictEqual(browser, "zip:10001|key:Enter+shift|agree:true|submit:zip=10001&agree=on&via=go")
-      assert.strictEqual(scene.get(log).children?.map((child) => child.text).join(""), browser)
+      assert.strictEqual(s.get(log).children?.map((child) => child.text).join(""), browser)
     }).pipe(Effect.scoped))
 
-  it("a popovertarget button toggles its popover", () => {
-    HtmlScene.make(Settings, {}, (s) =>
+  it.effect("a popovertarget button toggles its popover", () =>
+    Effect.gen(function*() {
+      const s = yield* HtmlScene.make(Settings, {})
       s.click(HtmlLocator.role("button", { name: "Menu" }))
-        .expect(log).toHaveText("toggle:open"))
-  })
+        .expect(log).toHaveText("toggle:open")
+    }))
 
   describe("a click's defaults", () => {
     const Checkout = Component.define({
@@ -224,19 +231,21 @@ describe("HtmlScene", () => {
         )
     })
 
-    it("a cancelled click runs none of them: no submit, no checkbox change, no popover toggle", () => {
-      HtmlScene.make(Checkout, {}, (s) =>
+    it.effect("a cancelled click runs none of them: no submit, no checkbox change, no popover toggle", () =>
+      Effect.gen(function*() {
+        const s = yield* HtmlScene.make(Checkout, {})
         s.click("Stop")
           .click(HtmlLocator.label("Agree"))
           .click("Menu")
-          .expect(log).toHaveText("stopped|checked?|menu?"))
-    })
+          .expect(log).toHaveText("stopped|checked?|menu?")
+      }))
 
-    it("a submit reads the fields as the click left them, by form owner", () => {
-      HtmlScene.make(Checkout, {}, (s) =>
+    it.effect("a submit reads the fields as the click left them, by form owner", () =>
+      Effect.gen(function*() {
+        const s = yield* HtmlScene.make(Checkout, {})
         s.click("Fill")
-          .expect(log).toHaveText("fill|submit:zip=new&note=hi"))
-    })
+          .expect(log).toHaveText("fill|submit:zip=new&note=hi")
+      }))
 
     it("the first legend of a disabled fieldset stays clickable, and the rest of it doesn't", () => {
       const s = HtmlScene.start(Checkout, {}).click("In legend").expect(log).toHaveText("legend")

@@ -4,6 +4,7 @@ import { Switch, type SwitchProps } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Locator, Scene, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
+import { Effect } from "effect"
 
 // The least markup the parts need: a labelled root with a thumb. The form
 // field comes with the root.
@@ -20,58 +21,50 @@ const thumb = Locator.tag("span")
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
 describe("Switch", () => {
-  it("a click asks for the other value, and the root and thumb show the value they were given", () => {
-    Scene.make(Switch, { checked: false }, standIn, (s) => {
-      s.check((story) => {
-        const attrs = story.get(root).attrs
-        assert.strictEqual(attrs?.type, "button")
-        assert.strictEqual(attrs?.["aria-checked"], "false")
-        assert.strictEqual(attrs?.["data-unchecked"], "")
-        assert.isUndefined(attrs?.["data-checked"])
-        assert.strictEqual(story.get(thumb).attrs?.["data-unchecked"], "")
-      })
-        .fire(root, "click")
+  it.effect("a click asks for the other value, and the root and thumb show the value they were given", () =>
+    Effect.gen(function*() {
+      const s = yield* Scene.make(Switch, { checked: false }, standIn)
+      const attrs = s.get(root).attrs
+      assert.strictEqual(attrs?.type, "button")
+      assert.strictEqual(attrs?.["aria-checked"], "false")
+      assert.strictEqual(attrs?.["data-unchecked"], "")
+      assert.isUndefined(attrs?.["data-checked"])
+      assert.strictEqual(s.get(thumb).attrs?.["data-unchecked"], "")
+      s.fire(root, "click")
         .emitted({ _tag: "Toggled", checked: true })
-        // Nothing changes until the consumer passes the new value back.
-        .check((story) => assert.strictEqual(story.get(root).attrs?.["aria-checked"], "false"))
-        .props({ checked: true })
-        .check((story) => {
-          assert.strictEqual(story.get(root).attrs?.["aria-checked"], "true")
-          assert.strictEqual(story.get(root).attrs?.["data-checked"], "")
-          assert.strictEqual(story.get(thumb).attrs?.["data-checked"], "")
-          assert.isUndefined(story.get(thumb).attrs?.["data-unchecked"])
-        })
-        .fire(root, "click")
+      // Nothing changes until the consumer passes the new value back.
+      assert.strictEqual(s.get(root).attrs?.["aria-checked"], "false")
+      s.props({ checked: true })
+      assert.strictEqual(s.get(root).attrs?.["aria-checked"], "true")
+      assert.strictEqual(s.get(root).attrs?.["data-checked"], "")
+      assert.strictEqual(s.get(thumb).attrs?.["data-checked"], "")
+      assert.isUndefined(s.get(thumb).attrs?.["data-unchecked"])
+      s.fire(root, "click")
         .emitted({ _tag: "Toggled", checked: false })
-    })
-  })
+    }))
 
-  it("a disabled or read-only switch ignores clicks, and only a disabled one leaves the tab order", () => {
-    const story = Scene.make(Switch, { checked: false, disabled: true }, standIn, (s) => {
-      s.check((story) => {
-        const attrs = story.get(root).attrs
-        assert.strictEqual(attrs?.disabled, "")
-        assert.strictEqual(attrs?.["data-disabled"], "")
-        assert.strictEqual(story.get(thumb).attrs?.["data-disabled"], "")
-      })
-        .fire(root, "click")
+  it.effect("a disabled or read-only switch ignores clicks, and only a disabled one leaves the tab order", () =>
+    Effect.gen(function*() {
+      const s = yield* Scene.make(Switch, { checked: false, disabled: true }, standIn)
+      const disabled = s.get(root).attrs
+      assert.strictEqual(disabled?.disabled, "")
+      assert.strictEqual(disabled?.["data-disabled"], "")
+      assert.strictEqual(s.get(thumb).attrs?.["data-disabled"], "")
+      s.fire(root, "click")
         .props({ checked: false, readOnly: true, required: true })
-        .check((story) => {
-          const attrs = story.get(root).attrs
-          assert.isUndefined(attrs?.disabled)
-          assert.strictEqual(attrs?.["aria-readonly"], "true")
-          assert.strictEqual(attrs?.["data-readonly"], "")
-          assert.strictEqual(attrs?.["aria-required"], "true")
-          assert.strictEqual(attrs?.["data-required"], "")
-          const thumbAttrs = story.get(thumb).attrs
-          assert.isUndefined(thumbAttrs?.["data-disabled"])
-          assert.strictEqual(thumbAttrs?.["data-readonly"], "")
-          assert.strictEqual(thumbAttrs?.["data-required"], "")
-        })
-        .fire(root, "click")
-    })
-    assert.deepStrictEqual(story.emitted, [])
-  })
+      const attrs = s.get(root).attrs
+      assert.isUndefined(attrs?.disabled)
+      assert.strictEqual(attrs?.["aria-readonly"], "true")
+      assert.strictEqual(attrs?.["data-readonly"], "")
+      assert.strictEqual(attrs?.["aria-required"], "true")
+      assert.strictEqual(attrs?.["data-required"], "")
+      const thumbAttrs = s.get(thumb).attrs
+      assert.isUndefined(thumbAttrs?.["data-disabled"])
+      assert.strictEqual(thumbAttrs?.["data-readonly"], "")
+      assert.strictEqual(thumbAttrs?.["data-required"], "")
+      s.fire(root, "click")
+      assert.deepStrictEqual(s.current.emitted, [])
+    }))
 
   it("the root takes only a native button, which toggles on Space and Enter by itself", () => {
     const s = Story.parts(Switch, { model: {}, props: { checked: false } })

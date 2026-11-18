@@ -1,7 +1,7 @@
-import { Command, Component, type Query } from "@effect/ui"
+import { Command, Component, type Query, type View } from "@effect/ui"
 import type { Steps } from "@effect/ui/testing"
 import { Scene, Story } from "@effect/ui/testing"
-import { Data, Effect, Schema, Stream } from "effect"
+import { Data, Effect, Schema, type Scope, Stream } from "effect"
 import { describe, expect, it } from "tstyche"
 import type { SearchBox, TodoItem } from "../test/fixtures/components.ts"
 import {
@@ -62,31 +62,38 @@ describe("Story", () => {
   })
 
   it("types steps by the component", () => {
-    const story = Story.make(Counter, { initial: 0 }, (s) =>
-      s.model((model) => {
-        expect(model).type.toBe<{ readonly count: number }>()
-      })
-        .props((props) => {
-          expect(props).type.toBe<{ readonly initial: number }>()
-          return props
-        })
-        .send(CounterMessage.make({ _tag: "Increment" })))
+    expect(Story.make(Counter, { initial: 0 })).type.toBe<
+      Effect.Effect<Story.Steps<typeof Counter>, never, Scope.Scope>
+    >()
+    const story = Story.start(Counter, { initial: 0 })
     expect(story.model).type.toBe<{ readonly count: number }>()
-    expect(Story.make).type.not.toBeCallableWith(Counter, { initial: "0" }, () => {})
+    story
+      .props((props) => {
+        expect(props).type.toBe<{ readonly initial: number }>()
+        return props
+      })
+      .send(CounterMessage.make({ _tag: "Increment" }))
+    expect(story.current.model).type.toBe<{ readonly count: number }>()
+    expect(Story.make).type.not.toBeCallableWith(Counter, { initial: "0" })
     expect(counter.send).type.not.toBeCallableWith("not a message")
     expect(counter.send).type.not.toBeCallableWith(TodoItemMessage.make({ _tag: "Save" }))
     expect(counter.given).type.not.toBeCallableWith({ saving: true })
   })
 
-  it("a chained arrow and a block callback with no return both compile", () => {
-    expect(Story.make).type.toBeCallableWith(
+  it("make takes no callback", () => {
+    // make takes no callback: the test yields the cursor and runs its steps
+    // as chained or plain statements.
+    expect(Story.make).type.toBeCallableWith(Counter, { initial: 0 })
+    expect(Story.make).type.not.toBeCallableWith(
       Counter,
       { initial: 0 },
       (s: Story.Steps<typeof Counter>) => s.send(increment).send(increment)
     )
-    expect(Story.make).type.toBeCallableWith(Counter, { initial: 0 }, (s: Story.Steps<typeof Counter>) => {
+    expect(Effect.gen(function*() {
+      const s = yield* Story.make(Counter, { initial: 0 })
+      s.send(increment).send(increment)
       s.send(increment)
-    })
+    })).type.toBe<Effect.Effect<void, never, Scope.Scope>>()
   })
 
   it("a shared step needs no explicit generics", () => {
@@ -124,7 +131,8 @@ describe("Story", () => {
     const steps = Story.start(Static, {})
     expect(steps).type.toBe<Story.Steps<typeof Static>>()
     expect(steps.current.model).type.toBe<number>()
-    expect(Story.make(Static, {}, (s) => s.given(1)).model).type.toBe<number>()
+    expect(Story.make(Static, {})).type.toBe<Effect.Effect<Story.Steps<typeof Static>, never, Scope.Scope>>()
+    expect(Story.start(Static, {}).given(1).model).type.toBe<number>()
     expect(steps.send).type.not.toBeCallableWith(CounterMessage.make({ _tag: "Increment" }))
     const shared = <S extends Story.Steps.Any>(s: S): S => s
     expect(shared(steps)).type.toBe<Story.Steps<typeof Static>>()
@@ -194,6 +202,36 @@ describe("Story", () => {
     expect(counter.fail).type.toBeCallableWith(matched, new SaveFailed({ reason: "disk full" }))
     expect(counter.fail).type.not.toBeCallableWith(Save, new Error("other"))
     expect(todoItem.fail).type.not.toBeCallableWith(SaveTodo, new Error("never fails"))
+  })
+})
+
+describe("Story.make and Scene.make", () => {
+  it("return an Effect, not the cursor: its steps need yield*", () => {
+    expect(Story.make(Counter, { initial: 0 })).type.not.toHaveProperty("send")
+    expect(Story.make(Counter, { initial: 0 })).type.not.toHaveProperty("model")
+    expect(Scene.make(Counter, { initial: 0 })).type.not.toHaveProperty("click")
+    expect(Scene.make(Counter, { initial: 0 })).type.not.toHaveProperty("view")
+    expect(Scene.make(Counter, { initial: 0 })).type.toBe<
+      Effect.Effect<Scene.Steps<typeof Counter>, never, Scope.Scope>
+    >()
+  })
+
+  it("the cursor has the record's fields, and the methods they replace are gone", () => {
+    expect(counter.model).type.toBe<{ readonly count: number }>()
+    expect(counter.model).type.not.toBeAssignableTo<Function>()
+    expect(counter.subscriptions).type.toBe<ReadonlyArray<string>>()
+    expect(counter.subscriptions).type.not.toBeAssignableTo<Function>()
+    expect(counter.queryInfo).type.toBe<ReadonlyArray<Steps.QueryInfo>>()
+    expect(counter.queryInfo).type.not.toBeAssignableTo<Function>()
+    expect(counter.results).type.toBe<Component.Results | undefined>()
+    const scene = Scene.start(Counter, { initial: 0 })
+    expect(scene.view).type.toBe<View.Node<CounterMessage, any>>()
+    expect(scene.view).type.not.toBeAssignableTo<Function>()
+    expect(scene.subscriptions).type.toBe<ReadonlyArray<string>>()
+    expect(scene.defaultPrevented).type.toBe<boolean>()
+    // The record still has them as functions.
+    expect(counter.current.subscriptions).type.toBe<() => ReadonlyArray<string>>()
+    expect(scene.current.view).type.toBeCallableWith()
   })
 })
 

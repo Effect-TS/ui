@@ -255,6 +255,24 @@ export class SceneCursor extends Cursor {
       all: state.all
     }
   }
+  get defaultPrevented(): boolean {
+    return this.state.defaultPrevented
+  }
+  get view(): View.Node<any, any> {
+    return this.state.view()
+  }
+  get root(): Locator.Node {
+    return this.state.root
+  }
+  get(locator: Locator.Locator): Locator.Node {
+    return this.state.get(locator)
+  }
+  query(locator: Locator.Locator): Locator.Node | undefined {
+    return this.state.query(locator)
+  }
+  all(locator: Locator.Locator): ReadonlyArray<Locator.Node> {
+    return this.state.all(locator)
+  }
   protected override settled(state: engine.State<any, any, any, any>, step: string): engine.State<any, any, any, any> {
     // Rendered once the step has settled, so a defect in `view` fails it.
     return trackMounts(state, step)
@@ -367,10 +385,6 @@ export class SceneCursor extends Cursor {
     return this.replace(withMount(this.state, live, { ...live, acknowledged: true }))
   }
 
-  view(f: (view: View.Node<any, any>) => void): this {
-    f(this.state.view())
-    return this
-  }
   parts(f: (parts: unknown) => void): this {
     const component = this.state.component as unknown as Partial<Component.Headless.Any>
     if (component.parts === undefined) {

@@ -101,8 +101,12 @@ export const Snippet = Component.define({
 // `Mount.map`. Each `mounted` of a stream mount sends one value; any other
 // mount ends once. A mount the view starts is work in flight: a message step
 // or the end of the test throws until `mounted` or `expectMount` names it.
-export const edited = Scene.make(Snippet, {}, (s) =>
+// `Scene.make` is scoped: a test runs this with `it.effect`, and the end
+// check runs when the test's scope closes.
+export const edited = Effect.gen(function*() {
+  const s = yield* Scene.make(Snippet, {})
   s.expectMount(CodeEditor({ text: "" }))
     .mounted(Measure, 320)
     .mounted(CodeEditor, "let x = 1")
-    .expectMount(CodeEditor({ text: "let x = 1" })))
+    .expectMount(CodeEditor({ text: "let x = 1" }))
+})

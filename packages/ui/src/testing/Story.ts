@@ -8,12 +8,13 @@
  * Commands stay pending as data until a step resolves them with the message
  * they would have produced, so no service is needed.
  *
- * `make` hands a callback a cursor, `Steps`, whose steps run as soon as they
- * are called and return the cursor, so they chain. A shared setup is a function
- * of the cursor, applied with `pipe`. Every step follows the acknowledgement
- * rule described in `Steps`: a story is the full account of what the
- * component did. A defect in `init` or `update` makes the step throw, on the
- * line that called it.
+ * `make` is a scoped Effect that gives a cursor, `Steps`, whose steps run as
+ * soon as they are called and return the cursor, so they chain. The test reads
+ * the Model and the rest of the record from the cursor between steps. A shared
+ * setup is a function of the cursor, applied with `pipe`. Every step follows
+ * the acknowledgement rule described in `Steps`: a story is the full account
+ * of what the component did. A defect in `init` or `update` makes the step
+ * throw, on the line that called it.
  *
  * **Example** (A todo row: send, resolve its Command, check the Model)
  *
@@ -45,18 +46,20 @@
  *   view: (_, h) => h.el("button").on("click", Message.make({ _tag: "Save" })).children("save")
  * })
  *
- * Story.make(TodoItem, { id: "t1" }, (s) =>
+ * Effect.gen(function*() {
+ *   const s = yield* Story.make(TodoItem, { id: "t1" })
  *   s.send(Message.make({ _tag: "Save" }))
  *     .expectExact(SaveTodo.make({ id: "t1" }))
  *     .resolve(SaveTodo, Message.make({ _tag: "Saved" }))
- *     .model((model) => {
- *       if (!model.saved) throw new Error("not saved")
- *     }))
+ *   console.log(s.model.saved) // true
+ * }).pipe(Effect.scoped, Effect.runSync)
  * ```
  *
  * @stability experimental
  * @since 0.1.0
  */
+import type * as Effect from "effect/Effect"
+import type * as Scope from "effect/Scope"
 import type * as Component from "../Component.ts"
 import type * as Head from "../Head.ts"
 import * as replay from "../internal/replay.ts"
@@ -161,7 +164,7 @@ type AnyComponent =
  * **Example** (A shared setup)
  *
  * ```ts import.meta.vitest
- * import { Schema } from "effect"
+ * import { Effect, Schema } from "effect"
  * import { Component } from "@effect/ui"
  * import { Story } from "@effect/ui/testing"
  *
@@ -179,8 +182,11 @@ type AnyComponent =
  * const twice = (s: Story.Steps<typeof Counter>) =>
  *   s.send(Message.make({ _tag: "Increment" })).send(Message.make({ _tag: "Increment" }))
  *
- * const story = Story.make(Counter, {}, (s) => s.given({ count: 10 }).pipe(twice))
- * console.log(story.model.count) // 12
+ * Effect.gen(function*() {
+ *   const s = yield* Story.make(Counter, {})
+ *   s.given({ count: 10 }).pipe(twice)
+ *   console.log(s.model.count) // 12
+ * }).pipe(Effect.scoped, Effect.runSync)
  * ```
  *
  * @stability experimental
@@ -203,8 +209,12 @@ export interface Steps<C extends AnyComponent> extends Shared.Steps<C> {
    */
   send(message: Component.Message<C> | ((model: Component.Model<C>) => Component.Message<C>)): this
 
-  /** Checks the Model. `f` throws to fail the test. */
-  model(f: (model: Component.Model<C>) => void): this
+  /** The Model after the last step. */
+  readonly model: Component.Model<C>
+  /** The query results after the last step, beside the Model. Opaque: `queries` opens them. */
+  readonly results: Component.Results | undefined
+  /** The queries' results, by name, as `h.queries` opens them for the current Model, props and results. */
+  readonly queries: { readonly [K in keyof Component.Queries<C>]: Component.QueryResultOf<Component.Queries<C>[K]> }
 }
 
 /**
@@ -240,22 +250,29 @@ class StepsImpl extends cursor.Cursor {
       (state) => engine.dispatch(state, typeof message === "function" ? message(state.model) : message)
     )
   }
-  model(f: (model: any) => void): this {
-    f(this.state.model)
-    return this
+  get model(): unknown {
+    return this.state.model
+  }
+  get results(): Component.Results | undefined {
+    return this.state.results
+  }
+  get queries(): unknown {
+    return this.state.queries()
   }
 }
 
 /**
- * Runs a story: `init` with `props`, then the steps `f` calls on the cursor.
+ * Starts a story: `init` with `props`, as a cursor in a scope. The test
+ * calls steps on the cursor and reads the record from it.
  *
  * **Details**
  *
- * `f` doesn't need to return the cursor, so a chained arrow and a block of
- * statements both work. `make` returns the final story so a test can read it.
- * At the end it throws on anything pending, kept or exempt included, on a
- * query with no result unless `keepPending` named it, and on any event or
- * send not acknowledged.
+ * When the scope closes with a success, the end check runs: it fails on
+ * anything pending, kept or exempt included, on a query with no result
+ * unless `keepPending` named it, and on any event or send not acknowledged.
+ * When the scope closes with a failure the end check doesn't run, so a
+ * failed test reports only its own failure. `it.effect` from
+ * `@effect/vitest` provides the scope, which closes at the end of the test.
  *
  * @stability experimental
  * @category constructors
@@ -263,14 +280,12 @@ class StepsImpl extends cursor.Cursor {
  */
 export const make = <C extends AnyComponent>(
   component: C,
-  props: Component.Props<C>,
-  f: (steps: Steps<C>) => void
-): Steps<C>["current"] => {
-  const steps = new StepsImpl("Story", cursor.initial(component, props))
-  f(steps as unknown as Steps<C>)
-  steps.finish()
-  return steps.current
-}
+  props: Component.Props<C>
+): Effect.Effect<Steps<C>, never, Scope.Scope> =>
+  cursor.scoped(
+    make,
+    () => new StepsImpl("Story", cursor.initial(component, props)) as unknown as cursor.Cursor & Steps<C>
+  )
 
 /**
  * The cursor after `init`. Its steps follow the acknowledgement rule, but
