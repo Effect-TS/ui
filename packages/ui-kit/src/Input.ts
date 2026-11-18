@@ -123,7 +123,9 @@ export type InputElement<Msg, R = never> = Html.VoidElement<
  * the ones a state leaves absent. A `disabled` the caller sets is removed
  * unless the `disabled` prop is set, and `aria-disabled` is always
  * removed, as the native `disabled` reports it. The caller's other
- * attributes and handlers stay.
+ * attributes and handlers stay. This holds for attribute names written in
+ * lowercase: `Input` doesn't remove a caller's `.attr("DISABLED", "")`,
+ * and an HTML host reads it as `disabled`.
  *
  * `onUpdate` is what an `input` event sends, on every edit, with the
  * value the user left in the field. It never cancels the event. Until the
