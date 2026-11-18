@@ -2179,8 +2179,9 @@ export type Helper<D> = D extends Definition<
  * is the function's and doesn't carry it.
  *
  * `props` and `events` are optional. `subscriptions` returns keyed Streams run
- * while their key is listed, and falsy entries are skipped. `elements`
- * overrides the registered vocabulary for this component.
+ * while their key is listed, and falsy entries are skipped. Two entries with
+ * one key fail the instance. `elements` overrides the registered vocabulary
+ * for this component.
  *
  * `queries` declares the queries the component shows, by name. Each entry is
  * `{ query: Q, args }` for one query, a list of pages when `Q` is a

@@ -42,6 +42,7 @@ import { getIndexSignatureKeys } from "./internal/schemaAST.ts"
 import { holdsRedacted, redactAST } from "./internal/schemaRedact.ts"
 import type * as Query from "./Query.ts"
 import { canonical } from "./Query.ts"
+import type * as Subscription from "./Subscription.ts"
 
 /**
  * The service the runtime records entries to.
@@ -129,7 +130,8 @@ export interface Issued {
  *
  * `DomEvent` is a view handler, such as a click. `Command` is a Command's
  * result, pointing at the entry that issued it and at its span.
- * `Subscription` is a keyed Subscription. `Query` is a query's
+ * `Subscription` is a keyed Subscription, with the name and deps its key
+ * was built from (see `SubscriptionStarted`). `Query` is a query's
  * `onChange`, pointing at the `QueryChanged` entry it saw. `Emit` is a
  * child's emit, pointing at the child's entry. `Failure` is a parent's
  * `onFailure` for a child that failed, pointing at the child's `Failed`
@@ -160,7 +162,12 @@ export type Source =
     readonly spanId: string | undefined
     readonly traceId: string | undefined
   }
-  | { readonly _tag: "Subscription"; readonly key: string }
+  | {
+    readonly _tag: "Subscription"
+    readonly key: string
+    readonly name: string
+    readonly deps: ReadonlyArray<Subscription.Dep> | undefined
+  }
   | { readonly _tag: "Query"; readonly name: string; readonly seq: number }
   | { readonly _tag: "Emit"; readonly path: string; readonly seq: number }
   | { readonly _tag: "Failure"; readonly path: string; readonly seq: number }
@@ -399,6 +406,15 @@ export interface LayerFailed extends InstanceBase {
  * A Subscription's key started. A query's watch isn't a Subscription here:
  * its fetches are `FetchStarted` entries and its values `QueryChanged`.
  *
+ * **Details**
+ *
+ * `key` is the Subscription's identity, and what its `SubscriptionStopped`
+ * and the `Update` entries it sends carry too. `name` and `deps` are what
+ * `Subscription.make` built the key from: `Subscription.make("room", "42",
+ * ...)` logs `name: "room"`, `deps: ["42"]` and `key: 'room:"42"'`. Group
+ * and label by `name`, and never by parsing `key`. `deps` is `undefined`
+ * for a Subscription with no deps.
+ *
  * @stability experimental
  * @category models
  * @since 0.1.0
@@ -406,10 +422,13 @@ export interface LayerFailed extends InstanceBase {
 export interface SubscriptionStarted extends InstanceBase {
   readonly _tag: "SubscriptionStarted"
   readonly key: string
+  readonly name: string
+  readonly deps: ReadonlyArray<Subscription.Dep> | undefined
 }
 
 /**
- * A Subscription's key stopped.
+ * A Subscription's key stopped. `name` and `deps` are those of the
+ * `SubscriptionStarted` entry with the same `key`.
  *
  * @stability experimental
  * @category models
@@ -418,6 +437,8 @@ export interface SubscriptionStarted extends InstanceBase {
 export interface SubscriptionStopped extends InstanceBase {
   readonly _tag: "SubscriptionStopped"
   readonly key: string
+  readonly name: string
+  readonly deps: ReadonlyArray<Subscription.Dep> | undefined
 }
 
 /**
@@ -808,6 +829,12 @@ const CommandWire = Schema.Struct({
 })
 const AwaitedEntryWire = Schema.Struct({ query: Schema.String, logKey: Schema.String })
 const CauseWire = Schema.Struct({ pretty: Schema.String, reasons: Schema.Array(Schema.Json) })
+// Deps are JSON values, not primitives, so a dep that is a struct wouldn't be a new Wire version.
+const SubscriptionWire = {
+  key: Schema.String,
+  name: Schema.String,
+  deps: Schema.NullOr(Schema.Array(Schema.Json))
+}
 const SourceWire = Schema.Union([
   Schema.TaggedStruct("DomEvent", { name: Schema.String }),
   Schema.TaggedStruct("Command", {
@@ -816,7 +843,7 @@ const SourceWire = Schema.Union([
     spanId: Schema.NullOr(Schema.String),
     traceId: Schema.NullOr(Schema.String)
   }),
-  Schema.TaggedStruct("Subscription", { key: Schema.String }),
+  Schema.TaggedStruct("Subscription", SubscriptionWire),
   Schema.TaggedStruct("Query", { name: Schema.String, seq: Schema.Number }),
   Schema.TaggedStruct("Emit", { path: Schema.String, seq: Schema.Number }),
   Schema.TaggedStruct("Failure", { path: Schema.String, seq: Schema.Number }),
@@ -848,6 +875,11 @@ const RunWire = {
  * `{ "~redacted": true }`, and a Model or message over `maxEntryBytes` becomes
  * `{ "~truncated": bytes }`. A Cause is sent as `Cause.pretty` plus its
  * reasons, best effort. An entry's `component` is sent as its name.
+ *
+ * A Subscription's `deps` are sent as an array of JSON values, or `null` for
+ * a Subscription with none. They're there to be read: `NaN`, `Infinity` and
+ * `-Infinity` are sent as `{ "~unserialisable": "number" }` and `-0` as
+ * `0`. The `key` beside them still tells those deps apart.
  *
  * @stability experimental
  * @category Wire
@@ -946,8 +978,8 @@ export const Wire = Schema.Union([
     issued: IssuedWire,
     reason: Schema.Literals(["unrendered", "failed", "fallback", "waiting", "absent"])
   }),
-  Schema.TaggedStruct("SubscriptionStarted", { ...InstanceWire, key: Schema.String }),
-  Schema.TaggedStruct("SubscriptionStopped", { ...InstanceWire, key: Schema.String })
+  Schema.TaggedStruct("SubscriptionStarted", { ...InstanceWire, ...SubscriptionWire }),
+  Schema.TaggedStruct("SubscriptionStopped", { ...InstanceWire, ...SubscriptionWire })
 ])
 
 /**
@@ -1177,7 +1209,7 @@ export const makeEncoder = (options?: {
           }
         case "SubscriptionStarted":
         case "SubscriptionStopped":
-          return { _tag: entry._tag, ...instanceBase(entry), key: entry.key }
+          return { _tag: entry._tag, ...instanceBase(entry), ...encodeSubscription(entry) }
       }
     }
   }
@@ -1191,12 +1223,27 @@ const instanceBase = (entry: InstanceBase) => ({
   component: entry.component.definition.name
 })
 
+// JSON has no `-0`, and `structural` has the placeholder for a number that isn't finite.
+const encodeSubscription = (
+  subscription: {
+    readonly key: string
+    readonly name: string
+    readonly deps: ReadonlyArray<Subscription.Dep> | undefined
+  }
+) => ({
+  key: subscription.key,
+  name: subscription.name,
+  deps: subscription.deps === undefined ? null : subscription.deps.map((dep) => dep === 0 ? 0 : structural(dep))
+})
+
 const encodeSource = (source: Source): typeof SourceWire.Type => {
   switch (source._tag) {
     case "Command":
       return { ...source, spanId: source.spanId ?? null, traceId: source.traceId ?? null }
     case "Mount":
       return { _tag: "Mount", name: source.name, args: encodeArgs(source.argsSchema, source.args) }
+    case "Subscription":
+      return { _tag: "Subscription", ...encodeSubscription(source) }
     default:
       return source
   }

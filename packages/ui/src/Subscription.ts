@@ -5,7 +5,8 @@
  * after each `update` and on a props change. The result is diffed by key: a
  * key that disappears has its Scope closed first, then a new key starts in a
  * child Scope of the instance. Each element the Stream emits is dispatched to
- * the instance as a message.
+ * the instance as a message. A key runs one Stream, so a result that lists
+ * one key twice fails the instance.
  *
  * Rule of thumb: if the lifetime is an event (an upload, one long poll), use a
  * Command. If you can say "while ...", use a Subscription. A Subscription's
@@ -57,10 +58,18 @@ export type TypeId = typeof TypeId
  *
  * **Details**
  *
- * `key` identifies the Subscription across renders. `stream` has `E = never`:
- * a defect fails the instance, and a Stream that ends stays stopped until its
- * key leaves and comes back. Reconnect logic lives in the Stream. `R` joins the
- * component's requirements.
+ * `key` identifies the Subscription across renders: the runtime diffs by it,
+ * and two entries of one `subscriptions` result that share a key fail the
+ * instance. `name` and `deps` are what `make` built the key from, kept apart
+ * so a tool can group a component's `room` Subscriptions without parsing
+ * keys. `name` is the string `make` was given, with no escaping. `deps` is
+ * always an array, so a single dep and a one-element tuple, which share a
+ * key, share their `deps` too. It's `undefined` for a Subscription with no
+ * deps.
+ *
+ * `stream` has `E = never`: a defect fails the instance, and a Stream that
+ * ends stays stopped until its key leaves and comes back. Reconnect logic
+ * lives in the Stream. `R` joins the component's requirements.
  *
  * @stability experimental
  * @category models
@@ -69,6 +78,8 @@ export type TypeId = typeof TypeId
 export interface Subscription<out Msg, out R = never> {
   readonly [TypeId]: TypeId
   readonly key: string
+  readonly name: string
+  readonly deps?: ReadonlyArray<Dep> | undefined
   readonly stream: Stream.Stream<Msg, never, R>
 }
 
@@ -172,6 +183,8 @@ export const keyOf = (name: string, deps?: Deps): string =>
  *   roomMessages(roomId).pipe(Stream.map((text) => Message.Received({ text }))))
  *
  * room.key // => 'room:"42"'
+ * room.name // => "room"
+ * room.deps // => ["42"]
  * ```
  *
  * @stability experimental
@@ -191,5 +204,11 @@ export const make: {
   build?: (deps: any) => Stream.Stream<any, never, any>
 ): Subscription<any, any> =>
   build === undefined
-    ? { [TypeId]: TypeId, key: keyOf(name), stream: depsOrStream }
-    : { [TypeId]: TypeId, key: keyOf(name, depsOrStream), stream: Stream.suspend(() => build(depsOrStream)) }
+    ? { [TypeId]: TypeId, key: keyOf(name), name, deps: undefined, stream: depsOrStream }
+    : {
+      [TypeId]: TypeId,
+      key: keyOf(name, depsOrStream),
+      name,
+      deps: Array.isArray(depsOrStream) ? depsOrStream : [depsOrStream],
+      stream: Stream.suspend(() => build(depsOrStream))
+    }

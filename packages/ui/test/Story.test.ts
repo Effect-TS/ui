@@ -57,6 +57,21 @@ describe("Story", () => {
     assert.strictEqual(s.model, 0)
   })
 
+  it("reports two Subscriptions that share a key, as the runtime does", () => {
+    const Twice = Component.define({ name: "Twice", model: Schema.Null, message: Schema.Null }).make({
+      init: () => null,
+      update: () => null,
+      subscriptions: () => [
+        Subscription.make("room", "42", () => Stream.empty),
+        Subscription.make("room", ["42"], () => Stream.empty)
+      ],
+      view: (_, h) => h.text("twice")
+    })
+    const s = Story.start(Twice, {})
+    assert.throws(() => s.subscriptions, "/Twice: two Subscriptions share the key room:\"42\"")
+    assert.throws(() => s.subscription("room:\"42\"", null), "/Twice: two Subscriptions share the key room:\"42\"")
+  })
+
   it("subscription keys follow dependency keys and model changes", () => {
     const steps = Story.start(SearchBox, {})
     const tick = SearchMessage.Tick()

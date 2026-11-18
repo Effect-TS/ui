@@ -36,6 +36,7 @@ import * as componentQueries from "./queries.ts"
 import * as childRef from "./ref.ts"
 import * as schedule from "./schedule.ts"
 import * as sharedReads from "./shared.ts"
+import * as subscriptionKeys from "./subscriptions.ts"
 
 /**
  * One instance between steps, as the engine records it: everything a Story or
@@ -520,8 +521,17 @@ export const record = <Props, Model, Msg, Events>(
     defaultPrevented: fields.defaultPrevented,
     ack: fields.ack,
     view,
-    subscriptions: () =>
-      (fields.component.subscriptions?.(fields.model, fields.props, fields.results) ?? []).map((sub) => sub.key),
+    subscriptions: () => {
+      const keys: Array<string> = []
+      for (const sub of fields.component.subscriptions?.(fields.model, fields.props, fields.results) ?? []) {
+        // The runtime fails the instance for it, so a test that reads the keys fails too.
+        if (keys.includes(sub.key)) {
+          throw subscriptionKeys.duplicateKey("/" + fields.component.definition.name, sub.key)
+        }
+        keys.push(sub.key)
+      }
+      return keys
+    },
     queryInfo: () => {
       const bound = boundOf(fields.component)
       if (bound === undefined) return []

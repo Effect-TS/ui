@@ -1529,6 +1529,86 @@ describe("Runtime", () => {
         ])
         assert.notStrictEqual(changes[0].key, changes[2].key)
       })))
+
+    it.effect("log the name and deps their key was built from, in memory and on the Wire", () =>
+      provideHost(Effect.gen(function*() {
+        const Msg = Schema.TaggedUnion({ Left: {}, Said: {} })
+        const said = Msg.make({ _tag: "Said" })
+        const Chat = Component.define({ name: "Chat", model: Schema.Boolean, message: Msg }).make({
+          init: () => true,
+          update: (inRoom, message) => message._tag === "Left" ? false : inRoom,
+          view: (_, h) => h.text("chat"),
+          subscriptions: (inRoom) => [
+            Subscription.make("tick", Stream.never),
+            // Deps JSON has no form for: the key tells them apart, and the Wire only has to be readable.
+            inRoom && Subscription.make("room", ["42", NaN, -0], () => Stream.make(said))
+          ]
+        })
+        const root = yield* TestHost.mount(Chat, {})
+        yield* TestHost.settle
+        root.send(Msg.make({ _tag: "Left" }))
+        yield* TestHost.settle
+
+        const tick = { key: "tick", name: "tick", deps: undefined }
+        const room = { key: "room:\"42\",NaN,-0", name: "room", deps: ["42", NaN, -0] }
+        const subscriptionOf = (entry: MessageLog.Entry) =>
+          entry._tag === "SubscriptionStarted" || entry._tag === "SubscriptionStopped"
+            ? [entry._tag, { key: entry.key, name: entry.name, deps: entry.deps }]
+            : entry._tag === "Update" && entry.source._tag === "Subscription"
+            ? ["Update", { key: entry.source.key, name: entry.source.name, deps: entry.source.deps }]
+            : undefined
+        assert.deepStrictEqual(root.log().map(subscriptionOf).filter((entry) => entry !== undefined), [
+          ["SubscriptionStarted", tick],
+          ["SubscriptionStarted", room],
+          ["Update", room],
+          ["SubscriptionStopped", room]
+        ])
+
+        const encoder = MessageLog.makeEncoder()
+        const wire = root.log().map((entry) => {
+          const frame = encoder.encode(entry)
+          assert.deepStrictEqual(Schema.decodeUnknownSync(MessageLog.Wire)(JSON.parse(JSON.stringify(frame))), frame)
+          return frame
+        })
+        const wireTick = { key: "tick", name: "tick", deps: null }
+        const wireRoom = { key: room.key, name: "room", deps: ["42", { "~unserialisable": "number" }, 0] }
+        const wireOf = (frame: MessageLog.Wire) =>
+          frame._tag === "SubscriptionStarted" || frame._tag === "SubscriptionStopped"
+            ? [frame._tag, { key: frame.key, name: frame.name, deps: frame.deps }]
+            : frame._tag === "Update" && frame.source._tag === "Subscription"
+            ? ["Update", { key: frame.source.key, name: frame.source.name, deps: frame.source.deps }]
+            : undefined
+        assert.deepStrictEqual(wire.map(wireOf).filter((frame) => frame !== undefined), [
+          ["SubscriptionStarted", wireTick],
+          ["SubscriptionStarted", wireRoom],
+          ["Update", wireRoom],
+          ["SubscriptionStopped", wireRoom]
+        ])
+      })))
+
+    it.effect("two entries with one key fail the instance", () =>
+      provideHost(Effect.gen(function*() {
+        const Twice = Component.define({ name: "Twice", model: Schema.Boolean, message: Schema.Boolean }).make({
+          init: () => false,
+          update: (_, twice) => twice,
+          view: (_, h) => h.text("up"),
+          subscriptions: (twice) => [
+            Subscription.make("room", "42", () => Stream.never),
+            // A one-element tuple has the key of a single dep.
+            twice && Subscription.make("room", ["42"], () => Stream.never)
+          ]
+        })
+        const root = yield* TestHost.mount(Twice, {}, { fallback: (_, h) => h.el("h1", "down") })
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "up")
+        root.send(true)
+        const crashed = yield* Effect.flip(TestHost.settle)
+        assert.strictEqual(crashed._tag, "RootCrashed")
+        assert.strictEqual(root.text(), "down")
+        const failed = root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
+        assert.deepStrictEqual([failed.in, failed.name], ["subscription", "room:\"42\""])
+        assert.include(Cause.pretty(failed.cause), "/Twice: two Subscriptions share the key room:\"42\"")
+      })))
   })
 
   it.effect("a child's emit from init reaches its parent after the parent's first Model", () =>
