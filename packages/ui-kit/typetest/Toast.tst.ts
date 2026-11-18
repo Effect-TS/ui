@@ -1,0 +1,74 @@
+import { Component, UiSchema } from "@effect/ui"
+import { type ToastItem, ToastProvider } from "@effect/ui-kit"
+import { Html } from "@effect/ui/html"
+import { Schema } from "effect"
+import { describe, expect, it } from "tstyche"
+
+const Msg = UiSchema.TaggedEnum({ Clicked: {} })
+type Msg = typeof Msg.Type
+
+type Button = Html.Element<Msg, never, Html.EventsOf<"button">, HTMLButtonElement, "button">
+type Div = Html.Element<Msg, never, Html.EventsOf<"div">, HTMLDivElement, "div">
+type Strong = Html.Element<Msg, never, Html.EventsOf<"strong">, HTMLElement, "strong">
+
+declare const toast: ToastItem
+
+describe("ToastProvider", () => {
+  it("needs nothing provided", () => {
+    expect<Component.Headless.Requirements<typeof ToastProvider>>().type.toBe<never>()
+  })
+
+  it("each part returns the builder it was given, with the consumer's message type", () => {
+    Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
+      init: () => null,
+      update: (model) => model,
+      view: (_, h) =>
+        ToastProvider(h, {
+          view: (t) => {
+            expect(t.toasts).type.toBe<ReadonlyArray<ToastItem>>()
+            expect(t.viewport(h.div.onClick(Msg.Clicked()))).type.toBe<Div>()
+            expect(t.root({ element: h.div, toast })).type.toBe<Div>()
+            expect(t.content({ element: h.div, toast })).type.toBe<Div>()
+            expect(t.title({ element: h.strong, toast })).type.toBe<Strong>()
+            expect(t.description({ element: h.strong, toast })).type.toBe<Strong>()
+            expect(t.action({ element: h.button, toast })).type.toBe<Button>()
+            expect(t.close({ element: h.button, toast })).type.toBe<Button>()
+            return t.viewport(h.div)
+          }
+        })
+    })
+  })
+
+  it("the buttons take only a button, and the containers only a div", () => {
+    Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
+      init: () => null,
+      update: (model) => model,
+      view: (_, h) =>
+        ToastProvider(h, {
+          view: (t) => {
+            expect(t.viewport).type.not.toBeCallableWith(h.section)
+            expect(t.root).type.not.toBeCallableWith({ element: h.li, toast })
+            expect(t.content).type.not.toBeCallableWith({ element: h.span, toast })
+            expect(t.action).type.not.toBeCallableWith({ element: h.a, toast })
+            expect(t.close).type.not.toBeCallableWith({ element: h.a, toast })
+            return t.viewport(h.div)
+          }
+        })
+    })
+  })
+
+  it("a sender posts only the add, update and close messages", () => {
+    Component.define({ name: "Sender", model: Schema.Null, message: Msg, elements: Html }).make({
+      init: () => null,
+      update: (model, _message, $) => {
+        expect($.send).type.toBeCallableWith(ToastProvider, { _tag: "AddedToast", toast: { id: "a", title: "A" } })
+        expect($.send).type.toBeCallableWith(ToastProvider, { _tag: "UpdatedToast", id: "a", type: "success" })
+        expect($.send).type.toBeCallableWith(ToastProvider, { _tag: "ClosedToast", id: "a" })
+        expect($.send).type.not.toBeCallableWith(ToastProvider, { _tag: "ClickedClose", id: "a" })
+        expect($.send).type.not.toBeCallableWith(ToastProvider, { _tag: "AddedToast", toast: { title: "A" } })
+        return model
+      },
+      view: (_, h) => h.div
+    })
+  })
+})
