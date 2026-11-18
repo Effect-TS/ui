@@ -19,5 +19,6 @@ Switch(h, {
 
 ## Components
 
+- [Avatar](src/Avatar.ts): an image with a fallback.
 - [Button](src/Button.ts): a native button that can stay focusable while disabled.
 - [Switch](src/Switch.ts): a controlled on/off setting.

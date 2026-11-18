@@ -1,0 +1,325 @@
+/**
+ * A user's picture, with initials or an icon in its place until the picture
+ * loads or when it can't, ported from Base UI's Avatar
+ * (https://base-ui.com/react/components/avatar).
+ *
+ * `Avatar` is headless: it loads the image, decides whether the image or
+ * the fallback shows, and the consumer draws the markup. The image's source
+ * is a prop of the avatar, so the root can load it before the image is
+ * drawn.
+ *
+ * **Anatomy**
+ *
+ * | Base UI           | Part       | Element                             |
+ * | :---------------- | :--------- | :---------------------------------- |
+ * | `Avatar.Root`     | `root`     | `<span>`, which loads the image     |
+ * | `Avatar.Image`    | `image`    | `<img>` inside the root, once shown |
+ * | `Avatar.Fallback` | `fallback` | `<span>` inside the root, once shown |
+ *
+ * `root` takes the `<span>` and returns it for more chaining. `image`
+ * takes the `<img>` and returns it once the image has loaded, and
+ * `undefined` before. `fallback` takes the `<span>` and its children as
+ * `{ element, children }`, and returns the finished `<span>` while the
+ * image isn't loaded and the `fallbackDelay` has passed, and `undefined`
+ * otherwise. So the consumer draws both, and at most one shows.
+ *
+ * Naming the picture is the consumer's job: an `alt` on the image, and
+ * text in the fallback, or an `aria-label` on it for an icon.
+ *
+ * **Data attributes**
+ *
+ * None. The parts also return `imageLoadingStatus`, for markup that
+ * depends on it.
+ *
+ * **Keyboard**
+ *
+ * None: an avatar isn't interactive.
+ *
+ * **Differences from Base UI**
+ *
+ * - The image's `src`, `srcSet`, `sizes`, `crossOrigin` and
+ *   `referrerPolicy`, and the fallback's `delay`, as `fallbackDelay`, are
+ *   props of the avatar: the root loads the image and the parts are drawn
+ *   after the state is known.
+ * - `imageLoadingStatus` has no `"idle"`: an image that hasn't settled is
+ *   `"loading"`, on the server too.
+ * - There is no `onLoadingStatusChange`: the parts return
+ *   `imageLoadingStatus`.
+ * - There is no `keepMounted`, so the image is loaded before it's drawn
+ *   and `loading="lazy"` has no effect. The image has no `data-loading`
+ *   and `data-error`, which only `keepMounted` sets.
+ * - The image has no `data-starting-style` and `data-ending-style`: it
+ *   shows and goes without an enter or exit transition.
+ *
+ * **Example** (A user's picture, with their initials until it loads)
+ *
+ * ```ts import.meta.vitest
+ * import { Component } from "@effect/ui"
+ * import { Html, HtmlServer } from "@effect/ui/html"
+ * import { Avatar } from "@effect/ui-kit"
+ * import { Effect, Schema } from "effect"
+ *
+ * const Profile = Component.define({
+ *   name: "Profile",
+ *   model: Schema.Null,
+ *   message: Schema.Never,
+ *   elements: Html
+ * }).make({
+ *   init: () => null,
+ *   update: (model) => model,
+ *   view: (_model, h) =>
+ *     Avatar(h, {
+ *       key: "avatar",
+ *       props: { src: "/ada.png" },
+ *       view: (s) =>
+ *         s.root(h.span.class("avatar")).children(
+ *           s.image(h.img.attr("alt", "Ada Lovelace")),
+ *           s.fallback({ element: h.span.class("initials"), children: ["AL"] })
+ *         )
+ *     })
+ * })
+ *
+ * // The server can't load the image, so it draws the fallback.
+ * const { html } = await Effect.runPromise(HtmlServer.renderToHtml(Profile, {}))
+ * if (!html.includes(`<span class="initials">AL</span>`) || html.includes("<img")) {
+ *   throw new Error("the server didn't draw the fallback in place of the image")
+ * }
+ * ```
+ *
+ * @stability experimental
+ * @since 0.1.0
+ */
+import * as Component from "@effect/ui/Component"
+import * as Html from "@effect/ui/html/Html"
+import * as Mount from "@effect/ui/Mount"
+import * as Subscription from "@effect/ui/Subscription"
+import type * as View from "@effect/ui/View"
+import * as Effect from "effect/Effect"
+import * as Schema from "effect/Schema"
+import * as Stream from "effect/Stream"
+
+// What the root loads and the image draws. Two images with the same fields
+// are the same load.
+const Source = Schema.Struct({
+  src: Schema.optional(Schema.String),
+  srcSet: Schema.optional(Schema.String),
+  sizes: Schema.optional(Schema.String),
+  crossOrigin: Schema.optional(Schema.Literals(["anonymous", "use-credentials"])),
+  referrerPolicy: Schema.optional(Schema.String)
+})
+type Source = typeof Source.Type
+
+/**
+ * The props of an `Avatar`: Base UI's Image props without the React ones,
+ * and the Fallback's `delay`.
+ *
+ * **Details**
+ *
+ * - `src`, `srcSet`, `sizes`, `crossOrigin` and `referrerPolicy`: the
+ *   image, as the `<img>` attributes of the same names. The root loads
+ *   it, and the image part sets them. Without a `src` or a `srcSet`, the
+ *   image fails at once and the fallback shows.
+ * - `fallbackDelay`: how long, in milliseconds, the fallback waits before
+ *   it shows, so a fast image doesn't flash it. `0` by default. Once it
+ *   has passed, the fallback shows whenever the image isn't loaded.
+ *
+ * @stability experimental
+ * @category schemas
+ * @since 0.1.0
+ */
+export const AvatarProps = Schema.Struct({
+  ...Source.fields,
+  fallbackDelay: Schema.optional(Schema.Number)
+})
+
+/**
+ * The props of an `Avatar`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type AvatarProps = typeof AvatarProps.Type
+
+/**
+ * Where the avatar's image stands: `"loading"` until it settles, then
+ * `"loaded"` or `"error"`. An image without a `src` or a `srcSet` is
+ * `"error"`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type AvatarImageLoadingStatus = "loading" | "loaded" | "error"
+
+const Settled = Schema.Struct({
+  source: Source,
+  status: Schema.Literals(["loaded", "error"])
+})
+
+// The last load that settled, for the source it loaded, so a new source is
+// loading until its own load settles. The fallback's delay passes once.
+const Model = Schema.Struct({
+  settled: Schema.NullOr(Settled),
+  delayElapsed: Schema.Boolean
+})
+
+const Message = Schema.TaggedUnion({
+  SettledImage: Settled.fields,
+  ElapsedFallbackDelay: {}
+})
+
+// The props' source, without the fields they leave out or set to
+// `undefined`, so both give the mount the same args.
+const sourceOf = ({ fallbackDelay: _, ...source }: AvatarProps): Source =>
+  Object.fromEntries(Object.entries(source).filter(([, value]) => value !== undefined))
+
+const hasImage = (source: Source): boolean => !!source.src || !!source.srcSet
+
+const sameSource = (a: Source, b: Source): boolean =>
+  a.src === b.src && a.srcSet === b.srcSet && a.sizes === b.sizes && a.crossOrigin === b.crossOrigin &&
+  a.referrerPolicy === b.referrerPolicy
+
+const statusOf = (settled: typeof Settled.Type | null, source: Source): AvatarImageLoadingStatus =>
+  !hasImage(source)
+    ? "error"
+    : settled !== null && sameSource(settled.source, source)
+    ? settled.status
+    : "loading"
+
+// Loads the source in an <img> that is never inserted, as Base UI does, and
+// reports how it settled. A cached image is complete at once.
+const load = (document: Document, source: Source) =>
+  Effect.callback<typeof Settled.Type>((resume) => {
+    const image = document.createElement("img")
+    const settle = (status: "loaded" | "error") => resume(Effect.succeed({ source, status }))
+    if (source.referrerPolicy !== undefined) image.referrerPolicy = source.referrerPolicy
+    image.crossOrigin = source.crossOrigin ?? null
+    if (source.sizes !== undefined) image.sizes = source.sizes
+    if (source.srcSet !== undefined) image.srcset = source.srcSet
+    if (source.src !== undefined) image.src = source.src
+    if (image.complete) return settle(image.naturalWidth > 0 ? "loaded" : "error")
+    image.onload = () => settle("loaded")
+    image.onerror = () => settle("error")
+    return Effect.sync(() => {
+      image.onload = null
+      image.onerror = null
+    })
+  })
+
+/**
+ * The root's mount: it loads each image source the root renders with, and
+ * reports how each load settled, dropping the load of a source the root no
+ * longer has.
+ *
+ * **When to use**
+ *
+ * Use to name the load in a `Scene` of an avatar's parts: acknowledge it
+ * with `expectMount`, or end it with
+ * `mounted(AvatarLoadImage, { source, status })`. It never runs on the
+ * server or in `TestHost`.
+ *
+ * @stability experimental
+ * @category mounts
+ * @since 0.1.0
+ */
+export const AvatarLoadImage = Mount.makeStream(
+  "AvatarLoadImage",
+  { args: Source },
+  (node: Element, _args, changes) =>
+    changes.pipe(Stream.switchMap((source) => Stream.fromEffect(load(node.ownerDocument, source))))
+)
+
+const loadImage = (source: Source) =>
+  AvatarLoadImage(source).pipe(Mount.map((settled) => Message.make({ _tag: "SettledImage", ...settled })))
+
+/**
+ * A `<span>` the avatar's root and fallback accept, from the consumer's
+ * `h.span`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type AvatarSpan<Msg, R> = Html.Element<Msg, R, Html.EventsOf<"span">, HTMLSpanElement, "span">
+
+/**
+ * A headless avatar. Call it with the consumer's `h` and a `view` closure
+ * that draws the root with `s.root(h.span)`, and inside it the image with
+ * `s.image(h.img)` and the fallback with
+ * `s.fallback({ element: h.span, children })`.
+ *
+ * **Details**
+ *
+ * The root loads the image in the browser, and the image shows once it
+ * has loaded. Until then, or when it fails, the fallback shows, after
+ * `fallbackDelay`. On the server, and on a host that doesn't run mounts,
+ * the image never loads, so the fallback shows.
+ *
+ * The image's own attributes win over the ones the consumer set on the
+ * builder it passes in: `src`, `srcset`, `sizes`, `crossorigin` and
+ * `referrerpolicy`, including the ones the props leave out.
+ *
+ * @stability experimental
+ * @category components
+ * @since 0.1.0
+ */
+export const Avatar = Component.define({
+  name: "Avatar",
+  props: AvatarProps,
+  model: Model,
+  message: Message,
+  elements: Html
+}).make({
+  init: ({ props }) => ({
+    settled: null,
+    delayElapsed: !(props.fallbackDelay !== undefined && props.fallbackDelay > 0)
+  }),
+  update: (model, message) =>
+    Message.match(message, {
+      SettledImage: ({ source, status }) => ({ ...model, settled: { source, status } }),
+      ElapsedFallbackDelay: () => ({ ...model, delayElapsed: true })
+    }),
+  subscriptions: (model, props) => [
+    !model.delayElapsed &&
+    Subscription.make(
+      "fallbackDelay",
+      props.fallbackDelay ?? 0,
+      (delay) => Stream.fromEffect(Effect.sleep(delay)).pipe(Stream.as(Message.make({ _tag: "ElapsedFallbackDelay" })))
+    )
+  ],
+  parts: (model, p) => {
+    const source = sourceOf(p.props)
+    const status = statusOf(model.settled, source)
+    const root = p.part("span", (b) => hasImage(source) ? b.onMount(loadImage(source)) : b)
+    const image = p.part("img", (b) =>
+      b.attr("src", source.src)
+        .attr("srcset", source.srcSet)
+        .attr("sizes", source.sizes)
+        .attr("crossorigin", source.crossOrigin)
+        .attr("referrerpolicy", source.referrerPolicy))
+    const fallback = p.part("span", (b) => b)
+    const showsFallback = status !== "loaded" && model.delayElapsed
+    return {
+      imageLoadingStatus: status,
+      root,
+      // Each part is applied before it's dropped, so a wrong tag throws in
+      // every state.
+      image: <B extends View.PartTarget<"img">>(element: B): ReturnType<B["attr"]> | undefined => {
+        const shown = image(element)
+        return status === "loaded" ? shown : undefined
+      },
+      fallback: <Msg, R, const C extends ReadonlyArray<View.Input<Msg, any>> = readonly []>(
+        options: {
+          /** The consumer's `h.span`, with its classes, attributes and handlers. */
+          readonly element: AvatarSpan<Msg, R>
+          /** What goes inside the fallback, such as initials or an icon. */
+          readonly children?: C | undefined
+        }
+      ): View.Element<Msg, R | View.Requirements<C[number]>> | undefined => {
+        const shown = fallback(options.element)
+        return showsFallback ? shown.children(...(options.children ?? [])) : undefined
+      }
+    }
+  }
+})

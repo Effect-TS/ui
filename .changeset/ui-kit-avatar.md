@@ -1,0 +1,5 @@
+---
+"@effect/ui-kit": minor
+---
+
+Add `Avatar`, a headless avatar ported from Base UI. Call it as `Avatar(h, { props: { src }, view })` and draw `s.root(h.span).children(s.image(h.img), s.fallback({ element: h.span, children }))`. The root loads the image in the browser. The image part returns the `<img>` once it has loaded. The fallback part returns its `<span>` until then, or when the load fails, after an optional `fallbackDelay`. The parts also return `imageLoadingStatus`.
