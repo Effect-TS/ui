@@ -31,4 +31,10 @@ export * from "./Button.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * from "./Checkbox.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./Switch.ts"
