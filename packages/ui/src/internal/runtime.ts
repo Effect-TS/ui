@@ -2109,6 +2109,13 @@ const setup = (
         Object.hasOwn(hydrating.state, path)
       ? stateCodecOf(component).decode(hydrating.state[path])
       : Option.none()
+    // An owner adopting the server's Model starts from what its reports last sent there.
+    const reportedOnServer = Option.isSome(fromServer) && component.definition.reports !== undefined
+      ? Option.flatMap(
+        Option.fromUndefinedOr(hydrating!.state["~reported"]?.[path]),
+        jsonCodecOf(component.definition.message).decode
+      )
+      : Option.none()
 
     /**
      * What the instance starts from: `init`'s result, and the Model it adopts from the server or from
@@ -2248,6 +2255,9 @@ const setup = (
         inst.model = Option.isSome(adopted) ? adopted.value.model : first.model
         inst.results = Option.isSome(adopted) ? adopted.value.results : undefined
         inst.adoptsChildren = Option.isSome(serverModel)
+        if (Option.isSome(serverModel) && Option.isSome(reportedOnServer)) {
+          inst.owning!.reported = { message: reportedOnServer.value }
+        }
         mountedSeq = record(inst, {
           _tag: "Mounted",
           props: inst.props,
@@ -2550,7 +2560,9 @@ const setup = (
   const runRound = (owner: Instance) => {
     owner.owning!.round = false
     if (owner.closed || owner.failure !== undefined || owner.readers === undefined) return
+    // Read together: a reader's reply can change the owner before the next reader is told.
     const value = owner.shares
+    const source = { _tag: "Shared", path: owner.path, seq: owner.owning!.seq } as const
     let counted = false
     for (const reader of Array.from(owner.readers)) {
       const seen = reader.seen
@@ -2563,12 +2575,12 @@ const setup = (
         if (!countShared(owner)) return
       }
       seen.set(owner, value)
-      for (const read of sharedReads.readsOf(reader.component.definition)) {
-        if (read.onChange === undefined || reader.owners?.get(read.owner.definition) !== owner) continue
-        const message = guard(reader, "shared", () => read.onChange!(value), read.name)
-        if (message === undefined || reader.closed) break
-        reader.dispatch(message, { _tag: "Shared", name: read.name, path: owner.path, seq: owner.owning!.seq })
-      }
+      // `define` allows one `onChange` per owner.
+      const read = sharedReads.readsOf(reader.component.definition).find((read) =>
+        read.onChange !== undefined && reader.owners?.get(read.owner.definition) === owner
+      )!
+      const message = guard(reader, "shared", () => read.onChange!(value), read.name)
+      if (message !== undefined && !reader.closed) reader.dispatch(message, { ...source, name: read.name })
       if (owner.closed) return
     }
   }
@@ -5414,6 +5426,7 @@ const setup = (
     // revert to cold and aren't shipped. Nothing is dispatched for them.
     const query = cache.dehydrate()
     const state: Record<string, unknown> = {}
+    const reported: Record<string, unknown> = {}
     const deferredPaths: Array<string> = []
     // `under`: inside a deferred instance, whose subtree the client builds fresh.
     const instance = (inst: Instance, under: boolean): Renderer.ServerNode => {
@@ -5431,6 +5444,12 @@ const setup = (
           inner = true
         } else {
           state[inst.path] = encoded.value
+          // What the owner's reports last sent, so the client doesn't send it again.
+          const last = inst.owning?.reported
+          if (last !== undefined && !holdsRedacted(inst.component.definition.message.ast)) {
+            const message = jsonCodecOf(inst.component.definition.message).encode(last.message)
+            if (Option.isSome(message)) reported[inst.path] = message.value
+          }
         }
       }
       return {
@@ -5474,6 +5493,7 @@ const setup = (
         ...state,
         "~deferred": deferredPaths,
         "~query": query,
+        ...(Object.keys(reported).length > 0 ? { "~reported": reported } : {}),
         ...(server?.static === true ? { "~static": true } : {})
       }
     }

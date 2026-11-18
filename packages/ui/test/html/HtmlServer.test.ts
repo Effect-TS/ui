@@ -115,19 +115,20 @@ describe("HtmlServer", { concurrent: false }, () => {
       }
     }).pipe(Effect.scoped))
 
-  it.effect("delivers reports on the server before the HTML is written, and hydration adopts it", () =>
+  it.effect("delivers reports on the server before the HTML is written, and hydration doesn't deliver them again", () =>
     Effect.gen(function*() {
       const GroupMessage = Schema.TaggedUnion({ ChangedOn: { on: Schema.Boolean } })
+      // Counts the messages its reports send, so a second delivery of the same one shows.
       const Group = Component.define({
         name: "Group",
-        model: Schema.Boolean,
+        model: Schema.Number,
         message: GroupMessage,
         shares: {
-          value: (on) => on,
+          value: (count) => count,
           reports: Schema.Boolean,
           onReports: (reports) => GroupMessage.make({ _tag: "ChangedOn", on: reports.includes(true) })
         }
-      }).make({ init: () => false, update: (_, { on }) => on, parts: () => ({}) })
+      }).make({ init: () => 0, update: (count) => count + 1, parts: () => ({}) })
       const Item = Component.define({
         name: "Item",
         props: Schema.Struct({ open: Schema.Boolean }),
@@ -138,7 +139,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       }).make({
         init: () => null,
         update: (model) => model,
-        view: (_, h) => h.span.children(h.shared.group ? "group open" : "group closed")
+        view: (_, h) => h.span.children(`reported ${h.shared.group}`)
       })
       const Page = Component.define({ name: "Page", model: Schema.Null, message: Schema.Never, elements: Html })
         .make({
@@ -147,13 +148,13 @@ describe("HtmlServer", { concurrent: false }, () => {
           view: (_, h) => Group(h, { key: "g", view: () => Item(h, { key: "i", props: { open: true } }) })
         })
       const rendered = yield* HtmlServer.renderToHtml(Page, {})
-      expect(rendered.html).toContain("<span>group open</span>")
+      expect(rendered.html).toContain("<span>reported 1</span>")
       const app = yield* container(rendered.html)
       const span = app.querySelector("span")
       yield* BrowserHost.mountEffect(Page, {}, app, { state: rendered.state })
       yield* tick
       expect(app.querySelector("span")).toBe(span)
-      expect(span!.textContent).toBe("group open")
+      expect(span!.textContent).toBe("reported 1")
     }).pipe(Effect.scoped))
 
   it.effect("folds HTML attribute names with last-write wins, but preserves SVG casing", () =>

@@ -41,3 +41,24 @@ export const readsOf = (definition: Component.Definition.Any): ReadonlyArray<Rea
   }
   return reads
 }
+
+/**
+ * Throws for a `shared` option that gives one owner two `onChange`s: a reader gets one message per
+ * round of an owner. Aliases of an owner with one `onChange` among them are fine.
+ *
+ * @internal
+ */
+export const check = (name: string, shared: Component.SharedReads): void => {
+  const handled = new Map<object, string>()
+  for (const [key, entry] of Object.entries(shared)) {
+    if (typeof entry === "function" || entry.onChange === undefined) continue
+    const owner = entry.owner.definition
+    const before = handled.get(owner)
+    if (before !== undefined) {
+      throw new Error(
+        `${name} lists ${owner.name} under ${before} and ${key}, each with an onChange. A reader gets one message per change of an owner: keep one onChange.`
+      )
+    }
+    handled.set(owner, key)
+  }
+}

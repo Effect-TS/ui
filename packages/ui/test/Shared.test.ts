@@ -443,6 +443,60 @@ describe("optional owners, reports and onChange", () => {
     })))
 })
 
+describe("onChange rounds and declarations", () => {
+  it.effect("a reader that changes the owner mid-round leaves the next reader's message pointing at its value's entry", () =>
+    provideHost(Effect.gen(function*() {
+      // Answers the first bump with another, inside the round that tells it.
+      const Replier = Component.define({
+        name: "Replier",
+        model: Schema.Null,
+        message: ReaderMessage,
+        shared: { group: { owner: Group, onChange: (value) => ReaderMessage.make({ _tag: "ChangedGroup", ...value }) } }
+      }).make({
+        init: () => null,
+        update: (model, message, $) =>
+          message._tag === "ChangedGroup" && message.bumps === 1 ? $.set(model).send(Group, { _tag: "Bumped" }) : model,
+        view: (_, h) => h.text("")
+      })
+      const Reader = makeReader((told) => told)
+      const Page = Component.define({ name: "Page", model: Schema.Null, message: PageMessage }).make({
+        init: () => null,
+        update: (model, _, $) => $.set(model).send(GroupRef, { _tag: "Bumped" }),
+        view: (_, h) =>
+          Group(h, { ref: GroupRef, view: () => h.el("div", Replier(h, { key: "a" }), Reader(h, { key: "r" })) })
+      })
+      const root = yield* TestHost.mount(Page, {})
+      yield* TestHost.settle
+      root.send(PageMessage.make({ _tag: "Bump", times: 1 }))
+      yield* TestHost.settle
+      const [first, second] = updatesAt(root.log(), group)
+      assert.deepStrictEqual(updatesAt(root.log(), reader).map((entry) => [entry.message, entry.source]), [
+        [{ _tag: "ChangedGroup", on: false, bumps: 1 }, { _tag: "Shared", name: "group", path: group, seq: first.seq }],
+        [{ _tag: "ChangedGroup", on: false, bumps: 2 }, { _tag: "Shared", name: "group", path: group, seq: second.seq }]
+      ])
+    })))
+
+  it("rejects two onChange for one owner, and takes aliases with one", () => {
+    const onChange = (value: { on: boolean; bumps: number }) => ReaderMessage.make({ _tag: "ChangedGroup", ...value })
+    assert.throws(
+      () =>
+        Component.define({
+          name: "Twice",
+          model: Schema.Null,
+          message: ReaderMessage,
+          shared: { a: { owner: Group, onChange }, b: { owner: Group, optional: true, onChange } }
+        }),
+      "Twice lists Group under a and b, each with an onChange"
+    )
+    Component.define({
+      name: "Aliased",
+      model: Schema.Null,
+      message: ReaderMessage,
+      shared: { a: { owner: Group, onChange }, b: Group, c: { owner: Group, report: () => true } }
+    })
+  })
+})
+
 describe("optional owners, reports and onChange in a Story", () => {
   const OptionalReader = Component.define({
     name: "OptionalReader",

@@ -94,6 +94,40 @@ describe("reports", () => {
       Component.Shared<typeof Provider> | Component.Shared<typeof Plain>
     >()
   })
+  it("keeps a supplied map with a string index", () => {
+    const reads: Readonly<Record<string, typeof Provider>> = { provider: Provider }
+    const Indexed = Component.define({ name: "Indexed", model: Schema.Null, message: Schema.Never, shared: reads })
+      .make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => {
+          // `| undefined` from the index signature, as for any record.
+          expect(h.shared["provider"]).type.toBe<{ open: boolean; instant: boolean } | undefined>()
+          return h.text("")
+        }
+      })
+    expect<Component.Requirements<typeof Indexed>>().type.toBe<Component.Shared<typeof Provider>>()
+  })
+  it("keeps the required owner of a child below an optional read", () => {
+    const Child = Component.define({
+      name: "Child",
+      model: Schema.Null,
+      message: Schema.Never,
+      shared: { p: Provider }
+    })
+      .make({ init: () => null, update: (model) => model, view: (_, h) => h.text("") })
+    const Wrapper = Component.define({
+      name: "Wrapper",
+      model: Schema.Null,
+      message: TipMessage,
+      shared: { p: { owner: Provider, optional: true } }
+    }).make({
+      init: () => null,
+      update: (model, _, $) => $.set(model).send(Provider, { _tag: "Completed" }),
+      view: (_, h) => Child(h, { key: "c" })
+    })
+    expect<Component.Requirements<typeof Wrapper>>().type.toBe<Component.Shared<typeof Provider>>()
+  })
   it("rejects a bad report", () => {
     Component.define({
       name: "Bad",

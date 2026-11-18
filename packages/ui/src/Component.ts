@@ -567,7 +567,8 @@ export declare namespace Shared {
  * reader carries no `Shared<typeof Owner>`. `report` is what the reader
  * tells the owner, from its own Model and props, for an owner whose
  * `shares` takes `reports`. `onChange` is the reader's message for a new
- * shared value.
+ * shared value. An owner may be listed under more than one name, but only
+ * one of them may have an `onChange`: `define` throws otherwise.
  *
  * `report` and `onChange` are typed by `define`, which knows the reader's
  * Model and props and the owner's value. Here they're `unknown`.
@@ -1796,8 +1797,9 @@ type OwnersAreHeadless<SV> = [SV] extends [never] ? unknown : {
   readonly "Only a headless component can share state: finish it with parts in place of view": never
 }
 
-// The owners `shared` lists: none when it's left out, and `SR` is still its constraint.
-type Listed<SR> = string extends keyof SR ? {} : SR
+// The owners `shared` lists: none when it's left out, and `SR` is still exactly its constraint. A map with
+// a string index of its own is kept.
+type Listed<SR> = (<T>() => T extends SR ? 1 : 2) extends (<T>() => T extends SharedReads ? 1 : 2) ? {} : SR
 
 // One entry of `shared`, for the owner inferred for it: `report` and `onChange` take their parameter types from
 // here. `SR` holds what's written, and `optional` with it, and this checks it against the owner.
@@ -1970,14 +1972,13 @@ export interface Definition<
     Events,
     Parts,
     Exclude<
-      | StepRequirements<UI>
-      | StepRequirements<U>
-      | StepRequirements<UR[keyof UR]>
+      // A send to an optional owner needs none above: only this component's own steps drop it.
+      | Exclude<StepRequirements<UI> | StepRequirements<U> | StepRequirements<UR[keyof UR]>, SharedOptional<SR>>
       | View.PartRequirements<Parts[keyof Parts]>
       | Subscription.Requirements<Sub>
       | QueryServices<L>
       | SharedRequirements<SR>,
-      Command.FrameworkService | SharedOptional<SR>
+      Command.FrameworkService
     >,
     Rcv,
     [SV] extends [never] ? never : Shared.Of<Name, SV, Rcv, Rp>
@@ -2030,14 +2031,13 @@ export interface Definition<
     Msg,
     Events,
     Exclude<
-      | StepRequirements<UI>
-      | StepRequirements<U>
-      | StepRequirements<UR[keyof UR]>
+      // A send to an optional owner needs none above: only this component's own steps drop it.
+      | Exclude<StepRequirements<UI> | StepRequirements<U> | StepRequirements<UR[keyof UR]>, SharedOptional<SR>>
       | View.Requirements<UV>
       | Subscription.Requirements<Sub>
       | QueryServices<L>
       | SharedRequirements<SR>,
-      Command.FrameworkService | SharedOptional<SR>
+      Command.FrameworkService
     >,
     V,
     L,
@@ -2453,6 +2453,7 @@ export const define = <
      * `undefined` when no owner is above, and a send to it is dropped. `report` is what this
      * component tells an owner whose `shares` takes reports. `onChange` is its message when the
      * value changes, delivered once per owner round before the next render, with the latest value.
+     * One `onChange` per owner: `define` throws for an owner listed twice with one each.
      */
     readonly shared?:
       | (
@@ -2488,6 +2489,7 @@ export const define = <
   }
 ): Definition<Name, Props, Model, Msg, Events, V, L, Tagged<Msg, Tags>, Sl, Listed<SR>, SV, Rp> => {
   const shares = options.shares
+  if (options.shared !== undefined) sharedReads.check(options.name, options.shared)
   const definition: Definition<Name, Props, Model, Msg, Events, V, L, Tagged<Msg, Tags>, Sl, Listed<SR>, SV, Rp> = {
     name: options.name,
     props: options.props ?? (Schema.Struct({}) as any),
