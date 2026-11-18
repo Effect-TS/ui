@@ -376,7 +376,8 @@ export declare namespace Child {
   export type Options<Props, Events, Msg, Rcv = never> =
     & (
       | {
-        readonly key: string
+        // PROTOTYPE (EFF-3930): optional. Without it the child's key is the empty string.
+        readonly key?: string | undefined
         readonly ref?: undefined
       }
       | {

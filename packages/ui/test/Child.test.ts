@@ -83,10 +83,10 @@ describe("a component call", () => {
     assert.strictEqual(row.ref, Draft)
   })
 
-  it("rejects both a key and a ref, or neither", () => {
+  it("rejects both a key and a ref, and has the empty key with neither", () => {
     const Draft = Row.ref("Draft")
-    assert.throws(() => Row(h, { key: "a", ref: Draft, props: { id: "a" } } as any), /exactly one of key and ref/)
-    assert.throws(() => Row(h, { props: { id: "a" } } as any), /exactly one of key and ref/)
+    assert.throws(() => Row(h, { key: "a", ref: Draft, props: { id: "a" } } as any), /a key or a ref, not both/)
+    assert.strictEqual(Row(h, { props: { id: "a" } }).key, "")
   })
 
   it("keeps a headless component's view", () => {
@@ -124,7 +124,7 @@ describe("a feature's render", () => {
     assert.strictEqual(child.fallback, fallback)
     const Main = Todos.ref("Main")
     assert.strictEqual(Todos.render(h, { ref: Main, fallback }).key, "Main")
-    assert.throws(() => Todos.render(h, { fallback } as any), /exactly one of key and ref/)
+    assert.strictEqual(Todos.render(h, { fallback }).key, "")
     // Detached, it still builds a child for the feature.
     const render = Todos.render
     assert.strictEqual(render(h, { key: "d", fallback }).key, "d")

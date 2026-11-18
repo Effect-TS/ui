@@ -241,12 +241,12 @@ describe("$.send", () => {
 })
 
 describe("a component child with a ref", () => {
-  it("takes a ref in place of a key, and rejects both or neither", () => {
+  it("takes a ref in place of a key, or neither, and rejects both", () => {
     ParentDef.view((_, h) => {
       expect(Editor(h, { ref: Draft })).type.not.toRaiseError()
       expect(Note(h, { ref: Rows.at("t1") })).type.not.toRaiseError()
       expect(Editor).type.not.toBeCallableWith(h, { key: "a", ref: Draft })
-      expect(Editor).type.not.toBeCallableWith(h, {})
+      expect(Editor(h, {})).type.not.toRaiseError()
       return h.el("p")
     })
   })
@@ -474,13 +474,13 @@ describe("an erased component", () => {
   const AnyProps = Component.define({ name: "AnyProps", props: Schema.Any, model: Schema.Null, message: EditorMessage })
     .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p") })
 
-  it("takes props, and exactly one of key and ref", () => {
+  it("takes props, and a key, a ref or neither", () => {
     ParentDef.view((_, h) => {
       expect(any(h, { key: "a", props: {} })).type.toBe<View.Child<typeof ParentMessage.Type, any>>()
       expect(AnyProps(h, { key: "a", props: 1 })).type.not.toRaiseError()
       expect(any).type.not.toBeCallableWith(h, { key: "a" })
       expect(AnyProps).type.not.toBeCallableWith(h, { key: "a" })
-      expect(any).type.not.toBeCallableWith(h, { props: {} })
+      expect(any(h, { props: {} })).type.not.toRaiseError()
       expect(any).type.not.toBeCallableWith(h, { key: "a", ref: Plain.ref("p"), props: {} })
       return h.el("p")
     })
