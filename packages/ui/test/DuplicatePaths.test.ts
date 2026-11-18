@@ -1,4 +1,4 @@
-import { Component, type MessageLog } from "@effect/ui"
+import { Component, type MessageLog, UiSchema } from "@effect/ui"
 import { Locator, Scene, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Effect, Schema } from "effect"
@@ -17,7 +17,7 @@ const Row = Component.define({
   view: (_, h) => h.el("li", h.props.label)
 })
 
-const ListMessage = Schema.TaggedUnion({ Set: { keys: Schema.Array(Schema.String) } })
+const ListMessage = UiSchema.TaggedEnum({ Set: { keys: Schema.Array(Schema.String) } })
 
 /** Renders a `Row` per key, either as siblings or each under its own element. */
 const makeList = (layout: "siblings" | "nested") =>
@@ -92,7 +92,7 @@ describe("duplicate child paths", () => {
         })
         yield* TestHost.settle
         assert.strictEqual(root.text(), "ab")
-        root.send(ListMessage.make({ _tag: "Set", keys: ["a", "b", "b"] }))
+        root.send(ListMessage.Set({ keys: ["a", "b", "b"] }))
         const crashed = yield* Effect.flip(TestHost.settle)
         assert.strictEqual(crashed._tag, "RootCrashed")
         assert.strictEqual(root.text(), "crashed")
@@ -173,7 +173,7 @@ describe("duplicate child paths", () => {
       second: Schema.Array(Schema.String)
     })
     type Props = typeof Props.Type
-    const ParentMessage = Schema.TaggedUnion({ Bump: {} })
+    const ParentMessage = UiSchema.TaggedEnum({ Bump: {} })
 
     /**
      * A `Row` per sibling key, then two `Broken` children, `b` and `c`, whose
@@ -245,7 +245,7 @@ describe("duplicate child paths", () => {
         const root = yield* TestHost.mount(Parent, { siblings: ["a"], first: ["b"], second: ["c", "d"] })
         yield* TestHost.settle
         assert.strictEqual(root.text(), "abcd")
-        root.send(ParentMessage.make({ _tag: "Bump" }))
+        root.send(ParentMessage.Bump())
         yield* TestHost.settle
         assert.strictEqual(root.text(), "abcd")
         assert.isFalse(root.log().some((entry) => entry._tag === "Failed" && entry.path === "/Parent"))
@@ -277,19 +277,19 @@ describe("duplicate child paths", () => {
       view: (_, h) => h.text("")
     })
 
-    const Go = Schema.TaggedUnion({ Go: {} })
+    const Go = UiSchema.TaggedEnum({ Go: {} })
     /** Named `Row`, so its fallback can show a `Row` at its own path. Fails on a click. */
     const Faulty = Component.define({ name: "Row", model: Schema.Null, message: Go }).make({
       init: () => null,
       update: () => {
         throw new Error("faulty")
       },
-      view: (_, h) => h.el("button").on("click", Go.make({ _tag: "Go" })).children("faulty")
+      view: (_, h) => h.el("button").on("click", Go.Go()).children("faulty")
     })
     const RowRef = Row.ref("a")
 
     const Props = Schema.Struct({ nested: Schema.Array(Schema.String), ref: Schema.Boolean })
-    const ParentMessage = Schema.TaggedUnion({ Bump: {} })
+    const ParentMessage = UiSchema.TaggedEnum({ Bump: {} })
 
     /**
      * `Broken[b]`'s fallback shows `Faulty` at `Row[a]`, by key or by ref, and
@@ -340,7 +340,7 @@ describe("duplicate child paths", () => {
           Locator.fire(root.get(Locator.text("faulty", { exact: true })), "click")
           yield* TestHost.settle
           assert.strictEqual(root.text(), "a")
-          root.send(ParentMessage.make({ _tag: "Bump" }))
+          root.send(ParentMessage.Bump())
           yield* TestHost.settle
           assert.strictEqual(root.text(), "a")
           assert.isFalse(root.log().some((entry) => entry._tag === "Failed" && entry.path === "/Parent"))
@@ -409,7 +409,7 @@ describe("a child without a key", () => {
       const root = yield* TestHost.mount(List, { keys: ["a"] }, { fallback: (_, h) => h.text("crashed") })
       yield* TestHost.settle
       assert.strictEqual(root.text(), "a")
-      root.send(ListMessage.make({ _tag: "Set", keys: ["a", "b"] }))
+      root.send(ListMessage.Set({ keys: ["a", "b"] }))
       yield* Effect.flip(TestHost.settle)
       assert.strictEqual(root.text(), "crashed")
       assert.include(

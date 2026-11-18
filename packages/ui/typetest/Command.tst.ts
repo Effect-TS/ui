@@ -1,8 +1,8 @@
-import { Command, Component, Renderer } from "@effect/ui"
+import { Command, Component, Renderer, UiSchema } from "@effect/ui"
 import { Context, Data, Effect, Schema, Stream } from "effect"
 import { describe, expect, it } from "tstyche"
 
-const Message = Schema.TaggedUnion({ Got: { n: Schema.Number } })
+const Message = UiSchema.TaggedEnum({ Got: { n: Schema.Number } })
 
 const Fx = Command.make("Fx", { args: {} }, () => Effect.succeed("text"))
 const St = Command.make("St", { args: {}, stream: true }, () => Stream.fromIterable(["text"]))
@@ -45,7 +45,7 @@ describe("Command", () => {
 
   describe("map", () => {
     it("keeps the kind and the source result", () => {
-      const toMessage = (text: string) => Message.make({ _tag: "Got", n: text.length })
+      const toMessage = (text: string) => Message.Got({ n: text.length })
       expect(Fx().pipe(Command.map(toMessage))).type.toBe<
         Command.Issued<typeof Message.Type, never, string, "Effect">
       >()
@@ -57,25 +57,25 @@ describe("Command", () => {
 
     it("maps a mixed-kind Command to a union the component can run", () => {
       const input = condition ? Fx() : St()
-      const mapped = input.pipe(Command.map((text) => Message.make({ _tag: "Got", n: text.length })))
+      const mapped = input.pipe(Command.map((text) => Message.Got({ n: text.length })))
       expect(mapped).type.toBe<
         | Command.Issued<typeof Message.Type, never, string, "Effect">
         | Command.Issued<typeof Message.Type, never, string, "Stream">
       >()
       expect($.run).type.toBeCallableWith(mapped)
-      expect($.run).type.toBeCallableWith(Command.map(input, (text) => Message.make({ _tag: "Got", n: text.length })))
+      expect($.run).type.toBeCallableWith(Command.map(input, (text) => Message.Got({ n: text.length })))
       expect($.run).type.not.toBeCallableWith(input)
     })
 
     it("chained pipeable maps keep one Command's source and requirements", () => {
       const chained = SA.make().pipe(
         Command.map((a) => a.length),
-        Command.map((n) => Message.make({ _tag: "Got", n }))
+        Command.map((n) => Message.Got({ n }))
       )
       expect(chained).type.toBe<Command.Issued<typeof Message.Type, SA, string, "Effect">>()
       const stream = SB.make().pipe(
         Command.map((n) => n + 1),
-        Command.map((n) => Message.make({ _tag: "Got", n }))
+        Command.map((n) => Message.Got({ n }))
       )
       expect(stream).type.toBe<Command.Issued<typeof Message.Type, SB, number, "Stream">>()
     })
@@ -89,7 +89,7 @@ describe("Command", () => {
       expect(once).type.toBe<
         Command.Issued<number, SA, string, "Effect"> | Command.Issued<number, SB, number, "Stream">
       >()
-      const twice = Command.map(once, (n) => Message.make({ _tag: "Got", n }))
+      const twice = Command.map(once, (n) => Message.Got({ n }))
       expect(twice).type.toBe<
         | Command.Issued<typeof Message.Type, SA, string, "Effect">
         | Command.Issued<typeof Message.Type, SB, number, "Stream">
@@ -103,7 +103,7 @@ describe("Command", () => {
 
   describe("as", () => {
     it("preserves kind, source and requirements in both forms", () => {
-      const message = Message.make({ _tag: "Got", n: 1 })
+      const message = Message.Got({ n: 1 })
       expect(SA.make().pipe(Command.as(message))).type.toBe<Command.Issued<typeof Message.Type, SA, string, "Effect">>()
       expect(Command.as(SB.make(), message)).type.toBe<Command.Issued<typeof Message.Type, SB, number, "Stream">>()
       expect(Command.as(Command.interrupt(Fx), message)).type.toBe<Command.Interrupt>()
@@ -210,8 +210,8 @@ describe("Command", () => {
 
   describe("match", () => {
     const matched = Save.make({ id: "t1", title: "milk" }).pipe(Command.match({
-      onSuccess: (title) => Message.make({ _tag: "Got", n: title.length }),
-      onFailure: (error) => Message.make({ _tag: "Got", n: error.reason.length })
+      onSuccess: (title) => Message.Got({ n: title.length }),
+      onFailure: (error) => Message.Got({ n: error.reason.length })
     }))
 
     it("a body with a typed error issues an Unmatched Command, which $.run doesn't take", () => {
@@ -273,13 +273,13 @@ describe("Command", () => {
       expect($.run).type.toBeCallableWith(Die())
       expect($.run).type.toBeCallableWith(Watch())
       expect($.run).type.toBeCallableWith(
-        Hold().pipe(Command.map((): typeof Message.Type => Message.make({ _tag: "Got", n: 1 })))
+        Hold().pipe(Command.map((): typeof Message.Type => Message.Got({ n: 1 })))
       )
     })
   })
   describe("Component.noop", () => {
     type Msg = typeof Message.Type
-    const got = Message.make({ _tag: "Got", n: 1 })
+    const got = Message.Got({ n: 1 })
     const Quiet = Command.make("Quiet", { args: {} }, () => Effect.succeed(Component.noop))
     const QuietAs = Command.make("QuietAs", { args: {} }, () => Effect.succeed(1).pipe(Effect.as(Component.noop)))
     const QuietMap = Command.make("QuietMap", { args: {} }, () => Effect.map(Effect.succeed(1), () => Component.noop))
@@ -341,7 +341,7 @@ describe("Command", () => {
     it("a match branch may end with it", () => {
       const quietOnSuccess = Save.make({ id: "t1", title: "milk" }).pipe(Command.match({
         onSuccess: () => Component.noop,
-        onFailure: (error) => Message.make({ _tag: "Got", n: error.reason.length })
+        onFailure: (error) => Message.Got({ n: error.reason.length })
       }))
       expect($.run).type.toBeCallableWith(quietOnSuccess)
       expect($never.run).type.not.toBeCallableWith(quietOnSuccess)

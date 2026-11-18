@@ -5,7 +5,7 @@
  * a mount that attaches a third-party editor and reports each change, and a
  * scene that names both by their definitions.
  */
-import { Component, Mount } from "@effect/ui"
+import { Component, Mount, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Scene } from "@effect/ui/testing"
 import { Effect, Queue, Schema, Stream } from "effect"
@@ -64,7 +64,7 @@ export const AttachEditor = Mount.makeStream(
 // A mount is named for what it does to the element, and the binding matches
 // the name string. A result that ends a mount is `Completed` and the
 // mount's name. A stream mount reports facts, as a Subscription does.
-const SnippetMessage = Schema.TaggedUnion({
+const SnippetMessage = UiSchema.TaggedEnum({
   CompletedMeasure: { width: Schema.Number },
   UpdatedCode: { text: Schema.String }
 })
@@ -86,11 +86,11 @@ export const Snippet = Component.define({
       UpdatedCode: ({ text }) => ({ ...model, text })
     }),
   view: (model, h) =>
-    h.section.onMount(Measure().pipe(Mount.map((width) => SnippetMessage.make({ _tag: "CompletedMeasure", width }))))
+    h.section.onMount(Measure().pipe(Mount.map((width) => SnippetMessage.CompletedMeasure({ width }))))
       .children(
         h.div.onMount(
           AttachEditor({ text: model.text }).pipe(
-            Mount.map((text) => SnippetMessage.make({ _tag: "UpdatedCode", text }))
+            Mount.map((text) => SnippetMessage.UpdatedCode({ text }))
           )
         ),
         h.p(`${model.text.length} characters in ${model.width}px`)

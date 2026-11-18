@@ -1,5 +1,5 @@
 import type { Mount } from "@effect/ui"
-import { Component, View } from "@effect/ui"
+import { Component, UiSchema, View } from "@effect/ui"
 import { Tooltip, type TooltipProps, TooltipProvider } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
@@ -33,7 +33,7 @@ const Button = <Msg, R>(
 }
 
 // A parent that opens the tooltip on a styled Button and counts what it hears.
-const ToolbarMessage = Schema.TaggedUnion({ PressedBold: {}, OpenedBoldTip: {}, DismissedBoldTip: {} })
+const ToolbarMessage = UiSchema.TaggedEnum({ PressedBold: {}, OpenedBoldTip: {}, DismissedBoldTip: {} })
 
 const Toolbar = Component.define({
   name: "Toolbar",
@@ -53,13 +53,12 @@ const Toolbar = Component.define({
       Tooltip(h, {
         key: "bold",
         props: { open: model.open },
-        onEmit: (event) =>
-          ToolbarMessage.make({ _tag: event._tag === "Opened" ? "OpenedBoldTip" : "DismissedBoldTip" }),
+        onEmit: (event) => event._tag === "Opened" ? ToolbarMessage.OpenedBoldTip() : ToolbarMessage.DismissedBoldTip(),
         view: (t) =>
           h.span(
             Button(h, {
               element: t.trigger(h.button),
-              onPress: ToolbarMessage.make({ _tag: "PressedBold" })
+              onPress: ToolbarMessage.PressedBold()
             }).class("tool").attr("aria-label", "Bold").children("B"),
             t.positioner(h.div).children("Bold")
           )
@@ -70,7 +69,7 @@ const Toolbar = Component.define({
 
 // Two tooltips under a provider, and one Model field for which one shows.
 const Tip = Schema.Literals(["bold", "italic"])
-const GroupedMessage = Schema.TaggedUnion({ OpenedTip: { tip: Tip }, DismissedTip: { tip: Tip } })
+const GroupedMessage = UiSchema.TaggedEnum({ OpenedTip: { tip: Tip }, DismissedTip: { tip: Tip } })
 
 const Grouped = Component.define({
   name: "Grouped",
@@ -94,7 +93,7 @@ const Grouped = Component.define({
               key: tip,
               props: { open: model.tip === tip },
               onEmit: (event) =>
-                GroupedMessage.make({ _tag: event._tag === "Opened" ? "OpenedTip" : "DismissedTip", tip }),
+                event._tag === "Opened" ? GroupedMessage.OpenedTip({ tip }) : GroupedMessage.DismissedTip({ tip }),
               view: (s) =>
                 h.span(
                   s.trigger(h.button.attr("aria-label", tip)).children(tip),
@@ -108,7 +107,7 @@ const Grouped = Component.define({
 
 // Two tooltips under a provider, each with its own field. `keep` refuses
 // bold's `Dismissed`, and `bold` counts bold's requests to close.
-const IndependentMessage = Schema.TaggedUnion({ OpenedTip: { tip: Tip }, DismissedTip: { tip: Tip } })
+const IndependentMessage = UiSchema.TaggedEnum({ OpenedTip: { tip: Tip }, DismissedTip: { tip: Tip } })
 
 const Independent = Component.define({
   name: "Independent",
@@ -137,7 +136,9 @@ const Independent = Component.define({
                 key: tip,
                 props: { open: model[tip], closeDelay: tip === "bold" ? h.props.closeDelay : 0 },
                 onEmit: (event) =>
-                  IndependentMessage.make({ _tag: event._tag === "Opened" ? "OpenedTip" : "DismissedTip", tip }),
+                  event._tag === "Opened"
+                    ? IndependentMessage.OpenedTip({ tip })
+                    : IndependentMessage.DismissedTip({ tip }),
                 view: (s) =>
                   h.span(
                     s.trigger(h.button.attr("aria-label", tip)).children(tip),
@@ -156,7 +157,7 @@ const Independent = Component.define({
 // requests to close are counted and refused, so it stays visible. The
 // others' are accepted.
 const Mark = Schema.Literals(["bold", "italic", "underline"])
-const DeferredMessage = Schema.TaggedUnion({
+const DeferredMessage = UiSchema.TaggedEnum({
   RequestedOpen: { tip: Mark },
   RequestedClose: { tip: Mark },
   AcceptedOpen: { tip: Mark },
@@ -195,7 +196,9 @@ const Deferred = Component.define({
                 key: tip,
                 props: { open: model[tip] },
                 onEmit: (event) =>
-                  DeferredMessage.make({ _tag: event._tag === "Opened" ? "RequestedOpen" : "RequestedClose", tip }),
+                  event._tag === "Opened"
+                    ? DeferredMessage.RequestedOpen({ tip })
+                    : DeferredMessage.RequestedClose({ tip }),
                 view: (s) =>
                   h.span(
                     s.trigger(h.button.attr("aria-label", tip)).children(tip),
@@ -443,10 +446,10 @@ describe("Tooltip", () => {
       fire("bold", "focus")
       fire("italic", "mouseenter")
       yield* wait(600)
-      root.send(DeferredMessage.make({ _tag: "AcceptedOpen", tip: "bold" }))
+      root.send(DeferredMessage.AcceptedOpen({ tip: "bold" }))
       yield* wait(0)
       assert.strictEqual(requests(), "0")
-      root.send(DeferredMessage.make({ _tag: "AcceptedOpen", tip: "italic" }))
+      root.send(DeferredMessage.AcceptedOpen({ tip: "italic" }))
       yield* wait(0)
       assert.isTrue(shows("italic"))
       assert.strictEqual(requests(), "1")
@@ -462,7 +465,7 @@ describe("Tooltip", () => {
       const wait = (millis: number) =>
         TestHost.settle.pipe(Effect.andThen(TestClock.adjust(`${millis} millis`)), Effect.andThen(TestHost.settle))
       const accept = (tip: typeof Mark.Type, open: boolean) =>
-        root.send(DeferredMessage.make({ _tag: open ? "AcceptedOpen" : "AcceptedClose", tip }))
+        root.send(open ? DeferredMessage.AcceptedOpen({ tip }) : DeferredMessage.AcceptedClose({ tip }))
       const requests = () => Locator.textOf(root.get(Locator.tag("output")))
       const shows = (tip: string) => root.get(Locator.attr("aria-label", tip)).attrs?.["data-popup-open"] === ""
 

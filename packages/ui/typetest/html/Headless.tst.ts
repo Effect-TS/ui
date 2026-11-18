@@ -1,4 +1,4 @@
-import { Component, Mount, View } from "@effect/ui"
+import { Component, Mount, UiSchema, View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { TestHost } from "@effect/ui/testing"
 import { Context, type Effect, Schema } from "effect"
@@ -8,7 +8,7 @@ import { Dialog, type Item, Menu, type MenuEvents } from "../../test/html/fixtur
 class Clock extends Context.Service<Clock, { readonly now: Effect.Effect<number> }>()("Clock") {}
 class Tracker extends Context.Service<Tracker, { readonly seen: Effect.Effect<void> }>()("Tracker") {}
 
-const Msg = Schema.TaggedUnion({ Picked: { id: Schema.String }, Clicked: {}, Seen: {} })
+const Msg = UiSchema.TaggedEnum({ Picked: { id: Schema.String }, Clicked: {}, Seen: {} })
 type Msg = typeof Msg.Type
 
 const items: ReadonlyArray<Item> = [{ id: "a", label: "Archive" }]
@@ -48,7 +48,7 @@ describe("headless components", () => {
           props: { items },
           onEmit: (event) => {
             expect(event).type.toBe<typeof MenuEvents.Type>()
-            return Msg.make({ _tag: "Picked", id: event.id })
+            return Msg.Picked({ id: event.id })
           },
           view: (m) => {
             expect(m.visible).type.toBe<ReadonlyArray<Item>>()
@@ -64,7 +64,7 @@ describe("headless components", () => {
                 m.visible.length === 0 && h.p("No actions found."),
                 h.ul.children(m.visible.map((item) => {
                   expect(item).type.toBe<Item>()
-                  return m.item(h.li.key(item.id), item).onClick(Msg.make({ _tag: "Clicked" })).children(item.label)
+                  return m.item(h.li.key(item.id), item).onClick(Msg.Clicked()).children(item.label)
                 }))
               )
             )
@@ -126,7 +126,7 @@ describe("headless components", () => {
         Timed(h, {
           key: "t",
           view: (t) =>
-            t.clock(h.time).onMount(MarkSeen().pipe(Mount.map(() => Msg.make({ _tag: "Seen" }))))
+            t.clock(h.time).onMount(MarkSeen().pipe(Mount.map(() => Msg.Seen())))
               .children(String(t.now))
         })
     })
@@ -213,7 +213,7 @@ describe("headless components", () => {
     const Other = Component.define({
       name: "Other",
       model: Schema.Null,
-      message: Schema.TaggedUnion({ Reset: {} }),
+      message: UiSchema.TaggedEnum({ Reset: {} }),
       receives: ["Reset"]
     }).make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p") })
     Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({

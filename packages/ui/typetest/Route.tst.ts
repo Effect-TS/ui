@@ -1,4 +1,4 @@
-import { Command, Component, Feature, Head, Query, Route, Router, type Subscription } from "@effect/ui"
+import { Command, Component, Feature, Head, Query, Route, Router, type Subscription, UiSchema } from "@effect/ui"
 import { TestHost } from "@effect/ui/testing"
 import { Effect, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
@@ -57,7 +57,7 @@ describe("Route", () => {
 
 describe("Router", () => {
   it("puts the navigation Commands a component runs in its requirements", () => {
-    const Message = Schema.TaggedUnion({ Go: {}, Done: {} })
+    const Message = UiSchema.TaggedEnum({ Go: {}, Done: {} })
     const Nav = Component.define({
       name: "Nav",
       model: Schema.Struct({ n: Schema.Number }),
@@ -68,12 +68,11 @@ describe("Router", () => {
         message._tag === "Go"
           ? $.run(
             Router.push(AppRoute, AppRoute.make({ _tag: "Home" })).pipe(
-              Command.map(() => Message.make({ _tag: "Done" }))
+              Command.map(() => Message.Done())
             )
           )
           : model,
-      subscriptions: () => [Router.subscription(AppRoute, AppRoute.make({ _tag: "Home" }), () =>
-        Message.make({ _tag: "Done" }))],
+      subscriptions: () => [Router.subscription(AppRoute, AppRoute.make({ _tag: "Home" }), () => Message.Done())],
       view: (_, h) => h.text("")
     })
     expect<Component.Requirements<typeof Nav>>().type.toBe<Router.Push | Router.Router>()

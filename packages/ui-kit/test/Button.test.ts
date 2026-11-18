@@ -1,11 +1,11 @@
-import { Component, View } from "@effect/ui"
+import { Component, UiSchema, View } from "@effect/ui"
 import { Button } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Locator, Scene } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 
-const CardMessage = Schema.TaggedUnion({ PressedSave: {}, ClickedCard: {} })
+const CardMessage = UiSchema.TaggedEnum({ PressedSave: {}, ClickedCard: {} })
 
 // A card whose click handler stands behind a button in its short form, to
 // see which one a click reaches.
@@ -30,10 +30,10 @@ const Card = Component.define({
       ClickedCard: () => ({ clicked: "card" })
     }),
   view: (model, h) =>
-    h.div.onClick(CardMessage.make({ _tag: "ClickedCard" })).children(
+    h.div.onClick(CardMessage.ClickedCard()).children(
       Button(h, {
         props: h.props.button,
-        onPress: h.props.press ? CardMessage.make({ _tag: "PressedSave" }) : undefined
+        onPress: h.props.press ? CardMessage.PressedSave() : undefined
       }).children("Save"),
       h.output(model.clicked)
     )
@@ -85,9 +85,9 @@ describe("Button", () => {
     assert.deepStrictEqual(node.children, [{ _tag: "Text", text: "Save" }])
 
     const own = (button: Html.Element<typeof CardMessage.Type, never, any, any, "button">) =>
-      View.build(button.onClick(CardMessage.make({ _tag: "ClickedCard" })), [])
+      View.build(button.onClick(CardMessage.ClickedCard()), [])
     assert.deepStrictEqual(own(Button(h)).handlers, { click: { _tag: "ClickedCard" } })
-    assert.throws(() => own(Button(h, { onPress: CardMessage.make({ _tag: "PressedSave" }) })), /already handles click/)
+    assert.throws(() => own(Button(h, { onPress: CardMessage.PressedSave() })), /already handles click/)
     // By the options, not the state: an enabled button would cancel nothing
     // yet, but disabling it would replace the caller's handler.
     assert.throws(() => own(Button(h, { props: { focusableWhenDisabled: true } })), /already handles click/)

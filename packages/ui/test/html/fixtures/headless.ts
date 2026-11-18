@@ -1,4 +1,4 @@
-import { Component } from "@effect/ui"
+import { Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 
@@ -9,7 +9,7 @@ export const Item = Schema.Struct({
 })
 export type Item = typeof Item.Type
 
-export const MenuMessage = Schema.TaggedUnion({
+export const MenuMessage = UiSchema.TaggedEnum({
   Toggle: {},
   Toggled: { open: Schema.Boolean },
   Query: { value: Schema.String },
@@ -18,7 +18,7 @@ export const MenuMessage = Schema.TaggedUnion({
   Focused: { found: Schema.Boolean }
 })
 
-export const MenuEvents = Schema.TaggedUnion({ Picked: { id: Schema.String } })
+export const MenuEvents = UiSchema.TaggedEnum({ Picked: { id: Schema.String } })
 
 const Trigger = Html.ref("Menu.trigger", "button")
 const Input = Html.ref("Menu.input", "input")
@@ -72,8 +72,8 @@ export const Menu = MenuDef.make({
       Toggled: ({ open }) =>
         $.set({ ...model, open, query: open ? model.query : "", active: open ? model.active : null }).run(
           open
-            ? Html.focus(Input, ({ found }) => MenuMessage.make({ _tag: "Focused", found }))
-            : Html.focus(Trigger, ({ found }) => MenuMessage.make({ _tag: "Focused", found }))
+            ? Html.focus(Input, ({ found }) => MenuMessage.Focused({ found }))
+            : Html.focus(Trigger, ({ found }) => MenuMessage.Focused({ found }))
         ),
       Query: ({ value }) => ({ ...model, query: value, active: step(filter($.props.items, value), null, 1) }),
       Key: ({ key }) => {
@@ -89,7 +89,7 @@ export const Menu = MenuDef.make({
           case "Enter":
             return active === null
               ? model
-              : $.set({ ...model, open: false }).emit(MenuEvents.make({ _tag: "Picked", id: active }))
+              : $.set({ ...model, open: false }).emit(MenuEvents.Picked({ id: active }))
           default: {
             // Typeahead: a printable key on the trigger moves to the first label that starts with what was typed.
             // A key that no label continues with starts over from that key, so the buffer is never longer than a label.
@@ -102,7 +102,7 @@ export const Menu = MenuDef.make({
           }
         }
       },
-      Pick: ({ id }) => $.set({ ...model, open: false }).emit(MenuEvents.make({ _tag: "Picked", id })),
+      Pick: ({ id }) => $.set({ ...model, open: false }).emit(MenuEvents.Picked({ id })),
       Focused: ({ found }) => ({
         ...model,
         focused: [...model.focused, (model.open ? "input" : "trigger") + ":" + String(found)]
@@ -121,9 +121,9 @@ export const Menu = MenuDef.make({
           .attr("aria-haspopup", "menu")
           .attr("aria-expanded", String(model.open))
           .attr("aria-controls", p.id("popup"))
-          .onClick(MenuMessage.make({ _tag: "Toggle" }))
+          .onClick(MenuMessage.Toggle())
           .onKeyDown(
-            ({ key }) => key.length === 1 || key === "ArrowDown" ? MenuMessage.make({ _tag: "Key", key }) : undefined,
+            ({ key }) => key.length === 1 || key === "ArrowDown" ? MenuMessage.Key({ key }) : undefined,
             {
               preventDefault: true
             }
@@ -132,18 +132,18 @@ export const Menu = MenuDef.make({
         b.id(p.id("popup"))
           .attr("role", "menu")
           .popover("auto", model.open)
-          .onToggle(({ open }) => MenuMessage.make({ _tag: "Toggled", open }))),
+          .onToggle(({ open }) => MenuMessage.Toggled({ open }))),
       input: p.part("input", (b) =>
         b.ref(Input)
           .attr("role", "combobox")
           .attr("aria-controls", p.id("popup"))
           .attr("aria-activedescendant", active === null ? undefined : p.id("item", active))
           .value(model.query)
-          .onInput(({ value }) => MenuMessage.make({ _tag: "Query", value }))
+          .onInput(({ value }) => MenuMessage.Query({ value }))
           .onKeyDown(
             ({ key }) =>
               key === "ArrowDown" || key === "ArrowUp" || key === "Enter" || key === "Escape"
-                ? MenuMessage.make({ _tag: "Key", key })
+                ? MenuMessage.Key({ key })
                 : undefined,
             { preventDefault: true }
           )),
@@ -152,14 +152,14 @@ export const Menu = MenuDef.make({
           .attr("role", "menuitem")
           .attr("aria-disabled", item.disabled === true ? "true" : undefined)
           .attr("data-active", active === item.id ? "" : undefined)
-          .onClick(item.disabled === true ? () => undefined : MenuMessage.make({ _tag: "Pick", id: item.id })))
+          .onClick(item.disabled === true ? () => undefined : MenuMessage.Pick({ id: item.id })))
     }
   }
 })
 
-export const DialogMessage = Schema.TaggedUnion({ Open: {}, Close: {} })
+export const DialogMessage = UiSchema.TaggedEnum({ Open: {}, Close: {} })
 
-export const DialogEvents = Schema.TaggedUnion({ Closed: {} })
+export const DialogEvents = UiSchema.TaggedEnum({ Closed: {} })
 
 /** A modal dialog with no markup of its own. Escape and its close part both close it. */
 export const Dialog = Component.define({
@@ -174,17 +174,17 @@ export const Dialog = Component.define({
   update: (_, message, $) =>
     DialogMessage.match(message, {
       Open: () => $.set({ open: true }),
-      Close: () => $.set({ open: false }).emit(DialogEvents.make({ _tag: "Closed" }))
+      Close: () => $.set({ open: false }).emit(DialogEvents.Closed())
     }),
   parts: (model, p) => ({
     open: model.open,
-    trigger: p.part("button", (b) => b.onClick(DialogMessage.make({ _tag: "Open" }))),
+    trigger: p.part("button", (b) => b.onClick(DialogMessage.Open())),
     popup: p.part("dialog", (b) =>
       b.attr("aria-labelledby", p.id("title"))
         .modal(model.open)
-        .onCancel(DialogMessage.make({ _tag: "Close" }))),
+        .onCancel(DialogMessage.Close())),
     title: p.part("h2", (b) => b.id(p.id("title"))),
     // Any element can close the dialog, so the part is declared over the host-neutral builder.
-    close: p.part((b) => b.on("click", DialogMessage.make({ _tag: "Close" }), { preventDefault: true }))
+    close: p.part((b) => b.on("click", DialogMessage.Close(), { preventDefault: true }))
   })
 })

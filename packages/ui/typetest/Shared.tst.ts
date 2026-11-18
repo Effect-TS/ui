@@ -1,10 +1,10 @@
-import { Component } from "@effect/ui"
+import { Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Scene } from "@effect/ui/testing"
 import { Layer, Schema } from "effect"
 import { describe, expect, it } from "tstyche"
 
-const TipsMessage = Schema.TaggedUnion({ Enter: { id: Schema.String }, Elapsed: {} })
+const TipsMessage = UiSchema.TaggedEnum({ Enter: { id: Schema.String }, Elapsed: {} })
 
 const TipsProvider = Component.define({
   name: "TipsProvider",
@@ -26,7 +26,7 @@ const Plain = Component.define({ name: "Plain", model: Schema.Null, message: Tip
   parts: () => ({})
 })
 
-const TipMessage = Schema.TaggedUnion({ Enter: { id: Schema.String } })
+const TipMessage = UiSchema.TaggedEnum({ Enter: { id: Schema.String } })
 
 const Tip = Component.define({
   name: "Tip",

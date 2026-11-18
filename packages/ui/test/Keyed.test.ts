@@ -1,4 +1,4 @@
-import { Command, Component, MessageLog, Query, Route, Router } from "@effect/ui"
+import { Command, Component, MessageLog, Query, Route, Router, UiSchema } from "@effect/ui"
 import { Locator, Scene, type Steps, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Exit, Layer, Option, Redacted, Request, RequestResolver, Schema } from "effect"
@@ -75,7 +75,7 @@ const makeApp = (options?: {
     )
   ) {}
 
-  const BoardMessage = Schema.TaggedUnion({
+  const BoardMessage = UiSchema.TaggedEnum({
     Show: { ids: Schema.Array(Schema.String) },
     UsersChanged: { changed: Schema.Array(Schema.String) },
     Rename: { id: Schema.String, name: Schema.String },
@@ -102,8 +102,7 @@ const makeApp = (options?: {
         onChange: (results, changes) => {
           // The opened array is the collection at the query's keys.
           assert.strictEqual(results.length, new Set(results.map((entry) => entry.args.id)).size)
-          return BoardMessage.make({
-            _tag: "UsersChanged",
+          return BoardMessage.UsersChanged({
             changed: changes.map((change) => `${change.args.id}:${show(change.result)}`)
           })
         }
@@ -124,7 +123,7 @@ const makeApp = (options?: {
         Rename: ({ id, name }) => {
           order.push(`update ${$.props.tag} Rename`)
           return $.set(model).run(
-            RenameUser.make({ id, name }).pipe(Command.map(() => BoardMessage.make({ _tag: "Renamed" })))
+            RenameUser.make({ id, name }).pipe(Command.map(() => BoardMessage.Renamed()))
           )
         },
         Renamed: () => model
@@ -135,13 +134,13 @@ const makeApp = (options?: {
       order.push(`view ${h.props.tag} ${text}`)
       return h.el("p").on(
         "click",
-        BoardMessage.make({ _tag: "Rename", id: "1", name: `Bob${h.props.tag}` })
+        BoardMessage.Rename({ id: "1", name: `Bob${h.props.tag}` })
       ).children(`${h.props.tag}: ${text}`)
     }
   })
 
   /** Boards side by side: "tag:id,id" each. */
-  const ListMessage = Schema.TaggedUnion({ Set: { boards: Schema.Array(Schema.String) } })
+  const ListMessage = UiSchema.TaggedEnum({ Set: { boards: Schema.Array(Schema.String) } })
   const List = Component.define({
     name: "List",
     props: Schema.Struct({ boards: Schema.Array(Schema.String) }),
@@ -167,6 +166,7 @@ const makeApp = (options?: {
     GetUser,
     BoardMessage,
     Board,
+    ListMessage,
     List,
     layer: RenameUser.layer.pipe(Layer.provideMerge(GetUser.layer))
   }
@@ -262,7 +262,7 @@ describe("Keyed query fields", () => {
         yield* load
         app.order.length = 0
         const before = root.frames().length
-        yield* Effect.sync(() => root.send(app.List.message.make({ _tag: "Set", boards: ["a:1,2", "b:2,1,2"] })))
+        yield* Effect.sync(() => root.send(app.ListMessage.Set({ boards: ["a:1,2", "b:2,1,2"] })))
         yield* TestHost.settle
         assert.deepStrictEqual(updates(app.order), ["update b [2:Bea,1:Ann]"])
         assert.deepStrictEqual(root.frames().slice(before), ["a: 1=Ann 2=Beab: 2=Bea 1=Ann"])
@@ -279,7 +279,7 @@ describe("Keyed query fields", () => {
         const root = yield* TestHost.mount(app.List, { boards: ["a:1,2"] })
         yield* load
         app.order.length = 0
-        root.send(app.List.message.make({ _tag: "Set", boards: ["a:1,2", "b:2,1"] }))
+        root.send(app.ListMessage.Set({ boards: ["a:1,2", "b:2,1"] }))
         yield* TestHost.settle
         assert.deepStrictEqual(app.order.filter((line) => line.includes(" b")), [
           "update b [2:Bea,1:Ann]",
@@ -292,7 +292,7 @@ describe("Keyed query fields", () => {
   it.effect("a kept child's new props over a warm key send its message before the child's one view", () => {
     const app = makeApp()
     const order: Array<string> = []
-    const Message = Schema.TaggedUnion({ UsersChanged: { changed: Schema.Array(Schema.String) } })
+    const Message = UiSchema.TaggedEnum({ UsersChanged: { changed: Schema.Array(Schema.String) } })
     const Row = Component.define({
       name: "Row",
       props: Schema.Struct({ ids: Schema.Array(Schema.String) }),
@@ -302,8 +302,7 @@ describe("Keyed query fields", () => {
         users: {
           queryMany: app.GetUser,
           args: (_model, props) => props.ids.map((id) => ({ id })),
-          onChange: (_loaded, changes) =>
-            Message.make({ _tag: "UsersChanged", changed: changes.map((change) => change.args.id) })
+          onChange: (_loaded, changes) => Message.UsersChanged({ changed: changes.map((change) => change.args.id) })
         }
       }
     }).make({
@@ -319,7 +318,7 @@ describe("Keyed query fields", () => {
         return h.el("p", text)
       }
     })
-    const PageMessage = Schema.TaggedUnion({ Show: { ids: Schema.Array(Schema.String) } })
+    const PageMessage = UiSchema.TaggedEnum({ Show: { ids: Schema.Array(Schema.String) } })
     const Page = Component.define({
       name: "Page",
       model: Schema.Array(Schema.String),
@@ -340,7 +339,7 @@ describe("Keyed query fields", () => {
         const root = yield* TestHost.mount(Page, {})
         yield* load
         order.length = 0
-        root.send(PageMessage.make({ _tag: "Show", ids: ["1", "3"] }))
+        root.send(PageMessage.Show({ ids: ["1", "3"] }))
         yield* TestHost.settle
         assert.deepStrictEqual(order, ["update [3]", "view Ann Cy"])
       })
@@ -358,7 +357,7 @@ describe("Keyed query fields", () => {
         app.order.length = 0
         const before = root.frames().length
         // a leaves as b arrives, so the end of the pass fetches both keys.
-        root.send(app.List.message.make({ _tag: "Set", boards: ["b:1,2"] }))
+        root.send(app.ListMessage.Set({ boards: ["b:1,2"] }))
         yield* TestHost.settle
         assert.deepStrictEqual(app.order, [
           "update b [1:Ann,2:Bea]",
@@ -379,8 +378,8 @@ describe("Keyed query fields", () => {
         const root = yield* TestHost.mount(app.Board, { tag: "a", ids: ["1", "2", "3"] })
         yield* load
         app.order.length = 0
-        root.send(app.BoardMessage.make({ _tag: "Show", ids: ["1", "2"] }))
-        root.send(app.BoardMessage.make({ _tag: "Show", ids: ["1"] }))
+        root.send(app.BoardMessage.Show({ ids: ["1", "2"] }))
+        root.send(app.BoardMessage.Show({ ids: ["1"] }))
         yield* TestHost.settle
         assert.deepStrictEqual(updates(app.order), ["update a []"])
         assert.deepStrictEqual(boardIds(app, root), ["1"])
@@ -396,8 +395,8 @@ describe("Keyed query fields", () => {
         const root = yield* TestHost.mount(app.Board, { tag: "a", ids: ["1", "2", "3"] })
         yield* load
         app.order.length = 0
-        root.send(app.BoardMessage.make({ _tag: "Show", ids: ["1", "2"] }))
-        root.send(app.BoardMessage.make({ _tag: "Rename", id: "1", name: "Al" }))
+        root.send(app.BoardMessage.Show({ ids: ["1", "2"] }))
+        root.send(app.BoardMessage.Rename({ id: "1", name: "Al" }))
         yield* TestHost.settle
         assert.deepStrictEqual(updates(app.order), ["update a Rename", "update a [1:Al]"])
         assert.deepStrictEqual(boardIds(app, root), ["1", "2"])
@@ -414,9 +413,9 @@ describe("Keyed query fields", () => {
         const root = yield* TestHost.mount(app.Board, { tag: "a", ids: ["1", "2", "3"] })
         yield* load
         app.order.length = 0
-        root.send(app.BoardMessage.make({ _tag: "Rename", id: "1", name: "Al" }))
-        root.send(app.BoardMessage.make({ _tag: "Show", ids: ["1", "2"] }))
-        root.send(app.BoardMessage.make({ _tag: "Rename", id: "2", name: "Bo" }))
+        root.send(app.BoardMessage.Rename({ id: "1", name: "Al" }))
+        root.send(app.BoardMessage.Show({ ids: ["1", "2"] }))
+        root.send(app.BoardMessage.Rename({ id: "2", name: "Bo" }))
         yield* TestHost.settle
         assert.deepStrictEqual(updates(app.order), ["update a Rename", "update a Rename", "update a [1:Al,2:Bo]"])
         assert.deepStrictEqual(boardIds(app, root), ["1", "2"])
@@ -433,7 +432,7 @@ describe("Keyed query fields", () => {
         const root = yield* TestHost.mount(app.Board, { tag: "a", ids: ["1", "2", "3"] })
         yield* load
         app.order.length = 0
-        root.send(app.BoardMessage.make({ _tag: "Show", ids: ["1", "2"] }))
+        root.send(app.BoardMessage.Show({ ids: ["1", "2"] }))
         yield* TestHost.settle
         assert.deepStrictEqual(app.order, ["update a []", "update a []", "view a 1=Ann"])
         assert.deepStrictEqual(boardIds(app, root), ["1"])
@@ -452,7 +451,7 @@ describe("Keyed query fields", () => {
         yield* load
         // The message's Model: one more.
         assert.strictEqual(app.queryRuns(), 2)
-        root.send(app.BoardMessage.make({ _tag: "Show", ids: ["2"] }))
+        root.send(app.BoardMessage.Show({ ids: ["2"] }))
         yield* TestHost.settle
         // `Show`'s Model, then the prune message's.
         assert.strictEqual(app.queryRuns(), 4)
@@ -468,7 +467,7 @@ describe("Keyed query fields", () => {
         const root = yield* TestHost.mount(app.Board, { tag: "a", ids: ["1", "2", "3"] })
         yield* load
         app.order.length = 0
-        root.send(app.BoardMessage.make({ _tag: "Show", ids: ["1", "3"] }))
+        root.send(app.BoardMessage.Show({ ids: ["1", "3"] }))
         yield* TestHost.settle
         assert.deepStrictEqual(updates(app.order), ["update a []"])
         assert.deepStrictEqual(boardIds(app, root), ["1", "3"])
@@ -486,16 +485,16 @@ describe("Keyed query fields", () => {
         const root = yield* TestHost.mount(app.Board, { tag: "a", ids: ["1", "2", "3"] })
         yield* load
         app.order.length = 0
-        root.send(app.BoardMessage.make({ _tag: "Show", ids: ["1", "3"] }))
+        root.send(app.BoardMessage.Show({ ids: ["1", "3"] }))
         yield* TestHost.settle
         assert.deepStrictEqual(updates(app.order), ["update a []"])
         // The result no longer holds key 2, so a reorder of the rest prunes nothing.
         assert.deepStrictEqual(boardIds(app, root), ["1", "3"])
         assert.strictEqual(root.text(), "a: 1=Ann 3=Cy")
-        root.send(app.BoardMessage.make({ _tag: "Show", ids: ["3", "1"] }))
+        root.send(app.BoardMessage.Show({ ids: ["3", "1"] }))
         yield* TestHost.settle
         assert.deepStrictEqual(updates(app.order), ["update a []"])
-        root.send(app.BoardMessage.make({ _tag: "Show", ids: ["1"] }))
+        root.send(app.BoardMessage.Show({ ids: ["1"] }))
         yield* TestHost.settle
         assert.deepStrictEqual(updates(app.order), ["update a []", "update a []"])
         assert.deepStrictEqual(boardIds(app, root), ["1"])
@@ -511,7 +510,7 @@ describe("Keyed query fields", () => {
         const root = yield* TestHost.mount(app.Board, { tag: "a", ids: ["1", "2", "3"] })
         yield* load
         app.order.length = 0
-        root.send(app.BoardMessage.make({ _tag: "Show", ids: ["3", "1", "2", "1"] }))
+        root.send(app.BoardMessage.Show({ ids: ["3", "1", "2", "1"] }))
         yield* TestHost.settle
         assert.deepStrictEqual(updates(app.order), [])
         assert.strictEqual(root.text(), "a: 3=Cy 1=Ann 2=Bea")
@@ -527,16 +526,16 @@ describe("Keyed query fields", () => {
       Effect.gen(function*() {
         const root = yield* TestHost.mount(app.Board, { tag: "a", ids: ["1", "2", "3"] })
         yield* load
-        root.send(app.BoardMessage.make({ _tag: "Show", ids: ["1", "2"] }))
+        root.send(app.BoardMessage.Show({ ids: ["1", "2"] }))
         yield* TestHost.settle
         app.order.length = 0
         // 3 is still cached: warm.
-        root.send(app.BoardMessage.make({ _tag: "Show", ids: ["1", "2", "3"] }))
+        root.send(app.BoardMessage.Show({ ids: ["1", "2", "3"] }))
         yield* TestHost.settle
         assert.deepStrictEqual(updates(app.order), ["update a [3:Cy]"])
         app.order.length = 0
         app.db.names.set("4", "Di")
-        root.send(app.BoardMessage.make({ _tag: "Show", ids: ["1", "2", "3", "4"] }))
+        root.send(app.BoardMessage.Show({ ids: ["1", "2", "3", "4"] }))
         yield* TestHost.settle
         assert.deepStrictEqual(updates(app.order), [])
         assert.strictEqual(root.text(), "a: 1=Ann 2=Bea 3=Cy 4=…")
@@ -656,7 +655,7 @@ describe("Keyed query fields", () => {
 
   it.effect("a single field over a key of the batch doesn't split the keyed field's message", () => {
     const app = makeApp()
-    const Message = Schema.TaggedUnion({ UsersChanged: { changed: Schema.Array(Schema.String) } })
+    const Message = UiSchema.TaggedEnum({ UsersChanged: { changed: Schema.Array(Schema.String) } })
     const changed: Array<ReadonlyArray<string>> = []
     const Mixed = Component.define({
       name: "Mixed",
@@ -666,8 +665,7 @@ describe("Keyed query fields", () => {
         users: {
           queryMany: app.GetUser,
           args: () => [{ id: "1" }, { id: "2" }, { id: "3" }],
-          onChange: (_loaded, changes) =>
-            Message.make({ _tag: "UsersChanged", changed: changes.map((change) => change.args.id) })
+          onChange: (_loaded, changes) => Message.UsersChanged({ changed: changes.map((change) => change.args.id) })
         },
         user: { query: app.GetUser, args: () => ({ id: "1" }) }
       }
@@ -937,7 +935,7 @@ describe("Story keyed steps", () => {
       const [ann] = tuples(app.Board, "users", s.results?.users)
       // The failure keeps the key's last Success.
       assert.deepStrictEqual(ann, ["{\"id\":\"1\"}", 1, ["gone"], [{ id: "1", name: "Ann" }, 0]])
-      s.send(app.BoardMessage.make({ _tag: "Show", ids: ["2"] }))
+      s.send(app.BoardMessage.Show({ ids: ["2"] }))
       assert.deepStrictEqual(heldIds(app.Board, s.results?.users), ["2"])
       assert.deepStrictEqual(updates(app.order), [
         "update a [1:Ann,2:failed]",
@@ -962,10 +960,10 @@ describe("Story keyed steps", () => {
           { args: { id: "2" }, value: { id: "2", name: "Bea" } },
           { args: { id: "3" }, value: { id: "3", name: "Cy" } }
         ])
-        .send(app.BoardMessage.make({ _tag: "Show", ids: ["1", "3"] }))
-        .send(app.BoardMessage.make({ _tag: "Show", ids: ["3", "1"] }))
+        .send(app.BoardMessage.Show({ ids: ["1", "3"] }))
+        .send(app.BoardMessage.Show({ ids: ["3", "1"] }))
         .loaded("users", { id: "1" }, { id: "1", name: "Al" })
-        .send(app.BoardMessage.make({ _tag: "Show", ids: ["1"] }))
+        .send(app.BoardMessage.Show({ ids: ["1"] }))
       assert.deepStrictEqual(heldIds(app.Board, s.results?.users), ["1"])
       assert.deepStrictEqual(updates(app.order), [
         "update a [1:Ann,2:Bea,3:Cy]",
@@ -981,7 +979,7 @@ describe("Story keyed steps", () => {
  * sends a message whose `update` checks `$.queries` for the selection, and moves it to the first id.
  */
 const makeSelection = (app: ReturnType<typeof makeApp>) => {
-  const Message = Schema.TaggedUnion({
+  const Message = UiSchema.TaggedEnum({
     Show: { ids: Schema.Array(Schema.String) },
     UsersChanged: {}
   })
@@ -993,7 +991,7 @@ const makeSelection = (app: ReturnType<typeof makeApp>) => {
       users: {
         queryMany: app.GetUser,
         args: (model) => model.ids.map((id) => ({ id })),
-        onChange: () => Message.make({ _tag: "UsersChanged" })
+        onChange: () => Message.UsersChanged()
       }
     }
   }).make({
@@ -1009,7 +1007,7 @@ const makeSelection = (app: ReturnType<typeof makeApp>) => {
       if (Option.isNone(row)) throw new Error(`no row for the selection ${model.selected}`)
       const result = row.value.result
       // A click shows the first id only, so a scene can make the change.
-      return h.el("p").on("click", Message.make({ _tag: "Show", ids: ["1"] })).children(
+      return h.el("p").on("click", Message.Show({ ids: ["1"] })).children(
         AsyncResult.isSuccess(result) ? result.value.name : "…"
       )
     }
@@ -1027,7 +1025,7 @@ describe("Keyed selection repaired by the prune handler", () => {
         const root = yield* TestHost.mount(Selection, {})
         yield* load
         assert.strictEqual(root.text(), "Bea")
-        root.send(Message.make({ _tag: "Show", ids: ["1"] }))
+        root.send(Message.Show({ ids: ["1"] }))
         yield* TestHost.settle
         assert.strictEqual(root.text(), "Ann")
         assert.isUndefined(root.log().find((entry) => entry._tag === "Failed"))
@@ -1051,7 +1049,7 @@ describe("Keyed selection repaired by the prune handler", () => {
         .expect(Locator.tag("p")).toHaveText("Ann")
       const s = yield* Story.make(Selection, {})
       s.pipe(loadBoth)
-        .send(Message.make({ _tag: "Show", ids: ["1"] }))
+        .send(Message.Show({ ids: ["1"] }))
       assert.deepStrictEqual(heldIds(Selection, s.results?.users), ["1"])
     }))
 })
@@ -1067,7 +1065,7 @@ describe("Story keyed rounds", () => {
           { args: { id: "2" }, value: { id: "2", name: "Bea" } },
           { args: { id: "3" }, value: { id: "3", name: "Cy" } }
         ])
-        .send(app.BoardMessage.make({ _tag: "Show", ids: ["1", "2"] }))
+        .send(app.BoardMessage.Show({ ids: ["1", "2"] }))
       assert.deepStrictEqual(heldIds(app.Board, s.results?.users), ["1"])
       assert.deepStrictEqual(updates(app.order), ["update a [1:Ann,2:Bea,3:Cy]", "update a []", "update a []"])
     }))
@@ -1081,7 +1079,7 @@ describe("Story keyed rounds", () => {
       () =>
         s
           .loadedMany("users", ids.map((id) => ({ args: { id }, value: { id, name: id } })))
-          .send(app.BoardMessage.make({ _tag: "Show", ids: ids.slice(0, -1) })),
+          .send(app.BoardMessage.Show({ ids: ids.slice(0, -1) })),
       /Board's query "users" was still pruned after 100 rounds .* without limit/
     )
     assert.strictEqual(updates(app.order).length, 101)
@@ -1092,7 +1090,7 @@ describe("Keyed history restore", () => {
   it.effect("a membership change and a push in one update save the pruned collection in the entry left", () => {
     const app = makeApp()
     const PageRoute = Route.union({ Home: Route.make("/"), Next: Route.make("/next") })
-    const Message = Schema.TaggedUnion({
+    const Message = UiSchema.TaggedEnum({
       ShowAndGo: { ids: Schema.Array(Schema.String) },
       Navigated: {}
     })
@@ -1108,7 +1106,7 @@ describe("Keyed history restore", () => {
           ShowAndGo: ({ ids }) =>
             $.set({ ...model, ids }).run(
               Router.push(PageRoute, PageRoute.make({ _tag: "Next" })).pipe(
-                Command.map(() => Message.make({ _tag: "Navigated" }))
+                Command.map(() => Message.Navigated())
               )
             ),
           Navigated: () => model
@@ -1127,7 +1125,7 @@ describe("Keyed history restore", () => {
     return Effect.gen(function*() {
       const root = yield* TestHost.mount(Page, {})
       yield* load
-      root.send(Message.make({ _tag: "ShowAndGo", ids: ["1"] }))
+      root.send(Message.ShowAndGo({ ids: ["1"] }))
       yield* TestHost.settle
       assert.deepStrictEqual(base.entries(), ["/", "/next"])
       const home = written.filter((entry) => entry.url === "/")
@@ -1155,7 +1153,7 @@ describe("Keyed history restore", () => {
   it.effect("drops each tuple taken under a patch and seeds the rest, stale", () => {
     const app = makeApp()
     const ShellRoute = Route.union({ Home: Route.make("/"), Board: Route.make("/board") })
-    const ShellMessage = Schema.TaggedUnion({
+    const ShellMessage = UiSchema.TaggedEnum({
       ChangedRoute: { route: ShellRoute },
       Go: { route: ShellRoute },
       Navigated: {}
@@ -1172,19 +1170,19 @@ describe("Keyed history restore", () => {
           ChangedRoute: ({ route }) => route,
           Go: ({ route }) =>
             $.set(model).run(
-              Router.push(ShellRoute, route).pipe(Command.map(() => ShellMessage.make({ _tag: "Navigated" })))
+              Router.push(ShellRoute, route).pipe(Command.map(() => ShellMessage.Navigated()))
             ),
           Navigated: () => model
         }),
       subscriptions: (model) => [
-        Router.subscription(ShellRoute, model, (route) => ShellMessage.make({ _tag: "ChangedRoute", route }))
+        Router.subscription(ShellRoute, model, (route) => ShellMessage.ChangedRoute({ route }))
       ],
       view: (model, h) =>
         h.el(
           "div",
           h.el("button").on(
             "click",
-            ShellMessage.make({ _tag: "Go", route: ShellRoute.make({ _tag: "Home" }) })
+            ShellMessage.Go({ route: ShellRoute.make({ _tag: "Home" }) })
           ).children("Home"),
           model._tag === "Board"
             ? app.Board(h, { key: "board", props: { tag: "a", ids: ["1", "2"] } })

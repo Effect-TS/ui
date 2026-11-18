@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, Mount } from "@effect/ui"
+import { Component, Mount, UiSchema } from "@effect/ui"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
@@ -70,7 +70,7 @@ describe("HtmlScene", () => {
 
   it.effect("a scene names a mount by its definition, checks its args and ends it with the definition's result", () =>
     Effect.gen(function*() {
-      const Message = Schema.TaggedUnion({ Add: { point: Schema.Number }, Drawn: { width: Schema.Number } })
+      const Message = UiSchema.TaggedEnum({ Add: { point: Schema.Number }, Drawn: { width: Schema.Number } })
       const DrawChart = Mount.make(
         "DrawChart",
         { args: { points: Schema.Array(Schema.Number) } },
@@ -91,9 +91,9 @@ describe("HtmlScene", () => {
         view: (model, h) =>
           h.div(
             h.canvas.onMount(
-              DrawChart({ points: model.points }).pipe(Mount.map((width) => Message.make({ _tag: "Drawn", width })))
+              DrawChart({ points: model.points }).pipe(Mount.map((width) => Message.Drawn({ width })))
             ),
-            h.button.onClick(Message.make({ _tag: "Add", point: 3 })).children("Add"),
+            h.button.onClick(Message.Add({ point: 3 })).children("Add"),
             h.p(`width ${model.width}`)
           )
       })

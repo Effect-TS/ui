@@ -3,7 +3,7 @@
  * page that reads its bio through a query, a search route and a slow page
  * whose provided Layer takes a second to build.
  */
-import { Component, Head, Query, Route, Router } from "@effect/ui"
+import { Component, Head, Query, Route, Router, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Context, Effect, Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
@@ -81,7 +81,7 @@ export const Slow = Component.define({
   view: (_, h) => h.h1("Slow")
 }).pipe(Component.provide(Layer.effect(SlowData, Effect.as(Effect.sleep("1 second"), "ready"))))
 
-export const Message = Schema.TaggedUnion({ ChangedRoute: { route: AppRoute }, Block: {}, Filter: {} })
+export const Message = UiSchema.TaggedEnum({ ChangedRoute: { route: AppRoute }, Block: {}, Filter: {} })
 
 export const App = Component.define({
   name: "App",
@@ -98,7 +98,7 @@ export const App = Component.define({
       Filter: () => model
     }),
   subscriptions: (model) => [
-    Router.subscription(AppRoute, model.route, (route) => Message.make({ _tag: "ChangedRoute", route })),
+    Router.subscription(AppRoute, model.route, (route) => Message.ChangedRoute({ route })),
     model.blocked && Router.blocked("editing")
   ],
   head: () => [Head.titleTemplate((title) => `${title} · App`), Head.lang("en"), Head.htmlClass("routed")],
@@ -112,7 +112,7 @@ export const App = Component.define({
         ),
         h.a.attr("href", "https://example.com/").children("Elsewhere"),
         h.a.attr("href", AppRoute.print(AppRoute.make({ _tag: "Slow" }))).children("Slow"),
-        h.button.onClick(Message.make({ _tag: "Block" })).children("Block"),
+        h.button.onClick(Message.Block()).children("Block"),
         h.form
           .attr("method", "get")
           .attr("action", "/search")
@@ -124,7 +124,7 @@ export const App = Component.define({
           .attr("method", "get")
           .attr("action", "/search")
           .attr("aria-label", "Filter")
-          .onSubmit(Message.make({ _tag: "Filter" })).children(
+          .onSubmit(Message.Filter()).children(
             h.input.attr("name", "q").attr("value", "x"),
             h.button.attr("type", "submit").children("Filter")
           )

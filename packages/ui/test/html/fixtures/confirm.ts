@@ -1,10 +1,10 @@
-import { Component } from "@effect/ui"
+import { Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 
 const State = Schema.Literals(["closed", "open", "modal"])
 
-export const ConfirmMessage = Schema.TaggedUnion({
+export const ConfirmMessage = UiSchema.TaggedEnum({
   Ask: {},
   Escaped: {},
   Chosen: { choice: Schema.String },
@@ -41,16 +41,16 @@ export const Confirm = Component.define({
     }),
   view: (model, h) => {
     const dialog = h.dialog.attr("aria-label", "Delete note?")
-      .onCancel(ConfirmMessage.make({ _tag: "Escaped" }))
-      .onClose(ConfirmMessage.make({ _tag: "Closed" }))
+      .onCancel(ConfirmMessage.Escaped())
+      .onClose(ConfirmMessage.Closed())
     return h.div(
-      h.button.onClick(ConfirmMessage.make({ _tag: "Ask" })).children("Ask"),
-      h.button.onClick(ConfirmMessage.make({ _tag: "Remove" })).children("Remove"),
+      h.button.onClick(ConfirmMessage.Ask()).children("Ask"),
+      h.button.onClick(ConfirmMessage.Remove()).children("Remove"),
       model.shown &&
         (model.state === "modal" ? dialog.modal(true) : dialog.open(model.state === "open")).children(
           h.h2("Delete note?"),
           h.form.attr("method", "dialog").onSubmit(({ entries }) =>
-            ConfirmMessage.make({ _tag: "Chosen", choice: entries.find(([name]) => name === "choice")?.[1] ?? "" })
+            ConfirmMessage.Chosen({ choice: entries.find(([name]) => name === "choice")?.[1] ?? "" })
           ).children(
             h.button.attr("name", "choice").attr("value", "keep").children("Keep"),
             h.button.attr("name", "choice").attr("value", "delete").children("Delete")

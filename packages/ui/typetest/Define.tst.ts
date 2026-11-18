@@ -1,5 +1,5 @@
 import type { View } from "@effect/ui"
-import { Command, Component, Query } from "@effect/ui"
+import { Command, Component, Query, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Effect, Schema } from "effect"
 import type { AsyncResult } from "effect/reactivity"
@@ -13,24 +13,24 @@ class GetUser extends Query.Service<GetUser>()(
   Effect.succeed(({ id }) => Effect.succeed({ id, name: "Ann" }))
 ) {}
 
-const Message = Schema.TaggedUnion({
+const Message = UiSchema.TaggedEnum({
   Edited: { body: Schema.String },
   SaveClicked: {},
   Saved: {}
 })
 type Message = typeof Message.Type
 
-const Events = Schema.TaggedUnion({ Changed: {} })
+const Events = UiSchema.TaggedEnum({ Changed: {} })
 
 class Save extends Command.Service<Save>()(
   "typetest/define/Save",
   { args: {}, invalidates: () => [] },
-  Effect.succeed(() => Effect.succeed(Message.make({ _tag: "Saved" })))
+  Effect.succeed(() => Effect.succeed(Message.Saved()))
 ) {}
 class Audit extends Command.Service<Audit>()(
   "typetest/define/Audit",
   { args: {}, invalidates: () => [] },
-  Effect.succeed(() => Effect.succeed(Message.make({ _tag: "Saved" })))
+  Effect.succeed(() => Effect.succeed(Message.Saved()))
 ) {}
 
 const Model = Schema.Struct({ body: Schema.String, edits: Schema.Number })

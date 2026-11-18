@@ -3,7 +3,7 @@
  * with an edit, over an in-memory users API whose calls take time on the
  * clock.
  */
-import { Command, Component, Query, Route, Router } from "@effect/ui"
+import { Command, Component, Query, Route, Router, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Context, Effect, Layer, Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
@@ -135,7 +135,7 @@ const detailUrl = (id: string) => AppRoute.print(AppRoute.make({ _tag: "Detail",
 
 // UserCard: one user, with a like button
 
-export const UserCardMessage = Schema.TaggedUnion({
+export const UserCardMessage = UiSchema.TaggedEnum({
   Like: {},
   Liked: {}
 })
@@ -156,8 +156,8 @@ export const UserCard = Component.define({
       Like: () =>
         $.run(
           LikeUser.make({ id: $.props.id }).pipe(Command.match({
-            onSuccess: () => UserCardMessage.make({ _tag: "Liked" }),
-            onFailure: () => UserCardMessage.make({ _tag: "Liked" })
+            onSuccess: () => UserCardMessage.Liked(),
+            onFailure: () => UserCardMessage.Liked()
           }))
         ),
       Liked: () => model
@@ -170,7 +170,7 @@ export const UserCard = Component.define({
         h.article(
           h.h2(user.name),
           h.p(user.email),
-          h.button.attr("aria-label", "Like").onClick(UserCardMessage.make({ _tag: "Like" })).children(
+          h.button.attr("aria-label", "Like").onClick(UserCardMessage.Like()).children(
             `♥ ${user.likes}`
           ),
           // waiting is only "a fetch is in flight". An optimistic patch alone doesn't set it.
@@ -181,7 +181,7 @@ export const UserCard = Component.define({
 
 // RenameForm: edits a user's name through a derived draft
 
-export const RenameFormMessage = Schema.TaggedUnion({
+export const RenameFormMessage = UiSchema.TaggedEnum({
   Edit: { name: Schema.String },
   Cancel: {},
   Save: {},
@@ -215,8 +215,8 @@ export const RenameForm = Component.define({
             // message below arrives, and a flag set here would come back stuck from history.state.
             $.set({ ...model, draft: Option.none(), error: Option.none() }).run(
               RenameUser.make({ id: $.props.id, name }).pipe(Command.match({
-                onSuccess: () => RenameFormMessage.make({ _tag: "Saved" }),
-                onFailure: (error) => RenameFormMessage.make({ _tag: "SaveFailed", name, reason: error.reason })
+                onSuccess: () => RenameFormMessage.Saved(),
+                onFailure: (error) => RenameFormMessage.SaveFailed({ name, reason: error.reason })
               }))
             )
         }),
@@ -232,12 +232,12 @@ export const RenameForm = Component.define({
       onInitial: () => h.p("Loading…"),
       onFailure: () => h.p("There is nothing to rename."),
       onSuccess: ({ value: user }) =>
-        h.form.onSubmit(RenameFormMessage.make({ _tag: "Save" })).children(
+        h.form.onSubmit(RenameFormMessage.Save()).children(
           h.input.attr("aria-label", "Name").value(Option.getOrElse(model.draft, () => user.name))
-            .onInput(({ value }) => RenameFormMessage.make({ _tag: "Edit", name: value })),
+            .onInput(({ value }) => RenameFormMessage.Edit({ name: value })),
           h.button.attr("type", "submit").disabled(Option.isNone(model.draft)).children("Save"),
           h.button.attr("type", "button").disabled(Option.isNone(model.draft))
-            .onClick(RenameFormMessage.make({ _tag: "Cancel" })).children("Cancel"),
+            .onClick(RenameFormMessage.Cancel()).children("Cancel"),
           // This instance has a save of this user queued or running.
           h.isRunning(RenameUser, { id: h.props.id }) && h.small("Saving…"),
           Option.match(model.error, {
@@ -250,7 +250,7 @@ export const RenameForm = Component.define({
 
 // DetailPage
 
-export const DetailPageMessage = Schema.TaggedUnion({ ToggleRename: {} })
+export const DetailPageMessage = UiSchema.TaggedEnum({ ToggleRename: {} })
 
 export const DetailPage = Component.define({
   name: "DetailPage",
@@ -264,14 +264,14 @@ export const DetailPage = Component.define({
   view: (model, h) =>
     h.section(
       UserCard(h, { key: "card", props: { id: h.props.id } }),
-      h.button.onClick(DetailPageMessage.make({ _tag: "ToggleRename" })).children(model.renaming ? "Close" : "Rename"),
+      h.button.onClick(DetailPageMessage.ToggleRename()).children(model.renaming ? "Close" : "Rename"),
       model.renaming && RenameForm(h, { key: "rename", props: { id: h.props.id } })
     )
 })
 
 // ListPage: a paged list that keeps the previous page on screen while the next one loads
 
-export const ListPageMessage = Schema.TaggedUnion({
+export const ListPageMessage = UiSchema.TaggedEnum({
   GoTo: { page: Schema.Number }
 })
 
@@ -303,10 +303,10 @@ export const ListPage = Component.define({
           ),
           h.nav(
             h.button.disabled(model.page === 0)
-              .onClick(ListPageMessage.make({ _tag: "GoTo", page: model.page - 1 })).children("Previous"),
+              .onClick(ListPageMessage.GoTo({ page: model.page - 1 })).children("Previous"),
             h.span(`Page ${page + 1} of ${pages}`),
             h.button.disabled(model.page >= pages - 1)
-              .onClick(ListPageMessage.make({ _tag: "GoTo", page: model.page + 1 })).children("Next"),
+              .onClick(ListPageMessage.GoTo({ page: model.page + 1 })).children("Next"),
             model.page !== page && h.small(`Loading page ${model.page + 1}…`)
           )
         )
@@ -316,7 +316,7 @@ export const ListPage = Component.define({
 
 // App: the layout, which holds the route
 
-export const AppMessage = Schema.TaggedUnion({ RouteChanged: { route: AppRoute } })
+export const AppMessage = UiSchema.TaggedEnum({ RouteChanged: { route: AppRoute } })
 
 export const App = Component.define({
   name: "App",
@@ -329,7 +329,7 @@ export const App = Component.define({
   update: (_route, message) => message.route,
   subscriptions: (
     model
-  ) => [Router.subscription(AppRoute, model, (route) => AppMessage.make({ _tag: "RouteChanged", route }))],
+  ) => [Router.subscription(AppRoute, model, (route) => AppMessage.RouteChanged({ route }))],
   view: (route, h) =>
     h.div(
       h.header(h.a.attr("href", AppRoute.print(AppRoute.make({ _tag: "List" }))).children("Users")),

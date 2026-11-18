@@ -3,13 +3,13 @@
  * Command, an event, a send to a child, a query, and a handler that can
  * produce no message.
  */
-import { Command, Component } from "@effect/ui"
+import { Command, Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Effect, Schema, Stream } from "effect"
 import * as users from "./users.ts"
 
-export const BadgeMessage = Schema.TaggedUnion({ Clear: {} })
-export const BadgeEvents = Schema.TaggedUnion({ Opened: { count: Schema.Number } })
+export const BadgeMessage = UiSchema.TaggedEnum({ Clear: {} })
+export const BadgeEvents = UiSchema.TaggedEnum({ Opened: { count: Schema.Number } })
 
 export const Badge = Component.define({
   name: "Badge",
@@ -26,7 +26,7 @@ export const Badge = Component.define({
 
 export const BadgeRef = Badge.ref("Badge")
 
-export const NoteMessage = Schema.TaggedUnion({
+export const NoteMessage = UiSchema.TaggedEnum({
   Edit: { text: Schema.String },
   Save: {},
   Saved: {},
@@ -42,27 +42,27 @@ export const NoteMessage = Schema.TaggedUnion({
 })
 export type NoteMessage = typeof NoteMessage.Type
 
-export const NoteEvents = Schema.TaggedUnion({ Saved: { text: Schema.String } })
+export const NoteEvents = UiSchema.TaggedEnum({ Saved: { text: Schema.String } })
 
 export const SaveNote = Command.make(
   "notes/SaveNote",
   { args: { text: Schema.String } },
-  () => Effect.succeed(NoteMessage.make({ _tag: "Saved" }))
+  () => Effect.succeed(NoteMessage.Saved())
 )
 export const FindNotes = Command.make(
   "notes/FindNotes",
   { args: { text: Schema.String }, mode: "switch" },
-  ({ text }) => Effect.succeed(NoteMessage.make({ _tag: "Found", items: [text] }))
+  ({ text }) => Effect.succeed(NoteMessage.Found({ items: [text] }))
 )
 export const SyncNote = Command.make(
   "notes/SyncNote",
   { args: {}, mode: "queue" },
-  () => Effect.succeed(NoteMessage.make({ _tag: "Synced" }))
+  () => Effect.succeed(NoteMessage.Synced())
 )
 export const FollowNotes = Command.make(
   "notes/FollowNotes",
   { args: {}, stream: true },
-  () => Stream.make(NoteMessage.make({ _tag: "Line", line: "a" }))
+  () => Stream.make(NoteMessage.Line({ line: "a" }))
 )
 
 export const Note = Component.define({
@@ -93,7 +93,7 @@ export const Note = Component.define({
     NoteMessage.match(message, {
       Edit: ({ text }) => ({ ...model, text, saved: false }),
       Save: () => $.run(SaveNote({ text: model.text })),
-      Saved: () => $.set({ ...model, saved: true }).emit(NoteEvents.make({ _tag: "Saved", text: model.text })),
+      Saved: () => $.set({ ...model, saved: true }).emit(NoteEvents.Saved({ text: model.text })),
       Find: ({ text }) => $.run(FindNotes({ text })),
       Found: ({ items }) => ({ ...model, items }),
       Follow: () => $.run(FollowNotes({})),
@@ -107,11 +107,11 @@ export const Note = Component.define({
   view: (model, h) =>
     h.div(
       h.input.attr("aria-label", "Text").value(model.text).onInput(({ value }) =>
-        value === model.text ? undefined : NoteMessage.make({ _tag: "Edit", text: value })
+        value === model.text ? undefined : NoteMessage.Edit({ text: value })
       ),
-      h.button.onClick(() => NoteMessage.make({ _tag: "Save" })).children(h.isRunning(SaveNote) ? "saving" : "save"),
-      h.button.onClick(() => model.saved ? undefined : NoteMessage.make({ _tag: "Save" })).children("save again"),
+      h.button.onClick(() => NoteMessage.Save()).children(h.isRunning(SaveNote) ? "saving" : "save"),
+      h.button.onClick(() => model.saved ? undefined : NoteMessage.Save()).children("save again"),
       h.p.attr("role", "status").children(model.saved ? `saved ${model.text}` : model.text),
-      Badge(h, { ref: BadgeRef, onEmit: (event) => NoteMessage.make({ _tag: "Opened", count: event.count }) })
+      Badge(h, { ref: BadgeRef, onEmit: (event) => NoteMessage.Opened({ count: event.count }) })
     )
 })

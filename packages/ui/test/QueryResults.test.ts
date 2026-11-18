@@ -1,4 +1,4 @@
-import { Command, Component, MessageLog, Query } from "@effect/ui"
+import { Command, Component, MessageLog, Query, UiSchema } from "@effect/ui"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Layer, Option, Redacted, Schema } from "effect"
@@ -58,7 +58,7 @@ const makeApp = (options?: {
 
   // An empty id disables the query.
   const userArgs = (_model: unknown, props: { readonly id: string }) => props.id === "" ? undefined : { id: props.id }
-  const CardMessage = Schema.TaggedUnion({
+  const CardMessage = UiSchema.TaggedEnum({
     UserChanged: { state: Schema.String },
     Rename: { name: Schema.String },
     Renamed: {}
@@ -74,7 +74,7 @@ const makeApp = (options?: {
         debounce: options?.debounce,
         args: userArgs,
         // The result is written by the runtime: the message only lets update see the change.
-        onChange: (result) => CardMessage.make({ _tag: "UserChanged", state: result._tag })
+        onChange: (result) => CardMessage.UserChanged({ state: result._tag })
       }
     }
   }).make({
@@ -89,8 +89,8 @@ const makeApp = (options?: {
           order.push(`update ${$.props.tag} Rename`)
           return $.set({ ...model, saving: true }).run(
             RenameUser.make({ id: $.props.id, name }).pipe(Command.match({
-              onSuccess: () => CardMessage.make({ _tag: "Renamed" }),
-              onFailure: () => CardMessage.make({ _tag: "Renamed" })
+              onSuccess: () => CardMessage.Renamed(),
+              onFailure: () => CardMessage.Renamed()
             }))
           )
         },
@@ -109,12 +109,12 @@ const makeApp = (options?: {
         onFailure: () => "failed"
       })
       order.push(`view ${h.props.tag} ${text}${model.saving ? " saving" : ""}`)
-      return h.el("p").on("click", CardMessage.make({ _tag: "Rename", name: "Bob" })).children(`${h.props.tag}=${text}`)
+      return h.el("p").on("click", CardMessage.Rename({ name: "Bob" })).children(`${h.props.tag}=${text}`)
     }
   })
 
   /** A parent whose Model says which cards are mounted: "tag:id" each. */
-  const ListMessage = Schema.TaggedUnion({ Set: { cards: Schema.Array(Schema.String) } })
+  const ListMessage = UiSchema.TaggedEnum({ Set: { cards: Schema.Array(Schema.String) } })
   const List = Component.define({
     name: "List",
     props: Schema.Struct({ cards: Schema.Array(Schema.String) }),
@@ -134,7 +134,7 @@ const makeApp = (options?: {
   })
 
   /** Calls `get` and `prefetch` from Commands, as an app would outside a query field. */
-  const ToolsMessage = Schema.TaggedUnion({
+  const ToolsMessage = UiSchema.TaggedEnum({
     Get: { id: Schema.String },
     Prefetch: { id: Schema.String },
     Got: { name: Schema.String }
@@ -156,7 +156,7 @@ const makeApp = (options?: {
       (context) => ({ id }: { readonly id: string }) => GetUser.prefetch({ id }).pipe(Effect.provide(context))
     )
   ) {}
-  const got = (name: string) => ToolsMessage.make({ _tag: "Got", name })
+  const got = (name: string) => ToolsMessage.Got({ name })
   const Tools = Component.define({
     name: "Tools",
     model: Schema.String,
@@ -225,7 +225,7 @@ describe("Query results", () => {
 
   it.effect("debounce: a burst of args changes shows the previous value, then fetches the last args once", () => {
     const app = makeApp({ debounce: "300 millis" })
-    const set = (...cards: Array<string>) => app.ListMessage.make({ _tag: "Set", cards })
+    const set = (...cards: Array<string>) => app.ListMessage.Set({ cards })
     return run(
       app.layer,
       Effect.gen(function*() {
@@ -252,7 +252,7 @@ describe("Query results", () => {
 
   it.effect("debounce: new args interrupt the old args' fetch, unless another watcher still needs it", () => {
     const app = makeApp({ debounce: "300 millis" })
-    const set = (...cards: Array<string>) => app.ListMessage.make({ _tag: "Set", cards })
+    const set = (...cards: Array<string>) => app.ListMessage.Set({ cards })
     return run(
       app.layer,
       Effect.gen(function*() {
@@ -282,7 +282,7 @@ describe("Query results", () => {
 
   it.effect("debounce: args whose entry is fresh, and a disabled query, don't wait", () => {
     const app = makeApp({ debounce: "300 millis" })
-    const set = (...cards: Array<string>) => app.ListMessage.make({ _tag: "Set", cards })
+    const set = (...cards: Array<string>) => app.ListMessage.Set({ cards })
     return run(
       app.layer,
       Effect.gen(function*() {
@@ -339,14 +339,14 @@ describe("Query results", () => {
         yield* TestClock.adjust("31 seconds")
         assert.isTrue(root.entry(app.GetUser, { id: "1" })?.stale)
         // A child joining a watched stale entry starts nothing.
-        root.send(app.ListMessage.make({ _tag: "Set", cards: ["a:1", "c:1"] }))
+        root.send(app.ListMessage.Set({ cards: ["a:1", "c:1"] }))
         yield* load
         assert.strictEqual(root.text(), "a=Annc=Ann")
         assert.strictEqual(app.db.calls, 1)
-        root.send(app.ListMessage.make({ _tag: "Set", cards: ["a:1"] }))
+        root.send(app.ListMessage.Set({ cards: ["a:1"] }))
         yield* TestHost.settle
         // a -> b: the new instance is created before the old one is destroyed, and the count still passes through zero.
-        root.send(app.ListMessage.make({ _tag: "Set", cards: ["b:1"] }))
+        root.send(app.ListMessage.Set({ cards: ["b:1"] }))
         yield* TestHost.settle
         assert.strictEqual(root.entry(app.GetUser, { id: "1" })?.watchers, 1)
         assert.deepStrictEqual(triggers(root), ["watch", "watch"])
@@ -402,7 +402,7 @@ describe("Query results", () => {
         yield* load
         yield* TestClock.adjust("31 seconds")
         // b is created first in document order, and a, kept, moves from 1 to 2 after it.
-        root.send(app.ListMessage.make({ _tag: "Set", cards: ["b:1", "a:2"] }))
+        root.send(app.ListMessage.Set({ cards: ["b:1", "a:2"] }))
         yield* TestHost.settle
         assert.deepStrictEqual(root.fetches().map((fetch) => [fetch.logKey, fetch.trigger]), [
           ["{\"id\":\"1\"}", "watch"],
@@ -471,7 +471,7 @@ describe("Query results", () => {
         yield* load
         yield* TestClock.adjust("31 seconds")
         // a, kept and first, re-keys to 1 before b, which watched 1, is removed.
-        root.send(app.ListMessage.make({ _tag: "Set", cards: ["a:1"] }))
+        root.send(app.ListMessage.Set({ cards: ["a:1"] }))
         yield* TestHost.settle
         assert.deepStrictEqual(root.fetches().map((fetch) => fetch.logKey).slice(2), ["{\"id\":\"1\"}"])
         assert.strictEqual(root.entry(app.GetUser, { id: "1" })?.watchers, 1)
@@ -484,7 +484,7 @@ describe("Query results", () => {
 
   /** Watches user `id`, and records each message's result as "tag Tag:waiting". */
   const makeWatcher = (app: ReturnType<typeof makeApp>, messages: Array<string>) => {
-    const WatchMessage = Schema.TaggedUnion({ Changed: { state: Schema.String } })
+    const WatchMessage = UiSchema.TaggedEnum({ Changed: { state: Schema.String } })
     return Component.define({
       name: "Watcher",
       props: Schema.Struct({ id: Schema.String, tag: Schema.String }),
@@ -494,7 +494,7 @@ describe("Query results", () => {
         user: {
           query: app.GetUser,
           args: (_model, props) => ({ id: props.id }),
-          onChange: (result) => WatchMessage.make({ _tag: "Changed", state: `${result._tag}:${result.waiting}` })
+          onChange: (result) => WatchMessage.Changed({ state: `${result._tag}:${result.waiting}` })
         }
       }
     }).make({
@@ -585,7 +585,7 @@ describe("Query results", () => {
         { args: { id: Schema.String }, success: Schema.String, error: Schema.String, staleTime: "1 second" },
         Effect.succeed(({ id }) => Effect.callback<string, string>((resume) => void finish.set(id, resume)))
       ) {}
-      const Message = Schema.TaggedUnion({ Changed: { state: Schema.String } })
+      const Message = UiSchema.TaggedEnum({ Changed: { state: Schema.String } })
       const Watcher = Component.define({
         name: "Watcher",
         props: Schema.Struct({ tag: Schema.String }),
@@ -595,7 +595,7 @@ describe("Query results", () => {
           data: {
             query: Read,
             args: () => ({ id: "fail" }),
-            onChange: (result) => Message.make({ _tag: "Changed", state: `${result._tag}:${result.waiting}` })
+            onChange: (result) => Message.Changed({ state: `${result._tag}:${result.waiting}` })
           }
         }
       }).make({
@@ -616,7 +616,7 @@ describe("Query results", () => {
         update: (model) => model,
         view: (_model, h) => h.el("div", h.props.show ? [Watcher(h, { key: "old", props: { tag: "o" } })] : [])
       })
-      const PageMessage = Schema.TaggedUnion({
+      const PageMessage = UiSchema.TaggedEnum({
         Enable: {},
         Swap: {}
       })
@@ -647,11 +647,11 @@ describe("Query results", () => {
           const root = yield* TestHost.mount(Page, {})
           yield* TestHost.settle
           // An unrelated query opens a pass, and the old watcher's fetch fails while it is open.
-          root.send(PageMessage.make({ _tag: "Enable" }))
+          root.send(PageMessage.Enable())
           finish.get("fail")!(Effect.fail("missing"))
           if (timing === "an earlier pass") yield* TestHost.settle
           messages.length = 0
-          root.send(PageMessage.make({ _tag: "Swap" }))
+          root.send(PageMessage.Swap())
           yield* TestHost.settle
           return {
             messages,
@@ -723,7 +723,7 @@ describe("Query results", () => {
 
   it.effect("a kept child's warm re-key emits through the onEmit of the view that re-keyed it", () => {
     const app = makeApp()
-    const EmitterMessage = Schema.TaggedUnion({ UserChanged: {} })
+    const EmitterMessage = UiSchema.TaggedEnum({ UserChanged: {} })
     const Emitter = Component.define({
       name: "Emitter",
       props: Schema.Struct({ id: Schema.String }),
@@ -734,7 +734,7 @@ describe("Query results", () => {
         user: {
           query: app.GetUser,
           args: (_model, props) => ({ id: props.id }),
-          onChange: () => EmitterMessage.make({ _tag: "UserChanged" })
+          onChange: () => EmitterMessage.UserChanged()
         }
       }
     }).make({
@@ -742,7 +742,7 @@ describe("Query results", () => {
       update: (model, _message, $) => $.set(model).emit($.props.id),
       view: (_model, h) => h.el("p", "emitter")
     })
-    const ParentMessage = Schema.TaggedUnion({ Switch: {}, Noted: { label: Schema.String } })
+    const ParentMessage = UiSchema.TaggedEnum({ Switch: {}, Noted: { label: Schema.String } })
     const Parent = Component.define({
       name: "Parent",
       model: Schema.Struct({ switched: Schema.Boolean, labels: Schema.Array(Schema.String) }),
@@ -760,7 +760,7 @@ describe("Query results", () => {
           Emitter(h, {
             key: "emitter",
             props: { id: model.switched ? "2" : "1" },
-            onEmit: (id) => ParentMessage.make({ _tag: "Noted", label: (model.switched ? "new " : "old ") + id })
+            onEmit: (id) => ParentMessage.Noted({ label: (model.switched ? "new " : "old ") + id })
           })
         )
     })
@@ -769,7 +769,7 @@ describe("Query results", () => {
       Effect.gen(function*() {
         const root = yield* TestHost.mount(Parent, {})
         yield* load
-        root.send(ParentMessage.make({ _tag: "Switch" }))
+        root.send(ParentMessage.Switch())
         yield* TestHost.settle
         assert.deepStrictEqual(root.model()?.labels, ["old 1", "new 2"])
       })
@@ -788,7 +788,7 @@ describe("Query results", () => {
       { args: {} },
       () => Effect.never.pipe(Effect.ensuring(Effect.uninterruptible(cleanup)))
     )
-    const BadMessage = Schema.TaggedUnion({ Crash: {} })
+    const BadMessage = UiSchema.TaggedEnum({ Crash: {} })
     const Bad = Component.define({
       name: "Bad",
       model: Schema.Struct({}),
@@ -799,7 +799,7 @@ describe("Query results", () => {
       update: (): {} => {
         throw new Error("crash")
       },
-      view: (_model, h) => h.el("p").on("click", BadMessage.make({ _tag: "Crash" })).children("bad")
+      view: (_model, h) => h.el("p").on("click", BadMessage.Crash()).children("bad")
     })
     const Host = Component.define({
       name: "Host",
@@ -841,14 +841,14 @@ describe("Query results", () => {
 
   it.effect("settle waits for a resolved Promise while an interval sleeps on the clock", () => {
     const app = makeApp({ interval: true })
-    const PollMessage = Schema.TaggedUnion({
+    const PollMessage = UiSchema.TaggedEnum({
       Go: {},
       Done: {}
     })
     const Go = Command.make(
       "Go",
       { args: {} },
-      () => Effect.promise(() => Promise.resolve(PollMessage.make({ _tag: "Done" })))
+      () => Effect.promise(() => Promise.resolve(PollMessage.Done()))
     )
     const Poll = Component.define({
       name: "Poll",
@@ -869,7 +869,7 @@ describe("Query results", () => {
       Effect.gen(function*() {
         const root = yield* TestHost.mount(Poll, {})
         yield* load
-        root.send(PollMessage.make({ _tag: "Go" }))
+        root.send(PollMessage.Go())
         yield* TestHost.settle
         assert.strictEqual(root.text(), "done")
         assert.deepStrictEqual(root.pending(), [])
@@ -886,7 +886,7 @@ describe("Query results", () => {
         yield* load
         app.order.length = 0
         // A new instance on user 1, and card b re-keyed from user 2 to user 1.
-        root.send(app.ListMessage.make({ _tag: "Set", cards: ["a:1", "c:1", "b:1"] }))
+        root.send(app.ListMessage.Set({ cards: ["a:1", "c:1", "b:1"] }))
         yield* TestHost.settle
         // Each folds the cache's value through update before its first render.
         assert.deepStrictEqual(app.order, ["update c UserChanged", "view c Ann", "update b UserChanged", "view b Ann"])
@@ -899,11 +899,11 @@ describe("Query results", () => {
   it.effect("a Command issued by the folded first emission starts after init's, and after the first render", () => {
     const app = makeApp()
     const seen: Array<string> = []
-    const Message = Schema.TaggedUnion({ UserChanged: {}, Noted: {} })
+    const Message = UiSchema.TaggedEnum({ UserChanged: {}, Noted: {} })
     const Note = Command.make("Note", { args: { text: Schema.String } }, ({ text }) =>
       Effect.sync(() => {
         seen.push(`command ${text}`)
-        return Message.make({ _tag: "Noted" })
+        return Message.Noted()
       }))
     const Noter = Component.define({
       name: "Noter",
@@ -913,7 +913,7 @@ describe("Query results", () => {
         user: {
           query: app.GetUser,
           args: () => ({ id: "1" }),
-          onChange: () => Message.make({ _tag: "UserChanged" })
+          onChange: () => Message.UserChanged()
         }
       }
     }).make({
@@ -967,7 +967,7 @@ describe("Query results", () => {
         const root = yield* Effect.scoped(Effect.gen(function*() {
           const root = yield* TestHost.mount(app.List, { cards: ["a:1", "b:2"] })
           yield* load
-          root.send(app.ListMessage.make({ _tag: "Set", cards: ["a:1"] }))
+          root.send(app.ListMessage.Set({ cards: ["a:1"] }))
           yield* TestHost.settle
           assert.strictEqual(root.entry(app.GetUser, { id: "1" })?.watchers, 1)
           assert.strictEqual(root.entry(app.GetUser, { id: "2" })?.watchers, 0)
@@ -1016,7 +1016,7 @@ describe("Query results", () => {
       Effect.gen(function*() {
         const root = yield* TestHost.mount(app.Card, { id: "1", tag: "a" })
         yield* load
-        root.send(app.CardMessage.make({ _tag: "Rename", name: "" }))
+        root.send(app.CardMessage.Rename({ name: "" }))
         yield* TestHost.settle
         assert.strictEqual(root.text(), "a=~")
         yield* TestClock.adjust("10 millis")
@@ -1089,7 +1089,7 @@ describe("Query results", () => {
       app.layer,
       Effect.gen(function*() {
         const root = yield* TestHost.mount(app.Tools, {})
-        root.send(app.ToolsMessage.make({ _tag: "Get", id: "2" }))
+        root.send(app.ToolsMessage.Get({ id: "2" }))
         yield* load
         assert.strictEqual(root.text(), "Bea")
         assert.deepStrictEqual(triggers(root), ["get"])
@@ -1104,13 +1104,13 @@ describe("Query results", () => {
       app.layer,
       Effect.gen(function*() {
         const root = yield* TestHost.mount(app.Tools, {})
-        root.send(app.ToolsMessage.make({ _tag: "Prefetch", id: "2" }))
+        root.send(app.ToolsMessage.Prefetch({ id: "2" }))
         yield* load
         assert.strictEqual(root.text(), "prefetched")
         assert.deepStrictEqual(triggers(root), ["prefetch"])
         assert.isTrue(AsyncResult.isSuccess(root.entry(app.GetUser, { id: "2" })!.stored))
         // A prefetch of a fresh entry starts nothing.
-        root.send(app.ToolsMessage.make({ _tag: "Prefetch", id: "2" }))
+        root.send(app.ToolsMessage.Prefetch({ id: "2" }))
         yield* load
         assert.strictEqual(app.db.calls, 1)
       })
@@ -1259,7 +1259,7 @@ describe("Query results", () => {
       },
       Effect.succeed(() => Effect.never)
     ) {}
-    const Message = Schema.TaggedUnion({ Break: {} })
+    const Message = UiSchema.TaggedEnum({ Break: {} })
     const Breaker = Component.define({
       name: "Breaker",
       model: Schema.Struct({}),
@@ -1268,7 +1268,7 @@ describe("Query results", () => {
     }).make({
       init: () => ({}),
       update: (model, _message, $) =>
-        $.set(model).run(BadRename.make({ id: "1" }).pipe(Command.map(() => Message.make({ _tag: "Break" })))),
+        $.set(model).run(BadRename.make({ id: "1" }).pipe(Command.map(() => Message.Break()))),
       view: (_model, h) => h.el("p", "breaker")
     })
     return run(
@@ -1276,7 +1276,7 @@ describe("Query results", () => {
       Effect.gen(function*() {
         const root = yield* TestHost.mount(Breaker, {})
         yield* load
-        root.send(Message.make({ _tag: "Break" }))
+        root.send(Message.Break())
         const error = yield* Effect.flip(TestHost.settle)
         assert.strictEqual(error._tag, "ProblemsError")
         const [problem] = yield* TestHost.expectProblem("PatchInvalid")
@@ -1294,13 +1294,13 @@ describe("Query results", () => {
   })
 
   it.effect("a clock wake that runs out of budget reports DrainExhausted", () => {
-    const Message = Schema.TaggedUnion({ Tick: {} })
+    const Message = UiSchema.TaggedEnum({ Tick: {} })
     const Wait = Command.make(
       "Wait",
       { args: {} },
-      () => Effect.sleep("1 millis").pipe(Effect.as(Message.make({ _tag: "Tick" })))
+      () => Effect.sleep("1 millis").pipe(Effect.as(Message.Tick()))
     )
-    const Spin = Command.make("Spin", { args: {} }, () => Effect.succeed(Message.make({ _tag: "Tick" })))
+    const Spin = Command.make("Spin", { args: {} }, () => Effect.succeed(Message.Tick()))
     const Spinner = Component.define({
       name: "Spinner",
       model: Schema.Number,

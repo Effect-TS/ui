@@ -229,10 +229,10 @@ type AnyComponent =
  *
  * ```ts import.meta.vitest
  * import { Effect, Schema } from "effect"
- * import { Component } from "@effect/ui"
+ * import { Component, UiSchema } from "@effect/ui"
  * import { Steps, Story } from "@effect/ui/testing"
  *
- * const Message = Schema.TaggedUnion({ ClickedIncrement: {} })
+ * const Message = UiSchema.TaggedEnum({ ClickedIncrement: {} })
  * const Counter = Component.define({
  *   name: "Counter",
  *   model: Schema.Struct({ count: Schema.Number }),
@@ -240,7 +240,7 @@ type AnyComponent =
  * }).make({
  *   init: () => ({ count: 0 }),
  *   update: (model) => ({ count: model.count + 1 }),
- *   view: (model, h) => h.el("button").on("click", Message.make({ _tag: "ClickedIncrement" })).children(`+ ${model.count}`)
+ *   view: (model, h) => h.el("button").on("click", Message.ClickedIncrement()).children(`+ ${model.count}`)
  * })
  *
  * const quiet = <S extends Steps.Steps.Any>(s: S): S =>
@@ -250,7 +250,7 @@ type AnyComponent =
  *
  * Effect.gen(function*() {
  *   const s = yield* Story.make(Counter, {})
- *   s.pipe(quiet).send(Message.make({ _tag: "ClickedIncrement" }))
+ *   s.pipe(quiet).send(Message.ClickedIncrement())
  *   console.log(s.model.count) // 1
  * }).pipe(Effect.scoped, Effect.runSync)
  * ```

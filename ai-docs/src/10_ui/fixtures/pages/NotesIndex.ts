@@ -1,4 +1,4 @@
-import { Component, Head } from "@effect/ui"
+import { Component, Head, UiSchema } from "@effect/ui"
 import { Layer, Match, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { ListNotes } from "../notes/queries/ListNotes.ts"
@@ -7,7 +7,7 @@ import { AppRoute } from "../routes.ts"
 
 const noteUrl = (id: string) => AppRoute.print(AppRoute.make({ _tag: "Note", params: { id } }))
 
-export const NotesIndexMessage = Schema.TaggedUnion({
+export const NotesIndexMessage = UiSchema.TaggedEnum({
   // The Pin button and a drop both send it, so it names what they share.
   PinnedNote: { id: Schema.String },
   DraggedIntoPins: {},
@@ -53,7 +53,7 @@ export const NotesIndexNoDeps = Component.define({
                 // Drag and drop needs a pointer, so every drag has a button
                 // that sends the same message, for the keyboard and touch.
                 h.button.attr("aria-label", `Pin ${note.title}`)
-                  .onClick(NotesIndexMessage.make({ _tag: "PinnedNote", id: note.id })).children("Pin")
+                  .onClick(NotesIndexMessage.PinnedNote({ id: note.id })).children("Pin")
               )
           )),
           // A drop target takes the drags whose types it accepts. Enter and
@@ -61,11 +61,11 @@ export const NotesIndexNoDeps = Component.define({
           // not to its children, so the highlight doesn't flicker.
           h.aside.attr("aria-label", "Pinned").class("pins", model.over && "drop-here")
             .onDrop(
-              ({ data }) => NotesIndexMessage.make({ _tag: "PinnedNote", id: data[NoteType] ?? "" }),
+              ({ data }) => NotesIndexMessage.PinnedNote({ id: data[NoteType] ?? "" }),
               { accepts: [NoteType], dropEffect: "link" }
             )
-            .onDragEnter(NotesIndexMessage.make({ _tag: "DraggedIntoPins" }))
-            .onDragLeave(NotesIndexMessage.make({ _tag: "DraggedOutOfPins" })).children(
+            .onDragEnter(NotesIndexMessage.DraggedIntoPins())
+            .onDragLeave(NotesIndexMessage.DraggedOutOfPins()).children(
               h.h2("Pinned"),
               h.ul(model.pinned.map((id) => h.li.key(id).children(notes.find((note) => note.id === id)?.title ?? id)))
             )

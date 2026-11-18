@@ -1,4 +1,4 @@
-import { Command, Component, MessageLog, Query, Route, Router } from "@effect/ui"
+import { Command, Component, MessageLog, Query, Route, Router, UiSchema } from "@effect/ui"
 import { Html, HtmlServer } from "@effect/ui/html"
 import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -39,7 +39,7 @@ const makeApp = () => {
     )
   ) {}
 
-  const ChatMessage = Schema.TaggedUnion({ Changed: {}, More: {}, Refresh: {} })
+  const ChatMessage = UiSchema.TaggedEnum({ Changed: {}, More: {}, Refresh: {} })
   const Chat = Component.define({
     name: "Chat",
     props: Schema.Struct({ room: Schema.String }),
@@ -50,7 +50,7 @@ const makeApp = () => {
       messages: {
         query: ListMessages,
         args: (_model, props) => props.room === "" ? undefined : { room: props.room },
-        onChange: () => ChatMessage.make({ _tag: "Changed" })
+        onChange: () => ChatMessage.Changed()
       }
     }
   }).make({
@@ -64,7 +64,7 @@ const makeApp = () => {
       }),
     view: (_model, h) =>
       h.el("div").children(
-        h.el("p").on("click", ChatMessage.make({ _tag: "More" })).children(
+        h.el("p").on("click", ChatMessage.More()).children(
           AsyncResult.match(h.queries.messages, {
             onInitial: () => "loading",
             onFailure: () => "failed",
@@ -73,7 +73,7 @@ const makeApp = () => {
           })
         ),
         // No text, so the view's text stays the list's.
-        h.el("button").attr("data-testid", "refresh").on("click", ChatMessage.make({ _tag: "Refresh" }))
+        h.el("button").attr("data-testid", "refresh").on("click", ChatMessage.Refresh())
       )
   })
   return { db, ListMessages, ChatMessage, Chat, layer: ListMessages.layer }
@@ -94,18 +94,18 @@ describe("Infinite queries", () => {
         const root = yield* TestHost.mount(app.Chat, { room: "r" })
         yield* page
         assert.strictEqual(root.text(), "r0 /1 Available")
-        root.send(app.ChatMessage.make({ _tag: "More" }))
+        root.send(app.ChatMessage.More())
         yield* TestHost.settle
         // A change of `more` is a result write of its own.
         assert.strictEqual(root.text(), "r0 /1 Loading")
         yield* page
         // The second page repeats m0: the first stays.
         assert.strictEqual(root.text(), "r0,r1 /2 Available")
-        root.send(app.ChatMessage.make({ _tag: "More" }))
+        root.send(app.ChatMessage.More())
         yield* page
         assert.strictEqual(root.text(), "r0,r1,r2 /3 End")
         assert.deepStrictEqual(root.entry(app.ListMessages, { room: "r" })?.more, { _tag: "End" })
-        root.send(app.ChatMessage.make({ _tag: "Refresh" }))
+        root.send(app.ChatMessage.Refresh())
         yield* page
         assert.strictEqual(root.text(), "r0 /1 Available")
         assert.deepStrictEqual(
@@ -133,11 +133,11 @@ describe("Infinite queries", () => {
         const root = yield* TestHost.mount(app.Chat, { room: "r" })
         yield* page
         app.db.fail.add(1)
-        root.send(app.ChatMessage.make({ _tag: "More" }))
+        root.send(app.ChatMessage.More())
         yield* page
         assert.strictEqual(root.text(), "r0 /1 Failed")
         app.db.fail.clear()
-        root.send(app.ChatMessage.make({ _tag: "More" }))
+        root.send(app.ChatMessage.More())
         yield* TestHost.settle
         assert.strictEqual(root.text(), "r0 /1 Loading")
         yield* page
@@ -164,7 +164,7 @@ describe("Infinite queries", () => {
         Option.isSome(cursor) ? Effect.fail(42) : Effect.sleep("10 millis").pipe(Effect.as(["a"]))
       )
     ) {}
-    const CodesMessage = Schema.TaggedUnion({ More: {}, Look: {} })
+    const CodesMessage = UiSchema.TaggedEnum({ More: {}, Look: {} })
     const Codes = Component.define({
       name: "Codes",
       model: Schema.String,
@@ -193,9 +193,9 @@ describe("Infinite queries", () => {
       Effect.gen(function*() {
         const root = yield* TestHost.mount(Codes, {})
         yield* page
-        root.send(CodesMessage.make({ _tag: "More" }))
+        root.send(CodesMessage.More())
         yield* TestHost.settle
-        root.send(CodesMessage.make({ _tag: "Look" }))
+        root.send(CodesMessage.Look())
         yield* TestHost.settle
         assert.strictEqual(root.model(), "failed 42")
 
@@ -224,7 +224,7 @@ describe("Infinite queries", () => {
       app.layer,
       Effect.gen(function*() {
         const root = yield* TestHost.mount(app.Chat, { room: "" })
-        root.send(app.ChatMessage.make({ _tag: "More" }))
+        root.send(app.ChatMessage.More())
         yield* page
         assert.deepStrictEqual(root.fetches(), [])
         assert.strictEqual(root.text(), "loading")
@@ -262,7 +262,7 @@ describe("Infinite queries", () => {
       Effect.gen(function*() {
         const root = yield* TestHost.mount(app.Chat, { room: "r" })
         yield* page
-        root.send(app.ChatMessage.make({ _tag: "More" }))
+        root.send(app.ChatMessage.More())
         yield* TestHost.settle
         const loading = lastResult(root)
         assert.deepStrictEqual(Query.snapshotData(loading.result)?.more, { _tag: "Loading" })
@@ -274,7 +274,7 @@ describe("Infinite queries", () => {
         assert.deepStrictEqual(loading.wire[6], [false, "Loading"])
         assert.deepStrictEqual(Query.snapshotData(loading.replayed)?.more, { _tag: "Loading" })
         yield* page
-        root.send(app.ChatMessage.make({ _tag: "More" }))
+        root.send(app.ChatMessage.More())
         yield* page
         const ended = lastResult(root)
         assert.strictEqual(ended.encoded[5], false)
@@ -313,14 +313,14 @@ describe("Infinite queries", () => {
       })
       const s = yield* Story.make(app.Chat, { room: "r" })
       s.loaded("messages", [pageAt(0, 1), pageAt(1, 2)], { waiting: true })
-        .send(app.ChatMessage.make({ _tag: "More" }))
+        .send(app.ChatMessage.More())
       assert.deepStrictEqual(s.loadingMore, ["messages"])
       // Still walking: the load more waits on.
       s.loaded("messages", [pageAt(0, 1), pageAt(1, 2)], { waiting: true })
       assert.deepStrictEqual(s.loadingMore, ["messages"])
       s.loadFailed("messages", "nope")
       assert.deepStrictEqual(s.loadingMore, [])
-      s.send(app.ChatMessage.make({ _tag: "Refresh" }))
+      s.send(app.ChatMessage.Refresh())
       const result = s.queries.messages
       assert.strictEqual(result._tag, "Failure")
       if (result._tag === "Failure") {
@@ -386,12 +386,12 @@ describe("Infinite queries", () => {
       // The same steps in a story, which reads the query's pages.
       const s = yield* Story.make(app.Chat, { room: "r" })
       s.loaded("messages", [pageAt(0, 1)])
-        .send(app.ChatMessage.make({ _tag: "More" }))
+        .send(app.ChatMessage.More())
       assert.deepStrictEqual(s.loadingMore, ["messages"])
       s.loadedMore("messages", pageAt(1, 2))
-        .send(app.ChatMessage.make({ _tag: "More" }))
+        .send(app.ChatMessage.More())
         .loadMoreFailed("messages", "nope")
-        .send(app.ChatMessage.make({ _tag: "Refresh" }))
+        .send(app.ChatMessage.Refresh())
       const messages = s.queries.messages
       assert.deepStrictEqual(
         AsyncResult.isSuccess(messages) ? [messages.value.pages, messages.value.more] : undefined,
@@ -399,7 +399,7 @@ describe("Infinite queries", () => {
       )
       const message = yield* defect(Effect.gen(function*() {
         const pending = yield* Story.make(app.Chat, { room: "r" })
-        pending.loaded("messages", [pageAt(0, 1)]).send(app.ChatMessage.make({ _tag: "More" }))
+        pending.loaded("messages", [pageAt(0, 1)]).send(app.ChatMessage.More())
       }))
       assert.match(message, /a load more of "messages" is pending/)
       assert.throws(
@@ -415,7 +415,7 @@ describe("Infinite queries", () => {
   it.effect("a history restore seeds the held pages stale and walks them again", () => {
     const app = makeApp()
     const ShellRoute = Route.union({ Home: Route.make("/"), Chat: Route.make("/chat") })
-    const ShellMessage = Schema.TaggedUnion({ ChangedRoute: { route: ShellRoute }, Go: {}, Navigated: {} })
+    const ShellMessage = UiSchema.TaggedEnum({ ChangedRoute: { route: ShellRoute }, Go: {}, Navigated: {} })
     const Shell = Component.define({
       name: "Shell",
       props: Schema.Struct({ route: ShellRoute }),
@@ -430,13 +430,13 @@ describe("Infinite queries", () => {
           Go: () =>
             $.set(model).run(
               Router.push(ShellRoute, ShellRoute.make({ _tag: "Home" })).pipe(
-                Command.map(() => ShellMessage.make({ _tag: "Navigated" }))
+                Command.map(() => ShellMessage.Navigated())
               )
             ),
           Navigated: () => model
         }),
       subscriptions: (model) => [
-        Router.subscription(ShellRoute, model, (route) => ShellMessage.make({ _tag: "ChangedRoute", route }))
+        Router.subscription(ShellRoute, model, (route) => ShellMessage.ChangedRoute({ route }))
       ],
       view: (model, h) => model._tag === "Chat" ? app.Chat(h, { key: "chat", props: { room: "r" } }) : h.el("p", "home")
     })
@@ -451,7 +451,7 @@ describe("Infinite queries", () => {
         Locator.fire(root.get(Locator.text("r0 /1 Available", { exact: true })), "click")
         yield* page
         assert.strictEqual(root.text(), "r0,r1 /2 Available")
-        root.send(ShellMessage.make({ _tag: "Go" }))
+        root.send(ShellMessage.Go())
         yield* TestHost.settle
         assert.strictEqual(root.text(), "home")
       }))

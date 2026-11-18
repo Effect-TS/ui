@@ -1,4 +1,4 @@
-import { Component, View } from "@effect/ui"
+import { Component, UiSchema, View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { HtmlScene } from "@effect/ui/html/testing"
 import { Locator, Scene, Story } from "@effect/ui/testing"
@@ -12,7 +12,7 @@ const items: ReadonlyArray<Item> = [
   { id: "c", label: "Copy" }
 ]
 
-const ToolbarMessage = Schema.TaggedUnion({ Picked: { id: Schema.String }, Clicked: { id: Schema.String } })
+const ToolbarMessage = UiSchema.TaggedEnum({ Picked: { id: Schema.String }, Clicked: { id: Schema.String } })
 
 const Toolbar = Component.define({
   name: "Toolbar",
@@ -27,7 +27,7 @@ const Toolbar = Component.define({
       Menu(h, {
         key: "actions",
         props: { items },
-        onEmit: (event) => ToolbarMessage.make({ _tag: "Picked", id: event.id }),
+        onEmit: (event) => ToolbarMessage.Picked({ id: event.id }),
         view: (m) =>
           h.div(
             m.trigger(h.button).children("Actions"),
@@ -36,7 +36,7 @@ const Toolbar = Component.define({
               m.visible.length === 0 && h.p("No actions found."),
               h.ul.children(m.visible.map((item) =>
                 m.item(h.li.key(item.id), item)
-                  .onClick(ToolbarMessage.make({ _tag: "Clicked", id: item.id }))
+                  .onClick(ToolbarMessage.Clicked({ id: item.id }))
                   .children(item.label)
               ))
             )
@@ -242,14 +242,14 @@ describe("headless components in a story", () => {
           parts: (_, p) => ({ link: p.part("a", (b) => b.onClick(() => undefined, { preventDefault: "always" })) })
         }
       )
-      const Clicked = Schema.TaggedUnion({ Clicked: {} })
+      const Clicked = UiSchema.TaggedEnum({ Clicked: {} })
       const Page = Component.define({ name: "Page", model: Schema.Number, message: Clicked, elements: Html }).make({
         init: () => 0,
         update: (count) => count + 1,
         view: (_, h) =>
           Guard(
             h,
-            { key: "g", view: (p) => p.link(h.a).onClick(Clicked.make({ _tag: "Clicked" })).children("go") }
+            { key: "g", view: (p) => p.link(h.a).onClick(Clicked.Clicked()).children("go") }
           )
       })
       const s = yield* Scene.make(Page, {})

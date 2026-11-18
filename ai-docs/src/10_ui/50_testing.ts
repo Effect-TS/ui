@@ -73,19 +73,19 @@ describe("NoteEditor", () => {
     Effect.gen(function*() {
       // Each step runs when called and throws on failure.
       const s = yield* Story.make(NoteEditor, { note })
-      s.send(NoteEditorMessage.make({ _tag: "UpdatedBody", body: edited.body }))
+      s.send(NoteEditorMessage.UpdatedBody({ body: edited.body }))
       assert.strictEqual(s.model.draft, edited.body)
       // Nothing runs in a story, so Subscriptions are asserted by key.
       assert.deepStrictEqual(s.subscriptions, ["autosave:1"])
       // Commands stay pending as data until a step resolves them. A
       // definition matches any args; `pending` holds them.
-      s.send(NoteEditorMessage.make({ _tag: "RequestedSave" })).expectExact(SaveNote)
+      s.send(NoteEditorMessage.RequestedSave()).expectExact(SaveNote)
       assert.deepStrictEqual(s.pending[0].command.args, { note: edited })
       // `resolve` takes the Command's own result. `fail` takes its typed error.
       s.resolve(SaveNote, edited)
       assert.strictEqual(s.model.saved, edited.body)
       // An event the component emitted is acknowledged by naming it.
-      s.emitted(NoteEditorEvents.make({ _tag: "Saved", note: edited }))
+      s.emitted(NoteEditorEvents.Saved({ note: edited }))
       // When the test ends, the end check fails if a Command is still
       // pending or an event isn't acknowledged.
     }))
@@ -102,7 +102,7 @@ describe("NoteEditor", () => {
         .expectExact(SaveNote)
         .expect(HtmlLocator.role("button", { name: "Saving…" })).toBeDisabled(false)
         .resolve(SaveNote, edited)
-        .emitted(NoteEditorEvents.make({ _tag: "Saved", note: edited }))
+        .emitted(NoteEditorEvents.Saved({ note: edited }))
         .expect(HtmlLocator.role("button", { name: "Save" })).toBeDisabled()
     }))
 
@@ -115,7 +115,7 @@ describe("NoteEditor", () => {
       assert.isTrue(s.defaultPrevented)
       s.expectExact(SaveNote)
         .resolve(SaveNote, edited)
-        .emitted(NoteEditorEvents.make({ _tag: "Saved", note: edited }))
+        .emitted(NoteEditorEvents.Saved({ note: edited }))
       // Any other step resets it.
       assert.isFalse(s.defaultPrevented)
     }))
@@ -249,7 +249,7 @@ it.layer(Layer.mergeAll(Notes.layerMemory([note]), TestHost.layer()), { buildPer
         yield* TestClock.adjust("2 seconds")
         yield* TestHost.settle
         assert.deepStrictEqual(yield* notes.get(note.id), edited)
-        assert.deepStrictEqual(root.emitted, [NoteEditorEvents.make({ _tag: "Saved", note: edited })])
+        assert.deepStrictEqual(root.emitted, [NoteEditorEvents.Saved({ note: edited })])
       }))
   }
 )

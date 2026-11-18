@@ -1,14 +1,14 @@
-import { Component, type View } from "@effect/ui"
+import { Component, UiSchema, type View } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { Effect, Exit, Schema, Scope } from "effect"
 
 const Row = Schema.Struct({ id: Schema.String, label: Schema.String, done: Schema.Boolean })
 type Row = typeof Row.Type
 const AppProps = Schema.Struct({ count: Schema.Number })
-const AppMessage = Schema.TaggedUnion({ Toggle: { id: Schema.String }, Reverse: {} })
+const AppMessage = UiSchema.TaggedEnum({ Toggle: { id: Schema.String }, Reverse: {} })
 type AppMessage = typeof AppMessage.Type
-const Flip = Schema.TaggedUnion({ Flip: {} })
-const flip = Flip.make({ _tag: "Flip" })
+const Flip = UiSchema.TaggedEnum({ Flip: {} })
+const flip = Flip.Flip()
 
 const init = ($: { readonly props: { readonly count: number } }): ReadonlyArray<Row> =>
   Array.from({ length: $.props.count }, (_, i) => ({ id: "r" + i, label: "Row " + i, done: false }))
@@ -30,7 +30,7 @@ const Plain = Component.define(app).make({
     h.ul.children(rows.map((row) =>
       h.li.key(row.id).class("row").attr("data-done", row.done ? "" : undefined).children(
         h.button.attr("aria-expanded", "false").attr("aria-controls", h.id("panel", row.id))
-          .onClick(AppMessage.make({ _tag: "Toggle", id: row.id })).children(row.label),
+          .onClick(AppMessage.Toggle({ id: row.id })).children(row.label),
         h.span(row.done ? "done" : "todo"),
         h.div.id(h.id("panel", row.id)).attr("hidden", "").children("details")
       )
@@ -123,7 +123,7 @@ const Wrapped = Component.define(app).make({
 // these measure what a Provider update costs with each shape of subtree under it. `touch` changes
 // the Provider's Model but not what it shares; `open` changes what it shares.
 
-const ProviderMessage = Schema.TaggedUnion({ Touch: {}, Open: { id: Schema.String } })
+const ProviderMessage = UiSchema.TaggedEnum({ Touch: {}, Open: { id: Schema.String } })
 const Provider = Component.define({
   name: "Provider",
   model: Schema.Struct({ open: Schema.NullOr(Schema.String), touches: Schema.Number }),
@@ -148,8 +148,8 @@ const Poker = Component.define({ name: "Poker", model: Schema.Null, message: Pro
     update: (model, message, $) => $.set(model).send(Provider, message),
     view: (_, h) =>
       h.div(
-        h.button.class("poke-touch").onClick(ProviderMessage.make({ _tag: "Touch" })).children("touch"),
-        h.button.class("poke-open").onClick(ProviderMessage.make({ _tag: "Open", id: "r0" })).children("open")
+        h.button.class("poke-touch").onClick(ProviderMessage.Touch()).children("touch"),
+        h.button.class("poke-open").onClick(ProviderMessage.Open({ id: "r0" })).children("open")
       )
   })
 
@@ -320,14 +320,14 @@ const pass = async (name: keyof typeof variants, count: number, repeats: number)
     const id = "r" + ((i * 37) % count)
     const before = done()
     start = performance.now()
-    root.send(AppMessage.make({ _tag: "Toggle", id }))
+    root.send(AppMessage.Toggle({ id }))
     toggle.push((await settle(() => Math.abs(done() - before) === 1, name + " toggle")) - start)
   }
   const reverse: Array<number> = []
   for (let i = 0; i < repeats; i++) {
     const first = rows()[0]
     start = performance.now()
-    root.send(AppMessage.make({ _tag: "Reverse" }))
+    root.send(AppMessage.Reverse())
     reverse.push((await settle(() => rows()[count - 1] === first, name + " reverse")) - start)
     check(rows().length === count, "every row is still there")
   }

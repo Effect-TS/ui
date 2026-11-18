@@ -1,4 +1,4 @@
-import { Component, Feature, type View } from "@effect/ui"
+import { Component, Feature, UiSchema, type View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Context, Effect, Layer, Schema } from "effect"
 import { describe, expect, it } from "tstyche"
@@ -6,7 +6,7 @@ import { describe, expect, it } from "tstyche"
 class Clock extends Context.Service<Clock, { readonly now: number }>()("typetest/slots/Clock") {}
 class Store extends Context.Service<Store, { readonly draft: string }>()("typetest/slots/Store") {}
 
-const PanelMsg = Schema.TaggedUnion({ Toggle: {} })
+const PanelMsg = UiSchema.TaggedEnum({ Toggle: {} })
 const PanelDef = Component.define({
   name: "Panel",
   model: Schema.Boolean,
@@ -29,9 +29,9 @@ const Plain = Component.define({ name: "Plain", model: Schema.Null, message: Sch
 // Needs Clock to render.
 declare const Ticker: Component.Component<"Ticker", {}, null, never, never, Clock>
 
-const PageMsg = Schema.TaggedUnion({ Saved: {} })
+const PageMsg = UiSchema.TaggedEnum({ Saved: {} })
 type PageMsg = typeof PageMsg.Type
-const OtherMsg = Schema.TaggedUnion({ Other: {} })
+const OtherMsg = UiSchema.TaggedEnum({ Other: {} })
 declare const h: View.Helper<PageMsg, unknown> & View.Tags<Html.Elements, PageMsg>
 declare const other: View.Helper<typeof OtherMsg.Type, unknown> & View.Tags<Html.Elements, typeof OtherMsg.Type>
 
@@ -69,7 +69,7 @@ describe("slots", () => {
     expect(Panel(h, { key: "p" })).type.toBe<View.Child<PageMsg, never>>()
     expect(Panel(h, {
       key: "p",
-      slots: { body: [h.p("note"), h.button.onClick(PageMsg.make({ _tag: "Saved" })).children("save")] }
+      slots: { body: [h.p("note"), h.button.onClick(PageMsg.Saved()).children("save")] }
     })).type.toBe<View.Child<PageMsg, never>>()
     expect(Panel(h, { key: "p", slots: { body: "text", footer: Plain(h, { key: "x" }) } })).type.not.toRaiseError()
   })
@@ -79,7 +79,7 @@ describe("slots", () => {
     expect(Panel).type.not.toBeCallableWith(h, { key: "p", slots: { header: "text" } })
     expect(Panel).type.not.toBeCallableWith(h, {
       key: "p",
-      slots: { body: other.button.onClick(OtherMsg.make({ _tag: "Other" })).children("x") }
+      slots: { body: other.button.onClick(OtherMsg.Other()).children("x") }
     })
   })
 

@@ -1,10 +1,10 @@
-import { Component } from "@effect/ui"
+import { Component, UiSchema } from "@effect/ui"
 import { Tooltip, type TooltipProvider } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 import { describe, expect, it } from "tstyche"
 
-const Msg = Schema.TaggedUnion({ Clicked: {} })
+const Msg = UiSchema.TaggedEnum({ Clicked: {} })
 type Msg = typeof Msg.Type
 
 type Button = Html.Element<Msg, never, Html.EventsOf<"button">, HTMLButtonElement, "button">
@@ -25,7 +25,7 @@ describe("Tooltip", () => {
           key: "t",
           props: { open: false },
           view: (s) => {
-            const trigger = s.trigger(h.button.class("tool").onClick(Msg.make({ _tag: "Clicked" })))
+            const trigger = s.trigger(h.button.class("tool").onClick(Msg.Clicked()))
             expect(trigger).type.toBe<Button>()
             expect(s.positioner(h.div)).type.toBe<Div>()
             expect(s.popup(h.div)).type.toBe<Div>()

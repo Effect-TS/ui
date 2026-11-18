@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, Mount } from "@effect/ui"
+import { Component, Mount, UiSchema } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { HtmlLocator, ssr } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
@@ -26,7 +26,7 @@ const items: ReadonlyArray<Item> = [
 // A Menu inside a Dialog, both placed by Picker
 // ---------------------------------------------------------------------------
 
-const PickerMessage = Schema.TaggedUnion({
+const PickerMessage = UiSchema.TaggedEnum({
   Picked: { id: Schema.String },
   Closed: {},
   Clicked: { id: Schema.String }
@@ -51,7 +51,7 @@ const Picker = Component.define({
     Dialog(h, {
       key: "confirm",
       props: { label: "Confirm" },
-      onEmit: () => PickerMessage.make({ _tag: "Closed" }),
+      onEmit: () => PickerMessage.Closed(),
       view: (d) =>
         h.div(
           d.trigger(h.button).children("Open"),
@@ -60,11 +60,11 @@ const Picker = Component.define({
             Menu(h, {
               key: "actions",
               props: { items },
-              onEmit: (event) => PickerMessage.make({ _tag: "Picked", id: event.id }),
+              onEmit: (event) => PickerMessage.Picked({ id: event.id }),
               view: (m) =>
                 h.ul.children(m.visible.map((item) =>
                   d.close(m.item(h.li.key(item.id), item))
-                    .onClick(PickerMessage.make({ _tag: "Clicked", id: item.id }))
+                    .onClick(PickerMessage.Clicked({ id: item.id }))
                     .children(item.label)
                 ))
             })
@@ -80,7 +80,7 @@ const Picker = Component.define({
 
 const Mine = Html.ref("Toolbar.filter", "input")
 
-const ToolbarMessage = Schema.TaggedUnion({
+const ToolbarMessage = UiSchema.TaggedEnum({
   Picked: { id: Schema.String },
   Focus: {},
   Focused: { found: Schema.Boolean }
@@ -96,14 +96,14 @@ const Toolbar = Component.define({
   update: (log, message, $) =>
     ToolbarMessage.match(message, {
       Picked: ({ id }) => [...log, "picked " + id],
-      Focus: () => $.run(Html.focus(Mine, ({ found }) => ToolbarMessage.make({ _tag: "Focused", found }))),
+      Focus: () => $.run(Html.focus(Mine, ({ found }) => ToolbarMessage.Focused({ found }))),
       Focused: ({ found }) => [...log, "focused " + String(found)]
     }),
   view: (log, h) =>
     Menu(h, {
       key: "actions",
       props: { items },
-      onEmit: (event) => ToolbarMessage.make({ _tag: "Picked", id: event.id }),
+      onEmit: (event) => ToolbarMessage.Picked({ id: event.id }),
       view: (m) =>
         h.div.class("toolbar").children(
           m.trigger(h.button.class("btn")).children("Actions"),
@@ -426,7 +426,7 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
       assert.strictEqual(trigger.getAttribute("aria-expanded"), "false")
       assert.strictEqual(document.activeElement, trigger)
 
-      root.send(ToolbarMessage.make({ _tag: "Focus" }))
+      root.send(ToolbarMessage.Focus())
       yield* tick
       assert.deepStrictEqual(root.model(), ["focused true"])
       assert.strictEqual(document.activeElement, input)

@@ -1,4 +1,4 @@
-import { Component } from "@effect/ui"
+import { Component, UiSchema } from "@effect/ui"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { Effect, Exit, Schema, Scope } from "effect"
 import { init, install, update } from "./harness.ts"
@@ -11,7 +11,7 @@ import { init, install, update } from "./harness.ts"
 
 const Row = Schema.Struct({ id: Schema.Number, label: Schema.String })
 const Model = Schema.Struct({ rows: Schema.Array(Row), selected: Schema.Number, nextId: Schema.Number })
-const Message = Schema.TaggedUnion({
+const Message = UiSchema.TaggedEnum({
   Run: { count: Schema.Number },
   Add: { count: Schema.Number },
   Update: {},
@@ -31,10 +31,10 @@ const Plain = Component.define(app).make({
         h.tr.key(String(row.id)).class(row.id === model.selected && "danger").children(
           h.td.class("col-md-1").children(String(row.id)),
           h.td.class("col-md-4").children(
-            h.a.onClick(Message.make({ _tag: "Select", id: row.id })).children(row.label)
+            h.a.onClick(Message.Select({ id: row.id })).children(row.label)
           ),
           h.td.class("col-md-1").children(
-            h.a.onClick(Message.make({ _tag: "Remove", id: row.id })).children(
+            h.a.onClick(Message.Remove({ id: row.id })).children(
               h.span.class("glyphicon", "glyphicon-remove").attr("aria-hidden", "true")
             )
           ),
@@ -44,7 +44,7 @@ const Plain = Component.define(app).make({
     )
 })
 
-const RowMessage = Schema.TaggedUnion({ Select: {}, Remove: {} })
+const RowMessage = UiSchema.TaggedEnum({ Select: {}, Remove: {} })
 const RowView = Component.define({
   name: "Row",
   props: Schema.Struct({ row: Row, selected: Schema.Boolean }),
@@ -57,15 +57,15 @@ const RowView = Component.define({
   update: (_, message, $) =>
     $.emit(
       message._tag === "Select"
-        ? Message.make({ _tag: "Select", id: $.props.row.id })
-        : Message.make({ _tag: "Remove", id: $.props.row.id })
+        ? Message.Select({ id: $.props.row.id })
+        : Message.Remove({ id: $.props.row.id })
     ),
   view: (_, h) =>
     h.tr.class(h.props.selected && "danger").children(
       h.td.class("col-md-1").children(String(h.props.row.id)),
-      h.td.class("col-md-4").children(h.a.onClick(RowMessage.make({ _tag: "Select" })).children(h.props.row.label)),
+      h.td.class("col-md-4").children(h.a.onClick(RowMessage.Select()).children(h.props.row.label)),
       h.td.class("col-md-1").children(
-        h.a.onClick(RowMessage.make({ _tag: "Remove" })).children(
+        h.a.onClick(RowMessage.Remove()).children(
           h.span.class("glyphicon", "glyphicon-remove").attr("aria-hidden", "true")
         )
       ),

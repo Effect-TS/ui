@@ -7,7 +7,7 @@ import type { TestContext, TestError } from "vitest"
 import { SaveTodo, TodoItem, TodoItemMessage } from "./fixtures/components.ts"
 
 const todo = { id: "t1", title: "buy milk", done: false }
-const save = TodoItemMessage.make({ _tag: "Save" })
+const save = TodoItemMessage.Save()
 
 const Hello = Mount.make("Hello", { args: {} }, () => Effect.succeed(Component.noop))
 const Greeting = Component.define({
@@ -42,7 +42,7 @@ describe("make's end check, in the scope it.effect provides", { concurrent: fals
     Effect.gen(function*() {
       const story = yield* Story.make(TodoItem, { todo })
       story.send(save)
-      story.resolve(SaveTodo, TodoItemMessage.make({ _tag: "Saved" }))
+      story.resolve(SaveTodo, TodoItemMessage.Saved())
       const scene = yield* Scene.make(Greeting, {})
       scene.mounted(Hello)
     }))

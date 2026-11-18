@@ -1,11 +1,11 @@
-import { Component, View } from "@effect/ui"
+import { Component, UiSchema, View } from "@effect/ui"
 import { Switch, type SwitchButton, type SwitchProps, type SwitchSpan } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Locator, Scene } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 
-const SettingsMessage = Schema.TaggedUnion({ ToggledNotify: { checked: Schema.Boolean }, ClickedRow: {} })
+const SettingsMessage = UiSchema.TaggedEnum({ ToggledNotify: { checked: Schema.Boolean }, ClickedRow: {} })
 
 // A consumer that keeps the value in its Model and draws the least markup
 // the parts need: a labelled root with a thumb. The form field comes with
@@ -28,10 +28,10 @@ const Settings = Component.define({
       ClickedRow: () => ({ ...model, rowClicks: model.rowClicks + 1 })
     }),
   view: (model, h) =>
-    h.div.onClick(SettingsMessage.make({ _tag: "ClickedRow" })).children(
+    h.div.onClick(SettingsMessage.ClickedRow()).children(
       Switch(h, {
         props: { checked: model.notify, ...h.props },
-        onToggle: ({ checked }) => SettingsMessage.make({ _tag: "ToggledNotify", checked }),
+        onToggle: ({ checked }) => SettingsMessage.ToggledNotify({ checked }),
         view: (s) => h.label(s.root(h.button).children(s.thumb(h.span.class("thumb"))), "Notifications")
       }),
       h.output(String(model.rowClicks))

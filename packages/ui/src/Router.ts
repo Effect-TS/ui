@@ -42,7 +42,7 @@
  *
  * ```ts import.meta.vitest
  * import { Effect, Schema } from "effect"
- * import { Command, Component, Route, Router } from "@effect/ui"
+ * import { Command, Component, Route, Router, UiSchema } from "@effect/ui"
  * import { TestHost } from "@effect/ui/testing"
  *
  * const AppRoute = Route.union({
@@ -51,7 +51,7 @@
  *   NotFound: Route.make("/*")
  * })
  *
- * const Message = Schema.TaggedUnion({
+ * const Message = UiSchema.TaggedEnum({
  *   ChangedRoute: { route: AppRoute },
  *   ClickedLink: { route: AppRoute }
  * })
@@ -69,7 +69,7 @@
  *       // The new route comes back through the subscription: the push itself sends nothing.
  *       ClickedLink: ({ route }) => $.run(Router.push(AppRoute, route).pipe(Command.asNoop))
  *     }),
- *   subscriptions: (model) => [Router.subscription(AppRoute, model.route, (route) => Message.make({ _tag: "ChangedRoute", route }))],
+ *   subscriptions: (model) => [Router.subscription(AppRoute, model.route, (route) => Message.ChangedRoute({ route }))],
  *   view: (model, h) => h.el("p", model.route._tag)
  * })
  *

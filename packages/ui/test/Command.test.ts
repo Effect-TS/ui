@@ -1,4 +1,4 @@
-import { Command, Component, Query } from "@effect/ui"
+import { Command, Component, Query, UiSchema } from "@effect/ui"
 import * as schedule from "@effect/ui/internal/schedule"
 import { assert, describe, it } from "@effect/vitest"
 import { Data, Effect, Exit, Layer, Schema, Stream } from "effect"
@@ -83,21 +83,21 @@ describe("Command", () => {
       Effect.gen(function*() {
         const kv = yield* KeyValueStore.KeyValueStore
         const message = yield* SaveTodo.make(todo).effect
-        assert.deepStrictEqual(message, TodoItemMessage.make({ _tag: "Saved" }))
+        assert.deepStrictEqual(message, TodoItemMessage.Saved())
         assert.strictEqual(yield* kv.get("todo/t1"), JSON.stringify(todo))
       }).pipe(Effect.provide(SaveTodo.layer.pipe(Layer.provideMerge(KeyValueStore.layerMemory)))))
 
     it.effect("the implementation owns the error policy", () =>
       Effect.gen(function*() {
         const message = yield* SaveTodo.make(todo).effect
-        assert.deepStrictEqual(message, TodoItemMessage.make({ _tag: "SaveFailed", reason: "disk full" }))
+        assert.deepStrictEqual(message, TodoItemMessage.SaveFailed({ reason: "disk full" }))
       }).pipe(Effect.provide(SaveTodo.layer.pipe(Layer.provide(failingKv)))))
 
     it.effect("a fake is a plain Layer.succeed", () =>
       Effect.gen(function*() {
         const message = yield* SaveTodo.make(todo).effect
-        assert.deepStrictEqual(message, TodoItemMessage.make({ _tag: "Saved" }))
-      }).pipe(Effect.provide(Layer.succeed(SaveTodo, () => Effect.succeed(TodoItemMessage.make({ _tag: "Saved" }))))))
+        assert.deepStrictEqual(message, TodoItemMessage.Saved())
+      }).pipe(Effect.provide(Layer.succeed(SaveTodo, () => Effect.succeed(TodoItemMessage.Saved())))))
 
     it.effect("a stream service runs its Stream", () =>
       Effect.gen(function*() {
@@ -290,8 +290,8 @@ describe("Command", () => {
   })
 
   describe("schedule", () => {
-    const Message = Schema.TaggedUnion({ Done: {} })
-    const done = () => Effect.succeed(Message.make({ _tag: "Done" }))
+    const Message = UiSchema.TaggedEnum({ Done: {} })
+    const done = () => Effect.succeed(Message.Done())
     const concurrent = Command.make("C", { args: {} }, done)
     const switching = Command.make("S", { args: {}, mode: "switch" }, done)
     const queueing = Command.make("Q", { args: { key: Schema.String }, mode: "queue", group: ["key"] }, done)

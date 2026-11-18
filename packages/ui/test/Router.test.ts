@@ -1,4 +1,4 @@
-import { Command, Component, Head, type MessageLog, Query, type Renderer, Route, Router } from "@effect/ui"
+import { Command, Component, Head, type MessageLog, Query, type Renderer, Route, Router, UiSchema } from "@effect/ui"
 import * as componentQueries from "@effect/ui/internal/queries"
 import * as runtime from "@effect/ui/internal/runtime"
 import { Locator, TestHost } from "@effect/ui/testing"
@@ -165,7 +165,7 @@ describe("Router", { concurrent: false }, () => {
 
   it.effect("settles a navigation once the root has its route, not when its message is dropped", () => {
     const routes = Route.union({ Home: Route.make("/"), Other: Route.make("/other") })
-    const Message = Schema.TaggedUnion({ Follow: { on: Schema.Boolean }, Changed: { route: routes } })
+    const Message = UiSchema.TaggedEnum({ Follow: { on: Schema.Boolean }, Changed: { route: routes } })
     const settled: Array<string | undefined> = []
     let onRoute = () => {}
     const Root = Component.define({
@@ -181,7 +181,7 @@ describe("Router", { concurrent: false }, () => {
         model.following
           ? [Router.subscription(routes, model.route, (route) => {
             onRoute()
-            return Message.make({ _tag: "Changed", route })
+            return Message.Changed({ route })
           })]
           : [],
       head: (model) => [Head.title(model.route._tag)],
@@ -193,14 +193,14 @@ describe("Router", { concurrent: false }, () => {
       // The root stops following while its Subscription maps the route, so the runtime drops the message.
       onRoute = () => {
         onRoute = () => {}
-        root.send(Message.make({ _tag: "Follow", on: false }))
+        root.send(Message.Follow({ on: false }))
       }
       const router = yield* Router.Router
       assert.strictEqual(yield* router.navigate("/other"), "navigated")
       yield* TestHost.settle
       assert.strictEqual(root.text(), "Home")
       assert.deepStrictEqual(settled, [])
-      root.send(Message.make({ _tag: "Follow", on: true }))
+      root.send(Message.Follow({ on: true }))
       yield* TestHost.settle
       assert.strictEqual(root.text(), "Other")
       assert.deepStrictEqual(settled, ["Other"])
@@ -723,7 +723,7 @@ describe("Router.patchSearch", { concurrent: false }, () => {
     "clear": [[{ q: undefined, page: undefined }]],
     "both": [[{ q: "x" }], [{ page: 5 }]]
   }
-  const PageMessage = Schema.TaggedUnion({
+  const PageMessage = UiSchema.TaggedEnum({
     Write: { label: Schema.String },
     Dirty: {},
     Outcome: { outcome: Schema.String }
@@ -742,7 +742,7 @@ describe("Router.patchSearch", { concurrent: false }, () => {
           $.run(
             ...writes[label]!.map(([patch, options]) =>
               Router.patchSearch(Routes, $.props.route, patch, options).pipe(
-                Command.map((outcome) => PageMessage.make({ _tag: "Outcome", outcome }))
+                Command.map((outcome) => PageMessage.Outcome({ outcome }))
               )
             )
           ),
@@ -755,13 +755,11 @@ describe("Router.patchSearch", { concurrent: false }, () => {
         "div",
         h.el("p", `q=${h.props.route.search.q ?? ""} page=${h.props.route.search.page};`),
         h.el("p", `outcomes ${model.outcomes.join(",")};`),
-        ...Object.keys(writes).map((label) =>
-          h.el("button").on("click", PageMessage.make({ _tag: "Write", label })).children(label)
-        ),
-        h.el("button").on("click", PageMessage.make({ _tag: "Dirty" })).children("dirty")
+        ...Object.keys(writes).map((label) => h.el("button").on("click", PageMessage.Write({ label })).children(label)),
+        h.el("button").on("click", PageMessage.Dirty()).children("dirty")
       )
   })
-  const AppMessage = Schema.TaggedUnion({ ChangedRoute: { route: Routes } })
+  const AppMessage = UiSchema.TaggedEnum({ ChangedRoute: { route: Routes } })
   /** A root that holds the route, keying the search page with `key`. */
   const makeApp = (key: (route: typeof SearchOnly.Type) => string) =>
     Component.define({
@@ -773,7 +771,7 @@ describe("Router.patchSearch", { concurrent: false }, () => {
       init: ($) => ({ route: $.props.route }),
       update: (_, { route }) => ({ route }),
       subscriptions: (model) => [
-        Router.subscription(Routes, model.route, (route) => AppMessage.make({ _tag: "ChangedRoute", route }))
+        Router.subscription(Routes, model.route, (route) => AppMessage.ChangedRoute({ route }))
       ],
       view: (model, h) =>
         Routes.match(model.route, {

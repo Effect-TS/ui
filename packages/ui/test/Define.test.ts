@@ -1,15 +1,15 @@
-import { Command, Component } from "@effect/ui"
+import { Command, Component, UiSchema } from "@effect/ui"
 import { Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 
-const Message = Schema.TaggedUnion({ Step: {}, Logged: { n: Schema.Number } })
-const Events = Schema.TaggedUnion({ Stepped: { n: Schema.Number } })
+const Message = UiSchema.TaggedEnum({ Step: {}, Logged: { n: Schema.Number } })
+const Events = UiSchema.TaggedEnum({ Stepped: { n: Schema.Number } })
 
 class Log extends Command.Service<Log>()(
   "test/define/Log",
   { args: { n: Schema.Number }, invalidates: () => [] },
-  Effect.succeed(({ n }) => Effect.succeed(Message.make({ _tag: "Logged", n })))
+  Effect.succeed(({ n }) => Effect.succeed(Message.Logged({ n })))
 ) {}
 
 const CounterDef = Component.define({
@@ -25,7 +25,7 @@ const bump = CounterDef.update((model, msg, $) => {
   const n = model.n + $.props.by
   return $.set({ n, seen: [...model.seen, msg._tag] })
     .run(Log.make({ n }))
-    .emit(Events.make({ _tag: "Stepped", n }))
+    .emit(Events.Stepped({ n }))
 })
 
 const Counter = CounterDef.make({
@@ -51,30 +51,30 @@ describe("Component.define", () => {
   it.effect("$.combine folds the Model and keeps every Command and event in call order", () =>
     Effect.gen(function*() {
       const s = yield* Story.make(Counter, { by: 2 })
-      s.send(Message.make({ _tag: "Step" }))
+      s.send(Message.Step())
       assert.deepStrictEqual(s.model, { n: 4, seen: ["Step", "Step"] })
       s.expectExact(Log.make({ n: 2 }), Log.make({ n: 4 }))
-        .emitted(Events.make({ _tag: "Stepped", n: 2 }), Events.make({ _tag: "Stepped", n: 4 }))
-        .resolve(Log.make({ n: 2 }), Message.make({ _tag: "Logged", n: 2 }))
-        .resolve(Log.make({ n: 4 }), Message.make({ _tag: "Logged", n: 4 }))
+        .emitted(Events.Stepped({ n: 2 }), Events.Stepped({ n: 4 }))
+        .resolve(Log.make({ n: 2 }), Message.Logged({ n: 2 }))
+        .resolve(Log.make({ n: 4 }), Message.Logged({ n: 4 }))
     }))
 
   it.effect("a record update dispatches by _tag", () =>
     Effect.gen(function*() {
       const s = yield* Story.make(Counter, { by: 1 })
-      s.send(Message.make({ _tag: "Step" }))
-        .emitted(Events.make({ _tag: "Stepped", n: 1 }), Events.make({ _tag: "Stepped", n: 2 }))
-        .resolve(Log.make({ n: 1 }), Message.make({ _tag: "Logged", n: 1 }))
-        .resolve(Log.make({ n: 2 }), Message.make({ _tag: "Logged", n: 2 }))
+      s.send(Message.Step())
+        .emitted(Events.Stepped({ n: 1 }), Events.Stepped({ n: 2 }))
+        .resolve(Log.make({ n: 1 }), Message.Logged({ n: 1 }))
+        .resolve(Log.make({ n: 2 }), Message.Logged({ n: 2 }))
       assert.deepStrictEqual(s.model.seen, ["Step", "Step", "logged 1", "logged 2"])
     }))
 
   it.effect("a slice called by hand binds $ to the message it is given", () =>
     Effect.gen(function*() {
       const s = yield* Story.make(ByHand, { by: 1 })
-      s.send(Message.make({ _tag: "Step" }))
+      s.send(Message.Step())
       assert.deepStrictEqual(s.model.seen, ["Logged"])
-      s.emitted(Events.make({ _tag: "Stepped", n: 1 }))
-        .resolve(Log.make({ n: 1 }), Message.make({ _tag: "Logged", n: 1 }))
+      s.emitted(Events.Stepped({ n: 1 }))
+        .resolve(Log.make({ n: 1 }), Message.Logged({ n: 1 }))
     }))
 })

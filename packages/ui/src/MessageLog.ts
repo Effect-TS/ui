@@ -42,6 +42,7 @@ import { getIndexSignatureKeys } from "./internal/schemaAST.ts"
 import { holdsRedacted, redactAST } from "./internal/schemaRedact.ts"
 import type * as Query from "./Query.ts"
 import { canonical } from "./Query.ts"
+import * as UiSchema from "./UiSchema.ts"
 
 /**
  * The service the runtime records entries to.
@@ -808,24 +809,24 @@ const CommandWire = Schema.Struct({
 })
 const AwaitedEntryWire = Schema.Struct({ query: Schema.String, logKey: Schema.String })
 const CauseWire = Schema.Struct({ pretty: Schema.String, reasons: Schema.Array(Schema.Json) })
-const SourceWire = Schema.Union([
-  Schema.TaggedStruct("DomEvent", { name: Schema.String }),
-  Schema.TaggedStruct("Command", {
+const SourceWire = UiSchema.TaggedEnum({
+  DomEvent: { name: Schema.String },
+  Command: {
     name: Schema.String,
     issued: IssuedWire,
     spanId: Schema.NullOr(Schema.String),
     traceId: Schema.NullOr(Schema.String)
-  }),
-  Schema.TaggedStruct("Subscription", { key: Schema.String }),
-  Schema.TaggedStruct("Query", { name: Schema.String, seq: Schema.Number }),
-  Schema.TaggedStruct("Emit", { path: Schema.String, seq: Schema.Number }),
-  Schema.TaggedStruct("Failure", { path: Schema.String, seq: Schema.Number }),
-  Schema.TaggedStruct("Send", { path: Schema.String, seq: Schema.Number }),
-  Schema.TaggedStruct("Shared", { name: Schema.String, path: Schema.String, seq: Schema.Number }),
-  Schema.TaggedStruct("Collected", {}),
-  Schema.TaggedStruct("Mount", { name: Schema.String, args: Schema.Json }),
-  Schema.TaggedStruct("Dispatch", {})
-])
+  },
+  Subscription: { key: Schema.String },
+  Query: { name: Schema.String, seq: Schema.Number },
+  Emit: { path: Schema.String, seq: Schema.Number },
+  Failure: { path: Schema.String, seq: Schema.Number },
+  Send: { path: Schema.String, seq: Schema.Number },
+  Shared: { name: Schema.String, path: Schema.String, seq: Schema.Number },
+  Collected: {},
+  Mount: { name: Schema.String, args: Schema.Json },
+  Dispatch: {}
+})
 const RunWire = {
   ...InstanceWire,
   name: Schema.String,
@@ -849,14 +850,18 @@ const RunWire = {
  * `{ "~truncated": bytes }`. A Cause is sent as `Cause.pretty` plus its
  * reasons, best effort. An entry's `component` is sent as its name.
  *
+ * The Schema is a `UiSchema.TaggedEnum`, so `Wire.Hello({ version, host })`
+ * builds a frame without validation. Decode a frame that comes from a socket
+ * or a file.
+ *
  * @stability experimental
  * @category Wire
  * @since 0.1.0
  */
-export const Wire = Schema.Union([
-  Schema.TaggedStruct("Hello", { version: Schema.Number, host: Schema.Literals(["browser", "server", "test"]) }),
-  Schema.TaggedStruct("SessionStarted", { ...BaseWire, app: Schema.String }),
-  Schema.TaggedStruct("FetchStarted", {
+export const Wire = UiSchema.TaggedEnum({
+  Hello: { version: Schema.Number, host: Schema.Literals(["browser", "server", "test"]) },
+  SessionStarted: { ...BaseWire, app: Schema.String },
+  FetchStarted: {
     ...BaseWire,
     query: Schema.String,
     logKey: Schema.String,
@@ -876,14 +881,14 @@ export const Wire = Schema.Union([
     stored: Schema.Boolean,
     page: Schema.optionalKey(Schema.Number),
     cursor: Schema.optionalKey(Schema.Json)
-  }),
-  Schema.TaggedStruct("Waiting", {
+  },
+  Waiting: {
     ...InstanceWire,
     props: Schema.Json,
     model: Schema.Json,
     queries: Schema.optionalKey(Schema.Json)
-  }),
-  Schema.TaggedStruct("Mounted", {
+  },
+  Mounted: {
     ...InstanceWire,
     props: Schema.Json,
     model: Schema.Json,
@@ -891,8 +896,8 @@ export const Wire = Schema.Union([
     commands: Schema.Array(CommandWire),
     events: Schema.Array(Schema.Json),
     adopted: Schema.Boolean
-  }),
-  Schema.TaggedStruct("Update", {
+  },
+  Update: {
     ...InstanceWire,
     source: SourceWire,
     message: Schema.Json,
@@ -906,49 +911,49 @@ export const Wire = Schema.Union([
       Schema.Struct({ ref: Schema.String, message: Schema.Json }),
       Schema.Struct({ owner: Schema.String, message: Schema.Json })
     ]))
-  }),
-  Schema.TaggedStruct("PropsChanged", { ...InstanceWire, props: Schema.Json }),
-  Schema.TaggedStruct("QueryChanged", { ...InstanceWire, name: Schema.String, result: Schema.Json }),
-  Schema.TaggedStruct("LayerPending", InstanceWire),
-  Schema.TaggedStruct("LayerReady", InstanceWire),
-  Schema.TaggedStruct("LayerFailed", { ...InstanceWire, cause: CauseWire }),
-  Schema.TaggedStruct("Failed", {
+  },
+  PropsChanged: { ...InstanceWire, props: Schema.Json },
+  QueryChanged: { ...InstanceWire, name: Schema.String, result: Schema.Json },
+  LayerPending: InstanceWire,
+  LayerReady: InstanceWire,
+  LayerFailed: { ...InstanceWire, cause: CauseWire },
+  Failed: {
     ...InstanceWire,
     props: Schema.Json,
     in: Schema.String,
     name: Schema.NullOr(Schema.String),
     cause: CauseWire,
     update: Schema.optionalKey(Schema.Struct({ message: Schema.Json, source: SourceWire }))
-  }),
-  Schema.TaggedStruct("Unmounted", InstanceWire),
-  Schema.TaggedStruct("CommandAwaiting", {
+  },
+  Unmounted: InstanceWire,
+  CommandAwaiting: {
     ...InstanceWire,
     name: Schema.String,
     issued: IssuedWire,
     entries: Schema.Array(AwaitedEntryWire)
-  }),
-  Schema.TaggedStruct("CommandEnded", {
+  },
+  CommandEnded: {
     ...RunWire,
     silent: Schema.Boolean,
     waitEnded: Schema.optionalKey(Schema.Literals(["settled", "nothing", "budget", "switch", "interrupt", "closed"])),
     outstanding: Schema.optionalKey(Schema.Array(AwaitedEntryWire))
-  }),
-  Schema.TaggedStruct("CommandInterrupted", RunWire),
-  Schema.TaggedStruct("CommandDropped", {
+  },
+  CommandInterrupted: RunWire,
+  CommandDropped: {
     ...InstanceWire,
     name: Schema.String,
     issued: IssuedWire,
     reason: Schema.Literal("server")
-  }),
-  Schema.TaggedStruct("SendDropped", {
+  },
+  SendDropped: {
     ...InstanceWire,
     ref: Schema.String,
     issued: IssuedWire,
     reason: Schema.Literals(["unrendered", "failed", "fallback", "waiting", "absent"])
-  }),
-  Schema.TaggedStruct("SubscriptionStarted", { ...InstanceWire, key: Schema.String }),
-  Schema.TaggedStruct("SubscriptionStopped", { ...InstanceWire, key: Schema.String })
-])
+  },
+  SubscriptionStarted: { ...InstanceWire, key: Schema.String },
+  SubscriptionStopped: { ...InstanceWire, key: Schema.String }
+})
 
 /**
  * One frame of the Wire.

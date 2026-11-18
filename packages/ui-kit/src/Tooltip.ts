@@ -89,12 +89,12 @@
  * **Example** (A toolbar button with a tooltip whose open state lives in the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { Component } from "@effect/ui"
+ * import { Component, UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Tooltip } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
- * const ToolbarMessage = Schema.TaggedUnion({ ToggledBoldTip: { open: Schema.Boolean } })
+ * const ToolbarMessage = UiSchema.TaggedEnum({ ToggledBoldTip: { open: Schema.Boolean } })
  *
  * const Toolbar = Component.define({
  *   name: "Toolbar",
@@ -111,7 +111,7 @@
  *     Tooltip(h, {
  *       key: "bold",
  *       props: { open: model.boldTip, sideOffset: 8 },
- *       onEmit: (event) => ToolbarMessage.make({ _tag: "ToggledBoldTip", open: event._tag === "Opened" }),
+ *       onEmit: (event) => ToolbarMessage.ToggledBoldTip({ open: event._tag === "Opened" }),
  *       view: (s) =>
  *         h.span(
  *           s.trigger(h.button.class("tool").attr("aria-label", "Bold")).children("B"),
@@ -134,6 +134,7 @@ import * as Command from "@effect/ui/Command"
 import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
+import * as UiSchema from "@effect/ui/UiSchema"
 import * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
@@ -234,7 +235,7 @@ export type TooltipProps = typeof TooltipProps.Type
  * @category schemas
  * @since 0.1.0
  */
-export const TooltipEvents = Schema.TaggedUnion({
+export const TooltipEvents = UiSchema.TaggedEnum({
   Opened: {},
   Dismissed: {}
 })
@@ -250,7 +251,7 @@ export type TooltipEvents = typeof TooltipEvents.Type
 
 // Pointer, focus and key facts from the trigger, the positioner and the
 // document, and the ends of the two timers.
-const Message = Schema.TaggedUnion({
+const Message = UiSchema.TaggedEnum({
   // `instant`: what a TooltipProvider above shared when the trigger last
   // rendered. `update` can't read shared state, so the value comes in here.
   EnteredTrigger: { instant: Schema.Boolean },
@@ -294,13 +295,13 @@ const Model = Schema.Struct({
 const WaitBeforeOpening = Command.make(
   "WaitBeforeOpening",
   { args: { delay: Schema.Number }, mode: "switch" },
-  ({ delay }) => Effect.as(Effect.sleep(Duration.millis(delay)), Message.make({ _tag: "CompletedWaitBeforeOpening" }))
+  ({ delay }) => Effect.as(Effect.sleep(Duration.millis(delay)), Message.CompletedWaitBeforeOpening())
 )
 
 const WaitBeforeClosing = Command.make(
   "WaitBeforeClosing",
   { args: { delay: Schema.Number }, mode: "switch" },
-  ({ delay }) => Effect.as(Effect.sleep(Duration.millis(delay)), Message.make({ _tag: "CompletedWaitBeforeClosing" }))
+  ({ delay }) => Effect.as(Effect.sleep(Duration.millis(delay)), Message.CompletedWaitBeforeClosing())
 )
 
 // The two dismissals no part hears, listened for on the document while the
@@ -336,8 +337,8 @@ const TrackDismissal = Mount.makeStream(
     })
 )
 
-const opened = TooltipEvents.make({ _tag: "Opened" })
-const dismissed = TooltipEvents.make({ _tag: "Dismissed" })
+const opened = TooltipEvents.Opened()
+const dismissed = TooltipEvents.Dismissed()
 
 // The newest turn that shows in a provider's group: the highest, as turns
 // are taken in order. 0 is a tooltip that hasn't taken one yet.
@@ -420,7 +421,7 @@ export type TooltipProviderProps = typeof TooltipProviderProps.Type
 // The turns of the tooltips below that show, from their reports, sorted so
 // the message doesn't depend on their order, with 0 for one that hasn't
 // taken a turn yet. And the end of the window after the last one closed.
-const ProviderMessage = Schema.TaggedUnion({
+const ProviderMessage = UiSchema.TaggedEnum({
   ChangedShown: { turns: Schema.Array(Schema.Number) },
   CompletedWaitBeforeCooling: {}
 })
@@ -428,8 +429,7 @@ const ProviderMessage = Schema.TaggedUnion({
 const WaitBeforeCooling = Command.make(
   "WaitBeforeCooling",
   { args: { timeout: Schema.Number }, mode: "switch" },
-  ({ timeout }) =>
-    Effect.as(Effect.sleep(Duration.millis(timeout)), ProviderMessage.make({ _tag: "CompletedWaitBeforeCooling" }))
+  ({ timeout }) => Effect.as(Effect.sleep(Duration.millis(timeout)), ProviderMessage.CompletedWaitBeforeCooling())
 )
 
 /**
@@ -499,8 +499,7 @@ export const TooltipProvider = Component.define({
       // Each tooltip's turn while it shows, `null` while it doesn't.
       schema: Schema.NullOr(Schema.Number),
       onChange: (collected) =>
-        ProviderMessage.make({
-          _tag: "ChangedShown",
+        ProviderMessage.ChangedShown({
           turns: collected.filter((turn): turn is number => turn !== null).sort((a, b) => a - b)
         })
     }
@@ -568,7 +567,7 @@ export const Tooltip = Component.define({
       owner: TooltipProvider,
       optional: true,
       report: (model, props) => (shownBy(props) ? model.turn : null),
-      onChange: (value) => Message.make({ _tag: "ChangedGroup", newest: newestOf(value.turns), next: value.next })
+      onChange: (value) => Message.ChangedGroup({ newest: newestOf(value.turns), next: value.next })
     }
   },
   elements: Html
@@ -665,12 +664,12 @@ export const Tooltip = Component.define({
       (b) =>
         b.attr("data-popup-open", flag(shown))
           .attr("data-trigger-disabled", flag(p.props.disabled))
-          .on("mouseenter", Message.make({ _tag: "EnteredTrigger", instant: group?.instant === true }))
-          .on("mouseleave", Message.make({ _tag: "LeftTrigger" }))
-          .on("mousedown", Message.make({ _tag: "PressedTrigger" }))
-          .onClick(Message.make({ _tag: "ClickedTrigger" }))
-          .onFocus(Message.make({ _tag: "FocusedTrigger" }))
-          .onBlur(Message.make({ _tag: "BlurredTrigger" }))
+          .on("mouseenter", Message.EnteredTrigger({ instant: group?.instant === true }))
+          .on("mouseleave", Message.LeftTrigger())
+          .on("mousedown", Message.PressedTrigger())
+          .onClick(Message.ClickedTrigger())
+          .onFocus(Message.FocusedTrigger())
+          .onBlur(Message.BlurredTrigger())
           .forward((node) => node.attr("style", withStyle(node.attrs.style, `anchor-name:${anchor}`)))
     )
     const positioner = p.part("div", (b) => {
@@ -680,11 +679,11 @@ export const Tooltip = Component.define({
         .forward((node) => node.attr("style", withStyle(node.attrs.style, placement(anchor, p.props))))
       if (p.props.disableHoverablePopup !== true) {
         decorated = decorated
-          .on("mouseenter", Message.make({ _tag: "EnteredPositioner" }))
-          .on("mouseleave", Message.make({ _tag: "LeftPositioner" }))
+          .on("mouseenter", Message.EnteredPositioner())
+          .on("mouseleave", Message.LeftPositioner())
       }
       // Only an open tooltip listens on the document.
-      return shown ? decorated.onMount(TrackDismissal().pipe(Mount.map((_tag) => Message.make({ _tag })))) : decorated
+      return shown ? decorated.onMount(TrackDismissal().pipe(Mount.map((tag) => Message[tag]()))) : decorated
     })
     const popup = p.part("div", instant)
     const arrow = p.part("div", (b) => instant(b).attr("aria-hidden", "true"))

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Command, Component, MessageLog, Mount, Query, type Renderer, Route, Router, View } from "@effect/ui"
+import { Command, Component, MessageLog, Mount, Query, type Renderer, Route, Router, UiSchema, View } from "@effect/ui"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, expect, it } from "@effect/vitest"
@@ -136,7 +136,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(field.value).toBe("Short title")
       }).pipe(Effect.scoped))
 
-    const Message = Schema.TaggedUnion({ Typed: { value: Schema.String }, Checked: { checked: Schema.Boolean } })
+    const Message = UiSchema.TaggedEnum({ Typed: { value: Schema.String }, Checked: { checked: Schema.Boolean } })
     const Form = Component.define({
       name: "Form",
       model: Schema.Struct({ text: Schema.String, checked: Schema.Boolean, open: Schema.Boolean }),
@@ -153,7 +153,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           // No handler at all: the field is read-only, as the Model never changes.
           h.textarea.attr("aria-label", "Unhandled").value(model.text),
           h.input.attr("type", "checkbox").attr("aria-label", "Agree").checked(model.checked)
-            .onInput(({ checked }) => Message.make({ _tag: "Checked", checked })),
+            .onInput(({ checked }) => Message.Checked({ checked })),
           h.select
             .attr("aria-label", "Pick")
             .value("b").children(h.option.attr("value", "a").children("A"), h.option.attr("value", "b").children("B")),
@@ -243,7 +243,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       Search: Route.make("/search", { search: { q: Schema.optional(Schema.String) } }),
       NotFound: Route.make("/*")
     })
-    const SearchMessage = Schema.TaggedUnion({
+    const SearchMessage = UiSchema.TaggedEnum({
       Typed: { value: Schema.String },
       Patched: { outcome: Schema.Literals(["navigated", "blocked", "stale"]) }
     })
@@ -263,17 +263,17 @@ describe("BrowserHost", { concurrent: false }, () => {
               ? model
               : $.run(
                 Router.patchSearch(SearchRoute, $.props.route, { q: value || undefined }).pipe(
-                  Command.map((outcome) => SearchMessage.make({ _tag: "Patched", outcome }))
+                  Command.map((outcome) => SearchMessage.Patched({ outcome }))
                 )
               ),
           Patched: () => model
         }),
       view: (_, h) =>
         h.input.attr("aria-label", "Search").value(h.props.route.search.q ?? "").onInput(({ value }) =>
-          SearchMessage.make({ _tag: "Typed", value })
+          SearchMessage.Typed({ value })
         )
     })
-    const AppMessage = Schema.TaggedUnion({ ChangedRoute: { route: SearchRoute } })
+    const AppMessage = UiSchema.TaggedEnum({ ChangedRoute: { route: SearchRoute } })
     const SearchApp = Component.define({
       name: "SearchApp",
       props: Schema.Struct({ route: SearchRoute }),
@@ -284,7 +284,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       init: ($) => ({ route: $.props.route }),
       update: (_, { route }) => ({ route }),
       subscriptions: (model) => [
-        Router.subscription(SearchRoute, model.route, (route) => AppMessage.make({ _tag: "ChangedRoute", route }))
+        Router.subscription(SearchRoute, model.route, (route) => AppMessage.ChangedRoute({ route }))
       ],
       view: (model, h) =>
         SearchRoute.match(model.route, {
@@ -393,7 +393,7 @@ describe("BrowserHost", { concurrent: false }, () => {
   })
 
   describe("events", () => {
-    const Message = Schema.TaggedUnion({
+    const Message = UiSchema.TaggedEnum({
       Clicked: { where: Schema.String },
       Key: { key: Schema.String, shift: Schema.Boolean },
       Submitted: { title: Schema.String, tags: Schema.Array(Schema.String) },
@@ -415,20 +415,19 @@ describe("BrowserHost", { concurrent: false }, () => {
         }),
       view: (_, h) =>
         h.div(
-          h.section.attr("aria-label", "Outer").onClick(Message.make({ _tag: "Clicked", where: "outer" })).children(
-            h.button.onClick(Message.make({ _tag: "Clicked", where: "inner" })).children("Inner"),
+          h.section.attr("aria-label", "Outer").onClick(Message.Clicked({ where: "outer" })).children(
+            h.button.onClick(Message.Clicked({ where: "inner" })).children("Inner"),
             h.button("Plain")
           ),
           h.div
-            .on("focus", Message.make({ _tag: "Focused", where: "div" })).children(
+            .on("focus", Message.Focused({ where: "div" })).children(
               h.input.attr("aria-label", "Focus me")
             ),
           h.input.attr("aria-label", "Keys")
-            .onKeyDown(({ key, shift }) => Message.make({ _tag: "Key", key, shift }))
-            .onFocus(Message.make({ _tag: "Focused", where: "keys" })),
+            .onKeyDown(({ key, shift }) => Message.Key({ key, shift }))
+            .onFocus(Message.Focused({ where: "keys" })),
           h.form.onSubmit(({ entries, fields }) =>
-            Message.make({
-              _tag: "Submitted",
+            Message.Submitted({
               title: fields.title ?? "",
               tags: entries.filter(([name]) => name === "tag").map(([, value]) => value)
             })
@@ -462,10 +461,10 @@ describe("BrowserHost", { concurrent: false }, () => {
           init: (): ReadonlyArray<string> => [],
           update: (log, message) => message._tag === "Clicked" ? [...log, message.where] : log,
           view: (log, h) =>
-            h.section.onClick(Message.make({ _tag: "Clicked", where: "outer" })).children(
+            h.section.onClick(Message.Clicked({ where: "outer" })).children(
               // The inner handler goes after the first click lands on it.
               log.length === 0
-                ? h.button.onClick(Message.make({ _tag: "Clicked", where: "inner" })).children("Go")
+                ? h.button.onClick(Message.Clicked({ where: "inner" })).children("Go")
                 : h.button("Go")
             )
         })
@@ -741,7 +740,7 @@ describe("BrowserHost", { concurrent: false }, () => {
 
     it.effect("a file drop sends the files, and the log's wire encoding replaces a message it can't encode", () =>
       Effect.gen(function*() {
-        const Message = Schema.TaggedUnion({ Dropped: { files: Schema.Array(Schema.instanceOf(File)) } })
+        const Message = UiSchema.TaggedEnum({ Dropped: { files: Schema.Array(Schema.instanceOf(File)) } })
         const Uploader = Component.define({
           name: "Uploader",
           model: Schema.Array(Schema.String),
@@ -753,7 +752,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           update: (names, { files }) => [...names, ...files.map((file) => `${file.name} ${file.size}`)],
           view: (_, h) =>
             h.div.attr("aria-label", "Upload").onDrop(
-              ({ files }) => Message.make({ _tag: "Dropped", files }),
+              ({ files }) => Message.Dropped({ files }),
               { accepts: ["Files"], dropEffect: "copy" }
             )
         })
@@ -993,22 +992,22 @@ describe("BrowserHost", { concurrent: false }, () => {
         const { calls } = yield* dialogCalls
         const { app, dialog, root } = yield* mountConfirm({ state: "open", acceptEscape: false })
         expect(dialog()!.open).toBe(true)
-        root.send(ConfirmMessage.make({ _tag: "Mode", state: "modal" }))
+        root.send(ConfirmMessage.Mode({ state: "modal" }))
         yield* tick
         expect(calls).toEqual(["close Delete note?", "showModal Delete note?"])
-        root.send(ConfirmMessage.make({ _tag: "Mode", state: "open" }))
+        root.send(ConfirmMessage.Mode({ state: "open" }))
         yield* tick
         expect(calls.slice(2)).toEqual(["close Delete note?"])
         expect(dialog()!.open).toBe(true)
         expect(root.model()!.log).toEqual([])
 
-        root.send(ConfirmMessage.make({ _tag: "Mode", state: "modal" }))
+        root.send(ConfirmMessage.Mode({ state: "modal" }))
         yield* tick
         HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name: "Remove" }))
         yield* tick
         expect(dialog()).toBeNull()
         // Later commits have nothing to show; showModal on the detached dialog would throw.
-        root.send(ConfirmMessage.make({ _tag: "Ask" }))
+        root.send(ConfirmMessage.Ask())
         yield* tick
         expect(calls.filter((call) => call.startsWith("showModal"))).toHaveLength(2)
       }).pipe(Effect.scoped))
@@ -1110,7 +1109,7 @@ describe("BrowserHost", { concurrent: false }, () => {
 
         // A drawer: a child component mounted only while it's open.
         calls.length = 0
-        const DrawerMessage = Schema.TaggedUnion({ Close: {} })
+        const DrawerMessage = UiSchema.TaggedEnum({ Close: {} })
         const Drawer = Component.define({
           name: "Drawer",
           model: Schema.Boolean,
@@ -1121,7 +1120,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           update: () => false,
           view: (open, h) =>
             h.div(
-              h.button.onClick(DrawerMessage.make({ _tag: "Close" })).children("Close"),
+              h.button.onClick(DrawerMessage.Close()).children("Close"),
               open && Nested(h, { key: "nested" })
             )
         })
@@ -1190,13 +1189,13 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(root.model()!.log).toEqual(["closed->open", "open->closed", "closed->open"])
 
         // Hidden then shown again by the Model before the toggle task: one coalesced, stale notification.
-        yield* send(MenuMessage.make({ _tag: "Set", open: false }))
-        yield* send(MenuMessage.make({ _tag: "Set", open: true }))
+        yield* send(MenuMessage.Set({ open: false }))
+        yield* send(MenuMessage.Set({ open: true }))
         yield* settle
         expect(root.model()!.log.at(-1)).toBe("open->open")
         expect(stub.showing.has(menu()!)).toBe(true)
         expect(shows(stub.calls)).toBe(3)
-        yield* send(MenuMessage.make({ _tag: "Set", open: false }))
+        yield* send(MenuMessage.Set({ open: false }))
         yield* settle
         expect(stub.showing.has(menu()!)).toBe(false)
         expect(stub.calls.at(-1)).toBe("hidePopover Menu")
@@ -1239,8 +1238,8 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(ignoring.root.model()!.open).toBe(true)
         expect(ignoring.stub.showing.has(ignoring.menu()!)).toBe(false)
         // It shows again only once the Model's value goes to false and back.
-        yield* ignoring.send(MenuMessage.make({ _tag: "Set", open: false }))
-        yield* ignoring.send(MenuMessage.make({ _tag: "Set", open: true }))
+        yield* ignoring.send(MenuMessage.Set({ open: false }))
+        yield* ignoring.send(MenuMessage.Set({ open: true }))
         expect(ignoring.stub.showing.has(ignoring.menu()!)).toBe(true)
       }).pipe(Effect.scoped))
 
@@ -1248,7 +1247,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         const { menu, root, send, settle, stub } = yield* mountMenu({ mode: "auto", open: false, follow: true })
         // The Model opens it, and the browser dismisses it before the toggle task: one `closed->closed`.
-        yield* send(MenuMessage.make({ _tag: "Set", open: true }))
+        yield* send(MenuMessage.Set({ open: true }))
         stub.dismiss(menu()!)
         yield* settle
         expect(root.model()!.log).toEqual(["closed->closed"])
@@ -1282,13 +1281,13 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         const { menu, send, settle, stub } = yield* mountMenu({ mode: "manual", open: true, follow: false })
         // Changing the attribute hides it; the new mode shows it again from the Model.
-        yield* send(MenuMessage.make({ _tag: "Mode", mode: "auto" }))
+        yield* send(MenuMessage.Mode({ mode: "auto" }))
         expect(stub.showing.has(menu()!)).toBe(true)
         yield* settle
         stub.dismiss(menu()!)
         yield* settle
         expect(stub.showing.has(menu()!)).toBe(false)
-        yield* send(MenuMessage.make({ _tag: "Mode", mode: "manual" }))
+        yield* send(MenuMessage.Mode({ mode: "manual" }))
         expect(stub.showing.has(menu()!)).toBe(true)
         expect(shows(stub.calls)).toBe(3)
       }).pipe(Effect.scoped))
@@ -1306,10 +1305,10 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(stub.calls).toEqual(["showPopover Menu"])
 
         const shown = menu()!
-        yield* send(MenuMessage.make({ _tag: "Remove" }))
+        yield* send(MenuMessage.Remove())
         expect(menu()).toBeNull()
-        yield* send(MenuMessage.make({ _tag: "Set", open: false }))
-        yield* send(MenuMessage.make({ _tag: "Set", open: true }))
+        yield* send(MenuMessage.Set({ open: false }))
+        yield* send(MenuMessage.Set({ open: true }))
         expect(stub.calls.filter((call) => call.startsWith("showPopover"))).toHaveLength(1)
         expect(root.model()!.log).toEqual([])
         expect(shown.isConnected).toBe(false)
@@ -1324,7 +1323,7 @@ describe("BrowserHost", { concurrent: false }, () => {
   describe("refs and mounts", () => {
     const Field = Html.ref("Field", "input")
     const Missing = Html.ref("Missing", "input")
-    const Message = Schema.TaggedUnion({
+    const Message = UiSchema.TaggedEnum({
       Focus: {},
       FocusMissing: {},
       Measure: {},
@@ -1342,10 +1341,9 @@ describe("BrowserHost", { concurrent: false }, () => {
       init: (): ReadonlyArray<string> => [],
       update: (log, message, $) =>
         Message.match(message, {
-          Focus: () => $.run(Html.focus(Field, ({ found }) => Message.make({ _tag: "Found", found }))),
-          FocusMissing: () => $.run(Html.focus(Missing, ({ found }) => Message.make({ _tag: "Found", found }))),
-          Measure: () =>
-            $.run(Html.measure(Field, (rect) => Message.make({ _tag: "Measured", some: Option.isSome(rect) }))),
+          Focus: () => $.run(Html.focus(Field, ({ found }) => Message.Found({ found }))),
+          FocusMissing: () => $.run(Html.focus(Missing, ({ found }) => Message.Found({ found }))),
+          Measure: () => $.run(Html.measure(Field, (rect) => Message.Measured({ some: Option.isSome(rect) }))),
           Found: ({ found }) => [...log, `found ${found}`],
           Measured: ({ some }) => [...log, `measured ${some}`],
           Mounted: ({ tag }) => [...log, `mounted ${tag}`]
@@ -1353,7 +1351,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       view: (_, h) =>
         h.div(
           h.input.attr("aria-label", "Field").ref(Field)
-            .onMount(ReadTag().pipe(Mount.map((tag) => Message.make({ _tag: "Mounted", tag }))))
+            .onMount(ReadTag().pipe(Mount.map((tag) => Message.Mounted({ tag }))))
         )
     })
 
@@ -1362,9 +1360,9 @@ describe("BrowserHost", { concurrent: false }, () => {
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Refs, {}, app)
         yield* tick
-        root.send(Message.make({ _tag: "Focus" }))
-        root.send(Message.make({ _tag: "FocusMissing" }))
-        root.send(Message.make({ _tag: "Measure" }))
+        root.send(Message.Focus())
+        root.send(Message.FocusMissing())
+        root.send(Message.Measure())
         yield* tick
         expect(document.activeElement).toBe(HtmlLocator.getByRole(app, "textbox", { name: "Field" }))
         expect(root.model()).toEqual(["mounted input", "found true", "found false", "measured true"])

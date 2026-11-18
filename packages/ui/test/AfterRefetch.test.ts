@@ -1,4 +1,4 @@
-import { Command, Component, MessageLog, Query } from "@effect/ui"
+import { Command, Component, MessageLog, Query, UiSchema } from "@effect/ui"
 import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Layer, Option, Schema } from "effect"
@@ -73,7 +73,7 @@ const makeApp = (options?: {
     )
   ) {}
 
-  const CardMessage = Schema.TaggedUnion({
+  const CardMessage = UiSchema.TaggedEnum({
     UserChanged: {},
     Rename: { name: Schema.String },
     Renamed: { name: Schema.String },
@@ -88,8 +88,8 @@ const makeApp = (options?: {
           options?.silent?.includes(name)
             // Made here, not `Component.noop`: the runtime recognises it by its type id, not by identity.
             ? { [Component.NoopTypeId]: Component.NoopTypeId }
-            : CardMessage.make({ _tag: "Renamed", name }),
-        onFailure: () => CardMessage.make({ _tag: "Failed", name })
+            : CardMessage.Renamed({ name }),
+        onFailure: () => CardMessage.Failed({ name })
       })
     )
     return options?.wait === false ? matched : Command.afterRefetch(matched, budget)
@@ -103,7 +103,7 @@ const makeApp = (options?: {
       user: {
         query: GetUser,
         args: (_model, props) => ({ id: props.id }),
-        onChange: () => CardMessage.make({ _tag: "UserChanged" })
+        onChange: () => CardMessage.UserChanged()
       }
     }
   }).make({
@@ -132,12 +132,12 @@ const makeApp = (options?: {
         model.done.length === 0 ? "" : " [" + model.done.join(",") + "]"
       };`
       order.push(`view ${shown}`)
-      return h.el("p").on("click", CardMessage.make({ _tag: "Rename", name: "Bob" })).children(shown)
+      return h.el("p").on("click", CardMessage.Rename({ name: "Bob" })).children(shown)
     }
   })
 
   /** A parent whose Model says which cards are mounted: "tag:id" each. */
-  const ListMessage = Schema.TaggedUnion({ Set: { cards: Schema.Array(Schema.String) } })
+  const ListMessage = UiSchema.TaggedEnum({ Set: { cards: Schema.Array(Schema.String) } })
   const List = Component.define({
     name: "List",
     props: Schema.Struct({ cards: Schema.Array(Schema.String) }),
@@ -207,7 +207,7 @@ const user1: MessageLog.AwaitedEntry = { query: "users/GetUser", logKey: "{\"id\
 const user2: MessageLog.AwaitedEntry = { query: "users/GetUser", logKey: "{\"id\":\"2\"}" }
 
 const renameOn = (root: { readonly send: (message: any) => void }, app: ReturnType<typeof makeApp>, name: string) =>
-  root.send(app.CardMessage.make({ _tag: "Rename", name }))
+  root.send(app.CardMessage.Rename({ name }))
 
 describe("Command.afterRefetch", () => {
   it.effect("holds onSuccess until the refetch settles, after the query's onChange message and in the same render", () => {
@@ -375,7 +375,7 @@ describe("Command.afterRefetch", () => {
 
   it.effect("a queryMany query: the last key's onChange message, then onSuccess, then one view", () => {
     const app = makeApp({ invalidates: "all" })
-    const BoardMessage = Schema.TaggedUnion({ Changed: {}, Rename: {}, Renamed: {} })
+    const BoardMessage = UiSchema.TaggedEnum({ Changed: {}, Rename: {}, Renamed: {} })
     const order: Array<string> = []
     const Board = Component.define({
       name: "Board",
@@ -387,7 +387,7 @@ describe("Command.afterRefetch", () => {
           args: () => [{ id: "1" }, { id: "2" }],
           onChange: (_loaded, changes) => {
             order.push(`changes ${changes.map((change) => change.args.id).join(",")}`)
-            return BoardMessage.make({ _tag: "Changed" })
+            return BoardMessage.Changed()
           }
         }
       }
@@ -401,8 +401,8 @@ describe("Command.afterRefetch", () => {
             $.set(model).run(
               app.RenameUser.make({ id: "1", name: "Bob" }).pipe(
                 Command.match({
-                  onSuccess: () => BoardMessage.make({ _tag: "Renamed" }),
-                  onFailure: () => BoardMessage.make({ _tag: "Renamed" })
+                  onSuccess: () => BoardMessage.Renamed(),
+                  onFailure: () => BoardMessage.Renamed()
                 }),
                 Command.afterRefetch("Infinity")
               )
@@ -428,7 +428,7 @@ describe("Command.afterRefetch", () => {
         const root = yield* TestHost.mount(Board, {})
         yield* tick
         app.db.delay.set("2", 20)
-        root.send(BoardMessage.make({ _tag: "Rename" }))
+        root.send(BoardMessage.Rename())
         yield* tick
         assert.deepStrictEqual(commandLog(root), [{ _tag: "CommandAwaiting", entries: [user1, user2] }])
         order.length = 0
@@ -511,7 +511,7 @@ describe("Command.afterRefetch", () => {
         app.db.delay.set("1", 1000)
         renameOn(root, app, "Bob")
         yield* tick
-        root.send(app.CardMessage.make({ _tag: "Stop" }))
+        root.send(app.CardMessage.Stop())
         yield* TestHost.settle
         assert.strictEqual(root.text(), "a=Bob~… [Bob];")
         assert.deepStrictEqual(commandLog(root).at(-1), {
@@ -535,7 +535,7 @@ describe("Command.afterRefetch", () => {
         Locator.fire(root.get(Locator.text("a=Ann;", { exact: true })), "click")
         yield* tick
         app.order.length = 0
-        root.send(app.ListMessage.make({ _tag: "Set", cards: [] }))
+        root.send(app.ListMessage.Set({ cards: [] }))
         yield* TestHost.settle
         assert.deepStrictEqual(app.order, [])
         assert.deepStrictEqual(commandLog(root).at(-1), {
@@ -746,7 +746,7 @@ describe("Command.afterRefetch", () => {
         })))
       )
     ) {}
-    const ItemsMessage = Schema.TaggedUnion({ More: {}, Touch: {}, Touched: {} })
+    const ItemsMessage = UiSchema.TaggedEnum({ More: {}, Touch: {}, Touched: {} })
     const ItemsView = Component.define({
       name: "ItemsView",
       model: Schema.Struct({ touched: Schema.Boolean }),
@@ -760,7 +760,7 @@ describe("Command.afterRefetch", () => {
           Touch: () =>
             $.set({ ...model, touched: false }).run(
               Touch.make().pipe(
-                Command.map(() => ItemsMessage.make({ _tag: "Touched" })),
+                Command.map(() => ItemsMessage.Touched()),
                 Command.afterRefetch("Infinity")
               )
             ),
@@ -781,10 +781,10 @@ describe("Command.afterRefetch", () => {
       Effect.gen(function*() {
         const root = yield* TestHost.mount(ItemsView, {})
         yield* tick
-        root.send(ItemsMessage.make({ _tag: "More" }))
+        root.send(ItemsMessage.More())
         yield* tick
         assert.strictEqual(root.text(), "0-0,0-1")
-        root.send(ItemsMessage.make({ _tag: "Touch" }))
+        root.send(ItemsMessage.Touch())
         yield* tick
         assert.deepStrictEqual(commandLog(root), [{
           _tag: "CommandAwaiting",
@@ -809,7 +809,7 @@ describe("Command.afterRefetch", () => {
         const s = yield* Story.make(app.Card, { id: "1", tag: "a" })
         s
           .loaded("user", ann)
-          .send(app.CardMessage.make({ _tag: "Rename", name: "Bob" }))
+          .send(app.CardMessage.Rename({ name: "Bob" }))
           .resolve(app.RenameUser, "Bob")
         assert.deepStrictEqual(s.pending.map((entry) => [entry.status, entry.awaiting]), [
           ["awaiting", [{ name: "user", args: { id: "1" } }]]
@@ -839,11 +839,11 @@ describe("Command.afterRefetch", () => {
         const s = yield* Story.make(app.Card, { id: "2", tag: "b" })
         s
           .loaded("user", { id: "2", name: "Bea" })
-          .send(app.CardMessage.make({ _tag: "Rename", name: "" }))
+          .send(app.CardMessage.Rename({ name: "" }))
           .fail(app.RenameUser, "empty")
         assert.deepStrictEqual(s.model.done, ["failed "])
         s
-          .send(app.CardMessage.make({ _tag: "Rename", name: "Cy" }))
+          .send(app.CardMessage.Rename({ name: "Cy" }))
           .resolve(app.RenameUser, "Cy")
           .waitExpired(app.RenameUser)
         assert.deepStrictEqual(s.model.done, ["failed ", "Cy"])
@@ -851,7 +851,7 @@ describe("Command.afterRefetch", () => {
         const u = yield* Story.make(unwatched.Card, { id: "1", tag: "a" })
         u
           .loaded("user", ann)
-          .send(unwatched.CardMessage.make({ _tag: "Rename", name: "Bob" }))
+          .send(unwatched.CardMessage.Rename({ name: "Bob" }))
           .resolve(unwatched.RenameUser, "Bob")
         assert.deepStrictEqual(u.model.done, ["Bob"])
         const started = Story.start(app.Card, { id: "1", tag: "a" })
@@ -867,13 +867,13 @@ describe("Command.afterRefetch", () => {
         const s = yield* Story.make(switching.Card, { id: "1", tag: "a" })
         s
           .loaded("user", ann)
-          .send(switching.CardMessage.make({ _tag: "Rename", name: "Bob" }))
+          .send(switching.CardMessage.Rename({ name: "Bob" }))
           .resolve(switching.RenameUser, "Bob")
-          .send(switching.CardMessage.make({ _tag: "Rename", name: "Cy" }))
+          .send(switching.CardMessage.Rename({ name: "Cy" }))
         assert.deepStrictEqual(s.model.done, ["Bob"])
         s
           .resolve(switching.RenameUser, "Cy")
-          .send(switching.CardMessage.make({ _tag: "Stop" }))
+          .send(switching.CardMessage.Stop())
         assert.deepStrictEqual(s.model.done, ["Bob", "Cy"])
         assert.deepStrictEqual(s.interrupted, [])
       }))
@@ -884,8 +884,8 @@ describe("Command.afterRefetch", () => {
         const s = yield* Story.make(queued.Card, { id: "1", tag: "a" })
         s
           .loaded("user", ann)
-          .send(queued.CardMessage.make({ _tag: "Rename", name: "Bob" }))
-          .send(queued.CardMessage.make({ _tag: "Rename", name: "" }))
+          .send(queued.CardMessage.Rename({ name: "Bob" }))
+          .send(queued.CardMessage.Rename({ name: "" }))
           .resolve(queued.RenameUser, "Bob")
         assert.deepStrictEqual(s.pending.map((entry) => entry.status), ["awaiting", "running"])
         s.fail(queued.RenameUser, "empty")
@@ -900,7 +900,7 @@ describe("Command.afterRefetch", () => {
         const s = yield* Story.make(app.Card, { id: "1", tag: "a" })
         s
           .keepPending("user")
-          .send(app.CardMessage.make({ _tag: "Rename", name: "Bob" }))
+          .send(app.CardMessage.Rename({ name: "Bob" }))
           .loaded("user", ann)
           .resolve(app.RenameUser, "Bob")
         assert.deepStrictEqual(s.pending.map((entry) => entry.status), ["awaiting"])
@@ -910,7 +910,7 @@ describe("Command.afterRefetch", () => {
         const failed = yield* Story.make(app.Card, { id: "1", tag: "a" })
         failed
           .loadFailed("user", "down")
-          .send(app.CardMessage.make({ _tag: "Rename", name: "Bob" }))
+          .send(app.CardMessage.Rename({ name: "Bob" }))
           .loaded("user", ann)
           .resolve(app.RenameUser, "Bob")
           .loaded("user", { id: "1", name: "Bob" })
@@ -923,14 +923,14 @@ describe("Command.afterRefetch", () => {
           () =>
             started
               .loaded("user", ann)
-              .send(app.CardMessage.make({ _tag: "Rename", name: "Bob" }))
+              .send(app.CardMessage.Rename({ name: "Bob" }))
               .loaded("user", { id: "1", name: "Bob" }),
           /"user" is under the optimistic patch of users\/RenameUser/
         )
         const s = yield* Story.make(app.Card, { id: "1", tag: "a" })
         s
           .loaded("user", ann)
-          .send(app.CardMessage.make({ _tag: "Rename", name: "Bob" }))
+          .send(app.CardMessage.Rename({ name: "Bob" }))
           .loaded("user", { id: "1", name: "Bob" }, { patched: true })
           .resolve(app.RenameUser, "Bob")
           .loaded("user", { id: "1", name: "Bob" })

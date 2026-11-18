@@ -1,4 +1,4 @@
-import { Component, Head } from "@effect/ui"
+import { Component, Head, UiSchema } from "@effect/ui"
 import { Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { Collapsible } from "../../kit/Collapsible.ts"
@@ -8,7 +8,7 @@ import { NoteEditor } from "../../notes/components/NoteEditor.ts"
 import { GetNote } from "../../notes/queries/GetNote.ts"
 import { Notes } from "../../notes/services/Notes.ts"
 
-export const NotePageMessage = Schema.TaggedUnion({
+export const NotePageMessage = UiSchema.TaggedEnum({
   SavedNote: {},
   FailedEditor: {},
   ClickedSaveNow: {}
@@ -70,7 +70,7 @@ export const NotePageNoDeps = Component.define({
             slots: {
               summary: [
                 h.h2(note.title),
-                h.button.attr("type", "button").onClick(NotePageMessage.make({ _tag: "ClickedSaveNow" })).children(
+                h.button.attr("type", "button").onClick(NotePageMessage.ClickedSaveNow()).children(
                   "Save now"
                 )
               ],
@@ -80,10 +80,10 @@ export const NotePageNoDeps = Component.define({
                   props: { note },
                   // Maps the child's events to this component's messages:
                   // the event's verb, then this page's name for the child.
-                  onEmit: () => NotePageMessage.make({ _tag: "SavedNote" }),
+                  onEmit: () => NotePageMessage.SavedNote(),
                   // Every child is a failure boundary. A failed child shows
                   // `fallback` and stays down until its key changes.
-                  onFailure: () => NotePageMessage.make({ _tag: "FailedEditor" }),
+                  onFailure: () => NotePageMessage.FailedEditor(),
                   fallback: () => h.p("The editor is unavailable.")
                 }),
                 NoteActivity.render(h, {

@@ -1,4 +1,4 @@
-import { Command, Component, Feature, MessageLog, Mount, Query, Renderer, Subscription } from "@effect/ui"
+import { Command, Component, Feature, MessageLog, Mount, Query, Renderer, Subscription, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import * as runtime from "@effect/ui/internal/runtime"
 import { Locator, Story, TestHost } from "@effect/ui/testing"
@@ -38,7 +38,7 @@ const click = (root: TestHost.TestRoot<any, any, any>, text: string) =>
 // A keyed list whose rows hold a Command open until they unmount
 // ---------------------------------------------------------------------------
 
-const RowMessage = Schema.TaggedUnion({ Bump: {} })
+const RowMessage = UiSchema.TaggedEnum({ Bump: {} })
 
 const Hold = Command.make("Hold", { args: {} }, () => Effect.never)
 const Row = Component.define({
@@ -49,10 +49,10 @@ const Row = Component.define({
 }).make({
   init: ($) => $.set(0).run(Hold()),
   update: (count) => count + 1,
-  view: (count, h) => h.el("li").on("click", RowMessage.make({ _tag: "Bump" })).children(`${h.props.id}:${count}`)
+  view: (count, h) => h.el("li").on("click", RowMessage.Bump()).children(`${h.props.id}:${count}`)
 })
 
-const ListMessage = Schema.TaggedUnion({
+const ListMessage = UiSchema.TaggedEnum({
   Add: { id: Schema.String },
   Remove: { id: Schema.String },
   Reverse: {}
@@ -86,12 +86,12 @@ describe("Runtime", () => {
       assert.deepStrictEqual(tags(root), ["SessionStarted", "Mounted", "Update", "Update"])
       const update = root.log()[2] as MessageLog.Update
       assert.deepStrictEqual(update.source, { _tag: "DomEvent", name: "click" })
-      assert.deepStrictEqual(update.message, CounterMessage.make({ _tag: "Increment" }))
+      assert.deepStrictEqual(update.message, CounterMessage.Increment())
     })))
 
   it.effect("only the innermost handler fires", () =>
     provideHost(Effect.gen(function*() {
-      const Msg = Schema.TaggedUnion({ Outer: {}, Inner: {} })
+      const Msg = UiSchema.TaggedEnum({ Outer: {}, Inner: {} })
       const Nested = Component.define({
         name: "Nested",
         model: Schema.Array(Schema.String),
@@ -100,8 +100,8 @@ describe("Runtime", () => {
         init: () => [],
         update: (seen, message) => [...seen, message._tag],
         view: (_, h) =>
-          h.el("div").on("click", Msg.make({ _tag: "Outer" })).children(
-            h.el("button").on("click", Msg.make({ _tag: "Inner" })).children("inner"),
+          h.el("div").on("click", Msg.Outer()).children(
+            h.el("button").on("click", Msg.Inner()).children("inner"),
             h.el("span", "plain")
           )
       })
@@ -127,14 +127,14 @@ describe("Runtime", () => {
         click(root, "b:0")
         yield* TestHost.settle
         testHost.host.clearOperations()
-        root.send(ListMessage.make({ _tag: "Reverse" }))
+        root.send(ListMessage.Reverse())
         yield* TestHost.settle
         assert.strictEqual(root.text(), "c:0b:1a:0")
         assert.deepStrictEqual(items(), [c, b, a])
         assert.isFalse(testHost.host.operations().some((op) => op.startsWith("create")))
 
-        root.send(ListMessage.make({ _tag: "Remove", id: "b" }))
-        root.send(ListMessage.make({ _tag: "Add", id: "d" }))
+        root.send(ListMessage.Remove({ id: "b" }))
+        root.send(ListMessage.Add({ id: "d" }))
         yield* TestHost.settle
         assert.strictEqual(root.text(), "c:0a:0d:0")
         assert.deepStrictEqual(items().slice(0, 2), [c, a])
@@ -185,7 +185,7 @@ describe("Runtime", () => {
         assert.deepStrictEqual(root.pending().map((p) => p.path), ["/Wrap/Row[a]"])
       })))
 
-    const RowsMessage = Schema.TaggedUnion({
+    const RowsMessage = UiSchema.TaggedEnum({
       Show: { ids: Schema.Array(Schema.String) },
       Select: { id: Schema.String }
     })
@@ -219,13 +219,13 @@ describe("Runtime", () => {
         const items = () => root.all(Locator.tag("li"))
         const [head, a, b, c, d] = items()
         testHost.host.clearOperations()
-        root.send(RowsMessage.make({ _tag: "Show", ids: ["a", "d", "c", "b"] }))
+        root.send(RowsMessage.Show({ ids: ["a", "d", "c", "b"] }))
         yield* TestHost.settle
         assert.strictEqual(root.text(), "headadcbfoot")
         assert.deepStrictEqual(items().slice(0, 5), [head, a, d, c, b])
         assert.isFalse(testHost.host.operations().some((op) => op.startsWith("create") || op.startsWith("remove")))
 
-        root.send(RowsMessage.make({ _tag: "Show", ids: ["c", "e"] }))
+        root.send(RowsMessage.Show({ ids: ["c", "e"] }))
         yield* TestHost.settle
         assert.strictEqual(root.text(), "headcefoot")
         assert.strictEqual(items()[0], head)
@@ -239,9 +239,9 @@ describe("Runtime", () => {
         yield* TestHost.settle
         const testHost = yield* TestHost.TestHost
         testHost.host.clearOperations()
-        root.send(RowsMessage.make({ _tag: "Select", id: "b" }))
+        root.send(RowsMessage.Select({ id: "b" }))
         yield* TestHost.settle
-        root.send(RowsMessage.make({ _tag: "Select", id: "c" }))
+        root.send(RowsMessage.Select({ id: "c" }))
         yield* TestHost.settle
         assert.deepStrictEqual(testHost.host.operations().filter((op) => !op.startsWith("head")), [
           "attr <li> class=\"on\"",
@@ -255,17 +255,17 @@ describe("Runtime", () => {
         const root = yield* TestHost.mount(Rows, {})
         yield* TestHost.settle
         const testHost = yield* TestHost.TestHost
-        root.send(RowsMessage.make({ _tag: "Show", ids: ["a", "b", "c", "d", "e", "f"] }))
+        root.send(RowsMessage.Show({ ids: ["a", "b", "c", "d", "e", "f"] }))
         yield* TestHost.settle
         const moves = () => testHost.host.operations().filter((op) => op.startsWith("insert <li>"))
         testHost.host.clearOperations()
-        root.send(RowsMessage.make({ _tag: "Show", ids: ["f", "b", "c", "d", "e", "a"] }))
+        root.send(RowsMessage.Show({ ids: ["f", "b", "c", "d", "e", "a"] }))
         yield* TestHost.settle
         assert.strictEqual(root.text(), "headfbcdeafoot")
         assert.strictEqual(moves().length, 2)
 
         testHost.host.clearOperations()
-        root.send(RowsMessage.make({ _tag: "Show", ids: ["x", "e", "b", "c", "f", "d"] }))
+        root.send(RowsMessage.Show({ ids: ["x", "e", "b", "c", "f", "d"] }))
         yield* TestHost.settle
         assert.strictEqual(root.text(), "headxebcfdfoot")
         // x is new, and b, c, d, the longest run already in order, stay: only e and f move.
@@ -273,7 +273,7 @@ describe("Runtime", () => {
 
         // The first rows stayed in order: only d, out of order after them, moves.
         testHost.host.clearOperations()
-        root.send(RowsMessage.make({ _tag: "Show", ids: ["x", "e", "b", "d", "c", "f"] }))
+        root.send(RowsMessage.Show({ ids: ["x", "e", "b", "d", "c", "f"] }))
         yield* TestHost.settle
         assert.strictEqual(root.text(), "headxebdcffoot")
         assert.deepStrictEqual(moves(), ["insert <li> before <li>"])
@@ -293,14 +293,14 @@ describe("Runtime", () => {
 
         // `foot` has no key, so it is matched by position and made again where the count changes.
         testHost.host.clearOperations()
-        root.send(RowsMessage.make({ _tag: "Show", ids: ["a", "b", "c", "d", "e", "f"] }))
+        root.send(RowsMessage.Show({ ids: ["a", "b", "c", "d", "e", "f"] }))
         yield* TestHost.settle
         assert.strictEqual(root.text(), "headabcdeffoot")
         assert.deepStrictEqual(items().slice(0, 5), before.slice(0, 5))
         assert.strictEqual(structural().filter((op) => op.startsWith("insert <li>")).length, 3)
 
         testHost.host.clearOperations()
-        root.send(RowsMessage.make({ _tag: "Show", ids: ["a", "b"] }))
+        root.send(RowsMessage.Show({ ids: ["a", "b"] }))
         yield* TestHost.settle
         assert.strictEqual(root.text(), "headabfoot")
         assert.deepStrictEqual(items().slice(0, 3), before.slice(0, 3))
@@ -440,7 +440,7 @@ describe("Runtime", () => {
         const moves = () => testHost.host.operations().filter((op) => op.startsWith("insert <li>")).length - 1
 
         testHost.host.clearOperations()
-        root.send(RowsMessage.make({ _tag: "Show", ids: ["a", "b", "x", "c", "d"] }))
+        root.send(RowsMessage.Show({ ids: ["a", "b", "x", "c", "d"] }))
         yield* TestHost.settle
         assert.strictEqual(root.text(), "headabxcdfoot")
         const x = items()[3]
@@ -448,14 +448,14 @@ describe("Runtime", () => {
         assert.strictEqual(moves(), 1)
 
         testHost.host.clearOperations()
-        root.send(RowsMessage.make({ _tag: "Show", ids: ["a", "x", "d"] }))
+        root.send(RowsMessage.Show({ ids: ["a", "x", "d"] }))
         yield* TestHost.settle
         assert.strictEqual(root.text(), "headaxdfoot")
         assert.deepStrictEqual(items().slice(0, 4), [head, a, x, d])
         assert.strictEqual(moves(), 0)
 
         // The key of a row before the change, used again after it.
-        root.send(RowsMessage.make({ _tag: "Show", ids: ["a", "x", "q", "a", "d"] }))
+        root.send(RowsMessage.Show({ ids: ["a", "x", "q", "a", "d"] }))
         const crashed = yield* Effect.flip(TestHost.settle)
         assert.strictEqual(crashed._tag, "RootCrashed")
         const failed = root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
@@ -480,7 +480,7 @@ describe("Runtime", () => {
           const ids: Array<string> = []
           const length = random(alphabet.length + 1)
           for (let index = 0; index < length; index++) ids.push(pool.splice(random(pool.length), 1)[0]!)
-          root.send(RowsMessage.make({ _tag: "Show", ids }))
+          root.send(RowsMessage.Show({ ids }))
           yield* TestHost.settle
           const shown = items()
           assert.strictEqual(root.text(), `head${ids.join("")}foot`)
@@ -499,7 +499,7 @@ describe("Runtime", () => {
       provideHost(Effect.gen(function*() {
         const root = yield* TestHost.mount(Rows, {}, { fallback: (_, h) => h.el("h1", "down") })
         yield* TestHost.settle
-        root.send(RowsMessage.make({ _tag: "Show", ids: ["a", "a"] }))
+        root.send(RowsMessage.Show({ ids: ["a", "a"] }))
         const crashed = yield* Effect.flip(TestHost.settle)
         assert.strictEqual(crashed._tag, "RootCrashed")
         const failed = root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
@@ -509,7 +509,7 @@ describe("Runtime", () => {
   })
 
   describe("failures", () => {
-    const BombMessage = Schema.TaggedUnion({ Explode: {} })
+    const BombMessage = UiSchema.TaggedEnum({ Explode: {} })
     const Bomb = Component.define({
       name: "Bomb",
       model: Schema.Number,
@@ -519,9 +519,9 @@ describe("Runtime", () => {
       update: (): number => {
         throw new Error("boom")
       },
-      view: (_, h) => h.el("button").on("click", BombMessage.make({ _tag: "Explode" })).children("bomb")
+      view: (_, h) => h.el("button").on("click", BombMessage.Explode()).children("bomb")
     })
-    const PageMessage = Schema.TaggedUnion({ BombFailed: {}, Retry: {} })
+    const PageMessage = UiSchema.TaggedEnum({ BombFailed: {}, Retry: {} })
     const Page = Component.define({
       name: "Page",
       model: Schema.Struct({ failures: Schema.Number, attempt: Schema.Number }),
@@ -539,7 +539,7 @@ describe("Runtime", () => {
           Bomb(h, {
             key: `bomb-${model.attempt}`,
             props: {},
-            onFailure: () => PageMessage.make({ _tag: "BombFailed" }),
+            onFailure: () => PageMessage.BombFailed(),
             fallback: () => h.el("p", "bomb failed")
           }),
           Counter(h, { key: "counter", props: { initial: 0 } })
@@ -563,7 +563,7 @@ describe("Runtime", () => {
         assert.strictEqual(root.text(), "bomb failed-1+")
 
         // Re-keying is the retry.
-        root.send(PageMessage.make({ _tag: "Retry" }))
+        root.send(PageMessage.Retry())
         yield* TestHost.settle
         assert.strictEqual(root.text(), "bomb-1+")
         assert.include(tags(root, "/Page/Bomb[bomb-1]"), "Mounted")
@@ -734,11 +734,11 @@ describe("Runtime", () => {
   })
 
   describe("Commands", () => {
-    const Msg = Schema.TaggedUnion({ Query: { text: Schema.String }, Results: { text: Schema.String } })
+    const Msg = UiSchema.TaggedEnum({ Query: { text: Schema.String }, Results: { text: Schema.String } })
     const Search = Command.make(
       "Search",
       { args: { text: Schema.String }, mode: "switch" },
-      ({ text }) => Effect.as(Effect.sleep("1 second"), Msg.make({ _tag: "Results", text }))
+      ({ text }) => Effect.as(Effect.sleep("1 second"), Msg.Results({ text }))
     )
     const Box = Component.define({
       name: "Box",
@@ -757,8 +757,8 @@ describe("Runtime", () => {
     it.effect("switch interrupts the running run, and results come back as messages", () =>
       provideHost(Effect.gen(function*() {
         const root = yield* TestHost.mount(Box, {})
-        root.send(Msg.make({ _tag: "Query", text: "a" }))
-        root.send(Msg.make({ _tag: "Query", text: "ab" }))
+        root.send(Msg.Query({ text: "a" }))
+        root.send(Msg.Query({ text: "ab" }))
         yield* TestHost.settle
         assert.deepStrictEqual(root.pending(), [{
           _tag: "Command",
@@ -786,12 +786,12 @@ describe("Runtime", () => {
     it.effect("a ref resolves within the issuing instance after the render is committed", () =>
       provideHost(Effect.gen(function*() {
         const Field = Renderer.ref("Field")
-        const RefMsg = Schema.TaggedUnion({ Show: {}, Found: { found: Schema.Boolean } })
+        const RefMsg = UiSchema.TaggedEnum({ Show: {}, Found: { found: Schema.Boolean } })
         const Look = Command.make("Look", { args: {} }, () =>
           Effect.gen(function*() {
             const refs = yield* Renderer.Refs
             const node = yield* refs.lookup(Field)
-            return RefMsg.make({ _tag: "Found", found: Option.isSome(node) })
+            return RefMsg.Found({ found: Option.isSome(node) })
           }))
         const Form = Component.define({
           name: "Form",
@@ -809,7 +809,7 @@ describe("Runtime", () => {
         const root = yield* TestHost.mount(Form, {})
         yield* TestHost.settle
         assert.deepStrictEqual(root.model(), { shown: false, found: false })
-        root.send(RefMsg.make({ _tag: "Show" }))
+        root.send(RefMsg.Show())
         yield* TestHost.settle
         assert.deepStrictEqual(root.model(), { shown: true, found: true })
       })))
@@ -868,7 +868,7 @@ describe("Runtime", () => {
     // The editor's buttons can run either command, so a mount provides both.
     const commands = (server: Server) => Layer.mergeAll(Save.layer, Rename.layer).pipe(Layer.provide(api(server)))
 
-    const EditorMsg = Schema.TaggedUnion({ Save: {}, Rename: {}, Stop: {}, Saved: { n: Schema.Number } })
+    const EditorMsg = UiSchema.TaggedEnum({ Save: {}, Rename: {}, Stop: {}, Saved: { n: Schema.Number } })
     const Editor = Component.define({
       name: "Editor",
       model: Schema.Number,
@@ -877,24 +877,22 @@ describe("Runtime", () => {
       init: () => 0,
       update: (n, message, $) =>
         EditorMsg.match(message, {
-          Save: () =>
-            $.set(n + 1).run(Save.make({ n: n + 1 }).pipe(Command.map((n) => EditorMsg.make({ _tag: "Saved", n })))),
-          Rename: () =>
-            $.set(n + 1).run(Rename.make({ n: n + 1 }).pipe(Command.map((n) => EditorMsg.make({ _tag: "Saved", n })))),
+          Save: () => $.set(n + 1).run(Save.make({ n: n + 1 }).pipe(Command.map((n) => EditorMsg.Saved({ n })))),
+          Rename: () => $.set(n + 1).run(Rename.make({ n: n + 1 }).pipe(Command.map((n) => EditorMsg.Saved({ n })))),
           Stop: () => $.run(Command.interrupt(Save)),
           Saved: () => n
         }),
       view: (_, h) =>
         h.el("div", [
-          h.el("button").on("click", EditorMsg.make({ _tag: "Save" })).children("save"),
-          h.el("button").on("click", EditorMsg.make({ _tag: "Rename" })).children("rename"),
-          h.el("button").on("click", EditorMsg.make({ _tag: "Stop" })).children("stop"),
+          h.el("button").on("click", EditorMsg.Save()).children("save"),
+          h.el("button").on("click", EditorMsg.Rename()).children("rename"),
+          h.el("button").on("click", EditorMsg.Stop()).children("stop"),
           h.text(h.isRunning(Save) ? "saving" : "idle")
         ])
     })
 
     // The layout: it watches the server count through `changes`, which carries server values only.
-    const PageMsg = Schema.TaggedUnion({ Count: { value: Schema.Number }, Close: {}, Watch: { on: Schema.Boolean } })
+    const PageMsg = UiSchema.TaggedEnum({ Count: { value: Schema.Number }, Close: {}, Watch: { on: Schema.Boolean } })
     const page = <R>(editor: Component.Component<"Editor", {}, number, any, never, R, any>) =>
       Component.define({
         name: "Page",
@@ -913,7 +911,7 @@ describe("Runtime", () => {
             "count",
             GetCount.changes({ id: "a" }).pipe(
               Stream.filter(AsyncResult.isSuccess),
-              Stream.map((result) => PageMsg.make({ _tag: "Count", value: result.value }))
+              Stream.map((result) => PageMsg.Count({ value: result.value }))
             )
           )
         ],
@@ -938,7 +936,7 @@ describe("Runtime", () => {
         click(root, "save")
         yield* TestHost.settle
         assert.include(root.text(), "saving")
-        root.send(PageMsg.make({ _tag: "Close" }))
+        root.send(PageMsg.Close())
         yield* TestHost.settle
         assert.deepStrictEqual(root.pending(), [])
         yield* TestClock.adjust("2 seconds")
@@ -1071,15 +1069,15 @@ describe("Runtime", () => {
             Effect.uninterruptible(Effect.andThen(Deferred.await(gate), Effect.sync(() => events.push("body done"))))
         })
       ) {}
-      const Msg = Schema.TaggedUnion({ Close: {}, Stop: {}, Done: {} })
+      const Msg = UiSchema.TaggedEnum({ Close: {}, Stop: {}, Done: {} })
       const Child = Component.define({
         name: "Child",
         model: Schema.Null,
         message: Msg
       }).make({
-        init: ($) => $.set(null).run(Stubborn.make().pipe(Command.map(() => Msg.make({ _tag: "Done" })))),
+        init: ($) => $.set(null).run(Stubborn.make().pipe(Command.map(() => Msg.Done()))),
         update: (model, message, $) => message._tag === "Stop" ? $.run(Command.interrupt(Stubborn)) : model,
-        view: (_, h) => h.el("button").on("click", Msg.make({ _tag: "Stop" })).children("stop")
+        view: (_, h) => h.el("button").on("click", Msg.Stop()).children("stop")
       })
       // A child whose `Command.make` run ends with it.
       const Holder = Component.define({
@@ -1096,7 +1094,7 @@ describe("Runtime", () => {
                 Effect.uninterruptible(
                   Effect.andThen(Deferred.await(gate), Effect.sync(() => events.push("body done")))
                 )
-            )().pipe(Command.map(() => Msg.make({ _tag: "Done" })))
+            )().pipe(Command.map(() => Msg.Done()))
           ),
         update: (model) => model,
         view: (_, h) => h.text("holder")
@@ -1157,7 +1155,7 @@ describe("Runtime", () => {
         const scope = yield* Scope.make()
         const root = yield* TestHost.mount(parent(Holder), {}).pipe(Scope.provide(scope))
         yield* TestHost.settle
-        root.send(Msg.make({ _tag: "Close" }))
+        root.send(Msg.Close())
         yield* TestHost.settle
         assert.notInclude(root.text(), "holder")
         yield* closeWaitsForBody(scope, stubborn)
@@ -1170,7 +1168,7 @@ describe("Runtime", () => {
         const scope = yield* Scope.make()
         const root = yield* TestHost.mount(parent(Child), {}).pipe(Scope.provide(scope))
         yield* TestHost.settle
-        root.send(Msg.make({ _tag: "Close" }))
+        root.send(Msg.Close())
         yield* TestHost.settle
         yield* closeWaitsForBody(scope, stubborn)
       }).pipe(Effect.provide(Stubborn.layer), Effect.provide(TestHost.layer()))
@@ -1190,7 +1188,7 @@ describe("Runtime", () => {
         const { Child, Msg, Stubborn, events, gate, parent } = makeStubborn()
         const root = yield* TestHost.mount(parent(Component.provide(Child, Stubborn.layer)), {})
         yield* TestHost.settle
-        root.send(Msg.make({ _tag: "Close" }))
+        root.send(Msg.Close())
         yield* TestHost.settle
         assert.deepStrictEqual(events, [])
         Deferred.doneUnsafe(gate, Exit.void)
@@ -1255,7 +1253,7 @@ describe("Runtime", () => {
           Effect.succeed(() => Stream.fromEffect(held("stream")))
         ) {}
         const Local = Command.make("test/Local", { args: {} }, () => held("make"))
-        const Msg = Schema.TaggedUnion({ Close: {} })
+        const Msg = UiSchema.TaggedEnum({ Close: {} })
         const Busy = Component.define({
           name: "Busy",
           model: Schema.Boolean,
@@ -1289,7 +1287,7 @@ describe("Runtime", () => {
         const root = yield* TestHost.mount(App, {})
         yield* TestHost.settle
         assert.strictEqual(root.pending().length, 6)
-        root.send(Msg.make({ _tag: "Close" }))
+        root.send(Msg.Close())
         yield* TestHost.settle
         assert.sameMembers(stopped, ["switch", "stream", "make"])
         assert.strictEqual(root.pending().length, 3)
@@ -1328,7 +1326,7 @@ describe("Runtime", () => {
             )
           )
       )
-      const Msg = Schema.TaggedUnion({ Go: { n: Schema.Number }, Stop: {} })
+      const Msg = UiSchema.TaggedEnum({ Go: { n: Schema.Number }, Stop: {} })
       const Jobs = Component.define({ name: "Jobs", model: Schema.Null, message: Msg }).make({
         init: () => null,
         update: (model, message, $) =>
@@ -1346,11 +1344,11 @@ describe("Runtime", () => {
         provideHost(Effect.gen(function*() {
           const { Jobs, Msg, cleanup, events } = makeCleanup(mode)
           const root = yield* TestHost.mount(Jobs, {})
-          root.send(Msg.make({ _tag: "Go", n: 1 }))
+          root.send(Msg.Go({ n: 1 }))
           yield* TestHost.settle
           // A queue run is cut by the interrupt; a switch run by the next one.
-          if (mode === "queue") root.send(Msg.make({ _tag: "Stop" }))
-          root.send(Msg.make({ _tag: "Go", n: 2 }))
+          if (mode === "queue") root.send(Msg.Stop())
+          root.send(Msg.Go({ n: 2 }))
           yield* TestHost.settle
           assert.strictEqual(root.text(), "running")
           assert.deepStrictEqual(events, ["start 1"])
@@ -1416,10 +1414,10 @@ describe("Runtime", () => {
             )
           )
         ) {}
-        const Msg = Schema.TaggedUnion({ Issue: { outcome: Outcome }, Stop: {}, Done: {} })
+        const Msg = UiSchema.TaggedEnum({ Issue: { outcome: Outcome }, Stop: {}, Done: {} })
         const done = Command.match({
-          onSuccess: () => Msg.make({ _tag: "Done" }),
-          onFailure: () => Msg.make({ _tag: "Done" })
+          onSuccess: () => Msg.Done(),
+          onFailure: () => Msg.Done()
         })
         const Tx_ = Component.provide(
           Component.define({ name: "Tx", model: Schema.Null, message: Msg }).make({
@@ -1437,10 +1435,10 @@ describe("Runtime", () => {
         const root = yield* TestHost.mount(Tx_, {})
         yield* TestHost.settle
         for (const outcome of ["succeed", "fail", "hold"] as const) {
-          root.send(Msg.make({ _tag: "Issue", outcome }))
+          root.send(Msg.Issue({ outcome }))
           yield* TestHost.settle
         }
-        root.send(Msg.make({ _tag: "Stop" }))
+        root.send(Msg.Stop())
         yield* TestHost.settle
         assert.deepStrictEqual(exits, ["Success", "Fail", "Interrupt"])
         assert.strictEqual(root.text(), "tx")
@@ -1477,16 +1475,16 @@ describe("Runtime", () => {
         )
         const root = yield* TestHost.mount(App, {}, { query: { idleTimeToLive: "1 second" } })
         yield* TestHost.settle
-        root.send(PageMsg.make({ _tag: "Watch", on: false }))
+        root.send(PageMsg.Watch({ on: false }))
         yield* TestHost.settle
         yield* TestClock.adjust("500 millis")
-        root.send(PageMsg.make({ _tag: "Watch", on: true }))
+        root.send(PageMsg.Watch({ on: true }))
         yield* TestHost.settle
         assert.strictEqual(server.requests, 1)
-        root.send(PageMsg.make({ _tag: "Watch", on: false }))
+        root.send(PageMsg.Watch({ on: false }))
         yield* TestHost.settle
         yield* TestClock.adjust("1 second")
-        root.send(PageMsg.make({ _tag: "Watch", on: true }))
+        root.send(PageMsg.Watch({ on: true }))
         yield* TestHost.settle
         assert.strictEqual(server.requests, 2)
       })))
@@ -1495,7 +1493,7 @@ describe("Runtime", () => {
   describe("Subscriptions", () => {
     it.effect("are diffed by key, closing the old key before starting the new one", () =>
       provideHost(Effect.gen(function*() {
-        const Msg = Schema.TaggedUnion({ Room: { id: Schema.String }, Said: { text: Schema.String } })
+        const Msg = UiSchema.TaggedEnum({ Room: { id: Schema.String }, Said: { text: Schema.String } })
         const Chat = Component.define({
           name: "Chat",
           model: Schema.Struct({ room: Schema.String, said: Schema.Array(Schema.String) }),
@@ -1512,13 +1510,13 @@ describe("Runtime", () => {
             Subscription.make(
               "room",
               [model.room],
-              ([room]) => Stream.make(Msg.make({ _tag: "Said", text: `hello from ${room}` }))
+              ([room]) => Stream.make(Msg.Said({ text: `hello from ${room}` }))
             )
           ]
         })
         const root = yield* TestHost.mount(Chat, {})
         yield* TestHost.settle
-        root.send(Msg.make({ _tag: "Room", id: "2" }))
+        root.send(Msg.Room({ id: "2" }))
         yield* TestHost.settle
         assert.strictEqual(root.text(), "hello from 1,hello from 2")
         const changes = root.log().filter((entry) =>
@@ -1573,7 +1571,7 @@ describe("Runtime", () => {
           update: (model) => model,
           view: (_, h) => h.el("span", h.props.text)
         })
-        const Msg = Schema.TaggedUnion({ Rename: { text: Schema.String } })
+        const Msg = UiSchema.TaggedEnum({ Rename: { text: Schema.String } })
         const Host = Component.define({
           name: "Host",
           model: Schema.String,
@@ -1585,7 +1583,7 @@ describe("Runtime", () => {
         })
         const root = yield* TestHost.mount(Host, {})
         const span = root.get(Locator.tag("span"))
-        root.send(Msg.make({ _tag: "Rename", text: "two" }))
+        root.send(Msg.Rename({ text: "two" }))
         yield* TestHost.settle
         assert.strictEqual(root.text(), "two")
         assert.strictEqual(root.get(Locator.tag("span")), span)
@@ -1594,7 +1592,7 @@ describe("Runtime", () => {
         const changed = root.log().find((entry) => entry._tag === "PropsChanged")
         assert.deepStrictEqual(changed?._tag === "PropsChanged" ? changed.props : undefined, { text: "two" })
         // Equal props log nothing.
-        root.send(Msg.make({ _tag: "Rename", text: "two" }))
+        root.send(Msg.Rename({ text: "two" }))
         yield* TestHost.settle
         assert.deepStrictEqual(tags(root, "/Host/Label[l]"), ["Mounted", "PropsChanged"])
       })))
@@ -1706,7 +1704,7 @@ describe("Runtime", () => {
           )
         )
         const Shared = Component.provide(Hello, Greet.layer.pipe(Layer.provideMerge(counted)))
-        const Msg = Schema.TaggedUnion({ Drop: {} })
+        const Msg = UiSchema.TaggedEnum({ Drop: {} })
         const Two = Component.define({
           name: "Two",
           model: Schema.Number,
@@ -1720,10 +1718,10 @@ describe("Runtime", () => {
         yield* TestHost.settle
         assert.strictEqual(root.text(), "hi worldhi world")
         assert.strictEqual(builds, 1)
-        root.send(Msg.make({ _tag: "Drop" }))
+        root.send(Msg.Drop())
         yield* TestHost.settle
         assert.strictEqual(closes, 0)
-        root.send(Msg.make({ _tag: "Drop" }))
+        root.send(Msg.Drop())
         yield* TestHost.settle
         assert.strictEqual(closes, 1)
       })))
@@ -1731,7 +1729,7 @@ describe("Runtime", () => {
     it.effect("onFailure turns a failed build into a message, and the component stays mounted", () =>
       provideHost(Effect.gen(function*() {
         const failing = Layer.effect(Greeter, Effect.fail("offline" as const))
-        const Msg = Schema.TaggedUnion({ Failed: {} })
+        const Msg = UiSchema.TaggedEnum({ Failed: {} })
         const Status = Component.define({
           name: "Status",
           model: Schema.String,
@@ -1741,7 +1739,7 @@ describe("Runtime", () => {
           update: () => "failed",
           view: (text, h) => h.text(text)
         })
-        const App = Component.provide(Status, failing, { onFailure: () => Msg.make({ _tag: "Failed" }) })
+        const App = Component.provide(Status, failing, { onFailure: () => Msg.Failed() })
         const root = yield* TestHost.mount(App, {})
         yield* TestHost.settle
         assert.strictEqual(root.text(), "failed")
@@ -1765,7 +1763,7 @@ describe("Runtime", () => {
         update: (_, id) => id,
         view: (id, h) => h.text(`[${id}]`)
       })
-      const DropMsg = Schema.TaggedUnion({ Drop: { key: Schema.String } })
+      const DropMsg = UiSchema.TaggedEnum({ Drop: { key: Schema.String } })
       /** Shows one child per key, in order, until the key is dropped. */
       const Siblings = (children: Record<string, Component.Mountable<{}, never, never>>) =>
         Component.define({
@@ -1777,8 +1775,7 @@ describe("Runtime", () => {
           update: (keys, { key }) => keys.filter((k) => k !== key),
           view: (keys, h) => h.el("div", keys.map((key) => children[key](h, { key, props: {} })))
         })
-      const drop = (root: TestHost.TestRoot<any, any, any>, key: string) =>
-        root.send(DropMsg.make({ _tag: "Drop", key }))
+      const drop = (root: TestHost.TestRoot<any, any, any>, key: string) => root.send(DropMsg.Drop({ key }))
 
       it.effect("is shared by every provide that resolves from the same Env, and closed by its last user", () =>
         provideHost(Effect.gen(function*() {
@@ -1985,7 +1982,7 @@ describe("Runtime", () => {
       update: (model) => model,
       view: (_, h) => h.el("b", h.props.label)
     })
-    const Msg = Schema.TaggedUnion({ Heard: { text: Schema.String } })
+    const Msg = UiSchema.TaggedEnum({ Heard: { text: Schema.String } })
     const Shell = Component.define({
       name: "Shell",
       model: Schema.Array(Schema.String),
@@ -1999,7 +1996,7 @@ describe("Runtime", () => {
           Badge.render(h, {
             key: "b",
             props: { label: "new" },
-            onEmit: (text) => Msg.make({ _tag: "Heard", text }),
+            onEmit: (text) => Msg.Heard({ text }),
             fallback: (result) => h.text(result._tag === "Initial" ? "loading" : "unavailable")
           })
         )
@@ -2068,7 +2065,7 @@ describe("Runtime", () => {
 
     it.effect("a message whose update throws is on its Failed entry, and crosses the Wire", () =>
       provideHost(Effect.gen(function*() {
-        const Message = Schema.TaggedUnion({ Break: { why: Schema.String } })
+        const Message = UiSchema.TaggedEnum({ Break: { why: Schema.String } })
         const Fragile = Component.define({
           name: "Fragile",
           props: Schema.Struct({ id: Schema.String }),
@@ -2082,7 +2079,7 @@ describe("Runtime", () => {
           view: (_, h) => h.text("fragile")
         })
         const root = yield* TestHost.mount(Fragile, { id: "a" })
-        const message = Message.make({ _tag: "Break", why: "boom" })
+        const message = Message.Break({ why: "boom" })
         root.send(message)
         yield* Effect.exit(TestHost.settle)
         assert.notInclude(tags(root), "Update")
@@ -2098,8 +2095,8 @@ describe("Runtime", () => {
       provideHost(Effect.gen(function*() {
         const hold = Deferred.makeUnsafe<void>()
         const slow = Deferred.makeUnsafe<void>()
-        const Message = Schema.TaggedUnion({ Close: {}, Done: {} })
-        const done = Command.map(() => Message.make({ _tag: "Done" }))
+        const Message = UiSchema.TaggedEnum({ Close: {}, Done: {} })
+        const done = Command.map(() => Message.Done())
         // Its Command can't be interrupted, so its close stays open until `hold` is done.
         const Holder = Component.define({ name: "Holder", model: Schema.Null, message: Message }).make({
           init: ($) =>
@@ -2121,7 +2118,7 @@ describe("Runtime", () => {
         })
         const root = yield* TestHost.mount(Top, {})
         yield* TestHost.settle
-        root.send(Message.make({ _tag: "Close" }))
+        root.send(Message.Close())
         yield* TestHost.settle
         // Both are out of the tree, child first, though the child's Command is still running.
         assert.deepStrictEqual(
@@ -2491,7 +2488,7 @@ describe("Runtime", () => {
         instance: 1,
         component: Counter,
         source: { _tag: "Dispatch" },
-        message: CounterMessage.make({ _tag: "Increment" }),
+        message: CounterMessage.Increment(),
         props: { initial: 1 },
         model: { count: 1 },
         commands: [],
@@ -2533,7 +2530,7 @@ describe("Runtime", () => {
           option: Schema.Option(Schema.Redacted(Schema.String)),
           users: Schema.Array(User)
         }),
-        message: Schema.TaggedUnion({ Login: { password: Schema.Redacted(Schema.String) } }),
+        message: UiSchema.TaggedEnum({ Login: { password: Schema.Redacted(Schema.String) } }),
         events: Schema.Redacted(Schema.String)
       }).make({
         init: () => ({ token: Redacted.make("t"), fromValue: Redacted.make("v"), option: Option.none(), users: [] }),
@@ -2720,7 +2717,7 @@ describe("Runtime", () => {
 
     it.effect("controlled properties are re-applied after every patch", () =>
       provideHost(Effect.gen(function*() {
-        const Msg = Schema.TaggedUnion({ Typed: { value: Schema.String }, Touch: {} })
+        const Msg = UiSchema.TaggedEnum({ Typed: { value: Schema.String }, Touch: {} })
         const Form = Component.define({
           name: "Form",
           model: Schema.Struct({ value: Schema.String, touched: Schema.Number }),
@@ -2735,8 +2732,8 @@ describe("Runtime", () => {
             }),
           view: (model, h) =>
             h.box(
-              h.field.value(model.value).on("input", ({ value }) => Msg.make({ _tag: "Typed", value })),
-              h.label.on("click", Msg.make({ _tag: "Touch" })).children(String(model.touched))
+              h.field.value(model.value).on("input", ({ value }) => Msg.Typed({ value })),
+              h.label.on("click", Msg.Touch()).children(String(model.touched))
             )
         })
         const root = yield* TestHost.mount(Form, {})
@@ -2754,7 +2751,7 @@ describe("Runtime", () => {
 
     it.effect("onMount runs with the element's node on hosts that run mounts", () =>
       Effect.gen(function*() {
-        const Msg = Schema.TaggedUnion({ Mounted: { tag: Schema.String } })
+        const Msg = UiSchema.TaggedEnum({ Mounted: { tag: Schema.String } })
         const ReadTag = Mount.make(
           "ReadTag",
           { args: { token: Schema.Redacted(Schema.String) } },
@@ -2772,7 +2769,7 @@ describe("Runtime", () => {
           view: (tag, h) =>
             h.box(
               h.label(tag),
-              h.field.onMount(ReadTag({ token }).pipe(Mount.map((tag) => Msg.make({ _tag: "Mounted", tag }))))
+              h.field.onMount(ReadTag({ token }).pipe(Mount.map((tag) => Msg.Mounted({ tag }))))
             )
         })
         const root = yield* TestHost.mount(Auto, {})
@@ -2835,7 +2832,7 @@ describe("Runtime", () => {
 
     it.effect("a mount runs once, sees each new args by their Schema, and its Scope closes with the element", () =>
       Effect.gen(function*() {
-        const Msg = Schema.TaggedUnion({ Set: { n: Schema.Number }, Touch: {}, Hide: {} })
+        const Msg = UiSchema.TaggedEnum({ Set: { n: Schema.Number }, Touch: {}, Hide: {} })
         const runs: Array<number> = []
         const seen: Array<number> = []
         let closed = 0
@@ -2874,18 +2871,18 @@ describe("Runtime", () => {
         const root = yield* TestHost.mount(Chart, {})
         yield* TestHost.settle
         assert.deepStrictEqual(seen, [0])
-        root.send(Msg.make({ _tag: "Set", n: 1 }))
+        root.send(Msg.Set({ n: 1 }))
         yield* TestHost.settle
         // A render whose args are equal gives no new value.
-        root.send(Msg.make({ _tag: "Touch" }))
+        root.send(Msg.Touch())
         yield* TestHost.settle
         assert.strictEqual(root.text(), "touches 1")
-        root.send(Msg.make({ _tag: "Set", n: 2 }))
+        root.send(Msg.Set({ n: 2 }))
         yield* TestHost.settle
         assert.deepStrictEqual(seen, [0, 1, 2])
         assert.deepStrictEqual(runs, [0])
         assert.strictEqual(closed, 0)
-        root.send(Msg.make({ _tag: "Hide" }))
+        root.send(Msg.Hide())
         yield* TestHost.settle
         assert.strictEqual(closed, 1)
         assert.deepStrictEqual(runs, [0])
@@ -3253,7 +3250,7 @@ describe("Runtime", () => {
       const container = testHost.host.createElement("#app") as TestHost.TestElement
       const root = yield* Renderer.mount(Counter, { initial: 7 }, container)
       assert.strictEqual(Locator.textOf(container), "-7+")
-      root.send(CounterMessage.make({ _tag: "Decrement" }))
+      root.send(CounterMessage.Decrement())
       yield* TestHost.settle
       assert.strictEqual(Locator.textOf(container), "-6+")
       assert.isAbove(testHost.host.commits(), 1)
@@ -3309,11 +3306,11 @@ describe("Runtime", () => {
 
   describe("a keyed provide", () => {
     class Greeter extends Context.Service<Greeter, { readonly room: string }>()("test/KeyedGreeter") {}
-    const Msg = Schema.TaggedUnion({ Move: { room: Schema.String }, Shown: { room: Schema.String } })
+    const Msg = UiSchema.TaggedEnum({ Move: { room: Schema.String }, Shown: { room: Schema.String } })
     class Show extends Command.Service<Show>()(
       "test/KeyedShow",
       { args: {}, invalidates: () => [] },
-      Greeter.useSync((greeter) => () => Effect.succeed(Msg.make({ _tag: "Shown", room: greeter.room })))
+      Greeter.useSync((greeter) => () => Effect.succeed(Msg.Shown({ room: greeter.room })))
     ) {}
     /** Starts in room "a". Its text is its room, then the room each `Show` ran against, in order. */
     const RoomView = Component.define({
@@ -3328,7 +3325,7 @@ describe("Runtime", () => {
           Shown: ({ room }) => ({ ...model, shown: [...model.shown, room] })
         }),
       view: (model, h) =>
-        h.el("button").on("click", Msg.make({ _tag: "Move", room: "b" })).children(
+        h.el("button").on("click", Msg.Move({ room: "b" })).children(
           `${model.room}:${model.shown.join("")}`
         )
     })
@@ -3349,7 +3346,7 @@ describe("Runtime", () => {
         })
         const root = yield* TestHost.mount(Room, {})
         yield* TestHost.settle
-        root.send(Msg.make({ _tag: "Move", room: "a" }))
+        root.send(Msg.Move({ room: "a" }))
         yield* TestHost.settle
         assert.strictEqual(root.text(), "a:aa")
         assert.deepStrictEqual([calls, builds], [["a"], 1])
@@ -3368,8 +3365,8 @@ describe("Runtime", () => {
         const root = yield* TestHost.mount(Room, {})
         yield* TestHost.settle
         // One flush: the key is read once both updates are in, so "b" is never selected.
-        root.send(Msg.make({ _tag: "Move", room: "b" }))
-        root.send(Msg.make({ _tag: "Move", room: "c" }))
+        root.send(Msg.Move({ room: "b" }))
+        root.send(Msg.Move({ room: "c" }))
         yield* TestHost.settle
         assert.strictEqual(root.text(), "c:acc")
         assert.deepStrictEqual(calls, ["a", "c"])
@@ -3437,7 +3434,7 @@ describe("Runtime", () => {
           const root = yield* TestHost.mount(Room, {})
           yield* TestClock.adjust("1 second")
           yield* TestHost.settle
-          root.send(Msg.make({ _tag: "Move", room: "b" }))
+          root.send(Msg.Move({ room: "b" }))
           yield* TestHost.settle
           // "a" is held while "b" builds.
           assert.deepStrictEqual(events, ["built a"])
@@ -3502,15 +3499,15 @@ describe("Runtime", () => {
               room === "b" ? Layer.effect(Greeter, Effect.fail("no room b")) : Layer.succeed(Greeter, { room })
             ))
           }
-        }, { onFailure: () => Msg.make({ _tag: "Shown", room: "!" }) })
+        }, { onFailure: () => Msg.Shown({ room: "!" }) })
         const root = yield* TestHost.mount(Room, {})
         yield* TestHost.settle
-        root.send(Msg.make({ _tag: "Move", room: "b" }))
+        root.send(Msg.Move({ room: "b" }))
         yield* TestHost.settle
         // The Command waiting for "b" is interrupted. onFailure's message changes the Model, not the key.
         assert.strictEqual(root.text(), "b:a!")
         assert.deepStrictEqual(calls, ["a", "b"])
-        root.send(Msg.make({ _tag: "Move", room: "c" }))
+        root.send(Msg.Move({ room: "c" }))
         yield* TestHost.settle
         assert.strictEqual(root.text(), "c:a!c")
         assert.deepStrictEqual(calls, ["a", "b", "c"])
@@ -3520,16 +3517,16 @@ describe("Runtime", () => {
     class Host extends Context.Service<Host, { readonly name: string }>()("test/KeyedHost") {}
 
     it.effect("after a handled failed selection, a new Command runs against the parent's services, and fails the instance if it needs a selected one", () => {
-      const Act = Schema.TaggedUnion({ Move: {}, Ping: {}, Need: {}, Done: { by: Schema.String } })
+      const Act = UiSchema.TaggedEnum({ Move: {}, Ping: {}, Need: {}, Done: { by: Schema.String } })
       class Ping extends Command.Service<Ping>()(
         "test/KeyedPing",
         { args: {}, invalidates: () => [] },
-        Host.useSync((host) => () => Effect.succeed(Act.make({ _tag: "Done", by: host.name })))
+        Host.useSync((host) => () => Effect.succeed(Act.Done({ by: host.name })))
       ) {}
       class Need extends Command.Service<Need>()(
         "test/KeyedNeed",
         { args: {}, invalidates: () => [] },
-        Greeter.useSync((greeter) => () => Effect.succeed(Act.make({ _tag: "Done", by: greeter.room })))
+        Greeter.useSync((greeter) => () => Effect.succeed(Act.Done({ by: greeter.room })))
       ) {}
       const Acting = Component.define({
         name: "Acting",
@@ -3552,17 +3549,17 @@ describe("Runtime", () => {
           Need.layer.pipe(Layer.provide(
             room === "b" ? Layer.effect(Greeter, Effect.fail("no room b")) : Layer.succeed(Greeter, { room })
           ))
-      }, { onFailure: () => Act.make({ _tag: "Done", by: "failed" }) })
+      }, { onFailure: () => Act.Done({ by: "failed" }) })
       return provideHost(
         Effect.gen(function*() {
           const root = yield* TestHost.mount(Room, {})
-          root.send(Act.make({ _tag: "Move" }))
+          root.send(Act.Move())
           yield* TestHost.settle
           assert.strictEqual(root.text(), "b:failed")
-          root.send(Act.make({ _tag: "Ping" }))
+          root.send(Act.Ping())
           yield* TestHost.settle
           assert.strictEqual(root.text(), "b:parent")
-          root.send(Act.make({ _tag: "Need" }))
+          root.send(Act.Need())
           const crashed = yield* Effect.flip(TestHost.settle)
           assert.strictEqual(crashed._tag, "RootCrashed")
         }).pipe(Effect.provide(Ping.layer.pipe(Layer.provide(Layer.succeed(Host, { name: "parent" })))))
@@ -3881,7 +3878,7 @@ describe("Runtime", () => {
           ),
         { onFailure: () => "failed" }
       )
-      const Msg = Schema.TaggedUnion({ Add: { name: Schema.String } })
+      const Msg = UiSchema.TaggedEnum({ Add: { name: Schema.String } })
       const Shell = Component.define({
         name: "Shell",
         model: Schema.Array(Schema.String),
@@ -3896,7 +3893,7 @@ describe("Runtime", () => {
       assert.strictEqual(root.flush(), 0)
       assert.strictEqual(root.buildsPendingSince(0), 1)
 
-      root.send(Msg.make({ _tag: "Add", name: "second" }))
+      root.send(Msg.Add({ name: "second" }))
       yield* TestHost.settle
       const navigated = root.flush()
       assert.isAbove(navigated, 0)
@@ -3904,19 +3901,19 @@ describe("Runtime", () => {
       assert.strictEqual(root.buildsPendingSince(0), 2)
       assert.strictEqual(root.buildsPendingSince(navigated), 1)
 
-      root.send(Msg.make({ _tag: "Add", name: "fail" }))
+      root.send(Msg.Add({ name: "fail" }))
       yield* TestHost.settle
       assert.strictEqual(root.buildsPendingSince(navigated), 1)
       // A failed build counts as settled.
-      root.send(Msg.make({ _tag: "Add", name: "x" }))
+      root.send(Msg.Add({ name: "x" }))
       yield* TestHost.settle
       assert.strictEqual(root.buildsPendingSince(0), 3)
     })))
 
   it.effect("settle fails with the log's tail when work never stops", () =>
     Effect.gen(function*() {
-      const Msg = Schema.TaggedUnion({ Again: {} })
-      const Again = Command.make("Again", { args: {} }, () => Effect.succeed(Msg.make({ _tag: "Again" })))
+      const Msg = UiSchema.TaggedEnum({ Again: {} })
+      const Again = Command.make("Again", { args: {} }, () => Effect.succeed(Msg.Again()))
       const Loop = Component.define({
         name: "Loop",
         model: Schema.Number,

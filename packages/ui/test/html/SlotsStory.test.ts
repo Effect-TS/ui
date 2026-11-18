@@ -1,4 +1,4 @@
-import { Component, View } from "@effect/ui"
+import { Component, UiSchema, View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Locator, Scene } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -8,7 +8,7 @@ const Note = Component.define({
   name: "Note",
   model: Schema.Number,
   message: Schema.Never,
-  events: Schema.TaggedUnion({ Saved: { text: Schema.String } }),
+  events: UiSchema.TaggedEnum({ Saved: { text: Schema.String } }),
   elements: Html
 }).make({ init: () => 0, update: (n) => n, view: (n, h) => h.span("note " + n) })
 
@@ -24,7 +24,7 @@ const Panel = Component.define({
   view: (_, h) => h.section(h.h2(h.slots.title), h.p("panel's own"), h.slots.body)
 })
 
-const PageMsg = Schema.TaggedUnion({ Bump: {}, Saved: { text: Schema.String } })
+const PageMsg = UiSchema.TaggedEnum({ Bump: {}, Saved: { text: Schema.String } })
 const Page = Component.define({
   name: "Page",
   model: Schema.Struct({ bumps: Schema.Number, saved: Schema.String }),
@@ -41,8 +41,8 @@ const Page = Component.define({
         slots: {
           title: "bumps " + model.bumps,
           body: [
-            h.button.onClick(PageMsg.make({ _tag: "Bump" })).children("bump"),
-            Note(h, { key: "n", onEmit: (event) => PageMsg.make({ _tag: "Saved", text: event.text }) })
+            h.button.onClick(PageMsg.Bump()).children("bump"),
+            Note(h, { key: "n", onEmit: (event) => PageMsg.Saved({ text: event.text }) })
           ]
         }
       }),

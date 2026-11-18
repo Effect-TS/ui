@@ -16,10 +16,10 @@
  *
  * ```ts import.meta.vitest
  * import { Effect, Schema } from "effect"
- * import { Component } from "@effect/ui"
+ * import { Component, UiSchema } from "@effect/ui"
  * import { Locator, TestHost } from "@effect/ui/testing"
  *
- * const Msg = Schema.TaggedUnion({ ClickedIncrement: {} })
+ * const Msg = UiSchema.TaggedEnum({ ClickedIncrement: {} })
  *
  * const Counter = Component.define({
  *   name: "Counter",
@@ -28,7 +28,7 @@
  * }).make({
  *   init: () => 0,
  *   update: (count) => count + 1,
- *   view: (count, h) => h.el("button").on("click", Msg.make({ _tag: "ClickedIncrement" })).children(String(count))
+ *   view: (count, h) => h.el("button").on("click", Msg.ClickedIncrement()).children(String(count))
  * })
  *
  * const program = Effect.gen(function*() {

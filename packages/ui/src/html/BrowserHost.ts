@@ -68,9 +68,9 @@
  * ```ts
  * import { BrowserHost, Html } from "@effect/ui/html"
  * import { Layer, Schema } from "effect"
- * import { Component } from "@effect/ui"
+ * import { Component, UiSchema } from "@effect/ui"
  *
- * const Message = Schema.TaggedUnion({ ClickedIncrement: {} })
+ * const Message = UiSchema.TaggedEnum({ ClickedIncrement: {} })
  *
  * const Counter = Component.define({
  *   name: "Counter",
@@ -80,7 +80,7 @@
  * }).make({
  *   init: () => 0,
  *   update: (count) => count + 1,
- *   view: (count, h) => h.button.onClick(Message.make({ _tag: "ClickedIncrement" })).children(String(count))
+ *   view: (count, h) => h.button.onClick(Message.ClickedIncrement()).children(String(count))
  * })
  *
  * // The tree is mounted for as long as the Layer is built.

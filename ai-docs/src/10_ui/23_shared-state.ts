@@ -7,7 +7,7 @@
  * provider mounted. Then an optional owner, the reports readers give it, and
  * a reader's `onChange`.
  */
-import { Component } from "@effect/ui"
+import { Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Locator, Scene, Story } from "@effect/ui/testing"
 import { Effect, Schema } from "effect"
@@ -16,7 +16,7 @@ import { Effect, Schema } from "effect"
 // The owner: a headless component with `shares`
 // ---------------------------------------------------------------------------
 
-const ProviderMessage = Schema.TaggedUnion({
+const ProviderMessage = UiSchema.TaggedEnum({
   FocusedTooltip: { id: Schema.String },
   BlurredTooltip: { id: Schema.String }
 })
@@ -51,7 +51,7 @@ export const TooltipProvider = Component.define({
 // A reader: `shared` names the owners it reads, `$.send` reaches the owner
 // ---------------------------------------------------------------------------
 
-const TooltipMessage = Schema.TaggedUnion({
+const TooltipMessage = UiSchema.TaggedEnum({
   FocusedTooltip: { id: Schema.String },
   BlurredTooltip: { id: Schema.String }
 })
@@ -76,8 +76,8 @@ export const Tooltip = Component.define({
     const id = h.id("tip")
     return h.span(
       h.button
-        .onFocus(TooltipMessage.make({ _tag: "FocusedTooltip", id }))
-        .onBlur(TooltipMessage.make({ _tag: "BlurredTooltip", id }))
+        .onFocus(TooltipMessage.FocusedTooltip({ id }))
+        .onBlur(TooltipMessage.BlurredTooltip({ id }))
         .attr("aria-describedby", id)
         .children(h.props.label),
       h.shared.provider.open === id && h.span.id(id).attr("role", "tooltip").children(h.props.tip)
@@ -147,7 +147,7 @@ export const focused = Effect.gen(function*() {
 // An optional owner, reports and onChange
 // ---------------------------------------------------------------------------
 
-const GroupMessage = Schema.TaggedUnion({ ChangedOpen: { open: Schema.Boolean } })
+const GroupMessage = UiSchema.TaggedEnum({ ChangedOpen: { open: Schema.Boolean } })
 
 // `shares` in its long form. `value` is what readers read. `collects` is
 // what the owner collects from them: `schema` is the Schema of what each
@@ -166,7 +166,7 @@ export const PanelGroup = Component.define({
     value: (model) => ({ anyOpen: model.anyOpen }),
     collects: {
       schema: Schema.Boolean,
-      onChange: (collected) => GroupMessage.make({ _tag: "ChangedOpen", open: collected.includes(true) })
+      onChange: (collected) => GroupMessage.ChangedOpen({ open: collected.includes(true) })
     }
   },
   elements: Html
@@ -176,7 +176,7 @@ export const PanelGroup = Component.define({
   parts: (model) => ({ anyOpen: model.anyOpen })
 })
 
-const PanelMessage = Schema.TaggedUnion({ Toggled: {}, ChangedGroup: { anyOpen: Schema.Boolean } })
+const PanelMessage = UiSchema.TaggedEnum({ Toggled: {}, ChangedGroup: { anyOpen: Schema.Boolean } })
 
 // The long form of a `shared` entry, typed by its `owner`.
 //
@@ -207,7 +207,7 @@ export const Panel = Component.define({
       owner: PanelGroup,
       optional: true,
       report: (model) => model.open,
-      onChange: (value) => PanelMessage.make({ _tag: "ChangedGroup", anyOpen: value.anyOpen })
+      onChange: (value) => PanelMessage.ChangedGroup({ anyOpen: value.anyOpen })
     }
   },
   elements: Html
@@ -220,7 +220,7 @@ export const Panel = Component.define({
     }),
   view: (model, h) =>
     h.section(
-      h.button.onClick(PanelMessage.make({ _tag: "Toggled" })).children(h.props.title),
+      h.button.onClick(PanelMessage.Toggled()).children(h.props.title),
       model.open && h.p.children(h.shared.group === undefined ? "On its own" : "In a group")
     )
 })

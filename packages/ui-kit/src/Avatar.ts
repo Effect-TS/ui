@@ -72,6 +72,7 @@ import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as Subscription from "@effect/ui/Subscription"
+import * as UiSchema from "@effect/ui/UiSchema"
 import * as View from "@effect/ui/View"
 import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
@@ -145,7 +146,7 @@ const Model = Schema.Struct({
   delayElapsed: Schema.Boolean
 })
 
-const Message = Schema.TaggedUnion({
+const Message = UiSchema.TaggedEnum({
   ChangedImageStatus: Report.fields,
   ElapsedFallbackDelay: {}
 })
@@ -219,7 +220,7 @@ export const AvatarLoadImage = Mount.makeStream(
 )
 
 const loadImage = (source: Source) =>
-  AvatarLoadImage(source).pipe(Mount.map((report) => Message.make({ _tag: "ChangedImageStatus", ...report })))
+  AvatarLoadImage(source).pipe(Mount.map((report) => Message.ChangedImageStatus({ ...report })))
 
 // Removed from the consumer's finished image before the part writes them,
 // so they come last and in this order: a browser may start fetching as soon
@@ -290,7 +291,7 @@ export const Avatar = Component.define({
     Subscription.make(
       "fallbackDelay",
       props.fallbackDelay ?? 0,
-      (delay) => Stream.fromEffect(Effect.sleep(delay)).pipe(Stream.as(Message.make({ _tag: "ElapsedFallbackDelay" })))
+      (delay) => Stream.fromEffect(Effect.sleep(delay)).pipe(Stream.as(Message.ElapsedFallbackDelay()))
     )
   ],
   parts: (model, p) => {

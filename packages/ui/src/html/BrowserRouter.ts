@@ -28,7 +28,7 @@
  * ```ts import.meta.vitest
  * import { BrowserHost, BrowserRouter, Html } from "@effect/ui/html"
  * import { Effect, Layer, Schema } from "effect"
- * import { Component, Route, Router } from "@effect/ui"
+ * import { Component, Route, Router, UiSchema } from "@effect/ui"
  * import { TestHost } from "@effect/ui/testing"
  *
  * const AppRoute = Route.union({
@@ -38,7 +38,7 @@
  * })
  * type AppRoute = typeof AppRoute.Type
  *
- * const Message = Schema.TaggedUnion({ ChangedRoute: { route: AppRoute } })
+ * const Message = UiSchema.TaggedEnum({ ChangedRoute: { route: AppRoute } })
  *
  * const App = Component.define({
  *   name: "App",
@@ -49,7 +49,7 @@
  * }).make({
  *   init: ($) => $.props.route,
  *   update: (_, message) => message.route,
- *   subscriptions: (model) => [Router.subscription(AppRoute, model, (route) => Message.make({ _tag: "ChangedRoute", route }))],
+ *   subscriptions: (model) => [Router.subscription(AppRoute, model, (route) => Message.ChangedRoute({ route }))],
  *   view: (route, h) =>
  *     h.div(
  *       h.a.attr("href", AppRoute.print(AppRoute.make({ _tag: "Person", params: { id: 1 } }))).children("Ada"),

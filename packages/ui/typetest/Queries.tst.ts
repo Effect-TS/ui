@@ -1,4 +1,4 @@
-import { Component, Head, Query } from "@effect/ui"
+import { Component, Head, Query, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Story } from "@effect/ui/testing"
 import { Context, Effect, Option, Schema } from "effect"
@@ -20,7 +20,7 @@ class GetTeam extends Query.Service<GetTeam>()(
   Effect.succeed(({ id }) => Effect.succeed({ id, title: "T" }))
 ) {}
 
-const Message = Schema.TaggedUnion({
+const Message = UiSchema.TaggedEnum({
   UserChanged: { state: Schema.String, failed: Schema.Boolean },
   TeamChanged: { state: Schema.String },
   Bump: {}
@@ -38,7 +38,7 @@ const Card = Component.define({
       args: (_model, props) => ({ id: props.id }),
       onChange: (result) => {
         expect(result).type.toBe<AsyncResult.AsyncResult<typeof User.Type, string>>()
-        return Message.make({ _tag: "UserChanged", state: result._tag, failed: AsyncResult.isFailure(result) })
+        return Message.UserChanged({ state: result._tag, failed: AsyncResult.isFailure(result) })
       }
     },
     team: {
@@ -50,7 +50,7 @@ const Card = Component.define({
       },
       onChange: (result) => {
         expect(result).type.toBe<AsyncResult.AsyncResult<typeof Team.Type, never>>()
-        return Message.make({ _tag: "TeamChanged", state: result._tag })
+        return Message.TeamChanged({ state: result._tag })
       }
     }
   }
@@ -80,8 +80,7 @@ const Card = Component.define({
     return AsyncResult.match(h.queries.user, {
       onInitial: () => h.p(Option.isSome(h.previous.user) ? h.previous.user.value.name : "Loading"),
       onFailure: () => h.p("Missing"),
-      onSuccess: ({ value }) =>
-        h.p.onClick(Message.make({ _tag: "Bump" })).children(value.name, h.patched.team ? "*" : "")
+      onSuccess: ({ value }) => h.p.onClick(Message.Bump()).children(value.name, h.patched.team ? "*" : "")
     })
   }
 })
@@ -191,7 +190,7 @@ describe("Component queries", () => {
           query: GetTeam,
           args: (_model, props) => ({ id: props.id }),
           // @ts-expect-error not assignable
-          onChange: (_result: AsyncResult.AsyncResult<string, never>) => Message.make({ _tag: "Bump" })
+          onChange: (_result: AsyncResult.AsyncResult<string, never>) => Message.Bump()
         }
       }
     }).make({
@@ -315,7 +314,7 @@ class GetCount extends Query.Service<GetCount>()(
   Effect.succeed(() => Effect.succeed(1))
 ) {}
 
-const ListMessage = Schema.TaggedUnion({
+const ListMessage = UiSchema.TaggedEnum({
   UsersChanged: { changed: Schema.Number },
   Show: { ids: Schema.Array(Schema.String) }
 })
@@ -332,7 +331,7 @@ const List = Component.define({
       onChange: (results, changes) => {
         expect(results).type.toBe<Component.KeyedResults<typeof GetUser>>()
         expect(changes).type.toBe<ReadonlyArray<Component.KeyedChange<typeof GetUser>>>()
-        return ListMessage.make({ _tag: "UsersChanged", changed: changes.length })
+        return ListMessage.UsersChanged({ changed: changes.length })
       }
     }
   }
@@ -419,7 +418,7 @@ describe("Keyed queries", () => {
           queryMany: GetUser,
           args: (m) => m.ids.map((id) => ({ id })),
           // @ts-expect-error not assignable
-          onChange: (_loaded: AsyncResult.AsyncResult<unknown, unknown>) => ListMessage.make({ _tag: "Show", ids: [] })
+          onChange: (_loaded: AsyncResult.AsyncResult<unknown, unknown>) => ListMessage.Show({ ids: [] })
         }
       }
     })
@@ -456,7 +455,7 @@ describe("Keyed queries", () => {
 
   it("take the Story's keyed steps, typed by the query", () => {
     Story.start(List, {})
-      .send(ListMessage.make({ _tag: "Show", ids: ["1", "2"] }))
+      .send(ListMessage.Show({ ids: ["1", "2"] }))
       .loaded("users", { id: "1" }, { id: "1", name: "Ann", teamId: "t" })
       .loadFailed("users", { id: "2" }, "missing", { waiting: true })
       .loadedMany("users", [
@@ -486,7 +485,7 @@ class ListMessages extends Query.InfiniteService<ListMessages>()("typetest/ListM
   staleTime: "1 minute"
 }, Effect.succeed((_args, _cursor) => Effect.succeed({ messages: [], next: null }))) {}
 
-const ChatMessage = Schema.TaggedUnion({ Changed: { count: Schema.Number }, More: {}, Refresh: {} })
+const ChatMessage = UiSchema.TaggedEnum({ Changed: { count: Schema.Number }, More: {}, Refresh: {} })
 
 const Chat = Component.define({
   name: "Chat",
@@ -502,8 +501,7 @@ const Chat = Component.define({
         expect(result).type.toBe<
           AsyncResult.AsyncResult<Component.InfiniteData<typeof ListMessages>, string>
         >()
-        return ChatMessage.make({
-          _tag: "Changed",
+        return ChatMessage.Changed({
           count: AsyncResult.isSuccess(result) ? result.value.items.length : 0
         })
       }
@@ -615,9 +613,9 @@ describe("List queries", () => {
     const page = { messages: [{ id: "m0", text: "a" }], next: null }
     Story.start(Chat, { room: "r" })
       .loaded("messages", [page])
-      .send(ChatMessage.make({ _tag: "More" }))
+      .send(ChatMessage.More())
       .loadedMore("messages", page)
-      .send(ChatMessage.make({ _tag: "More" }))
+      .send(ChatMessage.More())
       .loadMoreFailed("messages", "nope")
       // @ts-expect-error Argument of type '"user"' is not assignable to parameter of type '"messages"'
       .loadedMore("user", page)

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component } from "@effect/ui"
+import { Component, UiSchema } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { HtmlLocator, ssr } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
@@ -14,17 +14,17 @@ const container = Effect.acquireRelease(
   (element) => Effect.sync(() => element.remove())
 )
 
-const CounterMsg = Schema.TaggedUnion({ Add: {} })
+const CounterMsg = UiSchema.TaggedEnum({ Add: {} })
 const Counter = Component.define({
   name: "Counter",
   model: Schema.Number,
   message: CounterMsg,
-  events: Schema.TaggedUnion({ Added: { count: Schema.Number } }),
+  events: UiSchema.TaggedEnum({ Added: { count: Schema.Number } }),
   elements: Html
 }).make({
   init: () => 0,
   update: (n, _, $) => $.set(n + 1).emit({ _tag: "Added", count: n + 1 }),
-  view: (n, h) => h.button.onClick(CounterMsg.make({ _tag: "Add" })).children("add " + n)
+  view: (n, h) => h.button.onClick(CounterMsg.Add()).children("add " + n)
 })
 
 const Card = Component.define({
@@ -41,7 +41,7 @@ const Card = Component.define({
 })
 
 const where = { server: true }
-const PageMsg = Schema.TaggedUnion({ Added: { count: Schema.Number } })
+const PageMsg = UiSchema.TaggedEnum({ Added: { count: Schema.Number } })
 const Page = Component.define({
   name: "Page",
   model: Schema.Number,
@@ -58,7 +58,7 @@ const Page = Component.define({
           title: "note",
           body: [
             h.p(where.server ? "from the server" : "from the client"),
-            Counter(h, { key: "n", onEmit: (event) => PageMsg.make({ _tag: "Added", count: event.count }) })
+            Counter(h, { key: "n", onEmit: (event) => PageMsg.Added({ count: event.count }) })
           ]
         }
       }),

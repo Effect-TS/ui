@@ -1,4 +1,4 @@
-import { Component } from "@effect/ui"
+import { Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Effect, Schema } from "effect"
 
@@ -106,7 +106,7 @@ export const popoverStub = Effect.acquireRelease(
 
 const Mode = Schema.Literals(["manual", "auto"])
 
-export const MenuMessage = Schema.TaggedUnion({
+export const MenuMessage = UiSchema.TaggedEnum({
   Set: { open: Schema.Boolean },
   Toggled: { open: Schema.Boolean, newState: Schema.String, oldState: Schema.String },
   Mode: { mode: Mode },
@@ -143,7 +143,7 @@ export const Menu = Component.define({
     h.div(
       model.shown && h.div.attr("aria-label", "Menu").attr("role", "menu")
         .popover(model.mode, model.open)
-        .onToggle(({ newState, oldState, open }) => MenuMessage.make({ _tag: "Toggled", open, newState, oldState }))
+        .onToggle(({ newState, oldState, open }) => MenuMessage.Toggled({ open, newState, oldState }))
         .children(h.button("Rename"))
     )
 })

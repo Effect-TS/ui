@@ -1,4 +1,4 @@
-import { Command, Component, type Query, type View } from "@effect/ui"
+import { Command, Component, type Query, UiSchema, type View } from "@effect/ui"
 import type { Steps } from "@effect/ui/testing"
 import { Scene, Story } from "@effect/ui/testing"
 import { Data, Effect, Schema, type Scope, Stream } from "effect"
@@ -18,7 +18,7 @@ import {
 declare const counter: Story.Steps<typeof Counter>
 declare const todoItem: Story.Steps<typeof TodoItem>
 declare const searchBox: Story.Steps<typeof SearchBox>
-const increment = CounterMessage.make({ _tag: "Increment" })
+const increment = CounterMessage.Increment()
 
 describe("Story", () => {
   it("has no view surface: a story drives update with messages, not clicks", () => {
@@ -42,7 +42,7 @@ describe("Story", () => {
   })
 
   it("restricts receive to public messages and infers model callbacks", () => {
-    const Message = Schema.TaggedUnion({ Set: { value: Schema.Number }, Reset: {} })
+    const Message = UiSchema.TaggedEnum({ Set: { value: Schema.Number }, Reset: {} })
     const Receiver = Component.define({
       name: "Receiver",
       model: Schema.Number,
@@ -61,7 +61,7 @@ describe("Story", () => {
     expect(steps.receive).type.toBeCallableWith({ _tag: "Set", value: 1 })
     expect(steps.receive).type.not.toBeCallableWith({ _tag: "Reset" })
     expect(steps.receive).type.not.toBeCallableWith((_model: number) => ({ _tag: "Reset" as const }))
-    expect(counter.receive).type.not.toBeCallableWith(CounterMessage.make({ _tag: "Increment" }))
+    expect(counter.receive).type.not.toBeCallableWith(CounterMessage.Increment())
     expect(steps.subscription).type.toBeCallableWith("tick", { _tag: "Reset" })
     expect(steps.subscription).type.not.toBeCallableWith("tick", { _tag: "Missing" })
     counter.send((model) => {
@@ -82,11 +82,11 @@ describe("Story", () => {
         expect(props).type.toBe<{ readonly initial: number }>()
         return props
       })
-      .send(CounterMessage.make({ _tag: "Increment" }))
+      .send(CounterMessage.Increment())
     expect(story.current.model).type.toBe<{ readonly count: number }>()
     expect(Story.make).type.not.toBeCallableWith(Counter, { initial: "0" })
     expect(counter.send).type.not.toBeCallableWith("not a message")
-    expect(counter.send).type.not.toBeCallableWith(TodoItemMessage.make({ _tag: "Save" }))
+    expect(counter.send).type.not.toBeCallableWith(TodoItemMessage.Save())
     expect(counter.given).type.not.toBeCallableWith({ saving: true })
   })
 
@@ -121,7 +121,7 @@ describe("Story", () => {
   it("a step over the shared steps keeps the caller's type", () => {
     const quiet = <S extends Steps.Steps.Any>(s: S): S => s.expectNone()
     expect(quiet(counter)).type.toBe<Story.Steps<typeof Counter>>()
-    expect(quiet(counter).send).type.toBeCallableWith(CounterMessage.make({ _tag: "Increment" }))
+    expect(quiet(counter).send).type.toBeCallableWith(CounterMessage.Increment())
     expect(counter.pipe(quiet).current.model).type.toBe<{ readonly count: number }>()
     counter.check((story) => {
       expect(story.model).type.toBe<{ readonly count: number }>()
@@ -143,19 +143,19 @@ describe("Story", () => {
     expect(steps.current.model).type.toBe<number>()
     expect(Story.make(Static, {})).type.toBe<Effect.Effect<Story.Steps<typeof Static>, never, Scope.Scope>>()
     expect(Story.start(Static, {}).given(1).model).type.toBe<number>()
-    expect(steps.send).type.not.toBeCallableWith(CounterMessage.make({ _tag: "Increment" }))
+    expect(steps.send).type.not.toBeCallableWith(CounterMessage.Increment())
     const shared = <S extends Story.Steps.Any>(s: S): S => s
     expect(shared(steps)).type.toBe<Story.Steps<typeof Static>>()
   })
 
   it("resolves a Command with the definition's own message", () => {
-    expect(todoItem.resolve).type.toBeCallableWith(SaveTodo, TodoItemMessage.make({ _tag: "Saved" }))
-    expect(todoItem.resolve).type.not.toBeCallableWith(SaveTodo, SearchMessage.make({ _tag: "Tick" }))
+    expect(todoItem.resolve).type.toBeCallableWith(SaveTodo, TodoItemMessage.Saved())
+    expect(todoItem.resolve).type.not.toBeCallableWith(SaveTodo, SearchMessage.Tick())
     expect(searchBox.resolve).type.toBeCallableWith(
       Search({ text: "x" }),
-      SearchMessage.make({ _tag: "Results", items: [] })
+      SearchMessage.Results({ items: [] })
     )
-    expect(searchBox.resolve).type.not.toBeCallableWith(Search({ text: "x" }), TodoItemMessage.make({ _tag: "Saved" }))
+    expect(searchBox.resolve).type.not.toBeCallableWith(Search({ text: "x" }), TodoItemMessage.Saved())
   })
 
   it("an issued Command whose result never arrives is a target, and takes no result", () => {
@@ -170,33 +170,33 @@ describe("Story", () => {
   })
 
   it("a mapped Command as the target takes the definition's own result", () => {
-    const Uploaded = Schema.TaggedUnion({ Uploaded: { url: Schema.String } })
+    const Uploaded = UiSchema.TaggedEnum({ Uploaded: { url: Schema.String } })
     const UploadFile = Command.make(
       "UploadFile",
       { args: { name: Schema.String } },
       ({ name }) => Effect.succeed(`https://cdn/${name}`)
     )
-    const mapped = UploadFile({ name: "me.png" }).pipe(Command.map((url) => Uploaded.make({ _tag: "Uploaded", url })))
+    const mapped = UploadFile({ name: "me.png" }).pipe(Command.map((url) => Uploaded.Uploaded({ url })))
     expect(mapped).type.toBe<Command.Issued<typeof Uploaded.Type, never, string, "Effect">>()
     expect(counter.resolve).type.toBeCallableWith(mapped, "https://cdn/me.png")
-    expect(counter.resolve).type.not.toBeCallableWith(mapped, Uploaded.make({ _tag: "Uploaded", url: "" }))
+    expect(counter.resolve).type.not.toBeCallableWith(mapped, Uploaded.Uploaded({ url: "" }))
     const Progress = Command.make(
       "Progress",
       { args: { name: Schema.String }, stream: true },
       () => Stream.fromIterable([1, 2])
     )
     const mappedStream = Progress({ name: "x" }).pipe(
-      Command.map((percent) => Uploaded.make({ _tag: "Uploaded", url: String(percent) }))
+      Command.map((percent) => Uploaded.Uploaded({ url: String(percent) }))
     )
     expect(counter.next).type.toBeCallableWith(mappedStream, 50)
-    expect(counter.next).type.not.toBeCallableWith(mappedStream, Uploaded.make({ _tag: "Uploaded", url: "" }))
+    expect(counter.next).type.not.toBeCallableWith(mappedStream, Uploaded.Uploaded({ url: "" }))
     expect(counter.end).type.toBeCallableWith(mappedStream)
   })
 
   it("next and end only take stream Commands", () => {
-    expect(searchBox.next).type.toBeCallableWith(Upload, SearchMessage.make({ _tag: "Progress", percent: 1 }))
+    expect(searchBox.next).type.toBeCallableWith(Upload, SearchMessage.Progress({ percent: 1 }))
     expect(searchBox.end).type.toBeCallableWith(Upload)
-    expect(searchBox.next).type.not.toBeCallableWith(Search, SearchMessage.make({ _tag: "Results", items: [] }))
+    expect(searchBox.next).type.not.toBeCallableWith(Search, SearchMessage.Results({ items: [] }))
     expect(searchBox.end).type.not.toBeCallableWith(SaveTodo)
   })
 

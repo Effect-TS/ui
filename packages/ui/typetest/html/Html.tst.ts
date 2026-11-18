@@ -1,11 +1,11 @@
-import { Component, Mount, Renderer, Route, Router, type View } from "@effect/ui"
+import { Component, Mount, Renderer, Route, Router, UiSchema, type View } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { type Locator, Scene } from "@effect/ui/testing"
 import { Context, Effect, type Layer, Schema, type Scope, Stream } from "effect"
 import { describe, expect, it } from "tstyche"
 
-const Msg = Schema.TaggedUnion({
+const Msg = UiSchema.TaggedEnum({
   Typed: { value: Schema.String },
   Checked: { checked: Schema.Boolean },
   Sent: { title: Schema.String },
@@ -23,7 +23,7 @@ const Tick = Mount.make("Tick", { args: {} }, () => Clock.use((clock) => clock.n
 const LogUp = Mount.make(
   "LogUp",
   { args: {} },
-  () => Logger.use((logger) => logger.log("up")).pipe(Effect.as(Msg.make({ _tag: "Mounted" })))
+  () => Logger.use((logger) => logger.log("up")).pipe(Effect.as(Msg.Mounted()))
 )
 const Measure = Mount.make("Measure", { args: {} }, (node: HTMLElement) => Effect.sync(() => node.clientWidth))
 
@@ -86,8 +86,8 @@ describe("Html", () => {
       init: () => "",
       update: (model) => model,
       view: (draft, h) => {
-        const form = h.form.onSubmit(Msg.make({ _tag: "Sent", title: draft })).children(
-          h.input.ref(Field).value(draft).onInput(({ value }) => Msg.make({ _tag: "Typed", value })),
+        const form = h.form.onSubmit(Msg.Sent({ title: draft })).children(
+          h.input.ref(Field).value(draft).onInput(({ value }) => Msg.Typed({ value })),
           h.button.attr("type", "submit").children("Add"),
           h.span(draft),
           h.br
@@ -179,20 +179,20 @@ describe("Html", () => {
       update: (model) => model,
       view: (_, h) => {
         expect(h.input.onInput).type.toBeCallableWith(
-          ({ checked }: Html.InputPayload) => Msg.make({ _tag: "Checked", checked })
+          ({ checked }: Html.InputPayload) => Msg.Checked({ checked })
         )
         expect(h.textarea.on).type.toBeCallableWith(
           "input",
-          ({ value }: Html.ValuePayload) => Msg.make({ _tag: "Typed", value })
+          ({ value }: Html.ValuePayload) => Msg.Typed({ value })
         )
         expect(h.form.onSubmit).type.toBeCallableWith(({ fields }: Html.SubmitPayload) =>
-          Msg.make({ _tag: "Sent", title: fields.title ?? "" })
+          Msg.Sent({ title: fields.title ?? "" })
         )
         expect(h.button.onClick).type.toBeCallableWith(({ shift }: Html.PointerPayload) =>
-          shift ? undefined : Msg.make({ _tag: "Mounted" })
+          shift ? undefined : Msg.Mounted()
         )
-        expect(h.div.on).type.not.toBeCallableWith("input", Msg.make({ _tag: "Mounted" }))
-        expect(h.div.on).type.not.toBeCallableWith("submit", Msg.make({ _tag: "Mounted" }))
+        expect(h.div.on).type.not.toBeCallableWith("input", Msg.Mounted())
+        expect(h.div.on).type.not.toBeCallableWith("submit", Msg.Mounted())
         expect(h.button.onClick).type.not.toBeCallableWith("not a message")
         return h.div()
       }
@@ -228,7 +228,7 @@ describe("Html", () => {
         expect(h.div.popover).type.not.toBeCallableWith("hint", true)
         expect(h.div.onToggle).type.toBeCallableWith(
           ({ newState, oldState, open }: Html.PopoverTogglePayload) =>
-            Msg.make({ _tag: "Typed", value: `${oldState}${newState}${open}` })
+            Msg.Typed({ value: `${oldState}${newState}${open}` })
         )
         return h.div()
       }
@@ -239,7 +239,7 @@ describe("Html", () => {
     expect(Field).type.toBe<Renderer.Ref<HTMLInputElement>>()
     const Focus = Mount.make("Focus", { args: {} }, (element: HTMLInputElement) => {
       expect(element).type.toBe<HTMLInputElement>()
-      return Effect.succeed(Msg.make({ _tag: "Mounted" }))
+      return Effect.succeed(Msg.Mounted())
     })
     Component.define({
       name: "Refs",
@@ -256,7 +256,7 @@ describe("Html", () => {
         expect(h.textarea.attr("rows", "2").ref).type.not.toBeCallableWith(Field)
         // A mount goes on an element whose node its body can take.
         expect(h.textarea.onMount).type.not.toBeCallableWith(Focus())
-        expect(h.input.onMount).type.toBeCallableWith(Measure().pipe(Mount.map(() => Msg.make({ _tag: "Mounted" }))))
+        expect(h.input.onMount).type.toBeCallableWith(Measure().pipe(Mount.map(() => Msg.Mounted())))
         return h.input.onMount(Focus())
       }
     })
@@ -333,7 +333,7 @@ describe("Html", () => {
     const div = new Html.Element<Msg, never, Record<string, unknown>, HTMLDivElement>("div")
     // A result that isn't the component's message is mapped to one first.
     expect(div.onMount).type.not.toBeCallableWith(Measure())
-    expect(div.onMount).type.toBeCallableWith(Measure().pipe(Mount.map(() => Msg.make({ _tag: "Mounted" }))))
+    expect(div.onMount).type.toBeCallableWith(Measure().pipe(Mount.map(() => Msg.Mounted())))
     // A scene's step takes the definition's own result, and none for a mount that ends with noop.
     const s = Scene.start(Chart, {})
     expect(s.mounted).type.toBeCallableWith(Measure, 300)
@@ -350,7 +350,7 @@ describe("Html", () => {
     const Mixed = Mount.make("Mixed", { args: {} }, () =>
       Effect.gen(function*() {
         const ok = yield* Effect.succeed(true)
-        return ok ? Msg.make({ _tag: "Mounted" }) : Component.noop
+        return ok ? Msg.Mounted() : Component.noop
       }))
     expect(div.onMount).type.toBeCallableWith(Silent())
     expect(div.onMount).type.toBeCallableWith(Mixed())
@@ -439,7 +439,7 @@ describe("Html", () => {
       elements: Html
     }).make({
       init: () => "",
-      update: (_model, _, $) => $.run(Html.focus(Field, ({ found }) => Msg.make({ _tag: "Focused", found }))),
+      update: (_model, _, $) => $.run(Html.focus(Field, ({ found }) => Msg.Focused({ found }))),
       view: (_, h) => h.input.ref(Field)
     })
     expect(Form).type.toBe<Component.Component<"Form", {}, string, Msg, never, never, Html.Elements>>()
@@ -478,7 +478,7 @@ describe("BrowserHost", () => {
   }).make({
     init: () => 0,
     update: (count) => count + 1,
-    view: (count, h) => h.button.onClick(Msg.make({ _tag: "Mounted" })).children(String(count))
+    view: (count, h) => h.button.onClick(Msg.Mounted()).children(String(count))
   })
 
   it("mountEffect needs only a Scope for an HTML root", () => {

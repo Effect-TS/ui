@@ -2,7 +2,7 @@
  * The components the tests drive: a counter, a todo row that saves through a
  * Command service and reports to its parent, and the list that reacts to it.
  */
-import { Command, Component, Subscription } from "@effect/ui"
+import { Command, Component, Subscription, UiSchema } from "@effect/ui"
 import { Effect, Schema, Stream } from "effect"
 import { KeyValueStore } from "effect/persistence"
 
@@ -10,7 +10,7 @@ import { KeyValueStore } from "effect/persistence"
 // Counter
 // ---------------------------------------------------------------------------
 
-export const CounterMessage = Schema.TaggedUnion({ Increment: {}, Decrement: {} })
+export const CounterMessage = UiSchema.TaggedEnum({ Increment: {}, Decrement: {} })
 export type CounterMessage = typeof CounterMessage.Type
 
 export const Counter = Component.define({
@@ -28,9 +28,9 @@ export const Counter = Component.define({
   view: (model, h) =>
     h.el(
       "div",
-      h.el("button").on("click", CounterMessage.make({ _tag: "Decrement" })).children("-"),
+      h.el("button").on("click", CounterMessage.Decrement()).children("-"),
       h.el("span", String(model.count)),
-      h.el("button").on("click", CounterMessage.make({ _tag: "Increment" })).children("+")
+      h.el("button").on("click", CounterMessage.Increment()).children("+")
     )
 })
 
@@ -41,7 +41,7 @@ export const Counter = Component.define({
 export const Todo = Schema.Struct({ id: Schema.String, title: Schema.String, done: Schema.Boolean })
 export type Todo = typeof Todo.Type
 
-export const TodoItemMessage = Schema.TaggedUnion({
+export const TodoItemMessage = UiSchema.TaggedEnum({
   Toggle: {},
   Save: {},
   Saved: {},
@@ -49,7 +49,7 @@ export const TodoItemMessage = Schema.TaggedUnion({
 })
 export type TodoItemMessage = typeof TodoItemMessage.Type
 
-export const TodoItemEvents = Schema.TaggedUnion({ Toggled: { done: Schema.Boolean } })
+export const TodoItemEvents = UiSchema.TaggedEnum({ Toggled: { done: Schema.Boolean } })
 export type TodoItemEvents = typeof TodoItemEvents.Type
 
 const encodeTodo = Schema.encodeSync(Schema.fromJsonString(Todo))
@@ -61,9 +61,9 @@ export class SaveTodo extends Command.Service<SaveTodo>()(
     const kv = yield* KeyValueStore.KeyValueStore
     return (todo) =>
       kv.set(`todo/${todo.id}`, encodeTodo(todo)).pipe(
-        Effect.as(TodoItemMessage.make({ _tag: "Saved" })),
+        Effect.as(TodoItemMessage.Saved()),
         Effect.catchTag("KeyValueStoreError", (error) =>
-          Effect.succeed(TodoItemMessage.make({ _tag: "SaveFailed", reason: error.message })))
+          Effect.succeed(TodoItemMessage.SaveFailed({ reason: error.message })))
       )
   })
 ) {}
@@ -78,7 +78,7 @@ export const TodoItem = Component.define({
   init: ($) => $.set({ saving: false }),
   update: (_model, message, $) =>
     TodoItemMessage.match(message, {
-      Toggle: () => $.emit(TodoItemEvents.make({ _tag: "Toggled", done: !$.props.todo.done })),
+      Toggle: () => $.emit(TodoItemEvents.Toggled({ done: !$.props.todo.done })),
       Save: () => $.set({ saving: true }).run(SaveTodo.make($.props.todo)),
       Saved: () => ({ saving: false }),
       SaveFailed: () => ({ saving: false })
@@ -86,9 +86,9 @@ export const TodoItem = Component.define({
   view: (model, h) =>
     h.el(
       "li",
-      h.el("button").on("click", TodoItemMessage.make({ _tag: "Toggle" })).children(h.props.todo.done ? "[x]" : "[ ]"),
+      h.el("button").on("click", TodoItemMessage.Toggle()).children(h.props.todo.done ? "[x]" : "[ ]"),
       h.el("span", h.props.todo.title),
-      h.el("button").on("click", TodoItemMessage.make({ _tag: "Save" })).children(model.saving ? "saving" : "save")
+      h.el("button").on("click", TodoItemMessage.Save()).children(model.saving ? "saving" : "save")
     )
 })
 
@@ -96,7 +96,7 @@ export const TodoItem = Component.define({
 // TodoList: keyed TodoItem children, reacting to what a row reports
 // ---------------------------------------------------------------------------
 
-export const TodoListMessage = Schema.TaggedUnion({
+export const TodoListMessage = UiSchema.TaggedEnum({
   SetDone: { id: Schema.String, done: Schema.Boolean },
   RowFailed: { id: Schema.String }
 })
@@ -124,8 +124,8 @@ export const TodoList = Component.define({
         TodoItem(h, {
           key: todo.id,
           props: { todo },
-          onEmit: (events) => TodoListMessage.make({ _tag: "SetDone", id: todo.id, done: events.done }),
-          onFailure: () => TodoListMessage.make({ _tag: "RowFailed", id: todo.id }),
+          onEmit: (events) => TodoListMessage.SetDone({ id: todo.id, done: events.done }),
+          onFailure: () => TodoListMessage.RowFailed({ id: todo.id }),
           fallback: () => h.el("li", `${todo.title} failed`)
         })
       ),
@@ -137,7 +137,7 @@ export const TodoList = Component.define({
 // Search: Command modes, a stream Command, an interrupt, and a Subscription
 // ---------------------------------------------------------------------------
 
-export const SearchMessage = Schema.TaggedUnion({
+export const SearchMessage = UiSchema.TaggedEnum({
   Query: { text: Schema.String },
   Results: { items: Schema.Array(Schema.String) },
   Start: {},
@@ -150,13 +150,13 @@ export type SearchMessage = typeof SearchMessage.Type
 export const Search = Command.make(
   "Search",
   { args: { text: Schema.String }, mode: "switch" },
-  ({ text }) => Effect.succeed(SearchMessage.make({ _tag: "Results", items: [text] }))
+  ({ text }) => Effect.succeed(SearchMessage.Results({ items: [text] }))
 )
 
 export const Upload = Command.make(
   "Upload",
   { args: { name: Schema.String }, stream: true, mode: "queue", group: ["name"] },
-  () => Stream.make(SearchMessage.make({ _tag: "Progress", percent: 100 }))
+  () => Stream.make(SearchMessage.Progress({ percent: 100 }))
 )
 
 export const SearchBox = Component.define({
@@ -182,7 +182,7 @@ export const SearchBox = Component.define({
   view: (model, h) => h.el("div", model.text),
   subscriptions: (model) => [
     model.percent > 0 && model.percent < 100 &&
-    Subscription.make("tick", Stream.make(SearchMessage.make({ _tag: "Tick" }))),
+    Subscription.make("tick", Stream.make(SearchMessage.Tick())),
     Subscription.make("query", model.text, () => Stream.empty)
   ]
 })

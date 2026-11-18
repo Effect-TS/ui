@@ -17,12 +17,12 @@
  * **Example** (A todo row that saves through a Command and reports to its parent)
  *
  * ```ts import.meta.vitest
- * import { Command, Component } from "@effect/ui"
+ * import { Command, Component, UiSchema } from "@effect/ui"
  * import { Effect, Schema } from "effect"
  *
  * const Todo = Schema.Struct({ id: Schema.String, title: Schema.String, done: Schema.Boolean })
- * const TodoItemMessage = Schema.TaggedUnion({ ClickedToggle: {}, ClickedSave: {} })
- * const TodoItemEvents = Schema.TaggedUnion({ Toggled: { done: Schema.Boolean } })
+ * const TodoItemMessage = UiSchema.TaggedEnum({ ClickedToggle: {}, ClickedSave: {} })
+ * const TodoItemEvents = UiSchema.TaggedEnum({ Toggled: { done: Schema.Boolean } })
  *
  * class SaveTodo extends Command.Service<SaveTodo>()(
  *   "todos/SaveTodo",
@@ -40,7 +40,7 @@
  *   init: ($) => $.set({}),
  *   update: (_model, message, $) =>
  *     TodoItemMessage.match(message, {
- *       ClickedToggle: () => $.emit(TodoItemEvents.make({ _tag: "Toggled", done: !$.props.todo.done })),
+ *       ClickedToggle: () => $.emit(TodoItemEvents.Toggled({ done: !$.props.todo.done })),
  *       // Nothing to report: the save ends in `Component.noop`.
  *       ClickedSave: () => $.run(SaveTodo.make($.props.todo).pipe(Command.asNoop))
  *     }),
@@ -48,9 +48,9 @@
  *   view: (_, h) =>
  *     h.el(
  *       "li",
- *       h.el("button").on("click", TodoItemMessage.make({ _tag: "ClickedToggle" })).children(h.props.todo.done ? "[x]" : "[ ]"),
+ *       h.el("button").on("click", TodoItemMessage.ClickedToggle()).children(h.props.todo.done ? "[x]" : "[ ]"),
  *       h.el("span", h.props.todo.title),
- *       h.el("button").on("click", TodoItemMessage.make({ _tag: "ClickedSave" })).children("save"),
+ *       h.el("button").on("click", TodoItemMessage.ClickedSave()).children("save"),
  *       h.isRunning(SaveTodo) ? " saving" : ""
  *     )
  * })
@@ -163,15 +163,15 @@ export interface Noop {
  * **Example** (Silent on success, a message on failure)
  *
  * ```ts import.meta.vitest
- * import { Command, Component } from "@effect/ui"
+ * import { Command, Component, UiSchema } from "@effect/ui"
  * import { Effect, Schema } from "effect"
  *
- * const Message = Schema.TaggedUnion({ FailedDeleteKey: { reason: Schema.String } })
+ * const Message = UiSchema.TaggedEnum({ FailedDeleteKey: { reason: Schema.String } })
  *
  * const DeleteKey = Command.make("DeleteKey", { args: { key: Schema.String } }, ({ key }) =>
  *   (key === "" ? Effect.fail("empty key") : Effect.void).pipe(
  *     Effect.as(Component.noop),
- *     Effect.catch((reason) => Effect.succeed(Message.make({ _tag: "FailedDeleteKey", reason })))
+ *     Effect.catch((reason) => Effect.succeed(Message.FailedDeleteKey({ reason })))
  *   ))
  * ```
  *
@@ -745,7 +745,8 @@ export interface Step<in out Model, in out Msg, in out Events, out R = never, L 
    * **Details**
    *
    * `message` is one of the messages the ref's component `receives`, such
-   * as a tagged literal `{ _tag: "RequestedClear" }`: the whole Message, as
+   * as `Message.RequestedClear()` from a `UiSchema.TaggedEnum` or a tagged
+   * literal `{ _tag: "RequestedClear" }`: the whole Message, as
    * `Message.make` returns it, doesn't fit unless the child receives every
    * case. A send
    * to a child that isn't rendered, that failed, or that can't take
@@ -2244,10 +2245,10 @@ export type Helper<D> = D extends Definition<
  * **Example** (A counter)
  *
  * ```ts import.meta.vitest
- * import { Component } from "@effect/ui"
+ * import { Component, UiSchema } from "@effect/ui"
  * import { Schema } from "effect"
  *
- * const CounterMessage = Schema.TaggedUnion({ ClickedIncrement: {}, ClickedDecrement: {} })
+ * const CounterMessage = UiSchema.TaggedEnum({ ClickedIncrement: {}, ClickedDecrement: {} })
  *
  * const Counter = Component.define({
  *   name: "Counter",
@@ -2264,9 +2265,9 @@ export type Helper<D> = D extends Definition<
  *   view: (model, h) =>
  *     h.el(
  *       "div",
- *       h.el("button").on("click", CounterMessage.make({ _tag: "ClickedDecrement" })).children("-"),
+ *       h.el("button").on("click", CounterMessage.ClickedDecrement()).children("-"),
  *       h.el("span", String(model.count)),
- *       h.el("button").on("click", CounterMessage.make({ _tag: "ClickedIncrement" })).children("+")
+ *       h.el("button").on("click", CounterMessage.ClickedIncrement()).children("+")
  *     )
  * })
  * ```
@@ -2323,10 +2324,10 @@ import { Query } from "@effect/ui"
  * **Example** (A note page whose update is split into slices)
  *
  * ```ts import.meta.vitest
- * import { Component } from "@effect/ui"
+ * import { Component, UiSchema } from "@effect/ui"
  * import { Schema } from "effect"
  *
- * const NotePageMessage = Schema.TaggedUnion({ UpdatedBody: { body: Schema.String }, ClickedSave: {} })
+ * const NotePageMessage = UiSchema.TaggedEnum({ UpdatedBody: { body: Schema.String }, ClickedSave: {} })
  *
  * const NotePageDef = Component.define({
  *   name: "NotePage",
@@ -3004,10 +3005,10 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F } ? "onFailure" ext
  * **Example** (Sharing Command Layers across rows, and a per-instance store)
  *
  * ```ts import.meta.vitest
- * import { Command, Component } from "@effect/ui"
+ * import { Command, Component, UiSchema } from "@effect/ui"
  * import { Context, Effect, Layer, Schema } from "effect"
  *
- * const RowMessage = Schema.TaggedUnion({ ClickedSave: {} })
+ * const RowMessage = UiSchema.TaggedEnum({ ClickedSave: {} })
  *
  * class SaveTodo extends Command.Service<SaveTodo>()(
  *   "todos/SaveTodo",
@@ -3040,7 +3041,7 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F } ? "onFailure" ext
  * **Example** (A room switcher selecting its services by a Model field)
  *
  * ```ts import.meta.vitest
- * import { Command, Component } from "@effect/ui"
+ * import { Command, Component, UiSchema } from "@effect/ui"
  * import { Context, Effect, Layer, LayerMap, Schema } from "effect"
  *
  * class Chat extends Context.Service<Chat, { readonly room: string }>()("Chat") {}
@@ -3049,7 +3050,7 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F } ? "onFailure" ext
  *   lookup: (room: string) => Layer.succeed(Chat, { room })
  * }) {}
  *
- * const RoomMessage = Schema.TaggedUnion({
+ * const RoomMessage = UiSchema.TaggedEnum({
  *   SelectedRoom: { room: Schema.String },
  *   CompletedJoinRoom: { room: Schema.String }
  * })
@@ -3057,7 +3058,7 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F } ? "onFailure" ext
  * class JoinRoom extends Command.Service<JoinRoom>()(
  *   "rooms/JoinRoom",
  *   { args: {} },
- *   Chat.useSync((chat) => () => Effect.succeed(RoomMessage.make({ _tag: "CompletedJoinRoom", room: chat.room })))
+ *   Chat.useSync((chat) => () => Effect.succeed(RoomMessage.CompletedJoinRoom({ room: chat.room })))
  * ) {}
  *
  * const RoomView = Component.define({

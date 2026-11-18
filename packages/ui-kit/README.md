@@ -8,7 +8,7 @@ import { Switch } from "@effect/ui-kit"
 // In a view:
 Switch(h, {
   props: { checked: model.notify, name: "notify" },
-  onToggle: ({ checked }) => Message.make({ _tag: "ToggledNotify", checked }),
+  onToggle: ({ checked }) => Message.ToggledNotify({ checked }),
   view: (s) =>
     h.label(
       s.root(h.button.class("switch")).children(s.thumb(h.span.class("thumb"))),

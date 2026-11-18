@@ -1,4 +1,4 @@
-import { Component, Feature, Mount, View } from "@effect/ui"
+import { Component, Feature, Mount, UiSchema, View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { Locator, Scene } from "@effect/ui/testing"
@@ -21,8 +21,8 @@ describe("Scene", () => {
         .click(save)
         .expect(Locator.text("saving")).toExist()
         .expectExact(SaveNote({ text: "milk" }))
-        .resolve(SaveNote, NoteMessage.make({ _tag: "Saved" }))
-        .emitted(NoteEvents.make({ _tag: "Saved", text: "milk" }))
+        .resolve(SaveNote, NoteMessage.Saved())
+        .emitted(NoteEvents.Saved({ text: "milk" }))
         .expect(status).toHaveText("saved milk")
         // Already saved: the handler returns no message.
         .click(saveAgain)
@@ -107,7 +107,7 @@ describe("Scene", () => {
 
   it.effect("childEmit names a feature child by its service", () =>
     Effect.gen(function*() {
-      const Changed = Schema.TaggedUnion({ Changed: { to: Schema.String } })
+      const Changed = UiSchema.TaggedEnum({ Changed: { to: Schema.String } })
       class Panel extends Feature.Service<Panel>()("Panel", { props: Schema.Struct({}), events: Changed }) {}
       const Page = Component.define({ name: "Page", model: Schema.String, message: Schema.String, elements: Html })
         .make({
@@ -148,7 +148,7 @@ describe("Scene", () => {
     }))
 
   describe("children in headless closures", () => {
-    const Toggled = Schema.TaggedUnion({ Toggled: {} })
+    const Toggled = UiSchema.TaggedEnum({ Toggled: {} })
     const Disclosure = Component.define({ name: "Disclosure", model: Schema.Boolean, message: Toggled, elements: Html })
       .make({
         init: () => false,

@@ -16,7 +16,7 @@ the components that already follow it.
   // In a view:
   Switch(h, {
     props: { checked: model.notify },
-    onToggle: ({ checked }) => Message.make({ _tag: "ToggledNotify", checked }),
+    onToggle: ({ checked }) => Message.ToggledNotify({ checked }),
     view: (s) => h.label(s.root(h.button).children(s.thumb(h.span.class("thumb"))), "Notify")
   })
   ```
@@ -87,20 +87,20 @@ returns it (see "Parts").
 // One element: finish the returned builder.
 Button(h, {
   props: { disabled: model.saving },
-  onPress: Message.make({ _tag: "PressedSave" })
+  onPress: Message.PressedSave()
 }).class("save").children("Save")
 
 // Several elements: the consumer arranges them in `view`.
 Switch(h, {
   props: { checked: model.notify },
-  onToggle: ({ checked }) => Message.make({ _tag: "ToggledNotify", checked }),
+  onToggle: ({ checked }) => Message.ToggledNotify({ checked }),
   view: (s) => s.root(h.button).children(s.thumb(h.span.class("thumb")))
 })
 
 // A component: core's `onEmit`, and a `key` when it needs one.
 Checkbox(h, {
   props: { checked: model.terms },
-  onEmit: ({ checked }) => Message.make({ _tag: "ToggledTerms", checked }),
+  onEmit: ({ checked }) => Message.ToggledTerms({ checked }),
   view: (s) => s.root(h.button).children(s.indicator(h.span))
 })
 ```
@@ -218,7 +218,7 @@ model.advanced
   ```ts
   Button(h, {
     element: t.trigger(h.button),
-    onPress: Message.make({ _tag: "PressedBold" })
+    onPress: Message.PressedBold()
   }).class("tool").children("B")
   ```
 - **The kit's attributes win** over the consumer's. A part or view
