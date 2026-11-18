@@ -67,6 +67,18 @@ describe("UiSchema.TaggedEnum", () => {
     expect(UiSchema.TaggedEnum).type.not.toBeCallableWith({ $match: {} })
     expect(UiSchema.TaggedEnum).type.not.toBeCallableWith({ name: {} })
     expect(UiSchema.TaggedEnum).type.not.toBeCallableWith({ valueOf: {} })
+    expect(UiSchema.TaggedEnum).type.not.toBeCallableWith({ __defineGetter__: {} })
     expect(UiSchema.TaggedEnum).type.toBeCallableWith({ Ast: {} })
+  })
+
+  it("rejects a case that declares its own _tag", () => {
+    expect(UiSchema.TaggedEnum).type.not.toBeCallableWith({ A: { _tag: Schema.Literal("B") } })
+  })
+
+  it("types numeric keys as string tags", () => {
+    const Code = UiSchema.TaggedEnum({ 404: {}, Ok: {} })
+    expect(Code[404]()).type.toBe<{ readonly _tag: "404" }>()
+    expect(Code.$is).type.toBeCallableWith("404")
+    expect(Code.$match).type.not.toBeCallableWith(Code.Ok(), { Ok: () => 1 })
   })
 })

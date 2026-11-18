@@ -36,10 +36,28 @@ describe("UiSchema", () => {
       assert.strictEqual(Shape.cases.Rect.fields.height, Schema.FiniteFromString)
     })
 
-    it("throws on reserved tags", () => {
-      for (const tag of ["ast", "make", "cases", "$is", "name", "toString"]) {
+    it("throws on every name the schema already has, and on type-only members", () => {
+      const names = new Set(["Type", "Rebuild", "~type.make", "apply"])
+      for (let o: object | null = Shape; o !== null; o = Object.getPrototypeOf(o)) {
+        for (const name of Object.getOwnPropertyNames(o)) names.add(name)
+      }
+      for (const tag of ["Circle", "Rect", "Empty"]) names.delete(tag)
+      for (const tag of names) {
         assert.throws(() => UiSchema.TaggedEnum({ [tag]: {} } as any), `Reserved tag: ${tag}`)
       }
+    })
+
+    it("throws when a case declares its own _tag", () => {
+      assert.throws(
+        () => UiSchema.TaggedEnum({ A: { _tag: Schema.Literal("B") } } as any),
+        "Case A can't declare _tag"
+      )
+    })
+
+    it("numeric keys become string tags", () => {
+      const Code = UiSchema.TaggedEnum({ 404: {}, Ok: {} })
+      assert.deepStrictEqual(Code[404](), { _tag: "404" })
+      assert.isTrue(Code.$is("404")(Schema.decodeUnknownSync(Code)({ _tag: "404" })))
     })
   })
 })
