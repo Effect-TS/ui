@@ -173,15 +173,15 @@ const Message = Schema.TaggedUnion({
 })
 
 // The props' source, without the fields they leave out or set to
-// `undefined`, so both give the mount the same args.
+// `undefined`, so both are the same source.
 const sourceOf = ({ fallbackDelay: _, ...source }: AvatarProps): Source =>
   Object.fromEntries(Object.entries(source).filter(([, value]) => value !== undefined))
 
 const hasImage = (source: Source): boolean => !!source.src || !!source.srcSet
 
-const sameSource = (a: Source, b: Source): boolean =>
-  a.src === b.src && a.srcSet === b.srcSet && a.sizes === b.sizes && a.crossOrigin === b.crossOrigin &&
-  a.referrerPolicy === b.referrerPolicy
+// The comparison the runtime makes to tell whether the mount's args, and so
+// the source it loads, changed.
+const sameSource = Schema.toEquivalence(Source)
 
 const statusOf = (report: Report | null, source: Source): AvatarImageLoadingStatus =>
   !hasImage(source)
@@ -291,7 +291,7 @@ export const Avatar = Component.define({
 }).make({
   init: ({ props }) => ({
     report: null,
-    delayElapsed: !(props.fallbackDelay !== undefined && props.fallbackDelay > 0)
+    delayElapsed: !((props.fallbackDelay ?? 0) > 0)
   }),
   update: (model, message) =>
     Message.match(message, {
