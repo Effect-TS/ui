@@ -2257,6 +2257,9 @@ const setup = (
         inst.adoptsChildren = Option.isSome(serverModel)
         if (Option.isSome(serverModel) && Option.isSome(reportedOnServer)) {
           inst.owning!.reported = { message: reportedOnServer.value }
+          // Compared once the pass settles, readers or none: one that reported on the server may not mount here.
+          reportsDue.add(inst)
+          wake()
         }
         mountedSeq = record(inst, {
           _tag: "Mounted",
@@ -5433,23 +5436,28 @@ const setup = (
       let inner = under
       if (!under) {
         const codec = stateCodecOf(inst.component)
-        const encoded = inst.failure !== undefined ||
+        let encoded = inst.failure !== undefined ||
             inst.deferred ||
             (inst.component.layer !== undefined && inst.env.ctx === undefined)
           ? Option.none()
           : codec.encode(inst.model, inst.results)
         if (codec.redacted) warnRedacted(inst)
+        // What an owner's reports last sent: the client compares its reports with it. An owner whose
+        // message can't be shipped, a `Redacted` in its Schema included, is deferred with its subtree, as a
+        // Model adopted without it would get the same message again.
+        const last = inst.owning?.reported
+        let baseline: Option.Option<unknown> = Option.none()
+        if (Option.isSome(encoded) && last !== undefined) {
+          const message = inst.component.definition.message
+          baseline = holdsRedacted(message.ast) ? Option.none() : jsonCodecOf(message).encode(last.message)
+          if (Option.isNone(baseline)) encoded = Option.none()
+        }
         if (Option.isNone(encoded)) {
           deferredPaths.push(inst.path)
           inner = true
         } else {
           state[inst.path] = encoded.value
-          // What the owner's reports last sent, so the client doesn't send it again.
-          const last = inst.owning?.reported
-          if (last !== undefined && !holdsRedacted(inst.component.definition.message.ast)) {
-            const message = jsonCodecOf(inst.component.definition.message).encode(last.message)
-            if (Option.isSome(message)) reported[inst.path] = message.value
-          }
+          if (Option.isSome(baseline)) reported[inst.path] = baseline.value
         }
       }
       return {

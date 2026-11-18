@@ -115,20 +115,25 @@ describe("HtmlServer", { concurrent: false }, () => {
       }
     }).pipe(Effect.scoped))
 
-  it.effect("delivers reports on the server before the HTML is written, and hydration doesn't deliver them again", () =>
-    Effect.gen(function*() {
-      const GroupMessage = Schema.TaggedUnion({ ChangedOn: { on: Schema.Boolean } })
-      // Counts the messages its reports send, so a second delivery of the same one shows.
+  describe("reports across hydration", () => {
+    const Plain = Schema.TaggedUnion({ ChangedOn: { on: Schema.Boolean } })
+    // An unrelated variant holds a secret, so the last message can't be shipped.
+    const Secret = Schema.TaggedUnion({
+      ChangedOn: { on: Schema.Boolean },
+      Unlocked: { key: Schema.Redacted(Schema.String) }
+    })
+    /** An owner that counts the messages its reports send, so a duplicate and a missed one both show. */
+    const counting = (message: typeof Plain | typeof Secret) => {
       const Group = Component.define({
         name: "Group",
         model: Schema.Number,
-        message: GroupMessage,
+        message: message as typeof Plain,
         shares: {
           value: (count) => count,
           reports: Schema.Boolean,
-          onReports: (reports) => GroupMessage.make({ _tag: "ChangedOn", on: reports.includes(true) })
+          onReports: (reports) => Plain.make({ _tag: "ChangedOn", on: reports.includes(true) })
         }
-      }).make({ init: () => 0, update: (count) => count + 1, parts: () => ({}) })
+      }).make({ init: () => 0, update: (count) => count + 1, parts: (count) => ({ count }) })
       const Item = Component.define({
         name: "Item",
         props: Schema.Struct({ open: Schema.Boolean }),
@@ -136,26 +141,68 @@ describe("HtmlServer", { concurrent: false }, () => {
         message: Schema.Never,
         shared: { group: { owner: Group, report: (_, props) => props.open } },
         elements: Html
+      }).make({ init: () => null, update: (model) => model, view: (_, h) => h.span.children("item") })
+      return Component.define({
+        name: "Page",
+        props: Schema.Struct({ item: Schema.NullOr(Schema.Boolean) }),
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
       }).make({
         init: () => null,
         update: (model) => model,
-        view: (_, h) => h.span.children(`reported ${h.shared.group}`)
+        view: (_, h) =>
+          Group(h, {
+            key: "g",
+            view: (parts) =>
+              h.div.children(
+                h.p.children(`reported ${parts.count}`),
+                h.props.item !== null && Item(h, { key: "i", props: { open: h.props.item } })
+              )
+          })
       })
-      const Page = Component.define({ name: "Page", model: Schema.Null, message: Schema.Never, elements: Html })
-        .make({
-          init: () => null,
-          update: (model) => model,
-          view: (_, h) => Group(h, { key: "g", view: () => Item(h, { key: "i", props: { open: true } }) })
-        })
-      const rendered = yield* HtmlServer.renderToHtml(Page, {})
-      expect(rendered.html).toContain("<span>reported 1</span>")
-      const app = yield* container(rendered.html)
-      const span = app.querySelector("span")
-      yield* BrowserHost.mountEffect(Page, {}, app, { state: rendered.state })
-      yield* tick
-      expect(app.querySelector("span")).toBe(span)
-      expect(span!.textContent).toBe("reported 1")
-    }).pipe(Effect.scoped))
+    }
+    const cases = [
+      {
+        name: "the same report, with a Redacted message variant",
+        message: Secret,
+        server: true,
+        client: true,
+        count: 1
+      },
+      { name: "a report that changes on the client", message: Plain, server: true, client: false, count: 2 },
+      { name: "the only reader gone on the client", message: Plain, server: true, client: null, count: 2 }
+    ] as const
+    for (const { client, count, message, name, server } of cases) {
+      it.effect(`delivers each report once: ${name}`, () =>
+        Effect.gen(function*() {
+          const Page = counting(message)
+          const rendered = yield* HtmlServer.renderToHtml(Page, { item: server })
+          expect(rendered.html).toContain("<p>reported 1</p>")
+          // An owner whose last message can't ship is built fresh, with its subtree.
+          expect(rendered.state["~deferred"]).toEqual(message === Secret ? ["/Page/Group[g]"] : [])
+          expect(rendered.state["~reported"]).toEqual(
+            message === Secret ? undefined : { "/Page/Group[g]": { _tag: "ChangedOn", on: true } }
+          )
+          const app = yield* container(rendered.html)
+          yield* BrowserHost.mountEffect(Page, { item: client }, app, { state: rendered.state })
+          yield* tick
+          expect(app.querySelector("p")!.textContent).toBe(`reported ${count}`)
+        }).pipe(Effect.scoped))
+    }
+
+    it.effect("adopts the server's nodes when the last message ships", () =>
+      Effect.gen(function*() {
+        const Page = counting(Plain)
+        const rendered = yield* HtmlServer.renderToHtml(Page, { item: true })
+        const app = yield* container(rendered.html)
+        const p = app.querySelector("p")
+        yield* BrowserHost.mountEffect(Page, { item: true }, app, { state: rendered.state })
+        yield* tick
+        expect(app.querySelector("p")).toBe(p)
+        expect(p!.textContent).toBe("reported 1")
+      }).pipe(Effect.scoped))
+  })
 
   it.effect("folds HTML attribute names with last-write wins, but preserves SVG casing", () =>
     Effect.gen(function*() {
