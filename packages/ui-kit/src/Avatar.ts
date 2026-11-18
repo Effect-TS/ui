@@ -1,61 +1,34 @@
 /**
- * A user's picture, with initials or an icon in its place until the picture
- * loads or when it can't, ported from Base UI's Avatar
- * (https://base-ui.com/react/components/avatar).
- *
- * `Avatar` is headless: it loads the image, decides whether the image or
- * the fallback shows, and the consumer draws the markup. The image's source
- * is a prop of the avatar, so the root can load it before the image is
- * drawn.
+ * A user's picture with a fallback, such as initials or an icon, while the
+ * picture loads or if it fails.
  *
  * **Anatomy**
  *
- * | Base UI           | Part       | Element                             |
- * | :---------------- | :--------- | :---------------------------------- |
- * | `Avatar.Root`     | `root`     | `<span>`, which loads the image     |
- * | `Avatar.Image`    | `image`    | `<img>` inside the root, once shown |
- * | `Avatar.Fallback` | `fallback` | `<span>` inside the root, once shown |
+ * | Part       | Element | Behavior                                         |
+ * | :--------- | :------ | :----------------------------------------------- |
+ * | `root`     | `<span>` | Starts loading the image when mounted.           |
+ * | `image`    | `<img>`  | Shown once the current source loads.             |
+ * | `fallback` | `<span>` | Shown after the delay if the image isn't loaded. |
  *
- * Each part takes the consumer's builder and returns it, so the consumer
- * goes on chaining and adds children with `.children(...)`:
+ * Place the image and fallback inside the root. Each part takes an element
+ * builder and returns it, or `undefined` if the part is hidden. Use
+ * `fallback(h.span)?.children(...)` to supply the fallback content.
+ * Give the image an `alt` and the fallback text or a label for its icon.
  *
- * - `root(h.span)` returns the `<span>`.
- * - `image(h.img)` returns the `<img>` once the image has loaded, and
- *   `undefined` before.
- * - `fallback(h.span)` returns the `<span>` while the image isn't loaded
- *   and the `fallbackDelay` has passed, and `undefined` otherwise, so its
- *   content goes on with `?.children(...)`.
+ * **Loading behavior**
  *
- * So the consumer draws both the image and the fallback, and at most one
- * shows.
+ * Set the image source and `fallbackDelay` on the avatar. The root loads
+ * the source before the image part is rendered, so `loading="lazy"` on
+ * that part does not defer the request. The delay defaults to zero.
  *
- * Naming the picture is the consumer's job: an `alt` on the image, and
- * text in the fallback, or an `aria-label` on it for an icon.
- *
- * **Data attributes**
- *
- * None. The parts also return `imageLoadingStatus`, for markup that
- * depends on it.
+ * Use `imageLoadingStatus` in the view to style the parts. A source starts
+ * as `"loading"` (including on the server), then becomes `"loaded"` or
+ * `"error"`. A missing source is `"error"` immediately. The parts set no
+ * state data attributes and switch without enter or exit transitions.
  *
  * **Keyboard**
  *
  * None: an avatar isn't interactive.
- *
- * **Differences from Base UI**
- *
- * - The image's `src`, `srcSet`, `sizes`, `crossOrigin` and
- *   `referrerPolicy`, and the fallback's `delay`, as `fallbackDelay`, are
- *   props of the avatar: the root loads the image and the parts are drawn
- *   after the state is known.
- * - `imageLoadingStatus` has no `"idle"`: an image that hasn't settled is
- *   `"loading"`, on the server too.
- * - There is no `onLoadingStatusChange`: the parts return
- *   `imageLoadingStatus`.
- * - There is no `keepMounted`, so the image is loaded before it's drawn
- *   and `loading="lazy"` has no effect. The image has no `data-loading`
- *   and `data-error`, which only `keepMounted` sets.
- * - The image has no `data-starting-style` and `data-ending-style`: it
- *   shows and goes without an enter or exit transition.
  *
  * **Example** (A user's picture, with their initials until it loads)
  *
@@ -116,15 +89,14 @@ const Source = Schema.Struct({
 type Source = typeof Source.Type
 
 /**
- * The props of an `Avatar`: Base UI's Image props without the React ones,
- * and the Fallback's `delay`.
+ * The image source and fallback delay for an `Avatar`.
  *
  * **Details**
  *
  * - `src`, `srcSet`, `sizes`, `crossOrigin` and `referrerPolicy`: the
  *   image, as the `<img>` attributes of the same names. The root loads
  *   it, and the image part sets them. Without a `src` or a `srcSet`, the
- *   image fails at once and the fallback shows.
+ *   status is `"error"` immediately.
  * - `fallbackDelay`: how long, in milliseconds, the fallback waits before
  *   it shows, so a fast image doesn't flash it. `0` by default. Once it
  *   has passed, the fallback shows whenever the image isn't loaded.
@@ -196,8 +168,7 @@ const statusOf = (report: Report | null, source: Source): AvatarImageLoadingStat
     ? report.status
     : "loading"
 
-// Loads the source in an <img> that is never inserted, as Base UI does, and
-// reports how it settled. A cached image is complete at once.
+// Load the source in a detached <img>. A cached image may already be complete.
 const load = (document: Document, source: Source) =>
   Effect.callback<Report>((resume) => {
     const image = document.createElement("img")
