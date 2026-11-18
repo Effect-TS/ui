@@ -151,6 +151,64 @@ const Independent = Component.define({
     )
 })
 
+// Three tooltips under a provider whose opens and closes the test accepts by
+// hand, with `AcceptedOpen` and `AcceptedClose`, whenever it likes. Bold's
+// requests to close are counted and refused, so it stays visible. The
+// others' are accepted.
+const Mark = Schema.Literals(["bold", "italic", "underline"])
+const DeferredMessage = Schema.TaggedUnion({
+  RequestedOpen: { tip: Mark },
+  RequestedClose: { tip: Mark },
+  AcceptedOpen: { tip: Mark },
+  AcceptedClose: { tip: Mark }
+})
+
+const Deferred = Component.define({
+  name: "Deferred",
+  model: Schema.Struct({
+    bold: Schema.Boolean,
+    italic: Schema.Boolean,
+    underline: Schema.Boolean,
+    requests: Schema.Number
+  }),
+  message: DeferredMessage,
+  elements: Html
+}).make({
+  init: () => ({ bold: false, italic: false, underline: false, requests: 0 }),
+  update: (model, message) =>
+    DeferredMessage.match(message, {
+      RequestedOpen: () => model,
+      RequestedClose: (
+        { tip }
+      ) => (tip === "bold" ? { ...model, requests: model.requests + 1 } : { ...model, [tip]: false }),
+      AcceptedOpen: ({ tip }) => ({ ...model, [tip]: true }),
+      AcceptedClose: ({ tip }) => ({ ...model, [tip]: false })
+    }),
+  view: (model, h) =>
+    h.div(
+      TooltipProvider(h, {
+        props: {},
+        view: () =>
+          h.div(
+            ...Mark.literals.map((tip) =>
+              Tooltip(h, {
+                key: tip,
+                props: { open: model[tip] },
+                onEmit: (event) =>
+                  DeferredMessage.make({ _tag: event._tag === "Opened" ? "RequestedOpen" : "RequestedClose", tip }),
+                view: (s) =>
+                  h.span(
+                    s.trigger(h.button.attr("aria-label", tip)).children(tip),
+                    s.positioner(h.div).children(s.popup(h.div).children(tip))
+                  )
+              })
+            )
+          )
+      }),
+      h.output(String(model.requests))
+    )
+})
+
 const trigger = Locator.tag("button")
 const positioner = Locator.attr("role", "presentation")
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
@@ -270,7 +328,7 @@ describe("Tooltip", () => {
 
   it("parts clear stale state and preserve consumer styles alongside their shared anchor", () => {
     const s = Story.parts(Tooltip, {
-      model: { hovered: false, focused: false, pressed: false, instant: null, turn: 0 },
+      model: { hovered: false, focused: false, pressed: false, instant: null, turn: 0, yieldedTo: null },
       props: { open: false }
     })
     // The anchor survives a style the consumer chains after the part.
@@ -371,5 +429,66 @@ describe("Tooltip", () => {
       assert.isTrue(delayed.shows("italic"))
       assert.strictEqual(delayed.requests(), "1")
       assert.isFalse(delayed.shows("bold"))
+    }).pipe(Effect.provide(TestHost.layer())))
+
+  it.effect("both opens requested before either is accepted: the one accepted later still replaces the other", () =>
+    Effect.gen(function*() {
+      const root = yield* TestHost.mount(Deferred, {})
+      const wait = (millis: number) =>
+        TestHost.settle.pipe(Effect.andThen(TestClock.adjust(`${millis} millis`)), Effect.andThen(TestHost.settle))
+      const fire = (tip: string, event: string) => Locator.fire(root.get(Locator.attr("aria-label", tip)), event)
+      const requests = () => Locator.textOf(root.get(Locator.tag("output")))
+      const shows = (tip: string) => root.get(Locator.attr("aria-label", tip)).attrs?.["data-popup-open"] === ""
+
+      fire("bold", "focus")
+      fire("italic", "mouseenter")
+      yield* wait(600)
+      root.send(DeferredMessage.make({ _tag: "AcceptedOpen", tip: "bold" }))
+      yield* wait(0)
+      assert.strictEqual(requests(), "0")
+      root.send(DeferredMessage.make({ _tag: "AcceptedOpen", tip: "italic" }))
+      yield* wait(0)
+      assert.isTrue(shows("italic"))
+      assert.strictEqual(requests(), "1")
+      // Refused: bold stays, and isn't asked again.
+      yield* wait(1000)
+      assert.isTrue(shows("bold"))
+      assert.strictEqual(requests(), "1")
+    }).pipe(Effect.provide(TestHost.layer())))
+
+  it.effect("tooltips the consumer opens through props, with no request, replace each other too", () =>
+    Effect.gen(function*() {
+      const root = yield* TestHost.mount(Deferred, {})
+      const wait = (millis: number) =>
+        TestHost.settle.pipe(Effect.andThen(TestClock.adjust(`${millis} millis`)), Effect.andThen(TestHost.settle))
+      const accept = (tip: typeof Mark.Type, open: boolean) =>
+        root.send(DeferredMessage.make({ _tag: open ? "AcceptedOpen" : "AcceptedClose", tip }))
+      const requests = () => Locator.textOf(root.get(Locator.tag("output")))
+      const shows = (tip: string) => root.get(Locator.attr("aria-label", tip)).attrs?.["data-popup-open"] === ""
+
+      accept("bold", true)
+      yield* wait(0)
+      accept("italic", true)
+      yield* wait(0)
+      assert.strictEqual(requests(), "1")
+      yield* wait(1000)
+      assert.isTrue(shows("bold"))
+      assert.strictEqual(requests(), "1")
+
+      // Underline shown: bold asks again, once, for the new tooltip, and
+      // italic closes.
+      accept("underline", true)
+      yield* wait(0)
+      assert.strictEqual(requests(), "2")
+      assert.isFalse(shows("italic"))
+
+      // Bold closed and shown again is the newest, so underline gives way.
+      accept("bold", false)
+      yield* wait(0)
+      accept("bold", true)
+      yield* wait(0)
+      assert.isTrue(shows("bold"))
+      assert.isFalse(shows("underline"))
+      assert.strictEqual(requests(), "2")
     }).pipe(Effect.provide(TestHost.layer())))
 })

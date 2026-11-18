@@ -251,13 +251,11 @@ export type TooltipEvents = typeof TooltipEvents.Type
 // Pointer, focus and key facts from the trigger, the positioner and the
 // document, and the ends of the two timers.
 const Message = Schema.TaggedUnion({
-  // What a TooltipProvider above shared when the trigger last rendered.
-  // `update` can't read shared state, so the values come in here. `instant`:
-  // the hover skips its delay. `turn`: the turn this tooltip takes if it
-  // opens.
-  EnteredTrigger: { instant: Schema.Boolean, turn: Schema.Number },
+  // `instant`: what a TooltipProvider above shared when the trigger last
+  // rendered. `update` can't read shared state, so the value comes in here.
+  EnteredTrigger: { instant: Schema.Boolean },
   LeftTrigger: {},
-  FocusedTrigger: { turn: Schema.Number },
+  FocusedTrigger: {},
   BlurredTrigger: {},
   PressedTrigger: {},
   ClickedTrigger: {},
@@ -267,8 +265,9 @@ const Message = Schema.TaggedUnion({
   PressedDocument: {},
   CompletedWaitBeforeOpening: {},
   CompletedWaitBeforeClosing: {},
-  // The provider's newest shown tooltip changed.
-  ChangedGroup: { current: Schema.NullOr(Schema.Number) }
+  // The provider's shared value changed: the newest turn that shows, and the
+  // turn a newly shown tooltip takes.
+  ChangedGroup: { newest: Schema.NullOr(Schema.Number), next: Schema.Number }
 })
 
 // Only the pointer and focus, which the consumer would never store.
@@ -277,14 +276,17 @@ const Message = Schema.TaggedUnion({
 // trigger, so the focus that follows it neither opens the tooltip nor holds
 // it open. `instant` is why the last change skips its transition, as
 // `data-instant` reports it: `delay` when a TooltipProvider let it skip the
-// hover delay. `turn` orders the tooltips of a provider's group: the one it
-// took when it last asked to open, 0 if it never did.
+// hover delay. `turn` orders the shown tooltips of a provider's group: the
+// one it took when it was last shown, 0 while it hasn't taken one or isn't
+// shown. `yieldedTo` is the turn it last asked to close for, so a refused
+// request isn't repeated.
 const Model = Schema.Struct({
   hovered: Schema.Boolean,
   focused: Schema.Boolean,
   pressed: Schema.Boolean,
   instant: Schema.NullOr(Schema.Literals(["focus", "dismiss", "delay"])),
-  turn: Schema.Number
+  turn: Schema.Number,
+  yieldedTo: Schema.NullOr(Schema.Number)
 })
 
 // `switch`: a new wait replaces the running one, and leaving or entering
@@ -336,6 +338,13 @@ const TrackDismissal = Mount.makeStream(
 
 const opened = TooltipEvents.make({ _tag: "Opened" })
 const dismissed = TooltipEvents.make({ _tag: "Dismissed" })
+
+// The newest turn that shows in a provider's group: the highest, as turns
+// are taken in order. 0 is a tooltip that hasn't taken one yet.
+const newestOf = (turns: ReadonlyArray<number>): number | null => {
+  const taken = turns.filter((turn) => turn > 0)
+  return taken.length === 0 ? null : Math.max(...taken)
+}
 
 // A disabled tooltip never shows, whatever `open` says.
 const shownBy = (props: TooltipProps): boolean => props.open && props.disabled !== true
@@ -409,8 +418,8 @@ export const TooltipProviderProps = Schema.Struct({
 export type TooltipProviderProps = typeof TooltipProviderProps.Type
 
 // The turns of the tooltips below that show, from their reports, sorted so
-// the message doesn't depend on their order, and the end of the window after
-// the last one closed.
+// the message doesn't depend on their order, with 0 for one that hasn't
+// taken a turn yet. And the end of the window after the last one closed.
 const ProviderMessage = Schema.TaggedUnion({
   ChangedShown: { turns: Schema.Array(Schema.Number) },
   CompletedWaitBeforeCooling: {}
@@ -448,10 +457,10 @@ const WaitBeforeCooling = Command.make(
  * even if keyboard focus or `closeDelay` would hold it open. A consumer
  * that refuses keeps it on screen, and the request isn't repeated until yet
  * another tooltip takes over. A tooltip knows it was replaced by its turn:
- * each one takes the group's next turn when it asks to open, and the group
- * follows the turn that showed last. A tooltip the consumer opens without
- * its `Opened` keeps the turn it had, so the group still sees it as newly
- * shown.
+ * each one takes the group's next turn once it is shown, however it was
+ * opened, and the highest turn that shows is the newest. Two tooltips
+ * shown in the same update take the same turn, so neither replaces the
+ * other.
  *
  * The decision is made when the pointer enters the trigger: a hover
  * already waiting out its delay isn't cut short.
@@ -475,18 +484,17 @@ export const TooltipProvider = Component.define({
   props: TooltipProviderProps,
   // `open`: a tooltip below shows. `instant`: the next hover skips its
   // delay, while one shows and for `timeout` after the last one closed.
-  // `turns`: the turns that show. `current`: the one that showed last, which
-  // the others give way to. `next`: the turn the next tooltip to ask takes.
+  // `turns`: the turns that show, so every change reaches the readers.
+  // `next`: the turn the next tooltip to be shown takes.
   model: Schema.Struct({
     open: Schema.Boolean,
     instant: Schema.Boolean,
     turns: Schema.Array(Schema.Number),
-    current: Schema.NullOr(Schema.Number),
     next: Schema.Number
   }),
   message: ProviderMessage,
   shares: {
-    value: (model) => ({ open: model.open, instant: model.instant, current: model.current, next: model.next }),
+    value: (model) => ({ open: model.open, instant: model.instant, turns: model.turns, next: model.next }),
     // Each tooltip's turn while it shows, `null` while it doesn't.
     reports: Schema.NullOr(Schema.Number),
     onReports: (reports) =>
@@ -497,22 +505,12 @@ export const TooltipProvider = Component.define({
   },
   elements: Html
 }).make({
-  init: () => ({ open: false, instant: false, turns: [], current: null, next: 1 }),
+  init: () => ({ open: false, instant: false, turns: [], next: 1 }),
   update: (model, message, $) =>
     ProviderMessage.match(message, {
       ChangedShown: ({ turns }) => {
         const open = turns.length > 0
-        // A turn that wasn't showing before is the newest. Otherwise the
-        // current one stays while it shows.
-        const fresh = turns.filter((turn) => !model.turns.includes(turn))
-        const current = fresh.length > 0
-          ? Math.max(...fresh)
-          : model.current !== null && turns.includes(model.current)
-          ? model.current
-          : open
-          ? Math.max(...turns)
-          : null
-        const next = { ...model, open, turns, current, next: Math.max(model.next, ...turns.map((turn) => turn + 1)) }
+        const next = { ...model, open, turns, next: Math.max(model.next, ...turns.map((turn) => turn + 1)) }
         if (open) return $.set({ ...next, instant: true }).run(Command.interrupt(WaitBeforeCooling))
         // The last one closed: the window starts.
         if (model.open) {
@@ -562,18 +560,18 @@ export const Tooltip = Component.define({
   message: Message,
   events: TooltipEvents,
   // A TooltipProvider above, if there is one. Each tooltip tells it its turn
-  // while it shows, and hears when another one takes over.
+  // while it shows, and hears when the shown tooltips change.
   shared: {
     provider: {
       owner: TooltipProvider,
       optional: true,
       report: (model, props) => (shownBy(props) ? model.turn : null),
-      onChange: (value) => Message.make({ _tag: "ChangedGroup", current: value.current })
+      onChange: (value) => Message.make({ _tag: "ChangedGroup", newest: newestOf(value.turns), next: value.next })
     }
   },
   elements: Html
 }).make({
-  init: () => ({ hovered: false, focused: false, pressed: false, instant: null, turn: 0 }),
+  init: () => ({ hovered: false, focused: false, pressed: false, instant: null, turn: 0, yieldedTo: null }),
   update: (model, message, $) => {
     const props = $.props
     const enabled = props.disabled !== true
@@ -590,27 +588,21 @@ export const Tooltip = Component.define({
       return $.set(next).run(WaitBeforeClosing({ delay: props.closeDelay ?? 0 }))
     }
     return Message.match(message, {
-      EnteredTrigger: ({ instant, turn }) => {
+      EnteredTrigger: ({ instant }) => {
         const next = { ...model, hovered: true }
         if (!enabled) return next
         if (shown) return $.set(next).run(Command.interrupt(WaitBeforeClosing))
-        // The turn it takes if it opens, so its group knows it's the newest.
-        const taking = { ...next, turn }
         // A provider's group is open, or closed less than `timeout` ago.
-        if (instant) {
-          return $.set({ ...taking, instant: "delay" }).run(Command.interrupt(WaitBeforeOpening)).emit(opened)
-        }
-        return $.set(taking).run(WaitBeforeOpening({ delay: props.delay ?? 600 }))
+        if (instant) return $.set({ ...next, instant: "delay" }).run(Command.interrupt(WaitBeforeOpening)).emit(opened)
+        return $.set(next).run(WaitBeforeOpening({ delay: props.delay ?? 600 }))
       },
       LeftTrigger: left,
       EnteredPositioner: () => $.set({ ...model, hovered: true }).run(Command.interrupt(WaitBeforeClosing)),
       LeftPositioner: left,
-      FocusedTrigger: ({ turn }) => {
+      FocusedTrigger: () => {
         const next = { ...model, focused: !model.pressed, pressed: false }
         if (model.pressed || !enabled || shown) return next
-        return $.set({ ...next, instant: "focus", turn })
-          .run(Command.interrupt(WaitBeforeOpening))
-          .emit(opened)
+        return $.set({ ...next, instant: "focus" }).run(Command.interrupt(WaitBeforeOpening)).emit(opened)
       },
       BlurredTrigger: () => {
         const next = { ...model, focused: false, pressed: false }
@@ -632,14 +624,18 @@ export const Tooltip = Component.define({
         enabled && !props.open && model.hovered ? $.set({ ...model, instant: null }).emit(opened) : model,
       CompletedWaitBeforeClosing: () =>
         shown && !model.hovered && !model.focused ? $.set({ ...model, instant: null }).emit(dismissed) : model,
-      // Another tooltip of the group was shown after this one: ask to close,
-      // whatever holds this one open. While both show, the shared value
-      // changes only when `current` does, so a refused request isn't repeated
-      // until yet another tooltip takes over.
-      ChangedGroup: ({ current }) =>
-        shown && current !== null && current !== model.turn
-          ? $.set(model).run(Command.interrupt(WaitBeforeClosing)).emit(dismissed)
+      // The shown tooltips of the group changed. Its turn follows whether it
+      // is shown, as the consumer decided, not whether it asked: a closed
+      // tooltip gives its turn up, and a newly shown one takes the next.
+      // Another tooltip shown after this one asks it to close once, whatever
+      // holds it open, so a refusal isn't met with a second request.
+      ChangedGroup: ({ newest, next }) => {
+        if (!shown) return { ...model, turn: 0, yieldedTo: null }
+        if (model.turn === 0) return { ...model, turn: next, yieldedTo: null }
+        return newest !== null && newest !== model.turn && newest !== model.yieldedTo
+          ? $.set({ ...model, yieldedTo: newest }).run(Command.interrupt(WaitBeforeClosing)).emit(dismissed)
           : model
+      }
     })
   },
   parts: (model, p) => {
@@ -667,14 +663,11 @@ export const Tooltip = Component.define({
       (b) =>
         b.attr("data-popup-open", flag(shown))
           .attr("data-trigger-disabled", flag(p.props.disabled))
-          .on(
-            "mouseenter",
-            Message.make({ _tag: "EnteredTrigger", instant: group?.instant === true, turn: group?.next ?? 0 })
-          )
+          .on("mouseenter", Message.make({ _tag: "EnteredTrigger", instant: group?.instant === true }))
           .on("mouseleave", Message.make({ _tag: "LeftTrigger" }))
           .on("mousedown", Message.make({ _tag: "PressedTrigger" }))
           .onClick(Message.make({ _tag: "ClickedTrigger" }))
-          .onFocus(Message.make({ _tag: "FocusedTrigger", turn: group?.next ?? 0 }))
+          .onFocus(Message.make({ _tag: "FocusedTrigger" }))
           .onBlur(Message.make({ _tag: "BlurredTrigger" }))
           .forward((node) => node.attr("style", withStyle(node.attrs.style, `anchor-name:${anchor}`)))
     )
