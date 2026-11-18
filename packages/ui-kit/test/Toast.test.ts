@@ -87,15 +87,27 @@ const App = Component.define({
     })
 })
 
-// A page with a button that posts a new toast on each click.
-const PosterMessage = UiSchema.TaggedEnum({ ClickedPost: {} })
+// A page with a button that posts a new toast on each click, and one that
+// closes the newest.
+const PosterMessage = UiSchema.TaggedEnum({ ClickedPost: {}, ClickedDrop: {} })
 
 const Poster = Component.define({ name: "Poster", model: Schema.Number, message: PosterMessage, elements: Html })
   .make({
     init: () => 0,
-    update: (model, _message, $) =>
-      $.set(model + 1).send(ToastProvider, { _tag: "AddedToast", toast: { id: "t" + (model + 1), title: "Toast" } }),
-    view: (_, h) => h.button.attr("id", "post").onClick(PosterMessage.ClickedPost()).children("Post")
+    update: (model, message, $) =>
+      PosterMessage.match(message, {
+        ClickedPost: () =>
+          $.set(model + 1).send(ToastProvider, {
+            _tag: "AddedToast",
+            toast: { id: "t" + (model + 1), title: "Toast" }
+          }),
+        ClickedDrop: () => $.set(model).send(ToastProvider, { _tag: "ClosedToast", id: "t" + model })
+      }),
+    view: (_, h) =>
+      h.div(
+        h.button.attr("id", "post").onClick(PosterMessage.ClickedPost()).children("Post"),
+        h.button.attr("id", "drop").onClick(PosterMessage.ClickedDrop()).children("Drop")
+      )
   })
 
 const Page = Component.define({
@@ -344,12 +356,23 @@ describe("ToastProvider", { concurrent: false }, () => {
       yield* tick
       assert.strictEqual(document.activeElement, document.body)
 
+      // F6 focuses the viewport itself, then the app closes the only toast.
+      post.focus()
+      post.click()
+      yield* tick
+      press(post, "F6")
+      assert.strictEqual(document.activeElement, region)
+      byId("drop")!.click()
+      yield* tick
+      assert.strictEqual(document.activeElement, post)
+      assert.isFalse(region.hasAttribute("data-expanded"))
+
       // A toast the app posts afterwards closes on its own.
       post.click()
       yield* tick
-      assert.isNotNull(byId("t3"))
+      assert.isNotNull(byId("t4"))
       yield* TestClock.adjust("200 millis")
       yield* tick
-      assert.isNull(byId("t3"))
+      assert.isNull(byId("t4"))
     }))
 })

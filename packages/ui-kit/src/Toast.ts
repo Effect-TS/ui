@@ -467,10 +467,14 @@ const TrackViewport = Mount.makeStream(
             Queue.offerUnsafe(queue, "LeftViewport")
           }
         }
+        // Focus goes back to where it was before it entered the viewport, or
+        // else leaves the stack, so the stack collapses and the timers of
+        // later toasts run: an empty viewport never keeps focus.
+        const leave = () => {
+          if (!restore()) (document.activeElement as HTMLElement | null)?.blur()
+        }
         // A toast that closes with focus inside hands it to the next toast,
-        // or back to where it was before it entered the viewport. Failing
-        // both, focus leaves the stack, so the stack collapses and the timers
-        // of later toasts run: an empty viewport never keeps focus.
+        // or else focus leaves the viewport.
         const handOff = (records: ReadonlyArray<MutationRecord>) => {
           for (const record of records) {
             const closing = record.target as HTMLElement
@@ -479,7 +483,7 @@ const TrackViewport = Mount.makeStream(
             const after = roots.find((root) => closing.compareDocumentPosition(root) & 4)
             const next = after ?? roots.at(-1)
             if (next !== undefined) next.focus()
-            else if (!restore()) (document.activeElement as HTMLElement | null)?.blur()
+            else leave()
           }
         }
         yield* Effect.acquireRelease(
@@ -508,6 +512,9 @@ const TrackViewport = Mount.makeStream(
           Effect.sync(() => {
             empty = next.empty
             hovering = next.hovering
+            // The last toast closed with focus on the viewport itself, as
+            // after F6, which the hand-off doesn't see.
+            if (empty && node.contains(document.activeElement)) leave()
           })).pipe(Effect.forkScoped)
       })
     )
