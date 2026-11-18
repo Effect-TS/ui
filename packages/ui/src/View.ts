@@ -403,12 +403,28 @@ export declare namespace Child {
       }
     )
     & {
-      /** Handles the child's whole `events` union and returns `undefined` for the cases it ignores. */
-      readonly onEmit?: ((events: Events) => Msg | undefined) | undefined
+      /**
+       * Handle the child's events with a callback, or supply one handler per tag for tagged events.
+       * Return a parent message to dispatch it, or `undefined` to ignore the event.
+       */
+      readonly onEmit?: ((events: Events) => Msg | undefined) | EmitHandlers<Events, Msg> | undefined
       /** Also tells the parent that the child failed. The failure stays in the child either way. */
       readonly onFailure?: ((failure: AsyncResult.Failure<never, unknown>) => Msg | undefined) | undefined
     }
     & ({} extends Props ? { readonly props?: Props | undefined } : { readonly props: Props })
+
+  /**
+   * One handler for each tag in a child's event union.
+   *
+   * @category models
+   * @since 0.1.0
+   */
+  export type EmitHandlers<Events, Msg> = [Events] extends [never] ? never
+    : [Events] extends [{ readonly _tag: string }]
+    // Reject a wide tag without testing against a type that depends on Events (see ErasedReceives).
+      ? [(tag: EventTag<Events>) => void] extends [(tag: string) => void] ? never
+      : { readonly [T in EventTag<Events>]: (event: Extract<Events, { readonly _tag: T }>) => Msg | undefined }
+    : never
 
   /**
    * What a component or feature receives, as a child checks a ref against
@@ -420,6 +436,8 @@ export declare namespace Child {
    */
   export type Receives<Rcv> = [Rcv] extends [ErasedReceives] ? never : Rcv
 }
+
+type EventTag<Events> = Events extends { readonly _tag: infer T extends string } ? T : never
 
 // Only `any` and `never` extend it. A conditional on `[Rcv]` against a fixed
 // type, unlike `0 extends 1 & Rcv`, relates for two `Rcv`s, so it passes a

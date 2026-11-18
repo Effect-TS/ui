@@ -1638,6 +1638,33 @@ describe("Runtime", () => {
       assert.strictEqual(root.text(), "1child")
     })))
 
+  it.effect("a tagged onEmit record sends mapped messages to the parent and drops ignored events", () =>
+    provideHost(Effect.gen(function*() {
+      const Events = UiSchema.TaggedEnum({ Renamed: { name: Schema.String }, Discarded: {} })
+      const Child = Component.define({
+        name: "Child",
+        model: Schema.Number,
+        message: Schema.Never,
+        events: Events
+      }).make({
+        init: ($) => $.set(0).emit(Events.Discarded(), Events.Renamed({ name: "Ada" })),
+        update: (model) => model,
+        view: (_, h) => h.text("child")
+      })
+      const Parent = Component.define({
+        name: "Parent",
+        model: Schema.Array(Schema.String),
+        message: Schema.String
+      }).make({
+        init: () => [],
+        update: (messages, message) => [...messages, message],
+        view: (_, h) => Child(h, { onEmit: { Renamed: ({ name }) => name, Discarded: () => undefined } })
+      })
+      const root = yield* TestHost.mount(Parent, {})
+      yield* TestHost.settle
+      assert.deepStrictEqual(root.model(), ["Ada"])
+    })))
+
   describe("props", () => {
     it.effect("a props change re-renders the child without reaching its update", () =>
       provideHost(Effect.gen(function*() {

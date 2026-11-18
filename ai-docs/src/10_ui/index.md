@@ -196,7 +196,7 @@ Collapsible(h, {
   key: "note",
   slots: {
     summary: h.h2(note.title),
-    body: NoteEditor(h, { ref: Editor.at(note.id), props: { note }, onEmit: () => SavedNote })
+    body: NoteEditor(h, { ref: Editor.at(note.id), props: { note }, onEmit: { Saved: () => SavedNote } })
   }
 })
 ```

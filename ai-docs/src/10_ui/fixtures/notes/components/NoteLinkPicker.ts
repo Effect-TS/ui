@@ -48,7 +48,7 @@ export const NoteLinkPickerNoDeps = Component.define({
             options: Array.from(notes.values(), (note) => ({ id: note.id, label: note.title })),
             selected: model.linked
           },
-          onEmit: ({ id }) => NoteLinkPickerMessage.PickedLink({ id }),
+          onEmit: { Picked: ({ id }) => NoteLinkPickerMessage.PickedLink({ id }) },
           // The closure is this component's code, run with the Listbox's
           // parts. It draws the markup and applies each part to a builder of
           // the part's tag. A child placed in here, and its `onEmit`, report

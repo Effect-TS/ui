@@ -80,7 +80,7 @@ export const NotePageNoDeps = Component.define({
                   props: { note },
                   // Maps the child's events to this component's messages:
                   // the event's verb, then this page's name for the child.
-                  onEmit: () => NotePageMessage.SavedNote(),
+                  onEmit: { Saved: () => NotePageMessage.SavedNote() },
                   // Every child is a failure boundary. A failed child shows
                   // `fallback` and stays down until its key changes.
                   onFailure: () => NotePageMessage.FailedEditor(),
