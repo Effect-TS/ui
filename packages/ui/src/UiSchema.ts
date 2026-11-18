@@ -98,11 +98,6 @@ export declare namespace TaggedEnum {
    * Keys that can't be tags because they collide with schema, function or
    * object members.
    *
-   * **Details**
-   *
-   * `TaggedEnum` throws for exactly these keys, so a tag the types accept is
-   * never rejected when the schema is built.
-   *
    * @stability experimental
    * @category models
    * @since 0.1.0
@@ -123,62 +118,6 @@ export declare namespace TaggedEnum {
 }
 
 type TagOf<K> = K extends number ? `${K}` : Extract<K, string>
-
-const reservedTags: ReadonlySet<string> = new Set(Object.keys(
-  {
-    "~effect/Schema/Schema": 0,
-    "~type.parameters": 0,
-    "~type.make.in": 0,
-    "~type.make": 0,
-    "~type.constructor.default": 0,
-    "~type.mutability": 0,
-    "~type.optionality": 0,
-    "~encoded.mutability": 0,
-    "~encoded.optionality": 0,
-    ast: 0,
-    Rebuild: 0,
-    Type: 0,
-    Encoded: 0,
-    DecodingServices: 0,
-    EncodingServices: 0,
-    Iso: 0,
-    annotate: 0,
-    annotateKey: 0,
-    check: 0,
-    rebuild: 0,
-    make: 0,
-    makeOption: 0,
-    makeEffect: 0,
-    pipe: 0,
-    tag: 0,
-    cases: 0,
-    isAnyOf: 0,
-    guards: 0,
-    match: 0,
-    matchOrElse: 0,
-    is: 0,
-    apply: 0,
-    call: 0,
-    bind: 0,
-    toString: 0,
-    prototype: 0,
-    length: 0,
-    arguments: 0,
-    caller: 0,
-    name: 0,
-    constructor: 0,
-    hasOwnProperty: 0,
-    isPrototypeOf: 0,
-    propertyIsEnumerable: 0,
-    toLocaleString: 0,
-    valueOf: 0,
-    ["__proto__"]: 0,
-    __defineGetter__: 0,
-    __defineSetter__: 0,
-    __lookupGetter__: 0,
-    __lookupSetter__: 0
-  } satisfies Record<TaggedEnum.ReservedTag, 0>
-))
 
 /**
  * Builds a `Schema.TaggedUnion` and attaches one unchecked constructor per
@@ -205,8 +144,7 @@ const reservedTags: ReadonlySet<string> = new Set(Object.keys(
  *   branded value. Use `cases[tag].make` when you need validation or defaults.
  * - `is(tag)` doesn't look past `_tag`. Decode untrusted input first.
  * - A tag in {@link TaggedEnum.ReservedTag} (`ast`, `annotate`, `cases`,
- *   `is`, `match`, `make`, `pipe`, `name`, `Type`, ...) is a type error, and throws when
- *   the schema is built.
+ *   `is`, `match`, `make`, `pipe`, `name`, `Type`, ...) is a type error.
  * - A case can't declare its own `_tag` field, because the case key is the
  *   tag. This is a type error, and throws when the schema is built.
  * - A numeric key becomes a string tag: `{ 1: {} }` has the tag `"1"`.
@@ -247,9 +185,6 @@ export const TaggedEnum = <const CasesByTag extends Record<string, Schema.Struct
 ): TaggedEnum<{ readonly [K in keyof CasesByTag as TagOf<K>]: Schema.TaggedStruct<TagOf<K>, CasesByTag[K]> }> => {
   const tags = Object.keys(casesByTag)
   for (const key of tags) {
-    if (reservedTags.has(key)) {
-      throw new Error(`Reserved tag: ${key}`)
-    }
     if (Object.hasOwn(casesByTag[key], "_tag")) {
       throw new Error(`Case ${key} can't declare _tag`)
     }

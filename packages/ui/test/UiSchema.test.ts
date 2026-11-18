@@ -36,17 +36,6 @@ describe("UiSchema", () => {
       assert.strictEqual(Shape.cases.Rect.fields.height, Schema.FiniteFromString)
     })
 
-    it("throws on every name the schema already has, and on type-only members", () => {
-      const names = new Set(["Type", "Rebuild", "~type.make", "apply", "is", "match"])
-      for (let o: object | null = Shape; o !== null; o = Object.getPrototypeOf(o)) {
-        for (const name of Object.getOwnPropertyNames(o)) names.add(name)
-      }
-      for (const tag of ["Circle", "Rect", "Empty"]) names.delete(tag)
-      for (const tag of names) {
-        assert.throws(() => UiSchema.TaggedEnum({ [tag]: {} } as any), `Reserved tag: ${tag}`)
-      }
-    })
-
     it("throws when a case declares its own _tag", () => {
       assert.throws(
         () => UiSchema.TaggedEnum({ A: { _tag: Schema.Literal("B") } } as any),
