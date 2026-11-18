@@ -57,7 +57,7 @@ const TooltipMessage = UiSchema.TaggedEnum({
 })
 
 // `h.shared.provider` is the nearest TooltipProvider's value. Reading it, or
-// sending to it, puts `Component.Shared<typeof TooltipProvider>` in the
+// sending to it, puts `Component.Shared<"TooltipProvider">` in the
 // component's requirements: it compiles only below a TooltipProvider. Reads
 // are in `view` and `parts` only, so `update` stays a pure function of what
 // the log records.
@@ -183,7 +183,7 @@ const PanelMessage = UiSchema.TaggedEnum({ Toggled: {}, ChangedGroup: { anyOpen:
 // - `optional: true`: a Panel works with no PanelGroup above it. There
 //   `h.shared.group` is `undefined`, a `$.send(PanelGroup, ...)` is dropped
 //   and logged as `SendDropped` with reason `absent`, and the Panel needs no
-//   `Component.Shared<typeof PanelGroup>`.
+//   `Component.Shared<"PanelGroup">`.
 // - `report`: what the Panel tells the owner, from its own Model and props.
 //   It fails to compile for an owner whose `shares` has no `collects`.
 // - `onChange`: the Panel's message when the owner's value changes, for an

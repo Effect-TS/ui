@@ -457,7 +457,7 @@ export type SharedTypeId = typeof SharedTypeId
 
 /**
  * The requirement that reading or sending to an owner of shared state puts
- * in a component's `R`: `Component.Shared<typeof Provider>`.
+ * in a component's `R`: `Component.Shared<"Provider">`.
  *
  * **When to use**
  *
@@ -468,18 +468,22 @@ export type SharedTypeId = typeof SharedTypeId
  *
  * An owner is a headless component with `shares`. A component that lists it
  * in `shared` to read its value, or that calls `$.send(Owner, message)`,
- * carries `Shared<typeof Owner>`. Declaring the reader inside the owner's
+ * carries `Shared.Of<typeof Owner>`. Declaring the reader inside the owner's
  * `view` closure removes it, so a reader with no owner above it doesn't
  * compile. `provide` never removes it.
  *
- * It is `never` for a component that isn't an owner.
+ * Names are the type-level key. At runtime a reader still needs the exact
+ * owner definition, not just a component with the same name.
  *
  * @stability experimental
  * @category utility types
  * @since 0.1.0
  */
-export type Shared<C> = C extends Headless<infer _P, infer _E, infer _Parts, infer _R, infer _Rcv, infer Sh> ? Sh
-  : never
+export interface Shared<in out Name extends string> {
+  readonly [SharedTypeId]: {
+    readonly _Name: Types.Invariant<Name>
+  }
+}
 
 /**
  * Types for shared state.
@@ -489,23 +493,13 @@ export type Shared<C> = C extends Headless<infer _P, infer _E, infer _Parts, inf
  */
 export declare namespace Shared {
   /**
-   * The requirement of an owner named `Name` that shares `Value`,
-   * receives `Rcv` and collects `Report` from each reader that reports to it.
-   * `make` builds it from the definition, and `Shared<typeof Owner>` reads
-   * it back.
+   * The named requirement of an owner, or `never` for a component that isn't an owner.
    *
    * @stability experimental
-   * @category models
+   * @category utility types
    * @since 0.1.0
    */
-  export interface Of<in out Name extends string, in out Value, in out Rcv, in out Report = never> {
-    readonly [SharedTypeId]: {
-      readonly _Name: Types.Invariant<Name>
-      readonly _Value: Types.Invariant<Value>
-      readonly _Rcv: Types.Invariant<Rcv>
-      readonly _Report: Types.Invariant<Report>
-    }
-  }
+  export type Of<C> = C extends Headless<infer _P, infer _E, infer _Parts, infer _R, infer _Rcv, infer Sh> ? Sh : never
 
   /**
    * Any shared-state requirement.
@@ -514,12 +508,7 @@ export declare namespace Shared {
    * @category models
    * @since 0.1.0
    */
-  // `any` doesn't stand in for `never` in an invariant parameter, so an owner that receives or collects nothing is listed apart.
-  export type Any =
-    | Of<any, any, any, any>
-    | Of<any, any, never, any>
-    | Of<any, any, any, never>
-    | Of<any, any, never, never>
+  export type Any = Shared<any>
 
   /**
    * The value an owner shares: what its `shares` returns.
@@ -528,8 +517,9 @@ export declare namespace Shared {
    * @category utility types
    * @since 0.1.0
    */
-  export type Value<C> = Shared<C> extends infer S ?
-    S extends Of<infer _Name, infer V, infer _Rcv, infer _Rp> ? V : never
+  export type Value<C> = C extends
+    Headless<infer _P, infer _E, infer _Parts, infer _R, infer _Rcv, infer Sh, infer V, infer _Rp>
+    ? [Sh] extends [never] ? never : V
     : never
 
   /**
@@ -539,8 +529,8 @@ export declare namespace Shared {
    * @category utility types
    * @since 0.1.0
    */
-  export type Receives<C> = Shared<C> extends infer S ? S extends Of<infer _Name, infer _V, infer Rcv, infer _Rp> ? Rcv
-    : never
+  export type Receives<C> = C extends Headless<infer _P, infer _E, infer _Parts, infer _R, infer Rcv, infer Sh>
+    ? [Sh] extends [never] ? never : Rcv
     : never
 
   /**
@@ -552,8 +542,9 @@ export declare namespace Shared {
    * @category utility types
    * @since 0.1.0
    */
-  export type Report<C> = Shared<C> extends infer S ? S extends Of<infer _Name, infer _V, infer _Rcv, infer Rp> ? Rp
-    : never
+  export type Report<C> = C extends
+    Headless<infer _P, infer _E, infer _Parts, infer _R, infer _Rcv, infer Sh, infer _V, infer Rp>
+    ? [Sh] extends [never] ? never : Rp
     : never
 }
 
@@ -565,7 +556,7 @@ export declare namespace Shared {
  *
  * `Owner` alone is short for `{ owner: Owner }`. With `optional: true` the
  * reader works with no owner above it: the read is `undefined` there, and the
- * reader carries no `Shared<typeof Owner>`. `report` is what the reader
+ * reader carries no `Shared.Of<typeof Owner>`. `report` is what the reader
  * tells the owner, from its own Model and props, for an owner whose
  * `shares` has `collects`. `onChange` is the reader's message for a new
  * shared value. An owner may be listed under more than one name, but only
@@ -627,19 +618,19 @@ export type SharedHelpers<SR> = [keyof SR] extends [never] ? {} : {
 
 /**
  * The requirements a component's `shared` option adds: one
- * `Shared<typeof Owner>` per owner it reads, optional ones aside.
+ * `Shared.Of<typeof Owner>` per owner it reads, optional ones aside.
  *
  * @stability experimental
  * @category utility types
  * @since 0.1.0
  */
 export type SharedRequirements<SR> = {
-  readonly [K in keyof SR]: IsOptional<SR[K]> extends true ? never : Shared<SharedOwner<SR[K]>>
+  readonly [K in keyof SR]: IsOptional<SR[K]> extends true ? never : Shared.Of<SharedOwner<SR[K]>>
 }[keyof SR]
 
 /**
  * The requirements a component's `shared` option removes: the
- * `Shared<typeof Owner>` of each optional owner, which `$.send(Owner, ...)`
+ * `Shared.Of<typeof Owner>` of each optional owner, which `$.send(Owner, ...)`
  * would otherwise add.
  *
  * @stability experimental
@@ -647,7 +638,7 @@ export type SharedRequirements<SR> = {
  * @since 0.1.0
  */
 export type SharedOptional<SR> = {
-  readonly [K in keyof SR]: IsOptional<SR[K]> extends true ? Shared<SharedOwner<SR[K]>> : never
+  readonly [K in keyof SR]: IsOptional<SR[K]> extends true ? Shared.Of<SharedOwner<SR[K]>> : never
 }[keyof SR]
 
 /**
@@ -764,14 +755,14 @@ export interface Step<in out Model, in out Msg, in out Events, out R = never, L 
    * **Details**
    *
    * The sender needs no `shared` declaration: the step carries
-   * `Shared<typeof owner>` in `R`, as `run` carries a Command's
+   * `Shared.Of<typeof owner>` in `R`, as `run` carries a Command's
    * requirements, so the sender compiles only where an owner is above it.
    * The sends count against the same limit per flush as sends to children.
    */
   send<O extends Headless.Any>(
     owner: O,
     message: NoInfer<SendMessage<Shared.Receives<O>>>
-  ): Step<Model, Msg, Events, R | Shared<O>, L>
+  ): Step<Model, Msg, Events, R | Shared.Of<O>, L>
 }
 
 /**
@@ -1194,14 +1185,21 @@ export type HeadlessTypeId = typeof HeadlessTypeId
  * @category models
  * @since 0.1.0
  */
-export interface Headless<in out Props, out Events, out Parts, out R = never, in out Rcv = never, in Sh = never>
-  extends Pipeable.Pipeable
-{
+export interface Headless<
+  in out Props,
+  out Events,
+  out Parts,
+  out R = never,
+  in out Rcv = never,
+  in Sh = never,
+  in SV = never,
+  in Rp = never
+> extends Pipeable.Pipeable {
   /**
    * Declares a child of this component in a parent's view, from the parent's
    * `h`. `view` is the child's whole view, built from its parts. Its
    * requirements, the view's and the fallback's surface in the parent's.
-   * For an owner of shared state, the view's `Shared<typeof Owner>` is
+   * For an owner of shared state, the view's `Shared.Of<typeof Owner>` is
    * removed: the readers and senders in it have this owner above them.
    */
   <Msg, RV = never, RF = never>(
@@ -1230,6 +1228,8 @@ export interface Headless<in out Props, out Events, out Parts, out R = never, in
     readonly _R: Types.Covariant<R>
     readonly _Rcv: Types.Invariant<Rcv>
     readonly _Sh: Types.Contravariant<Sh>
+    readonly _SV: Types.Contravariant<SV>
+    readonly _Rp: Types.Contravariant<Rp>
   }
   /** What `define` returned. `provide` keeps it, so `definition.name` is the name the component was defined with. */
   readonly definition: Definition.Any
@@ -1763,7 +1763,9 @@ const HeadlessProto = Object.assign(Object.create(Function.prototype), {
     _Parts: (_: never) => _,
     _R: (_: never) => _,
     _Rcv: (_: never) => _,
-    _Sh: (_: never) => _
+    _Sh: (_: never) => _,
+    _SV: (_: never) => _,
+    _Rp: (_: never) => _
   },
   pipe: Proto.pipe,
   ref: Proto.ref
@@ -1817,7 +1819,7 @@ type SharedEntry<E, O, Model, Props, Msg> = [E] extends [Headless.Any] ? O : {
 
 // An owner listed in `shared` is a headless component with `shares`.
 type OwnersOnly<SO> = {
-  readonly [K in keyof SO]: [Shared<SO[K]>] extends [never] ? {
+  readonly [K in keyof SO]: [Shared.Of<SO[K]>] extends [never] ? {
       readonly owner: "A component in shared must be a headless component with shares"
     }
     : unknown
@@ -1984,7 +1986,9 @@ export interface Definition<
       Command.FrameworkService
     >,
     Rcv,
-    [SV] extends [never] ? never : Shared.Of<Name, SV, Rcv, Rp>
+    [SV] extends [never] ? never : Shared<Name>,
+    SV,
+    Rp
   >
   /** Finishes the component. */
   make<

@@ -2511,8 +2511,8 @@ const setup = (
   }
   /**
    * A reader of shared state finds the owner of each definition it reads, once, at mount, and registers
-   * with it. An optional owner that isn't above is left out. Only a cast mounts a reader with no required
-   * owner above it, and it fails. An `onChange` starts from the value the reader mounts with.
+   * with it. An optional owner that isn't above is left out. A required owner must match by definition,
+   * not just by name. An `onChange` starts from the value the reader mounts with.
    */
   const findOwners = (inst: Instance) => {
     for (const read of sharedReads.readsOf(inst.component.definition)) {
@@ -2520,6 +2520,13 @@ const setup = (
       const owner = nearestOwner(inst.parent, definition)
       if (owner === undefined) {
         if (read.optional) continue
+        for (let at = inst.parent; at !== undefined; at = at.parent) {
+          if (at.component.definition.name === definition.name) {
+            throw new Error(
+              `${inst.path} reads the shared state of ${definition.name}, but a different component with the same name is above it at ${at.path}`
+            )
+          }
+        }
         throw new Error(
           `${inst.path} reads the shared state of ${definition.name}, and no ${definition.name} is above it`
         )

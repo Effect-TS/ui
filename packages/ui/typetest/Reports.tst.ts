@@ -93,7 +93,7 @@ describe("reports", () => {
   it("drops optional requirements", () => {
     expect<Component.Requirements<typeof Tip>>().type.toBe<never>()
     expect<Component.Headless.Requirements<typeof Required>>().type.toBe<
-      Component.Shared<typeof Provider> | Component.Shared<typeof Plain>
+      Component.Shared.Of<typeof Provider> | Component.Shared.Of<typeof Plain>
     >()
   })
   it("keeps a supplied map with a string index", () => {
@@ -108,7 +108,7 @@ describe("reports", () => {
           return h.text("")
         }
       })
-    expect<Component.Requirements<typeof Indexed>>().type.toBe<Component.Shared<typeof Provider>>()
+    expect<Component.Requirements<typeof Indexed>>().type.toBe<Component.Shared.Of<typeof Provider>>()
   })
   it("keeps the required owner of a child below an optional read", () => {
     const Child = Component.define({
@@ -128,7 +128,7 @@ describe("reports", () => {
       update: (model, _, $) => $.set(model).send(Provider, { _tag: "Completed" }),
       view: (_, h) => Child(h, { key: "c" })
     })
-    expect<Component.Requirements<typeof Wrapper>>().type.toBe<Component.Shared<typeof Provider>>()
+    expect<Component.Requirements<typeof Wrapper>>().type.toBe<Component.Shared.Of<typeof Provider>>()
   })
   it("rejects collects without its onChange", () => {
     Component.define({
