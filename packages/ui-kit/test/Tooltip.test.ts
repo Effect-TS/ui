@@ -106,6 +106,51 @@ const Grouped = Component.define({
     })
 })
 
+// Two tooltips under a provider, each with its own field. `keep` refuses
+// bold's `Dismissed`, and `bold` counts bold's requests to close.
+const IndependentMessage = Schema.TaggedUnion({ OpenedTip: { tip: Tip }, DismissedTip: { tip: Tip } })
+
+const Independent = Component.define({
+  name: "Independent",
+  props: Schema.Struct({ keep: Schema.Boolean, closeDelay: Schema.Number }),
+  model: Schema.Struct({ bold: Schema.Boolean, italic: Schema.Boolean, requests: Schema.Number }),
+  message: IndependentMessage,
+  elements: Html
+}).make({
+  init: () => ({ bold: false, italic: false, requests: 0 }),
+  update: (model, message, $) =>
+    IndependentMessage.match(message, {
+      OpenedTip: ({ tip }) => ({ ...model, [tip]: true }),
+      DismissedTip: ({ tip }) =>
+        tip === "bold"
+          ? { ...model, bold: $.props.keep, requests: model.requests + 1 }
+          : { ...model, italic: false }
+    }),
+  view: (model, h) =>
+    h.div(
+      TooltipProvider(h, {
+        props: {},
+        view: () =>
+          h.div(
+            ...Tip.literals.map((tip) =>
+              Tooltip(h, {
+                key: tip,
+                props: { open: model[tip], closeDelay: tip === "bold" ? h.props.closeDelay : 0 },
+                onEmit: (event) =>
+                  IndependentMessage.make({ _tag: event._tag === "Opened" ? "OpenedTip" : "DismissedTip", tip }),
+                view: (s) =>
+                  h.span(
+                    s.trigger(h.button.attr("aria-label", tip)).children(tip),
+                    s.positioner(h.div).children(s.popup(h.div).children(tip))
+                  )
+              })
+            )
+          )
+      }),
+      h.output(String(model.requests))
+    )
+})
+
 const trigger = Locator.tag("button")
 const positioner = Locator.attr("role", "presentation")
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
@@ -225,7 +270,7 @@ describe("Tooltip", () => {
 
   it("parts clear stale state and preserve consumer styles alongside their shared anchor", () => {
     const s = Story.parts(Tooltip, {
-      model: { hovered: false, focused: false, pressed: false, instant: null },
+      model: { hovered: false, focused: false, pressed: false, instant: null, turn: 0 },
       props: { open: false }
     })
     // The anchor survives a style the consumer chains after the part.
@@ -290,5 +335,41 @@ describe("Tooltip", () => {
       yield* wait(1)
       assert.strictEqual(openTip(), "italic")
       assert.isUndefined(instant("italic"))
+    }).pipe(Effect.provide(TestHost.layer())))
+
+  it.effect("when another tooltip of the group is shown, one held open asks once to close, and stays if refused", () =>
+    Effect.gen(function*() {
+      const wait = (millis: number) =>
+        TestHost.settle.pipe(Effect.andThen(TestClock.adjust(`${millis} millis`)), Effect.andThen(TestHost.settle))
+      const scene = (root: { readonly get: (locator: Locator.Locator) => TestHost.TestNode }) => ({
+        fire: (tip: string, event: string) => Locator.fire(root.get(Locator.attr("aria-label", tip)), event),
+        shows: (tip: string) => root.get(Locator.attr("aria-label", tip)).attrs?.["data-popup-open"] === "",
+        requests: () => Locator.textOf(root.get(Locator.tag("output")))
+      })
+
+      // Keyboard focus holds bold open, and the consumer refuses its close.
+      const held = scene(yield* TestHost.mount(Independent, { keep: true, closeDelay: 0 }))
+      held.fire("bold", "focus")
+      yield* wait(0)
+      held.fire("italic", "mouseenter")
+      yield* wait(0)
+      assert.isTrue(held.shows("italic"))
+      assert.strictEqual(held.requests(), "1")
+      assert.isTrue(held.shows("bold"))
+      // No repeated request while both stay open.
+      yield* wait(1000)
+      assert.strictEqual(held.requests(), "1")
+      assert.isTrue(held.shows("bold"))
+
+      // A close delay holds bold open, and the consumer accepts at once.
+      const delayed = scene(yield* TestHost.mount(Independent, { keep: false, closeDelay: 1000 }))
+      delayed.fire("bold", "mouseenter")
+      yield* wait(600)
+      delayed.fire("bold", "mouseleave")
+      delayed.fire("italic", "mouseenter")
+      yield* wait(0)
+      assert.isTrue(delayed.shows("italic"))
+      assert.strictEqual(delayed.requests(), "1")
+      assert.isFalse(delayed.shows("bold"))
     }).pipe(Effect.provide(TestHost.layer())))
 })
