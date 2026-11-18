@@ -5,18 +5,23 @@ import { Notes } from "../services/Notes.ts"
 
 // Props, Model, messages and events are Schemas, so the runtime can log,
 // serialise and hydrate them. Build a message with `Message.make({ _tag })`.
+//
+// A message is a fact about what happened, named verb first in the past
+// tense: the cause, then the control. `RequestedSave` has four causes, the
+// form, Ctrl+S, the autosave and a parent's send, so it names the fact they
+// share.
 export const NoteEditorMessage = Schema.TaggedUnion({
-  Edited: { body: Schema.String },
-  Save: {},
-  Saved: { note: Note },
-  SaveFailed: { reason: Schema.String },
-  AskDiscard: {},
-  ActionsToggled: { open: Schema.Boolean },
-  Answered: { choice: Schema.String },
-  KeepEditing: {}
+  UpdatedBody: { body: Schema.String },
+  RequestedSave: {},
+  SucceededSaveNote: { note: Note },
+  FailedSaveNote: { reason: Schema.String },
+  ClickedDiscard: {},
+  ToggledActions: { open: Schema.Boolean },
+  SubmittedDiscardForm: { choice: Schema.String },
+  CancelledDiscardDialog: {}
 })
 
-// What the editor reports to its parent.
+// What the editor reports to its parent: what the user did, with no cause.
 export const NoteEditorEvents = Schema.TaggedUnion({ Saved: { note: Note } })
 
 // A side effect is a Command, and I/O goes through a `Command.Service`. Its
@@ -43,6 +48,17 @@ export class SaveNote extends Command.Service<SaveNote>()(
   })
 ) {}
 
+// Each Command maps to its messages once, here, next to the Message union
+// and the Command. This function is all that ties `SucceededSaveNote` and
+// `FailedSaveNote` to `SaveNote`, so `update` calls it and never maps the
+// Command inline. `SaveNote` can fail, so `Command.match` maps
+// its success and its failure. A Command that can't fail takes `Command.map`.
+const saveNote = (note: Note) =>
+  SaveNote.make({ note }).pipe(Command.match({
+    onSuccess: (note) => NoteEditorMessage.make({ _tag: "SucceededSaveNote", note }),
+    onFailure: (error) => NoteEditorMessage.make({ _tag: "FailedSaveNote", reason: error.reason })
+  }))
+
 // The editor is large, so it is written in pieces. `Component.define`
 // takes what nothing is inferred from: the name and the Schemas, plus
 // `queries` and `elements` when a component has them. The update slices
@@ -67,7 +83,7 @@ const NoteEditorDef = Component.define({
   // The messages a parent may send with `$.send`. The rest of the Message
   // union stays private, so the editor can change it without breaking a
   // parent.
-  receives: ["Save"]
+  receives: ["RequestedSave"]
 })
 
 // An update function without a tag takes every message, so `$.combine` in
@@ -76,31 +92,24 @@ const NoteEditorDef = Component.define({
 const closeActions = NoteEditorDef.update((model) => ({ ...model, actionsOpen: false }))
 const clearError = NoteEditorDef.update((model) => ({ ...model, error: null }))
 
-// A slice for one tag: `message` is the Save message, and the Model, props
+// A slice for one tag: `message` is the RequestedSave message, and the Model, props
 // and `$` come from the definition. `init`, `update` and `view` are pure.
 // They read props from `$.props` and `h.props`. A props change re-renders,
 // but never reaches `update`.
-const save = NoteEditorDef.update("Save", (model, _message, $) =>
+const save = NoteEditorDef.update("RequestedSave", (model, _message, $) =>
   model.draft === model.saved
     // With nothing to run or emit, return the next Model.
     ? model
     // `$.combine` runs the functions in order, each from the Model the one
     // before returned, and returns a step, so `.run` follows it. Ctrl+S can
     // save while the menu is open, so a save closes it. `$.run` only takes
-    // Commands whose result is one of this component's messages. `SaveNote`
-    // can fail, so `Command.match` maps its success and its failure. A
-    // Command that can't fail takes `Command.map`.
-    : $.combine(closeActions, clearError).run(
-      SaveNote.make({ note: { ...$.props.note, body: model.draft } }).pipe(Command.match({
-        onSuccess: (note) => NoteEditorMessage.make({ _tag: "Saved", note }),
-        onFailure: (error) => NoteEditorMessage.make({ _tag: "SaveFailed", reason: error.reason })
-      }))
-    ))
+    // Commands whose result is one of this component's messages.
+    : $.combine(closeActions, clearError).run(saveNote({ ...$.props.note, body: model.draft })))
 
 // Choosing a menu item closes the menu, and the confirm dialog's state is in
 // the Model, like any other.
-const askDiscard = NoteEditorDef.update(
-  "AskDiscard",
+const clickedDiscard = NoteEditorDef.update(
+  "ClickedDiscard",
   (_model, _message, $) => $.combine(closeActions, (model) => ({ ...model, confirming: true }))
 )
 
@@ -117,10 +126,13 @@ const askDiscard = NoteEditorDef.update(
 const discardDialog = NoteEditorDef.fragment((h, open: boolean) =>
   h.dialog.attr("aria-label", "Discard your changes?")
     .modal(open)
-    .onCancel(NoteEditorMessage.make({ _tag: "KeepEditing" })).children(
+    .onCancel(NoteEditorMessage.make({ _tag: "CancelledDiscardDialog" })).children(
       h.h2("Discard your changes?"),
       h.form.onSubmit(({ entries }) =>
-        NoteEditorMessage.make({ _tag: "Answered", choice: entries.find(([name]) => name === "choice")?.[1] ?? "" })
+        NoteEditorMessage.make({
+          _tag: "SubmittedDiscardForm",
+          choice: entries.find(([name]) => name === "choice")?.[1] ?? ""
+        })
       ).children(
         h.button.attr("name", "choice").attr("value", "keep").children("Keep editing"),
         h.button.attr("name", "choice").attr("value", "discard").children("Discard")
@@ -142,18 +154,19 @@ const discardDialog = NoteEditorDef.fragment((h, open: boolean) =>
 // the same string anywhere else.
 const noteEditorView = NoteEditorDef.view((model, h) =>
   h.div(
-    h.form.attr("aria-label", "Edit note").onSubmit(NoteEditorMessage.make({ _tag: "Save" })).children(
+    h.form.attr("aria-label", "Edit note").onSubmit(NoteEditorMessage.make({ _tag: "RequestedSave" })).children(
       h.h2(h.props.note.title),
       h.textarea.attr("aria-label", "Body").value(model.draft)
         .class("note-body", model.draft !== model.saved && "unsaved")
-        .onInput(({ value }) => NoteEditorMessage.make({ _tag: "Edited", body: value }))
+        .onInput(({ value }) => NoteEditorMessage.make({ _tag: "UpdatedBody", body: value }))
         // Ctrl+S or Cmd+S saves instead of opening the browser's save
         // dialog. With `preventDefault`, the browser's default is cancelled
         // only when the handler returns a message, so every other key types
         // as usual. Nothing stops the event's propagation, and a form's
         // `submit` is always cancelled, so `onSubmit` takes no options.
         .onKeyDown(
-          ({ ctrl, key, meta }) => (ctrl || meta) && key === "s" ? NoteEditorMessage.make({ _tag: "Save" }) : undefined,
+          ({ ctrl, key, meta }) =>
+            (ctrl || meta) && key === "s" ? NoteEditorMessage.make({ _tag: "RequestedSave" }) : undefined,
           { preventDefault: true }
         ),
       // `h.isRunning` is true while this instance has a save queued or running.
@@ -170,9 +183,9 @@ const noteEditorView = NoteEditorDef.view((model, h) =>
       h.div.attr("id", `actions-${h.props.note.id}`).attr("role", "menu").attr("aria-label", "Note actions")
         .attr("style", `position-anchor: --actions-${h.props.note.id}; position-area: bottom span-left; margin: 0`)
         .popover("auto", model.actionsOpen)
-        .onToggle(({ open }) => NoteEditorMessage.make({ _tag: "ActionsToggled", open })).children(
+        .onToggle(({ open }) => NoteEditorMessage.make({ _tag: "ToggledActions", open })).children(
           h.button.attr("type", "button").disabled(model.draft === model.saved)
-            .onClick(NoteEditorMessage.make({ _tag: "AskDiscard" })).children("Discard changes")
+            .onClick(NoteEditorMessage.make({ _tag: "ClickedDiscard" })).children("Discard changes")
         ),
       model.error !== null && h.p.attr("role", "alert").children(model.error)
     ),
@@ -196,22 +209,22 @@ export const NoteEditorNoDeps = NoteEditorDef.make({
   // added to the Schema doesn't compile until it is handled. A function
   // written inline gets the narrowed message too.
   update: {
-    Edited: (model, { body }) => ({ ...model, draft: body, edits: model.edits + 1 }),
-    Save: save,
+    UpdatedBody: (model, { body }) => ({ ...model, draft: body, edits: model.edits + 1 }),
+    RequestedSave: save,
     // `$.set` replaces the Model and doesn't merge. `$.emit` reports to the
     // parent.
-    Saved: (model, { note }, $) =>
+    SucceededSaveNote: (model, { note }, $) =>
       $.set({ ...model, saved: note.body }).emit(NoteEditorEvents.make({ _tag: "Saved", note })),
-    SaveFailed: (model, { reason }) => ({ ...model, error: reason }),
-    AskDiscard: askDiscard,
+    FailedSaveNote: (model, { reason }) => ({ ...model, error: reason }),
+    ClickedDiscard: clickedDiscard,
     // An auto popover is followed: the browser opens it from its button and
     // closes it on Escape or a click outside, and the Model keeps up.
-    ActionsToggled: (model, { open }) => ({ ...model, actionsOpen: open }),
-    Answered: (model, { choice }) =>
+    ToggledActions: (model, { open }) => ({ ...model, actionsOpen: open }),
+    SubmittedDiscardForm: (model, { choice }) =>
       choice === "discard"
         ? { ...model, draft: model.saved, confirming: false }
         : { ...model, confirming: false },
-    KeepEditing: (model) => ({ ...model, confirming: false })
+    CancelledDiscardDialog: (model) => ({ ...model, confirming: false })
   },
   // A Subscription is a keyed Stream that runs while it is listed. Use one
   // when you can say "while ...", and a Command for a single event. This one
@@ -224,7 +237,7 @@ export const NoteEditorNoDeps = NoteEditorDef.make({
     Subscription.make(
       "autosave",
       model.edits,
-      () => Stream.fromEffect(Effect.as(Effect.sleep("2 seconds"), NoteEditorMessage.make({ _tag: "Save" })))
+      () => Stream.fromEffect(Effect.as(Effect.sleep("2 seconds"), NoteEditorMessage.make({ _tag: "RequestedSave" })))
     )
   ],
   view: noteEditorView

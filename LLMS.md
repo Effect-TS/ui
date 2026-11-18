@@ -34,6 +34,68 @@ renders the child with a ref from `Child.ref("Name")`, and its `update` calls
 `$.send(ref, message)`. Don't send what the child shows: that belongs in its
 props.
 
+### Naming
+
+Name messages, events, Commands and mounts as Foldkit does
+(https://foldkit.dev/best-practices/messages). A message is a fact about what
+happened, never an instruction, and `update` decides what the fact means for
+the current Model. `Set*`, `Update*` and bare imperatives such as `Save` or
+`GoHome` are out.
+
+| Thing                                         | Name                                                      | Example                                                         |
+| --------------------------------------------- | --------------------------------------------------------- | --------------------------------------------------------------- |
+| Message from a view handler                   | Verb first, past tense: the cause, then the control       | `ClickedDiscard`, `UpdatedBody`, `PressedKey`, `ToggledActions` |
+| Message from a Command or mount result        | `Succeeded`, `Failed` or `Completed`, then the definition | `SucceededSaveNote`, `FailedSaveNote`, `CompletedMeasure`       |
+| Message from a Subscription or a stream mount | The fact the source reported                              | `Ticked`, `ChangedRoute`, `MovedPointer`                        |
+| Message from a child's event                  | The event's verb, then the parent's name for the child    | `ToggledNotify`, `SavedNote`, `PickedLink`                      |
+| Message from a child's failure                | `Failed`, then the parent's name for the child            | `FailedEditor`                                                  |
+| Message with more than one cause              | The fact the causes share                                 | `RequestedSave`                                                 |
+| Event                                         | What the user did, past tense, with no cause              | `Toggled`, `Picked`, `Saved`                                    |
+| Command                                       | Imperative, for what its body does                        | `SaveNote`, `WaitBeforeDismissal`                               |
+| Mount                                         | Imperative, for what it does to the element               | `DrawChart`, `Measure`, `TrackPointer`                          |
+
+A Command result takes `Succeeded` and `Failed` when the Command can fail,
+and `Completed` otherwise. Name a Command for what its body does, not for
+what `update` does with its result: a timer that waits before a toast is
+dismissed is `WaitBeforeDismissal`, not `DismissAfter`. `RequestedSave` in
+`NoteEditor` comes from the form, Ctrl+S, the autosave Subscription and a
+parent's send, so it names what all four report.
+
+A definition's binding and its name string match:
+`const DrawChart = Mount.make("DrawChart", ...)`. A `Command.Service` keeps
+its feature prefix, as in `"notes/SaveNote"`, and the rule applies to the
+last segment.
+
+Map each `Command.Service` to its messages once, beside the Message union,
+and call that function from `update`. A result is mapped where the Command
+is issued, so nothing else ties `SaveNote` to `SucceededSaveNote`:
+
+```ts
+const saveNote = (note: Note) =>
+  SaveNote.make({ note }).pipe(Command.match({
+    onSuccess: (note) => NoteEditorMessage.make({ _tag: "SucceededSaveNote", note }),
+    onFailure: (error) => NoteEditorMessage.make({ _tag: "FailedSaveNote", reason: error.reason })
+  }))
+```
+
+Never write a no-op message, such as `Noop` or a tag added only so a result
+has something to send. A Command with nothing to report ends in `Component.noop`,
+usually through `Command.asNoop`. It sends nothing, and the log still records
+its `CommandEnded` with `silent: true`. A component with no messages takes
+`message: Schema.Never`. A mount with nothing to report ends in a
+`Completed*` message instead, such as `CompletedDrawChart`, because a silent
+mount leaves nothing in the `MessageLog`. That rule is temporary, and goes
+once the log records mounts that send nothing.
+
+Effect UI differs from Foldkit in three places:
+
+- There is no `Got*`. A parent never wraps a child's messages: it maps the
+  child's events in `onEmit`, so its message is the event's verb and its
+  name for the child.
+- A message listed in `receives` has no prefix of its own. It is named like
+  any other message, for the fact it reports.
+- A Command needs no `Completed*` message. `Component.noop` is enough.
+
 ### Stateless view wrappers
 
 Name view functions in CapitalCase, like components (for example, `Card` and `Field`).
@@ -116,7 +178,7 @@ Collapsible(h, {
   key: "note",
   slots: {
     summary: h.h2(note.title),
-    body: NoteEditor(h, { ref: Editor.at(note.id), props: { note }, onEmit: () => Saved })
+    body: NoteEditor(h, { ref: Editor.at(note.id), props: { note }, onEmit: () => SavedNote })
   }
 })
 ```
@@ -179,13 +241,14 @@ Command: `Mount.make(name, { args }, (node, args, changes) => effect)` for
 work that ends with one result, or `Mount.makeStream` for work that sends a
 result per event for as long as the element lives. Annotate `node` with the
 node the body needs. A view issues it with its args and maps the result to a
-message: `h.canvas.onMount(Draw({ points }).pipe(Mount.map(toMessage)))`.
-End a mount with nothing to send with `Component.noop`. An element takes one
-mount. Args with no real Schema, such as a callback, need `Schema.declare`.
-Mounts never run on the server or in `TestHost`. A `Scene` tracks the mounts
-in its view: `expectMount(Draw({ points }))` asserts on the rendered args and
-acknowledges the mount running, and `mounted(Draw, result)` sends what the body
-would have produced. A mount nothing acknowledged fails the next message step
+message: `h.canvas.onMount(DrawChart({ points }).pipe(Mount.map(toMessage)))`.
+End a mount with nothing to report in a `Completed*` message, as Naming
+describes. An element takes one mount. Args with no real Schema, such as a
+callback, need `Schema.declare`. Mounts never run on the server or in
+`TestHost`. A `Scene` tracks the mounts in its view:
+`expectMount(DrawChart({ points }))` asserts on the rendered args and
+acknowledges the mount running, and `mounted(DrawChart, result)` sends what
+the body would have produced. A mount nothing acknowledged fails the next message step
 and the end of the test.
 
 ### Organizing an app
@@ -290,7 +353,7 @@ client, not the services.
   provider mounted.
 - **[Mounts](./ai-docs/src/10_ui/24_mounts.ts)**:
   Start work with an element's host node: a mount that measures a box once,
-  a mount that hosts a third-party editor and reports each change, and a
+  a mount that attaches a third-party editor and reports each change, and a
   scene that names both by their definitions.
 - **[Routing and the document head](./ai-docs/src/10_ui/30_routing.ts)**:
   Define typed routes with `Route` and keep the current route in the root's

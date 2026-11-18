@@ -11,8 +11,8 @@ const indexRoute = AppRoute.make({ _tag: "Index" })
 const searchRoute = AppRoute.make({ _tag: "Search", search: {} })
 
 export const AppMessage = Schema.TaggedUnion({
-  RouteChanged: { route: AppRoute },
-  GoHome: {}
+  ChangedRoute: { route: AppRoute },
+  ClickedBackToNotes: {}
 })
 
 // The root needs no domain Layers of its own, because each page provides
@@ -30,15 +30,15 @@ export const App = Component.define({
   init: ($) => ({ route: $.props.route }),
   update: (_model, message, $) =>
     AppMessage.match(message, {
-      RouteChanged: ({ route }) => ({ route }),
+      ChangedRoute: ({ route }) => ({ route }),
       // The new route comes back through the Router subscription, so the
       // navigation sends nothing. `Command.asNoop` ends it with no message,
       // and with no no-op variant in `AppMessage`. It also hides a
       // navigation a guard blocked, which this one has no use for.
-      GoHome: () => $.run(Router.push(AppRoute, indexRoute).pipe(Command.asNoop))
+      ClickedBackToNotes: () => $.run(Router.push(AppRoute, indexRoute).pipe(Command.asNoop))
     }),
   subscriptions: (model) => [
-    Router.subscription(AppRoute, model.route, (route) => AppMessage.make({ _tag: "RouteChanged", route }))
+    Router.subscription(AppRoute, model.route, (route) => AppMessage.make({ _tag: "ChangedRoute", route }))
   ],
   // App-wide head defaults go in the root's `head`, not in the HTML shell.
   // The template wraps the title a page below sets, giving
@@ -69,7 +69,7 @@ export const App = Component.define({
           NotFound: () =>
             h.section(
               h.h1("Page not found"),
-              h.button.onClick(AppMessage.make({ _tag: "GoHome" })).children("Back to all notes")
+              h.button.onClick(AppMessage.make({ _tag: "ClickedBackToNotes" })).children("Back to all notes")
             )
         })
       )

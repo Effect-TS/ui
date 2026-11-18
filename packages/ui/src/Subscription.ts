@@ -18,12 +18,12 @@
  * import { Subscription } from "@effect/ui"
  * import { Schema, Stream } from "effect"
  *
- * const Message = Schema.TaggedUnion({ Tick: {}, Received: { text: Schema.String } })
+ * const Message = Schema.TaggedUnion({ Ticked: {}, Received: { text: Schema.String } })
  *
  * const roomMessages = (roomId: string) => Stream.make(`hello from ${roomId}`)
  *
  * const subscriptions = (model: { readonly running: boolean }, props: { readonly roomId: string }) => [
- *   model.running && Subscription.make("tick", Stream.tick("1 second").pipe(Stream.as(Message.make({ _tag: "Tick" })))),
+ *   model.running && Subscription.make("tick", Stream.tick("1 second").pipe(Stream.as(Message.make({ _tag: "Ticked" })))),
  *   Subscription.make("room", props.roomId, (roomId) =>
  *     roomMessages(roomId).pipe(Stream.map((text) => Message.make({ _tag: "Received", text }))))
  * ]

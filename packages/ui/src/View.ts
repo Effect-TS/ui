@@ -22,10 +22,10 @@
  * import type { View } from "@effect/ui"
  * import { Schema } from "effect"
  *
- * const Message = Schema.TaggedUnion({ Increment: {} })
+ * const Message = Schema.TaggedUnion({ ClickedIncrement: {} })
  *
  * const view = (count: number, h: View.Helper<typeof Message.Type, {}>) =>
- *   h.el("div", h.el("button").on("click", Message.make({ _tag: "Increment" })).children("+"), String(count))
+ *   h.el("div", h.el("button").on("click", Message.make({ _tag: "ClickedIncrement" })).children("+"), String(count))
  * ```
  *
  * @stability experimental
@@ -62,11 +62,11 @@ import type * as Renderer from "./Renderer.ts"
  * export const Counter = Component.define({
  *   name: "Counter",
  *   model: Schema.Number,
- *   message: Schema.Literal("Increment")
+ *   message: Schema.Literal("ClickedIncrement")
  * }).make({
  *   init: () => 0,
  *   update: (count) => count + 1,
- *   view: (count, h) => Button(h, String(count), "Increment")
+ *   view: (count, h) => Button(h, String(count), "ClickedIncrement")
  * })
  * ```
  *
@@ -1196,8 +1196,10 @@ export class ElementBuilder<
    * such as a widget's events, is defined with `Mount.makeStream`.
    *
    * A body that is an `Effect<void>` doesn't compile here, because a `void`
-   * type can hold any value, which would be sent as a message. End a mount
-   * with nothing to send with `Effect.as(Component.noop)`.
+   * type can hold any value, which would be sent as a message. For now, end a
+   * mount with nothing to report in a `Completed*` message, because a silent
+   * mount leaves nothing in the `MessageLog`. `Effect.as(Component.noop)`
+   * also compiles, and sends nothing.
    *
    * @since 0.1.0
    */

@@ -2,7 +2,7 @@
  * @title Mounts
  *
  * Start work with an element's host node: a mount that measures a box once,
- * a mount that hosts a third-party editor and reports each change, and a
+ * a mount that attaches a third-party editor and reports each change, and a
  * scene that names both by their definitions.
  */
 import { Component, Mount } from "@effect/ui"
@@ -37,8 +37,8 @@ export const Measure = Mount.make(
 // `changes` gives each render's args when they differ by its equivalence,
 // so the editor follows the Model without being rebuilt. Everything runs in
 // the mount's Scope, which closes when the element goes.
-export const CodeEditor = Mount.makeStream(
-  "CodeEditor",
+export const AttachEditor = Mount.makeStream(
+  "AttachEditor",
   { args: { text: Schema.String } },
   (node: HTMLElement, _args, changes) =>
     Stream.callback<string>((queue) =>
@@ -61,9 +61,12 @@ export const CodeEditor = Mount.makeStream(
 // A view issues mounts and maps their results to its messages
 // ---------------------------------------------------------------------------
 
+// A mount is named for what it does to the element, and the binding matches
+// the name string. A result that ends a mount is `Completed` and the
+// mount's name. A stream mount reports facts, as a Subscription does.
 const SnippetMessage = Schema.TaggedUnion({
-  Measured: { width: Schema.Number },
-  Edited: { text: Schema.String }
+  CompletedMeasure: { width: Schema.Number },
+  UpdatedCode: { text: Schema.String }
 })
 
 // An element takes one mount. A render that gives it a mount of another
@@ -79,14 +82,16 @@ export const Snippet = Component.define({
   init: () => ({ text: "", width: 0 }),
   update: (model, message) =>
     SnippetMessage.match(message, {
-      Measured: ({ width }) => ({ ...model, width }),
-      Edited: ({ text }) => ({ ...model, text })
+      CompletedMeasure: ({ width }) => ({ ...model, width }),
+      UpdatedCode: ({ text }) => ({ ...model, text })
     }),
   view: (model, h) =>
-    h.section.onMount(Measure().pipe(Mount.map((width) => SnippetMessage.make({ _tag: "Measured", width }))))
+    h.section.onMount(Measure().pipe(Mount.map((width) => SnippetMessage.make({ _tag: "CompletedMeasure", width }))))
       .children(
         h.div.onMount(
-          CodeEditor({ text: model.text }).pipe(Mount.map((text) => SnippetMessage.make({ _tag: "Edited", text })))
+          AttachEditor({ text: model.text }).pipe(
+            Mount.map((text) => SnippetMessage.make({ _tag: "UpdatedCode", text }))
+          )
         ),
         h.p(`${model.text.length} characters in ${model.width}px`)
       )
@@ -105,8 +110,8 @@ export const Snippet = Component.define({
 // check runs when the test's scope closes.
 export const edited = Effect.gen(function*() {
   const s = yield* Scene.make(Snippet, {})
-  s.expectMount(CodeEditor({ text: "" }))
+  s.expectMount(AttachEditor({ text: "" }))
     .mounted(Measure, 320)
-    .mounted(CodeEditor, "let x = 1")
-    .expectMount(CodeEditor({ text: "let x = 1" }))
+    .mounted(AttachEditor, "let x = 1")
+    .expectMount(AttachEditor({ text: "let x = 1" }))
 })

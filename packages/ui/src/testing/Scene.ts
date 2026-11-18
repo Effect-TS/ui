@@ -21,12 +21,12 @@
  * import { Locator, Scene } from "@effect/ui/testing"
  * import { Effect, Schema } from "effect"
  *
- * const Message = Schema.TaggedUnion({ Save: {}, Saved: {} })
+ * const Message = Schema.TaggedUnion({ ClickedSave: {}, CompletedSaveTodo: {} })
  *
  * class SaveTodo extends Command.Service<SaveTodo>()(
  *   "todos/SaveTodo",
  *   { args: { id: Schema.String } },
- *   Effect.succeed(() => Effect.succeed(Message.make({ _tag: "Saved" })))
+ *   Effect.succeed(() => Effect.succeed(Message.make({ _tag: "CompletedSaveTodo" })))
  * ) {}
  *
  * const TodoItem = Component.define({
@@ -38,12 +38,12 @@
  *   init: () => ({ saved: false }),
  *   update: (model, message, $) =>
  *     Message.match(message, {
- *       Save: () => $.run(SaveTodo.make({ id: $.props.id })),
- *       Saved: () => ({ saved: true })
+ *       ClickedSave: () => $.run(SaveTodo.make({ id: $.props.id })),
+ *       CompletedSaveTodo: () => ({ saved: true })
  *     }),
  *   // In a scene, `h.isRunning` is derived from the pending Commands.
  *   view: (model, h) =>
- *     h.el("button").on("click", Message.make({ _tag: "Save" })).children(
+ *     h.el("button").on("click", Message.make({ _tag: "ClickedSave" })).children(
  *       model.saved ? "saved" : h.isRunning(SaveTodo) ? "saving" : "save"
  *     )
  * })
@@ -53,7 +53,7 @@
  *   s.click("save")
  *     .expect(Locator.text("saving")).toExist()
  *     .expectExact(SaveTodo.make({ id: "t1" }))
- *     .resolve(SaveTodo, Message.make({ _tag: "Saved" }))
+ *     .resolve(SaveTodo, Message.make({ _tag: "CompletedSaveTodo" }))
  *     .expect(Locator.tag("button")).toHaveText("saved")
  * }).pipe(Effect.scoped, Effect.runSync)
  * ```

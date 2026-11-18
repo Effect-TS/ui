@@ -16,8 +16,8 @@ import { Effect, Schema } from "effect"
 // ---------------------------------------------------------------------------
 
 const ProviderMessage = Schema.TaggedUnion({
-  Enter: { id: Schema.String },
-  Leave: { id: Schema.String }
+  FocusedTooltip: { id: Schema.String },
+  BlurredTooltip: { id: Schema.String }
 })
 
 // The state is the owner's ordinary Model, so every change to it is an
@@ -31,16 +31,17 @@ export const TooltipProvider = Component.define({
   props: Schema.Struct({ delay: Schema.optional(Schema.Number) }),
   model: Schema.Struct({ open: Schema.NullOr(Schema.String) }),
   message: ProviderMessage,
-  // `$.send(TooltipProvider, message)` takes these.
-  receives: ["Enter", "Leave"],
+  // `$.send(TooltipProvider, message)` takes these. They are facts, named
+  // like any other message.
+  receives: ["FocusedTooltip", "BlurredTooltip"],
   shares: (model) => ({ open: model.open }),
   elements: Html
 }).make({
   init: () => ({ open: null }),
   update: (model, message) =>
     ProviderMessage.match(message, {
-      Enter: ({ id }) => ({ open: id }),
-      Leave: ({ id }) => model.open === id ? { open: null } : model
+      FocusedTooltip: ({ id }) => ({ open: id }),
+      BlurredTooltip: ({ id }) => model.open === id ? { open: null } : model
     }),
   parts: () => ({})
 })
@@ -50,8 +51,8 @@ export const TooltipProvider = Component.define({
 // ---------------------------------------------------------------------------
 
 const TooltipMessage = Schema.TaggedUnion({
-  Enter: { id: Schema.String },
-  Leave: { id: Schema.String }
+  FocusedTooltip: { id: Schema.String },
+  BlurredTooltip: { id: Schema.String }
 })
 
 // `h.shared.tips` is the nearest TooltipProvider's value. Reading it, or
@@ -74,8 +75,8 @@ export const Tooltip = Component.define({
     const id = h.id("tip")
     return h.span(
       h.button
-        .onFocus(TooltipMessage.make({ _tag: "Enter", id }))
-        .onBlur(TooltipMessage.make({ _tag: "Leave", id }))
+        .onFocus(TooltipMessage.make({ _tag: "FocusedTooltip", id }))
+        .onBlur(TooltipMessage.make({ _tag: "BlurredTooltip", id }))
         .attr("aria-describedby", id)
         .children(h.props.label),
       h.shared.tips.open === id && h.span.id(id).attr("role", "tooltip").children(h.props.tip)
@@ -103,7 +104,8 @@ export const Tooltip = Component.define({
 export const Toolbar = Component.define({
   name: "Toolbar",
   model: Schema.Null,
-  message: Schema.TaggedUnion({ Noop: {} }),
+  // No messages, and no no-op variant to stand in for them.
+  message: Schema.Never,
   elements: Html
 }).make({
   init: () => null,

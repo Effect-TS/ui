@@ -115,12 +115,10 @@ update the components that already follow it.
 
 ## Messages and events
 
-- Name messages and events as Foldkit does
-  (https://foldkit.dev/core/messages): verb-first, past-tense facts about
-  what happened, not instructions. Messages name their cause
-  (`ClickedRoot`, `PressedKey`, `UpdatedQuery`). Events name what the
-  user did (`Toggled`, `Picked`, `Dismissed`), not Base UI's callback
-  names (`CheckedChange`, `OpenChange`).
+- Name messages, events, Commands and mounts by the "Naming" section of
+  `ai-docs/src/10_ui/index.md`, which `LLMS.md` includes. Base UI's
+  callback names are never event names: Switch emits `Toggled`, not
+  `CheckedChange`.
 - `update` always uses `Message.match`, even for a union with one
   member, so a new message is a type error until it is handled.
 

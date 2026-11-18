@@ -53,7 +53,7 @@
  *
  * const Message = Schema.TaggedUnion({
  *   ChangedRoute: { route: AppRoute },
- *   Go: { route: AppRoute }
+ *   ClickedLink: { route: AppRoute }
  * })
  *
  * const App = Component.define({
@@ -67,7 +67,7 @@
  *     Message.match(message, {
  *       ChangedRoute: ({ route }) => ({ route }),
  *       // The new route comes back through the subscription: the push itself sends nothing.
- *       Go: ({ route }) => $.run(Router.push(AppRoute, route).pipe(Command.asNoop))
+ *       ClickedLink: ({ route }) => $.run(Router.push(AppRoute, route).pipe(Command.asNoop))
  *     }),
  *   subscriptions: (model) => [Router.subscription(AppRoute, model.route, (route) => Message.make({ _tag: "ChangedRoute", route }))],
  *   view: (model, h) => h.el("p", model.route._tag)

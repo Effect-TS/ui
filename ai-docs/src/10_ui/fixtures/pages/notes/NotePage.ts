@@ -9,9 +9,9 @@ import { GetNote } from "../../notes/queries/GetNote.ts"
 import { Notes } from "../../notes/services/Notes.ts"
 
 export const NotePageMessage = Schema.TaggedUnion({
-  Saved: {},
-  EditorFailed: {},
-  SaveNow: {}
+  SavedNote: {},
+  FailedEditor: {},
+  ClickedSaveNow: {}
 })
 
 // A ref names a child so the page can send it messages. The note's id
@@ -36,14 +36,15 @@ export const NotePageNoDeps = Component.define({
   // `update` can read the results too, as `$.queries`.
   update: (model, message, $) =>
     NotePageMessage.match(message, {
-      Saved: () => ({ ...model, notice: "Saved" }),
-      EditorFailed: () => ({ ...model, notice: "The editor crashed" }),
+      SavedNote: () => ({ ...model, notice: "Saved" }),
+      FailedEditor: () => ({ ...model, notice: "The editor crashed" }),
       // "Save now" is a one-shot instruction, so it's a send, not a prop.
       // State the editor shows, like the note, stays in its props. The
       // editor's `update` handles the message after this render, with the
       // props from it. A send to a child that isn't rendered, such as while
       // the note loads, is dropped and logged.
-      SaveNow: () => $.send(Editor.at($.props.id), { _tag: "Save" })
+      // The message sent is still a fact, named by the editor.
+      ClickedSaveNow: () => $.send(Editor.at($.props.id), { _tag: "RequestedSave" })
     }),
   // `head` gets the Model, the props and the queries' results, as a view
   // does. The title comes from the loaded note, and the note's id from the
@@ -60,7 +61,7 @@ export const NotePageNoDeps = Component.define({
         h.article(
           // The Collapsible draws the frame and opens and closes the body.
           // Each slot's content is this page's: written with this `h`, so
-          // the button sends `SaveNow` here, the editor's events and failure
+          // the button sends `ClickedSaveNow` here, the editor's events and failure
           // map to this page's messages, `$.send` reaches the editor by its
           // ref, and `NoteActivity` is resolved from this page's Layers.
           // The editor's path is `.../Collapsible[note]/[body]/NoteEditor[...]`.
@@ -69,17 +70,20 @@ export const NotePageNoDeps = Component.define({
             slots: {
               summary: [
                 h.h2(note.title),
-                h.button.attr("type", "button").onClick(NotePageMessage.make({ _tag: "SaveNow" })).children("Save now")
+                h.button.attr("type", "button").onClick(NotePageMessage.make({ _tag: "ClickedSaveNow" })).children(
+                  "Save now"
+                )
               ],
               body: [
                 NoteEditor(h, {
                   ref: Editor.at(note.id),
                   props: { note },
-                  // Maps the child's events to this component's messages.
-                  onEmit: () => NotePageMessage.make({ _tag: "Saved" }),
+                  // Maps the child's events to this component's messages:
+                  // the event's verb, then this page's name for the child.
+                  onEmit: () => NotePageMessage.make({ _tag: "SavedNote" }),
                   // Every child is a failure boundary. A failed child shows
                   // `fallback` and stays down until its key changes.
-                  onFailure: () => NotePageMessage.make({ _tag: "EditorFailed" }),
+                  onFailure: () => NotePageMessage.make({ _tag: "FailedEditor" }),
                   fallback: () => h.p("The editor is unavailable.")
                 }),
                 NoteActivity.render(h, {

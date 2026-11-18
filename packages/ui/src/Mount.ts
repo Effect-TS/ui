@@ -10,29 +10,32 @@
  *
  * The body gets the host node, the args and a Stream of the args, and ends
  * with its own result. The view maps that result to a message with
- * `Mount.map`. A mount with nothing to tell the component ends with
- * `Component.noop`. A mount that reports as it goes, such as a widget's
- * events, is defined with `Mount.makeStream`, and its body is a Stream of
- * results.
+ * `Mount.map`. For now, a mount with nothing to report ends in a
+ * `Completed*` message, such as `CompletedDrawChart`, because a silent mount
+ * leaves nothing in the `MessageLog`. A mount that reports as it goes, such
+ * as a widget's events, is defined with `Mount.makeStream`, and its body is
+ * a Stream of results.
  *
  * **Example** (A mount that follows its args)
  *
  * ```ts import.meta.vitest
- * import { Component, Mount } from "@effect/ui"
+ * import { Mount } from "@effect/ui"
  * import { Effect, Schema, Stream } from "effect"
  *
  * declare const draw: (canvas: HTMLCanvasElement, points: ReadonlyArray<number>) => void
+ *
+ * const Message = Schema.TaggedUnion({ CompletedDrawChart: {} })
  *
  * const DrawChart = Mount.make(
  *   "DrawChart",
  *   { args: { points: Schema.Array(Schema.Number) } },
  *   (canvas: HTMLCanvasElement, _args, changes) =>
- *     Stream.runForEach(changes, ({ points }) => Effect.sync(() => draw(canvas, points))).pipe(
- *       Effect.as(Component.noop)
- *     )
+ *     Stream.runForEach(changes, ({ points }) => Effect.sync(() => draw(canvas, points)))
  * )
  *
- * // In a view: `h.canvas.onMount(DrawChart({ points: model.points }))`
+ * // In a view: `h.canvas.onMount(drawChart(model.points))`
+ * const drawChart = (points: ReadonlyArray<number>) =>
+ *   DrawChart({ points }).pipe(Mount.map(() => Message.make({ _tag: "CompletedDrawChart" })))
  * ```
  *
  * @stability experimental
@@ -322,8 +325,10 @@ export const isDefinition = (u: unknown): u is Definition.Any => Predicate.hasPr
  *   that falls behind gets only the latest.
  *
  * The body ends with its own result, which a view maps to a message with
- * `map`, or with `Component.noop` to send nothing. Its requirements join
- * those of the component that renders it.
+ * `map`. It may end with `Component.noop`, which sends nothing, but for now
+ * a mount with nothing to report ends in a `Completed*` message instead,
+ * because a silent mount leaves nothing in the `MessageLog`. Its
+ * requirements join those of the component that renders it.
  *
  * **Gotchas**
  *
@@ -337,13 +342,13 @@ export const isDefinition = (u: unknown): u is Definition.Any => Predicate.hasPr
  * import { Mount } from "@effect/ui"
  * import { Effect, Schema } from "effect"
  *
- * const Message = Schema.TaggedUnion({ Measured: { width: Schema.Number } })
+ * const Message = Schema.TaggedUnion({ CompletedMeasure: { width: Schema.Number } })
  *
  * const Measure = Mount.make("Measure", { args: {} }, (node: HTMLElement) =>
  *   Effect.sync(() => node.getBoundingClientRect().width))
  *
  * // In a view
- * const measure = Measure().pipe(Mount.map((width) => Message.make({ _tag: "Measured", width })))
+ * const measure = Measure().pipe(Mount.map((width) => Message.make({ _tag: "CompletedMeasure", width })))
  * ```
  *
  * @stability experimental
@@ -391,10 +396,10 @@ export const make = <const Name extends string, const In extends Command.ArgsInp
  * }
  * declare const createEditor: (node: HTMLElement, text: string) => Editor
  *
- * const Message = Schema.TaggedUnion({ Edited: { text: Schema.String } })
+ * const Message = Schema.TaggedUnion({ ChangedText: { text: Schema.String } })
  *
- * const CodeEditor = Mount.makeStream(
- *   "CodeEditor",
+ * const AttachEditor = Mount.makeStream(
+ *   "AttachEditor",
  *   { args: { text: Schema.String } },
  *   (node: HTMLElement, { text }) =>
  *     Stream.callback<string>((queue) =>
@@ -406,7 +411,7 @@ export const make = <const Name extends string, const In extends Command.ArgsInp
  * )
  *
  * // In a view
- * const editor = CodeEditor({ text: "" }).pipe(Mount.map((text) => Message.make({ _tag: "Edited", text })))
+ * const editor = AttachEditor({ text: "" }).pipe(Mount.map((text) => Message.make({ _tag: "ChangedText", text })))
  * ```
  *
  * @stability experimental
