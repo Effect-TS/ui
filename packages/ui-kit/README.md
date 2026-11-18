@@ -19,4 +19,5 @@ Switch(h, {
 
 ## Components
 
+- [Button](src/Button.ts): a native button that can stay focusable while disabled.
 - [Switch](src/Switch.ts): a controlled on/off setting.

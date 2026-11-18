@@ -40,7 +40,7 @@ Work top to bottom. Put the notes from steps 1 to 3 in the PR description.
 3. **Decide the shape**, using the conventions:
    - view function, headless component, or (rarely) a component with
      slots. Count the state Base UI keeps that the port puts off
-   - one element with `element` and `children`, or several arranged in
+   - one element returned as a builder with chained `.children(...)`, or several arranged in
      `view`
    - the parts, the tag each accepts, and the attributes and events each
      owns
@@ -70,9 +70,9 @@ Work top to bottom. Put the notes from steps 1 to 3 in the PR description.
      absent, while the consumer's class and other attributes stay. For a
      view function's part, that holds for a value chained after the part too
    - for a view function, an element that already handles an event fails
-     the render when the `on<Event>` option would replace it, in every
-     state, whether the handler was set before the part or chained after
-     it, and keeps its handler without the option
+     the render if any option reserves that event, in every state, whether
+     the handler was set before the call or chained after it. Check that
+     the consumer's handler stays when no option reserves the event
 
    Add `packages/ui-kit/typetest/<Name>.tst.ts` for each part: the builder
    it returns, the inferred message type and requirements, and the tags it
