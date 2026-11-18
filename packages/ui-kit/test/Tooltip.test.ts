@@ -1,10 +1,11 @@
 import type { Mount } from "@effect/ui"
 import { Component, View } from "@effect/ui"
-import { Tooltip, type TooltipProps } from "@effect/ui-kit"
+import { Tooltip, type TooltipProps, TooltipProvider } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
+import { TestClock } from "effect/testing"
 
 const standIn = {
   elements: Html,
@@ -65,6 +66,44 @@ const Toolbar = Component.define({
       }),
       h.output(`pressed ${model.pressed}, dismissed ${model.dismissed}`)
     )
+})
+
+// Two tooltips under a provider, and one Model field for which one shows.
+const Tip = Schema.Literals(["bold", "italic"])
+const GroupedMessage = Schema.TaggedUnion({ OpenedTip: { tip: Tip }, DismissedTip: { tip: Tip } })
+
+const Grouped = Component.define({
+  name: "Grouped",
+  model: Schema.Struct({ tip: Schema.NullOr(Tip) }),
+  message: GroupedMessage,
+  elements: Html
+}).make({
+  init: () => ({ tip: null }),
+  update: (model, message) =>
+    GroupedMessage.match(message, {
+      OpenedTip: ({ tip }) => ({ tip }),
+      DismissedTip: ({ tip }) => (model.tip === tip ? { tip: null } : model)
+    }),
+  view: (model, h) =>
+    TooltipProvider(h, {
+      props: {},
+      view: () =>
+        h.div(
+          ...Tip.literals.map((tip) =>
+            Tooltip(h, {
+              key: tip,
+              props: { open: model.tip === tip },
+              onEmit: (event) =>
+                GroupedMessage.make({ _tag: event._tag === "Opened" ? "OpenedTip" : "DismissedTip", tip }),
+              view: (s) =>
+                h.span(
+                  s.trigger(h.button.attr("aria-label", tip)).children(tip),
+                  s.positioner(h.div).children(s.popup(h.div.class(`${tip}-popup`)).children(tip))
+                )
+            })
+          )
+        )
+    })
 })
 
 const trigger = Locator.tag("button")
@@ -212,5 +251,44 @@ describe("Tooltip", () => {
       // The parent got Button's press and the tooltip's dismissal, once each.
       assert.strictEqual(Locator.textOf(root.get(Locator.tag("output"))), "pressed 1, dismissed 1")
       assert.isUndefined(root.get(trigger).attrs?.["data-popup-open"])
+    }).pipe(Effect.provide(TestHost.layer())))
+
+  it.effect("after one tooltip of a group closes, another opens at once inside the timeout and waits outside it", () =>
+    Effect.gen(function*() {
+      const root = yield* TestHost.mount(Grouped, {})
+      const hover = (tip: string) => Locator.fire(root.get(Locator.attr("aria-label", tip)), "mouseenter")
+      const leave = (tip: string) => Locator.fire(root.get(Locator.attr("aria-label", tip)), "mouseleave")
+      const instant = (tip: string) => root.get(Locator.attr("class", `${tip}-popup`)).attrs?.["data-instant"]
+      const open = () => root.query(Locator.attr("data-popup-open", ""))
+      const openTip = () => Locator.textOf(open()!)
+      const settle = TestHost.settle
+      // Commands start when the host settles, so settle before moving the clock.
+      const wait = (millis: number) =>
+        settle.pipe(Effect.andThen(TestClock.adjust(`${millis} millis`)), Effect.andThen(settle))
+
+      // A opens after its hover delay, then the consumer accepts its close.
+      hover("bold")
+      yield* wait(600)
+      assert.strictEqual(openTip(), "bold")
+      leave("bold")
+      yield* wait(0)
+      assert.isUndefined(open())
+
+      // Inside the window, B opens on the hover itself, marked `delay`.
+      yield* wait(399)
+      hover("italic")
+      yield* settle
+      assert.strictEqual(openTip(), "italic")
+      assert.strictEqual(instant("italic"), "delay")
+
+      // Outside the window, B waits its full delay again.
+      leave("italic")
+      yield* wait(400)
+      hover("italic")
+      yield* wait(599)
+      assert.isUndefined(open())
+      yield* wait(1)
+      assert.strictEqual(openTip(), "italic")
+      assert.isUndefined(instant("italic"))
     }).pipe(Effect.provide(TestHost.layer())))
 })
