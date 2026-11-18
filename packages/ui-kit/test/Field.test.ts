@@ -1,0 +1,185 @@
+import type { Component } from "@effect/ui"
+import { View } from "@effect/ui"
+import { Checkbox, Field, type FieldProps, Input, Switch } from "@effect/ui-kit"
+import { Html } from "@effect/ui/html"
+import { Locator, Scene, Story } from "@effect/ui/testing"
+import { assert, describe, it } from "@effect/vitest"
+import { Effect } from "effect"
+
+// A field with every part. The control already describes itself with a hint
+// of the consumer's own.
+const standIn = {
+  elements: Html,
+  view: (
+    f: Component.Headless.Parts<typeof Field>,
+    h: View.Helper<never, FieldProps> & View.Tags<Html.Elements, never>
+  ) =>
+    f.root(h.div).children(
+      f.label(h.label).children("Name"),
+      f.control(h.input.attr("aria-describedby", "hint")),
+      f.description(h.p).children("Visible on your profile"),
+      f.error(h.span)?.children("Enter your name")
+    )
+}
+
+const root = Locator.tag("div")
+const label = Locator.tag("label")
+const control = Locator.tag("input")
+const description = Locator.tag("p")
+const error = Locator.tag("span")
+const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
+
+const parts = (props: FieldProps, model = { focused: false, touched: false }) => Story.parts(Field, { model, props })
+const attrsOf = (builder: View.ElementBuilder<never, never, any, any>) => View.build(builder, []).attrs
+
+describe("Field", () => {
+  it.effect("the label names the control, which points at the description and at the error while it shows", () =>
+    Effect.gen(function*() {
+      const s = yield* Scene.make(Field, { described: true, invalid: true }, standIn)
+      const id = s.get(control).attrs?.id
+      assert.isString(id)
+      assert.strictEqual(s.get(label).attrs?.for, id)
+      const ids = [s.get(description).attrs?.id, s.get(error).attrs?.id]
+      assert.strictEqual(new Set([id, ...ids]).size, 3)
+      // Next to the consumer's own hint, which stays.
+      assert.strictEqual(s.get(control).attrs?.["aria-describedby"], `hint ${ids[0]} ${ids[1]}`)
+      assert.strictEqual(s.get(control).attrs?.["aria-invalid"], "true")
+
+      s.props({ described: true, invalid: false })
+        .expect(error).toBeAbsent()
+      assert.strictEqual(s.get(control).attrs?.["aria-describedby"], `hint ${ids[0]}`)
+      assert.isUndefined(s.get(control).attrs?.["aria-invalid"])
+    }))
+
+  it.effect("every part shows whether the control has focus and whether it was left", () =>
+    Effect.gen(function*() {
+      const s = yield* Scene.make(Field, { described: true, invalid: true }, standIn)
+      const shown = (name: string) =>
+        [root, label, control, description, error].map((part) => s.get(part).attrs?.[name])
+      s.fire(control, "focus")
+      assert.deepStrictEqual(shown("data-focused"), ["", "", "", "", ""])
+      assert.deepStrictEqual(shown("data-touched"), [undefined, undefined, undefined, undefined, undefined])
+      s.fire(control, "blur")
+      assert.deepStrictEqual(shown("data-focused"), [undefined, undefined, undefined, undefined, undefined])
+      assert.deepStrictEqual(shown("data-touched"), ["", "", "", "", ""])
+      // A field disabled while its control had focus may never hear the blur.
+      s.fire(control, "focus")
+        .props({ described: true, disabled: true })
+      assert.isUndefined(s.get(root).attrs?.["data-focused"])
+    }))
+
+  it("each part keeps the consumer's attributes, but the field's own win, present or absent", () => {
+    const owned = [
+      "id",
+      "for",
+      "aria-invalid",
+      "data-disabled",
+      "data-valid",
+      "data-invalid",
+      "data-touched",
+      "data-dirty",
+      "data-filled",
+      "data-focused"
+    ]
+    const stale = <B extends { readonly attr: (name: string, value: string) => any }>(
+      builder: B
+    ): ReturnType<B["attr"]> => owned.reduce((out, name) => out.attr(name, "stale"), builder.attr("class", "mine"))
+
+    // A field with no state removes every state attribute the consumer set.
+    const blank = parts({ described: true })
+    assert.deepStrictEqual(attrsOf(blank.root(stale(h.div))), {
+      class: "mine",
+      id: "stale",
+      for: "stale",
+      "aria-invalid": "stale"
+    })
+    const { id: controlId, "aria-describedby": descriptionId } = attrsOf(blank.control(h.input))
+    assert.isString(descriptionId)
+    assert.deepStrictEqual(attrsOf(blank.label(stale(h.label))), {
+      class: "mine",
+      id: "stale",
+      "aria-invalid": "stale",
+      for: controlId
+    })
+    assert.deepStrictEqual(attrsOf(blank.description(stale(h.p))), {
+      class: "mine",
+      for: "stale",
+      "aria-invalid": "stale",
+      id: descriptionId
+    })
+    // The control's own `disabled` and `data-disabled` are left to it.
+    assert.deepStrictEqual(attrsOf(blank.control(stale(h.input).disabled(true))), {
+      class: "mine",
+      for: "stale",
+      "data-disabled": "stale",
+      disabled: "",
+      id: controlId,
+      "aria-describedby": descriptionId
+    })
+    assert.isUndefined(blank.error(h.div))
+
+    // Every state the field has is on every part.
+    const full = parts({ disabled: true, invalid: true, dirty: true, filled: true }, { focused: true, touched: true })
+    const state = { "data-invalid": "", "data-touched": "", "data-dirty": "", "data-filled": "", "data-disabled": "" }
+    assert.deepStrictEqual(attrsOf(full.root(h.div)), state)
+    assert.deepStrictEqual(attrsOf(full.label(h.label)), { ...state, for: controlId })
+    // A disabled field hides the error and its `aria-invalid`, and keeps its
+    // control disabled whatever the consumer chains after the part.
+    assert.isUndefined(full.error(h.div))
+    assert.deepStrictEqual(
+      attrsOf(full.control(h.textarea).disabled(false).attr("data-disabled", undefined)),
+      {
+        "data-invalid": "",
+        "data-touched": "",
+        "data-dirty": "",
+        "data-filled": "",
+        id: controlId,
+        "data-disabled": "",
+        disabled: ""
+      }
+    )
+    assert.strictEqual(attrsOf(parts({ invalid: false }).root(h.div))["data-valid"], "")
+  })
+
+  it("a disabled field disables another kit control on the same element, and an enabled one leaves it its own", () => {
+    const controls = (field: FieldProps, disabled: boolean) => {
+      const f = parts(field)
+      const checkbox = Story.parts(Checkbox, { model: {}, props: { checked: false, disabled } })
+      let switched: View.Element<never> | undefined
+      Switch(h, {
+        props: { checked: false, disabled },
+        view: (s) => {
+          switched = View.build(s.root(f.control(h.button)), [])
+          return switched
+        }
+      })
+      return [
+        View.build(
+          Input(h, { element: f.control(h.input), props: { value: "Ada", disabled }, onUpdate: () => undefined }),
+          []
+        ),
+        View.build(checkbox.root(f.control(h.button)), []),
+        switched!
+      ].map(({ attrs }) => [attrs.id, attrs.disabled, attrs["data-disabled"]])
+    }
+    const id = attrsOf(parts({}).control(h.input)).id
+    assert.deepStrictEqual(controls({ disabled: true }, false), [[id, "", ""], [id, "", ""], [id, "", ""]])
+    assert.deepStrictEqual(controls({}, true), [[id, "", ""], [id, "", ""], [id, "", ""]])
+    assert.deepStrictEqual(controls({}, false), [[id, undefined, undefined], [id, undefined, undefined], [
+      id,
+      undefined,
+      undefined
+    ]])
+  })
+
+  it("the label and the control take only their own tags, and a description needs the described prop", () => {
+    const f = parts({})
+    assert.throws(() => f.label(h.span as any), /a part for <label> was given <span>/)
+    assert.throws(
+      () => f.control(h.div as any),
+      /a part for <input> or <textarea> or <select> or <button> was given <div>/
+    )
+    assert.throws(() => f.description(h.p), /Field: the description was drawn without the described prop/)
+    assert.isUndefined(attrsOf(f.control(h.select))["aria-describedby"])
+  })
+})
