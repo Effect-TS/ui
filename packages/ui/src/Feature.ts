@@ -114,9 +114,9 @@ export interface Service<in out Self, in out Props, in out Events, in out Receiv
    * service may be building (`Initial`) or failed (`Failure`).
    */
   // A method, so `Feature.Any` takes every feature, as for `toLayer`.
-  render<Msg, RF = never>(
+  render<Msg, RF = never, Keys extends string = never>(
     h: View.Helper<Msg, unknown>,
-    options: View.Child.Options<Props, Events, NoInfer<Msg>, Receives> & {
+    options: View.Child.Options<Props, Events, NoInfer<Msg>, Receives, Keys> & {
       readonly fallback: (
         result: AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>
       ) => View.Content<NoInfer<Msg>, RF>

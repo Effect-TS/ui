@@ -38,7 +38,12 @@ export const make = (
     key: options.ref !== undefined ? options.ref.key : options.key ?? "",
     ref: options.ref,
     props: options.props ?? {},
-    onEmit: typeof onEmit === "object" ? (event) => onEmit[event._tag](event) : onEmit ?? ignore,
+    onEmit: typeof onEmit === "object"
+      ? (event) => {
+        const tag = event._tag
+        return Object.hasOwn(onEmit, tag) ? onEmit[tag](event) : undefined
+      }
+      : onEmit ?? ignore,
     fallback: options.fallback,
     onFailure: options.onFailure,
     view: options.view,
