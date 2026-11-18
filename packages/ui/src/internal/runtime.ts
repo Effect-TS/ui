@@ -678,7 +678,9 @@ const noHead: Head.Head = { ...Head.empty }
 
 /** An entry about an instance, without what `record` adds. */
 type Draft = MessageLog.InstanceEntry extends infer E
-  ? E extends MessageLog.InstanceEntry ? Omit<E, keyof MessageLog.InstanceBase> & { readonly causedBy?: number | undefined } : never
+  ? E extends MessageLog.InstanceEntry
+    ? Omit<E, keyof MessageLog.InstanceBase> & { readonly causedBy?: number | undefined }
+  : never
   : never
 /** An entry about the tree, without what `recordTree` adds. */
 type TreeDraft = Exclude<MessageLog.Entry, MessageLog.InstanceEntry> extends infer E
@@ -2049,36 +2051,37 @@ const setup = (
    */
   const instanceHandlers = (inst: Instance, bound: componentQueries.Bound | undefined) => {
     const handlers = inst as { -readonly [K in "dispatch" | "fire"]: Instance[K] }
-    handlers.dispatch = (message, source) => step(() => {
-      renderAbove(inst)
-      if (inst.closed || inst.waiting || frozen) return
-      const component = inst.component
-      let next: ReturnType<typeof component.update>
-      busy++
-      try {
-        next = component.update(inst.model, message as never, inst.props, inst.results)
-      } catch (error) {
-        // No `Update` is logged for it, so the failure carries the message.
-        return failInstance(inst, Cause.die(error), "update", undefined, { message, source })
-      } finally {
-        busy--
-      }
-      if (next === undefined) return
-      const entrySeq = record(inst, {
-        _tag: "Update",
-        source,
-        message,
-        props: inst.props,
-        model: next.model,
-        commands: next.commands,
-        events: next.events,
-        lists: next.lists ?? [],
-        sends: next.sends ?? [],
-        // What `update` saw in `$.queries`, so a replay from any surviving entry sees it too.
-        ...(bound === undefined ? undefined : { queries: inst.results ?? bound.empty })
+    handlers.dispatch = (message, source) =>
+      step(() => {
+        renderAbove(inst)
+        if (inst.closed || inst.waiting || frozen) return
+        const component = inst.component
+        let next: ReturnType<typeof component.update>
+        busy++
+        try {
+          next = component.update(inst.model, message as never, inst.props, inst.results)
+        } catch (error) {
+          // No `Update` is logged for it, so the failure carries the message.
+          return failInstance(inst, Cause.die(error), "update", undefined, { message, source })
+        } finally {
+          busy--
+        }
+        if (next === undefined) return
+        const entrySeq = record(inst, {
+          _tag: "Update",
+          source,
+          message,
+          props: inst.props,
+          model: next.model,
+          commands: next.commands,
+          events: next.events,
+          lists: next.lists ?? [],
+          sends: next.sends ?? [],
+          // What `update` saw in `$.queries`, so a replay from any surviving entry sees it too.
+          ...(bound === undefined ? undefined : { queries: inst.results ?? bound.empty })
+        })
+        apply(inst, next, entrySeq, false)
       })
-      apply(inst, next, entrySeq, false)
-    })
     handlers.fire = (event, handler, payload, onMessage) => {
       if (inst.closed || inst.waiting) return
       const message = typeof handler === "function"

@@ -253,4 +253,45 @@ describe("the worked example", () => {
       "queued"
     )
   })
+
+  // What the tree did, as the facts and what followed from each, without the entries' numbers: a
+  // render that ran earlier or later numbers them differently and changes nothing else.
+  const timelineOf = (flush: TestHost.Flush) => {
+    const { deps } = setup("/users/1")
+    return run(
+      deps,
+      Effect.gen(function*() {
+        const root = yield* mount
+        yield* TestHost.settle
+        yield* TestClock.adjust("10 millis")
+        click(root, "Rename")
+        yield* TestHost.settle
+        rename(root, "B")
+        yield* TestHost.settle
+        yield* TestClock.adjust("100 millis")
+        yield* TestHost.settle
+        yield* TestClock.adjust("100 millis")
+        yield* TestHost.settle
+        yield* navigate("/")
+        yield* TestClock.adjust("10 millis")
+        yield* TestHost.settle
+        return {
+          text: root.text(),
+          timeline: TestHost.formatTimeline(root.log()).replace(/ ?\(?(after )?#\d+\)? ?/g, " ")
+        }
+      }),
+      flush
+    )
+  }
+
+  it.effect("one script gives one timeline, whenever the render flush runs", () =>
+    Effect.gen(function*() {
+      const expected = yield* timelineOf("queued")
+      assert.include(expected.timeline, "Update")
+      for (const flush of ["first", "last", { seed: 1 }, { seed: 2 }, { seed: 3 }] as const) {
+        const actual = yield* timelineOf(flush)
+        assert.strictEqual(actual.text, expected.text, JSON.stringify(flush))
+        assert.strictEqual(actual.timeline, expected.timeline, JSON.stringify(flush))
+      }
+    }))
 })

@@ -887,72 +887,125 @@ const summary = (value: unknown): string => {
  * @since 0.1.0
  */
 export const formatLog = (entries: ReadonlyArray<MessageLog.Entry>): string =>
-  entries.map((entry) => {
-    const head = `  #${entry.seq}${"path" in entry ? ` ${entry.path}` : ""} ${entry._tag}`
-    switch (entry._tag) {
-      case "Update": {
-        const source = entry.source
-        const from = source._tag === "DomEvent"
-          ? `dom ${source.name}`
-          : source._tag === "Command"
-          ? `command ${source.name}`
-          : source._tag === "Subscription"
-          ? `subscription ${source.key}`
-          : source._tag === "Query"
-          ? `query ${source.name}`
-          : source._tag === "Emit"
-          ? `emit from ${source.path}`
-          : source._tag === "Failure"
-          ? `failure of ${source.path}`
-          : source._tag === "Send"
-          ? `send from ${source.path}`
-          : source._tag === "Shared"
-          ? `shared ${source.name} from ${source.path}`
-          : source._tag === "Collected"
-          ? "collected"
-          : source._tag === "Mount"
-          ? `mount ${source.name}`
-          : "dispatch"
-        const commands = entry.commands.length === 0 ? "" : ` -> ${entry.commands.map((c) => c.name).join(", ")}`
-        const events = entry.events.length === 0 ? "" : ` events ${entry.events.map(summary).join(", ")}`
-        const sends = entry.sends.length === 0
-          ? ""
-          : ` sends ${
-            entry.sends.map((send) =>
-              `${send.ref !== undefined ? send.ref.key : send.owner.definition.name} ${summary(send.message)}`
-            ).join(", ")
-          }`
-        return `${head} ${summary(entry.message)} (${from})${commands}${events}${sends}`
-      }
-      case "Mounted":
-        return `${head}${entry.commands.length === 0 ? "" : ` -> ${entry.commands.map((c) => c.name).join(", ")}`}`
-      case "Failed":
-        return `${head} in ${entry.in}${entry.name === undefined ? "" : ` (${entry.name})`}${
-          entry.update === undefined ? "" : ` of ${summary(entry.update.message)}`
-        }: ${entry.cause.toString().split("\n")[0]}`
-      case "SubscriptionStarted":
-      case "SubscriptionStopped":
-        return `${head} ${entry.key}`
-      case "CommandEnded":
-        return `${head} ${entry.name}${entry.silent ? " (silent)" : ""}${
-          entry.waitEnded === undefined ? "" : ` (wait ${entry.waitEnded})`
+  entries.map((entry) => "  " + formatEntry(entry)).join("\n")
+
+/**
+ * Formats log entries as a timeline: each fact on its own line, in the order
+ * they happened, with the entries that follow from it indented under it.
+ *
+ * **Details**
+ *
+ * A fact is an entry without `causedBy`: a message from a DOM event, a
+ * Command's result, a Subscription or `root.send`, a query result, a Layer
+ * build or a run ending. The entries under it are what the tree did about
+ * it, in the order they were logged: the messages its `update` sent on, the
+ * props, mounts and unmounts of its render, the runs it stopped and the
+ * fetches its render started. See `MessageLog.Base`.
+ *
+ * An entry is listed under its fact even when the flush that logged it ran
+ * after later facts, so its number can be higher than the next fact's. An
+ * entry whose fact isn't among `entries`, as when a ring buffer dropped it,
+ * is listed as a fact, with `(after #n)` naming the missing one.
+ *
+ * **Example** (Printing what a click did)
+ *
+ * ```ts
+ * import { TestHost } from "@effect/ui/testing"
+ *
+ * declare const root: TestHost.TestRoot<unknown, unknown, unknown>
+ *
+ * console.log(TestHost.formatTimeline(root.log()))
+ * // #7 /Parent Update Inc (dispatch)
+ * //     #8 /Parent/Child[child] PropsChanged
+ * // #9 /Parent/Child[child] Update Read (dom click)
+ * ```
+ *
+ * @stability experimental
+ * @category formatting
+ * @since 0.1.0
+ */
+export const formatTimeline = (entries: ReadonlyArray<MessageLog.Entry>): string => {
+  const facts = new Map<number, Array<MessageLog.Entry>>()
+  for (const entry of entries) {
+    if (entry.causedBy === undefined || !facts.has(entry.causedBy)) facts.set(entry.seq, [])
+    else facts.get(entry.causedBy)!.push(entry)
+  }
+  const lines: Array<string> = []
+  for (const entry of entries) {
+    const followed = facts.get(entry.seq)
+    if (followed === undefined) continue
+    lines.push(formatEntry(entry) + (entry.causedBy === undefined ? "" : ` (after #${entry.causedBy})`))
+    for (const consequence of followed) lines.push("    " + formatEntry(consequence))
+  }
+  return lines.join("\n")
+}
+
+const formatEntry = (entry: MessageLog.Entry): string => {
+  const head = `#${entry.seq}${"path" in entry ? ` ${entry.path}` : ""} ${entry._tag}`
+  switch (entry._tag) {
+    case "Update": {
+      const source = entry.source
+      const from = source._tag === "DomEvent"
+        ? `dom ${source.name}`
+        : source._tag === "Command"
+        ? `command ${source.name}`
+        : source._tag === "Subscription"
+        ? `subscription ${source.key}`
+        : source._tag === "Query"
+        ? `query ${source.name}`
+        : source._tag === "Emit"
+        ? `emit from ${source.path}`
+        : source._tag === "Failure"
+        ? `failure of ${source.path}`
+        : source._tag === "Send"
+        ? `send from ${source.path}`
+        : source._tag === "Shared"
+        ? `shared ${source.name} from ${source.path}`
+        : source._tag === "Collected"
+        ? "collected"
+        : source._tag === "Mount"
+        ? `mount ${source.name}`
+        : "dispatch"
+      const commands = entry.commands.length === 0 ? "" : ` -> ${entry.commands.map((c) => c.name).join(", ")}`
+      const events = entry.events.length === 0 ? "" : ` events ${entry.events.map(summary).join(", ")}`
+      const sends = entry.sends.length === 0
+        ? ""
+        : ` sends ${
+          entry.sends.map((send) =>
+            `${send.ref !== undefined ? send.ref.key : send.owner.definition.name} ${summary(send.message)}`
+          ).join(", ")
         }`
-      case "CommandInterrupted":
-        return `${head} ${entry.name}`
-      case "CommandAwaiting":
-        return `${head} ${entry.name} on ${
-          entry.entries.map((awaited) => `${awaited.query} ${awaited.logKey}`).join(", ")
-        }`
-      case "CommandDropped":
-        return `${head} ${entry.name} (${entry.reason})`
-      case "SendDropped":
-        return `${head} ${entry.ref} (${entry.reason})`
-      case "FetchStarted":
-        return `${head} ${entry.query} ${entry.logKey} (${entry.trigger}${entry.restart ? ", restart" : ""})`
-      default:
-        return head
+      return `${head} ${summary(entry.message)} (${from})${commands}${events}${sends}`
     }
-  }).join("\n")
+    case "Mounted":
+      return `${head}${entry.commands.length === 0 ? "" : ` -> ${entry.commands.map((c) => c.name).join(", ")}`}`
+    case "Failed":
+      return `${head} in ${entry.in}${entry.name === undefined ? "" : ` (${entry.name})`}${
+        entry.update === undefined ? "" : ` of ${summary(entry.update.message)}`
+      }: ${entry.cause.toString().split("\n")[0]}`
+    case "SubscriptionStarted":
+    case "SubscriptionStopped":
+      return `${head} ${entry.key}`
+    case "CommandEnded":
+      return `${head} ${entry.name}${entry.silent ? " (silent)" : ""}${
+        entry.waitEnded === undefined ? "" : ` (wait ${entry.waitEnded})`
+      }`
+    case "CommandInterrupted":
+      return `${head} ${entry.name}`
+    case "CommandAwaiting":
+      return `${head} ${entry.name} on ${
+        entry.entries.map((awaited) => `${awaited.query} ${awaited.logKey}`).join(", ")
+      }`
+    case "CommandDropped":
+      return `${head} ${entry.name} (${entry.reason})`
+    case "SendDropped":
+      return `${head} ${entry.ref} (${entry.reason})`
+    case "FetchStarted":
+      return `${head} ${entry.query} ${entry.logKey} (${entry.trigger}${entry.restart ? ", restart" : ""})`
+    default:
+      return head
+  }
+}
 
 /**
  * A stand-in for a feature, from `stub`.

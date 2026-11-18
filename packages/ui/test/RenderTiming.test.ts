@@ -29,8 +29,7 @@ const makeApp = () => {
     message: ParentMessage
   }).make({
     init: () => ({ n: 0, shown: true }),
-    update: (model, message) =>
-      message._tag === "Inc" ? { ...model, n: model.n + 1 } : { ...model, shown: false },
+    update: (model, message) => message._tag === "Inc" ? { ...model, n: model.n + 1 } : { ...model, shown: false },
     view: (model, h) => {
       views.push(`parent ${model.n}`)
       return h.el("div").children(model.shown ? Child(h, { key: "child", props: { n: model.n } }) : "gone")
@@ -203,5 +202,46 @@ describe("causedBy", () => {
       const interrupted = log.filter((entry) => entry._tag === "CommandInterrupted")
       assert.strictEqual(interrupted.length, 1)
       assert.strictEqual(interrupted[0]!.causedBy, updates[2]!.seq)
+    })))
+})
+
+describe("TestHost.formatTimeline", () => {
+  it.effect("lists each fact with what followed from it under it, whichever flush logged it", () =>
+    provideHost(Effect.gen(function*() {
+      const app = makeApp()
+      const root = yield* TestHost.mount(app.Parent, {})
+      yield* TestHost.settle
+      const from = root.log().length
+      const button = root.get(Locator.tag("button"))
+      root.send(app.ParentMessage.make({ _tag: "Inc" }))
+      Locator.fire(button, "click")
+      root.send(app.ParentMessage.make({ _tag: "Hide" }))
+      yield* TestHost.settle
+      const first = root.log()[from]!.seq
+      assert.strictEqual(
+        TestHost.formatTimeline(root.log().slice(from)),
+        [
+          `#${first} /Parent Update Inc (dispatch)`,
+          `    #${first + 1} /Parent/Child[child] PropsChanged`,
+          `#${first + 2} /Parent/Child[child] Update Read (dom click)`,
+          `#${first + 3} /Parent Update Hide (dispatch)`,
+          `    #${first + 4} /Parent/Child[child] Unmounted`
+        ].join("\n")
+      )
+    })))
+
+  it.effect("an entry whose fact isn't among the entries is listed as one, naming it", () =>
+    provideHost(Effect.gen(function*() {
+      const app = makeApp()
+      const root = yield* TestHost.mount(app.Parent, {})
+      yield* TestHost.settle
+      const log = root.log()
+      assert.strictEqual(
+        TestHost.formatTimeline(log.slice(1, 3)),
+        [
+          `#${log[1]!.seq} /Parent Mounted (after #${log[0]!.seq})`,
+          `#${log[2]!.seq} /Parent/Child[child] Mounted (after #${log[0]!.seq})`
+        ].join("\n")
+      )
     })))
 })
