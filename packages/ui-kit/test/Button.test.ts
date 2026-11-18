@@ -33,9 +33,8 @@ const Card = Component.define({
     h.div.onClick(CardMessage.make({ _tag: "ClickedCard" })).children(
       Button(h, {
         props: h.props.button,
-        onPress: h.props.press ? CardMessage.make({ _tag: "PressedSave" }) : undefined,
-        children: ["Save"]
-      }),
+        onPress: h.props.press ? CardMessage.make({ _tag: "PressedSave" }) : undefined
+      }).children("Save"),
       h.output(model.clicked)
     )
 })
@@ -67,26 +66,30 @@ describe("Button", () => {
       assert.strictEqual(clicked(s), "card")
     }))
 
-  it("element carries the caller's class, attributes and handlers, the button's own win, and a click handler clashing with onPress throws", () => {
-    const element = h.button
+  it("the caller chains a class, attributes and children, the button's own win, and a click handler clashing with onPress throws", () => {
+    const styled = Button(h, { props: { disabled: true }, element: h.button.attr("aria-disabled", "true") })
       .class("save")
       .attr("aria-label", "Save note")
       .attr("type", "submit")
-      .attr("aria-disabled", "true")
-      .attr("data-disabled", "")
-      .disabled(true)
-    const styled = Button(h, { element, children: ["Save"] })
-    assert.deepStrictEqual(styled.attrs, { class: "save", "aria-label": "Save note", type: "button" })
-    assert.deepStrictEqual(styled.children, [{ _tag: "Text", text: "Save" }])
+      .attr("data-disabled", "x")
+      .disabled(false)
+      .children("Save")
+    const node = View.build(styled, [])
+    assert.deepStrictEqual(node.attrs, {
+      class: "save",
+      "aria-label": "Save note",
+      type: "button",
+      "data-disabled": "",
+      disabled: ""
+    })
+    assert.deepStrictEqual(node.children, [{ _tag: "Text", text: "Save" }])
 
-    const own = h.button.onClick(CardMessage.make({ _tag: "ClickedCard" }))
-    assert.deepStrictEqual(Button(h, { element: own }).handlers, { click: { _tag: "ClickedCard" } })
-    assert.throws(
-      () => Button(h, { element: own, onPress: CardMessage.make({ _tag: "PressedSave" }) }),
-      /already handles click/
-    )
+    const own = (button: Html.Element<typeof CardMessage.Type, never, any, any, "button">) =>
+      View.build(button.onClick(CardMessage.make({ _tag: "ClickedCard" })), [])
+    assert.deepStrictEqual(own(Button(h)).handlers, { click: { _tag: "ClickedCard" } })
+    assert.throws(() => own(Button(h, { onPress: CardMessage.make({ _tag: "PressedSave" }) })), /already handles click/)
     // By the options, not the state: an enabled button would cancel nothing
     // yet, but disabling it would replace the caller's handler.
-    assert.throws(() => Button(h, { element: own, props: { focusableWhenDisabled: true } }), /already handles click/)
+    assert.throws(() => own(Button(h, { props: { focusableWhenDisabled: true } })), /already handles click/)
   })
 })

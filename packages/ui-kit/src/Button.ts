@@ -3,10 +3,10 @@
  * Button (https://base-ui.com/react/components/button).
  *
  * `Button` is a view function. It holds no state, so it is a function that
- * takes the caller's `h` and returns the finished `<button>`, with its
- * `type`, disabled state, click handling and children. A press sends the
- * caller's `onPress` message straight to the caller's `update`, and a
- * disabled button sends nothing.
+ * takes the caller's `h` and returns a `<button>` builder that gets its
+ * `type`, disabled state and click handling when it is built. A press
+ * sends the caller's `onPress` message straight to the caller's `update`,
+ * and a disabled button sends nothing.
  *
  * **Anatomy**
  *
@@ -14,10 +14,10 @@
  * | :------- | :--------------------------------------- |
  * | `Button` | `<button>`, from `element` or `h.button` |
  *
- * `Button` takes `{ element, props, onPress, children }` and returns the
- * finished element. Pass `element` only for a class, the caller's own
- * attributes, or a part to stack on the same `<button>`, such as a tooltip
- * trigger.
+ * `Button` takes `{ element, props, onPress }` and returns the builder, so
+ * the caller adds classes, attributes and children after it:
+ * `Button(h, { onPress }).class("save").children("Save")`. Pass `element`
+ * to stack a part on the same `<button>`, such as a tooltip trigger.
  *
  * **Data attributes**
  *
@@ -78,11 +78,11 @@
  *     }),
  *   view: (model, h) =>
  *     Button(h, {
- *       element: h.button.class("save"),
  *       props: { disabled: model.saving, focusableWhenDisabled: true },
- *       onPress: EditorMessage.make({ _tag: "PressedSave" }),
- *       children: [model.saving ? "Saving" : "Save"]
+ *       onPress: EditorMessage.make({ _tag: "PressedSave" })
  *     })
+ *       .class("save")
+ *       .children(model.saving ? "Saving" : "Save")
  * })
  *
  * // The button keeps the caller's class, and doesn't submit a form.
@@ -94,7 +94,6 @@
  * @since 0.1.0
  */
 import type * as Html from "@effect/ui/html/Html"
-import * as View from "@effect/ui/View"
 import { flag } from "./internal/attributes.ts"
 
 /**
@@ -122,8 +121,8 @@ export interface ButtonProps {
 }
 
 /**
- * A `<button>` builder `Button` accepts as `element`, from the caller's
- * `h.button`.
+ * A `<button>` builder: what `Button` accepts as `element`, from the
+ * caller's `h.button`, and what it returns.
  *
  * @stability experimental
  * @category models
@@ -133,64 +132,69 @@ export type ButtonElement<Msg, R = never> = Html.Element<Msg, R, Html.EventsOf<"
 
 /**
  * A button that can stay focusable while disabled. Call it with the
- * caller's `h`, the press as `onPress` and the label as `children`.
+ * caller's `h` and the press as `onPress`, then chain the label with
+ * `.children(...)`.
  *
  * **Details**
  *
- * `Button` writes its own attributes over the ones on `element`: `type`,
+ * `Button` returns the builder it was given, or `h.button`, and writes its
+ * own attributes in `forward`, when the element is built. So they win over
+ * the caller's, set on `element` or chained after the call: `type`,
  * `disabled`, `aria-disabled` and `data-disabled`, including the ones a
- * state leaves absent. So a `disabled` on `element` is removed unless the
- * `disabled` prop is set. The other attributes and handlers on `element`,
- * and a part's layer on it, stay.
+ * state leaves absent. A `disabled` the caller sets is removed unless the
+ * `disabled` prop is set. The caller's other attributes, handlers and
+ * children, and a part's layer, stay.
  *
  * `Button` sets the click handler for `onPress`, and for a disabled
  * button with `focusableWhenDisabled`, whose click it cancels. Given
- * either, an `element` with a click handler of its own throws at render,
- * whatever the state: pass the message as `onPress`. Given neither,
- * `Button` sets no click handler, so the consumer's stays, and without one
- * a click reaches an ancestor's.
+ * either, a click handler of the caller's own, set on `element` or chained
+ * after the call, throws at render, whatever the state: pass the message
+ * as `onPress`. Given neither, `Button` sets no click handler, so the
+ * caller's stays, and without one a click reaches an ancestor's.
  *
  * @stability experimental
  * @category components
  * @since 0.1.0
  */
-export const Button = <Msg, R = never, const C extends ReadonlyArray<View.Input<Msg, any>> = readonly []>(
-  h: { readonly button: ButtonElement<Msg, never> },
+export const Button = <Msg, R = never>(
+  h: { readonly button: ButtonElement<Msg> },
   options: {
-    /** The caller's `h.button`, with its classes and attributes. `h.button` when left out. */
+    /** The caller's `h.button`, to stack a part on it. `h.button` when left out. */
     readonly element?: ButtonElement<Msg, R> | undefined
     readonly props?: ButtonProps | undefined
     /** The message a press sends, with a click, Space or Enter. */
     readonly onPress?: NoInfer<Msg> | undefined
-    /** What goes inside the button, usually its label. */
-    readonly children?: C | undefined
   } = {}
-): View.Element<Msg, R | View.Requirements<C[number]>> => {
-  const element = options.element ?? h.button
+): ButtonElement<Msg, R> => {
+  const element: ButtonElement<Msg, R> = options.element ?? h.button
+  const { onPress } = options
   const props = options.props ?? {}
-  // By the options alone, not by the state: a clash that waited for the
-  // button to be disabled would first show in production.
-  if (
-    (options.onPress !== undefined || props.focusableWhenDisabled === true) && element.handlers.click !== undefined
-  ) {
-    throw new Error(
-      "Button: the element already handles click, which Button would replace. Send the message from onPress"
-    )
-  }
   const disabled = props.disabled === true
   const focusable = disabled && props.focusableWhenDisabled === true
-  const button = element
-    .attr("type", props.type ?? "button")
-    .attr("aria-disabled", focusable ? "true" : undefined)
-    .attr("data-disabled", flag(disabled))
-    .disabled(disabled && !focusable)
-  // A focusable disabled button keeps receiving clicks, so it cancels them,
-  // and a submit button doesn't submit its form. A natively disabled one
-  // receives none. `onPress` only sends: an enabled reset button resets.
-  const pressable = focusable
-    ? button.onClick(() => undefined, { preventDefault: "always" })
-    : !disabled && options.onPress !== undefined
-    ? button.onClick(options.onPress)
-    : button
-  return View.build(pressable, options.children ?? [])
+  // The writes wait for the finished button, so they come after whatever
+  // the caller chains on it, and the check sees a click handler chained
+  // after the call.
+  return element.forward((node) => {
+    // By the options alone, not by the state: a clash that waited for the
+    // button to be disabled would first show in production.
+    if ((onPress !== undefined || props.focusableWhenDisabled === true) && node.handlers.click !== undefined) {
+      throw new Error(
+        "Button: the element already handles click, which Button would replace. Send the message from onPress"
+      )
+    }
+    const button = node
+      .attr("type", props.type ?? "button")
+      .attr("aria-disabled", focusable ? "true" : undefined)
+      .attr("data-disabled", flag(disabled))
+      .disabled(disabled && !focusable)
+    // A focusable disabled button keeps receiving clicks, so it cancels
+    // them, and a submit button doesn't submit its form. A natively
+    // disabled one receives none. `onPress` only sends: an enabled reset
+    // button resets.
+    return focusable
+      ? button.onClick(() => undefined, { preventDefault: "always" })
+      : !disabled && onPress !== undefined
+      ? button.onClick(onPress)
+      : button
+  })
 }

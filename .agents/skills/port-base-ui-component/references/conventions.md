@@ -82,13 +82,11 @@ a view function call reads like a component call. The parts inside a
 returns it (see "Parts").
 
 ```ts
-// One element: the kit finishes it.
+// One element: the kit returns its builder, and the consumer chains on it.
 Button(h, {
-  element: h.button.class("save"),
   props: { disabled: model.saving },
-  onPress: Message.make({ _tag: "PressedSave" }),
-  children: ["Save"]
-})
+  onPress: Message.make({ _tag: "PressedSave" })
+}).class("save").children("Save")
 
 // Several elements: the consumer arranges them in `view`.
 Switch(h, {
@@ -112,16 +110,15 @@ Checkbox(h, {
 - `element` is the consumer's builder, a sibling of `props`. It carries
   the class, the consumer's attributes and handlers, and any other part
   already applied to it. A view function that draws one element with a
-  fixed tag defaults it to `h.<tag>`, so `Button(h, { onPress, children })`
-  works. Everywhere the tag is the consumer's choice, `element` is
+  fixed tag defaults it to `h.<tag>`, so `Button(h, { onPress })` works. Everywhere the tag is the consumer's choice, `element` is
   required: the kit doesn't pick markup for the consumer.
-- `children` is what goes inside, as an array. **A view function call
-  takes its children in `children` and returns a finished node.** Nobody
-  calls `.children()` on what a view function call returned, so the
-  function can become a component, whose call returns a `View.Child`,
-  without changing a call site. A builder's `.children(...)` returns the
-  builder, so finish the node with `View.build(element, children)`.
-- `view` replaces `element` and `children` when the component has more
+- **A view function that draws one element returns its builder**, as a
+  part does, and takes no `children` option. The consumer adds classes,
+  attributes and children by chaining:
+  `Button(h, { onPress }).class("save").children("Save")`. The function
+  does its writes in `forward`, so they win over what the consumer chains
+  after the call, and its handler check sees a handler chained there.
+- `view` replaces `element` when the component has more
   than one element: `view: (parts) => ...` gets the parts, as a headless
   call does. Don't take a builder per part
   (`elements: { root, thumb }`): it stops working once a part has
@@ -223,9 +220,8 @@ model.advanced
   ```ts
   Button(h, {
     element: t.trigger(h.button.class("tool")),
-    onPress: Message.make({ _tag: "PressedBold" }),
-    children: ["B"]
-  })
+    onPress: Message.make({ _tag: "PressedBold" })
+  }).children("B")
   ```
 - **The kit's attributes win** over the consumer's. A part or view
   function writes every attribute it owns in every state, with `undefined`
