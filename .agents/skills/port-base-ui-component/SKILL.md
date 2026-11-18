@@ -40,7 +40,7 @@ Work top to bottom. Put the notes from steps 1 to 3 in the PR description.
 3. **Decide the shape**, using the conventions:
    - view function, headless component, or (rarely) a component with
      slots. Count the state Base UI keeps that the port puts off
-   - one element with `element` and `children`, or several arranged in
+   - one element returned as a builder with chained `.children(...)`, or several arranged in
      `view`
    - the parts, the tag each accepts, and the attributes and events each
      owns

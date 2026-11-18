@@ -70,9 +70,11 @@ state doesn't compile without its owner above it, so an optional context
 reaches the control through a part on the consumer's builder,
 `s.root(f.control(h.button))`.
 
-When a view function later needs state, keep its call. Put the headless
-component behind a function with the same options, so a consumer adds at
-most a `key`.
+When a view function with `view` needs state, keep its call. Wrap the
+headless component in a function with the same options; the consumer may
+need to add a `key`. A one-element view function returns a builder, but a
+component returns a `View.Child`. Consumers can no longer chain on the
+result, so ship that swap as a breaking change.
 
 ## Call shape
 
@@ -82,9 +84,7 @@ a view function call reads like a component call. The parts inside a
 returns it (see "Parts").
 
 ```ts
-// One element. Button is the exception that returns its builder, so the
-// consumer chains on it. Other one-element functions take `children` and
-// return a finished node (see `children` below).
+// One element: finish the returned builder.
 Button(h, {
   props: { disabled: model.saving },
   onPress: Message.make({ _tag: "PressedSave" })
@@ -109,27 +109,12 @@ Checkbox(h, {
   function in it: a component's props are Schema data, which the log
   records and a replay reads back, and the runtime compares them on every
   render. Leave it optional when every prop is.
-- `element` is the consumer's builder, a sibling of `props`. It carries
-  the class, the consumer's attributes and handlers, and any other part
-  already applied to it. A view function that draws one element with a
-  fixed tag defaults it to `h.<tag>`, so `Button(h, { onPress })` works.
-  Everywhere the tag is the consumer's choice, `element` is required: the
-  kit doesn't pick markup for the consumer.
-- `children` is what goes inside, as an array. **A view function call
-  takes its children in `children` and returns a finished node.** Nobody
-  calls `.children()` on what a view function call returned, so the
-  function can become a component, whose call returns a `View.Child`,
-  without changing a call site. A builder's `.children(...)` returns the
-  builder, so finish the node with `View.build(element, children)`.
-- **`Button` is the exception.** It takes no `children` option and
-  returns its builder, as a part does, so the consumer adds classes,
-  attributes and children by chaining:
-  `Button(h, { onPress }).class("save").children("Save")`. It does its
-  writes in `forward`, so they win over what the consumer chains after
-  the call, and its handler check sees a handler chained there. If Button
-  becomes a component, its call sites change. Don't follow it for another
-  view function without deciding that for the kit.
-- `view` replaces `element` and `children` when the component has more
+- A one-element view function returns its builder. Chain classes, attributes,
+  handlers and `.children(...)` on the result; there is no `children` option.
+- Pass `element` when you already have a builder, for example from another
+  part. A fixed tag defaults to `h.<tag>`; when the consumer chooses the
+  tag, `element` is required.
+- Use `view` instead when the component has more
   than one element: `view: (parts) => ...` gets the parts, as a headless
   call does. Don't take a builder per part
   (`elements: { root, thumb }`): it stops working once a part has
@@ -230,9 +215,9 @@ model.advanced
 
   ```ts
   Button(h, {
-    element: t.trigger(h.button.class("tool")),
+    element: t.trigger(h.button),
     onPress: Message.make({ _tag: "PressedBold" })
-  }).children("B")
+  }).class("tool").children("B")
   ```
 - **The kit's attributes win** over the consumer's. A part or view
   function writes every attribute it owns in every state, with `undefined`
@@ -275,15 +260,11 @@ model.advanced
   consumer's handler for that event and would replace the consumer's
   own. So a view function throws at render when it was given an
   `on<Event>` and the element already handles the event that option
-  sets, as `Switch`'s root does for `click` with `onToggle`. A part checks
-  in its `forward` function, `node.handlers.click`, which also sees a
-  handler chained after the part. A view function that draws one element
-  checks its `element`. Decide by the
-  options and never by the state: a read-only switch sets no handler,
-  but a clash that waited for it to become editable would first show in
-  production. Without the option the function sets no handler, and the
-  consumer's stays. That keeps a view function's behaviour from changing
-  if it becomes a component.
+  sets, as `Switch`'s root does for `click` with `onToggle`. A view function or its part checks the final
+  node in `forward`, so the check sees handlers chained after the call.
+  Decide by the options, not the current state. Button reserves `click`
+  when it has `onPress` or `focusableWhenDisabled: true`, even while
+  enabled. With neither, the consumer's click handler stays.
   - With no handler on an element, the host gives the event to the
     nearest ancestor that handles it. So a click on a read-only control
     reaches the row around it. Don't promise that for a natively
@@ -292,7 +273,8 @@ model.advanced
   cancel the native event, and the consumer gets no option to. The kit
   cancels only when the props rule the native action out, with
   `preventDefault: "always"` on the handler, as a disabled button that
-  stays focusable does for its click. Sending a message cancels nothing:
+  stays focusable does for its click. Cancelling doesn't silence a handler
+  on a headless part's separate layer. Sending a message cancels nothing:
   a `type: "reset"` button resets its form with or without `onPress`. A
   consumer who wants the press without the native action changes the
   props (`type: "button"`, `disabled`).
