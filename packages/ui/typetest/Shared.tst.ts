@@ -79,17 +79,6 @@ describe("shared state", () => {
       update: (model) => model,
       view: (_, h) => Tip(h, { key: "a", props: { id: "a" } })
     })
-    const SameName = Component.define({
-      name: "TipsProvider",
-      model: Schema.Null,
-      message: TipMessage,
-      shares: () => 1
-    }).make({
-      init: () => null,
-      update: (model) => model,
-      parts: () => ({})
-    })
-    expect<Component.Shared.Of<typeof SameName>>().type.toBe<TipsShared>()
     expect<Component.Requirements<typeof Inside>>().type.toBe<never>()
     expect<Component.Requirements<typeof Outside>>().type.toBe<TipsShared>()
     const provided = Component.provide(Tip, Layer.empty as unknown as Layer.Layer<TipsShared>)

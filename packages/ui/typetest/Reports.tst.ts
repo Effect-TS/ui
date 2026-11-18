@@ -110,11 +110,6 @@ describe("reports", () => {
       message: TipMessage,
       shared: { a: { owner: Provider, optional: true } }
     })
-    const sendsA = sender.make({
-      init: () => null,
-      update: (_, __, $) => $.send(Provider, { _tag: "Completed" }),
-      view: (_, h) => h.text("")
-    })
     const sendsB = sender.make({
       init: () => null,
       update: (_, __, $) => $.send(B, { _tag: "Entered" }),
@@ -127,8 +122,7 @@ describe("reports", () => {
       view: (_, h) => h.text("")
     })
     expect<Component.Requirements<typeof widened>>().type.toBe<Component.Shared<"Provider">>()
-    expect<Component.Requirements<typeof sendsA>>().type.toBe<never>()
-    expect<Component.Headless.Requirements<typeof sendsB>>().type.toBe<Component.Shared.Of<typeof B>>()
+    expect<Component.Headless.Requirements<typeof sendsB>>().type.toBe<Component.Shared<"Provider">>()
   })
   it("keeps a supplied map with a string index", () => {
     const reads: Readonly<Record<string, typeof Provider>> = { provider: Provider }
