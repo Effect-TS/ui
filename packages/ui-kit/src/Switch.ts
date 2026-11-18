@@ -17,9 +17,9 @@
  * `root` takes the button and its children as `{ element, children }`
  * and returns the finished button. It adds the hidden `<input>` that
  * carries the form value as the last child, so a switch with a `name`
- * can't be drawn without it. `thumb` takes `{ element, children }` too.
- * Applied to the `<span>` alone, `s.thumb(h.span)`, it returns the builder
- * for another kit call's `element`.
+ * can't be drawn without it. Use `s.thumb(h.span.class("thumb"))` directly as a
+ * child or as another kit call's `element`. To put content inside the
+ * thumb, pass `{ element, children }`.
  *
  * Naming the switch is the consumer's job: a `<label>` around the root or
  * one pointing at its `id`, an `aria-label` or `aria-labelledby` on the
@@ -81,7 +81,7 @@
  *         h.label.class("setting").children(
  *           s.root({
  *             element: h.button.class("switch"),
- *             children: [s.thumb({ element: h.span.class("thumb") })]
+ *             children: [s.thumb(h.span.class("thumb"))]
  *           }),
  *           "Notifications"
  *         )
@@ -162,8 +162,8 @@ export type SwitchSpan<Msg, R = never> = Html.Element<Msg, R, Html.EventsOf<"spa
  * state. Without `onToggle` the switch sets none, and the consumer's
  * click handler stays.
  *
- * `thumb` returns the finished span, or, applied to the span alone, the
- * builder for another kit call's `element`.
+ * `thumb(span)` decorates the span for use as a child or as another
+ * call's `element`. `thumb({ element, children })` returns the finished span.
  *
  * @stability experimental
  * @category models
@@ -213,7 +213,7 @@ const state = <B extends { readonly attr: (name: string, value: string | undefin
  * A switch. Call it with the consumer's `h`, the `props`, and a `view`
  * closure that draws the root with
  * `s.root({ element: h.button, children })`, usually with
- * `s.thumb({ element: h.span })` as a child. It returns what `view`
+ * `s.thumb(h.span.class("thumb"))` as a child. It returns what `view`
  * returns.
  *
  * **Details**

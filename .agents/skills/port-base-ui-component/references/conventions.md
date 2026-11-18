@@ -17,7 +17,7 @@ the components that already follow it.
   Switch(h, {
     props: { checked: model.notify },
     onToggle: ({ checked }) => Message.make({ _tag: "ToggledNotify", checked }),
-    view: (s) => h.label(s.root({ element: h.button, children: [s.thumb({ element: h.span })] }), "Notify")
+    view: (s) => h.label(s.root({ element: h.button, children: [s.thumb(h.span.class("thumb"))] }), "Notify")
   })
   ```
 
@@ -91,7 +91,7 @@ Button(h, {
 Switch(h, {
   props: { checked: model.notify },
   onToggle: ({ checked }) => Message.make({ _tag: "ToggledNotify", checked }),
-  view: (s) => s.root({ element: h.button, children: [s.thumb({ element: h.span })] })
+  view: (s) => s.root({ element: h.button, children: [s.thumb(h.span.class("thumb"))] })
 })
 
 // A component: core's `onEmit`, and a `key` when it needs one.
@@ -180,12 +180,13 @@ model.advanced
   runtime. A view function's part is typed by its `element`.
 - A part sets ARIA, data attributes, ids, refs and handlers, and nothing
   visual.
-- **Call shape.** A part takes one options object and returns the
-  finished node, so the call site names each argument and the children
-  are always in `children`:
+- **Call shape.** When a part takes just a builder and adds no markup, pass
+  the builder positionally. Use the decorated builder directly as a child.
+  For children, extra fields, or a part that adds markup, pass an options
+  object to get the finished node:
 
   ```ts
-  s.root({ element: h.button.class("switch"), children: [s.thumb({ element: h.span })] })
+  s.root({ element: h.button.class("switch"), children: [s.thumb(h.span.class("thumb"))] })
   s.tab({ element: h.button, value: "a", children: ["Account"] })
   ```
 
@@ -198,9 +199,8 @@ model.advanced
   `Listbox.ts` in `ai-docs` shows the core API, where a part takes the
   builder and extra arguments positionally (`m.option(h.li, option)`).
   ui-kit wraps `p.part` to take the options object.
-- **Stacking.** A part that adds no markup also takes the builder alone
-  and returns it decorated, for one purpose: to be another kit call's
-  `element`, so two kit things share one element.
+- **Stacking.** A part that adds no markup can also supply its decorated builder
+  as another kit call's `element`, so both share one element.
 
   ```ts
   Button(h, {
