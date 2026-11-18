@@ -576,16 +576,19 @@ describe("Story", () => {
   })
 
   describe("queries", () => {
-    it("lists the queries on the record from make, current and check, beside their results", () => {
-      const names = (record: Story.Story<any, any, any, any>) => record.queryInfo().map((info) => info.name)
-      const final = Story.make(Note, { author: "1" }, (s) => {
+    it.effect("lists the queries on the record from make, current and check, beside their results", () =>
+      Effect.gen(function*() {
+        const names = (record: Story.Story<any, any, any, any>) => record.queryInfo().map((info) => info.name)
+        const s = yield* Story.make(Note, { author: "1" })
         assert.deepStrictEqual(names(s.current), ["author"])
+        assert.deepStrictEqual(s.queryInfo, s.current.queryInfo())
         s.loaded("author", { id: "1", name: "Ann", email: "", likes: 0 })
           .check((story) => assert.deepStrictEqual(names(story), ["author"]))
-      })
-      assert.deepStrictEqual(names(final), ["author"])
-      assert.strictEqual(final.queries().author._tag, "Success")
-    })
+        // The record make's cursor ends with, as the callback form returned it.
+        assert.deepStrictEqual(names(s.current), ["author"])
+        assert.strictEqual(s.current.queries().author._tag, "Success")
+        assert.strictEqual(s.queries.author._tag, "Success")
+      }))
 
     const text = (scene: { readonly root: Locator.Node }) => Locator.textOf(scene.root)
     const page = (n: number, names: ReadonlyArray<string>) => ({

@@ -322,12 +322,15 @@ describe("Scene", () => {
     assert.notProperty(s.current, "queries")
   })
 
-  it("lists the queries on the record from make, current and check", () => {
-    const names = (record: Scene.Scene<any, any, any, any>) => record.queryInfo().map((info) => info.name)
-    const final = Scene.make(Note, {}, (s) => {
+  it.effect("lists the queries on the record from make, current and check", () =>
+    Effect.gen(function*() {
+      const names = (record: Scene.Scene<any, any, any, any>) => record.queryInfo().map((info) => info.name)
+      const s = yield* Scene.make(Note, {})
       assert.deepStrictEqual(names(s.current), ["author"])
+      assert.deepStrictEqual(s.queryInfo, s.current.queryInfo())
       s.check((scene) => assert.deepStrictEqual(names(scene), ["author"]))
-    })
-    assert.deepStrictEqual(names(final), ["author"])
-  })
+      // A scene's cursor has no query results either: they are a story's.
+      assert.isUndefined((s as any).results)
+      assert.isUndefined((s as any).queries)
+    }))
 })
