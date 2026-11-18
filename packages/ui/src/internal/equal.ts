@@ -58,7 +58,7 @@ const differsPlainly = (a: unknown, b: unknown): boolean => {
 }
 
 /**
- * A shared value, or what an owner's `onReports` returns: compared as props are when both are plain
+ * A shared value, or what an owner's `collects.onChange` returns: compared as props are when both are plain
  * records, so one built anew each time is no change, and by `Equal.equals` otherwise, so a new Date of
  * the same time isn't either.
  *

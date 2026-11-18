@@ -140,7 +140,7 @@ export type Fields<Props, Model, Msg, Events> =
   & {
     readonly childModels?: ReadonlyMap<string, unknown> | undefined
     readonly shared?: ReadonlyMap<Component.Definition.Any, unknown> | undefined
-    readonly reported?: Reported | undefined
+    readonly collected?: Collected | undefined
   }
 
 // -- headless children ------------------------------------------------------
@@ -325,15 +325,15 @@ export const sharedMessages = (
   return messages
 }
 
-/** What an owner's `onReports` last returned in a story. */
-interface Reported {
+/** What an owner's `collects.onChange` last returned in a story. */
+interface Collected {
   readonly message: unknown
 }
-const reportedLast = new WeakMap<object, Reported>()
+const collectedLast = new WeakMap<object, Collected>()
 
 /**
- * Runs the story's component's `onReports` for `reports`, and sends its message when it differs from
- * the last one, starting from its message for no reports.
+ * Runs the story's component's `collects.onChange` for `reports`, and sends its message when it differs
+ * from the last one, starting from its message for no reports.
  *
  * @internal
  */
@@ -343,14 +343,14 @@ export const withReports = (
   step: string
 ): State<any, any, any, any> => {
   const definition = story.component.definition
-  if (definition.reports === undefined) {
-    throw new Error(`${step}: ${definition.name} takes no reports: its shares has no reports Schema`)
+  if (definition.collects === undefined) {
+    throw new Error(`${step}: ${definition.name} collects no reports: its shares has no collects`)
   }
-  const onReports = definition.reports.onReports as (reports: ReadonlyArray<unknown>) => unknown
-  const last = reportedLast.get(story) ?? { message: onReports([]) }
-  const message = onReports(reports)
+  const onChange = definition.collects.onChange as (collected: ReadonlyArray<unknown>) => unknown
+  const last = collectedLast.get(story) ?? { message: onChange([]) }
+  const message = onChange(reports)
   if (sharedEqual(last.message, message)) return story
-  return dispatch(update(story, { reported: { message } }), message)
+  return dispatch(update(story, { collected: { message } }), message)
 }
 
 /**
@@ -541,7 +541,7 @@ export const record = <Props, Model, Msg, Events>(
   }
   if (fields.childModels !== undefined) childModels.set(story, fields.childModels)
   if (fields.shared !== undefined) sharedGiven.set(story, fields.shared)
-  if (fields.reported !== undefined) reportedLast.set(story, fields.reported)
+  if (fields.collected !== undefined) collectedLast.set(story, fields.collected)
   return story
 }
 
@@ -565,7 +565,7 @@ export const update = <Props, Model, Msg, Events>(
     ack: story.ack,
     childModels: childModels.get(story),
     shared: sharedGiven.get(story),
-    reported: reportedLast.get(story),
+    collected: collectedLast.get(story),
     ...patch
   }
   // A defect in `view` fails the step that changed the Model, the query results, the props or what's pending.

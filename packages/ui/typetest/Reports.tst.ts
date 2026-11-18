@@ -17,8 +17,10 @@ const Provider = Component.define({
   receives: ["Completed"],
   shares: {
     value: (model) => ({ open: model.open, instant: model.instant }),
-    reports: Schema.Boolean,
-    onReports: (reports) => ProviderMessage.make({ _tag: "ChangedOpen", open: reports.includes(true) })
+    collects: {
+      schema: Schema.Boolean,
+      onChange: (collected) => ProviderMessage.make({ _tag: "ChangedOpen", open: collected.includes(true) })
+    }
   }
 }).make({
   init: () => ({ open: false, instant: false }),
@@ -128,6 +130,18 @@ describe("reports", () => {
     })
     expect<Component.Requirements<typeof Wrapper>>().type.toBe<Component.Shared<typeof Provider>>()
   })
+  it("rejects collects without its onChange", () => {
+    Component.define({
+      name: "Bad",
+      model: Schema.Null,
+      message: ProviderMessage,
+      shares: {
+        value: () => null,
+        // @ts-expect-error  Property 'onChange' is missing
+        collects: { schema: Schema.Boolean }
+      }
+    })
+  })
   it("rejects a bad report", () => {
     Component.define({
       name: "Bad",
@@ -148,7 +162,7 @@ describe("reports", () => {
       shared: {
         plain: {
           owner: Plain,
-          // @ts-expect-error  This owner takes no reports
+          // @ts-expect-error  This owner collects no reports
           report: () => true
         }
       }
@@ -175,12 +189,12 @@ describe("reports", () => {
   })
 })
 
-describe("reported", () => {
+describe("collected", () => {
   it("takes the owner's reports in a scene of the owner", () => {
     Effect.gen(function*() {
       const s = yield* Scene.make(Provider, {}, { elements: Html, view: (_, h) => h.div })
-      expect(s.reported).type.toBeCallableWith([true, false])
-      expect(s.reported).type.not.toBeCallableWith(["open"])
+      expect(s.collected).type.toBeCallableWith([true, false])
+      expect(s.collected).type.not.toBeCallableWith(["open"])
     })
   })
 })

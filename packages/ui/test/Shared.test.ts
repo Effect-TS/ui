@@ -287,8 +287,10 @@ const Group = Component.define({
   receives: ["Bumped"],
   shares: {
     value: (model) => ({ on: model.on, bumps: model.bumps }),
-    reports: Schema.Boolean,
-    onReports: (reports) => GroupMessage.make({ _tag: "ChangedOn", on: reports.includes(true) })
+    collects: {
+      schema: Schema.Boolean,
+      onChange: (collected) => GroupMessage.make({ _tag: "ChangedOn", on: collected.includes(true) })
+    }
   }
 }).make({
   init: () => ({ on: false, bumps: 0 }),
@@ -396,8 +398,8 @@ describe("optional owners, reports and onChange", () => {
       yield* TestHost.settle
       const updates = updatesAt(root.log(), "/Bar/Group[g]")
       assert.deepStrictEqual(updates.map((entry) => [entry.message, entry.source]), [
-        [{ _tag: "ChangedOn", on: true }, { _tag: "Reported" }],
-        [{ _tag: "ChangedOn", on: false }, { _tag: "Reported" }]
+        [{ _tag: "ChangedOn", on: true }, { _tag: "Collected" }],
+        [{ _tag: "ChangedOn", on: false }, { _tag: "Collected" }]
       ])
     })))
 
@@ -550,13 +552,13 @@ describe("optional owners, reports and onChange in a Story", () => {
       assert.strictEqual(s.model, false)
     }))
 
-  it.effect("reported sends the owner's onReports message when it differs from the last", () =>
+  it.effect("collected sends the owner's collects.onChange message when it differs from the last", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(Group, {}, { view: (parts, h) => h.el("p", parts.on ? "on" : "off") })
       // The same message as for no reports.
-      s.reported([false, false])
+      s.collected([false, false])
       assert.strictEqual(Locator.textOf(s.root), "off")
-      s.reported([false, true])
+      s.collected([false, true])
       assert.strictEqual(Locator.textOf(s.root), "on")
     }))
 })
