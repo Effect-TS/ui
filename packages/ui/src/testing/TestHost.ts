@@ -19,7 +19,7 @@
  * import { Component } from "@effect/ui"
  * import { Locator, TestHost } from "@effect/ui/testing"
  *
- * const Msg = Schema.TaggedUnion({ Increment: {} })
+ * const Msg = Schema.TaggedUnion({ ClickedIncrement: {} })
  *
  * const Counter = Component.define({
  *   name: "Counter",
@@ -28,7 +28,7 @@
  * }).make({
  *   init: () => 0,
  *   update: (count) => count + 1,
- *   view: (count, h) => h.el("button").on("click", Msg.make({ _tag: "Increment" })).children(String(count))
+ *   view: (count, h) => h.el("button").on("click", Msg.make({ _tag: "ClickedIncrement" })).children(String(count))
  * })
  *
  * const program = Effect.gen(function*() {

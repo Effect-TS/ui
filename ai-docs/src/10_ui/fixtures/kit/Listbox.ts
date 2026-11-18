@@ -18,11 +18,10 @@ export const ListboxOption = Schema.Struct({
 export type ListboxOption = typeof ListboxOption.Type
 
 export const ListboxMessage = Schema.TaggedUnion({
-  Toggled: { open: Schema.Boolean },
-  Query: { value: Schema.String },
-  Key: { key: Schema.String },
-  Pick: { id: Schema.String },
-  Moved: {}
+  ToggledPopup: { open: Schema.Boolean },
+  UpdatedQuery: { value: Schema.String },
+  PressedKey: { key: Schema.String },
+  ClickedOption: { id: Schema.String }
 })
 
 // What the consumer gets through `onEmit`. Typeahead on the closed trigger
@@ -55,8 +54,9 @@ const activeIn = (shown: ReadonlyArray<ListboxOption>, active: string | null) =>
   shown.some((o) => o.id === active && o.disabled !== true) ? active : null
 
 // `Html.focus` and `Html.scrollIntoView` report whether the ref was
-// rendered, as a message. Nothing here depends on it.
-const moved = () => ListboxMessage.make({ _tag: "Moved" })
+// rendered. Nothing here depends on it, so they end in `Component.noop`,
+// which sends nothing, and the Message union has no no-op variant.
+const silent = () => Component.noop
 
 /**
  * A trigger that opens a popup with a filter input and the rows. The input is
@@ -88,11 +88,11 @@ export const Listbox = Component.define({
       // The popup is an auto popover. The browser opens it from the trigger
       // and closes it on Escape or a click outside, and the Model follows.
       // Focus moves into the popup and back to the trigger with it.
-      Toggled: ({ open }) =>
+      ToggledPopup: ({ open }) =>
         $.set({ ...model, open, query: "", active: open ? $.props.selected : null })
-          .run(open ? Html.focus(Input, moved) : Html.focus(Trigger, moved)),
-      Query: ({ value }) => ({ ...model, query: value, active: step(filter($.props.options, value), null, 1) }),
-      Key: ({ key }) => {
+          .run(open ? Html.focus(Input, silent) : Html.focus(Trigger, silent)),
+      UpdatedQuery: ({ value }) => ({ ...model, query: value, active: step(filter($.props.options, value), null, 1) }),
+      PressedKey: ({ key }) => {
         const shown = filter($.props.options, model.query)
         const active = activeIn(shown, model.active)
         switch (key) {
@@ -104,7 +104,7 @@ export const Listbox = Component.define({
             return next === null
               ? { ...model, open: true }
               : $.set({ ...model, open: true, active: next })
-                .run(Html.scrollIntoView(Row.at(next), moved, { block: "nearest" }))
+                .run(Html.scrollIntoView(Row.at(next), silent, { block: "nearest" }))
           }
           case "Enter":
             return active === null
@@ -127,8 +127,7 @@ export const Listbox = Component.define({
           }
         }
       },
-      Pick: ({ id }) => $.set({ ...model, open: false }).emit(ListboxEvents.make({ _tag: "Picked", id })),
-      Moved: () => model
+      ClickedOption: ({ id }) => $.set({ ...model, open: false }).emit(ListboxEvents.make({ _tag: "Picked", id }))
     }),
   // `parts` returns plain values for the consumer to read, and parts to
   // apply to its elements. `p.part(tag, decorate)` takes only a builder of
@@ -160,7 +159,7 @@ export const Listbox = Component.define({
           .onKeyDown(
             ({ alt, ctrl, key, meta }) =>
               key === "ArrowDown" || (key.length === 1 && key !== " " && !alt && !ctrl && !meta)
-                ? ListboxMessage.make({ _tag: "Key", key })
+                ? ListboxMessage.make({ _tag: "PressedKey", key })
                 : undefined,
             // Cancels the default only when a message was returned, so Tab,
             // Space and Enter keep working.
@@ -170,7 +169,7 @@ export const Listbox = Component.define({
         b.id(p.id("popup"))
           .attr("role", "dialog")
           .popover("auto", model.open)
-          .onToggle(({ open }) => ListboxMessage.make({ _tag: "Toggled", open }))),
+          .onToggle(({ open }) => ListboxMessage.make({ _tag: "ToggledPopup", open }))),
       input: p.part("input", (b) =>
         b.ref(Input)
           .attr("role", "combobox")
@@ -179,11 +178,11 @@ export const Listbox = Component.define({
           .attr("aria-controls", p.id("list"))
           .attr("aria-activedescendant", active === null ? undefined : p.id("option", active))
           .value(model.query)
-          .onInput(({ value }) => ListboxMessage.make({ _tag: "Query", value }))
+          .onInput(({ value }) => ListboxMessage.make({ _tag: "UpdatedQuery", value }))
           .onKeyDown(
             ({ key }) =>
               key === "ArrowDown" || key === "ArrowUp" || key === "Enter" || key === "Escape"
-                ? ListboxMessage.make({ _tag: "Key", key })
+                ? ListboxMessage.make({ _tag: "PressedKey", key })
                 : undefined,
             { preventDefault: true }
           )),
@@ -196,7 +195,9 @@ export const Listbox = Component.define({
           .attr("role", "option")
           .attr("aria-selected", String(active === option.id))
           .attr("aria-disabled", option.disabled === true ? "true" : undefined)
-          .onClick(option.disabled === true ? () => undefined : ListboxMessage.make({ _tag: "Pick", id: option.id })))
+          .onClick(
+            option.disabled === true ? () => undefined : ListboxMessage.make({ _tag: "ClickedOption", id: option.id })
+          ))
     }
   }
 })

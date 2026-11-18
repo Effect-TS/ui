@@ -14,9 +14,9 @@ const SearchRoute = AppRoute.subset(["Search"])
 const noteUrl = (id: string) => AppRoute.print(AppRoute.make({ _tag: "Note", params: { id } }))
 
 export const SearchPageMessage = Schema.TaggedUnion({
-  Typed: { text: Schema.String },
-  Sorted: { sort: NoteSort },
-  PageChosen: { page: Schema.Number }
+  UpdatedSearch: { text: Schema.String },
+  SelectedOrder: { sort: NoteSort },
+  ClickedPage: { page: Schema.Number }
 })
 
 export const SearchPageNoDeps = Component.define({
@@ -51,16 +51,16 @@ export const SearchPageNoDeps = Component.define({
       // back button. `undefined` removes a param or resets it to its
       // default, so a new search starts on page 1. The new route comes back
       // as props, through the root, so the Command sends nothing.
-      Typed: ({ text }) =>
+      UpdatedSearch: ({ text }) =>
         $.run(
           Router.patchSearch(AppRoute, $.props.route, { q: text || undefined, page: undefined }).pipe(Command.asNoop)
         ),
-      Sorted: ({ sort }) =>
+      SelectedOrder: ({ sort }) =>
         $.run(Router.patchSearch(AppRoute, $.props.route, { sort, page: undefined }).pipe(Command.asNoop)),
       // A page change is worth a history entry, so it pushes, and it
       // scrolls to the top like a new page would. Unlike a link to
       // `?page=2`, it isn't announced and focus stays on the button.
-      PageChosen: ({ page }) =>
+      ClickedPage: ({ page }) =>
         $.run(
           Router.patchSearch(AppRoute, $.props.route, { page }, { history: "push", scroll: true }).pipe(Command.asNoop)
         )
@@ -78,10 +78,10 @@ export const SearchPageNoDeps = Component.define({
         ),
         h.nav.attr("aria-label", "Pages").children(
           h.button.attr("type", "button").disabled(page <= 1)
-            .onClick(SearchPageMessage.make({ _tag: "PageChosen", page: page - 1 })).children("Previous"),
+            .onClick(SearchPageMessage.make({ _tag: "ClickedPage", page: page - 1 })).children("Previous"),
           h.span(`Page ${page} of ${results.pages}`),
           h.button.attr("type", "button").disabled(page >= results.pages)
-            .onClick(SearchPageMessage.make({ _tag: "PageChosen", page: page + 1 })).children("Next")
+            .onClick(SearchPageMessage.make({ _tag: "ClickedPage", page: page + 1 })).children("Next")
         )
       )
 
@@ -93,9 +93,11 @@ export const SearchPageNoDeps = Component.define({
       // most every 200 ms, to stay under the browsers' limits on history
       // calls.
       h.input.attr("type", "search").attr("aria-label", "Search").value(q ?? "")
-        .onInput(({ value }) => SearchPageMessage.make({ _tag: "Typed", text: value })),
+        .onInput(({ value }) => SearchPageMessage.make({ _tag: "UpdatedSearch", text: value })),
       h.select.attr("aria-label", "Order").value(sort)
-        .onChange(({ value }) => SearchPageMessage.make({ _tag: "Sorted", sort: value === "desc" ? "desc" : "asc" }))
+        .onChange(({ value }) =>
+          SearchPageMessage.make({ _tag: "SelectedOrder", sort: value === "desc" ? "desc" : "asc" })
+        )
         .children(
           h.option.attr("value", "asc").children("A to Z"),
           h.option.attr("value", "desc").children("Z to A")

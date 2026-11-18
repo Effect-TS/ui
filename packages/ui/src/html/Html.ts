@@ -52,7 +52,7 @@
  * import { Schema } from "effect"
  * import { Component } from "@effect/ui"
  *
- * const Message = Schema.TaggedUnion({ Typed: { value: Schema.String }, Add: {} })
+ * const Message = Schema.TaggedUnion({ UpdatedDraft: { value: Schema.String }, SubmittedForm: {} })
  *
  * const NewTodo = Html.ref("NewTodo", "input")
  *
@@ -63,11 +63,11 @@
  *   elements: Html
  * }).make({
  *   init: () => "",
- *   update: (draft, message) => (message._tag === "Typed" ? message.value : ""),
+ *   update: (draft, message) => (message._tag === "UpdatedDraft" ? message.value : ""),
  *   view: (draft, h) =>
- *     h.form.onSubmit(Message.make({ _tag: "Add" })).children(
+ *     h.form.onSubmit(Message.make({ _tag: "SubmittedForm" })).children(
  *       h.input.ref(NewTodo).attr("aria-label", "New todo").value(draft)
- *         .onInput(({ value }) => Message.make({ _tag: "Typed", value })),
+ *         .onInput(({ value }) => Message.make({ _tag: "UpdatedDraft", value })),
  *       h.button.attr("type", "submit").children("Add")
  *     )
  * })
@@ -80,7 +80,7 @@
  * import { Schema } from "effect"
  * import { Component } from "@effect/ui"
  *
- * const Message = Schema.TaggedUnion({ Typed: { value: Schema.String }, Send: {} })
+ * const Message = Schema.TaggedUnion({ UpdatedDraft: { value: Schema.String }, PressedEnter: {} })
  *
  * const Composer = Component.define({
  *   name: "Composer",
@@ -89,14 +89,14 @@
  *   elements: Html
  * }).make({
  *   init: () => "",
- *   update: (draft, message) => (message._tag === "Typed" ? message.value : ""),
+ *   update: (draft, message) => (message._tag === "UpdatedDraft" ? message.value : ""),
  *   view: (draft, h) =>
  *     h.textarea.attr("aria-label", "Message").value(draft)
- *       .onInput(({ value }) => Message.make({ _tag: "Typed", value }))
+ *       .onInput(({ value }) => Message.make({ _tag: "UpdatedDraft", value }))
  *       // Enter that ends an IME composition only confirms the text.
  *       .onKeyDown(
  *         ({ key, shift, composing }) =>
- *           key === "Enter" && !shift && !composing ? Message.make({ _tag: "Send" }) : undefined,
+ *           key === "Enter" && !shift && !composing ? Message.make({ _tag: "PressedEnter" }) : undefined,
  *         { preventDefault: true }
  *       )
  * })
@@ -1415,10 +1415,10 @@ export const Measure: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Optio
  * import { Html } from "@effect/ui/html"
  * import { Schema } from "effect"
  *
- * const Message = Schema.TaggedUnion({ Add: {}, Focused: {} })
+ * const Message = Schema.TaggedUnion({ SubmittedForm: {}, CompletedFocusNewTodo: {} })
  * const NewTodo = Html.ref("NewTodo", "input")
  *
- * const command = Html.focus(NewTodo, () => Message.make({ _tag: "Focused" }))
+ * const command = Html.focus(NewTodo, () => Message.make({ _tag: "CompletedFocusNewTodo" }))
  * ```
  *
  * @stability experimental

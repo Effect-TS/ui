@@ -73,13 +73,13 @@ describe("NoteEditor", () => {
     Effect.gen(function*() {
       // Each step runs when called and throws on failure.
       const s = yield* Story.make(NoteEditor, { note })
-      s.send(NoteEditorMessage.make({ _tag: "Edited", body: edited.body }))
+      s.send(NoteEditorMessage.make({ _tag: "UpdatedBody", body: edited.body }))
       assert.strictEqual(s.model.draft, edited.body)
       // Nothing runs in a story, so Subscriptions are asserted by key.
       assert.deepStrictEqual(s.subscriptions, ["autosave:1"])
       // Commands stay pending as data until a step resolves them. A
       // definition matches any args; `pending` holds them.
-      s.send(NoteEditorMessage.make({ _tag: "Save" })).expectExact(SaveNote)
+      s.send(NoteEditorMessage.make({ _tag: "RequestedSave" })).expectExact(SaveNote)
       assert.deepStrictEqual(s.pending[0].command.args, { note: edited })
       // `resolve` takes the Command's own result. `fail` takes its typed error.
       s.resolve(SaveNote, edited)
@@ -184,7 +184,7 @@ describe("NotePage", () => {
         .click("Save now")
         // A scene renders no children, so what `update` sent them is data,
         // acknowledged with the ref and the message.
-        .sent(NoteEditor.ref("Editor").at(note.id), { _tag: "Save" })
+        .sent(NoteEditor.ref("Editor").at(note.id), { _tag: "RequestedSave" })
     }))
 })
 

@@ -15,8 +15,8 @@ const updatesAt = (log: ReadonlyArray<MessageLog.Entry>, path: string) =>
 const TipMessage = Schema.TaggedUnion({ Enter: { id: Schema.String } })
 
 /** An owner: which tip is open. Its `label` prop is shared too. */
-const Tips = Component.define({
-  name: "Tips",
+const TipsProvider = Component.define({
+  name: "TipsProvider",
   props: Schema.Struct({ label: Schema.optional(Schema.String) }),
   model: Schema.NullOr(Schema.String),
   message: TipMessage,
@@ -30,25 +30,30 @@ const Tip = Component.define({
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.Null,
   message: TipMessage,
-  shared: { tips: Tips }
+  shared: { provider: TipsProvider }
 }).make({
   init: () => null,
-  update: (model, message, $) => $.set(model).send(Tips, message),
+  update: (model, message, $) => $.set(model).send(TipsProvider, message),
   view: (_, h) =>
     h.el("button").on("click", TipMessage.make({ _tag: "Enter", id: h.props.id })).children(
-      `${h.props.id}:${h.shared.tips.open === h.props.id ? "open" : "closed"}${h.shared.tips.label}`
+      `${h.props.id}:${h.shared.provider.open === h.props.id ? "open" : "closed"}${h.shared.provider.label}`
     )
 })
 
 /** A headless reader: its part is the open tip. */
-const Trigger = Component.define({ name: "Trigger", model: Schema.Null, message: TipMessage, shared: { tips: Tips } })
+const Trigger = Component.define({
+  name: "Trigger",
+  model: Schema.Null,
+  message: TipMessage,
+  shared: { provider: TipsProvider }
+})
   .make({
     init: () => null,
     update: (model) => model,
-    parts: (_, p) => ({ open: p.shared.tips.open, label: p.shared.tips.label })
+    parts: (_, p) => ({ open: p.shared.provider.open, label: p.shared.provider.label })
   })
 
-/** Tips with a Tip and a Trigger in its closure. Its Model is the label it passes to Tips. */
+/** TipsProvider with a Tip and a Trigger in its closure. Its Model is the label it passes to TipsProvider. */
 const App = Component.define({
   name: "App",
   model: Schema.String,
@@ -57,7 +62,7 @@ const App = Component.define({
   init: () => "",
   update: (_, message) => message.label,
   view: (label, h) =>
-    Tips(h, {
+    TipsProvider(h, {
       key: "tips",
       props: { label },
       view: () =>
@@ -76,13 +81,13 @@ describe("shared state", () => {
       click(root, "a:closed")
       yield* TestHost.settle
       assert.strictEqual(root.text(), "a:opena")
-      const [sent] = updatesAt(root.log(), "/App/Tips[tips]/Tip[a]")
+      const [sent] = updatesAt(root.log(), "/App/TipsProvider[tips]/Tip[a]")
       assert.deepStrictEqual(MessageLog.encodeSend(sent.sends![0]), {
-        owner: "Tips",
+        owner: "TipsProvider",
         message: { _tag: "Enter", id: "a" }
       })
-      const [received] = updatesAt(root.log(), "/App/Tips[tips]")
-      assert.deepStrictEqual(received.source, { _tag: "Send", path: "/App/Tips[tips]/Tip[a]", seq: sent.seq })
+      const [received] = updatesAt(root.log(), "/App/TipsProvider[tips]")
+      assert.deepStrictEqual(received.source, { _tag: "Send", path: "/App/TipsProvider[tips]/Tip[a]", seq: sent.seq })
     })))
 
   it.effect("re-renders the readers when the owner's props change what it shares", () =>
@@ -98,33 +103,41 @@ describe("shared state", () => {
   it.effect("re-renders the readers only when the shared value changes", () =>
     provideHost(Effect.gen(function*() {
       const Tick = Schema.TaggedUnion({ Tick: {} })
-      const Clock = Component.define({
-        name: "Clock",
+      const ClockProvider = Component.define({
+        name: "ClockProvider",
         model: Schema.Number,
         message: Tick,
         receives: ["Tick"],
         shares: (ticks) => new Date(Math.floor(ticks / 2))
       }).make({ init: () => 0, update: (ticks) => ticks + 1, parts: () => ({}) })
       let renders = 0
-      const Face = Component.define({ name: "Face", model: Schema.Null, message: Tick, shared: { clock: Clock } })
+      const Face = Component.define({
+        name: "Face",
+        model: Schema.Null,
+        message: Tick,
+        shared: { provider: ClockProvider }
+      })
         .make({
           init: () => null,
           update: (model) => model,
           view: (_, h) => {
             renders++
-            return h.el("p", String(h.shared.clock.getTime()))
+            return h.el("p", String(h.shared.provider.getTime()))
           }
         })
       const Ticker = Component.define({ name: "Ticker", model: Schema.Null, message: Tick }).make({
         init: () => null,
-        update: (model, message, $) => $.set(model).send(Clock, message),
+        update: (model, message, $) => $.set(model).send(ClockProvider, message),
         view: (_, h) => h.el("button").on("click", Tick.make({ _tag: "Tick" })).children("tick")
       })
       const Host = Component.define({ name: "Host", model: Schema.Null, message: Tick }).make({
         init: () => null,
         update: (model) => model,
         view: (_, h) =>
-          Clock(h, { key: "clock", view: () => h.el("div", [Face(h, { key: "face" }), Ticker(h, { key: "tick" })]) })
+          ClockProvider(h, {
+            key: "clock",
+            view: () => h.el("div", [Face(h, { key: "face" }), Ticker(h, { key: "tick" })])
+          })
       })
       const root = yield* TestHost.mount(Host, {})
       yield* TestHost.settle
@@ -138,8 +151,8 @@ describe("shared state", () => {
 
   it.effect("fails an owner whose shares throws, with source shares", () =>
     provideHost(Effect.gen(function*() {
-      const Broken = Component.define({
-        name: "Broken",
+      const BrokenProvider = Component.define({
+        name: "BrokenProvider",
         model: Schema.Null,
         message: TipMessage,
         shares: (): string => {
@@ -149,7 +162,8 @@ describe("shared state", () => {
       const Host = Component.define({ name: "Host", model: Schema.Null, message: TipMessage }).make({
         init: () => null,
         update: (model) => model,
-        view: (_, h) => Broken(h, { key: "b", view: () => h.el("p", "inside"), fallback: () => h.el("p", "broken") })
+        view: (_, h) =>
+          BrokenProvider(h, { key: "b", view: () => h.el("p", "inside"), fallback: () => h.el("p", "broken") })
       })
       const root = yield* TestHost.mount(Host, {})
       yield* TestHost.settle
@@ -177,10 +191,10 @@ describe("shared state", () => {
       yield* TestHost.mount(App, {}).pipe(Effect.provideService(services.RootHooks, hooks))
       yield* TestHost.settle
       const snapshot = Object.keys(handle!.snapshot())
-      assert.notInclude(snapshot, "/App/Tips[tips]")
-      assert.include(snapshot, "/App/Tips[tips]/Tip[a]")
-      assert.notInclude(restored, "/App/Tips[tips]")
-      assert.include(restored, "/App/Tips[tips]/Tip[a]")
+      assert.notInclude(snapshot, "/App/TipsProvider[tips]")
+      assert.include(snapshot, "/App/TipsProvider[tips]/Tip[a]")
+      assert.notInclude(restored, "/App/TipsProvider[tips]")
+      assert.include(restored, "/App/TipsProvider[tips]/Tip[a]")
     }).pipe(provideHost))
 })
 
@@ -190,9 +204,9 @@ describe("shared state in a Scene", () => {
       const s = yield* Scene.make(Tip, { id: "a" })
       s.click("a:closed")
       assert.deepStrictEqual(s.current.sent.map((send) => [send.owner?.definition.name, send.message]), [
-        ["Tips", { _tag: "Enter", id: "a" }]
+        ["TipsProvider", { _tag: "Enter", id: "a" }]
       ])
-      s.sent(Tips, { _tag: "Enter", id: "a" })
+      s.sent(TipsProvider, { _tag: "Enter", id: "a" })
       // The scene never runs the owner's update.
       assert.strictEqual(Locator.textOf(s.root), "a:closed")
     }))
@@ -211,7 +225,7 @@ describe("shared state in a Scene", () => {
       const Frame = Component.define({ name: "Frame", model: Schema.Null, message: TipMessage, slots: ["body"] }).make({
         init: () => null,
         update: (model) => model,
-        view: (_, h) => Tips(h, { key: "tips", props: { label: "placed" }, view: () => h.slots.body })
+        view: (_, h) => TipsProvider(h, { key: "tips", props: { label: "placed" }, view: () => h.slots.body })
       })
       const s = yield* Scene.make(Frame, {}, {
         slots: (h) => ({ body: Trigger(h, { key: "t", view: (parts) => h.el("i", parts.label) }) })
@@ -235,23 +249,28 @@ describe("shared state in a Scene", () => {
             message: TipMessage,
             shares: (model) => model
           }).make({ init: ($) => $.props.value, update: (model) => model, parts: () => ({}) })
-        const A = required("A")
-        const B = required("B")
-        const Sum = Component.define({ name: "Sum", model: Schema.Null, message: TipMessage, shared: { a: A, b: B } })
+        const AProvider = required("AProvider")
+        const BProvider = required("BProvider")
+        const Sum = Component.define({
+          name: "Sum",
+          model: Schema.Null,
+          message: TipMessage,
+          shared: { a: AProvider, b: BProvider }
+        })
           .make({
             init: () => null,
             update: (model) => model,
             view: (_, h) => h.el("p", String(h.shared.a + h.shared.b))
           })
         const shared = yield* Scene.make(Sum, {})
-        assert.strictEqual(Locator.textOf(shared.shared(A, 1).shared(B, 2).root), "3")
+        assert.strictEqual(Locator.textOf(shared.shared(AProvider, 1).shared(BProvider, 2).root), "3")
         const given = yield* Scene.make(Sum, {})
-        assert.strictEqual(Locator.textOf(given.given(null, {}, [[A, 1], [B, 2]]).root), "3")
+        assert.strictEqual(Locator.textOf(given.given(null, {}, [[AProvider, 1], [BProvider, 2]]).root), "3")
         const message = yield* defect(Effect.gen(function*() {
           const s = yield* Scene.make(Sum, {})
-          s.shared(A, 1)
+          s.shared(AProvider, 1)
         }))
-        assert.match(message, /\.shared\(B, value\)/)
+        assert.match(message, /\.shared\(BProvider, value\)/)
       })
   )
 })

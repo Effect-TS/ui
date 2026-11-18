@@ -231,7 +231,7 @@ const ReaderRow = Component.define({
   props: Schema.Struct({ row: Row }),
   model: Schema.Null,
   message: Schema.Never,
-  shared: { tips: Provider },
+  shared: { provider: Provider },
   elements: Html
 }).make({
   init: () => null,
@@ -241,7 +241,7 @@ const ReaderRow = Component.define({
       key: "d",
       view: (d) =>
         h.li.class("row").attr("data-done", h.props.row.done ? "" : undefined)
-          .attr("data-open", h.shared.tips.open === h.props.row.id ? "" : undefined).children(
+          .attr("data-open", h.shared.provider.open === h.props.row.id ? "" : undefined).children(
             d.trigger(h.button).children(h.props.row.label),
             h.span(h.props.row.done ? "done" : "todo"),
             d.panel(h.div).children("details")

@@ -32,7 +32,7 @@
  * import { Effect, Schema } from "effect"
  * import { KeyValueStore } from "effect/persistence"
  *
- * const Message = Schema.TaggedUnion({ Delete: {}, Deleted: {}, DeleteFailed: {} })
+ * const Message = Schema.TaggedUnion({ ClickedDelete: {}, SucceededDeleteTodo: {}, FailedDeleteTodo: {} })
  *
  * class DeleteTodo extends Command.Service<DeleteTodo>()("todos/DeleteTodo", {
  *   args: { id: Schema.String },
@@ -41,11 +41,13 @@
  *   return ({ id }) => kv.remove(`todo/${id}`)
  * })) {}
  *
- * // In a component, mapping both channels to messages. The component requires `DeleteTodo`.
- * const remove = DeleteTodo.make({ id: "t1" }).pipe(Command.match({
- *   onSuccess: () => Message.make({ _tag: "Deleted" }),
- *   onFailure: () => Message.make({ _tag: "DeleteFailed" })
- * }))
+ * // Maps both channels to messages, once, beside the Message union.
+ * // `update` calls it, and the component requires `DeleteTodo`.
+ * const deleteTodo = (id: string) =>
+ *   DeleteTodo.make({ id }).pipe(Command.match({
+ *     onSuccess: () => Message.make({ _tag: "SucceededDeleteTodo" }),
+ *     onFailure: () => Message.make({ _tag: "FailedDeleteTodo" })
+ *   }))
  * // The live wiring provides `DeleteTodo.layer`, which requires `KeyValueStore`.
  * ```
  *
@@ -925,10 +927,10 @@ export const groupKeyOf = (definition: Definition.Any, group: unknown): string |
  * import { Command } from "@effect/ui"
  * import { Effect, Random, Schema } from "effect"
  *
- * const DieMessage = Schema.TaggedUnion({ Roll: {}, Rolled: { n: Schema.Number } })
+ * const DieMessage = Schema.TaggedUnion({ ClickedRoll: {}, CompletedRollDie: { n: Schema.Number } })
  *
  * const RollDie = Command.make("RollDie", { args: { sides: Schema.Number } }, ({ sides }) =>
- *   Random.nextIntBetween(1, sides).pipe(Effect.map((n) => DieMessage.make({ _tag: "Rolled", n }))))
+ *   Random.nextIntBetween(1, sides).pipe(Effect.map((n) => DieMessage.make({ _tag: "CompletedRollDie", n }))))
  *
  * // In a component: `$.run(RollDie({ sides: 6 }))`, pending in a story as { name: "RollDie", args: { sides: 6 } }
  * ```
@@ -1043,7 +1045,11 @@ export const make: {
  * import { Effect, Layer, Schema } from "effect"
  * import { KeyValueStore } from "effect/persistence"
  *
- * const Message = Schema.TaggedUnion({ Save: {}, Saved: {}, SaveFailed: { reason: Schema.String } })
+ * const Message = Schema.TaggedUnion({
+ *   ClickedSave: {},
+ *   SucceededSaveTodo: {},
+ *   FailedSaveTodo: { reason: Schema.String }
+ * })
  *
  * class SaveTodo extends Command.Service<SaveTodo>()("todos/SaveTodo", {
  *   args: { id: Schema.String, title: Schema.String },
@@ -1054,11 +1060,12 @@ export const make: {
  *   return ({ id, title }) => kv.set(`todo/${id}`, title)
  * })) {}
  *
- * // Issue it from `update`, mapping both channels to messages
- * const save = SaveTodo.make({ id: "t1", title: "milk" }).pipe(Command.match({
- *   onSuccess: () => Message.make({ _tag: "Saved" }),
- *   onFailure: (e) => Message.make({ _tag: "SaveFailed", reason: e.message })
- * }))
+ * // Maps both channels to messages, once, beside the Message union. `update` calls it.
+ * const saveTodo = (todo: { readonly id: string; readonly title: string }) =>
+ *   SaveTodo.make(todo).pipe(Command.match({
+ *     onSuccess: () => Message.make({ _tag: "SucceededSaveTodo" }),
+ *     onFailure: (e) => Message.make({ _tag: "FailedSaveTodo", reason: e.message })
+ *   }))
  * // Live: provide `SaveTodo.layer`, which requires `KeyValueStore`
  * // Test: a fake that needs nothing
  * const Fake = Layer.succeed(SaveTodo, () => Effect.void)
@@ -1182,13 +1189,13 @@ export const Service: <Self>() => {
  * import { Command } from "@effect/ui"
  * import { Effect, Schema } from "effect"
  *
- * const Message = Schema.TaggedUnion({ Uploaded: { url: Schema.String } })
+ * const Message = Schema.TaggedUnion({ CompletedUploadFile: { url: Schema.String } })
  *
  * const UploadFile = Command.make("UploadFile", { args: { name: Schema.String } }, ({ name }) =>
  *   Effect.succeed(`https://cdn/${name}`))
  *
  * const upload = UploadFile({ name: "photo.png" }).pipe(
- *   Command.map((url) => Message.make({ _tag: "Uploaded", url }))
+ *   Command.map((url) => Message.make({ _tag: "CompletedUploadFile", url }))
  * )
  * ```
  *
@@ -1312,18 +1319,19 @@ export const asNoop = <C extends Command<any, any>>(self: C): Mapped<C, Componen
  *
  * class SaveFailed extends Data.TaggedError("SaveFailed")<{ readonly reason: string }> {}
  *
- * const Message = Schema.TaggedUnion({ Saved: {}, Failed: { reason: Schema.String } })
+ * const Message = Schema.TaggedUnion({ SucceededSaveTodo: {}, FailedSaveTodo: { reason: Schema.String } })
  *
- * class Save extends Command.Service<Save>()("Save", {
+ * class SaveTodo extends Command.Service<SaveTodo>()("todos/SaveTodo", {
  *   args: { title: Schema.String },
  * }, Effect.succeed(({ title }: { readonly title: string }) =>
  *   title === "" ? Effect.fail(new SaveFailed({ reason: "empty" })) : Effect.void
  * )) {}
  *
- * const save = Save.make({ title: "milk" }).pipe(Command.match({
- *   onSuccess: () => Message.make({ _tag: "Saved" }),
- *   onFailure: (error) => Message.make({ _tag: "Failed", reason: error.reason })
- * }))
+ * const saveTodo = (title: string) =>
+ *   SaveTodo.make({ title }).pipe(Command.match({
+ *     onSuccess: () => Message.make({ _tag: "SucceededSaveTodo" }),
+ *     onFailure: (error) => Message.make({ _tag: "FailedSaveTodo", reason: error.reason })
+ *   }))
  * ```
  *
  * @stability experimental
@@ -1415,14 +1423,14 @@ type AwaitsRefetchOf<R, K> = [K] extends ["Effect"] ? [R] extends [never] ? {
  * import { Command } from "@effect/ui"
  * import { Effect, Schema } from "effect"
  *
- * const Message = Schema.TaggedUnion({ Renamed: {} })
+ * const Message = Schema.TaggedUnion({ CompletedRenameUser: {} })
  *
  * class RenameUser extends Command.Service<RenameUser>()("RenameUser", {
  *   args: { id: Schema.String, name: Schema.String },
  * }, Effect.succeed(() => Effect.void)) {}
  *
  * const rename = RenameUser.make({ id: "1", name: "Ada" }).pipe(
- *   Command.map(() => Message.make({ _tag: "Renamed" })),
+ *   Command.map(() => Message.make({ _tag: "CompletedRenameUser" })),
  *   Command.afterRefetch("5 seconds")
  * )
  * ```

@@ -21,6 +21,73 @@ renders the child with a ref from `Child.ref("Name")`, and its `update` calls
 `$.send(ref, message)`. Don't send what the child shows: that belongs in its
 props.
 
+### Naming
+
+Name messages, events, Commands and mounts as Foldkit does
+(https://foldkit.dev/best-practices/messages). A message is a fact about what
+happened, never an instruction, and `update` decides what the fact means for
+the current Model. `Set*`, `Update*` and bare imperatives such as `Save` or
+`GoHome` are out.
+
+| Thing                                         | Name                                                      | Example                                                         |
+| --------------------------------------------- | --------------------------------------------------------- | --------------------------------------------------------------- |
+| Message from a view handler                   | Verb first, past tense: the cause, then the control       | `ClickedDiscard`, `UpdatedBody`, `PressedKey`, `ToggledActions` |
+| Message from a Command or mount result        | `Succeeded`, `Failed` or `Completed`, then the definition | `SucceededSaveNote`, `FailedSaveNote`, `CompletedMeasure`       |
+| Message from a Subscription or a stream mount | The fact the source reported                              | `Ticked`, `ChangedRoute`, `MovedPointer`                        |
+| Message from a child's event                  | The event's verb, then the parent's name for the child    | `ToggledNotify`, `SavedNote`, `PickedLink`                      |
+| Message from a child's failure                | `Failed`, then the parent's name for the child            | `FailedEditor`                                                  |
+| Message with more than one cause              | The fact the causes share                                 | `RequestedSave`                                                 |
+| Event                                         | What the user did, past tense, with no cause              | `Toggled`, `Picked`, `Saved`                                    |
+| Command                                       | Imperative, for what its body does                        | `SaveNote`, `WaitBeforeDismissal`                               |
+| Mount                                         | Imperative, for what it does to the element               | `DrawChart`, `Measure`, `TrackPointer`                          |
+
+A Command result takes `Succeeded` and `Failed` when the Command can fail,
+and `Completed` otherwise. Name a Command for what its body does, not for
+what `update` does with its result: a timer that waits before a toast is
+dismissed is `WaitBeforeDismissal`, not `DismissAfter`. `RequestedSave` in
+`NoteEditor` comes from the form, Ctrl+S, the autosave Subscription and a
+parent's send, so it names what all four report.
+
+A definition's binding and its name string match:
+`const DrawChart = Mount.make("DrawChart", ...)`. A `Command.Service` keeps
+its feature prefix, as in `"notes/SaveNote"`, and the rule applies to the
+last segment.
+
+A component with `shares` takes the `Provider` suffix, as in
+`TooltipProvider`. A reader names it `provider` in `shared`, so it reads
+`h.shared.provider`. A reader of several owners names each one after its
+owner instead, such as `tooltip` and `theme`.
+
+Map each `Command.Service` to its messages once, beside the Message union,
+and call that function from `update`. A result is mapped where the Command
+is issued, so nothing else ties `SaveNote` to `SucceededSaveNote`:
+
+```ts
+const saveNote = (note: Note) =>
+  SaveNote.make({ note }).pipe(Command.match({
+    onSuccess: (note) => NoteEditorMessage.make({ _tag: "SucceededSaveNote", note }),
+    onFailure: (error) => NoteEditorMessage.make({ _tag: "FailedSaveNote", reason: error.reason })
+  }))
+```
+
+Never write a no-op message, such as `Noop` or a tag added only so a result
+has something to send. A Command with nothing to report ends in `Component.noop`,
+usually through `Command.asNoop`. It sends nothing, and the log still records
+its `CommandEnded` with `silent: true`. A component with no messages takes
+`message: Schema.Never`. A mount with nothing to report ends in a
+`Completed*` message instead, such as `CompletedDrawChart`, because a silent
+mount leaves nothing in the `MessageLog`. That rule is temporary, and goes
+once the log records mounts that send nothing.
+
+Effect UI differs from Foldkit in three places:
+
+- There is no `Got*`. A parent never wraps a child's messages: it maps the
+  child's events in `onEmit`, so its message is the event's verb and its
+  name for the child.
+- A message listed in `receives` has no prefix of its own. It is named like
+  any other message, for the fact it reports.
+- A Command needs no `Completed*` message. `Component.noop` is enough.
+
 ### Stateless view wrappers
 
 Name view functions in CapitalCase, like components (for example, `Card` and `Field`).
@@ -103,7 +170,7 @@ Collapsible(h, {
   key: "note",
   slots: {
     summary: h.h2(note.title),
-    body: NoteEditor(h, { ref: Editor.at(note.id), props: { note }, onEmit: () => Saved })
+    body: NoteEditor(h, { ref: Editor.at(note.id), props: { note }, onEmit: () => SavedNote })
   }
 })
 ```
@@ -142,16 +209,18 @@ runs it with a stand-in view for the consumer.
 
 A headless component with `shares: (model, props) => value` owns shared
 state: every component in its `view` closure, at any depth, can read the
-value. A reader lists the owners it reads in `shared: { tips: Provider }` and
-reads `h.shared.tips` or `p.shared.tips` in `view` or `parts`. Any
-`update` below the owner can call `$.send(Provider, message)` with one of the
-messages the owner `receives`. Reads and sends put
-`Component.Shared<typeof Provider>` in a component's requirements, and the
-owner's closure removes it, so a reader with no owner above it doesn't
-compile. The state is the owner's Model, so the log records every change. In
-a `Scene`, `s.shared(Provider, value)` or
-`s.given(model, {}, [[Provider, value]])` gives readers a value, and each send
-to the owner is acknowledged with `s.sent(Provider, message)`.
+value. A reader lists the owners it reads in
+`shared: { provider: TooltipProvider }` and reads `h.shared.provider` or
+`p.shared.provider` in `view` or `parts`. Any `update` below the owner can
+call `$.send(TooltipProvider, message)` with one of the messages the owner
+`receives`. Reads and sends put `Component.Shared<typeof TooltipProvider>`
+in a component's requirements, and the owner's closure removes it, so a
+reader with no owner above it doesn't compile. The state is the owner's
+Model, so the log records every change. In a `Scene`,
+`s.shared(TooltipProvider, value)` or
+`s.given(model, {}, [[TooltipProvider, value]])` gives readers a value, and
+each send to the owner is acknowledged with
+`s.sent(TooltipProvider, message)`.
 
 Every owner update re-runs its closure, and headless children in it
 re-render each time, so put normal components directly under an owner.
@@ -166,13 +235,14 @@ Command: `Mount.make(name, { args }, (node, args, changes) => effect)` for
 work that ends with one result, or `Mount.makeStream` for work that sends a
 result per event for as long as the element lives. Annotate `node` with the
 node the body needs. A view issues it with its args and maps the result to a
-message: `h.canvas.onMount(Draw({ points }).pipe(Mount.map(toMessage)))`.
-End a mount with nothing to send with `Component.noop`. An element takes one
-mount. Args with no real Schema, such as a callback, need `Schema.declare`.
-Mounts never run on the server or in `TestHost`. A `Scene` tracks the mounts
-in its view: `expectMount(Draw({ points }))` asserts on the rendered args and
-acknowledges the mount running, and `mounted(Draw, result)` sends what the body
-would have produced. A mount nothing acknowledged fails the next message step
+message: `h.canvas.onMount(DrawChart({ points }).pipe(Mount.map(toMessage)))`.
+End a mount with nothing to report in a `Completed*` message, as Naming
+describes. An element takes one mount. Args with no real Schema, such as a
+callback, need `Schema.declare`. Mounts never run on the server or in
+`TestHost`. A `Scene` tracks the mounts in its view:
+`expectMount(DrawChart({ points }))` asserts on the rendered args and
+acknowledges the mount running, and `mounted(DrawChart, result)` sends what
+the body would have produced. A mount nothing acknowledged fails the next message step
 and the end of the test.
 
 ### Organizing an app

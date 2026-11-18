@@ -21,13 +21,13 @@
  * import { Effect, Schema } from "effect"
  *
  * const Todo = Schema.Struct({ id: Schema.String, title: Schema.String, done: Schema.Boolean })
- * const TodoItemMessage = Schema.TaggedUnion({ Toggle: {}, Save: {}, Saved: {} })
+ * const TodoItemMessage = Schema.TaggedUnion({ ClickedToggle: {}, ClickedSave: {} })
  * const TodoItemEvents = Schema.TaggedUnion({ Toggled: { done: Schema.Boolean } })
  *
  * class SaveTodo extends Command.Service<SaveTodo>()(
  *   "todos/SaveTodo",
  *   { args: Todo },
- *   Effect.succeed(() => Effect.succeed(TodoItemMessage.make({ _tag: "Saved" })))
+ *   Effect.succeed(() => Effect.void)
  * ) {}
  *
  * const TodoItem = Component.define({
@@ -38,18 +38,19 @@
  *   events: TodoItemEvents
  * }).make({
  *   init: ($) => $.set({}),
- *   update: (model, message, $) =>
+ *   update: (_model, message, $) =>
  *     TodoItemMessage.match(message, {
- *       Toggle: () => $.emit(TodoItemEvents.make({ _tag: "Toggled", done: !$.props.todo.done })),
- *       Save: () => $.run(SaveTodo.make($.props.todo)),
- *       Saved: () => model
+ *       ClickedToggle: () => $.emit(TodoItemEvents.make({ _tag: "Toggled", done: !$.props.todo.done })),
+ *       // Nothing to report: the save ends in `Component.noop`.
+ *       ClickedSave: () => $.run(SaveTodo.make($.props.todo).pipe(Command.asNoop))
  *     }),
- *   // `h.isRunning` is true from the Save until its message has been handled.
+ *   // `h.isRunning` is true from `ClickedSave` until the save ends.
  *   view: (_, h) =>
  *     h.el(
  *       "li",
- *       h.el("button").on("click", TodoItemMessage.make({ _tag: "Toggle" })).children(h.props.todo.done ? "[x]" : "[ ]"),
+ *       h.el("button").on("click", TodoItemMessage.make({ _tag: "ClickedToggle" })).children(h.props.todo.done ? "[x]" : "[ ]"),
  *       h.el("span", h.props.todo.title),
+ *       h.el("button").on("click", TodoItemMessage.make({ _tag: "ClickedSave" })).children("save"),
  *       h.isRunning(SaveTodo) ? " saving" : ""
  *     )
  * })
@@ -164,12 +165,12 @@ export interface Noop {
  * import { Command, Component } from "@effect/ui"
  * import { Effect, Schema } from "effect"
  *
- * const Message = Schema.TaggedUnion({ DeleteFailed: { reason: Schema.String } })
+ * const Message = Schema.TaggedUnion({ FailedDeleteKey: { reason: Schema.String } })
  *
- * const Delete = Command.make("Delete", { args: { key: Schema.String } }, ({ key }) =>
+ * const DeleteKey = Command.make("DeleteKey", { args: { key: Schema.String } }, ({ key }) =>
  *   (key === "" ? Effect.fail("empty key") : Effect.void).pipe(
  *     Effect.as(Component.noop),
- *     Effect.catch((reason) => Effect.succeed(Message.make({ _tag: "DeleteFailed", reason })))
+ *     Effect.catch((reason) => Effect.succeed(Message.make({ _tag: "FailedDeleteKey", reason })))
  *   ))
  * ```
  *
@@ -659,7 +660,7 @@ export interface Step<in out Model, in out Msg, in out Events, out R = never, L 
    * **Details**
    *
    * `message` is one of the messages the ref's component `receives`, such
-   * as a tagged literal `{ _tag: "Clear" }`: the whole Message, as
+   * as a tagged literal `{ _tag: "RequestedClear" }`: the whole Message, as
    * `Message.make` returns it, doesn't fit unless the child receives every
    * case. A send
    * to a child that isn't rendered, that failed, or that can't take
@@ -2118,7 +2119,7 @@ export type Helper<D> = D extends Definition<
  * import { Component } from "@effect/ui"
  * import { Schema } from "effect"
  *
- * const CounterMessage = Schema.TaggedUnion({ Increment: {}, Decrement: {} })
+ * const CounterMessage = Schema.TaggedUnion({ ClickedIncrement: {}, ClickedDecrement: {} })
  *
  * const Counter = Component.define({
  *   name: "Counter",
@@ -2129,15 +2130,15 @@ export type Helper<D> = D extends Definition<
  *   init: ($) => ({ count: $.props.initial }),
  *   update: (model, message) =>
  *     CounterMessage.match(message, {
- *       Increment: () => ({ count: model.count + 1 }),
- *       Decrement: () => ({ count: model.count - 1 })
+ *       ClickedIncrement: () => ({ count: model.count + 1 }),
+ *       ClickedDecrement: () => ({ count: model.count - 1 })
  *     }),
  *   view: (model, h) =>
  *     h.el(
  *       "div",
- *       h.el("button").on("click", CounterMessage.make({ _tag: "Decrement" })).children("-"),
+ *       h.el("button").on("click", CounterMessage.make({ _tag: "ClickedDecrement" })).children("-"),
  *       h.el("span", String(model.count)),
- *       h.el("button").on("click", CounterMessage.make({ _tag: "Increment" })).children("+")
+ *       h.el("button").on("click", CounterMessage.make({ _tag: "ClickedIncrement" })).children("+")
  *     )
  * })
  * ```
@@ -2197,7 +2198,7 @@ import { Query } from "@effect/ui"
  * import { Component } from "@effect/ui"
  * import { Schema } from "effect"
  *
- * const NotePageMessage = Schema.TaggedUnion({ Edited: { body: Schema.String }, SaveClicked: {} })
+ * const NotePageMessage = Schema.TaggedUnion({ UpdatedBody: { body: Schema.String }, ClickedSave: {} })
  *
  * const NotePageDef = Component.define({
  *   name: "NotePage",
@@ -2209,8 +2210,8 @@ import { Query } from "@effect/ui"
  * const touch = NotePageDef.update((model) => ({ ...model, edits: model.edits + 1 }))
  * const validate = NotePageDef.update((model) => ({ ...model, error: model.body === "" ? "Empty" : null }))
  *
- * // `msg` is the Edited message.
- * const handleEdited = NotePageDef.update("Edited", (model, msg, $) =>
+ * // `msg` is the UpdatedBody message.
+ * const handleUpdatedBody = NotePageDef.update("UpdatedBody", (model, msg, $) =>
  *   $.combine(() => ({ ...model, body: msg.body }), touch))
  *
  * // `h` first, then any other arguments.
@@ -2221,8 +2222,8 @@ import { Query } from "@effect/ui"
  * export const NotePage = NotePageDef.make({
  *   init: () => ({ body: "", edits: 0, error: null }),
  *   update: {
- *     Edited: handleEdited,
- *     SaveClicked: (_model, _msg, $) => $.combine(validate)
+ *     UpdatedBody: handleUpdatedBody,
+ *     ClickedSave: (_model, _msg, $) => $.combine(validate)
  *   },
  *   view: noteView
  * })
@@ -2237,27 +2238,27 @@ import { Query } from "@effect/ui"
  * const Card = Component.define({
  *   name: "Card",
  *   model: Schema.Boolean,
- *   message: Schema.Literal("Toggle"),
+ *   message: Schema.Literal("ClickedToggle"),
  *   slots: ["title", "body"]
  * }).make({
  *   init: () => true,
  *   update: (open) => !open,
  *   view: (open, h) =>
- *     h.el("section", h.el("h2", h.slots.title), h.el("button").onClick("Toggle"), open && h.slots.body)
+ *     h.el("section", h.el("h2", h.slots.title), h.el("button").onClick("ClickedToggle"), open && h.slots.body)
  * })
  *
  * export const Page = Component.define({
  *   name: "Page",
  *   model: Schema.Number,
- *   message: Schema.Literal("Like")
+ *   message: Schema.Literal("ClickedLike")
  * }).make({
  *   init: () => 0,
  *   update: (likes) => likes + 1,
- *   // The button is the page's, so a click sends the page's `Like`.
+ *   // The button is the page's, so a click sends the page's `ClickedLike`.
  *   view: (likes, h) =>
  *     Card(h, {
  *       key: "card",
- *       slots: { title: "Likes", body: h.el("button").onClick("Like").children(`${likes} likes`) }
+ *       slots: { title: "Likes", body: h.el("button").onClick("ClickedLike").children(`${likes} likes`) }
  *     })
  * })
  * ```
@@ -2830,12 +2831,12 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F } ? "onFailure" ext
  * import { Command, Component } from "@effect/ui"
  * import { Context, Effect, Layer, Schema } from "effect"
  *
- * const RowMessage = Schema.TaggedUnion({ Save: {}, Saved: {} })
+ * const RowMessage = Schema.TaggedUnion({ ClickedSave: {} })
  *
  * class SaveTodo extends Command.Service<SaveTodo>()(
  *   "todos/SaveTodo",
  *   { args: { id: Schema.String } },
- *   Effect.succeed(() => Effect.succeed(RowMessage.make({ _tag: "Saved" })))
+ *   Effect.succeed(() => Effect.void)
  * ) {}
  *
  * class EditorStore extends Context.Service<EditorStore, { readonly draft: string }>()("EditorStore") {
@@ -2849,10 +2850,9 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F } ? "onFailure" ext
  *   message: RowMessage
  * }).make({
  *   init: () => ({}),
- *   update: (model, message, $) =>
+ *   update: (_model, message, $) =>
  *     RowMessage.match(message, {
- *       Save: () => $.run(SaveTodo.make({ id: $.props.id })),
- *       Saved: () => model
+ *       ClickedSave: () => $.run(SaveTodo.make({ id: $.props.id }).pipe(Command.asNoop))
  *     }),
  *   view: (_, h) => h.el("li", h.props.id)
  * })
@@ -2873,12 +2873,15 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F } ? "onFailure" ext
  *   lookup: (room: string) => Layer.succeed(Chat, { room })
  * }) {}
  *
- * const RoomMessage = Schema.TaggedUnion({ Move: { room: Schema.String }, Joined: { room: Schema.String } })
+ * const RoomMessage = Schema.TaggedUnion({
+ *   SelectedRoom: { room: Schema.String },
+ *   CompletedJoinRoom: { room: Schema.String }
+ * })
  *
- * class Join extends Command.Service<Join>()(
- *   "rooms/Join",
+ * class JoinRoom extends Command.Service<JoinRoom>()(
+ *   "rooms/JoinRoom",
  *   { args: {} },
- *   Chat.useSync((chat) => () => Effect.succeed(RoomMessage.make({ _tag: "Joined", room: chat.room })))
+ *   Chat.useSync((chat) => () => Effect.succeed(RoomMessage.make({ _tag: "CompletedJoinRoom", room: chat.room })))
  * ) {}
  *
  * const RoomView = Component.define({
@@ -2886,12 +2889,12 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F } ? "onFailure" ext
  *   model: Schema.Struct({ room: Schema.String, joined: Schema.String }),
  *   message: RoomMessage
  * }).make({
- *   init: ($) => $.set({ room: "lobby", joined: "" }).run(Join.make()),
+ *   init: ($) => $.set({ room: "lobby", joined: "" }).run(JoinRoom.make()),
  *   update: (model, message, $) =>
  *     RoomMessage.match(message, {
- *       // Selects the new room's Layer: Join runs against it.
- *       Move: ({ room }) => $.set({ ...model, room }).run(Join.make()),
- *       Joined: ({ room }) => ({ ...model, joined: room })
+ *       // Selects the new room's Layer: JoinRoom runs against it.
+ *       SelectedRoom: ({ room }) => $.set({ ...model, room }).run(JoinRoom.make()),
+ *       CompletedJoinRoom: ({ room }) => ({ ...model, joined: room })
  *     }),
  *   view: (model, h) => h.el("p", model.joined)
  * })
@@ -2899,7 +2902,7 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F } ? "onFailure" ext
  * // Requires `Rooms`, provided above, so the rooms outlive a switch.
  * const Room = Component.provide(RoomView, {
  *   key: (_, model) => model.room,
- *   layer: (room) => Join.layer.pipe(Layer.provideMerge(Rooms.get(room)))
+ *   layer: (room) => JoinRoom.layer.pipe(Layer.provideMerge(Rooms.get(room)))
  * })
  * ```
  *

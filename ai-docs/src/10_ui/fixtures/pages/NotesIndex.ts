@@ -8,8 +8,10 @@ import { AppRoute } from "../routes.ts"
 const noteUrl = (id: string) => AppRoute.print(AppRoute.make({ _tag: "Note", params: { id } }))
 
 export const NotesIndexMessage = Schema.TaggedUnion({
-  Pinned: { id: Schema.String },
-  Dragging: { over: Schema.Boolean }
+  // The Pin button and a drop both send it, so it names what they share.
+  PinnedNote: { id: Schema.String },
+  DraggedIntoPins: {},
+  DraggedOutOfPins: {}
 })
 
 // A drag carries strings by type. An app's own type keeps other drags,
@@ -28,8 +30,9 @@ export const NotesIndexNoDeps = Component.define({
   init: () => ({ pinned: [], over: false }),
   update: (model, message) =>
     Match.valueTags(message, {
-      Pinned: ({ id }) => ({ ...model, pinned: model.pinned.includes(id) ? model.pinned : [...model.pinned, id] }),
-      Dragging: ({ over }) => ({ ...model, over })
+      PinnedNote: ({ id }) => ({ ...model, pinned: model.pinned.includes(id) ? model.pinned : [...model.pinned, id] }),
+      DraggedIntoPins: () => ({ ...model, over: true }),
+      DraggedOutOfPins: () => ({ ...model, over: false })
     }),
   // Every mounted instance contributes head entries. They merge in document
   // order, and the later entry wins.
@@ -50,7 +53,7 @@ export const NotesIndexNoDeps = Component.define({
                 // Drag and drop needs a pointer, so every drag has a button
                 // that sends the same message, for the keyboard and touch.
                 h.button.attr("aria-label", `Pin ${note.title}`)
-                  .onClick(NotesIndexMessage.make({ _tag: "Pinned", id: note.id })).children("Pin")
+                  .onClick(NotesIndexMessage.make({ _tag: "PinnedNote", id: note.id })).children("Pin")
               )
           )),
           // A drop target takes the drags whose types it accepts. Enter and
@@ -58,11 +61,11 @@ export const NotesIndexNoDeps = Component.define({
           // not to its children, so the highlight doesn't flicker.
           h.aside.attr("aria-label", "Pinned").class("pins", model.over && "drop-here")
             .onDrop(
-              ({ data }) => NotesIndexMessage.make({ _tag: "Pinned", id: data[NoteType] ?? "" }),
+              ({ data }) => NotesIndexMessage.make({ _tag: "PinnedNote", id: data[NoteType] ?? "" }),
               { accepts: [NoteType], dropEffect: "link" }
             )
-            .onDragEnter(NotesIndexMessage.make({ _tag: "Dragging", over: true }))
-            .onDragLeave(NotesIndexMessage.make({ _tag: "Dragging", over: false })).children(
+            .onDragEnter(NotesIndexMessage.make({ _tag: "DraggedIntoPins" }))
+            .onDragLeave(NotesIndexMessage.make({ _tag: "DraggedOutOfPins" })).children(
               h.h2("Pinned"),
               h.ul(model.pinned.map((id) => h.li.key(id).children(notes.find((note) => note.id === id)?.title ?? id)))
             )

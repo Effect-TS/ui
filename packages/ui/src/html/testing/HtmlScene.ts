@@ -19,15 +19,15 @@
  * import { Effect, Schema } from "effect"
  *
  * const Message = Schema.TaggedUnion({
- *   Typed: { zip: Schema.String },
- *   Submitted: { zip: Schema.String },
- *   Loaded: { forecast: Schema.String }
+ *   UpdatedZip: { zip: Schema.String },
+ *   SubmittedForm: { zip: Schema.String },
+ *   CompletedFetchWeather: { forecast: Schema.String }
  * })
  *
  * class FetchWeather extends Command.Service<FetchWeather>()(
  *   "weather/FetchWeather",
  *   { args: { zip: Schema.String } },
- *   Effect.succeed(() => Effect.succeed(Message.make({ _tag: "Loaded", forecast: "sun" })))
+ *   Effect.succeed(() => Effect.succeed(Message.make({ _tag: "CompletedFetchWeather", forecast: "sun" })))
  * ) {}
  *
  * const Weather = Component.define({
@@ -39,16 +39,16 @@
  *   init: () => ({ zip: "", forecast: "" }),
  *   update: (model, message, $) =>
  *     Message.match(message, {
- *       Typed: ({ zip }) => ({ ...model, zip }),
- *       Submitted: ({ zip }) => $.run(FetchWeather.make({ zip })),
- *       Loaded: ({ forecast }) => ({ ...model, forecast })
+ *       UpdatedZip: ({ zip }) => ({ ...model, zip }),
+ *       SubmittedForm: ({ zip }) => $.run(FetchWeather.make({ zip })),
+ *       CompletedFetchWeather: ({ forecast }) => ({ ...model, forecast })
  *     }),
  *   view: (model, h) =>
  *     h.div(
- *       h.form.onSubmit(({ fields }) => Message.make({ _tag: "Submitted", zip: fields.zip ?? "" })).children(
+ *       h.form.onSubmit(({ fields }) => Message.make({ _tag: "SubmittedForm", zip: fields.zip ?? "" })).children(
  *         h.label.attr("for", "zip").children("Zip code"),
  *         h.input.attr("id", "zip").attr("name", "zip").value(model.zip)
- *           .onInput(({ value }) => Message.make({ _tag: "Typed", zip: value })),
+ *           .onInput(({ value }) => Message.make({ _tag: "UpdatedZip", zip: value })),
  *         h.button.children("Get Weather")
  *       ),
  *       h.p.attr("role", "status").children(model.forecast)
@@ -61,7 +61,7 @@
  *     // A submit button submits its form, with the fields read from the view.
  *     .click(HtmlLocator.role("button", { name: "Get Weather" }))
  *     .expectExact(FetchWeather.make({ zip: "90210" }))
- *     .resolve(FetchWeather, Message.make({ _tag: "Loaded", forecast: "sun" }))
+ *     .resolve(FetchWeather, Message.make({ _tag: "CompletedFetchWeather", forecast: "sun" }))
  *     .expect(HtmlLocator.role("status")).toHaveText("sun")
  * }).pipe(Effect.scoped, Effect.runSync)
  * ```

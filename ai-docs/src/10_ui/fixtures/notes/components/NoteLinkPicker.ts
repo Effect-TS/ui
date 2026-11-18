@@ -5,7 +5,7 @@ import { Listbox } from "../../kit/Listbox.ts"
 import { ListNotes } from "../queries/ListNotes.ts"
 import { Notes } from "../services/Notes.ts"
 
-export const NoteLinkPickerMessage = Schema.TaggedUnion({ Picked: { id: Schema.String } })
+export const NoteLinkPickerMessage = Schema.TaggedUnion({ PickedLink: { id: Schema.String } })
 
 // What the picker reports to its parent, such as an editor inserting a link.
 export const NoteLinkPickerEvents = Schema.TaggedUnion({ Linked: { id: Schema.String } })
@@ -38,7 +38,9 @@ export const NoteLinkPickerNoDeps = Component.define({
         const notes = new Map(value.filter((note) => note.id !== h.props.noteId).map((note) => [note.id, note]))
         // A headless child is placed by calling it, like any other, and
         // takes a `key` or a `ref`. Its state lives in its own instance, and
-        // `onEmit` maps its events to this component's messages.
+        // `onEmit` maps its events to this component's messages. The
+        // message is the event's verb and this component's name for the
+        // child: the Listbox's `Picked` under the key "link" is `PickedLink`.
         return Listbox(h, {
           key: "link",
           // Only what the Listbox filters and announces goes in its props.
@@ -46,7 +48,7 @@ export const NoteLinkPickerNoDeps = Component.define({
             options: Array.from(notes.values(), (note) => ({ id: note.id, label: note.title })),
             selected: model.linked
           },
-          onEmit: ({ id }) => NoteLinkPickerMessage.make({ _tag: "Picked", id }),
+          onEmit: ({ id }) => NoteLinkPickerMessage.make({ _tag: "PickedLink", id }),
           // The closure is this component's code, run with the Listbox's
           // parts. It draws the markup and applies each part to a builder of
           // the part's tag. A child placed in here, and its `onEmit`, report
