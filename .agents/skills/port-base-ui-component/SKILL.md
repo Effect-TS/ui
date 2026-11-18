@@ -8,8 +8,7 @@ description: Port one Base UI component into packages/ui-kit as an unstyled Effe
 One run ports one component. If the port needs another ui-kit
 component that doesn't exist yet, such as a Field, a Popover or a positioning
 helper, stop and open a separate issue for it. When the missing piece only
-backs an optional feature, leave the feature out, list it under "Differences
-from Base UI" in the module docs, and carry on.
+backs an optional feature, leave it out and document any resulting limitation in ui-kit terms.
 
 Read [references/conventions.md](references/conventions.md) before step 3.
 `Switch` (`packages/ui-kit/src/Switch.ts` and its test) is the worked
@@ -82,6 +81,10 @@ Work top to bottom. Put the notes from steps 1 to 3 in the PR description.
    the `undefined` a part writes for an absent state) and check that a test
    fails.
 6. **Document and check.**
+   - Keep upstream research and links in the porting skill. In ui-kit code,
+     comments, JSDoc and the README, describe the kit's own behavior without
+     naming the upstream project. Check that this search returns no matches:
+     `git grep -inE 'base[[:space:]_./-]*ui|@mui/base' -- packages/ui-kit`.
    - Write the module JSDoc in the shape the conventions give. The one
      example goes in a fence opened with `ts import.meta.vitest`, so it runs
      as a doctest. Examples aren't type-checked, so the example renders the

@@ -390,13 +390,12 @@ portal. The details are in the JSDoc of `popover` and `modal` in
 
 The module JSDoc has, in order:
 
-1. one sentence on what the component is, with the Base UI link, then
-   which kind it is
-2. **Anatomy**: a table of each Base UI part, its part name and element,
+1. one sentence on what the component does, then which kind it is
+2. **Anatomy**: the kit part names and their elements,
    then a line on what each part takes and the markup it adds
 3. **Data attributes**
 4. **Keyboard**
-5. **Differences from Base UI**: everything left out or changed
+5. any usage limits or form behavior the consumer needs to know
 6. one `**Example**` that runs as a doctest and checks the rendered HTML
 
 The JSDoc of the view function or component lists the attributes and

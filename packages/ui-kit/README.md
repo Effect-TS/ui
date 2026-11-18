@@ -1,6 +1,6 @@
 # @effect/ui-kit
 
-Unstyled components for [`@effect/ui`](../ui), ported from [Base UI](https://base-ui.com/). Each one owns the behaviour, ARIA, data attributes and any form field, and you draw the markup with your own `h` builders and style it. A component that keeps no state, such as `Switch`, is a plain view function and takes no `key`.
+Unstyled components for [`@effect/ui`](../ui). Each one owns the behaviour, ARIA, data attributes and any form field, and you draw the markup with your own `h` builders and style it. A component that keeps no state, such as `Switch`, is a plain view function and takes no `key`.
 
 ```ts
 import { Switch } from "@effect/ui-kit"
@@ -17,6 +17,6 @@ Switch(h, {
 })
 ```
 
-| Component | Base UI                                               |
-| :-------- | :---------------------------------------------------- |
-| `Switch`  | [Switch](https://base-ui.com/react/components/switch) |
+## Components
+
+- [Switch](src/Switch.ts): a controlled on/off setting.
