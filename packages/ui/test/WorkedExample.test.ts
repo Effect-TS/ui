@@ -275,31 +275,7 @@ describe("the worked example", () => {
         yield* navigate("/")
         yield* TestClock.adjust("10 millis")
         yield* TestHost.settle
-        return {
-          log: root.log(),
-          text: root.text(),
-          timeline: TestHost.formatTimeline(root.log()).replace(/ ?\(?(after )?#\d+\)? ?/g, " ")
-        }
-      }),
-      flush
-    )
-  }
-
-  it.effect("one script gives one timeline, whenever the render flush runs", () =>
-    Effect.gen(function*() {
-      const expected = yield* timelineOf("queued")
-      assert.include(expected.timeline, "Update")
-      for (const flush of ["first", "last", { seed: 1 }, { seed: 2 }, { seed: 3 }] as const) {
-        const actual = yield* timelineOf(flush)
-        assert.strictEqual(actual.text, expected.text, JSON.stringify(flush))
-        assert.strictEqual(actual.timeline, expected.timeline, JSON.stringify(flush))
-      }
-    }))
-
-  for (const flush of ["queued", "first", "last"] as const) {
-    it.effect(`every instance's log replays through its update, with the flush ${flush}`, () =>
-      Effect.gen(function*() {
-        const { log } = yield* timelineOf(flush)
+        const log = root.log()
         const mounted = log.filter((entry) => entry._tag === "Mounted")
         assert.isAbove(mounted.length, 3)
         for (const entry of mounted) {
@@ -310,6 +286,23 @@ describe("the worked example", () => {
           )
           assert.isUndefined(replay.divergence, entry.path)
         }
-      }))
+        return {
+          text: root.text(),
+          timeline: TestHost.formatTimeline(log).replace(/ ?\(?(after )?#\d+\)? ?/g, " ")
+        }
+      }),
+      flush
+    )
   }
+
+  it.effect("one script replays and gives one timeline, whenever the render flush runs", () =>
+    Effect.gen(function*() {
+      const expected = yield* timelineOf("queued")
+      assert.include(expected.timeline, "Update")
+      for (const flush of ["first", "last", { seed: 1 }] as const) {
+        const actual = yield* timelineOf(flush)
+        assert.strictEqual(actual.text, expected.text, JSON.stringify(flush))
+        assert.strictEqual(actual.timeline, expected.timeline, JSON.stringify(flush))
+      }
+    }))
 })

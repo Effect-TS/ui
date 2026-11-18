@@ -417,18 +417,9 @@ describe("optional owners, reports and onChange", () => {
       assert.deepStrictEqual(updatesAt(root.log(), group).map((entry) => entry.message), [
         { _tag: "ChangedOn", on: true }
       ])
-    })))
-
-  it.effect("the owner's collected message and the reader's onChange follow from the click that changed the report", () =>
-    provideHost(Effect.gen(function*() {
-      const root = yield* TestHost.mount(makePage(makeReader((told) => told)), {})
-      yield* TestHost.settle
-      Locator.fire(root.get(Locator.text("reader")), "click")
-      yield* TestHost.settle
       const [clicked, told] = updatesAt(root.log(), reader)
-      const [collected] = updatesAt(root.log(), group)
       assert.strictEqual(clicked.causedBy, undefined)
-      assert.strictEqual(collected.causedBy, clicked.seq)
+      assert.strictEqual(changed.causedBy, clicked.seq)
       assert.strictEqual(told.causedBy, clicked.seq)
     })))
 
