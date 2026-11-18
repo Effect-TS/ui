@@ -395,25 +395,8 @@ export const make: {
       readonly view: (parts: Parts, h: View.Helper<never, Props> & View.Tags<V, never>) => View.Content<never, any>
     }
   ): Effect.Effect<Steps<Component.Component<string, Props, any, any, Events, R, V>, Parts>, never, Scope.Scope>
-} = function make(component: any, props: any, options?: any): any {
-  return run(make, internal.SceneCursor, "Scene", component, props, options)
-}
-
-/**
- * Starts `make` for a kind of scene: the `make` the test called, the
- * cursor class, its module name for errors, and the arguments `make` took.
- *
- * @internal
- */
-export const run = (
-  make: Function,
-  Ctor: new(module: string, state: engine.State<any, any, any, any>) => internal.SceneCursor,
-  module: string,
-  component: any,
-  props: unknown,
-  options: any
-): Effect.Effect<internal.SceneCursor, never, Scope.Scope> =>
-  cursor.scoped(cursor.callSite(make), () => internal.begin(Ctor, module, component, props, options))
+} = (component: any, props: any, options?: any): any =>
+  cursor.scoped(make, () => internal.begin(internal.SceneCursor, "Scene", component, props, options))
 
 /**
  * The cursor after `init`. Its steps follow the acknowledgement rule, but

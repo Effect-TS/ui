@@ -73,9 +73,10 @@ import type * as Effect from "effect/Effect"
 import type * as Scope from "effect/Scope"
 import type * as Component from "../../Component.ts"
 import * as internal from "../../internal/scene.ts"
+import * as cursor from "../../internal/steps.ts"
 import * as engine from "../../internal/story.ts"
 import * as Locator from "../../testing/Locator.ts"
-import * as Scene from "../../testing/Scene.ts"
+import type * as Scene from "../../testing/Scene.ts"
 import type * as View from "../../View.ts"
 import type * as Html from "../Html.ts"
 import * as HtmlLocator from "./HtmlLocator.ts"
@@ -591,9 +592,8 @@ export const make: {
       readonly view: (parts: Parts, h: View.Helper<never, Props> & View.Tags<V, never>) => View.Content<never, any>
     }
   ): Effect.Effect<Steps<Component.Component<string, Props, any, any, Events, R, V>, Parts>, never, Scope.Scope>
-} = function make(component: any, props: any, options?: any): any {
-  return Scene.run(make, StepsImpl, "HtmlScene", component, props, options)
-}
+} = (component: any, props: any, options?: any): any =>
+  cursor.scoped(make, () => internal.begin(StepsImpl, "HtmlScene", component, props, options))
 
 /**
  * The cursor after `init`. Its steps follow the acknowledgement rule, but

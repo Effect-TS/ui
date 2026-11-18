@@ -339,27 +339,17 @@ export abstract class Cursor {
 }
 
 /**
- * Where a test called `make`: a stack trace that starts at the caller of `fn`, where the engine
- * supports it, so an end check that fails in a finalizer can point at the test.
- *
- * @internal
- */
-export const callSite = (fn: Function): Error => {
-  const site = new Error()
-  ;(Error as { captureStackTrace?: (target: object, fn: Function) => void }).captureStackTrace?.(site, fn)
-  return site
-}
-
-/**
  * A cursor as a scoped Effect: `begin` makes it, and the scope's finalizer runs the end check once
  * the scope closes with a success. A failed test already has its failure, so the end check doesn't add
  * a second one. The finalizer runs after the test's own code has returned, so its error takes the stack
- * of `site`, where the test called `make`.
+ * of where the test called `make`: a trace that starts at `make`'s caller, where the engine supports it.
  *
  * @internal
  */
-export const scoped = <S extends Cursor>(site: Error, begin: () => S): Effect.Effect<S, never, Scope.Scope> =>
-  Effect.acquireRelease(
+export const scoped = <S extends Cursor>(make: Function, begin: () => S): Effect.Effect<S, never, Scope.Scope> => {
+  const site = new Error()
+  ;(Error as { captureStackTrace?: (target: object, fn: Function) => void }).captureStackTrace?.(site, make)
+  return Effect.acquireRelease(
     Effect.sync(begin),
     (steps, exit) =>
       Exit.isSuccess(exit)
@@ -375,6 +365,7 @@ export const scoped = <S extends Cursor>(site: Error, begin: () => S): Effect.Ef
         })
         : Effect.void
   )
+}
 
 /**
  * The record every kind shares, from the engine's.

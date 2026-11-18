@@ -283,7 +283,7 @@ export const make = <C extends AnyComponent>(
   props: Component.Props<C>
 ): Effect.Effect<Steps<C>, never, Scope.Scope> =>
   cursor.scoped(
-    cursor.callSite(make),
+    make,
     () => new StepsImpl("Story", cursor.initial(component, props)) as unknown as cursor.Cursor & Steps<C>
   )
 

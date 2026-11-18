@@ -625,12 +625,12 @@ describe("Story", () => {
         story
           .loaded("user", { id: "1", name: "Ann", email: "ann@x", likes: 0 }, { waiting: true })
           .loadFailed("user", new users.UserNotFound({ id: "1" }))
-        const kept = story.current.queries().user
+        const kept = story.queries.user
         assert.isTrue(AsyncResult.isFailure(kept) && Option.isSome(kept.previousSuccess))
         // Another user's result doesn't carry over.
         story.props({ id: "2" })
           .loadFailed("user", new users.UserNotFound({ id: "2" }))
-        const other = story.current.queries().user
+        const other = story.queries.user
         assert.isTrue(AsyncResult.isFailure(other) && Option.isNone(other.previousSuccess))
       }))
 
@@ -642,7 +642,7 @@ describe("Story", () => {
         assert.strictEqual(s.model.draft._tag, "Some")
         s.given((model) => ({ ...model, draft: Option.none() }))
         assert.strictEqual(s.model.draft._tag, "None")
-        assert.strictEqual(s.current.queries().user._tag, "Success")
+        assert.strictEqual(s.queries.user._tag, "Success")
         assert.deepStrictEqual(s.subscriptions, [])
         assert.throws(
           () => Story.start(users.RenameForm, { id: "1" }).loaded("draft" as any, "x"),
@@ -722,7 +722,7 @@ describe("Story", () => {
         assert.deepStrictEqual(renders, ["Ann Bea ?+Ivy 1 0", "Anna Bea ?+Ivy 1 1"])
         const final = yield* Story.make(Team, { id: "1" })
         final.given({ changes: 0 }, loaded).loaded("user", user("1", "Anna", "2")).keepPending("others")
-        assert.strictEqual(final.current.queries().friend._tag, "Success")
+        assert.strictEqual(final.queries.friend._tag, "Success")
         assert.throws(
           () => Story.start(Team, { id: "1" }).given({ changes: 0 }, { friend: user("2", "Bea") }),
           /friend.*disabled/

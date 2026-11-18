@@ -321,7 +321,7 @@ describe("Infinite queries", () => {
       s.loadFailed("messages", "nope")
       assert.deepStrictEqual(s.loadingMore, [])
       s.send(app.ChatMessage.make({ _tag: "Refresh" }))
-      const result = s.current.queries().messages
+      const result = s.queries.messages
       assert.strictEqual(result._tag, "Failure")
       if (result._tag === "Failure") {
         assert.isTrue(result.waiting)
@@ -356,7 +356,7 @@ describe("Infinite queries", () => {
         .expect(Locator.text("r0,r1 /2 End", { exact: true })).toExist()
       const s = yield* Story.make(app.Chat, { room: "r" })
       s.given({}, { messages: [pageAt(0, 1), pageAt(1, null)] })
-      const messages = s.current.queries().messages
+      const messages = s.queries.messages
       assert.deepStrictEqual(AsyncResult.isSuccess(messages) ? messages.value.more : undefined, { _tag: "End" })
     }))
 
@@ -392,7 +392,7 @@ describe("Infinite queries", () => {
         .send(app.ChatMessage.make({ _tag: "More" }))
         .loadMoreFailed("messages", "nope")
         .send(app.ChatMessage.make({ _tag: "Refresh" }))
-      const messages = s.current.queries().messages
+      const messages = s.queries.messages
       assert.deepStrictEqual(
         AsyncResult.isSuccess(messages) ? [messages.value.pages, messages.value.more] : undefined,
         [[pageAt(0, 1)], { _tag: "Available" }]

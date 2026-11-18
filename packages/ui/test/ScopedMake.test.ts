@@ -3,7 +3,7 @@ import { Html } from "@effect/ui/html"
 import { Scene, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
-import type { TestContext } from "vitest"
+import type { TestContext, TestError } from "vitest"
 import { SaveTodo, TodoItem, TodoItemMessage } from "./fixtures/components.ts"
 
 const todo = { id: "t1", title: "buy milk", done: false }
@@ -25,11 +25,18 @@ const Greeting = Component.define({
 // scope closes, after the test's own code. `fails` turns their failure into a pass, and the errors
 // vitest saw are recorded here for the last test to read, so the block runs in order, and as a whole.
 describe("make's end check, in the scope it.effect provides", { concurrent: false }, () => {
-  const reported = new Map<string, ReadonlyArray<string>>()
+  const reported: Array<ReadonlyArray<TestError>> = []
   const record = (ctx: TestContext) =>
     ctx.onTestFinished(({ task }) => {
-      reported.set(task.name, (task.result?.errors ?? []).map((error) => error.message))
+      // Copied: vitest empties the list once `fails` has turned the failure into a pass.
+      reported.push([...task.result?.errors ?? []])
     })
+  // The frame under an error's message: where vitest points its report.
+  const frame = (error: TestError) => {
+    const header = `${error.name}: ${error.message}\n`
+    assert.isTrue(error.stack!.startsWith(header))
+    return error.stack!.slice(header.length).split("\n")[0]!
+  }
 
   it.effect("passes when the test settles everything", () =>
     Effect.gen(function*() {
@@ -62,24 +69,23 @@ describe("make's end check, in the scope it.effect provides", { concurrent: fals
       assert.fail("the body's own failure")
     }))
 
-  it("reported the end check's failure, or only the body's when the body failed", () => {
-    assert.deepStrictEqual([...reported.keys()], [
-      "a Story that ends with a Command pending",
-      "a Scene that ends with a mount not acknowledged",
-      "a test whose body failed"
-    ])
-    const [command] = reported.get("a Story that ends with a Command pending")!
+  it("reported the end check's failure at the make call, or only the body's when the body failed", () => {
+    assert.lengthOf(reported, 3)
+    const [command, mount, body] = reported.map((errors) => errors.map((error) => error.message))
+    assert.lengthOf(command!, 1)
     assert.match(
-      command!,
+      command![0]!,
       /^Story\.make: the test ends with work not settled or acknowledged:\n {2}- todos\/SaveTodo\(.*\) \[running\] is pending/
     )
-    assert.lengthOf(reported.get("a Story that ends with a Command pending")!, 1)
-    assert.lengthOf(reported.get("a Scene that ends with a mount not acknowledged")!, 1)
+    assert.lengthOf(mount!, 1)
     assert.match(
-      reported.get("a Scene that ends with a mount not acknowledged")![0]!,
+      mount![0]!,
       /^Scene\.make: the test ends with work not settled or acknowledged:\n {2}- the mount Hello\(\{\}\) on <p> started/
     )
     // The Command the body left pending would fail the end check, but the body failed first.
-    assert.deepStrictEqual(reported.get("a test whose body failed"), ["the body's own failure"])
+    assert.deepStrictEqual(body, ["the body's own failure"])
+    // The end check ran after the test's code returned, and still points at the line that called make.
+    assert.match(frame(reported[0]![0]!), /ScopedMake\.test\.ts:\d+:\d+/)
+    assert.match(frame(reported[1]![0]!), /ScopedMake\.test\.ts:\d+:\d+/)
   })
 })

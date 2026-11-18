@@ -80,7 +80,7 @@ describe("Story", () => {
     expect(counter.given).type.not.toBeCallableWith({ saving: true })
   })
 
-  it("a chained arrow and a block callback with no return both compile", () => {
+  it("make takes no callback", () => {
     // make takes no callback: the test yields the cursor and runs its steps
     // as chained or plain statements.
     expect(Story.make).type.toBeCallableWith(Counter, { initial: 0 })
