@@ -32,7 +32,7 @@ const Settings = Component.define({
       Switch(h, {
         props: { checked: model.notify, ...h.props },
         onToggle: ({ checked }) => SettingsMessage.make({ _tag: "ToggledNotify", checked }),
-        view: (s) => h.label(s.root({ element: h.button, children: [s.thumb({ element: h.span })] }), "Notifications")
+        view: (s) => h.label(s.root({ element: h.button, children: [s.thumb(h.span.class("thumb"))] }), "Notifications")
       }),
       h.output(String(model.rowClicks))
     )
@@ -57,6 +57,7 @@ describe("Switch", () => {
       assert.strictEqual(attrs?.["aria-checked"], "false")
       assert.strictEqual(attrs?.["data-unchecked"], "")
       assert.isUndefined(attrs?.["data-checked"])
+      assert.strictEqual(s.get(thumb).attrs?.class, "thumb")
       assert.strictEqual(s.get(thumb).attrs?.["data-unchecked"], "")
       s.fire(root, "click")
       assert.strictEqual(s.get(root).attrs?.["aria-checked"], "true")
@@ -147,7 +148,11 @@ describe("Switch", () => {
     // Applied to the builder alone, the thumb returns it for another call's
     // `element`.
     const builder = Switch(h, { props: { checked: false }, view: (s) => s.thumb(element) })
-    assert.deepStrictEqual(builder.children("on").attrs, finished.attrs)
+    const stacked = Switch(h, {
+      props: { checked: true },
+      view: (s) => s.thumb({ element: builder, children: ["on"] })
+    })
+    assert.deepStrictEqual(stacked.attrs, { class: "thumb", "data-checked": "" })
   })
 
   it("the root keeps a consumer's click handler without onToggle, and refuses it with one in every state", () => {

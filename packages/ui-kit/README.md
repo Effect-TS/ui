@@ -13,7 +13,7 @@ Switch(h, {
     h.label(
       s.root({
         element: h.button.class("switch"),
-        children: [s.thumb({ element: h.span.class("thumb") })]
+        children: [s.thumb(h.span.class("thumb"))]
       }),
       "Notifications"
     )

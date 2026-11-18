@@ -30,7 +30,7 @@ describe("Switch", () => {
             >()
             return s.root({
               element: h.button.on("focus", Msg.make({ _tag: "Clicked" })),
-              children: [s.thumb({ element: h.span }), needsClock]
+              children: [s.thumb(h.span.class("thumb")), needsClock]
             })
           }
         })
