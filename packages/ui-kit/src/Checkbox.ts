@@ -19,10 +19,10 @@
  *
  * Each part takes the consumer's builder and returns it, so the consumer
  * goes on chaining and adds children with `.children(...)`:
- * `s.root(h.button).children(s.indicator(h.span))`. `root` adds the
- * hidden `<input>` that carries the form value as the button's first
- * child, so a checkbox with a `name` can't be drawn without it, and the
- * consumer's children come after it. `indicator` adds no markup.
+ * `s.root(h.button).children(s.indicator(h.span))`. When the checkbox has
+ * a form value to submit, `root` appends its hidden input after any
+ * children already on the button and before children you chain afterward,
+ * so the form value can't be left out. `indicator` adds no markup.
  *
  * A part's result is still a builder, so it can be another kit call's
  * `element`, and both share one element.
@@ -226,8 +226,10 @@ const state = <B extends { readonly attr: (name: string, value: string | undefin
  *
  * `root(button)` and `indicator(span)` each return the builder they were
  * given, so the consumer chains classes, attributes, handlers and children
- * on it. The root's hidden input is its first child, before the
- * consumer's. A click on a disabled or read-only checkbox emits nothing.
+ * on it. When the checkbox has a form value to submit, `root` appends its
+ * hidden input after any children already on the button and before
+ * children you chain afterward. A click on a disabled or read-only
+ * checkbox emits nothing.
  * A handler the consumer adds to the root runs after the checkbox's own.
  *
  * The checkbox's own attributes win over the ones the consumer set on the
@@ -288,7 +290,8 @@ export const Checkbox = Component.define({
             // Cancels Enter's click on the button, and leaves every other key alone.
             { preventDefault: true }
           )
-          // The form field goes in first, so the consumer's children come after it.
+          // The form field goes after the children already on the button, and
+          // before the ones the consumer chains afterward.
           .children(hidden)),
       indicator: p.part("span", (b) => state(b, p.props))
     }
