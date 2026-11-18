@@ -1,0 +1,296 @@
+/**
+ * A control that the user ticks or unticks, ported from Base UI's Checkbox
+ * (https://base-ui.com/react/components/checkbox).
+ *
+ * `Checkbox` is a headless component: it owns the ARIA, the data
+ * attributes, the form field and the click and key handling, and the
+ * consumer draws the markup. Its Model is empty, but cancelling Enter
+ * needs a message of its own, and the parts Base UI has that this port
+ * puts off (the indicator's transitions, Enter submitting the form) need
+ * an instance. The consumer owns the value, passes it as `checked`, and
+ * stores what the `Toggled` event reports.
+ *
+ * **Anatomy**
+ *
+ * | Base UI              | Part        | Element                                           |
+ * | :------------------- | :---------- | :------------------------------------------------ |
+ * | `Checkbox.Root`      | `root`      | `<button role="checkbox">`, with the hidden input |
+ * | `Checkbox.Indicator` | `indicator` | `<span>` inside the root                          |
+ *
+ * Each part takes the consumer's builder and returns it, so the consumer
+ * goes on chaining and adds children with `.children(...)`:
+ * `s.root(h.button).children(s.indicator(h.span))`. `root` adds the
+ * hidden `<input>` that carries the form value as the button's first
+ * child, so a checkbox with a `name` can't be drawn without it, and the
+ * consumer's children come after it. `indicator` adds no markup.
+ *
+ * A part's result is still a builder, so it can be another kit call's
+ * `element`, and both share one element.
+ *
+ * Naming the checkbox is the consumer's job: a `<label>` around the root or
+ * one pointing at its `id`, an `aria-label` or `aria-labelledby` on the
+ * button, or text inside it.
+ *
+ * **Data attributes**
+ *
+ * On `root` and `indicator`, each present with an empty value or absent:
+ *
+ * - `data-checked` / `data-unchecked`, neither while indeterminate
+ * - `data-indeterminate`
+ * - `data-disabled`
+ * - `data-readonly`
+ * - `data-required`
+ *
+ * **Keyboard**
+ *
+ * The root is a native `<button>`, so the browser's defaults do the work:
+ * Space toggles it and Tab moves focus. A click on a `<label>` that names
+ * it toggles it too. Enter doesn't toggle it, as it doesn't toggle a
+ * native checkbox: the root's `keydown` handler cancels Enter and leaves
+ * every other key's default alone.
+ *
+ * That handler also means the root gets every `keydown` while it has
+ * focus. A host gives an event only to the innermost element with a
+ * handler for it, so an ancestor's `onKeyDown` never sees Escape or the
+ * arrow keys pressed on the checkbox. To handle them, add `onKeyDown` to
+ * the root's button, which runs after the checkbox's own.
+ *
+ * **Differences from Base UI**
+ *
+ * - The value is always controlled. There is no `defaultChecked`: keep the
+ *   value in the consumer's Model.
+ * - The root is always a native `<button>`, Base UI's `nativeButton` mode.
+ * - The form value is a hidden input inside the root, so `required` sets
+ *   `aria-required` and `data-required` but doesn't block a form
+ *   submission, and there is no `inputRef`.
+ * - Enter does nothing. Base UI submits the checkbox's form, and no ui-kit
+ *   Command can do that yet.
+ * - The indicator is always drawn, Base UI's `keepMounted` mode, without
+ *   the `data-starting-style` and `data-ending-style` transition
+ *   attributes. Hide it with `[data-unchecked]`, or don't draw it unless
+ *   `s.checked || s.indeterminate`.
+ * - There is no `form` prop. A `form` attribute on the root associates
+ *   only the button, not the hidden input inside it, so draw the checkbox
+ *   inside the form it submits with.
+ * - `parent` waits for a ui-kit CheckboxGroup.
+ * - Field state (`data-valid`, `data-invalid`, `data-dirty`,
+ *   `data-touched`, `data-filled`, `data-focused`) waits for a ui-kit
+ *   Field.
+ *
+ * **Example** (A labelled checkbox whose value lives in the consumer's Model)
+ *
+ * ```ts import.meta.vitest
+ * import { Component } from "@effect/ui"
+ * import { Html, HtmlServer } from "@effect/ui/html"
+ * import { Checkbox } from "@effect/ui-kit"
+ * import { Effect, Schema } from "effect"
+ *
+ * const SignupMessage = Schema.TaggedUnion({ ToggledTerms: { checked: Schema.Boolean } })
+ *
+ * const Signup = Component.define({
+ *   name: "Signup",
+ *   model: Schema.Struct({ terms: Schema.Boolean }),
+ *   message: SignupMessage,
+ *   elements: Html
+ * }).make({
+ *   init: () => ({ terms: false }),
+ *   update: (model, message) =>
+ *     SignupMessage.match(message, {
+ *       ToggledTerms: ({ checked }) => ({ ...model, terms: checked })
+ *     }),
+ *   view: (model, h) =>
+ *     Checkbox(h, {
+ *       props: { checked: model.terms, name: "terms", required: true },
+ *       onEmit: ({ checked }) => SignupMessage.make({ _tag: "ToggledTerms", checked }),
+ *       view: (s) =>
+ *         h.label.class("terms").children(
+ *           s.root(h.button.class("checkbox")).children(s.indicator(h.span.class("tick"))),
+ *           "I accept the terms"
+ *         )
+ *     })
+ * })
+ *
+ * // The root keeps the consumer's class and gets the checkbox's role.
+ * const { html } = await Effect.runPromise(HtmlServer.renderToHtml(Signup, {}))
+ * if (!/<button class="checkbox"[^>]* role="checkbox"/.test(html)) throw new Error("the root isn't a styled checkbox")
+ * ```
+ *
+ * @stability experimental
+ * @since 0.1.0
+ */
+import * as Component from "@effect/ui/Component"
+import * as Html from "@effect/ui/html/Html"
+import * as Schema from "effect/Schema"
+import { flag } from "./internal/attributes.ts"
+import { field } from "./internal/field.ts"
+
+/**
+ * The props of a `Checkbox`, Base UI's Root props without the React ones.
+ *
+ * **Details**
+ *
+ * - `checked`: whether the checkbox is ticked. Required: the consumer owns
+ *   it.
+ * - `indeterminate`: shows the checkbox as neither ticked nor unticked,
+ *   with `aria-checked="mixed"`. It overrides `checked` in the ARIA and
+ *   data attributes, but not in the form value. A click still emits the
+ *   opposite of `checked`, so clear `indeterminate` when storing it.
+ * - `disabled`: sets the native `disabled` attribute, so the checkbox is
+ *   skipped by Tab and ignores clicks.
+ * - `readOnly`: ignores clicks but stays focusable, and sets
+ *   `aria-readonly`.
+ * - `required`: sets `aria-required` and `data-required`.
+ * - `name`, `value` and `uncheckedValue`: the form field. A ticked
+ *   checkbox submits `value`, `"on"` by default. An unticked one submits
+ *   `uncheckedValue`, or nothing when it is unset. A disabled checkbox, or
+ *   one without a `name`, submits nothing.
+ *
+ * @stability experimental
+ * @category schemas
+ * @since 0.1.0
+ */
+export const CheckboxProps = Schema.Struct({
+  checked: Schema.Boolean,
+  indeterminate: Schema.optional(Schema.Boolean),
+  disabled: Schema.optional(Schema.Boolean),
+  readOnly: Schema.optional(Schema.Boolean),
+  required: Schema.optional(Schema.Boolean),
+  name: Schema.optional(Schema.String),
+  value: Schema.optional(Schema.String),
+  uncheckedValue: Schema.optional(Schema.String)
+})
+
+/**
+ * The props of a `Checkbox`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type CheckboxProps = typeof CheckboxProps.Type
+
+/**
+ * What a `Checkbox` emits. `Toggled` is Base UI's `onCheckedChange`: the
+ * user ticked or unticked the checkbox, and `checked` is the value they
+ * asked for, which the consumer stores and passes back.
+ *
+ * @stability experimental
+ * @category schemas
+ * @since 0.1.0
+ */
+export const CheckboxEvents = Schema.TaggedUnion({
+  Toggled: { checked: Schema.Boolean }
+})
+
+/**
+ * What a `Checkbox` emits.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type CheckboxEvents = typeof CheckboxEvents.Type
+
+// A click on the root, which Space on the native button arrives as. Enter
+// is its own message so the root can cancel the button's click on Enter.
+const Message = Schema.TaggedUnion({ ClickedRoot: {}, PressedEnter: {} })
+
+const interactive = (props: CheckboxProps): boolean => props.disabled !== true && props.readOnly !== true
+
+// The state attributes, the same on the root and the indicator so either
+// one can be styled on its own. An indeterminate checkbox is neither
+// checked nor unchecked.
+const state = <B extends { readonly attr: (name: string, value: string | undefined) => B }>(
+  builder: B,
+  props: CheckboxProps
+): B => {
+  const indeterminate = props.indeterminate === true
+  return builder
+    .attr("data-checked", flag(!indeterminate && props.checked))
+    .attr("data-unchecked", flag(!indeterminate && !props.checked))
+    .attr("data-indeterminate", flag(indeterminate))
+    .attr("data-disabled", flag(props.disabled))
+    .attr("data-readonly", flag(props.readOnly))
+    .attr("data-required", flag(props.required))
+}
+
+/**
+ * A headless checkbox. Call it with the consumer's `h`, the `props`, and a
+ * `view` closure that draws the root with `s.root(h.button)`, usually with
+ * `s.indicator(h.span)` as a child.
+ *
+ * **Details**
+ *
+ * The parts also return `checked`, `indeterminate`, `disabled`, `readOnly`
+ * and `required`, resolved to booleans, for markup that depends on them.
+ *
+ * `root(button)` and `indicator(span)` each return the builder they were
+ * given, so the consumer chains classes, attributes, handlers and children
+ * on it. The root's hidden input is its first child, before the
+ * consumer's. A click on a disabled or read-only checkbox emits nothing.
+ * A handler the consumer adds to the root runs after the checkbox's own.
+ *
+ * The checkbox's own attributes win over the ones the consumer set on the
+ * builder before the part: `type`, `role`, `disabled`, the ARIA state
+ * (`aria-checked`, `aria-disabled`, `aria-readonly`, `aria-required`)
+ * and the data attributes. That includes the ones a state leaves absent,
+ * so a `disabled` on the consumer's button is removed unless the
+ * `disabled` prop is set. A part writes them when it is applied, so an
+ * attribute the consumer chains after `s.root(...)` or `s.indicator(...)`
+ * is the consumer's to answer for.
+ *
+ * @stability experimental
+ * @category components
+ * @since 0.1.0
+ */
+export const Checkbox = Component.define({
+  name: "Checkbox",
+  props: CheckboxProps,
+  model: Schema.Struct({}),
+  message: Message,
+  events: CheckboxEvents,
+  elements: Html
+}).make({
+  init: () => ({}),
+  update: (model, message, $) =>
+    Message.match(message, {
+      ClickedRoot: () =>
+        interactive($.props)
+          ? $.emit(CheckboxEvents.make({ _tag: "Toggled", checked: !$.props.checked }))
+          : model,
+      // Enter means nothing to a checkbox: the message only cancels it.
+      PressedEnter: () => model
+    }),
+  parts: (_model, p) => {
+    const indeterminate = p.props.indeterminate === true
+    const hidden = field(p.props)
+    return {
+      checked: p.props.checked,
+      indeterminate,
+      disabled: p.props.disabled === true,
+      readOnly: p.props.readOnly === true,
+      required: p.props.required === true,
+      root: p.part("button", (b) =>
+        state(b, p.props)
+          // Inside a form a button submits by default.
+          .attr("type", "button")
+          .attr("role", "checkbox")
+          .attr("aria-checked", indeterminate ? "mixed" : String(p.props.checked))
+          .attr("aria-readonly", p.props.readOnly === true ? "true" : undefined)
+          .attr("aria-required", p.props.required === true ? "true" : undefined)
+          // Never set: the native `disabled` reports it. Removed, so the
+          // consumer's can't report a state the props don't have.
+          .attr("aria-disabled", undefined)
+          .disabled(p.props.disabled === true)
+          .onClick(Message.make({ _tag: "ClickedRoot" }))
+          .onKeyDown(
+            ({ key }) => key === "Enter" ? Message.make({ _tag: "PressedEnter" }) : undefined,
+            // Cancels Enter's click on the button, and leaves every other key alone.
+            { preventDefault: true }
+          )
+          // The form field goes in first, so the consumer's children come after it.
+          .children(hidden)),
+      indicator: p.part("span", (b) => state(b, p.props))
+    }
+  }
+})
