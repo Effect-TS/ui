@@ -1255,6 +1255,12 @@ export interface PartsHelper<Msg, Props, V extends View.Elements> {
    *
    * The part takes only builders of the tags it lists, checked by tag name
    * in the types and again when it's applied.
+   *
+   * The part returns the consumer's builder, so the consumer chains on it
+   * and gives it children. Children `decorate` adds with `children` come
+   * before the ones the consumer adds after the part. A function it sets
+   * with `forward` runs when the element is built, on the builder as the
+   * consumer finished it.
    */
   part<K extends keyof View.Tags<V, Msg> & string, Args extends ReadonlyArray<any>, R2 = never>(
     tag: K | readonly [K, ...ReadonlyArray<K>],

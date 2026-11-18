@@ -177,10 +177,11 @@ describe("View elements", () => {
       update: (model) => model,
       view: (_, h) => {
         expect(h.el("x-foo")).type.toBe<View.ContainerBuilder<typeof Msg.Type>>()
-        expect(h.el("x-foo", "a")).type.toBe<View.Element<typeof Msg.Type, never>>()
-        expect(h.el("x-foo").attr("a", "b").children("c")).type.toBe<View.Element<typeof Msg.Type, never>>()
-        expect(h.el("x-foo", "a")).type.not.toHaveProperty("attr")
-        expect(h.el("x-foo").children()).type.not.toHaveProperty("attr")
+        // The shorthand and `children` return the builder, so the chain goes on.
+        expect(h.el("x-foo", "a")).type.toBe<View.ContainerBuilder<typeof Msg.Type>>()
+        expect(h.el("x-foo").attr("a", "b").children("c").attr("d", "e")).type.toBe<
+          View.ContainerBuilder<typeof Msg.Type>
+        >()
         // The shorthand takes at least one child, so a spread of an array goes through children.
         const items: Array<string> = []
         expect(h.el).type.not.toBeCallableWith("x-foo", ...items)

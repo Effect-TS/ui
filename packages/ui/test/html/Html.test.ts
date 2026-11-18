@@ -45,14 +45,14 @@ describe("Html", () => {
     const onInput = ({ value }: Html.InputPayload) => TodoMessage.make({ _tag: "Draft", value })
     const todos = ["Milk", "Eggs"]
 
-    it("builds the tree with attributes before children", () => {
+    it("builds the tree a chain describes", () => {
       const h = helper()
-      const tree = h.form.onSubmit(add).children(
+      const tree = View.build(h.form.onSubmit(add), [
         h.input.ref(NewTodo).value("draft").onInput(onInput),
         h.button.attr("type", "submit").children("Add"),
         h.span("Todos"),
         todos.map((title) => Item(h, { key: title, props: { title } }))
-      )
+      ])
       assert.deepStrictEqual(
         tree,
         element("form", { handlers: { submit: add } }, [
@@ -116,10 +116,11 @@ describe("Html", () => {
 
     it("the root's own name and length never reach a builder or a node", () => {
       const h = helper()
-      const fields = ["attrs", "elementKey", "eventOptions", "handlers", "mount", "owned", "props", "refKey", "tag"]
-      assert.deepStrictEqual(Object.keys(h.form.attr("method", "post")).sort(), fields)
-      assert.deepStrictEqual(Object.keys(h.form("a")).sort(), ["_tag", "children", ...fields].sort())
-      assert.deepStrictEqual(Object.keys(View.toNode(h.form)).sort(), ["_tag", "children", ...fields].sort())
+      const node = ["attrs", "elementKey", "eventOptions", "handlers", "mount", "owned", "props", "refKey", "tag"]
+      const builder = [...node, "content", "hooks", "removals"].sort()
+      assert.deepStrictEqual(Object.keys(h.form.attr("method", "post")).sort(), builder)
+      assert.deepStrictEqual(Object.keys(h.form("a")).sort(), builder)
+      assert.deepStrictEqual(Object.keys(View.toNode(h.form)).sort(), ["_tag", "children", ...node].sort())
     })
 
     it("builders are values: a chain call leaves its receiver alone", () => {
@@ -220,15 +221,9 @@ describe("Html", () => {
         )
       }))
 
-    it("fields added to a library builder are kept by its chain calls", () => {
-      const mark = Symbol("mark")
-      const decorated = Object.assign(new View.ElementBuilder<TodoMessage>("button"), { tone: "warm", [mark]: 1 })
-      const chained = decorated.attr("id", "save").key("k")
-      assert.strictEqual(chained.tone, "warm")
-      assert.strictEqual(chained[mark], 1)
-      // A field under a symbol alone, on a class whose other builders hold none.
-      const marked = Object.assign(new View.ElementBuilder<TodoMessage>("button").attr("id", "a"), { [mark]: 2 })
-      assert.strictEqual(marked.attr("id", "b").key("k")[mark], 2)
+    it("a field added to a library builder under a string key is kept by its chain calls", () => {
+      const decorated = Object.assign(new View.ElementBuilder<TodoMessage>("button"), { tone: "warm" })
+      assert.strictEqual(decorated.attr("id", "save").key("k").tone, "warm")
     })
 
     it("children are the same nodes however they are passed", () => {
@@ -252,9 +247,10 @@ describe("Html", () => {
       ]
       for (const inputs of cases) {
         const expected: ReadonlyArray<View.Node<TodoMessage, any>> = View.children(inputs)
-        assert.deepStrictEqual(h.div.children(...inputs).children, expected)
-        assert.deepStrictEqual(h.div(...inputs as [View.Input<TodoMessage, any>]).children, expected)
-        assert.deepStrictEqual(new View.ContainerBuilder<TodoMessage>("div").children(...inputs).children, expected)
+        const built = (builder: View.ElementBuilder<TodoMessage, any, any, any>) => View.build(builder, []).children
+        assert.deepStrictEqual(built(h.div.children(...inputs)), expected)
+        assert.deepStrictEqual(built(h.div(...inputs as [View.Input<TodoMessage, any>])), expected)
+        assert.deepStrictEqual(built(new View.ContainerBuilder<TodoMessage>("div").children(...inputs)), expected)
       }
     })
 

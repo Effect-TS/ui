@@ -8,11 +8,11 @@
  * registered once for the app by module augmentation of `Register` plus
  * `registerElements`, or set on one component with `elements`.
  *
- * An element's attributes and handlers come first and its children last:
- * `h.el("form").on("submit", msg).children(...)`. `children` ends the chain
- * and returns a node with no chain methods, and `h.el(tag, ...children)` is
- * shorthand for it. A builder with no children is itself a valid child or
- * view. Arrays of children are flattened, and `false`, `null` and
+ * An element is written as a chain: `h.el("form").on("submit", msg).children(...)`.
+ * `children` returns the builder, so the chain goes on, and a second call
+ * adds after the first. `h.el(tag, ...children)` is shorthand for it. A
+ * builder is itself a valid child or view, with the children it holds.
+ * Arrays of children are flattened, and `false`, `null` and
  * `undefined` render nothing. Adjacent text merges into one text node when
  * the view is built, and empty text is dropped.
  *
@@ -581,8 +581,8 @@ export const isElementBuilder = (u: unknown): u is ElementBuilder<unknown, unkno
   u instanceof ElementBuilder
 
 /**
- * Turns view content into a node: an element builder becomes its element
- * with no children, and a node is returned as it is.
+ * Turns view content into a node: an element builder becomes its element,
+ * with the children it holds, and a node is returned as it is.
  *
  * @stability experimental
  * @category constructors
@@ -592,8 +592,14 @@ export const toNode = <Msg, R>(content: Content<Msg, R>): Node<Msg, R> =>
   content instanceof ElementBuilder ? build(content, []) : content
 
 /**
- * Builds the element node a builder describes, with the given children
- * normalised as `children` does. What a builder's `children` method calls.
+ * Builds the element node a builder describes: the children it holds, then
+ * the given ones, normalised as `children` does.
+ *
+ * **When to use**
+ *
+ * Use when a finished node is needed, such as in a function declared to
+ * return a `View.Element`. A view, a child and a fallback take the builder
+ * as it is.
  *
  * @stability experimental
  * @category constructors
@@ -604,20 +610,19 @@ export const build = <Msg, R, const C extends ReadonlyArray<Input<Msg, any>>>(
   inputs: C
 ): Element<Msg, R | Requirements<C[number]>> => buildWith(builder, inputs.length === 0 ? [] : children(inputs))
 
-/**
- * `build`, for inputs the caller owns and is done with, such as a
- * `children` method's rest arguments: the array is reused for the
- * element's children where it can be. What a builder's `children` calls.
- *
- * @internal
- */
-export const buildOwned = <Msg, R, const C extends ReadonlyArray<Input<Msg, any>>>(
-  builder: ElementBuilder<Msg, R, any, any>,
-  inputs: C
-): Element<Msg, R | Requirements<C[number]>> =>
-  buildWith(builder, inputs.length === 0 ? [] : childrenOf(inputs as unknown as Array<Input<Msg, any>>))
-
 const buildWith = <Msg, R>(
+  builder: ElementBuilder<Msg, any, any, any>,
+  given: Array<Node<Msg, any>>
+): Element<Msg, R> => {
+  // What the builder holds from `children` comes first, and what it is
+  // given now comes after.
+  const content = builder.content as Array<Node<Msg, any>> | undefined
+  const all = content === undefined ? given : given.length === 0 ? content : children([...content, ...given])
+  const hooks = builder.hooks
+  return hooks === undefined ? elementOf(builder, all) : forwardTo(builder, hooks, all)
+}
+
+const elementOf = <Msg, R>(
   builder: ElementBuilder<Msg, any, any, any>,
   children: Array<Node<Msg, any>>
 ): Element<Msg, R> => ({
@@ -633,6 +638,70 @@ const buildWith = <Msg, R>(
   owned: builder.owned,
   children
 })
+
+/**
+ * What a builder's `forward` stores: a function from the finished builder
+ * to the element to render.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type Forward = (node: any) => Element<any, any> | ElementBuilder<any, any, any, any>
+
+// Builds a builder that holds hooks. The last hook set runs first. It gets
+// the finished builder: this one without that hook and without its key,
+// holding every child. Building that runs the hooks set before it. The key
+// goes on what the hook returns, as siblings are matched by the outermost
+// node.
+const forwardTo = <Msg, R>(
+  builder: ElementBuilder<Msg, any, any, any>,
+  hooks: ReadonlyArray<Forward>,
+  content: Array<Node<Msg, any>>
+): Element<Msg, R> => {
+  const finished = copyBuilder(builder) as Mutable<ElementBuilder<Msg, any, any, any>>
+  finished.hooks = hooks.length === 1 ? undefined : hooks.slice(0, -1)
+  finished.content = content
+  finished.elementKey = undefined
+  const out: Node<Msg, R> = toNode(hooks[hooks.length - 1]!(finished))
+  if (out._tag !== "Element") {
+    throw new Error(`forward: the <${builder.tag}> was built into a ${out._tag}, and its hook has to return an element`)
+  }
+  return builder.elementKey === undefined ? out : { ...out, elementKey: builder.elementKey }
+}
+
+/**
+ * A copy of `builder` with `place` added after the hooks it already holds.
+ * What a builder's `forward` calls.
+ *
+ * @internal
+ */
+export const withForward = <B extends ElementBuilder<any, any, any, any>>(builder: B, place: Forward): B => {
+  const out = copyBuilder(builder) as Mutable<B>
+  out.hooks = builder.hooks === undefined ? [place] : [...builder.hooks, place]
+  return out
+}
+
+/**
+ * A copy of `builder` with `inputs` after the children it already holds,
+ * normalised as `children` does. What a builder's `children` calls, with
+ * its rest arguments: the array is reused for the first children.
+ *
+ * @internal
+ */
+export const withContent = <B extends ElementBuilder<any, any, any, any>>(
+  builder: B,
+  inputs: ReadonlyArray<Input<any, any>>
+): B => {
+  const out = copyBuilder(builder) as Mutable<B>
+  const content = builder.content
+  out.content = content === undefined
+    ? (inputs.length === 0 ? [] : childrenOf(inputs as Array<Input<any, any>>))
+    : inputs.length === 0
+    ? content
+    : children([...content, ...inputs])
+  return out
+}
 
 /**
  * `children`, for an array the caller owns, such as a method's rest
@@ -712,15 +781,18 @@ export const withFields = <B extends ElementBuilder<any, any, any, any>>(
  * A view copies a builder for each chain call, so the copy is what building a
  * view costs most. A builder that holds only the base class's fields is
  * copied by a constructor made for its class, which stores them one by one:
- * several times faster than a generic copy. A builder whose class adds
- * fields of its own is copied generically.
+ * several times faster than a generic copy. A builder that holds another
+ * field under a string key, from its class or added to it, is copied
+ * generically. A field under a symbol isn't looked for, as asking for a
+ * builder's symbols on every copy cost about as much as the rest of
+ * building a view, so a copy leaves it behind.
  */
 const copyBuilder = <B extends ElementBuilder<any, any, any, any>>(builder: B): B => {
   // Counted in place: `Object.keys` would make an array for every copy.
   let fields = 0
   for (const _ in builder) fields++
-  // A field under a symbol isn't counted, so it is asked for.
-  if (fields === builderFields.length && Object.getOwnPropertySymbols(builder).length === 0) {
+  // A builder keeps no state under a symbol, so the count is the whole check.
+  if (fields === builderFields.length) {
     const proto = Object.getPrototypeOf(builder)
     let copier = copiers.get(proto)
     if (copier === undefined) {
@@ -741,6 +813,9 @@ const builderFields = [
   "refKey",
   "mount",
   "owned",
+  "content",
+  "hooks",
+  "removals",
   "tag"
 ] as const
 
@@ -767,6 +842,9 @@ const makeCopier = (proto: object, first: ElementBuilder<any, any, any, any>): C
     this.refKey = from.refKey
     this.mount = from.mount
     this.owned = from.owned
+    this.content = from.content
+    this.hooks = from.hooks
+    this.removals = from.removals
     this.tag = from.tag
   }
   copier.prototype = proto
@@ -862,19 +940,13 @@ export const wrapPart = <
   F extends (...args: Array<any>) => any
 >(_part: P, wrapper: F): F & Pick<P, "~R"> => wrapper
 
-// Only a part's blank builder records removals. Ordinary builders keep their
-// string-only attrs and their fast copier; copies of a part patch keep this symbol.
-const partAttributeRemovals = Symbol("partAttributeRemovals")
-type PartPatch = {
-  [partAttributeRemovals]?: ReadonlyArray<string>
-}
-
 /**
  * Makes a part for one owner. `decorate` gets an empty builder of the
  * consumer's class and tag, so it never sees what the consumer set. Its
  * attributes and properties are written over the consumer's, except token
  * lists, and its handlers, event options, ref, mount and token lists become
- * one owned layer.
+ * one owned layer. The children it adds go after the ones the consumer's
+ * builder holds, and what it sets with `forward` after the builder's.
  *
  * @internal
  */
@@ -894,17 +966,17 @@ export const makePart = (
   const blank: ElementBuilder<any, any, any, any> = Object.assign(
     Object.create(Object.getPrototypeOf(builder)),
     blankFields,
-    { tag: builder.tag, [partAttributeRemovals]: [] }
+    { tag: builder.tag, removals: [] }
   )
   const patch = decorate(blank, ...args)
   if (!(patch instanceof ElementBuilder)) {
-    throw new Error(owner.path + ": a part returns the builder it was given, without children")
+    throw new Error(owner.path + ": a part returns the builder it was given")
   }
   if (patch.elementKey !== undefined) throw new Error(owner.path + ": a part can't set an element's key")
   if (patch.owned.length > 0) throw new Error(owner.path + ": a part can't apply another part")
   const attrs: Record<string, string> = { ...builder.attrs }
   const tokens: Record<string, string> = {}
-  for (const name of (patch as PartPatch)[partAttributeRemovals] ?? []) {
+  for (const name of patch.removals ?? []) {
     // Token lists are additive: a part can omit its own tokens, not the consumer's.
     if (!tokenListAttributes.has(name)) delete attrs[name]
   }
@@ -920,11 +992,22 @@ export const makePart = (
     mount: patch.mount,
     tokens
   }
-  return withFields(builder, {
+  const out = withFields(builder, {
     attrs,
     props: { ...builder.props, ...patch.props },
     owned: [...builder.owned, layer]
   })
+  // The part's children come after the ones the builder came with, and its
+  // hooks are set after the builder's.
+  if (patch.content !== undefined) {
+    ;(out as Mutable<typeof out>).content = builder.content === undefined
+      ? patch.content
+      : children([...builder.content, ...patch.content])
+  }
+  if (patch.hooks !== undefined) {
+    ;(out as Mutable<typeof out>).hooks = builder.hooks === undefined ? patch.hooks : [...builder.hooks, ...patch.hooks]
+  }
+  return out
 }
 
 /**
@@ -975,7 +1058,10 @@ const blankFields = {
   eventOptions: noFields,
   refKey: undefined,
   mount: undefined,
-  owned: noOwned
+  owned: noOwned,
+  content: undefined,
+  hooks: undefined,
+  removals: undefined
 }
 
 /**
@@ -996,8 +1082,8 @@ const escapeId = (value: string): string =>
 
 /**
  * The element builder: `h.el(tag)` and a vocabulary's element names. It
- * holds attributes, properties, handlers, a key, a ref and a mount, and no
- * children: an element's children go in last, with `children`.
+ * holds attributes, properties, handlers, a key, a ref, a mount and the
+ * children given so far.
  *
  * **Details**
  *
@@ -1069,6 +1155,27 @@ export class ElementBuilder<
    * @since 0.1.0
    */
   readonly owned: ReadonlyArray<Owned> = noOwned
+  /**
+   * The children given with `children` so far, as nodes, or `undefined`
+   * before the first call. Read the element's children off the node,
+   * `View.build(builder, []).children`, which also runs `forward`.
+   *
+   * @since 0.1.0
+   */
+  readonly content: ReadonlyArray<Node<Msg, any>> | undefined = undefined
+  /**
+   * The functions set with `forward`, in the order they were set.
+   *
+   * @since 0.1.0
+   */
+  readonly hooks: ReadonlyArray<Forward> | undefined = undefined
+  /**
+   * On the blank builder a part decorates, the attributes the part
+   * removed. `undefined` on every other builder.
+   *
+   * @since 0.1.0
+   */
+  readonly removals: ReadonlyArray<string> | undefined = undefined
   /**
    * Phantom: the requirements of the element's mount, which surface in the
    * component's.
@@ -1144,11 +1251,9 @@ export class ElementBuilder<
    * @since 0.1.0
    */
   attr(name: string, value: string | undefined): this {
-    const out = copyBuilder(this) as Mutable<this> & PartPatch
-    const removals = out[partAttributeRemovals]
-    if (value === undefined && removals !== undefined) {
-      out[partAttributeRemovals] = [...removals, name]
-    }
+    const out = copyBuilder(this) as Mutable<this>
+    const removals = this.removals
+    if (value === undefined && removals !== undefined) out.removals = [...removals, name]
     const attrs = this.attrs
     if (attrs === noFields) {
       if (value !== undefined) out.attrs = assoc(attrs, name, value)
@@ -1237,6 +1342,61 @@ export class ElementBuilder<
     }
     return withFields(this, { mount })
   }
+  /**
+   * Lets a chain land on an element that sits below the root of what is
+   * rendered. `place` gets the finished element, with everything chained
+   * after this call and its children in it, and returns the element to
+   * render: one around it, or the finished element itself.
+   *
+   * **When to use**
+   *
+   * Use when a function takes a builder and returns it, and the element
+   * needs markup around it, or the function's own attributes written after
+   * the caller's.
+   *
+   * **Details**
+   *
+   * `place` runs when the builder becomes an element: as another element's
+   * child, or as what a view returns. What it returns has to be an
+   * element, and the requirements of what it adds join this element's.
+   *
+   * The finished element is still a builder. `place` can read what the
+   * caller chained, such as `node.handlers`, and write attributes after
+   * it. Children it adds come after the caller's.
+   *
+   * A key set on the builder, before or after this call, goes on the
+   * element `place` returns, as siblings are matched by their outermost
+   * node. The ref, the mount and the handlers stay on the finished element.
+   *
+   * A builder can hold several of these functions, from this method and
+   * from the parts applied to it. The last one set runs first, and building
+   * the finished element it gets runs the one before. So the last call's
+   * markup is outermost, and the first call writes its attributes last.
+   *
+   * **Example** (A frame around the caller's input)
+   *
+   * ```ts import.meta.vitest
+   * import { View } from "@effect/ui"
+   * import { Html } from "@effect/ui/html"
+   *
+   * const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
+   *
+   * // The class and the attribute land on the input, inside the frame.
+   * const framed = h.input.forward((node) => h.div.class("frame").children(node))
+   * const frame = View.build(framed.class("amount").attr("inputmode", "decimal"), [])
+   *
+   * if (frame.tag !== "div" || frame.attrs.class !== "frame") throw new Error("the frame isn't outermost")
+   * ```
+   *
+   * @since 0.1.0
+   */
+  forward<R2 = never>(
+    place: (
+      node: ElementBuilder<Msg, R, Handlers, HostNode, Tag>
+    ) => Element<Msg, R2> | ElementBuilder<Msg, R2, any, any>
+  ): ElementBuilder<Msg, R | R2, Handlers, HostNode, Tag> {
+    return withForward(this, place) as any
+  }
 }
 
 /**
@@ -1244,8 +1404,9 @@ export class ElementBuilder<
  *
  * **Details**
  *
- * `children` ends the chain and returns the element node, which has no chain
- * methods, so attributes and handlers always come before the children.
+ * `children` returns the builder with the children added after the ones it
+ * holds. So a function that takes a builder can add children of its own and
+ * still return a builder, for its caller to add more.
  *
  * @stability experimental
  * @category models
@@ -1277,14 +1438,28 @@ export class ContainerBuilder<
     return (super.onMount as any)(mount)
   }
   /**
-   * Ends the chain with the element's children: nodes, builders, text,
-   * arrays to flatten, and holes (`false`, `null`, `undefined`). Their
-   * requirements join the element's.
+   * Adds children after the ones the builder holds, and returns the
+   * builder: nodes, builders, text, arrays to flatten, and holes (`false`,
+   * `null`, `undefined`). Their requirements join the element's.
    *
    * @since 0.1.0
    */
-  children<const C extends ReadonlyArray<Input<Msg, any>>>(...inputs: C): Element<Msg, R | Requirements<C[number]>> {
-    return buildOwned(this, inputs)
+  children<const C extends ReadonlyArray<Input<Msg, any>>>(
+    ...inputs: C
+  ): ContainerBuilder<Msg, R | Requirements<C[number]>, Handlers, HostNode, Tag> {
+    return withContent(this, inputs) as any
+  }
+  /**
+   * Like `ElementBuilder.forward`, keeping `children`.
+   *
+   * @since 0.1.0
+   */
+  override forward<R2 = never>(
+    place: (
+      node: ContainerBuilder<Msg, R, Handlers, HostNode, Tag>
+    ) => Element<Msg, R2> | ElementBuilder<Msg, R2, any, any>
+  ): ContainerBuilder<Msg, R | R2, Handlers, HostNode, Tag> {
+    return withForward(this, place) as any
   }
 }
 
@@ -1295,8 +1470,9 @@ export class ContainerBuilder<
  *
  * **Details**
  *
- * The chain methods return the builder `B`, which isn't callable, and the
- * call returns a node, so `h.div(a).class("x")` doesn't compile.
+ * The chain methods and the call return the builder `B`, which isn't
+ * callable: `h.div(a).children(b)` adds `b`, and `h.div(a)(b)` doesn't
+ * compile.
  *
  * @stability experimental
  * @category models
@@ -1474,7 +1650,7 @@ export interface Helper<Msg, Props> {
   el<const C extends readonly [Input<Msg, any>, ...ReadonlyArray<Input<Msg, any>>]>(
     tag: string,
     ...children: C
-  ): Element<Msg, Requirements<C[number]>>
+  ): ContainerBuilder<Msg, Requirements<C[number]>>
   /** A text node. The only way to put text in a native view. */
   text(text: string): Text
   /**
@@ -1546,19 +1722,22 @@ class NoTextBuilder<Msg> extends ContainerBuilder<Msg> {
   }
   override children<const C extends ReadonlyArray<Input<Msg, any>>>(
     ...inputs: C
-  ): Element<Msg, Requirements<C[number]>> {
-    const node = super.children(...inputs)
+  ): ContainerBuilder<Msg, Requirements<C[number]>> {
+    const out = super.children(...inputs) as Mutable<ContainerBuilder<Msg, any>>
     let message: string | undefined
-    const children = node.children as Array<Node<Msg, any>>
-    for (let index = 0; index < children.length; index++) {
-      const child = children[index]!
+    let children: Array<Node<Msg, any>> | undefined
+    const content = out.content ?? []
+    for (let index = 0; index < content.length; index++) {
+      const child = content[index]!
       if (child._tag === "Text") throw new Error(message ??= this.noTextMessage())
       // An outlet's content isn't known yet, so the runtime checks it when it builds the content.
       if (child._tag === "Outlet") {
+        children ??= [...content]
         children[index] = { _tag: "Outlet", name: child.name, noText: message ??= this.noTextMessage() }
       }
     }
-    return node
+    if (children !== undefined) out.content = children
+    return out
   }
   private noTextMessage(): string {
     return `<${this.tag}> can't hold text in the ${this.vocabulary} vocabulary; text goes inside ${

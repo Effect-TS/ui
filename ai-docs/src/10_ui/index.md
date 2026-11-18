@@ -108,7 +108,9 @@ Name view functions in CapitalCase, like components (for example, `Card` and `Fi
 Use `View.H<M>` with `@effect/ui/html/register` for shared HTML view
 functions. No separate HTML helper type is needed. When the root is the hole,
 return its builder and let the caller add children: `Card(h).children(...)`.
-This needs no children generic. For a nested hole, use an options object
+This needs no children generic. `children` returns the builder and a second
+call adds after the first, so the function can add children of its own and
+still return the builder. For a nested hole, use an options object
 and keep its children inferred through `C`:
 
 ```ts
@@ -127,6 +129,17 @@ Pass `children: [child, otherChild]`. The unspread array retains the union
 of its children's service requirements. `View.Children<M>` is a generic
 constraint, not a parameter annotation: annotating children directly with it
 erases requirements. `View.Input<M>` instead rejects service-requiring children.
+
+A nested hole can also stay a builder. `forward` lets the caller's chain
+and children land on an element below the root: the function returns the
+inner builder, and `forward` says what goes around it when it is built.
+
+```ts
+const Framed = <M>(h: View.H<M>) => h.div.class("control").forward((control) => h.div.class("frame").children(control))
+
+// The class and the children land on the control, inside the frame.
+Framed(h).class("wide").children(h.input)
+```
 
 ### Loading data
 
