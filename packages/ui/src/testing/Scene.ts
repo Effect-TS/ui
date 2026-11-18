@@ -252,8 +252,8 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Shared.Ste
   ): this
   /**
    * Sends the message the parent's `onEmit` maps `event` from the child of
-   * `child` at `key` to, if any. A ref finds the child rendered with it. A
-   * message step.
+   * `child` at `key` to, if any. A string finds the child rendered with that
+   * key, and a ref the child rendered with it. A message step.
    */
   childEmit<Child extends Component.Any | Component.Headless.Any | Feature.Any>(
     child: Child,
@@ -280,11 +280,18 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Shared.Ste
    * Sets the Model the headless child of `child` without a key is expanded
    * from, in place of its `init` Model. The scene never runs the child's
    * `update`.
+   *
+   * **Details**
+   *
+   * The Model is for the instance the step found, at its path: a child at
+   * another path keeps its own, even one with the same component and key in
+   * another closure, or one a later step renders.
    */
   givenChild(child: Component.Headless.Any, model: unknown): this
   /**
    * Sets the Model the headless child of `child` at `key` is expanded from.
-   * A ref finds the child rendered with it.
+   * A string finds the child rendered with that key, and a ref the child
+   * rendered with it.
    */
   givenChild(child: Component.Headless.Any, key: string | Component.Ref.Any, model: unknown): this
   /**
@@ -471,7 +478,7 @@ export const children = <Msg>(
  * child rendered with it.
  * Throws, as the runtime fails the parent, if the fallback renders two
  * children at one path, or a child at the path or ref key of another child of
- * `view`. It sees one fallback, so it can't check two shown at once, as the
+ * the view, closure or slot content that declared the child. It sees one fallback, so it can't check two shown at once, as the
  * runtime does.
  *
  * @stability experimental
@@ -499,7 +506,12 @@ export const fallback: {
   const child = engine.findChild(view, component, key, "Scene.fallback")
   if (child.fallback === undefined) return undefined
   const node = View.toNode(child.fallback(result))
-  // As the runtime does: the fallback's children share the parent's paths.
-  checkFallbackPaths(checkChildPaths("Scene.fallback", view), child, node)
+  // As the runtime does: the fallback's children share the paths of the view, closure or slot content
+  // that declared the child. A view no scene expanded is one such view.
+  checkFallbackPaths(
+    engine.scopeOf(child, "Scene.fallback") ?? checkChildPaths("Scene.fallback", view),
+    child,
+    node
+  )
   return node
 }

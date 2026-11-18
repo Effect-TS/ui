@@ -27,6 +27,7 @@ import {
   checkChildPaths,
   checkContentPaths,
   childName,
+  type ChildPaths,
   segment,
   slotSegment
 } from "./paths.ts"
@@ -135,7 +136,7 @@ export type Fields<Props, Model, Msg, Events> =
     | "ack"
   >
   & {
-    readonly childModels?: ReadonlyArray<GivenChild> | undefined
+    readonly childModels?: ReadonlyMap<string, unknown> | undefined
     readonly shared?: ReadonlyMap<Component.Definition.Any, unknown> | undefined
   }
 
@@ -143,17 +144,34 @@ export type Fields<Props, Model, Msg, Events> =
 // A story shows a headless child expanded: the closure it was declared with, run against the parts of the
 // child's `init` Model or of the Model `givenChild` set. No runtime is involved.
 /**
- * The Model `givenChild` set for the headless child of `component` with `key`.
+ * The Models `givenChild` set, by the path of the headless child each one is for.
  *
  * @internal
  */
-export interface GivenChild {
-  readonly component: object
-  readonly key: string
-  readonly model: unknown
+export const childModels = new WeakMap<object, ReadonlyMap<string, unknown>>()
+
+/** Where an expansion found a child: its path, and the paths of the view or closure that declared it. */
+interface Placement {
+  readonly path: string
+  readonly scope: (label: string) => ChildPaths
 }
-/** @internal */
-export const childModels = new WeakMap<object, ReadonlyArray<GivenChild>>()
+const placements = new WeakMap<object, Placement>()
+
+/**
+ * The path a story gave `child` as it expanded its view, if it did.
+ *
+ * @internal
+ */
+export const pathOf = (child: View.Child<any, any>): string | undefined => placements.get(child)?.path
+
+/**
+ * The child paths of the view, closure or slot content that declared `child`, as the runtime checks its
+ * fallback against them, labelled `label`. `undefined` for a child no story expansion placed.
+ *
+ * @internal
+ */
+export const scopeOf = (child: View.Child<any, any>, label: string): ChildPaths | undefined =>
+  placements.get(child)?.scope(label)
 // The children an expansion replaced, by the expanded root: `childEmit` and `childFailure` still find them.
 const expandedChildren = new WeakMap<object, ReadonlyArray<View.Child<any, any>>>()
 
@@ -275,7 +293,7 @@ export const sharedLookup = (given: Owners | undefined, owners: Owners): Compone
 const expandRoot = <Msg>(
   view: View.Node<Msg, any>,
   name: string,
-  given: ReadonlyArray<GivenChild> | undefined,
+  given: ReadonlyMap<string, unknown> | undefined,
   filled: Readonly<Record<string, View.Input<never, any>>> | undefined,
   shared: Owners | undefined,
   root: Owners
@@ -292,14 +310,16 @@ const expandRoot = <Msg>(
     const nodes = View.children([input])
     const paths = checkContentPaths(path, nodes)
     if (own) written.push(paths)
-    return nodes.map((child) => expand(child, path, depth, own, owners))
+    const scope = (label: string) => checkContentPaths(label, nodes)
+    return nodes.map((child) => expand(child, path, depth, own, owners, scope))
   }
   const expand = (
     node: View.Node<any, any>,
     path: string,
     depth: number,
     own: boolean,
-    owners: Owners
+    owners: Owners,
+    scope: (label: string) => ChildPaths
   ): View.Node<any, any> => {
     switch (node._tag) {
       case "Text":
@@ -319,7 +339,7 @@ const expandRoot = <Msg>(
       case "Element": {
         let changed = false
         const children = node.children.map((child) => {
-          const next = expand(child, path, depth, own, owners)
+          const next = expand(child, path, depth, own, owners, scope)
           if (next !== child) changed = true
           return next
         })
@@ -327,9 +347,11 @@ const expandRoot = <Msg>(
       }
       case "Child": {
         const component = node.component as unknown as Component.Headless.Any
+        const childPath = path + "/" + segment(node)
+        const placement: Placement = { path: childPath, scope }
+        placements.set(node, placement)
         if (node.slots !== undefined) {
           // A child's view isn't run, but what the parent passed for its slots is the parent's.
-          const childPath = path + "/" + segment(node)
           const shown: Array<View.Node<any, any>> = []
           const lengths: Array<readonly [string, number]> = []
           for (const slot in node.slots) {
@@ -338,14 +360,13 @@ const expandRoot = <Msg>(
             lengths.push([slot, placed.length])
           }
           const out = { ...node, children: shown } as View.Node<any, any>
+          placements.set(out, placement)
           slotLengths.set(out, lengths)
           return out
         }
         if (node.view === undefined || component.parts === undefined) return node
         replaced.push(node)
-        const childPath = path + "/" + segment(node)
-        const set = given?.find((entry) => isChildOf(node, entry.component) && node.key === entry.key)
-        const model = set !== undefined ? set.model : component.init(node.props).model
+        const model = given?.has(childPath) ? given.get(childPath) : component.init(node.props).model
         const parts = component.parts(model, node.props, {
           owner: { path: childPath, depth: depth + 1 },
           shared: sharedLookup(shared, owners)
@@ -354,7 +375,14 @@ const expandRoot = <Msg>(
         const paths = checkChildPaths(childPath, tree)
         if (own) written.push(paths)
         // An owner expanded here is the nearest one for the readers in its closure.
-        const inner = expand(tree, childPath, depth + 1, own, ownersBelow(owners, component, model, node.props))
+        const inner = expand(
+          tree,
+          childPath,
+          depth + 1,
+          own,
+          ownersBelow(owners, component, model, node.props),
+          (label) => checkChildPaths(label, tree)
+        )
         // A copy per render: a closure may return a node it cached, and the identities are this render's.
         const out = { ...inner } as View.Node<any, any>
         expansionOf.set(out, [node, ...(expansionOf.get(inner) ?? [])])
@@ -364,7 +392,7 @@ const expandRoot = <Msg>(
       }
     }
   }
-  const expanded = expand(view, "/" + name, 0, true, root)
+  const expanded = expand(view, "/" + name, 0, true, root, (label) => checkChildPaths(label, view))
   checkAuthorRefs("/" + name, written)
   checkAuthorPlacements("/" + name, written)
   if (replaced.length > 0) expandedChildren.set(expanded, replaced)
@@ -1703,18 +1731,16 @@ const shownNodes = function*(node: View.Node<any, any>): Generator<View.Node<any
 /**
  * Whether `child` was declared from `component`: the component itself, a provided copy of it, or the
  * feature service.
- *
- * @internal
  */
-export const isChildOf = (child: View.Child<any, any>, component: object): boolean => {
+const isChildOf = (child: View.Child<any, any>, component: object): boolean => {
   if (child.component === component) return true
   const definition = (child.component as { readonly definition?: unknown }).definition
   return definition !== undefined && definition === (component as { readonly definition?: unknown }).definition
 }
 
 /**
- * The one child of `component` with `key`: a string matches the child's key, a ref a child rendered with
- * it, and no key a child rendered without a key or a ref.
+ * The one child of `component` with `key`: a string matches a child rendered with that key, a ref a child
+ * rendered with it, and no key a child rendered without a key or a ref.
  *
  * @internal
  */
@@ -1730,7 +1756,7 @@ export const findChild = <Msg>(
       key === undefined
         ? child.key === "" && child.ref === undefined
         : typeof key === "string"
-        ? child.key === key
+        ? child.key === key && child.ref === undefined
         : child.ref !== undefined && child.ref.key === key.key
     )
   )

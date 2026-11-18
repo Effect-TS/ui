@@ -98,6 +98,11 @@ describe("Scene", () => {
         () => Scene.start(Note, {}).childEmit(Note, BadgeRef, { _tag: "Saved", text: "" }),
         /^Scene\.childEmit: no child Note with the ref Badge; children: Badge\[Badge\] \(ref\)$/
       )
+      // A string names a keyed child, never one rendered with a ref.
+      assert.throws(
+        () => Scene.start(Note, {}).childEmit(Badge, BadgeRef.key, { _tag: "Opened", count: 1 }),
+        /^Scene\.childEmit: no child Badge with key "Badge"/
+      )
     }))
 
   it.effect("childEmit names a feature child by its service", () =>
@@ -141,6 +146,53 @@ describe("Scene", () => {
         /^Scene\.childEmit: no child Badge with key "b"; children: Note\[\], Badge\[\]$/
       )
     }))
+
+  describe("children in headless closures", () => {
+    const Toggled = Schema.TaggedUnion({ Toggled: {} })
+    const Disclosure = Component.define({ name: "Disclosure", model: Schema.Boolean, message: Toggled, elements: Html })
+      .make({
+        init: () => false,
+        update: (open) => !open,
+        parts: (open) => ({ open })
+      })
+    const Outer = Disclosure.ref("D")
+    const state = (open: boolean) => (open ? "open" : "closed")
+
+    it("givenChild sets the Model of the child it selects, and no other at another path", () => {
+      // The ref child's key is "D", and so is the keyed child in its closure.
+      const Page = Component.define({ name: "Page", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) =>
+          Disclosure(h, {
+            ref: Outer,
+            view: (outer) =>
+              h.div(
+                h.p(state(outer.open)),
+                Disclosure(h, { key: "D", view: (inner) => h.p(state(inner.open)) })
+              )
+          })
+      })
+      const texts = (s: Scene.Steps.Any) => s.all(Locator.tag("p")).map((node) => Locator.textOf(node))
+      assert.deepStrictEqual(texts(Scene.start(Page, {}).givenChild(Disclosure, Outer, true)), ["open", "closed"])
+      assert.deepStrictEqual(texts(Scene.start(Page, {}).givenChild(Disclosure, "D", true)), ["closed", "open"])
+    })
+
+    it("Scene.fallback checks a child's paths in the view that declared it", () => {
+      const Page = Component.define({ name: "Page", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) =>
+          h.div(
+            Disclosure(h, { key: "a", view: () => Badge(h, {}) }),
+            Disclosure(h, { key: "b", view: () => Badge(h, {}) }),
+            Note(h, { fallback: () => h.text("no note") })
+          )
+      })
+      const view = Scene.start(Page, {}).view
+      assert.deepStrictEqual(Scene.fallback(view, Note, AsyncResult.initial()), { _tag: "Text", text: "no note" })
+    })
+  })
 
   it.effect("childFailure sends what onFailure maps, and does nothing without one", () =>
     Effect.gen(function*() {

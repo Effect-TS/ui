@@ -11,4 +11,4 @@ Scene's child steps and `Scene.fallback` now take the child's component first, t
 - `s.givenChild(Menu, "actions", model)` replaces `s.givenChild("actions", model)`
 - `Scene.fallback(view, TodoItem, "t1", result)` replaces `Scene.fallback(view, "t1", result)`
 
-A step that matches no child, or several, throws.
+A string selects a child rendered with that key, never one rendered with a ref. A step that matches no child, or several, throws. `givenChild` sets the Model of the one instance it found, at its path, and `Scene.fallback` checks the fallback against the view, closure or slot content that declared the child, as the runtime does.

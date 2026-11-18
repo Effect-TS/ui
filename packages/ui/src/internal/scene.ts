@@ -338,12 +338,14 @@ export class SceneCursor extends Cursor {
   }
   givenChild(child: Component.Headless.Any, ...args: KeyAnd<unknown>): this {
     const [key, model] = keyAnd(args)
-    const found = engine.findChild(this.state.view(), child, key, this.name("givenChild"))
+    const step = this.name("givenChild")
+    // The Model is for the instance the step selected: the one at its path, as the runtime keys instances.
+    const path = engine.pathOf(engine.findChild(this.state.view(), child, key, step))
+    if (path === undefined) throw new Error(`${step}: the child isn't one the scene expands`)
     return this.act("givenChild", "acting", (state) => {
-      const given = (engine.childModels.get(state) ?? []).filter((entry) =>
-        !(entry.key === found.key && engine.isChildOf(found, entry.component))
-      )
-      return engine.update(state, { childModels: [...given, { component: child, key: found.key, model }] })
+      const given = new Map(engine.childModels.get(state))
+      given.set(path, model)
+      return engine.update(state, { childModels: given })
     })
   }
   shared(owner: Component.Headless.Any, value: unknown): this {
