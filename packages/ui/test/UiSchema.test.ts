@@ -15,16 +15,16 @@ describe("UiSchema", () => {
       assert.deepStrictEqual(Shape.Empty(), { _tag: "Empty" })
     })
 
-    it("$is checks only _tag", () => {
-      assert.isTrue(Shape.$is("Circle")({ _tag: "Circle" }))
-      assert.isFalse(Shape.$is("Circle")(Shape.Empty()))
-      assert.isFalse(Shape.$is("Circle")(null))
+    it("is checks only _tag", () => {
+      assert.isTrue(Shape.is("Circle")({ _tag: "Circle" }))
+      assert.isFalse(Shape.is("Circle")(Shape.Empty()))
+      assert.isFalse(Shape.is("Circle")(null))
     })
 
-    it("$match supports data-first and data-last", () => {
+    it("match supports data-first and data-last", () => {
       const cases = { Circle: () => "circle", Rect: () => "rect", Empty: () => "empty" }
-      assert.strictEqual(Shape.$match(Shape.Rect({ width: 1, height: 2 }), cases), "rect")
-      assert.strictEqual(pipe(Shape.Empty(), Shape.$match(cases)), "empty")
+      assert.strictEqual(Shape.match(Shape.Rect({ width: 1, height: 2 }), cases), "rect")
+      assert.strictEqual(pipe(Shape.Empty(), Shape.match(cases)), "empty")
     })
 
     it("decodes as a tagged union", () => {
@@ -37,7 +37,7 @@ describe("UiSchema", () => {
     })
 
     it("throws on every name the schema already has, and on type-only members", () => {
-      const names = new Set(["Type", "Rebuild", "~type.make", "apply"])
+      const names = new Set(["Type", "Rebuild", "~type.make", "apply", "is", "match"])
       for (let o: object | null = Shape; o !== null; o = Object.getPrototypeOf(o)) {
         for (const name of Object.getOwnPropertyNames(o)) names.add(name)
       }
@@ -57,7 +57,7 @@ describe("UiSchema", () => {
     it("numeric keys become string tags", () => {
       const Code = UiSchema.TaggedEnum({ 404: {}, Ok: {} })
       assert.deepStrictEqual(Code[404](), { _tag: "404" })
-      assert.isTrue(Code.$is("404")(Schema.decodeUnknownSync(Code)({ _tag: "404" })))
+      assert.isTrue(Code.is("404")(Schema.decodeUnknownSync(Code)({ _tag: "404" })))
     })
   })
 })

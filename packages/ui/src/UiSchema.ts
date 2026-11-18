@@ -2,7 +2,7 @@
  * Schemas for UI values that are built often and must stay cheap to build.
  *
  * `TaggedEnum` takes the same input as `Schema.TaggedUnion` and attaches one
- * constructor per case, plus `$is` and `$match`, directly to the schema, the
+ * constructor per case, plus `is` and `match`, directly to the schema, the
  * way `Data.taggedEnum` does. The constructors skip validation, so a model or
  * message built in a hot path costs no more than an object literal, while the
  * same definition still decodes and encodes as a schema.
@@ -30,8 +30,8 @@ import * as Schema from "effect/Schema"
 import type * as Types from "effect/Types"
 
 /**
- * A `Schema.TaggedUnion` with one unchecked constructor per case, `$is` and
- * `$match`.
+ * A `Schema.TaggedUnion` with one unchecked constructor per case, `is` and
+ * `match`.
  *
  * **Details**
  *
@@ -59,7 +59,7 @@ export declare namespace TaggedEnum {
    * **Details**
    *
    * Everything `Schema.TaggedUnion` has, including `cases`, `guards` and
-   * `match`, plus `$is` and `$match`. `annotate`, `check` and `rebuild`
+   * `match`, plus `is`. `annotate`, `check` and `rebuild`
    * return a {@link TaggedEnum}, so the constructors survive them.
    *
    * @stability experimental
@@ -71,11 +71,7 @@ export declare namespace TaggedEnum {
     /**
      * Returns a type guard that checks only the `_tag` field.
      */
-    readonly $is: <Tag extends keyof Cases>(tag: Tag) => (u: unknown) => u is Cases[Tag]["Type"]
-    /**
-     * Matches a value exhaustively on `_tag`, data-first or data-last.
-     */
-    readonly $match: Schema.TaggedUnion<Cases>["match"]
+    readonly is: <Tag extends keyof Cases>(tag: Tag) => (u: unknown) => u is Cases[Tag]["Type"]
   }
 
   /**
@@ -160,8 +156,7 @@ const reservedTags: ReadonlySet<string> = new Set(Object.keys(
     guards: 0,
     match: 0,
     matchOrElse: 0,
-    $is: 0,
-    $match: 0,
+    is: 0,
     apply: 0,
     call: 0,
     bind: 0,
@@ -187,7 +182,7 @@ const reservedTags: ReadonlySet<string> = new Set(Object.keys(
 
 /**
  * Builds a `Schema.TaggedUnion` and attaches one unchecked constructor per
- * case, plus `$is` and `$match`, directly to the schema.
+ * case, plus `is` and `match`, directly to the schema.
  *
  * **When to use**
  *
@@ -198,8 +193,8 @@ const reservedTags: ReadonlySet<string> = new Set(Object.keys(
  *
  * Each constructor is keyed by its tag and only adds `_tag` to its input, like
  * `Data.taggedEnum`. The input is the case's `Type` without `_tag`; a case
- * with no other fields takes no argument. `$is(tag)` returns a guard that
- * checks only `_tag`, and `$match` matches exhaustively, data-first or
+ * with no other fields takes no argument. `is(tag)` returns a guard that
+ * checks only `_tag`, and `match` matches exhaustively, data-first or
  * data-last. The `Schema.TaggedUnion` members, `cases` included, are kept,
  * and `annotate` returns a schema that still has the constructors.
  *
@@ -208,9 +203,9 @@ const reservedTags: ReadonlySet<string> = new Set(Object.keys(
  * - Constructors skip validation, checks and constructor defaults. A field
  *   with a constructor default is required, and a branded field takes a
  *   branded value. Use `cases[tag].make` when you need validation or defaults.
- * - `$is(tag)` doesn't look past `_tag`. Decode untrusted input first.
+ * - `is(tag)` doesn't look past `_tag`. Decode untrusted input first.
  * - A tag in {@link TaggedEnum.ReservedTag} (`ast`, `annotate`, `cases`,
- *   `make`, `pipe`, `name`, `Type`, ...) is a type error, and throws when
+ *   `is`, `match`, `make`, `pipe`, `name`, `Type`, ...) is a type error, and throws when
  *   the schema is built.
  * - A case can't declare its own `_tag` field, because the case key is the
  *   tag. This is a type error, and throws when the schema is built.
@@ -229,9 +224,9 @@ const reservedTags: ReadonlySet<string> = new Set(Object.keys(
  *
  * const circle = Shape.Circle({ radius: 1 })
  *
- * Shape.$is("Circle")(circle) // => true
+ * Shape.is("Circle")(circle) // => true
  *
- * Shape.$match(circle, {
+ * Shape.match(circle, {
  *   Circle: ({ radius }) => radius,
  *   Rect: ({ width, height }) => width * height
  * }) // => 1
@@ -261,11 +256,11 @@ export const TaggedEnum = <const CasesByTag extends Record<string, Schema.Struct
   }
   const union = Schema.TaggedUnion(casesByTag)
   const { tag, cases, isAnyOf, guards, match, matchOrElse } = union
-  const members: Record<string, unknown> = { tag, cases, isAnyOf, guards, match, matchOrElse, $is, $match: match }
+  const members: Record<string, unknown> = { tag, cases, isAnyOf, guards, match, matchOrElse, is }
   for (const key of tags) {
     members[key] = (args: object | undefined) => ({ ...args, _tag: key })
   }
   return Schema.make<any>(union.ast, members)
 }
 
-const $is = (tag: string) => (u: unknown) => Predicate.isTagged(u, tag)
+const is = (tag: string) => (u: unknown) => Predicate.isTagged(u, tag)

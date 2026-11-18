@@ -45,26 +45,27 @@ describe("UiSchema.TaggedEnum", () => {
     expect(schema.A).type.toBeCallableWith({ a: 1 })
   })
 
-  it("$is narrows on _tag", () => {
+  it("is narrows on _tag", () => {
     const u = hole<unknown>()
-    if (Shape.$is("Circle")(u)) {
+    if (Shape.is("Circle")(u)) {
       expect(u).type.toBe<Circle>()
     }
-    expect(Shape.$is).type.not.toBeCallableWith("Square")
+    expect(Shape.is).type.not.toBeCallableWith("Square")
   })
 
-  it("$match is exhaustive, data-first and data-last", () => {
+  it("match is exhaustive, data-first and data-last", () => {
     const shape = hole<Shape>()
     const cases = { Circle: () => 1, Rect: () => "rect" as const, Empty: () => true }
-    expect(Shape.$match(shape, cases)).type.toBe<number | "rect" | boolean>()
-    expect(pipe(shape, Shape.$match(cases))).type.toBe<number | "rect" | boolean>()
-    expect(Shape.$match).type.not.toBeCallableWith(shape, { Circle: () => 1, Rect: () => 2 })
+    expect(Shape.match(shape, cases)).type.toBe<number | "rect" | boolean>()
+    expect(pipe(shape, Shape.match(cases))).type.toBe<number | "rect" | boolean>()
+    expect(Shape.match).type.not.toBeCallableWith(shape, { Circle: () => 1, Rect: () => 2 })
   })
 
   it("rejects reserved tags", () => {
     expect(UiSchema.TaggedEnum).type.not.toBeCallableWith({ ast: {} })
     expect(UiSchema.TaggedEnum).type.not.toBeCallableWith({ Type: {} })
-    expect(UiSchema.TaggedEnum).type.not.toBeCallableWith({ $match: {} })
+    expect(UiSchema.TaggedEnum).type.not.toBeCallableWith({ is: {} })
+    expect(UiSchema.TaggedEnum).type.not.toBeCallableWith({ match: {} })
     expect(UiSchema.TaggedEnum).type.not.toBeCallableWith({ name: {} })
     expect(UiSchema.TaggedEnum).type.not.toBeCallableWith({ valueOf: {} })
     expect(UiSchema.TaggedEnum).type.not.toBeCallableWith({ __defineGetter__: {} })
@@ -78,7 +79,7 @@ describe("UiSchema.TaggedEnum", () => {
   it("types numeric keys as string tags", () => {
     const Code = UiSchema.TaggedEnum({ 404: {}, Ok: {} })
     expect(Code[404]()).type.toBe<{ readonly _tag: "404" }>()
-    expect(Code.$is).type.toBeCallableWith("404")
-    expect(Code.$match).type.not.toBeCallableWith(Code.Ok(), { Ok: () => 1 })
+    expect(Code.is).type.toBeCallableWith("404")
+    expect(Code.match).type.not.toBeCallableWith(Code.Ok(), { Ok: () => 1 })
   })
 })
