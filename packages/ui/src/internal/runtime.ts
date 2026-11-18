@@ -475,6 +475,8 @@ interface Owning {
   round: boolean
   /** What `onReports` last returned, read first as its message for no reports. */
   reported: { readonly message: unknown } | undefined
+  /** Hydration: `reported` is the server's, and no comparison has run on the client yet. */
+  restored: boolean
 }
 
 /**
@@ -893,6 +895,12 @@ const setup = (
   const fromStatic = hydrating?.state["~static"] === true
   const adoptedWaiters: Array<() => void> = []
   const settleWaiting = () => {
+    // A reader below a held owner may have mounted, or gone.
+    if (heldReports.size > 0) {
+      for (const owner of heldReports) reportsDue.add(owner)
+      heldReports.clear()
+      wake()
+    }
     waiting--
     if (waiting === 0 && started) finishAdoption()
   }
@@ -1118,6 +1126,8 @@ const setup = (
   const sharedPasses = new Map<Instance, number>()
   // Owners whose readers' reports may have changed: read once nothing is left to render.
   const reportsDue = new Set<Instance>()
+  // Hydration: owners whose first comparison waits for an instance below them to adopt.
+  const heldReports = new Set<Instance>()
   const markDirty = (inst: Instance) => {
     dirty.add(inst)
     wake()
@@ -2069,7 +2079,9 @@ const setup = (
       outbox: [],
       shares: undefined,
       readers: undefined,
-      owning: component.definition.shares === undefined ? undefined : { seq: -1, round: false, reported: undefined },
+      owning: component.definition.shares === undefined
+        ? undefined
+        : { seq: -1, round: false, reported: undefined, restored: false },
       owners: undefined,
       seen: undefined,
       dispatch: undefined as any,
@@ -2257,7 +2269,9 @@ const setup = (
         inst.adoptsChildren = Option.isSome(serverModel)
         if (Option.isSome(serverModel) && Option.isSome(reportedOnServer)) {
           inst.owning!.reported = { message: reportedOnServer.value }
-          // Compared once the pass settles, readers or none: one that reported on the server may not mount here.
+          inst.owning!.restored = true
+          // Compared once the pass settles and nothing below waits to adopt, readers or none: one that reported
+          // on the server may not mount here.
           reportsDue.add(inst)
           wake()
         }
@@ -2608,6 +2622,16 @@ const setup = (
     reportsDue.delete(owner)
     const reports = owner.component.definition.reports
     if (reports === undefined || owner.closed || owner.failure !== undefined || owner.waiting) return
+    const owning = owner.owning!
+    // The server's message is compared with every reader that adopts, so one still building its Layer isn't
+    // counted as gone. Settling it delivers the owner again.
+    if (owning.restored) {
+      if (waitsBelow(owner)) {
+        heldReports.add(owner)
+        return
+      }
+      owning.restored = false
+    }
     const collected: Array<unknown> = []
     for (const reader of owner.readers ?? []) {
       if (reader.left || reader.closed || reader.failure !== undefined) continue
@@ -2619,7 +2643,6 @@ const setup = (
         collected.push(report)
       }
     }
-    const owning = owner.owning!
     const message = guard(owner, "shares", () => {
       owning.reported ??= { message: reports.onReports([]) }
       return { value: reports.onReports(collected as Array<never>) }
@@ -2628,6 +2651,14 @@ const setup = (
     owning.reported = { message: message.value }
     if (!countShared(owner)) return
     owner.dispatch(message.value, { _tag: "Reported" })
+  }
+  /** Whether an instance below `inst` still waits for its Layer before it adopts. */
+  const waitsBelow = (inst: Instance): boolean => {
+    for (const child of inst.children) {
+      if (child.closed || child.failure !== undefined) continue
+      if (child.waiting || waitsBelow(child)) return true
+    }
+    return false
   }
   /**
    * Counts one more pass of an owner's shared value through its readers in this flush, and fails the

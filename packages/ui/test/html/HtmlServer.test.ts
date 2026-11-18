@@ -123,7 +123,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       Unlocked: { key: Schema.Redacted(Schema.String) }
     })
     /** An owner that counts the messages its reports send, so a duplicate and a missed one both show. */
-    const counting = (message: typeof Plain | typeof Secret) => {
+    const counting = (message: typeof Plain | typeof Secret, item?: (component: any) => any) => {
       const Group = Component.define({
         name: "Group",
         model: Schema.Number,
@@ -142,6 +142,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         shared: { group: { owner: Group, report: (_, props) => props.open } },
         elements: Html
       }).make({ init: () => null, update: (model) => model, view: (_, h) => h.span.children("item") })
+      const Shown = item === undefined ? Item : item(Item)
       return Component.define({
         name: "Page",
         props: Schema.Struct({ item: Schema.NullOr(Schema.Boolean) }),
@@ -157,7 +158,7 @@ describe("HtmlServer", { concurrent: false }, () => {
             view: (parts) =>
               h.div.children(
                 h.p.children(`reported ${parts.count}`),
-                h.props.item !== null && Item(h, { key: "i", props: { open: h.props.item } })
+                h.props.item !== null && Shown(h, { key: "i", props: { open: h.props.item } })
               )
           })
       })
@@ -185,11 +186,40 @@ describe("HtmlServer", { concurrent: false }, () => {
             message === Secret ? undefined : { "/Page/Group[g]": { _tag: "ChangedOn", on: true } }
           )
           const app = yield* container(rendered.html)
-          yield* BrowserHost.mountEffect(Page, { item: client }, app, { state: rendered.state })
+          const log = MessageLog.makeMemory({ size: 1000 })
+          yield* BrowserHost.mountEffect(Page, { item: client }, app, { state: rendered.state }).pipe(
+            Effect.provideService(MessageLog.MessageLog, log)
+          )
           yield* tick
           expect(app.querySelector("p")!.textContent).toBe(`reported ${count}`)
+          // One on the client each: the Redacted owner is built fresh from 0, the others change.
+          expect(log.entries().filter((entry) => entry._tag === "Update" && entry.source._tag === "Reported"))
+            .toHaveLength(1)
         }).pipe(Effect.scoped))
     }
+
+    it.effect("waits for a reader still building its Layer before comparing, and sends nothing when it reports the same", () =>
+      Effect.gen(function*() {
+        const slow = Layer.effectDiscard(Effect.sleep("50 millis"))
+        const Page = counting(Plain, (Item) => Item.pipe(Component.provide(slow)))
+        const fiber = yield* Effect.forkChild(HtmlServer.renderToHtml(Page, { item: true }))
+        yield* TestClock.adjust("50 millis")
+        const rendered = yield* Fiber.join(fiber)
+        expect(rendered.state["~deferred"]).toEqual([])
+        expect(rendered.html).toContain("<p>reported 1</p>")
+        const app = yield* container(rendered.html)
+        const log = MessageLog.makeMemory({ size: 1000 })
+        const root = yield* BrowserHost.mountEffect(Page, { item: true }, app, { state: rendered.state }).pipe(
+          Effect.provideService(MessageLog.MessageLog, log)
+        )
+        yield* tick
+        yield* TestClock.adjust("50 millis")
+        yield* root.adopted
+        yield* tick
+        expect(app.querySelector("p")!.textContent).toBe("reported 1")
+        const reported = log.entries().filter((entry) => entry._tag === "Update" && entry.source._tag === "Reported")
+        expect(reported).toEqual([])
+      }).pipe(Effect.scoped))
 
     it.effect("adopts the server's nodes when the last message ships", () =>
       Effect.gen(function*() {

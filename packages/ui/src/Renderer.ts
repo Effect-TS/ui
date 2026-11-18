@@ -196,7 +196,8 @@ export interface Hydration<Node> {
  * `~reported` holds, by path, the message an owner of shared state last got
  * from its readers' reports. An owner that adopts its Model starts from it,
  * so the client sends that message again only if its reports differ, even
- * with no reader left to report. An owner whose message Schema holds a
+ * with no reader left to report. The comparison waits until nothing below the
+ * owner is still building its Layer to adopt. An owner whose message Schema holds a
  * `Schema.Redacted` can't ship it, so it's deferred with its subtree.
  *
  * **Gotchas**
