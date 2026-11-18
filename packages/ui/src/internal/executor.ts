@@ -46,8 +46,6 @@ export type Flush = "queued" | "first" | "last" | { readonly seed: number }
  */
 export class TestExecutor implements Executor, Scheduler.SchedulerDispatcher {
   private tasks: Array<{ readonly task: () => void; readonly priority: number }> = []
-  // The flushes of `"last"`, run when no task is queued.
-  private late: Array<() => void> = []
   private random: number
   readonly flushes: Flush
   readonly scheduler: Scheduler.Scheduler
@@ -63,13 +61,9 @@ export class TestExecutor implements Executor, Scheduler.SchedulerDispatcher {
   schedule(task: () => void): void {
     const flushes = this.flushes
     if (flushes === "queued") return this.scheduleTask(task, 0)
-    if (flushes === "last") {
-      this.late.push(task)
-      return
-    }
-    // Outside the priorities, so a task queued later never goes ahead of it by its priority.
-    const index = flushes === "first" ? 0 : this.next(this.tasks.length + 1)
-    this.tasks.splice(index, 0, { task, priority: -Infinity })
+    // Outside the priorities: every task goes behind `-Infinity` and ahead of `Infinity`, whenever it's queued.
+    if (typeof flushes === "string") return this.scheduleTask(task, flushes === "first" ? -Infinity : Infinity)
+    this.tasks.splice(this.next(this.tasks.length + 1), 0, { task, priority: -Infinity })
   }
   /** mulberry32: the same seed gives the same places. */
   private next(below: number): number {
@@ -89,14 +83,13 @@ export class TestExecutor implements Executor, Scheduler.SchedulerDispatcher {
   /** Runs queued tasks, and the tasks they queue, until none are left or the budget runs out. Returns whether it finished. */
   drain(budget: number): boolean {
     let steps = 0
-    while (this.tasks.length > 0 || this.late.length > 0) {
+    while (this.tasks.length > 0) {
       if (steps++ >= budget) return false
-      if (this.tasks.length > 0) this.tasks.shift()!.task()
-      else this.late.shift()!()
+      this.tasks.shift()!.task()
     }
     return true
   }
   get size(): number {
-    return this.tasks.length + this.late.length
+    return this.tasks.length
   }
 }

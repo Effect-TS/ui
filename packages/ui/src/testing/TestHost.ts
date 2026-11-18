@@ -52,7 +52,6 @@ import * as Data from "effect/Data"
 import type * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
-import * as Option from "effect/Option"
 import * as Queue from "effect/Queue"
 import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Schema from "effect/Schema"
@@ -432,14 +431,10 @@ export const layer = (options?: {
 }): Layer.Layer<TestHost | Renderer.Renderer> =>
   Layer.effectContext(Effect.gen(function*() {
     const host = makeHost()
-    // A provider that fails to read is no setting.
-    const configured = options?.flush !== undefined
-      ? Option.none<string>()
-      : yield* Effect.orElseSucceed(
-        Config.option(Config.schema(Schema.String, "EFFECT_UI_TEST_FLUSH")),
-        () => Option.none<string>()
-      )
-    const flush = options?.flush ?? Option.getOrUndefined(Option.map(configured, flushFrom)) ?? "queued"
+    // No config, or a provider that fails to read, is no setting.
+    const flush = options?.flush ??
+      flushFrom(yield* Effect.orElseSucceed(Config.String("EFFECT_UI_TEST_FLUSH"), () => "")) ??
+      "queued"
     const executor = new Executor.TestExecutor(flush)
     const log = MessageLog.makeMemory({ size: options?.logSize ?? Infinity })
     const trees = new Set<Tree>()

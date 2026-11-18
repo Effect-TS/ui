@@ -678,13 +678,11 @@ const noHead: Head.Head = { ...Head.empty }
 
 /** An entry about an instance, without what `record` adds. */
 type Draft = MessageLog.InstanceEntry extends infer E
-  ? E extends MessageLog.InstanceEntry
-    ? Omit<E, keyof MessageLog.InstanceBase> & { readonly causedBy?: number | undefined }
-  : never
+  ? E extends MessageLog.InstanceEntry ? Omit<E, keyof MessageLog.InstanceBase> : never
   : never
 /** An entry about the tree, without what `recordTree` adds. */
 type TreeDraft = Exclude<MessageLog.Entry, MessageLog.InstanceEntry> extends infer E
-  ? E extends MessageLog.Entry ? Omit<E, keyof MessageLog.Base> & { readonly causedBy?: number | undefined } : never
+  ? E extends MessageLog.Entry ? Omit<E, keyof MessageLog.Base> : never
   : never
 
 let sessions = 0
@@ -934,7 +932,7 @@ const setup = (
    */
   const number = (causedBy: number | undefined): Pick<MessageLog.Base, "seq" | "causedBy"> => {
     const next = ++seq
-    const cause = causedBy ?? (depth > 0 ? origin : undefined)
+    const cause = causedBy ?? origin
     if (starting) {
       starting = false
       origin = cause ?? next
@@ -971,25 +969,21 @@ const setup = (
     } finally {
       // The watchers its `update` registered fetch now, and not at the flush: which args are
       // fetched doesn't depend on what else arrives before it. A render's still wait for its drain.
-      if (!draining) releaseWatchHold()
+      if (!draining && watchHold !== undefined) releaseWatchHold()
     }
   }
-  /** The entry what is running follows from, for work that outlives it. */
-  const cause = (): number | undefined => depth > 0 ? origin : undefined
   /** Logs an entry about the tree, and returns its number. */
-  const recordTree = (draft: TreeDraft): number => {
+  const recordTree = (draft: TreeDraft, causedBy?: number): number => {
     if (!log.enabled) return -1
-    const { causedBy, ...rest } = draft
-    const entry = { ...rest, ...number(causedBy), at: clock.currentTimeMillisUnsafe(), session } as MessageLog.Entry
+    const entry = { ...draft, ...number(causedBy), at: clock.currentTimeMillisUnsafe(), session } as MessageLog.Entry
     log.record(entry)
     return entry.seq
   }
   /** Logs an entry about `inst`, and returns its number. */
-  const record = (inst: Instance, draft: Draft): number => {
+  const record = (inst: Instance, draft: Draft, causedBy?: number): number => {
     if (!log.enabled) return -1
-    const { causedBy, ...rest } = draft
     const entry = {
-      ...rest,
+      ...draft,
       ...number(causedBy),
       at: clock.currentTimeMillisUnsafe(),
       session,
@@ -1109,9 +1103,11 @@ const setup = (
   // Every fetch the cache starts is logged, as an entry about the tree. A watch's fetch starts when the
   // render pass's hold is released, and follows from the step whose render registered the watcher.
   const offFetch = cache.onFetch((event) => {
-    if (frozen) return
-    const causedBy = event.trigger === "watch" ? watchCauses.get(entryKey(event.query, event.logKey)) : undefined
-    recordTree({ _tag: "FetchStarted", ...event, causedBy })
+    if (frozen || !log.enabled) return
+    recordTree(
+      { _tag: "FetchStarted", ...event },
+      event.trigger === "watch" ? watchCauses.get(entryKey(event.query, event.logKey)) : undefined
+    )
   })
   // On the server a fetch in flight holds the response, so one that ends may make the tree idle.
   const offFetchEnd = server === undefined ? undefined : cache.onFetchEnd(() => checkIdle())
@@ -1198,7 +1194,7 @@ const setup = (
   // step to change one: the collected message follows from that one.
   const reportsDue = new Map<Instance, number | undefined>()
   const dueReports = (owner: Instance) => {
-    reportsDue.set(owner, cause() ?? reportsDue.get(owner))
+    reportsDue.set(owner, origin ?? reportsDue.get(owner))
     wake()
   }
   // Hydration: owners whose first comparison waits for an instance below them to adopt.
@@ -1206,7 +1202,7 @@ const setup = (
   const markDirty = (inst: Instance) => {
     dirty.add(inst)
     // The latest step to change it: its render logs what follows from that one.
-    inst.cause = cause() ?? inst.cause
+    inst.cause = origin ?? inst.cause
     wake()
   }
   // How many renders and `update` calls are running: nothing renders inside one.
@@ -1224,13 +1220,11 @@ const setup = (
    */
   const renderAbove = (inst: Instance) => {
     if (dirty.size === 0 || busy > 0) return
+    let top: Instance | undefined
+    for (let at = inst.parent; at !== undefined; at = at.parent) if (dirty.has(at)) top = at
+    if (top === undefined) return
     const above: Array<Instance> = []
-    let any = false
-    for (let at = inst.parent; at !== undefined; at = at.parent) {
-      above.push(at)
-      any ||= dirty.has(at)
-    }
-    if (!any) return
+    for (let at = inst.parent; at !== top.parent; at = at!.parent) above.push(at!)
     const outer = receiving
     receiving = inst
     try {
@@ -1256,7 +1250,7 @@ const setup = (
     checkPendingRefs()
   }
   const defer = (f: () => void) => {
-    const from = cause()
+    const from = origin
     deferred.push(from === undefined ? f : () => under(from, f))
     wake()
   }
@@ -3027,7 +3021,7 @@ const setup = (
       // Left and logged by `ended`, once the fiber has exited.
       run.done = true
       run.status = "stopping"
-      run.cutBy = cause()
+      run.cutBy = origin
       fiber.interruptUnsafe()
       return
     }
@@ -3306,9 +3300,8 @@ const setup = (
       name: run.command.name,
       issued: run.issued,
       spanId: run.spanId,
-      traceId: run.traceId,
-      causedBy: run.cutBy
-    })
+      traceId: run.traceId
+    }, run.cutBy)
 
   /** `h.isRunning` for one instance: a run of the Command in the schedule, of the group if given. */
   const runningOf = (inst: Instance) => (name: string, groupKey: string | undefined): boolean =>
@@ -3492,9 +3485,8 @@ const setup = (
         continue
       }
       const def = Query.defOf(marker.query)
-      const logKey = marker.argsKey === undefined
-        ? key
-        : Subscription.keyOf(`~query/${marker.name}`, def.logKey(marker.args, marker.argsKey))
+      const fetchKey = marker.argsKey === undefined ? undefined : def.logKey(marker.args, marker.argsKey)
+      const logKey = fetchKey === undefined ? key : Subscription.keyOf(`~query/${marker.name}`, fetchKey)
       const running: WatchRun = { marker, logKey, handle: undefined, released: false, debounce: undefined }
       holdsWatchers = true
       watches.set(key, running)
@@ -3503,7 +3495,7 @@ const setup = (
       inst.watched?.add(entryKey(def.name, marker.argsKey))
       const entry = { args: marker.args, argsKey: marker.argsKey }
       // The step whose render declared these args: the watcher may register later, once the Layer is ready.
-      const asked = cause()
+      const asked = origin
       let last:
         | {
           readonly result: AsyncResult.AsyncResult<any, any>
@@ -3552,8 +3544,8 @@ const setup = (
           )
         }
         holdWatches()
-        const from = asked ?? cause()
-        if (from !== undefined) watchCauses.set(entryKey(def.name, def.logKey(marker.args, marker.argsKey!)), from)
+        const from = asked ?? origin
+        if (from !== undefined) watchCauses.set(entryKey(def.name, fetchKey!), from)
         const handle = cache.watch(
           def,
           marker.args,
