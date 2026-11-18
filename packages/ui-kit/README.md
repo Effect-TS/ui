@@ -11,10 +11,7 @@ Switch(h, {
   onToggle: ({ checked }) => Message.make({ _tag: "ToggledNotify", checked }),
   view: (s) =>
     h.label(
-      s.root({
-        element: h.button.class("switch"),
-        children: [s.thumb(h.span.class("thumb"))]
-      }),
+      s.root(h.button.class("switch")).children(s.thumb(h.span.class("thumb"))),
       "Notifications"
     )
 })

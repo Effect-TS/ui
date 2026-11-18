@@ -1,5 +1,5 @@
 import { Component, View } from "@effect/ui"
-import { Switch, type SwitchButton, type SwitchProps } from "@effect/ui-kit"
+import { Switch, type SwitchButton, type SwitchProps, type SwitchSpan } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Locator, Scene } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -32,7 +32,7 @@ const Settings = Component.define({
       Switch(h, {
         props: { checked: model.notify, ...h.props },
         onToggle: ({ checked }) => SettingsMessage.make({ _tag: "ToggledNotify", checked }),
-        view: (s) => h.label(s.root({ element: h.button, children: [s.thumb(h.span.class("thumb"))] }), "Notifications")
+        view: (s) => h.label(s.root(h.button).children(s.thumb(h.span.class("thumb"))), "Notifications")
       }),
       h.output(String(model.rowClicks))
     )
@@ -44,9 +44,13 @@ const rowClicks = (s: { readonly get: (locator: Locator.Locator) => Locator.Node
   s.get(Locator.tag("output")).children?.[0]?.text
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
-// The root a consumer gets for these props and this button.
-const rootOf = (props: SwitchProps, element: SwitchButton<never> = h.button) =>
-  Switch(h, { props, view: (s) => s.root({ element, children: ["label"] }) })
+// The root a consumer gets for these props and this button: the element the
+// part's builder becomes, with what `chain` adds after the part.
+const rootOf = (
+  props: SwitchProps,
+  element: SwitchButton<never> = h.button,
+  chain: (root: SwitchButton<never>) => SwitchButton<never> = (root) => root
+) => View.build(Switch(h, { props, view: (s) => chain(s.root(element)).children("label") }), [])
 
 describe("Switch", () => {
   it.effect("a click asks for the other value, and the root and thumb show the value they were given", () =>
@@ -119,8 +123,13 @@ describe("Switch", () => {
       "data-unchecked": ""
     })
     // A disabled, checked switch keeps its own `disabled` over the
-    // consumer's removal, and removes the consumer's `data-unchecked`.
-    const disabled = rootOf({ checked: true, disabled: true }, element.attr("data-unchecked", "").disabled(false))
+    // consumer's removal, and removes the consumer's `data-unchecked`,
+    // chained after the part as well as set before it.
+    const disabled = rootOf(
+      { checked: true, disabled: true },
+      element.attr("data-unchecked", ""),
+      (root) => root.disabled(false).attr("role", "checkbox")
+    )
     assert.deepStrictEqual(disabled.attrs, {
       class: "switch",
       "aria-label": "Mute",
@@ -133,48 +142,54 @@ describe("Switch", () => {
     })
   })
 
-  it("the thumb drops a state the switch doesn't have, finished with its children or as a builder to pass on", () => {
+  it("the thumb drops a state the switch doesn't have, and its result is another call's element", () => {
     const element = h.span.class("thumb")
       .attr("data-checked", "")
       .attr("data-disabled", "")
       .attr("data-readonly", "")
       .attr("data-required", "")
-    const finished = Switch(h, {
-      props: { checked: false },
-      view: (s) => s.thumb({ element, children: ["on"] })
-    })
+    const thumbOf = (checked: boolean, span: SwitchSpan<never>) =>
+      View.build(Switch(h, { props: { checked }, view: (s) => s.thumb(span).children("on") }), [])
+    const finished = thumbOf(false, element)
     assert.deepStrictEqual(finished.attrs, { class: "thumb", "data-unchecked": "" })
     assert.strictEqual(finished.children.length, 1)
-    // Applied to the builder alone, the thumb returns it for another call's
-    // `element`.
-    const builder = Switch(h, { props: { checked: false }, view: (s) => s.thumb(element) })
-    const stacked = Switch(h, {
-      props: { checked: true },
-      view: (s) => s.thumb({ element: builder, children: ["on"] })
+    // The part returns the builder, so a second call takes it as its
+    // element. Both write when the span is built, the inner call last.
+    const builder = Switch(h, { props: { checked: false, required: true }, view: (s) => s.thumb(element) })
+    assert.deepStrictEqual(thumbOf(true, builder).attrs, {
+      class: "thumb",
+      "data-unchecked": "",
+      "data-required": ""
     })
-    assert.deepStrictEqual(stacked.attrs, { class: "thumb", "data-checked": "" })
   })
 
   it("the root keeps a consumer's click handler without onToggle, and refuses it with one in every state", () => {
     const handler = () => undefined
-    const element = h.button.onClick(handler)
-    assert.strictEqual(rootOf({ checked: false }, element).handlers.click, handler)
-    const toggling = (props: SwitchProps) => () =>
-      Switch(h, { props, onToggle: () => undefined, view: (s) => s.root({ element }) })
-    assert.throws(toggling({ checked: false }), /Switch: the root's element already handles click/)
+    assert.strictEqual(rootOf({ checked: false }, h.button.onClick(handler)).handlers.click, handler)
+    const toggling = (props: SwitchProps, when: "before" | "after") => () =>
+      View.build(
+        Switch(h, {
+          props,
+          onToggle: () => undefined,
+          view: (s) => when === "before" ? s.root(h.button.onClick(handler)) : s.root(h.button).onClick(handler)
+        }),
+        []
+      )
+    // Set on the builder before the part, or chained after it.
+    assert.throws(toggling({ checked: false }, "before"), /Switch: the root already handles click/)
+    assert.throws(toggling({ checked: false }, "after"), /Switch: the root already handles click/)
     // A read-only switch sets no handler, but it would once it's editable.
-    assert.throws(toggling({ checked: false, readOnly: true }), /Switch: the root's element already handles click/)
+    assert.throws(toggling({ checked: false, readOnly: true }, "after"), /Switch: the root already handles click/)
   })
 
-  it("the root draws the form field after its children: value when on, and uncheckedValue or nothing when off", () => {
+  it("the root draws the form field before its children: value when on, and uncheckedValue or nothing when off", () => {
     const field = (props: SwitchProps) => {
-      const button = rootOf(props)
-      const last = button.children[button.children.length - 1]!
-      if (last._tag !== "Element") return null
-      assert.strictEqual(last.tag, "input")
-      assert.strictEqual(last.attrs.type, "hidden")
-      assert.strictEqual(last.attrs.name, "notify")
-      return last.attrs.value
+      const first = rootOf(props).children[0]!
+      if (first._tag !== "Element") return null
+      assert.strictEqual(first.tag, "input")
+      assert.strictEqual(first.attrs.type, "hidden")
+      assert.strictEqual(first.attrs.name, "notify")
+      return first.attrs.value
     }
     assert.strictEqual(field({ checked: true, name: "notify" }), "on")
     assert.strictEqual(field({ checked: true, name: "notify", value: "yes" }), "yes")

@@ -14,12 +14,12 @@
  * | `Switch.Root`  | `root`  | `<button role="switch">`, with the hidden input |
  * | `Switch.Thumb` | `thumb` | `<span>` inside the root                        |
  *
- * `root` takes the button and its children as `{ element, children }`
- * and returns the finished button. It adds the hidden `<input>` that
- * carries the form value as the last child, so a switch with a `name`
- * can't be drawn without it. Use `s.thumb(h.span.class("thumb"))` directly as a
- * child or as another kit call's `element`. To put content inside the
- * thumb, pass `{ element, children }`.
+ * Each part takes the consumer's builder and returns it, so the consumer
+ * goes on chaining: `s.root(h.button.class("switch")).children(...)`.
+ * `root` adds the hidden `<input>` that carries the form value as the
+ * button's first child, before the consumer's children, so a switch with a
+ * `name` can't be drawn without it. A part's result is also another kit
+ * call's `element`.
  *
  * Naming the switch is the consumer's job: a `<label>` around the root or
  * one pointing at its `id`, an `aria-label` or `aria-labelledby` on the
@@ -79,10 +79,7 @@
  *       onToggle: ({ checked }) => SettingsMessage.make({ _tag: "ToggledNotify", checked }),
  *       view: (s) =>
  *         h.label.class("setting").children(
- *           s.root({
- *             element: h.button.class("switch"),
- *             children: [s.thumb(h.span.class("thumb"))]
- *           }),
+ *           s.root(h.button.class("switch")).children(s.thumb(h.span.class("thumb"))),
  *           "Notifications"
  *         )
  *     })
@@ -97,7 +94,7 @@
  * @since 0.1.0
  */
 import type * as Html from "@effect/ui/html/Html"
-import * as View from "@effect/ui/View"
+import type * as View from "@effect/ui/View"
 import { flag } from "./internal/attributes.ts"
 import { field } from "./internal/field.ts"
 
@@ -155,15 +152,15 @@ export type SwitchSpan<Msg, R = never> = Html.Element<Msg, R, Html.EventsOf<"spa
  *
  * **Details**
  *
- * `root` returns the finished button: set its classes, attributes and
- * other handlers on `element`, and pass what goes inside as `children`.
- * A switch with an `onToggle` sets the button's click handler, so an
- * `element` that already handles `click` fails the render, in every
- * state. Without `onToggle` the switch sets none, and the consumer's
- * click handler stays.
+ * `root(button)` and `thumb(span)` each return the builder they were
+ * given, so set its classes, attributes, other handlers and children
+ * before the part or after it. The switch writes its own attributes when
+ * the element is built, so they win over the consumer's either way.
  *
- * `thumb(span)` decorates the span for use as a child or as another
- * call's `element`. `thumb({ element, children })` returns the finished span.
+ * A switch with an `onToggle` sets the button's click handler, so a root
+ * that handles `click` itself fails the render, in every state, whether
+ * the handler was set before the part or chained after it. Without
+ * `onToggle` the switch sets none, and the consumer's click handler stays.
  *
  * @stability experimental
  * @category models
@@ -174,25 +171,10 @@ export interface SwitchParts<Msg> {
   readonly disabled: boolean
   readonly readOnly: boolean
   readonly required: boolean
-  readonly root: <R = never, const C extends ReadonlyArray<View.Input<Msg, any>> = readonly []>(
-    options: {
-      /** The consumer's `h.button`, with its classes, attributes and handlers. */
-      readonly element: SwitchButton<Msg, R>
-      /** What goes inside the button, usually the thumb. */
-      readonly children?: C | undefined
-    }
-  ) => View.Element<Msg, R | View.Requirements<C[number]>>
-  readonly thumb: {
-    <R = never, const C extends ReadonlyArray<View.Input<Msg, any>> = readonly []>(
-      options: {
-        /** The consumer's `h.span`, with its classes and attributes. */
-        readonly element: SwitchSpan<Msg, R>
-        /** What goes inside the span. */
-        readonly children?: C | undefined
-      }
-    ): View.Element<Msg, R | View.Requirements<C[number]>>
-    <R = never>(element: SwitchSpan<Msg, R>): SwitchSpan<Msg, R>
-  }
+  /** The consumer's `h.button`. The form field is its first child. */
+  readonly root: <R = never>(element: SwitchButton<Msg, R>) => SwitchButton<Msg, R>
+  /** The consumer's `h.span`, usually a child of the root. */
+  readonly thumb: <R = never>(element: SwitchSpan<Msg, R>) => SwitchSpan<Msg, R>
 }
 
 // The state attributes, the same on the root and the thumb so either one
@@ -211,8 +193,7 @@ const state = <B extends { readonly attr: (name: string, value: string | undefin
 
 /**
  * A switch. Call it with the consumer's `h`, the `props`, and a `view`
- * closure that draws the root with
- * `s.root({ element: h.button, children })`, usually with
+ * closure that draws the root with `s.root(h.button)`, usually with
  * `s.thumb(h.span.class("thumb"))` as a child. It returns what `view`
  * returns.
  *
@@ -226,7 +207,7 @@ const state = <B extends { readonly attr: (name: string, value: string | undefin
  * disabled button no click.
  *
  * The switch's own attributes win over the ones the consumer set on the
- * builders it passes in: `type`, `role`, `disabled`, the ARIA state
+ * builders, before the part or after it: `type`, `role`, `disabled`, the ARIA state
  * (`aria-checked`, `aria-disabled`, `aria-readonly`, `aria-required`)
  * and the data attributes. That includes the ones a state leaves absent,
  * so a `disabled` on the consumer's button is removed unless the
@@ -249,44 +230,37 @@ export const Switch = <Msg, A extends View.Content<Msg, any>>(
   const { onToggle, props } = options
   const interactive = props.disabled !== true && props.readOnly !== true
   const hidden = field(props)
-  // Both of the thumb's forms: `SwitchParts` types each one's result.
-  const thumb = (
-    input: SwitchSpan<Msg, any> | {
-      readonly element: SwitchSpan<Msg, any>
-      readonly children?: ReadonlyArray<View.Input<Msg, any>> | undefined
-    }
-  ): any =>
-    input instanceof View.ElementBuilder
-      ? state(input, props)
-      : state(input.element, props).children(...(input.children ?? []))
   return options.view({
     checked: props.checked,
     disabled: props.disabled === true,
     readOnly: props.readOnly === true,
     required: props.required === true,
-    root: ({ children, element }) => {
-      // By `onToggle` alone, not by the state: a read-only switch sets no
-      // handler now, but the clash would only show once it became editable.
-      if (onToggle !== undefined && element.handlers.click !== undefined) {
-        throw new Error(
-          "Switch: the root's element already handles click, which onToggle would replace. Send the message from onToggle"
-        )
-      }
-      const root = state(element, props)
-        // Inside a form a button submits by default.
-        .attr("type", "button")
-        .attr("role", "switch")
-        .attr("aria-checked", String(props.checked))
-        .attr("aria-readonly", props.readOnly === true ? "true" : undefined)
-        .attr("aria-required", props.required === true ? "true" : undefined)
-        // Never set: the native `disabled` reports it.
-        .attr("aria-disabled", undefined)
-        .disabled(props.disabled === true)
-      return (interactive && onToggle !== undefined
-        ? root.onClick(() => onToggle({ checked: !props.checked }))
-        : root)
-        .children(...(children ?? []), hidden)
-    },
-    thumb
+    root: (element) =>
+      // The field goes in first, so the consumer's children come after it.
+      // The attributes and the handler wait for the finished button: they
+      // are written after whatever the consumer chains on the root.
+      element.children(hidden).forward((node) => {
+        // By `onToggle` alone, not by the state: a read-only switch sets no
+        // handler now, but the clash would only show once it became editable.
+        if (onToggle !== undefined && node.handlers.click !== undefined) {
+          throw new Error(
+            "Switch: the root already handles click, which onToggle would replace. Send the message from onToggle"
+          )
+        }
+        const root = state(node, props)
+          // Inside a form a button submits by default.
+          .attr("type", "button")
+          .attr("role", "switch")
+          .attr("aria-checked", String(props.checked))
+          .attr("aria-readonly", props.readOnly === true ? "true" : undefined)
+          .attr("aria-required", props.required === true ? "true" : undefined)
+          // Never set: the native `disabled` reports it.
+          .attr("aria-disabled", undefined)
+          .disabled(props.disabled === true)
+        return interactive && onToggle !== undefined
+          ? root.onClick(() => onToggle({ checked: !props.checked }))
+          : root
+      }),
+    thumb: (element) => element.forward((node) => state(node, props))
   })
 }

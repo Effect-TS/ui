@@ -22,25 +22,23 @@ describe("Switch", () => {
           props: { checked: false },
           onToggle: ({ checked }) => Msg.make({ _tag: "Toggled", checked }),
           view: (s) => {
-            expect(s.root({ element: h.button })).type.toBe<View.Element<Msg, never>>()
-            // Finished with `children`, or the builder for another call's `element`.
-            expect(s.thumb({ element: h.span, children: [needsClock] })).type.toBe<View.Element<Msg, Clock>>()
-            expect(s.thumb(h.span.class("thumb"))).type.toBe<
-              Html.Element<Msg, never, Html.EventsOf<"span">, HTMLSpanElement, "span">
+            type Button<R> = Html.Element<Msg, R, Html.EventsOf<"button">, HTMLButtonElement, "button">
+            // Each part returns the builder it was given, for children or another call's `element`.
+            expect(s.root(h.button)).type.toBe<Button<never>>()
+            expect(s.thumb(h.span.class("thumb")).children(needsClock)).type.toBe<
+              Html.Element<Msg, Clock, Html.EventsOf<"span">, HTMLSpanElement, "span">
             >()
-            return s.root({
-              element: h.button.on("focus", Msg.make({ _tag: "Clicked" })),
-              children: [s.thumb(h.span.class("thumb")), needsClock]
-            })
+            return s.root(h.button.on("focus", Msg.make({ _tag: "Clicked" })))
+              .children(s.thumb(h.span.class("thumb")), needsClock)
           }
         })
-        expect(root).type.toBe<View.Element<Msg, Clock>>()
+        expect(root).type.toBe<Html.Element<Msg, Clock, Html.EventsOf<"button">, HTMLButtonElement, "button">>()
         return root
       }
     })
   })
 
-  it("root takes only a button in an options object, and onToggle only the consumer's message", () => {
+  it("root takes only a button, thumb only a span, and onToggle only the consumer's message", () => {
     Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
       update: (model) => model,
@@ -53,11 +51,10 @@ describe("Switch", () => {
         return Switch(h, {
           props: { checked: false },
           view: (s) => {
-            expect(s.root).type.not.toBeCallableWith({ element: h.span })
-            expect(s.root).type.not.toBeCallableWith(h.button)
+            expect(s.root).type.not.toBeCallableWith(h.span)
+            expect(s.root).type.not.toBeCallableWith({ element: h.button })
             expect(s.thumb).type.not.toBeCallableWith(h.div)
-            expect(s.thumb).type.not.toBeCallableWith({ element: h.div })
-            return s.root({ element: h.button })
+            return s.root(h.button)
           }
         })
       }
