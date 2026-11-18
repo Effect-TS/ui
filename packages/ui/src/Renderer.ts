@@ -142,6 +142,10 @@ export interface Host<Node> {
  * such as an HTML `textarea`, is marked `textOnly`: the server writes only
  * its text, and hydration adopts the element but builds its children fresh.
  *
+ * `adoptProp`, if given, sets a property of an adopted element in place of
+ * `setProp`, so the host can keep what the user changed in the server's
+ * nodes before they adopted. A host without it gets `setProp`.
+ *
  * `adopted`, if given, is called once every instance has adopted, with the head
  * the tree had at adoption: each instance's entries and child instances as
  * they were when it mounted (a waiting child's when it adopted), merged in
@@ -173,6 +177,7 @@ export interface Hydration<Node> {
     | { readonly _tag: "Close"; readonly path: string }
     | { readonly _tag: "Other" }
   getAttr(node: Node, name: string): string | undefined
+  readonly adoptProp?: ((node: Node, name: string, value: unknown) => void) | undefined
   readonly adopted?: ((head: Head.Head) => void) | undefined
 }
 

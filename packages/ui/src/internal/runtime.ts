@@ -4706,7 +4706,11 @@ const setup = (
           ? view.children.map((child) => create(inst, child, env))
           : view.children.map((child, index) => adoptNode(inst, child, plans[index]!, env))
         place(node, children, undefined)
-        for (const name in view.props) host.setProp(node, name, view.props[name])
+        const adoptProp = hydration!.adoptProp
+        for (const name in view.props) {
+          if (adoptProp !== undefined) adoptProp(node, name, view.props[name])
+          else host.setProp(node, name, view.props[name])
+        }
         return {
           _tag: "Element",
           v: view,

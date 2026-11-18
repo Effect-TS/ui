@@ -63,6 +63,16 @@
  * and puts the Model's value back after the user changes it and the Model
  * didn't follow, whether `update` rejected the change or nothing handled it.
  *
+ * A server-rendered control the user changed before its instance adopted
+ * keeps what it shows, and the host sends its state to the element's
+ * `onInput` and `onChange` as if the events had just fired, then puts the
+ * Model's value back as above if `update` didn't take it. A control counts as
+ * changed when it differs from both the server's HTML and the Model's value,
+ * so a field the browser filled in, by autofill or by restoring a form, is
+ * reported too, and so is one showing what the browser made of a value it
+ * can't show, such as a range input clamped to its `max`. A focused text
+ * field gets no `change`, as the browser sends it when focus leaves.
+ *
  * **Example** (Mounting an app)
  *
  * ```ts
@@ -141,6 +151,12 @@ const controlled: ReadonlySet<string> = new Set(["value", "checked", "selected",
 
 const emptyValue = (name: string): unknown => name === "value" ? "" : false
 
+/** Input types whose `change` the browser fires when the field loses focus, not when the value changes. */
+const changeOnBlur: ReadonlySet<string> = new Set(["text", "search", "url", "tel", "email", "password", "number"])
+
+const isRadio = (node: globalThis.Node): node is HTMLInputElement =>
+  (node as globalThis.Element).localName === "input" && (node as HTMLInputElement).type === "radio"
+
 interface Bound {
   readonly handlers: Readonly<Record<string, View.Handler<unknown, any>>>
   readonly dispatch: Renderer.Dispatch
@@ -188,6 +204,14 @@ const fieldsOf = (form: HTMLFormElement, submitter: HTMLElement | null) => {
   return { fields, entries }
 }
 
+/** The payload of `input` and `change` from `source`, the control that changed. */
+const controlPayload = (source: globalThis.Element): unknown => {
+  const control = source as HTMLInputElement
+  return control.localName === "input"
+    ? { value: control.value, checked: control.checked === true }
+    : { value: String(control.value ?? "") }
+}
+
 /**
  * Builds the payload a handler gets: plain data, read from the event and the
  * elements involved.
@@ -210,12 +234,8 @@ const payloadOf = (name: string, event: Event, target: EventTarget | null, eleme
       return { key: e.key ?? "", ...modifiers(event), composing }
     }
     case "input":
-    case "change": {
-      const source = (target !== null && "value" in (target as object) ? target : element) as HTMLInputElement
-      return source.localName === "input"
-        ? { value: source.value, checked: source.checked === true }
-        : { value: String(source.value ?? "") }
-    }
+    case "change":
+      return controlPayload((target !== null && "value" in (target as object) ? target : element) as globalThis.Element)
     case "submit": {
       const form = (element.localName === "form" ? element : target) as HTMLFormElement
       return fieldsOf(form, (event as SubmitEvent).submitter ?? null)
@@ -515,6 +535,74 @@ export const makeHost = (
     restoring.add(target as globalThis.Node)
   }
 
+  // -- edits before adoption -------------------------------------------------
+  // A server-rendered control the user changed before its instance adopted keeps what it shows, and the
+  // change is reported to its `onInput` and `onChange` at the commit, as if the events had just fired.
+  // A change is told from an untouched control by its live state differing from the server's default.
+  /** Controls changed before they adopted, whose Model value isn't written until the commit reports them. */
+  const edited = new Set<globalThis.Node>()
+  /**
+   * Whether a server textarea differed from its text when hydration last read it, just before adopting
+   * it. Adoption rebuilds the text, which moves the default, and an untouched textarea's value with it.
+   */
+  const textareaChanged = new WeakMap<globalThis.Node, boolean>()
+
+  /** Whether the user changed `element` from the default the server's HTML gave it. */
+  const changedFromDefault = (element: globalThis.Element): boolean => {
+    switch (element.localName) {
+      case "input": {
+        const input = element as HTMLInputElement
+        return input.type === "checkbox" || input.type === "radio"
+          ? input.checked !== input.defaultChecked
+          : input.value !== input.defaultValue
+      }
+      case "textarea": {
+        const textarea = element as HTMLTextAreaElement
+        return textareaChanged.get(element) ?? textarea.value !== textarea.defaultValue
+      }
+      case "option":
+        // The attribute, since not every DOM has `defaultSelected`.
+        return (element as HTMLOptionElement).selected !== element.hasAttribute("selected")
+      case "select":
+        return Array.from((element as HTMLSelectElement).options).some(changedFromDefault)
+      default:
+        return false
+    }
+  }
+
+  /** The control an option's change is reported on and held for: its `select`, if it has one. */
+  const controlOf = (node: globalThis.Node): globalThis.Node =>
+    (node as globalThis.Element).localName === "option"
+      ? (node as globalThis.Element).closest("select") ?? node
+      : node
+
+  /** Sends `name` for `control` to the innermost handler for it, from `control` up, as the event would go. */
+  const report = (control: globalThis.Element, name: string) => {
+    for (let node: globalThis.Node | null = control; node !== null; node = node.parentNode) {
+      const entry = bound.get(node)
+      const handler = entry?.handlers[name]
+      if (entry !== undefined && handler !== undefined) return entry.dispatch(name, handler, controlPayload(control))
+    }
+  }
+
+  /**
+   * Reports each held control's state as its `input` and `change`. A radio group is reported by the
+   * checked button. A focused text field gets no `change`: the browser fires it when focus leaves.
+   */
+  const reportEdits = () => {
+    const controls = Array.from(edited)
+    edited.clear()
+    for (const node of controls) {
+      const control = node as HTMLInputElement
+      if (!control.isConnected || (isRadio(control) && !control.checked)) continue
+      report(control, "input")
+      const typing = control.localName === "textarea" ||
+        (control.localName === "input" && changeOnBlur.has(control.type))
+      if (!typing || control.ownerDocument.activeElement !== control) report(control, "change")
+      restoreSoon(control)
+    }
+  }
+
   // -- drag and drop ---------------------------------------------------------
   // The active drop target is the innermost element on the pointer's path whose `drop` options accept
   // the drag's types. It's worked out again on every `dragenter` and `dragover`, so its enter and leave
@@ -754,13 +842,31 @@ export const makeHost = (
   }
   for (const name of alwaysEvents) listen(name)
 
+  /**
+   * Sets a property of an adopted element. A control the user changed from the server's default, to
+   * other than the Model's value, is held: it keeps what it shows, and the commit reports it.
+   */
+  const adoptProp = (node: globalThis.Node, name: string, value: unknown): void => {
+    const element = node as any
+    if (
+      (name === "value" || name === "checked" || name === "selected") &&
+      element[name] !== (value === undefined ? emptyValue(name) : value) &&
+      changedFromDefault(node as globalThis.Element)
+    ) {
+      // A radio group needs no more: the button the user checked and the one that was checked both
+      // differ from their defaults, so neither is written.
+      edited.add(controlOf(node))
+    }
+    host.setProp(node, name, value)
+  }
+
   // The element `createElement` made last, until its events are set: it has no entry yet, and its
   // tag is known without asking the node.
   let fresh: globalThis.Node | undefined
   // Whether its tag is `form` in any case, so only such an element is asked what it is.
   let freshMayBeForm = false
 
-  return {
+  const host: Renderer.Host<globalThis.Node> & { readonly dispose: () => void } = {
     createElement(tag) {
       freshMayBeForm = tag.length === 4 && (tag === "form" || tag.toLowerCase() === "form")
       return fresh = elements.svgTags.has(tag) ? document.createElementNS(SVG, tag) : document.createElement(tag)
@@ -839,6 +945,8 @@ export const makeHost = (
           }
           values.set(name, value)
         }
+        // A control changed before it adopted shows the change until the commit reports it.
+        if (edited.size > 0 && edited.has(controlOf(node))) return
         // Skip a no-op, so a caret in the middle of the text stays where it is.
         if (element[name] !== value) element[name] = value
         return
@@ -891,6 +999,10 @@ export const makeHost = (
         switch (node.nodeType) {
           case 1: {
             const tag = (node as globalThis.Element).localName
+            if (tag === "textarea") {
+              const textarea = node as HTMLTextAreaElement
+              textareaChanged.set(node, textarea.value !== textarea.defaultValue)
+            }
             return { _tag: "Element", tag, textOnly: server.textOnlyTags.has(tag) }
           }
           case 3:
@@ -901,9 +1013,11 @@ export const makeHost = (
             return { _tag: "Other" }
         }
       },
-      getAttr: (node, name) => (node as globalThis.Element).getAttribute(name) ?? undefined
+      getAttr: (node, name) => (node as globalThis.Element).getAttribute(name) ?? undefined,
+      adoptProp
     },
     commit() {
+      if (edited.size > 0) reportEdits()
       for (const dialog of shown) {
         if (!dialog.open || !dialog.isConnected) shown.delete(dialog)
       }
@@ -922,11 +1036,13 @@ export const makeHost = (
     dispose: () => {
       for (const [name, f] of listening) document.removeEventListener(name, f, { capture: true })
       listening.clear()
+      edited.clear()
       cancelExitCheck()
       cancelOver()
       active = undefined
     }
   }
+  return host
 }
 
 /**
@@ -1080,8 +1196,9 @@ export interface MountOptions<V extends View.Elements, RF = never> {
  * An instance whose provided Layer is still building keeps the server's
  * nodes until the Layer is ready, and everything else is live at once. A
  * waiting instance is inert: its buttons do nothing, links still navigate through
- * the Router, a `<form>` submits natively, and typed input is overwritten
- * when it adopts. Head sync starts once no instance is waiting.
+ * the Router, and a `<form>` submits natively. What the user types or picks
+ * in its fields stays, and reaches the fields' `onInput` and `onChange` when
+ * it adopts. Head sync starts once no instance is waiting.
  *
  * **Example** (Launching an app)
  *
