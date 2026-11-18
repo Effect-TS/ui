@@ -184,7 +184,7 @@ describe("HtmlServer", { concurrent: false }, () => {
           expect(rendered.html).toContain("<p>collected 1</p>")
           // An owner whose last message can't ship is built fresh, with its subtree.
           expect(rendered.state["~deferred"]).toEqual(message === Secret ? ["/Page/Group[g]"] : [])
-          expect(rendered.state["~collected"]).toEqual(
+          expect(rendered.state["~reported"]).toEqual(
             message === Secret ? undefined : { "/Page/Group[g]": { _tag: "ChangedOn", on: true } }
           )
           const app = yield* container(rendered.html)

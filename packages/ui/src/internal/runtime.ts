@@ -2124,7 +2124,7 @@ const setup = (
     // An owner adopting the server's Model starts from what its reports last sent there.
     const collectedOnServer = Option.isSome(fromServer) && component.definition.collects !== undefined
       ? Option.flatMap(
-        Option.fromUndefinedOr(hydrating!.state["~collected"]?.[path]),
+        Option.fromUndefinedOr(hydrating!.state["~reported"]?.[path]),
         jsonCodecOf(component.definition.message).decode
       )
       : Option.none()
@@ -5532,7 +5532,7 @@ const setup = (
         ...state,
         "~deferred": deferredPaths,
         "~query": query,
-        ...(Object.keys(collected).length > 0 ? { "~collected": collected } : {}),
+        ...(Object.keys(collected).length > 0 ? { "~reported": collected } : {}),
         ...(server?.static === true ? { "~static": true } : {})
       }
     }

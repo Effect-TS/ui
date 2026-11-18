@@ -777,7 +777,7 @@ export const fanout = <const Layers extends ReadonlyArray<Layer.Layer<never, any
  * @category Wire
  * @since 0.1.0
  */
-export const wireVersion = 4
+export const wireVersion = 5
 
 /**
  * Where a log comes from, as `Hello` reports it.

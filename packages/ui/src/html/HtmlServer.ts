@@ -78,7 +78,7 @@ import * as server from "./internal/server.ts"
  * `html` is the body markup for the app's container. `state` maps each
  * instance's path to its Schema-encoded Model, plus `~deferred`, the
  * settled query entries under `~query`, the last message each owner of
- * shared state got from its reports under `~collected`, and `~static` for a
+ * shared state got from its reports under `~reported`, and `~static` for a
  * static render;
  * pass it to `BrowserHost.mount`. `model` is the root's Model
  * after the server run, for app code that sets the status (a 404 for a
