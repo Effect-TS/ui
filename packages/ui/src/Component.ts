@@ -1843,6 +1843,7 @@ export interface SharesCollects<out Msg, in out Rp> {
 // The tags of a message union, and the member with one tag.
 type TagOf<Msg> = Msg extends { readonly _tag: infer T extends string } ? T : never
 type Tagged<Msg, T> = Extract<Msg, { readonly _tag: T }>
+type UnknownTag<T> = `'${T & string}' is not a tag of this component's message`
 
 /**
  * What `define` returns: a component's name, Schemas, queries and
@@ -1854,7 +1855,8 @@ type Tagged<Msg, T> = Extract<Msg, { readonly _tag: T }>
  * `update` with a tag returns a slice for that tag. Without one, it returns
  * an update function over the whole message type. Either fits the matching
  * key of a record `update`, and `$.combine` takes either where the message
- * fits. `view` and `fragment` return the function they're given.
+ * fits. A record key that isn't a message tag is a type error.
+ * `view` and `fragment` return the function they're given.
  *
  * `make` takes `init`, `update`, `view`, `subscriptions` and `head`, and
  * reads `R` off what they return.
@@ -1949,11 +1951,12 @@ export interface Definition<
     readonly update:
       | ((model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L>) => U)
       | {
-        readonly [T in keyof UR]: (
-          model: Model,
-          msg: Tagged<Msg, T>,
-          $: Update<Model, Msg, Events, Props, L, Tagged<Msg, T>>
-        ) => UR[T]
+        readonly [T in keyof UR]: T extends TagOf<Msg> ? (
+            model: Model,
+            msg: Tagged<Msg, T>,
+            $: Update<Model, Msg, Events, Props, L, Tagged<Msg, T>>
+          ) => UR[T]
+          : UnknownTag<T>
       }
     /** A headless component has no view to place slots in, so a definition with slots can't take `parts`. */
     readonly parts: [Sl] extends [never] ?
@@ -2006,11 +2009,12 @@ export interface Definition<
       readonly update:
         | ((model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L>) => U)
         | {
-          readonly [T in keyof UR]: (
-            model: Model,
-            msg: Tagged<Msg, T>,
-            $: Update<Model, Msg, Events, Props, L, Tagged<Msg, T>>
-          ) => UR[T]
+          readonly [T in keyof UR]: T extends TagOf<Msg> ? (
+              model: Model,
+              msg: Tagged<Msg, T>,
+              $: Update<Model, Msg, Events, Props, L, Tagged<Msg, T>>
+            ) => UR[T]
+            : UnknownTag<T>
         }
       readonly view: (
         model: Model,

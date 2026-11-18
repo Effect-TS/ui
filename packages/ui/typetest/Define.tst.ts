@@ -171,6 +171,44 @@ describe("Component.define", () => {
     })
   })
 
+  it("rejects a record key that is no tag, and names it", () => {
+    NoteDef.make({
+      init: () => ({ body: "", edits: 0 }),
+      update: {
+        Edited: touch,
+        SaveClicked: touch,
+        Saved: touch,
+        // @ts-expect-error 'Deleted' is not a tag of this component's message
+        Deleted: touch
+      },
+      view: (_: Model, h: Component.Helper<typeof NoteDef>) => h.p()
+    })
+  })
+
+  it("rejects a key that is no tag in a spread, in a variable and with parts", () => {
+    const init = () => ({ body: "", edits: 0 })
+    const view = (_: Model, h: Component.Helper<typeof NoteDef>) => h.p()
+    const shared = { Saved: touch, Deleted: touch }
+    const record = { ...shared, Edited: touch, SaveClicked: touch }
+    expect(NoteDef.make).type.not.toBeCallableWith({
+      init,
+      update: { ...shared, Edited: touch, SaveClicked: touch },
+      view
+    })
+    expect(NoteDef.make).type.not.toBeCallableWith({ init, update: record, view })
+    expect(NoteDef.make).type.not.toBeCallableWith({
+      init,
+      update: record,
+      parts: (model: Model) => ({ body: model.body })
+    })
+    // Picking the fields shares the handlers.
+    expect(NoteDef.make).type.toBeCallableWith({
+      init,
+      update: { Saved: shared.Saved, Edited: touch, SaveClicked: touch },
+      view
+    })
+  })
+
   it("fragment types h from the definition, with its queries and elements, and infers the other arguments", () => {
     const row = NoteDef.fragment((h, label: string, count: number) => {
       expect(h).type.toBe<Component.Helper<typeof NoteDef>>()
