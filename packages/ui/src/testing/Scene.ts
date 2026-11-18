@@ -503,13 +503,13 @@ export const fallback: {
   ...args: ReadonlyArray<any>
 ): View.Node<Msg, any> | undefined => {
   const [key, result] = args.length === 1 ? [undefined, args[0]] : args
-  const child = engine.findChild(view, component, key, "Scene.fallback")
+  const { child, scope } = engine.findChild(view, component, key, "Scene.fallback")
   if (child.fallback === undefined) return undefined
   const node = View.toNode(child.fallback(result))
   // As the runtime does: the fallback's children share the paths of the view, closure or slot content
   // that declared the child. A view no scene expanded is one such view.
   checkFallbackPaths(
-    engine.scopeOf(child, "Scene.fallback") ?? checkChildPaths("Scene.fallback", view),
+    scope?.("Scene.fallback") ?? checkChildPaths("Scene.fallback", view),
     child,
     node
   )

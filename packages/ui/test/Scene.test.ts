@@ -191,6 +191,31 @@ describe("Scene", () => {
       })
       const view = Scene.start(Page, {}).view
       assert.deepStrictEqual(Scene.fallback(view, Note, AsyncResult.initial()), { _tag: "Text", text: "no note" })
+      // The root of a closure is declared by the closure, not by the view beside it.
+      const Root = Component.define({ name: "Root", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => h.div(Badge(h, {}), Disclosure(h, { view: () => Note(h, { fallback: () => Badge(h, {}) }) }))
+      })
+      const fallback = Scene.fallback(Scene.start(Root, {}).view, Note, AsyncResult.initial())
+      assert.strictEqual((fallback as View.Child<never, any>).component, Badge)
+    })
+
+    it("givenChild in one scene uses that scene's path for a child node another scene shows", () => {
+      // One cached child node: Top shows it in its own view, Nested in a closure.
+      let cached: View.Child<never, any> | undefined
+      const inner = (h: View.Helper<never, unknown>) =>
+        cached ??= Disclosure(h, { key: "inner", view: (parts) => h.el("p", state(parts.open)) })
+      const page = (name: string, nested: boolean) =>
+        Component.define({ name, model: Schema.Null, message: Schema.Never }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => nested ? Disclosure(h, { key: "outer", view: () => inner(h) }) : h.el("div", inner(h))
+        })
+      const top = Scene.start(page("Top", false), {})
+      void top.view
+      void Scene.start(page("Nested", true), {}).view
+      top.givenChild(Disclosure, "inner", true).expect(Locator.tag("p")).toHaveText("open")
     })
   })
 

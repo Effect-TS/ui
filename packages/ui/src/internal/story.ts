@@ -150,28 +150,21 @@ export type Fields<Props, Model, Msg, Events> =
  */
 export const childModels = new WeakMap<object, ReadonlyMap<string, unknown>>()
 
-/** Where an expansion found a child: its path, and the paths of the view or closure that declared it. */
-interface Placement {
-  readonly path: string
-  readonly scope: (label: string) => ChildPaths
+/**
+ * One place a view shows a child: the child as declared, and, in a view a story expanded, the path the
+ * expansion gave it and the child paths of the view, closure or slot content that declared it, labelled
+ * as asked. A child node may be shown at several places, in one view or in several stories' views, so
+ * each place is its own occurrence.
+ *
+ * @internal
+ */
+export interface Occurrence {
+  readonly child: View.Child<any, any>
+  readonly path: string | undefined
+  readonly scope: ((label: string) => ChildPaths) | undefined
 }
-const placements = new WeakMap<object, Placement>()
-
-/**
- * The path a story gave `child` as it expanded its view, if it did.
- *
- * @internal
- */
-export const pathOf = (child: View.Child<any, any>): string | undefined => placements.get(child)?.path
-
-/**
- * The child paths of the view, closure or slot content that declared `child`, as the runtime checks its
- * fallback against them, labelled `label`. `undefined` for a child no story expansion placed.
- *
- * @internal
- */
-export const scopeOf = (child: View.Child<any, any>, label: string): ChildPaths | undefined =>
-  placements.get(child)?.scope(label)
+// Every child an expansion placed, by the expanded root, in the order it placed them.
+const occurrences = new WeakMap<object, ReadonlyArray<Occurrence>>()
 // The children an expansion replaced, by the expanded root: `childEmit` and `childFailure` still find them.
 const expandedChildren = new WeakMap<object, ReadonlyArray<View.Child<any, any>>>()
 
@@ -299,6 +292,7 @@ const expandRoot = <Msg>(
   root: Owners
 ): View.Node<Msg, any> => {
   const replaced: Array<View.Child<any, any>> = []
+  const placed: Array<Occurrence> = []
   // As the runtime does: two children at one path fail the view or the closure that holds them, and
   // so do two children with one ref key across the view and the closures it gives its headless children.
   // Nor can two of them place one slot.
@@ -348,8 +342,7 @@ const expandRoot = <Msg>(
       case "Child": {
         const component = node.component as unknown as Component.Headless.Any
         const childPath = path + "/" + segment(node)
-        const placement: Placement = { path: childPath, scope }
-        placements.set(node, placement)
+        placed.push({ child: node, path: childPath, scope })
         if (node.slots !== undefined) {
           // A child's view isn't run, but what the parent passed for its slots is the parent's.
           const shown: Array<View.Node<any, any>> = []
@@ -360,7 +353,6 @@ const expandRoot = <Msg>(
             lengths.push([slot, placed.length])
           }
           const out = { ...node, children: shown } as View.Node<any, any>
-          placements.set(out, placement)
           slotLengths.set(out, lengths)
           return out
         }
@@ -396,6 +388,9 @@ const expandRoot = <Msg>(
   checkAuthorRefs("/" + name, written)
   checkAuthorPlacements("/" + name, written)
   if (replaced.length > 0) expandedChildren.set(expanded, replaced)
+  // A root the expansion left as it was may be a node the component cached and another story shows,
+  // and its children are all declared by the view itself, so it keeps nothing.
+  if (expanded !== view) occurrences.set(expanded, placed)
   return expanded
 }
 
@@ -1744,14 +1739,15 @@ const isChildOf = (child: View.Child<any, any>, component: object): boolean => {
  *
  * @internal
  */
-export const findChild = <Msg>(
-  view: View.Node<Msg, any>,
+export const findChild = (
+  view: View.Node<any, any>,
   component: Component.Any | Component.Headless.Any | Feature.Any,
   key: string | Component.Ref.Any | undefined,
   step: string
-): View.Child<Msg, any> => {
-  const all = children(view)
-  const found = all.filter((child) =>
+): Occurrence => {
+  const all = occurrences.get(view) ??
+    children(view).map((child): Occurrence => ({ child, path: undefined, scope: undefined }))
+  const found = all.filter(({ child }) =>
     isChildOf(child, component) && (
       key === undefined
         ? child.key === "" && child.ref === undefined
@@ -1770,7 +1766,7 @@ export const findChild = <Msg>(
   throw new Error(
     found.length === 0
       ? `${step}: no child ${name} ${which}; children: ${
-        all.map((child) => segment(child) + (child.ref !== undefined ? " (ref)" : "")).join(", ")
+        all.map(({ child }) => segment(child) + (child.ref !== undefined ? " (ref)" : "")).join(", ")
       }`
       : `${step}: ${found.length} children ${name} ${which}: give each one its own key or ref`
   )

@@ -325,14 +325,14 @@ export class SceneCursor extends Cursor {
   childEmit(child: ChildTarget, ...args: KeyAnd<unknown>): this {
     const [key, event] = keyAnd(args)
     return this.act("childEmit", "message", (state) => {
-      const found = engine.findChild(state.view(), child, key, this.name("childEmit"))
+      const found = engine.findChild(state.view(), child, key, this.name("childEmit")).child
       return engine.dispatch(state, found.onEmit(event))
     })
   }
   childFailure(child: ChildTarget, ...args: KeyAnd<Cause.Cause<unknown>>): this {
     const [key, cause] = keyAnd(args)
     return this.act("childFailure", "message", (state) => {
-      const found = engine.findChild(state.view(), child, key, this.name("childFailure"))
+      const found = engine.findChild(state.view(), child, key, this.name("childFailure")).child
       return engine.dispatch(state, found.onFailure?.(AsyncResult.failure(cause)))
     })
   }
@@ -340,7 +340,7 @@ export class SceneCursor extends Cursor {
     const [key, model] = keyAnd(args)
     const step = this.name("givenChild")
     // The Model is for the instance the step selected: the one at its path, as the runtime keys instances.
-    const path = engine.pathOf(engine.findChild(this.state.view(), child, key, step))
+    const path = engine.findChild(this.state.view(), child, key, step).path
     if (path === undefined) throw new Error(`${step}: the child isn't one the scene expands`)
     return this.act("givenChild", "acting", (state) => {
       const given = new Map(engine.childModels.get(state))
