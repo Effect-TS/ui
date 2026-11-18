@@ -1,21 +1,15 @@
 /**
- * A control that the user ticks or unticks, ported from Base UI's Checkbox
- * (https://base-ui.com/react/components/checkbox).
- *
- * `Checkbox` is a headless component: it owns the ARIA, the data
- * attributes, the form field and the click and key handling, and the
- * consumer draws the markup. Its Model is empty, but cancelling Enter
- * needs a message of its own, and the parts Base UI has that this port
- * puts off (the indicator's transitions, Enter submitting the form) need
- * an instance. The consumer owns the value, passes it as `checked`, and
- * stores what the `Toggled` event reports.
+ * A controlled checkbox. Pass the current value as `checked` and update
+ * it when the checkbox emits `Toggled`. Your view supplies the markup;
+ * the component adds ARIA and data attributes, handles user input and
+ * supplies the form field.
  *
  * **Anatomy**
  *
- * | Base UI              | Part        | Element                                           |
- * | :------------------- | :---------- | :------------------------------------------------ |
- * | `Checkbox.Root`      | `root`      | `<button role="checkbox">`, with the hidden input |
- * | `Checkbox.Indicator` | `indicator` | `<span>` inside the root                          |
+ * | Part        | Element                  |
+ * | :---------- | :----------------------- |
+ * | `root`      | `<button role="checkbox">` |
+ * | `indicator` | `<span>` inside the root |
  *
  * Each part takes the consumer's builder and returns it, so the consumer
  * goes on chaining and adds children with `.children(...)`:
@@ -55,27 +49,17 @@
  * arrow keys pressed on the checkbox. To handle them, add `onKeyDown` to
  * the root's button, which runs after the checkbox's own.
  *
- * **Differences from Base UI**
+ * **Forms**
  *
- * - The value is always controlled. There is no `defaultChecked`: keep the
- *   value in the consumer's Model.
- * - The root is always a native `<button>`, Base UI's `nativeButton` mode.
- * - The form value is a hidden input inside the root, so `required` sets
- *   `aria-required` and `data-required` but doesn't block a form
- *   submission, and there is no `inputRef`.
- * - Enter does nothing. Base UI submits the checkbox's form, and no ui-kit
- *   Command can do that yet.
- * - The indicator is always drawn, Base UI's `keepMounted` mode, without
- *   the `data-starting-style` and `data-ending-style` transition
- *   attributes. Hide it with `[data-unchecked]`, or don't draw it unless
- *   `s.checked || s.indeterminate`.
- * - There is no `form` prop. A `form` attribute on the root associates
- *   only the button, not the hidden input inside it, so draw the checkbox
- *   inside the form it submits with.
- * - `parent` waits for a ui-kit CheckboxGroup.
- * - Field state (`data-valid`, `data-invalid`, `data-dirty`,
- *   `data-touched`, `data-filled`, `data-focused`) waits for a ui-kit
- *   Field.
+ * Place the checkbox inside the form that should submit its value. A
+ * `form` attribute on the button does not associate its hidden input
+ * with that form. The `required` prop sets `aria-required` and
+ * `data-required` but does not block submission when unchecked.
+ *
+ * **Indicator visibility**
+ *
+ * The indicator stays in the DOM whenever your view renders it. Hide it
+ * with `[data-unchecked]` or render it only when `s.checked || s.indeterminate`.
  *
  * **Example** (A labelled checkbox whose value lives in the consumer's Model)
  *
@@ -125,7 +109,7 @@ import { flag } from "./internal/attributes.ts"
 import { field } from "./internal/field.ts"
 
 /**
- * The props of a `Checkbox`, Base UI's Root props without the React ones.
+ * Props for controlling the checkbox state and the value it submits.
  *
  * **Details**
  *
@@ -170,9 +154,8 @@ export const CheckboxProps = Schema.Struct({
 export type CheckboxProps = typeof CheckboxProps.Type
 
 /**
- * What a `Checkbox` emits. `Toggled` is Base UI's `onCheckedChange`: the
- * user ticked or unticked the checkbox, and `checked` is the value they
- * asked for, which the consumer stores and passes back.
+ * `Toggled` reports the requested value in `checked`. Store that value
+ * and pass it back as the `checked` prop to update the checkbox.
  *
  * @stability experimental
  * @category schemas
