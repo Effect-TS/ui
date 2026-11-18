@@ -23,3 +23,4 @@ Switch(h, {
 - [Button](src/Button.ts): a native button that can stay focusable while disabled.
 - [Checkbox](src/Checkbox.ts): a controlled checkbox with an indicator.
 - [Switch](src/Switch.ts): a controlled on/off setting.
+- [Tooltip](src/Tooltip.ts): a popup shown when its trigger is hovered or focused.

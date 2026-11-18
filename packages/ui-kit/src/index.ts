@@ -38,3 +38,9 @@ export * from "./Checkbox.ts"
  * @since 0.1.0
  */
 export * from "./Switch.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
+export * from "./Tooltip.ts"
