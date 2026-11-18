@@ -130,7 +130,8 @@ describe("Story", () => {
           "div",
           h.el("input").attr("data-testid", "name").on(
             "input",
-            (payload: unknown) => Message.Typed({ value: (payload as { readonly value: string }).value })
+            // The payload is unknown, so this goes through the checked `make`.
+            (payload: unknown) => Message.cases.Typed.make({ value: (payload as { readonly value: string }).value })
           ),
           h.el("button").on("click", Message.Pressed()).children(h.el("span", "Save")),
           h.el("p", "Save draft"),
