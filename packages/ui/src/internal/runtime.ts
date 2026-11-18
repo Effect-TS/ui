@@ -454,7 +454,7 @@ export interface Instance {
   shares: unknown
   /** An owner of shared state: the instances below it that read it, marked dirty when its value changes. */
   readers: Set<Instance> | undefined
-  /** An owner of shared state: what its readers' `onChange` and its `onReports` need. */
+  /** An owner of shared state: what its readers' `onChange` and its `collects` need. */
   readonly owning: Owning | undefined
   /**
    * A reader of shared state: the owner instance of each definition it reads, found at mount. An optional
@@ -467,15 +467,15 @@ export interface Instance {
   readonly fire: Renderer.Dispatch
 }
 
-/** An owner of shared state: what its readers' `onChange` and its `onReports` need. */
+/** An owner of shared state: what its readers' `onChange` and its `collects` need. */
 interface Owning {
   /** The entry that last changed the shared value: a reader's `onChange` message points at it. */
   seq: number
   /** A round of the readers' `onChange` is in the flush's deferred work. */
   round: boolean
-  /** What `onReports` last returned, read first as its message for no reports. */
-  reported: { readonly message: unknown } | undefined
-  /** Hydration: `reported` is the server's, and no comparison has run on the client yet. */
+  /** What `collects.onChange` last returned, read first as its message for no reports. */
+  collected: { readonly message: unknown } | undefined
+  /** Hydration: `collected` is the server's, and no comparison has run on the client yet. */
   restored: boolean
 }
 
@@ -1121,7 +1121,7 @@ const setup = (
   // How many times each instance has delivered sends in this flush: a parent and a child that answer
   // each other would otherwise never leave `drainLoop`.
   const sendPasses = new Map<Instance, number>()
-  // How many times each owner of shared state has sent its readers' `onChange` or its own `onReports` in
+  // How many times each owner of shared state has sent its readers' `onChange` or its own `collects.onChange` in
   // this flush: a reader whose answer changes the shared value again would otherwise never leave `drainLoop`.
   const sharedPasses = new Map<Instance, number>()
   // Owners whose readers' reports may have changed: read once nothing is left to render.
@@ -2081,7 +2081,7 @@ const setup = (
       readers: undefined,
       owning: component.definition.shares === undefined
         ? undefined
-        : { seq: -1, round: false, reported: undefined, restored: false },
+        : { seq: -1, round: false, collected: undefined, restored: false },
       owners: undefined,
       seen: undefined,
       dispatch: undefined as any,
@@ -2122,9 +2122,9 @@ const setup = (
       ? stateCodecOf(component).decode(hydrating.state[path])
       : Option.none()
     // An owner adopting the server's Model starts from what its reports last sent there.
-    const reportedOnServer = Option.isSome(fromServer) && component.definition.reports !== undefined
+    const collectedOnServer = Option.isSome(fromServer) && component.definition.collects !== undefined
       ? Option.flatMap(
-        Option.fromUndefinedOr(hydrating!.state["~reported"]?.[path]),
+        Option.fromUndefinedOr(hydrating!.state["~collected"]?.[path]),
         jsonCodecOf(component.definition.message).decode
       )
       : Option.none()
@@ -2267,8 +2267,8 @@ const setup = (
         inst.model = Option.isSome(adopted) ? adopted.value.model : first.model
         inst.results = Option.isSome(adopted) ? adopted.value.results : undefined
         inst.adoptsChildren = Option.isSome(serverModel)
-        if (Option.isSome(serverModel) && Option.isSome(reportedOnServer)) {
-          inst.owning!.reported = { message: reportedOnServer.value }
+        if (Option.isSome(serverModel) && Option.isSome(collectedOnServer)) {
+          inst.owning!.collected = { message: collectedOnServer.value }
           inst.owning!.restored = true
           // Compared once the pass settles and nothing below waits to adopt, readers or none: one that reported
           // on the server may not mount here.
@@ -2608,20 +2608,20 @@ const setup = (
     for (const read of sharedReads.readsOf(inst.component.definition)) {
       if (read.report === undefined) continue
       const owner = owners.get(read.owner.definition)
-      if (owner === undefined || owner.closed || owner.component.definition.reports === undefined) continue
+      if (owner === undefined || owner.closed || owner.component.definition.collects === undefined) continue
       reportsDue.add(owner)
       wake()
     }
   }
   /**
    * Reads every current report of an owner, once nothing is left to render, and dispatches what
-   * `onReports` returns for them when it differs from what it last returned. The first comparison is
+   * `collects.onChange` returns for them when it differs from what it last returned. The first comparison is
    * with its message for no reports, so readers that mount reporting nothing new send nothing.
    */
   const deliverReports = (owner: Instance) => {
     reportsDue.delete(owner)
-    const reports = owner.component.definition.reports
-    if (reports === undefined || owner.closed || owner.failure !== undefined || owner.waiting) return
+    const collects = owner.component.definition.collects
+    if (collects === undefined || owner.closed || owner.failure !== undefined || owner.waiting) return
     const owning = owner.owning!
     // The server's message is compared with every reader that adopts, so one still building its Layer isn't
     // counted as gone. Settling it delivers the owner again.
@@ -2632,7 +2632,7 @@ const setup = (
       }
       owning.restored = false
     }
-    const collected: Array<unknown> = []
+    const reports: Array<unknown> = []
     for (const reader of owner.readers ?? []) {
       if (reader.left || reader.closed || reader.failure !== undefined) continue
       for (const read of sharedReads.readsOf(reader.component.definition)) {
@@ -2640,17 +2640,17 @@ const setup = (
         const report = guard(reader, "shared", () => read.report!(reader.model, reader.props), read.name)
         // The reader failed, and leaving marked the owner again.
         if (reader.failure !== undefined) return
-        collected.push(report)
+        reports.push(report)
       }
     }
     const message = guard(owner, "shares", () => {
-      owning.reported ??= { message: reports.onReports([]) }
-      return { value: reports.onReports(collected as Array<never>) }
+      owning.collected ??= { message: collects.onChange([]) }
+      return { value: collects.onChange(reports as Array<never>) }
     })
-    if (message === undefined || sharedEqual(owning.reported!.message, message.value)) return
-    owning.reported = { message: message.value }
+    if (message === undefined || sharedEqual(owning.collected!.message, message.value)) return
+    owning.collected = { message: message.value }
     if (!countShared(owner)) return
-    owner.dispatch(message.value, { _tag: "Reported" })
+    owner.dispatch(message.value, { _tag: "Collected" })
   }
   /** Whether an instance below `inst` still waits for its Layer before it adopts. */
   const waitsBelow = (inst: Instance): boolean => {
@@ -2663,14 +2663,14 @@ const setup = (
   /**
    * Counts one more pass of an owner's shared value through its readers in this flush, and fails the
    * owner past the limit. Every loop between a shared value, the readers' `report` and `onChange`, and
-   * the owner's `onReports` passes through the owner, so failing it alone stops the loop.
+   * the owner's `collects.onChange` passes through the owner, so failing it alone stops the loop.
    */
   const countShared = (owner: Instance): boolean => {
     const passes = (sharedPasses.get(owner) ?? 0) + 1
     sharedPasses.set(owner, passes)
     if (passes <= maxSendPasses) return true
     const error = new Error(
-      `${owner.path} sent its readers' onChange or its own onReports ${maxSendPasses} times in one flush. A reader whose onChange or report answers the shared value with a change of it loops: answer with a value that settles.`
+      `${owner.path} sent its readers' onChange or its own collects.onChange ${maxSendPasses} times in one flush. A reader whose onChange or report answers the shared value with a change of it loops: answer with a value that settles.`
     )
     failInstance(owner, Cause.die(error), "shares")
     return false
@@ -5460,7 +5460,7 @@ const setup = (
     // revert to cold and aren't shipped. Nothing is dispatched for them.
     const query = cache.dehydrate()
     const state: Record<string, unknown> = {}
-    const reported: Record<string, unknown> = {}
+    const collected: Record<string, unknown> = {}
     const deferredPaths: Array<string> = []
     // `under`: inside a deferred instance, whose subtree the client builds fresh.
     const instance = (inst: Instance, under: boolean): Renderer.ServerNode => {
@@ -5476,7 +5476,7 @@ const setup = (
         // What an owner's reports last sent: the client compares its reports with it. An owner whose
         // message can't be shipped, a `Redacted` in its Schema included, is deferred with its subtree, as a
         // Model adopted without it would get the same message again.
-        const last = inst.owning?.reported
+        const last = inst.owning?.collected
         let baseline: Option.Option<unknown> = Option.none()
         if (Option.isSome(encoded) && last !== undefined) {
           const message = inst.component.definition.message
@@ -5488,7 +5488,7 @@ const setup = (
           inner = true
         } else {
           state[inst.path] = encoded.value
-          if (Option.isSome(baseline)) reported[inst.path] = baseline.value
+          if (Option.isSome(baseline)) collected[inst.path] = baseline.value
         }
       }
       return {
@@ -5532,7 +5532,7 @@ const setup = (
         ...state,
         "~deferred": deferredPaths,
         "~query": query,
-        ...(Object.keys(reported).length > 0 ? { "~reported": reported } : {}),
+        ...(Object.keys(collected).length > 0 ? { "~collected": collected } : {}),
         ...(server?.static === true ? { "~static": true } : {})
       }
     }

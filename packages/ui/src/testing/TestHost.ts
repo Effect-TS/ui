@@ -863,8 +863,8 @@ export const formatLog = (entries: ReadonlyArray<MessageLog.Entry>): string =>
           ? `send from ${source.path}`
           : source._tag === "Shared"
           ? `shared ${source.name} from ${source.path}`
-          : source._tag === "Reported"
-          ? "reports"
+          : source._tag === "Collected"
+          ? "collected"
           : source._tag === "Mount"
           ? `mount ${source.name}`
           : "dispatch"

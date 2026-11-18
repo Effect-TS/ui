@@ -211,12 +211,12 @@ export interface Steps<C extends AnyComponent, Parts = never, Report = never> ex
   /**
    * Gives an owner of shared state the reports of its readers, as the
    * runtime collects them once a render pass settles, in no promised order.
-   * Runs `shares`'s `onReports` and sends its message when it differs from
-   * the one it last returned, starting from its message for no reports. A
-   * message step when it sends. Throws for a component whose `shares` has
-   * no `reports` Schema. A scene of a headless component only.
+   * Runs the `onChange` of `shares`'s `collects` and sends its message when
+   * it differs from the one it last returned, starting from its message for
+   * no reports. A message step when it sends. Throws for a component whose
+   * `shares` has no `collects`. A scene of a headless component only.
    */
-  reported(reports: ReadonlyArray<Report>): this
+  collected(reports: ReadonlyArray<Report>): this
   /**
    * Clicks the one element `target` matches: the innermost element with a
    * `click` handler, that element or an ancestor, sends its message. A

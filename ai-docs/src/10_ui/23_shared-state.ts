@@ -149,22 +149,25 @@ export const focused = Effect.gen(function*() {
 
 const GroupMessage = Schema.TaggedUnion({ ChangedOpen: { open: Schema.Boolean } })
 
-// `shares` in its long form. `value` is what readers read. `reports` is the
-// Schema of what each reader tells the owner, and `onReports` the owner's
-// message for the current reports. Once a render pass has nothing left to
-// render, the runtime calls `onReports` with every mounted reader's report,
-// in no promised order, and dispatches the message only when it differs from
-// the last one, starting from `onReports([])`. So two panels that swap in one
-// render send nothing, and a panel that unmounts takes its report with it.
-// The message is an `Update` with source `Reported`.
+// `shares` in its long form. `value` is what readers read. `collects` is
+// what the owner collects from them: `schema` is the Schema of what each
+// reader tells the owner, and `onChange` the owner's message for the current
+// reports. Once a render pass has nothing left to render, the runtime calls
+// `onChange` with every mounted reader's report, in no promised order, and
+// dispatches the message only when it differs from the last one, starting
+// from `onChange([])`. So two panels that swap in one render send nothing,
+// and a panel that unmounts takes its report with it. The message is an
+// `Update` with source `Collected`.
 export const PanelGroup = Component.define({
   name: "PanelGroup",
   model: Schema.Struct({ anyOpen: Schema.Boolean }),
   message: GroupMessage,
   shares: {
     value: (model) => ({ anyOpen: model.anyOpen }),
-    reports: Schema.Boolean,
-    onReports: (reports) => GroupMessage.make({ _tag: "ChangedOpen", open: reports.includes(true) })
+    collects: {
+      schema: Schema.Boolean,
+      onChange: (collected) => GroupMessage.make({ _tag: "ChangedOpen", open: collected.includes(true) })
+    }
   },
   elements: Html
 }).make({
@@ -182,7 +185,7 @@ const PanelMessage = Schema.TaggedUnion({ Toggled: {}, ChangedGroup: { anyOpen: 
 //   and logged as `SendDropped` with reason `absent`, and the Panel needs no
 //   `Component.Shared<typeof PanelGroup>`.
 // - `report`: what the Panel tells the owner, from its own Model and props.
-//   It fails to compile for an owner with no `reports` Schema.
+//   It fails to compile for an owner whose `shares` has no `collects`.
 // - `onChange`: the Panel's message when the owner's value changes, for an
 //   `update` that must act on it. `view` and `parts` read `h.shared` as
 //   usual. It isn't sent at mount, so `init` can't read the value, and never
@@ -191,8 +194,9 @@ const PanelMessage = Schema.TaggedUnion({ Toggled: {}, ChangedGroup: { anyOpen: 
 //   changes is one message, and a value that changes back sends nothing.
 //
 // A `report` or `onChange` that answers the shared value with a change of
-// its own can loop. The owner counts its `onReports` messages and its rounds
-// of `onChange`, and fails past 100 in one flush, so its `fallback` shows.
+// its own can loop. The owner counts its `collects.onChange` messages and
+// its rounds of the readers' `onChange`, and fails past 100 in one flush, so
+// its `fallback` shows.
 export const Panel = Component.define({
   name: "Panel",
   props: Schema.Struct({ title: Schema.String }),
@@ -222,7 +226,7 @@ export const Panel = Component.define({
 })
 
 // A test of each side. Neither runs the other: `shared` gives the Panel its
-// owner's value, and `reported`, a step of a headless component's scene,
+// owner's value, and `collected`, a step of a headless component's scene,
 // gives the PanelGroup its readers' reports.
 export const panels = Effect.gen(function*() {
   const panel = yield* Story.make(Panel, { title: "One" })
@@ -242,7 +246,7 @@ export const panels = Effect.gen(function*() {
     view: (parts, h) => h.p.children(parts.anyOpen ? "open" : "closed")
   })
   // The same message as for no reports: nothing is sent.
-  group.reported([false, false])
-  group.reported([false, true])
+  group.collected([false, false])
+  group.collected([false, true])
     .expect(Locator.text("open")).toExist()
 })

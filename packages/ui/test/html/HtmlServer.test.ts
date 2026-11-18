@@ -130,8 +130,10 @@ describe("HtmlServer", { concurrent: false }, () => {
         message: message as typeof Plain,
         shares: {
           value: (count) => count,
-          reports: Schema.Boolean,
-          onReports: (reports) => Plain.make({ _tag: "ChangedOn", on: reports.includes(true) })
+          collects: {
+            schema: Schema.Boolean,
+            onChange: (collected) => Plain.make({ _tag: "ChangedOn", on: collected.includes(true) })
+          }
         }
       }).make({ init: () => 0, update: (count) => count + 1, parts: (count) => ({ count }) })
       const Item = Component.define({
@@ -157,7 +159,7 @@ describe("HtmlServer", { concurrent: false }, () => {
             key: "g",
             view: (parts) =>
               h.div.children(
-                h.p.children(`reported ${parts.count}`),
+                h.p.children(`collected ${parts.count}`),
                 h.props.item !== null && Shown(h, { key: "i", props: { open: h.props.item } })
               )
           })
@@ -179,10 +181,10 @@ describe("HtmlServer", { concurrent: false }, () => {
         Effect.gen(function*() {
           const Page = counting(message)
           const rendered = yield* HtmlServer.renderToHtml(Page, { item: server })
-          expect(rendered.html).toContain("<p>reported 1</p>")
+          expect(rendered.html).toContain("<p>collected 1</p>")
           // An owner whose last message can't ship is built fresh, with its subtree.
           expect(rendered.state["~deferred"]).toEqual(message === Secret ? ["/Page/Group[g]"] : [])
-          expect(rendered.state["~reported"]).toEqual(
+          expect(rendered.state["~collected"]).toEqual(
             message === Secret ? undefined : { "/Page/Group[g]": { _tag: "ChangedOn", on: true } }
           )
           const app = yield* container(rendered.html)
@@ -191,9 +193,9 @@ describe("HtmlServer", { concurrent: false }, () => {
             Effect.provideService(MessageLog.MessageLog, log)
           )
           yield* tick
-          expect(app.querySelector("p")!.textContent).toBe(`reported ${count}`)
+          expect(app.querySelector("p")!.textContent).toBe(`collected ${count}`)
           // One on the client each: the Redacted owner is built fresh from 0, the others change.
-          expect(log.entries().filter((entry) => entry._tag === "Update" && entry.source._tag === "Reported"))
+          expect(log.entries().filter((entry) => entry._tag === "Update" && entry.source._tag === "Collected"))
             .toHaveLength(1)
         }).pipe(Effect.scoped))
     }
@@ -206,7 +208,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         yield* TestClock.adjust("50 millis")
         const rendered = yield* Fiber.join(fiber)
         expect(rendered.state["~deferred"]).toEqual([])
-        expect(rendered.html).toContain("<p>reported 1</p>")
+        expect(rendered.html).toContain("<p>collected 1</p>")
         const app = yield* container(rendered.html)
         const log = MessageLog.makeMemory({ size: 1000 })
         const root = yield* BrowserHost.mountEffect(Page, { item: true }, app, { state: rendered.state }).pipe(
@@ -216,9 +218,9 @@ describe("HtmlServer", { concurrent: false }, () => {
         yield* TestClock.adjust("50 millis")
         yield* root.adopted
         yield* tick
-        expect(app.querySelector("p")!.textContent).toBe("reported 1")
-        const reported = log.entries().filter((entry) => entry._tag === "Update" && entry.source._tag === "Reported")
-        expect(reported).toEqual([])
+        expect(app.querySelector("p")!.textContent).toBe("collected 1")
+        const collected = log.entries().filter((entry) => entry._tag === "Update" && entry.source._tag === "Collected")
+        expect(collected).toEqual([])
       }).pipe(Effect.scoped))
 
     it.effect("adopts the server's nodes when the last message ships", () =>
@@ -230,7 +232,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         yield* BrowserHost.mountEffect(Page, { item: true }, app, { state: rendered.state })
         yield* tick
         expect(app.querySelector("p")).toBe(p)
-        expect(p!.textContent).toBe("reported 1")
+        expect(p!.textContent).toBe("collected 1")
       }).pipe(Effect.scoped))
   })
 

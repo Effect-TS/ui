@@ -348,9 +348,9 @@ export class SceneCursor extends Cursor {
       return engine.update(state, { childModels: given })
     })
   }
-  reported(reports: ReadonlyArray<unknown>): this {
-    const step = this.name("reported")
-    return this.act("reported", "message", (state) => engine.withReports(state, reports, step))
+  collected(reports: ReadonlyArray<unknown>): this {
+    const step = this.name("collected")
+    return this.act("collected", "message", (state) => engine.withReports(state, reports, step))
   }
   protected override givenShared(
     state: engine.State<any, any, any, any>,

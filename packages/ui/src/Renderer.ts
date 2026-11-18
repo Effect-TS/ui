@@ -193,7 +193,7 @@ export interface Hydration<Node> {
  * open. An entry still in flight at the budget isn't shipped, and the client
  * fetches it. `~static` is set by a render with `static: true`.
  *
- * `~reported` holds, by path, the message an owner of shared state last got
+ * `~collected` holds, by path, the message an owner of shared state last got
  * from its readers' reports. An owner that adopts its Model starts from it,
  * so the client sends that message again only if its reports differ, even
  * with no reader left to report. The comparison waits until nothing below the
@@ -222,7 +222,7 @@ export interface State {
   readonly [path: string]: unknown
   readonly "~deferred"?: ReadonlyArray<string> | undefined
   readonly "~query"?: unknown
-  readonly "~reported"?: { readonly [path: string]: unknown } | undefined
+  readonly "~collected"?: { readonly [path: string]: unknown } | undefined
   readonly "~static"?: boolean | undefined
 }
 

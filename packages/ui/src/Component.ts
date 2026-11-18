@@ -490,7 +490,7 @@ export type Shared<C> = C extends Headless<infer _P, infer _E, infer _Parts, inf
 export declare namespace Shared {
   /**
    * The requirement of an owner named `Name` that shares `Value`,
-   * receives `Rcv` and takes `Report` from each reader that reports to it.
+   * receives `Rcv` and collects `Report` from each reader that reports to it.
    * `make` builds it from the definition, and `Shared<typeof Owner>` reads
    * it back.
    *
@@ -514,7 +514,7 @@ export declare namespace Shared {
    * @category models
    * @since 0.1.0
    */
-  // `any` doesn't stand in for `never` in an invariant parameter, so an owner that receives or takes nothing is listed apart.
+  // `any` doesn't stand in for `never` in an invariant parameter, so an owner that receives or collects nothing is listed apart.
   export type Any =
     | Of<any, any, any, any>
     | Of<any, any, never, any>
@@ -544,8 +544,9 @@ export declare namespace Shared {
     : never
 
   /**
-   * What each reader reports to an owner: the type of the `reports` Schema
-   * in its `shares`. `never` for an owner that takes no reports.
+   * What each reader reports to an owner: the type of the `schema` its
+   * `shares` has under `collects`. `never` for an owner that collects
+   * nothing.
    *
    * @stability experimental
    * @category utility types
@@ -566,7 +567,7 @@ export declare namespace Shared {
  * reader works with no owner above it: the read is `undefined` there, and the
  * reader carries no `Shared<typeof Owner>`. `report` is what the reader
  * tells the owner, from its own Model and props, for an owner whose
- * `shares` takes `reports`. `onChange` is the reader's message for a new
+ * `shares` has `collects`. `onChange` is the reader's message for a new
  * shared value. An owner may be listed under more than one name, but only
  * one of them may have an `onChange`: `define` throws otherwise.
  *
@@ -1807,7 +1808,7 @@ type SharedEntry<E, O, Model, Props, Msg> = [E] extends [Headless.Any] ? O : {
   readonly owner: O
   readonly optional?: boolean | undefined
   readonly report?:
-    | ([Shared.Report<O>] extends [never] ? "This owner takes no reports: its shares has no reports Schema"
+    | ([Shared.Report<O>] extends [never] ? "This owner collects no reports: its shares has no collects"
       : (model: Model, props: Props) => Shared.Report<O>)
     | undefined
   readonly onChange?: ((value: Shared.Value<O>) => Msg) | undefined
@@ -1822,16 +1823,17 @@ type OwnersOnly<SO> = {
 }
 
 /**
- * What an owner takes from the readers that report to it, as the definition
- * keeps it: the Schema of one report, and the message for all of them.
+ * What an owner collects from the readers that report to it, the `collects`
+ * of its `shares`: the Schema of one report, and the message for all of
+ * them.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface SharesReports<out Msg, in out Rp> {
-  readonly reports: Schema.Codec<Rp, any>
-  readonly onReports: (reports: ReadonlyArray<Rp>) => Msg
+export interface SharesCollects<out Msg, in out Rp> {
+  readonly schema: Schema.Codec<Rp, any>
+  readonly onChange: (collected: ReadonlyArray<Rp>) => Msg
 }
 
 // The tags of a message union, and the member with one tag.
@@ -1886,8 +1888,8 @@ export interface Definition<
   readonly shared: SR | undefined
   /** What an owner shares with the components below it, from its Model and props: the `value` of `shares`. */
   readonly shares: ((model: Model, props: Props) => SV) | undefined
-  /** What an owner takes from the readers below it: the `reports` and `onReports` of `shares`. */
-  readonly reports: SharesReports<Msg, Rp> | undefined
+  /** What an owner collects from the readers below it: the `collects` of `shares`. */
+  readonly collects: SharesCollects<Msg, Rp> | undefined
   /**
    * A slice for one tag: `msg` is that tag's member, and so is the message
    * `$.combine` takes functions over. The slice returned takes any `$`, so
@@ -2081,9 +2083,9 @@ export declare namespace Definition {
     readonly shared: SharedReads | undefined
     /** What the component shares as an owner, or `undefined` when it isn't one. */
     readonly shares: ((model: any, props: any) => unknown) | undefined
-    /** What the component takes from the readers that report to it, or `undefined` when it takes nothing. */
-    readonly reports:
-      | { readonly reports: Schema.Codec<any, any>; readonly onReports: (reports: ReadonlyArray<never>) => unknown }
+    /** What the component collects from the readers that report to it, or `undefined` when it collects nothing. */
+    readonly collects:
+      | { readonly schema: Schema.Codec<any, any>; readonly onChange: (collected: ReadonlyArray<never>) => unknown }
       | undefined
   }
 
@@ -2451,7 +2453,7 @@ export const define = <
      * The owners whose shared state `view` or `parts` reads, by the name `h.shared` and `p.shared` use:
      * each an owner, or `{ owner, optional, report, onChange }`. With `optional`, the read is
      * `undefined` when no owner is above, and a send to it is dropped. `report` is what this
-     * component tells an owner whose `shares` takes reports. `onChange` is its message when the
+     * component tells an owner whose `shares` has `collects`. `onChange` is its message when the
      * value changes, delivered once per owner round before the next render, with the latest value.
      * One `onChange` per owner: `define` throws for an owner listed twice with one each.
      */
@@ -2464,7 +2466,7 @@ export const define = <
       | undefined
     /**
      * Makes a headless component an owner: what it shares with the components below it, and what
-     * it takes from them. A function is short for `{ value }`. Every owner update re-runs the owner's
+     * it collects from them. A function is short for `{ value }`. Every owner update re-runs the owner's
      * closure, so put normal components directly under it, and every reader re-renders when the
      * value changes, so keep it small.
      */
@@ -2476,14 +2478,17 @@ export const define = <
       }
       | {
         readonly value: (model: Model, props: Props) => SV
-        /** The Schema of what each reader below reports with `report`. */
-        readonly reports: Schema.Codec<Rp, any>
-        /**
-         * The message for the current reports, one per reader, in no promised order. It's
-         * dispatched once a render pass has nothing left to render, when it differs from the last
-         * one, which starts as `onReports([])`.
-         */
-        readonly onReports: (reports: ReadonlyArray<NoInfer<Rp>>) => NoInfer<Msg>
+        /** What the owner collects from the readers below it. */
+        readonly collects: {
+          /** The Schema of what each reader below reports with `report`. */
+          readonly schema: Schema.Codec<Rp, any>
+          /**
+           * The message for the current reports, one per reader, in no promised order. It's
+           * dispatched once a render pass has nothing left to render, when it differs from the last
+           * one, which starts as `onChange([])`.
+           */
+          readonly onChange: (collected: ReadonlyArray<NoInfer<Rp>>) => NoInfer<Msg>
+        }
       }
       | undefined
   }
@@ -2502,8 +2507,8 @@ export const define = <
     slots: options.slots ?? [],
     shared: options.shared,
     shares: typeof shares === "function" ? shares : shares?.value,
-    reports: shares !== undefined && typeof shares !== "function" && "reports" in shares
-      ? { reports: shares.reports, onReports: shares.onReports }
+    collects: shares !== undefined && typeof shares !== "function" && "collects" in shares
+      ? shares.collects
       : undefined,
     // A slice is the function given, with `$` bound to the Model and message it's called with.
     update: ((...args: ReadonlyArray<any>) => {

@@ -137,8 +137,8 @@ export interface Issued {
  * owner of shared state, pointing at the sender's entry. `Shared` is a
  * reader's `onChange` for its owner's shared value: the name the reader's
  * `shared` lists the owner under, the owner's path, and the owner's entry
- * that last changed the value. `Reported` is an owner's `onReports` for a
- * change in its readers' reports. `Mount` is an
+ * that last changed the value. `Collected` is an owner's `collects.onChange` for
+ * a change in its readers' reports. `Mount` is an
  * `onMount` result, with the mount's name and the args its element last
  * rendered with, and `Dispatch` is a message sent from outside the tree,
  * such as `TestHost`'s `root.send`.
@@ -166,7 +166,7 @@ export type Source =
   | { readonly _tag: "Failure"; readonly path: string; readonly seq: number }
   | { readonly _tag: "Send"; readonly path: string; readonly seq: number }
   | { readonly _tag: "Shared"; readonly name: string; readonly path: string; readonly seq: number }
-  | { readonly _tag: "Reported" }
+  | { readonly _tag: "Collected" }
   | {
     readonly _tag: "Mount"
     readonly name: string
@@ -822,7 +822,7 @@ const SourceWire = Schema.Union([
   Schema.TaggedStruct("Failure", { path: Schema.String, seq: Schema.Number }),
   Schema.TaggedStruct("Send", { path: Schema.String, seq: Schema.Number }),
   Schema.TaggedStruct("Shared", { name: Schema.String, path: Schema.String, seq: Schema.Number }),
-  Schema.TaggedStruct("Reported", {}),
+  Schema.TaggedStruct("Collected", {}),
   Schema.TaggedStruct("Mount", { name: Schema.String, args: Schema.Json }),
   Schema.TaggedStruct("Dispatch", {})
 ])
