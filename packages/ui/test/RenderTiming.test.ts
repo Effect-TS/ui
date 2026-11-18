@@ -1,7 +1,8 @@
-import { Command, Component, type MessageLog } from "@effect/ui"
+import { Command, Component, type MessageLog, Query } from "@effect/ui"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Deferred, Effect, Schema } from "effect"
+import { ConfigProvider, Deferred, Effect, Layer, Schema } from "effect"
+import { TestClock } from "effect/testing"
 
 const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(TestHost.layer()))
 
@@ -85,6 +86,77 @@ describe("render timing", () => {
           "/Parent/Child[child] Unmounted"
         ])
       })))
+  }
+
+  for (const between of [true, false]) {
+    it.effect(
+      `a query's onChange reads the props its parent's Model gives it, ${
+        between ? "after the flush" : "before the flush"
+      }`,
+      () => {
+        class GetName extends Query.Service<GetName>()(
+          "test/GetName",
+          { args: {}, success: Schema.String, error: Schema.Never, staleTime: "30 seconds" },
+          Effect.succeed(() => Effect.as(Effect.sleep("10 millis"), "Ann"))
+        ) {}
+        const ReaderMessage = Schema.TaggedUnion({ Named: {} })
+        const Reader = Component.define({
+          name: "Reader",
+          props: Schema.Struct({ n: Schema.Number }),
+          model: Schema.Number,
+          message: ReaderMessage,
+          queries: { name: { query: GetName, args: () => ({}), onChange: () => ReaderMessage.make({ _tag: "Named" }) } }
+        }).make({
+          init: () => -1,
+          update: (_model, _message, $) => $.props.n,
+          view: (model, h) => h.el("i").children(`${h.props.n}/${model}`)
+        })
+        const Holder = Component.define({ name: "Holder", model: Schema.Number, message: Schema.Null }).make({
+          init: () => 0,
+          update: (model) => model + 1,
+          view: (model, h) => h.el("div").children(Reader(h, { key: "reader", props: { n: model } }))
+        })
+        return Effect.gen(function*() {
+          const root = yield* TestHost.mount(Holder, {})
+          yield* TestHost.settle
+          root.send(null)
+          if (between) yield* TestHost.settle
+          // The fetch ends, and its result is written, in the clock's wake: before the flush when none ran.
+          yield* TestClock.adjust("10 millis")
+          yield* TestHost.settle
+          assert.strictEqual(root.text(), "1/1")
+        }).pipe(Effect.provide(GetName.layer), Effect.provide(TestHost.layer({ flush: "last" })))
+      }
+    )
+  }
+
+  for (const flush of ["first", "last"] as const) {
+    it.effect(`a query fetches the args of every Model, with the flush ${flush}`, () => {
+      class GetNumber extends Query.Service<GetNumber>()(
+        "test/GetNumber",
+        { args: { n: Schema.Number }, success: Schema.Number, error: Schema.Never, staleTime: "30 seconds" },
+        Effect.succeed(({ n }) => Effect.as(Effect.sleep("10 millis"), n))
+      ) {}
+      const Again = Command.make("Again", { args: {} }, () => Effect.succeed("again" as const))
+      const Counter = Component.define({
+        name: "Counter",
+        model: Schema.Number,
+        message: Schema.Literals(["click", "again"]),
+        queries: { number: { query: GetNumber, args: (model: number) => ({ n: model }) } }
+      }).make({
+        init: () => 0,
+        // The Command's result arrives before the flush or after it.
+        update: (model, message, $) => message === "click" ? $.set(model + 1).run(Again({})) : model + 1,
+        view: (model, h) => h.el("button").on("click", "click").children(String(model))
+      })
+      return Effect.gen(function*() {
+        const root = yield* TestHost.mount(Counter, {})
+        yield* TestHost.settle
+        Locator.fire(root.get(Locator.tag("button")), "click")
+        yield* TestHost.settle
+        assert.deepStrictEqual(root.fetches().map((fetch) => fetch.logKey), ["{\"n\":0}", "{\"n\":1}", "{\"n\":2}"])
+      }).pipe(Effect.provide(GetNumber.layer), Effect.provide(TestHost.layer({ flush })))
+    })
   }
 
   it.effect("the instance a message is on its way to renders once, in the flush", () =>
@@ -244,4 +316,57 @@ describe("TestHost.formatTimeline", () => {
         ].join("\n")
       )
     })))
+})
+
+describe("TestHost.layer flush", () => {
+  // A click's update issues a Command whose result is a second message: the render the click asked
+  // for runs before the Command's fiber or after it.
+  const views = (host: Layer.Layer<TestHost.TestHost>) => {
+    let count = 0
+    const Again = Command.make("Again", { args: {} }, () => Effect.succeed("again" as const))
+    const Counter = Component.define({
+      name: "Counter",
+      model: Schema.Number,
+      message: Schema.Literals(["click", "again"])
+    }).make({
+      init: () => 0,
+      update: (model, message, $) => message === "click" ? $.set(model + 1).run(Again({})) : model + 1,
+      view: (model, h) => {
+        count++
+        return h.el("button").on("click", "click").children(String(model))
+      }
+    })
+    return Effect.gen(function*() {
+      const root = yield* TestHost.mount(Counter, {})
+      yield* TestHost.settle
+      count = 0
+      Locator.fire(root.get(Locator.tag("button")), "click")
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "2")
+      return count
+    }).pipe(Effect.provide(host))
+  }
+  const env = (value: string) => ConfigProvider.layer(ConfigProvider.fromEnv({ env: { EFFECT_UI_TEST_FLUSH: value } }))
+
+  it.effect("first renders before the scheduler's other tasks, and last after them", () =>
+    Effect.gen(function*() {
+      assert.strictEqual(yield* views(TestHost.layer({ flush: "first" })), 2)
+      assert.strictEqual(yield* views(TestHost.layer({ flush: "last" })), 1)
+    }))
+
+  it.effect("a seed gives the same order every time", () =>
+    Effect.gen(function*() {
+      for (const seed of [1, 2, 3, 4]) {
+        const count = yield* views(TestHost.layer({ flush: { seed } }))
+        assert.include([1, 2], count)
+        assert.strictEqual(yield* views(TestHost.layer({ flush: { seed } })), count)
+      }
+    }))
+
+  it.effect("EFFECT_UI_TEST_FLUSH sets it when the option is unset", () =>
+    Effect.gen(function*() {
+      assert.strictEqual(yield* views(TestHost.layer().pipe(Layer.provide(env("first")))), 2)
+      assert.strictEqual(yield* views(TestHost.layer().pipe(Layer.provide(env("last")))), 1)
+      assert.strictEqual(yield* views(TestHost.layer({ flush: "first" }).pipe(Layer.provide(env("last")))), 2)
+    }))
 })

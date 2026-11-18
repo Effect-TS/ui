@@ -965,7 +965,16 @@ const setup = (
    *
    * `causedBy` is the entry of an earlier step this one carries on from, as a debounce's delay does.
    */
-  const step = <A>(f: () => A, causedBy?: number): A => depth > 0 ? f() : under(causedBy, f, true)
+  const step = <A>(f: () => A, causedBy?: number): A => {
+    if (depth > 0) return f()
+    try {
+      return under(causedBy, f, true)
+    } finally {
+      // The watchers its `update` registered fetch now, and not at the flush: which args are
+      // fetched doesn't depend on what else arrives before it. A render's still wait for its drain.
+      if (!draining) releaseWatchHold()
+    }
+  }
   /** The entry what is running follows from, for work that outlives it. */
   const cause = (): number | undefined => depth > 0 ? origin : undefined
   /** Logs an entry about the tree, and returns its number. */
@@ -1156,9 +1165,10 @@ const setup = (
     }
   }
   /**
-   * The cache hold of the current render pass. A watcher registered outside a drain opens one and
-   * schedules a flush, and the drain releases it once nothing is left to render: every release and
-   * registration of the pass is in before any zero-to-one decision is made.
+   * The cache hold of the current step or render pass. A watcher registered outside a drain opens one,
+   * and the step that registered it releases it when it returns. One registered in a drain is released
+   * once nothing is left to render: every release and registration of the pass is in before any
+   * zero-to-one decision is made.
    */
   let watchHold: (() => void) | undefined
   // The entry each watcher registered during the hold follows from, by cache entry.

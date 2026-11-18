@@ -784,6 +784,11 @@ export interface Step<in out Model, in out Msg, in out Events, out R = never, L 
  * function, and one tag's member in a slice for that tag. `$.combine` takes
  * functions over it.
  *
+ * `$.props` is what the Models above the instance give it now, whether or
+ * not the flush that renders them has run: an ancestor waiting to render
+ * renders before a message reaches the instance. One that no longer
+ * renders the instance removes it then, and the message is dropped.
+ *
  * @stability experimental
  * @category models
  * @since 0.1.0

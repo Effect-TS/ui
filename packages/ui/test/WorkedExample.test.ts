@@ -4,7 +4,7 @@
  */
 import { Component, Router } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Locator, TestHost } from "@effect/ui/testing"
+import { Locator, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Layer, Schema } from "effect"
 import { TestClock } from "effect/testing"
@@ -276,6 +276,7 @@ describe("the worked example", () => {
         yield* TestClock.adjust("10 millis")
         yield* TestHost.settle
         return {
+          log: root.log(),
           text: root.text(),
           timeline: TestHost.formatTimeline(root.log()).replace(/ ?\(?(after )?#\d+\)? ?/g, " ")
         }
@@ -294,4 +295,21 @@ describe("the worked example", () => {
         assert.strictEqual(actual.timeline, expected.timeline, JSON.stringify(flush))
       }
     }))
+
+  for (const flush of ["queued", "first", "last"] as const) {
+    it.effect(`every instance's log replays through its update, with the flush ${flush}`, () =>
+      Effect.gen(function*() {
+        const { log } = yield* timelineOf(flush)
+        const mounted = log.filter((entry) => entry._tag === "Mounted")
+        assert.isAbove(mounted.length, 3)
+        for (const entry of mounted) {
+          const replay = Story.fromLog(
+            entry.component as Component.Component<any, any, any, any, any, any, any, any, any>,
+            log,
+            { path: entry.path }
+          )
+          assert.isUndefined(replay.divergence, entry.path)
+        }
+      }))
+  }
 })

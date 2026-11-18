@@ -311,3 +311,82 @@ it.layer(AppTest, { buildPerTest: true })("App", (it) => {
       assert.include(result.adopted, "/App/NotePage[/notes/n1]/Collapsible[note]/[body]/NoteEditor[Editor[n1]]")
     }))
 })
+
+// ---------------------------------------------------------------------------
+// The log as a timeline: what happened, and what the tree did about it.
+// ---------------------------------------------------------------------------
+
+// `root.log()` is every entry the runtime logged. An entry is one of two
+// kinds. A fact reached the tree from outside it: a message from a DOM event,
+// a Command's result, a Subscription or `root.send`, a query result, a Layer
+// build or a Command run that ended. A consequence is what the tree did about
+// a fact, and names it in `causedBy`: the messages its `update` sent on, the
+// props, mounts and unmounts of its render, the runs it stopped, the fetches
+// it started.
+//
+// `TestHost.formatTimeline` prints the facts in order, one per line, with
+// each one's consequences indented under it. Print it when a test fails, or
+// assert on it.
+//
+// A browser renders on its own clock, between whatever arrives. What an
+// `update` is given doesn't depend on when: a message finds the props its
+// ancestors' Models give its instance now, and an instance they no longer
+// render takes none. `TestHost.layer({ flush })` moves the render among the
+// test scheduler's tasks, so a test can check that its outcome holds
+// wherever the render falls. Setting `EFFECT_UI_TEST_FLUSH` to `first`,
+// `last` or a seed does it for a whole suite, with no change to its tests.
+//
+// A render still shows only the latest Model. A child is mounted with the
+// props of the render that mounts it, and one shown and hidden again before
+// a render is never mounted.
+const timelineOf = (flush: TestHost.Flush) =>
+  Effect.gen(function*() {
+    const root = yield* TestHost.mount(App, Router.props(AppRoute))
+    yield* TestHost.settle
+    Locator.fire(root.get(body), "input", { value: edited.body })
+    yield* TestHost.settle
+    yield* TestClock.adjust("2 seconds")
+    yield* TestHost.settle
+    const log = root.log()
+    // Entry numbers follow the order entries were logged in, which a render
+    // that ran earlier or later changes. Nothing else does.
+    return { log, timeline: TestHost.formatTimeline(log).replace(/#\d+/g, "#") }
+  }).pipe(
+    Effect.scoped,
+    Effect.provide(
+      Layer.mergeAll(Router.memory({ routes: AppRoute, url: "/notes/n1" }), ApiFake, TestHost.layer({ flush }))
+    )
+  )
+
+describe("the App's timeline", () => {
+  it.effect("is the same whenever the render runs", () =>
+    Effect.gen(function*() {
+      const { timeline } = yield* timelineOf("queued")
+      // The keystroke is a fact. What followed from it is listed under it.
+      assert.match(timeline, /^# \S+ Update \S+ \(dom input\)/m)
+      for (const flush of ["first", "last", { seed: 1 }, { seed: 2 }] as const) {
+        assert.strictEqual((yield* timelineOf(flush)).timeline, timeline)
+      }
+    }))
+
+  // `Story.fromLog` re-runs one instance's messages through its `update`,
+  // with the props and query results the log gave it, and compares the Model,
+  // Commands and events with what was logged. Here it does so for every
+  // instance the session mounted.
+  it.effect("replays, instance by instance", () =>
+    Effect.gen(function*() {
+      const { log } = yield* timelineOf("last")
+      const mounted = log.filter((entry) => entry._tag === "Mounted")
+      assert.isAbove(mounted.length, 3)
+      for (const entry of mounted) {
+        const replay = Story.fromLog(
+          entry.component as Component.Component<any, any, any, any, any, any, any, any, any>,
+          log,
+          {
+            path: entry.path
+          }
+        )
+        assert.isUndefined(replay.divergence, entry.path)
+      }
+    }))
+})
