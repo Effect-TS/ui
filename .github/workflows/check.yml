@@ -112,6 +112,20 @@ jobs:
           - runtime: Node 22.19.0 minimum
             node: 22.19.0
             command: pnpm vitest run --project @effect/ui --max-concurrency=10
+          # The same tests with the render flush before, after and at seeded places among the
+          # scheduler's tasks: `TestHost.Flush`. A seeded failure is repeated with its seed.
+          - runtime: Node, flush first
+            node: ""
+            command: pnpm vitest run --max-concurrency=10
+            flush: first
+          - runtime: Node, flush last
+            node: ""
+            command: pnpm vitest run --max-concurrency=10
+            flush: last
+          - runtime: Node, flush seeded
+            node: ""
+            command: pnpm vitest run --max-concurrency=10
+            flush: ${{ github.run_id }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Install dependencies
@@ -120,6 +134,8 @@ jobs:
           node-version: ${{ matrix.node }}
       - name: Test
         run: ${{ matrix.command }}
+        env:
+          EFFECT_UI_TEST_FLUSH: ${{ matrix.flush }}
 
   doctest:
     name: Test (Documentation)

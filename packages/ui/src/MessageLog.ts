@@ -177,8 +177,29 @@ export type Source =
   | { readonly _tag: "Dispatch" }
 
 /**
- * Fields every entry has: its number, its time from `Clock`, and the session
- * it belongs to.
+ * Fields every entry has: its number, its time from `Clock`, the session it
+ * belongs to, and the entry it follows from.
+ *
+ * **Details**
+ *
+ * An entry without `causedBy` is a fact: something that reached the tree
+ * from outside it. The session starting is one. So is an `Update` whose
+ * message came from a DOM event, a Command's result, a Subscription, a mount
+ * or `root.send`, a `QueryChanged`, a Layer build or a Command run ending,
+ * and a `FetchStarted` a timer, a host signal or a Command's own work
+ * started.
+ *
+ * An entry with `causedBy` is a consequence. The field is the `seq` of the
+ * fact it follows from, however many steps lie between them: a child's
+ * `Update` for a parent's `$.send` names the fact the parent's `update`
+ * handled, not the parent's entry. The entries of a render name the fact
+ * that last made the rendered instance dirty, so when one flush renders
+ * what two messages changed, an instance both changed names the later one.
+ * `CommandInterrupted` names the fact whose handling stopped the run, where
+ * `issued` names the entry that started it. A `FetchStarted` with trigger
+ * `"watch"` names the fact whose render declared the query's args.
+ *
+ * The `seq` it holds may be of an entry a ring buffer has dropped.
  *
  * @stability experimental
  * @category models
@@ -188,6 +209,7 @@ export interface Base {
   readonly seq: number
   readonly at: number
   readonly session: string
+  readonly causedBy?: number
 }
 
 /**
@@ -791,7 +813,8 @@ export type WireHost = "browser" | "server" | "test"
 const BaseWire = {
   seq: Schema.Number,
   at: Schema.Number,
-  session: Schema.String
+  session: Schema.String,
+  causedBy: Schema.optionalKey(Schema.Number)
 }
 const InstanceWire = {
   ...BaseWire,
@@ -1183,7 +1206,12 @@ export const makeEncoder = (options?: {
   }
 }
 
-const base = (entry: Base) => ({ seq: entry.seq, at: entry.at, session: entry.session })
+const base = (entry: Base) => ({
+  seq: entry.seq,
+  at: entry.at,
+  session: entry.session,
+  ...(entry.causedBy === undefined ? undefined : { causedBy: entry.causedBy })
+})
 const instanceBase = (entry: InstanceBase) => ({
   ...base(entry),
   path: entry.path,

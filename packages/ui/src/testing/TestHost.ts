@@ -46,11 +46,13 @@
  */
 import * as Cause from "effect/Cause"
 import * as Clock from "effect/Clock"
+import * as Config from "effect/Config"
 import * as Context from "effect/Context"
 import * as Data from "effect/Data"
 import type * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
+import * as Option from "effect/Option"
 import * as Queue from "effect/Queue"
 import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Schema from "effect/Schema"
@@ -368,6 +370,34 @@ export class DrainExhausted extends Data.TaggedClass("DrainExhausted")<{
 export const TestHost: Context.Service<TestHost, TestHost> = Context.Service<TestHost>("@effect/ui/testing/TestHost")
 
 /**
+ * When a tree's render flush runs among the tasks the test scheduler holds:
+ * the steps of Command, Subscription, mount and Layer fibers.
+ *
+ * **Details**
+ *
+ * - `"queued"`: in its turn, after the tasks queued before it. The default.
+ * - `"first"`: before every task already queued.
+ * - `"last"`: once no task is queued, the ones queued meanwhile included.
+ * - `{ seed }`: at a place a generator seeded with `seed` picks, so a run
+ *   that fails is repeated by its seed.
+ *
+ * A browser renders on its own clock, between whatever work arrives. A test
+ * that passes under one of these and fails under another has found
+ * behaviour that depends on when the render ran.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type Flush = "queued" | "first" | "last" | { readonly seed: number }
+
+const flushFrom = (value: string): Flush | undefined => {
+  if (value === "queued" || value === "first" || value === "last") return value
+  const seed = Number(value)
+  return value !== "" && Number.isInteger(seed) ? { seed } : undefined
+}
+
+/**
  * Provides `TestHost`, the `Renderer` for it, the test scheduler and a
  * `MessageLog.memory` log.
  *
@@ -376,6 +406,12 @@ export const TestHost: Context.Service<TestHost, TestHost> = Context.Service<Tes
  * `budget` is how many scheduler tasks `settle` and a clock wake run before
  * they give up (100,000 by default), and `logSize` the size of the log's ring
  * buffer, unbounded by default.
+ *
+ * `flush` is when a render flush runs among the scheduler's tasks: see
+ * `Flush`. Without it, the config `EFFECT_UI_TEST_FLUSH` decides, which the
+ * default `ConfigProvider` reads from the environment: `queued`, `first`,
+ * `last`, or an integer for a seed. That runs a whole suite under another
+ * policy without a change to its tests. Without either it's `"queued"`.
  *
  * The Layer owns settable `Query.Visibility` and `Query.Connectivity`, both
  * starting true, and collects the problems every mounted cache reports.
@@ -392,10 +428,19 @@ export const TestHost: Context.Service<TestHost, TestHost> = Context.Service<Tes
 export const layer = (options?: {
   readonly budget?: number | undefined
   readonly logSize?: number | undefined
+  readonly flush?: Flush | undefined
 }): Layer.Layer<TestHost | Renderer.Renderer> =>
   Layer.effectContext(Effect.gen(function*() {
     const host = makeHost()
-    const executor = new Executor.TestExecutor()
+    // A provider that fails to read is no setting.
+    const configured = options?.flush !== undefined
+      ? Option.none<string>()
+      : yield* Effect.orElseSucceed(
+        Config.option(Config.schema(Schema.String, "EFFECT_UI_TEST_FLUSH")),
+        () => Option.none<string>()
+      )
+    const flush = options?.flush ?? Option.getOrUndefined(Option.map(configured, flushFrom)) ?? "queued"
+    const executor = new Executor.TestExecutor(flush)
     const log = MessageLog.makeMemory({ size: options?.logSize ?? Infinity })
     const trees = new Set<Tree>()
     const budget = options?.budget ?? 100_000

@@ -30,6 +30,15 @@ export const CurrentExecutor = Context.Reference<Executor>("@effect/ui/internal/
 })
 
 /**
+ * Where a queued render flush goes among the fiber tasks: in its turn, before
+ * all of them, after all of them and the tasks they queue, or at a place a
+ * seeded generator picks.
+ *
+ * @internal
+ */
+export type Flush = "queued" | "first" | "last" | { readonly seed: number }
+
+/**
  * One queue for every fiber task and the render flush, ordered by priority
  * and then FIFO. Nothing runs until it's drained.
  *
@@ -37,8 +46,14 @@ export const CurrentExecutor = Context.Reference<Executor>("@effect/ui/internal/
  */
 export class TestExecutor implements Executor, Scheduler.SchedulerDispatcher {
   private tasks: Array<{ readonly task: () => void; readonly priority: number }> = []
+  // The flushes of `"last"`, run when no task is queued.
+  private late: Array<() => void> = []
+  private random: number
+  readonly flushes: Flush
   readonly scheduler: Scheduler.Scheduler
-  constructor() {
+  constructor(flushes: Flush = "queued") {
+    this.flushes = flushes
+    this.random = typeof flushes === "string" ? 0 : flushes.seed >>> 0
     this.scheduler = {
       executionMode: "sync",
       shouldYield: (fiber) => fiber.currentOpCount >= fiber.cache.maxOpsBeforeYield,
@@ -46,7 +61,22 @@ export class TestExecutor implements Executor, Scheduler.SchedulerDispatcher {
     }
   }
   schedule(task: () => void): void {
-    this.scheduleTask(task, 0)
+    const flushes = this.flushes
+    if (flushes === "queued") return this.scheduleTask(task, 0)
+    if (flushes === "last") {
+      this.late.push(task)
+      return
+    }
+    // Outside the priorities, so a task queued later never goes ahead of it by its priority.
+    const index = flushes === "first" ? 0 : this.next(this.tasks.length + 1)
+    this.tasks.splice(index, 0, { task, priority: -Infinity })
+  }
+  /** mulberry32: the same seed gives the same places. */
+  private next(below: number): number {
+    let t = this.random = (this.random + 0x6D2B79F5) >>> 0
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return Math.floor((((t ^ (t >>> 14)) >>> 0) / 4294967296) * below)
   }
   scheduleTask(task: () => void, priority: number): void {
     let index = this.tasks.length
@@ -59,13 +89,14 @@ export class TestExecutor implements Executor, Scheduler.SchedulerDispatcher {
   /** Runs queued tasks, and the tasks they queue, until none are left or the budget runs out. Returns whether it finished. */
   drain(budget: number): boolean {
     let steps = 0
-    while (this.tasks.length > 0) {
+    while (this.tasks.length > 0 || this.late.length > 0) {
       if (steps++ >= budget) return false
-      this.tasks.shift()!.task()
+      if (this.tasks.length > 0) this.tasks.shift()!.task()
+      else this.late.shift()!()
     }
     return true
   }
   get size(): number {
-    return this.tasks.length
+    return this.tasks.length + this.late.length
   }
 }

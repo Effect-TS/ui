@@ -20,8 +20,8 @@ const setup = (url: string) => {
   return { server, deps }
 }
 
-const run = <A, E>(deps: Layer.Layer<any>, effect: Effect.Effect<A, E, any>) =>
-  effect.pipe(Effect.provide(deps), Effect.scoped, Effect.provide(TestHost.layer())) as Effect.Effect<A, E>
+const run = <A, E>(deps: Layer.Layer<any>, effect: Effect.Effect<A, E, any>, flush?: TestHost.Flush) =>
+  effect.pipe(Effect.provide(deps), Effect.scoped, Effect.provide(TestHost.layer({ flush }))) as Effect.Effect<A, E>
 
 const mount = Effect.flatMap(Router.currentRoute(users.AppRoute), (route) => TestHost.mount(users.App, { route }))
 
@@ -246,7 +246,11 @@ describe("the worked example", () => {
         // Neither save reached the server: the first was cut mid-request.
         assert.strictEqual(server.calls.rename, 0)
         assert.notInclude(["B", "C"], server.users.get("1")?.name)
-      })
+      }),
+      // The flush that removes the form runs before the first save's fiber takes a step, so the save
+      // never begins. A flush after that step cuts it mid-request instead, and the user it patched is
+      // fetched again.
+      "queued"
     )
   })
 })

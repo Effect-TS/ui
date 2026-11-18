@@ -331,6 +331,8 @@ interface Run {
   waited: Pick<MessageLog.CommandEnded, "waitEnded" | "outstanding"> | undefined
   /** Stops the budget's sleep and the cache's callback. */
   cancelWait: (() => void) | undefined
+  /** The entry that started the step that stopped the run, for the `CommandInterrupted` its fiber's exit logs. */
+  cutBy: number | undefined
 }
 
 interface SubscriptionRun {
@@ -370,6 +372,8 @@ export interface Instance {
   readonly depth: number
   readonly component: Component.Any
   readonly parent: Instance | undefined
+  /** The entry that started the step that last marked it dirty, until it renders. */
+  cause: number | undefined
   /**
    * Who wrote the tree this instance renders: the instance itself, or for a headless instance the
    * author of the tree it sits in.
@@ -674,11 +678,11 @@ const noHead: Head.Head = { ...Head.empty }
 
 /** An entry about an instance, without what `record` adds. */
 type Draft = MessageLog.InstanceEntry extends infer E
-  ? E extends MessageLog.InstanceEntry ? Omit<E, keyof MessageLog.InstanceBase> : never
+  ? E extends MessageLog.InstanceEntry ? Omit<E, keyof MessageLog.InstanceBase> & { readonly causedBy?: number | undefined } : never
   : never
 /** An entry about the tree, without what `recordTree` adds. */
 type TreeDraft = Exclude<MessageLog.Entry, MessageLog.InstanceEntry> extends infer E
-  ? E extends MessageLog.Entry ? Omit<E, keyof MessageLog.Base> : never
+  ? E extends MessageLog.Entry ? Omit<E, keyof MessageLog.Base> & { readonly causedBy?: number | undefined } : never
   : never
 
 let sessions = 0
@@ -918,19 +922,65 @@ const setup = (
 
   // -- log ------------------------------------------------------------------
   let seq = 0
+  // The entry that what is running follows from: see `step`.
+  let origin: number | undefined
+  // How many `under` calls are running, and whether the outermost is a step with no entry yet.
+  let depth = 0
+  let starting = false
+  /**
+   * Numbers the next entry, and names the entry it follows from: `causedBy` when its caller knows it,
+   * and otherwise the entry that started what is running. A step's first entry has none, and starts it.
+   */
+  const number = (causedBy: number | undefined): Pick<MessageLog.Base, "seq" | "causedBy"> => {
+    const next = ++seq
+    const cause = causedBy ?? (depth > 0 ? origin : undefined)
+    if (starting) {
+      starting = false
+      origin = cause ?? next
+    }
+    return cause === undefined ? { seq: next } : { seq: next, causedBy: cause }
+  }
+  /** Runs `f` as what follows from the entry `cause`. */
+  const under = <A>(cause: number | undefined, f: () => A, start = false): A => {
+    const outer = origin
+    const outerStarting = starting
+    origin = cause
+    starting = start && cause === undefined
+    depth++
+    try {
+      return f()
+    } finally {
+      depth--
+      origin = outer
+      starting = outerStarting
+    }
+  }
+  /**
+   * Runs one step: something from outside the tree (a message, a query result, a run or a Layer build
+   * that ended, a timer) and what follows from it before it returns. Its first entry is the fact, and
+   * every other entry it logs names that one in `causedBy`, as do the entries of the renders and the
+   * deferred work it asked for. A step inside another is part of it.
+   *
+   * `causedBy` is the entry of an earlier step this one carries on from, as a debounce's delay does.
+   */
+  const step = <A>(f: () => A, causedBy?: number): A => depth > 0 ? f() : under(causedBy, f, true)
+  /** The entry what is running follows from, for work that outlives it. */
+  const cause = (): number | undefined => depth > 0 ? origin : undefined
   /** Logs an entry about the tree, and returns its number. */
   const recordTree = (draft: TreeDraft): number => {
     if (!log.enabled) return -1
-    const entry = { ...draft, seq: ++seq, at: clock.currentTimeMillisUnsafe(), session } as MessageLog.Entry
+    const { causedBy, ...rest } = draft
+    const entry = { ...rest, ...number(causedBy), at: clock.currentTimeMillisUnsafe(), session } as MessageLog.Entry
     log.record(entry)
     return entry.seq
   }
   /** Logs an entry about `inst`, and returns its number. */
   const record = (inst: Instance, draft: Draft): number => {
     if (!log.enabled) return -1
+    const { causedBy, ...rest } = draft
     const entry = {
-      ...draft,
-      seq: ++seq,
+      ...rest,
+      ...number(causedBy),
       at: clock.currentTimeMillisUnsafe(),
       session,
       path: inst.path,
@@ -1046,9 +1096,12 @@ const setup = (
     }
     return out
   }
-  // Every fetch the cache starts is logged, as an entry about the tree.
+  // Every fetch the cache starts is logged, as an entry about the tree. A watch's fetch starts when the
+  // render pass's hold is released, and follows from the step whose render registered the watcher.
   const offFetch = cache.onFetch((event) => {
-    if (!frozen) recordTree({ _tag: "FetchStarted", ...event })
+    if (frozen) return
+    const causedBy = event.trigger === "watch" ? watchCauses.get(entryKey(event.query, event.logKey)) : undefined
+    recordTree({ _tag: "FetchStarted", ...event, causedBy })
   })
   // On the server a fetch in flight holds the response, so one that ends may make the tree idle.
   const offFetchEnd = server === undefined ? undefined : cache.onFetchEnd(() => checkIdle())
@@ -1106,6 +1159,8 @@ const setup = (
    * registration of the pass is in before any zero-to-one decision is made.
    */
   let watchHold: (() => void) | undefined
+  // The entry each watcher registered during the hold follows from, by cache entry.
+  const watchCauses = new Map<string, number>()
   let draining = false
   const holdWatches = () => {
     if (watchHold !== undefined) return
@@ -1116,7 +1171,11 @@ const setup = (
   const releaseWatchHold = () => {
     const release = watchHold
     watchHold = undefined
-    release?.()
+    try {
+      release?.()
+    } finally {
+      watchCauses.clear()
+    }
   }
   // How many times each instance has delivered sends in this flush: a parent and a child that answer
   // each other would otherwise never leave `drainLoop`.
@@ -1130,10 +1189,59 @@ const setup = (
   const heldReports = new Set<Instance>()
   const markDirty = (inst: Instance) => {
     dirty.add(inst)
+    // The latest step to change it: its render logs what follows from that one.
+    inst.cause = cause() ?? inst.cause
     wake()
   }
+  // How many renders and `update` calls are running: nothing renders inside one.
+  let busy = 0
+  // The instance `renderAbove` is rendering the ancestors of.
+  let receiving: Instance | undefined
+  /**
+   * Renders the dirty instances above `inst`, outermost first, before it is given a message or a
+   * query result. Its `update` then reads the props its ancestors' Models give it now, and it is gone
+   * when they no longer render it, whenever the flush that would have rendered them runs.
+   *
+   * `inst` is given its new props and stays dirty: its own view waits for the flush, as it does
+   * without a dirty ancestor. A message from a field's event is ahead of the Model that view would
+   * render, and rendering it now would write the older value over what the user typed.
+   */
+  const renderAbove = (inst: Instance) => {
+    if (dirty.size === 0 || busy > 0) return
+    const above: Array<Instance> = []
+    let any = false
+    for (let at = inst.parent; at !== undefined; at = at.parent) {
+      above.push(at)
+      any ||= dirty.has(at)
+    }
+    if (!any) return
+    const outer = receiving
+    receiving = inst
+    try {
+      for (let index = above.length - 1; index >= 0; index--) {
+        const next = above[index]!
+        // What it rendered is gone with it, `inst` included.
+        if (next.closed) return
+        if (dirty.delete(next)) renderDirty(next)
+      }
+    } finally {
+      receiving = outer
+    }
+  }
+  const renderDirty = (inst: Instance) => {
+    const from = inst.cause
+    inst.cause = undefined
+    busy++
+    try {
+      under(from, () => render(inst))
+    } finally {
+      busy--
+    }
+    checkPendingRefs()
+  }
   const defer = (f: () => void) => {
-    deferred.push(f)
+    const from = cause()
+    deferred.push(from === undefined ? f : () => under(from, f))
     wake()
   }
   /** Runs `f` once the current render is committed. */
@@ -1191,8 +1299,8 @@ const setup = (
           if (next === undefined || inst.depth < next.depth) next = inst
         }
         dirty.delete(next!)
-        if (!next!.closed) render(next!)
-        checkPendingRefs()
+        if (!next!.closed) renderDirty(next!)
+        else checkPendingRefs()
       }
       mergeHead()
     } while (dirty.size > 0 || deferred.length > 0 || isHolding() || reportsDue.size > 0)
@@ -1573,7 +1681,7 @@ const setup = (
       }
       const exit = fiber.pollUnsafe()
       if (exit !== undefined) return done(exit)
-      fiber.addObserver(done)
+      fiber.addObserver((exit) => step(() => done(exit)))
       // A build still running ends with its Scope.
       addFinalizer(
         buildScope,
@@ -1674,7 +1782,8 @@ const setup = (
    * as a build that failed without failing `own` does.
    */
   const countBuilding = (own: Env, scope: Scope.Scope): () => void => {
-    const stamp = { flush: flushes }
+    // A build that begins between flushes belongs to the next one, which commits what began it.
+    const stamp = { flush: rendering ? flushes : flushes + 1 }
     building.add(stamp)
     const settle = () => {
       if (!building.delete(stamp)) return
@@ -1940,15 +2049,19 @@ const setup = (
    */
   const instanceHandlers = (inst: Instance, bound: componentQueries.Bound | undefined) => {
     const handlers = inst as { -readonly [K in "dispatch" | "fire"]: Instance[K] }
-    handlers.dispatch = (message, source) => {
+    handlers.dispatch = (message, source) => step(() => {
+      renderAbove(inst)
       if (inst.closed || inst.waiting || frozen) return
       const component = inst.component
       let next: ReturnType<typeof component.update>
+      busy++
       try {
         next = component.update(inst.model, message as never, inst.props, inst.results)
       } catch (error) {
         // No `Update` is logged for it, so the failure carries the message.
         return failInstance(inst, Cause.die(error), "update", undefined, { message, source })
+      } finally {
+        busy--
       }
       if (next === undefined) return
       const entrySeq = record(inst, {
@@ -1965,7 +2078,7 @@ const setup = (
         ...(bound === undefined ? undefined : { queries: inst.results ?? bound.empty })
       })
       apply(inst, next, entrySeq, false)
-    }
+    })
     handlers.fire = (event, handler, payload, onMessage) => {
       if (inst.closed || inst.waiting) return
       const message = typeof handler === "function"
@@ -2074,6 +2187,7 @@ const setup = (
       prefetch: undefined,
       keyed: undefined,
       keyedQueued: false,
+      cause: undefined,
       loadMores: undefined,
       mounting: undefined,
       outbox: [],
@@ -2827,7 +2941,8 @@ const setup = (
           traceId: undefined,
           waiting: false,
           waited: undefined,
-          cancelWait: undefined
+          cancelWait: undefined,
+          cutBy: undefined
         }
         inst.runs.push(run)
         // Issued before a keyed provide's due read: a change of key keeps it.
@@ -2892,6 +3007,7 @@ const setup = (
       // Left and logged by `ended`, once the fiber has exited.
       run.done = true
       run.status = "stopping"
+      run.cutBy = cause()
       fiber.interruptUnsafe()
       return
     }
@@ -2984,7 +3100,7 @@ const setup = (
       const fiber = fork(context, Effect.onExit(program, (exit) => Scope.close(scope, exit)))
       run.fiber = fiber
       track(liveRuns, fiber)
-      fiber.addObserver((exit) => ended(inst, run, exit, source))
+      fiber.addObserver((exit) => step(() => ended(inst, run, exit, source)))
     }
     // After a handled Layer failure, work runs against the parent's services. A run issued before a
     // keyed provide's due read starts against the selection the read leaves.
@@ -3108,10 +3224,11 @@ const setup = (
     if (remaining === 0) return endWait(run, "budget")
     // After the cache's emission: a single query's result is already written, and a keyed query's is
     // queued in the flush's deferred work, which the delivery goes behind.
-    const ended = (by: MessageLog.WaitEnded) => {
-      endWait(run, by)
-      defer(() => release(inst, run))
-    }
+    const ended = (by: MessageLog.WaitEnded) =>
+      step(() => {
+        endWait(run, by)
+        defer(() => release(inst, run))
+      })
     const off = handle.onRefetched(() => ended("settled"))
     const timer = Number.isFinite(remaining)
       ? forkNow(ctx, Effect.andThen(Effect.sleep(Duration.millis(remaining)), Effect.sync(() => ended("budget"))))
@@ -3169,7 +3286,8 @@ const setup = (
       name: run.command.name,
       issued: run.issued,
       spanId: run.spanId,
-      traceId: run.traceId
+      traceId: run.traceId,
+      causedBy: run.cutBy
     })
 
   /** `h.isRunning` for one instance: a run of the Command in the schedule, of the group if given. */
@@ -3295,7 +3413,7 @@ const setup = (
           accepted()
           inst.dispatch(message, source)
         }, (cause) => {
-          if (current()) failInstance(inst, cause, "subscription", key)
+          if (current()) step(() => failInstance(inst, cause, "subscription", key))
         })
         if (attachedTo !== undefined) addFinalizer(running.scope, Effect.sync(attachedTo.close))
         const fiber = forkLater(
@@ -3309,7 +3427,7 @@ const setup = (
         // A Stream that ends stays stopped until its key leaves and comes back.
         fiber.addObserver((exit) => {
           if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) {
-            failInstance(inst, exit.cause, "subscription", key)
+            step(() => failInstance(inst, exit.cause, "subscription", key))
           }
         })
       }
@@ -3364,6 +3482,8 @@ const setup = (
       if (marker.argsKey === undefined) continue
       inst.watched?.add(entryKey(def.name, marker.argsKey))
       const entry = { args: marker.args, argsKey: marker.argsKey }
+      // The step whose render declared these args: the watcher may register later, once the Layer is ready.
+      const asked = cause()
       let last:
         | {
           readonly result: AsyncResult.AsyncResult<any, any>
@@ -3384,6 +3504,7 @@ const setup = (
         ) return
         last = { result, patched, more }
         if (marker.keyed) {
+          // Not a step: the keys' results collect, and the write that delivers them is one.
           const run = inst.keyed!.get(marker.name)!
           run.values.set(entry.argsKey, { args: entry.args, result, patched })
           run.changes.add(entry.argsKey)
@@ -3393,7 +3514,11 @@ const setup = (
         const query = bound.byName.get(marker.name)!
         // It may run inside another instance's `update`: a patch registered at issue reaches every
         // watcher before that `update` returns.
-        writeResult(inst, query, bound.snapshot(query, entry, result, patched, more), [], logKey)
+        step(() => {
+          renderAbove(inst)
+          if (running.released || inst.closed) return
+          writeResult(inst, query, bound.snapshot(query, entry, result, patched, more), [], logKey)
+        })
       }
       const go = (envCtx: Context.Context<any>) => {
         if (inst.closed || running.released) return
@@ -3407,6 +3532,8 @@ const setup = (
           )
         }
         holdWatches()
+        const from = asked ?? cause()
+        if (from !== undefined) watchCauses.set(entryKey(def.name, def.logKey(marker.args, marker.argsKey!)), from)
         const handle = cache.watch(
           def,
           marker.args,
@@ -3414,7 +3541,7 @@ const setup = (
           send,
           (cause) => {
             // A defect in a fetcher fails every watching instance. The cache never stores it.
-            if (!running.released) failInstance(inst, cause, "subscription", logKey)
+            if (!running.released) step(() => failInstance(inst, cause, "subscription", logKey))
           },
           { patched: true }
         )
@@ -3436,15 +3563,18 @@ const setup = (
         start()
         continue
       }
-      // Its first value is folded when it registers: there is no loop to wait for.
+      // Its first value is folded when it registers: there is no loop to wait for. The fetch it starts
+      // follows from the step that changed the args.
       running.debounce = forkNow(
         ctx,
         Effect.andThen(
           Effect.sleep(Duration.millis(marker.debounce)),
-          Effect.sync(() => {
-            running.debounce = undefined
-            start()
-          })
+          Effect.sync(() =>
+            step(() => {
+              running.debounce = undefined
+              start()
+            }, asked)
+          )
         )
       )
     }
@@ -3482,6 +3612,7 @@ const setup = (
     inst.keyedQueued = true
     defer(() => {
       inst.keyedQueued = false
+      renderAbove(inst)
       drainKeyed(inst)
     })
   }
@@ -3535,7 +3666,7 @@ const setup = (
         return value === undefined ? [] : [bound.snapshot(query, entry, value.result, value.patched, undefined)]
       })
     )
-    writeResult(inst, query, snapshot, changes, run.logKey)
+    step(() => writeResult(inst, query, snapshot, changes, run.logKey))
     return true
   }
   /**
@@ -3960,7 +4091,7 @@ const setup = (
         interruptOnClose(mountScope, fiber)
         fiber.addObserver((exit) => {
           if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) {
-            failInstance(inst, exit.cause, "mount", mount.name)
+            step(() => failInstance(inst, exit.cause, "mount", mount.name))
           }
         })
       })
@@ -4359,6 +4490,7 @@ const setup = (
       prefetch: undefined,
       keyed: undefined,
       keyedQueued: false,
+      cause: undefined,
       loadMores: undefined,
       mounting: undefined,
       outbox: [],
@@ -5160,8 +5292,12 @@ const setup = (
         // A headless child's view is the closure, which is new on every render of whoever declared it.
         if (instance.owner !== undefined) instance.content = child.view
         if ((changed || instance.owner !== undefined) && !instance.closed) {
-          dirty.delete(instance)
-          render(instance)
+          // The instance a message is on its way to keeps its view until the flush: see `renderAbove`.
+          if (instance === receiving) markDirty(instance)
+          else {
+            dirty.delete(instance)
+            render(instance)
+          }
         }
         if (slotted !== undefined && !instance.closed) refreshOutlets(slotted)
         rendered.v = child
@@ -5326,7 +5462,10 @@ const setup = (
   }
 
   // -- root -----------------------------------------------------------------
-  recordTree({ _tag: "SessionStarted", app: component.definition.name })
+  // The first mount follows from the session's start.
+  origin = recordTree({ _tag: "SessionStarted", app: component.definition.name })
+  if (origin === -1) origin = undefined
+  depth++
   // Registered before the root instance forks its Scope from `rootScope`: finalizers run in
   // reverse, so every instance Scope (and its Layers' finalizers) closes before the nodes go.
   let rootRendered: () => ReadonlyArray<Rendered> = () => []
@@ -5383,6 +5522,8 @@ const setup = (
   // Mounting drains like a flush, so failures it causes (a title template that throws included) settle
   // before the snapshots do. `onMount` work runs after the commit, so its updates come later.
   drain()
+  depth--
+  origin = undefined
   settleSnapshots()
   if (reportPending) reportAdoption()
   host.commit?.()
