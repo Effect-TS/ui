@@ -1,16 +1,16 @@
-import { Command, Component, MessageLog } from "@effect/ui"
+import { Command, Component, MessageLog, UiSchema } from "@effect/ui"
 import { Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 
-const Message = Schema.TaggedUnion({
+const Message = UiSchema.TaggedEnum({
   Fire: { command: Schema.String },
   Queue: { n: Schema.Number, silent: Schema.Boolean },
   Got: { n: Schema.Number }
 })
 type Message = typeof Message.Type
-const got = (n: number) => Message.make({ _tag: "Got", n })
+const got = (n: number) => Message.Got({ n })
 
 const Quiet = Command.make("Quiet", { args: {} }, () => Effect.succeed(Component.noop))
 const Mixed = Command.make(
@@ -67,7 +67,7 @@ describe("Component.noop", () => {
   it.effect("a silent Effect Command sends nothing, and CommandEnded says so with the run's span", () =>
     run(Effect.gen(function*() {
       const root = yield* TestHost.mount(Recorder, {})
-      root.send(Message.make({ _tag: "Fire", command: "Quiet" }))
+      root.send(Message.Fire({ command: "Quiet" }))
       yield* TestHost.settle
       assert.deepStrictEqual(root.model(), ["Fire"])
       assert.deepStrictEqual(root.log().filter((entry) => entry._tag === "Update").length, 1)
@@ -89,7 +89,7 @@ describe("Component.noop", () => {
   it.effect("CommandEnded of a run that sent a message has its span ids, the same as the Update's source", () =>
     run(Effect.gen(function*() {
       const root = yield* TestHost.mount(Recorder, {})
-      root.send(Message.make({ _tag: "Fire", command: "Loud" }))
+      root.send(Message.Fire({ command: "Loud" }))
       yield* TestHost.settle
       assert.deepStrictEqual(root.model(), ["Fire", "Got 0"])
       const [entry] = ended(root)
@@ -104,7 +104,7 @@ describe("Component.noop", () => {
   it.effect("asNoop silences a Command that has a message", () =>
     run(Effect.gen(function*() {
       const root = yield* TestHost.mount(Recorder, {})
-      root.send(Message.make({ _tag: "Fire", command: "LoudAsNoop" }))
+      root.send(Message.Fire({ command: "LoudAsNoop" }))
       yield* TestHost.settle
       assert.deepStrictEqual(root.model(), ["Fire"])
       assert.strictEqual(ended(root)[0].silent, true)
@@ -113,7 +113,7 @@ describe("Component.noop", () => {
   it.effect("a Stream's silent elements send nothing and the Stream carries on", () =>
     run(Effect.gen(function*() {
       const root = yield* TestHost.mount(Recorder, {})
-      root.send(Message.make({ _tag: "Fire", command: "Mixed" }))
+      root.send(Message.Fire({ command: "Mixed" }))
       yield* TestHost.settle
       assert.deepStrictEqual(root.model(), ["Fire", "Got 1", "Got 2"])
       // Some elements had a message, so the run isn't silent.
@@ -123,8 +123,8 @@ describe("Component.noop", () => {
   it.effect("a Stream whose every element is silent is silent, and an empty Stream isn't", () =>
     run(Effect.gen(function*() {
       const root = yield* TestHost.mount(Recorder, {})
-      root.send(Message.make({ _tag: "Fire", command: "AllQuiet" }))
-      root.send(Message.make({ _tag: "Fire", command: "Empty" }))
+      root.send(Message.Fire({ command: "AllQuiet" }))
+      root.send(Message.Fire({ command: "Empty" }))
       yield* TestHost.settle
       assert.deepStrictEqual(root.model(), ["Fire", "Fire"])
       assert.deepStrictEqual(ended(root).map((entry) => [entry.name, entry.silent]), [
@@ -136,9 +136,9 @@ describe("Component.noop", () => {
   it.effect("queue: silent and message-bearing runs of one definition keep issue order", () =>
     run(Effect.gen(function*() {
       const root = yield* TestHost.mount(Recorder, {})
-      root.send(Message.make({ _tag: "Queue", n: 0, silent: false }))
-      root.send(Message.make({ _tag: "Queue", n: 1, silent: true }))
-      root.send(Message.make({ _tag: "Queue", n: 2, silent: false }))
+      root.send(Message.Queue({ n: 0, silent: false }))
+      root.send(Message.Queue({ n: 1, silent: true }))
+      root.send(Message.Queue({ n: 2, silent: false }))
       yield* TestHost.settle
       yield* TestClock.adjust("60 millis")
       yield* TestHost.settle
@@ -150,11 +150,11 @@ describe("Component.noop", () => {
   it.effect("a story resolves a run with Component.noop, or with a result its mapper turns into it, and sends nothing", () =>
     Effect.gen(function*() {
       const s = yield* Story.make(Recorder, {})
-      s.send(Message.make({ _tag: "Fire", command: "Quiet" }))
+      s.send(Message.Fire({ command: "Quiet" }))
         .resolve(Quiet, Component.noop)
       assert.deepStrictEqual(s.model, ["Fire"])
       // `resolve` takes the definition's own result, which `asNoop` maps to `Component.noop`.
-      s.send(Message.make({ _tag: "Fire", command: "LoudAsNoop" }))
+      s.send(Message.Fire({ command: "LoudAsNoop" }))
         .resolve(Loud, got(0))
       assert.deepStrictEqual(s.model, ["Fire", "Fire"])
       s.expectNone()
@@ -190,7 +190,7 @@ describe("Component.noop", () => {
         update: (model) => model,
         view: (_, h) => h.text("child")
       })
-      const Close = Schema.TaggedUnion({ Close: {} })
+      const Close = UiSchema.TaggedEnum({ Close: {} })
       const Parent = Component.provide(
         Component.define({ name: "Parent", model: Schema.Boolean, message: Close }).make({
           init: () => true,
@@ -201,7 +201,7 @@ describe("Component.noop", () => {
       )
       const root = yield* TestHost.mount(Parent, {})
       yield* TestHost.settle
-      root.send(Close.make({ _tag: "Close" }))
+      root.send(Close.Close())
       yield* TestHost.settle
       assert.deepStrictEqual(root.pending(), [])
       yield* TestClock.adjust("1 second")

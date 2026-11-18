@@ -1,11 +1,11 @@
 // @vitest-environment happy-dom
-import { Component, Mount, View } from "@effect/ui"
+import { Component, Mount, UiSchema, View } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 
-const Message = Schema.TaggedUnion({
+const Message = UiSchema.TaggedEnum({
   Clicked: {},
   Reversed: {},
   Focus: {},
@@ -13,7 +13,7 @@ const Message = Schema.TaggedUnion({
   Mounted: { id: Schema.String, tag: Schema.String }
 })
 type Message = typeof Message.Type
-const clicked = Message.make({ _tag: "Clicked" })
+const clicked = Message.Clicked()
 const h = View.makeHelper<Message, {}, Html.Elements>({}, Html)
 
 type Button<Msg, R = never> = Html.Element<Msg, R, Html.EventsOf<"button">, HTMLButtonElement, "button">
@@ -215,7 +215,7 @@ describe("forward on BrowserHost", { concurrent: false }, () => {
       Message.match(message, {
         Clicked: () => model,
         Reversed: () => ({ ...model, ids: [...model.ids].reverse() }),
-        Focus: () => $.run(Html.focus(First, ({ found }) => Message.make({ _tag: "Found", found }))),
+        Focus: () => $.run(Html.focus(First, ({ found }) => Message.Found({ found }))),
         Found: ({ found }) => ({ ...model, log: [...model.log, `found ${found}`] }),
         Mounted: ({ id, tag }) => ({ ...model, log: [...model.log, `mounted ${id} on ${tag}`] })
       }),
@@ -223,7 +223,7 @@ describe("forward on BrowserHost", { concurrent: false }, () => {
       h.section.children(model.ids.map((id) => {
         const row = framed(h.button.attr("aria-label", id), id)
           .key(id)
-          .onMount(ReadTag().pipe(Mount.map((tag) => Message.make({ _tag: "Mounted", id, tag }))))
+          .onMount(ReadTag().pipe(Mount.map((tag) => Message.Mounted({ id, tag }))))
         return (id === "a" ? row.ref(First) : row).children(id)
       }))
   })
@@ -236,8 +236,8 @@ describe("forward on BrowserHost", { concurrent: false }, () => {
       const frames = () => Array.from(app.querySelectorAll("div.frame"))
       const before = frames()
       const buttons = before.map((frame) => frame.querySelector("button"))
-      root.send(Message.make({ _tag: "Reversed" }))
-      root.send(Message.make({ _tag: "Focus" }))
+      root.send(Message.Reversed())
+      root.send(Message.Focus())
       yield* tick
       const after = frames()
       assert.deepStrictEqual(after.map((frame) => frame.textContent), ["c", "b", "a"])

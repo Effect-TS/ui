@@ -1,4 +1,4 @@
-import { Component } from "@effect/ui"
+import { Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 
@@ -17,7 +17,7 @@ export const ListboxOption = Schema.Struct({
 })
 export type ListboxOption = typeof ListboxOption.Type
 
-export const ListboxMessage = Schema.TaggedUnion({
+export const ListboxMessage = UiSchema.TaggedEnum({
   ToggledPopup: { open: Schema.Boolean },
   UpdatedQuery: { value: Schema.String },
   PressedKey: { key: Schema.String },
@@ -26,7 +26,7 @@ export const ListboxMessage = Schema.TaggedUnion({
 
 // What the consumer gets through `onEmit`. Typeahead on the closed trigger
 // picks too, as a native `<select>` does.
-export const ListboxEvents = Schema.TaggedUnion({ Picked: { id: Schema.String } })
+export const ListboxEvents = UiSchema.TaggedEnum({ Picked: { id: Schema.String } })
 
 // Refs into the consumer's elements. A part attaches them, so they belong to
 // the Listbox and its `update` can focus and scroll them. `Row.at(id)`
@@ -109,7 +109,7 @@ export const Listbox = Component.define({
           case "Enter":
             return active === null
               ? model
-              : $.set({ ...model, open: false }).emit(ListboxEvents.make({ _tag: "Picked", id: active }))
+              : $.set({ ...model, open: false }).emit(ListboxEvents.Picked({ id: active }))
           case "Escape":
             return { ...model, open: false }
           default: {
@@ -123,11 +123,11 @@ export const Listbox = Component.define({
             const hit = find(typed)
             return hit === undefined
               ? { ...model, typed: "" }
-              : $.set({ ...model, typed }).emit(ListboxEvents.make({ _tag: "Picked", id: hit.id }))
+              : $.set({ ...model, typed }).emit(ListboxEvents.Picked({ id: hit.id }))
           }
         }
       },
-      ClickedOption: ({ id }) => $.set({ ...model, open: false }).emit(ListboxEvents.make({ _tag: "Picked", id }))
+      ClickedOption: ({ id }) => $.set({ ...model, open: false }).emit(ListboxEvents.Picked({ id }))
     }),
   // `parts` returns plain values for the consumer to read, and parts to
   // apply to its elements. `p.part(tag, decorate)` takes only a builder of
@@ -159,7 +159,7 @@ export const Listbox = Component.define({
           .onKeyDown(
             ({ alt, ctrl, key, meta }) =>
               key === "ArrowDown" || (key.length === 1 && key !== " " && !alt && !ctrl && !meta)
-                ? ListboxMessage.make({ _tag: "PressedKey", key })
+                ? ListboxMessage.PressedKey({ key })
                 : undefined,
             // Cancels the default only when a message was returned, so Tab,
             // Space and Enter keep working.
@@ -169,7 +169,7 @@ export const Listbox = Component.define({
         b.id(p.id("popup"))
           .attr("role", "dialog")
           .popover("auto", model.open)
-          .onToggle(({ open }) => ListboxMessage.make({ _tag: "ToggledPopup", open }))),
+          .onToggle(({ open }) => ListboxMessage.ToggledPopup({ open }))),
       input: p.part("input", (b) =>
         b.ref(Input)
           .attr("role", "combobox")
@@ -178,11 +178,11 @@ export const Listbox = Component.define({
           .attr("aria-controls", p.id("list"))
           .attr("aria-activedescendant", active === null ? undefined : p.id("option", active))
           .value(model.query)
-          .onInput(({ value }) => ListboxMessage.make({ _tag: "UpdatedQuery", value }))
+          .onInput(({ value }) => ListboxMessage.UpdatedQuery({ value }))
           .onKeyDown(
             ({ key }) =>
               key === "ArrowDown" || key === "ArrowUp" || key === "Enter" || key === "Escape"
-                ? ListboxMessage.make({ _tag: "PressedKey", key })
+                ? ListboxMessage.PressedKey({ key })
                 : undefined,
             { preventDefault: true }
           )),
@@ -196,7 +196,7 @@ export const Listbox = Component.define({
           .attr("aria-selected", String(active === option.id))
           .attr("aria-disabled", option.disabled === true ? "true" : undefined)
           .onClick(
-            option.disabled === true ? () => undefined : ListboxMessage.make({ _tag: "ClickedOption", id: option.id })
+            option.disabled === true ? () => undefined : ListboxMessage.ClickedOption({ id: option.id })
           ))
     }
   }

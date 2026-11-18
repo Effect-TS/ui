@@ -1,11 +1,11 @@
-import { Command, Component, Feature, type Query, type View } from "@effect/ui"
+import { Command, Component, Feature, type Query, UiSchema, type View } from "@effect/ui"
 import { Context, Effect, Layer, Schema, Scope } from "effect"
 import type { KeyValueStore } from "effect/persistence"
 import type { AsyncResult } from "effect/reactivity"
 import { describe, expect, it } from "tstyche"
 import { Counter, SaveTodo, Todo, TodoItem, TodoItemEvents, TodoItemMessage } from "../test/fixtures/components.ts"
 
-const Message = Schema.TaggedUnion({ X: {}, Y: {}, Done: {} })
+const Message = UiSchema.TaggedEnum({ X: {}, Y: {}, Done: {} })
 
 class A extends Context.Service<A, { readonly a: Effect.Effect<void> }>()("A") {}
 class B extends Context.Service<B, { readonly b: Effect.Effect<void> }>()("B") {}
@@ -13,12 +13,12 @@ class B extends Context.Service<B, { readonly b: Effect.Effect<void> }>()("B") {
 class CA extends Command.Service<CA>()(
   "CA",
   { args: {}, invalidates: () => [] },
-  Effect.succeed(() => Effect.succeed(Message.make({ _tag: "Done" })))
+  Effect.succeed(() => Effect.succeed(Message.Done()))
 ) {}
 class CB extends Command.Service<CB>()(
   "CB",
   { args: {}, invalidates: () => [] },
-  Effect.succeed(() => Effect.succeed(Message.make({ _tag: "Done" })))
+  Effect.succeed(() => Effect.succeed(Message.Done()))
 ) {}
 
 declare const NeedsRuntime: Component.Component<
@@ -120,9 +120,11 @@ describe("Component", () => {
       const UsesScope = Command.make(
         "UsesScope",
         { args: {} },
-        () => Effect.map(Scope.Scope, () => Message.make({ _tag: "Done" }))
+        () => Effect.map(Scope.Scope, () => Message.Done())
       )
-      expect(UsesScope()).type.toBe<Command.Issued<typeof Message.Type, never, typeof Message.Type, "Effect">>()
+      // A case constructor returns just its case, so the Command issues that case.
+      type Done = typeof Message.cases.Done.Type
+      expect(UsesScope()).type.toBe<Command.Issued<Done, never, Done, "Effect">>()
       const C = Component.define({
         name: "C",
         model: Schema.Struct({}),
@@ -141,37 +143,36 @@ describe("Component", () => {
       expect(Command.make).type.not.toBeCallableWith(
         "Save",
         { args: {} },
-        () => Effect.map(A, () => Message.make({ _tag: "Done" }))
+        () => Effect.map(A, () => Message.Done())
       )
       expect(Command.make).type.toBeCallableWith(
         "Roll",
         { args: {} },
-        () => Effect.succeed(Message.make({ _tag: "Done" }))
+        () => Effect.succeed(Message.Done())
       )
     })
   })
 
   describe("Command.Service", () => {
     it("types the implementation by the message it returns", () => {
+      type Result = Extract<TodoItemMessage, { readonly _tag: "Saved" | "SaveFailed" }>
       expect(SaveTodo.make({ id: "t1", title: "milk", done: false })).type.toBe<
-        Command.Issued<TodoItemMessage, SaveTodo, TodoItemMessage, "Effect">
+        Command.Issued<Result, SaveTodo, Result, "Effect">
       >()
-      expect(Layer.succeed(SaveTodo)).type.toBeCallableWith(() =>
-        Effect.succeed(TodoItemMessage.make({ _tag: "Saved" }))
-      )
-      expect(Layer.succeed(SaveTodo)).type.not.toBeCallableWith(() => Effect.succeed(Message.make({ _tag: "Done" })))
+      expect(Layer.succeed(SaveTodo)).type.toBeCallableWith(() => Effect.succeed(TodoItemMessage.Saved()))
+      expect(Layer.succeed(SaveTodo)).type.not.toBeCallableWith(() => Effect.succeed(Message.Done()))
     })
 
     it("rejects a function that reaches for a service instead of capturing it", () => {
       expect(Command.Service<B>()).type.not.toBeCallableWith(
         "Bad",
         { args: {}, invalidates: () => [] },
-        Effect.succeed(() => Effect.map(A, () => Message.make({ _tag: "Done" })))
+        Effect.succeed(() => Effect.map(A, () => Message.Done()))
       )
       expect(Command.Service<B>()).type.toBeCallableWith(
         "Good",
         { args: {}, invalidates: () => [] },
-        Effect.map(A, () => () => Effect.succeed(Message.make({ _tag: "Done" })))
+        Effect.map(A, () => () => Effect.succeed(Message.Done()))
       )
     })
   })
@@ -194,7 +195,7 @@ describe("Component", () => {
       expect<Component.Requirements<typeof Curried>>().type.toBe<KeyValueStore.KeyValueStore>()
       const FromProps = Component.provide(TodoItem, (props) => {
         expect(props).type.toBe<{ readonly todo: Todo }>()
-        return Layer.succeed(SaveTodo, () => Effect.succeed(TodoItemMessage.make({ _tag: "Saved" })))
+        return Layer.succeed(SaveTodo, () => Effect.succeed(TodoItemMessage.Saved()))
       })
       expect<Component.Requirements<typeof FromProps>>().type.toBe<never>()
       expect<Component.Props<typeof FromProps>>().type.toBe<{ readonly todo: Todo }>()
@@ -233,7 +234,7 @@ describe("Component", () => {
       expect(Component.provide).type.not.toBeCallableWith(TodoItem, failing)
       expect(Component.provide).type.not.toBeCallableWith(TodoItem, [failing])
       expect(Component.provide).type.toBeCallableWith(TodoItem, failing, {
-        onFailure: () => TodoItemMessage.make({ _tag: "SaveFailed", reason: "offline" })
+        onFailure: () => TodoItemMessage.SaveFailed({ reason: "offline" })
       })
       expect(Component.provide).type.not.toBeCallableWith(failing)
     })
@@ -306,7 +307,7 @@ describe("Component", () => {
   })
 
   describe("calling a component", () => {
-    const ParentMessage = Schema.TaggedUnion({ Toggled: { done: Schema.Boolean } })
+    const ParentMessage = UiSchema.TaggedEnum({ Toggled: { done: Schema.Boolean } })
     type ParentMessage = typeof ParentMessage.Type
     const ParentDef = Component.define({ name: "Parent", model: Schema.Null, message: ParentMessage })
     const todo = { id: "", title: "", done: false }
@@ -319,7 +320,7 @@ describe("Component", () => {
         expect(TodoItem).type.not.toBeCallableWith(h, {
           key: "t",
           props: { todo },
-          onEmit: () => Message.make({ _tag: "X" })
+          onEmit: () => Message.X()
         })
         expect(TodoItem).type.not.toBeCallableWith(h, { key: "t" })
         expect(TodoItem).type.not.toBeCallableWith(h, { key: "t", props: { initial: 0 } })

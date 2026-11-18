@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Command, Component, Head, MessageLog, Query, Route, Router } from "@effect/ui"
+import { Command, Component, Head, MessageLog, Query, Route, Router, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
 import { Locator, Story, TestHost } from "@effect/ui/testing"
@@ -39,8 +39,8 @@ const makeApp = () => {
     Effect.succeed(() => Effect.void)
   ) {}
 
-  const NoteMessage = Schema.TaggedUnion({ Click: {}, Touch: {}, Touched: {} })
-  const touched = NoteMessage.make({ _tag: "Touched" })
+  const NoteMessage = UiSchema.TaggedEnum({ Click: {}, Touch: {}, Touched: {} })
+  const touched = NoteMessage.Touched()
   const Note = Component.define({
     name: "Note",
     props: Schema.Struct({ id: Schema.String }),
@@ -76,7 +76,7 @@ const makeApp = () => {
           onSuccess: ({ value }) => value,
           onFailure: () => "failed"
         })),
-        h.button.onClick(NoteMessage.make({ _tag: "Click" })).children(`clicks ${model.clicks}`)
+        h.button.onClick(NoteMessage.Click()).children(`clicks ${model.clicks}`)
       )
   })
 
@@ -84,7 +84,7 @@ const makeApp = () => {
     Home: Route.make("/"),
     Note: Route.make("/notes/:id", { params: { id: Schema.String } })
   })
-  const AppMessage = Schema.TaggedUnion({ RouteChanged: { route: AppRoute } })
+  const AppMessage = UiSchema.TaggedEnum({ RouteChanged: { route: AppRoute } })
   const App = Component.define({
     name: "App",
     props: Schema.Struct({ route: AppRoute }),
@@ -95,7 +95,7 @@ const makeApp = () => {
     init: ($) => $.props.route,
     update: (_route, message) => message.route,
     subscriptions: (route) => [
-      Router.subscription(AppRoute, route, (next) => AppMessage.make({ _tag: "RouteChanged", route: next }))
+      Router.subscription(AppRoute, route, (next) => AppMessage.RouteChanged({ route: next }))
     ],
     view: (route, h) =>
       h.main(AppRoute.match(route, {
@@ -105,7 +105,7 @@ const makeApp = () => {
   })
 
   // Passes its id to one Note under a fixed key, so a new id is new props, not a re-key.
-  const ShellMessage = Schema.TaggedUnion({ SetId: { id: Schema.String } })
+  const ShellMessage = UiSchema.TaggedEnum({ SetId: { id: Schema.String } })
   const Shell = Component.define({
     name: "Shell",
     model: Schema.String,
@@ -116,7 +116,7 @@ const makeApp = () => {
     update: (_id, message) => message.id,
     view: (id, h) => h.div(Note(h, { key: "note", props: { id } }))
   })
-  const setId = (id: string) => ShellMessage.make({ _tag: "SetId", id })
+  const setId = (id: string) => ShellMessage.SetId({ id })
 
   return {
     server,
@@ -215,7 +215,7 @@ describe("a query without onChange", { concurrent: false }, () => {
       assert.strictEqual(queryChanges(result.log, "/Note").length, 0)
       assert.deepStrictEqual(updates(result.log, "/Note"), [])
       // update sees the hydrated result.
-      result.root.send(app.NoteMessage.make({ _tag: "Click" }))
+      result.root.send(app.NoteMessage.Click())
       yield* TestHost.settle
       assert.deepStrictEqual(result.root.model(), { clicks: 1, last: "Note 1" })
       assert.strictEqual(app.server.calls, 1)
@@ -400,7 +400,7 @@ describe("a query without onChange", { concurrent: false }, () => {
       Effect.gen(function*() {
         const root = yield* TestHost.mount(app.Note, { id: "1" })
         yield* load
-        root.send(app.NoteMessage.make({ _tag: "Touch" }))
+        root.send(app.NoteMessage.Touch())
         yield* TestHost.settle
         // The refetch is in flight: the result keeps the value, waiting.
         click(root, "clicks 0")

@@ -1,10 +1,10 @@
-import { Component, Feature, type View } from "@effect/ui"
+import { Component, Feature, UiSchema, type View } from "@effect/ui"
 import { Scene, Story, TestHost } from "@effect/ui/testing"
 import { Context, Effect, Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { describe, expect, it } from "tstyche"
 
-const EditorMessage = Schema.TaggedUnion({ Clear: {}, Focus: {}, Typed: { text: Schema.String } })
+const EditorMessage = UiSchema.TaggedEnum({ Clear: {}, Focus: {}, Typed: { text: Schema.String } })
 type EditorMessage = typeof EditorMessage.Type
 type Received = Extract<EditorMessage, { readonly _tag: "Clear" | "Focus" }>
 
@@ -56,7 +56,7 @@ declare const NeedsStore: Component.Component<
   Extract<EditorMessage, { readonly _tag: "Clear" }>
 >
 
-const TodosMessage = Schema.TaggedUnion({ Clear: {} })
+const TodosMessage = UiSchema.TaggedEnum({ Clear: {} })
 class Todos extends Feature.Service<Todos>()("Todos", {
   props: Schema.Struct({}),
   receives: TodosMessage
@@ -74,7 +74,7 @@ declare const anyFeature: Feature.Any
 declare const untrusted: unknown
 declare const arbitraryObject: object
 
-const ParentMessage = Schema.TaggedUnion({ Go: {} })
+const ParentMessage = UiSchema.TaggedEnum({ Go: {} })
 const ParentDef = Component.define({ name: "Parent", model: Schema.Null, message: ParentMessage })
 
 describe("Component receives", () => {
@@ -104,12 +104,14 @@ describe("$.send", () => {
   it("takes a message the ref's component receives, and rejects any other", () => {
     ParentDef.update((model, _msg, $) => {
       expect($.send(Draft, { _tag: "Clear" })).type.not.toRaiseError()
-      expect($.send(Draft, EditorMessage.cases.Focus.make({}))).type.not.toRaiseError()
+      expect($.send(Draft, EditorMessage.Focus())).type.not.toRaiseError()
       expect($.send(Todos.ref("Main"), { _tag: "Clear" })).type.not.toRaiseError()
+      // A case constructor returns just its case, so it fits a ref that receives that case.
+      expect($.send(Draft, EditorMessage.Clear())).type.not.toRaiseError()
+      expect($.send).type.not.toBeCallableWith(Draft, EditorMessage.Typed({ text: "x" }))
       // `make` returns the whole Message, which includes a case Editor doesn't receive.
       expect($.send).type.not.toBeCallableWith(Draft, EditorMessage.make({ _tag: "Clear" }))
-      expect($.send).type.not.toBeCallableWith(Draft, EditorMessage.cases.Typed.make({ text: "x" }))
-      expect($.send).type.not.toBeCallableWith(Plain.ref("P"), EditorMessage.make({ _tag: "Clear" }))
+      expect($.send).type.not.toBeCallableWith(Plain.ref("P"), EditorMessage.Clear())
       // Wider than the child's Message: nothing says the value is one.
       expect($.send).type.not.toBeCallableWith(Draft, untrusted)
       expect($.send).type.not.toBeCallableWith(Draft, arbitraryObject)
@@ -153,7 +155,7 @@ describe("$.send", () => {
       expect($.send).type.not.toBeCallableWith(ErasedPlain.ref("E").at(1), { _tag: "Clear" })
       // Concrete refs, and their rows, still infer.
       expect($.send(Draft.at("a"), { _tag: "Focus" })).type.not.toRaiseError()
-      expect($.send(Rows.at(1), EditorMessage.cases.Clear.make({}))).type.not.toRaiseError()
+      expect($.send(Rows.at(1), EditorMessage.Clear())).type.not.toRaiseError()
       expect($.send(Todos.ref("Main").at(2), { _tag: "Clear" })).type.not.toRaiseError()
       return model
     })
@@ -194,7 +196,7 @@ describe("$.send", () => {
   it("stores and inspects features, components and refs in their erased forms", () => {
     class Panel extends Feature.Service<Panel>()("Panel", {
       props: Schema.Struct({}),
-      events: Schema.TaggedUnion({ Changed: {} })
+      events: UiSchema.TaggedEnum({ Changed: {} })
     }) {}
     // Every feature fits `Feature.Any`, whatever it receives, and every ref fits `Ref.Any`.
     class Bare extends Feature.Service<Bare>()("Bare", { props: Schema.Struct({}) }) {}
@@ -575,7 +577,7 @@ describe("a component that receives", () => {
     expect(TestHost.mount(Editor, {})).type.not.toRaiseError()
     expect(Effect.gen(function*() {
       const s = yield* Story.make(Editor, {})
-      s.send(EditorMessage.make({ _tag: "Clear" }))
+      s.send(EditorMessage.Clear())
     })).type.not.toRaiseError()
     expect(Scene.start(Editor, {}).childEmit(Editor, Draft, {} as never)).type.not.toRaiseError()
     expect(Scene.start(Editor, {}).childEmit(Plain, Plain.ref("P"), {} as never)).type.not.toRaiseError()

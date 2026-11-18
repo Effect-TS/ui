@@ -13,12 +13,12 @@
  * **Example** (A weather lookup)
  *
  * ```ts import.meta.vitest
- * import { Command, Component } from "@effect/ui"
+ * import { Command, Component, UiSchema } from "@effect/ui"
  * import { Html } from "@effect/ui/html"
  * import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
  * import { Effect, Schema } from "effect"
  *
- * const Message = Schema.TaggedUnion({
+ * const Message = UiSchema.TaggedEnum({
  *   UpdatedZip: { zip: Schema.String },
  *   SubmittedForm: { zip: Schema.String },
  *   CompletedFetchWeather: { forecast: Schema.String }
@@ -27,7 +27,7 @@
  * class FetchWeather extends Command.Service<FetchWeather>()(
  *   "weather/FetchWeather",
  *   { args: { zip: Schema.String } },
- *   Effect.succeed(() => Effect.succeed(Message.make({ _tag: "CompletedFetchWeather", forecast: "sun" })))
+ *   Effect.succeed(() => Effect.succeed(Message.CompletedFetchWeather({ forecast: "sun" })))
  * ) {}
  *
  * const Weather = Component.define({
@@ -45,10 +45,10 @@
  *     }),
  *   view: (model, h) =>
  *     h.div(
- *       h.form.onSubmit(({ fields }) => Message.make({ _tag: "SubmittedForm", zip: fields.zip ?? "" })).children(
+ *       h.form.onSubmit(({ fields }) => Message.SubmittedForm({ zip: fields.zip ?? "" })).children(
  *         h.label.attr("for", "zip").children("Zip code"),
  *         h.input.attr("id", "zip").attr("name", "zip").value(model.zip)
- *           .onInput(({ value }) => Message.make({ _tag: "UpdatedZip", zip: value })),
+ *           .onInput(({ value }) => Message.UpdatedZip({ zip: value })),
  *         h.button.children("Get Weather")
  *       ),
  *       h.p.attr("role", "status").children(model.forecast)
@@ -61,7 +61,7 @@
  *     // A submit button submits its form, with the fields read from the view.
  *     .click(HtmlLocator.role("button", { name: "Get Weather" }))
  *     .expectExact(FetchWeather.make({ zip: "90210" }))
- *     .resolve(FetchWeather, Message.make({ _tag: "CompletedFetchWeather", forecast: "sun" }))
+ *     .resolve(FetchWeather, Message.CompletedFetchWeather({ forecast: "sun" }))
  *     .expect(HtmlLocator.role("status")).toHaveText("sun")
  * }).pipe(Effect.scoped, Effect.runSync)
  * ```

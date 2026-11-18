@@ -4,7 +4,7 @@
  * child through another's slot, a feature child and two components whose query the declarer can't
  * see, a page whose view throws, and a page whose Layer fails.
  */
-import { Component, Feature, Query, Route, Router } from "@effect/ui"
+import { Component, Feature, Query, Route, Router, UiSchema } from "@effect/ui"
 import { Context, Effect, Layer, Schema } from "effect"
 import { GetPerson } from "./router.ts"
 
@@ -112,7 +112,7 @@ export const Failing = Component.define({
 /** What the Person handler saw as the current location when it ran. */
 export const probe = { location: (): string => "", seen: [] as Array<string> }
 
-const AppMessage = Schema.TaggedUnion({ ChangedRoute: { route: Routes } })
+const AppMessage = UiSchema.TaggedEnum({ ChangedRoute: { route: Routes } })
 
 export const App = Component.define({
   name: "App",
@@ -123,7 +123,7 @@ export const App = Component.define({
   init: ($) => ({ route: $.props.route }),
   update: (_, message) => ({ route: message.route }),
   subscriptions: (model) => [
-    Router.subscription(Routes, model.route, (route) => AppMessage.make({ _tag: "ChangedRoute", route })),
+    Router.subscription(Routes, model.route, (route) => AppMessage.ChangedRoute({ route })),
     Router.prefetch(Routes, {
       // The sidebar is mounted already: the check after a push skips it.
       Home: () => [Router.page(Sidebar, { id: 9 })],

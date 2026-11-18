@@ -1,4 +1,4 @@
-import { Component, type View } from "@effect/ui"
+import { Component, UiSchema, type View } from "@effect/ui"
 import { Checkbox } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Context, Schema } from "effect"
@@ -6,7 +6,7 @@ import { describe, expect, it } from "tstyche"
 
 class Clock extends Context.Service<Clock, {}>()("Clock") {}
 
-const Msg = Schema.TaggedUnion({ Clicked: {} })
+const Msg = UiSchema.TaggedEnum({ Clicked: {} })
 type Msg = typeof Msg.Type
 
 declare const needsClock: View.Child<never, Clock>
@@ -25,7 +25,7 @@ describe("Checkbox", () => {
           view: (s) => {
             expect(s.root(h.button)).type.toBe<Button<never>>()
             expect(s.indicator(h.span.class("tick")).children(needsClock)).type.toBe<Span<Clock>>()
-            const root = s.root(h.button.onClick(Msg.make({ _tag: "Clicked" })))
+            const root = s.root(h.button.onClick(Msg.Clicked()))
               .children(s.indicator(h.span), needsClock)
             expect(root).type.toBe<Button<Clock>>()
             return root

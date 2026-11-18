@@ -1,4 +1,4 @@
-import { Command, Component, Head, Router } from "@effect/ui"
+import { Command, Component, Head, Router, UiSchema } from "@effect/ui"
 import { Layer, Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { type NoteResults, NoteSort } from "../../notes/domain/Note.ts"
@@ -13,7 +13,7 @@ const SearchRoute = AppRoute.subset(["Search"])
 
 const noteUrl = (id: string) => AppRoute.print(AppRoute.make({ _tag: "Note", params: { id } }))
 
-export const SearchPageMessage = Schema.TaggedUnion({
+export const SearchPageMessage = UiSchema.TaggedEnum({
   UpdatedSearch: { text: Schema.String },
   SelectedOrder: { sort: NoteSort },
   ClickedPage: { page: Schema.Number }
@@ -78,10 +78,10 @@ export const SearchPageNoDeps = Component.define({
         ),
         h.nav.attr("aria-label", "Pages").children(
           h.button.attr("type", "button").disabled(page <= 1)
-            .onClick(SearchPageMessage.make({ _tag: "ClickedPage", page: page - 1 })).children("Previous"),
+            .onClick(SearchPageMessage.ClickedPage({ page: page - 1 })).children("Previous"),
           h.span(`Page ${page} of ${results.pages}`),
           h.button.attr("type", "button").disabled(page >= results.pages)
-            .onClick(SearchPageMessage.make({ _tag: "ClickedPage", page: page + 1 })).children("Next")
+            .onClick(SearchPageMessage.ClickedPage({ page: page + 1 })).children("Next")
         )
       )
 
@@ -93,11 +93,9 @@ export const SearchPageNoDeps = Component.define({
       // most every 200 ms, to stay under the browsers' limits on history
       // calls.
       h.input.attr("type", "search").attr("aria-label", "Search").value(q ?? "")
-        .onInput(({ value }) => SearchPageMessage.make({ _tag: "UpdatedSearch", text: value })),
+        .onInput(({ value }) => SearchPageMessage.UpdatedSearch({ text: value })),
       h.select.attr("aria-label", "Order").value(sort)
-        .onChange(({ value }) =>
-          SearchPageMessage.make({ _tag: "SelectedOrder", sort: value === "desc" ? "desc" : "asc" })
-        )
+        .onChange(({ value }) => SearchPageMessage.SelectedOrder({ sort: value === "desc" ? "desc" : "asc" }))
         .children(
           h.option.attr("value", "asc").children("A to Z"),
           h.option.attr("value", "desc").children("Z to A")

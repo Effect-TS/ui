@@ -9,7 +9,8 @@ import {
   Query,
   type Renderer,
   Router,
-  Subscription
+  Subscription,
+  UiSchema
 } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
@@ -116,9 +117,9 @@ describe("HtmlServer", { concurrent: false }, () => {
     }).pipe(Effect.scoped))
 
   describe("reports across hydration", () => {
-    const Plain = Schema.TaggedUnion({ ChangedOn: { on: Schema.Boolean } })
+    const Plain = UiSchema.TaggedEnum({ ChangedOn: { on: Schema.Boolean } })
     // An unrelated variant holds a secret, so the last message can't be shipped.
-    const Secret = Schema.TaggedUnion({
+    const Secret = UiSchema.TaggedEnum({
       ChangedOn: { on: Schema.Boolean },
       Unlocked: { key: Schema.Redacted(Schema.String) }
     })
@@ -132,7 +133,7 @@ describe("HtmlServer", { concurrent: false }, () => {
           value: (count) => count,
           collects: {
             schema: Schema.Boolean,
-            onChange: (collected) => Plain.make({ _tag: "ChangedOn", on: collected.includes(true) })
+            onChange: (collected) => Plain.ChangedOn({ on: collected.includes(true) })
           }
         }
       }).make({ init: () => 0, update: (count) => count + 1, parts: (count) => ({ count }) })
@@ -481,7 +482,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       yield* Effect.addFinalizer(() => Effect.sync(() => close.mockRestore()))
       // The browser closes the adopted showing, and the Model shows a modal before the report.
       dialog.close()
-      root.send(ConfirmMessage.make({ _tag: "Mode", state: "modal" }))
+      root.send(ConfirmMessage.Mode({ state: "modal" }))
       yield* Effect.promise(() => Promise.resolve())
       expect(dialog.open).toBe(true)
       pending.shift()!()
@@ -558,8 +559,8 @@ describe("HtmlServer", { concurrent: false }, () => {
         error: Schema.Never,
         staleTime: "30 seconds"
       }, Effect.succeed(() => Effect.succeed("loaded"))) {}
-      const ChildMessage = Schema.TaggedUnion({ Loaded: {}, Tracked: {} })
-      const Track = Command.make("Track", { args: {} }, () => Effect.succeed(ChildMessage.make({ _tag: "Tracked" })))
+      const ChildMessage = UiSchema.TaggedEnum({ Loaded: {}, Tracked: {} })
+      const Track = Command.make("Track", { args: {} }, () => Effect.succeed(ChildMessage.Tracked()))
       let builds = 0
       const Child = Component.define({
         name: "Child",
@@ -568,7 +569,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         events: Schema.Literal("loaded"),
         elements: Html,
         queries: {
-          text: { query: GetText, args: () => ({}), onChange: () => ChildMessage.make({ _tag: "Loaded" }) }
+          text: { query: GetText, args: () => ({}), onChange: () => ChildMessage.Loaded() }
         }
       }).make({
         // init's Command is dropped silently: the client runs it when it adopts.
@@ -611,7 +612,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         update: (model) => model,
         view: (_, h) => h.p("live")
       }).pipe(Component.provide(Layer.succeed(Connection, "socket"), { server: false }))
-      const ParentMessage = Schema.TaggedUnion({ Ready: {} })
+      const ParentMessage = UiSchema.TaggedEnum({ Ready: {} })
       const Parent = Component.define({
         name: "Parent",
         model: Schema.Boolean,
@@ -625,7 +626,7 @@ describe("HtmlServer", { concurrent: false }, () => {
             h.p(ready ? "ready" : "waiting"),
             Child(
               h,
-              { key: "a", props: {}, onEmit: () => ParentMessage.make({ _tag: "Ready" }) }
+              { key: "a", props: {}, onEmit: () => ParentMessage.Ready() }
             ),
             Broken(h, { key: "b", props: {}, fallback: () => h.p("broken") }),
             Live(h, { key: "c", props: {} })
@@ -658,7 +659,7 @@ describe("HtmlServer", { concurrent: false }, () => {
 
   it.effect("reports ServerCommandIssued every time, and fails ssr with it", () =>
     Effect.gen(function*() {
-      const Message = Schema.TaggedUnion({ Go: {} })
+      const Message = UiSchema.TaggedEnum({ Go: {} })
       const Log = Command.make("Log", { args: {} }, () => Effect.never)
       const Page = Component.define({
         name: "Page",
@@ -668,7 +669,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       }).make({
         init: ($) => $.set(0).run(Log()),
         update: (count, _, $) => $.set(count + 1).run(Log()),
-        view: (count, h) => h.p.onMount(mountSending("Go", Message.make({ _tag: "Go" }))).children(String(count))
+        view: (count, h) => h.p.onMount(mountSending("Go", Message.Go())).children(String(count))
       })
       // An event from a child drives the parent's update twice on the server.
       const Child = Component.define({
@@ -690,8 +691,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       }).make({
         init: () => 0,
         update: (count, _, $) => $.set(count + 1).run(Log()),
-        view: (count, h) =>
-          h.div(h.p(String(count)), Child(h, { key: "c", props: {}, onEmit: () => Message.make({ _tag: "Go" }) }))
+        view: (count, h) => h.div(h.p(String(count)), Child(h, { key: "c", props: {}, onEmit: () => Message.Go() }))
       })
       const problems: Array<Query.Problem.Any> = []
       const rendered = yield* HtmlServer.renderToHtml(Parent, {}).pipe(
@@ -715,7 +715,7 @@ describe("HtmlServer", { concurrent: false }, () => {
   it.effect("keeps an instance whose Layer is still building inert until it adopts, then fires onMount", () =>
     Effect.gen(function*() {
       class Store extends Context.Service<Store, string>()("test/Store") {}
-      const Message = Schema.TaggedUnion({ Mounted: {}, Clicked: {} })
+      const Message = UiSchema.TaggedEnum({ Mounted: {}, Clicked: {} })
       const Panel = Component.define({
         name: "Panel",
         model: Schema.Struct({ mounted: Schema.Boolean, clicks: Schema.Number }),
@@ -727,8 +727,8 @@ describe("HtmlServer", { concurrent: false }, () => {
           message._tag === "Mounted" ? { ...model, mounted: true } : { ...model, clicks: model.clicks + 1 },
         view: (model, h) =>
           h.button
-            .onClick(Message.make({ _tag: "Clicked" }))
-            .onMount(mountSending("Mounted", Message.make({ _tag: "Mounted" }))).children(
+            .onClick(Message.Clicked())
+            .onMount(mountSending("Mounted", Message.Mounted())).children(
               `${model.clicks} ${model.mounted ? "mounted" : "server"}`
             )
       }).pipe(Component.provide(Layer.effect(Store, Effect.as(Effect.sleep("50 millis"), "ready"))))
@@ -1031,7 +1031,7 @@ describe("HtmlServer", { concurrent: false }, () => {
 
   it.effect("judges adoption when it commits, before onMount updates replace nodes", () =>
     hosted(Effect.gen(function*() {
-      const Message = Schema.TaggedUnion({ Mounted: {} })
+      const Message = UiSchema.TaggedEnum({ Mounted: {} })
       const Swap = Component.define({
         name: "Swap",
         model: Schema.Boolean,
@@ -1043,7 +1043,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         view: (mounted, h) =>
           mounted
             ? h.div("mounted")
-            : h.p.onMount(mountSending("Swap", Message.make({ _tag: "Mounted" }))).children("server")
+            : h.p.onMount(mountSending("Swap", Message.Mounted())).children("server")
       })
       const result = yield* ssr(Swap, {})
       yield* TestHost.settle
@@ -1098,7 +1098,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         update: (model) => model,
         view: (_, h) => h.p("waiting")
       }).pipe(Component.provide(Layer.effect(Slow, Effect.as(Effect.sleep("30 millis"), "ready"))))
-      const Message = Schema.TaggedUnion({ Mounted: {} })
+      const Message = UiSchema.TaggedEnum({ Mounted: {} })
       const Titled = Component.define({
         name: "Titled",
         model: Schema.String,
@@ -1109,7 +1109,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         update: () => "mounted",
         head: (title) => [Head.title(title)],
         view: (_, h) =>
-          h.div.onMount(mountSending("Title", Message.make({ _tag: "Mounted" }))).children(
+          h.div.onMount(mountSending("Title", Message.Mounted())).children(
             Waiting(h, { key: "w", props: {} })
           )
       })
@@ -1212,7 +1212,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         head: () => [Head.title("title")],
         view: (_, h) => h.p("titled")
       })
-      const Message = Schema.TaggedUnion({ Mounted: {} })
+      const Message = UiSchema.TaggedEnum({ Mounted: {} })
       const Page = Component.define({
         name: "Page",
         model: Schema.Boolean,
@@ -1222,7 +1222,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => true,
         update: () => false,
         view: (showTitled, h) =>
-          h.div.onMount(mountSending("Hide", Message.make({ _tag: "Mounted" }))).children(
+          h.div.onMount(mountSending("Hide", Message.Mounted())).children(
             showTitled ? Titled(h, { key: "t", props: {} }) : h.p("gone"),
             Waiting(h, { key: "w", props: {} })
           )
@@ -1412,7 +1412,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         head: () => [Head.title("leaf")],
         view: (_, h) => h.p("leaf")
       })
-      const Message = Schema.TaggedUnion({ Bump: {} })
+      const Message = UiSchema.TaggedEnum({ Bump: {} })
       const Layout = Component.define({
         name: "Layout",
         model: Schema.Number,
@@ -1426,7 +1426,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       })
       const bumpThrice = Effect.fnUntraced(function*(root: { readonly send: (message: typeof Message.Type) => void }) {
         for (let i = 0; i < 3; i++) {
-          root.send(Message.make({ _tag: "Bump" }))
+          root.send(Message.Bump())
           yield* tick
         }
       })
@@ -1444,7 +1444,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         const result = yield* ssr(Layout, {})
         expect(calls).toBe(2)
         for (let i = 0; i < 3; i++) {
-          result.root.send(Message.make({ _tag: "Bump" }))
+          result.root.send(Message.Bump())
           yield* TestHost.settle
         }
         expect(calls).toBe(5)
@@ -1525,7 +1525,7 @@ describe("HtmlServer queries", { concurrent: false }, () => {
   it.effect("runs rounds: an onChange message that changes the args fetches the next key", () =>
     hosted(Effect.gen(function*() {
       const { GetItem, show, calls } = makeItems()
-      const Message = Schema.TaggedUnion({ Loaded: { ok: Schema.Boolean } })
+      const Message = UiSchema.TaggedEnum({ Loaded: { ok: Schema.Boolean } })
       const Pager = Component.define({
         name: "Pager",
         model: Schema.Struct({ page: Schema.Number }),
@@ -1535,7 +1535,7 @@ describe("HtmlServer queries", { concurrent: false }, () => {
           item: {
             query: GetItem,
             args: (model) => ({ id: model.page }),
-            onChange: (result) => Message.make({ _tag: "Loaded", ok: AsyncResult.isSuccess(result) })
+            onChange: (result) => Message.Loaded({ ok: AsyncResult.isSuccess(result) })
           }
         }
       }).make({
@@ -1647,11 +1647,11 @@ describe("HtmlServer queries", { concurrent: false }, () => {
           builds++ % 2 === 0 ? Effect.succeed("ready") : Effect.as(Effect.sleep("10 millis"), "ready")
         )
       )))
-      const Message = Schema.TaggedUnion({ Refreshed: {} })
+      const Message = UiSchema.TaggedEnum({ Refreshed: {} })
       class Refresh extends Command.Service<Refresh>()("Refresh", {
         args: {},
         invalidates: () => [GetItem]
-      }, Effect.succeed(() => Effect.succeed(Message.make({ _tag: "Refreshed" })))) {}
+      }, Effect.succeed(() => Effect.succeed(Message.Refreshed()))) {}
       const Page = Component.define({
         name: "Page",
         model: Schema.Struct({}),
@@ -1698,11 +1698,11 @@ describe("HtmlServer queries", { concurrent: false }, () => {
         Store,
         Effect.suspend(() => builds++ === 0 ? Effect.succeed("ready") : Effect.as(Effect.sleep("10 millis"), "ready"))
       )))
-      const Message = Schema.TaggedUnion({ Navigated: {}, Refreshed: {} })
+      const Message = UiSchema.TaggedEnum({ Navigated: {}, Refreshed: {} })
       class Refresh extends Command.Service<Refresh>()("Refresh", {
         args: {},
         invalidates: () => [GetItem]
-      }, Effect.succeed(() => Effect.succeed(Message.make({ _tag: "Refreshed" })))) {}
+      }, Effect.succeed(() => Effect.succeed(Message.Refreshed()))) {}
       const Page = Component.define({
         name: "Page",
         model: Schema.Struct({}),
@@ -1713,7 +1713,7 @@ describe("HtmlServer queries", { concurrent: false }, () => {
         init: ($) =>
           $.set({}).run(
             Router.push(AppRoute, Option.getOrThrow(AppRoute.parse("/slow"))).pipe(
-              Command.map(() => Message.make({ _tag: "Navigated" }))
+              Command.map(() => Message.Navigated())
             )
           ),
         update: (model, message, $) => message._tag === "Navigated" ? $.set(model).run(Refresh.make()) : model,
@@ -1764,7 +1764,7 @@ describe("HtmlServer queries", { concurrent: false }, () => {
         Store,
         Effect.suspend(() => builds++ === 0 ? Effect.succeed("ready") : Effect.as(Effect.sleep("10 millis"), "ready"))
       )))
-      const Message = Schema.TaggedUnion({ Navigated: {} })
+      const Message = UiSchema.TaggedEnum({ Navigated: {} })
       const Page = Component.define({
         name: "Page",
         model: Schema.Struct({}),
@@ -1775,7 +1775,7 @@ describe("HtmlServer queries", { concurrent: false }, () => {
         init: ($) =>
           $.set({}).run(
             Router.push(AppRoute, Option.getOrThrow(AppRoute.parse("/people/1"))).pipe(
-              Command.map(() => Message.make({ _tag: "Navigated" }))
+              Command.map(() => Message.Navigated())
             )
           ),
         update: (model) => model,

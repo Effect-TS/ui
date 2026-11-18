@@ -1,4 +1,4 @@
-import { Command, Component, Route, Router } from "@effect/ui"
+import { Command, Component, Route, Router, UiSchema } from "@effect/ui"
 import { Effect, Schema } from "effect"
 import { describe, expect, it } from "tstyche"
 
@@ -42,7 +42,7 @@ describe("Router.patchSearch", () => {
 
   it("adds stale to the outcome, and PatchSearch to the requirements", () => {
     expect<Router.PatchOutcome>().type.toBe<"navigated" | "blocked" | "stale">()
-    const Message = Schema.TaggedUnion({ Typed: { value: Schema.String }, Patched: {} })
+    const Message = UiSchema.TaggedEnum({ Typed: { value: Schema.String }, Patched: {} })
     const Box = Component.define({
       name: "Box",
       props: Schema.Struct({ route: SearchRoute }),
@@ -54,7 +54,7 @@ describe("Router.patchSearch", () => {
         message._tag === "Typed"
           ? $.run(
             Router.patchSearch(AppRoute, $.props.route, { q: message.value || undefined }).pipe(
-              Command.map(() => Message.make({ _tag: "Patched" }))
+              Command.map(() => Message.Patched())
             )
           )
           : model,

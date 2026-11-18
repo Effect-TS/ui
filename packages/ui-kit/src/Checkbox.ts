@@ -64,12 +64,12 @@
  * **Example** (A labelled checkbox whose value lives in the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { Component } from "@effect/ui"
+ * import { Component, UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Checkbox } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
- * const SignupMessage = Schema.TaggedUnion({ ToggledTerms: { checked: Schema.Boolean } })
+ * const SignupMessage = UiSchema.TaggedEnum({ ToggledTerms: { checked: Schema.Boolean } })
  *
  * const Signup = Component.define({
  *   name: "Signup",
@@ -85,7 +85,7 @@
  *   view: (model, h) =>
  *     Checkbox(h, {
  *       props: { checked: model.terms, name: "terms", required: true },
- *       onEmit: ({ checked }) => SignupMessage.make({ _tag: "ToggledTerms", checked }),
+ *       onEmit: ({ checked }) => SignupMessage.ToggledTerms({ checked }),
  *       view: (s) =>
  *         h.label.class("terms").children(
  *           s.root(h.button.class("checkbox")).children(s.indicator(h.span.class("tick"))),
@@ -104,6 +104,7 @@
  */
 import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
+import * as UiSchema from "@effect/ui/UiSchema"
 import * as Schema from "effect/Schema"
 import { flag } from "./internal/attributes.ts"
 import { field } from "./internal/field.ts"
@@ -161,7 +162,7 @@ export type CheckboxProps = typeof CheckboxProps.Type
  * @category schemas
  * @since 0.1.0
  */
-export const CheckboxEvents = Schema.TaggedUnion({
+export const CheckboxEvents = UiSchema.TaggedEnum({
   Toggled: { checked: Schema.Boolean }
 })
 
@@ -176,7 +177,7 @@ export type CheckboxEvents = typeof CheckboxEvents.Type
 
 // A click on the root, which Space on the native button arrives as. Enter
 // is its own message so the root can cancel the button's click on Enter.
-const Message = Schema.TaggedUnion({ ClickedRoot: {}, PressedEnter: {} })
+const Message = UiSchema.TaggedEnum({ ClickedRoot: {}, PressedEnter: {} })
 
 const interactive = (props: CheckboxProps): boolean => props.disabled !== true && props.readOnly !== true
 
@@ -241,7 +242,7 @@ export const Checkbox = Component.define({
     Message.match(message, {
       ClickedRoot: () =>
         interactive($.props)
-          ? $.emit(CheckboxEvents.make({ _tag: "Toggled", checked: !$.props.checked }))
+          ? $.emit(CheckboxEvents.Toggled({ checked: !$.props.checked }))
           : model,
       // Enter means nothing to a checkbox: the message only cancels it.
       PressedEnter: () => model
@@ -267,9 +268,9 @@ export const Checkbox = Component.define({
           // consumer's can't report a state the props don't have.
           .attr("aria-disabled", undefined)
           .disabled(p.props.disabled === true)
-          .onClick(Message.make({ _tag: "ClickedRoot" }))
+          .onClick(Message.ClickedRoot())
           .onKeyDown(
-            ({ key }) => key === "Enter" ? Message.make({ _tag: "PressedEnter" }) : undefined,
+            ({ key }) => key === "Enter" ? Message.PressedEnter() : undefined,
             // Cancels Enter's click on the button, and leaves every other key alone.
             { preventDefault: true }
           )

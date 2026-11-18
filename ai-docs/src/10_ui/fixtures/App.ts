@@ -1,4 +1,4 @@
-import { Command, Component, Head, Router } from "@effect/ui"
+import { Command, Component, Head, Router, UiSchema } from "@effect/ui"
 import { Schema } from "effect"
 import { NotePage } from "./pages/notes/NotePage.ts"
 import { NotesIndex } from "./pages/NotesIndex.ts"
@@ -10,7 +10,7 @@ const indexRoute = AppRoute.make({ _tag: "Index" })
 // prints as `/search`.
 const searchRoute = AppRoute.make({ _tag: "Search", search: {} })
 
-export const AppMessage = Schema.TaggedUnion({
+export const AppMessage = UiSchema.TaggedEnum({
   ChangedRoute: { route: AppRoute },
   ClickedBackToNotes: {}
 })
@@ -38,7 +38,7 @@ export const App = Component.define({
       ClickedBackToNotes: () => $.run(Router.push(AppRoute, indexRoute).pipe(Command.asNoop))
     }),
   subscriptions: (model) => [
-    Router.subscription(AppRoute, model.route, (route) => AppMessage.make({ _tag: "ChangedRoute", route }))
+    Router.subscription(AppRoute, model.route, (route) => AppMessage.ChangedRoute({ route }))
   ],
   // App-wide head defaults go in the root's `head`, not in the HTML shell.
   // The template wraps the title a page below sets, giving
@@ -69,7 +69,7 @@ export const App = Component.define({
           NotFound: () =>
             h.section(
               h.h1("Page not found"),
-              h.button.onClick(AppMessage.make({ _tag: "ClickedBackToNotes" })).children("Back to all notes")
+              h.button.onClick(AppMessage.ClickedBackToNotes()).children("Back to all notes")
             )
         })
       )

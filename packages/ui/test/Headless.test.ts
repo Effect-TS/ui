@@ -1,4 +1,4 @@
-import { Command, Component, Feature, type MessageLog, type View } from "@effect/ui"
+import { Command, Component, Feature, type MessageLog, UiSchema, type View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Locator, Scene, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -25,7 +25,7 @@ const items: ReadonlyArray<Item> = [
 // Three owners on one element: a Menu inside a Dialog, both placed by Picker
 // ---------------------------------------------------------------------------
 
-const PickerMessage = Schema.TaggedUnion({
+const PickerMessage = UiSchema.TaggedEnum({
   Picked: { id: Schema.String },
   Closed: {},
   Clicked: { id: Schema.String }
@@ -50,7 +50,7 @@ const Picker = Component.define({
     Dialog(h, {
       key: "confirm",
       props: { label: "Confirm" },
-      onEmit: () => PickerMessage.make({ _tag: "Closed" }),
+      onEmit: () => PickerMessage.Closed(),
       view: (d) =>
         h.div(
           d.trigger(h.button).children("Open"),
@@ -59,11 +59,11 @@ const Picker = Component.define({
             Menu(h, {
               key: "actions",
               props: { items },
-              onEmit: (event) => PickerMessage.make({ _tag: "Picked", id: event.id }),
+              onEmit: (event) => PickerMessage.Picked({ id: event.id }),
               view: (m) =>
                 h.ul.children(m.visible.map((item) =>
                   d.close(m.item(h.li.key(item.id), item))
-                    .onClick(PickerMessage.make({ _tag: "Clicked", id: item.id }))
+                    .onClick(PickerMessage.Clicked({ id: item.id }))
                     .children(item.label)
                 ))
             })
@@ -77,7 +77,7 @@ const Picker = Component.define({
 // A stateful normal child declared inside a headless child's closure
 // ---------------------------------------------------------------------------
 
-const BellMessage = Schema.TaggedUnion({ Ring: {}, Break: {} })
+const BellMessage = UiSchema.TaggedEnum({ Ring: {}, Break: {} })
 
 const Bell = Component.define({
   name: "Bell",
@@ -96,12 +96,12 @@ const Bell = Component.define({
     }),
   view: (count, h) =>
     h.span(
-      h.button.onClick(BellMessage.make({ _tag: "Ring" })).children("ring " + count),
-      h.button.onClick(BellMessage.make({ _tag: "Break" })).children("break")
+      h.button.onClick(BellMessage.Ring()).children("ring " + count),
+      h.button.onClick(BellMessage.Break()).children("break")
     )
 })
 
-const BoardMessage = Schema.TaggedUnion({ Rang: {}, Failed: {} })
+const BoardMessage = UiSchema.TaggedEnum({ Rang: {}, Failed: {} })
 
 const Board = Component.define({
   name: "Board",
@@ -120,8 +120,8 @@ const Board = Component.define({
         m.popup(h.div).children(
           Bell(h, {
             key: "bell",
-            onEmit: () => BoardMessage.make({ _tag: "Rang" }),
-            onFailure: () => BoardMessage.make({ _tag: "Failed" }),
+            onEmit: () => BoardMessage.Rang(),
+            onFailure: () => BoardMessage.Failed(),
             fallback: () => {
               if (h.props.fallbackThrows) throw new Error("no fallback")
               return h.span("bell down")
@@ -148,7 +148,7 @@ const Lingering = Component.define({ name: "Lingering", model: Schema.Null, mess
   view: (_, h) => h.el("span")
 })
 
-const OpenerMessage = Schema.TaggedUnion({ Open: {}, Twin: {}, Swap: {} })
+const OpenerMessage = UiSchema.TaggedEnum({ Open: {}, Twin: {}, Swap: {} })
 
 const Actions = Menu.ref("Actions")
 const Spare = Menu.ref("Spare")
@@ -174,7 +174,7 @@ const Opener = Component.define({
       : $.send(Actions, { _tag: "Toggle" }),
   view: (model, h) =>
     h.div(
-      h.button.onClick(OpenerMessage.make({ _tag: "Open" })).children("open"),
+      h.button.onClick(OpenerMessage.Open()).children("open"),
       Menu(h, {
         ref: Actions,
         props: { items },
@@ -222,7 +222,7 @@ const Bare = Component.define({ name: "Bare", model: Schema.Null, message: Schem
   update: (model) => model,
   parts: () => ({})
 })
-const ConsumerMessage = Schema.TaggedUnion({ Break: {} })
+const ConsumerMessage = UiSchema.TaggedEnum({ Break: {} })
 const Consumer = Component.define({
   name: "Consumer",
   props: Schema.Struct({ throwsAt: Schema.Literals(["mount", "re-render"]) }),
@@ -234,7 +234,7 @@ const Consumer = Component.define({
   view: (broken, h) =>
     h.el(
       "div",
-      h.el("button").on("click", ConsumerMessage.make({ _tag: "Break" })).children("break"),
+      h.el("button").on("click", ConsumerMessage.Break()).children("break"),
       Bare(h, {
         key: "h",
         fallback: () => h.text("headless down"),
@@ -381,7 +381,7 @@ describe("headless components", () => {
     it.effect("fail the parent when its view re-renders", () =>
       provideHost(Effect.gen(function*() {
         const root = yield* crashed("never")
-        root.send(OpenerMessage.make({ _tag: "Twin" }))
+        root.send(OpenerMessage.Twin())
         yield* Effect.flip(TestHost.settle)
         assert.strictEqual(root.text(), "crashed")
         assert.deepStrictEqual(failed(root), [twice])
@@ -402,10 +402,10 @@ describe("headless components", () => {
         Effect.gen(function*() {
           lingering.release = Deferred.makeUnsafe()
           const root = yield* crashed("never")
-          root.send(OpenerMessage.make({ _tag: "Swap" }))
+          root.send(OpenerMessage.Swap())
           yield* TestHost.settle
           assert.include(root.text(), "spare in a closure")
-          root.send(OpenerMessage.make({ _tag: "Swap" }))
+          root.send(OpenerMessage.Swap())
           yield* TestHost.settle
           assert.include(root.text(), "spare in the view")
           assert.deepStrictEqual(failed(root), [])

@@ -19,16 +19,16 @@
  * **Example** (Save, resolve its Command, see the result)
  *
  * ```ts import.meta.vitest
- * import { Command, Component } from "@effect/ui"
+ * import { Command, Component, UiSchema } from "@effect/ui"
  * import { Locator, Scene } from "@effect/ui/testing"
  * import { Effect, Schema } from "effect"
  *
- * const Message = Schema.TaggedUnion({ ClickedSave: {}, CompletedSaveTodo: {} })
+ * const Message = UiSchema.TaggedEnum({ ClickedSave: {}, CompletedSaveTodo: {} })
  *
  * class SaveTodo extends Command.Service<SaveTodo>()(
  *   "todos/SaveTodo",
  *   { args: { id: Schema.String } },
- *   Effect.succeed(() => Effect.succeed(Message.make({ _tag: "CompletedSaveTodo" })))
+ *   Effect.succeed(() => Effect.succeed(Message.CompletedSaveTodo()))
  * ) {}
  *
  * const TodoItem = Component.define({
@@ -45,7 +45,7 @@
  *     }),
  *   // In a scene, `h.isRunning` is derived from the pending Commands.
  *   view: (model, h) =>
- *     h.el("button").on("click", Message.make({ _tag: "ClickedSave" })).children(
+ *     h.el("button").on("click", Message.ClickedSave()).children(
  *       model.saved ? "saved" : h.isRunning(SaveTodo) ? "saving" : "save"
  *     )
  * })
@@ -55,7 +55,7 @@
  *   s.click("save")
  *     .expect(Locator.text("saving")).toExist()
  *     .expectExact(SaveTodo.make({ id: "t1" }))
- *     .resolve(SaveTodo, Message.make({ _tag: "CompletedSaveTodo" }))
+ *     .resolve(SaveTodo, Message.CompletedSaveTodo())
  *     .expect(Locator.tag("button")).toHaveText("saved")
  * }).pipe(Effect.scoped, Effect.runSync)
  * ```

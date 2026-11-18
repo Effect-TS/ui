@@ -1,4 +1,4 @@
-import { Command, Component, Feature, type MessageLog, Renderer, Route, Router } from "@effect/ui"
+import { Command, Component, Feature, type MessageLog, Renderer, Route, Router, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -27,7 +27,7 @@ const Leaf = define("Leaf").make({ init: () => null, update: (m) => m, view: (_,
 
 // Places its slot until "toggle" hides it.
 let frameViews = 0
-const Toggle = Schema.TaggedUnion({ Toggle: {} })
+const Toggle = UiSchema.TaggedEnum({ Toggle: {} })
 const Frame = Component.define({
   name: "Frame",
   model: Schema.Boolean,
@@ -39,11 +39,11 @@ const Frame = Component.define({
   update: (shown) => !shown,
   view: (shown, h) => {
     frameViews++
-    return h.div(h.button.onClick(Toggle.make({ _tag: "Toggle" })).children("toggle"), shown && h.slots.body)
+    return h.div(h.button.onClick(Toggle.Toggle()).children("toggle"), shown && h.slots.body)
   }
 })
 
-const EditorMsg = Schema.TaggedUnion({ Type: {}, Clear: {}, Break: {} })
+const EditorMsg = UiSchema.TaggedEnum({ Typed: {}, Clear: {}, Break: {} })
 const Editor = Component.define({
   name: "Editor",
   model: Schema.Number,
@@ -59,13 +59,13 @@ const Editor = Component.define({
   },
   view: (n, h) =>
     h.span(
-      h.button.onClick(EditorMsg.make({ _tag: "Type" })).children("type " + n),
-      h.button.onClick(EditorMsg.make({ _tag: "Break" })).children("break")
+      h.button.onClick(EditorMsg.Typed()).children("type " + n),
+      h.button.onClick(EditorMsg.Break()).children("break")
     )
 })
 const Draft = Editor.ref("Draft")
 
-const PageMsg = Schema.TaggedUnion({ Changed: { count: Schema.Number }, Clear: {}, Failed: {} })
+const PageMsg = UiSchema.TaggedEnum({ Changed: { count: Schema.Number }, Clear: {}, Failed: {} })
 const Page = Component.define({ name: "Page", model: Schema.String, message: PageMsg, elements: Html }).make({
   init: () => "",
   update: (log, msg, $) =>
@@ -74,7 +74,7 @@ const Page = Component.define({ name: "Page", model: Schema.String, message: Pag
       : log + (msg._tag === "Changed" ? "changed " + msg.count : "failed"),
   view: (log, h) =>
     h.div(
-      h.button.onClick(PageMsg.make({ _tag: "Clear" })).children("clear"),
+      h.button.onClick(PageMsg.Clear()).children("clear"),
       Frame(h, {
         key: "f",
         slots: {
@@ -82,8 +82,8 @@ const Page = Component.define({ name: "Page", model: Schema.String, message: Pag
             h.output(log),
             Editor(h, {
               ref: Draft,
-              onEmit: (count) => PageMsg.make({ _tag: "Changed", count }),
-              onFailure: () => PageMsg.make({ _tag: "Failed" }),
+              onEmit: (count) => PageMsg.Changed({ count }),
+              onFailure: () => PageMsg.Failed(),
               fallback: () => h.span("editor down")
             })
           ]
@@ -108,7 +108,7 @@ describe("slots", () => {
       assert.include(root.text(), "changed 1failed")
       assert.include(root.text(), "editor down")
       assert.deepStrictEqual(updates(root), [
-        editorPath + " DomEvent Type",
+        editorPath + " DomEvent Typed",
         "/Page Emit Changed",
         "/Page Failure Failed"
       ])
@@ -170,21 +170,21 @@ describe("slots", () => {
 
   it.effect("content passed after the child mounted belongs to the parent too", () =>
     provideHost(Effect.gen(function*() {
-      const LateMsg = Schema.TaggedUnion({ Fill: {}, Hit: {} })
+      const LateMsg = UiSchema.TaggedEnum({ Fill: {}, Hit: {} })
       const Late = Component.provide(
         Component.define({ name: "Late", model: Schema.Boolean, message: LateMsg, elements: Html }).make({
           init: () => false,
           update: () => true,
           view: (filled, h) =>
             h.div(
-              h.button.onClick(LateMsg.make({ _tag: "Fill" })).children("fill"),
+              h.button.onClick(LateMsg.Fill()).children("fill"),
               // No slots at first: the content comes with a later render.
               filled
                 ? Frame(h, {
                   key: "f",
                   slots: {
                     body: [
-                      h.button.onClick(LateMsg.make({ _tag: "Hit" })).children("hit"),
+                      h.button.onClick(LateMsg.Hit()).children("hit"),
                       Badge.render(h, { key: "b", fallback: () => h.span("no badge") })
                     ]
                   }
@@ -239,13 +239,13 @@ describe("slots", () => {
         view: (_, h) =>
           Outer(h, {
             key: "o",
-            slots: { body: Editor(h, { key: "e", onEmit: (count) => PageMsg.make({ _tag: "Changed", count }) }) }
+            slots: { body: Editor(h, { key: "e", onEmit: (count) => PageMsg.Changed({ count }) }) }
           })
       })
       const root = yield* TestHost.mount(Top, {})
       click(root, "type 0")
       yield* TestHost.settle
-      assert.deepStrictEqual(updates(root), ["/Top/Outer[o]/[body]/Editor[e] DomEvent Type", "/Top Emit Changed"])
+      assert.deepStrictEqual(updates(root), ["/Top/Outer[o]/[body]/Editor[e] DomEvent Typed", "/Top Emit Changed"])
       click(root, "toggle")
       yield* TestHost.settle
       assert.include(unmounted(root), "/Top/Outer[o]/[body]/Editor[e]")

@@ -91,8 +91,8 @@ is issued, so nothing else ties `SaveNote` to `SucceededSaveNote`:
 ```ts
 const saveNote = (note: Note) =>
   SaveNote.make({ note }).pipe(Command.match({
-    onSuccess: (note) => NoteEditorMessage.make({ _tag: "SucceededSaveNote", note }),
-    onFailure: (error) => NoteEditorMessage.make({ _tag: "FailedSaveNote", reason: error.reason })
+    onSuccess: (note) => NoteEditorMessage.SucceededSaveNote({ note }),
+    onFailure: (error) => NoteEditorMessage.FailedSaveNote({ reason: error.reason })
   }))
 ```
 

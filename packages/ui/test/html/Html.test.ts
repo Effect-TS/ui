@@ -1,11 +1,11 @@
-import { Component, View } from "@effect/ui"
+import { Component, UiSchema, View } from "@effect/ui"
 import { Html, HtmlServer } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 
 const button = () => new Html.Element("button")
 
-const TodoMessage = Schema.TaggedUnion({ Add: {}, Draft: { value: Schema.String } })
+const TodoMessage = UiSchema.TaggedEnum({ Add: {}, Draft: { value: Schema.String } })
 type TodoMessage = typeof TodoMessage.Type
 const NewTodo = Html.ref("NewTodo", "input")
 const Item = Component.define({
@@ -41,8 +41,8 @@ const element = (
 
 describe("Html", () => {
   describe("builder", () => {
-    const add = TodoMessage.make({ _tag: "Add" })
-    const onInput = ({ value }: Html.InputPayload) => TodoMessage.make({ _tag: "Draft", value })
+    const add = TodoMessage.Add()
+    const onInput = ({ value }: Html.InputPayload) => TodoMessage.Draft({ value })
     const todos = ["Milk", "Eggs"]
 
     it("builds the tree a chain describes", () => {

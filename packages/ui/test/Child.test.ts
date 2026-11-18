@@ -1,9 +1,9 @@
-import { Component, Feature, View } from "@effect/ui"
+import { Component, Feature, UiSchema, View } from "@effect/ui"
 import { assert, describe, it } from "@effect/vitest"
 import { Layer, Schema } from "effect"
 
-const RowMessage = Schema.TaggedUnion({ Clear: {}, Typed: { text: Schema.String } })
-const RowEvents = Schema.TaggedUnion({ Changed: { text: Schema.String } })
+const RowMessage = UiSchema.TaggedEnum({ Clear: {}, Typed: { text: Schema.String } })
+const RowEvents = UiSchema.TaggedEnum({ Changed: { text: Schema.String } })
 
 const RowDef = Component.define({
   name: "Row",
@@ -30,7 +30,7 @@ const Listbox = ListboxDef.make({
 
 class Todos extends Feature.Service<Todos>()("Todos", { props: Schema.Struct({}), events: RowEvents }) {}
 
-const ParentMessage = Schema.TaggedUnion({ Changed: { text: Schema.String } })
+const ParentMessage = UiSchema.TaggedEnum({ Changed: { text: Schema.String } })
 const h = View.makeHelper<typeof ParentMessage.Type, {}>({}, undefined)
 
 describe("a component call", () => {
@@ -59,7 +59,7 @@ describe("a component call", () => {
   })
 
   it("builds a child with a key", () => {
-    const onEmit = (events: typeof RowEvents.Type) => ParentMessage.make({ _tag: "Changed", text: events.text })
+    const onEmit = (events: typeof RowEvents.Type) => ParentMessage.Changed({ text: events.text })
     const child = Row(h, { key: "a", props: { id: "a" }, onEmit })
     assert.strictEqual(child._tag, "Child")
     assert.strictEqual(child.component, Row)

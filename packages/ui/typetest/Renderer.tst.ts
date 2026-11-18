@@ -1,11 +1,11 @@
-import { Component, Mount, Renderer, Route, Router, type View } from "@effect/ui"
+import { Component, Mount, Renderer, Route, Router, UiSchema, type View } from "@effect/ui"
 import { TestHost } from "@effect/ui/testing"
 import { Effect, Schema, type Scope } from "effect"
 import { describe, expect, it } from "tstyche"
 import { Counter } from "../test/fixtures/components.ts"
 import { Tiny, type TinyField, type TinyHost } from "../test/fixtures/vocabulary.ts"
 
-const Msg = Schema.TaggedUnion({ Typed: { value: Schema.String }, Mounted: {} })
+const Msg = UiSchema.TaggedEnum({ Typed: { value: Schema.String }, Mounted: {} })
 const Field = Renderer.ref<TinyField>("Field")
 
 describe("Renderer", () => {
@@ -118,17 +118,17 @@ describe("View elements", () => {
   it("onMount takes a mount whose body needs the element's node, and rejects one for another node", () => {
     const ForField = Mount.make("ForField", { args: {} }, (node: TinyField) => {
       expect(node).type.toBe<TinyField>()
-      return Effect.succeed(Msg.make({ _tag: "Mounted" }))
+      return Effect.succeed(Msg.Mounted())
     })
     const ForOther = Mount.make(
       "ForOther",
       { args: {} },
-      (_node: { readonly other: true }) => Effect.succeed(Msg.make({ _tag: "Mounted" }))
+      (_node: { readonly other: true }) => Effect.succeed(Msg.Mounted())
     )
     // A body that doesn't annotate its node takes any.
     const ForAny = Mount.make("ForAny", { args: {} }, (node) => {
       expect(node).type.toBe<unknown>()
-      return Effect.succeed(Msg.make({ _tag: "Mounted" }))
+      return Effect.succeed(Msg.Mounted())
     })
     Component.define({
       name: "Mounts",
@@ -158,9 +158,9 @@ describe("View elements", () => {
       view: (_, h) => {
         expect(h.field.on).type.toBeCallableWith(
           "input",
-          ({ value }: { readonly value: string }) => Msg.make({ _tag: "Typed", value })
+          ({ value }: { readonly value: string }) => Msg.Typed({ value })
         )
-        expect(h.field.on).type.not.toBeCallableWith("click", Msg.make({ _tag: "Mounted" }))
+        expect(h.field.on).type.not.toBeCallableWith("click", Msg.Mounted())
         expect(h.field.on).type.not.toBeCallableWith("input", "not a message")
         return h.box()
       }
@@ -203,7 +203,7 @@ describe("View elements", () => {
       view: (_, h) => {
         expect(h.field).type.not.toHaveProperty("children")
         expect(h.field.value("a")).type.not.toHaveProperty("children")
-        expect(h.box.on("click", Msg.make({ _tag: "Mounted" })).children).type.toBeCallableWith(h.field)
+        expect(h.box.on("click", Msg.Mounted()).children).type.toBeCallableWith(h.field)
         return h.box(h.field)
       }
     })

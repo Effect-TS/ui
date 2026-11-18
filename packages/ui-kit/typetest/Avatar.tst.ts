@@ -1,4 +1,4 @@
-import { Component, type View } from "@effect/ui"
+import { Component, UiSchema, type View } from "@effect/ui"
 import { Avatar, type AvatarImg, type AvatarSpan } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Context, Schema } from "effect"
@@ -6,7 +6,7 @@ import { describe, expect, it } from "tstyche"
 
 class Clock extends Context.Service<Clock, {}>()("Clock") {}
 
-const Msg = Schema.TaggedUnion({ Clicked: {} })
+const Msg = UiSchema.TaggedEnum({ Clicked: {} })
 type Msg = typeof Msg.Type
 
 declare const needsClock: View.Child<never, Clock>
@@ -23,7 +23,7 @@ describe("Avatar", () => {
             expect(s.imageLoadingStatus).type.toBe<"loading" | "loaded" | "error">()
             expect(s.root(h.span.class("avatar"))).type.toBe<AvatarSpan<Msg>>()
             expect(s.image(h.img.attr("alt", "Ada"))).type.toBe<AvatarImg<Msg> | undefined>()
-            expect(s.fallback(h.span.onClick(Msg.make({ _tag: "Clicked" })))).type.toBe<AvatarSpan<Msg> | undefined>()
+            expect(s.fallback(h.span.onClick(Msg.Clicked()))).type.toBe<AvatarSpan<Msg> | undefined>()
             const fallback = s.fallback(h.span)?.children("AL", needsClock)
             expect(fallback).type.toBe<AvatarSpan<Msg, Clock> | undefined>()
             const root = s.root(h.span).children(s.image(h.img), fallback)

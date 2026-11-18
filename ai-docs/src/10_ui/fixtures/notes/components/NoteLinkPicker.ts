@@ -1,14 +1,14 @@
-import { Component } from "@effect/ui"
+import { Component, UiSchema } from "@effect/ui"
 import { Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { Listbox } from "../../kit/Listbox.ts"
 import { ListNotes } from "../queries/ListNotes.ts"
 import { Notes } from "../services/Notes.ts"
 
-export const NoteLinkPickerMessage = Schema.TaggedUnion({ PickedLink: { id: Schema.String } })
+export const NoteLinkPickerMessage = UiSchema.TaggedEnum({ PickedLink: { id: Schema.String } })
 
 // What the picker reports to its parent, such as an editor inserting a link.
-export const NoteLinkPickerEvents = Schema.TaggedUnion({ Linked: { id: Schema.String } })
+export const NoteLinkPickerEvents = UiSchema.TaggedEnum({ Linked: { id: Schema.String } })
 
 const excerpt = (body: string) => (body.length > 60 ? body.slice(0, 60) + "…" : body)
 
@@ -29,7 +29,7 @@ export const NoteLinkPickerNoDeps = Component.define({
   queries: { notes: { query: ListNotes, args: () => ({}) } }
 }).make({
   init: () => ({ linked: null }),
-  update: (_model, { id }, $) => $.set({ linked: id }).emit(NoteLinkPickerEvents.make({ _tag: "Linked", id })),
+  update: (_model, { id }, $) => $.set({ linked: id }).emit(NoteLinkPickerEvents.Linked({ id })),
   view: (model, h) =>
     AsyncResult.match(h.queries.notes, {
       onInitial: () => h.p("Loading notes…"),
@@ -48,7 +48,7 @@ export const NoteLinkPickerNoDeps = Component.define({
             options: Array.from(notes.values(), (note) => ({ id: note.id, label: note.title })),
             selected: model.linked
           },
-          onEmit: ({ id }) => NoteLinkPickerMessage.make({ _tag: "PickedLink", id }),
+          onEmit: ({ id }) => NoteLinkPickerMessage.PickedLink({ id }),
           // The closure is this component's code, run with the Listbox's
           // parts. It draws the markup and applies each part to a builder of
           // the part's tag. A child placed in here, and its `onEmit`, report

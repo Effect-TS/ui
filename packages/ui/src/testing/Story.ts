@@ -19,16 +19,16 @@
  * **Example** (A todo row: send, resolve its Command, check the Model)
  *
  * ```ts import.meta.vitest
- * import { Command, Component } from "@effect/ui"
+ * import { Command, Component, UiSchema } from "@effect/ui"
  * import { Story } from "@effect/ui/testing"
  * import { Effect, Schema } from "effect"
  *
- * const Message = Schema.TaggedUnion({ ClickedSave: {}, CompletedSaveTodo: {} })
+ * const Message = UiSchema.TaggedEnum({ ClickedSave: {}, CompletedSaveTodo: {} })
  *
  * class SaveTodo extends Command.Service<SaveTodo>()(
  *   "todos/SaveTodo",
  *   { args: { id: Schema.String } },
- *   Effect.succeed(() => Effect.succeed(Message.make({ _tag: "CompletedSaveTodo" })))
+ *   Effect.succeed(() => Effect.succeed(Message.CompletedSaveTodo()))
  * ) {}
  *
  * const TodoItem = Component.define({
@@ -43,14 +43,14 @@
  *       ClickedSave: () => $.run(SaveTodo.make({ id: $.props.id })),
  *       CompletedSaveTodo: () => ({ saved: true })
  *     }),
- *   view: (_, h) => h.el("button").on("click", Message.make({ _tag: "ClickedSave" })).children("save")
+ *   view: (_, h) => h.el("button").on("click", Message.ClickedSave()).children("save")
  * })
  *
  * Effect.gen(function*() {
  *   const s = yield* Story.make(TodoItem, { id: "t1" })
- *   s.send(Message.make({ _tag: "ClickedSave" }))
+ *   s.send(Message.ClickedSave())
  *     .expectExact(SaveTodo.make({ id: "t1" }))
- *     .resolve(SaveTodo, Message.make({ _tag: "CompletedSaveTodo" }))
+ *     .resolve(SaveTodo, Message.CompletedSaveTodo())
  *   console.log(s.model.saved) // true
  * }).pipe(Effect.scoped, Effect.runSync)
  * ```
@@ -165,10 +165,10 @@ type AnyComponent =
  *
  * ```ts import.meta.vitest
  * import { Effect, Schema } from "effect"
- * import { Component } from "@effect/ui"
+ * import { Component, UiSchema } from "@effect/ui"
  * import { Story } from "@effect/ui/testing"
  *
- * const Message = Schema.TaggedUnion({ ClickedIncrement: {} })
+ * const Message = UiSchema.TaggedEnum({ ClickedIncrement: {} })
  * const Counter = Component.define({
  *   name: "Counter",
  *   model: Schema.Struct({ count: Schema.Number }),
@@ -176,11 +176,11 @@ type AnyComponent =
  * }).make({
  *   init: () => ({ count: 0 }),
  *   update: (model) => ({ count: model.count + 1 }),
- *   view: (model, h) => h.el("button").on("click", Message.make({ _tag: "ClickedIncrement" })).children(`+ ${model.count}`)
+ *   view: (model, h) => h.el("button").on("click", Message.ClickedIncrement()).children(`+ ${model.count}`)
  * })
  *
  * const twice = (s: Story.Steps<typeof Counter>) =>
- *   s.send(Message.make({ _tag: "ClickedIncrement" })).send(Message.make({ _tag: "ClickedIncrement" }))
+ *   s.send(Message.ClickedIncrement()).send(Message.ClickedIncrement())
  *
  * Effect.gen(function*() {
  *   const s = yield* Story.make(Counter, {})

@@ -10,13 +10,13 @@ Component tests are split in two. `Story` tests the model: it sends messages, se
 it.effect("saves the draft and tells its parent", () =>
   Effect.gen(function*() {
     const story = yield* Story.make(NoteEditor, { note })
-    story.send(NoteEditorMessage.make({ _tag: "Edited", body: edited.body }))
+    story.send(NoteEditorMessage.Edited({ body: edited.body }))
     assert.strictEqual(story.model.draft, edited.body)
-    story.send(NoteEditorMessage.make({ _tag: "Save" }))
+    story.send(NoteEditorMessage.Save())
     story.expectExact(SaveNote)
     story.resolve(SaveNote, edited)
     assert.strictEqual(story.model.saved, edited.body)
-    story.emitted(NoteEditorEvents.make({ _tag: "Saved", note: edited }))
+    story.emitted(NoteEditorEvents.Saved({ note: edited }))
   }))
 ```
 

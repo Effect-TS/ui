@@ -20,12 +20,13 @@
  *
  * ```ts import.meta.vitest
  * import type { View } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui"
  * import { Schema } from "effect"
  *
- * const Message = Schema.TaggedUnion({ ClickedIncrement: {} })
+ * const Message = UiSchema.TaggedEnum({ ClickedIncrement: {} })
  *
  * const view = (count: number, h: View.Helper<typeof Message.Type, {}>) =>
- *   h.el("div", h.el("button").on("click", Message.make({ _tag: "ClickedIncrement" })).children("+"), String(count))
+ *   h.el("div", h.el("button").on("click", Message.ClickedIncrement()).children("+"), String(count))
  * ```
  *
  * @stability experimental

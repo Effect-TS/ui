@@ -202,8 +202,8 @@ describe("HtmlLocator", () => {
     it.effect("a TestHost tree, checked state included", () =>
       Effect.gen(function*() {
         const root = yield* TestHost.mount(TodoApp, {})
-        root.send(TodoAppMessage.make({ _tag: "Draft", value: "Read" }))
-        root.send(TodoAppMessage.make({ _tag: "Add" }))
+        root.send(TodoAppMessage.Draft({ value: "Read" }))
+        root.send(TodoAppMessage.Add())
         yield* TestHost.settle
         const box = HtmlLocator.getByRole(root.container, "checkbox", { name: "Read", checked: false })
         expect(HtmlLocator.checked(box)).toBe(false)

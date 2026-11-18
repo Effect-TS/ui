@@ -1,4 +1,4 @@
-import { Component } from "@effect/ui"
+import { Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 
@@ -7,7 +7,7 @@ import { Schema } from "effect"
 // parent's: the parent writes it with its own `h`, so its handlers send the
 // parent's messages and its children report to the parent.
 
-export const CollapsibleMessage = Schema.TaggedUnion({ ClickedToggle: {} })
+export const CollapsibleMessage = UiSchema.TaggedEnum({ ClickedToggle: {} })
 
 export const Collapsible = Component.define({
   name: "Collapsible",
@@ -31,7 +31,7 @@ export const Collapsible = Component.define({
         h.button
           .attr("type", "button")
           .attr("aria-expanded", model.open ? "true" : "false")
-          .onClick(CollapsibleMessage.make({ _tag: "ClickedToggle" }))
+          .onClick(CollapsibleMessage.ClickedToggle())
           .children(model.open ? "Hide" : "Show")
       ),
       model.open && h.slots.body

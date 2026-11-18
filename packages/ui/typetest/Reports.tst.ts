@@ -1,10 +1,10 @@
-import { Component } from "@effect/ui"
+import { Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Scene } from "@effect/ui/testing"
 import { Effect, Schema } from "effect"
 import { describe, expect, it } from "tstyche"
 
-const ProviderMessage = Schema.TaggedUnion({
+const ProviderMessage = UiSchema.TaggedEnum({
   ChangedOpen: { open: Schema.Boolean },
   Completed: {}
 })
@@ -19,7 +19,7 @@ const Provider = Component.define({
     value: (model) => ({ open: model.open, instant: model.instant }),
     collects: {
       schema: Schema.Boolean,
-      onChange: (collected) => ProviderMessage.make({ _tag: "ChangedOpen", open: collected.includes(true) })
+      onChange: (collected) => ProviderMessage.ChangedOpen({ open: collected.includes(true) })
     }
   }
 }).make({
@@ -39,7 +39,7 @@ const Plain = Component.define({
   parts: () => ({})
 })
 
-const TipMessage = Schema.TaggedUnion({ Entered: {}, Completed: {} })
+const TipMessage = UiSchema.TaggedEnum({ Entered: {}, Completed: {} })
 
 const Tip = Component.define({
   name: "Tip",
@@ -56,7 +56,7 @@ const Tip = Component.define({
       },
       onChange: (value) => {
         expect(value).type.toBe<{ open: boolean; instant: boolean }>()
-        return TipMessage.make({ _tag: "Entered" })
+        return TipMessage.Entered()
       }
     }
   },

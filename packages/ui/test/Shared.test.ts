@@ -1,4 +1,4 @@
-import { Component, MessageLog } from "@effect/ui"
+import { Component, MessageLog, UiSchema } from "@effect/ui"
 import * as services from "@effect/ui/internal/services"
 import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -12,7 +12,7 @@ const click = (root: TestHost.TestRoot<any, any, any>, text: string) =>
 const updatesAt = (log: ReadonlyArray<MessageLog.Entry>, path: string) =>
   log.filter((entry): entry is MessageLog.Update => entry._tag === "Update" && entry.path === path)
 
-const TipMessage = Schema.TaggedUnion({ Enter: { id: Schema.String } })
+const TipMessage = UiSchema.TaggedEnum({ Enter: { id: Schema.String } })
 
 /** An owner: which tip is open. Its `label` prop is shared too. */
 const TipsProvider = Component.define({
@@ -35,7 +35,7 @@ const Tip = Component.define({
   init: () => null,
   update: (model, message, $) => $.set(model).send(TipsProvider, message),
   view: (_, h) =>
-    h.el("button").on("click", TipMessage.make({ _tag: "Enter", id: h.props.id })).children(
+    h.el("button").on("click", TipMessage.Enter({ id: h.props.id })).children(
       `${h.props.id}:${h.shared.provider.open === h.props.id ? "open" : "closed"}${h.shared.provider.label}`
     )
 })
@@ -57,7 +57,7 @@ const Trigger = Component.define({
 const App = Component.define({
   name: "App",
   model: Schema.String,
-  message: Schema.TaggedUnion({ Label: { label: Schema.String } })
+  message: UiSchema.TaggedEnum({ Label: { label: Schema.String } })
 }).make({
   init: () => "",
   update: (_, message) => message.label,
@@ -102,7 +102,7 @@ describe("shared state", () => {
   // A Date has no keys: it must be compared by value, not as a record.
   it.effect("re-renders the readers only when the shared value changes", () =>
     provideHost(Effect.gen(function*() {
-      const Tick = Schema.TaggedUnion({ Tick: {} })
+      const Tick = UiSchema.TaggedEnum({ Tick: {} })
       const ClockProvider = Component.define({
         name: "ClockProvider",
         model: Schema.Number,
@@ -128,7 +128,7 @@ describe("shared state", () => {
       const Ticker = Component.define({ name: "Ticker", model: Schema.Null, message: Tick }).make({
         init: () => null,
         update: (model, message, $) => $.set(model).send(ClockProvider, message),
-        view: (_, h) => h.el("button").on("click", Tick.make({ _tag: "Tick" })).children("tick")
+        view: (_, h) => h.el("button").on("click", Tick.Tick()).children("tick")
       })
       const Host = Component.define({ name: "Host", model: Schema.Null, message: Tick }).make({
         init: () => null,
@@ -277,7 +277,7 @@ describe("shared state in a Scene", () => {
 
 // -- optional owners, reports and onChange ------------------------------------
 
-const GroupMessage = Schema.TaggedUnion({ ChangedOn: { on: Schema.Boolean }, Bumped: {} })
+const GroupMessage = UiSchema.TaggedEnum({ ChangedOn: { on: Schema.Boolean }, Bumped: {} })
 
 /** An owner that is on while any reader reports `true`, and counts bumps. */
 const Group = Component.define({
@@ -289,7 +289,7 @@ const Group = Component.define({
     value: (model) => ({ on: model.on, bumps: model.bumps }),
     collects: {
       schema: Schema.Boolean,
-      onChange: (collected) => GroupMessage.make({ _tag: "ChangedOn", on: collected.includes(true) })
+      onChange: (collected) => GroupMessage.ChangedOn({ on: collected.includes(true) })
     }
   }
 }).make({
@@ -302,7 +302,7 @@ const Group = Component.define({
   parts: (model) => ({ on: model.on })
 })
 
-const ReaderMessage = Schema.TaggedUnion({
+const ReaderMessage = UiSchema.TaggedEnum({
   Clicked: {},
   ChangedGroup: { on: Schema.Boolean, bumps: Schema.Number }
 })
@@ -317,17 +317,17 @@ const makeReader = (answer: (told: boolean) => boolean) =>
       group: {
         owner: Group,
         report: (on) => on,
-        onChange: (value) => ReaderMessage.make({ _tag: "ChangedGroup", ...value })
+        onChange: (value) => ReaderMessage.ChangedGroup({ ...value })
       }
     }
   }).make({
     init: () => false,
     update: (on, message) => ReaderMessage.match(message, { Clicked: () => !on, ChangedGroup: ({ on }) => answer(on) }),
-    view: (_, h) => h.el("button").on("click", ReaderMessage.make({ _tag: "Clicked" })).children("reader")
+    view: (_, h) => h.el("button").on("click", ReaderMessage.Clicked()).children("reader")
   })
 
 const GroupRef = Group.ref("Group")
-const PageMessage = Schema.TaggedUnion({ Bump: { times: Schema.Number } })
+const PageMessage = UiSchema.TaggedEnum({ Bump: { times: Schema.Number } })
 const makePage = (Reader: ReturnType<typeof makeReader>) =>
   Component.define({ name: "Page", model: Schema.Null, message: PageMessage }).make({
     init: () => null,
@@ -354,7 +354,7 @@ describe("optional owners, reports and onChange", () => {
         init: () => null,
         update: (model, message, $) => $.set(model).send(TipsProvider, message),
         view: (_, h) =>
-          h.el("button").on("click", TipMessage.make({ _tag: "Enter", id: "a" })).children(
+          h.el("button").on("click", TipMessage.Enter({ id: "a" })).children(
             h.shared.provider === undefined ? "alone" : "grouped"
           )
       })
@@ -375,7 +375,7 @@ describe("optional owners, reports and onChange", () => {
         message: Schema.Never,
         shared: { group: { owner: Group, report: (_, props) => props.open } }
       }).make({ init: () => null, update: (model) => model, view: (_, h) => h.text("") })
-      const Open = Schema.TaggedUnion({ Open: { which: Schema.String } })
+      const Open = UiSchema.TaggedEnum({ Open: { which: Schema.String } })
       const Bar = Component.define({ name: "Bar", model: Schema.String, message: Open }).make({
         init: () => "a",
         update: (_, { which }) => which,
@@ -392,9 +392,9 @@ describe("optional owners, reports and onChange", () => {
       })
       const root = yield* TestHost.mount(Bar, {})
       yield* TestHost.settle
-      root.send(Open.make({ _tag: "Open", which: "b" }))
+      root.send(Open.Open({ which: "b" }))
       yield* TestHost.settle
-      root.send(Open.make({ _tag: "Open", which: "gone" }))
+      root.send(Open.Open({ which: "gone" }))
       yield* TestHost.settle
       const updates = updatesAt(root.log(), "/Bar/Group[g]")
       assert.deepStrictEqual(updates.map((entry) => [entry.message, entry.source]), [
@@ -436,7 +436,7 @@ describe("optional owners, reports and onChange", () => {
     provideHost(Effect.gen(function*() {
       const root = yield* TestHost.mount(makePage(makeReader((told) => told)), {})
       yield* TestHost.settle
-      root.send(PageMessage.make({ _tag: "Bump", times: 150 }))
+      root.send(PageMessage.Bump({ times: 150 }))
       yield* TestHost.settle
       assert.lengthOf(updatesAt(root.log(), group), 150)
       assert.deepStrictEqual(updatesAt(root.log(), reader).map((entry) => entry.message), [
@@ -453,7 +453,7 @@ describe("onChange rounds and declarations", () => {
         name: "Replier",
         model: Schema.Null,
         message: ReaderMessage,
-        shared: { group: { owner: Group, onChange: (value) => ReaderMessage.make({ _tag: "ChangedGroup", ...value }) } }
+        shared: { group: { owner: Group, onChange: (value) => ReaderMessage.ChangedGroup({ ...value }) } }
       }).make({
         init: () => null,
         update: (model, message, $) =>
@@ -469,7 +469,7 @@ describe("onChange rounds and declarations", () => {
       })
       const root = yield* TestHost.mount(Page, {})
       yield* TestHost.settle
-      root.send(PageMessage.make({ _tag: "Bump", times: 1 }))
+      root.send(PageMessage.Bump({ times: 1 }))
       yield* TestHost.settle
       const [first, second] = updatesAt(root.log(), group)
       assert.deepStrictEqual(updatesAt(root.log(), reader).map((entry) => [entry.message, entry.source]), [
@@ -479,7 +479,7 @@ describe("onChange rounds and declarations", () => {
     })))
 
   it("rejects two onChange for one owner, and takes aliases with one", () => {
-    const onChange = (value: { on: boolean; bumps: number }) => ReaderMessage.make({ _tag: "ChangedGroup", ...value })
+    const onChange = (value: { on: boolean; bumps: number }) => ReaderMessage.ChangedGroup({ ...value })
     assert.throws(
       () =>
         Component.define({
@@ -509,7 +509,7 @@ describe("optional owners, reports and onChange in a Story", () => {
         owner: Group,
         optional: true,
         report: (on) => on,
-        onChange: (value) => ReaderMessage.make({ _tag: "ChangedGroup", ...value })
+        onChange: (value) => ReaderMessage.ChangedGroup({ ...value })
       }
     }
   }).make({
@@ -520,7 +520,7 @@ describe("optional owners, reports and onChange in a Story", () => {
         ChangedGroup: ({ on }) => on
       }),
     view: (_, h) =>
-      h.el("button").on("click", ReaderMessage.make({ _tag: "Clicked" })).children(
+      h.el("button").on("click", ReaderMessage.Clicked()).children(
         h.shared.group === undefined ? "alone" : `bumps ${h.shared.group.bumps}`
       )
   })
@@ -544,7 +544,7 @@ describe("optional owners, reports and onChange in a Story", () => {
       s.shared(Group, { on: true, bumps: 1 })
       assert.strictEqual(s.model, true)
       // An equal value sends nothing.
-      s.send(ReaderMessage.make({ _tag: "ChangedGroup", on: false, bumps: 1 }))
+      s.send(ReaderMessage.ChangedGroup({ on: false, bumps: 1 }))
       s.shared(Group, { on: true, bumps: 1 })
       assert.strictEqual(s.model, false)
       // `given` supplies a value without sending.

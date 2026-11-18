@@ -1,4 +1,4 @@
-import { Component, Feature, MessageLog } from "@effect/ui"
+import { Component, Feature, MessageLog, UiSchema } from "@effect/ui"
 import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Effect, Layer, Schema } from "effect"
@@ -8,7 +8,7 @@ const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Eff
 const click = (root: TestHost.TestRoot<any, any, any>, text: string) =>
   Locator.fire(root.get(Locator.text(text, { exact: true })), "click")
 
-const ItemMessage = Schema.TaggedUnion({ Clear: {}, Boom: {} })
+const ItemMessage = UiSchema.TaggedEnum({ Clear: {}, Boom: {} })
 
 /** Counts the `Clear`s it receives, and shows the label it had at the last one. */
 const Item = Component.define({
@@ -24,14 +24,14 @@ const Item = Component.define({
     return { clears: model.clears + 1, label: $.props.label }
   },
   view: (model, h) =>
-    h.el("li").on("click", ItemMessage.make({ _tag: "Boom" })).children(
+    h.el("li").on("click", ItemMessage.Boom()).children(
       `${h.props.label}:${model.clears}:${model.label}`
     )
 })
 
 const Row = Item.ref("Row")
 
-const ListMessage = Schema.TaggedUnion({
+const ListMessage = UiSchema.TaggedEnum({
   Clear: { id: Schema.String },
   Add: { id: Schema.String },
   Clears: { ids: Schema.Array(Schema.String) }
@@ -68,7 +68,7 @@ describe("$.send", () => {
     provideHost(Effect.gen(function*() {
       const root = yield* TestHost.mount(List, { ids: ["a", "b", "c"] })
       yield* TestHost.settle
-      root.send(ListMessage.make({ _tag: "Clear", id: "b" }))
+      root.send(ListMessage.Clear({ id: "b" }))
       yield* TestHost.settle
       assert.strictEqual(root.text(), "a3:0:b3:1:b3c3:0:")
       const [sent] = updates(root.log(), "/List")
@@ -83,7 +83,7 @@ describe("$.send", () => {
     provideHost(Effect.gen(function*() {
       const root = yield* TestHost.mount(List, { ids: ["a"] })
       yield* TestHost.settle
-      root.send(ListMessage.make({ _tag: "Add", id: "b" }))
+      root.send(ListMessage.Add({ id: "b" }))
       yield* TestHost.settle
       // The child's re-render lands in the parent's commit: no frame shows the new row before the send.
       assert.deepStrictEqual(root.frames(), ["a1:0:", "a2:0:b2:1:b2"])
@@ -93,7 +93,7 @@ describe("$.send", () => {
     provideHost(Effect.gen(function*() {
       const root = yield* TestHost.mount(List, { ids: ["a", "b"] })
       yield* TestHost.settle
-      root.send(ListMessage.make({ _tag: "Clears", ids: ["b", "a", "b"] }))
+      root.send(ListMessage.Clears({ ids: ["b", "a", "b"] }))
       yield* TestHost.settle
       assert.strictEqual(root.text(), "a2:1:a2b2:2:b2")
       assert.deepStrictEqual(
@@ -106,7 +106,7 @@ describe("$.send", () => {
     provideHost(Effect.gen(function*() {
       const root = yield* TestHost.mount(List, { ids: ["a"] })
       yield* TestHost.settle
-      root.send(ListMessage.make({ _tag: "Clear", id: "z" }))
+      root.send(ListMessage.Clear({ id: "z" }))
       yield* TestHost.settle
       const [sent] = updates(root.log(), "/List")
       const [drop] = dropped(root.log())
@@ -119,7 +119,7 @@ describe("$.send", () => {
 
   it.effect("drops and logs a send to a child that failed", () =>
     provideHost(Effect.gen(function*() {
-      const Message = Schema.TaggedUnion({ Boom: {}, Clear: {} })
+      const Message = UiSchema.TaggedEnum({ Boom: {}, Clear: {} })
       const Draft = Item.ref("Draft")
       const Page = Component.define({ name: "Page", model: Schema.Null, message: Message }).make({
         init: () => null,
@@ -137,7 +137,7 @@ describe("$.send", () => {
       click(root, "d:0:")
       yield* TestHost.settle
       assert.strictEqual(root.text(), "failed")
-      root.send(Message.make({ _tag: "Clear" }))
+      root.send(Message.Clear())
       yield* TestHost.settle
       const [drop] = dropped(root.log())
       assert.strictEqual(drop.ref, "Draft")
@@ -146,13 +146,13 @@ describe("$.send", () => {
 
   it.effect("drops and logs a send to a feature on its fallback", () =>
     provideHost(Effect.gen(function*() {
-      const EditorReceives = Schema.TaggedUnion({ Clear: {} })
+      const EditorReceives = UiSchema.TaggedEnum({ Clear: {} })
       class Editor extends Feature.Service<Editor>()("Editor", {
         props: Schema.Struct({ label: Schema.String }),
         receives: EditorReceives
       }) {}
       const Main = Editor.ref("Main")
-      const Message = Schema.TaggedUnion({ Clear: {} })
+      const Message = UiSchema.TaggedEnum({ Clear: {} })
       const Page = Component.define({ name: "Page", model: Schema.Null, message: Message }).make({
         init: () => null,
         update: (_, __, $) => $.send(Main, { _tag: "Clear" }),
@@ -160,7 +160,7 @@ describe("$.send", () => {
       })
       const Never: Layer.Layer<Editor> = Layer.effect(Editor, Effect.never)
       const root = yield* TestHost.mount(Component.provide(Page, Never), {})
-      root.send(Message.make({ _tag: "Clear" }))
+      root.send(Message.Clear())
       yield* TestHost.settle
       assert.strictEqual(root.text(), "loading")
       const [drop] = dropped(root.log())
@@ -170,7 +170,7 @@ describe("$.send", () => {
 
   it.effect("reaches a feature's implementation, and a provided component, through a ref", () =>
     provideHost(Effect.gen(function*() {
-      const EditorReceives = Schema.TaggedUnion({ Clear: {} })
+      const EditorReceives = UiSchema.TaggedEnum({ Clear: {} })
       class Editor extends Feature.Service<Editor>()("Editor", {
         props: Schema.Struct({ label: Schema.String }),
         receives: EditorReceives
@@ -178,7 +178,7 @@ describe("$.send", () => {
       const Main = Editor.ref("Main")
       const Draft = Item.ref("Draft")
       const Provided = Component.provide(Item, Layer.empty)
-      const Message = Schema.TaggedUnion({ Clear: {} })
+      const Message = UiSchema.TaggedEnum({ Clear: {} })
       const Page = Component.define({ name: "Page", model: Schema.Null, message: Message }).make({
         init: () => null,
         update: (_, __, $) => $.send(Main, { _tag: "Clear" }).send(Draft, { _tag: "Clear" }),
@@ -191,7 +191,7 @@ describe("$.send", () => {
       })
       const root = yield* TestHost.mount(Component.provide(Page, Editor.toLayer(Item)), {})
       yield* TestHost.settle
-      root.send(Message.make({ _tag: "Clear" }))
+      root.send(Message.Clear())
       yield* TestHost.settle
       assert.strictEqual(root.text(), "m:1:md:1:d")
       assert.lengthOf(dropped(root.log()), 0)
@@ -199,7 +199,7 @@ describe("$.send", () => {
 
   it.effect("fails the sender when a parent and child answer each other", () =>
     provideHost(Effect.gen(function*() {
-      const PingMessage = Schema.TaggedUnion({ Ping: {} })
+      const PingMessage = UiSchema.TaggedEnum({ Ping: {} })
       const Echo = Component.define({
         name: "Echo",
         model: Schema.Null,
@@ -216,7 +216,7 @@ describe("$.send", () => {
         init: () => null,
         update: (_, message, $) => $.send(Other, message),
         view: (_, h) =>
-          h.el("button").on("click", PingMessage.make({ _tag: "Ping" })).children(
+          h.el("button").on("click", PingMessage.Ping()).children(
             Echo(h, { ref: Other, onEmit: (ping) => ping })
           )
       })
@@ -239,7 +239,7 @@ describe("$.send", () => {
 
   it.effect("doesn't count independent sends against each other", () =>
     provideHost(Effect.gen(function*() {
-      const GoMessage = Schema.TaggedUnion({ Go: {} })
+      const GoMessage = UiSchema.TaggedEnum({ Go: {} })
       const Leaf = Component.define({ name: "Leaf", model: Schema.Number, message: GoMessage, receives: ["Go"] }).make({
         init: () => 0,
         update: (n) => n + 1,
@@ -261,7 +261,7 @@ describe("$.send", () => {
       })
       const root = yield* TestHost.mount(List, {})
       yield* TestHost.settle
-      root.send(GoMessage.make({ _tag: "Go" }))
+      root.send(GoMessage.Go())
       yield* TestHost.settle
       assert.strictEqual(root.text(), "1".repeat(150))
       assert.isFalse(root.log().some((entry) => entry._tag === "Failed"))
@@ -271,20 +271,20 @@ describe("$.send", () => {
 describe("Story and sends", () => {
   it("records what update sent until sent acknowledges it, and given throws rather than discard it", () => {
     const steps = Story.start(List, { ids: ["a", "b"] })
-      .send(ListMessage.make({ _tag: "Clear", id: "b" }))
+      .send(ListMessage.Clear({ id: "b" }))
     assert.deepStrictEqual(steps.current.sent.map((send) => [send.ref?.key, send.message]), [
       ["Row[b]", { _tag: "Clear" }]
     ])
     // An unacknowledged send blocks the next acting step.
     assert.throws(
-      () => steps.send(ListMessage.make({ _tag: "Add", id: "c" })),
+      () => steps.send(ListMessage.Add({ id: "c" })),
       /Story\.send: earlier work isn't settled or acknowledged:\n {2}- \{"_tag":"Clear"\} to Row\[b\] was sent/
     )
     // sent asserts the oldest send, then drops it from the record.
     assert.throws(() => steps.sent(Row.at("a"), { _tag: "Clear" }), /Story\.sent: expected/)
     assert.lengthOf(steps.sent(Row.at("b"), { _tag: "Clear" }).current.sent, 0)
     // The record holds only what isn't acknowledged: the new send, not the earlier one.
-    steps.send(ListMessage.make({ _tag: "Add", id: "c" }))
+    steps.send(ListMessage.Add({ id: "c" }))
     assert.deepStrictEqual(steps.current.sent.map((send) => [send.ref?.key, send.message]), [
       ["Row[c]", { _tag: "Clear" }]
     ])
@@ -294,8 +294,8 @@ describe("Story and sends", () => {
 
   it.effect("finds a child by its ref in childEmit, childFailure and fallback", () =>
     Effect.gen(function*() {
-      const Message = Schema.TaggedUnion({ Saw: { what: Schema.String } })
-      const EchoMessage = Schema.TaggedUnion({ Said: {} })
+      const Message = UiSchema.TaggedEnum({ Saw: { what: Schema.String } })
+      const EchoMessage = UiSchema.TaggedEnum({ Said: {} })
       const Echo = Component.define({
         name: "Echo",
         model: Schema.Null,
@@ -311,8 +311,8 @@ describe("Story and sends", () => {
             h.el("p", seen.join(",")),
             Echo(h, {
               ref: Mine,
-              onEmit: () => Message.make({ _tag: "Saw", what: "emit" }),
-              onFailure: () => Message.make({ _tag: "Saw", what: "failure" }),
+              onEmit: () => Message.Saw({ what: "emit" }),
+              onFailure: () => Message.Saw({ what: "failure" }),
               fallback: () => h.text("gone")
             })
           ])
@@ -331,7 +331,7 @@ describe("Story and sends", () => {
     provideHost(Effect.gen(function*() {
       const root = yield* TestHost.mount(List, { ids: ["a", "b"] })
       yield* TestHost.settle
-      root.send(ListMessage.make({ _tag: "Clear", id: "b" }))
+      root.send(ListMessage.Clear({ id: "b" }))
       yield* TestHost.settle
       const log = root.log()
       const encoder = MessageLog.makeEncoder()
@@ -363,13 +363,13 @@ describe("Story and sends", () => {
 
   it.effect("stub records what a parent sends it", () =>
     provideHost(Effect.gen(function*() {
-      const EditorReceives = Schema.TaggedUnion({ Clear: {}, Focus: {} })
+      const EditorReceives = UiSchema.TaggedEnum({ Clear: {}, Focus: {} })
       class Editor extends Feature.Service<Editor>()("Editor", {
         props: Schema.Struct({}),
         receives: EditorReceives
       }) {}
       const Main = Editor.ref("Main")
-      const Message = Schema.TaggedUnion({ Go: {} })
+      const Message = UiSchema.TaggedEnum({ Go: {} })
       const Page = Component.define({ name: "Page", model: Schema.Null, message: Message }).make({
         init: () => null,
         update: (_, __, $) => $.send(Main, { _tag: "Focus" }).send(Main, { _tag: "Clear" }),
@@ -378,7 +378,7 @@ describe("Story and sends", () => {
       const stub = TestHost.stub(Editor)
       const root = yield* TestHost.mount(Page, {}).pipe(Effect.provide(stub.layer))
       yield* TestHost.settle
-      root.send(Message.make({ _tag: "Go" }))
+      root.send(Message.Go())
       yield* TestHost.settle
       assert.deepStrictEqual(stub.received(), [{ _tag: "Focus" }, { _tag: "Clear" }])
     })))

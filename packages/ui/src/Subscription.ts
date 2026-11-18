@@ -15,17 +15,17 @@
  * **Example** (A timer while running, and a room keyed on a prop)
  *
  * ```ts import.meta.vitest
- * import { Subscription } from "@effect/ui"
+ * import { Subscription, UiSchema } from "@effect/ui"
  * import { Schema, Stream } from "effect"
  *
- * const Message = Schema.TaggedUnion({ Ticked: {}, Received: { text: Schema.String } })
+ * const Message = UiSchema.TaggedEnum({ Ticked: {}, Received: { text: Schema.String } })
  *
  * const roomMessages = (roomId: string) => Stream.make(`hello from ${roomId}`)
  *
  * const subscriptions = (model: { readonly running: boolean }, props: { readonly roomId: string }) => [
- *   model.running && Subscription.make("tick", Stream.tick("1 second").pipe(Stream.as(Message.make({ _tag: "Ticked" })))),
+ *   model.running && Subscription.make("tick", Stream.tick("1 second").pipe(Stream.as(Message.Ticked()))),
  *   Subscription.make("room", props.roomId, (roomId) =>
- *     roomMessages(roomId).pipe(Stream.map((text) => Message.make({ _tag: "Received", text }))))
+ *     roomMessages(roomId).pipe(Stream.map((text) => Message.Received({ text }))))
  * ]
  * ```
  *
@@ -161,15 +161,15 @@ export const keyOf = (name: string, deps?: Deps): string =>
  * **Example** (Keying a Subscription on a prop)
  *
  * ```ts import.meta.vitest
- * import { Subscription } from "@effect/ui"
+ * import { Subscription, UiSchema } from "@effect/ui"
  * import { Schema, Stream } from "effect"
  *
- * const Message = Schema.TaggedUnion({ Received: { text: Schema.String } })
+ * const Message = UiSchema.TaggedEnum({ Received: { text: Schema.String } })
  *
  * const roomMessages = (roomId: string) => Stream.make(`hello from ${roomId}`)
  *
  * const room = Subscription.make("room", "42", (roomId) =>
- *   roomMessages(roomId).pipe(Stream.map((text) => Message.make({ _tag: "Received", text }))))
+ *   roomMessages(roomId).pipe(Stream.map((text) => Message.Received({ text }))))
  *
  * room.key // => 'room:"42"'
  * ```

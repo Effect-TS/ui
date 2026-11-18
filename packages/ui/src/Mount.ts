@@ -19,12 +19,12 @@
  * **Example** (A mount that follows its args)
  *
  * ```ts import.meta.vitest
- * import { Mount } from "@effect/ui"
+ * import { Mount, UiSchema } from "@effect/ui"
  * import { Effect, Schema, Stream } from "effect"
  *
  * declare const draw: (canvas: HTMLCanvasElement, points: ReadonlyArray<number>) => void
  *
- * const Message = Schema.TaggedUnion({ CompletedDrawChart: {} })
+ * const Message = UiSchema.TaggedEnum({ CompletedDrawChart: {} })
  *
  * const DrawChart = Mount.make(
  *   "DrawChart",
@@ -35,7 +35,7 @@
  *
  * // In a view: `h.canvas.onMount(drawChart(model.points))`
  * const drawChart = (points: ReadonlyArray<number>) =>
- *   DrawChart({ points }).pipe(Mount.map(() => Message.make({ _tag: "CompletedDrawChart" })))
+ *   DrawChart({ points }).pipe(Mount.map(() => Message.CompletedDrawChart()))
  * ```
  *
  * @stability experimental
@@ -339,16 +339,16 @@ export const isDefinition = (u: unknown): u is Definition.Any => Predicate.hasPr
  * **Example** (A mount with a result)
  *
  * ```ts import.meta.vitest
- * import { Mount } from "@effect/ui"
+ * import { Mount, UiSchema } from "@effect/ui"
  * import { Effect, Schema } from "effect"
  *
- * const Message = Schema.TaggedUnion({ CompletedMeasure: { width: Schema.Number } })
+ * const Message = UiSchema.TaggedEnum({ CompletedMeasure: { width: Schema.Number } })
  *
  * const Measure = Mount.make("Measure", { args: {} }, (node: HTMLElement) =>
  *   Effect.sync(() => node.getBoundingClientRect().width))
  *
  * // In a view
- * const measure = Measure().pipe(Mount.map((width) => Message.make({ _tag: "CompletedMeasure", width })))
+ * const measure = Measure().pipe(Mount.map((width) => Message.CompletedMeasure({ width })))
  * ```
  *
  * @stability experimental
@@ -388,7 +388,7 @@ export const make = <const Name extends string, const In extends Command.ArgsInp
  * **Example** (A widget's events)
  *
  * ```ts import.meta.vitest
- * import { Mount } from "@effect/ui"
+ * import { Mount, UiSchema } from "@effect/ui"
  * import { Effect, Queue, Schema, Stream } from "effect"
  *
  * interface Editor {
@@ -396,7 +396,7 @@ export const make = <const Name extends string, const In extends Command.ArgsInp
  * }
  * declare const createEditor: (node: HTMLElement, text: string) => Editor
  *
- * const Message = Schema.TaggedUnion({ ChangedText: { text: Schema.String } })
+ * const Message = UiSchema.TaggedEnum({ ChangedText: { text: Schema.String } })
  *
  * const AttachEditor = Mount.makeStream(
  *   "AttachEditor",
@@ -411,7 +411,7 @@ export const make = <const Name extends string, const In extends Command.ArgsInp
  * )
  *
  * // In a view
- * const editor = AttachEditor({ text: "" }).pipe(Mount.map((text) => Message.make({ _tag: "ChangedText", text })))
+ * const editor = AttachEditor({ text: "" }).pipe(Mount.map((text) => Message.ChangedText({ text })))
  * ```
  *
  * @stability experimental

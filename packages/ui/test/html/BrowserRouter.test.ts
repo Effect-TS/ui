@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Command, Component, Query, Route, Router } from "@effect/ui"
+import { Command, Component, Query, Route, Router, UiSchema } from "@effect/ui"
 import { BrowserHost, BrowserRouter, Html, HtmlServer } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, expect, it } from "@effect/vitest"
@@ -38,8 +38,8 @@ const ListRoute = Route.union({
 })
 const ListOnly = ListRoute.subset(["List"])
 
-const ListMessage = Schema.TaggedUnion({ Typed: { value: Schema.String }, Next: {}, Patched: {} })
-const patched = Command.map(() => ListMessage.make({ _tag: "Patched" }))
+const ListMessage = UiSchema.TaggedEnum({ Typed: { value: Schema.String }, Next: {}, Patched: {} })
+const patched = Command.map(() => ListMessage.Patched())
 
 /** A page whose search text and page number live in the search only. */
 const ListPage = Component.define({
@@ -67,9 +67,9 @@ const ListPage = Component.define({
     h.div(
       h.h1(`List page ${h.props.route.search.page}`),
       h.input.attr("aria-label", "Search").value(h.props.route.search.q ?? "").onInput(({ value }) =>
-        ListMessage.make({ _tag: "Typed", value })
+        ListMessage.Typed({ value })
       ),
-      h.button.onClick(ListMessage.make({ _tag: "Next" })).children("Next"),
+      h.button.onClick(ListMessage.Next()).children("Next"),
       h.a.attr("href", ListRoute.print(ListRoute.make({ _tag: "List", search: { page: 2 } }))).children("Page 2"),
       h.a.attr("href", "#results").children("Results")
     )

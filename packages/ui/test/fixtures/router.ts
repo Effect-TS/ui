@@ -4,7 +4,7 @@
  * Command) and counts clicks, and a slow page whose provided Layer takes a
  * second to build.
  */
-import { Command, Component, Head, Query, Route, Router } from "@effect/ui"
+import { Command, Component, Head, Query, Route, Router, UiSchema } from "@effect/ui"
 import { Context, Effect, Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 
@@ -64,7 +64,7 @@ export class RenamePerson extends Command.Service<RenamePerson>()("RenamePerson"
   optimistic: ({ id }) => [GetPerson.patch({ id }, () => "Renamed")]
 }, Effect.succeed(() => Effect.never)) {}
 
-export const PersonMessage = Schema.TaggedUnion({
+export const PersonMessage = UiSchema.TaggedEnum({
   Loaded: { name: Schema.String },
   Visited: {},
   Bump: {},
@@ -75,7 +75,7 @@ export const PersonMessage = Schema.TaggedUnion({
 export const CountVisit = Command.make(
   "CountVisit",
   { args: {} },
-  () => Effect.succeed(PersonMessage.make({ _tag: "Visited" }))
+  () => Effect.succeed(PersonMessage.Visited())
 )
 
 export const Person = Component.define({
@@ -92,8 +92,7 @@ export const Person = Component.define({
     person: {
       query: GetPerson,
       args: (_model, props) => ({ id: props.id }),
-      onChange: (result) =>
-        PersonMessage.make({ _tag: "Loaded", name: AsyncResult.isSuccess(result) ? result.value : "Loading" })
+      onChange: (result) => PersonMessage.Loaded({ name: AsyncResult.isSuccess(result) ? result.value : "Loading" })
     }
   }
 }).make({
@@ -101,8 +100,7 @@ export const Person = Component.define({
   update: (model, message, $) =>
     PersonMessage.match(message, {
       Loaded: ({ name }) => ({ ...model, name }),
-      Rename: () =>
-        $.run(RenamePerson.make({ id: model.id }).pipe(Command.map(() => PersonMessage.make({ _tag: "Renamed" })))),
+      Rename: () => $.run(RenamePerson.make({ id: model.id }).pipe(Command.map(() => PersonMessage.Renamed()))),
       Renamed: () => model,
       Visited: () => ({ ...model, visits: model.visits + 1 }),
       Bump: () => ({ ...model, count: model.count + 1 })
@@ -113,8 +111,8 @@ export const Person = Component.define({
       "div",
       h.el("h1", model.name),
       h.queries.person.waiting ? h.el("p", "Refreshing") : null,
-      h.el("button").on("click", PersonMessage.make({ _tag: "Bump" })).children(`count ${model.count}`),
-      h.el("button").on("click", PersonMessage.make({ _tag: "Rename" })).children("Rename")
+      h.el("button").on("click", PersonMessage.Bump()).children(`count ${model.count}`),
+      h.el("button").on("click", PersonMessage.Rename()).children("Rename")
     )
 }).pipe(Component.provide(Layer.merge(GetPerson.layer, RenamePerson.layer)))
 
@@ -137,7 +135,7 @@ export const Slow = Component.define({
 // Root
 // ---------------------------------------------------------------------------
 
-export const AppMessage = Schema.TaggedUnion({
+export const AppMessage = UiSchema.TaggedEnum({
   ChangedRoute: { route: AppRoute },
   Go: { route: AppRoute },
   Back: {},
@@ -146,7 +144,7 @@ export const AppMessage = Schema.TaggedUnion({
   Navigated: { outcome: Schema.Literals(["navigated", "blocked"]) }
 })
 
-const navigated = (outcome: Router.Outcome) => AppMessage.make({ _tag: "Navigated", outcome })
+const navigated = (outcome: Router.Outcome) => AppMessage.Navigated({ outcome })
 
 export const App = Component.define({
   name: "App",
@@ -165,13 +163,12 @@ export const App = Component.define({
       Navigated: ({ outcome }) => ({ ...model, outcomes: [...model.outcomes, outcome] })
     }),
   subscriptions: (model) => [
-    Router.subscription(AppRoute, model.route, (route) => AppMessage.make({ _tag: "ChangedRoute", route })),
+    Router.subscription(AppRoute, model.route, (route) => AppMessage.ChangedRoute({ route })),
     model.blocked && Router.blocked("editing")
   ],
   head: () => [Head.titleTemplate((title) => `${title} · App`), Head.lang("en")],
   view: (model, h) => {
-    const go = (label: string, route: AppRoute) =>
-      h.el("button").on("click", AppMessage.make({ _tag: "Go", route })).children(label)
+    const go = (label: string, route: AppRoute) => h.el("button").on("click", AppMessage.Go({ route })).children(label)
     return h.el(
       "div",
       h.el(
@@ -180,9 +177,9 @@ export const App = Component.define({
         go("Person 1", AppRoute.make({ _tag: "Person", params: { id: 1 } })),
         go("Person 2", AppRoute.make({ _tag: "Person", params: { id: 2 } })),
         go("Slow", AppRoute.make({ _tag: "Slow" })),
-        h.el("button").on("click", AppMessage.make({ _tag: "Back" })).children("Back"),
-        h.el("button").on("click", AppMessage.make({ _tag: "Block" })).children("Block"),
-        h.el("button").on("click", AppMessage.make({ _tag: "Unblock" })).children("Unblock")
+        h.el("button").on("click", AppMessage.Back()).children("Back"),
+        h.el("button").on("click", AppMessage.Block()).children("Block"),
+        h.el("button").on("click", AppMessage.Unblock()).children("Unblock")
       ),
       AppRoute.match(model.route, {
         Home: (route) => Home(h, { key: AppRoute.print(route), props: {} }),

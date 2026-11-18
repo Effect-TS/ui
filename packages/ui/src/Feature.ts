@@ -13,11 +13,11 @@
  * **Example** (Declaring a feature and providing an implementation)
  *
  * ```ts import.meta.vitest
- * import { Component, Feature } from "@effect/ui"
+ * import { Component, Feature, UiSchema } from "@effect/ui"
  * import { Schema } from "effect"
  *
  * const TodosProps = Schema.Struct({ filter: Schema.Literals(["all", "open"]) })
- * const TodosEvents = Schema.TaggedUnion({ Counted: { open: Schema.Number } })
+ * const TodosEvents = UiSchema.TaggedEnum({ Counted: { open: Schema.Number } })
  *
  * class Todos extends Feature.Service<Todos>()("Todos", { props: TodosProps, events: TodosEvents }) {}
  *

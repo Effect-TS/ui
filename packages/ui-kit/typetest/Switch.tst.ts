@@ -1,4 +1,4 @@
-import { Component, type View } from "@effect/ui"
+import { Component, UiSchema, type View } from "@effect/ui"
 import { Switch } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Context, Schema } from "effect"
@@ -6,9 +6,9 @@ import { describe, expect, it } from "tstyche"
 
 class Clock extends Context.Service<Clock, {}>()("Clock") {}
 
-const Msg = Schema.TaggedUnion({ Clicked: {}, Toggled: { checked: Schema.Boolean } })
+const Msg = UiSchema.TaggedEnum({ Clicked: {}, Toggled: { checked: Schema.Boolean } })
 type Msg = typeof Msg.Type
-const Other = Schema.TaggedUnion({ Pressed: {} })
+const Other = UiSchema.TaggedEnum({ Pressed: {} })
 
 declare const needsClock: View.Child<never, Clock>
 
@@ -20,7 +20,7 @@ describe("Switch", () => {
       view: (_, h) => {
         const root = Switch(h, {
           props: { checked: false },
-          onToggle: ({ checked }) => Msg.make({ _tag: "Toggled", checked }),
+          onToggle: ({ checked }) => Msg.Toggled({ checked }),
           view: (s) => {
             type Button<R> = Html.Element<Msg, R, Html.EventsOf<"button">, HTMLButtonElement, "button">
             // Each part returns the builder it was given, for children or another call's `element`.
@@ -28,7 +28,7 @@ describe("Switch", () => {
             expect(s.thumb(h.span.class("thumb")).children(needsClock)).type.toBe<
               Html.Element<Msg, Clock, Html.EventsOf<"span">, HTMLSpanElement, "span">
             >()
-            return s.root(h.button.on("focus", Msg.make({ _tag: "Clicked" })))
+            return s.root(h.button.on("focus", Msg.Clicked()))
               .children(s.thumb(h.span.class("thumb")), needsClock)
           }
         })
@@ -45,7 +45,7 @@ describe("Switch", () => {
       view: (_, h) => {
         expect(Switch).type.not.toBeCallableWith(h, {
           props: { checked: false },
-          onToggle: () => Other.make({ _tag: "Pressed" }),
+          onToggle: () => Other.Pressed(),
           view: () => h.br
         })
         return Switch(h, {

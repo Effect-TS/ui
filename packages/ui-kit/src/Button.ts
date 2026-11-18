@@ -36,12 +36,12 @@
  * **Example** (A save button that stays focusable while it saves)
  *
  * ```ts import.meta.vitest
- * import { Component } from "@effect/ui"
+ * import { Component, UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Button } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
- * const EditorMessage = Schema.TaggedUnion({ PressedSave: {} })
+ * const EditorMessage = UiSchema.TaggedEnum({ PressedSave: {} })
  *
  * const Editor = Component.define({
  *   name: "Editor",
@@ -57,7 +57,7 @@
  *   view: (model, h) =>
  *     Button(h, {
  *       props: { disabled: model.saving, focusableWhenDisabled: true },
- *       onPress: EditorMessage.make({ _tag: "PressedSave" })
+ *       onPress: EditorMessage.PressedSave()
  *     })
  *       .class("save")
  *       .children(model.saving ? "Saving" : "Save")
