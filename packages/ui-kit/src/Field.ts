@@ -60,9 +60,10 @@
  * enabled the control points at the error's id, so draw `error` in every
  * field that can be invalid.
  *
- * A disabled field disables its control. A control's own parts and values
- * don't hear of it: pass `disabled: f.disabled` to a checkbox whose
- * indicator shows `data-disabled`.
+ * A disabled field disables its control and the hidden inputs inside it,
+ * so the control submits nothing. A control's own parts don't hear of it:
+ * pass `disabled: f.disabled` to a checkbox whose indicator shows
+ * `data-disabled`.
  *
  * `touched` and `focused` are the field's own. Give the field another
  * `key` to start over, such as after the form is reset.
@@ -117,9 +118,11 @@
  */
 import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
+import * as Subscription from "@effect/ui/Subscription"
 import * as UiSchema from "@effect/ui/UiSchema"
-import type * as View from "@effect/ui/View"
+import * as View from "@effect/ui/View"
 import * as Schema from "effect/Schema"
+import * as Stream from "effect/Stream"
 import { flag } from "./internal/attributes.ts"
 
 /**
@@ -165,6 +168,15 @@ export type FieldProps = typeof FieldProps.Type
 
 const Message = UiSchema.TaggedEnum({ FocusedControl: {}, BlurredControl: {} })
 
+// A disabled control submits nothing, and neither do the hidden inputs
+// inside it, such as the one a checkbox or a switch keeps its form value in.
+const unsubmitted = <Msg, R>(element: View.Element<Msg, R>): View.Element<Msg, R> =>
+  element.tag === "input" && element.attrs.type === "hidden"
+    ? { ...element, attrs: { ...element.attrs, disabled: "" } }
+    : element.children.length === 0
+    ? element
+    : { ...element, children: element.children.map((node) => node._tag === "Element" ? unsubmitted(node) : node) }
+
 /**
  * A headless field. Call it with the consumer's `h`, the `props`, and a
  * `view` closure that draws the root with `f.root(h.div)` and, inside it,
@@ -194,11 +206,17 @@ const Message = UiSchema.TaggedEnum({ FocusedControl: {}, BlurredControl: {} })
  *
  * A disabled field writes `disabled` and `data-disabled` on the control
  * when the element is built, so they win over what the consumer chains and
- * over another kit call on the same element. An enabled field writes
- * neither, so the control keeps its own.
+ * over another kit call on the same element. It also disables the hidden
+ * inputs inside the control, so a checkbox or a switch drawn on it submits
+ * nothing. An enabled field writes none of it, so the control keeps its
+ * own.
  *
  * `control` handles `focus` and `blur` on a layer of its own, so the
- * consumer's handlers for them, and another kit call's, still run.
+ * consumer's handlers for them, and another kit call's, still run. A
+ * disabled field reports neither: it shows no focus, and isn't touched
+ * until it is enabled and left. A field disabled while its control has
+ * focus drops the focus, and shows it again only when the control is
+ * focused again.
  *
  * @stability experimental
  * @category components
@@ -212,19 +230,27 @@ export const Field = Component.define({
   elements: Html
 }).make({
   init: () => ({ focused: false, touched: false }),
-  update: (model, message) =>
+  // A disabled field takes no focus, and losing it doesn't count as a visit.
+  update: (model, message, $) =>
     Message.match(message, {
-      FocusedControl: () => ({ ...model, focused: true }),
-      BlurredControl: () => ({ focused: false, touched: true })
+      FocusedControl: () => $.props.disabled === true ? model : { ...model, focused: true },
+      BlurredControl: () => $.props.disabled === true ? { ...model, focused: false } : { focused: false, touched: true }
     }),
+  // A control disabled while it has focus loses it without a blur event, so
+  // the field reports the blur itself. Otherwise the focus would show again
+  // once the field is enabled.
+  subscriptions: (model, props) => [
+    model.focused && props.disabled === true &&
+    Subscription.make("lostFocus", Stream.make(Message.BlurredControl()))
+  ],
   parts: (model, p) => {
     const disabled = p.props.disabled === true
     const invalid = p.props.invalid === true
     const valid = p.props.invalid === false
     const dirty = p.props.dirty === true
     const filled = p.props.filled === true
-    // A disabled control has no focus to show, and one disabled while it
-    // had focus may never report the blur.
+    // A disabled control has no focus to show, from the render that
+    // disables it.
     const focused = model.focused && !disabled
     const showsError = invalid && !disabled
     const controlId = p.id("control")
@@ -268,9 +294,10 @@ export const Field = Component.define({
           .onFocus(Message.FocusedControl())
           .onBlur(Message.BlurredControl())
         // Written when the control is built, after another kit call on the
-        // same element wrote its own. An enabled field leaves both alone.
+        // same element wrote its own and added its children. An enabled
+        // field leaves all of it alone.
         return disabled
-          ? control.forward((node) => node.attr("data-disabled", "").disabled(true))
+          ? control.forward((node) => unsubmitted(View.build(node.attr("data-disabled", "").disabled(true), [])))
           : control
       }),
       description: <B extends View.PartTarget<string>>(element: B): ReturnType<B["attr"]> => {

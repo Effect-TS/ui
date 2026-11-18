@@ -1,10 +1,10 @@
-import type { Component } from "@effect/ui"
-import { View } from "@effect/ui"
+// @vitest-environment happy-dom
+import { Component, View } from "@effect/ui"
 import { Checkbox, Field, type FieldProps, Input, Switch } from "@effect/ui-kit"
-import { Html } from "@effect/ui/html"
+import { Html, HtmlServer } from "@effect/ui/html"
 import { Locator, Scene, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 
 // A field with every part. The control already describes itself with a hint
 // of the consumer's own.
@@ -62,10 +62,28 @@ describe("Field", () => {
       s.fire(control, "blur")
       assert.deepStrictEqual(shown("data-focused"), [undefined, undefined, undefined, undefined, undefined])
       assert.deepStrictEqual(shown("data-touched"), ["", "", "", "", ""])
-      // A field disabled while its control had focus may never hear the blur.
+    }))
+
+  it.effect("a field disabled while its control has focus drops the focus, and a disabled field isn't touched", () =>
+    Effect.gen(function*() {
+      const s = yield* Scene.make(Field, { described: true }, standIn)
+      const shown = () => [s.get(control).attrs?.["data-focused"], s.get(control).attrs?.["data-touched"]]
+      // No blur follows, so the field reports it: hidden at once, and gone
+      // from the Model before the field is enabled again.
       s.fire(control, "focus")
         .props({ described: true, disabled: true })
-      assert.isUndefined(s.get(root).attrs?.["data-focused"])
+      assert.deepStrictEqual(shown(), [undefined, undefined])
+      s.subscription("lostFocus", { _tag: "BlurredControl" })
+        .props({ described: true })
+      assert.deepStrictEqual(shown(), [undefined, undefined])
+
+      // Events a disabled control was sent anyway report nothing.
+      s.props({ described: true, disabled: true })
+        .fire(control, "focus")
+      assert.throws(() => s.subscription("lostFocus", { _tag: "BlurredControl" }), /active keys: \[\]/)
+      s.fire(control, "blur")
+        .props({ described: true })
+      assert.deepStrictEqual(shown(), [undefined, undefined])
     }))
 
   it("each part keeps the consumer's attributes, but the field's own win, present or absent", () => {
@@ -171,6 +189,48 @@ describe("Field", () => {
       undefined
     ]])
   })
+
+  it.effect("a disabled field submits nothing for its control, and an enabled one submits each value", () =>
+    Effect.gen(function*() {
+      const Form = Component.define({
+        name: "Form",
+        props: Schema.Struct({ disabled: Schema.Boolean }),
+        model: Schema.Struct({}),
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => ({}),
+        update: (model) => model,
+        view: (_model, h) => {
+          const field = (
+            key: string,
+            draw: (f: Component.Headless.Parts<typeof Field>) => View.Content<never>
+          ) => Field(h, { key, props: { disabled: h.props.disabled }, view: (f) => f.root(h.div).children(draw(f)) })
+          const props = { checked: true, name: "terms" }
+          return h.form(
+            field(
+              "name",
+              (f) =>
+                Input(h, { element: f.control(h.input), props: { value: "Ada" }, onUpdate: () => undefined })
+                  .attr("name", "name")
+            ),
+            field("terms", (f) => Checkbox(h, { props, view: (s) => s.root(f.control(h.button)) })),
+            field(
+              "news",
+              (f) => Switch(h, { props: { ...props, name: "news" }, view: (s) => s.root(f.control(h.button)) })
+            )
+          )
+        }
+      })
+      const submitted = (disabled: boolean) =>
+        HtmlServer.renderToHtml(Form, { disabled }).pipe(Effect.map(({ html }) => {
+          const form = document.createElement("div")
+          form.innerHTML = html
+          return [...new FormData(form.querySelector("form")!).entries()]
+        }))
+      assert.deepStrictEqual(yield* submitted(false), [["name", "Ada"], ["terms", "on"], ["news", "on"]])
+      assert.deepStrictEqual(yield* submitted(true), [])
+    }))
 
   it("the label and the control take only their own tags, and a description needs the described prop", () => {
     const f = parts({})
