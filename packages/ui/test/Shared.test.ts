@@ -419,6 +419,19 @@ describe("optional owners, reports and onChange", () => {
       ])
     })))
 
+  it.effect("the owner's collected message and the reader's onChange follow from the click that changed the report", () =>
+    provideHost(Effect.gen(function*() {
+      const root = yield* TestHost.mount(makePage(makeReader((told) => told)), {})
+      yield* TestHost.settle
+      Locator.fire(root.get(Locator.text("reader")), "click")
+      yield* TestHost.settle
+      const [clicked, told] = updatesAt(root.log(), reader)
+      const [collected] = updatesAt(root.log(), group)
+      assert.strictEqual(clicked.causedBy, undefined)
+      assert.strictEqual(collected.causedBy, clicked.seq)
+      assert.strictEqual(told.causedBy, clicked.seq)
+    })))
+
   it.effect("a report and a shared value that answer each other fail the owner", () =>
     provideHost(Effect.gen(function*() {
       // Reports the opposite of what it's told, so equality never stops the pair.

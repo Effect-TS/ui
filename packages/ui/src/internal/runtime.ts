@@ -903,9 +903,8 @@ const setup = (
   const settleWaiting = () => {
     // A reader below a held owner may have mounted, or gone.
     if (heldReports.size > 0) {
-      for (const owner of heldReports) reportsDue.add(owner)
+      for (const owner of heldReports) dueReports(owner)
       heldReports.clear()
-      wake()
     }
     waiting--
     if (waiting === 0 && started) finishAdoption()
@@ -1195,8 +1194,13 @@ const setup = (
   // How many times each owner of shared state has sent its readers' `onChange` or its own `collects.onChange` in
   // this flush: a reader whose answer changes the shared value again would otherwise never leave `drainLoop`.
   const sharedPasses = new Map<Instance, number>()
-  // Owners whose readers' reports may have changed: read once nothing is left to render.
-  const reportsDue = new Set<Instance>()
+  // Owners whose readers' reports may have changed, read once nothing is left to render, with the latest
+  // step to change one: the collected message follows from that one.
+  const reportsDue = new Map<Instance, number | undefined>()
+  const dueReports = (owner: Instance) => {
+    reportsDue.set(owner, cause() ?? reportsDue.get(owner))
+    wake()
+  }
   // Hydration: owners whose first comparison waits for an instance below them to adopt.
   const heldReports = new Set<Instance>()
   const markDirty = (inst: Instance) => {
@@ -1303,7 +1307,7 @@ const setup = (
           // A fetch started here reaches its watchers now, so their updates render in this pass.
           if (isHolding()) releaseWatchHold()
           // Then the pass has nothing left to render, and every report is read from where it settled.
-          else deliverReports(reportsDue.values().next().value!)
+          else deliverReports(reportsDue.keys().next().value!)
           continue
         }
         let next: Instance | undefined
@@ -2399,8 +2403,7 @@ const setup = (
           inst.owning!.restored = true
           // Compared once the pass settles and nothing below waits to adopt, readers or none: one that reported
           // on the server may not mount here.
-          reportsDue.add(inst)
-          wake()
+          dueReports(inst)
         }
         mountedSeq = record(inst, {
           _tag: "Mounted",
@@ -2736,8 +2739,7 @@ const setup = (
       if (read.report === undefined) continue
       const owner = owners.get(read.owner.definition)
       if (owner === undefined || owner.closed || owner.component.definition.collects === undefined) continue
-      reportsDue.add(owner)
-      wake()
+      dueReports(owner)
     }
   }
   /**
@@ -2746,7 +2748,12 @@ const setup = (
    * with its message for no reports, so readers that mount reporting nothing new send nothing.
    */
   const deliverReports = (owner: Instance) => {
+    const from = reportsDue.get(owner)
     reportsDue.delete(owner)
+    if (from === undefined) collectReports(owner)
+    else under(from, () => collectReports(owner))
+  }
+  const collectReports = (owner: Instance) => {
     const collects = owner.component.definition.collects
     if (collects === undefined || owner.closed || owner.failure !== undefined || owner.waiting) return
     const owning = owner.owning!

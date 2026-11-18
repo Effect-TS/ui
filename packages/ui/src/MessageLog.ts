@@ -197,7 +197,10 @@ export type Source =
  * what two messages changed, an instance both changed names the later one.
  * `CommandInterrupted` names the fact whose handling stopped the run, where
  * `issued` names the entry that started it. A `FetchStarted` with trigger
- * `"watch"` names the fact whose render declared the query's args.
+ * `"watch"` names the fact whose render declared the query's args. A
+ * reader's shared `onChange` `Update` names the fact that changed the
+ * owner's value, and an owner's `collects.onChange` `Update` the fact that
+ * last changed a report.
  *
  * The `seq` it holds may be of an entry a ring buffer has dropped.
  *
