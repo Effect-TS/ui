@@ -51,6 +51,8 @@ describe("Avatar", () => {
           view: (s) => {
             expect(s.root).type.not.toBeCallableWith(h.div)
             expect(s.root).type.not.toBeCallableWith({ element: h.div })
+            // An object with an `attr` method isn't a builder, and has no `element`.
+            expect(s.root).type.not.toBeCallableWith({ attr: () => 1 })
             expect(s.image).type.not.toBeCallableWith({ element: h.span })
             expect(s.image).type.not.toBeCallableWith(h.img)
             expect(s.fallback).type.not.toBeCallableWith({ element: h.div })

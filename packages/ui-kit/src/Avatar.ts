@@ -339,7 +339,7 @@ export const Avatar = Component.define({
         .attr("src", source.src))
     const fallback = p.part("span", (b) => b)
     const showsFallback = status !== "loaded" && model.delayElapsed
-    function rootPart<B extends View.PartTarget<"span">>(element: B): ReturnType<B["attr"]>
+    function rootPart<Msg, R>(element: AvatarSpan<Msg, R>): AvatarSpan<Msg, R>
     function rootPart<Msg, R, const C extends ReadonlyArray<View.Input<Msg, any>> = readonly []>(options: {
       /** The consumer's `h.span`, with its classes, attributes and handlers. */
       readonly element: AvatarSpan<Msg, R>
