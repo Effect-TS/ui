@@ -6,8 +6,8 @@ import { describe, expect, it } from "tstyche"
 
 const TipsMessage = Schema.TaggedUnion({ Enter: { id: Schema.String }, Elapsed: {} })
 
-const Tips = Component.define({
-  name: "Tips",
+const TipsProvider = Component.define({
+  name: "TipsProvider",
   props: Schema.Struct({ delay: Schema.optional(Schema.Number) }),
   model: Schema.Struct({ open: Schema.NullOr(Schema.String) }),
   message: TipsMessage,
@@ -33,13 +33,13 @@ const Tip = Component.define({
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.Null,
   message: TipMessage,
-  shared: { tips: Tips },
+  shared: { provider: TipsProvider },
   elements: Html
 }).make({
   init: () => null,
   update: (model) => model,
   view: (_, h) => {
-    expect(h.shared.tips).type.toBe<{ open: string | null }>()
+    expect(h.shared.provider).type.toBe<{ open: string | null }>()
     return h.span()
   }
 })
@@ -47,18 +47,18 @@ const Tip = Component.define({
 // Sends to the owner with no `shared` declaration.
 const Sender = Component.define({ name: "Sender", model: Schema.Null, message: TipMessage }).make({
   init: () => null,
-  update: (model, message, $) => $.set(model).send(Tips, message),
+  update: (model, message, $) => $.set(model).send(TipsProvider, message),
   view: (_, h) => h.el("p")
 })
 
-type TipsShared = Component.Shared.Of<"Tips", { open: string | null }, typeof TipMessage.Type>
+type TipsShared = Component.Shared.Of<"TipsProvider", { open: string | null }, typeof TipMessage.Type>
 
 describe("shared state", () => {
   it("names an owner's requirement, which the owner itself doesn't carry", () => {
-    expect<Component.Shared<typeof Tips>>().type.toBe<TipsShared>()
-    expect<Component.Requirements<typeof Tips>>().type.toBe<never>()
+    expect<Component.Shared<typeof TipsProvider>>().type.toBe<TipsShared>()
+    expect<Component.Requirements<typeof TipsProvider>>().type.toBe<never>()
     // Owners and other headless components alike.
-    expect(Tips).type.toBeAssignableTo<Component.Headless.Any>()
+    expect(TipsProvider).type.toBeAssignableTo<Component.Headless.Any>()
     expect(Plain).type.toBeAssignableTo<Component.Headless.Any>()
   })
 
@@ -72,7 +72,7 @@ describe("shared state", () => {
     const Inside = def.make({
       init: () => null,
       update: (model) => model,
-      view: (_, h) => Tips(h, { key: "tips", view: () => Tip(h, { key: "a", props: { id: "a" } }) })
+      view: (_, h) => TipsProvider(h, { key: "tips", view: () => Tip(h, { key: "a", props: { id: "a" } }) })
     })
     const Outside = def.make({
       init: () => null,
@@ -87,8 +87,8 @@ describe("shared state", () => {
 
   it("checks a send against the owner's receives", () => {
     Component.define({ name: "S", model: Schema.Null, message: TipMessage }).update((model, _msg, $) => {
-      expect($.send(Tips, { _tag: "Enter", id: "a" })).type.not.toRaiseError()
-      expect($.send).type.not.toBeCallableWith(Tips, { _tag: "Elapsed" })
+      expect($.send(TipsProvider, { _tag: "Enter", id: "a" })).type.not.toRaiseError()
+      expect($.send).type.not.toBeCallableWith(TipsProvider, { _tag: "Elapsed" })
       expect($.send).type.not.toBeCallableWith(Plain, { _tag: "Enter", id: "a" })
       return model
     })
@@ -98,8 +98,13 @@ describe("shared state", () => {
     const options = { init: () => null, update: (model: null) => model, view: (_: null, h: any) => h.el("p") }
     const NotOwner = Component.define({ name: "NotOwner", model: Schema.Null, message: TipMessage })
     expect(NotOwner.make).type.toBeCallableWith(options)
-    const Drawn = Component.define({ name: "Drawn", model: Schema.Null, message: TipMessage, shares: () => 1 })
-    expect(Drawn.make).type.not.toBeCallableWith(options)
+    const DrawnProvider = Component.define({
+      name: "DrawnProvider",
+      model: Schema.Null,
+      message: TipMessage,
+      shares: () => 1
+    })
+    expect(DrawnProvider.make).type.not.toBeCallableWith(options)
     expect(Component.define).type.not.toBeCallableWith({
       name: "Bad",
       model: Schema.Null,
@@ -110,14 +115,14 @@ describe("shared state", () => {
 
   it("checks a scene's shared values against their owner", () => {
     const steps = Scene.start(Tip, { id: "a" })
-    expect(steps.shared(Tips, { open: "a" })).type.not.toRaiseError()
-    expect(steps.given(null, {}, [[Tips, { open: "a" }]])).type.not.toRaiseError()
-    expect(steps.shared).type.not.toBeCallableWith(Tips, { open: 1 })
+    expect(steps.shared(TipsProvider, { open: "a" })).type.not.toRaiseError()
+    expect(steps.given(null, {}, [[TipsProvider, { open: "a" }]])).type.not.toRaiseError()
+    expect(steps.shared).type.not.toBeCallableWith(TipsProvider, { open: 1 })
     expect(steps.shared).type.not.toBeCallableWith(Plain, null)
-    expect(steps.given).type.not.toBeCallableWith(null, {}, [[Tips, { open: 1 }]])
+    expect(steps.given).type.not.toBeCallableWith(null, {}, [[TipsProvider, { open: 1 }]])
   })
 
   it("takes an owner as a scene's component", () => {
-    expect(Scene.make(Tips, {}, { elements: Html, view: (_, h) => h.span() })).type.not.toRaiseError()
+    expect(Scene.make(TipsProvider, {}, { elements: Html, view: (_, h) => h.span() })).type.not.toRaiseError()
   })
 })

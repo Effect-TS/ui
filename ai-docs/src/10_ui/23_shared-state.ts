@@ -55,7 +55,7 @@ const TooltipMessage = Schema.TaggedUnion({
   BlurredTooltip: { id: Schema.String }
 })
 
-// `h.shared.tips` is the nearest TooltipProvider's value. Reading it, or
+// `h.shared.provider` is the nearest TooltipProvider's value. Reading it, or
 // sending to it, puts `Component.Shared<typeof TooltipProvider>` in the
 // component's requirements: it compiles only below a TooltipProvider. Reads
 // are in `view` and `parts` only, so `update` stays a pure function of what
@@ -65,7 +65,7 @@ export const Tooltip = Component.define({
   props: Schema.Struct({ label: Schema.String, tip: Schema.String }),
   model: Schema.Null,
   message: TooltipMessage,
-  shared: { tips: TooltipProvider },
+  shared: { provider: TooltipProvider },
   elements: Html
 }).make({
   init: () => null,
@@ -79,7 +79,7 @@ export const Tooltip = Component.define({
         .onBlur(TooltipMessage.make({ _tag: "BlurredTooltip", id }))
         .attr("aria-describedby", id)
         .children(h.props.label),
-      h.shared.tips.open === id && h.span.id(id).attr("role", "tooltip").children(h.props.tip)
+      h.shared.provider.open === id && h.span.id(id).attr("role", "tooltip").children(h.props.tip)
     )
   }
 })

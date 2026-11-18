@@ -209,7 +209,7 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Shared.Ste
   /**
    * Starts from any Model, as `Steps.Steps.given` does. `shared` sets the
    * values owners share, as `shared` steps would, in the same render:
-   * `[[Provider, value], [Other, value]]`. Values given before and not
+   * `[[TooltipProvider, value], [ThemeProvider, value]]`. Values given before and not
    * listed are kept.
    */
   given<const O extends ReadonlyArray<Component.Headless.Any> = []>(

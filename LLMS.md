@@ -66,6 +66,11 @@ A definition's binding and its name string match:
 its feature prefix, as in `"notes/SaveNote"`, and the rule applies to the
 last segment.
 
+A component with `shares` takes the `Provider` suffix, as in
+`TooltipProvider`. A reader names it `provider` in `shared`, so it reads
+`h.shared.provider`. A reader of several owners names each one after its
+owner instead, such as `tooltip` and `theme`.
+
 Map each `Command.Service` to its messages once, beside the Message union,
 and call that function from `update`. A result is mapped where the Command
 is issued, so nothing else ties `SaveNote` to `SucceededSaveNote`:
@@ -217,16 +222,18 @@ runs it with a stand-in view for the consumer.
 
 A headless component with `shares: (model, props) => value` owns shared
 state: every component in its `view` closure, at any depth, can read the
-value. A reader lists the owners it reads in `shared: { tips: Provider }` and
-reads `h.shared.tips` or `p.shared.tips` in `view` or `parts`. Any
-`update` below the owner can call `$.send(Provider, message)` with one of the
-messages the owner `receives`. Reads and sends put
-`Component.Shared<typeof Provider>` in a component's requirements, and the
-owner's closure removes it, so a reader with no owner above it doesn't
-compile. The state is the owner's Model, so the log records every change. In
-a `Scene`, `s.shared(Provider, value)` or
-`s.given(model, {}, [[Provider, value]])` gives readers a value, and each send
-to the owner is acknowledged with `s.sent(Provider, message)`.
+value. A reader lists the owners it reads in
+`shared: { provider: TooltipProvider }` and reads `h.shared.provider` or
+`p.shared.provider` in `view` or `parts`. Any `update` below the owner can
+call `$.send(TooltipProvider, message)` with one of the messages the owner
+`receives`. Reads and sends put `Component.Shared<typeof TooltipProvider>`
+in a component's requirements, and the owner's closure removes it, so a
+reader with no owner above it doesn't compile. The state is the owner's
+Model, so the log records every change. In a `Scene`,
+`s.shared(TooltipProvider, value)` or
+`s.given(model, {}, [[TooltipProvider, value]])` gives readers a value, and
+each send to the owner is acknowledged with
+`s.sent(TooltipProvider, message)`.
 
 Every owner update re-runs its closure, and headless children in it
 re-render each time, so put normal components directly under an owner.
