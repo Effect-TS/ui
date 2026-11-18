@@ -111,7 +111,10 @@
  *     Tooltip(h, {
  *       key: "bold",
  *       props: { open: model.boldTip, sideOffset: 8 },
- *       onEmit: (event) => ToolbarMessage.ToggledBoldTip({ open: event._tag === "Opened" }),
+ *       onEmit: {
+ *         Opened: () => ToolbarMessage.ToggledBoldTip({ open: true }),
+ *         Dismissed: () => ToolbarMessage.ToggledBoldTip({ open: false })
+ *       },
  *       view: (s) =>
  *         h.span(
  *           s.trigger(h.button.class("tool").attr("aria-label", "Bold")).children("B"),

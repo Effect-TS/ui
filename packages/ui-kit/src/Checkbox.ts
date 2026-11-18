@@ -85,7 +85,7 @@
  *   view: (model, h) =>
  *     Checkbox(h, {
  *       props: { checked: model.terms, name: "terms", required: true },
- *       onEmit: ({ checked }) => SignupMessage.ToggledTerms({ checked }),
+ *       onEmit: { Toggled: ({ checked }) => SignupMessage.ToggledTerms({ checked }) },
  *       view: (s) =>
  *         h.label.class("terms").children(
  *           s.root(h.button.class("checkbox")).children(s.indicator(h.span.class("tick"))),

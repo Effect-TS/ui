@@ -14,7 +14,7 @@ export interface Options {
   // Every ref fits `Ref.Any`; the call's type has checked what it receives.
   readonly ref?: Component.Ref.Any | undefined
   readonly props?: unknown
-  readonly onEmit?: ((events: any) => unknown) | undefined
+  readonly onEmit?: ((event: any) => unknown) | Readonly<Record<string, (event: any) => unknown>> | undefined
   readonly fallback?: ((result: any) => View.Content<any, any>) | undefined
   readonly onFailure?: ((failure: AsyncResult.Failure<never, unknown>) => unknown) | undefined
   readonly view?: ((parts: any) => View.Content<any, any>) | undefined
@@ -30,6 +30,7 @@ export const make = (
   if (options.key !== undefined && options.ref !== undefined) {
     throw new Error("A child takes a key or a ref, not both")
   }
+  const { onEmit } = options
   return {
     _tag: "Child",
     component: component as Component.Any,
@@ -37,7 +38,7 @@ export const make = (
     key: options.ref !== undefined ? options.ref.key : options.key ?? "",
     ref: options.ref,
     props: options.props ?? {},
-    onEmit: options.onEmit ?? ignore,
+    onEmit: typeof onEmit === "object" ? (event) => onEmit[event._tag](event) : onEmit ?? ignore,
     fallback: options.fallback,
     onFailure: options.onFailure,
     view: options.view,
