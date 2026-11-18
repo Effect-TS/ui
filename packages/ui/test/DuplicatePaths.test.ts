@@ -254,12 +254,13 @@ describe("duplicate child paths", () => {
     it("fail Scene.fallback the same way", () => {
       const view = Scene.start(Parent, { siblings: ["a"], first: ["a"], second: [] }).current.view()
       assert.throws(
-        () => Scene.fallback(view, "b", AsyncResult.failure(Cause.fail("broken"))),
+        () => Scene.fallback(view, Broken, "b", AsyncResult.failure(Cause.fail("broken"))),
         /Scene\.fallback renders two children at Row\[a\], in the fallback of Broken\[b\]/
       )
       assert.isDefined(
         Scene.fallback(
           Scene.start(Parent, { siblings: ["a"], first: ["b"], second: [] }).current.view(),
+          Broken,
           "b",
           AsyncResult.failure(Cause.fail("broken"))
         )
@@ -369,4 +370,52 @@ describe("duplicate child paths", () => {
         })))
     }
   })
+})
+
+describe("a child without a key", () => {
+  it.effect("mounts at Name[], one per component", () =>
+    provideHost(Effect.gen(function*() {
+      const Label = Component.define({ name: "Label", model: Schema.Null, message: Schema.Never }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => h.el("span", "label")
+      })
+      const Page = Component.define({ name: "Page", model: Schema.Null, message: Schema.Never }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => h.el("main", Row(h, { props: { label: "row" } }), Label(h, {}))
+      })
+      const root = yield* TestHost.mount(Page, {})
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "rowlabel")
+      assert.deepStrictEqual(
+        root.log().filter((entry) => entry._tag === "Mounted").map((entry) => entry.path),
+        ["/Page", "/Page/Row[]", "/Page/Label[]"]
+      )
+    })))
+
+  it.effect("in a list fails the parent once a second row renders, asking for a key", () =>
+    provideHost(Effect.gen(function*() {
+      const List = Component.define({
+        name: "List",
+        props: Schema.Struct({ keys: Schema.Array(Schema.String) }),
+        model: Schema.Array(Schema.String),
+        message: ListMessage
+      }).make({
+        init: ($) => $.props.keys,
+        update: (_, message) => message.keys,
+        view: (keys, h) => h.el("ul", keys.map((key) => Row(h, { props: { label: key } })))
+      })
+      const root = yield* TestHost.mount(List, { keys: ["a"] }, { fallback: (_, h) => h.text("crashed") })
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "a")
+      root.send(ListMessage.make({ _tag: "Set", keys: ["a", "b"] }))
+      yield* Effect.flip(TestHost.settle)
+      assert.strictEqual(root.text(), "crashed")
+      assert.include(
+        Cause.pretty(failure(root.log()).cause),
+        "/List renders two children at Row[]. A child without a key must be the only Row where it is rendered: " +
+          "give each Row its own `key`"
+      )
+    })))
 })

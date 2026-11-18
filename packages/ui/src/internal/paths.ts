@@ -126,7 +126,9 @@ const visit = (
     let taken = byName.get(name)
     if (taken === undefined) byName.set(name, taken = new Map())
     const holder = taken.get(node.key)
-    if (holder !== undefined && holder !== replaced) failure(paths.path, `at ${segment(node)}${where}`)
+    if (holder !== undefined && holder !== replaced) {
+      failure(paths.path, `at ${segment(node)}${where}${keyHint(name, node)}`)
+    }
     taken.set(node.key, node)
     const ref = node.ref
     if (ref !== undefined) {
@@ -140,6 +142,14 @@ const visit = (
     place(paths, node.name)
   }
 }
+
+// A missing key is a runtime error, not a type error, so the message names the fix.
+const keyHint = (name: string, node: View.Child<any, any>): string =>
+  node.ref !== undefined
+    ? ""
+    : node.key === ""
+    ? `. A child without a key must be the only ${name} where it is rendered: give each ${name} its own \`key\``
+    : `. Give each ${name} its own \`key\``
 
 const place = (paths: ChildPaths, name: string): void => {
   const placed = paths.placed ??= new Set()

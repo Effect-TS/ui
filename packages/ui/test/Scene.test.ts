@@ -4,6 +4,7 @@ import { HtmlLocator } from "@effect/ui/html/testing"
 import { Locator, Scene } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Effect, Redacted, Schema } from "effect"
+import { AsyncResult } from "effect/reactivity"
 import { Badge, BadgeRef, Note, NoteEvents, NoteMessage, SaveNote } from "./fixtures/notes.ts"
 import { defect } from "./utils/scoped.ts"
 
@@ -89,13 +90,13 @@ describe("Scene", () => {
     assert.throws(() => s.click(status), /^Scene\.click: nothing handles "click"/)
   })
 
-  it.effect("childEmit is typed by the child, and throws when the slot holds another component", () =>
+  it.effect("childEmit is typed by the child, and finds only a child of that component", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(Note, {})
       s.childEmit(Badge, BadgeRef, { _tag: "Opened", count: 2 }).expect(status).toHaveText("opened 2")
       assert.throws(
         () => Scene.start(Note, {}).childEmit(Note, BadgeRef, { _tag: "Saved", text: "" }),
-        /^Scene\.childEmit: the child at the ref Badge is Badge, not Note/
+        /^Scene\.childEmit: no child Note with the ref Badge; children: Badge\[Badge\] \(ref\)$/
       )
     }))
 
@@ -114,14 +115,37 @@ describe("Scene", () => {
       s.childEmit(Panel, "panel", { _tag: "Changed", to: "dark" }).expect(Locator.tag("p")).toHaveText("dark")
       assert.throws(
         () => Scene.start(Page, {}).childEmit(Badge, "panel", { _tag: "Opened", count: 1 }),
-        /^Scene\.childEmit: the child at "panel" is Panel, not Badge/
+        /^Scene\.childEmit: no child Badge with key "panel"; children: Panel\[panel\]$/
+      )
+    }))
+
+  it.effect("child steps find a child without a key by its component", () =>
+    Effect.gen(function*() {
+      const Page = Component.define({ name: "Page", model: Schema.String, message: Schema.String, elements: Html })
+        .make({
+          init: () => "",
+          update: (_, message) => message,
+          view: (seen, h) =>
+            h.div(
+              h.p(seen),
+              Note(h, { onEmit: () => "note", onFailure: () => "note failed" }),
+              Badge(h, { onEmit: () => "badge", onFailure: () => "badge failed", fallback: () => h.text("no badge") })
+            )
+        })
+      const s = yield* Scene.make(Page, {})
+      s.childEmit(Badge, { _tag: "Opened", count: 1 }).expect(Locator.tag("p")).toHaveText("badge")
+        .childFailure(Badge, Cause.fail("boom")).expect(Locator.tag("p")).toHaveText("badge failed")
+      assert.deepStrictEqual(Scene.fallback(s.view, Badge, AsyncResult.initial()), { _tag: "Text", text: "no badge" })
+      assert.throws(
+        () => Scene.start(Page, {}).childEmit(Badge, "b", { _tag: "Opened", count: 1 }),
+        /^Scene\.childEmit: no child Badge with key "b"; children: Note\[\], Badge\[\]$/
       )
     }))
 
   it.effect("childFailure sends what onFailure maps, and does nothing without one", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(Note, {})
-      s.childFailure(BadgeRef, Cause.fail("boom")).expect(status).toHaveText("")
+      s.childFailure(Badge, BadgeRef, Cause.fail("boom")).expect(status).toHaveText("")
     }))
 
   describe("mounts", () => {

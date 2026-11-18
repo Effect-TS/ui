@@ -214,7 +214,7 @@ describe("shared state in a Scene", () => {
   it.effect("reads the expanded Model of an owner in the scene's own view", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(App, {})
-      s.givenChild("tips", "a")
+      s.givenChild(TipsProvider, "tips", "a")
       // Trigger is expanded; Tip is a normal child, so a slot with no text.
       assert.strictEqual(Locator.textOf(s.root), "a")
     }))

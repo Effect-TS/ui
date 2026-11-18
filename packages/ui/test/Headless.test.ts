@@ -452,7 +452,7 @@ describe("headless components", () => {
       // Nothing in the view sends `Twin` or `Swap`, so the scene starts from the Model they make.
       assert.throws(() => Scene.start(Opener, { twin: "never" }).given((model) => ({ ...model, twin: true })), twice)
       const open = { open: true, query: "", active: null, typed: "", focused: [] }
-      assert.throws(() => Scene.start(Opener, { twin: "open" }).givenChild("Actions", open).current.view(), twice)
+      assert.throws(() => Scene.start(Opener, { twin: "open" }).givenChild(Menu, Actions, open).current.view(), twice)
       // Moved in one step, the ref is held once.
       const swapped = Scene.start(Opener, { twin: "never" }).given((model) => ({ ...model, swapped: true }))
       assert.lengthOf(swapped.current.all(Locator.text("spare in a closure")), 1)

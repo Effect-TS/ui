@@ -311,12 +311,25 @@ export type MountHint =
  *
  * **Details**
  *
- * The runtime gives each child its own instance, Model and Scope. Several
- * instances of one component are several children with different keys. The child
- * reports up through `onEmit`, checked against the parent's message type, and
- * every child is a failure boundary: a failed child shows `fallback`, or
- * nothing, until its key changes, and the parent's optional `onFailure` is
- * also messaged.
+ * The runtime gives each child its own instance, Model and Scope, at the path
+ * `Name[key]` under its parent. Several instances of one component are
+ * several children with different keys. The child reports up through
+ * `onEmit`, checked against the parent's message type, and every child is a
+ * failure boundary: a failed child shows `fallback`, or nothing, until its
+ * key changes, and the parent's optional `onFailure` is also messaged.
+ *
+ * **Gotchas**
+ *
+ * A child without a key has the empty key, at `Name[]`, so it must be the only
+ * child of its component where it is rendered: a second one fails the parent
+ * with an error that asks for a `key`. Rows in a list always need a key. A
+ * list of one unkeyed row renders, and a row that replaces it keeps its
+ * instance and Model.
+ *
+ * Two children at one path are one instance, whatever branch of the view
+ * declared them: `cond ? Listbox(h, { props: a }) : Listbox(h, { props: b })`
+ * keeps the Model when `cond` changes, and `init` doesn't run again. Key each
+ * branch when the component's Model holds state that shouldn't carry over.
  *
  * @stability experimental
  * @category models
@@ -359,8 +372,10 @@ export declare namespace Child {
    *
    * **Details**
    *
-   * A child takes exactly one of `key` and `ref`. With a ref, the ref's key
-   * is the child's key, and the parent can `$.send` to the child. `Rcv` is
+   * A child takes a `key`, a `ref` or neither, never both. Without either,
+   * its key is the empty string, so `key: ""` and no key name the same child.
+   * With a ref, the ref's key is the child's key, and the parent can
+   * `$.send` to the child. `Rcv` is
    * what the component receives, and the ref must be a `Component.Ref.For`
    * of it: a ref made from a component also fits a provided copy of it or a
    * feature implementation. An erased `Component.Ref.Any` names no child:
@@ -376,7 +391,8 @@ export declare namespace Child {
   export type Options<Props, Events, Msg, Rcv = never> =
     & (
       | {
-        readonly key: string
+        /** The child's identity among its parent's children of one component. The empty string by default. */
+        readonly key?: string | undefined
         readonly ref?: undefined
       }
       | {

@@ -14,6 +14,7 @@ import * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Schema from "effect/Schema"
 import * as Command from "../Command.ts"
 import type * as Component from "../Component.ts"
+import type * as Feature from "../Feature.ts"
 import * as MessageLog from "../MessageLog.ts"
 import * as Query from "../Query.ts"
 import * as Locator from "../testing/Locator.ts"
@@ -25,6 +26,7 @@ import {
   checkAuthorRefs,
   checkChildPaths,
   checkContentPaths,
+  childName,
   segment,
   slotSegment
 } from "./paths.ts"
@@ -133,15 +135,25 @@ export type Fields<Props, Model, Msg, Events> =
     | "ack"
   >
   & {
-    readonly childModels?: ReadonlyMap<string, unknown> | undefined
+    readonly childModels?: ReadonlyArray<GivenChild> | undefined
     readonly shared?: ReadonlyMap<Component.Definition.Any, unknown> | undefined
   }
 
 // -- headless children ------------------------------------------------------
 // A story shows a headless child expanded: the closure it was declared with, run against the parts of the
 // child's `init` Model or of the Model `givenChild` set. No runtime is involved.
+/**
+ * The Model `givenChild` set for the headless child of `component` with `key`.
+ *
+ * @internal
+ */
+export interface GivenChild {
+  readonly component: object
+  readonly key: string
+  readonly model: unknown
+}
 /** @internal */
-export const childModels = new WeakMap<object, ReadonlyMap<string, unknown>>()
+export const childModels = new WeakMap<object, ReadonlyArray<GivenChild>>()
 // The children an expansion replaced, by the expanded root: `childEmit` and `childFailure` still find them.
 const expandedChildren = new WeakMap<object, ReadonlyArray<View.Child<any, any>>>()
 
@@ -263,7 +275,7 @@ export const sharedLookup = (given: Owners | undefined, owners: Owners): Compone
 const expandRoot = <Msg>(
   view: View.Node<Msg, any>,
   name: string,
-  given: ReadonlyMap<string, unknown> | undefined,
+  given: ReadonlyArray<GivenChild> | undefined,
   filled: Readonly<Record<string, View.Input<never, any>>> | undefined,
   shared: Owners | undefined,
   root: Owners
@@ -332,7 +344,8 @@ const expandRoot = <Msg>(
         if (node.view === undefined || component.parts === undefined) return node
         replaced.push(node)
         const childPath = path + "/" + segment(node)
-        const model = given?.has(node.key) ? given.get(node.key) : component.init(node.props).model
+        const set = given?.find((entry) => isChildOf(node, entry.component) && node.key === entry.key)
+        const model = set !== undefined ? set.model : component.init(node.props).model
         const parts = component.parts(model, node.props, {
           owner: { path: childPath, depth: depth + 1 },
           shared: sharedLookup(shared, owners)
@@ -1687,21 +1700,52 @@ const shownNodes = function*(node: View.Node<any, any>): Generator<View.Node<any
   }
 }
 
-/** @internal */
+/**
+ * Whether `child` was declared from `component`: the component itself, a provided copy of it, or the
+ * feature service.
+ *
+ * @internal
+ */
+export const isChildOf = (child: View.Child<any, any>, component: object): boolean => {
+  if (child.component === component) return true
+  const definition = (child.component as { readonly definition?: unknown }).definition
+  return definition !== undefined && definition === (component as { readonly definition?: unknown }).definition
+}
+
+/**
+ * The one child of `component` with `key`: a string matches the child's key, a ref a child rendered with
+ * it, and no key a child rendered without a key or a ref.
+ *
+ * @internal
+ */
 export const findChild = <Msg>(
   view: View.Node<Msg, any>,
-  key: string | Component.Ref.Any,
+  component: Component.Any | Component.Headless.Any | Feature.Any,
+  key: string | Component.Ref.Any | undefined,
   step: string
 ): View.Child<Msg, any> => {
-  const child = children(view).find((child) =>
-    typeof key === "string" ? child.key === key : child.ref !== undefined && child.ref.key === key.key
-  )
-  if (child === undefined) {
-    throw new Error(
-      `${step}: no child ${typeof key === "string" ? `with key "${key}"` : `with the ref ${key.key}`}; children: ${
-        children(view).map((c) => c.ref !== undefined ? `ref ${c.key}` : c.key).join(", ")
-      }`
+  const all = children(view)
+  const found = all.filter((child) =>
+    isChildOf(child, component) && (
+      key === undefined
+        ? child.key === "" && child.ref === undefined
+        : typeof key === "string"
+        ? child.key === key
+        : child.ref !== undefined && child.ref.key === key.key
     )
-  }
-  return child
+  )
+  if (found.length === 1) return found[0]!
+  const name = childName(component as Component.Any)
+  const which = key === undefined
+    ? "without a key"
+    : typeof key === "string"
+    ? `with key "${key}"`
+    : `with the ref ${key.key}`
+  throw new Error(
+    found.length === 0
+      ? `${step}: no child ${name} ${which}; children: ${
+        all.map((child) => segment(child) + (child.ref !== undefined ? " (ref)" : "")).join(", ")
+      }`
+      : `${step}: ${found.length} children ${name} ${which}: give each one its own key or ref`
+  )
 }

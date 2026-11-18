@@ -27,13 +27,14 @@ export const make = (
   options: Options
 ): View.Child<any, any> => {
   // A child with a key and a ref would have two identities that can disagree.
-  if ((options.key === undefined) === (options.ref === undefined)) {
-    throw new Error("A child takes exactly one of key and ref")
+  if (options.key !== undefined && options.ref !== undefined) {
+    throw new Error("A child takes a key or a ref, not both")
   }
   return {
     _tag: "Child",
     component: component as Component.Any,
-    key: options.ref !== undefined ? options.ref.key : options.key!,
+    // Without a key or a ref, the empty key: the child's segment is `Name[]`.
+    key: options.ref !== undefined ? options.ref.key : options.key ?? "",
     ref: options.ref,
     props: options.props ?? {},
     onEmit: options.onEmit ?? ignore,

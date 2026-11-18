@@ -359,8 +359,8 @@ export declare namespace Ref {
    * annotated back into one, and `$.send` takes nothing through it or its
    * `at` rows. It names no child either: every typed ref fits
    * it, so a child that took it would skip the receives check. It keeps its
-   * `key`, so a Scene's `childEmit` and `childFailure` steps and
-   * `Scene.fallback` find a child by it.
+   * `key`, so a Scene's `childEmit`, `childFailure` and `givenChild` steps
+   * and `Scene.fallback` find a child by it.
    * `View.Child`'s `ref`, `Step`'s `sends`, what `isRef` narrows to,
    * and the refs of `Feature.Any` and of a component whose receives are
    * `any` are erased.

@@ -58,7 +58,7 @@ describe("HtmlScene", () => {
       blur: (s) => s.blur(missing),
       drop: (s) => s.drop(missing, { data: { "application/x-todo": "milk" } }),
       childEmit: (s) => s.childEmit(Board, "none", undefined as never),
-      childFailure: (s) => s.childFailure("none", Cause.fail("boom"))
+      childFailure: (s) => s.childFailure(Board, "none", Cause.fail("boom"))
     }
     for (const [name, run] of Object.entries(steps)) {
       const scene = HtmlScene.start(Board, {}).click("Plain")
