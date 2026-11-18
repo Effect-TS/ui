@@ -296,10 +296,20 @@ portal. The details are in the JSDoc of `popover` and `modal` in
 
 - `.popover("manual", open)` is controlled: the host shows and hides the
   popup as `open` says, and restores it if anything else changes it. Use
-  it when `open` is a prop. Dismissal is then the kit's job: handle Escape
-  on the focused part, and an outside click with `subscriptions` (stop if
-  none fits), each emitting `Dismissed`. The popup stays open until the
-  consumer passes `open: false`, so a consumer can refuse.
+  it when `open` is a prop. Dismissal is then the kit's job: Escape and a
+  press outside each emit `Dismissed`. Blur and pointer-leave don't stand
+  in for the outside press: it must also close a popup that focus, a close
+  delay or the consumer keeps open. A popup that opens with focus inside
+  handles Escape on the focused part. One that opens without focus, such
+  as `Tooltip` on hover, hears neither on a part, so it listens on its
+  document: a stream mount on the popover, applied only while the popup
+  shows, reports Escape and mouse presses, as `Tooltip`'s `TrackDismissal`
+  does. No service gives a Subscription the document, so it's a mount and
+  not an entry in `subscriptions`. Which presses are outside is the
+  component's call: `Tooltip` already tracks whether the pointer is on its
+  parts, so its `update` decides, and a popup that doesn't track the
+  pointer compares the press's target in the mount. The popup stays open
+  until the consumer passes `open: false`, so a consumer can refuse.
 - `.popover("auto", open)` with `onToggle` follows the browser: it closes
   on Escape, an outside click, or another auto popover opening, and the
   Model stores what `onToggle` reports. Use it only when `open` is the
