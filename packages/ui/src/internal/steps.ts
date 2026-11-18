@@ -145,6 +145,24 @@ export abstract class Cursor {
     if (this.state.ack.acted) engine.checkGivenQueries(this.state, state, step)
     return this.replace(this.settled(state, step))
   }
+  shared(owner: Component.Headless.Any, value: unknown): this {
+    const step = this.name("shared")
+    const given = (state: engine.State<any, any, any, any>) =>
+      engine.update(state, { shared: engine.withShared(state, [[owner, value]], step) })
+    const messages = engine.sharedMessages(this.state, owner, value)
+    // Only what readers see changes: nothing to settle or check.
+    if (messages.length === 0) return this.replace(this.givenShared(given(this.state), step))
+    return this.act(
+      "shared",
+      "message",
+      (state) =>
+        messages.reduce<engine.State<any, any, any, any>>((out, message) => engine.dispatch(out, message), given(state))
+    )
+  }
+  /** A `shared` step that sent nothing: a kind that renders renders the new value, when it can. */
+  protected givenShared(state: engine.State<any, any, any, any>, _step: string): engine.State<any, any, any, any> {
+    return state
+  }
   props(next: unknown): this {
     return this.act(
       "props",
@@ -377,7 +395,10 @@ export const baseRecord = (state: engine.State<any, any, any, any>) => ({
   interrupted: state.interrupted,
   loadingMore: state.loadingMore,
   subscriptions: state.subscriptions,
-  queryInfo: state.queryInfo
+  queryInfo: state.queryInfo,
+  get reports() {
+    return engine.reportsOf(state)
+  }
 })
 
 /**

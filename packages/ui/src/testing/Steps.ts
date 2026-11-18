@@ -117,6 +117,13 @@ export interface Record<Props, Model, Msg, Events> {
   readonly subscriptions: () => ReadonlyArray<string>
   /** Each of the component's queries, with its `Query`'s name and the args it returns for the current Model and props. */
   readonly queryInfo: () => ReadonlyArray<QueryInfo>
+  /**
+   * What the component reports to each owner its `shared` lists with a
+   * `report`, by the name it lists the owner under, from the current Model
+   * and props. An optional owner with no value given is absent, and has no
+   * report.
+   */
+  readonly reports: { readonly [name: string]: unknown }
 }
 
 /**
@@ -316,11 +323,45 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    * and whatever the results held before. The view renders once. It throws if a
    * named query is disabled, or a keyed entry's args aren't ones the query
    * returns.
+   *
+   * `shared` sets the values owners share, as `shared` steps would, but
+   * sends no `onChange` message: `[[TooltipProvider, value], [ThemeProvider,
+   * value]]`. Values given before and not listed are kept.
    */
-  given(
+  given<const O extends ReadonlyArray<Component.Headless.Any> = []>(
     model: Component.Model<C> | ((model: Component.Model<C>) => Component.Model<C>),
-    queries?: Given<C>
+    queries?: Given<C>,
+    shared?: { readonly [K in keyof O]: readonly [owner: O[K], value: Component.Shared.Value<O[K]>] }
   ): this
+  /**
+   * Sets the value `owner` shares with the component, in place of the one it
+   * would see otherwise.
+   *
+   * **Details**
+   *
+   * `owner` is a headless component with `shares`, and the value is keyed
+   * by it, not by a reader's local name: in a scene, one step reaches the
+   * scene's component and every headless child the scene expands. The value
+   * is kept until the next `shared` step or `given` that sets one for
+   * `owner`.
+   *
+   * Without it, a reader sees the value of the nearest `owner` in the
+   * scene's own view, or else, for an `optional` read, `undefined`, and
+   * for a required one `shares(init(props).model, props)` with no props
+   * when every prop of `owner` is optional. Otherwise rendering a scene
+   * throws, naming this step, but not in a `shared` step: `shared` steps
+   * in a row can give several owners' values.
+   *
+   * When the component had a value for `owner`, given before or the
+   * default of a required read, and this one differs, each `onChange` its
+   * `shared` lists for `owner` sends its message, and the step is a
+   * message step. A first value of an optional owner sends nothing: in an
+   * app the owner is found once, when the reader mounts. The test never
+   * runs `owner`'s `update`: what the component sends it must be
+   * acknowledged with `sent`, and a send to an optional owner with no value
+   * given is dropped.
+   */
+  shared<O extends Component.Headless.Any>(owner: O, value: Component.Shared.Value<O>): this
   /**
    * Changes the props. A props change never reaches `update`: it changes the
    * view, the queries' args and the Subscription keys.

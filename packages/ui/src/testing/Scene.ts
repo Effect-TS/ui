@@ -187,7 +187,7 @@ type AnyComponent =
  * @category models
  * @since 0.1.0
  */
-export interface Steps<C extends AnyComponent, Parts = never> extends Shared.Steps<C> {
+export interface Steps<C extends AnyComponent, Parts = never, Report = never> extends Shared.Steps<C> {
   /** The scene after the last step. */
   readonly current: Scene<
     Component.Props<C>,
@@ -209,17 +209,14 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Shared.Ste
   all(locator: Locator.Locator): ReadonlyArray<Locator.Node>
 
   /**
-   * Starts from any Model, as `Steps.Steps.given` does. `shared` sets the
-   * values owners share, as `shared` steps would, in the same render:
-   * `[[TooltipProvider, value], [ThemeProvider, value]]`. Values given before and not
-   * listed are kept.
+   * Gives an owner of shared state the reports of its readers, as the
+   * runtime collects them once a render pass settles, in no promised order.
+   * Runs `shares`'s `onReports` and sends its message when it differs from
+   * the one it last returned, starting from its message for no reports. A
+   * message step when it sends. Throws for a component whose `shares` has
+   * no `reports` Schema. A scene of a headless component only.
    */
-  given<const O extends ReadonlyArray<Component.Headless.Any> = []>(
-    model: Component.Model<C> | ((model: Component.Model<C>) => Component.Model<C>),
-    queries?: Shared.Given<C>,
-    shared?: { readonly [K in keyof O]: readonly [owner: O[K], value: Component.Shared.Value<O[K]>] }
-  ): this
-
+  reported(reports: ReadonlyArray<Report>): this
   /**
    * Clicks the one element `target` matches: the innermost element with a
    * `click` handler, that element or an ancestor, sends its message. A
@@ -294,25 +291,6 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Shared.Ste
    * rendered with it.
    */
   givenChild(child: Component.Headless.Any, key: string | Component.Ref.Any, model: unknown): this
-  /**
-   * Sets the value `owner` shares with the readers in the scene, in place of
-   * the one they'd see otherwise.
-   *
-   * **Details**
-   *
-   * `owner` is a headless component with `shares`, and the value is keyed by
-   * it, not by a reader's local name: one step reaches the scene's component
-   * and every headless child the scene expands. The value is kept until the
-   * next `shared` step or `given` that sets one for `owner`.
-   *
-   * Without it, a reader sees the expanded Model of the nearest `owner` in the
-   * scene's own view, or else `shares(init(props).model, props)` with no props
-   * when every prop of `owner` is optional. Otherwise rendering throws, naming
-   * this step, but not in a `shared` step: `shared` steps in a row can give
-   * several owners' values. The scene never runs `owner`'s `update`: what a
-   * reader sends it must be acknowledged with `sent`.
-   */
-  shared<O extends Component.Headless.Any>(owner: O, value: Component.Shared.Value<O>): this
   /**
    * Ends the one mount matching `target` with the result its body would have
    * produced, and sends the message the view's `Mount.map` makes of it.
@@ -426,14 +404,22 @@ export const make: {
    * one. An event runs every part layer on its element, in the runtime's
    * order, and each layer's `preventDefault` applies to its own message.
    */
-  <Props, Events, Parts, R, Rcv, V extends View.Elements = never>(
-    component: Component.Headless<Props, Events, Parts, R, Rcv>,
+  <Props, Events, Parts, R, Rcv, V extends View.Elements = never, Sh = never>(
+    component: Component.Headless<Props, Events, Parts, R, Rcv, Sh>,
     props: Props,
     options: {
       readonly elements?: View.Vocabulary<V> | undefined
       readonly view: (parts: Parts, h: View.Helper<never, Props> & View.Tags<V, never>) => View.Content<never, any>
     }
-  ): Effect.Effect<Steps<Component.Component<string, Props, any, any, Events, R, V>, Parts>, never, Scope.Scope>
+  ): Effect.Effect<
+    Steps<
+      Component.Component<string, Props, any, any, Events, R, V>,
+      Parts,
+      Component.Shared.Report<Component.Headless<Props, Events, Parts, R, Rcv, Sh>>
+    >,
+    never,
+    Scope.Scope
+  >
 } = (component: any, props: any, options?: any): any =>
   cursor.scoped(make, () => internal.begin(internal.SceneCursor, "Scene", component, props, options))
 

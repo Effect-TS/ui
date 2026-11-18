@@ -115,6 +115,47 @@ describe("HtmlServer", { concurrent: false }, () => {
       }
     }).pipe(Effect.scoped))
 
+  it.effect("delivers reports on the server before the HTML is written, and hydration adopts it", () =>
+    Effect.gen(function*() {
+      const GroupMessage = Schema.TaggedUnion({ ChangedOn: { on: Schema.Boolean } })
+      const Group = Component.define({
+        name: "Group",
+        model: Schema.Boolean,
+        message: GroupMessage,
+        shares: {
+          value: (on) => on,
+          reports: Schema.Boolean,
+          onReports: (reports) => GroupMessage.make({ _tag: "ChangedOn", on: reports.includes(true) })
+        }
+      }).make({ init: () => false, update: (_, { on }) => on, parts: () => ({}) })
+      const Item = Component.define({
+        name: "Item",
+        props: Schema.Struct({ open: Schema.Boolean }),
+        model: Schema.Null,
+        message: Schema.Never,
+        shared: { group: { owner: Group, report: (_, props) => props.open } },
+        elements: Html
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => h.span.children(h.shared.group ? "group open" : "group closed")
+      })
+      const Page = Component.define({ name: "Page", model: Schema.Null, message: Schema.Never, elements: Html })
+        .make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => Group(h, { key: "g", view: () => Item(h, { key: "i", props: { open: true } }) })
+        })
+      const rendered = yield* HtmlServer.renderToHtml(Page, {})
+      expect(rendered.html).toContain("<span>group open</span>")
+      const app = yield* container(rendered.html)
+      const span = app.querySelector("span")
+      yield* BrowserHost.mountEffect(Page, {}, app, { state: rendered.state })
+      yield* tick
+      expect(app.querySelector("span")).toBe(span)
+      expect(span!.textContent).toBe("group open")
+    }).pipe(Effect.scoped))
+
   it.effect("folds HTML attribute names with last-write wins, but preserves SVG casing", () =>
     Effect.gen(function*() {
       const Page = Component.define({

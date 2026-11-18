@@ -384,7 +384,8 @@ client, not the services.
   Share part of a headless component's state with every component below it:
   a tooltip provider that knows which tooltip is open, tooltips that read it
   and tell it when they're focused, and a scene of one tooltip with no
-  provider mounted.
+  provider mounted. Then an optional owner, the reports readers give it, and
+  a reader's `onChange`.
 - **[Mounts](./ai-docs/src/10_ui/24_mounts.ts)**:
   Start work with an element's host node: a mount that measures a box once,
   a mount that attaches a third-party editor and reports each change, and a

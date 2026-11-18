@@ -107,6 +107,7 @@ export type FailedIn =
   | "head"
   | "send"
   | "shares"
+  | "shared"
 
 /**
  * Which Command run an entry is about: the `seq` of the entry that issued it
@@ -133,12 +134,16 @@ export interface Issued {
  * child's emit, pointing at the child's entry. `Failure` is a parent's
  * `onFailure` for a child that failed, pointing at the child's `Failed`
  * entry. `Send` is a parent's `$.send`, or a descendant's `$.send` to an
- * owner of shared state, pointing at the sender's entry. `Mount` is an
+ * owner of shared state, pointing at the sender's entry. `Shared` is a
+ * reader's `onChange` for its owner's shared value: the name the reader's
+ * `shared` lists the owner under, the owner's path, and the owner's entry
+ * that last changed the value. `Reported` is an owner's `onReports` for a
+ * change in its readers' reports. `Mount` is an
  * `onMount` result, with the mount's name and the args its element last
  * rendered with, and `Dispatch` is a message sent from outside the tree,
  * such as `TestHost`'s `root.send`.
  *
- * `Emit`, `Failure` and `Send` name the other instance's path as well as
+ * `Emit`, `Failure`, `Send` and `Shared` name the other instance's path as well as
  * its entry, so a ring buffer that has dropped that entry still says where
  * the message came from.
  *
@@ -160,6 +165,8 @@ export type Source =
   | { readonly _tag: "Emit"; readonly path: string; readonly seq: number }
   | { readonly _tag: "Failure"; readonly path: string; readonly seq: number }
   | { readonly _tag: "Send"; readonly path: string; readonly seq: number }
+  | { readonly _tag: "Shared"; readonly name: string; readonly path: string; readonly seq: number }
+  | { readonly _tag: "Reported" }
   | {
     readonly _tag: "Mount"
     readonly name: string
@@ -536,9 +543,9 @@ export interface CommandDropped extends InstanceBase {
 }
 
 /**
- * A `$.send` that reached no child: `path` is the sender's, `ref` the key
- * of the child it named, and `issued` the sender's `Update` entry and the
- * send's index in its `sends`.
+ * A `$.send` that reached no child or owner: `path` is the sender's, `ref`
+ * the key of the child it named or the name of the owner, and `issued` the
+ * sender's `Update` entry and the send's index in its `sends`.
  *
  * **Details**
  *
@@ -547,6 +554,8 @@ export interface CommandDropped extends InstanceBase {
  * shows a feature's `fallback` because its Layer is building or failed, and
  * `waiting` when the child waits for its Layer before it adopts the server's
  * nodes. The message isn't kept for a later instance at that child's path.
+ * The reason is `absent` for a send to an owner the sender's `shared` lists
+ * as `optional`, when no instance of it is above the sender.
  *
  * @stability experimental
  * @category models
@@ -556,7 +565,7 @@ export interface SendDropped extends InstanceBase {
   readonly _tag: "SendDropped"
   readonly ref: string
   readonly issued: Issued
-  readonly reason: "unrendered" | "failed" | "fallback" | "waiting"
+  readonly reason: "unrendered" | "failed" | "fallback" | "waiting" | "absent"
 }
 
 /**
@@ -812,6 +821,8 @@ const SourceWire = Schema.Union([
   Schema.TaggedStruct("Emit", { path: Schema.String, seq: Schema.Number }),
   Schema.TaggedStruct("Failure", { path: Schema.String, seq: Schema.Number }),
   Schema.TaggedStruct("Send", { path: Schema.String, seq: Schema.Number }),
+  Schema.TaggedStruct("Shared", { name: Schema.String, path: Schema.String, seq: Schema.Number }),
+  Schema.TaggedStruct("Reported", {}),
   Schema.TaggedStruct("Mount", { name: Schema.String, args: Schema.Json }),
   Schema.TaggedStruct("Dispatch", {})
 ])
@@ -933,7 +944,7 @@ export const Wire = Schema.Union([
     ...InstanceWire,
     ref: Schema.String,
     issued: IssuedWire,
-    reason: Schema.Literals(["unrendered", "failed", "fallback", "waiting"])
+    reason: Schema.Literals(["unrendered", "failed", "fallback", "waiting", "absent"])
   }),
   Schema.TaggedStruct("SubscriptionStarted", { ...InstanceWire, key: Schema.String }),
   Schema.TaggedStruct("SubscriptionStopped", { ...InstanceWire, key: Schema.String })

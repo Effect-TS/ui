@@ -73,6 +73,7 @@ import * as child from "./internal/child.ts"
 import * as internalNoop from "./internal/noop.ts"
 import * as componentQueries from "./internal/queries.ts"
 import * as childRef from "./internal/ref.ts"
+import * as sharedReads from "./internal/shared.ts"
 import type * as Query from "./Query.ts"
 import type * as Subscription from "./Subscription.ts"
 import * as View from "./View.ts"
@@ -488,19 +489,21 @@ export type Shared<C> = C extends Headless<infer _P, infer _E, infer _Parts, inf
  */
 export declare namespace Shared {
   /**
-   * The requirement of an owner named `Name` that shares `Value` and
-   * receives `Rcv`. `make` builds it from the definition, and
-   * `Shared<typeof Owner>` reads it back.
+   * The requirement of an owner named `Name` that shares `Value`,
+   * receives `Rcv` and takes `Report` from each reader that reports to it.
+   * `make` builds it from the definition, and `Shared<typeof Owner>` reads
+   * it back.
    *
    * @stability experimental
    * @category models
    * @since 0.1.0
    */
-  export interface Of<in out Name extends string, in out Value, in out Rcv> {
+  export interface Of<in out Name extends string, in out Value, in out Rcv, in out Report = never> {
     readonly [SharedTypeId]: {
       readonly _Name: Types.Invariant<Name>
       readonly _Value: Types.Invariant<Value>
       readonly _Rcv: Types.Invariant<Rcv>
+      readonly _Report: Types.Invariant<Report>
     }
   }
 
@@ -511,7 +514,12 @@ export declare namespace Shared {
    * @category models
    * @since 0.1.0
    */
-  export type Any = Of<any, any, any>
+  // `any` doesn't stand in for `never` in an invariant parameter, so an owner that receives or takes nothing is listed apart.
+  export type Any =
+    | Of<any, any, any, any>
+    | Of<any, any, never, any>
+    | Of<any, any, any, never>
+    | Of<any, any, never, never>
 
   /**
    * The value an owner shares: what its `shares` returns.
@@ -520,7 +528,9 @@ export declare namespace Shared {
    * @category utility types
    * @since 0.1.0
    */
-  export type Value<C> = Shared<C> extends infer S ? S extends Of<infer _Name, infer V, infer _Rcv> ? V : never : never
+  export type Value<C> = Shared<C> extends infer S ?
+    S extends Of<infer _Name, infer V, infer _Rcv, infer _Rp> ? V : never
+    : never
 
   /**
    * The messages an owner receives, which `$.send(Owner, message)` takes.
@@ -529,9 +539,51 @@ export declare namespace Shared {
    * @category utility types
    * @since 0.1.0
    */
-  export type Receives<C> = Shared<C> extends infer S ? S extends Of<infer _Name, infer _V, infer Rcv> ? Rcv : never
+  export type Receives<C> = Shared<C> extends infer S ? S extends Of<infer _Name, infer _V, infer Rcv, infer _Rp> ? Rcv
+    : never
+    : never
+
+  /**
+   * What each reader reports to an owner: the type of the `reports` Schema
+   * in its `shares`. `never` for an owner that takes no reports.
+   *
+   * @stability experimental
+   * @category utility types
+   * @since 0.1.0
+   */
+  export type Report<C> = Shared<C> extends infer S ? S extends Of<infer _Name, infer _V, infer _Rcv, infer Rp> ? Rp
+    : never
     : never
 }
+
+/**
+ * One entry of a reader's `shared` option: the owner, or the owner with what
+ * else the reader declares about it.
+ *
+ * **Details**
+ *
+ * `Owner` alone is short for `{ owner: Owner }`. With `optional: true` the
+ * reader works with no owner above it: the read is `undefined` there, and the
+ * reader carries no `Shared<typeof Owner>`. `report` is what the reader
+ * tells the owner, from its own Model and props, for an owner whose
+ * `shares` takes `reports`. `onChange` is the reader's message for a new
+ * shared value.
+ *
+ * `report` and `onChange` are typed by `define`, which knows the reader's
+ * Model and props and the owner's value. Here they're `unknown`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type SharedRead =
+  | Headless.Any
+  | {
+    readonly owner: Headless.Any
+    readonly optional?: boolean | undefined
+    readonly report?: unknown
+    readonly onChange?: unknown
+  }
 
 /**
  * What a reader's `shared` option lists: owners, by the local name `h.shared`
@@ -541,29 +593,60 @@ export declare namespace Shared {
  * @category models
  * @since 0.1.0
  */
-export type SharedReads = { readonly [name: string]: Headless.Any }
+export type SharedReads = { readonly [name: string]: SharedRead }
+
+/**
+ * The owner an entry of `shared` names.
+ *
+ * @stability experimental
+ * @category utility types
+ * @since 0.1.0
+ */
+export type SharedOwner<E> = E extends { readonly owner: infer O } ? O : E
+
+// Whether an entry of `shared` is `optional: true`.
+type IsOptional<E> = E extends { readonly optional: true } ? true : false
 
 /**
  * What `h` in `view` and `p` in `parts` gain for a component that reads
- * shared state: `shared`, each owner's current value under its local name.
+ * shared state: `shared`, each owner's current value under its local name,
+ * or `undefined` for an optional owner that isn't above.
  *
  * @stability experimental
  * @category utility types
  * @since 0.1.0
  */
 export type SharedHelpers<SR> = [keyof SR] extends [never] ? {} : {
-  readonly shared: { readonly [K in keyof SR]: Shared.Value<SR[K]> }
+  readonly shared: {
+    readonly [K in keyof SR]: IsOptional<SR[K]> extends true ? Shared.Value<SharedOwner<SR[K]>> | undefined
+      : Shared.Value<SharedOwner<SR[K]>>
+  }
 }
 
 /**
  * The requirements a component's `shared` option adds: one
- * `Shared<typeof Owner>` per owner it reads.
+ * `Shared<typeof Owner>` per owner it reads, optional ones aside.
  *
  * @stability experimental
  * @category utility types
  * @since 0.1.0
  */
-export type SharedRequirements<SR> = { readonly [K in keyof SR]: Shared<SR[K]> }[keyof SR]
+export type SharedRequirements<SR> = {
+  readonly [K in keyof SR]: IsOptional<SR[K]> extends true ? never : Shared<SharedOwner<SR[K]>>
+}[keyof SR]
+
+/**
+ * The requirements a component's `shared` option removes: the
+ * `Shared<typeof Owner>` of each optional owner, which `$.send(Owner, ...)`
+ * would otherwise add.
+ *
+ * @stability experimental
+ * @category utility types
+ * @since 0.1.0
+ */
+export type SharedOptional<SR> = {
+  readonly [K in keyof SR]: IsOptional<SR[K]> extends true ? Shared<SharedOwner<SR[K]>> : never
+}[keyof SR]
 
 /**
  * A `$.loadMore(name)` or `$.reset(name)` an `update` issued, by query
@@ -1193,7 +1276,7 @@ export interface PartsContext {
  * @category models
  * @since 0.1.0
  */
-export type SharedLookup = (owner: Headless.Any) => unknown
+export type SharedLookup = (owner: Headless.Any, optional?: boolean) => unknown
 
 /**
  * Helper types for `Headless`.
@@ -1713,11 +1796,40 @@ type OwnersAreHeadless<SV> = [SV] extends [never] ? unknown : {
   readonly "Only a headless component can share state: finish it with parts in place of view": never
 }
 
+// The owners `shared` lists: none when it's left out, and `SR` is still its constraint.
+type Listed<SR> = string extends keyof SR ? {} : SR
+
+// One entry of `shared`, for the owner inferred for it: `report` and `onChange` take their parameter types from
+// here. `SR` holds what's written, and `optional` with it, and this checks it against the owner.
+type SharedEntry<E, O, Model, Props, Msg> = [E] extends [Headless.Any] ? O : {
+  readonly owner: O
+  readonly optional?: boolean | undefined
+  readonly report?:
+    | ([Shared.Report<O>] extends [never] ? "This owner takes no reports: its shares has no reports Schema"
+      : (model: Model, props: Props) => Shared.Report<O>)
+    | undefined
+  readonly onChange?: ((value: Shared.Value<O>) => Msg) | undefined
+}
+
 // An owner listed in `shared` is a headless component with `shares`.
-type OwnersOnly<SR> = {
-  readonly [K in keyof SR]: [Shared<SR[K]>] extends [never] ?
-    "A component in shared must be a headless component with shares"
-    : SR[K]
+type OwnersOnly<SO> = {
+  readonly [K in keyof SO]: [Shared<SO[K]>] extends [never] ? {
+      readonly owner: "A component in shared must be a headless component with shares"
+    }
+    : unknown
+}
+
+/**
+ * What an owner takes from the readers that report to it, as the definition
+ * keeps it: the Schema of one report, and the message for all of them.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface SharesReports<out Msg, in out Rp> {
+  readonly reports: Schema.Codec<Rp, any>
+  readonly onReports: (reports: ReadonlyArray<Rp>) => Msg
 }
 
 // The tags of a message union, and the member with one tag.
@@ -1754,7 +1866,8 @@ export interface Definition<
   Rcv = never,
   Sl extends string = never,
   SR = {},
-  SV = never
+  SV = never,
+  Rp = never
 > {
   readonly name: Name
   readonly props: Schema.Codec<Props, any>
@@ -1769,8 +1882,10 @@ export interface Definition<
   readonly slots: ReadonlyArray<Sl>
   /** The owners whose shared state `view` or `parts` reads, by local name. */
   readonly shared: SR | undefined
-  /** What an owner shares with the components below it, from its Model and props. */
+  /** What an owner shares with the components below it, from its Model and props: the `value` of `shares`. */
   readonly shares: ((model: Model, props: Props) => SV) | undefined
+  /** What an owner takes from the readers below it: the `reports` and `onReports` of `shares`. */
+  readonly reports: SharesReports<Msg, Rp> | undefined
   /**
    * A slice for one tag: `msg` is that tag's member, and so is the message
    * `$.combine` takes functions over. The slice returned takes any `$`, so
@@ -1862,10 +1977,10 @@ export interface Definition<
       | Subscription.Requirements<Sub>
       | QueryServices<L>
       | SharedRequirements<SR>,
-      Command.FrameworkService
+      Command.FrameworkService | SharedOptional<SR>
     >,
     Rcv,
-    [SV] extends [never] ? never : Shared.Of<Name, SV, Rcv>
+    [SV] extends [never] ? never : Shared.Of<Name, SV, Rcv, Rp>
   >
   /** Finishes the component. */
   make<
@@ -1922,7 +2037,7 @@ export interface Definition<
       | Subscription.Requirements<Sub>
       | QueryServices<L>
       | SharedRequirements<SR>,
-      Command.FrameworkService
+      Command.FrameworkService | SharedOptional<SR>
     >,
     V,
     L,
@@ -1966,6 +2081,10 @@ export declare namespace Definition {
     readonly shared: SharedReads | undefined
     /** What the component shares as an owner, or `undefined` when it isn't one. */
     readonly shares: ((model: any, props: any) => unknown) | undefined
+    /** What the component takes from the readers that report to it, or `undefined` when it takes nothing. */
+    readonly reports:
+      | { readonly reports: Schema.Codec<any, any>; readonly onReports: (reports: ReadonlyArray<never>) => unknown }
+      | undefined
   }
 
   /**
@@ -2023,7 +2142,8 @@ export type Helper<D> = D extends Definition<
   infer _Rcv,
   infer Sl,
   infer SR,
-  infer _SV
+  infer _SV,
+  infer _Rp
 > ? View.Helper<Msg, P> & View.Tags<V, Msg> & QueryHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>
   : never
 
@@ -2290,8 +2410,13 @@ export const define = <
   V extends View.Elements = View.Registered,
   const Tags extends TagOf<Msg> = never,
   const Sl extends string = never,
-  SR extends SharedReads = {},
-  SV = never
+  // What `shared` lists, as written. It defaults to its constraint, which stands for no `shared`: a `{}` default
+  // would be fixed before `optional` is read.
+  SR extends SharedReads = SharedReads,
+  SV = never,
+  Rp = never,
+  // The owner of each entry of `shared`, inferred before `report` and `onChange` are typed.
+  SO extends { readonly [name: string]: Headless.Any } = {}
 >(
   options: {
     readonly name: Name
@@ -2322,17 +2447,48 @@ export const define = <
     readonly elements?: View.Vocabulary<V> | undefined
     /** The names of the slots a parent may fill, each placed in `view` with `h.slots.<name>`. None by default. */
     readonly slots?: ReadonlyArray<Sl> | undefined
-    /** The owners whose shared state `view` or `parts` reads, by the name `h.shared` and `p.shared` use. */
-    readonly shared?: (SR & NoInfer<OwnersOnly<SR>>) | undefined
     /**
-     * Makes a headless component an owner: what it shares with the components below it. Every
-     * owner update re-runs the owner's closure, so put normal components directly under it, and
-     * every reader re-renders when the value changes, so keep it small.
+     * The owners whose shared state `view` or `parts` reads, by the name `h.shared` and `p.shared` use:
+     * each an owner, or `{ owner, optional, report, onChange }`. With `optional`, the read is
+     * `undefined` when no owner is above, and a send to it is dropped. `report` is what this
+     * component tells an owner whose `shares` takes reports. `onChange` is its message when the
+     * value changes, delivered once per owner round before the next render, with the latest value.
      */
-    readonly shares?: ((model: Model, props: Props) => SV) | undefined
+    readonly shared?:
+      | (
+        & SR
+        & { readonly [K in keyof SO]: SharedEntry<SR[K & keyof SR], SO[K], Model, Props, NoInfer<Msg>> }
+        & NoInfer<OwnersOnly<SO>>
+      )
+      | undefined
+    /**
+     * Makes a headless component an owner: what it shares with the components below it, and what
+     * it takes from them. A function is short for `{ value }`. Every owner update re-runs the owner's
+     * closure, so put normal components directly under it, and every reader re-renders when the
+     * value changes, so keep it small.
+     */
+    readonly shares?:
+      | ((model: Model, props: Props) => SV)
+      | {
+        /** What the readers below read, from the owner's Model and props. */
+        readonly value: (model: Model, props: Props) => SV
+      }
+      | {
+        readonly value: (model: Model, props: Props) => SV
+        /** The Schema of what each reader below reports with `report`. */
+        readonly reports: Schema.Codec<Rp, any>
+        /**
+         * The message for the current reports, one per reader, in no promised order. It's
+         * dispatched once a render pass has nothing left to render, when it differs from the last
+         * one, which starts as `onReports([])`.
+         */
+        readonly onReports: (reports: ReadonlyArray<NoInfer<Rp>>) => NoInfer<Msg>
+      }
+      | undefined
   }
-): Definition<Name, Props, Model, Msg, Events, V, L, Tagged<Msg, Tags>, Sl, SR, SV> => {
-  const definition: Definition<Name, Props, Model, Msg, Events, V, L, Tagged<Msg, Tags>, Sl, SR, SV> = {
+): Definition<Name, Props, Model, Msg, Events, V, L, Tagged<Msg, Tags>, Sl, Listed<SR>, SV, Rp> => {
+  const shares = options.shares
+  const definition: Definition<Name, Props, Model, Msg, Events, V, L, Tagged<Msg, Tags>, Sl, Listed<SR>, SV, Rp> = {
     name: options.name,
     props: options.props ?? (Schema.Struct({}) as any),
     model: options.model,
@@ -2343,7 +2499,10 @@ export const define = <
     elements: options.elements,
     slots: options.slots ?? [],
     shared: options.shared,
-    shares: options.shares,
+    shares: typeof shares === "function" ? shares : shares?.value,
+    reports: shares !== undefined && typeof shares !== "function" && "reports" in shares
+      ? { reports: shares.reports, onReports: shares.onReports }
+      : undefined,
     // A slice is the function given, with `$` bound to the Model and message it's called with.
     update: ((...args: ReadonlyArray<any>) => {
       const update: AnyUpdate = args[args.length - 1]
@@ -2406,7 +2565,7 @@ const finish = (
       `${definition.name}: only a headless component can share state, so finish it with parts in place of view`
     )
   }
-  const reads = Object.entries(definition.shared ?? {})
+  const reads = sharedReads.readsOf(definition)
   return makeComponent(view === undefined ? HeadlessProto : Proto, {
     definition,
     props: definition.props,
@@ -2488,17 +2647,21 @@ const finish = (
 // `h.shared` and `p.shared`: each listed owner's current value, by local name.
 const readShared = (
   name: string,
-  reads: ReadonlyArray<readonly [name: string, owner: Headless.Any]>,
+  reads: ReadonlyArray<sharedReads.Read>,
   lookup: SharedLookup | undefined
 ): { readonly [name: string]: unknown } => {
   const out: { [name: string]: unknown } = {}
-  for (const [key, owner] of reads) {
+  for (const read of reads) {
     if (lookup === undefined) {
+      if (read.optional) {
+        out[read.name] = undefined
+        continue
+      }
       throw new Error(
-        `${name} reads the shared state of ${owner.definition.name}, and nothing supplies it: render it below a ${owner.definition.name}`
+        `${name} reads the shared state of ${read.owner.definition.name}, and nothing supplies it: render it below a ${read.owner.definition.name}`
       )
     }
-    out[key] = lookup(owner)
+    out[read.name] = lookup(read.owner, read.optional)
   }
   return out
 }

@@ -4,11 +4,12 @@
  * Share part of a headless component's state with every component below it:
  * a tooltip provider that knows which tooltip is open, tooltips that read it
  * and tell it when they're focused, and a scene of one tooltip with no
- * provider mounted.
+ * provider mounted. Then an optional owner, the reports readers give it, and
+ * a reader's `onChange`.
  */
 import { Component } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Locator, Scene } from "@effect/ui/testing"
+import { Locator, Scene, Story } from "@effect/ui/testing"
 import { Effect, Schema } from "effect"
 
 // ---------------------------------------------------------------------------
@@ -140,4 +141,108 @@ export const focused = Effect.gen(function*() {
   // What the provider would make of it, given by hand: the tooltip shows.
   s.shared(TooltipProvider, { open: message.id })
     .expect(Locator.text("Bold")).toExist()
+})
+
+// ---------------------------------------------------------------------------
+// An optional owner, reports and onChange
+// ---------------------------------------------------------------------------
+
+const GroupMessage = Schema.TaggedUnion({ ChangedOpen: { open: Schema.Boolean } })
+
+// `shares` in its long form. `value` is what readers read. `reports` is the
+// Schema of what each reader tells the owner, and `onReports` the owner's
+// message for the current reports. Once a render pass has nothing left to
+// render, the runtime calls `onReports` with every mounted reader's report,
+// in no promised order, and dispatches the message only when it differs from
+// the last one, starting from `onReports([])`. So two panels that swap in one
+// render send nothing, and a panel that unmounts takes its report with it.
+// The message is an `Update` with source `Reported`.
+export const PanelGroup = Component.define({
+  name: "PanelGroup",
+  model: Schema.Struct({ anyOpen: Schema.Boolean }),
+  message: GroupMessage,
+  shares: {
+    value: (model) => ({ anyOpen: model.anyOpen }),
+    reports: Schema.Boolean,
+    onReports: (reports) => GroupMessage.make({ _tag: "ChangedOpen", open: reports.includes(true) })
+  },
+  elements: Html
+}).make({
+  init: () => ({ anyOpen: false }),
+  update: (_, { open }) => ({ anyOpen: open }),
+  parts: (model) => ({ anyOpen: model.anyOpen })
+})
+
+const PanelMessage = Schema.TaggedUnion({ Toggled: {}, ChangedGroup: { anyOpen: Schema.Boolean } })
+
+// The long form of a `shared` entry, typed by its `owner`.
+//
+// - `optional: true`: a Panel works with no PanelGroup above it. There
+//   `h.shared.group` is `undefined`, a `$.send(PanelGroup, ...)` is dropped
+//   and logged as `SendDropped` with reason `absent`, and the Panel needs no
+//   `Component.Shared<typeof PanelGroup>`.
+// - `report`: what the Panel tells the owner, from its own Model and props.
+//   It fails to compile for an owner with no `reports` Schema.
+// - `onChange`: the Panel's message when the owner's value changes, for an
+//   `update` that must act on it. `view` and `parts` read `h.shared` as
+//   usual. It isn't sent at mount, so `init` can't read the value, and never
+//   with an optional owner absent. Changes are delivered in one round per
+//   owner before the next render, with the value as it is then: a burst of
+//   changes is one message, and a value that changes back sends nothing.
+//
+// A `report` or `onChange` that answers the shared value with a change of
+// its own can loop. The owner counts its `onReports` messages and its rounds
+// of `onChange`, and fails past 100 in one flush, so its `fallback` shows.
+export const Panel = Component.define({
+  name: "Panel",
+  props: Schema.Struct({ title: Schema.String }),
+  model: Schema.Struct({ open: Schema.Boolean, groupOpen: Schema.Boolean }),
+  message: PanelMessage,
+  shared: {
+    group: {
+      owner: PanelGroup,
+      optional: true,
+      report: (model) => model.open,
+      onChange: (value) => PanelMessage.make({ _tag: "ChangedGroup", anyOpen: value.anyOpen })
+    }
+  },
+  elements: Html
+}).make({
+  init: () => ({ open: false, groupOpen: false }),
+  update: (model, message) =>
+    PanelMessage.match(message, {
+      Toggled: () => ({ ...model, open: !model.open }),
+      ChangedGroup: ({ anyOpen }) => ({ ...model, groupOpen: anyOpen })
+    }),
+  view: (model, h) =>
+    h.section(
+      h.button.onClick(PanelMessage.make({ _tag: "Toggled" })).children(h.props.title),
+      model.open && h.p.children(h.shared.group === undefined ? "On its own" : "In a group")
+    )
+})
+
+// A test of each side. Neither runs the other: `shared` gives the Panel its
+// owner's value, and `reported`, a step of a headless component's scene,
+// gives the PanelGroup its readers' reports.
+export const panels = Effect.gen(function*() {
+  const panel = yield* Story.make(Panel, { title: "One" })
+  // An optional owner is absent until given: no report.
+  console.log(panel.current.reports) // {}
+  // The first value of an optional owner sends nothing: in an app the owner is
+  // found once, when the reader mounts.
+  panel.shared(PanelGroup, { anyOpen: false })
+  // A change sends `onChange`'s message. `given`'s third argument gives a
+  // value without sending.
+  panel.shared(PanelGroup, { anyOpen: true })
+  console.log(panel.model.groupOpen) // true
+  console.log(panel.current.reports) // { group: false }
+
+  const group = yield* Scene.make(PanelGroup, {}, {
+    elements: Html,
+    view: (parts, h) => h.p.children(parts.anyOpen ? "open" : "closed")
+  })
+  // The same message as for no reports: nothing is sent.
+  group.reported([false, false])
+  group.reported([false, true])
+    .expect(Locator.text("open")).toExist()
 })

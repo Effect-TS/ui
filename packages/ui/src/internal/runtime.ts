@@ -32,6 +32,7 @@ import type * as Renderer from "../Renderer.ts"
 import * as Router from "../Router.ts"
 import * as Subscription from "../Subscription.ts"
 import * as View from "../View.ts"
+import { propsEqual, sharedEqual } from "./equal.ts"
 import * as Executor from "./executor.ts"
 import * as match from "./match.ts"
 import { isKeyed, keyOf } from "./match.ts"
@@ -52,6 +53,7 @@ import { holdsRedacted } from "./schemaRedact.ts"
 import { scopeAddFinalizerUnsafe } from "./scope.ts"
 import * as serverHost from "./serverHost.ts"
 import * as services from "./services.ts"
+import * as sharedReads from "./shared.ts"
 
 // ---------------------------------------------------------------------------
 // Envs: the Context an instance resolves its services from
@@ -452,10 +454,27 @@ export interface Instance {
   shares: unknown
   /** An owner of shared state: the instances below it that read it, marked dirty when its value changes. */
   readers: Set<Instance> | undefined
-  /** A reader of shared state: the owner instance of each definition it reads, found at mount. */
+  /** An owner of shared state: what its readers' `onChange` and its `onReports` need. */
+  readonly owning: Owning | undefined
+  /**
+   * A reader of shared state: the owner instance of each definition it reads, found at mount. An optional
+   * owner that isn't above it has no entry.
+   */
   owners: Map<Component.Definition.Any, Instance> | undefined
+  /** A reader with an `onChange`: the value of each owner its `onChange` last saw. */
+  seen: Map<Instance, unknown> | undefined
   readonly dispatch: (message: unknown, source: MessageLog.Source) => void
   readonly fire: Renderer.Dispatch
+}
+
+/** An owner of shared state: what its readers' `onChange` and its `onReports` need. */
+interface Owning {
+  /** The entry that last changed the shared value: a reader's `onChange` message points at it. */
+  seq: number
+  /** A round of the readers' `onChange` is in the flush's deferred work. */
+  round: boolean
+  /** What `onReports` last returned, read first as its message for no reports. */
+  reported: { readonly message: unknown } | undefined
 }
 
 /**
@@ -641,48 +660,6 @@ const entryKey = (query: string, argsKey: string): string => `${query}\u0000${ar
 
 /** How long a declaration that ran for a route drops intents for it. Fixed. */
 const intentGuardMillis = 30_000
-
-/** Shallow per key, with `Equal.equals` only for values that differ by reference. */
-const propsEqual = (a: unknown, b: unknown): boolean => {
-  if (a === b) return true
-  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return Equal.equals(a, b)
-  const keys = Object.keys(a)
-  if (keys.length !== Object.keys(b).length) return false
-  for (const key of keys) {
-    const x = (a as any)[key]
-    const y = (b as any)[key]
-    if (x !== y && (differsPlainly(x, y) || !Equal.equals(x, y))) return false
-  }
-  return true
-}
-
-const isPrimitive = (u: unknown): boolean => u === null || (typeof u !== "object" && typeof u !== "function")
-
-/**
- * Whether two plain objects have a field that differs as a primitive, so they can't be equal. It
- * answers for the common change, a record with one field replaced, without the hashes `Equal.equals`
- * takes of both. `false` leaves the answer to `Equal.equals`.
- */
-const isPlainRecord = (value: unknown): value is object => {
-  if (typeof value !== "object" || value === null) return false
-  const proto = Object.getPrototypeOf(value)
-  return proto === Object.prototype || proto === null
-}
-
-const differsPlainly = (a: unknown, b: unknown): boolean => {
-  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false
-  if (Object.getPrototypeOf(a) !== Object.prototype || Object.getPrototypeOf(b) !== Object.prototype) return false
-  // An object with its own equality decides for itself.
-  if (Equal.symbol in a || Equal.symbol in b) return false
-  for (const key in a) {
-    if (!Object.hasOwn(b, key)) continue
-    const x = (a as any)[key]
-    const y = (b as any)[key]
-    // `NaN` is equal to itself for `Equal.equals`.
-    if (x !== y && isPrimitive(x) && isPrimitive(y) && (x === x || y === y)) return true
-  }
-  return false
-}
 
 const emptyText: View.Text = { _tag: "Text", text: "" }
 const ignoreEvents = () => undefined
@@ -1136,6 +1113,11 @@ const setup = (
   // How many times each instance has delivered sends in this flush: a parent and a child that answer
   // each other would otherwise never leave `drainLoop`.
   const sendPasses = new Map<Instance, number>()
+  // How many times each owner of shared state has sent its readers' `onChange` or its own `onReports` in
+  // this flush: a reader whose answer changes the shared value again would otherwise never leave `drainLoop`.
+  const sharedPasses = new Map<Instance, number>()
+  // Owners whose readers' reports may have changed: read once nothing is left to render.
+  const reportsDue = new Set<Instance>()
   const markDirty = (inst: Instance) => {
     dirty.add(inst)
     wake()
@@ -1154,6 +1136,7 @@ const setup = (
     rendering = true
     flushes++
     sendPasses.clear()
+    sharedPasses.clear()
     drain()
     settleSnapshots()
     if (reportPending) reportAdoption()
@@ -1180,7 +1163,7 @@ const setup = (
     do {
       // Before any send is delivered: a mount or a closure that rendered alone leaves its author's refs to check.
       checkPendingRefs()
-      while (dirty.size > 0 || deferred.length > 0 || isHolding()) {
+      while (dirty.size > 0 || deferred.length > 0 || isHolding() || reportsDue.size > 0) {
         if (deferred.length > 0) {
           deferred.shift()!()
           checkPendingRefs()
@@ -1188,7 +1171,9 @@ const setup = (
         }
         if (dirty.size === 0) {
           // A fetch started here reaches its watchers now, so their updates render in this pass.
-          releaseWatchHold()
+          if (isHolding()) releaseWatchHold()
+          // Then the pass has nothing left to render, and every report is read from where it settled.
+          else deliverReports(reportsDue.values().next().value!)
           continue
         }
         let next: Instance | undefined
@@ -1200,7 +1185,7 @@ const setup = (
         checkPendingRefs()
       }
       mergeHead()
-    } while (dirty.size > 0 || deferred.length > 0 || isHolding())
+    } while (dirty.size > 0 || deferred.length > 0 || isHolding() || reportsDue.size > 0)
   }
   /**
    * Decides whether the server is idle once the current callback has finished:
@@ -1393,6 +1378,8 @@ const setup = (
   const leave = (inst: Instance) => {
     if (inst.left) return
     inst.left = true
+    // Its reports go with it.
+    markReports(inst)
     for (const child of inst.children) leave(child)
     // An outlet is a place in its receiver's view, not an instance the log knows.
     if (inst.component !== outletComponent) record(inst, { _tag: "Unmounted" })
@@ -2082,7 +2069,9 @@ const setup = (
       outbox: [],
       shares: undefined,
       readers: undefined,
+      owning: component.definition.shares === undefined ? undefined : { seq: -1, round: false, reported: undefined },
       owners: undefined,
+      seen: undefined,
       dispatch: undefined as any,
       fire: undefined as any
     }
@@ -2273,7 +2262,7 @@ const setup = (
       logEarly()
       if (first === undefined) return
       // Before any child mounts: the readers below read it as they render.
-      if (!refreshShares(inst)) return
+      if (!refreshShares(inst, mountedSeq)) return
       // The first emission of each watch is written as its result before the first render, parent before
       // child, so a new instance over a warm entry never commits "Loading". An instance adopting the
       // server's state renders it first, to match the server's nodes, and gets the emissions after.
@@ -2384,7 +2373,7 @@ const setup = (
 
   const apply = (inst: Instance, next: Component.Next<any, any, any, any>, entrySeq: number, initial: boolean) => {
     inst.model = next.model
-    if (!refreshShares(inst)) return
+    if (!refreshShares(inst, entrySeq)) return
     // Before its Commands are issued, so they wait for the read, even when the Model is unchanged.
     if (!initial && inst.selection !== undefined) inst.selection.due = true
     const mounting = inst.mounting
@@ -2495,35 +2484,37 @@ const setup = (
   }
   /**
    * A reader of shared state finds the owner of each definition it reads, once, at mount, and registers
-   * with it. Only a cast mounts one with no owner above it, and it fails.
+   * with it. An optional owner that isn't above is left out. Only a cast mounts a reader with no required
+   * owner above it, and it fails. An `onChange` starts from the value the reader mounts with.
    */
   const findOwners = (inst: Instance) => {
-    const reads = inst.component.definition.shared
-    if (reads === undefined) return
-    for (const { definition } of Object.values(reads)) {
+    for (const read of sharedReads.readsOf(inst.component.definition)) {
+      const definition = read.owner.definition
       const owner = nearestOwner(inst.parent, definition)
       if (owner === undefined) {
+        if (read.optional) continue
         throw new Error(
           `${inst.path} reads the shared state of ${definition.name}, and no ${definition.name} is above it`
         )
       }
       ;(inst.owners ??= new Map()).set(definition, owner)
       ;(owner.readers ??= new Set()).add(inst)
+      if (read.onChange !== undefined) (inst.seen ??= new Map()).set(owner, owner.shares)
     }
   }
-  /** What `h.shared` and `p.shared` query: each owner's current value. */
+  /** What `h.shared` and `p.shared` query: each owner's current value, `undefined` for one that's absent. */
   const sharedOf = (inst: Instance): Component.SharedLookup | undefined => {
     const owners = inst.owners
     return owners === undefined ? undefined : (owner) => owners.get(owner.definition)?.shares
   }
   /**
    * Recomputes an owner's shared value from its Model and props, and marks its readers dirty when it
-   * changed. A plain record compares as props do, so a `shares` that builds a new object each time
-   * renders nothing new; any other value by `Equal.equals`, so a new Date of the same time does too.
-   * Does nothing for a component that isn't an owner. Returns `false` when `shares` threw and
-   * failed the owner.
+   * changed. A change queues one round of the readers' `onChange`, if none is queued: `seq` is the
+   * entry that made it. Marks the owners the instance reports to, whose reports are read after the pass.
+   * Returns `false` when `shares` threw and failed the owner.
    */
-  const refreshShares = (inst: Instance): boolean => {
+  const refreshShares = (inst: Instance, seq: number): boolean => {
+    markReports(inst)
     const shares = inst.component.definition.shares
     if (shares === undefined) return true
     let next: unknown
@@ -2533,28 +2524,119 @@ const setup = (
       failInstance(inst, Cause.die(error), "shares")
       return false
     }
-    if (
-      isPlainRecord(inst.shares) && isPlainRecord(next)
-        ? propsEqual(inst.shares, next)
-        : Equal.equals(inst.shares, next)
-    ) {
-      return true
-    }
+    if (sharedEqual(inst.shares, next)) return true
     inst.shares = next
+    const owning = inst.owning!
+    owning.seq = seq
     if (inst.readers !== undefined) {
+      let listened = false
       for (const reader of inst.readers) {
-        if (!reader.closed) markDirty(reader)
+        if (reader.closed) continue
+        markDirty(reader)
+        if (reader.seen?.has(inst)) listened = true
+      }
+      if (listened && !owning.round) {
+        owning.round = true
+        defer(() => runRound(inst))
       }
     }
     return true
   }
   /**
-   * Delivers `$.send(Owner, message)`s to the nearest owner of each above `inst`, in order. Only a cast
-   * sends to an owner that isn't above, and that fails the sender.
+   * One round of an owner's readers' `onChange`, before the next render: each reader whose last seen
+   * value differs from the current one gets its message, so the values in between are skipped and a
+   * value that changed back sends nothing. A round that sends spends one of the owner's passes.
+   */
+  const runRound = (owner: Instance) => {
+    owner.owning!.round = false
+    if (owner.closed || owner.failure !== undefined || owner.readers === undefined) return
+    const value = owner.shares
+    let counted = false
+    for (const reader of Array.from(owner.readers)) {
+      const seen = reader.seen
+      if (
+        seen === undefined || !seen.has(owner) || reader.closed || reader.failure !== undefined || reader.waiting ||
+        sharedEqual(seen.get(owner), value)
+      ) continue
+      if (!counted) {
+        counted = true
+        if (!countShared(owner)) return
+      }
+      seen.set(owner, value)
+      for (const read of sharedReads.readsOf(reader.component.definition)) {
+        if (read.onChange === undefined || reader.owners?.get(read.owner.definition) !== owner) continue
+        const message = guard(reader, "shared", () => read.onChange!(value), read.name)
+        if (message === undefined || reader.closed) break
+        reader.dispatch(message, { _tag: "Shared", name: read.name, path: owner.path, seq: owner.owning!.seq })
+      }
+      if (owner.closed) return
+    }
+  }
+  /** Marks the owners `inst` reports to, for a report that may have changed, come or gone. */
+  const markReports = (inst: Instance) => {
+    const owners = inst.owners
+    if (owners === undefined) return
+    for (const read of sharedReads.readsOf(inst.component.definition)) {
+      if (read.report === undefined) continue
+      const owner = owners.get(read.owner.definition)
+      if (owner === undefined || owner.closed || owner.component.definition.reports === undefined) continue
+      reportsDue.add(owner)
+      wake()
+    }
+  }
+  /**
+   * Reads every current report of an owner, once nothing is left to render, and dispatches what
+   * `onReports` returns for them when it differs from what it last returned. The first comparison is
+   * with its message for no reports, so readers that mount reporting nothing new send nothing.
+   */
+  const deliverReports = (owner: Instance) => {
+    reportsDue.delete(owner)
+    const reports = owner.component.definition.reports
+    if (reports === undefined || owner.closed || owner.failure !== undefined || owner.waiting) return
+    const collected: Array<unknown> = []
+    for (const reader of owner.readers ?? []) {
+      if (reader.left || reader.closed || reader.failure !== undefined) continue
+      for (const read of sharedReads.readsOf(reader.component.definition)) {
+        if (read.report === undefined || reader.owners?.get(read.owner.definition) !== owner) continue
+        const report = guard(reader, "shared", () => read.report!(reader.model, reader.props), read.name)
+        // The reader failed, and leaving marked the owner again.
+        if (reader.failure !== undefined) return
+        collected.push(report)
+      }
+    }
+    const owning = owner.owning!
+    const message = guard(owner, "shares", () => {
+      owning.reported ??= { message: reports.onReports([]) }
+      return { value: reports.onReports(collected as Array<never>) }
+    })
+    if (message === undefined || sharedEqual(owning.reported!.message, message.value)) return
+    owning.reported = { message: message.value }
+    if (!countShared(owner)) return
+    owner.dispatch(message.value, { _tag: "Reported" })
+  }
+  /**
+   * Counts one more pass of an owner's shared value through its readers in this flush, and fails the
+   * owner past the limit. Every loop between a shared value, the readers' `report` and `onChange`, and
+   * the owner's `onReports` passes through the owner, so failing it alone stops the loop.
+   */
+  const countShared = (owner: Instance): boolean => {
+    const passes = (sharedPasses.get(owner) ?? 0) + 1
+    sharedPasses.set(owner, passes)
+    if (passes <= maxSendPasses) return true
+    const error = new Error(
+      `${owner.path} sent its readers' onChange or its own onReports ${maxSendPasses} times in one flush. A reader whose onChange or report answers the shared value with a change of it loops: answer with a value that settles.`
+    )
+    failInstance(owner, Cause.die(error), "shares")
+    return false
+  }
+  /**
+   * Delivers `$.send(Owner, message)`s to the nearest owner of each above `inst`, in order. A send to an
+   * owner the sender reads as optional, with none above, is dropped. Only a cast sends to another owner
+   * that isn't above, and that fails the sender.
    */
   const sendToOwners = (inst: Instance, sends: ReadonlyArray<Component.Send>, entrySeq: number) => {
     let counted = false
-    for (const send of sends) {
+    for (const [index, send] of sends.entries()) {
       if (send.owner === undefined) continue
       if (inst.closed) return
       const definition = send.owner.definition
@@ -2563,6 +2645,15 @@ const setup = (
         if (!countSends(inst, definition.name)) return
       }
       const owner = nearestOwner(inst.parent, definition)
+      if (
+        owner === undefined &&
+        sharedReads.readsOf(inst.component.definition).some((read) =>
+          read.optional && read.owner.definition === definition
+        )
+      ) {
+        record(inst, { _tag: "SendDropped", ref: definition.name, issued: { seq: entrySeq, index }, reason: "absent" })
+        continue
+      }
       if (owner === undefined) {
         const error = new Error(`${inst.path} sent to ${definition.name}, and no ${definition.name} is above it`)
         failInstance(inst, Cause.die(error), "send")
@@ -4193,7 +4284,9 @@ const setup = (
       results: undefined,
       shares: undefined,
       readers: undefined,
+      owning: undefined,
       owners: undefined,
+      seen: undefined,
       head: [],
       onEmit: ignoreEvents,
       onFailure: undefined,
@@ -5011,12 +5104,12 @@ const setup = (
           instance.props = child.props
           if (instance.selection !== undefined) instance.selection.due = true
           // Before the result writes the new props cause, so a replay opens them against these props.
-          record(instance, { _tag: "PropsChanged", props: child.props })
+          const changedSeq = record(instance, { _tag: "PropsChanged", props: child.props })
           // Watches first: new args over a settled entry write its value before this render, and the
           // keyed queries' results are written before it too.
           syncSubscriptions(instance)
           drainKeyed(instance)
-          if (!instance.closed) refreshShares(instance)
+          if (!instance.closed) refreshShares(instance, changedSeq)
         }
         // A headless child's view is the closure, which is new on every render of whoever declared it.
         if (instance.owner !== undefined) instance.content = child.view
@@ -5314,7 +5407,7 @@ const setup = (
 
   /** Serialises the tree once, in document order, with the state the client adopts. */
   const finish = () => {
-    if (scheduled || dirty.size > 0 || deferred.length > 0) flush()
+    if (scheduled || dirty.size > 0 || deferred.length > 0 || reportsDue.size > 0) flush()
     frozen = true
     server?.onFinish?.(cache)
     // In the same synchronous step as the Models: fetches in flight are interrupted, and their entries
