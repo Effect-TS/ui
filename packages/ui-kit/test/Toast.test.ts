@@ -98,12 +98,18 @@ const Poster = Component.define({ name: "Poster", model: Schema.Number, message:
     view: (_, h) => h.button.attr("id", "post").onClick(PosterMessage.ClickedPost()).children("Post")
   })
 
-const Page = Component.define({ name: "Page", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+const Page = Component.define({
+  name: "Page",
+  props: Schema.Struct({ timeout: Schema.Number }),
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+}).make({
   init: () => null,
   update: (model) => model,
   view: (_, h) =>
     ToastProvider(h, {
-      props: { timeout: 0 },
+      props: { timeout: h.props.timeout },
       view: (t) =>
         h.div(
           Poster(h, {}),
@@ -116,6 +122,28 @@ const Page = Component.define({ name: "Page", model: Schema.Null, message: Schem
 
 /** Lets the render flush and the mounts run. */
 const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))
+
+const mountPage = Effect.fnUntraced(function*(timeout: number) {
+  const container = yield* Effect.acquireRelease(
+    Effect.sync(() => document.body.appendChild(document.createElement("div"))),
+    (element) => Effect.sync(() => element.remove())
+  )
+  yield* Effect.flatMap(
+    Scope.Scope,
+    (scope) => Scope.provide(BrowserHost.mountEffect(Page, { timeout }, container), scope)
+  )
+  yield* tick
+  return {
+    byId: (id: string) => container.querySelector<HTMLElement>("#" + id),
+    region: container.querySelector<HTMLElement>("[role=region]")!
+  }
+})
+
+const press = (target: EventTarget, key: string) => {
+  const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })
+  target.dispatchEvent(event)
+  return event.defaultPrevented
+}
 
 describe("ToastProvider", { concurrent: false }, () => {
   it.effect("a toast posted from below closes after its timeout, which pauses in full while the pointer is on the stack", () =>
@@ -186,6 +214,13 @@ describe("ToastProvider", { concurrent: false }, () => {
         s.receive(post({ _tag: "AddedToast", toast: { id } })).expectMount(trackToast(s, id))
       }
       s.fire(toast("a"), "keydown", { key: "Escape" }).emitted({ _tag: "Dismissed", id: "a" })
+      // The collapsed stack hides Close, except while it has focus, as after
+      // a press that was released outside the stack.
+      assert.strictEqual(s.get(toast("close-b")).attrs?.["aria-hidden"], "true")
+      s.fire(toast("close-b"), "focus")
+      assert.isUndefined(s.get(toast("close-b")).attrs?.["aria-hidden"])
+      s.fire(toast("close-b"), "blur")
+      assert.strictEqual(s.get(toast("close-b")).attrs?.["aria-hidden"], "true")
       s.fire(toast("close-b"), "click").emitted({ _tag: "Dismissed", id: "b" })
       s.receive(post({ _tag: "ClosedToast", id: "c" }))
       assert.deepStrictEqual(s.current.emitted, [])
@@ -257,19 +292,7 @@ describe("ToastProvider", { concurrent: false }, () => {
 
   it.effect("F6 moves focus into the stack and back, and focus on a closing toast moves to the next one", () =>
     Effect.gen(function*() {
-      const container = yield* Effect.acquireRelease(
-        Effect.sync(() => document.body.appendChild(document.createElement("div"))),
-        (element) => Effect.sync(() => element.remove())
-      )
-      yield* Effect.flatMap(Scope.Scope, (scope) => Scope.provide(BrowserHost.mountEffect(Page, {}, container), scope))
-      yield* tick
-      const byId = (id: string) => container.querySelector<HTMLElement>("#" + id)
-      const press = (target: EventTarget, key: string) => {
-        const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })
-        target.dispatchEvent(event)
-        return event.defaultPrevented
-      }
-      const region = container.querySelector<HTMLElement>("[role=region]")!
+      const { byId, region } = yield* mountPage(0)
       const post = byId("post")!
       post.focus()
 
@@ -295,5 +318,38 @@ describe("ToastProvider", { concurrent: false }, () => {
       yield* tick
       assert.strictEqual(document.activeElement, post)
       assert.isNull(byId("t1"))
+    }))
+
+  it.effect("closing the last focused toast never leaves focus on the empty stack, so later toasts time out", () =>
+    Effect.gen(function*() {
+      const { byId, region } = yield* mountPage(200)
+      const post = byId("post")!
+
+      // Tab from the button into the only toast, then Escape: focus goes back.
+      post.focus()
+      post.click()
+      yield* tick
+      byId("t1")!.focus()
+      press(byId("t1")!, "Escape")
+      yield* tick
+      assert.strictEqual(document.activeElement, post)
+      assert.isFalse(region.hasAttribute("data-expanded"))
+
+      // Focus that came from nowhere leaves the stack for the page.
+      post.blur()
+      post.click()
+      yield* tick
+      byId("t2")!.focus()
+      press(byId("t2")!, "Escape")
+      yield* tick
+      assert.strictEqual(document.activeElement, document.body)
+
+      // A toast the app posts afterwards closes on its own.
+      post.click()
+      yield* tick
+      assert.isNotNull(byId("t3"))
+      yield* TestClock.adjust("200 millis")
+      yield* tick
+      assert.isNull(byId("t3"))
     }))
 })
