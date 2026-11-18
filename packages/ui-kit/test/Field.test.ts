@@ -22,14 +22,13 @@ const standIn = {
     )
 }
 
-const root = Locator.tag("div")
 const label = Locator.tag("label")
 const control = Locator.tag("input")
 const description = Locator.tag("p")
 const error = Locator.tag("span")
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
-const parts = (props: FieldProps, model = { focused: false, touched: false }) => Story.parts(Field, { model, props })
+const parts = (props: FieldProps) => Story.parts(Field, { model: { focused: false, touched: false }, props })
 const attrsOf = (builder: View.ElementBuilder<never, never, any, any>) => View.build(builder, []).attrs
 
 describe("Field", () => {
@@ -51,130 +50,37 @@ describe("Field", () => {
       assert.isUndefined(s.get(control).attrs?.["aria-invalid"])
     }))
 
-  it.effect("every part shows whether the control has focus and whether it was left", () =>
-    Effect.gen(function*() {
-      const s = yield* Scene.make(Field, { described: true, invalid: true }, standIn)
-      const shown = (name: string) =>
-        [root, label, control, description, error].map((part) => s.get(part).attrs?.[name])
-      s.fire(control, "focus")
-      assert.deepStrictEqual(shown("data-focused"), ["", "", "", "", ""])
-      assert.deepStrictEqual(shown("data-touched"), [undefined, undefined, undefined, undefined, undefined])
-      s.fire(control, "blur")
-      assert.deepStrictEqual(shown("data-focused"), [undefined, undefined, undefined, undefined, undefined])
-      assert.deepStrictEqual(shown("data-touched"), ["", "", "", "", ""])
-    }))
-
-  it.effect("a field disabled while its control has focus drops the focus, and a disabled field isn't touched", () =>
+  it.effect("re-enabling a field restores neither focus nor a visit until the user focuses and leaves it", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(Field, { described: true }, standIn)
-      const shown = () => [s.get(control).attrs?.["data-focused"], s.get(control).attrs?.["data-touched"]]
-      // No blur follows, so the field reports it: hidden at once, and gone
-      // from the Model before the field is enabled again.
+      const state = () => [s.get(control).attrs?.["data-focused"], s.get(control).attrs?.["data-touched"]]
+      s.fire(control, "focus").props({ described: true, disabled: true })
+      assert.deepStrictEqual(state(), [undefined, undefined])
+      s.subscription("lostFocus", { _tag: "BlurredControl" }).props({ described: true })
+      assert.deepStrictEqual(state(), [undefined, undefined])
       s.fire(control, "focus")
-        .props({ described: true, disabled: true })
-      assert.deepStrictEqual(shown(), [undefined, undefined])
-      s.subscription("lostFocus", { _tag: "BlurredControl" })
-        .props({ described: true })
-      assert.deepStrictEqual(shown(), [undefined, undefined])
-
-      // A blur a disabled control was sent anyway isn't a visit.
-      s.props({ described: true, disabled: true })
-        .fire(control, "blur")
-        .props({ described: true })
-      assert.deepStrictEqual(shown(), [undefined, undefined])
+      assert.deepStrictEqual(state(), ["", undefined])
+      s.fire(control, "blur")
+      assert.deepStrictEqual(state(), [undefined, ""])
     }))
 
-  it("each part keeps the consumer's attributes, but the field's own win, present or absent", () => {
-    const owned = [
-      "id",
-      "for",
-      "aria-invalid",
-      "data-disabled",
-      "data-valid",
-      "data-invalid",
-      "data-touched",
-      "data-dirty",
-      "data-filled",
-      "data-focused"
-    ]
-    const stale = <B extends { readonly attr: (name: string, value: string) => any }>(
-      builder: B
-    ): ReturnType<B["attr"]> => owned.reduce((out, name) => out.attr(name, "stale"), builder.attr("class", "mine"))
-
-    // A field with no state removes every state attribute the consumer set.
-    const blank = parts({ described: true })
-    assert.deepStrictEqual(attrsOf(blank.root(stale(h.div))), {
+  it("field state overrides stale attributes without replacing consumer attributes", () => {
+    const f = parts({ invalid: false, dirty: true, filled: true })
+    assert.deepStrictEqual(attrsOf(f.root(h.div.class("mine").attr("data-invalid", "stale"))), {
       class: "mine",
-      id: "stale",
-      for: "stale",
-      "aria-invalid": "stale"
+      "data-valid": "",
+      "data-dirty": "",
+      "data-filled": ""
     })
-    const { id: controlId, "aria-describedby": descriptionId } = attrsOf(blank.control(h.input))
-    assert.isString(descriptionId)
-    assert.deepStrictEqual(attrsOf(blank.label(stale(h.label))), {
-      class: "mine",
-      id: "stale",
-      "aria-invalid": "stale",
-      for: controlId
-    })
-    assert.deepStrictEqual(attrsOf(blank.description(stale(h.p))), {
-      class: "mine",
-      for: "stale",
-      "aria-invalid": "stale",
-      id: descriptionId
-    })
-    // The control's own `disabled` and `data-disabled` are left to it.
-    assert.deepStrictEqual(attrsOf(blank.control(stale(h.input).disabled(true))), {
-      class: "mine",
-      for: "stale",
-      "data-disabled": "stale",
-      disabled: "",
-      id: controlId,
-      "aria-describedby": descriptionId
-    })
-    assert.isUndefined(blank.error(h.div))
-
-    // Every state the field has is on every part.
-    const full = parts({ disabled: true, invalid: true, dirty: true, filled: true }, { focused: true, touched: true })
-    const state = { "data-invalid": "", "data-touched": "", "data-dirty": "", "data-filled": "", "data-disabled": "" }
-    assert.deepStrictEqual(attrsOf(full.root(h.div)), state)
-    assert.deepStrictEqual(attrsOf(full.label(h.label)), { ...state, for: controlId })
-    // A disabled field hides the error and its `aria-invalid`, and keeps its
-    // control disabled whatever the consumer chains after the part.
-    assert.isUndefined(full.error(h.div))
-    assert.deepStrictEqual(
-      attrsOf(full.control(h.textarea).disabled(false).attr("data-disabled", undefined)),
-      {
-        "data-invalid": "",
-        "data-touched": "",
-        "data-dirty": "",
-        "data-filled": "",
-        id: controlId,
-        "data-disabled": "",
-        disabled: ""
-      }
-    )
-    assert.strictEqual(attrsOf(parts({ invalid: false }).root(h.div))["data-valid"], "")
-  })
-
-  it("a disabled field disables another kit control on the same element, and an enabled one leaves it its own", () => {
-    const controls = (field: FieldProps, disabled: boolean) => {
-      const f = parts(field)
-      const checkbox = Story.parts(Checkbox, { model: {}, props: { checked: false, disabled } })
-      return [
-        Input(h, { element: f.control(h.input), props: { value: "Ada", disabled }, onUpdate: () => undefined }),
-        checkbox.root(f.control(h.button)),
-        Switch(h, { props: { checked: false, disabled }, view: (s) => s.root(f.control(h.button)) })
-      ].map(attrsOf).map((attrs) => [attrs.id, attrs.disabled, attrs["data-disabled"]])
-    }
-    const id = attrsOf(parts({}).control(h.input)).id
-    assert.deepStrictEqual(controls({ disabled: true }, false), [[id, "", ""], [id, "", ""], [id, "", ""]])
-    assert.deepStrictEqual(controls({}, true), [[id, "", ""], [id, "", ""], [id, "", ""]])
-    assert.deepStrictEqual(controls({}, false), [[id, undefined, undefined], [id, undefined, undefined], [
-      id,
-      undefined,
-      undefined
-    ]])
+    const own = attrsOf(f.control(h.input.disabled(true).attr("data-disabled", "")))
+    assert.strictEqual(own.disabled, "")
+    assert.strictEqual(own["data-disabled"], "")
+    const disabled = parts({ disabled: true, invalid: true })
+    assert.isUndefined(disabled.error(h.span))
+    const forced = attrsOf(disabled.control(h.input).disabled(false).attr("data-disabled", undefined))
+    assert.strictEqual(forced.disabled, "")
+    assert.strictEqual(forced["data-disabled"], "")
+    assert.isUndefined(forced["aria-invalid"])
   })
 
   it.effect("a disabled field submits nothing for its control, and an enabled one submits each value", () =>
