@@ -552,7 +552,7 @@ describe("BrowserRouter", { concurrent: false }, () => {
         const { field } = yield* startList("/list?utm_source=news")
         window.scrollTo(0, 50)
         field.focus()
-        HtmlLocator.input(field, "ab")
+        HtmlLocator.type(field, "ab")
         yield* tick
         expect(url()).toBe("/list?q=ab&utm_source=news")
         expect(document.activeElement).toBe(field)
@@ -588,7 +588,7 @@ describe("BrowserRouter", { concurrent: false }, () => {
       Effect.gen(function*() {
         const { app, field } = yield* startList("/list")
         for (const value of ["a", "ab", "abc"]) {
-          HtmlLocator.input(field, value)
+          HtmlLocator.type(field, value)
           yield* tick
         }
         // The page shows the latest search at once; the address bar has the first.
@@ -639,9 +639,9 @@ describe("BrowserRouter", { concurrent: false }, () => {
     it.effect("writes the pending search before following an in-page #hash link", () =>
       Effect.gen(function*() {
         const { app, field } = yield* startList("/list")
-        HtmlLocator.input(field, "a")
+        HtmlLocator.type(field, "a")
         yield* tick
-        HtmlLocator.input(field, "ab")
+        HtmlLocator.type(field, "ab")
         yield* tick
         expect(url()).toBe("/list?q=a")
         // The link resolves against the document's URL, which must be the Router's.

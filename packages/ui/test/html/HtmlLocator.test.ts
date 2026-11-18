@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
-import { HtmlLocator } from "@effect/ui/html/testing"
-import { Locator, Story, TestHost } from "@effect/ui/testing"
+import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
+import { Locator, Scene, TestHost } from "@effect/ui/testing"
 import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
 import { Confirm } from "./fixtures/confirm.ts"
-import { Menu, MenuMessage } from "./fixtures/popover.ts"
+import { Menu } from "./fixtures/popover.ts"
 import { TodoApp, TodoAppMessage, TodoItem } from "./fixtures/todos.ts"
 
 const el = (
@@ -74,21 +74,16 @@ describe("HtmlLocator", () => {
       Effect.gen(function*() {
         const dialog = HtmlLocator.role("dialog", { name: "Delete note?" })
         const keep = HtmlLocator.role("button", { name: "Keep" })
-        Story.make(Confirm, { state: "closed", acceptEscape: false }, (s) => {
-          s.check((story) => {
-            expect(story.query(dialog)).toBeUndefined()
-            expect(story.query(keep)).toBeUndefined()
-            expect(HtmlLocator.dialogState(story.get(HtmlLocator.role("dialog", { hidden: true })))).toBe("closed")
-          })
-            .click("Ask")
-            .check((story) => {
-              expect(HtmlLocator.dialogState(story.get(dialog))).toBe("modal")
-              expect(story.query(keep)).toBeDefined()
-            })
-            // Escape is rejected by `update`, so the dialog stays modal.
-            .fire(dialog, "cancel")
-            .check((story) => expect(HtmlLocator.dialogState(story.get(dialog))).toBe("modal"))
-        })
+        const s = yield* Scene.make(Confirm, { state: "closed", acceptEscape: false })
+        expect(s.query(dialog)).toBeUndefined()
+        expect(s.query(keep)).toBeUndefined()
+        expect(HtmlLocator.dialogState(s.get(HtmlLocator.role("dialog", { hidden: true })))).toBe("closed")
+        s.click("Ask")
+        expect(HtmlLocator.dialogState(s.get(dialog))).toBe("modal")
+        expect(s.query(keep)).toBeDefined()
+        // Escape is rejected by `update`, so the dialog stays modal.
+        s.fire(dialog, "cancel")
+        expect(HtmlLocator.dialogState(s.get(dialog))).toBe("modal")
         const open = yield* TestHost.mount(Confirm, { state: "open" as const, acceptEscape: false })
         expect(HtmlLocator.dialogState(open.get(dialog))).toBe("open")
         // A static `open` attribute counts too.
@@ -123,18 +118,16 @@ describe("HtmlLocator", () => {
       Effect.gen(function*() {
         const menu = HtmlLocator.role("menu", { name: "Menu" })
         const rename = HtmlLocator.role("button", { name: "Rename" })
-        Story.make(Menu, { mode: "auto", open: false, follow: true }, (s) => {
-          s.check((story) => {
-            expect(story.query(menu)).toBeUndefined()
-            expect(story.query(rename)).toBeUndefined()
-            expect(HtmlLocator.popoverState(story.get(HtmlLocator.role("menu", { hidden: true })))).toBe("closed")
-          })
-            .send(MenuMessage.make({ _tag: "Set", open: true }))
-            .check((story) => expect(HtmlLocator.popoverState(story.get(menu))).toBe("open"))
-            // A light dismiss, as the browser host reports it; the Model follows.
-            .fire(menu, "toggle", { open: false, newState: "closed", oldState: "open" })
-            .check((story) => expect(story.query(menu)).toBeUndefined())
-        })
+        const s = yield* Scene.make(Menu, { mode: "auto", open: false, follow: true })
+        expect(s.query(menu)).toBeUndefined()
+        expect(s.query(rename)).toBeUndefined()
+        expect(HtmlLocator.popoverState(s.get(HtmlLocator.role("menu", { hidden: true })))).toBe("closed")
+        // A parent opening it, as `Set` would: nothing in the view sends that.
+        s.given((model) => ({ ...model, open: true }))
+        expect(HtmlLocator.popoverState(s.get(menu))).toBe("open")
+        // A light dismiss, as the browser host reports it; the Model follows.
+        s.fire(menu, "toggle", { open: false, newState: "closed", oldState: "open" })
+        expect(s.query(menu)).toBeUndefined()
         const root = yield* TestHost.mount(Menu, { mode: "manual" as const, open: true, follow: false })
         expect(HtmlLocator.popoverState(root.get(menu))).toBe("open")
         expect(HtmlLocator.popoverState(document.createElement("div"))).toBe("closed")
@@ -191,22 +184,20 @@ describe("HtmlLocator", () => {
   })
 
   describe("trees", () => {
-    it("a story's view value, field values included", () => {
-      const story = Story.make(
-        TodoApp,
-        {},
-        (s) => s.send(TodoAppMessage.make({ _tag: "Draft", value: "Read" }))
-      )
-      // `.value(text)` sets a property, so the attributes don't hold it.
-      const field = story.get(HtmlLocator.role("textbox", { name: "New todo" }))
-      expect(field.attrs?.value).toBeUndefined()
-      expect(HtmlLocator.value(field)).toBe("Read")
-      const item = Story.make(TodoItem, { todo: { id: "1", title: "Read", done: true } }, () => {})
-      expect(HtmlLocator.checked(item.get(HtmlLocator.role("checkbox", { name: "Read" })))).toBe(true)
-      expect(HtmlLocator.checked(item.get(HtmlLocator.role("button")))).toBeUndefined()
-      expect(HtmlLocator.getByRole(story.root, "button", { name: "Clear done" })).toBeDefined()
-      expect(story.all(Locator.inside(Locator.tag("form"), HtmlLocator.role("button")))).toHaveLength(1)
-    })
+    it.effect("a scene's view value, field values included", () =>
+      Effect.gen(function*() {
+        const scene = yield* HtmlScene.make(TodoApp, {})
+        scene.type(HtmlLocator.role("textbox", { name: "New todo" }), "Read")
+        // `.value(text)` sets a property, so the attributes don't hold it.
+        const field = scene.get(HtmlLocator.role("textbox", { name: "New todo" }))
+        expect(field.attrs?.value).toBeUndefined()
+        expect(HtmlLocator.value(field)).toBe("Read")
+        const item = yield* Scene.make(TodoItem, { todo: { id: "1", title: "Read", done: true } })
+        expect(HtmlLocator.checked(item.get(HtmlLocator.role("checkbox", { name: "Read" })))).toBe(true)
+        expect(HtmlLocator.checked(item.get(HtmlLocator.role("button")))).toBeUndefined()
+        expect(HtmlLocator.getByRole(scene.root, "button", { name: "Clear done" })).toBeDefined()
+        expect(scene.all(Locator.inside(Locator.tag("form"), HtmlLocator.role("button")))).toHaveLength(1)
+      }))
 
     it.effect("a TestHost tree, checked state included", () =>
       Effect.gen(function*() {

@@ -1,13 +1,13 @@
 /**
  * @title Testing @effect/ui components
  *
- * Test a component as a pure `Story`, a Command against a fake Layer, and a
- * whole tree on `TestHost`. The last test renders on the server and hydrates
+ * Test a component's logic as a `Story` and its view as a `Scene`, a Command
+ * against a fake Layer, and a whole tree on `TestHost`. The last test renders on the server and hydrates
  * with `ssr`.
  */
 // @vitest-environment happy-dom
 import { Component, Router } from "@effect/ui"
-import { HtmlLocator, HtmlStory, ssr } from "@effect/ui/html/testing"
+import { HtmlLocator, HtmlScene, ssr } from "@effect/ui/html/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Layer } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
@@ -16,12 +16,18 @@ import { TestClock } from "effect/testing"
 // many test files does it once, in a Vitest setup file.
 // oxlint-disable-next-line no-unassigned-import
 import "@effect/ui/html/register"
-import { Locator, Story, TestHost } from "@effect/ui/testing"
+import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 // One file here, to read top to bottom. In an app each `describe` sits next
 // to what it tests: `notes/components/NoteEditor.test.ts` and `App.test.ts`.
 import { App } from "./fixtures/App.ts"
 import { Collapsible } from "./fixtures/kit/Collapsible.ts"
-import { NoteEditor, NoteEditorEvents, NoteEditorNoDeps, SaveNote } from "./fixtures/notes/components/NoteEditor.ts"
+import {
+  NoteEditor,
+  NoteEditorEvents,
+  NoteEditorMessage,
+  NoteEditorNoDeps,
+  SaveNote
+} from "./fixtures/notes/components/NoteEditor.ts"
 import { type Note, NoteSaveError } from "./fixtures/notes/domain/Note.ts"
 import { Notes } from "./fixtures/notes/services/Notes.ts"
 import { NotePageNoDeps } from "./fixtures/pages/notes/NotePage.ts"
@@ -34,136 +40,169 @@ const edited: Note = { ...note, body: "Oat milk" }
 const body = HtmlLocator.role("textbox", { name: "Body" })
 
 // ---------------------------------------------------------------------------
-// Story: one instance as pure functions. No runtime, Layers or host.
+// Story and Scene: one instance as pure functions. No runtime, Layers or host.
 // ---------------------------------------------------------------------------
 
+// A Story drives `update`: it sends messages and checks the Model. A Scene
+// drives the view: it clicks and types as a user does and checks what the
+// view shows, with no Model to read. Test logic with a Story: what a message
+// does to the Model, and which Commands it runs. Test what a user sees and
+// does with a Scene. In an app each kind gets its own file, next to the
+// component: `NoteEditor.story.test.ts` and `NoteEditor.scene.test.ts`.
+//
+// Both follow one rule: every effect a step causes is accounted for before
+// the test moves on. A message step (`send`, `receive`, a click) throws
+// while a Command it could race is still running, a query has no result, or
+// an event, send or ignored click hasn't been acknowledged. A Command whose
+// mode is `switch`, `drop` or `queue`, or a stream, is meant to overlap the
+// next message, so it doesn't block one. `keepPending` lets any other
+// Command overlap on purpose. `make`'s end check fails on anything left.
+// This is stricter than foldkit's stories: an ignored interaction and a query
+// with no result count too.
+//
+// `make` is a scoped Effect: `const s = yield* Story.make(...)` gives the
+// cursor, and `it.effect` from `@effect/vitest` provides the scope. Steps
+// chain, and the test reads the Model or the view from the cursor between
+// them. The end check runs when the scope closes, at the end of the test. It
+// is skipped when the test already failed, so a failure reports only itself.
+// `start` gives the same cursor with no end check: use it to assert that a
+// step throws.
+
 describe("NoteEditor", () => {
-  it("saves the draft and tells its parent", () => {
-    // Each step runs when called and throws on failure. Events carry the
-    // plain payloads the view's handlers expect.
-    Story.make(NoteEditor, { note }, (s) =>
-      s.fire(body, "input", { value: edited.body })
-        // A field's value is a property, not an attribute: read it with
-        // `HtmlLocator.value`, and a checkbox with `HtmlLocator.checked`.
-        .check((story) => assert.strictEqual(HtmlLocator.value(story.get(body)), edited.body))
-        // Nothing runs in a story, so Subscriptions are asserted by key.
-        .subscriptions((keys) => assert.deepStrictEqual(keys, ["autosave:1"]))
-        .fire(HtmlLocator.role("form", { name: "Edit note" }), "submit")
-        // Commands stay pending as data until a step resolves them.
-        .expectExact(SaveNote)
-        .check((story) => assert.deepStrictEqual(story.pending[0].command.args, { note: edited }))
-        // `resolve` takes the Command's own result. `fail` takes its typed error.
-        .resolve(SaveNote, edited)
-        .model((model) => assert.strictEqual(model.saved, edited.body))
-        .emitted((events) => assert.deepStrictEqual(events, [NoteEditorEvents.make({ _tag: "Saved", note: edited })])))
-    // `Story.make` fails if a Command is still pending at the end.
-  })
+  it.effect("story: saves the draft and tells its parent", () =>
+    Effect.gen(function*() {
+      // Each step runs when called and throws on failure.
+      const s = yield* Story.make(NoteEditor, { note })
+      s.send(NoteEditorMessage.make({ _tag: "Edited", body: edited.body }))
+      assert.strictEqual(s.model.draft, edited.body)
+      // Nothing runs in a story, so Subscriptions are asserted by key.
+      assert.deepStrictEqual(s.subscriptions, ["autosave:1"])
+      // Commands stay pending as data until a step resolves them. A
+      // definition matches any args; `pending` holds them.
+      s.send(NoteEditorMessage.make({ _tag: "Save" })).expectExact(SaveNote)
+      assert.deepStrictEqual(s.pending[0].command.args, { note: edited })
+      // `resolve` takes the Command's own result. `fail` takes its typed error.
+      s.resolve(SaveNote, edited)
+      assert.strictEqual(s.model.saved, edited.body)
+      // An event the component emitted is acknowledged by naming it.
+      s.emitted(NoteEditorEvents.make({ _tag: "Saved", note: edited }))
+      // When the test ends, the end check fails if a Command is still
+      // pending or an event isn't acknowledged.
+    }))
 
-  it("saves on Ctrl+S instead of opening the browser's save dialog", () => {
-    Story.make(NoteEditor, { note }, (s) =>
-      s.fire(body, "input", { value: edited.body })
-        // `defaultPrevented` tells whether the last `fire` or `click` step
-        // cancelled the browser's default. Checks read it without resetting it.
-        .fire(body, "keydown", { key: "s", ctrl: true })
-        .check((story) => assert.isTrue(story.defaultPrevented))
+  it.effect("scene: saves the draft and tells its parent", () =>
+    Effect.gen(function*() {
+      const s = yield* HtmlScene.make(NoteEditor, { note })
+      // `type` sends the `input` the browser host sends.
+      s.type(body, edited.body)
+        // A field's value is a property, not an attribute: `toHaveValue` reads it.
+        .expect(body).toHaveValue(edited.body)
+        // A submit button submits its form, with the fields read from the view.
+        .click(HtmlLocator.role("button", { name: "Save" }))
         .expectExact(SaveNote)
+        .expect(HtmlLocator.role("button", { name: "Saving…" })).toBeDisabled(false)
         .resolve(SaveNote, edited)
-        // Any other step resets it.
-        .check((story) => assert.isFalse(story.defaultPrevented)))
-  })
+        .emitted(NoteEditorEvents.make({ _tag: "Saved", note: edited }))
+        .expect(HtmlLocator.role("button", { name: "Save" })).toBeDisabled()
+    }))
 
-  it("discards from the actions menu after asking, and Escape keeps the changes", () => {
-    const discard = HtmlLocator.role("dialog", { name: "Discard your changes?" })
-    const actions = HtmlLocator.role("menu", { name: "Note actions" })
-    // A closed popover is hidden from role queries, so opening it finds it with `hidden`.
-    const closedActions = HtmlLocator.role("menu", { name: "Note actions", hidden: true })
-    Story.make(NoteEditor, { note }, (s) =>
-      s.fire(body, "input", { value: edited.body })
-        // The browser opens the menu from its button; a story sends the
-        // toggle the browser host would.
-        .fire(closedActions, "toggle", { open: true, newState: "open", oldState: "closed" })
-        .check((story) => assert.strictEqual(HtmlLocator.popoverState(story.get(actions)), "open"))
+  it.effect("scene: saves on Ctrl+S instead of opening the browser's save dialog", () =>
+    Effect.gen(function*() {
+      const s = yield* HtmlScene.make(NoteEditor, { note })
+      // `defaultPrevented` tells whether the last interaction cancelled the
+      // browser's default. Reading it doesn't reset it.
+      s.type(body, edited.body).keydown(body, "s", { ctrl: true })
+      assert.isTrue(s.defaultPrevented)
+      s.expectExact(SaveNote)
+        .resolve(SaveNote, edited)
+        .emitted(NoteEditorEvents.make({ _tag: "Saved", note: edited }))
+      // Any other step resets it.
+      assert.isFalse(s.defaultPrevented)
+    }))
+
+  it.effect("scene: discards from the actions menu after asking, and Escape keeps the changes", () =>
+    Effect.gen(function*() {
+      const discard = HtmlLocator.role("dialog", { name: "Discard your changes?" })
+      const actions = HtmlLocator.role("menu", { name: "Note actions" })
+      const s = yield* HtmlScene.make(NoteEditor, { note })
+      s.type(body, edited.body)
+        // The menu's button is a `popovertarget` invoker: the click sends the
+        // menu the `toggle` the browser would.
+        .click("More actions")
+        .expect(actions).toExist()
         .click("Discard changes")
-        // Choosing an item closes the menu.
-        .check((story) => assert.isUndefined(story.query(actions)))
-        // A dialog's state is `props.open` in a story: closed, open or modal.
-        .check((story) => assert.strictEqual(HtmlLocator.dialogState(story.get(discard)), "modal"))
+        // Choosing an item closes the menu. A closed popover or dialog is
+        // hidden from role queries, as it is from the accessibility tree.
+        .expect(actions).toBeAbsent()
+        .expect(discard).toExist()
         // Escape is a close request, sent to `onCancel`. Here `update` closes
-        // the dialog and keeps the draft. A closed dialog is hidden from role
-        // queries, as it is from the accessibility tree.
+        // the dialog and keeps the draft.
         .fire(discard, "cancel")
-        .check((story) => assert.isUndefined(story.query(discard)))
-        .model((model) => assert.strictEqual(model.draft, edited.body))
-        .fire(closedActions, "toggle", { open: true, newState: "open", oldState: "closed" })
+        .expect(discard).toBeAbsent()
+        .expect(body).toHaveValue(edited.body)
+        .click("More actions")
         .click("Discard changes")
-        // The dialog's form is the app's: its choice is in `entries`.
-        .fire(Locator.inside(discard, Locator.tag("form")), "submit", {
-          fields: { choice: "discard" },
-          entries: [["choice", "discard"]]
-        })
-        .model((model) => assert.strictEqual(model.draft, note.body)))
-  })
+        // The dialog's form is the app's: the button's name and value are in `entries`.
+        .click(HtmlLocator.role("button", { name: "Discard" }))
+        .expect(body).toHaveValue(note.body)
+    }))
 
-  it("shows why a save failed", () => {
-    Story.make(NoteEditor, { note }, (s) =>
-      s.fire(body, "input", { value: edited.body })
-        .fire(HtmlLocator.role("form", { name: "Edit note" }), "submit")
+  it.effect("scene: shows why a save failed", () =>
+    Effect.gen(function*() {
+      const s = yield* HtmlScene.make(NoteEditor, { note })
+      s.type(body, edited.body)
+        .submit(body)
         .fail(SaveNote, new NoteSaveError({ reason: "You are offline" }))
-        .check((story) => assert.strictEqual(Locator.textOf(story.get(HtmlLocator.role("alert"))), "You are offline")))
-  })
+        .expect(HtmlLocator.role("alert")).toHaveText("You are offline")
+    }))
 })
 
 describe("Collapsible", () => {
-  it("places what a parent passes, and hides the body", () => {
-    // `slots` stands in for a parent's content. Its `h` has no messages,
-    // as the content's handlers would send the parent's.
-    Story.make(
-      Collapsible,
-      {},
-      { slots: (h) => ({ summary: h.h2("Groceries"), body: h.p("Milk") }) },
-      (s) =>
-        s.click("Hide")
-          .check((story) => {
-            assert.strictEqual(Locator.textOf(story.get(Locator.tag("h2"))), "Groceries")
-            assert.isUndefined(story.query(Locator.text("Milk")))
-          })
-    )
-  })
+  it.effect("places what a parent passes, and hides the body", () =>
+    Effect.gen(function*() {
+      // `slots` stands in for a parent's content. Its `h` has no messages,
+      // as the content's handlers would send the parent's.
+      const s = yield* Scene.make(Collapsible, {}, {
+        slots: (h) => ({ summary: h.h2("Groceries"), body: h.p("Milk") })
+      })
+      s.click("Hide")
+        .expect(Locator.tag("h2")).toHaveText("Groceries")
+        .expect(Locator.text("Milk")).toBeAbsent()
+    }))
 })
 
 describe("NotePage", () => {
-  it("tells the editor to save now", () => {
-    Story.make(NotePageNoDeps, { id: note.id }, (s) =>
+  it.effect("tells the editor to save now", () =>
+    Effect.gen(function*() {
+      const s = yield* HtmlScene.make(NotePageNoDeps, { id: note.id })
+      // Load steps take the query's name. `loaded` writes the `note`
+      // query's result, as the runtime would, and re-renders.
       s.loaded("note", note)
         // The button is in the Collapsible's `summary` slot. A parent's
-        // story shows the content it passed to a child's slots, but not
-        // the child's own view.
+        // scene shows the content it passed to a child's slots, but not the
+        // child's own view.
         .click("Save now")
-        // A story renders no children, so what `update` sent them is data.
-        .sent((sent) =>
-          assert.deepStrictEqual(sent.map((send) => [send.ref?.key, send.message]), [["Editor[n1]", { _tag: "Save" }]])
-        ))
-  })
+        // A scene renders no children, so what `update` sent them is data,
+        // acknowledged with the ref and the message.
+        .sent(NoteEditor.ref("Editor").at(note.id), { _tag: "Save" })
+    }))
 })
 
 describe("NotesIndex", () => {
-  it("pins a note dropped on the pinned list", () => {
-    const pinned = HtmlLocator.role("complementary", { name: "Pinned" })
-    Story.make(NotesIndexNoDeps, {}, (s) =>
-      // Load steps take the query's name. `loaded` writes the result to
-      // the `notes` query, as the runtime would, and re-renders the view.
-      s.loaded("notes", [note])
-        // A drop with a hand-written payload. `HtmlStory.drop` picks the
-        // target the browser host would, and throws when none accepts the
-        // payload's types, as the browser refuses the drop.
-        .pipe(HtmlStory.drop(pinned, { data: { "application/x-note": note.id } }))
-        .model((model) => assert.deepStrictEqual(model.pinned, [note.id]))
-        .check((story) => assert.isTrue(story.defaultPrevented)))
-    assert.throws(() =>
-      Story.start(NotesIndexNoDeps, {}).loaded("notes", [note])
-        .pipe(HtmlStory.drop(pinned, { files: [new File(["hello"], "notes.txt")] }))
-    )
-  })
+  it.effect("pins a note dropped on the pinned list", () =>
+    Effect.gen(function*() {
+      const pinned = HtmlLocator.role("complementary", { name: "Pinned" })
+      const s = yield* HtmlScene.make(NotesIndexNoDeps, {})
+      // A drop with a hand-written payload goes to the target the browser
+      // host would pick, and throws when none accepts the payload's types,
+      // as the browser refuses the drop.
+      s.loaded("notes", [note]).drop(pinned, { data: { "application/x-note": note.id } })
+      assert.isTrue(s.defaultPrevented)
+      s.expect(Locator.inside(pinned, Locator.tag("li"))).toHaveText(note.title)
+      // A step that throws is asserted on a `start` cursor, which has no end check.
+      const refused = HtmlScene.start(NotesIndexNoDeps, {}).loaded("notes", [note])
+      assert.throws(() => refused.drop(pinned, { files: [new File(["hello"], "notes.txt")] }))
+    }))
 })
 
 // ---------------------------------------------------------------------------

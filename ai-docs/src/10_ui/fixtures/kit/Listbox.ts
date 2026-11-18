@@ -139,7 +139,7 @@ export const Listbox = Component.define({
   // never share an id, and the server and the browser agree on them.
   //
   // Parts need no runtime. A test of the Listbox builds them from a Model and
-  // props with `Story.parts(Listbox, { model, props })`, and `Story.make`
+  // props with `Story.parts(Listbox, { model, props })`, and `Scene.make`
   // runs it with a stand-in view for the consumer.
   parts: (model, p) => {
     const shown = filter(p.props.options, model.query)

@@ -147,26 +147,29 @@ describe("Component.noop", () => {
       assert.deepStrictEqual(root.pending(), [])
     })))
 
-  it("a story resolves a run with Component.noop, or with a result its mapper turns into it, and sends nothing", () => {
-    Story.make(Recorder, {}, (s) =>
+  it.effect("a story resolves a run with Component.noop, or with a result its mapper turns into it, and sends nothing", () =>
+    Effect.gen(function*() {
+      const s = yield* Story.make(Recorder, {})
       s.send(Message.make({ _tag: "Fire", command: "Quiet" }))
         .resolve(Quiet, Component.noop)
-        .model((model) => assert.deepStrictEqual(model, ["Fire"]))
-        // `resolve` takes the definition's own result, which `asNoop` maps to `Component.noop`.
-        .send(Message.make({ _tag: "Fire", command: "LoudAsNoop" }))
+      assert.deepStrictEqual(s.model, ["Fire"])
+      // `resolve` takes the definition's own result, which `asNoop` maps to `Component.noop`.
+      s.send(Message.make({ _tag: "Fire", command: "LoudAsNoop" }))
         .resolve(Loud, got(0))
-        .model((model) => assert.deepStrictEqual(model, ["Fire", "Fire"]))
-        .expectNone())
-  })
+      assert.deepStrictEqual(s.model, ["Fire", "Fire"])
+      s.expectNone()
+    }))
 
-  it("a component whose Message is Schema.Never runs a silent Command", () => {
-    const Silent = Component.define({ name: "Silent", model: Schema.Number, message: Schema.Never }).make({
-      init: ($) => $.set(0).run(Quiet()),
-      update: (model) => model,
-      view: (model, h) => h.el("p", String(model))
-    })
-    Story.make(Silent, {}, (s) => s.resolve(Quiet, Component.noop).expectNone())
-  })
+  it.effect("a component whose Message is Schema.Never runs a silent Command", () =>
+    Effect.gen(function*() {
+      const Silent = Component.define({ name: "Silent", model: Schema.Number, message: Schema.Never }).make({
+        init: ($) => $.set(0).run(Quiet()),
+        update: (model) => model,
+        view: (model, h) => h.el("p", String(model))
+      })
+      const s = yield* Story.make(Silent, {})
+      s.resolve(Quiet, Component.noop).expectNone()
+    }))
 
   it.effect("a detached run that ends after its instance closed doesn't map its result and isn't silent", () =>
     run(Effect.gen(function*() {

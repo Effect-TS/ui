@@ -1,0 +1,39 @@
+import { Component } from "@effect/ui"
+import { Html } from "@effect/ui/html"
+import { Schema } from "effect"
+
+/** A form whose every event is logged, as `event:detail`. */
+export const Settings = Component.define({
+  name: "Settings",
+  model: Schema.Struct({ log: Schema.Array(Schema.String), agree: Schema.Boolean, zip: Schema.String }),
+  message: Schema.String,
+  elements: Html
+}).make({
+  init: () => ({ log: [], agree: false, zip: "" }),
+  update: (model, message) => ({
+    log: [...model.log, message],
+    agree: message === "agree:true" ? true : message === "agree:false" ? false : model.agree,
+    zip: message.startsWith("zip:") ? message.slice(4) : model.zip
+  }),
+  view: (model, h) =>
+    h.div(
+      h.form.onSubmit(({ entries }) => `submit:${entries.map(([name, value]) => `${name}=${value}`).join("&")}`)
+        .children(
+          h.label.attr("for", "zip").children("Zip code"),
+          h.input.attr("id", "zip").attr("name", "zip").attr("placeholder", "90210").value(model.zip)
+            .onInput(({ value }) => `zip:${value}`)
+            .onKeyDown(({ key, shift }) => `key:${key}${shift ? "+shift" : ""}`),
+          h.label(
+            h.input.attr("type", "checkbox").attr("name", "agree").checked(model.agree)
+              .onChange(({ checked }) => `agree:${checked}`),
+            "Agree"
+          ),
+          h.input.attr("type", "checkbox").attr("name", "off").attr("aria-label", "Off").disabled(true),
+          h.button.attr("name", "via").attr("value", "go").children("Go"),
+          h.button.attr("type", "button").disabled(true).children("Later")
+        ),
+      h.button.attr("popovertarget", "menu").children("Menu"),
+      h.div.attr("id", "menu").attr("popover", "").onToggle(({ newState }) => `toggle:${newState}`).children("Items"),
+      h.output(model.log.join("|"))
+    )
+})

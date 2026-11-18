@@ -1,6 +1,6 @@
 import { Command, Component, Feature, type MessageLog, type View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Locator, Story, TestHost } from "@effect/ui/testing"
+import { Locator, Scene, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Deferred, Effect, Layer, Schema } from "effect"
 import { Dialog, type Item, Menu } from "./html/fixtures/headless.ts"
@@ -446,14 +446,15 @@ describe("headless components", () => {
         ])
       })))
 
-    it("fail a Story step the same way", () => {
+    it("fail a Scene step the same way", () => {
       const twice = /\/Opener renders two children with the ref Actions, in the view it gives \/Opener\/Menu\[Actions\]/
-      assert.throws(() => Story.start(Opener, { twin: "mount" }).current.view(), twice)
-      assert.throws(() => Story.start(Opener, { twin: "never" }).send(OpenerMessage.make({ _tag: "Twin" })), twice)
+      assert.throws(() => Scene.start(Opener, { twin: "mount" }).current.view(), twice)
+      // Nothing in the view sends `Twin` or `Swap`, so the scene starts from the Model they make.
+      assert.throws(() => Scene.start(Opener, { twin: "never" }).given((model) => ({ ...model, twin: true })), twice)
       const open = { open: true, query: "", active: null, typed: "", focused: [] }
-      assert.throws(() => Story.start(Opener, { twin: "open" }).givenChild("Actions", open).current.view(), twice)
+      assert.throws(() => Scene.start(Opener, { twin: "open" }).givenChild("Actions", open).current.view(), twice)
       // Moved in one step, the ref is held once.
-      const swapped = Story.start(Opener, { twin: "never" }).send(OpenerMessage.make({ _tag: "Swap" }))
+      const swapped = Scene.start(Opener, { twin: "never" }).given((model) => ({ ...model, swapped: true }))
       assert.lengthOf(swapped.current.all(Locator.text("spare in a closure")), 1)
     })
   })

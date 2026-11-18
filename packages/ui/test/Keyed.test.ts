@@ -1,5 +1,5 @@
 import { Command, Component, MessageLog, Query, Route, Router } from "@effect/ui"
-import { Locator, Story, TestHost } from "@effect/ui/testing"
+import { Locator, Scene, type Steps, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Exit, Layer, Option, Redacted, Request, RequestResolver, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
@@ -913,41 +913,49 @@ describe("Keyed redaction", () => {
 })
 
 describe("Story keyed steps", () => {
-  it("loads keys one at a time or many in one write, and writes the prune itself", () => {
-    const app = makeApp()
-    Story.make(app.Board, { tag: "a", ids: ["1", "2"] }, (s) =>
+  it.effect("loads keys one at a time or many in one write, and writes the prune itself", () =>
+    Effect.gen(function*() {
+      const app = makeApp()
+      const scene = yield* Scene.make(app.Board, { tag: "a", ids: ["1", "2"] })
+      scene
+        .loadedMany("users", [{ args: { id: "1" }, value: { id: "1", name: "Ann" } }, {
+          args: { id: "2" },
+          error: "gone"
+        }])
+        .expect(Locator.tag("p")).toHaveText("a: 1=Ann 2=failed")
+        .loaded("users", { id: "2" }, { id: "2", name: "Bea" }, { patched: true })
+        .expect(Locator.tag("p")).toHaveText("a: 1=Ann 2=Bea~")
+      app.order.length = 0
+      const s = yield* Story.make(app.Board, { tag: "a", ids: ["1", "2"] })
       s
         .loadedMany("users", [{ args: { id: "1" }, value: { id: "1", name: "Ann" } }, {
           args: { id: "2" },
           error: "gone"
         }])
-        .check((story) => assert.strictEqual(Locator.textOf(story.get(Locator.tag("p"))), "a: 1=Ann 2=failed"))
         .loaded("users", { id: "2" }, { id: "2", name: "Bea" }, { patched: true })
-        .check((story) => assert.strictEqual(Locator.textOf(story.get(Locator.tag("p"))), "a: 1=Ann 2=Bea~"))
         .loadFailed("users", { id: "1" }, "gone", { waiting: true })
-        .check((story) => {
-          const [ann] = tuples(app.Board, "users", story.results?.users)
-          // The failure keeps the key's last Success.
-          assert.deepStrictEqual(ann, ["{\"id\":\"1\"}", 1, ["gone"], [{ id: "1", name: "Ann" }, 0]])
-        })
-        .send(app.BoardMessage.make({ _tag: "Show", ids: ["2"] }))
-        .check((story) => assert.deepStrictEqual(heldIds(app.Board, story.results?.users), ["2"])))
-    assert.deepStrictEqual(updates(app.order), [
-      "update a [1:Ann,2:failed]",
-      "update a [2:Bea]",
-      "update a [1:failed]",
-      "update a []"
-    ])
-    assert.throws(
-      () =>
-        Story.make(app.Board, { tag: "a", ids: ["1"] }, (s) => s.loaded("users", { id: "5" }, { id: "5", name: "E" })),
-      /doesn't return the args/
-    )
-  })
+      const [ann] = tuples(app.Board, "users", s.results?.users)
+      // The failure keeps the key's last Success.
+      assert.deepStrictEqual(ann, ["{\"id\":\"1\"}", 1, ["gone"], [{ id: "1", name: "Ann" }, 0]])
+      s.send(app.BoardMessage.make({ _tag: "Show", ids: ["2"] }))
+      assert.deepStrictEqual(heldIds(app.Board, s.results?.users), ["2"])
+      assert.deepStrictEqual(updates(app.order), [
+        "update a [1:Ann,2:failed]",
+        "update a [2:Bea]",
+        "update a [1:failed]",
+        "update a []"
+      ])
+      const started = Story.start(app.Board, { tag: "a", ids: ["1"] })
+      assert.throws(
+        () => started.loaded("users", { id: "5" }, { id: "5", name: "E" }),
+        /doesn't return the args/
+      )
+    }))
 
-  it("writes a prune once per lost key set, as the runtime does", () => {
-    const app = makeApp()
-    Story.make(app.Board, { tag: "a", ids: ["1", "2", "3"] }, (s) =>
+  it.effect("writes a prune once per lost key set, as the runtime does", () =>
+    Effect.gen(function*() {
+      const app = makeApp()
+      const s = yield* Story.make(app.Board, { tag: "a", ids: ["1", "2", "3"] })
       s
         .loadedMany("users", [
           { args: { id: "1" }, value: { id: "1", name: "Ann" } },
@@ -958,14 +966,14 @@ describe("Story keyed steps", () => {
         .send(app.BoardMessage.make({ _tag: "Show", ids: ["3", "1"] }))
         .loaded("users", { id: "1" }, { id: "1", name: "Al" })
         .send(app.BoardMessage.make({ _tag: "Show", ids: ["1"] }))
-        .check((story) => assert.deepStrictEqual(heldIds(app.Board, story.results?.users), ["1"])))
-    assert.deepStrictEqual(updates(app.order), [
-      "update a [1:Ann,2:Bea,3:Cy]",
-      "update a []",
-      "update a [1:Al]",
-      "update a []"
-    ])
-  })
+      assert.deepStrictEqual(heldIds(app.Board, s.results?.users), ["1"])
+      assert.deepStrictEqual(updates(app.order), [
+        "update a [1:Ann,2:Bea,3:Cy]",
+        "update a []",
+        "update a [1:Al]",
+        "update a []"
+      ])
+    }))
 })
 
 /**
@@ -1000,7 +1008,10 @@ const makeSelection = (app: ReturnType<typeof makeApp>) => {
       const row = h.queries.users.get({ id: model.selected })
       if (Option.isNone(row)) throw new Error(`no row for the selection ${model.selected}`)
       const result = row.value.result
-      return h.el("p", AsyncResult.isSuccess(result) ? result.value.name : "…")
+      // A click shows the first id only, so a scene can make the change.
+      return h.el("p").on("click", Message.make({ _tag: "Show", ids: ["1"] })).children(
+        AsyncResult.isSuccess(result) ? result.value.name : "…"
+      )
     }
   })
   return { Message, Selection }
@@ -1024,28 +1035,32 @@ describe("Keyed selection repaired by the prune handler", () => {
     )
   })
 
-  it("Story renders the step once its prunes have settled, as the runtime does", () => {
-    const app = makeApp()
-    const { Message, Selection } = makeSelection(app)
-    Story.make(Selection, {}, (s) =>
-      s
-        .loadedMany("users", [
+  it.effect("Scene renders the step once its prunes have settled, as the runtime does", () =>
+    Effect.gen(function*() {
+      const app = makeApp()
+      const { Message, Selection } = makeSelection(app)
+      const loadBoth = <S extends Steps.Steps.Any>(s: S): S =>
+        s.loadedMany("users", [
           { args: { id: "1" }, value: { id: "1", name: "Ann" } },
           { args: { id: "2" }, value: { id: "2", name: "Bea" } }
         ])
-        .check((story) => assert.strictEqual(Locator.textOf(story.get(Locator.tag("p"))), "Bea"))
+      const scene = yield* Scene.make(Selection, {})
+      scene.pipe(loadBoth)
+        .expect(Locator.tag("p")).toHaveText("Bea")
+        .click("Bea")
+        .expect(Locator.tag("p")).toHaveText("Ann")
+      const s = yield* Story.make(Selection, {})
+      s.pipe(loadBoth)
         .send(Message.make({ _tag: "Show", ids: ["1"] }))
-        .check((story) => {
-          assert.strictEqual(Locator.textOf(story.get(Locator.tag("p"))), "Ann")
-          assert.deepStrictEqual(heldIds(Selection, story.results?.users), ["1"])
-        }))
-  })
+      assert.deepStrictEqual(heldIds(Selection, s.results?.users), ["1"])
+    }))
 })
 
 describe("Story keyed rounds", () => {
-  it("sends a prune whose update prunes again in a second round, as the runtime does", () => {
-    const app = makeApp({ pruneTrims: true })
-    Story.make(app.Board, { tag: "a", ids: ["1", "2", "3"] }, (s) =>
+  it.effect("sends a prune whose update prunes again in a second round, as the runtime does", () =>
+    Effect.gen(function*() {
+      const app = makeApp({ pruneTrims: true })
+      const s = yield* Story.make(app.Board, { tag: "a", ids: ["1", "2", "3"] })
       s
         .loadedMany("users", [
           { args: { id: "1" }, value: { id: "1", name: "Ann" } },
@@ -1053,20 +1068,20 @@ describe("Story keyed rounds", () => {
           { args: { id: "3" }, value: { id: "3", name: "Cy" } }
         ])
         .send(app.BoardMessage.make({ _tag: "Show", ids: ["1", "2"] }))
-        .check((story) => assert.deepStrictEqual(heldIds(app.Board, story.results?.users), ["1"])))
-    assert.deepStrictEqual(updates(app.order), ["update a [1:Ann,2:Bea,3:Cy]", "update a []", "update a []"])
-  })
+      assert.deepStrictEqual(heldIds(app.Board, s.results?.users), ["1"])
+      assert.deepStrictEqual(updates(app.order), ["update a [1:Ann,2:Bea,3:Cy]", "update a []", "update a []"])
+    }))
 
   it("throws when a step's prunes don't settle in 100 rounds", () => {
     const app = makeApp({ pruneDrops: true })
     // Each prune's update drops one more id, so 103 held keys take more than 100 rounds to settle.
     const ids = Array.from({ length: 103 }, (_, i) => String(i))
+    const s = Story.start(app.Board, { tag: "a", ids })
     assert.throws(
       () =>
-        Story.make(app.Board, { tag: "a", ids }, (s) =>
-          s
-            .loadedMany("users", ids.map((id) => ({ args: { id }, value: { id, name: id } })))
-            .send(app.BoardMessage.make({ _tag: "Show", ids: ids.slice(0, -1) }))),
+        s
+          .loadedMany("users", ids.map((id) => ({ args: { id }, value: { id, name: id } })))
+          .send(app.BoardMessage.make({ _tag: "Show", ids: ids.slice(0, -1) })),
       /Board's query "users" was still pruned after 100 rounds .* without limit/
     )
     assert.strictEqual(updates(app.order).length, 101)

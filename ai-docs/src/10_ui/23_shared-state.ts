@@ -3,13 +3,13 @@
  *
  * Share part of a headless component's state with every component below it:
  * a tooltip provider that knows which tooltip is open, tooltips that read it
- * and tell it when they're focused, and a story of one tooltip with no
+ * and tell it when they're focused, and a scene of one tooltip with no
  * provider mounted.
  */
 import { Component } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Locator, Story } from "@effect/ui/testing"
-import { Schema } from "effect"
+import { Locator, Scene } from "@effect/ui/testing"
+import { Effect, Schema } from "effect"
 
 // ---------------------------------------------------------------------------
 // The owner: a headless component with `shares`
@@ -27,7 +27,7 @@ const ProviderMessage = Schema.TaggedUnion({
 // reopen a tooltip nobody is focused on.
 export const TooltipProvider = Component.define({
   name: "TooltipProvider",
-  // Every prop optional, so a story of a reader has a default value.
+  // Every prop optional, so a scene of a reader has a default value.
   props: Schema.Struct({ delay: Schema.optional(Schema.Number) }),
   model: Schema.Struct({ open: Schema.NullOr(Schema.String) }),
   message: ProviderMessage,
@@ -121,16 +121,21 @@ export const Toolbar = Component.define({
 })
 
 // ---------------------------------------------------------------------------
-// A story of a reader, with no owner mounted
+// A scene of a reader, with no owner mounted
 // ---------------------------------------------------------------------------
 
 // The reader sees the provider's default, `shares(init(props).model, props)`,
-// until `shared` gives it a value. Sends to the owner are in `sent`, and the
-// story never runs the owner's `update`.
-export const focused = Story.make(Tooltip, { label: "B", tip: "Bold" }, (s) => {
+// until `shared` gives it a value. Sends to the owner are in `sent` until a
+// `sent` step acknowledges them, and the scene never runs the owner's `update`.
+// A test runs this with `it.effect`, which provides the scope `Scene.make` needs.
+export const focused = Effect.gen(function*() {
+  const s = yield* Scene.make(Tooltip, { label: "B", tip: "Bold" })
   s.fire(Locator.text("B"), "focus")
   const [enter] = s.current.sent
   console.log(enter?.owner?.definition.name) // "TooltipProvider"
+  const message = enter!.message as typeof TooltipMessage.Type
+  s.sent(TooltipProvider, message)
   // What the provider would make of it, given by hand: the tooltip shows.
-  s.shared(TooltipProvider, { open: (enter!.message as typeof TooltipMessage.Type).id })
+  s.shared(TooltipProvider, { open: message.id })
+    .expect(Locator.text("Bold")).toExist()
 })

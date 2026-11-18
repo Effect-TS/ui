@@ -1,7 +1,7 @@
-import { Component, View } from "@effect/ui"
+import { Component, Mount, View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { TestHost } from "@effect/ui/testing"
-import { Context, Effect, Schema } from "effect"
+import { Context, type Effect, Schema } from "effect"
 import { describe, expect, it } from "tstyche"
 import { Dialog, type Item, Menu, type MenuEvents } from "../../test/html/fixtures/headless.ts"
 
@@ -14,6 +14,8 @@ type Msg = typeof Msg.Type
 const items: ReadonlyArray<Item> = [{ id: "a", label: "Archive" }]
 
 // A headless component whose part has a mount that needs a service.
+const Tick = Mount.make("Tick", { args: {} }, () => Clock.use((clock) => clock.now))
+const MarkSeen = Mount.make("MarkSeen", { args: {} }, () => Tracker.use((tracker) => tracker.seen))
 const Timed = Component.define({
   name: "Timed",
   model: Schema.Number,
@@ -24,7 +26,7 @@ const Timed = Component.define({
   update: (_, now) => now,
   parts: (now, p) => ({
     now,
-    clock: p.part("time", (b) => b.onMount("tick", () => Clock.use((clock) => clock.now)))
+    clock: p.part("time", (b) => b.onMount(Tick()))
   })
 })
 
@@ -112,8 +114,7 @@ describe("headless components", () => {
         Timed(h, {
           key: "t",
           view: (t) =>
-            t.clock(h.time).onMount("seen", () =>
-              Effect.as(Tracker.use((tracker) => tracker.seen), Msg.make({ _tag: "Seen" })))
+            t.clock(h.time).onMount(MarkSeen().pipe(Mount.map(() => Msg.make({ _tag: "Seen" }))))
               .children(String(t.now))
         })
     })
@@ -130,14 +131,10 @@ describe("headless components", () => {
       init: () => null,
       update: (model) => model,
       parts: (_, p) => {
-        const clock = p.part("time", (b) => b.onMount("tick", () => Clock.use((clock) => clock.now)))
+        const clock = p.part("time", (b) => b.onMount(Tick()))
         const seen = p.part(
           "div",
-          (b, label: string) =>
-            b.attr("aria-label", label).onMount(
-              "seen",
-              () => Effect.as(Tracker.use((tracker) => tracker.seen), Component.noop)
-            )
+          (b, label: string) => b.attr("aria-label", label).onMount(MarkSeen().pipe(Mount.map(() => Component.noop)))
         )
         return {
           clock: View.wrapPart(

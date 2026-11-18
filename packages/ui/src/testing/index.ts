@@ -15,6 +15,18 @@ export * as Locator from "./Locator.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * as Scene from "./Scene.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
+export * as Steps from "./Steps.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * as Story from "./Story.ts"
 
 /**

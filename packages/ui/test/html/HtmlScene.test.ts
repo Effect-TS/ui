@@ -1,0 +1,255 @@
+// @vitest-environment happy-dom
+import { Component, Mount } from "@effect/ui"
+import { BrowserHost, Html } from "@effect/ui/html"
+import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
+import { Locator } from "@effect/ui/testing"
+import { assert, describe, it } from "@effect/vitest"
+import { Cause, Effect, Schema } from "effect"
+import { Settings } from "./fixtures/settings.ts"
+
+const Board = Component.define({
+  name: "Board",
+  model: Schema.Array(Schema.String),
+  message: Schema.String,
+  elements: Html
+}).make({
+  init: (): ReadonlyArray<string> => [],
+  update: (log, message) => [...log, message],
+  view: (log, h) =>
+    h.section.onDrop(
+      ({ data, files }) => `outer ${data["application/x-todo"] ?? files.map((file) => file.name).join(",")}`,
+      { accepts: ["application/x-todo", "Files"] }
+    ).children(
+      h.div.attr("aria-label", "Inner")
+        .onDrop(() => "inner", { accepts: ["text/uri-list"] }).children(h.p("Inner child")),
+      h.p("Plain"),
+      h.output(log.join("|"))
+    )
+})
+
+const log = Locator.tag("output")
+
+describe("HtmlScene", () => {
+  it.effect("drop goes to the innermost target that accepts the drag, and throws when none does", () =>
+    Effect.gen(function*() {
+      const s = yield* HtmlScene.make(Board, {})
+      // The inner target doesn't accept a todo, so the outer one takes it.
+      s.drop(Locator.text("Inner child"), { data: { "application/x-todo": "milk" } })
+      assert.isTrue(s.defaultPrevented)
+      s.drop(Locator.text("Inner child"), { data: { "text/uri-list": "https://example.com" } })
+        .drop(Locator.text("Plain"), { files: [new File(["x"], "a.txt")] })
+        .expect(log).toHaveText("outer milk|inner|outer a.txt")
+      assert.throws(
+        () => s.drop(Locator.text("Plain"), { data: { "text/plain": "hello" } }),
+        /HtmlScene\.drop: nothing at text "Plain" accepts "text\/plain"/
+      )
+    }))
+
+  it("a message step reports unacknowledged work before a lookup that fails", () => {
+    const missing = Locator.text("Missing")
+    const steps: Record<string, (s: HtmlScene.Steps<typeof Board>) => unknown> = {
+      click: (s) => s.click(missing),
+      fire: (s) => s.fire(missing, "click"),
+      type: (s) => s.type(missing, "x"),
+      change: (s) => s.change(missing, "x"),
+      keydown: (s) => s.keydown(missing, "a"),
+      submit: (s) => s.submit(missing),
+      focus: (s) => s.focus(missing),
+      blur: (s) => s.blur(missing),
+      drop: (s) => s.drop(missing, { data: { "application/x-todo": "milk" } }),
+      childEmit: (s) => s.childEmit(Board, "none", undefined as never),
+      childFailure: (s) => s.childFailure("none", Cause.fail("boom"))
+    }
+    for (const [name, run] of Object.entries(steps)) {
+      const scene = HtmlScene.start(Board, {}).click("Plain")
+      assert.throws(() => run(scene), new RegExp(`^HtmlScene\\.${name}: earlier work isn't settled or acknowledged`))
+      scene.expectIgnored()
+      assert.throws(() => run(scene), new RegExp(`^HtmlScene\\.${name}: (nothing matches|no child)`))
+    }
+  })
+
+  it.effect("a scene names a mount by its definition, checks its args and ends it with the definition's result", () =>
+    Effect.gen(function*() {
+      const Message = Schema.TaggedUnion({ Add: { point: Schema.Number }, Drawn: { width: Schema.Number } })
+      const DrawChart = Mount.make(
+        "DrawChart",
+        { args: { points: Schema.Array(Schema.Number) } },
+        (canvas: HTMLCanvasElement) => Effect.sync(() => canvas.width)
+      )
+      const Chart = Component.define({
+        name: "Chart",
+        model: Schema.Struct({ points: Schema.Array(Schema.Number), width: Schema.Number }),
+        message: Message,
+        elements: Html
+      }).make({
+        init: () => ({ points: [1, 2], width: 0 }),
+        update: (model, message) =>
+          Message.match(message, {
+            Add: ({ point }) => ({ ...model, points: [...model.points, point] }),
+            Drawn: ({ width }) => ({ ...model, width })
+          }),
+        view: (model, h) =>
+          h.div(
+            h.canvas.onMount(
+              DrawChart({ points: model.points }).pipe(Mount.map((width) => Message.make({ _tag: "Drawn", width })))
+            ),
+            h.button.onClick(Message.make({ _tag: "Add", point: 3 })).children("Add"),
+            h.p(`width ${model.width}`)
+          )
+      })
+      const s = yield* HtmlScene.make(Chart, {})
+      s.expectMount(DrawChart({ points: [1, 2] }))
+        .click("Add")
+        // The mount keeps running with the new args.
+        .expectMount(DrawChart({ points: [1, 2, 3] }))
+        // The definition's own result: the view's Mount.map makes the message.
+        .mounted(DrawChart, 300)
+        .expect(Locator.tag("p")).toHaveText("width 300")
+      assert.throws(
+        () => s.expectMount(DrawChart({ points: [] })),
+        /HtmlScene\.expectMount: no rendered mount matches DrawChart\(\{"points":\[\]\}\); mounts: DrawChart\(\{"points":\[1,2,3\]\}\)/
+      )
+    }))
+
+  it.effect("type, keydown, label and placeholder send what the browser host sends", () =>
+    Effect.gen(function*() {
+      const s = yield* HtmlScene.make(Settings, {})
+      s.type(HtmlLocator.label("Zip code"), "10001")
+        .expect(HtmlLocator.placeholder("90210")).toHaveValue("10001")
+        .keydown(HtmlLocator.label("Zip code"), "Enter", { shift: true })
+        .expect(log).toHaveText("zip:10001|key:Enter+shift")
+    }))
+
+  it.effect("a submit button submits its form with the fields read from the view", () =>
+    Effect.gen(function*() {
+      const s = yield* HtmlScene.make(Settings, {})
+      s.type(HtmlLocator.label("Zip code"), "10001")
+        .click(HtmlLocator.role("checkbox", { name: "Agree" }))
+        .click(HtmlLocator.role("button", { name: "Go" }))
+        // The disabled checkbox is left out, the submitter is in.
+        .expect(log).toHaveText("zip:10001|agree:true|submit:zip=10001&agree=on&via=go")
+        // Submitting without a submitter.
+        .submit(HtmlLocator.label("Zip code"))
+        .expect(log).toHaveText(/\|submit:zip=10001&agree=on$/)
+    }))
+
+  it.effect("a checkbox fires input and change, and the matchers read fields", () =>
+    Effect.gen(function*() {
+      const s = yield* HtmlScene.make(Settings, {})
+      s.expect(HtmlLocator.label("Agree")).toBeChecked(false)
+        .click(HtmlLocator.label("Agree"))
+        .expect(HtmlLocator.label("Agree")).toBeChecked()
+        .click(HtmlLocator.label("Agree"))
+        .expect(log).toHaveText("agree:true|agree:false")
+        .expect(HtmlLocator.label("Off")).toBeDisabled()
+        .expect(HtmlLocator.label("Agree")).toBeDisabled(false)
+        .expect(HtmlLocator.label("Zip code")).toHaveAccessibleName("Zip code")
+      const started = HtmlScene.start(Settings, {})
+      assert.throws(() => started.expect(HtmlLocator.label("Agree")).toBeChecked(), /toBeChecked\(\): it is unchecked/)
+      assert.throws(() => started.expect(HtmlLocator.label("Agree")).toBeDisabled(), /toBeDisabled\(\): it is enabled/)
+      assert.throws(
+        () => started.expect(HtmlLocator.label("Zip code")).toHaveValue("1"),
+        /toHaveValue\("1"\): its value is ""/
+      )
+      assert.throws(
+        () => started.expect(HtmlLocator.label("Zip code")).toHaveAccessibleName("Zip"),
+        /toHaveAccessibleName\("Zip"\): its accessible name is "Zip code"/
+      )
+    }))
+
+  it("clicking a disabled control throws", () => {
+    const s = HtmlScene.start(Settings, {})
+    assert.throws(() => s.click(HtmlLocator.label("Off")), /^HtmlScene\.click: label "Off" is disabled/)
+    assert.throws(() => s.click("Later"), /^HtmlScene\.click: text "Later" is disabled/)
+  })
+
+  it.effect("click, type and keydown send what BrowserHost sends for the same actions", () =>
+    Effect.gen(function*() {
+      const app = yield* Effect.acquireRelease(
+        Effect.sync(() => document.body.appendChild(document.createElement("div"))),
+        (element) => Effect.sync(() => element.remove())
+      )
+      yield* BrowserHost.mountEffect(Settings, {}, app)
+      const zip = HtmlLocator.getByRole(app, "textbox", { name: "Zip code" }) as HTMLInputElement
+      HtmlLocator.type(zip, "10001")
+      zip.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true }))
+      HtmlLocator.click(HtmlLocator.getByRole(app, "checkbox", { name: "Agree" }))
+      HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name: "Go" }))
+      yield* Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))
+      const browser = app.querySelector("output")!.textContent
+      const s = yield* HtmlScene.make(Settings, {})
+      s.type(HtmlLocator.label("Zip code"), "10001")
+        .keydown(HtmlLocator.label("Zip code"), "Enter", { shift: true })
+        .click(HtmlLocator.role("checkbox", { name: "Agree" }))
+        .click(HtmlLocator.role("button", { name: "Go" }))
+      assert.strictEqual(browser, "zip:10001|key:Enter+shift|agree:true|submit:zip=10001&agree=on&via=go")
+      assert.strictEqual(s.get(log).children?.map((child) => child.text).join(""), browser)
+    }).pipe(Effect.scoped))
+
+  it.effect("a popovertarget button toggles its popover", () =>
+    Effect.gen(function*() {
+      const s = yield* HtmlScene.make(Settings, {})
+      s.click(HtmlLocator.role("button", { name: "Menu" }))
+        .expect(log).toHaveText("toggle:open")
+    }))
+
+  describe("a click's defaults", () => {
+    const Checkout = Component.define({
+      name: "Checkout",
+      model: Schema.Struct({ log: Schema.Array(Schema.String), zip: Schema.String }),
+      message: Schema.String,
+      elements: Html
+    }).make({
+      init: () => ({ log: [], zip: "old" }),
+      update: (model, message) => ({
+        log: [...model.log, message],
+        zip: message === "fill" ? "new" : model.zip
+      }),
+      view: (model, h) =>
+        h.div(
+          h.form.attr("id", "f").onSubmit(({ entries }) =>
+            `submit:${entries.map(([name, value]) => `${name}=${value}`).join("&")}`
+          ).children(
+            h.input.attr("name", "zip").attr("aria-label", "Zip").value(model.zip),
+            // Inside the form, but owned by another one.
+            h.input.attr("name", "elsewhere").attr("form", "other").value("x"),
+            h.button.onClick("fill").children("Fill"),
+            h.button.onClick("stopped", { preventDefault: true }).children("Stop"),
+            h.input.attr("type", "checkbox").attr("aria-label", "Agree")
+              .onClick("checked?", { preventDefault: true })
+              .onChange(({ checked }) => `agree:${checked}`)
+          ),
+          // Outside the form, owned by it through its form attribute.
+          h.input.attr("name", "note").attr("form", "f").value("hi"),
+          h.button.attr("popovertarget", "menu").onClick("menu?", { preventDefault: true }).children("Menu"),
+          h.div.attr("id", "menu").attr("popover", "").onToggle(({ newState }) => `toggle:${newState}`),
+          h.fieldset.attr("disabled", "").children(
+            h.legend(h.button.attr("type", "button").onClick("legend").children("In legend")),
+            h.button.attr("type", "button").onClick("body").children("In body")
+          ),
+          h.output(model.log.join("|"))
+        )
+    })
+
+    it.effect("a cancelled click runs none of them: no submit, no checkbox change, no popover toggle", () =>
+      Effect.gen(function*() {
+        const s = yield* HtmlScene.make(Checkout, {})
+        s.click("Stop")
+          .click(HtmlLocator.label("Agree"))
+          .click("Menu")
+          .expect(log).toHaveText("stopped|checked?|menu?")
+      }))
+
+    it.effect("a submit reads the fields as the click left them, by form owner", () =>
+      Effect.gen(function*() {
+        const s = yield* HtmlScene.make(Checkout, {})
+        s.click("Fill")
+          .expect(log).toHaveText("fill|submit:zip=new&note=hi")
+      }))
+
+    it("the first legend of a disabled fieldset stays clickable, and the rest of it doesn't", () => {
+      const s = HtmlScene.start(Checkout, {}).click("In legend").expect(log).toHaveText("legend")
+      assert.throws(() => s.click("In body"), /^HtmlScene\.click: text "In body" is disabled/)
+    })
+  })
+})

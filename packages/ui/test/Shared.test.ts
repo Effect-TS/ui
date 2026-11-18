@@ -1,8 +1,9 @@
 import { Component, MessageLog } from "@effect/ui"
 import * as services from "@effect/ui/internal/services"
-import { Locator, Story, TestHost } from "@effect/ui/testing"
+import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
+import { defect } from "./utils/scoped.ts"
 
 const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.scoped, Effect.provide(TestHost.layer()))
@@ -183,54 +184,74 @@ describe("shared state", () => {
     }).pipe(provideHost))
 })
 
-describe("shared state in a Story", () => {
-  it("gives a reader the default of an owner whose props are optional, and keeps its sends in sent", () => {
-    const story = Story.make(Tip, { id: "a" }, (s) => s.click("a:closed"))
-    assert.deepStrictEqual(story.sent.map((send) => [send.owner?.definition.name, send.message]), [
-      ["Tips", { _tag: "Enter", id: "a" }]
-    ])
-    // The story never runs the owner's update.
-    assert.strictEqual(Locator.textOf(story.root), "a:closed")
-  })
+describe("shared state in a Scene", () => {
+  it.effect("gives a reader the default of an owner whose props are optional, and keeps its sends in sent", () =>
+    Effect.gen(function*() {
+      const s = yield* Scene.make(Tip, { id: "a" })
+      s.click("a:closed")
+      assert.deepStrictEqual(s.current.sent.map((send) => [send.owner?.definition.name, send.message]), [
+        ["Tips", { _tag: "Enter", id: "a" }]
+      ])
+      s.sent(Tips, { _tag: "Enter", id: "a" })
+      // The scene never runs the owner's update.
+      assert.strictEqual(Locator.textOf(s.root), "a:closed")
+    }))
 
-  it("reads the expanded Model of an owner in the story's own view", () => {
-    const story = Story.make(App, {}, (s) => s.givenChild("tips", "a"))
-    // Trigger is expanded; Tip is a normal child, so a slot with no text.
-    assert.strictEqual(Locator.textOf(story.root), "a")
-  })
+  it.effect("reads the expanded Model of an owner in the scene's own view", () =>
+    Effect.gen(function*() {
+      const s = yield* Scene.make(App, {})
+      s.givenChild("tips", "a")
+      // Trigger is expanded; Tip is a normal child, so a slot with no text.
+      assert.strictEqual(Locator.textOf(s.root), "a")
+    }))
 
-  // A story with no steps keeps the view it expanded, where the owner placing the slot is already gone.
-  it("gives slot content the owner that places it", () => {
-    const Frame = Component.define({ name: "Frame", model: Schema.Null, message: TipMessage, slots: ["body"] }).make({
-      init: () => null,
-      update: (model) => model,
-      view: (_, h) => Tips(h, { key: "tips", props: { label: "placed" }, view: () => h.slots.body })
-    })
-    const story = Story.make(Frame, {}, {
-      slots: (h) => ({ body: Trigger(h, { key: "t", view: (parts) => h.el("i", parts.label) }) })
-    }, () => {})
-    assert.strictEqual(Locator.textOf(story.root), "placed")
-  })
+  // A scene with no steps keeps the view it expanded, where the owner placing the slot is already gone.
+  it.effect("gives slot content the owner that places it", () =>
+    Effect.gen(function*() {
+      const Frame = Component.define({ name: "Frame", model: Schema.Null, message: TipMessage, slots: ["body"] }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => Tips(h, { key: "tips", props: { label: "placed" }, view: () => h.slots.body })
+      })
+      const s = yield* Scene.make(Frame, {}, {
+        slots: (h) => ({ body: Trigger(h, { key: "t", view: (parts) => h.el("i", parts.label) }) })
+      })
+      assert.strictEqual(Locator.textOf(s.root), "placed")
+    }))
 
   it("gives the parts of a headless reader the shared value", () => {
     assert.deepStrictEqual(Story.parts(Trigger, { model: null, props: {} }), { open: null, label: "" })
   })
 
-  it("takes the values of owners with required props from shared steps or given, and throws naming a missing one", () => {
-    const required = (name: string) =>
-      Component.define({
-        name,
-        props: Schema.Struct({ value: Schema.Number }),
-        model: Schema.Number,
-        message: TipMessage,
-        shares: (model) => model
-      }).make({ init: ($) => $.props.value, update: (model) => model, parts: () => ({}) })
-    const A = required("A")
-    const B = required("B")
-    const Sum = Component.define({ name: "Sum", model: Schema.Null, message: TipMessage, shared: { a: A, b: B } })
-      .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p", String(h.shared.a + h.shared.b)) })
-    assert.strictEqual(Locator.textOf(Story.make(Sum, {}, (s) => s.shared(A, 1).shared(B, 2)).root), "3")
-    assert.strictEqual(Locator.textOf(Story.make(Sum, {}, (s) => s.given(null, {}, [[A, 1], [B, 2]])).root), "3")
-    assert.throws(() => Story.make(Sum, {}, (s) => s.shared(A, 1)), /\.shared\(B, value\)/)
-  })
+  it.effect(
+    "takes the values of owners with required props from shared steps or given, and throws naming a missing one",
+    () =>
+      Effect.gen(function*() {
+        const required = (name: string) =>
+          Component.define({
+            name,
+            props: Schema.Struct({ value: Schema.Number }),
+            model: Schema.Number,
+            message: TipMessage,
+            shares: (model) => model
+          }).make({ init: ($) => $.props.value, update: (model) => model, parts: () => ({}) })
+        const A = required("A")
+        const B = required("B")
+        const Sum = Component.define({ name: "Sum", model: Schema.Null, message: TipMessage, shared: { a: A, b: B } })
+          .make({
+            init: () => null,
+            update: (model) => model,
+            view: (_, h) => h.el("p", String(h.shared.a + h.shared.b))
+          })
+        const shared = yield* Scene.make(Sum, {})
+        assert.strictEqual(Locator.textOf(shared.shared(A, 1).shared(B, 2).root), "3")
+        const given = yield* Scene.make(Sum, {})
+        assert.strictEqual(Locator.textOf(given.given(null, {}, [[A, 1], [B, 2]]).root), "3")
+        const message = yield* defect(Effect.gen(function*() {
+          const s = yield* Scene.make(Sum, {})
+          s.shared(A, 1)
+        }))
+        assert.match(message, /\.shared\(B, value\)/)
+      })
+  )
 })

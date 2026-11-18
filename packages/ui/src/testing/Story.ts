@@ -1,21 +1,22 @@
 /**
- * Story tests drive one component instance step by step: pure, with no
- * runtime, no Layers and no host.
+ * Story tests drive `update` with messages and assert on the Model: pure,
+ * with no runtime, no Layers, no host and no view.
  *
- * A story covers `init`, `update` and locators over the instance's view value.
+ * A story is evidence about `update`. It takes any message and any Model,
+ * so it reaches branches that are awkward to reach through the view. It
+ * never renders, so a defect in `view` fails a `Scene`, not a story.
  * Commands stay pending as data until a step resolves them with the message
- * they would have produced, so no service is needed. A child is a leaf:
- * anything that crosses into one is a runtime test.
+ * they would have produced, so no service is needed.
  *
- * `make` hands a callback a cursor, `Steps`, whose steps run as soon as they
- * are called and return the cursor, so they chain. A shared setup is a function
- * of the cursor, applied with `pipe`. `make` fails if a Command is still
- * pending once the callback returns. Sending a message while Commands are
- * pending is allowed, since testing `switch` and `concurrent` needs it. A
- * defect in `init`, `update` or `view` makes the step throw, on the line
- * that called it.
+ * `make` is a scoped Effect that gives a cursor, `Steps`, whose steps run as
+ * soon as they are called and return the cursor, so they chain. The test reads
+ * the Model and the rest of the record from the cursor between steps. A shared
+ * setup is a function of the cursor, applied with `pipe`. Every step follows
+ * the acknowledgement rule described in `Steps`: a story is the full account
+ * of what the component did. A defect in `init` or `update` makes the step
+ * throw, on the line that called it.
  *
- * **Example** (A todo row: click, resolve its Command, check the Model)
+ * **Example** (A todo row: send, resolve its Command, check the Model)
  *
  * ```ts import.meta.vitest
  * import { Command, Component } from "@effect/ui"
@@ -42,106 +43,94 @@
  *       Save: () => $.run(SaveTodo.make({ id: $.props.id })),
  *       Saved: () => ({ saved: true })
  *     }),
- *   // In a story, `h.isRunning` is derived from the pending Commands.
- *   view: (_, h) => h.el("button").on("click", Message.make({ _tag: "Save" })).children(h.isRunning(SaveTodo) ? "saving" : "save")
+ *   view: (_, h) => h.el("button").on("click", Message.make({ _tag: "Save" })).children("save")
  * })
  *
- * Story.make(TodoItem, { id: "t1" }, (s) =>
- *   s.click("save")
+ * Effect.gen(function*() {
+ *   const s = yield* Story.make(TodoItem, { id: "t1" })
+ *   s.send(Message.make({ _tag: "Save" }))
  *     .expectExact(SaveTodo.make({ id: "t1" }))
  *     .resolve(SaveTodo, Message.make({ _tag: "Saved" }))
- *     .model((model) => {
- *       if (!model.saved) throw new Error("not saved")
- *     }))
+ *   console.log(s.model.saved) // true
+ * }).pipe(Effect.scoped, Effect.runSync)
  * ```
  *
  * @stability experimental
  * @since 0.1.0
  */
-import * as Cause from "effect/Cause"
-import * as Duration from "effect/Duration"
-import * as Equal from "effect/Equal"
-import * as Option from "effect/Option"
-import { type Pipeable, pipeArguments } from "effect/Pipeable"
-import * as AsyncResult from "effect/reactivity/AsyncResult"
-import * as Schema from "effect/Schema"
-import * as Command from "../Command.ts"
+import type * as Effect from "effect/Effect"
+import type * as Scope from "effect/Scope"
 import type * as Component from "../Component.ts"
 import type * as Head from "../Head.ts"
-import { isNoop } from "../internal/noop.ts"
-import {
-  checkAuthorPlacements,
-  checkAuthorRefs,
-  checkChildPaths,
-  checkContentPaths,
-  checkFallbackPaths,
-  segment,
-  slotSegment
-} from "../internal/paths.ts"
-import * as componentQueries from "../internal/queries.ts"
-import * as schedule from "../internal/schedule.ts"
-import * as MessageLog from "../MessageLog.ts"
-import * as Query from "../Query.ts"
-import * as View from "../View.ts"
-import * as Locator from "./Locator.ts"
+import * as replay from "../internal/replay.ts"
+import * as cursor from "../internal/steps.ts"
+import * as engine from "../internal/story.ts"
+import type * as MessageLog from "../MessageLog.ts"
+import type * as View from "../View.ts"
+import type * as Shared from "./Steps.ts"
+
+export type {
+  /**
+   * The same type as `Steps.AwaitedQuery`, which defines it.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  AwaitedQuery,
+  /**
+   * The same type as `Steps.KeyedLoad`, which defines it.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  KeyedLoad,
+  /**
+   * The same type as `Steps.Pending`, which defines it.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  Pending,
+  /**
+   * The same type as `Steps.QueryInfo`, which defines it.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  QueryInfo,
+  /**
+   * The same type as `Steps.StreamTarget`, which defines it.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  StreamTarget,
+  /**
+   * The same type as `Steps.Target`, which defines it.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  Target
+} from "./Steps.ts"
 
 /**
- * A Command issued by the instance whose message hasn't been delivered.
- *
- * **Details**
- *
- * `running` is what the runtime would be executing; `queued` is waiting behind
- * a running run of the same group under `mode: "queue"`. `awaiting` has
- * resolved or failed, and holds `message`: a `Command.afterRefetch` run
- * waits for the queries in `awaiting`, and under `mode: "queue"` a
- * message also waits for the earlier ones of its group.
+ * The state of one instance between steps, as a story records it. Immutable:
+ * every step replaces the cursor's record with a new one.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface Pending<Msg> {
-  readonly command:
-    | Command.Issued<Msg | Component.Noop, any, never, "Effect">
-    | Command.Issued<Msg | Component.Noop, any, never, "Stream">
-  readonly status: "running" | "queued" | "awaiting"
-  /** On an awaiting run: the message it delivers when its wait ends, or `Component.noop` for none. */
-  readonly message?: Msg | Component.Noop | undefined
-  /** On an awaiting run: the queries its wait is still on, each at the args it awaits. */
-  readonly awaiting?: ReadonlyArray<AwaitedQuery> | undefined
-}
-
-/**
- * A query a `Command.afterRefetch` run waits for, by its name in
- * `queries`, at the args it returned when the run resolved. A `queryMany`
- * query has one per awaited key.
- *
- * @stability experimental
- * @category models
- * @since 0.1.0
- */
-export interface AwaitedQuery {
-  readonly name: string
-  readonly args: unknown
-}
-
-/**
- * The state of one instance between steps. Immutable: every step replaces the
- * cursor's record with a new one.
- *
- * **Details**
- *
- * `get`, `query` and `all` run locators over the current view, as
- * `TestHost`'s roots do.
- *
- * @stability experimental
- * @category models
- * @since 0.1.0
- */
-export interface Story<Props, Model, Msg, Events, Queries = { readonly [name: string]: unknown }> {
-  /** The component, erased to receive nothing: a story doesn't know what it receives. */
-  readonly component: Component.Component<any, Props, Model, Msg, Events, any, any, any, never>
-  readonly props: Props
+export interface Story<Props, Model, Msg, Events, Queries = { readonly [name: string]: unknown }>
+  extends Shared.Record<Props, Model, Msg, Events>
+{
   readonly model: Model
   /**
    * The query results, beside the Model: what each query last
@@ -150,126 +139,11 @@ export interface Story<Props, Model, Msg, Events, Queries = { readonly [name: st
   readonly results: Component.Results | undefined
   /** The queries' results, by name, as `h.queries` opens them for the current Model, props and results. */
   readonly queries: () => Queries
-  /** Commands issued but not yet resolved, oldest first. */
-  readonly pending: ReadonlyArray<Pending<Msg>>
-  /** Everything emitted to the parent so far. */
-  readonly emitted: ReadonlyArray<Events>
-  /** Every `$.send` to a child so far, in order. A story renders no children, so nothing receives them. */
-  readonly sent: ReadonlyArray<Component.Send>
-  /**
-   * Commands interrupted by `switch`, by an interrupt Command, or by `given`.
-   * An awaiting run that is cut delivers its message instead, and isn't here.
-   */
-  readonly interrupted: ReadonlyArray<
-    | Command.Issued<Msg | Component.Noop, any, never, "Effect">
-    | Command.Issued<Msg | Component.Noop, any, never, "Stream">
-  >
-  /** Commands ignored by `mode: "drop"`. */
-  readonly dropped: ReadonlyArray<
-    | Command.Issued<Msg | Component.Noop, any, never, "Effect">
-    | Command.Issued<Msg | Component.Noop, any, never, "Stream">
-  >
-  /** The infinite queries with a load more `update` issued and no step has settled yet. */
-  readonly loadingMore: ReadonlyArray<string>
-  /**
-   * Whether the `click` or `fire` step that made this record cancelled its
-   * event's default, as the browser host would: its handler was set with
-   * `preventDefault: true` and produced a message, or with
-   * `preventDefault: "always"`, or the event is `submit`, which is always
-   * cancelled, whatever the handler returns and with no handler at all.
-   *
-   * **Details**
-   *
-   * Every other step that makes a record resets it to `false`, and so does
-   * an event whose default isn't cancelled. The checks, `model`, `view`,
-   * `check`, `expectExact` and the others, don't make a record, so they read
-   * it without resetting it.
-   */
-  readonly defaultPrevented: boolean
-  /**
-   * The view of the current Model and props, rendered once the step that
-   * changed them has sent its keyed prunes, so a defect in `view` fails that
-   * step.
-   */
-  readonly view: () => View.Node<Msg, any>
-  /** The Subscription keys the current Model and props ask for, without the query watches. Nothing runs. */
-  readonly subscriptions: () => ReadonlyArray<string>
-  /** Each of the component's queries, with its `Query`'s name and the args it returns for the current Model and props. */
-  readonly queryInfo: () => ReadonlyArray<QueryInfo>
-  /** The view as a `Locator.Node` tree. */
-  readonly root: Locator.Node
-  /** The one element matching `locator`. Throws when there's none or several. */
-  readonly get: (locator: Locator.Locator) => Locator.Node
-  /** The one element matching `locator`, or `undefined`. Throws when there are several. */
-  readonly query: (locator: Locator.Locator) => Locator.Node | undefined
-  /** Every element matching `locator`, in document order. */
-  readonly all: (locator: Locator.Locator) => ReadonlyArray<Locator.Node>
 }
-
-/**
- * One of a component's queries in a story: its name, its `Query`'s name, and the args it returns
- * for the current Model and props, `undefined` when it is disabled. A
- * `queryMany` query's args are its unique args, in order.
- *
- * @stability experimental
- * @category models
- * @since 0.1.0
- */
-export interface QueryInfo {
-  readonly name: string
-  readonly query: string
-  readonly args: unknown
-}
-
-// The `Query` a `queries` entry shows, for the steps that name a query.
-type QueryOf<D> = D extends Component.QueryOne<infer R> ? R : D extends Component.QueryMany<infer R> ? R : never
-
-/**
- * One key of a `queryMany` query for `loadedMany`: its args and a Success
- * value or a typed failure.
- *
- * @stability experimental
- * @category models
- * @since 0.1.0
- */
-export type KeyedLoad<R extends Query.Query.Any> =
-  | {
-    readonly args: Query.Query.Args<R>
-    readonly value: Query.Query.Success<R>
-    readonly waiting?: boolean | undefined
-    readonly patched?: boolean | undefined
-  }
-  | {
-    readonly args: Query.Query.Args<R>
-    readonly error: Query.Query.Error<R>
-    readonly waiting?: boolean | undefined
-  }
-
-/**
- * A pending Command's definition, or an issued Command to also match the
- * arguments.
- *
- * @stability experimental
- * @category models
- * @since 0.1.0
- */
-export type Target =
-  | Command.Definition.Any
-  | Command.Issued<any, any, never, "Effect">
-  | Command.Issued<any, any, never, "Stream">
-
-/**
- * A stream Command's definition, or an issued stream Command: what `next` and
- * `end` take.
- *
- * @stability experimental
- * @category models
- * @since 0.1.0
- */
-export type StreamTarget = Command.Definition<any, any, true, any, any> | Command.Issued<any, any, never, "Stream">
 
 // A component with no messages has `Msg = never`, and its `update` can't take `any`, so it needs its own member.
 // `Rcv` is invariant, and `any` doesn't stand for `never`, so one that receives nothing needs its own members too.
+// The same union as `Steps.ts`'s, so `Story.Steps.Any` extends `Steps.Steps.Any`.
 type AnyComponent =
   | Component.Component<any, any, any, any, any, any, any, any, any>
   | Component.Component<any, any, any, never, any, any, any, any, any>
@@ -277,19 +151,20 @@ type AnyComponent =
   | Component.Component<any, any, any, never, any, any, any, any, never>
 
 /**
- * A cursor over one story. Each step runs as soon as it's called, replaces
- * `current` and returns the cursor, so steps chain. A step that fails throws.
+ * A cursor over one story. It has the steps every kind of test shares, from
+ * `Steps.Steps`, and drives the instance by sending messages to `update`.
  *
  * **Details**
  *
  * The types come from the component: `Steps<typeof Counter>` only sends
  * `Counter`'s messages. A step shared by any component is written
- * `<S extends Story.Steps.Any>(s: S): S`, which keeps the caller's type.
+ * `<S extends Story.Steps.Any>(s: S): S`, which keeps the caller's type. One
+ * that only uses the shared steps can take `Steps.Steps.Any` instead.
  *
  * **Example** (A shared setup)
  *
  * ```ts import.meta.vitest
- * import { Schema } from "effect"
+ * import { Effect, Schema } from "effect"
  * import { Component } from "@effect/ui"
  * import { Story } from "@effect/ui/testing"
  *
@@ -304,17 +179,21 @@ type AnyComponent =
  *   view: (model, h) => h.el("button").on("click", Message.make({ _tag: "Increment" })).children(`+ ${model.count}`)
  * })
  *
- * const twice = (s: Story.Steps<typeof Counter>) => s.click("+").click("+")
+ * const twice = (s: Story.Steps<typeof Counter>) =>
+ *   s.send(Message.make({ _tag: "Increment" })).send(Message.make({ _tag: "Increment" }))
  *
- * const story = Story.make(Counter, {}, (s) => s.given({ count: 10 }).pipe(twice))
- * console.log(story.model.count) // 12
+ * Effect.gen(function*() {
+ *   const s = yield* Story.make(Counter, {})
+ *   s.given({ count: 10 }).pipe(twice)
+ *   console.log(s.model.count) // 12
+ * }).pipe(Effect.scoped, Effect.runSync)
  * ```
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface Steps<C extends AnyComponent> extends Pipeable {
+export interface Steps<C extends AnyComponent> extends Shared.Steps<C> {
   /** The story after the last step. */
   readonly current: Story<
     Component.Props<C>,
@@ -325,232 +204,17 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
   >
 
   /**
-   * Starts from any Model, forgetting what was issued and emitted so far. An
-   * updater is called with the current Model: `given(f)` is exactly
-   * `given(f(current.model))`.
-   *
-   * **Details**
-   *
-   * `given` never runs `update`. Queries keep their results, except that a
-   * keyed query drops the stored keys it no longer returns, with no
-   * `onChange` message. Later steps send `onChange` as usual.
-   *
-   * `loaded` starts the queries it names from loaded results: a Success
-   * value, an infinite query's page array, or a keyed query's entries as
-   * `loadedMany` takes them. Each result is written at the args the query
-   * returns for the new Model and the given results, so a query whose args
-   * read another's result follows the new one, whatever the order of the keys
-   * and whatever the results held before. The view renders once. It throws if a
-   * named query is disabled, or a keyed entry's args aren't ones the query
-   * returns.
-   *
-   * `shared` sets the values owners share, as `shared` steps would, in the
-   * same render: `[[Provider, value], [Other, value]]`. Values given before
-   * and not listed are kept.
+   * Sends a message to `update`. An updater is called with the current
+   * Model. A message step.
    */
-  given<const O extends ReadonlyArray<Component.Headless.Any> = []>(
-    model: Component.Model<C> | ((model: Component.Model<C>) => Component.Model<C>),
-    queries?: {
-      readonly [K in keyof Component.Queries<C>]?: Component.Queries<C>[K] extends Component.QueryMany<infer R>
-        ? ReadonlyArray<KeyedLoad<R>>
-        : Query.Query.Success<QueryOf<Component.Queries<C>[K]>>
-    },
-    shared?: { readonly [K in keyof O]: readonly [owner: O[K], value: Component.Shared.Value<O[K]>] }
-  ): this
-  /**
-   * Changes the props. A props change never reaches `update`: it re-renders the
-   * view and changes the Subscription keys.
-   */
-  props(next: Component.Props<C> | ((props: Component.Props<C>) => Component.Props<C>)): this
-  /** Sends a message to `update`. */
-  send(message: Component.Message<C>): this
-  /**
-   * Clicks the one element `target` matches: the innermost element with a
-   * `click` handler, that element or an ancestor, sends its message. A string
-   * means `Locator.text(target)`. Throws when nothing or several elements match,
-   * or when nothing handles the click. `defaultPrevented` tells whether the
-   * default was cancelled.
-   */
-  click(target: string | Locator.Locator): this
-  /**
-   * Sends `event` with `payload`, `{}` by default, to the one element
-   * `locator` matches: the innermost element with a handler for it, that
-   * element or an ancestor, sends its message. Throws when nothing handles
-   * it, except for `submit`, which the browser host cancels with or without a
-   * handler. `defaultPrevented` tells whether the default was cancelled.
-   */
-  fire(locator: Locator.Locator, event: string, payload?: unknown): this
-  /**
-   * Sends the message the parent's `onEmit` maps `events` from the child with
-   * `key` to, if any. A ref finds the child rendered with it.
-   */
-  childEmit(key: string | Component.Ref.Any, events: unknown): this
-  /**
-   * Sends the message the parent's `onFailure` maps a failure of the child with
-   * `key` to, if any. The failure is passed as an `AsyncResult.Failure`. A
-   * ref finds the child rendered with it.
-   */
-  childFailure(key: string | Component.Ref.Any, cause: Cause.Cause<unknown>): this
-  /**
-   * Sets the Model the headless child with `key` is expanded from, in place
-   * of its `init` Model. The story never runs the child's `update`.
-   */
-  givenChild(key: string, model: unknown): this
-  /**
-   * Sets the value `owner` shares with the readers in the story, in place of
-   * the one they'd see otherwise.
-   *
-   * **Details**
-   *
-   * `owner` is a headless component with `shares`, and the value is keyed by
-   * it, not by a reader's local name: one step reaches the story's component
-   * and every headless child the story expands. The value is kept until the
-   * next `shared` step or `given` that sets one for `owner`.
-   *
-   * Without it, a reader sees the expanded Model of the nearest `owner` in the
-   * story's own view, or else `shares(init(props).model, props)` with no props
-   * when every prop of `owner` is optional. Otherwise rendering throws, naming
-   * this step, but not in a `shared` step: `shared` steps in a row can give
-   * several owners' values. The next step of another kind, a query or the end
-   * of `Story.make` throws. The story never runs `owner`'s `update`: what a
-   * reader sends it is in `sent`.
-   */
-  shared<O extends Component.Headless.Any>(owner: O, value: Component.Shared.Value<O>): this
+  send(message: Component.Message<C> | ((model: Component.Model<C>) => Component.Message<C>)): this
 
-  /**
-   * Resolves the oldest running Command matching `target` with the result it
-   * would have produced, and sends the message.
-   *
-   * **Details**
-   *
-   * A definition matches by identity; an issued Command also matches the
-   * arguments. `result` is the definition's own result, before any
-   * `Command.map`, which is replayed to produce the component's message. A
-   * queued run of the same group starts when the running one resolves.
-   *
-   * A Command issued with `Command.afterRefetch` becomes `awaiting` on the
-   * component's own queries its declared targets match, less those its
-   * `writes` store, and sends at once when there are none. A `loaded` or
-   * `loadFailed` step on the last of them writes the query's result, then
-   * sends this one. `waitExpired` ends the wait by budget. Under `mode: "queue"`
-   * a message also waits for the earlier ones of its group.
-   */
-  resolve<D extends Target>(target: D, result: Command.Result<D>): this
-  /**
-   * Fails the oldest running Command matching `target` with a typed failure
-   * of its body, and sends the message its `Command.match` maps it to. A
-   * stream Command ends. Throws for a Command whose body can't fail. A
-   * failure doesn't wait for refetches.
-   */
-  fail<D extends Target>(target: D, error: Command.Failure<D>): this
-  /** Sends one element of the oldest running stream Command matching `target`, which stays pending. */
-  next<D extends StreamTarget>(target: D, result: Command.Result<D>): this
-  /** Ends the oldest running stream Command matching `target`, sending nothing. */
-  end<D extends StreamTarget>(target: D): this
-  /**
-   * Ends the `Command.afterRefetch` wait of the oldest awaiting Command
-   * matching `target` by its budget, and sends its message. Throws when no
-   * matching Command is waiting.
-   */
-  waitExpired(target: Target): this
-
-  /**
-   * Loads a query with a Success: writes its result at the query's current
-   * args, then sends the message of its `onChange`, if any. Throws when the
-   * query is disabled. For an infinite query `value` is the page array, and
-   * unless `waiting` it settles a pending load more.
-   *
-   * **Details**
-   *
-   * Unless `waiting` or `patched`, it is a settle: it ends a
-   * `Command.afterRefetch` wait on the query. It throws while a running or
-   * queued Command's patch is live on the query, since no fetch settles
-   * under a live patch: only a `patched` value is written then. As in the
-   * cache, a patch is live only when the result held a Success at issue.
-   */
-  loaded<N extends Component.SingleNames<Component.Queries<C>>>(
-    name: N,
-    value: Query.Query.Success<QueryOf<Component.Queries<C>[N]>>,
-    options?: { readonly waiting?: boolean | undefined; readonly patched?: boolean | undefined }
-  ): this
-  /**
-   * Loads one key of a `queryMany` query with a Success, as `loadedMany`
-   * does with one entry.
-   */
-  loaded<N extends Component.KeyedNames<Component.Queries<C>>>(
-    name: N,
-    args: Query.Query.Args<QueryOf<Component.Queries<C>[N]>>,
-    value: Query.Query.Success<QueryOf<Component.Queries<C>[N]>>,
-    options?: { readonly waiting?: boolean | undefined; readonly patched?: boolean | undefined }
-  ): this
-  /**
-   * Loads a query with a typed failure, as `loaded` does. The failure keeps
-   * the result's last Success as `previousSuccess` when it holds one at the
-   * query's current args. Unless `waiting`, it settles an infinite query's
-   * pending load more.
-   */
-  loadFailed<N extends Component.SingleNames<Component.Queries<C>>>(
-    name: N,
-    error: Query.Query.Error<QueryOf<Component.Queries<C>[N]>>,
-    options?: { readonly waiting?: boolean | undefined }
-  ): this
-  /** Loads one key of a `queryMany` query with a typed failure, as `loadedMany` does with one entry. */
-  loadFailed<N extends Component.KeyedNames<Component.Queries<C>>>(
-    name: N,
-    args: Query.Query.Args<QueryOf<Component.Queries<C>[N]>>,
-    error: Query.Query.Error<QueryOf<Component.Queries<C>[N]>>,
-    options?: { readonly waiting?: boolean | undefined }
-  ): this
-  /**
-   * Settles an infinite query's pending load more with its next page: writes the
-   * query's pages with `page` appended. Throws when no load more is
-   * pending.
-   */
-  loadedMore<N extends Component.InfiniteNames<Component.Queries<C>>>(
-    name: N,
-    page: Query.InfiniteQuery.Page<QueryOf<Component.Queries<C>[N]>>
-  ): this
-  /**
-   * Settles an infinite query's pending load more with a failure: the pages stay,
-   * and `more` is `Failed` with `error`. Throws when no load more is
-   * pending.
-   */
-  loadMoreFailed<N extends Component.InfiniteNames<Component.Queries<C>>>(
-    name: N,
-    error: Query.Query.Error<QueryOf<Component.Queries<C>[N]>>
-  ): this
-  /**
-   * Loads several keys of a `queryMany` query in one write, as the runtime
-   * writes a first emission or a batch: the result holds the query's stored
-   * keys and these, and `onChange`'s `changes` holds these. Throws on args
-   * the query doesn't currently return.
-   */
-  loadedMany<N extends Component.KeyedNames<Component.Queries<C>>>(
-    name: N,
-    entries: ReadonlyArray<KeyedLoad<QueryOf<Component.Queries<C>[N]>>>
-  ): this
-
-  /** Checks the Model. `f` throws to fail the test. */
-  model(f: (model: Component.Model<C>) => void): this
-  /** Checks the view. `f` throws to fail the test. */
-  view(f: (view: View.Node<Component.Message<C>, any>) => void): this
-  /** Checks everything emitted so far. `f` throws to fail the test. */
-  emitted(f: (emitted: ReadonlyArray<Component.Events<C>>) => void): this
-  /** Checks every `$.send` to a child so far. `f` throws to fail the test. */
-  sent(f: (sent: ReadonlyArray<Component.Send>) => void): this
-  /** Checks the Subscription keys the current Model and props ask for. `f` throws to fail the test. */
-  subscriptions(f: (keys: ReadonlyArray<string>) => void): this
-  /** Checks the queries and their current args. `f` throws to fail the test. */
-  queryInfo(f: (info: ReadonlyArray<QueryInfo>) => void): this
-  /** Checks the whole story. `f` throws to fail the test. */
-  check(f: (story: Steps<C>["current"]) => void): this
-
-  /** Asserts that exactly these Commands are pending, in order. */
-  expectExact(...targets: ReadonlyArray<Target>): this
-  /** Asserts that a Command matching `target` is pending. */
-  expectHas(target: Target): this
-  /** Asserts that nothing is pending. */
-  expectNone(): this
+  /** The Model after the last step. */
+  readonly model: Component.Model<C>
+  /** The query results after the last step, beside the Model. Opaque: `queries` opens them. */
+  readonly results: Component.Results | undefined
+  /** The queries' results, by name, as `h.queries` opens them for the current Model, props and results. */
+  readonly queries: { readonly [K in keyof Component.Queries<C>]: Component.QueryResultOf<Component.Queries<C>[K]> }
 }
 
 /**
@@ -570,1445 +234,79 @@ export declare namespace Steps {
   export type Any = Steps<AnyComponent>
 }
 
-type Fields<Props, Model, Msg, Events> =
-  & Pick<
-    Story<Props, Model, Msg, Events>,
-    | "component"
-    | "props"
-    | "model"
-    | "results"
-    | "pending"
-    | "emitted"
-    | "sent"
-    | "interrupted"
-    | "dropped"
-    | "loadingMore"
-    | "defaultPrevented"
-  >
-  & {
-    readonly childModels?: ReadonlyMap<string, unknown> | undefined
-    readonly shared?: ReadonlyMap<Component.Definition.Any, unknown> | undefined
-  }
-
-// -- headless children ------------------------------------------------------
-// A story shows a headless child expanded: the closure it was declared with, run against the parts of the
-// child's `init` Model or of the Model `givenChild` set. No runtime is involved.
-const childModels = new WeakMap<object, ReadonlyMap<string, unknown>>()
-// The children an expansion replaced, by the expanded root: `childEmit` and `childFailure` still find them.
-const expandedChildren = new WeakMap<object, ReadonlyArray<View.Child<any, any>>>()
-
-// What a story of a slotted component passed for its slots, by the component `withSlots` made.
-const storySlots = new WeakMap<object, Readonly<Record<string, View.Input<never, any>>>>()
-
-// The values `shared` gave, by owner definition: definitions, since `withView` copies components.
-const sharedGiven = new WeakMap<object, ReadonlyMap<Component.Definition.Any, unknown>>()
-
-// -- shared state -----------------------------------------------------------
-// The owners above a point in the story's view, nearest last: their values as the readers there see them.
-type Owners = ReadonlyMap<Component.Definition.Any, unknown>
-const noOwners: Owners = new Map()
-
-/** The owners the readers below `component` see: `owners`, and `component` nearest when it's an owner. */
-const ownersBelow = (
-  owners: Owners,
-  component: { readonly definition: Component.Definition.Any },
-  model: unknown,
-  props: unknown
-): Owners => {
-  const shares = component.definition.shares
-  return shares === undefined ? owners : new Map(owners).set(component.definition, shares(model, props))
-}
-
-/** The owners above the story's view: the story's component, when it's an owner. */
-const rootOwners = (
-  component: { readonly definition: Component.Definition.Any },
-  model: unknown,
-  props: unknown
-): Owners => ownersBelow(noOwners, component, model, props)
-
-// A reader's owner has no value in the story: a render that a `shared` step could still fix may miss it.
-class MissingShared extends Error {}
-
-/** Renders `story`, letting a missing shared value through: another `shared` step may give it. */
-const renderSharing = (story: Story<any, any, any, any>) => {
-  try {
-    story.view()
-  } catch (error) {
-    if (!(error instanceof MissingShared)) throw error
-  }
-}
-
-/** The values `story` was given, with `entries` set over them. */
-const withShared = (
-  story: Story<any, any, any, any>,
-  entries: ReadonlyArray<readonly [Component.Headless.Any, unknown]>,
-  step: string
-): Owners | undefined => {
-  const before = sharedGiven.get(story)
-  if (entries.length === 0) return before
-  const given = new Map(before)
-  for (const [owner, value] of entries) {
-    if (owner.definition.shares === undefined) {
-      throw new Error(`Story.${step}: ${owner.definition.name} shares nothing: it has no shares`)
+class StepsImpl extends cursor.Cursor {
+  protected project(state: engine.State<any, any, any, any>): object {
+    return {
+      ...cursor.baseRecord(state),
+      model: state.model,
+      results: state.results,
+      queries: state.queries
     }
-    given.set(owner.definition, value)
-  }
-  return given
-}
-
-/** What `owner` shares with no instance of it in the story: from `init` with no props, if it takes none. */
-const sharedDefault = (owner: Component.Headless.Any): unknown => {
-  const name = owner.definition.name
-  const props = {}
-  if (!Schema.is(owner.props)(props)) {
-    throw new MissingShared(
-      `Story: the story reads the shared state of ${name}, whose props aren't all optional, so it has no default. Give it with .shared(${name}, value)`
-    )
-  }
-  return owner.definition.shares!(owner.init(props).model, props)
-}
-
-/** `h.shared` and `p.shared` in a story: a given value, else the nearest owner above, else the default. */
-const sharedLookup = (given: Owners | undefined, owners: Owners): Component.SharedLookup => (owner) => {
-  const definition = owner.definition
-  if (given?.has(definition)) return given.get(definition)
-  if (owners.has(definition)) return owners.get(definition)
-  return sharedDefault(owner)
-}
-
-const expandRoot = <Msg>(
-  view: View.Node<Msg, any>,
-  name: string,
-  given: ReadonlyMap<string, unknown> | undefined,
-  filled: Readonly<Record<string, View.Input<never, any>>> | undefined,
-  shared: Owners | undefined,
-  root: Owners
-): View.Node<Msg, any> => {
-  const replaced: Array<View.Child<any, any>> = []
-  // As the runtime does: two children at one path fail the view or the closure that holds them, and
-  // so do two children with one ref key across the view and the closures it gives its headless children.
-  // Nor can two of them place one slot.
-  const written = [checkChildPaths("/" + name, view)]
-  // Content is shown under `children`, where a query looks, at the path the runtime gives it.
-  // `own`: the story's component wrote it, so its refs count with the component's. Content the story
-  // passed for its slots was written by a parent, and so were the closures in it.
-  const content = (input: View.Input<any, any>, path: string, depth: number, own: boolean, owners: Owners) => {
-    const nodes = View.children([input])
-    const paths = checkContentPaths(path, nodes)
-    if (own) written.push(paths)
-    return nodes.map((child) => expand(child, path, depth, own, owners))
-  }
-  const expand = (
-    node: View.Node<any, any>,
-    path: string,
-    depth: number,
-    own: boolean,
-    owners: Owners
-  ): View.Node<any, any> => {
-    switch (node._tag) {
-      case "Text":
-        return node
-      case "Outlet": {
-        // The story's component placing a slot: it shows what the story passed.
-        const input = filled?.[node.name]
-        if (input === undefined) return node
-        return {
-          ...node,
-          children: content(input, "/" + name + "/" + slotSegment(node.name), 1, false, owners)
-        } as View.Node<
-          any,
-          any
-        >
-      }
-      case "Element": {
-        let changed = false
-        const children = node.children.map((child) => {
-          const next = expand(child, path, depth, own, owners)
-          if (next !== child) changed = true
-          return next
-        })
-        return changed ? { ...node, children } : node
-      }
-      case "Child": {
-        const component = node.component as unknown as Component.Headless.Any
-        if (node.slots !== undefined) {
-          // A child's view isn't run, but what the parent passed for its slots is the parent's.
-          const childPath = path + "/" + segment(node)
-          const shown: Array<View.Node<any, any>> = []
-          for (const slot in node.slots) {
-            shown.push(...content(node.slots[slot], childPath + "/" + slotSegment(slot), depth + 1, own, owners))
-          }
-          return { ...node, children: shown } as View.Node<any, any>
-        }
-        if (node.view === undefined || component.parts === undefined) return node
-        replaced.push(node)
-        const childPath = path + "/" + segment(node)
-        const model = given?.has(node.key) ? given.get(node.key) : component.init(node.props).model
-        const parts = component.parts(model, node.props, {
-          owner: { path: childPath, depth: depth + 1 },
-          shared: sharedLookup(shared, owners)
-        })
-        const tree = View.toNode(node.view(parts))
-        const paths = checkChildPaths(childPath, tree)
-        if (own) written.push(paths)
-        // An owner expanded here is the nearest one for the readers in its closure.
-        return expand(tree, childPath, depth + 1, own, ownersBelow(owners, component, model, node.props))
-      }
-    }
-  }
-  const expanded = expand(view, "/" + name, 0, true, root)
-  checkAuthorRefs("/" + name, written)
-  checkAuthorPlacements("/" + name, written)
-  if (replaced.length > 0) expandedChildren.set(expanded, replaced)
-  return expanded
-}
-
-/**
- * Defers rendering until the view is first read, after the step's keyed
- * prunes settle. This skips intermediate records the runtime wouldn't render.
- * `render` gives the expanded view.
- */
-const record = <Props, Model, Msg, Events>(
-  fields: Fields<Props, Model, Msg, Events>,
-  render: () => View.Node<Msg, any>
-): Story<Props, Model, Msg, Events> => {
-  let rendered: View.Node<Msg, any> | undefined
-  const view = () => rendered ??= render()
-  // A view value is a `Locator.Node` tree; a child is a node with no tag or text.
-  const root = () => view() as Locator.Node
-  const context = () => boundOf(fields.component)?.context(fields.model, fields.props, fields.results)
-  const story: Story<Props, Model, Msg, Events> = {
-    component: fields.component,
-    props: fields.props,
-    model: fields.model,
-    results: fields.results,
-    queries: () => context()?.queries ?? {},
-    pending: fields.pending,
-    emitted: fields.emitted,
-    sent: fields.sent,
-    interrupted: fields.interrupted,
-    dropped: fields.dropped,
-    loadingMore: fields.loadingMore,
-    defaultPrevented: fields.defaultPrevented,
-    view,
-    subscriptions: () =>
-      (fields.component.subscriptions?.(fields.model, fields.props, fields.results) ?? []).map((sub) => sub.key),
-    queryInfo: () => {
-      const bound = boundOf(fields.component)
-      if (bound === undefined) return []
-      const current = context()!
-      return bound.entries.map((entry) => ({
-        name: entry.name,
-        query: Query.defOf(entry.query).name,
-        args: current.argsOf(entry.name).args
-      }))
-    },
-    get root() {
-      return root()
-    },
-    get: (locator) => Locator.get(root(), locator),
-    query: (locator) => Locator.query(root(), locator),
-    all: (locator) => Locator.all(root(), locator)
-  }
-  if (fields.childModels !== undefined) childModels.set(story, fields.childModels)
-  if (fields.shared !== undefined) sharedGiven.set(story, fields.shared)
-  return story
-}
-
-const update = <Props, Model, Msg, Events>(
-  story: Story<Props, Model, Msg, Events>,
-  patch: Partial<Fields<Props, Model, Msg, Events>>
-): Story<Props, Model, Msg, Events> => {
-  const fields: Fields<Props, Model, Msg, Events> = {
-    component: story.component,
-    props: story.props,
-    model: story.model,
-    results: story.results,
-    pending: story.pending,
-    emitted: story.emitted,
-    sent: story.sent,
-    interrupted: story.interrupted,
-    dropped: story.dropped,
-    loadingMore: story.loadingMore,
-    // Only a `click` or `fire` step sets it, last, once the step has settled.
-    defaultPrevented: false,
-    childModels: childModels.get(story),
-    shared: sharedGiven.get(story),
-    ...patch
-  }
-  // A defect in `view` fails the step that changed the Model, the query results, the props or what's pending.
-  // An unchanged view is kept as expanded: expanding it again would rebuild slot content without the
-  // owners whose nodes the first expansion replaced.
-  const view = fields.model === story.model && fields.results === story.results && fields.props === story.props &&
-      fields.pending === story.pending && fields.loadingMore === story.loadingMore &&
-      fields.childModels === childModels.get(story) && fields.shared === sharedGiven.get(story)
-    ? story.view
-    : () => expandedView(fields)
-  return record(fields, view)
-}
-
-/** The story's view: the component's own, with its headless children and slot content expanded. */
-const expandedView = (fields: Fields<any, any, any, any>): View.Node<any, any> =>
-  expandRoot(
-    viewOfFields(fields),
-    fields.component.definition.name,
-    fields.childModels,
-    storySlots.get(fields.component),
-    fields.shared,
-    rootOwners(fields.component, fields.model, fields.props)
-  )
-
-/** The story's component's own view, before its headless children are expanded. */
-const viewOfFields = (fields: Fields<any, any, any, any>): View.Node<any, any> =>
-  fields.component.view(
-    fields.model,
-    fields.props,
-    runningOf(fields.pending),
-    fields.results,
-    undefined,
-    sharedLookup(fields.shared, rootOwners(fields.component, fields.model, fields.props))
-  )
-
-const boundOf = componentQueries.boundOf
-
-const isKeyed = (story: Story<any, any, any, any>, name: string): boolean =>
-  boundOf(story.component)?.byName.get(name)?.keyed === true
-
-/** The query called `name`, or a throw naming the step. */
-const queryOf = (story: Story<any, any, any, any>, step: string, name: string): componentQueries.Entry => {
-  const entry = boundOf(story.component)?.byName.get(name)
-  if (entry === undefined) {
-    throw new Error(`Story.${step}: "${name}" is not a query of ${story.component.definition.name}`)
-  }
-  return entry
-}
-
-/** A query's args for the story's Model, props and results. */
-const argsAt = (story: Story<any, any, any, any>, name: string) =>
-  boundOf(story.component)!.context(story.model, story.props, story.results).argsOf(name)
-
-/**
- * Writes a query's result, then sends the message of its `onChange`, if any, as the runtime does.
- * A keyed query's `onChange` also gets `changes`.
- */
-const writeResult = (
-  story: Story<any, any, any, any>,
-  entry: componentQueries.Entry,
-  result: unknown,
-  changes: ReadonlyArray<componentQueries.KeyedChange>
-): Story<any, any, any, any> => {
-  const bound = boundOf(story.component)!
-  // As in the runtime, the same snapshot writes nothing.
-  if (Equal.equals((story.results ?? bound.empty)[entry.name], result)) return story
-  const out = update(story, { results: { ...(story.results ?? bound.empty), [entry.name]: result } })
-  const message = bound.context(out.model, out.props, out.results).changed(entry.name, changes)
-  return message === undefined ? out : dispatch(out, message.value)
-}
-
-/** The result a load step writes, from the query's last Success at its current args. */
-type Build = (
-  previous: Option.Option<AsyncResult.Success<any, any>>
-) => AsyncResult.Success<any, any> | AsyncResult.Failure<any, any>
-
-/** Writes `result` to a single or infinite query's result at its current args. */
-const loadStep = (
-  story: Story<any, any, any, any>,
-  step: string,
-  name: string,
-  build: Build,
-  patched: boolean,
-  more?: Query.More<any>
-): Story<any, any, any, any> => {
-  const entry = queryOf(story, step, name)
-  const current = argsAt(story, name)
-  if (current.argsKey === undefined) {
-    throw new Error(`Story.${step}: the query "${name}" is disabled for the current Model and props`)
-  }
-  const result = build(storedAt(story, name, current.argsKey))
-  const def = Query.defOf(entry.query)
-  const snapshot = boundOf(story.component)!.snapshot(
-    entry,
-    { args: current.args, argsKey: current.argsKey },
-    result,
-    patched,
-    more ?? (def.list !== undefined && result._tag === "Success" ? moreOfPages(def, result.value) : undefined)
-  )
-  return writeResult(story, entry, snapshot, [])
-}
-
-/** The result's last Success at `argsKey`: its value, or a Failure's previous one. */
-const storedAt = (
-  story: Story<any, any, any, any>,
-  name: string,
-  argsKey: string
-): Option.Option<AsyncResult.Success<any, any>> => {
-  const data = Query.snapshotData(story.results?.[name])
-  const stored = data?.argsKey === argsKey ? data.result : undefined
-  return stored === undefined
-    ? Option.none()
-    : stored._tag === "Success"
-    ? Option.some(stored)
-    : stored.previousSuccess
-}
-
-/**
- * The results `given` starts from, written with no `onChange` message. Each
- * named query holds its given results at the args it returns, and a keyed
- * query that isn't named keeps the keys it held before that it still returns. Args can
- * read other queries' results, so the writes repeat until none changes: the
- * result doesn't depend on the order of the names or on the results held before.
- */
-const givenResults = (
-  story: Story<any, any, any, any>,
-  given: { readonly [name: string]: unknown }
-): Component.Results | undefined => {
-  for (const name of Object.keys(given)) queryOf(story, "given", name)
-  const bound = boundOf(story.component)
-  if (bound === undefined) return story.results
-  const before = story.results ?? bound.empty
-  const results: { [name: string]: unknown } = { ...before }
-  // The result a query should hold for the current results, or undefined while a named query is
-  // disabled or doesn't return the given args.
-  const target = (entry: componentQueries.Entry): unknown => {
-    const current = bound.context(story.model, story.props, { ...results }).argsOf(entry.name)
-    if (!Object.hasOwn(given, entry.name)) {
-      // From the results held before: a key an earlier round dropped can come back once the args settle.
-      const held = Query.snapshotMapData(before[entry.name])?.entries
-      return bound.snapshotMany(
-        entry,
-        current.entries!.flatMap((key) => {
-          const stored = held?.get(key.argsKey)
-          return stored === undefined ? [] : [stored]
-        })
-      )
-    }
-    const def = Query.defOf(entry.query)
-    if (entry.keyed) {
-      const keys = current.entries!
-      const snapshots: Array<unknown> = []
-      for (const load of given[entry.name] as ReadonlyArray<KeyedLoad<any>>) {
-        const key = keys.find((key) => key.argsKey === def.argsKey(load.args))
-        if (key === undefined) return undefined
-        const result = "value" in load
-          ? AsyncResult.success(load.value, { waiting: load.waiting, timestamp: 0 })
-          : AsyncResult.failure(Cause.fail(load.error), { waiting: load.waiting })
-        snapshots.push(bound.snapshot(entry, key, result as any, false, undefined))
-      }
-      return bound.snapshotMany(entry, snapshots)
-    }
-    if (current.argsKey === undefined) return undefined
-    const value = given[entry.name]
-    return bound.snapshot(
-      entry,
-      { args: current.args, argsKey: current.argsKey },
-      AsyncResult.success(value, { timestamp: 0 }),
-      false,
-      def.list !== undefined ? moreOfPages(def, value as ReadonlyArray<unknown>) : undefined
-    )
-  }
-  const written = bound.entries.filter((entry) => entry.keyed || Object.hasOwn(given, entry.name))
-  // Each round settles at least one more level of queries whose args read another's result, so a
-  // write still due after a round per query never settles.
-  for (let round = 0, changed = true; changed; round++) {
-    changed = false
-    for (const entry of written) {
-      const next = target(entry)
-      if (next === undefined || Equal.equals(results[entry.name], next)) continue
-      if (round > written.length) {
-        throw new Error(
-          `Story.given: the query "${entry.name}" doesn't settle: its args keep changing with the given results`
-        )
-      }
-      results[entry.name] = next
-      changed = true
-    }
-  }
-  const unmet = written.find((entry) => target(entry) === undefined)
-  if (unmet !== undefined) {
-    throw new Error(
-      `Story.given: the query "${unmet.name}" is disabled, or doesn't return the given args, for the Model and props`
-    )
-  }
-  return results
-}
-
-/** Whether a page array has a next page, by the definition's `next`. */
-const moreOfPages = (def: ReturnType<typeof Query.defOf>, pages: ReadonlyArray<unknown>): Query.More<never> =>
-  pages.length > 0 && Option.isSome(def.list!.next(pages[pages.length - 1], pages))
-    ? { _tag: "Available" }
-    : { _tag: "End" }
-
-const listQuery = (story: Story<any, any, any, any>, step: string, name: string): void => {
-  if (boundOf(story.component)?.byName.get(name)?.list !== true) {
-    throw new Error(`Story.${step}: "${name}" is not an infinite query of ${story.component.definition.name}`)
-  }
-}
-
-/** Settles a query's pending load more with `result`, written at its pages. A live patch makes it throw. */
-const settleMore = (
-  story: Story<any, any, any, any>,
-  step: string,
-  name: string,
-  pagesOf: (pages: ReadonlyArray<unknown>) => ReadonlyArray<unknown>,
-  more?: Query.More<any>
-): Story<any, any, any, any> => {
-  listQuery(story, step, name)
-  const argsKey = argsAt(story, name).argsKey
-  if (argsKey !== undefined) checkUnpatched(story, step, name, argsKey)
-  if (!story.loadingMore.includes(name)) {
-    throw new Error(`Story.${step}: no load more of "${name}" is pending`)
-  }
-  return loadStep(
-    settlePending(story, name),
-    step,
-    name,
-    (previous) => {
-      if (Option.isNone(previous)) throw new Error(`Story.${step}: "${name}" holds no pages at its args`)
-      return AsyncResult.success(pagesOf(previous.value.value), { timestamp: previous.value.timestamp })
-    },
-    false,
-    more
-  )
-}
-
-/**
- * A `$.loadMore` or `$.reset` from `update`, as the runtime runs it at the query's
- * current args: a load more is pending, and writes `Loading`; a reset writes the
- * first page, waiting, and ends a pending load more.
- */
-const applyList = (story: Story<any, any, any, any>, list: Component.ListIssue): Story<any, any, any, any> => {
-  const entry = boundOf(story.component)?.byName.get(list.name)
-  if (entry === undefined || !entry.list) return story
-  const argsKey = argsAt(story, list.name).argsKey
-  if (argsKey === undefined) return story
-  const previous = storedAt(story, list.name, argsKey)
-  const def = Query.defOf(entry.query)
-  const data = Query.snapshotData(story.results?.[list.name])
-  if (list.op === "loadMore") {
-    if (story.loadingMore.includes(list.name)) return story
-    // At the end, or with nothing held at these args, nothing is written and nothing waits.
-    if (Option.isNone(previous) || moreOfPages(def, previous.value.value)._tag === "End") return story
-    const loading = update(story, { loadingMore: [...story.loadingMore, list.name] })
-    if (data?.result?._tag !== "Success") return loading
-    return loadStep(
-      loading,
-      "loadMore",
-      list.name,
-      () => data.result as AsyncResult.Success<any, any>,
-      data.patched,
-      { _tag: "Loading" }
-    )
-  }
-  const reset = settlePending(story, list.name)
-  if (Option.isNone(previous)) return reset
-  const first = AsyncResult.success(previous.value.value.slice(0, 1), { timestamp: previous.value.timestamp })
-  return loadStep(
-    reset,
-    "reset",
-    list.name,
-    // A Failure stays one, over the first page only, while the walk runs.
-    () =>
-      data?.result?._tag === "Failure"
-        ? AsyncResult.failure(data.result.cause, { previousSuccess: Option.some(first), waiting: true })
-        : AsyncResult.success(first.value, { timestamp: first.timestamp, waiting: true }),
-    false
-  )
-}
-
-/** Ends an infinite query's pending load more: a settle, Success or Failure, ends the walk it waits on. */
-const settlePending = (story: Story<any, any, any, any>, name: string): Story<any, any, any, any> =>
-  story.loadingMore.includes(name)
-    ? update(story, { loadingMore: story.loadingMore.filter((other) => other !== name) })
-    : story
-
-/** A `queryMany` query and its unique args, or a throw naming the step. */
-const keyedQuery = (
-  story: Story<any, any, any, any>,
-  step: string,
-  name: string
-): { readonly entry: componentQueries.Entry; readonly keys: ReadonlyArray<componentQueries.Keyed> } => {
-  const entry = boundOf(story.component)?.byName.get(name)
-  if (entry === undefined || !entry.keyed) {
-    throw new Error(`Story.${step}: "${name}" is not a queryMany query of ${story.component.definition.name}`)
-  }
-  return { entry, keys: argsAt(story, name).entries! }
-}
-
-/**
- * Writes a keyed query's result as the runtime does: the stored keys the
- * query still returns, with `loads` over them, and `changes` holds
- * `loads`.
- */
-const writeKeyed = (
-  story: Story<any, any, any, any>,
-  entry: componentQueries.Entry,
-  keys: ReadonlyArray<componentQueries.Keyed>,
-  loads: ReadonlyArray<
-    { readonly argsKey: string; readonly result: AsyncResult.AsyncResult<any, any>; readonly patched: boolean }
-  >
-): Story<any, any, any, any> => {
-  const bound = boundOf(story.component)!
-  const held = Query.snapshotMapData(story.results?.[entry.name])?.entries
-  const byKey = new Map(loads.map((load) => [load.argsKey, load]))
-  const snapshot = bound.snapshotMany(
-    entry,
-    keys.flatMap((key) => {
-      const load = byKey.get(key.argsKey)
-      if (load !== undefined) return [bound.snapshot(entry, key, load.result as any, load.patched, undefined)]
-      const stored = held?.get(key.argsKey)
-      return stored === undefined ? [] : [stored]
-    })
-  )
-  const changes = keys.flatMap((key) => {
-    const load = byKey.get(key.argsKey)
-    return load === undefined ? [] : [{ args: key.args, result: load.result }]
-  })
-  return writeResult(story, entry, snapshot, changes)
-}
-
-/** Loads keys of a keyed query: each args must be one the query currently returns. */
-const loadKeyedStep = (
-  story: Story<any, any, any, any>,
-  step: string,
-  name: string,
-  loads: ReadonlyArray<KeyedLoad<any>>
-): Story<any, any, any, any> => {
-  const { entry, keys } = keyedQuery(story, step, name)
-  const def = Query.defOf(entry.query)
-  const held = Query.snapshotMapData(story.results?.[name])?.entries
-  const settled = new Set<string>()
-  const written = writeKeyed(
-    story,
-    entry,
-    keys,
-    loads.map((load) => {
-      const argsKey = def.argsKey(load.args)
-      if (!keys.some((key) => key.argsKey === argsKey)) {
-        throw new Error(
-          `Story.${step}: the query "${name}" doesn't return the args ${def.logKey(load.args, argsKey)}`
-        )
-      }
-      const patched = "value" in load && load.patched === true
-      if (!patched) checkUnpatched(story, step, name, argsKey)
-      if (!patched && load.waiting !== true) settled.add(argsKey)
-      return {
-        argsKey,
-        result: "value" in load
-          ? AsyncResult.success(load.value, { waiting: load.waiting, timestamp: 0 })
-          : AsyncResult.failWithPrevious(load.error, {
-            previous: Option.fromUndefinedOr(Query.snapshotData(held?.get(argsKey))?.result),
-            waiting: load.waiting
-          }),
-        patched
-      }
-    })
-  )
-  // After the result's write: the wait's own message comes second.
-  return settleWaits(written, (awaited) => awaited.name === name && settled.has(def.argsKey(awaited.args)))
-}
-
-/** How many rounds of prunes one step may write before it throws. */
-const pruneRounds = 100
-
-/**
- * After a step: a keyed query whose result holds a key it no longer returns
- * gets the result pruned, with no changes, as the runtime's drain writes it. A
- * prune's `onChange` can change the key set again, so rounds run until none
- * is due, at most one write per query per round. The runtime doesn't bound
- * them; a step throws after `pruneRounds`.
- */
-const pruneKeyed = (story: Story<any, any, any, any>): Story<any, any, any, any> => {
-  const bound = boundOf(story.component)
-  if (bound === undefined) return story
-  let out = story
-  for (let round = 0;; round++) {
-    let pruned = false
-    for (const entry of bound.entries) {
-      if (!entry.keyed) continue
-      const held = Query.snapshotMapData(out.results?.[entry.name])
-      if (held === undefined || held.entries.size === 0) continue
-      const keys = argsAt(out, entry.name).entries!
-      const declared = new Set(keys.map((key) => key.argsKey))
-      if (Array.from(held.entries.keys()).every((key) => declared.has(key))) continue
-      if (round === pruneRounds) {
-        throw new Error(
-          `Story: ${story.component.definition.name}'s query "${entry.name}" was still pruned after ${pruneRounds} rounds in one step. Each prune's onChange changes its key set again, and the runtime would prune without limit.`
-        )
-      }
-      out = writeKeyed(out, entry, keys, [])
-      pruned = true
-    }
-    if (!pruned) return out
-  }
-}
-
-/** `h.isRunning` in a story: derived from what's pending. */
-const runningOf = (pending: ReadonlyArray<Pending<any>>) => (name: string, groupKey: string | undefined): boolean =>
-  pending.some((entry) =>
-    entry.command.name === name && (groupKey === undefined || entry.command.groupKey === groupKey)
-  )
-
-const toEntries = <Msg>(pending: ReadonlyArray<Pending<Msg>>): Array<schedule.Entry<Pending<Msg>>> =>
-  pending.map((entry) => ({
-    name: entry.command.name,
-    key: entry.command.groupKey,
-    mode: entry.command.mode,
-    status: entry.status,
-    value: entry
-  }))
-
-/**
- * Applies what `init` or `update` returned: the Model, the Commands through `schedule`, and the events.
- * As in the runtime, a cut run that awaits delivers its message inside this `update`, before the
- * Command that cut it is added.
- */
-const apply = <Props, Model, Msg, Events>(
-  story: Story<Props, Model, Msg, Events>,
-  next: Component.Next<Model, Msg, Events, any>
-): Story<Props, Model, Msg, Events> => {
-  let out = update(story, { model: next.model })
-  for (const command of next.commands) {
-    const decision = schedule.schedule(toEntries(out.pending), command)
-    if (decision.interrupt.length > 0) {
-      const gone = new Set(decision.interrupt.map((entry) => entry.value))
-      out = update(out, {
-        pending: out.pending.filter((entry) => !gone.has(entry)),
-        interrupted: [
-          ...out.interrupted,
-          ...decision.interrupt.flatMap((entry) => entry.value.status === "awaiting" ? [] : [entry.value.command])
-        ]
-      })
-      for (const entry of decision.interrupt) {
-        if (entry.value.status === "awaiting") out = dispatch(out, entry.value.message)
-      }
-    }
-    if (command._tag === "Interrupt") continue
-    switch (decision.action) {
-      case "start":
-      case "queue": {
-        const entry: Pending<Msg> = { command, status: decision.action === "start" ? "running" : "queued" }
-        livePatches.set(entry, registeredPatches(out, command))
-        out = update(out, { pending: [...out.pending, entry] })
-        break
-      }
-      case "drop":
-        out = update(out, { dropped: [...out.dropped, command] })
-        break
-      case "none":
-        break
-    }
-  }
-  out = update(out, { emitted: [...out.emitted, ...next.events] })
-  if (next.sends !== undefined && next.sends.length > 0) out = update(out, { sent: [...out.sent, ...next.sends] })
-  for (const list of next.lists ?? []) out = applyList(out, list)
-  return out
-}
-
-/**
- * A run's fiber exited: with a message it is awaiting, on `awaiting` or behind an earlier message of
- * its queue, and without one it leaves. The next queued run of its group starts either way.
- */
-const exited = <Props, Model, Msg, Events>(
-  story: Story<Props, Model, Msg, Events>,
-  entry: Pending<Msg>,
-  held: { readonly message: Msg; readonly awaiting: ReadonlyArray<AwaitedQuery> } | undefined
-): Story<Props, Model, Msg, Events> => {
-  const awaiting: Pending<Msg> | undefined = held === undefined
-    ? undefined
-    : { command: entry.command, status: "awaiting", message: held.message, awaiting: held.awaiting }
-  const next = schedule.next(toEntries(story.pending.filter((other) => other !== entry)), toEntries([entry])[0])
-  const pending = story.pending.flatMap((other): Array<Pending<Msg>> => {
-    if (other === entry) return awaiting === undefined ? [] : [awaiting]
-    if (other !== next?.value) return [other]
-    const running: Pending<Msg> = { command: other.command, status: "running" }
-    livePatches.set(running, livePatches.get(other) ?? [])
-    return [running]
-  })
-  const out = update(story, { pending })
-  return awaiting === undefined ? out : release(out, awaiting)
-}
-
-/** Delivers the messages of `entry`'s group that can go now, in the order `schedule.deliverable` gives. */
-const release = <Props, Model, Msg, Events>(
-  story: Story<Props, Model, Msg, Events>,
-  entry: Pending<Msg>
-): Story<Props, Model, Msg, Events> => {
-  let out = story
-  for (;;) {
-    const next = schedule.deliverable(
-      toEntries(out.pending),
-      toEntries([entry])[0],
-      (other) => other.awaiting === undefined || other.awaiting.length === 0
-    )
-    if (next === undefined) return out
-    out = dispatch(update(out, { pending: out.pending.filter((other) => other !== next.value) }), next.value.message)
-  }
-}
-
-/** Takes awaited queries off the awaiting runs, delivering what a wait that ends lets go. */
-const settleWaits = <Props, Model, Msg, Events>(
-  story: Story<Props, Model, Msg, Events>,
-  settled: (awaited: AwaitedQuery) => boolean
-): Story<Props, Model, Msg, Events> => {
-  let out = story
-  for (const entry of story.pending) {
-    if (entry.awaiting === undefined || !entry.awaiting.some(settled) || !out.pending.includes(entry)) continue
-    const rest: Pending<Msg> = { ...entry, awaiting: entry.awaiting.filter((awaited) => !settled(awaited)) }
-    out = update(out, { pending: out.pending.map((other) => other === entry ? rest : other) })
-    if (rest.awaiting!.length === 0) out = release(out, rest)
-  }
-  return out
-}
-
-/**
- * A single or infinite query's `loaded` or `loadFailed`: unless `patched`, a live patch makes it throw,
- * and unless `waiting` too, it settles the query's entry for the waits on it, after its write.
- */
-const settleStep = (
-  story: Story<any, any, any, any>,
-  step: string,
-  name: string,
-  patched: boolean,
-  waiting: boolean,
-  build: Build
-): Story<any, any, any, any> => {
-  const entry = queryOf(story, step, name)
-  const argsKey = argsAt(story, name).argsKey
-  if (!patched && argsKey !== undefined) checkUnpatched(story, step, name, argsKey)
-  // A settle ends the walk a list's pending load more waits on, unless a walk is still running.
-  const loaded = loadStep(waiting ? story : settlePending(story, name), step, name, build, patched)
-  return patched || waiting ? loaded : settleWaits(
-    loaded,
-    (awaited) => awaited.name === name && Query.defOf(entry.query).argsKey(awaited.args) === argsKey
-  )
-}
-
-/** The component's own queries, each with the entries it is at: one per args it returns now. */
-function* currentEntries(
-  story: Story<any, any, any, any>
-): Generator<{ readonly query: componentQueries.Entry; readonly entries: ReadonlyArray<componentQueries.Keyed> }> {
-  const bound = boundOf(story.component)
-  if (bound === undefined) return
-  const context = bound.context(story.model, story.props, story.results)
-  for (const query of bound.entries) {
-    const current = context.argsOf(query.name)
-    yield {
-      query,
-      entries: current.entries ??
-        (current.argsKey === undefined ? [] : [{ args: current.args, argsKey: current.argsKey }])
-    }
-  }
-}
-
-/**
- * What a `Command.afterRefetch` run resolved with `result` waits for: the component's own queries,
- * at their current args, that its declared targets match, less the entries its `writes` store.
- */
-const awaitedQueries = (
-  story: Story<any, any, any, any>,
-  command: Command.Issued<any, any, never, "Effect"> | Command.Issued<any, any, never, "Stream">,
-  result: unknown
-): ReadonlyArray<AwaitedQuery> => {
-  const budget = command.afterRefetch
-  if (command._tag !== "Effect" || budget === undefined || Duration.isZero(budget)) return []
-  if (boundOf(story.component) === undefined) return []
-  const written = (command.writes?.(result) ?? []).map((write) => ({
-    name: Query.defOf(write.query).name,
-    argsKey: Query.defOf(write.query).argsKey(write.args)
-  }))
-  const out: Array<AwaitedQuery> = []
-  for (const { entries, query } of currentEntries(story)) {
-    const queryName = Query.defOf(query.query).name
-    for (const { args, argsKey } of entries) {
-      if (!Query.invalidatesEntry(command, query.query, args)) continue
-      if (written.some((write) => write.name === queryName && write.argsKey === argsKey)) continue
-      out.push({ name: query.name, args })
-    }
-  }
-  return out
-}
-
-/**
- * Patches registered at issue, by query name and args key. As in the cache, only entries that
- * held a Success then register a patch; cold or failed entries don't delay settling.
- */
-const livePatches = new WeakMap<Pending<any>, ReadonlyArray<{ readonly name: string; readonly argsKey: string }>>()
-
-/** The component's own queries, at their current args, that `command`'s patches register on. */
-const registeredPatches = (
-  story: Story<any, any, any, any>,
-  command: Command.Issued<any, any, never, "Effect"> | Command.Issued<any, any, never, "Stream">
-): ReadonlyArray<{ readonly name: string; readonly argsKey: string }> => {
-  if (command.optimistic.length === 0) return []
-  const out: Array<{ readonly name: string; readonly argsKey: string }> = []
-  for (const { entries, query } of currentEntries(story)) {
-    const result = story.results?.[query.name]
-    const held = query.keyed ? Query.snapshotMapData(result)?.entries : undefined
-    for (const { args, argsKey } of entries) {
-      const data = Query.snapshotData(held !== undefined ? held.get(argsKey) : result)
-      if (data?.argsKey !== argsKey || data.result?._tag !== "Success") continue
-      if (!Query.invalidatesEntry({ invalidates: [], optimistic: command.optimistic }, query.query, args)) continue
-      out.push({ name: query.name, argsKey })
-    }
-  }
-  return out
-}
-
-/**
- * Throws when a running or queued Command's optimistic patch is live on the entry of query `name`
- * at `argsKey`: the runtime settles no fetch there, so only a patched value can be written.
- */
-const checkUnpatched = (story: Story<any, any, any, any>, step: string, name: string, argsKey: string): void => {
-  const patcher = story.pending.find((entry) =>
-    entry.status !== "awaiting" &&
-    livePatches.get(entry)?.some((patch) => patch.name === name && patch.argsKey === argsKey) === true
-  )
-  if (patcher !== undefined) {
-    throw new Error(
-      `Story.${step}: "${name}" is under the optimistic patch of ${
-        describe(patcher.command)
-      } [${patcher.status}], and no fetch settles under a live patch. Resolve or fail it first, or write the patched value with \`{ patched: true }\`.`
-    )
-  }
-}
-
-const describe = (
-  command: Command.Issued<any, any, never, "Effect"> | Command.Issued<any, any, never, "Stream">
-): string => `${command.name}(${JSON.stringify(MessageLog.encodeArgs(command.argsSchema, command.args))})`
-
-const describePending = (pending: ReadonlyArray<Pending<any>>): string =>
-  pending.length === 0 ?
-    "nothing" :
-    pending.map((entry) =>
-      `${describe(entry.command)} [${entry.status}${
-        entry.awaiting === undefined || entry.awaiting.length === 0
-          ? ""
-          : ` on ${entry.awaiting.map((awaited) => awaited.name).join(", ")}`
-      }]`
-    ).join(", ")
-
-const matches = (target: Target, entry: Pending<any>): boolean => {
-  if (Command.isDefinition(target)) return entry.command.name === Command.nameOf(target)
-  return entry.command.name === target.name && Equal.equals(entry.command.args, target.args)
-}
-
-const describeTarget = (target: Target): string =>
-  Command.isDefinition(target) ? Command.nameOf(target) : describe(target)
-
-const findRunning = (story: Story<any, any, any, any>, target: Target, step: string): Pending<any> => {
-  const entry = story.pending.find((entry) => entry.status === "running" && matches(target, entry))
-  if (entry === undefined) {
-    throw new Error(`Story.${step}: no running ${describeTarget(target)}; pending: ${describePending(story.pending)}`)
-  }
-  return entry
-}
-
-const handle = <Msg, Payload>(handler: View.Handler<Msg, Payload>, payload: Payload): Msg | undefined =>
-  typeof handler === "function" ? (handler as (payload: Payload) => Msg | undefined)(payload) : handler
-
-const dispatch = <Props, Model, Msg, Events>(
-  story: Story<Props, Model, Msg, Events>,
-  message: Msg | Component.Noop | undefined
-): Story<Props, Model, Msg, Events> =>
-  // `undefined` is a handler's "no message", and `Component.noop` a Command's or a mount's.
-  message === undefined || isNoop(message)
-    ? story
-    : apply(story, story.component.update(story.model, message, story.props, story.results))
-
-/** `node` and its ancestors in `root`, innermost first, or `undefined` when `node` isn't in `root`. */
-const pathTo = (root: View.Node<any, any>, node: Locator.Node): Array<View.Node<any, any>> | undefined => {
-  if (root === node) return [root]
-  // An element's children, or the content a story shows under a child or an outlet.
-  const children = (root as { readonly children?: ReadonlyArray<View.Node<any, any>> }).children
-  if (children === undefined) return undefined
-  for (const child of children) {
-    const path = pathTo(child, node)
-    if (path !== undefined) {
-      path.push(root)
-      return path
-    }
-  }
-  return undefined
-}
-
-/**
- * Sends `event` to the one element `locator` matches, bubbling to the
- * innermost element that handles it, and tells whether its default was
- * cancelled. Every element in a story is the app's, so a `submit` is always
- * cancelled, and needs no handler.
- */
-const fireAt = <Props, Model, Msg, Events>(
-  story: Story<Props, Model, Msg, Events>,
-  locator: Locator.Locator,
-  event: string,
-  payload: unknown,
-  step: string
-): { readonly story: Story<Props, Model, Msg, Events>; readonly prevented: boolean } => {
-  const found = story.all(locator)
-  if (found.length !== 1) {
-    throw new Error(
-      `Story.${step}: ${
-        found.length === 0 ? "nothing matches" : `${found.length} elements match`
-      } ${locator.description}`
-    )
-  }
-  const view = story.view()
-  // The innermost element with any layer for the event, as on a host.
-  const handler = pathTo(view, found[0])?.find((node): node is View.Element<Msg, any> =>
-    node._tag === "Element" &&
-    (Object.hasOwn(node.handlers, event) || (node.owned ?? []).some((layer) => Object.hasOwn(layer.handlers, event)))
-  )
-  const submit = event === "submit"
-  if (handler === undefined) {
-    if (submit) return { story, prevented: true }
-    throw new Error(`Story.${step}: nothing handles "${event}" at ${locator.description}`)
-  }
-  // A story runs its own component's layers: the element's handlers, and in an author's story the
-  // parts' layers it owns, wherever its view applied them. A headless child's layer needs the child's `update`.
-  const own = "/" + story.component.definition.name
-  const owned = handler.owned ?? []
-  const layers = [...owned.filter((layer) => layer.owner.path === own), handler].filter((layer) =>
-    Object.hasOwn(layer.handlers, event)
-  )
-  if (layers.length === 0) {
-    const owners = owned.filter((layer) => Object.hasOwn(layer.handlers, event)).map((layer) => layer.owner.path)
-    throw new Error(
-      `Story.${step}: only ${owners.join(" and ")} handles "${event}" at ${locator.description}. ` +
-        "A story doesn't run a child's update: use givenChild for its Model, or a TestHost test."
-    )
-  }
-  // `"always"` from any layer cancels, a child's included. Then each layer runs once, in the runtime's
-  // order: its message decides whether its own `preventDefault: true` cancels, then it's sent.
-  let prevented = submit || [...owned, handler].some((layer) => layer.eventOptions[event]?.preventDefault === "always")
-  let out = story
-  for (const layer of layers) {
-    const message = handle(layer.handlers[event]!, payload)
-    if (message === undefined) continue
-    if (layer.eventOptions[event]?.preventDefault === true) prevented = true
-    // Every layer here is the story's own component's, so each message is the story's.
-    out = dispatch(out, message as Msg)
-  }
-  return { story: out, prevented }
-}
-
-// Pending Commands are stored with their Source erased; `findRunning` matched `target`, so
-// `result` is the Source of this entry's Command.
-const resolveWith = (entry: Pending<any>, result: unknown): any =>
-  (entry.command.resolve as (result: unknown) => unknown)(result)
-
-const findStream = (story: Story<any, any, any, any>, target: StreamTarget, step: string): Pending<any> => {
-  const entry = findRunning(story, target, step)
-  if (entry.command._tag !== "Stream") {
-    throw new Error(`Story.${step}: ${describe(entry.command)} is not a stream Command`)
-  }
-  return entry
-}
-
-class StepsImpl implements Steps<AnyComponent> {
-  current: Story<any, any, any, any, any>
-  constructor(current: Story<any, any, any, any, any>) {
-    this.current = current
-    // A missing shared value can't be given before the first step.
-    renderSharing(current)
-  }
-  pipe() {
-    return pipeArguments(this, arguments)
-  }
-  private step(next: Story<any, any, any, any>, defaultPrevented = false): this {
-    const settled = next === this.current ? next : pruneKeyed(next)
-    // Set on the settled record, so a step that changed nothing still resets it.
-    this.current = settled.defaultPrevented === defaultPrevented ? settled : update(settled, { defaultPrevented })
-    // Rendered once the step has settled, so a defect in `view` fails it.
-    this.current.view()
-    return this
-  }
-
-  given(
-    model: unknown,
-    queries?: { readonly [name: string]: unknown },
-    shared: ReadonlyArray<readonly [Component.Headless.Any, unknown]> = []
-  ): this {
-    const next = typeof model === "function" ? model(this.current.model) : model
-    const out = update(this.current, {
-      model: next,
-      pending: [],
-      emitted: [],
-      sent: [],
-      interrupted: [],
-      dropped: [],
-      loadingMore: [],
-      shared: withShared(this.current, shared, "given")
-    })
-    // Settled here, with no onChange message: the step's own prune then has nothing to write.
-    return this.step(update(out, { results: givenResults(out, queries ?? {}) }))
-  }
-  props(next: unknown): this {
-    const props = typeof next === "function" ? next(this.current.props) : next
-    return this.step(update(this.current, { props }))
   }
   send(message: unknown): this {
-    return this.step(dispatch(this.current, message))
-  }
-  click(target: string | Locator.Locator): this {
-    const locator = typeof target === "string" ? Locator.text(target) : target
-    const { prevented, story } = fireAt(this.current, locator, "click", {}, "click")
-    return this.step(story, prevented)
-  }
-  fire(locator: Locator.Locator, event: string, payload: unknown = {}): this {
-    const { prevented, story } = fireAt(this.current, locator, event, payload, "fire")
-    return this.step(story, prevented)
-  }
-  childEmit(key: string | Component.Ref.Any, events: unknown): this {
-    return this.step(dispatch(this.current, findChild(this.current.view(), key, "childEmit").onEmit(events)))
-  }
-  childFailure(key: string | Component.Ref.Any, cause: Cause.Cause<unknown>): this {
-    const child = findChild(this.current.view(), key, "childFailure")
-    return this.step(dispatch(this.current, child.onFailure?.(AsyncResult.failure(cause))))
-  }
-  givenChild(key: string, model: unknown): this {
-    findChild(this.current.view(), key, "givenChild")
-    const given = new Map(childModels.get(this.current))
-    given.set(key, model)
-    return this.step(update(this.current, { childModels: given }))
-  }
-  shared(owner: Component.Headless.Any, value: unknown): this {
-    // Nothing to settle and no default to reset: only what readers see changes.
-    this.current = update(this.current, { shared: withShared(this.current, [[owner, value]], "shared") })
-    renderSharing(this.current)
-    return this
-  }
-
-  resolve(target: Target, result: unknown): this {
-    const entry = findRunning(this.current, target, "resolve")
-    return this.step(exited(this.current, entry, {
-      message: resolveWith(entry, result),
-      awaiting: awaitedQueries(this.current, entry.command, result)
-    }))
-  }
-  fail(target: Target, error: unknown): this {
-    const entry = findRunning(this.current, target, "fail")
-    const reject = entry.command.reject as ((error: unknown) => unknown) | undefined
-    if (reject === undefined) {
-      throw new Error(`Story.fail: ${describe(entry.command)} has no typed failure mapped by Command.match`)
-    }
-    return this.step(exited(this.current, entry, { message: reject(error), awaiting: [] }))
-  }
-  next(target: StreamTarget, result: unknown): this {
-    return this.step(dispatch(this.current, resolveWith(findStream(this.current, target, "next"), result)))
-  }
-  end(target: StreamTarget): this {
-    return this.step(exited(this.current, findStream(this.current, target, "end"), undefined))
-  }
-  waitExpired(target: Target): this {
-    const entry = this.current.pending.find((entry) =>
-      entry.awaiting !== undefined && entry.awaiting.length > 0 && matches(target, entry)
-    )
-    if (entry === undefined) {
-      throw new Error(
-        `Story.waitExpired: no ${describeTarget(target)} is waiting on refetches; pending: ${
-          describePending(this.current.pending)
-        }`
-      )
-    }
-    return this.step(settleWaits(this.current, (awaited) => entry.awaiting!.includes(awaited)))
-  }
-  loaded(name: string, ...rest: Array<any>): this {
-    if (isKeyed(this.current, name)) {
-      const [args, value, options] = rest
-      return this.step(loadKeyedStep(this.current, "loaded", name, [{ args, value, ...options }]))
-    }
-    const [value, options] = rest as [
-      unknown,
-      { readonly waiting?: boolean | undefined; readonly patched?: boolean | undefined } | undefined
-    ]
-    return this.step(
-      settleStep(
-        this.current,
-        "loaded",
-        name,
-        options?.patched === true,
-        options?.waiting === true,
-        () => AsyncResult.success(value, { waiting: options?.waiting, timestamp: 0 })
-      )
+    return this.act(
+      "send",
+      "message",
+      (state) => engine.dispatch(state, typeof message === "function" ? message(state.model) : message)
     )
   }
-  loadedMore(name: string, page: unknown): this {
-    return this.step(settleMore(this.current, "loadedMore", name, (pages) => [...pages, page]))
+  get model(): unknown {
+    return this.state.model
   }
-  loadMoreFailed(name: string, error: unknown): this {
-    return this.step(settleMore(this.current, "loadMoreFailed", name, (pages) => pages, { _tag: "Failed", error }))
+  get results(): Component.Results | undefined {
+    return this.state.results
   }
-  loadFailed(name: string, ...rest: Array<any>): this {
-    if (isKeyed(this.current, name)) {
-      const [args, error, options] = rest
-      return this.step(loadKeyedStep(this.current, "loadFailed", name, [{ args, error, waiting: options?.waiting }]))
-    }
-    const [error, options] = rest as [unknown, { readonly waiting?: boolean | undefined } | undefined]
-    return this.step(
-      settleStep(
-        this.current,
-        "loadFailed",
-        name,
-        false,
-        options?.waiting === true,
-        (previousSuccess) => AsyncResult.failure(Cause.fail(error), { previousSuccess, waiting: options?.waiting })
-      )
-    )
-  }
-  loadedMany(name: string, entries: ReadonlyArray<KeyedLoad<any>>): this {
-    return this.step(loadKeyedStep(this.current, "loadedMany", name, entries))
-  }
-
-  model(f: (model: any) => void): this {
-    f(this.current.model)
-    return this
-  }
-  view(f: (view: View.Node<any, any>) => void): this {
-    f(this.current.view())
-    return this
-  }
-  emitted(f: (emitted: ReadonlyArray<any>) => void): this {
-    f(this.current.emitted)
-    return this
-  }
-  sent(f: (sent: ReadonlyArray<Component.Send>) => void): this {
-    f(this.current.sent)
-    return this
-  }
-  subscriptions(f: (keys: ReadonlyArray<string>) => void): this {
-    f(this.current.subscriptions())
-    return this
-  }
-  queryInfo(f: (info: ReadonlyArray<QueryInfo>) => void): this {
-    f(this.current.queryInfo())
-    return this
-  }
-  check(f: (story: Story<any, any, any, any, any>) => void): this {
-    f(this.current)
-    return this
-  }
-
-  expectExact(...targets: ReadonlyArray<Target>): this {
-    const pending = this.current.pending
-    if (pending.length !== targets.length || !targets.every((target, index) => matches(target, pending[index]))) {
-      throw new Error(
-        `Story.expectExact: expected ${
-          targets.length === 0 ? "nothing" : targets.map(describeTarget).join(", ")
-        }; pending: ${describePending(pending)}`
-      )
-    }
-    return this
-  }
-  expectHas(target: Target): this {
-    const pending = this.current.pending
-    if (!pending.some((entry) => matches(target, entry))) {
-      throw new Error(`Story.expectHas: ${describeTarget(target)} is not pending; pending: ${describePending(pending)}`)
-    }
-    return this
-  }
-  expectNone(): this {
-    if (this.current.pending.length > 0) {
-      throw new Error(`Story.expectNone: pending: ${describePending(this.current.pending)}`)
-    }
-    return this
+  get queries(): unknown {
+    return this.state.queries()
   }
 }
 
 /**
- * Runs a story: `init` with `props`, then the steps `f` calls on the cursor.
+ * Starts a story: `init` with `props`, as a cursor in a scope. The test
+ * calls steps on the cursor and reads the record from it.
  *
  * **Details**
  *
- * `f` doesn't need to return the cursor, so a chained arrow and a block of
- * statements both work. `make` returns the final story so a test can read it,
- * and throws if a Command is still pending at the end.
+ * When the scope closes with a success, the end check runs: it fails on
+ * anything pending, kept or exempt included, on a query with no result
+ * unless `keepPending` named it, and on any event or send not acknowledged.
+ * When the scope closes with a failure the end check doesn't run, so a
+ * failed test reports only its own failure. `it.effect` from
+ * `@effect/vitest` provides the scope, which closes at the end of the test.
  *
  * @stability experimental
  * @category constructors
  * @since 0.1.0
  */
-export const make: {
-  <C extends AnyComponent>(
-    component: C,
-    props: Component.Props<C>,
-    f: (steps: Steps<C>) => void
-  ): Steps<C>["current"]
-  /**
-   * A story of a component with slots: `slots` stands in for what a parent
-   * passes. Its `h` has no messages of its own, as a parent's content in a
-   * story has nothing to send them to. `h` builds elements from
-   * `elements`, then the component's own vocabulary, then the registered
-   * one, and is typed with `elements`, or else the component's vocabulary. The content shows where the view places each slot, at the path the
-   * runtime gives it, such as `/Panel/[body]/Editor[e]`.
-   */
-  <C extends AnyComponent, V extends View.Elements = never>(
-    component: C,
-    props: Component.Props<C>,
-    options: {
-      readonly elements?: View.Vocabulary<V> | undefined
-      readonly slots: (
-        h: View.Helper<never, unknown> & View.Tags<[V] extends [never] ? VocabularyOf<C> : V, never>
-      ) => { readonly [K in Component.Slots<C>]?: View.Input<never, any> }
-    },
-    f: (steps: Steps<C>) => void
-  ): Steps<C>["current"]
-  /**
-   * A story of a headless component: `view` stands in for a consumer's
-   * closure. Its `h` has no messages of its own, so every handler in the
-   * story is one of the component's parts'. `h` builds elements from
-   * `elements`, then the component's own vocabulary, then the registered
-   * one. An event runs every part layer on its element, in the runtime's
-   * order, and each layer's `preventDefault` applies to its own message.
-   */
-  <Props, Events, Parts, R, Rcv, V extends View.Elements = never>(
-    component: Component.Headless<Props, Events, Parts, R, Rcv>,
-    props: Props,
-    options: {
-      readonly elements?: View.Vocabulary<V> | undefined
-      readonly view: (parts: Parts, h: View.Helper<never, Props> & View.Tags<V, never>) => View.Content<never, any>
-    },
-    f: (steps: Steps<Component.Component<string, Props, any, any, Events, R, V>>) => void
-  ): Story<Props, any, any, Events>
-} = (
-  component: any,
-  props: any,
-  ...rest: ReadonlyArray<any>
-): any => {
-  const f: (steps: Steps<any>) => void = rest[rest.length - 1]
-  const steps = start(
-    rest.length === 1
-      ? component
-      : rest[0].slots !== undefined
-      ? withSlots(component, rest[0].slots, rest[0].elements)
-      : withView(component, rest[0].view, rest[0].elements),
-    props
+export const make = <C extends AnyComponent>(
+  component: C,
+  props: Component.Props<C>
+): Effect.Effect<Steps<C>, never, Scope.Scope> =>
+  cursor.scoped(
+    make,
+    () => new StepsImpl("Story", cursor.initial(component, props)) as unknown as cursor.Cursor & Steps<C>
   )
-  f(steps)
-  const story = steps.current
-  // A story with no steps hasn't rendered since `start`, which lets a missing shared value pass.
-  story.view()
-  if (story.pending.length > 0) {
-    throw new Error(`Story.make: Commands still pending at the end: ${describePending(story.pending)}`)
-  }
-  if (story.loadingMore.length > 0) {
-    throw new Error(
-      `Story.make: a load more still pending at the end on ${
-        story.loadingMore.map((name) => JSON.stringify(name)).join(", ")
-      }`
-    )
-  }
-  return story
-}
 
 /**
- * The cursor after `init`, with no check on what's pending at the end.
+ * The cursor after `init`. Its steps follow the acknowledgement rule, but
+ * nothing checks what's pending or unacknowledged at the end.
  *
  * @stability experimental
  * @category constructors
  * @since 0.1.0
  */
-export const start = <C extends AnyComponent>(component: C, props: Component.Props<C>): Steps<C> => {
-  const first = component.init(props)
-  const fields: Fields<any, any, any, any> = {
-    // The record is stored with its types erased; `Steps<C>` restores them.
-    component: component as Component.Component<any, any, any, any, any, any, any, any, never>,
-    props,
-    model: first.model,
-    results: undefined,
-    pending: [],
-    emitted: [],
-    sent: [],
-    interrupted: [],
-    dropped: [],
-    loadingMore: [],
-    defaultPrevented: false
-  }
-  const empty = record(fields, () => expandedView(fields))
-  return new StepsImpl(apply(empty, first)) as Steps<C>
-}
+export const start = <C extends AnyComponent>(component: C, props: Component.Props<C>): Steps<C> =>
+  new StepsImpl("Story", cursor.initial(component, props)) as unknown as Steps<C>
 
 /**
- * The children declared in a view, optionally filtered by component or
- * feature service.
- *
- * @stability experimental
- * @category queries
- * @since 0.1.0
- */
-export const children = <Msg>(
-  view: View.Node<Msg, any>,
-  component?: Component.Any | { readonly key: string }
-): ReadonlyArray<View.Child<Msg, any>> =>
-  [...(expandedChildren.get(view) ?? []), ...shownNodes(view)].filter((node): node is View.Child<Msg, any> =>
-    node._tag === "Child" && (component === undefined || node.component === component)
-  )
-
-/**
- * `node` and the nodes below it, as a story shows them: the content it expanded under a child or an
- * outlet, or, in a view it didn't expand, what a child's slots were passed.
- */
-const shownNodes = function*(node: View.Node<any, any>): Generator<View.Node<any, any>> {
-  yield node
-  const shown = (node as { readonly children?: ReadonlyArray<View.Node<any, any>> }).children
-  if (shown !== undefined) {
-    for (const child of shown) yield* shownNodes(child)
-  } else if (node._tag === "Child") {
-    for (const child of View.slotNodes(node)) yield* shownNodes(child)
-  }
-}
-
-/**
- * A headless component with `view` as its consumer, as a component a story
- * can run. `view` has no messages of its own, so every handler that runs is
- * a layer of the component's parts: `fireAt` runs the layers whose owner is
- * the story's component, wherever the view applied them.
- */
-const withView = (
-  component: Component.Headless.Any,
-  view: (parts: any, h: any) => View.Content<any, any>,
-  elements: View.Vocabulary<any> | undefined
-): AnyComponent => {
-  const owner: View.Owner = { path: "/" + component.definition.name, depth: 0 }
-  return Object.assign(Object.create(component), {
-    view: (
-      model: unknown,
-      props: unknown,
-      running?: View.Running,
-      queries?: Component.Results,
-      _path?: string,
-      shared?: Component.SharedLookup
-    ) => {
-      const h = View.makeHelper(props, elements ?? component.elements(), running, owner.path)
-      return View.toNode(view(component.parts(model, props, { owner, running, queries, shared }), h))
-    }
-  })
-}
-
-/** The vocabulary a component's view builds from. */
-type VocabularyOf<C> = C extends { readonly "~V"?: infer V } ? V : never
-
-/** A component whose story passed `slots`: the content shows where its view places each slot. */
-const withSlots = (
-  component: AnyComponent,
-  slots: (h: any) => Readonly<Record<string, View.Input<never, any>>>,
-  elements: View.Vocabulary<any> | undefined
-): AnyComponent => {
-  const made = Object.create(component)
-  storySlots.set(
-    made,
-    slots(View.makeHelper({}, elements ?? component.elements(), undefined, "/" + component.definition.name))
-  )
-  return made
-}
-
-/**
- * The parts of a headless component for a story's Model and props: the
- * plain values a consumer's closure would read.
+ * The parts of a headless component for a Model and props: the plain values
+ * a consumer's closure would read.
  *
  * **Details**
  *
- * A reader of shared state reads what the story's `shared` steps gave, or
- * else each owner's default, as the story's own view does.
+ * Given a Scene's record, a reader of shared state reads what the scene's
+ * `shared` steps gave, or else each owner's default, as the scene's view
+ * does.
  *
  * @stability experimental
  * @category queries
@@ -2016,73 +314,20 @@ const withSlots = (
  */
 export const parts = <Props, Events, Parts, R, Rcv>(
   component: Component.Headless<Props, Events, Parts, R, Rcv>,
-  story: { readonly model: unknown; readonly props: Props }
-): Parts =>
-  component.parts(story.model, story.props, {
+  record: { readonly model: unknown; readonly props: Props } | { readonly props: Props }
+): Parts => {
+  const state = cursor.stateOf.get(record)
+  const model = state !== undefined ? state.model : (record as { readonly model: unknown }).model
+  const lookup = state ?? record
+  return component.parts(model, record.props, {
     owner: { path: "/" + component.definition.name, depth: 0 },
-    shared: sharedLookup(sharedGiven.get(story), rootOwners(component, story.model, story.props))
+    shared: engine.sharedLookup(engine.sharedGiven.get(lookup), engine.rootOwners(component, model, record.props))
   })
-
-const findChild = <Msg>(
-  view: View.Node<Msg, any>,
-  key: string | Component.Ref.Any,
-  step: string
-): View.Child<Msg, any> => {
-  const child = children(view).find((child) =>
-    typeof key === "string" ? child.key === key : child.ref !== undefined && child.ref.key === key.key
-  )
-  if (child === undefined) {
-    throw new Error(
-      `Story.${step}: no child ${
-        typeof key === "string" ? `with key "${key}"` : `with the ref ${key.key}`
-      }; children: ${children(view).map((c) => c.ref !== undefined ? `ref ${c.key}` : c.key).join(", ")}`
-    )
-  }
-  return child
 }
 
 /**
- * What the child with `key` shows for `result`: its `fallback` evaluated with an
- * `AsyncResult.Initial` or `AsyncResult.Failure`, or `undefined` without one.
- * A ref finds the child rendered with it.
- * Throws, as the runtime fails the parent, if the fallback renders two
- * children at one path, or a child at the path or ref key of another child of
- * `view`. It sees one fallback, so it can't check two shown at once, as the
- * runtime does.
- *
- * @stability experimental
- * @category queries
- * @since 0.1.0
- */
-export const fallback = <Msg>(
-  view: View.Node<Msg, any>,
-  key: string | Component.Ref.Any,
-  result: AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>
-): View.Node<Msg, any> | undefined => {
-  const child = findChild(view, key, "fallback")
-  if (child.fallback === undefined) return undefined
-  const node = View.toNode(child.fallback(result))
-  // As the runtime does: the fallback's children share the parent's paths.
-  checkFallbackPaths(checkChildPaths("Story.fallback", view), child, node)
-  return node
-}
-
-/**
- * The message `Component.provide`'s `onFailure` maps a Layer failure to, or
- * `undefined` when the component has none.
- *
- * @stability experimental
- * @category queries
- * @since 0.1.0
- */
-export const layerFailure = <C extends Component.Any>(
-  component: C,
-  failure: AsyncResult.Failure<never, any>
-): Component.Message<C> | undefined => component.layerFailure?.(failure)
-
-/**
- * One instance's head entries for a Model and props, or for a story's Model,
- * props and queries: what its `head` option returns, or none without one.
+ * One instance's head entries for a Model and props, or for the Model,
+ * props and queries of a story's or a scene's record: what its `head` option returns, or none without one.
  * The merge across the tree is a runtime test's.
  *
  * **Details**
@@ -2122,15 +367,17 @@ export const head: {
     model: Model,
     ...props: {} extends Props ? [props?: Props] : [props: Props]
   ): ReadonlyArray<Head.Entry>
-  <Props, Model, Msg, Events>(story: Story<Props, Model, Msg, Events>): ReadonlyArray<Head.Entry>
+  <Props, Model, Msg, Events>(record: Shared.Record<Props, Model, Msg, Events>): ReadonlyArray<Head.Entry>
 } = (
-  self: AnyComponent | Story<any, any, any, any>,
+  self: AnyComponent | Shared.Record<any, any, any, any>,
   model?: unknown,
   props?: unknown
-) =>
-  "pending" in self
-    ? self.component.head?.(self.model, self.props, self.results) ?? []
-    : self.head?.(model, props ?? {}, undefined) ?? []
+) => {
+  if (!("pending" in self)) return self.head?.(model, props ?? {}, undefined) ?? []
+  const state = cursor.stateOf.get(self)
+  if (state === undefined) throw new Error("Story.head: the record didn't come from a Story or a Scene")
+  return state.component.head?.(state.model, state.props, state.results) ?? []
+}
 
 // ---------------------------------------------------------------------------
 // Replay
@@ -2202,196 +449,6 @@ export interface Replay<
   readonly divergence: Divergence<Model, Msg, Events> | undefined
 }
 
-const placeholders = ["~unserialisable", "~redacted", "~truncated"]
-const findPlaceholder = (value: unknown): string | undefined => {
-  if (typeof value !== "object" || value === null) return undefined
-  for (const key of Object.keys(value)) {
-    if (placeholders.includes(key)) return key
-    const inner = findPlaceholder((value as any)[key])
-    if (inner !== undefined) return inner
-  }
-  return undefined
-}
-
-const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends View.Elements, Rcv>(
-  component: Component.Component<Name, Props, Model, Msg, Events, R, V, any, Rcv>,
-  entries: ReadonlyArray<MessageLog.Entry | MessageLog.Wire>,
-  options?: { readonly path?: string | undefined }
-): Replay<Model, Msg, Events, any, any> => {
-  // The entries that carry an instance's state, each with its component.
-  type Stateful =
-    | MessageLog.Update
-    | MessageLog.Mounted
-    | MessageLog.QueryChanged
-    | MessageLog.PropsChanged
-    | Extract<MessageLog.Wire, { _tag: "Update" | "Mounted" | "QueryChanged" | "PropsChanged" }>
-  const stateful = entries.filter((entry): entry is Stateful =>
-    entry._tag === "Update" || entry._tag === "Mounted" || entry._tag === "QueryChanged" ||
-    entry._tag === "PropsChanged"
-  )
-  const path = options?.path ??
-    stateful.find((entry) =>
-      (typeof entry.component === "string" ? entry.component : entry.component.definition.name) ===
-        component.definition.name
-    )?.path
-  if (path === undefined) throw new Error(`Story.fromLog: the log has no entry for ${component.definition.name}`)
-  const all = stateful.filter((entry) => entry.path === path)
-  // The replay starts at the first Model. Props and query results written before it are in that Update's record, or
-  // belong to an earlier mount.
-  const start = all.findIndex((entry) => entry._tag === "Update" || entry._tag === "Mounted")
-  if (start === -1) throw new Error(`Story.fromLog: the log has no entry for ${path}`)
-  const first = all[start] as
-    | MessageLog.Update
-    | MessageLog.Mounted
-    | Extract<MessageLog.Wire, { _tag: "Update" | "Mounted" }>
-  const bound = boundOf(component)
-  const resultOf = (entry: MessageLog.QueryChanged | Extract<MessageLog.Wire, { _tag: "QueryChanged" }>) => {
-    if (typeof entry.component !== "string") return entry.result
-    const schema = bound?.logSchema.fields[entry.name]
-    if (schema === undefined) {
-      throw new Error(`Story.fromLog: entry #${entry.seq} (${path}) writes "${entry.name}", which isn't a query`)
-    }
-    return decodeWith(entry, `query "${entry.name}"`, schema, entry.result)
-  }
-
-  const decoders = new Map<Schema.Top, (value: unknown) => unknown>()
-  const decode = (
-    entry: { readonly seq: number },
-    field: "props" | "model" | "message" | "events",
-    value: unknown
-  ): any => decodeWith(entry, field, component[field] as Schema.Top, value)
-  function decodeWith(entry: { readonly seq: number }, field: string, schema: Schema.Top, value: unknown): any {
-    let run = decoders.get(schema)
-    if (run === undefined) {
-      run = Schema.decodeUnknownSync(Schema.toCodecJson(schema as Schema.Codec<unknown, unknown>))
-      decoders.set(schema, run)
-    }
-    try {
-      return run(value)
-    } catch (error) {
-      const placeholder = findPlaceholder(value)
-      throw new Error(
-        `Story.fromLog: entry #${entry.seq} (${path}) has a ${field} that can't be decoded${
-          placeholder === undefined ? "" : `, because it was logged as a ${placeholder} placeholder`
-        }: ${String(error)}`,
-        { cause: error }
-      )
-    }
-  }
-  const read = (entry: typeof first) => {
-    if (typeof entry.component !== "string") {
-      return {
-        results: (entry as MessageLog.Update | MessageLog.Mounted).queries,
-        props: entry.props as Props,
-        model: entry.model as Model,
-        events: entry.events as ReadonlyArray<Events>,
-        commands: (entry as MessageLog.Update).commands.map(MessageLog.encodeCommand),
-        lists: entry._tag === "Update" ? entry.lists : [],
-        sends: entry._tag === "Update" ? (entry as MessageLog.Update).sends.map(MessageLog.encodeSend) : [],
-        message: entry._tag === "Update" ? entry.message as Msg : undefined
-      }
-    }
-    const wire = entry as Extract<MessageLog.Wire, { _tag: "Update" | "Mounted" }>
-    return {
-      results: wire.queries !== undefined && bound !== undefined
-        ? decodeWith(entry, "queries", bound.logSchema, wire.queries) as Component.Results
-        : undefined,
-      props: decode(entry, "props", wire.props) as Props,
-      model: decode(entry, "model", wire.model) as Model,
-      events: wire.events.map((emitted) => decode(entry, "events", emitted)) as ReadonlyArray<Events>,
-      commands: wire.commands,
-      lists: wire._tag === "Update" ? wire.lists : [],
-      sends: wire._tag === "Update" ? wire.sends : [],
-      message: wire._tag === "Update" ? decode(entry, "message", wire.message) as Msg : undefined
-    }
-  }
-
-  const sameModel = Schema.toEquivalence(component.model as Schema.Codec<Model, unknown>)
-  const sameEvents = Schema.toEquivalence(Schema.Array(component.events as Schema.Codec<Events, unknown>))
-  const sameCommands = (a: ReadonlyArray<unknown>, b: ReadonlyArray<unknown>) => JSON.stringify(a) === JSON.stringify(b)
-
-  // A path can hold one instance after another, and the one leaving can still log after the next
-  // has mounted, so each instance's state is tracked by its number. The result is the last one's.
-  interface State {
-    model: Model
-    props: unknown
-    results: Component.Results | undefined
-  }
-  const states = new Map<number, State>()
-  const begin = (entry: typeof first): State => {
-    const initial = read(entry)
-    const state = { model: initial.model, props: initial.props, results: initial.results }
-    states.set(entry.instance, state)
-    return state
-  }
-  let latest = begin(first)
-  let replayed = 0
-  const result = (
-    reached: State,
-    divergence: Divergence<Model, Msg, Events> | undefined
-  ): Replay<Model, Msg, Events, any, any> => ({
-    path,
-    ...reached,
-    queries: () => bound?.context(reached.model, reached.props, reached.results).queries ?? {},
-    replayed,
-    divergence
-  })
-  for (const entry of all.slice(start + 1)) {
-    const state = states.get(entry.instance)
-    if (entry._tag === "QueryChanged") {
-      // Without a Model yet, the write is in the instance's first surviving `Update`.
-      if (state !== undefined) {
-        state.results = { ...(state.results ?? bound?.empty), [entry.name]: resultOf(entry) }
-      }
-      continue
-    }
-    if (entry._tag === "PropsChanged") {
-      if (state !== undefined) {
-        state.props = typeof entry.component === "string" ? decode(entry, "props", entry.props) : entry.props
-      }
-      continue
-    }
-    if (state === undefined || entry._tag === "Mounted") {
-      // Mounted again at the same path: the replay starts over from it.
-      latest = begin(entry)
-      continue
-    }
-    const recorded = read(entry)
-    // The Update's record is what `update` read, so it holds even when earlier entries were evicted.
-    state.props = recorded.props
-    if (recorded.results !== undefined) state.results = recorded.results
-    const next = component.update(state.model, recorded.message as Msg, recorded.props as Props, state.results)
-    replayed++
-    const recomputed = {
-      model: next.model,
-      events: next.events,
-      commands: next.commands.map(MessageLog.encodeCommand),
-      lists: next.lists ?? [],
-      sends: (next.sends ?? []).map(MessageLog.encodeSend)
-    }
-    if (
-      !sameModel(recomputed.model, recorded.model) || !sameEvents(recomputed.events, recorded.events) ||
-      !sameCommands(recomputed.commands, recorded.commands) || !sameCommands(recomputed.lists, recorded.lists) ||
-      !sameCommands(recomputed.sends, recorded.sends)
-    ) {
-      return result(state, {
-        seq: entry.seq,
-        message: recorded.message as Msg,
-        recorded: {
-          model: recorded.model,
-          events: recorded.events,
-          commands: recorded.commands,
-          lists: recorded.lists,
-          sends: recorded.sends
-        },
-        recomputed
-      })
-    }
-    state.model = recomputed.model
-  }
-  return result(latest, undefined)
-}
-
 /**
  * Re-runs a logged session of one component, purely, and reports the first
  * place it doesn't reproduce.
@@ -2408,9 +465,10 @@ const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends 
  *
  * The props and results are tracked with the Model, so the result is the state
  * the instance ended with. They start from the first entry's: a `Mounted`
- * entry's or an `Update` entry's recorded props and results. Each later `PropsChanged` entry sets the props and each
- * `QueryChanged` entry writes its result, so props from the parent and loads
- * that settled after the last message are in the result too.
+ * entry's or an `Update` entry's recorded props and results. Each later
+ * `PropsChanged` entry sets the props and each `QueryChanged` entry writes
+ * its result, so props from the parent and loads that settled after the last
+ * message are in the result too.
  *
  * A path that mounted more than once is replayed instance by instance, each
  * from its own entries, and the result is the state of the last one.
@@ -2432,4 +490,10 @@ export const fromLog: <C extends AnyComponent>(
   Component.Events<C>,
   { readonly [K in keyof Component.Queries<C>]: Component.QueryResultOf<Component.Queries<C>[K]> },
   Component.Props<C>
-> = replayLog as any
+> = (component, entries, options) =>
+  replay.replayLog(
+    "Story.fromLog",
+    component as Component.Component<string, any, any, any, any, any, any, any, any>,
+    entries,
+    options
+  ) as any

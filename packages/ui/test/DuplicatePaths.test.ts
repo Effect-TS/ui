@@ -1,5 +1,5 @@
 import { Component, type MessageLog } from "@effect/ui"
-import { Locator, Story, TestHost } from "@effect/ui/testing"
+import { Locator, Scene, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Effect, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
@@ -141,18 +141,19 @@ describe("duplicate child paths", () => {
           Other(h, { ref: Shared, props: { label: "b" } })
         )
     })
-    assert.throws(() => Story.start(Both, {}), /\/Both renders two children with the ref Shared/)
+    assert.throws(() => Scene.start(Both, {}), /\/Both renders two children with the ref Shared/)
   })
 
-  it("fail a Story step whose view renders two children at one path", () => {
-    const steps = Story.start(makeList("nested"), { keys: ["a"] })
-    assert.lengthOf(Story.children(steps.current.view()), 1)
+  it("fail a Scene step whose view renders two children at one path", () => {
+    const steps = Scene.start(makeList("nested"), { keys: ["a"] })
+    assert.lengthOf(Scene.children(steps.current.view()), 1)
+    // Nothing in the view sends `Set`, so the scene starts from the Model it makes.
     assert.throws(
-      () => steps.send(ListMessage.make({ _tag: "Set", keys: ["a", "a"] })),
+      () => steps.given(["a", "a"]),
       /\/List renders two children at Row\[a\]/
     )
     assert.throws(
-      () => Story.start(makeList("siblings"), { keys: ["b", "b"] }),
+      () => Scene.start(makeList("siblings"), { keys: ["b", "b"] }),
       /\/List renders two children at Row\[b\]/
     )
   })
@@ -250,15 +251,15 @@ describe("duplicate child paths", () => {
         assert.isFalse(root.log().some((entry) => entry._tag === "Failed" && entry.path === "/Parent"))
       })))
 
-    it("fail Story.fallback the same way", () => {
-      const view = Story.start(Parent, { siblings: ["a"], first: ["a"], second: [] }).current.view()
+    it("fail Scene.fallback the same way", () => {
+      const view = Scene.start(Parent, { siblings: ["a"], first: ["a"], second: [] }).current.view()
       assert.throws(
-        () => Story.fallback(view, "b", AsyncResult.failure(Cause.fail("broken"))),
-        /Story\.fallback renders two children at Row\[a\], in the fallback of Broken\[b\]/
+        () => Scene.fallback(view, "b", AsyncResult.failure(Cause.fail("broken"))),
+        /Scene\.fallback renders two children at Row\[a\], in the fallback of Broken\[b\]/
       )
       assert.isDefined(
-        Story.fallback(
-          Story.start(Parent, { siblings: ["a"], first: ["b"], second: [] }).current.view(),
+        Scene.fallback(
+          Scene.start(Parent, { siblings: ["a"], first: ["b"], second: [] }).current.view(),
           "b",
           AsyncResult.failure(Cause.fail("broken"))
         )

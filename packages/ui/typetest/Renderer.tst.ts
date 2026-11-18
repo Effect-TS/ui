@@ -1,4 +1,4 @@
-import { Component, Renderer, Route, Router, type View } from "@effect/ui"
+import { Component, Mount, Renderer, Route, Router, type View } from "@effect/ui"
 import { TestHost } from "@effect/ui/testing"
 import { Effect, Schema, type Scope } from "effect"
 import { describe, expect, it } from "tstyche"
@@ -115,7 +115,21 @@ describe("View elements", () => {
     })
   })
 
-  it("onMount types the node and joins the component's requirements", () => {
+  it("onMount takes a mount whose body needs the element's node, and rejects one for another node", () => {
+    const ForField = Mount.make("ForField", { args: {} }, (node: TinyField) => {
+      expect(node).type.toBe<TinyField>()
+      return Effect.succeed(Msg.make({ _tag: "Mounted" }))
+    })
+    const ForOther = Mount.make(
+      "ForOther",
+      { args: {} },
+      (_node: { readonly other: true }) => Effect.succeed(Msg.make({ _tag: "Mounted" }))
+    )
+    // A body that doesn't annotate its node takes any.
+    const ForAny = Mount.make("ForAny", { args: {} }, (node) => {
+      expect(node).type.toBe<unknown>()
+      return Effect.succeed(Msg.make({ _tag: "Mounted" }))
+    })
     Component.define({
       name: "Mounts",
       model: Schema.String,
@@ -124,11 +138,11 @@ describe("View elements", () => {
     }).make({
       init: () => "",
       update: (model) => model,
-      view: (_, h) =>
-        h.field.onMount("focus", (node) => {
-          expect(node).type.toBe<TinyField>()
-          return Effect.succeed(Msg.make({ _tag: "Mounted" }))
-        })
+      view: (_, h) => {
+        expect(h.field.onMount).type.toBeCallableWith(ForAny())
+        expect(h.field.onMount).type.not.toBeCallableWith(ForOther())
+        return h.field.onMount(ForField())
+      }
     })
   })
 

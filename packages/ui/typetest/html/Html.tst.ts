@@ -1,7 +1,7 @@
-import { Component, Renderer, Route, Router, type View } from "@effect/ui"
+import { Component, Mount, Renderer, Route, Router, type View } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
-import type { Locator } from "@effect/ui/testing"
+import { type Locator, Scene } from "@effect/ui/testing"
 import { Context, Effect, type Layer, Schema, type Scope, Stream } from "effect"
 import { describe, expect, it } from "tstyche"
 
@@ -19,6 +19,14 @@ const Field = Html.ref("Field", "input")
 class Clock extends Context.Service<Clock, { readonly now: Effect.Effect<number> }>()("Clock") {}
 class Logger extends Context.Service<Logger, { readonly log: (line: string) => Effect.Effect<void> }>()("Logger") {}
 
+const Tick = Mount.make("Tick", { args: {} }, () => Clock.use((clock) => clock.now))
+const LogUp = Mount.make(
+  "LogUp",
+  { args: {} },
+  () => Logger.use((logger) => logger.log("up")).pipe(Effect.as(Msg.make({ _tag: "Mounted" })))
+)
+const Measure = Mount.make("Measure", { args: {} }, (node: HTMLElement) => Effect.sync(() => node.clientWidth))
+
 const Ticker = Component.define({
   name: "Ticker",
   model: Schema.Number,
@@ -27,7 +35,7 @@ const Ticker = Component.define({
 }).make({
   init: () => 0,
   update: (_, now) => now,
-  view: (now, h) => h.time.onMount("tick", () => Clock.use((clock) => clock.now)).children(String(now))
+  view: (now, h) => h.time.onMount(Tick()).children(String(now))
 })
 
 interface NativeTags<Msg> {
@@ -191,6 +199,10 @@ describe("Html", () => {
 
   it("refs and onMount are typed by tag", () => {
     expect(Field).type.toBe<Renderer.Ref<HTMLInputElement>>()
+    const Focus = Mount.make("Focus", { args: {} }, (element: HTMLInputElement) => {
+      expect(element).type.toBe<HTMLInputElement>()
+      return Effect.succeed(Msg.make({ _tag: "Mounted" }))
+    })
     Component.define({
       name: "Refs",
       model: Schema.String,
@@ -204,10 +216,10 @@ describe("Html", () => {
         expect(h.input.value("a").ref).type.toBeCallableWith(Field)
         expect(h.textarea.ref).type.not.toBeCallableWith(Field)
         expect(h.textarea.attr("rows", "2").ref).type.not.toBeCallableWith(Field)
-        return h.input.onMount("focus", (element) => {
-          expect(element).type.toBe<HTMLInputElement>()
-          return Effect.succeed(Msg.make({ _tag: "Mounted" }))
-        })
+        // A mount goes on an element whose node its body can take.
+        expect(h.textarea.onMount).type.not.toBeCallableWith(Focus())
+        expect(h.input.onMount).type.toBeCallableWith(Measure().pipe(Mount.map(() => Msg.make({ _tag: "Mounted" }))))
+        return h.input.onMount(Focus())
       }
     })
   })
@@ -222,10 +234,7 @@ describe("Html", () => {
       init: () => null,
       update: (model) => model,
       view: (_, h) =>
-        h.div.onMount(
-          "log",
-          () => Logger.use((logger) => logger.log("up")).pipe(Effect.as(Msg.make({ _tag: "Mounted" })))
-        )
+        h.div.onMount(LogUp())
           .class("box")
           .children(Ticker(h, { key: "ticker" }))
     })
@@ -249,16 +258,27 @@ describe("Html", () => {
     }).make({
       init: () => null,
       update: (model) => model,
-      view: (_, h) =>
-        h.input.onMount(
-          "log",
-          () => Logger.use((logger) => logger.log("up")).pipe(Effect.as(Msg.make({ _tag: "Mounted" })))
-        )
+      view: (_, h) => h.input.onMount(LogUp())
     })
     expect(Bare).type.toBe<Component.Component<"Bare", {}, null, Msg, never, Logger, Html.Elements>>()
   })
 
-  it("onMount may end with Component.noop, and an input mount gets a typed Stream of changes", () => {
+  it("a mount may end with Component.noop, and its body gets its args and a typed Stream of them", () => {
+    const Hello = Mount.make("Hello", { args: {} }, () => Effect.succeed(Component.noop))
+    const DrawChart = Mount.make(
+      "DrawChart",
+      { args: { points: Schema.Array(Schema.Number) } },
+      (node: HTMLCanvasElement, args, changes) => {
+        expect(node).type.toBe<HTMLCanvasElement>()
+        expect(args).type.toBe<{ readonly points: ReadonlyArray<number> }>()
+        expect(changes).type.toBe<Stream.Stream<{ readonly points: ReadonlyArray<number> }>>()
+        return Stream.runForEach(changes, () => Logger.use((logger) => logger.log("draw"))).pipe(
+          Effect.as(Component.noop)
+        )
+      }
+    )
+    expect(DrawChart).type.not.toBeCallableWith()
+    expect(DrawChart).type.not.toBeCallableWith({ points: "none" })
     const Chart = Component.define({
       name: "Chart",
       model: Schema.Array(Schema.Number),
@@ -267,61 +287,60 @@ describe("Html", () => {
     }).make({
       init: (): ReadonlyArray<number> => [],
       update: (points) => points,
-      view: (points, h) =>
-        h.div.onMount("hello", () => Effect.succeed(Component.noop)).children(
-          h.canvas.onMount("chart", points, (node, changes) => {
-            expect(node).type.toBe<HTMLCanvasElement>()
-            expect(changes).type.toBe<Stream.Stream<ReadonlyArray<number>>>()
-            return Stream.runForEach(changes, () => Logger.use((logger) => logger.log("draw"))).pipe(
-              Effect.as(Component.noop)
-            )
-          })
-        )
+      view: (points, h) => h.div.onMount(Hello()).children(h.canvas.onMount(DrawChart({ points })))
     })
     expect(Chart).type.toBe<
       Component.Component<"Chart", {}, ReadonlyArray<number>, never, never, Logger, Html.Elements>
     >()
-    const div = new Html.Element<Msg>("div")
-    expect(div.onMount).type.toBeCallableWith("done", () => Effect.succeed(Msg.make({ _tag: "Mounted" })))
-    expect(div.onMount).type.not.toBeCallableWith("wrong", () => Effect.succeed("not a message"))
-    expect(div.onMount).type.not.toBeCallableWith("wrong", 1, () => Effect.succeed("not a message"))
+    const div = new Html.Element<Msg, never, Record<string, unknown>, HTMLDivElement>("div")
+    // A result that isn't the component's message is mapped to one first.
+    expect(div.onMount).type.not.toBeCallableWith(Measure())
+    expect(div.onMount).type.toBeCallableWith(Measure().pipe(Mount.map(() => Msg.make({ _tag: "Mounted" }))))
+    // A scene's step takes the definition's own result, and none for a mount that ends with noop.
+    const s = Scene.start(Chart, {})
+    expect(s.mounted).type.toBeCallableWith(Measure, 300)
+    expect(s.mounted).type.not.toBeCallableWith(Measure, "wide")
+    expect(s.mounted).type.not.toBeCallableWith(Measure)
+    expect(s.mounted).type.toBeCallableWith(Hello)
+    expect(s.mounted).type.toBeCallableWith(DrawChart({ points: [] }))
   })
 
   it("onMount ends with a message or Component.noop, never with void or undefined", () => {
     const div = new Html.Element<Msg>("div")
     const input = new Html.VoidElement<Msg>("input")
-    const silent = Effect.succeed(Component.noop)
-    const mixed = Effect.gen(function*() {
-      const ok = yield* Effect.succeed(true)
-      return ok ? Msg.make({ _tag: "Mounted" }) : Component.noop
-    })
-    expect(div.onMount).type.toBeCallableWith("silent", () => silent)
-    expect(div.onMount).type.toBeCallableWith("silent", 1, () => Effect.void.pipe(Effect.as(Component.noop)))
-    expect(div.onMount).type.toBeCallableWith("mixed", () => mixed)
-    expect(input.onMount).type.toBeCallableWith("silent", () => silent)
+    const Silent = Mount.make("Silent", { args: {} }, () => Effect.succeed(Component.noop))
+    const Mixed = Mount.make("Mixed", { args: {} }, () =>
+      Effect.gen(function*() {
+        const ok = yield* Effect.succeed(true)
+        return ok ? Msg.make({ _tag: "Mounted" }) : Component.noop
+      }))
+    expect(div.onMount).type.toBeCallableWith(Silent())
+    expect(div.onMount).type.toBeCallableWith(Mixed())
+    expect(input.onMount).type.toBeCallableWith(Silent())
 
     const holdsAValue: Effect.Effect<void> = Effect.succeed("not a message")
+    const Void = Mount.make("Void", { args: {} }, () => Effect.void)
+    const Holds = Mount.make("Holds", { args: {} }, () => holdsAValue)
+    const Undefined = Mount.make("Undefined", { args: {} }, () => Effect.succeed(undefined))
+    const Other = Mount.make("Other", { args: {} }, () => Effect.succeed(Symbol.for("other")))
     for (const builder of [div, input]) {
-      expect(builder.onMount).type.not.toBeCallableWith("void", () => Effect.void)
-      expect(builder.onMount).type.not.toBeCallableWith("void", 1, () => Effect.void)
-      expect(builder.onMount).type.not.toBeCallableWith("holds", () => holdsAValue)
-      expect(builder.onMount).type.not.toBeCallableWith("undefined", () => Effect.succeed(undefined))
-      expect(builder.onMount).type.not.toBeCallableWith("undefined", 1, () => Effect.succeed(undefined))
-      expect(builder.onMount).type.not.toBeCallableWith("symbol", () => Effect.succeed(Symbol.for("other")))
+      expect(builder.onMount).type.not.toBeCallableWith(Void())
+      expect(builder.onMount).type.not.toBeCallableWith(Holds())
+      expect(builder.onMount).type.not.toBeCallableWith(Undefined())
+      expect(builder.onMount).type.not.toBeCallableWith(Other())
     }
   })
 
   it("a rejected onMount result shows View.MountHint", () => {
     const div = new Html.Element<Msg>("div")
     const input = new Html.VoidElement<Msg>("input")
-    // @ts-expect-error A mount with nothing to send ends with Effect.as(Component.noop)
-    div.onMount("void", () => Effect.void)
-    // @ts-expect-error A mount with nothing to send ends with Effect.as(Component.noop)
-    div.onMount("void", 1, () => Effect.void)
-    // @ts-expect-error A mount with nothing to send ends with Effect.as(Component.noop)
-    input.onMount("void", () => Effect.void)
-    // @ts-expect-error A mount with nothing to send ends with Effect.as(Component.noop)
-    input.onMount("void", 1, () => Effect.void)
+    const Void = Mount.make("Void", { args: {} }, () => Effect.void)
+    // @ts-expect-error or end its body with Effect.as(Component.noop)
+    div.onMount(Void())
+    // @ts-expect-error or end its body with Effect.as(Component.noop)
+    input.onMount(Void())
+    // @ts-expect-error Map its result with Mount.map
+    new Html.Element<Msg, never, Record<string, unknown>, HTMLDivElement>("div").onMount(Measure())
   })
 
   it("View.Input keeps what a child requires", () => {

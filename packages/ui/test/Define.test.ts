@@ -48,33 +48,33 @@ const ByHand = CounterDef.make({
 })
 
 describe("Component.define", () => {
-  it("$.combine folds the Model and keeps every Command and event in call order", () => {
-    Story.make(Counter, { by: 2 }, (s) =>
+  it.effect("$.combine folds the Model and keeps every Command and event in call order", () =>
+    Effect.gen(function*() {
+      const s = yield* Story.make(Counter, { by: 2 })
       s.send(Message.make({ _tag: "Step" }))
-        .model((model) => assert.deepStrictEqual(model, { n: 4, seen: ["Step", "Step"] }))
-        .expectExact(Log.make({ n: 2 }), Log.make({ n: 4 }))
-        .emitted((emitted) =>
-          assert.deepStrictEqual(emitted, [
-            Events.make({ _tag: "Stepped", n: 2 }),
-            Events.make({ _tag: "Stepped", n: 4 })
-          ])
-        )
+      assert.deepStrictEqual(s.model, { n: 4, seen: ["Step", "Step"] })
+      s.expectExact(Log.make({ n: 2 }), Log.make({ n: 4 }))
+        .emitted(Events.make({ _tag: "Stepped", n: 2 }), Events.make({ _tag: "Stepped", n: 4 }))
         .resolve(Log.make({ n: 2 }), Message.make({ _tag: "Logged", n: 2 }))
-        .resolve(Log.make({ n: 4 }), Message.make({ _tag: "Logged", n: 4 })))
-  })
+        .resolve(Log.make({ n: 4 }), Message.make({ _tag: "Logged", n: 4 }))
+    }))
 
-  it("a record update dispatches by _tag", () => {
-    Story.make(Counter, { by: 1 }, (s) =>
+  it.effect("a record update dispatches by _tag", () =>
+    Effect.gen(function*() {
+      const s = yield* Story.make(Counter, { by: 1 })
       s.send(Message.make({ _tag: "Step" }))
+        .emitted(Events.make({ _tag: "Stepped", n: 1 }), Events.make({ _tag: "Stepped", n: 2 }))
         .resolve(Log.make({ n: 1 }), Message.make({ _tag: "Logged", n: 1 }))
         .resolve(Log.make({ n: 2 }), Message.make({ _tag: "Logged", n: 2 }))
-        .model((model) => assert.deepStrictEqual(model.seen, ["Step", "Step", "logged 1", "logged 2"])))
-  })
+      assert.deepStrictEqual(s.model.seen, ["Step", "Step", "logged 1", "logged 2"])
+    }))
 
-  it("a slice called by hand binds $ to the message it is given", () => {
-    Story.make(ByHand, { by: 1 }, (s) =>
+  it.effect("a slice called by hand binds $ to the message it is given", () =>
+    Effect.gen(function*() {
+      const s = yield* Story.make(ByHand, { by: 1 })
       s.send(Message.make({ _tag: "Step" }))
-        .model((model) => assert.deepStrictEqual(model.seen, ["Logged"]))
-        .resolve(Log.make({ n: 1 }), Message.make({ _tag: "Logged", n: 1 })))
-  })
+      assert.deepStrictEqual(s.model.seen, ["Logged"])
+      s.emitted(Events.make({ _tag: "Stepped", n: 1 }))
+        .resolve(Log.make({ n: 1 }), Message.make({ _tag: "Logged", n: 1 }))
+    }))
 })

@@ -128,7 +128,8 @@ export const TodoList = Component.define({
           onFailure: () => TodoListMessage.make({ _tag: "RowFailed", id: todo.id }),
           fallback: () => h.el("li", `${todo.title} failed`)
         })
-      )
+      ),
+      model.failed.length > 0 && h.el("li", `rows failed: ${model.failed.join(",")}`)
     )
 })
 
