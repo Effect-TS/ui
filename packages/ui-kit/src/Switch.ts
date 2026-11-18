@@ -1,6 +1,5 @@
 /**
- * A control that turns a setting on or off, ported from Base UI's Switch
- * (https://base-ui.com/react/components/switch).
+ * A control that turns a setting on or off.
  *
  * `Switch` is a view function. It keeps no state, so it takes no `key`: it
  * owns the ARIA, the data attributes, the form field and the click
@@ -9,10 +8,10 @@
  *
  * **Anatomy**
  *
- * | Base UI        | Part    | Element                                         |
- * | :------------- | :------ | :---------------------------------------------- |
- * | `Switch.Root`  | `root`  | `<button role="switch">`, with the hidden input |
- * | `Switch.Thumb` | `thumb` | `<span>` inside the root                        |
+ * | Part    | Element                                         |
+ * | :------ | :---------------------------------------------- |
+ * | `root`  | `<button role="switch">`, with the hidden input |
+ * | `thumb` | `<span>` inside the root                        |
  *
  * Each part takes the consumer's builder and returns it, so the consumer
  * goes on chaining: `s.root(h.button.class("switch")).children(...)`.
@@ -40,17 +39,10 @@
  * moves focus, without a key handler. A click on a `<label>` that names
  * it toggles it too.
  *
- * **Differences from Base UI**
+ * **Form behavior**
  *
- * - The value is always controlled. There is no `defaultChecked`: keep the
- *   value in the consumer's Model.
- * - The root is always a native `<button>`, Base UI's `nativeButton` mode.
- * - The form value is a hidden input inside the root, so `required` sets
- *   `aria-required` and `data-required` but doesn't block a form
- *   submission.
- * - Field state (`data-valid`, `data-invalid`, `data-dirty`,
- *   `data-touched`, `data-filled`, `data-focused`) waits for a ui-kit
- *   Field.
+ * The form value is a hidden input inside the root. The `required` prop
+ * sets `aria-required` and `data-required` but does not block submission.
  *
  * **Example** (A labelled switch whose value lives in the consumer's Model)
  *
@@ -99,7 +91,7 @@ import { flag } from "./internal/attributes.ts"
 import { field } from "./internal/field.ts"
 
 /**
- * The props of a `Switch`, Base UI's Root props without the React ones.
+ * The controlled value, interaction state and form settings for `Switch`.
  *
  * **Details**
  *

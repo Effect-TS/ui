@@ -1,5 +1,5 @@
 /**
- * Unstyled components for `@effect/ui`, ported from Base UI.
+ * Unstyled components for `@effect/ui`.
  *
  * Each component is exported by its own name, so
  * `import { Switch } from "@effect/ui-kit"` is the component itself, called
