@@ -1198,6 +1198,48 @@ describe("Runtime", () => {
         assert.deepStrictEqual(events, ["body done", "build released"])
       })))
 
+    it.effect("an instance's close waits for its run before its Layer is released, when its parent's Layer was late", () =>
+      provideHost(Effect.gen(function*() {
+        const ready = yield* Deferred.make<void>()
+        const events: Array<string> = []
+        class Job extends Command.Service<Job>()(
+          "test/LateJob",
+          { args: {} },
+          Effect.gen(function*() {
+            yield* Effect.addFinalizer(() => Effect.sync(() => events.push("layer released")))
+            return () =>
+              Effect.gen(function*() {
+                yield* Effect.addFinalizer(() => Effect.sync(() => events.push("run cleaned")))
+                return yield* Effect.never
+              })
+          })
+        ) {}
+        const Child = Component.provide(
+          Component.define({ name: "Child", model: Schema.Null, message: Schema.Never }).make({
+            init: ($) => $.set(null).run(Job.make().pipe(Command.asNoop)),
+            update: (model) => model,
+            view: (_, h) => h.text("child")
+          }),
+          () => Job.layer
+        )
+        // The child's Layer builds only once the parent's is ready.
+        const Parent = Component.provide(
+          Component.define({ name: "Parent", model: Schema.Boolean, message: Schema.Boolean }).make({
+            init: () => true,
+            update: (_, open) => open,
+            view: (open, h) => open ? Child(h, { key: "child", props: {} }) : h.text("closed")
+          }),
+          Layer.effectDiscard(Deferred.await(ready))
+        )
+        const root = yield* TestHost.mount(Parent, {})
+        yield* TestHost.settle
+        yield* Deferred.succeed(ready, undefined)
+        yield* TestHost.settle
+        root.send(false)
+        yield* TestHost.settle
+        assert.deepStrictEqual(events, ["run cleaned", "layer released"])
+      })))
+
     it.effect("switch runs, Stream Commands and Command.make Commands end with their instance", () =>
       provideHost(Effect.gen(function*() {
         const stopped: Array<string> = []
@@ -1306,7 +1348,8 @@ describe("Runtime", () => {
           const root = yield* TestHost.mount(Jobs, {})
           root.send(Msg.make({ _tag: "Go", n: 1 }))
           yield* TestHost.settle
-          root.send(Msg.make({ _tag: "Stop" }))
+          // A queue run is cut by the interrupt; a switch run by the next one.
+          if (mode === "queue") root.send(Msg.make({ _tag: "Stop" }))
           root.send(Msg.make({ _tag: "Go", n: 2 }))
           yield* TestHost.settle
           assert.strictEqual(root.text(), "running")
@@ -1322,30 +1365,86 @@ describe("Runtime", () => {
         })))
     }
 
-    it.effect("a defect in an interrupted run's cleanup is reported as CleanupFailed", () =>
+    it.effect("a defect in the cleanup of a run switch cut is reported as CleanupFailed, and the next run starts", () =>
       provideHost(Effect.gen(function*() {
+        const started: Array<number> = []
         const Job = Command.make(
           "test/Brittle",
-          { args: {} },
-          () => Effect.onInterrupt(Effect.never, () => Effect.die("cleanup broke"))
+          { args: { n: Schema.Number }, mode: "switch" },
+          ({ n }) =>
+            Effect.sync(() => started.push(n)).pipe(
+              Effect.andThen(Effect.never),
+              Effect.onInterrupt(() => Effect.die("cleanup broke"))
+            )
         )
-        const Msg = Schema.TaggedUnion({ Go: {}, Stop: {} })
-        const Jobs = Component.define({ name: "Jobs", model: Schema.Null, message: Msg }).make({
+        const Jobs = Component.define({ name: "Jobs", model: Schema.Null, message: Schema.Number }).make({
           init: () => null,
-          update: (model, message, $) =>
-            $.set(model).run(message._tag === "Go" ? Job().pipe(Command.asNoop) : Command.interrupt(Job)),
+          update: (model, n, $) => $.set(model).run(Job({ n }).pipe(Command.asNoop)),
           view: (_, h) => h.text(h.isRunning(Job) ? "running" : "idle")
         })
         const root = yield* TestHost.mount(Jobs, {})
-        root.send(Msg.make({ _tag: "Go" }))
+        root.send(1)
         yield* TestHost.settle
-        root.send(Msg.make({ _tag: "Stop" }))
+        root.send(2)
         assert.strictEqual((yield* Effect.flip(TestHost.settle))._tag, "ProblemsError")
         const [problem] = (yield* TestHost.expectProblem("CleanupFailed")) as ReadonlyArray<Command.CleanupFailed>
         assert.deepStrictEqual([problem.path, problem.command], ["/Jobs", "test/Brittle"])
         assert.isTrue(Cause.hasDies(problem.cause))
-        assert.strictEqual(root.text(), "idle")
+        assert.deepStrictEqual(started, [1, 2])
+        assert.strictEqual(root.text(), "running")
         assert.isFalse(root.log().some((entry) => entry._tag === "Failed"))
+      })))
+
+    it.effect("a run's Scope closes with the run's own exit, while its instance stays mounted", () =>
+      provideHost(Effect.gen(function*() {
+        const exits: Array<string> = []
+        const Outcome = Schema.Literals(["succeed", "fail", "hold"])
+        class Tx extends Command.Service<Tx>()(
+          "test/Tx",
+          { args: { outcome: Outcome }, invalidates: () => [] },
+          Effect.succeed(({ outcome }: { readonly outcome: typeof Outcome.Type }) =>
+            Effect.acquireRelease(
+              Effect.void,
+              (_, exit) =>
+                Effect.sync(() =>
+                  exits.push(Exit.isSuccess(exit) ? "Success" : Cause.hasFails(exit.cause) ? "Fail" : "Interrupt")
+                )
+            ).pipe(
+              Effect.andThen(
+                outcome === "succeed" ? Effect.void : outcome === "fail" ? Effect.fail("rejected") : Effect.never
+              )
+            )
+          )
+        ) {}
+        const Msg = Schema.TaggedUnion({ Issue: { outcome: Outcome }, Stop: {}, Done: {} })
+        const done = Command.match({
+          onSuccess: () => Msg.make({ _tag: "Done" }),
+          onFailure: () => Msg.make({ _tag: "Done" })
+        })
+        const Tx_ = Component.provide(
+          Component.define({ name: "Tx", model: Schema.Null, message: Msg }).make({
+            init: () => null,
+            update: (model, message, $) =>
+              Msg.match(message, {
+                Issue: ({ outcome }) => $.run(Tx.make({ outcome }).pipe(done)),
+                Stop: () => $.run(Command.interrupt(Tx)),
+                Done: () => model
+              }),
+            view: (_, h) => h.text("tx")
+          }),
+          Tx.layer
+        )
+        const root = yield* TestHost.mount(Tx_, {})
+        yield* TestHost.settle
+        for (const outcome of ["succeed", "fail", "hold"] as const) {
+          root.send(Msg.make({ _tag: "Issue", outcome }))
+          yield* TestHost.settle
+        }
+        root.send(Msg.make({ _tag: "Stop" }))
+        yield* TestHost.settle
+        assert.deepStrictEqual(exits, ["Success", "Fail", "Interrupt"])
+        assert.strictEqual(root.text(), "tx")
+        assert.isFalse(root.log().some((entry) => entry._tag === "Unmounted"))
       })))
 
     it.effect("a write lands in its entry without a request, and changes never shows the patch", () =>

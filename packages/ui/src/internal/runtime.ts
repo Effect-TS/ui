@@ -2171,7 +2171,7 @@ const setup = (
         // A keyed provide selects from the Model the instance starts with: the server's when it
         // hydrates, else history's or `init`'s. Each selection builds in a Scope of its own.
         let keys: Keys = none
-        let buildScope: Scope.Closeable = scope
+        let buildScope: Scope.Closeable | undefined
         if (component.layerKeys !== undefined) {
           let model: unknown
           if (Option.isSome(fromServer)) model = fromServer.value.model
@@ -2203,6 +2203,9 @@ const setup = (
             addFinalizer(scope, closeSelection(selection))
           }
         }
+        // Forked now, before the run-stop finalizer below, so a build that waits for its parent's Env
+        // still closes after the instance's runs.
+        buildScope ??= Scope.forkUnsafe(scope, "sequential")
         const sharedLayer = component.sharedLayer
         const shared = sharedLayer !== undefined ? acquireShared(parentEnv, sharedLayer) : undefined
         const own = shared !== undefined ? shared.env : buildingEnv(parentEnv)
@@ -2236,8 +2239,8 @@ const setup = (
           lifecycle({ _tag: "LayerPending" })
           settleBuild = countBuilding(own, buildScope)
         }
-        // Added after the Layer's Scopes, so the close stops the instance's runs and waits for their
-        // cleanup before the services they use are released.
+        // Added after the Layer's Scopes, which all exist by now, so the close stops the instance's runs
+        // and waits for their cleanup before the services they use are released.
         addFinalizer(scope, Effect.suspend(() => awaitRuns(stopRuns(inst))))
       }
     }
