@@ -495,13 +495,15 @@ export const TooltipProvider = Component.define({
   message: ProviderMessage,
   shares: {
     value: (model) => ({ open: model.open, instant: model.instant, turns: model.turns, next: model.next }),
-    // Each tooltip's turn while it shows, `null` while it doesn't.
-    reports: Schema.NullOr(Schema.Number),
-    onReports: (reports) =>
-      ProviderMessage.make({
-        _tag: "ChangedShown",
-        turns: reports.filter((turn): turn is number => turn !== null).sort((a, b) => a - b)
-      })
+    collects: {
+      // Each tooltip's turn while it shows, `null` while it doesn't.
+      schema: Schema.NullOr(Schema.Number),
+      onChange: (collected) =>
+        ProviderMessage.make({
+          _tag: "ChangedShown",
+          turns: collected.filter((turn): turn is number => turn !== null).sort((a, b) => a - b)
+        })
+    }
   },
   elements: Html
 }).make({
