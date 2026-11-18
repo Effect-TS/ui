@@ -5,6 +5,7 @@
  * @internal
  */
 import * as Schema from "effect/Schema"
+import * as Command from "../Command.ts"
 import type * as Component from "../Component.ts"
 import * as MessageLog from "../MessageLog.ts"
 import type { Divergence, Replay } from "../testing/Story.ts"
@@ -51,7 +52,29 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
         component.definition.name
     )?.path
   if (path === undefined) throw new Error(`${label}: the log has no entry for ${component.definition.name}`)
-  const all = stateful.filter((entry) => entry.path === path)
+  // The entries that write the instance's Layer status or end one of its runs.
+  type Lifecycle =
+    | MessageLog.LayerPending
+    | MessageLog.LayerReady
+    | MessageLog.LayerFailed
+    | MessageLog.CommandEnded
+    | MessageLog.CommandInterrupted
+    | MessageLog.CommandDropped
+    | Extract<
+      MessageLog.Wire,
+      { _tag: "LayerPending" | "LayerReady" | "LayerFailed" | "CommandEnded" | "CommandInterrupted" | "CommandDropped" }
+    >
+  const lifecycleTags = new Set([
+    "LayerPending",
+    "LayerReady",
+    "LayerFailed",
+    "CommandEnded",
+    "CommandInterrupted",
+    "CommandDropped"
+  ])
+  const all = entries.filter((entry): entry is Stateful | Lifecycle =>
+    "path" in entry && entry.path === path && (stateful.includes(entry as Stateful) || lifecycleTags.has(entry._tag))
+  )
   // The replay starts at the first Model. Props and query results written before it are in that Update's record, or
   // belong to an earlier mount.
   const start = all.findIndex((entry) => entry._tag === "Update" || entry._tag === "Mounted")
@@ -132,11 +155,27 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
     model: Model
     props: unknown
     results: Component.Results | undefined
+    status: Replay<Model, Msg, Events>["status"]
+    // The runs issued and not logged as ended yet, by the entry and index that issued them.
+    runs: Map<string, { readonly name: string; readonly group: string | null }>
   }
   const states = new Map<number, State>()
+  const issue = (state: State, entry: { readonly seq: number }, commands: ReturnType<typeof read>["commands"]) =>
+    commands.forEach((command, index) => {
+      if (command._tag !== "Interrupt") {
+        state.runs.set(`${entry.seq}:${index}`, { name: command.name, group: command.group })
+      }
+    })
   const begin = (entry: typeof first): State => {
     const initial = read(entry)
-    const state = { model: initial.model, props: initial.props, results: initial.results }
+    const state: State = {
+      model: initial.model,
+      props: initial.props,
+      results: initial.results,
+      status: "Ready",
+      runs: new Map()
+    }
+    issue(state, entry, initial.commands)
     states.set(entry.instance, state)
     return state
   }
@@ -145,15 +184,42 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
   const result = (
     reached: State,
     divergence: Divergence<Model, Msg, Events> | undefined
-  ): Replay<Model, Msg, Events, any, any> => ({
-    path,
-    ...reached,
-    queries: () => bound?.context(reached.model, reached.props, reached.results).queries ?? {},
-    replayed,
-    divergence
-  })
+  ): Replay<Model, Msg, Events, any, any> => {
+    const runs = [...reached.runs.values()]
+    return {
+      path,
+      model: reached.model,
+      props: reached.props,
+      results: reached.results,
+      queries: () => bound?.context(reached.model, reached.props, reached.results).queries ?? {},
+      status: reached.status,
+      isRunning: (command, group) => {
+        const name = Command.nameOf(command)
+        const key = Command.groupKeyOf(command, group)
+        return runs.some((run) => run.name === name && (key === undefined || run.group === key))
+      },
+      replayed,
+      divergence
+    }
+  }
   for (const entry of all.slice(start + 1)) {
     const state = states.get(entry.instance)
+    switch (entry._tag) {
+      case "LayerPending":
+        if (state !== undefined) state.status = entry.status ?? "Pending"
+        continue
+      case "LayerReady":
+        if (state !== undefined) state.status = "Ready"
+        continue
+      case "LayerFailed":
+        if (state !== undefined) state.status = "Failed"
+        continue
+      case "CommandEnded":
+      case "CommandInterrupted":
+      case "CommandDropped":
+        state?.runs.delete(`${entry.issued.seq}:${entry.issued.index}`)
+        continue
+    }
     if (entry._tag === "QueryChanged") {
       // Without a Model yet, the write is in the instance's first surviving `Update`.
       if (state !== undefined) {
@@ -204,6 +270,7 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
       })
     }
     state.model = recomputed.model
+    issue(state, entry, recorded.commands)
   }
   return result(latest, undefined)
 }

@@ -393,8 +393,16 @@ export interface Unmounted extends InstanceBase {
 
 /**
  * An instance's provided Layer is still building once the instance is
- * created. Its Commands, Subscriptions and mounts, and its descendants', wait
- * for it.
+ * created, or once a keyed provide selected again. Its Commands,
+ * Subscriptions and mounts, and its descendants', wait for it.
+ *
+ * **Details**
+ *
+ * `status` is what the instance's feature slots record until the Layer
+ * settles: `Pending` at mount, `Rebuilding` after a keyed provide selected
+ * again, and `Awaiting` for an instance the server rendered with its services
+ * that waits for the client's build. A Wire frame without it, from an older
+ * log, is `Pending`.
  *
  * @stability experimental
  * @category models
@@ -402,6 +410,7 @@ export interface Unmounted extends InstanceBase {
  */
 export interface LayerPending extends InstanceBase {
   readonly _tag: "LayerPending"
+  readonly status: "Pending" | "Rebuilding" | "Awaiting"
 }
 
 /**
@@ -967,7 +976,10 @@ export const Wire = Schema.Union([
   }),
   Schema.TaggedStruct("PropsChanged", { ...InstanceWire, props: Schema.Json }),
   Schema.TaggedStruct("QueryChanged", { ...InstanceWire, name: Schema.String, result: Schema.Json }),
-  Schema.TaggedStruct("LayerPending", InstanceWire),
+  Schema.TaggedStruct("LayerPending", {
+    ...InstanceWire,
+    status: Schema.optionalKey(Schema.Literals(["Pending", "Rebuilding", "Awaiting"]))
+  }),
   Schema.TaggedStruct("LayerReady", InstanceWire),
   Schema.TaggedStruct("LayerFailed", { ...InstanceWire, cause: CauseWire }),
   Schema.TaggedStruct("Failed", {
@@ -1179,6 +1191,7 @@ export const makeEncoder = (options?: {
           }
         }
         case "LayerPending":
+          return { _tag: "LayerPending", ...instanceBase(entry), status: entry.status }
         case "LayerReady":
         case "Unmounted":
           return { _tag: entry._tag, ...instanceBase(entry) }

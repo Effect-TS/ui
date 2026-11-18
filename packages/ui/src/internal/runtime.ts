@@ -69,6 +69,11 @@ interface Env {
   ctx: Context.Context<any> | undefined
   failure: Cause.Cause<unknown> | undefined
   /**
+   * What the boundary records about its Layer, written with the entry that logs each transition. The
+   * feature slots that resolve from it read it, never `ctx` or `failure`.
+   */
+  status: Status
+  /**
    * What the shared Layers resolving from this Env are built with, made on first use: a fork of the
    * map its Context was built with, so it reuses what an ancestor built and keeps what it builds.
    */
@@ -82,17 +87,42 @@ interface Env {
   }>
 }
 
+/**
+ * A provide boundary's recorded status, and what a slot shows. `Pending` while its Layer builds,
+ * `Rebuilding` while a keyed provide builds a new selection, `Awaiting` while an instance the server
+ * rendered with its services waits for the client's build, then `Ready` or `Failed`. A slot showing a
+ * failed child records `Failed` with the child's failure.
+ */
+type Status =
+  | { readonly _tag: "Pending" | "Rebuilding" | "Awaiting" | "Ready" }
+  | { readonly _tag: "Failed"; readonly cause: Cause.Cause<unknown> }
+const pendingStatus: Status = { _tag: "Pending" }
+const rebuildingStatus: Status = { _tag: "Rebuilding" }
+const awaitingStatus: Status = { _tag: "Awaiting" }
+const readyStatus: Status = { _tag: "Ready" }
+/**
+ * The failure a client adopts for a Layer that failed on the server. The server's cause isn't shipped:
+ * it can hold what the page must not show.
+ */
+const serverFailure = (path: string): Cause.Cause<unknown> =>
+  Cause.die(new Error(`[@effect/ui] ${path}'s Layer failed on the server`))
+/** What a slot's `fallback` is passed for a status other than `Ready`. */
+const resultOf = (status: Status): AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown> =>
+  status._tag === "Failed" ? AsyncResult.failure(status.cause) : AsyncResult.initial(true)
+
 const readyEnv = (ctx: Context.Context<any>, parent?: Env): Env => ({
   ctx,
   failure: undefined,
+  status: readyStatus,
   memoMap: undefined,
   parent,
   waiters: [],
   never: false
 })
-const buildingEnv = (parent: Env, never = parent.never): Env => ({
+const buildingEnv = (parent: Env, never = parent.never, status: Status = pendingStatus): Env => ({
   ctx: undefined,
   failure: undefined,
+  status,
   memoMap: undefined,
   parent,
   waiters: [],
@@ -111,15 +141,15 @@ const whenReady = (
 }
 const resolveEnv = (env: Env, ctx: Context.Context<any>) => {
   env.ctx = ctx
+  env.status = readyStatus
   for (const waiter of env.waiters.splice(0)) waiter.ready(ctx)
 }
 const failEnv = (env: Env, cause: Cause.Cause<unknown>) => {
   env.failure = cause
+  env.status = { _tag: "Failed", cause }
   for (const waiter of env.waiters.splice(0)) waiter.failed?.(cause)
 }
 const memoMapOf = (env: Env): Layer.MemoMap => env.memoMap ??= Layer.CurrentMemoMap.forkOrCreate(env.ctx!)
-const unavailable = (env: Env): AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown> =>
-  env.failure !== undefined ? AsyncResult.failure(env.failure) : AsyncResult.initial(true)
 
 /** What a keyed provide's keys read: one value per keyed provide, or the defect a key threw. */
 type Keys = ReadonlyArray<unknown> | { readonly defect: unknown }
@@ -249,7 +279,10 @@ interface RFallback {
   readonly _tag: "Fallback"
   readonly v: View.Child<any, any>
   readonly inner: Rendered
-  readonly failure: Cause.Cause<unknown> | undefined
+  /** The slot's recorded status: its feature's boundary's, or `Failed` with a failed child's failure. */
+  readonly status: Status
+  /** A failed child, not its feature's Layer, put it here: it stays until the key changes. */
+  readonly failedChild: boolean
 }
 
 /** How many times one instance may deliver sends in a flush before it fails. */
@@ -902,6 +935,8 @@ const setup = (
   // Kept past adoption, which drops `hydrating`: the Router reads it when the root's first route arrives.
   const fromStatic = hydrating?.state["~static"] === true
   const adoptedWaiters: Array<() => void> = []
+  /** The status the server recorded at `path`, a provide's or a slot's, while hydrating. */
+  const shippedStatus = (path: string): "Pending" | "Failed" | undefined => hydrating?.state["~status"]?.[path]
   const settleWaiting = () => {
     // A reader below a held owner may have mounted, or gone.
     if (heldReports.size > 0) {
@@ -1813,8 +1848,9 @@ const setup = (
   /**
    * The instance's provided Layer failed once it was made. Unhandled, the instance fails. Handled, it
    * stays mounted and hears about it once: Feature children below show `fallback`, and Commands waiting
-   * for the Layer are interrupted. The server leaves it to the client. A selection a keyed provide
-   * has replaced in the meantime is not heard from.
+   * for the Layer are interrupted. The server ships the failure as the instance's status, and a client
+   * that adopts the instance starts from it. A selection a keyed provide has replaced in the meantime
+   * is not heard from.
    */
   const ownFailed = (inst: Instance, own: Env, cause: Cause.Cause<unknown>, before?: () => void) => {
     const handle = inst.component.layerFailure
@@ -1825,7 +1861,6 @@ const setup = (
       })
       return
     }
-    inst.deferred = true
     failEnv(own, cause)
     defer(() => {
       if (inst.env !== own) return
@@ -1899,7 +1934,7 @@ const setup = (
   const swap = (inst: Instance, selection: Selection, keys: Keys) => {
     selection.keys = keys
     const previous = inst.env
-    const own = buildingEnv(selection.parentEnv)
+    const own = buildingEnv(selection.parentEnv, undefined, rebuildingStatus)
     inst.env = own
     const waits: Array<Fiber.Fiber<unknown, unknown>> = []
     const stopped = inst.runs.filter((run) => !selection.issued.has(run))
@@ -1953,7 +1988,7 @@ const setup = (
     )
     if (failed || own.ctx !== undefined || own.failure !== undefined) return
     pending = true
-    record(inst, { _tag: "LayerPending" })
+    record(inst, { _tag: "LayerPending", status: "Rebuilding" })
     settle = countBuilding(own, selection.scope)
   }
 
@@ -2242,6 +2277,11 @@ const setup = (
     let constructing = true
     let failedEarly: Cause.Cause<unknown> | undefined
     let pending = false
+    // Logged when the Layer is still building once the instance is made. Hydration may make it `Awaiting`.
+    const pendingDraft: { readonly _tag: "LayerPending"; status: MessageLog.LayerPending["status"] } = {
+      _tag: "LayerPending",
+      status: "Pending"
+    }
 
     // Hydration: the Model and query results the server rendered this path with, unless it deferred the path.
     const fromServer: Adopted = hydrating !== undefined &&
@@ -2250,6 +2290,8 @@ const setup = (
         Object.hasOwn(hydrating.state, path)
       ? stateCodecOf(component).decode(hydrating.state[path])
       : Option.none()
+    // The status the server recorded for the instance's provide, when it wasn't ready there.
+    const shipped = Option.isSome(fromServer) ? shippedStatus(path) : undefined
     // An owner adopting the server's Model starts from what its reports last sent there.
     const collectedOnServer = Option.isSome(fromServer) && component.definition.collects !== undefined
       ? Option.flatMap(
@@ -2344,7 +2386,9 @@ const setup = (
         // still closes after the instance's runs.
         buildScope ??= Scope.forkUnsafe(scope, "sequential")
         const sharedLayer = component.sharedLayer
-        const shared = sharedLayer !== undefined ? acquireShared(parentEnv, sharedLayer) : undefined
+        // Failed on the server: the client adopts the failure, which the Model already handled, and builds nothing.
+        const adoptsFailure = shipped === "Failed"
+        const shared = sharedLayer !== undefined && !adoptsFailure ? acquireShared(parentEnv, sharedLayer) : undefined
         const own = shared !== undefined ? shared.env : buildingEnv(parentEnv)
         inst.env = own
         if (shared !== undefined) {
@@ -2366,6 +2410,10 @@ const setup = (
         }
         if (inst.closed) {
           // `init` failed before a keyed provide could select: nothing is built.
+        } else if (adoptsFailure) {
+          const cause = serverFailure(path)
+          lifecycle({ _tag: "LayerFailed", cause })
+          failEnv(own, cause)
         } else if (shared !== undefined) {
           whenReady(own, ready, fail)
         } else {
@@ -2373,7 +2421,7 @@ const setup = (
         }
         if (!inst.closed && own.ctx === undefined && own.failure === undefined && failedEarly === undefined) {
           pending = true
-          lifecycle({ _tag: "LayerPending" })
+          lifecycle(pendingDraft)
           settleBuild = countBuilding(own, buildScope)
         }
         // Added after the Layer's Scopes, which all exist by now, so the close stops the instance's runs
@@ -2476,13 +2524,17 @@ const setup = (
       return inst
     }
 
-    // Hydration: an instance whose provided Layer is still building keeps the server's nodes, inert,
-    // and adopts them once the Layer is ready. If the Layer fails and the component handles it,
-    // the instance is built fresh and gets its failure message.
+    // Hydration: an instance the server rendered with its services, whose provided Layer is still
+    // building here, keeps the server's nodes, inert, and adopts them once the Layer is ready: its status
+    // is `Awaiting`. If the Layer fails and the component handles it, the instance is built fresh and gets
+    // its failure message. One the server rendered while its Layer was pending adopts at once, as its
+    // feature slots showed their fallbacks there too.
     if (
       range !== undefined && Option.isSome(fromServer) && component.layer !== undefined && !inst.closed &&
-      inst.env.ctx === undefined && inst.env.failure === undefined
+      shipped === undefined && inst.env.status._tag !== "Ready" && inst.env.status._tag !== "Failed"
     ) {
+      inst.env.status = awaitingStatus
+      pendingDraft.status = "Awaiting"
       const raw: Rendered = { _tag: "Text", v: emptyText, node: undefined }
       // Its first entry: `Mounted` comes when the Layer is ready, and the Layer's entries come as they happen.
       record(inst, {
@@ -2868,7 +2920,7 @@ const setup = (
       const reason: MessageLog.SendDropped["reason"] | undefined = child === undefined
         ? "unrendered"
         : child._tag === "Fallback"
-        ? (child.failure !== undefined ? "failed" : "fallback")
+        ? (child.failedChild ? "failed" : "fallback")
         : child.inst.failure !== undefined
         ? "failed"
         : child.inst.closed
@@ -4628,7 +4680,8 @@ const setup = (
 
   const createChild = (inst: Instance, view: View.Child<any, any>, env: Env, range?: Range): Rendered => {
     const target = view.component
-    if (Feature.isService(target) && env.ctx === undefined) {
+    const status = env.status
+    if (Feature.isService(target) && status._tag !== "Ready") {
       // The feature's service comes from a Layer that is still building, or failed. The child shows
       // `fallback`, rendered against the nearest settled Env, and re-renders when the Layer settles.
       if (view.fallback === undefined) {
@@ -4636,19 +4689,13 @@ const setup = (
           `${inst.path}: ${target.key} isn't available, because a Layer above it is still building or failed. Pass \`fallback\` to the feature's \`render\`.`
         )
       }
-      if (env.failure === undefined) {
+      if (status._tag !== "Failed") {
         const rerender = () => {
           if (!inst.closed) markDirty(inst)
         }
         whenReady(env, rerender, rerender)
       }
-      if (range !== undefined) removeRange(range)
-      return {
-        _tag: "Fallback",
-        v: view,
-        inner: create(inst, fallbackOf(inst, view, env), settled(env)),
-        failure: undefined
-      }
+      return fallbackSlot(inst, view, status, false, env, range)
     }
     let component: Component.Any
     let childEnv = env
@@ -4723,13 +4770,13 @@ const setup = (
     throw clash
   }
 
-  /** What a feature child shows while its Layer is building or failed. */
-  const fallbackOf = (inst: Instance, view: View.Child<any, any>, env: Env): View.Node<any, any> =>
+  /** What a feature child shows while the Layer it resolves from isn't ready: `fallback` of its status. */
+  const fallbackOf = (inst: Instance, view: View.Child<any, any>, status: Status): View.Node<any, any> =>
     shownIn(
       inst,
       view,
       // As in `fallbackFor`: the fallback is its author's code, so one that throws fails its author.
-      guard(inst.author, "fallback", () => View.toNode(view.fallback!(unavailable(env)))) ?? emptyText
+      guard(inst.author, "fallback", () => View.toNode(view.fallback!(resultOf(status)))) ?? emptyText
     )
 
   /** What a failed child shows. A fallback that throws fails `inst` with source `fallback`. */
@@ -4748,9 +4795,39 @@ const setup = (
     view: View.Child<any, any>,
     failure: Cause.Cause<unknown>,
     env: Env
-  ): Rendered => {
-    const shown = fallbackFor(inst, view, failure)
-    return { _tag: "Fallback", v: view, inner: create(inst, shown, settled(env)), failure }
+  ): Rendered => fallbackSlot(inst, view, { _tag: "Failed", cause: failure }, true, env, undefined)
+
+  /**
+   * A slot showing its `fallback` for `status`. Given the server's range, it adopts the server's
+   * nodes when the server recorded the same status there and the fallback matches them, and otherwise
+   * replaces them.
+   */
+  const fallbackSlot = (
+    inst: Instance,
+    view: View.Child<any, any>,
+    status: Status,
+    failedChild: boolean,
+    env: Env,
+    range: Range | undefined
+  ): RFallback => {
+    const shown = status._tag === "Failed" && failedChild
+      ? fallbackFor(inst, view, status.cause)
+      : fallbackOf(inst, view, status)
+    let inner: Rendered | undefined
+    if (range !== undefined) {
+      const plan = shippedStatus(`${inst.path}/${segment(view)}`) === status._tag
+        ? matchList(inst, [shown], range.nodes)
+        : undefined
+      if (plan !== undefined) {
+        inner = adoptNode(inst, shown, plan[0]!, settled(env))
+        range.claimed = true
+        host.remove(range.open)
+        host.remove(range.close)
+      } else {
+        removeRange(range)
+      }
+    }
+    return { _tag: "Fallback", v: view, inner: inner ?? create(inst, shown, settled(env)), status, failedChild }
   }
 
   // -- hydration ------------------------------------------------------------
@@ -5272,26 +5349,21 @@ const setup = (
       }
       case "Fallback": {
         const child = view as View.Child<any, any>
-        if (rendered.failure !== undefined) {
-          const shown = fallbackFor(inst, child, rendered.failure!)
-          return {
-            _tag: "Fallback",
-            v: child,
-            inner: patchOrReplace(inst, rendered.inner, shown, settled(env)),
-            failure: rendered.failure
-          }
-        }
-        if (env.ctx !== undefined) {
+        const status = rendered.failedChild ? rendered.status : env.status
+        if (status._tag === "Ready") {
           // Ready now: the fallback goes, and the feature mounts in its place.
           destroy(inst, rendered.inner)
           return createChild(inst, child, env)
         }
-        const shown = fallbackOf(inst, child, env)
+        const shown = rendered.failedChild && status._tag === "Failed"
+          ? fallbackFor(inst, child, status.cause)
+          : fallbackOf(inst, child, status)
         return {
           _tag: "Fallback",
           v: child,
           inner: patchOrReplace(inst, rendered.inner, shown, settled(env)),
-          failure: undefined
+          status,
+          failedChild: rendered.failedChild
         }
       }
       case "Outlet": {
@@ -5645,14 +5717,19 @@ const setup = (
     const state: Record<string, unknown> = {}
     const collected: Record<string, unknown> = {}
     const deferredPaths: Array<string> = []
+    const statuses: Record<string, "Pending" | "Failed"> = {}
+    /** Ships a status other than `Ready`: the client starts from it. */
+    const ship = (path: string, status: Status) => {
+      if (status._tag === "Pending" || status._tag === "Failed") statuses[path] = status._tag
+    }
     // `under`: inside a deferred instance, whose subtree the client builds fresh.
     const instance = (inst: Instance, under: boolean): Renderer.ServerNode => {
       let inner = under
       if (!under) {
         const codec = stateCodecOf(inst.component)
-        let encoded = inst.failure !== undefined ||
-            inst.deferred ||
-            (inst.component.layer !== undefined && inst.env.ctx === undefined)
+        // A failed instance, and one kept off the server, are built fresh. One whose Layer is pending
+        // or failed ships its status with its state.
+        let encoded = inst.failure !== undefined || inst.deferred
           ? Option.none()
           : codec.encode(inst.model, inst.results)
         if (codec.redacted) warnRedacted(inst)
@@ -5672,6 +5749,7 @@ const setup = (
         } else {
           state[inst.path] = encoded.value
           if (Option.isSome(baseline)) collected[inst.path] = baseline.value
+          if (inst.component.layer !== undefined) ship(inst.path, inst.env.status)
         }
       }
       return {
@@ -5701,9 +5779,13 @@ const setup = (
             children: rendered.inst.rendered.map((child) => serialize(rendered.inst, child, under))
           }
         case "Fallback": {
-          // A failed child, or a feature whose Layer isn't ready: the client builds it fresh.
+          // A failed child: the client builds it fresh. A feature whose Layer isn't ready: the client
+          // adopts the fallback while its status is the one shipped.
           const path = `${inst.path}/${segment(rendered.v)}`
-          if (!under) deferredPaths.push(path)
+          if (!under) {
+            if (rendered.failedChild) deferredPaths.push(path)
+            else ship(path, rendered.status)
+          }
           return { _tag: "Range", path, children: [serialize(inst, rendered.inner, true)] }
         }
       }
@@ -5714,6 +5796,7 @@ const setup = (
       state: {
         ...state,
         "~deferred": deferredPaths,
+        ...(Object.keys(statuses).length > 0 ? { "~status": statuses } : {}),
         "~query": query,
         ...(Object.keys(collected).length > 0 ? { "~reported": collected } : {}),
         ...(server?.static === true ? { "~static": true } : {})

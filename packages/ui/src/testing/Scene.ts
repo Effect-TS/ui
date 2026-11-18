@@ -258,20 +258,41 @@ export interface Steps<C extends AnyComponent, Parts = never, Report = never> ex
     event: EventsOf<Child>
   ): this
   /**
-   * Sends the message the parent's `onFailure` maps a failure of the child
-   * of `child` without a key to, if any. The failure is passed as an
-   * `AsyncResult.Failure`. A message step.
+   * Fails the child of `child` without a key: its slot shows the failure
+   * branch of its `fallback`, or nothing without one, as the runtime's does,
+   * and the step sends the message the parent's `onFailure` maps the failure
+   * to, if any. The failure is passed as an `AsyncResult.Failure`. A message
+   * step.
    */
   childFailure(child: Component.Any | Component.Headless.Any | Feature.Any, cause: Cause.Cause<unknown>): this
   /**
-   * Sends the message the parent's `onFailure` maps a failure of the child
-   * of `child` at `key` to, if any. A ref finds the child rendered with it.
-   * A message step.
+   * Fails the child of `child` at `key`, as `childFailure` without a key
+   * does. A ref finds the child rendered with it. A message step.
    */
   childFailure(
     child: Component.Any | Component.Headless.Any | Feature.Any,
     key: string | Component.Ref.Any,
     cause: Cause.Cause<unknown>
+  ): this
+  /**
+   * Shows the slot of the child of `child` without a key as pending, as a
+   * feature slot is while the Layer it resolves from builds: it renders the
+   * pending branch of its `fallback`, passed `AsyncResult.initial(true)`.
+   *
+   * **Details**
+   *
+   * The status is for the slot at the child's path, for the rest of the
+   * scene, until a `childFailure` step fails it. Throws when the child has no
+   * `fallback`, as the runtime does for a feature slot.
+   */
+  childPending(child: Component.Any | Component.Headless.Any | Feature.Any): this
+  /**
+   * Shows the slot of the child of `child` at `key` as pending. A ref finds
+   * the child rendered with it.
+   */
+  childPending(
+    child: Component.Any | Component.Headless.Any | Feature.Any,
+    key: string | Component.Ref.Any
   ): this
   /**
    * Sets the Model the headless child of `child` without a key is expanded

@@ -140,9 +140,16 @@ export type Fields<Props, Model, Msg, Events> =
   >
   & {
     readonly childModels?: ReadonlyMap<string, unknown> | undefined
+    readonly childStatus?: ReadonlyMap<string, SlotResult> | undefined
     readonly shared?: ReadonlyMap<Component.Definition.Any, unknown> | undefined
     readonly collected?: Collected | undefined
   }
+
+// What a failed slot without a `fallback` shows.
+const emptyText: View.Node<never, never> = { _tag: "Text", text: "" }
+
+/** What a slot's `fallback` is passed: `Initial` while it's pending, `Failure` once it failed. */
+type SlotResult = AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>
 
 // -- headless children ------------------------------------------------------
 // A story shows a headless child expanded: the closure it was declared with, run against the parts of the
@@ -153,6 +160,23 @@ export type Fields<Props, Model, Msg, Events> =
  * @internal
  */
 export const childModels = new WeakMap<object, ReadonlyMap<string, unknown>>()
+
+/**
+ * The slots `childPending` and `childFailure` recorded, by the child's path: each shows its `fallback` of
+ * that result in place of the child, as the runtime's slot does.
+ *
+ * @internal
+ */
+export const childStatuses = new WeakMap<object, ReadonlyMap<string, SlotResult>>()
+
+/**
+ * The path a story gives `found`: the expansion's, or, in a view it left as it was, where every child is
+ * the root's own, the root's path and the child's segment.
+ *
+ * @internal
+ */
+export const pathOf = (story: State<any, any, any, any>, found: Occurrence): string =>
+  found.path ?? "/" + story.component.definition.name + "/" + segment(found.child)
 
 /**
  * One place a view shows a child: the child as declared, and, in a view a story expanded, the path the
@@ -386,7 +410,8 @@ const expandRoot = <Msg>(
   given: ReadonlyMap<string, unknown> | undefined,
   filled: Readonly<Record<string, View.Input<never, any>>> | undefined,
   shared: Owners | undefined,
-  root: Owners
+  root: Owners,
+  status: ReadonlyMap<string, SlotResult> | undefined
 ): View.Node<Msg, any> => {
   const replaced: Array<View.Child<any, any>> = []
   const placed: Array<Occurrence> = []
@@ -440,6 +465,13 @@ const expandRoot = <Msg>(
         const component = node.component as unknown as Component.Headless.Any
         const childPath = path + "/" + segment(node)
         placed.push({ child: node, path: childPath, scope })
+        const result = status?.get(childPath)
+        if (result !== undefined) {
+          // The slot shows its `fallback`, whose children share the paths of the content that declared it.
+          replaced.push(node)
+          const shown = node.fallback === undefined ? emptyText : View.toNode(node.fallback(result))
+          return expand(shown, path, depth, own, owners, scope)
+        }
         if (node.slots !== undefined) {
           // A child's view isn't run, but what the parent passed for its slots is the parent's.
           const shown: Array<View.Node<any, any>> = []
@@ -550,6 +582,7 @@ export const record = <Props, Model, Msg, Events>(
     all: (locator) => Locator.all(root(), locator)
   }
   if (fields.childModels !== undefined) childModels.set(story, fields.childModels)
+  if (fields.childStatus !== undefined) childStatuses.set(story, fields.childStatus)
   if (fields.shared !== undefined) sharedGiven.set(story, fields.shared)
   if (fields.collected !== undefined) collectedLast.set(story, fields.collected)
   return story
@@ -574,6 +607,7 @@ export const update = <Props, Model, Msg, Events>(
     defaultPrevented: story.defaultPrevented,
     ack: story.ack,
     childModels: childModels.get(story),
+    childStatus: childStatuses.get(story),
     shared: sharedGiven.get(story),
     collected: collectedLast.get(story),
     ...patch
@@ -583,7 +617,8 @@ export const update = <Props, Model, Msg, Events>(
   // owners whose nodes the first expansion replaced.
   const view = fields.model === story.model && fields.results === story.results && fields.props === story.props &&
       fields.pending === story.pending && fields.loadingMore === story.loadingMore &&
-      fields.childModels === childModels.get(story) && fields.shared === sharedGiven.get(story)
+      fields.childModels === childModels.get(story) && fields.childStatus === childStatuses.get(story) &&
+      fields.shared === sharedGiven.get(story)
     ? story.view
     : () => expandedView(fields)
   return record(fields, view)
@@ -601,7 +636,8 @@ export const expandedView = (fields: Fields<any, any, any, any>): View.Node<any,
     fields.childModels,
     storySlots.get(fields.component),
     fields.shared,
-    rootOwners(fields.component, fields.model, fields.props)
+    rootOwners(fields.component, fields.model, fields.props),
+    fields.childStatus
   )
 
 /** The story's component's own view, before its headless children are expanded. */

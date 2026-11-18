@@ -188,8 +188,17 @@ export interface Hydration<Node> {
  * **Details**
  *
  * `~deferred` lists instances the client builds fresh instead of adopting:
- * a provided Layer that missed the budget or was kept off the server, and a
- * child that failed. A deferred path covers its subtree.
+ * a provided Layer kept off the server, and state that can't be shipped. A
+ * deferred path covers its subtree.
+ *
+ * `~status` holds, by path, what the server recorded where a provided Layer
+ * wasn't ready: `Pending` or `Failed`, for an instance whose Layer missed the
+ * budget or failed and was handled, and for a feature slot that showed its
+ * `fallback`. Such an instance is adopted. One that adopts a `Failed` Layer
+ * doesn't build it, and its `fallback` gets a cause that says the path failed
+ * on the server, as the server's cause isn't shipped. One that adopts a
+ * `Pending` Layer builds it and renders at once. A slot whose status on the
+ * client is the one shipped adopts the server's `fallback` nodes.
  *
  * `~query` holds every entry that settled on the server, a typed Failure
  * included, by query name and args key. The client's cache hydrates from it,
@@ -225,6 +234,7 @@ export interface Hydration<Node> {
 export interface State {
   readonly [path: string]: unknown
   readonly "~deferred"?: ReadonlyArray<string> | undefined
+  readonly "~status"?: { readonly [path: string]: "Pending" | "Failed" } | undefined
   readonly "~query"?: unknown
   readonly "~reported"?: { readonly [path: string]: unknown } | undefined
   readonly "~static"?: boolean | undefined

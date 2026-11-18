@@ -60,6 +60,7 @@
  */
 import type * as Effect from "effect/Effect"
 import type * as Scope from "effect/Scope"
+import type * as Command from "../Command.ts"
 import type * as Component from "../Component.ts"
 import type * as Head from "../Head.ts"
 import * as replay from "../internal/replay.ts"
@@ -445,6 +446,21 @@ export interface Replay<
   readonly results: Component.Results | undefined
   /** The queries' results, by name, as `h.queries` opens them for the Model, props and results reached. */
   readonly queries: () => Queries
+  /**
+   * What the instance's provided Layer last logged: `Pending`, `Rebuilding` or
+   * `Awaiting` from a `LayerPending` entry, `Ready` from `LayerReady`, and
+   * `Failed` from `LayerFailed`. `Ready` when the log says nothing about it.
+   * A feature slot below the instance shows its `fallback` for any status but
+   * `Ready`.
+   */
+  readonly status: "Pending" | "Rebuilding" | "Awaiting" | "Ready" | "Failed"
+  /**
+   * `h.isRunning` for the state reached, called as it is: whether a run of
+   * the Command, of the group if given, was issued and isn't logged as ended, interrupted or
+   * dropped yet. As in the runtime, a stopped run counts until its fiber exits,
+   * when its `CommandInterrupted` entry is logged.
+   */
+  readonly isRunning: (command: Command.Definition.Any, group?: unknown) => boolean
   readonly replayed: number
   readonly divergence: Divergence<Model, Msg, Events> | undefined
 }
@@ -472,6 +488,10 @@ export interface Replay<
  *
  * A path that mounted more than once is replayed instance by instance, each
  * from its own entries, and the result is the state of the last one.
+ *
+ * The Layer entries set `status`, and the Command entries that end a run
+ * set what `isRunning` reports, so a log cut at any entry gives what the
+ * instance's feature slots and `h.isRunning` showed there.
  *
  * It takes live entries or Wire frames. A Wire value sent as a placeholder,
  * such as a truncated Model, can't be decoded, and the error names the entry.

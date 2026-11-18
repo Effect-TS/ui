@@ -59,6 +59,17 @@ const describeExpected = (expected: unknown): string =>
 /** A child a scene step names. */
 type ChildTarget = Component.Any | Component.Headless.Any | Feature.Any
 
+/** `state` with the slot of `found` recorded as `result`: the view shows its `fallback` of it. */
+const withSlot = (
+  state: engine.State<any, any, any, any>,
+  found: engine.Occurrence,
+  result: AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>
+): engine.State<any, any, any, any> => {
+  const statuses = new Map(engine.childStatuses.get(state))
+  statuses.set(engine.pathOf(state, found), result)
+  return engine.update(state, { childStatus: statuses })
+}
+
 /** The arguments after a child step's component: an optional key or ref, then the step's value. */
 type KeyAnd<A> = readonly [value: A] | readonly [key: string | Component.Ref.Any, value: A]
 
@@ -332,8 +343,19 @@ export class SceneCursor extends Cursor {
   childFailure(child: ChildTarget, ...args: KeyAnd<Cause.Cause<unknown>>): this {
     const [key, cause] = keyAnd(args)
     return this.act("childFailure", "message", (state) => {
-      const found = engine.findChild(state.view(), child, key, this.name("childFailure")).child
-      return engine.dispatch(state, found.onFailure?.(AsyncResult.failure(cause)))
+      const found = engine.findChild(state.view(), child, key, this.name("childFailure"))
+      const failure: AsyncResult.Failure<never, unknown> = AsyncResult.failure(cause)
+      return engine.dispatch(withSlot(state, found, failure), found.child.onFailure?.(failure))
+    })
+  }
+  childPending(child: ChildTarget, key?: string | Component.Ref.Any): this {
+    const step = this.name("childPending")
+    return this.act("childPending", "acting", (state) => {
+      const found = engine.findChild(state.view(), child, key, step)
+      if (found.child.fallback === undefined) {
+        throw new Error(`${step}: the child has no fallback to show while it's pending`)
+      }
+      return withSlot(state, found, AsyncResult.initial(true))
     })
   }
   givenChild(child: Component.Headless.Any, ...args: KeyAnd<unknown>): this {

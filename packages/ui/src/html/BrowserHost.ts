@@ -1077,8 +1077,12 @@ export interface MountOptions<V extends View.Elements, RF = never> {
  * match the server's nodes is rebuilt on its own, and one the server deferred
  * is built fresh.
  *
- * An instance whose provided Layer is still building keeps the server's
- * nodes until the Layer is ready, and everything else is live at once. A
+ * An instance the server rendered with its provided Layer ready, whose
+ * Layer is still building here, keeps the server's nodes until the Layer is
+ * ready, and everything else is live at once. Its `LayerPending` entry says
+ * `Awaiting`. One whose Layer was pending or failed on the server adopts at
+ * once, and its feature slots keep the server's `fallback` nodes while their
+ * status is the one the server shipped. A
  * waiting instance is inert: its buttons do nothing, links still navigate through
  * the Router, a `<form>` submits natively, and typed input is overwritten
  * when it adopts. Head sync starts once no instance is waiting.

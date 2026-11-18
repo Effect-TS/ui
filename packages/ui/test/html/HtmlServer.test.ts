@@ -533,8 +533,10 @@ describe("HtmlServer", { concurrent: false }, () => {
       const deferred = yield* ssr(App, slow.props, { budget: "50 millis" }).pipe(
         Effect.provide([People.layer, slow.router])
       )
-      expect(deferred.state["~deferred"]).toEqual(["/App/Slow[/slow]"])
-      expect(deferred.state["/App/Slow[/slow]"]).toBeUndefined()
+      // A Layer that missed the budget ships its status with the Model, and the client adopts both.
+      expect(deferred.state["~deferred"]).toEqual([])
+      expect(deferred.state["~status"]).toEqual({ "/App/Slow[/slow]": "Pending" })
+      expect(deferred.state["/App/Slow[/slow]"]).toBeDefined()
       yield* TestClock.adjust("1 second")
       yield* TestHost.settle
       expect(deferred.container.querySelector("h1")!.textContent).toBe("Slow")

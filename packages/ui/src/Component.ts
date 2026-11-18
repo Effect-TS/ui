@@ -2777,6 +2777,14 @@ export type ProvideInput =
  * Model, and `layer` turns it into the Layer to build. The Layer is built
  * again, in place, when the key changes by `Equal.equals`.
  *
+ * **Details**
+ *
+ * While the new selection builds, the old view isn't kept. Each feature slot
+ * below shows its `fallback`, passed `AsyncResult.initial(true)`, as at
+ * mount, and the log's `LayerPending` entry says `Rebuilding`. Once the
+ * Layer is ready the feature mounts again. If the Layer fails, the slot shows
+ * the failure branch of its `fallback`.
+ *
  * @stability experimental
  * @category models
  * @since 0.1.0
