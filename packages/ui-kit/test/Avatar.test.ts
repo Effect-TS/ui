@@ -12,10 +12,10 @@ const standIn = {
     s: Component.Headless.Parts<typeof Avatar>,
     h: View.Helper<never, AvatarProps> & View.Tags<Html.Elements, never>
   ) =>
-    s.root(h.span.attr("data-status", s.imageLoadingStatus)).children(
-      s.image(h.img),
-      s.fallback({ element: h.span.class("fallback"), children: ["AL"] })
-    )
+    s.root({
+      element: h.span.attr("data-status", s.imageLoadingStatus),
+      children: [s.image({ element: h.img }), s.fallback({ element: h.span.class("fallback"), children: ["AL"] })]
+    })
 }
 
 const image = Locator.tag("img")
@@ -64,7 +64,7 @@ describe("Avatar", () => {
       .attr("referrerpolicy", "origin")
     const shown = (props: AvatarProps) =>
       Story.parts(Avatar, { model: { report: { source: props, status: "loaded" }, delayElapsed: true }, props })
-        .image(element)?.attrs
+        .image({ element })?.attrs
     assert.deepStrictEqual(shown({ src: "/ada.png" }), { class: "photo", alt: "Ada Lovelace", src: "/ada.png" })
     const attrs = shown({
       src: "/ada.png",

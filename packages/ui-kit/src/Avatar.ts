@@ -16,12 +16,21 @@
  * | `Avatar.Image`    | `image`    | `<img>` inside the root, once shown |
  * | `Avatar.Fallback` | `fallback` | `<span>` inside the root, once shown |
  *
- * `root` takes the `<span>` and returns it for more chaining. `image`
- * takes the `<img>` and returns it once the image has loaded, and
- * `undefined` before. `fallback` takes the `<span>` and its children as
- * `{ element, children }`, and returns the finished `<span>` while the
- * image isn't loaded and the `fallbackDelay` has passed, and `undefined`
- * otherwise. So the consumer draws both, and at most one shows.
+ Each part takes the consumer's element as `{ element }`, and the root
+ * and the fallback take `children` beside it. Each returns a finished
+ * element:
+ *
+ * - `root({ element, children })` returns the `<span>`.
+ * - `image({ element })` returns the `<img>` once the image has loaded, and
+ *   `undefined` before.
+ * - `fallback({ element, children })` returns the `<span>` while the image
+ *   isn't loaded and the `fallbackDelay` has passed, and `undefined`
+ *   otherwise.
+ *
+ * So the consumer draws both the image and the fallback, and at most one
+ * shows. `root` also takes a bare builder, `s.root(h.span)`, and returns
+ * the builder, so another part can stack on it as its `element`. The image
+ * and the fallback don't, since they may be `undefined`.
  *
  * Naming the picture is the consumer's job: an `alt` on the image, and
  * text in the fallback, or an `aria-label` on it for an icon.
@@ -72,10 +81,13 @@
  *       key: "avatar",
  *       props: { src: "/ada.png" },
  *       view: (s) =>
- *         s.root(h.span.class("avatar")).children(
- *           s.image(h.img.attr("alt", "Ada Lovelace")),
- *           s.fallback({ element: h.span.class("initials"), children: ["AL"] })
- *         )
+ *         s.root({
+ *           element: h.span.class("avatar"),
+ *           children: [
+ *             s.image({ element: h.img.attr("alt", "Ada Lovelace") }),
+ *             s.fallback({ element: h.span.class("initials"), children: ["AL"] })
+ *           ]
+ *         })
  *     })
  * })
  *
@@ -93,7 +105,7 @@ import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as Subscription from "@effect/ui/Subscription"
-import type * as View from "@effect/ui/View"
+import * as View from "@effect/ui/View"
 import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
@@ -260,10 +272,19 @@ const imageAttributes = ["crossorigin", "referrerpolicy", "sizes", "srcset", "sr
 export type AvatarSpan<Msg, R> = Html.Element<Msg, R, Html.EventsOf<"span">, HTMLSpanElement, "span">
 
 /**
+ * An `<img>` the avatar's image accepts, from the consumer's `h.img`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type AvatarImg<Msg, R> = Html.VoidElement<Msg, R, Html.EventsOf<"img">, HTMLImageElement, "img">
+
+/**
  * A headless avatar. Call it with the consumer's `h` and a `view` closure
- * that draws the root with `s.root(h.span)`, and inside it the image with
- * `s.image(h.img)` and the fallback with
- * `s.fallback({ element: h.span, children })`.
+ * that draws the root with `s.root({ element: h.span, children })`, with
+ * the image, `s.image({ element: h.img })`, and the fallback,
+ * `s.fallback({ element: h.span, children })`, as its children.
  *
  * **Details**
  *
@@ -318,14 +339,31 @@ export const Avatar = Component.define({
         .attr("src", source.src))
     const fallback = p.part("span", (b) => b)
     const showsFallback = status !== "loaded" && model.delayElapsed
+    function rootPart<B extends View.PartTarget<"span">>(element: B): ReturnType<B["attr"]>
+    function rootPart<Msg, R, const C extends ReadonlyArray<View.Input<Msg, any>> = readonly []>(options: {
+      /** The consumer's `h.span`, with its classes, attributes and handlers. */
+      readonly element: AvatarSpan<Msg, R>
+      /** What goes inside the root: the image and the fallback. */
+      readonly children?: C | undefined
+    }): View.Element<Msg, R | View.Requirements<C[number]>>
+    // A builder gets the part and stays a chain, to be another call's
+    // `element`. The options object gets a finished element.
+    function rootPart(target: any): unknown {
+      return View.isElementBuilder(target)
+        ? root(target as AvatarSpan<unknown, unknown>)
+        : View.build(root(target.element), target.children ?? [])
+    }
     return {
       imageLoadingStatus: status,
-      root,
+      root: rootPart,
       // Each part is applied before it's dropped, so a wrong tag throws in
       // every state.
-      image: <B extends View.PartTarget<"img">>(element: B): ReturnType<B["attr"]> | undefined => {
-        const shown = image(imageAttributes.reduce((out: B, name) => out.attr(name, undefined), element))
-        return status === "loaded" ? shown : undefined
+      image: <Msg, R>(options: {
+        /** The consumer's `h.img`, with its `alt`, classes, attributes and handlers. */
+        readonly element: AvatarImg<Msg, R>
+      }): View.Element<Msg, R> | undefined => {
+        const shown = image(imageAttributes.reduce((out, name) => out.attr(name, undefined), options.element))
+        return status === "loaded" ? View.build(shown, []) : undefined
       },
       fallback: <Msg, R, const C extends ReadonlyArray<View.Input<Msg, any>> = readonly []>(
         options: {
@@ -336,7 +374,7 @@ export const Avatar = Component.define({
         }
       ): View.Element<Msg, R | View.Requirements<C[number]>> | undefined => {
         const shown = fallback(options.element)
-        return showsFallback ? shown.children(...(options.children ?? [])) : undefined
+        return showsFallback ? View.build(shown, options.children ?? []) : undefined
       }
     }
   }
