@@ -4,6 +4,8 @@
 
 Reads and sends now require `Component.Shared<"OwnerName">`. Replace `Component.Shared<typeof Owner>` with `Component.Shared.Of<typeof Owner>`. Give distinct owners distinct names: the requirement is checked by name, but a reader still looks up its owner by definition at mount.
 
+`Component.SharedOptional` is removed: `make` no longer subtracts optional owners by name.
+
 If an update sends to an optional owner, omit its explicit step return type. For example, with `shared: { a: { owner: A, optional: true } }`:
 
 ```diff

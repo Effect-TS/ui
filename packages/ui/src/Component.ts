@@ -518,8 +518,7 @@ export declare namespace Shared {
    * @since 0.1.0
    */
   export type Value<C> = C extends
-    Headless<infer _P, infer _E, infer _Parts, infer _R, infer _Rcv, infer Sh, infer V, infer _Rp>
-    ? [Sh] extends [never] ? never : V
+    Headless<infer _P, infer _E, infer _Parts, infer _R, infer _Rcv, infer _Sh, infer V, infer _Rp> ? V
     : never
 
   /**
@@ -529,6 +528,7 @@ export declare namespace Shared {
    * @category utility types
    * @since 0.1.0
    */
+  // A component that isn't an owner may still have `receives`, for its parent's sends.
   export type Receives<C> = C extends Headless<infer _P, infer _E, infer _Parts, infer _R, infer Rcv, infer Sh>
     ? [Sh] extends [never] ? never : Rcv
     : never
@@ -543,8 +543,7 @@ export declare namespace Shared {
    * @since 0.1.0
    */
   export type Report<C> = C extends
-    Headless<infer _P, infer _E, infer _Parts, infer _R, infer _Rcv, infer Sh, infer _V, infer Rp>
-    ? [Sh] extends [never] ? never : Rp
+    Headless<infer _P, infer _E, infer _Parts, infer _R, infer _Rcv, infer _Sh, infer _V, infer Rp> ? Rp
     : never
 }
 
@@ -628,19 +627,7 @@ export type SharedRequirements<SR> = {
   readonly [K in keyof SR]: IsOptional<SR[K]> extends true ? never : Shared.Of<SharedOwner<SR[K]>>
 }[keyof SR]
 
-/**
- * The named requirements corresponding to a component's optional shared owners.
- *
- * @stability experimental
- * @category utility types
- * @since 0.1.0
- */
-export type SharedOptional<SR> = {
-  readonly [K in keyof SR]: IsOptional<SR[K]> extends true ? Shared.Of<SharedOwner<SR[K]>> : never
-}[keyof SR]
-
-// Retain the send target until make checks optional reads. A step annotated with just
-// Shared<Name> has lost this information, so it cannot be discharged by an optional read.
+// A send keeps its target in the step's `R` until `make` has dropped the sends to optional owners.
 type SendTarget<O> = { readonly "~@effect/ui/Component/SendTarget": Types.Invariant<O> }
 
 type OptionalTargets<SR> = {
@@ -648,6 +635,10 @@ type OptionalTargets<SR> = {
 }[keyof SR]
 
 type NamedRequirement<R> = R extends SendTarget<infer O> ? Shared.Of<O> : R
+
+// What a component's own steps require. A send to an optional owner needs none above, and only these steps
+// drop it. A step annotated with just `Shared<Name>` has lost its target, so it stays required.
+type OwnStepRequirements<U, SR> = NamedRequirement<Exclude<RawStepRequirements<U>, OptionalTargets<SR>>>
 
 /**
  * A `$.loadMore(name)` or `$.reset(name)` an `update` issued, by query
@@ -1987,8 +1978,7 @@ export interface Definition<
     Events,
     Parts,
     Exclude<
-      // A send to an optional owner needs none above: only this component's own steps drop it.
-      | NamedRequirement<Exclude<RawStepRequirements<UI | U | UR[keyof UR]>, OptionalTargets<SR>>>
+      | OwnStepRequirements<UI | U | UR[keyof UR], SR>
       | View.PartRequirements<Parts[keyof Parts]>
       | Subscription.Requirements<Sub>
       | QueryServices<L>
@@ -2048,8 +2038,7 @@ export interface Definition<
     Msg,
     Events,
     Exclude<
-      // A send to an optional owner needs none above: only this component's own steps drop it.
-      | NamedRequirement<Exclude<RawStepRequirements<UI | U | UR[keyof UR]>, OptionalTargets<SR>>>
+      | OwnStepRequirements<UI | U | UR[keyof UR], SR>
       | View.Requirements<UV>
       | Subscription.Requirements<Sub>
       | QueryServices<L>
