@@ -1,5 +1,5 @@
 import { Component, UiSchema, View } from "@effect/ui"
-import { Input, type InputElement, type InputProps } from "@effect/ui-kit"
+import { Input, type InputElement } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Locator, Scene } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -30,13 +30,7 @@ const Profile = Component.define({
 const input = Locator.tag("input")
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
-// The input a caller gets for these props and this element, with what
-// `chain` adds after the call.
-const inputOf = (
-  props: InputProps,
-  element: InputElement<never> = h.input,
-  chain: (input: InputElement<never>) => InputElement<never> = (input) => input
-) => View.build(chain(Input(h, { props, element })), [])
+const build = (input: InputElement<never>) => View.build(input, [])
 
 describe("Input", () => {
   it.effect("an edit reports the value the user left, and a disabled input reports nothing", () =>
@@ -59,14 +53,15 @@ describe("Input", () => {
       .attr("aria-disabled", "true")
       .attr("data-disabled", "x")
       .value("caller")
-    const enabled = inputOf({ value: "Ada" }, element.disabled(true))
+    const enabled = build(Input(h, { props: { value: "Ada" }, element: element.disabled(true) }))
     assert.deepStrictEqual(enabled.attrs, { class: "name", type: "email" })
     assert.strictEqual(enabled.props.value, "Ada")
 
-    const disabled = inputOf(
-      { value: "Ada", disabled: true },
-      element,
-      (input) => input.disabled(false).attr("data-disabled", undefined).value("after")
+    const disabled = build(
+      Input(h, { props: { value: "Ada", disabled: true }, element })
+        .disabled(false)
+        .attr("data-disabled", undefined)
+        .value("after")
     )
     assert.deepStrictEqual(disabled.attrs, { class: "name", type: "email", "data-disabled": "", disabled: "" })
     assert.strictEqual(disabled.props.value, "Ada")
@@ -74,18 +69,15 @@ describe("Input", () => {
 
   it("the input keeps a caller's input handler without onUpdate, and refuses it with one in every state", () => {
     const handler = () => undefined
-    assert.strictEqual(inputOf({ value: "" }, h.input.onInput(handler)).handlers.input, handler)
-    const updating = (props: InputProps, when: "before" | "after") => () => {
-      const call = Input(h, {
-        props,
-        element: when === "before" ? h.input.onInput(handler) : h.input,
-        onUpdate: handler
-      })
-      return View.build(when === "before" ? call : call.onInput(handler), [])
-    }
-    assert.throws(updating({ value: "" }, "before"), /Input: the element already handles input/)
-    assert.throws(updating({ value: "" }, "after"), /Input: the element already handles input/)
+    const own = h.input.onInput(handler)
+    const clash = /Input: the element already handles input/
+    assert.strictEqual(build(Input(h, { props: { value: "" }, element: own })).handlers.input, handler)
+    assert.throws(() => build(Input(h, { props: { value: "" }, element: own, onUpdate: handler })), clash)
+    assert.throws(() => build(Input(h, { props: { value: "" }, onUpdate: handler }).onInput(handler)), clash)
     // A disabled input sets no handler, but it would once it's enabled.
-    assert.throws(updating({ value: "", disabled: true }, "after"), /Input: the element already handles input/)
+    assert.throws(
+      () => build(Input(h, { props: { value: "", disabled: true }, onUpdate: handler }).onInput(handler)),
+      clash
+    )
   })
 })
