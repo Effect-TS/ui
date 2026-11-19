@@ -366,9 +366,11 @@ const payloadOf = (
       return { top: element.scrollTop, left: element.scrollLeft }
     case "focusin":
     case "focusout": {
-      // Where focus came from or goes. `null` when that is another window, or nowhere.
-      const other = (event as FocusEvent).relatedTarget as globalThis.Node | null
-      return { within: other !== null && element.contains(other) }
+      // Where focus came from or goes: `null` for another window or nowhere, and any event target in an
+      // event a script made, such as the window. `contains` throws for a target that isn't a node, and
+      // checking `nodeType` instead of `instanceof` keeps a node from another realm.
+      const other = (event as FocusEvent).relatedTarget as Partial<globalThis.Node> | null
+      return { within: typeof other?.nodeType === "number" && element.contains(other as globalThis.Node) }
     }
     default:
       return {}

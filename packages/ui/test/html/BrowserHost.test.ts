@@ -525,8 +525,18 @@ describe("BrowserHost", { concurrent: false }, () => {
         focus("First")
         focus("Second")
         focus("Keys")
+        // A script may name any event target as the other end, such as the window, which no element contains.
+        HtmlLocator.getByRole(app, "textbox", { name: "First" })
+          .dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: window }))
         yield* tick
-        expect(root.model()).toEqual(["focusin", "focusout within", "focusin within", "focusout", "focus keys"])
+        expect(root.model()).toEqual([
+          "focusin",
+          "focusout within",
+          "focusin within",
+          "focusout",
+          "focus keys",
+          "focusout"
+        ])
       }).pipe(Effect.scoped))
 
     it.effect("payloads are plain data", () =>

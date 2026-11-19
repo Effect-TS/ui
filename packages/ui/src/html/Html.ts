@@ -462,7 +462,8 @@ export interface DropTargetOptions extends View.EventOptions {
  * An element that handles both can tell focus moving between its
  * descendants from focus arriving or leaving: `within` is `true` for the
  * first, and `false` for the second. Focus coming from or going to
- * another window, or nowhere, counts as outside.
+ * another window, or nowhere, counts as outside, as does an event a script
+ * dispatched with a `relatedTarget` that isn't a node, such as the window.
  *
  * @stability experimental
  * @category events
