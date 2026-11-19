@@ -1,4 +1,15 @@
-import { Command, Component, Feature, MessageLog, Mount, Query, Renderer, Subscription, UiSchema } from "@effect/ui"
+import {
+  Command,
+  Component,
+  Feature,
+  MessageLog,
+  Mount,
+  Query,
+  Renderer,
+  Subscription,
+  UiSchema,
+  View
+} from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import * as runtime from "@effect/ui/internal/runtime"
 import { Locator, Story, TestHost } from "@effect/ui/testing"
@@ -162,6 +173,31 @@ describe("Runtime", () => {
         assert.deepStrictEqual(items().slice(0, 2), [c, a])
         assert.deepStrictEqual(tags(root, "/List/Row[b]").slice(-2), ["Unmounted", "CommandInterrupted"])
         assert.sameMembers(root.pending().map((p) => p.path), ["/List/Row[c]", "/List/Row[a]", "/List/Row[d]"])
+      })))
+
+    it.effect("a view wrapped by hand is given each row's path as a string, and passes it on to h.id", () =>
+      provideHost(Effect.gen(function*() {
+        const state = { model: Schema.Null, message: Schema.Never }
+        const Badge = Component.define({ ...state, name: "Badge" }).make({
+          init: () => null,
+          update: () => null,
+          view: (_, h) => h.el("li", h.id("label"))
+        })
+        const given: Array<unknown> = []
+        // The fifth parameter typed as a string, as the public type has it.
+        const view: Component.Any["view"] = (model, props, running, queries, path?: string) => {
+          given.push(path)
+          return Badge.view(model, props, running, queries, path?.toUpperCase())
+        }
+        const Wrapped = Object.assign(Object.create(Badge) as typeof Badge, { view })
+        const Rows = Component.define({ ...state, name: "Rows" }).make({
+          init: () => null,
+          update: () => null,
+          view: (_, h) => h.el("ul", ["a", "b"].map((key) => ({ ...Badge(h, { key }), component: Wrapped })))
+        })
+        const root = yield* TestHost.mount(Rows, {})
+        assert.deepStrictEqual(given, ["/Rows/Badge[a]", "/Rows/Badge[b]"])
+        assert.strictEqual(root.text(), View.idOf("/ROWS/BADGE[A]", "label") + View.idOf("/ROWS/BADGE[B]", "label"))
       })))
 
     it.effect("closing the mount's Scope unmounts every instance", () =>

@@ -1845,7 +1845,7 @@ export const withView = (
       props: unknown,
       running?: View.Running,
       queries?: Component.Results,
-      _path?: unknown,
+      _path?: string,
       shared?: Component.SharedLookup
     ) => {
       const h = View.makeHelper(props, elements ?? component.elements(), running, owner.path)

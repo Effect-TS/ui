@@ -1886,13 +1886,13 @@ class HelperImpl<Msg, Props> implements Helper<Msg, Props> {
   readonly elements: Vocabulary<any> | undefined
   readonly runningFn: Running
   /** The instance's path, or the instance, whose path is read only when `id` is called. */
-  readonly at: string | { readonly path: string }
+  readonly at: string | PathSource
   readonly store: LazyStore | undefined
   constructor(
     props: Props,
     elements: Vocabulary<any> | undefined,
     running: Running | undefined,
-    at: string | { readonly path: string },
+    at: string | PathSource,
     store: LazyStore | undefined
   ) {
     this.props = props
@@ -1985,6 +1985,37 @@ class NoTextBuilder<Msg> extends ContainerBuilder<Msg> {
 const helperClasses = new WeakMap<Vocabulary<any>, typeof HelperImpl<any, any>>()
 
 /**
+ * What a runtime can give a view in place of its path: something whose
+ * `path` is read only when `h.id` is called.
+ *
+ * @internal
+ */
+export interface PathSource {
+  readonly path: string
+}
+
+const lazyPathViews = new WeakSet<object>()
+
+/**
+ * Marks `view` as taking a `PathSource` for its path. Only views that
+ * `make` builds are marked: a view written or wrapped by hand is given the
+ * path as a string, as its type says.
+ *
+ * @internal
+ */
+export const readsPathLazily = <F extends object>(view: F): F => {
+  lazyPathViews.add(view)
+  return view
+}
+
+/**
+ * Whether `view` takes a `PathSource` for its path.
+ *
+ * @internal
+ */
+export const takesPathSource = (view: object): boolean => lazyPathViews.has(view)
+
+/**
  * Builds the view helper for one render, with a vocabulary's element names
  * mixed in when one is given.
  *
@@ -1994,7 +2025,7 @@ export const makeHelper = <Msg, Props, V extends Elements = never>(
   props: Props,
   elements: Vocabulary<V> | undefined,
   running?: Running | undefined,
-  path?: string | { readonly path: string } | undefined,
+  path?: string | PathSource | undefined,
   store?: LazyStore | undefined
 ): Helper<Msg, Props> & Tags<V, Msg> => {
   if (elements === undefined) return new HelperImpl(props, undefined, running, path ?? "", store) as any

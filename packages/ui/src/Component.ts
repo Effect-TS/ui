@@ -1020,11 +1020,8 @@ export interface Mountable<in out Props, out Events, out R = never, in Rcv = nev
     props: Props,
     running?: ((name: string, groupKey: string | undefined) => boolean) | undefined,
     queries?: Results | undefined,
-    /**
-     * The instance's path, which `h.id` derives ids from, or something whose `path` is read when
-     * `h.id` is called. Without it, the root path `/<name>`.
-     */
-    path?: string | { readonly path: string } | undefined,
+    /** The instance's path, which `h.id` derives ids from. Without it, the root path `/<name>`. */
+    path?: string | undefined,
     /** Answers `h.shared`: an owner's current value. Without it, a component that reads shared state throws. */
     shared?: SharedLookup | undefined,
     /** Where `h.lazy` keeps its nodes between renders. Without it, `h.lazy` builds every time. */
@@ -1126,7 +1123,7 @@ export interface Component<
     props: Props,
     running?: ((name: string, groupKey: string | undefined) => boolean) | undefined,
     queries?: Results | undefined,
-    path?: string | { readonly path: string } | undefined,
+    path?: string | undefined,
     shared?: SharedLookup | undefined,
     lazy?: View.LazyStore | undefined
   ) => View.Node<Msg, R>
@@ -2722,12 +2719,12 @@ const finish = (
       toNext(updateFn(model, msg, makeUpdate(model, props, open(model, props, results), msg))),
     view: view === undefined
       ? undefined
-      : (
+      : View.readsPathLazily((
         model: unknown,
         props: unknown,
         running?: View.Running,
         results?: Results,
-        path?: string | { readonly path: string },
+        path?: string | View.PathSource,
         shared?: SharedLookup,
         lazy?: View.LazyStore
       ) => {
@@ -2757,7 +2754,7 @@ const finish = (
           if (lazy !== undefined) lazy.lazy = undefined
           throw error
         }
-      },
+      }),
     parts: parts === undefined
       ? undefined
       : (model: unknown, props: unknown, context: PartsContext) => {

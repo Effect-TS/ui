@@ -4839,11 +4839,15 @@ const setup = (
     return guard(inst, "content", () => checked(inst, View.toNode(inst.content!(parts.value))))
   }
 
-  const ownView = (inst: Instance): View.Node<any, any> =>
-    checked(
+  const ownView = (inst: Instance): View.Node<any, any> => {
+    const view = inst.component.view
+    // A view that `make` built reads the path only for `h.id`. Any other is given the path itself.
+    const path = View.takesPathSource(view) ? inst : inst.path
+    return checked(
       inst,
-      inst.component.view(inst.model, inst.props, runningOf(inst), inst.results, inst, sharedOf(inst), inst)
+      view(inst.model, inst.props, runningOf(inst), inst.results, path as string, sharedOf(inst), inst)
     )
+  }
 
   /** Checks a fresh view's child paths, which its fallbacks are checked against as they're shown. */
   const checked = (inst: Instance, tree: View.Node<any, any>): View.Node<any, any> => {
