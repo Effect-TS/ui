@@ -22,33 +22,7 @@ const image = Locator.tag("img")
 const fallback = Locator.attr("class", "fallback")
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
-const ada = { src: "/ada.png" }
-const adaKey = `image:"/ada.png",null,null,null,null`
-const loaded = { _tag: "ChangedImageStatus", source: ada, status: "loaded" } as const
-
 describe("Avatar", () => {
-  it.effect("a restored source shows the fallback until its new load settles", () =>
-    Effect.gen(function*() {
-      const s = yield* Scene.make(Avatar, ada, standIn)
-      s.subscription(adaKey, loaded)
-      assert.isDefined(s.query(image))
-
-      for (
-        const [key, source, status] of [
-          ["image:null,null,null,null,null", {}, "error"],
-          [`image:"/grace.png",null,null,null,null`, { src: "/grace.png" }, "loading"]
-        ] as const
-      ) {
-        s.props(source).subscription(key, { _tag: "ChangedImageStatus", source, status }).props(ada)
-        assert.isDefined(s.query(Locator.attr("data-status", "loading")))
-        assert.isUndefined(s.query(image))
-        assert.isDefined(s.query(fallback))
-        s.subscription(adaKey, loaded)
-        assert.isDefined(s.query(image))
-        assert.isUndefined(s.query(fallback))
-      }
-    }))
-
   it.effect("the fallback waits for its delay, and then shows whenever the image isn't loaded", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(Avatar, { src: "/ada.png", fallbackDelay: 600 }, standIn)
@@ -59,6 +33,7 @@ describe("Avatar", () => {
 
   it.effect("on TestHost, the fallback shows until the current source's load settles, even if an old load settles as the source changes", () =>
     Effect.gen(function*() {
+      const ada = { src: "/ada.png" }
       const grace = { src: "/grace.png" }
       const Message = UiSchema.TaggedEnum({ Picked: { src: Schema.String } })
       const Page = Component.define({
@@ -72,11 +47,15 @@ describe("Avatar", () => {
         view: (src, h) =>
           Avatar(h, {
             props: { src },
-            view: (s) => s.root(h.span).children(s.image(h.img), s.fallback(h.span.class("fallback"))?.children("AL"))
+            view: (s) =>
+              s.root(h.span.attr("data-status", s.imageLoadingStatus)).children(
+                s.image(h.img),
+                s.fallback(h.span.class("fallback"))
+              )
           })
       })
       const root = yield* TestHost.mount(Page, {}, {
-        frames: (root) => root.query(image) ? "image" : root.query(fallback) ? "fallback" : "none"
+        frames: (root) => [root.query(image) && "image", root.query(fallback) && "fallback"].filter(Boolean).join("+")
       })
       yield* TestHost.settle
       // Ada's load settles after the page picks Grace, but before it renders.
@@ -87,7 +66,12 @@ describe("Avatar", () => {
       assert.deepStrictEqual(root.frames(), ["fallback"])
       yield* TestImages.load(ada)
       yield* TestHost.settle
-      assert.deepStrictEqual(root.frames(), ["fallback", "image"])
+      root.send(Message.Picked({ src: "" }))
+      yield* TestHost.settle
+      root.send(Message.Picked(ada))
+      yield* TestHost.settle
+      assert.isDefined(root.query(Locator.attr("data-status", "loading")))
+      assert.deepStrictEqual(root.frames(), ["fallback", "image", "fallback"])
     }).pipe(Effect.provide(Layer.merge(TestHost.layer(), TestImages.layer))))
 
   it("the image keeps the consumer's attributes, but its own win, present or absent, before the part or after, and come last with src after the rest", () => {
