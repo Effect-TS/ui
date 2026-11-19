@@ -47,9 +47,9 @@ const tracked = (s: Rendered): TrackPointer =>
     ?.mount as unknown as TrackPointer
 // What the mount's Stream reports.
 const pressed = (index: number, fraction: number, onThumb = false) =>
-  ({ _tag: "Pressed", index, fraction, onThumb }) as never
-const moved = (fraction: number) => ({ _tag: "Moved", fraction }) as never
-const releasedPointer = { _tag: "Released" } as never
+  ({ _tag: "PressedPointer", index, fraction, onThumb }) as never
+const moved = (fraction: number) => ({ _tag: "MovedPointer", fraction }) as never
+const releasedPointer = { _tag: "ReleasedPointer" } as never
 
 const both = (value: number | ReadonlyArray<number>): readonly [SliderEvents, SliderEvents] => [
   { _tag: "Moved", value },
