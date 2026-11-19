@@ -98,6 +98,7 @@ import * as SubscriptionRef from "effect/SubscriptionRef"
 import type * as Types from "effect/Types"
 import * as Command from "./Command.ts"
 import type * as Component from "./Component.ts"
+import * as prefetchWalk from "./internal/prefetch.ts"
 import * as queryCore from "./internal/queryCore.ts"
 import * as services from "./internal/services.ts"
 import { canonical, pairsWithout, withPairs } from "./internal/url.ts"
@@ -1184,6 +1185,14 @@ interface UnionInternals {
   readonly make: (input: unknown) => { readonly _tag: string }
 }
 
+/** What the kernel runtime's prefetch walk reports with. */
+const prefetchProblems: prefetchWalk.Problems = {
+  PrefetchThrew,
+  PrefetchQueryNotProvided,
+  PrefetchPageNotMounted,
+  PrefetchEntryNotWatched
+}
+
 const commandLayers = Layer.mergeAll(
   Push.layer,
   Replace.layer,
@@ -1604,6 +1613,12 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       })
     )
 
+    const declare: services.RootHooks["declare"] = (declarer) => {
+      declarers.add(declarer)
+      return () => {
+        declarers.delete(declarer)
+      }
+    }
     const hooks: services.RootHooks = {
       attach: (root) => {
         roots.add(root)
@@ -1617,12 +1632,8 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
         restoring.delete(path)
         return found
       },
-      declare: (declarer) => {
-        declarers.add(declarer)
-        return () => {
-          declarers.delete(declarer)
-        }
-      },
+      declare,
+      prefetch: (runtime, inst, declared) => prefetchWalk.declare(declare, prefetchProblems, runtime, inst, declared),
       afterFlush: (root, info) => {
         if (pending === undefined || pending.since === undefined || root !== primary()) return
         if (info.flush < pending.since || info.buildsPendingSince(pending.since) > 0) return

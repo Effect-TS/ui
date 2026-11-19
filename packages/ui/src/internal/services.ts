@@ -9,6 +9,7 @@ import type * as Effect from "effect/Effect"
 import type { Refs as RefsShape, Renderer as RendererShape } from "../Renderer.ts"
 import type * as Route from "../Route.ts"
 import type * as Subscription from "../Subscription.ts"
+import type * as prefetchWalk from "./prefetch.ts"
 
 /** @internal */
 export const Renderer = Context.Service<RendererShape, RendererShape>("@effect/ui/Renderer")
@@ -70,6 +71,15 @@ export interface RootHooks {
   readonly restore: (path: string) => unknown
   /** Registers an instance's `Router.prefetch` declaration. The returned function unregisters it. */
   readonly declare: (declarer: Declarer) => () => void
+  /**
+   * The kernel runtime's `declare`: the Router makes the declarer, with its own walk and check, from what
+   * the runtime gives. `declared` holds the latest `subscriptions` run's map.
+   */
+  readonly prefetch: (
+    runtime: prefetchWalk.Runtime,
+    inst: prefetchWalk.Instance,
+    declared: { readonly declaration: Prefetch }
+  ) => () => void
 }
 
 /**
