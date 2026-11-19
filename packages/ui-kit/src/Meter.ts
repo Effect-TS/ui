@@ -86,7 +86,7 @@ import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Schema from "effect/Schema"
 import { withStyle } from "./internal/attributes.ts"
-import { nvdaLabel, percentText, placeInRange } from "./internal/range.ts"
+import { fillValue, indicatorSize, nvdaLabel, percentText, placeInRange } from "./internal/range.ts"
 
 /**
  * Props for the value of a `Meter`.
@@ -168,7 +168,6 @@ export const Meter = Component.define({
     const { percentage, value } = placeInRange(p.props.value, min, max)
     const valueText = p.props.valueText ?? percentText(percentage)
     const labelId = p.id("label")
-    const width = `inset-inline-start:0;height:inherit;width:${percentage}%`
     return {
       percentage,
       valueText,
@@ -183,14 +182,14 @@ export const Meter = Component.define({
           // After every child, including the ones chained after the part.
           .forward((node) => node.children(nvdaLabel))),
       label: p.part("span", (b) => b.attr("id", labelId).attr("role", "presentation")),
-      value: p.part("span", (b) =>
-        b.attr("aria-hidden", "true")
-          // The consumer's children replace the text, read when the element is built.
-          .forward((node) => node.content !== undefined && node.content.length > 0 ? node : node.children(valueText))),
+      value: p.part("span", (b) => b.attr("aria-hidden", "true").forward((node) => fillValue(node, valueText))),
       track: p.part("div", (b) => b),
       // After the consumer's inline style, set before the part or chained
       // after it, so the width wins and the consumer's other declarations stay.
-      indicator: p.part("div", (b) => b.forward((node) => node.attr("style", withStyle(node.attrs.style, width))))
+      indicator: p.part(
+        "div",
+        (b) => b.forward((node) => node.attr("style", withStyle(node.attrs.style, indicatorSize(percentage))))
+      )
     }
   }
 })

@@ -88,7 +88,7 @@ import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Schema from "effect/Schema"
 import { flag, withStyle } from "./internal/attributes.ts"
-import { nvdaLabel, percentText, placeInRange } from "./internal/range.ts"
+import { fillValue, indicatorSize, nvdaLabel, percentText, placeInRange } from "./internal/range.ts"
 
 /**
  * Props for the value of a `Progress`.
@@ -198,7 +198,7 @@ export const Progress = Component.define({
     const { max, min, percentage, status, value } = resolve(p.props)
     const valueText = p.props.valueText ?? (percentage === null ? undefined : percentText(percentage))
     // What the indicator adds to its inline style: nothing while indeterminate.
-    const size = percentage === null ? undefined : `inset-inline-start:0;height:inherit;width:${percentage}%`
+    const size = percentage === null ? undefined : indicatorSize(percentage)
     const labelId = p.id("label")
     // An attribute a part sets to `undefined` is removed from the consumer's
     // builder too, so a consumer's `data-complete` can't report a state the
@@ -227,12 +227,7 @@ export const Progress = Component.define({
       value: p.part("span", (b) =>
         state(b)
           .attr("aria-hidden", "true")
-          // The consumer's children replace the text, read when the element is built.
-          .forward((node) =>
-            valueText === undefined || (node.content !== undefined && node.content.length > 0)
-              ? node
-              : node.children(valueText)
-          )),
+          .forward((node) => fillValue(node, valueText))),
       track: p.part("div", state),
       indicator: p.part("div", (b) =>
         state(b)

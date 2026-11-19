@@ -23,6 +23,19 @@ export const placeInRange = (
 // the same on the server and in the browser.
 export const percentText = (percentage: number): string => `${Math.round(percentage)}%`
 
+// What the indicator adds to its inline style, after the consumer's, to be
+// as wide as the percentage.
+export const indicatorSize = (percentage: number): string => `inset-inline-start:0;height:inherit;width:${percentage}%`
+
+// The value part's text, unless there is none or the consumer gave the part
+// children of its own. Run in `forward`, so it reads the children chained
+// after the part too.
+export const fillValue = <Msg, R, Handlers, HostNode, Tag extends string>(
+  node: View.ContainerBuilder<Msg, R, Handlers, HostNode, Tag>,
+  text: string | undefined
+): View.ContainerBuilder<Msg, R, Handlers, HostNode, Tag> =>
+  text === undefined || (node.content !== undefined && node.content.length > 0) ? node : node.children(text)
+
 // The markup that makes NVDA read the label of a bar: without content of
 // its own after the label, it reads the value alone. The root appends it
 // after all its children.
