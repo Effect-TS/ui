@@ -9,6 +9,9 @@ const uploadFirst = UploadFile.make({ uploadId: 0, sizeMegabytes: firstFile.size
 const uploadSecond = UploadFile.make({ uploadId: 1, sizeMegabytes: secondFile.sizeMegabytes })
 const uploadThird = UploadFile.make({ uploadId: 2, sizeMegabytes: thirdFile.sizeMegabytes })
 
+const completedFirst = UploadsMessage.CompletedUploadFile({ uploadId: 0 })
+const completedSecond = UploadsMessage.CompletedUploadFile({ uploadId: 1 })
+
 const startUpload = UploadsMessage.ClickedStartUpload()
 const cancelFirst = UploadsMessage.ClickedCancelUpload({ uploadId: 0 })
 
@@ -23,7 +26,7 @@ describe("Uploads", () => {
         { id: 0, fileName: firstFile.name, sizeMegabytes: firstFile.sizeMegabytes, status: "Uploading" }
       ])
       assert.strictEqual(s.model.uploadId, 1)
-      s.expectExact(uploadFirst).resolve(uploadFirst, undefined)
+      s.expectExact(uploadFirst).resolve(uploadFirst, completedFirst)
       assert.deepStrictEqual(statuses(s.model), ["Done"])
     }))
 
@@ -41,7 +44,7 @@ describe("Uploads", () => {
     Effect.gen(function*() {
       const s = yield* Story.make(Uploads, {})
       s.send(startUpload)
-        .resolve(uploadFirst, undefined)
+        .resolve(uploadFirst, completedFirst)
         .send(cancelFirst)
       assert.deepStrictEqual(s.interrupted, [])
       s.expectNone()
@@ -55,7 +58,7 @@ describe("Uploads", () => {
         .send(startUpload)
         .send(cancelFirst)
       assert.deepStrictEqual(s.interrupted.map((command) => command.args), [uploadFirst.args])
-      s.expectExact(uploadSecond).resolve(uploadSecond, undefined)
+      s.expectExact(uploadSecond).resolve(uploadSecond, completedSecond)
       assert.deepStrictEqual(statuses(s.model), ["Cancelled", "Done"])
     }))
 
@@ -66,7 +69,7 @@ describe("Uploads", () => {
         .send(cancelFirst)
         .send(startUpload)
       assert.deepStrictEqual(s.interrupted.map((command) => command.args), [uploadFirst.args])
-      s.expectExact(uploadSecond).resolve(uploadSecond, undefined)
+      s.expectExact(uploadSecond).resolve(uploadSecond, completedSecond)
       assert.deepStrictEqual(statuses(s.model), ["Cancelled", "Done"])
     }))
 
@@ -77,7 +80,7 @@ describe("Uploads", () => {
         .send(cancelFirst)
         .send(UploadsMessage.ClickedRestartUpload({ uploadId: 0 }))
       assert.deepStrictEqual(statuses(s.model), ["Uploading"])
-      s.expectExact(uploadFirst).resolve(uploadFirst, undefined)
+      s.expectExact(uploadFirst).resolve(uploadFirst, completedFirst)
       assert.deepStrictEqual(statuses(s.model), ["Done"])
     }))
 
@@ -87,7 +90,7 @@ describe("Uploads", () => {
       s.send(startUpload)
         .send(startUpload)
         .send(startUpload)
-        .resolve(uploadSecond, undefined)
+        .resolve(uploadSecond, completedSecond)
         .send(UploadsMessage.ClickedCancelAllUploads())
       assert.deepStrictEqual(s.interrupted.map((command) => command.args), [uploadFirst.args, uploadThird.args])
       s.expectNone()

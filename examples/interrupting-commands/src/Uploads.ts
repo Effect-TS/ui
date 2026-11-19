@@ -70,13 +70,15 @@ export class UploadFile extends Command.Service<UploadFile>()(
     group: ["uploadId"],
     mode: "switch"
   },
-  Effect.succeed(({ sizeMegabytes }) => Effect.sleep(Duration.millis(sizeMegabytes * MILLISECONDS_PER_MEGABYTE)))
+  Effect.succeed(({ uploadId, sizeMegabytes }) =>
+    Effect.gen(function*() {
+      yield* Effect.sleep(Duration.millis(sizeMegabytes * MILLISECONDS_PER_MEGABYTE))
+      return UploadsMessage.CompletedUploadFile({ uploadId })
+    })
+  )
 ) {}
 
-const uploadFile = (upload: Upload) =>
-  UploadFile.make({ uploadId: upload.id, sizeMegabytes: upload.sizeMegabytes }).pipe(
-    Command.as(UploadsMessage.CompletedUploadFile({ uploadId: upload.id }))
-  )
+const uploadFile = (upload: Upload) => UploadFile.make({ uploadId: upload.id, sizeMegabytes: upload.sizeMegabytes })
 
 // VIEW
 
@@ -147,6 +149,7 @@ export const UploadsNoDeps = UploadsDef.make({
       }
       return $.set({ uploadId: model.uploadId + 1, uploads: [...model.uploads, upload] }).run(uploadFile(upload))
     },
+
     // Once `update` interrupts a run, the run delivers nothing, so marking the
     // upload cancelled here can't be undone by a late `CompletedUploadFile`.
     // A finished or cancelled upload has no run to interrupt.
@@ -154,18 +157,21 @@ export const UploadsNoDeps = UploadsDef.make({
       model.uploads.some((upload) => upload.id === uploadId && isUploading(upload))
         ? $.set(withStatus(model, uploadId, "Cancelled")).run(Command.interrupt(UploadFile, { uploadId }))
         : model,
+
     // With no group, the interrupt stops every run of `UploadFile`.
     ClickedCancelAllUploads: (model, _message, $) =>
       $.set({
         ...model,
         uploads: model.uploads.map((upload) => isUploading(upload) ? { ...upload, status: "Cancelled" } : upload)
       }).run(Command.interrupt(UploadFile)),
+
     ClickedRestartUpload: (model, { uploadId }, $) => {
       const upload = model.uploads.find((upload) => upload.id === uploadId && upload.status === "Cancelled")
       return upload === undefined
         ? model
         : $.set(withStatus(model, uploadId, "Uploading")).run(uploadFile(upload))
     },
+
     CompletedUploadFile: (model, { uploadId }) => withStatus(model, uploadId, "Done")
   },
   head: () => [Head.title("Effect UI Interrupting Commands Example")],

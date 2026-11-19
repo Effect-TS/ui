@@ -2,9 +2,10 @@ import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
 import { describe, it } from "@effect/vitest"
 import { Effect } from "effect"
-import { FAKE_FILES, UploadFile, Uploads } from "./Uploads.ts"
+import { FAKE_FILES, UploadFile, Uploads, UploadsMessage } from "./Uploads.ts"
 
 const [firstFile] = FAKE_FILES
+const completedFirst = UploadsMessage.CompletedUploadFile({ uploadId: 0 })
 
 const uploadButton = HtmlLocator.role("button", { name: "Upload a file" })
 const cancelFirst = HtmlLocator.role("button", { name: "Cancel upload 0" })
@@ -27,7 +28,7 @@ describe("Uploads", () => {
         .expect(Locator.text(firstFile.name)).toExist()
         .expect(Locator.text("Uploading")).toExist()
         .expect(cancelFirst).toExist()
-        .resolve(UploadFile, undefined)
+        .resolve(UploadFile, completedFirst)
         .expect(Locator.text("Done")).toExist()
     }))
 
@@ -39,7 +40,7 @@ describe("Uploads", () => {
         .expect(Locator.text("Cancelled")).toExist()
         .click(restartFirst)
         .expect(Locator.text("Uploading")).toExist()
-        .resolve(UploadFile, undefined)
+        .resolve(UploadFile, completedFirst)
         .expect(Locator.text("Done")).toExist()
     }))
 
