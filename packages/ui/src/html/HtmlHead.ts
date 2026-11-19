@@ -585,32 +585,6 @@ const slotsOf = (head: HtmlHead): ReadonlyMap<string, string> => {
   return out
 }
 
-const ownSlots = (entries: ReadonlyArray<Entry>): Array<string> => {
-  const out: Array<string> = []
-  for (const entry of entries) {
-    switch (entry._tag) {
-      case "Title":
-        out.push("title")
-        break
-      case "Lang":
-        out.push("lang")
-        break
-      case "Dir":
-        out.push("dir")
-        break
-      case "Meta":
-        out.push(identity(entry))
-        break
-      case "Link": {
-        const id = identity(entry)
-        if (id === "link canonical") out.push(id)
-        break
-      }
-    }
-  }
-  return out
-}
-
 const combine = (node: Head.Tree<Entry, HtmlHead>, children: ReadonlyArray<HtmlHead>): HtmlHead => {
   const meta = new Map<string, Meta>()
   const links = new Map<string, Link>()
@@ -704,7 +678,7 @@ export const merge = (tree: Head.Tree<Entry, HtmlHead>, options?: Head.MergeOpti
   const onConflict = options?.onConflict
   return headFold.fold(
     tree,
-    { combine, slots: slotsOf, ownSlots },
+    { combine, slots: slotsOf },
     onConflict === undefined ? undefined : (slot, earlier, later) => onConflict(Head.conflict(slot, earlier, later))
   )
 }

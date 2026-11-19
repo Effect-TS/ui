@@ -157,7 +157,6 @@ const tag = (name: string, pairs: ReadonlyArray<readonly [string, string]>): str
     headAttributes.normalize(pairs).map(([key, value]) => ` ${key}="${escapeAttribute(value)}"`).join("")
   } ${Head.marker}>`
 
-/** @internal */
 /**
  * The folded head of a root as an `HtmlHead`: a host-neutral root's `Head.Head` holds only the title.
  *

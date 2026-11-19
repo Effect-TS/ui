@@ -137,23 +137,27 @@ describe("Head", () => {
       })
       const App = Component.define({
         name: "App",
-        model: Schema.Number,
-        message: Schema.Never
+        model: Schema.Boolean,
+        message: Schema.Boolean
       }).make({
-        init: () => 0,
-        update: (model) => model,
-        head: () => [
-          Head.titleTemplate(() => {
-            throw new Error("bad template")
+        init: () => false,
+        update: (_, broken) => broken,
+        head: (broken) => [
+          Head.titleTemplate((title) => {
+            if (broken) throw new Error("bad template")
+            return `${title} · App`
           })
         ],
         view: (_, h) => Page(h, { key: "page", props: {} })
       })
       const root = yield* TestHost.mount(App, {}, { fallback: (_, h) => h.text("down") })
+      yield* TestHost.settle
+      assert.deepStrictEqual(root.head(), { title: "Ada · App" })
+      root.send(true)
       const crashed = yield* Effect.flip(TestHost.settle)
       assert.strictEqual(crashed._tag, "RootCrashed")
       assert.strictEqual(root.text(), "down")
-      // The failed root and the page under it contribute nothing.
+      // The failed root and the page under it contribute nothing: the title it had goes.
       assert.deepStrictEqual(root.head(), { title: undefined })
     }).pipe(Effect.provide(TestHost.layer())))
 

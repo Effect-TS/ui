@@ -60,9 +60,9 @@ interface Owner {
 
 interface Shared {
   readonly sync: (head: Head.HtmlHead) => void
+  /** Puts the shell's values back, if a host has synced. */
+  readonly restore: () => void
   hosts: number
-  /** Whether a host has written the document, so the shell's values need putting back. */
-  written: boolean
 }
 
 /** The sync of each document with a live host: one baseline per document, not per host. */
@@ -87,28 +87,25 @@ export const make = (
 ): { readonly sync: (head: Head.HtmlHead) => void; readonly release: () => void } => {
   let entry = shared.get(document)
   if (entry === undefined) {
-    entry = { sync: makeSync(document, warn), hosts: 0, written: false }
+    entry = { ...makeSync(document, warn), hosts: 0 }
     shared.set(document, entry)
   }
   const current = entry
   current.hosts++
   let released = false
   return {
-    sync: (head) => {
-      current.written = true
-      current.sync(head)
-    },
+    sync: current.sync,
     release: () => {
       if (released) return
       released = true
-      if (--current.hosts > 0 || shared.get(document) !== current) return
+      if (--current.hosts > 0) return
       shared.delete(document)
-      if (current.written) current.sync(Head.empty)
+      current.restore()
     }
   }
 }
 
-const makeSync = (document: Document, warn: Warn): (head: Head.HtmlHead) => void => {
+const makeSync = (document: Document, warn: Warn): Pick<Shared, "sync" | "restore"> => {
   const root = document.documentElement
   const html: Owner = { element: root, original: new Map(), tokens: new Set(), data: new Set() }
   const body: Owner | undefined = document.body === null
@@ -244,7 +241,7 @@ const makeSync = (document: Document, warn: Warn): (head: Head.HtmlHead) => void
     else if (owner.element.getAttribute(Head.marker) !== marker) owner.element.setAttribute(Head.marker, marker)
   }
 
-  return (head) => {
+  const sync = (head: Head.HtmlHead) => {
     if (owned === undefined) {
       checkShell(head)
       owned = index()
@@ -294,6 +291,12 @@ const makeSync = (document: Document, warn: Warn): (head: Head.HtmlHead) => void
         document.head.insertBefore(tag, before)
       }
       previous = tag
+    }
+  }
+  return {
+    sync,
+    restore: () => {
+      if (owned !== undefined) sync(Head.empty)
     }
   }
 }

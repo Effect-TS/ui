@@ -435,7 +435,11 @@ export const ssr = <
         frame()
       }
     }
-    const mounted = yield* runtime.mount(component, props, container, { state, query: options?.query }).pipe(
+    const mounted = yield* runtime.mount(component, props, container, {
+      state,
+      query: options?.query,
+      adoptionHead: true
+    }).pipe(
       Effect.provideContext(
         Context.make(Renderer.Renderer, { host: recording }).pipe(
           Context.add(Html.Host, BrowserHost.htmlHost),

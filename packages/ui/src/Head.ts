@@ -218,9 +218,6 @@ export const resolveTitle = (
   }
 }
 
-const hasTitle = (entries: ReadonlyArray<{ readonly _tag: string }>): boolean =>
-  entries.some((entry) => entry._tag === "Title")
-
 /**
  * Folds a host-neutral tree into its title, applying each node's `reduce`
  * bottom up.
@@ -244,8 +241,7 @@ export const merge = <E extends { readonly _tag: string } = Entry>(
       for (const child of children) if (child.title !== undefined) below = child.title
       return { title: resolveTitle(node, below) }
     },
-    slots: (head) => new Map(head.title === undefined ? [] : [["title", head.title]]),
-    ownSlots: (entries) => hasTitle(entries) ? ["title"] : []
+    slots: (head) => new Map(head.title === undefined ? [] : [["title", head.title]])
   }, options?.onConflict === undefined ? undefined : reportTo(options.onConflict))
 
 const reportTo = (onConflict: (conflict: Conflict) => void) => (slot: string, earlier: string, later: string) =>
