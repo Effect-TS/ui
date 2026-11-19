@@ -21,6 +21,12 @@ export * as Component from "./Component.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * as Composed from "./Composed.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * as Feature from "./Feature.ts"
 
 /**
