@@ -12,6 +12,101 @@ const container = Effect.acquireRelease(
   (element) => Effect.sync(() => element.remove())
 )
 
+/**
+ * An app whose Save Command loads Query in its work and then waits for `release` before it succeeds with
+ * `"old"`. Its Replace Command succeeds with `"new"` at once. Both write their result to the note the
+ * child reads, which Show mounts, and whose fetch never settles.
+ */
+const lateSave = Effect.gen(function*() {
+  vi.resetModules()
+  const [Command, Component, UiSchema, BrowserHost, Html, queryCore] = yield* Effect.promise(() =>
+    Promise.all([
+      import("@effect/ui/Command"),
+      import("@effect/ui/Component"),
+      import("@effect/ui/UiSchema"),
+      import("@effect/ui/html/BrowserHost"),
+      import("@effect/ui/html/Html"),
+      import("@effect/ui/internal/queryCore")
+    ])
+  )
+  let release!: () => void
+  const released = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  // Both are set by Save's work, which is what loads Query.
+  let child: ((h: any) => any) | undefined
+  let write: ((saved: string) => any) | undefined
+  class Save extends Command.Service<Save>()(
+    "lazy/LateSave",
+    { args: {}, writes: (saved: string) => [write!(saved)] },
+    Effect.succeed(() =>
+      Effect.promise(async () => {
+        const Query = await import("@effect/ui/Query")
+        class GetNote extends Query.Service<GetNote>()(
+          "lazy/LateNote",
+          { args: { id: Schema.String }, success: Schema.String, error: Schema.Never, staleTime: "30 seconds" },
+          Effect.succeed(() => Effect.never)
+        ) {}
+        const Note = Component.define({
+          name: "Note",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html,
+          queries: { note: { query: GetNote, args: () => ({ id: "1" }) } }
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_model, h) =>
+            h.p.children(AsyncResult.match(h.queries.note, {
+              onInitial: () => "loading",
+              onFailure: () => "failed",
+              onSuccess: (success) => success.value
+            }))
+        }).pipe(Component.provide(GetNote.layer))
+        child = (h) => Note(h, {})
+        write = (saved) => GetNote.set({ id: "1" }, saved)
+        await released
+        return "old"
+      })
+    )
+  ) {}
+  class Replace extends Command.Service<Replace>()(
+    "lazy/Replace",
+    { args: {}, writes: (saved: string) => [write!(saved)] },
+    Effect.succeed(() => Effect.succeed("new"))
+  ) {}
+  const Message = UiSchema.TaggedEnum({ Save: {}, Replace: {}, Show: {}, Saved: {} })
+  const App = Component.define({ name: "App", model: Schema.Boolean, message: Message, elements: Html }).make({
+    init: () => false,
+    update: (shown, message, $) =>
+      Message.match(message, {
+        Save: () => $.run(Save.make({}).pipe(Command.as(Message.Saved()))),
+        Replace: () => $.run(Replace.make({}).pipe(Command.as(Message.Show()))),
+        Show: () => true,
+        Saved: () => shown
+      }),
+    view: (shown, h) =>
+      h.div.children(
+        h.button.onClick(Message.Save()).children("Save"),
+        h.button.onClick(Message.Replace()).children("Replace"),
+        h.button.onClick(Message.Show()).children("Show"),
+        shown && child !== undefined ? child(h) : h.p.children("hidden")
+      )
+  }).pipe(Component.provide(Save.layer), Component.provide(Replace.layer))
+  const app = yield* container
+  const problems: Array<string> = []
+  yield* BrowserHost.mountEffect(App, {}, app).pipe(
+    Effect.provideService(queryCore.Problems, (problem) => {
+      problems.push(problem._tag)
+    })
+  )
+  const click = (label: string) =>
+    Effect.sync(() =>
+      Array.from(app.querySelectorAll("button")).find((button) => button.textContent === label)!.click()
+    )
+  return { click, release, problems, note: () => app.querySelector("p")?.textContent }
+})
+
 // Each test starts a module graph of its own, so they run one at a time.
 describe("Query loaded after the mount", { concurrent: false }, () => {
   it.effect("a root mounted before the app imports Query runs the queries of a child that loads later", () =>
@@ -152,5 +247,29 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
       yield* tick
       assert.strictEqual(app.querySelector("p")?.textContent, "saved")
       assert.deepStrictEqual(calls, { writes: 1, fetches: 0 })
+    }))
+
+  it.effect("a Command issued after one that is still loading Query keeps its newer write", () =>
+    Effect.gen(function*() {
+      const { click, note, release } = yield* lateSave
+      yield* click("Save")
+      yield* tick
+      yield* click("Replace")
+      yield* tick
+      release()
+      yield* tick
+      assert.strictEqual(note(), "new")
+    }))
+
+  it.effect("a Command that loaded Query writes to a query first read after its work began without a problem", () =>
+    Effect.gen(function*() {
+      const { click, note, problems, release } = yield* lateSave
+      yield* click("Save")
+      yield* tick
+      yield* click("Show")
+      yield* tick
+      release()
+      yield* tick
+      assert.deepStrictEqual({ note: note(), problems }, { note: "old", problems: [] })
     }))
 })

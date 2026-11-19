@@ -363,8 +363,10 @@ const firstInOutlets = <A>(receiver: Instance, f: (out: Instance) => A | undefin
 interface Run {
   readonly command: Command.Issued<any, any, never, "Effect"> | Command.Issued<any, any, never, "Stream">
   readonly issued: MessageLog.Issued
-  /** The run at the cache, begun at issue. `undefined` for a `Command.make` Command. */
-  /** The cache's run. A run issued before the app loaded `Query` has none until its work loads it. */
+  /**
+   * The run at the cache, begun at issue. `undefined` for a `Command.make` Command, and for a run issued
+   * before the app loaded `Query`: one with `writes` gets its run when the cache is made.
+   */
   handle: Query.RunHandle | undefined
   status: schedule.Status
   fiber: Fiber.Fiber<unknown, unknown> | undefined
@@ -1216,6 +1218,8 @@ const setup = (
   // -- query cache ---------------------------------------------------------
   // Made at the mount when the app has loaded the `Query` module by then, and otherwise when it loads it.
   let cache = cell.made
+  /** The runs with `writes` issued before the cache was made, in the order they were issued, until they end. */
+  let early: Set<Run> | undefined
   /** The cache, where a query is at hand: its module is loaded. */
   const queryCache = (): queryCore.Cache => cache ?? cell.get()!
   const withCache = (context: Context.Context<any>): Context.Context<any> =>
@@ -1286,6 +1290,15 @@ const setup = (
     if (hydratedQueries !== undefined) {
       made.hydrate(hydratedQueries, { static: hydratedStatic, at: hydratedAt })
       if (windowClosed) made.closeWindow()
+    }
+    // The runs issued before the cache was made begin now, in the order they were issued and ahead of
+    // every run issued since. One whose work has begun starts before any entry exists, as it did.
+    if (early !== undefined) {
+      for (const run of early) {
+        run.handle = beginRun(made, run.command)
+        if (run.spanId !== undefined) run.handle.start()
+      }
+      early = undefined
     }
   }
   cell.onMake = attachCache
@@ -3414,6 +3427,9 @@ const setup = (
         }
         if (inst.runs === emptyList) inst.runs = []
         inst.runs.push(run)
+        if (runs === undefined && command.service !== undefined && command.writes !== undefined) {
+          ;(early ??= new Set()).add(run)
+        }
         // Issued before a keyed provide's due read: a change of key keeps it.
         dueSelection(inst)?.issued.add(run)
         if (run.status === "running") startRun(inst, run)
@@ -3426,6 +3442,7 @@ const setup = (
 
   const removeRun = (inst: Instance, run: Run) => {
     run.done = true
+    early?.delete(run)
     const index = inst.runs.indexOf(run)
     if (index >= 0) inst.runs.splice(index, 1)
   }
@@ -3562,13 +3579,15 @@ const setup = (
           if (run.handle !== undefined) return run.handle.run(work, writes)
           if (writes === undefined) return work
           // Issued before the app loaded `Query`, so with nothing to invalidate or patch: both are made
-          // by `Query`. Work that loaded it can still write, and its run begins once it has succeeded.
+          // by `Query`. Its run begins when the cache is made, which can be while this work goes on.
           return Effect.uninterruptibleMask((restore) =>
-            Effect.flatMap(restore(work), (success) => {
-              const made = cache ?? cell.get()
-              if (made === undefined) return Effect.succeed(success)
-              run.handle = beginRun(made, command)
-              return run.handle.run(Effect.succeed(success), writes)
+            Effect.flatMap(Effect.exit(restore(work)), (exit) => {
+              // Work that loaded `Query` can write to a cache nothing has asked for yet.
+              if (exit._tag === "Success" && cache === undefined) cell.get()
+              if (run.handle !== undefined) return run.handle.run(exit, writes)
+              // Its work is over: a cache made from here on has no run to begin for it.
+              early?.delete(run)
+              return exit
             })
           )
         }
