@@ -74,7 +74,8 @@
  * A key moves to a value a step from `min` lands on, as the native input
  * does, so with `step: 3` and `largeStep: 5` PageUp from 0 goes to 6. A
  * `max` between two steps can't be reached: the last step below it is the
- * top.
+ * top. A `value` off the grid shows at its nearest step, as the native
+ * input shows it, and `values` and the events report that step.
  *
  * The arrows assume left-to-right text. The input's `keydown` handler
  * cancels the default of these keys only, so the input gets every
@@ -307,7 +308,7 @@ interface Settings {
   readonly collision: "push" | "swap" | "none"
   // The value is an array, so the events carry one.
   readonly array: boolean
-  // In order, each within min and max.
+  // In order, each on the step grid between min and top.
   readonly values: ReadonlyArray<number>
   readonly disabled: boolean
 }
@@ -318,17 +319,20 @@ const settingsOf = (props: SliderProps): Settings => {
   const step = props.step ?? 1
   const array = typeof props.value !== "number"
   const raw: ReadonlyArray<number> = typeof props.value === "number" ? [props.value] : props.value
+  const top = max <= min ? min : roundToStep(min + Math.floor(exact((max - min) / step)) * step, step, min)
   return {
     min,
     max,
-    top: max <= min ? min : roundToStep(min + Math.floor(exact((max - min) / step)) * step, step, min),
+    top,
     step,
     largeStep: props.largeStep ?? 10,
     gap: exact(step * (props.minStepsBetweenValues ?? 0)),
     vertical: props.orientation === "vertical",
     collision: props.thumbCollisionBehavior ?? "push",
     array,
-    values: raw.map((value) => clamp(value, min, max)).sort((a, b) => a - b),
+    // At the step the native input shows, so the input, its ARIA value
+    // and what a key starts from agree.
+    values: raw.map((value) => clamp(roundToStep(clamp(value, min, max), step, min), min, top)).sort((a, b) => a - b),
     disabled: props.disabled === true
   }
 }
@@ -614,11 +618,12 @@ const TrackPointer = Mount.makeStream(
         // A key on a thumb a press focused shows the focus ring, as Tab
         // would: the input is focused again, visibly. That blur and focus
         // stop at the window, so neither the slider nor a Field sees focus
-        // leave.
+        // leave. A thumb that lost focus to the key's handlers keeps it lost.
         const onKey = (event: KeyboardEvent) => {
           const input = event.target as HTMLInputElement
           const view = document.defaultView
-          if (view === null || !sliderKeys.has(event.key) || input.disabled || focusVisible(input)) return
+          if (view === null || !sliderKeys.has(event.key) || input.disabled) return
+          if (!input.matches(":focus") || focusVisible(input)) return
           if (!thumbsIn(node).some((thumb) => inputOf(thumb) === input)) return
           const hush = (focus: Event) => {
             if (focus.target === input) focus.stopImmediatePropagation()

@@ -192,6 +192,12 @@ describe("Slider", () => {
       s.fire(input(), "keydown", key("End")).emitted(...both(9))
       s.mounted(tracked(s), pressed(0, 1)).emitted({ _tag: "Moved", value: 9 })
       s.mounted(tracked(s), releasedPointer).emitted({ _tag: "Committed", value: 9 })
+      // A value off the grid shows at the step the native input shows, which
+      // also bounds its neighbour.
+      s.props({ value: [0, 5], max: 12, step: 3 })
+      s.parts((p) => assert.deepStrictEqual(p.values, [0, 6]))
+      assert.strictEqual(s.get(input(1)).attrs?.["aria-valuenow"], "6")
+      s.fire(input(0), "keydown", key("End")).emitted(...both([6, 6]))
       // Decimal steps keep exactly the gap.
       s.props({ value: [0.1, 0.3], step: 0.1, minStepsBetweenValues: 1 })
       s.fire(input(0), "keydown", key("ArrowRight")).emitted(...both([0.2, 0.3]))
