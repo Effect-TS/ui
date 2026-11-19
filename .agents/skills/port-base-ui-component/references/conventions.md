@@ -319,6 +319,20 @@ model.advanced
     key moves to the frame. Prefer markup inside: a wrapper is an element
     the consumer can't style through the chain. When a wrapper is needed
     and the consumer should style it, take its builder as an argument.
+- **A focusable element the kit places**, such as a slider thumb's
+  `<input type="range">`, is the consumer's builder too. The part that
+  places it takes it as a second field next to `element`, named for
+  what it is, and decorates and places it:
+
+  ```ts
+  s.thumb({ element: h.div.class("thumb"), input: f.control(h.input) })
+  ```
+
+  The consumer must name that element and reach it with other kit calls,
+  such as `Field`'s `f.control`, so the kit doesn't build it the way it
+  builds a hidden form field. What the consumer set on it stays, and the
+  field is required, so it can't be left out. `Slider` is the worked
+  example.
 - **A wrapped part drops its mount's requirements** (EFF-3914). A headless
   component's requirements come from the parts it returns, and a plain
   function around `p.part` hides them, so a consumer can forget to
