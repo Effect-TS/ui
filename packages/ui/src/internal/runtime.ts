@@ -1646,6 +1646,7 @@ const setup = (
   const leave = (inst: Instance) => {
     if (inst.left) return
     inst.left = true
+    inst.lazy = undefined
     // At once, not when the Scope closes: the host may hand out a container's handle again.
     if (inst.parked !== undefined) {
       for (const container of inst.parked) unpark(inst, container)
@@ -1706,6 +1707,8 @@ const setup = (
       Effect.logError(`${inst.path} failed in ${where}${name === undefined ? "" : ` (${name})`}`, cause)
     )
     inst.failure = cause
+    // Nodes from the render that failed aren't given again.
+    inst.lazy = undefined
     viewChanged = true
     close(inst)
     const parent = inst.parent
@@ -5523,14 +5526,31 @@ const setup = (
     }
   }
 
-  /** Whether a rendered element holds only elements and text. */
-  const plainTree = (rendered: RElement): boolean => {
+  /**
+   * When a rendered element holds only elements and text, how many of them set a property: -1 when it
+   * holds anything else.
+   */
+  const plainTree = (rendered: RElement): number => {
+    let props = rendered.v.props === View.noFields ? 0 : 1
     const children = rendered.children
     for (let i = 0; i < children.length; i++) {
       const child = children[i]!
-      if (child._tag !== "Text" && (child._tag !== "Element" || !plainTree(child))) return false
+      if (child._tag === "Text") continue
+      const below = child._tag === "Element" ? plainTree(child) : -1
+      if (below < 0) return -1
+      props += below
     }
-    return true
+    return props
+  }
+  /** Re-applies the controlled properties under a rendered element, as a patch to the same view does. */
+  const restoreControlled = (rendered: RElement): void => {
+    const props = rendered.v.props
+    if (props !== View.noFields) patchProps(rendered.node, props, props)
+    const children = rendered.children
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i]!
+      if (child._tag === "Element") restoreControlled(child)
+    }
   }
 
   const patchElement = (
@@ -5541,8 +5561,13 @@ const setup = (
   ): void => {
     const prev = rendered.v
     // The view it was patched to last time, such as what `h.lazy` gave again: with only elements and
-    // text below, nothing would change. A child below may still have to change, such as a fallback.
-    if (element === prev && plainTree(rendered)) return
+    // text below, only a controlled property can have changed. A child below may still have to change,
+    // such as a fallback.
+    if (element === prev) {
+      const props = plainTree(rendered)
+      if (props > 0) restoreControlled(rendered)
+      if (props >= 0) return
+    }
     const node = rendered.node
     // One record, as when no attribute is set or a builder is reused: nothing changed.
     if (prev.attrs !== element.attrs) patchAttrs(node, prev.attrs, element.attrs)

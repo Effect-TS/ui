@@ -2743,11 +2743,16 @@ const finish = (
         }
         if (reads.length > 0) h.shared = readShared(definition.name, reads, shared)
         const lazies = lazy?.lazy as View.Lazies | undefined
-        if (lazies === undefined) return View.toNode(view(model, h))
-        lazies.begin()
-        const node = View.toNode(view(model, h))
-        lazies.end()
-        return node
+        lazies?.begin()
+        try {
+          const node = View.toNode(view(model, h))
+          lazies?.end()
+          return node
+        } catch (error) {
+          // What a render that threw built isn't given again.
+          if (lazy !== undefined) lazy.lazy = undefined
+          throw error
+        }
       },
     parts: parts === undefined
       ? undefined

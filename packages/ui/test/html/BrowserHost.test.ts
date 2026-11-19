@@ -558,6 +558,53 @@ describe("BrowserHost", { concurrent: false }, () => {
         yield* tick
         assert.strictEqual(app.innerHTML, "<section><h2>Title</h2><p>ready</p></section>")
       }).pipe(Effect.scoped))
+
+    it.effect("puts a controlled property back under a node it gives again, as under one the view keeps", () =>
+      Effect.gen(function*() {
+        const FieldsDef = Component.define({
+          name: "Fields",
+          model: Schema.Number,
+          message: LazyMessage,
+          elements: Html
+        })
+        const field = (h: Component.Helper<typeof FieldsDef>, label: string) =>
+          h.input.attr("aria-label", label).value("fixed")
+        let kept: View.Node<typeof LazyMessage.Type> | undefined
+        const Fields = FieldsDef.make({
+          init: () => 0,
+          update: (ticks) => ticks + 1,
+          view: (ticks, h) => h.div(h.p(String(ticks)), h.lazy(field, "lazy"), kept ??= View.toNode(field(h, "kept")))
+        })
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Fields, {}, app)
+        const inputs = [...app.querySelectorAll("input")]
+        // Changed by a script, with no event for the host to restore after.
+        for (const input of inputs) input.value = "edited"
+        root.send(LazyMessage.Tick())
+        yield* tick
+        assert.strictEqual(app.querySelector("p")!.textContent, "1")
+        assert.deepStrictEqual(inputs.map((input) => input.value), ["fixed", "fixed"])
+      }).pipe(Effect.scoped))
+
+    it("builds again what a render that threw built", () => {
+      let fails = true
+      const Failing = ItemsDef.make({
+        init: () => ({ items: [], selected: 0, ticks: 0 }),
+        update: (model) => model,
+        view: (model, h) => {
+          const node = h.lazy(row, model.items[0]!, false)
+          if (fails) throw new Error("boom")
+          return node
+        }
+      })
+      const store: View.LazyStore = { lazy: undefined }
+      const model = { items: [{ id: 1, label: "a" }], selected: 0, ticks: 0 }
+      built.length = 0
+      assert.throws(() => Failing.view(model, {}, undefined, undefined, undefined, undefined, store), /boom/)
+      fails = false
+      Failing.view(model, {}, undefined, undefined, undefined, undefined, store)
+      assert.deepStrictEqual(built, ["a", "a"])
+    })
   })
 
   describe("events", () => {
