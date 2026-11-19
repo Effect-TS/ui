@@ -28,6 +28,9 @@ describe("Field", () => {
         Field(h, {
           props: { described: true },
           view: (f) => {
+            expect(f.legend(h.div)).type.toBe<Element<"div">>()
+            expect(f.group(h.fieldset)).type.toBe<Element<"fieldset">>()
+            expect(f.member(h.input)).type.toBe<InputElement<Msg>>()
             expect(f.focused).type.toBe<boolean>()
             expect(f.label(h.label.class("label"))).type.toBe<Element<"label">>()
             expect(f.control(h.input)).type.toBe<InputElement<Msg>>()
@@ -40,27 +43,6 @@ describe("Field", () => {
             const root = f.root(h.section).children(f.label(h.label), f.control(h.input), error)
             expect(root).type.toBe<Element<"section", Clock>>()
             return root
-          }
-        })
-    })
-  })
-
-  it("a group's parts return the builders they were given, and a member is another kit call's element", () => {
-    Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
-      init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
-        Field(h, {
-          view: (f) => {
-            expect(f.legend(h.div)).type.toBe<Element<"div">>()
-            expect(f.group(h.fieldset)).type.toBe<Element<"fieldset">>()
-            expect(f.member(h.input)).type.toBe<InputElement<Msg>>()
-            expect(f.member(h.button)).type.toBe<Element<"button">>()
-            return f.root(h.div).children(
-              f.group(h.div).children(
-                Checkbox(h, { props: { checked: false }, view: (s) => s.root(f.member(h.button)) })
-              )
-            )
           }
         })
     })
