@@ -639,18 +639,24 @@ const listenFor = (
     handler,
     preventDefault: options?.preventDefault
   }
-  // The runtime attaches the listener here and runs no Stream, as for `Router.prefetch`. Each event
-  // goes to the handler of the latest `subscriptions` result, and cancels its default as the
-  // message is taken.
-  const direct: NonNullable<services.Direct[typeof services.direct]> = (context, emit, fail, latest) => ({
+  // The runtime attaches the listener here and runs no Stream, as for `Router.prefetch`. `enter`
+  // renders the pending ancestors first, so an event goes to the latest declaration, or nowhere if
+  // they removed it.
+  const direct: NonNullable<services.Direct[typeof services.direct]> = (context, emit, fail, enter) => ({
     initial: Effect.void,
-    close: Context.get(context, GlobalEvents).listen(target, event, { capture }, (payload, preventDefault) => {
-      try {
-        globalEvents.run(globalEvents.listenerOf(latest()) ?? declared, payload, preventDefault, emit)
-      } catch (error) {
-        fail(Cause.die(error))
-      }
-    })
+    close: Context.get(context, GlobalEvents).listen(
+      target,
+      event,
+      { capture },
+      (payload, preventDefault) =>
+        enter((latest) => {
+          try {
+            globalEvents.run(globalEvents.listenerOf(latest) ?? declared, payload, preventDefault, emit)
+          } catch (error) {
+            fail(Cause.die(error))
+          }
+        })
+    )
   })
   return Object.assign(
     Subscription.make(`@effect/ui/html/${target}`, capture ? [event, "capture"] : [event], () => Stream.never),
@@ -769,6 +775,59 @@ export const onWindow = <K extends keyof WindowEvents, Msg>(
   handler: View.Handler<Msg, GlobalPayload<WindowEvents[K]>>,
   options?: GlobalEventOptions | undefined
 ): Subscription.Subscription<Msg> => listenFor("window", event, handler, options)
+
+// ---------------------------------------------------------------------------
+// images
+// ---------------------------------------------------------------------------
+
+/**
+ * An image to load, as the `<img>` attributes of the same names.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface ImageSource {
+  readonly src?: string | undefined
+  readonly srcSet?: string | undefined
+  readonly sizes?: string | undefined
+  readonly crossOrigin?: "anonymous" | "use-credentials" | undefined
+  readonly referrerPolicy?: string | undefined
+}
+
+/**
+ * Loads images the page doesn't show, such as to show an `<img>` only once
+ * its source has loaded.
+ *
+ * **Details**
+ *
+ * `load` settles with `"loaded"` or `"error"`, and interrupting it drops
+ * the load. `BrowserHost.layer` provides one that loads in a detached
+ * `<img>` of its document. The default never settles, so on a host without
+ * a document an image stays loading. A test settles loads with `TestImages`
+ * from `@effect/ui/html/testing`.
+ *
+ * @stability experimental
+ * @category services
+ * @since 0.1.0
+ */
+export interface Images {
+  readonly load: (source: ImageSource) => Effect.Effect<"loaded" | "error">
+}
+
+/**
+ * The image loader. It defaults to one whose loads never settle.
+ *
+ * @stability experimental
+ * @category references
+ * @since 0.1.0
+ */
+export const Images: Context.Reference<Images> = Context.Reference<Images>(
+  "@effect/ui/html/Html/Images",
+  { defaultValue: () => pending }
+)
+
+const pending: Images = { load: () => Effect.never }
 
 // ---------------------------------------------------------------------------
 // elements

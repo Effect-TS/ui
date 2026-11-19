@@ -1,10 +1,10 @@
-import type { Component } from "@effect/ui"
-import { View } from "@effect/ui"
-import { Avatar, AvatarLoadImage, type AvatarProps } from "@effect/ui-kit"
+import { Component, UiSchema, View } from "@effect/ui"
+import { Avatar, type AvatarProps } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
-import { Locator, Scene, Story } from "@effect/ui/testing"
+import { TestImages } from "@effect/ui/html/testing"
+import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { Effect, Layer, Schema } from "effect"
 
 const standIn = {
   elements: Html,
@@ -23,35 +23,56 @@ const fallback = Locator.attr("class", "fallback")
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
 describe("Avatar", () => {
-  it.effect("a restored source shows the fallback until its new load settles", () =>
-    Effect.gen(function*() {
-      const ada = { src: "/ada.png" }
-      const loaded = { source: ada, status: "loaded" } as const
-      const s = yield* Scene.make(Avatar, ada, standIn)
-      s.mounted(AvatarLoadImage(ada), loaded)
-      assert.isDefined(s.query(image))
-
-      for (
-        const report of [{ source: {}, status: "error" }, { source: { src: "/grace.png" }, status: "loading" }] as const
-      ) {
-        s.props(report.source).mounted(AvatarLoadImage(report.source), report).props(ada)
-        assert.isDefined(s.query(Locator.attr("data-status", "loading")))
-        assert.isUndefined(s.query(image))
-        assert.isDefined(s.query(fallback))
-        s.mounted(AvatarLoadImage(ada), loaded)
-        assert.isDefined(s.query(image))
-        assert.isUndefined(s.query(fallback))
-      }
-    }))
-
   it.effect("the fallback waits for its delay, and then shows whenever the image isn't loaded", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(Avatar, { src: "/ada.png", fallbackDelay: 600 }, standIn)
-      s.expectMount(AvatarLoadImage({ src: "/ada.png" }))
       assert.isUndefined(s.query(fallback))
       s.subscription("fallbackDelay:600", { _tag: "ElapsedFallbackDelay" })
       assert.isDefined(s.query(fallback))
     }))
+
+  it.effect("on TestHost, the fallback shows until the current source's load settles, even if an old load settles as the source changes", () =>
+    Effect.gen(function*() {
+      const ada = { src: "/ada.png" }
+      const grace = { src: "/grace.png" }
+      const Message = UiSchema.TaggedEnum({ Picked: { src: Schema.String } })
+      const Page = Component.define({
+        name: "Page",
+        model: Schema.String,
+        message: Message,
+        elements: Html
+      }).make({
+        init: () => ada.src,
+        update: { Picked: (_, { src }) => src },
+        view: (src, h) =>
+          Avatar(h, {
+            props: { src },
+            view: (s) =>
+              s.root(h.span.attr("data-status", s.imageLoadingStatus)).children(
+                s.image(h.img),
+                s.fallback(h.span.class("fallback"))
+              )
+          })
+      })
+      const root = yield* TestHost.mount(Page, {}, {
+        frames: (root) => [root.query(image) && "image", root.query(fallback) && "fallback"].filter(Boolean).join("+")
+      })
+      yield* TestHost.settle
+      // Ada's load settles after the page picks Grace, but before it renders.
+      root.send(Message.Picked(grace))
+      yield* TestImages.load(ada)
+      root.send(Message.Picked(ada))
+      yield* TestHost.settle
+      assert.deepStrictEqual(root.frames(), ["fallback"])
+      yield* TestImages.load(ada)
+      yield* TestHost.settle
+      root.send(Message.Picked({ src: "" }))
+      yield* TestHost.settle
+      root.send(Message.Picked(ada))
+      yield* TestHost.settle
+      assert.isDefined(root.query(Locator.attr("data-status", "loading")))
+      assert.deepStrictEqual(root.frames(), ["fallback", "image", "fallback"])
+    }).pipe(Effect.provide(Layer.merge(TestHost.layer(), TestImages.layer))))
 
   it("the image keeps the consumer's attributes, but its own win, present or absent, before the part or after, and come last with src after the rest", () => {
     const element = h.img

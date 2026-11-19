@@ -56,7 +56,7 @@ describe("Avatar", () => {
     })
   })
 
-  it("the root's mount needs no service", () => {
+  it("the avatar needs no service", () => {
     expect<Component.Headless.Requirements<typeof Avatar>>().type.toBe<never>()
   })
 })

@@ -142,6 +142,37 @@ describe("Html.onDocument and Html.onWindow", () => {
     }).pipe(Effect.provide(testLayer)))
 })
 
+const PreventDefault = Schema.Literals(["always", true, false])
+const ParentMessage = UiSchema.TaggedEnum({ Set: { listen: Schema.NullOr(PreventDefault) } })
+
+// A child listens for keys with the `preventDefault` its parent picks, or not
+// at all for `null`. Its handler emits a message for every key but Escape.
+const Listener = Component.define({
+  name: "Listener",
+  props: Schema.Struct({ preventDefault: PreventDefault }),
+  model: Schema.Null,
+  message: Message,
+  elements: Html
+}).make({
+  init: () => null,
+  update: (model) => model,
+  view: (_, h) => h.span(),
+  subscriptions: (_, { preventDefault }) => [
+    Html.onDocument("keydown", ({ key }) => key === "Escape" ? undefined : Message.Pressed({ key }), { preventDefault })
+  ]
+})
+
+const Parent = Component.define({
+  name: "Parent",
+  model: Schema.NullOr(PreventDefault),
+  message: ParentMessage,
+  elements: Html
+}).make({
+  init: () => "always" as const,
+  update: { Set: (_, { listen }) => listen },
+  view: (listen, h) => h.div(listen === null ? undefined : Listener(h, { props: { preventDefault: listen } }))
+})
+
 describe("BrowserHost's GlobalEvents", { concurrent: false }, () => {
   const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))
   const container = Effect.acquireRelease(
@@ -165,6 +196,24 @@ describe("BrowserHost's GlobalEvents", { concurrent: false }, () => {
       assert.isTrue(press(byId("field"), "Enter"))
       yield* tick
       assert.deepStrictEqual(root.model()?.log, ["ax", "fieldEnter!"])
+    }).pipe(Effect.scoped))
+
+  it.effect("a key pressed before the parent renders goes by the declaration that render gives", () =>
+    Effect.gen(function*() {
+      const root = yield* BrowserHost.mountEffect(Parent, {}, yield* container)
+      const set = (listen: typeof PreventDefault.Type | null) => root.send(ParentMessage.Set({ listen }))
+      yield* tick
+      // A current "always" listener cancels even when its handler emits nothing.
+      assert.isTrue(press(document.body, "Escape"))
+      // Each change is followed by a press before the scheduled render.
+      set(true)
+      assert.isFalse(press(document.body, "Escape"))
+      set(false)
+      assert.isFalse(press(document.body, "x"))
+      set("always")
+      yield* tick
+      set(null)
+      assert.isFalse(press(document.body, "Escape"))
     }).pipe(Effect.scoped))
 
   it.effect("stops listening when the tree unmounts", () =>

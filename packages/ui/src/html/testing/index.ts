@@ -41,3 +41,9 @@ export * as Ssr from "./Ssr.ts"
  * @since 0.1.0
  */
 export * as TestGlobalEvents from "./TestGlobalEvents.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
+export * as TestImages from "./TestImages.ts"
