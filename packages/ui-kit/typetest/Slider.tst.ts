@@ -1,10 +1,12 @@
-import { Component, UiSchema, type View } from "@effect/ui"
+import { Component, Mount, UiSchema, type View } from "@effect/ui"
 import { Field, Slider } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
-import { Context, Schema } from "effect"
+import { Context, Effect, Schema } from "effect"
 import { describe, expect, it } from "tstyche"
 
 class Clock extends Context.Service<Clock, {}>()("Clock") {}
+
+const NeedsClock = Mount.make("NeedsClock", { args: {} }, () => Clock.use(() => Effect.succeed(Component.noop)))
 
 const Msg = UiSchema.TaggedEnum({ Clicked: {} })
 type Msg = typeof Msg.Type
@@ -41,6 +43,25 @@ describe("Slider", () => {
             return s.root(h.div).children(control)
           }
         })
+    })
+  })
+
+  it("a thumb needs what its input needs", () => {
+    App.make({
+      init: () => null,
+      update: (model) => model,
+      view: (_, h) => {
+        const slider = Slider(h, {
+          props: { value: 40 },
+          view: (s) => {
+            const thumb = s.thumb({ element: h.div, input: h.input.onMount(NeedsClock()) })
+            expect(thumb).type.toBe<Div<Clock>>()
+            return s.root(h.div).children(thumb)
+          }
+        })
+        expect<View.Requirements<typeof slider>>().type.toBe<Clock>()
+        return slider
+      }
     })
   })
 

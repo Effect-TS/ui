@@ -180,6 +180,25 @@ describe("Slider", () => {
       s.parts((p) => assert.isFalse(p.dragging))
     }))
 
+  it.effect("a key lands on the step grid the native input shows, which also measures the gap between thumbs", () =>
+    Effect.gen(function*() {
+      // A large step off the grid goes to the nearest step, as the input
+      // would show it.
+      const s = yield* Scene.make(Slider, { value: 0, max: 12, step: 3, largeStep: 5 }, standIn)
+      s.expectMount(tracked(s))
+      s.fire(input(), "keydown", key("PageUp")).emitted(...both(6))
+      // A max between two steps: the last step below it is the end.
+      s.props({ value: 0, max: 10, step: 3 })
+      s.fire(input(), "keydown", key("End")).emitted(...both(9))
+      s.mounted(tracked(s), pressed(0, 1)).emitted({ _tag: "Moved", value: 9 })
+      s.mounted(tracked(s), releasedPointer).emitted({ _tag: "Committed", value: 9 })
+      // Decimal steps keep exactly the gap.
+      s.props({ value: [0.1, 0.3], step: 0.1, minStepsBetweenValues: 1 })
+      s.fire(input(0), "keydown", key("ArrowRight")).emitted(...both([0.2, 0.3]))
+      s.fire(input(0), "keydown", key("End")).emitted(...both([0.2, 0.3]))
+      s.fire(input(1), "keydown", key("Home")).emitted(...both([0.1, 0.2]))
+    }))
+
   it.effect("a range has a thumb per value, which says which end it is, and Home and End stop at the other thumb", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(Slider, { value: [70, 20], minStepsBetweenValues: 5 }, standIn)

@@ -1,7 +1,7 @@
 /**
  * A controlled slider with one thumb or several. Pass the current value as
- * \`value\`, a number or an array of numbers, and update it when the slider
- * emits \`Moved\`. Your view supplies the markup; the component adds ARIA and
+ * `value`, a number or an array of numbers, and update it when the slider
+ * emits `Moved`. Your view supplies the markup; the component adds ARIA and
  * data attributes, handles pointer and keyboard input, and places the native
  * range input inside each thumb. It is a headless component, because it
  * keeps the thumb being dragged and the focused one.
@@ -10,89 +10,95 @@
  *
  * | Part        | Element                                        |
  * | :---------- | :--------------------------------------------- |
- * | \`root\`      | any element, \`role="group"\`                     |
- * | \`value\`     | \`<output>\`                                      |
- * | \`control\`   | \`<div>\`, the area that takes pointer presses    |
- * | \`track\`     | any element inside the control                 |
- * | \`indicator\` | any element inside the track, the filled range |
- * | \`thumb\`     | any element, with the \`<input type="range">\` inside |
+ * | `root`      | any element, `role="group"`                     |
+ * | `value`     | `<output>`                                      |
+ * | `control`   | `<div>`, the area that takes pointer presses    |
+ * | `track`     | any element inside the control                 |
+ * | `indicator` | any element inside the track, the filled range |
+ * | `thumb`     | any element, with the `<input type="range">` inside |
  *
  * Each part takes the consumer's builder and returns it, so the consumer
- * goes on chaining and adds children with \`.children(...)\`. \`thumb\` takes
- * two builders, \`{ element, input, index }\`: \`element\` is the thumb you
- * see and drag, and \`input\` is the \`<input>\` that takes focus, the keys,
+ * goes on chaining and adds children with `.children(...)`. `thumb` takes
+ * two builders, `{ element, input, index }`: `element` is the thumb you
+ * see and drag, and `input` is the `<input>` that takes focus, the keys,
  * the screen reader and the form value. The thumb sets the input up as a
- * visually hidden range input and puts it inside \`element\`, before the
+ * visually hidden range input and puts it inside `element`, before the
  * children you chain afterward. Because you hand over the input's builder,
- * what you set on it stays: its \`name\`, its \`aria-label\`, or a
- * \`Field\`'s \`f.control\`. \`index\` picks the value the thumb shows, and is
- * required when \`value\` is an array.
+ * what you set on it stays: its `name`, its `aria-label`, or a
+ * `Field`'s `f.control`. `index` picks the value the thumb shows, and is
+ * required when `value` is an array.
  *
- * The kit sets no layout. \`thumb\` gets \`--slider-thumb-position\` and
- * \`indicator\` gets \`--slider-indicator-start\` and
- * \`--slider-indicator-size\`, each a percentage along the control, from the
+ * The kit sets no layout. `thumb` gets `--slider-thumb-position` and
+ * `indicator` gets `--slider-indicator-start` and
+ * `--slider-indicator-size`, each a percentage along the control, from the
  * left or, when vertical, from the bottom. The hidden input fills the
- * thumb with \`position: absolute\`, so give the thumb a position. For
- * dragging by touch, give the control \`touch-action: none\`.
+ * thumb with `position: absolute`, so give the thumb a position. For
+ * dragging by touch, give the control `touch-action: none`.
  *
  * **Naming**
  *
- * Naming each thumb is the consumer's job, on its input. A \`Field\` names a
+ * Naming each thumb is the consumer's job, on its input. A `Field` names a
  * single thumb and adds a description, an error and the validity state:
- * draw its input with \`f.control(h.input)\`. A disabled field disables the
- * input, but the slider's other parts follow the \`disabled\` prop, so pass
- * \`disabled: f.disabled\` as well.
+ * draw its input with `f.control(h.input)`. A disabled field disables the
+ * input, but the slider's other parts follow the `disabled` prop, so pass
+ * `disabled: f.disabled` as well.
  *
- * A range slider can't use \`Field\` yet. Name the group with plain HTML,
- * such as \`s.root(h.fieldset)\` with a \`<legend>\`, and each thumb with an
- * \`aria-label\` on its input. Don't pass \`f.control\` to more than one
- * input, since that gives two elements one \`id\`. Two thumbs get
- * \`aria-valuetext\` saying which end each one is, unless you set one.
+ * A range slider can't use `Field` yet. Name the group with plain HTML,
+ * such as `s.root(h.fieldset)` with a `<legend>`, and each thumb with an
+ * `aria-label` on its input. Don't pass `f.control` to more than one
+ * input, since that gives two elements one `id`. Two thumbs get
+ * `aria-valuetext` saying which end each one is, unless you set one.
  *
  * **Data attributes**
  *
  * On every part, each present with an empty value or absent, except
- * \`data-orientation\`:
+ * `data-orientation`:
  *
- * - \`data-orientation\`: \`horizontal\` or \`vertical\`
- * - \`data-dragging\`: a thumb is being dragged
- * - \`data-disabled\`
+ * - `data-orientation`: `horizontal` or `vertical`
+ * - `data-dragging`: a thumb is being dragged
+ * - `data-disabled`
  *
- * \`thumb\` also gets \`data-index\`. A \`Field\`'s data attributes, such as
- * \`data-invalid\` and \`data-touched\`, go on its parts and on the input
- * \`f.control\` decorates.
+ * `thumb` also gets `data-index`. A `Field`'s data attributes, such as
+ * `data-invalid` and `data-touched`, go on its parts and on the input
+ * `f.control` decorates.
  *
  * **Keyboard**
  *
  * Tab moves between the thumbs' inputs. On a focused thumb:
  *
- * - ArrowRight and ArrowUp add \`step\`; ArrowLeft and ArrowDown take it away
- * - Shift with an arrow, PageUp and PageDown move by \`largeStep\`
- * - Home and End go to \`min\` and \`max\`, or, with several thumbs, as far
+ * - ArrowRight and ArrowUp add `step`; ArrowLeft and ArrowDown take it away
+ * - Shift with an arrow, PageUp and PageDown move by `largeStep`
+ * - Home and End go to `min` and `max`, or, with several thumbs, as far
  *   as the neighbouring thumb allows
  *
- * The arrows assume left-to-right text. The input's \`keydown\` handler
+ * A key moves to a value a step from `min` lands on, as the native input
+ * does, so with `step: 3` and `largeStep: 5` PageUp from 0 goes to 6. A
+ * `max` between two steps can't be reached: the last step below it is the
+ * top.
+ *
+ * The arrows assume left-to-right text. The input's `keydown` handler
  * cancels the default of these keys only, so the input gets every
- * \`keydown\` while it has focus, and an ancestor's \`onKeyDown\` never sees
- * them. To handle them, add \`onKeyDown\` to the input's builder.
+ * `keydown` while it has focus, and an ancestor's `onKeyDown` never sees
+ * them. To handle them, add `onKeyDown` to the input's builder.
  *
  * **Pointer**
  *
  * A press with the primary button on a thumb drags it from where it was
  * grabbed. A press elsewhere on the control moves the nearest thumb there
  * and drags it. The drag follows the pointer outside the control until it
- * is released. The thumb being dragged gets focus.
+ * is released. The thumb being dragged gets focus without a focus ring,
+ * and the first key pressed on it shows the ring.
  *
  * **Events**
  *
- * \`Moved\` reports each value the user moves to, during a drag and for each
- * key. \`Committed\` reports the value once the user is done: when the
+ * `Moved` reports each value the user moves to, during a drag and for each
+ * key. `Committed` reports the value once the user is done: when the
  * pointer is released and after each key. Both carry a number when
- * \`value\` is a number, and an array otherwise.
+ * `value` is a number, and an array otherwise.
  *
  * **Forms**
  *
- * Each input submits its value under the \`name\` you give it. Place the
+ * Each input submits its value under the `name` you give it. Place the
  * slider inside the form that should submit it.
  *
  * **Example** (A labelled volume slider whose value lives in the consumer's Model)
@@ -124,7 +130,7 @@
  *             props: { value: model.volume, disabled: f.disabled },
  *             onEmit: {
  *               Moved: ({ value }) => PlayerMessage.MovedVolume({ value: value as number }),
- *               Committed: () => Component.noop
+ *               Committed: () => undefined
  *             },
  *             view: (s) =>
  *               s.root(h.div.class("slider")).children(
@@ -203,7 +209,7 @@ export const SliderProps = Schema.Struct({
 })
 
 /**
- * The props of a \`Slider\`.
+ * The props of a `Slider`.
  *
  * @stability experimental
  * @category models
@@ -226,7 +232,7 @@ export const SliderEvents = UiSchema.TaggedEnum({
 })
 
 /**
- * What a \`Slider\` emits.
+ * What a `Slider` emits.
  *
  * @stability experimental
  * @category models
@@ -248,9 +254,9 @@ const Message = UiSchema.TaggedEnum({
 
 type Message = typeof Message.Type
 
-// \`active\`: the thumb whose input has focus, or -1. \`pressed\`: the thumb
-// the pointer is dragging, or -1. \`pressedValues\`: the values when the press
-// began, which a swap restores. \`moved\`: the last value the press reported,
+// `active`: the thumb whose input has focus, or -1. `pressed`: the thumb
+// the pointer is dragging, or -1. `pressedValues`: the values when the press
+// began, which a swap restores. `moved`: the last value the press reported,
 // which its release commits.
 const Model = Schema.Struct({
   active: Schema.Number,
@@ -269,7 +275,7 @@ const clamp = (value: number, min: number, max: number): number => Math.min(Math
 
 const decimals = (value: number): number => {
   if (value === 0 || !Number.isFinite(value)) return 0
-  // A small number prints as \`1e-8\`.
+  // A small number prints as `1e-8`.
   if (Math.abs(value) < 1) {
     const [mantissa, exponent] = value.toExponential().split("e-")
     return (mantissa!.split(".")[1]?.length ?? 0) + Number(exponent ?? 0)
@@ -277,20 +283,23 @@ const decimals = (value: number): number => {
   return value.toString().split(".")[1]?.length ?? 0
 }
 
-// The nearest value a step from \`min\` lands on, without floating-point dust.
+// The nearest value a step from `min` lands on, without floating-point dust.
 const roundToStep = (value: number, step: number, min: number): number =>
   Number((Math.round((value - min) / step) * step + min).toFixed(Math.max(decimals(step), decimals(min))))
+
+// A sum or difference of values without floating-point dust, as `0.3 - 0.1`
+// gives `0.19999999999999998`.
+const exact = (value: number): number => Number(value.toFixed(12))
 
 const sameValues = (a: ReadonlyArray<number>, b: ReadonlyArray<number>): boolean =>
   a.length === b.length && a.every((value, i) => value === b[i])
 
-// Every pair of neighbours at least \`gap\` apart.
-const keepsGap = (values: ReadonlyArray<number>, gap: number): boolean =>
-  values.every((value, i) => i === 0 || Math.abs(value - values[i - 1]!) >= gap)
-
 interface Settings {
   readonly min: number
   readonly max: number
+  // The highest value on the step grid. The native input never goes past
+  // it, so neither does the slider when `max` is off the grid.
+  readonly top: number
   readonly step: number
   readonly largeStep: number
   readonly gap: number
@@ -312,9 +321,10 @@ const settingsOf = (props: SliderProps): Settings => {
   return {
     min,
     max,
+    top: max <= min ? min : roundToStep(min + Math.floor(exact((max - min) / step)) * step, step, min),
     step,
     largeStep: props.largeStep ?? 10,
-    gap: step * (props.minStepsBetweenValues ?? 0),
+    gap: exact(step * (props.minStepsBetweenValues ?? 0)),
     vertical: props.orientation === "vertical",
     collision: props.thumbCollisionBehavior ?? "push",
     array,
@@ -323,13 +333,17 @@ const settingsOf = (props: SliderProps): Settings => {
   }
 }
 
+// Every pair of neighbours at least `gap` apart.
+const keepsGap = (s: Settings, values: ReadonlyArray<number>): boolean =>
+  values.every((value, i) => i === 0 || exact(value - values[i - 1]!) >= s.gap)
+
 // Where a value sits between min and max, in percent.
 const percentOf = (s: Settings, value: number): number =>
   s.max === s.min ? 0 : ((value - s.min) / (s.max - s.min)) * 100
 
-// The values with the thumb at \`index\` moved to \`next\`, pushing the
-// thumbs it meets along and keeping them \`gap\` apart. A thumb pushed back
-// past where it started, in \`initial\`, stops there.
+// The values with the thumb at `index` moved to `next`, pushing the
+// thumbs it meets along and keeping them `gap` apart. A thumb pushed back
+// past where it started, in `initial`, stops there.
 const pushed = (
   s: Settings,
   values: ReadonlyArray<number>,
@@ -339,10 +353,10 @@ const pushed = (
 ): Array<number> => {
   const out = values.slice()
   const last = out.length - 1
-  out[index] = clamp(next, s.min + index * s.gap, s.max - (last - index) * s.gap)
+  out[index] = clamp(next, s.min + index * s.gap, s.top - (last - index) * s.gap)
   for (let i = index + 1; i <= last; i++) {
     const low = out[i - 1]! + s.gap
-    const high = s.max - (last - i) * s.gap
+    const high = s.top - (last - i) * s.gap
     let candidate = Math.max(out[i]!, low)
     if (initial[i]! < candidate) candidate = Math.max(initial[i]!, low)
     out[i] = clamp(candidate, low, high)
@@ -354,10 +368,10 @@ const pushed = (
     if (initial[i]! > candidate) candidate = Math.min(initial[i]!, high)
     out[i] = clamp(candidate, low, high)
   }
-  return out.map((value) => Number(value.toFixed(12)))
+  return out.map((value) => exact(value))
 }
 
-// The values once the pointer puts the dragged thumb at \`next\`, by the
+// The values once the pointer puts the dragged thumb at `next`, by the
 // collision rule, and the thumb dragged from then on: another one after a
 // swap.
 const collide = (
@@ -371,9 +385,8 @@ const collide = (
   const candidate = values.slice()
   const previous = values[index - 1]
   const following = values[index + 1]
-  const kept = Number(
-    clamp(next, previous === undefined ? s.min : previous + s.gap, following === undefined ? s.max : following - s.gap)
-      .toFixed(12)
+  const kept = exact(
+    clamp(next, previous === undefined ? s.min : previous + s.gap, following === undefined ? s.top : following - s.gap)
   )
   candidate[index] = kept
   if (s.collision === "none") return { values: candidate, index }
@@ -397,23 +410,23 @@ const collide = (
   const after = adjusted[neighbour + 1]
   const low = Math.max(before === undefined ? s.min : before + s.gap, s.min + neighbour * s.gap)
   const high = Math.min(
-    after === undefined ? s.max : after - s.gap,
-    s.max - (adjusted.length - 1 - neighbour) * s.gap
+    after === undefined ? s.top : after - s.gap,
+    s.top - (adjusted.length - 1 - neighbour) * s.gap
   )
-  adjusted[neighbour] = Number(clamp(kept, low, high).toFixed(12))
+  adjusted[neighbour] = exact(clamp(kept, low, high))
   return { values: adjusted, index: target }
 }
 
 // The value at a point along the control, from 0 at the start to 1 at the
 // end.
 const valueAt = (s: Settings, fraction: number): number =>
-  clamp(roundToStep(s.min + clamp(fraction, 0, 1) * (s.max - s.min), s.step, s.min), s.min, s.max)
+  clamp(roundToStep(s.min + clamp(fraction, 0, 1) * (s.max - s.min), s.step, s.min), s.min, s.top)
 
-// The values with one thumb's input set to \`next\`, kept between its
+// The values with one thumb's input set to `next`, kept between its
 // neighbours.
 const withThumb = (s: Settings, index: number, next: number): ReadonlyArray<number> => {
   const values = s.values.slice()
-  values[index] = clamp(clamp(next, s.min, s.max), values[index - 1] ?? -Infinity, values[index + 1] ?? Infinity)
+  values[index] = clamp(clamp(next, s.min, s.top), values[index - 1] ?? -Infinity, values[index + 1] ?? Infinity)
   return values
 }
 
@@ -426,7 +439,7 @@ const setThumb = (model: Model, $: SliderUpdate, index: number, next: number) =>
   const s = settingsOf($.props)
   if (s.disabled || index < 0 || index >= s.values.length || Number.isNaN(next)) return model
   const values = withThumb(s, index, next)
-  if (!keepsGap(values, s.gap) || sameValues(values, s.values)) return model
+  if (!keepsGap(s, values) || sameValues(values, s.values)) return model
   const value = valueOf(s, values)
   return $.emit(SliderEvents.Moved({ value }), SliderEvents.Committed({ value }))
 }
@@ -447,8 +460,8 @@ const keyed = (s: Settings, index: number, key: string, shift: boolean): number 
   const current = s.values[index]
   if (current === undefined) return undefined
   const range = s.values.length > 1
-  if (key === "Home") return range && index > 0 ? s.values[index - 1]! + s.gap : s.min
-  if (key === "End") return range && index < s.values.length - 1 ? s.values[index + 1]! - s.gap : s.max
+  if (key === "Home") return range && index > 0 ? exact(s.values[index - 1]! + s.gap) : s.min
+  if (key === "End") return range && index < s.values.length - 1 ? exact(s.values[index + 1]! - s.gap) : s.top
   const direction = key === "ArrowUp" || key === "ArrowRight" || key === "PageUp"
     ? 1
     : key === "ArrowDown" || key === "ArrowLeft" || key === "PageDown"
@@ -457,15 +470,14 @@ const keyed = (s: Settings, index: number, key: string, shift: boolean): number 
   if (direction === 0) return undefined
   const increment = shift || key === "PageUp" || key === "PageDown" ? s.largeStep : s.step
   const from = roundToStep(current, s.step, s.min)
-  const next = from + increment * direction
-  return clamp(
-    Number(next.toFixed(Math.max(decimals(from), decimals(increment), decimals(s.min)))),
-    s.min,
-    s.max
-  )
+  // On the step grid, where the native input would put it, and at least a
+  // step on when `largeStep` rounds to none.
+  let next = roundToStep(from + increment * direction, s.step, s.min)
+  if (next * direction <= from * direction) next = roundToStep(from + s.step * direction, s.step, s.min)
+  return clamp(next, s.min, s.top)
 }
 
-// The pointer put the dragged thumb at \`fraction\` of the control.
+// The pointer put the dragged thumb at `fraction` of the control.
 const drag = (model: Model, $: SliderUpdate, index: number, fraction: number, next: Model) => {
   const s = settingsOf($.props)
   const target = valueAt(s, fraction)
@@ -473,7 +485,7 @@ const drag = (model: Model, $: SliderUpdate, index: number, fraction: number, ne
     ? collide(s, model.pressedValues.length === s.values.length ? model.pressedValues : s.values, index, target)
     : { values: [target], index: 0 }
   const step = { ...next, pressed: moved.index }
-  if (!keepsGap(moved.values, s.gap) || sameValues(moved.values, s.values)) return $.set(step)
+  if (!keepsGap(s, moved.values) || sameValues(moved.values, s.values)) return $.set(step)
   const value = valueOf(s, moved.values)
   return $.set({ ...step, moved: value }).emit(SliderEvents.Moved({ value }))
 }
@@ -496,16 +508,28 @@ const thumbsIn = (node: HTMLElement): Array<HTMLElement> =>
 const inputOf = (thumb: HTMLElement | undefined): HTMLInputElement | null =>
   thumb?.querySelector<HTMLInputElement>("input[type=range]") ?? null
 
+const focusEvents = ["blur", "focusout", "focus", "focusin"] as const
+
+// Whether the element shows its focus ring. A browser that can't tell
+// counts as showing it, so nothing is refocused.
+const focusVisible = (element: Element): boolean => {
+  try {
+    return element.matches(":focus-visible")
+  } catch {
+    return true
+  }
+}
+
 const midpointOf = (element: Element, vertical: boolean): number => {
   const rect = element.getBoundingClientRect()
   return vertical ? rect.top + rect.height / 2 : rect.left + rect.width / 2
 }
 
 // Presses on the control, then the pointer's moves and its release
-// anywhere in the document. A press on a thumb drags it from where it was
-// grabbed. A press on the track drags the nearest thumb. \`pressed\`: the
-// thumb the Model drags, which gets focus. \`vertical\`: measure along the
-// height, from the bottom.
+// anywhere in the document, and the keys on a thumb a press focused. A
+// press on a thumb drags it from where it was grabbed. A press on the track
+// drags the nearest thumb. `pressed`: the thumb the Model drags, which gets
+// focus. `vertical`: measure along the height, from the bottom.
 const TrackPointer = Mount.makeStream(
   "TrackPointer",
   { args: { pressed: Schema.Number, disabled: Schema.Boolean, vertical: Schema.Boolean } },
@@ -587,11 +611,35 @@ const TrackPointer = Mount.makeStream(
           document.addEventListener("pointercancel", onUp, { signal })
           Queue.offerUnsafe(queue, { _tag: "Pressed", index, fraction: fractionAt(event), onThumb: hit !== undefined })
         }
+        // A key on a thumb a press focused shows the focus ring, as Tab
+        // would: the input is focused again, visibly. That blur and focus
+        // stop at the window, so neither the slider nor a Field sees focus
+        // leave.
+        const onKey = (event: KeyboardEvent) => {
+          const input = event.target as HTMLInputElement
+          const view = document.defaultView
+          if (view === null || !sliderKeys.has(event.key) || input.disabled || focusVisible(input)) return
+          if (!thumbsIn(node).some((thumb) => inputOf(thumb) === input)) return
+          const hush = (focus: Event) => {
+            if (focus.target === input) focus.stopImmediatePropagation()
+          }
+          for (const name of focusEvents) view.addEventListener(name, hush, { capture: true })
+          try {
+            input.blur()
+            input.focus({ preventScroll: true, focusVisible: true } as FocusOptions)
+          } finally {
+            for (const name of focusEvents) view.removeEventListener(name, hush, { capture: true })
+          }
+        }
         yield* Effect.acquireRelease(
-          Effect.sync(() => node.addEventListener("pointerdown", onDown)),
+          Effect.sync(() => {
+            node.addEventListener("pointerdown", onDown)
+            node.addEventListener("keydown", onKey)
+          }),
           () =>
             Effect.sync(() => {
               node.removeEventListener("pointerdown", onDown)
+              node.removeEventListener("keydown", onKey)
               controller.current.abort()
             })
         )
@@ -612,6 +660,19 @@ const TrackPointer = Mount.makeStream(
 )
 
 // -- parts -------------------------------------------------------------------
+
+// The thumb's element with its input as a child, so it needs what the input
+// needs too.
+type ThumbOf<B extends View.PartTarget<string>, I extends View.PartTarget<"input">> = WithRequirements<
+  ReturnType<B["attr"]>,
+  View.Requirements<I>
+>
+
+type WithRequirements<T, R2> = [R2] extends [never] ? T
+  : T extends Html.Element<infer Msg, infer R, infer E, infer N, infer Tag> ? Html.Element<Msg, R | R2, E, N, Tag>
+  : T extends View.ContainerBuilder<infer Msg, infer R, infer H, infer N, infer Tag> ?
+    View.ContainerBuilder<Msg, R | R2, H, N, Tag>
+  : T
 
 // Visually hidden, the size of the thumb, so a screen reader's focus ring
 // matches the thumb.
@@ -663,7 +724,7 @@ export const Slider = Component.define({
       // Thumbs stacked at the end are dragged from the first of them, so
       // they can be pulled apart.
       let thumb = index
-      if (onThumb) { while (thumb > 0 && s.values[thumb] === s.max && s.values[thumb - 1] === s.max) thumb-- }
+      if (onThumb) { while (thumb > 0 && s.values[thumb]! >= s.top && s.values[thumb - 1]! >= s.top) thumb-- }
       const next: Model = { ...model, pressed: thumb, pressedValues: s.values, moved: null }
       // A thumb grabbed where it is doesn't move until the pointer does.
       return onThumb ? next : drag(next, $, thumb, fraction, next)
@@ -706,7 +767,7 @@ export const Slider = Component.define({
         .attr("step", String(s.step))
         .attr("aria-orientation", orientation)
         .attr("aria-valuenow", String(value))
-        // Never set: the native \`disabled\` reports it.
+        // Never set: the native `disabled` reports it.
         .attr("aria-disabled", undefined)
         .disabled(s.disabled)
         .value(String(value))
@@ -777,7 +838,7 @@ export const Slider = Component.define({
         thumbPart,
         <B extends View.PartTarget<string>, I extends View.PartTarget<"input">>(
           { element, index, input }: { readonly element: B; readonly input: I; readonly index?: number | undefined }
-        ): ReturnType<B["attr"]> => {
+        ): ThumbOf<B, I> => {
           if (index === undefined && Array.isArray(p.props.value)) {
             throw new Error("Slider: a thumb of a slider whose value is an array needs its index")
           }
@@ -785,7 +846,7 @@ export const Slider = Component.define({
           if (!Number.isInteger(at) || at < 0 || at >= s.values.length) {
             throw new Error("Slider: no value for the thumb at index " + at)
           }
-          return thumbPart(element, at, inputPart(input, at))
+          return thumbPart(element, at, inputPart(input, at)) as ThumbOf<B, I>
         }
       )
     }
