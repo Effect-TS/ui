@@ -1082,7 +1082,29 @@ const withEntry = <A>(
  */
 const assoc = <A>(record: Readonly<Record<string, A>>, name: string, value: A): Readonly<Record<string, A>> => {
   // The first entry of most records: nothing to copy.
-  const out: Record<string, A> = record === noFields ? {} : { ...record }
+  if (record === noFields) return firstEntry(name, value)
+  const out: Record<string, A> = { ...record }
+  put(out, name, value)
+  return out
+}
+
+/**
+ * A record holding one entry. The names set most often are written as literals, which hold their
+ * one entry in place, where `{}` keeps room for four. A literal is also faster to build than a
+ * store under a name a view chose.
+ */
+const firstEntry = <A>(name: string, value: A): Record<string, A> => {
+  switch (name) {
+    case "class":
+      return { class: value }
+    case "id":
+      return { id: value }
+    case "click":
+      return { click: value }
+    case "input":
+      return { input: value }
+  }
+  const out: Record<string, A> = {}
   put(out, name, value)
   return out
 }
