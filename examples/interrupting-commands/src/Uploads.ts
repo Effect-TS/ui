@@ -80,14 +80,12 @@ const UploadsDef = Component.define({
 const UploadAction = UploadsDef.fragment((h, upload: Upload) => {
   switch (upload.status) {
     case "Uploading":
-      return h.button.key("Uploading")
-        .onClick(UploadsMessage.ClickedCancelUpload({ uploadId: upload.id }))
+      return h.button.onClick(UploadsMessage.ClickedCancelUpload({ uploadId: upload.id }))
         .attr("aria-label", `Cancel upload ${upload.id}`)
         .class(ACTION_BUTTON_CLASS, "border-red-300 text-red-600 hover:bg-red-50")
         .children("Cancel")
     case "Cancelled":
-      return h.button.key("Cancelled")
-        .onClick(UploadsMessage.ClickedRestartUpload({ uploadId: upload.id }))
+      return h.button.onClick(UploadsMessage.ClickedRestartUpload({ uploadId: upload.id }))
         .attr("aria-label", `Restart upload ${upload.id}`)
         .class(ACTION_BUTTON_CLASS, "border-blue-300 text-blue-600 hover:bg-blue-50")
         .children("Restart")
@@ -129,7 +127,6 @@ export const UploadsNoDeps = UploadsDef.make({
       )
     },
 
-    // An interrupted run cannot deliver a late completion that would undo cancellation.
     ClickedCancelUpload: (model, { uploadId }, $) =>
       model.uploads.some((upload) => upload.id === uploadId && isUploading(upload))
         ? $.set(withStatus(model, uploadId, "Cancelled")).run(Command.interrupt(UploadFile, { uploadId }))

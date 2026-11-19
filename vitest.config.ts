@@ -26,7 +26,6 @@ const project = (
   return [mergeConfig(shared, cfg)]
 }
 
-// An example's tests sit beside its components, and the HTML elements are registered once for all of them.
 const example = (name: string) =>
   project(name, path.join("examples", name), true, {
     test: {
