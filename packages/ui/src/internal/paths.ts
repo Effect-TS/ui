@@ -90,11 +90,20 @@ const failure = (at: At, what: string): never => {
  * hydration marker, and a send matches a child by its ref's key alone, so the
  * parent fails instead. Returns what the view uses, for its fallbacks.
  *
+ * `last` is the tree the view rendered last time, when it held no child, ref
+ * or outlet: a node the new tree holds again at the same place, as `h.lazy`
+ * gives it, holds none either, and is passed over. Places are compared below
+ * elements a patch would pair, of one tag and key, as a list's rows are.
+ *
  * @internal
  */
-export const checkChildPaths = (at: At, tree: View.Node<any, any>): ChildPaths => {
+export const checkChildPaths = (
+  at: At,
+  tree: View.Node<any, any>,
+  last?: View.Element<any, any> | undefined
+): ChildPaths => {
   const paths: ChildPaths = { at, paths: undefined, refs: undefined, placed: undefined }
-  visit(paths, tree, undefined, "")
+  if (tree !== last) visit(paths, tree, undefined, "", last)
   return paths
 }
 
@@ -123,17 +132,21 @@ const visit = (
   paths: ChildPaths,
   node: View.Node<any, any>,
   replaced: View.Child<any, any> | undefined,
-  where: string
+  where: string,
+  last?: View.Element<any, any> | undefined
 ): void => {
   if (node._tag === "Element") {
     const children = node.children
+    const before = last?.children
     for (let index = 0; index < children.length; index++) {
       const child = children[index]!
+      const was = before?.[index]
       // Text and an element with no children hold no child: most of a view, passed over without a call.
       if (
-        child._tag === "Child" || child._tag === "Outlet" || (child._tag === "Element" && child.children.length > 0)
+        child !== was &&
+        (child._tag === "Child" || child._tag === "Outlet" || (child._tag === "Element" && child.children.length > 0))
       ) {
-        visit(paths, child, replaced, where)
+        visit(paths, child, replaced, where, pairs(child, was) ? was : undefined)
       }
     }
   } else if (node._tag === "Child") {
@@ -158,6 +171,11 @@ const visit = (
     place(paths, node.name)
   }
 }
+
+/** Whether a patch would pair two elements: a row a list replaced isn't compared below. */
+const pairs = (node: View.Node<any, any>, was: View.Node<any, any> | undefined): was is View.Element<any, any> =>
+  was !== undefined && was._tag === "Element" && node._tag === "Element" && was.tag === node.tag &&
+  was.elementKey === node.elementKey
 
 // A missing key is a runtime error, not a type error, so the message names the fix.
 const keyHint = (name: string, node: View.Child<any, any>): string =>

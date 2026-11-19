@@ -4905,7 +4905,12 @@ const setup = (
 
   /** Checks a fresh view's child paths, which its fallbacks are checked against as they're shown. */
   const checked = (inst: Instance, tree: View.Node<any, any>): View.Node<any, any> => {
-    const paths = checkChildPaths(inst, tree)
+    // The tree it rendered last, when that held no child, as `inst.childPaths` found: only a view that
+    // used `h.lazy` gives its nodes again, so only its tree is worth comparing.
+    const last = inst.lazy !== undefined && inst.childPaths === undefined && inst.rendered.length === 1
+      ? inst.rendered[0]!
+      : undefined
+    const paths = checkChildPaths(inst, tree, last?._tag === "Element" ? last.v : undefined)
     // A view with no child, ref or outlet has nothing to check its fallbacks or refs against.
     inst.childPaths = paths.paths === undefined && paths.refs === undefined && paths.placed === undefined
       ? undefined
