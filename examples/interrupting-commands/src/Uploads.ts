@@ -78,8 +78,6 @@ export class UploadFile extends Command.Service<UploadFile>()(
   })
 ) {}
 
-const uploadFile = (upload: Upload) => UploadFile.make({ uploadId: upload.id, sizeMegabytes: upload.sizeMegabytes })
-
 // VIEW
 
 const BADGE_CLASS: Record<UploadStatus, string> = {
@@ -147,7 +145,9 @@ export const UploadsNoDeps = UploadsDef.make({
         sizeMegabytes: file.sizeMegabytes,
         status: "Uploading"
       }
-      return $.set({ uploadId: model.uploadId + 1, uploads: [...model.uploads, upload] }).run(uploadFile(upload))
+      return $.set({ uploadId: model.uploadId + 1, uploads: [...model.uploads, upload] }).run(
+        UploadFile.make({ uploadId: upload.id, sizeMegabytes: upload.sizeMegabytes })
+      )
     },
 
     // Once `update` interrupts a run, the run delivers nothing, so marking the
@@ -169,7 +169,9 @@ export const UploadsNoDeps = UploadsDef.make({
       const upload = model.uploads.find((upload) => upload.id === uploadId && upload.status === "Cancelled")
       return upload === undefined
         ? model
-        : $.set(withStatus(model, uploadId, "Uploading")).run(uploadFile(upload))
+        : $.set(withStatus(model, uploadId, "Uploading")).run(
+          UploadFile.make({ uploadId, sizeMegabytes: upload.sizeMegabytes })
+        )
     },
 
     CompletedUploadFile: (model, { uploadId }) => withStatus(model, uploadId, "Done")
