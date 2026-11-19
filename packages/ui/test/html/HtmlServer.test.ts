@@ -499,6 +499,50 @@ describe("HtmlServer", { concurrent: false }, () => {
       })
   )
 
+  // The render reads an element's enumerable props once itself, before the HTML is written.
+  const getters: ReadonlyArray<readonly [string, "textarea" | "input", boolean, string, number]> = [
+    ["a textarea's, not enumerable", "textarea", false, "<textarea>released</textarea>", 0],
+    ["an input's, enumerable", "input", true, "<input value=\"released\">", 1]
+  ]
+
+  it.effect.each(getters)(
+    "calls a getter given as a value once, after the render's Layers are released: %s",
+    ([, tag, enumerable, html, rendering]) =>
+      Effect.gen(function*() {
+        let released = false
+        // What each call gave, and how many there were when the Layers were released.
+        const calls: Array<string> = []
+        let before = -1
+        const props = Object.defineProperty({}, "value", {
+          enumerable,
+          get() {
+            calls.push(released ? "released" : "live")
+            return calls.at(-1)
+          }
+        })
+        const Page = Component.define({
+          name: "Getter",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          // An element written by hand.
+          view: (_, h) => h.div.children({ ...(View.toNode(h[tag]) as View.Element<never>), props })
+        }).pipe(Component.provide(Layer.effectDiscard(Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            before = calls.length
+            released = true
+          })
+        ))))
+        const rendered = yield* HtmlServer.renderToHtml(Page, {})
+        expect(rendered.html).toBe(`<!--[/Getter--><div>${html}</div><!--]/Getter-->`)
+        expect(before).toBe(rendering)
+        expect(calls.slice(before)).toEqual(["released"])
+      })
+  )
+
   it.effect("keeps winning HTML aliases through updates and removals without folding SVG attributes", () =>
     Effect.gen(function*() {
       // What each step sets, and what the elements then hold. The HTML parser folds

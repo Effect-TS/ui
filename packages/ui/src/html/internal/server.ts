@@ -143,6 +143,23 @@ const plainAttributes = (
   return out
 }
 
+const isEnumerable = Object.prototype.propertyIsEnumerable
+
+/**
+ * Whether the enumerable properties read the same now as later, with nothing of theirs called: each
+ * is the object's own and holds its value, and its `value` is no object or function, whose
+ * `toString` would be called.
+ */
+const settled = (props: Readonly<Record<string, unknown>>): boolean => {
+  for (const name in props) {
+    const own = Object.getOwnPropertyDescriptor(props, name)
+    if (own === undefined || !("value" in own) || (name === "value" && Object(own.value) === own.value)) {
+      return false
+    }
+  }
+  return true
+}
+
 /**
  * An open element whose end needs more than its closing tag. Most elements
  * have none.
@@ -169,9 +186,9 @@ let framedTags: ReadonlySet<string> | undefined
  * Writes a server tree as HTML as it is walked, for a runtime that has no nodes to give `toHtml`.
  *
  * It is written while the render's Scope is open, and `toHtml` runs after it has closed. A string
- * or a number given as a `value` reads the same either way. An object's `toString` may not, so the
- * writer refuses a tree that has one where `toHtml` would read it, without reading it, and `toHtml`
- * writes that tree from the nodes.
+ * or a number held by a property reads the same either way. A getter may not, nor an object's
+ * `toString`, so the writer refuses a tree that has one where `toHtml` would call it, without
+ * calling it, and `toHtml` writes that tree from the nodes.
  *
  * @internal
  */
@@ -212,17 +229,12 @@ export const makeWriter = (): ServerSink & { readonly html: () => string; readon
       bare = false
       if (skips) return
       const plain = plainAttributes(tag, attrs, props)
-      // Where `toHtml` reads a `value`: among the attributes, and a textarea's or a select's own, which
-      // needn't be among its props' keys.
-      if (plain === undefined || tag === "textarea" || tag === "select") {
-        const value = props.value
-        // An object or a function.
-        if (Object(value) === value) {
-          refused = skips = true
-          frame = text = undefined
-          out = ""
-          return
-        }
+      // With plain attributes no property is enumerable. `toHtml` reads a `value` that isn't, too.
+      if ((plain === undefined && !settled(props)) || ("value" in props && !isEnumerable.call(props, "value"))) {
+        refused = skips = true
+        frame = text = undefined
+        out = ""
+        return
       }
       // Most elements: outside a select, and closed by their closing tag.
       if (selectValue === undefined && !framed.has(tag)) {
