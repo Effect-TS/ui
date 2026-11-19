@@ -159,8 +159,7 @@ describe("Scene", () => {
     const state = (open: boolean) => (open ? "open" : "closed")
 
     it("givenChild sets the Model of the child it selects, and no other at another path", () => {
-      // The ref child's key is "D". A child's path is its author's and its segment, so the keyed child in
-      // its closure takes another key.
+      // The ref child's key is "D", and so is the keyed child in its closure.
       const Page = Component.define({ name: "Page", model: Schema.Null, message: Schema.Never, elements: Html }).make({
         init: () => null,
         update: (model) => model,
@@ -170,13 +169,13 @@ describe("Scene", () => {
             view: (outer) =>
               h.div(
                 h.p(state(outer.open)),
-                Disclosure(h, { key: "inner", view: (inner) => h.p(state(inner.open)) })
+                Disclosure(h, { key: "D", view: (inner) => h.p(state(inner.open)) })
               )
           })
       })
       const texts = (s: Scene.Steps.Any) => s.all(Locator.tag("p")).map((node) => Locator.textOf(node))
       assert.deepStrictEqual(texts(Scene.start(Page, {}).givenChild(Disclosure, Outer, true)), ["open", "closed"])
-      assert.deepStrictEqual(texts(Scene.start(Page, {}).givenChild(Disclosure, "inner", true)), ["closed", "open"])
+      assert.deepStrictEqual(texts(Scene.start(Page, {}).givenChild(Disclosure, "D", true)), ["closed", "open"])
     })
 
     it("Scene.fallback checks a child's paths in the view that declared it", () => {
@@ -185,8 +184,8 @@ describe("Scene", () => {
         update: (model) => model,
         view: (_, h) =>
           h.div(
-            Disclosure(h, { key: "a", view: () => Badge(h, { key: "a" }) }),
-            Disclosure(h, { key: "b", view: () => Badge(h, { key: "b" }) }),
+            Disclosure(h, { key: "a", view: () => Badge(h, {}) }),
+            Disclosure(h, { key: "b", view: () => Badge(h, {}) }),
             Note(h, { fallback: () => h.text("no note") })
           )
       })

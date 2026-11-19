@@ -64,8 +64,7 @@ export const NotePageNoDeps = Component.define({
           // the button sends `ClickedSaveNow` here, the editor's events and failure
           // map to this page's messages, `$.send` reaches the editor by its
           // ref, and `NoteActivity` is resolved from this page's Layers.
-          // The editor's path is this page's and its own segment,
-          // `.../NotePage[...]/NoteEditor[...]`, wherever the Collapsible places it.
+          // The editor's path is `.../Collapsible[note]/[body]/NoteEditor[...]`.
           Collapsible(h, {
             key: "note",
             slots: {

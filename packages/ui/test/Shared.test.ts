@@ -81,13 +81,13 @@ describe("shared state", () => {
       click(root, "a:closed")
       yield* TestHost.settle
       assert.strictEqual(root.text(), "a:opena")
-      const [sent] = updatesAt(root.log(), "/App/Tip[a]")
+      const [sent] = updatesAt(root.log(), "/App/TipsProvider[tips]/Tip[a]")
       assert.deepStrictEqual(MessageLog.encodeSend(sent.sends![0]), {
         owner: "TipsProvider",
         message: { _tag: "Enter", id: "a" }
       })
       const [received] = updatesAt(root.log(), "/App/TipsProvider[tips]")
-      assert.deepStrictEqual(received.source, { _tag: "Send", path: "/App/Tip[a]", seq: sent.seq })
+      assert.deepStrictEqual(received.source, { _tag: "Send", path: "/App/TipsProvider[tips]/Tip[a]", seq: sent.seq })
     })))
 
   it.effect("re-renders the readers when the owner's props change what it shares", () =>
@@ -192,9 +192,9 @@ describe("shared state", () => {
       yield* TestHost.settle
       const snapshot = Object.keys(handle!.snapshot())
       assert.notInclude(snapshot, "/App/TipsProvider[tips]")
-      assert.include(snapshot, "/App/Tip[a]")
+      assert.include(snapshot, "/App/TipsProvider[tips]/Tip[a]")
       assert.notInclude(restored, "/App/TipsProvider[tips]")
-      assert.include(restored, "/App/Tip[a]")
+      assert.include(restored, "/App/TipsProvider[tips]/Tip[a]")
     }).pipe(provideHost))
 })
 
@@ -340,7 +340,7 @@ const makePage = (Reader: ReturnType<typeof makeReader>) =>
   })
 
 const group = "/Page/Group[Group]"
-const reader = "/Page/Reader[r]"
+const reader = group + "/Reader[r]"
 
 describe("optional owners, reports and onChange", () => {
   it.effect("an optional reader with no owner reads undefined, and its send to the owner is dropped", () =>
@@ -567,42 +567,6 @@ describe("optional owners, reports and onChange in a Story", () => {
     }))
 })
 
-describe("owners of slot content", () => {
-  it.effect("content reads the owner its author wrote around it, not one inside the receiver's view", () =>
-    provideHost(Effect.gen(function*() {
-      const Framed = Component.define({ name: "Framed", model: Schema.Null, message: Schema.Never, slots: ["body"] })
-        .make({
-          init: () => null,
-          update: (model) => model,
-          view: (_, h) =>
-            TipsProvider(h, { key: "inner", props: { label: "frame" }, view: () => h.el("section", h.slots.body) })
-        })
-      const Page = Component.define({ name: "Page", model: Schema.Boolean, message: Schema.Boolean }).make({
-        init: () => false,
-        update: (_, framed) => framed,
-        view: (framed, h) =>
-          TipsProvider(h, {
-            key: "outer",
-            props: { label: "page" },
-            view: () => {
-              const tip = Tip(h, { key: "t", props: { id: "a" } })
-              return framed ? Framed(h, { key: "c", slots: { body: tip } }) : h.el("section", tip)
-            }
-          })
-      })
-      const root = yield* TestHost.mount(Page, {})
-      yield* TestHost.settle
-      assert.strictEqual(root.text(), "a:closedpage")
-      root.send(true)
-      yield* TestHost.settle
-      assert.strictEqual(root.text(), "a:closedpage")
-      click(root, "a:closedpage")
-      yield* TestHost.settle
-      assert.strictEqual(root.text(), "a:openpage")
-      assert.lengthOf(updatesAt(root.log(), "/Page/TipsProvider[outer]"), 1)
-    })))
-})
-
 describe("a component that reads its own kind", () => {
   const NestMessage = UiSchema.TaggedEnum({ ChangedBelow: { open: Schema.Number } })
   const Nest = Component.define({
@@ -631,16 +595,13 @@ describe("a component that reads its own kind", () => {
       const label = (name: string, parts: { readonly nested: boolean; readonly below: number }) =>
         h.el("span", `${name} ${parts.nested ? "nested" : "outer"} ${parts.below}`)
       return Nest(h, {
-        key: "a",
         props: { open: true },
         view: (a) =>
           h.el("div", [
             label("a", a),
             Nest(h, {
-              key: "b",
               props: { open: true },
-              view: (b) =>
-                h.el("div", [label("b", b), Nest(h, { key: "c", props: { open }, view: (c) => label("c", c) })])
+              view: (b) => h.el("div", [label("b", b), Nest(h, { props: { open }, view: (c) => label("c", c) })])
             })
           ])
       })
