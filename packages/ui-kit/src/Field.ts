@@ -84,10 +84,9 @@
  *   elements: Html
  * }).make({
  *   init: () => ({ name: "" }),
- *   update: (model, message) =>
- *     ProfileMessage.match(message, {
- *       UpdatedName: ({ value }) => ({ ...model, name: value })
- *     }),
+ *   update: {
+ *     UpdatedName: (model, { value }) => ({ ...model, name: value })
+ *   },
  *   view: (model, h) =>
  *     Field(h, {
  *       props: { invalid: model.name === "", filled: model.name !== "", described: true },
@@ -226,12 +225,12 @@ export const Field = Component.define({
   elements: Html
 }).make({
   init: () => ({ focused: false, touched: false }),
-  update: (model, message, $) =>
-    Message.match(message, {
-      FocusedControl: () => ({ ...model, focused: true }),
-      // Losing focus doesn't count as a visit while the field is disabled.
-      BlurredControl: () => $.props.disabled === true ? { ...model, focused: false } : { focused: false, touched: true }
-    }),
+  update: {
+    FocusedControl: (model) => ({ ...model, focused: true }),
+    // Losing focus doesn't count as a visit while the field is disabled.
+    BlurredControl: (model, _message, $) =>
+      $.props.disabled === true ? { ...model, focused: false } : { focused: false, touched: true }
+  },
   subscriptions: (model, props) => [model.focused && props.disabled === true && lostFocus],
   parts: (model, p) => {
     const disabled = p.props.disabled === true
