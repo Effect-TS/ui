@@ -56,6 +56,7 @@ export * from "./Field.ts"
  * @since 0.1.0
  */
 export * from "./Input.ts"
+export * from "./Progress.ts"
 
 /**
  * @stability experimental

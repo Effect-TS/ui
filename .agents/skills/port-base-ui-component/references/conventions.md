@@ -185,8 +185,15 @@ model.advanced
   UI supports them and the behaviour holds for each. A headless part is
   declared with the tag, `p.part("button", ...)`, and rejects another at
   runtime. A view function's part is typed by its `element`.
-- A part sets ARIA, data attributes, ids, refs and handlers, and nothing
-  visual.
+- A part sets ARIA, data attributes, ids, refs and handlers. The only
+  visual thing it sets is an inline declaration its job depends on: the
+  width of `Progress`'s indicator, the placement of `Tooltip`'s
+  positioner. It adds those in `forward` with `withStyle`
+  (`internal/attributes.ts`), after the consumer's inline style, so its
+  own win and the consumer's other declarations stay. Colours, sizes and
+  anything else a stylesheet can decide are the consumer's. A part also
+  exposes the value behind the declaration, such as `s.percentage`, so a
+  consumer who draws the element another way can skip the part.
 - **Call shape.** A part takes the consumer's builder as its one argument
   and returns it, with the part applied. The consumer goes on chaining,
   and adds children with `.children(...)`:

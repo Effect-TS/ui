@@ -154,7 +154,7 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import { flag, withStyle } from "./internal/attributes.ts"
+import { flag, visuallyHidden, withStyle } from "./internal/attributes.ts"
 
 /**
  * The content of a toast, as a sender posts it in `AddedToast`.
@@ -513,10 +513,6 @@ const wait = (entry: Entry, props: ToastProviderProps) =>
 
 const stop = (id: string) => Command.interrupt(WaitBeforeDismissal, { id })
 
-// Visually hidden, but read by screen readers.
-const hidden =
-  "position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"
-
 // Where each toast sits in the stack: its index from the front, the height
 // of the toasts in front of it, its own height, and whether it's past the
 // limit. A closing toast keeps its place in the list but leaves the count.
@@ -697,7 +693,7 @@ export const ToastProvider = Component.define({
       ? []
       : model.toasts.filter((toast) => toast.priority === "high" && toast.transition !== "ending")
     const alerts = urgent.length === 0 ? undefined : View.toNode(
-      new Html.Element<never>("div").attr("style", hidden).children(
+      new Html.Element<never>("div").attr("style", visuallyHidden).children(
         ...urgent.map((toast) =>
           new Html.Element<never>("div").key(toast.id).attr("role", "alert").attr("aria-atomic", "true").children(
             new Html.Element<never>("div").children(toast.title ?? ""),
