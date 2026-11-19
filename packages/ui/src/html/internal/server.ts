@@ -3,10 +3,9 @@
  * as escaped strings.
  */
 import type * as Renderer from "../../Renderer.ts"
-import type * as Head from "../HtmlHead.ts"
+import * as Head from "../HtmlHead.ts"
 import * as elements from "./elements.ts"
 import * as headAttributes from "./headAttributes.ts"
-import * as headMerge from "./headMerge.ts"
 import * as markers from "./markers.ts"
 
 // ---------------------------------------------------------------------------
@@ -190,7 +189,7 @@ export const toHtml = (nodes: ReadonlyArray<ServerNode>, selectValue?: string): 
 const tag = (name: string, pairs: ReadonlyArray<readonly [string, string]>): string =>
   `<${name}${
     headAttributes.normalize(pairs).map(([key, value]) => ` ${key}="${escapeAttribute(value)}"`).join("")
-  } ${headAttributes.marker}>`
+  } ${Head.marker}>`
 
 /**
  * The folded head of a root as an `HtmlHead`: a host-neutral root's `Head.Head` holds only the title.
@@ -201,14 +200,14 @@ export const htmlHead = (head: unknown): Head.HtmlHead => {
   const value = head as Partial<Head.HtmlHead> | undefined
   return value !== undefined && value.meta !== undefined
     ? value as Head.HtmlHead
-    : { ...headMerge.empty, title: value?.title }
+    : { ...Head.empty, title: value?.title }
 }
 
 /** @internal */
 export const headTags = (head: Head.HtmlHead): string => {
-  let out = head.title === undefined ? "" : `<title ${headAttributes.marker}>${escapeText(head.title)}</title>`
-  for (const entry of head.meta) out += tag("meta", headMerge.attributes(entry))
-  for (const entry of head.links) out += tag("link", headMerge.attributes(entry))
+  let out = head.title === undefined ? "" : `<title ${Head.marker}>${escapeText(head.title)}</title>`
+  for (const entry of head.meta) out += tag("meta", Head.attributes(entry))
+  for (const entry of head.links) out += tag("link", Head.attributes(entry))
   // The JSON is canonical, with `<` escaped, so it can't end the script.
   for (const entry of head.jsonLd) out += `${tag("script", [["type", "application/ld+json"]])}${entry.json}</script>`
   return out
@@ -234,6 +233,6 @@ export const attributes = (pairs: ReadonlyArray<readonly [string, string]>): str
   const normalized = headAttributes.normalize(pairs)
   return normalized.length === 0 ? "" : [
     ...normalized.map(([name, value]) => `${name}="${escapeAttribute(value)}"`),
-    `${headAttributes.marker}="${escapeAttribute(normalized.map(([name]) => name).join(" "))}"`
+    `${Head.marker}="${escapeAttribute(normalized.map(([name]) => name).join(" "))}"`
   ].join(" ")
 }

@@ -411,13 +411,6 @@ const payloadOf = (
  * baseline of the shell's values, captured by the first, so a second mount
  * doesn't take the first one's title for the shell's.
  *
- * The sync of everything but the title comes with the `HtmlHead` module, so
- * an app that uses nothing from it doesn't ship that code. Such an app has
- * no entry but a title, unless a `reduceHead` or a fold of its own builds
- * the rest by hand, or the server marked tags that some other app printed.
- * The host then leaves those as they are and reports it to `warn` once.
- * Using any export of `HtmlHead`, such as its entries, brings the sync.
- *
  * @stability experimental
  * @category constructors
  * @since 0.1.0
