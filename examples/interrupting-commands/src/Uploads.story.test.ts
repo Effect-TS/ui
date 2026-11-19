@@ -9,13 +9,16 @@ const uploadFirst = UploadFile({ uploadId: 0, sizeMegabytes: firstFile.sizeMegab
 const uploadSecond = UploadFile({ uploadId: 1, sizeMegabytes: secondFile.sizeMegabytes })
 const uploadThird = UploadFile({ uploadId: 2, sizeMegabytes: thirdFile.sizeMegabytes })
 
+const startUpload = UploadsMessage.ClickedStartUpload()
+const cancelFirst = UploadsMessage.ClickedCancelUpload({ uploadId: 0 })
+
 const statuses = (model: UploadsModel) => model.uploads.map((upload) => upload.status)
 
 describe("Uploads", () => {
   it.effect("starting an upload appends an Uploading entry and runs UploadFile", () =>
     Effect.gen(function*() {
       const s = yield* Story.make(Uploads, {})
-      s.send(UploadsMessage.ClickedStartUpload())
+      s.send(startUpload)
       assert.deepStrictEqual(s.model.uploads, [
         { id: 0, fileName: firstFile.name, sizeMegabytes: firstFile.sizeMegabytes, status: "Uploading" }
       ])
@@ -27,8 +30,8 @@ describe("Uploads", () => {
   it.effect("cancelling an upload interrupts it and marks it Cancelled", () =>
     Effect.gen(function*() {
       const s = yield* Story.make(Uploads, {})
-      s.send(UploadsMessage.ClickedStartUpload())
-        .send(UploadsMessage.ClickedCancelUpload({ uploadId: 0 }))
+      s.send(startUpload)
+        .send(cancelFirst)
       assert.deepStrictEqual(s.interrupted.map((command) => command.args), [uploadFirst.args])
       s.expectNone()
       assert.deepStrictEqual(statuses(s.model), ["Cancelled"])
@@ -37,9 +40,9 @@ describe("Uploads", () => {
   it.effect("cancelling a finished upload changes nothing and interrupts nothing", () =>
     Effect.gen(function*() {
       const s = yield* Story.make(Uploads, {})
-      s.send(UploadsMessage.ClickedStartUpload())
+      s.send(startUpload)
         .resolve(uploadFirst, undefined)
-        .send(UploadsMessage.ClickedCancelUpload({ uploadId: 0 }))
+        .send(cancelFirst)
       assert.deepStrictEqual(s.interrupted, [])
       s.expectNone()
       assert.deepStrictEqual(statuses(s.model), ["Done"])
@@ -48,9 +51,9 @@ describe("Uploads", () => {
   it.effect("cancelling one upload leaves the other running", () =>
     Effect.gen(function*() {
       const s = yield* Story.make(Uploads, {})
-      s.send(UploadsMessage.ClickedStartUpload())
-        .send(UploadsMessage.ClickedStartUpload())
-        .send(UploadsMessage.ClickedCancelUpload({ uploadId: 0 }))
+      s.send(startUpload)
+        .send(startUpload)
+        .send(cancelFirst)
       assert.deepStrictEqual(s.interrupted.map((command) => command.args), [uploadFirst.args])
       s.expectExact(uploadSecond).resolve(uploadSecond, undefined)
       assert.deepStrictEqual(statuses(s.model), ["Cancelled", "Done"])
@@ -59,9 +62,9 @@ describe("Uploads", () => {
   it.effect("a new upload can start right after another is cancelled", () =>
     Effect.gen(function*() {
       const s = yield* Story.make(Uploads, {})
-      s.send(UploadsMessage.ClickedStartUpload())
-        .send(UploadsMessage.ClickedCancelUpload({ uploadId: 0 }))
-        .send(UploadsMessage.ClickedStartUpload())
+      s.send(startUpload)
+        .send(cancelFirst)
+        .send(startUpload)
       assert.deepStrictEqual(s.interrupted.map((command) => command.args), [uploadFirst.args])
       s.expectExact(uploadSecond).resolve(uploadSecond, undefined)
       assert.deepStrictEqual(statuses(s.model), ["Cancelled", "Done"])
@@ -70,8 +73,8 @@ describe("Uploads", () => {
   it.effect("restarting a cancelled upload reuses its id and file", () =>
     Effect.gen(function*() {
       const s = yield* Story.make(Uploads, {})
-      s.send(UploadsMessage.ClickedStartUpload())
-        .send(UploadsMessage.ClickedCancelUpload({ uploadId: 0 }))
+      s.send(startUpload)
+        .send(cancelFirst)
         .send(UploadsMessage.ClickedRestartUpload({ uploadId: 0 }))
       assert.deepStrictEqual(statuses(s.model), ["Uploading"])
       s.expectExact(uploadFirst).resolve(uploadFirst, undefined)
@@ -81,9 +84,9 @@ describe("Uploads", () => {
   it.effect("cancel all interrupts every running upload and only those", () =>
     Effect.gen(function*() {
       const s = yield* Story.make(Uploads, {})
-      s.send(UploadsMessage.ClickedStartUpload())
-        .send(UploadsMessage.ClickedStartUpload())
-        .send(UploadsMessage.ClickedStartUpload())
+      s.send(startUpload)
+        .send(startUpload)
+        .send(startUpload)
         .resolve(uploadSecond, undefined)
         .send(UploadsMessage.ClickedCancelAllUploads())
       assert.deepStrictEqual(s.interrupted.map((command) => command.args), [uploadFirst.args, uploadThird.args])
