@@ -1659,41 +1659,50 @@ describe("BrowserHost", { concurrent: false }, () => {
       Mounted: { tag: Schema.String }
     })
     const ReadTag = Mount.make("ReadTag", { args: {} }, (element: HTMLElement) => Effect.succeed(element.localName))
-    const Refs = Component.define({
-      name: "Refs",
-      model: Schema.Array(Schema.String),
-      message: Message,
-      elements: Html
-    }).make({
-      init: (): ReadonlyArray<string> => [],
-      update: (log, message, $) =>
-        Message.match(message, {
-          Focus: () => $.run(Html.focus(Field, ({ found }) => Message.Found({ found }))),
-          FocusMissing: () => $.run(Html.focus(Missing, ({ found }) => Message.Found({ found }))),
-          Measure: () => $.run(Html.measure(Field, (rect) => Message.Measured({ some: Option.isSome(rect) }))),
-          Found: ({ found }) => [...log, `found ${found}`],
-          Measured: ({ some }) => [...log, `measured ${some}`],
-          Mounted: ({ tag }) => [...log, `mounted ${tag}`]
-        }),
-      view: (_, h) =>
-        h.div(
-          h.input.attr("aria-label", "Field").ref(Field)
-            .onMount(ReadTag().pipe(Mount.map((tag) => Message.Mounted({ tag }))))
-        )
-    })
+    const refs = (elements: View.Vocabulary<Html.Elements>) =>
+      Component.define({
+        name: "Refs",
+        model: Schema.Array(Schema.String),
+        message: Message,
+        elements
+      }).make({
+        init: (): ReadonlyArray<string> => [],
+        update: (log, message, $) =>
+          Message.match(message, {
+            Focus: () => $.run(Html.focus(Field, ({ found }) => Message.Found({ found }))),
+            FocusMissing: () => $.run(Html.focus(Missing, ({ found }) => Message.Found({ found }))),
+            Measure: () => $.run(Html.measure(Field, (rect) => Message.Measured({ some: Option.isSome(rect) }))),
+            Found: ({ found }) => [...log, `found ${found}`],
+            Measured: ({ some }) => [...log, `measured ${some}`],
+            Mounted: ({ tag }) => [...log, `mounted ${tag}`]
+          }),
+        view: (_, h) =>
+          h.div(
+            h.input.attr("aria-label", "Field").ref(Field)
+              .onMount(ReadTag().pipe(Mount.map((tag) => Message.Mounted({ tag }))))
+          )
+      })
 
-    it.effect("ref Commands reach the element; onMount gets it", () =>
-      Effect.gen(function*() {
-        const app = yield* container
-        const root = yield* BrowserHost.mountEffect(Refs, {}, app)
-        yield* tick
-        root.send(Message.Focus())
-        root.send(Message.FocusMissing())
-        root.send(Message.Measure())
-        yield* tick
-        expect(document.activeElement).toBe(HtmlLocator.getByRole(app, "textbox", { name: "Field" }))
-        expect(root.model()).toEqual(["mounted input", "found true", "found false", "measured true"])
-      }).pipe(Effect.scoped))
+    const vocabularies: ReadonlyArray<readonly [string, View.Vocabulary<Html.Elements>]> = [
+      ["the Html module", Html],
+      ["Html.vocabulary", Html.vocabulary]
+    ]
+
+    it.effect.each(vocabularies)(
+      "ref Commands reach the element; onMount gets it, with %s as elements",
+      ([, elements]) =>
+        Effect.gen(function*() {
+          const app = yield* container
+          const root = yield* BrowserHost.mountEffect(refs(elements), {}, app)
+          yield* tick
+          root.send(Message.Focus())
+          root.send(Message.FocusMissing())
+          root.send(Message.Measure())
+          yield* tick
+          expect(document.activeElement).toBe(HtmlLocator.getByRole(app, "textbox", { name: "Field" }))
+          expect(root.model()).toEqual(["mounted input", "found true", "found false", "measured true"])
+        }).pipe(Effect.scoped)
+    )
   })
 
   describe("hosts", () => {
