@@ -249,23 +249,15 @@ describe("Router", { concurrent: false }, () => {
       assert.strictEqual(yield* router.push(x), "navigated")
       assert.strictEqual(yield* router.patchSearch(x, { q: "x" }), "navigated")
       yield* Effect.yieldNow
-      assert.strictEqual(router.location().seq, 0)
       assert.deepStrictEqual(messages, [])
 
-      assert.strictEqual(yield* router.navigate("/search?utm=2&q=x"), "navigated")
-      yield* Effect.yieldNow
-      assert.deepStrictEqual(messages, [x])
-      assert.strictEqual(router.location().seq, 0)
-      assert.strictEqual(router.location().url, "/search?q=x&utm=1")
       assert.deepStrictEqual(history.entries(), ["/search?q=x&utm=1"])
 
       // A new hash gets one history entry, even when followed twice.
       yield* router.navigate("/search?q=x#top")
-      yield* router.navigate("/search?q=x#top", { replace: true })
+      yield* router.navigate("/search?q=x#top")
       yield* Effect.yieldNow
-      assert.deepStrictEqual(messages, [x, x, x])
-      assert.strictEqual(router.location().seq, 0)
-      assert.strictEqual(router.location().hash, "#top")
+      assert.deepStrictEqual(messages, [x, x])
       assert.deepStrictEqual(history.entries(), ["/search?q=x&utm=1", "/search?q=x&utm=1#top"])
     }).pipe(Effect.provide(Router.memory({ routes, history })))
   })

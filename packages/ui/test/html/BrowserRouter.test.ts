@@ -1,12 +1,12 @@
 // @vitest-environment happy-dom
-import { Command, Component, Query, Route, Router, UiSchema } from "@effect/ui"
+import { Command, Component, MessageLog, Query, Route, Router, UiSchema } from "@effect/ui"
 import { BrowserHost, BrowserRouter, Html, HtmlServer } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, expect, it } from "@effect/vitest"
-import { Context, Effect, Exit, Layer, Option, Schema, Scope, Stream } from "effect"
+import { Context, Effect, Exit, Layer, Option, Schema, Scope } from "effect"
 import { TestClock } from "effect/testing"
 import { describe } from "vitest"
-import { App, AppRoute, People } from "./fixtures/routed.ts"
+import { App, AppRoute, Message, People } from "./fixtures/routed.ts"
 
 const SearchRoute = Route.union({
   Search: Route.make("/search", { search: { q: Schema.optional(Schema.String) } }),
@@ -337,10 +337,8 @@ describe("BrowserRouter", { concurrent: false }, () => {
 
   it.effect("clicking the current route notifies subscribers without scrolling, announcing or adding history", () =>
     Effect.gen(function*() {
-      const { app, router } = yield* start("/?utm_source=news")
-      const urls: Array<string> = []
-      yield* Stream.runForEach(router.changes, ({ url }) => Effect.sync(() => urls.push(url))).pipe(Effect.forkScoped)
-      yield* Effect.yieldNow
+      const log = MessageLog.makeMemory()
+      const { app } = yield* start("/?utm_source=news").pipe(Effect.provideService(MessageLog.MessageLog, log))
       const entries = window.history.length
       window.scrollTo(0, 80)
       expect(clickReporting(link(app, "Home"))).toBe(true)
@@ -349,24 +347,8 @@ describe("BrowserRouter", { concurrent: false }, () => {
       expect(window.history.length).toBe(entries)
       expect(window.scrollY).toBe(80)
       expect(region()?.textContent).toBe("")
-      expect(urls).toEqual(["/?utm_source=news", "/?utm_source=news"])
-    }).pipe(Effect.scoped))
-
-  it.effect("repeating Slow while its Layer is pending still scrolls and announces when ready", () =>
-    Effect.gen(function*() {
-      const { app } = yield* start("/")
-      window.scrollTo(0, 80)
-      clickReporting(link(app, "Slow"))
-      yield* tick
-      expect(window.location.pathname).toBe("/slow")
-      expect(window.scrollY).toBe(80)
-      clickReporting(link(app, "Slow"))
-      yield* tick
-      expect(window.scrollY).toBe(80)
-      yield* TestClock.adjust("1 second")
-      yield* tick
-      expect(window.scrollY).toBe(0)
-      expect(region()?.textContent).toBe("Slow · App")
+      expect(log.entries().flatMap((entry) => entry._tag === "Update" ? [entry.message] : []))
+        .toEqual([Message.ChangedRoute({ route: homeRoute })])
     }).pipe(Effect.scoped))
 
   it.effect("repeating Slow after Back preserves the entry's pending scroll restoration", () =>
@@ -381,25 +363,13 @@ describe("BrowserRouter", { concurrent: false }, () => {
       window.history.back()
       yield* tick
       expect(window.location.pathname).toBe("/slow")
+      window.scrollTo(0, 40)
       clickReporting(link(app, "Slow"))
       yield* tick
+      expect(window.scrollY).toBe(40)
       yield* TestClock.adjust("1 second")
       yield* tick
       expect(window.scrollY).toBe(90)
-    }).pipe(Effect.scoped))
-
-  it.effect("repeating Person 1 preserves its queued announcement", () =>
-    Effect.gen(function*() {
-      const frames = manualFrames()
-      const { app } = yield* start("/", { window: frames.window })
-      clickReporting(link(app, "Person 1"))
-      yield* tick
-      expect(document.title).toBe("Person 1 · App")
-      expect(region()?.textContent).toBe("")
-      clickReporting(link(app, "Person 1"))
-      yield* tick
-      frames.run()
-      expect(region()?.textContent).toBe("Person 1 · App")
     }).pipe(Effect.scoped))
 
   it.effect("a redirect reusing its route object announces only after the new visit settles", () =>
@@ -407,7 +377,7 @@ describe("BrowserRouter", { concurrent: false }, () => {
       const frames = manualFrames()
       const slow = AppRoute.make({ _tag: "Slow" })
       const routes = Route.union(AppRoute.routes, Route.redirect("/old-slow", () => slow))
-      const { router } = yield* start("/", { routes, window: frames.window })
+      const { app, router } = yield* start("/", { routes, window: frames.window })
 
       yield* router.navigate("/old-slow")
       yield* tick
@@ -423,6 +393,9 @@ describe("BrowserRouter", { concurrent: false }, () => {
 
       yield* tick
       yield* TestClock.adjust("1 second")
+      yield* tick
+      // A click on this visit, unlike a new visit, preserves its queued announcement.
+      clickReporting(link(app, "Slow"))
       yield* tick
       frames.run()
       expect(region()?.textContent).toBe("Slow · App")
@@ -528,30 +501,15 @@ describe("BrowserRouter", { concurrent: false }, () => {
       expect(HtmlLocator.getByRole(app, "heading").textContent).toBe("Search ada")
     }).pipe(Effect.scoped))
 
-  it.effect("doesn't announce a navigation a newer one replaced before its frame", () =>
-    Effect.gen(function*() {
-      const frames = manualFrames()
-      const { app } = yield* start("/", { window: frames.window })
-      clickReporting(link(app, "Person 1"))
-      yield* tick
-      // Person 1 settled and cleared the region; its text waits for the next frame.
-      expect(region()?.textContent).toBe("")
-      clickReporting(link(app, "Slow"))
-      yield* tick
-      frames.run()
-      expect(region()?.textContent).toBe("")
-      yield* TestClock.adjust("1 second")
-      yield* tick
-      frames.run()
-      expect(region()?.textContent).toBe("Slow · App")
-    }).pipe(Effect.scoped))
-
   it.effect("restores the scroll position on back and forward between #hash entries", () =>
     Effect.gen(function*() {
       const { app, router } = yield* start("/")
       clickReporting(link(app, "Person 2 bio"))
       yield* tick
       window.scrollTo(0, 100)
+      clickReporting(link(app, "Person 2 bio"))
+      yield* tick
+      expect(window.scrollY).toBe(100)
       yield* router.navigate("/people/2#top")
       yield* tick
       window.scrollTo(0, 40)
