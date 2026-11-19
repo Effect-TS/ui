@@ -762,6 +762,156 @@ describe("HtmlServer", { concurrent: false }, () => {
       expect(app.innerHTML).not.toContain("<!--")
     }).pipe(Effect.scoped))
 
+  describe("keeps what the user changed before adoption", () => {
+    const Message = UiSchema.TaggedEnum({
+      Input: { field: Schema.String, value: Schema.String },
+      Change: { field: Schema.String, value: Schema.String }
+    })
+    const makeForm = (seen: Array<string>) =>
+      Component.define({
+        name: "Form",
+        model: Schema.Struct({
+          name: Schema.String,
+          other: Schema.String,
+          note: Schema.String,
+          agree: Schema.Boolean
+        }),
+        message: Message,
+        elements: Html
+      }).make({
+        init: () => ({ name: "server", other: "server", note: "server", agree: false }),
+        update: (model, message) => {
+          seen.push(`${message._tag} ${message.field}=${message.value}`)
+          // The note rejects every edit.
+          if (message.field === "note") return model
+          if (message.field === "agree") return { ...model, agree: message.value === "true" }
+          return { ...model, [message.field]: message.value }
+        },
+        view: (model, h) => {
+          const input = (field: string) => ({ value }: { readonly value: string }) => Message.Input({ field, value })
+          return h.form(
+            h.input.attr("aria-label", "Name").value(model.name).onInput(input("name"))
+              .onChange(({ value }) => Message.Change({ field: "name", value })),
+            h.input.attr("aria-label", "Other").value(model.other).onInput(input("other")),
+            h.textarea.attr("aria-label", "Note").value(model.note).onInput(input("note")),
+            h.input.attr("type", "checkbox").attr("aria-label", "Agree").checked(model.agree)
+              .onChange(({ checked }) => Message.Change({ field: "agree", value: String(checked) }))
+          )
+        }
+      })
+    const field = <A extends globalThis.Element>(app: globalThis.Element, label: string) =>
+      app.querySelector<A>(`[aria-label="${label}"]`)!
+
+    it.effect("reports an edit made while the instance waits for its Layer", () =>
+      Effect.gen(function*() {
+        const seen: Array<string> = []
+        const Form = makeForm(seen).pipe(Component.provide(Layer.effectDiscard(Effect.sleep("50 millis"))))
+        const fiber = yield* Effect.forkChild(HtmlServer.renderToHtml(Form, {}))
+        yield* TestClock.adjust("50 millis")
+        const rendered = yield* Fiber.join(fiber)
+        const app = yield* container(rendered.html)
+        const root = yield* BrowserHost.mountEffect(Form, {}, app, { state: rendered.state })
+        const name = field<HTMLInputElement>(app, "Name")
+        const note = field<HTMLTextAreaElement>(app, "Note")
+        name.value = "edited"
+        // Cleared, which a textarea's rebuilt text can't be told from by its default alone.
+        note.value = ""
+        yield* tick
+        expect(seen).toEqual([])
+
+        yield* TestClock.adjust("50 millis")
+        yield* root.adopted
+        yield* tick
+        expect(field(app, "Name")).toBe(name)
+        expect(name.value).toBe("edited")
+        expect(field<HTMLInputElement>(app, "Other").value).toBe("server")
+        expect(note.value).toBe("server")
+        expect(root.model()).toMatchObject({ name: "edited", other: "server", note: "server" })
+        expect(seen).toEqual(["Input name=edited", "Change name=edited", "Input note="])
+      }).pipe(Effect.scoped))
+
+    it.effect("reports edits made before the client mounts: a checkbox and a focused field", () =>
+      Effect.gen(function*() {
+        const seen: Array<string> = []
+        const Form = makeForm(seen)
+        const rendered = yield* HtmlServer.renderToHtml(Form, {})
+        const app = yield* container(rendered.html)
+        const agree = field<HTMLInputElement>(app, "Agree")
+        const name = field<HTMLInputElement>(app, "Name")
+        agree.checked = true
+        name.focus()
+        name.value = "typed"
+
+        const root = yield* BrowserHost.mountEffect(Form, {}, app, { state: rendered.state })
+        yield* root.adopted
+        yield* tick
+        expect(agree.checked).toBe(true)
+        expect(name.value).toBe("typed")
+        expect(root.model()).toMatchObject({ name: "typed", agree: true })
+        // The browser still fires the focused field's `change` when it loses focus.
+        expect(seen).toEqual(["Input name=typed", "Change agree=true"])
+      }).pipe(Effect.scoped))
+
+    // The client Model picks what the server's HTML didn't, so the adoption writes reach the edited group.
+    const Choice = Component.define({
+      name: "Choice",
+      model: Schema.Struct({ choice: Schema.String, pick: Schema.String }),
+      message: Message,
+      elements: Html
+    })
+    const choiceView = (seen: Array<string>) =>
+      Choice.make({
+        init: () => ({ choice: "a", pick: "" }),
+        update: (model, message) => {
+          seen.push(`${message._tag} ${message.field}=${message.value}`)
+          return { ...model, [message.field]: message.value }
+        },
+        view: (model, h) => {
+          const radios = ["a", "b", "c"].map((value) =>
+            h.input.attr("type", "radio").attr("name", "choice").attr("aria-label", value)
+              .attr("form", "choices")
+              .checked(model.choice === value).onChange(() => Message.Change({ field: "choice", value }))
+          )
+          // The browser starts on B: A is disabled by its group.
+          const select = h.select.attr("aria-label", "Pick").value(model.pick)
+            .onChange(({ value }) => Message.Change({ field: "pick", value }))
+            .children(
+              h.optgroup.attr("disabled", "").children(h.option.attr("value", "a").children("A")),
+              h.option.attr("value", "b").children("B"),
+              h.option.attr("value", "c").children("C")
+            )
+          return h.div(h.form.attr("id", "choices").children(select), ...radios)
+        }
+      })
+
+    for (const picked of [false, true]) {
+      const name = picked ? "keeps a radio picked outside its form" : "initializes untouched radios and a select"
+      it.effect(name, () =>
+        Effect.gen(function*() {
+          const seen: Array<string> = []
+          const Form = choiceView(seen)
+          const rendered = yield* HtmlServer.renderToHtml(Form, {})
+          const app = yield* container(rendered.html)
+          const radios = ["a", "b", "c"].map((label) => field<HTMLInputElement>(app, label))
+          const pick = field<HTMLSelectElement>(app, "Pick")
+          expect(pick.value).toBe("b")
+          if (picked) radios[1].checked = true
+          const expected = picked ? [false, true, false] : [false, false, true]
+
+          const root = yield* BrowserHost.mountEffect(Form, {}, app, {
+            state: { ...rendered.state, "/Choice": { choice: "c", pick: "c" } }
+          })
+          expect(radios.map((radio) => radio.checked)).toEqual(expected)
+          yield* root.adopted
+          yield* tick
+          expect(radios.map((radio) => radio.checked)).toEqual(expected)
+          expect(pick.value).toBe("c")
+          expect(root.model()).toMatchObject({ choice: picked ? "b" : "c", pick: "c" })
+          expect(seen).toEqual(picked ? ["Change choice=b"] : [])
+        }).pipe(Effect.scoped))
+    }
+  })
+
   it.effect("a keyed provide selects its Layer from the Model the client adopts", () =>
     Effect.gen(function*() {
       class Store extends Context.Service<Store, string>()("test/KeyedStore") {}

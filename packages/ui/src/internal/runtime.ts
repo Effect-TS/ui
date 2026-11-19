@@ -887,6 +887,9 @@ const setup = (
 
   // -- hydration ------------------------------------------------------------
   const hydration = host.hydration
+  // Sets a property of an adopted element: the host's own way, or as on any other element.
+  const adoptProp = hydration?.adoptProp ??
+    ((node: unknown, name: string, value: unknown) => host.setProp(node, name, value))
   // The server's state, until every instance has adopted.
   let hydrating: {
     readonly state: Renderer.State
@@ -4850,7 +4853,7 @@ const setup = (
           ? view.children.map((child) => create(inst, child, env))
           : view.children.map((child, index) => adoptNode(inst, child, plans[index]!, env))
         place(node, children, undefined)
-        for (const name in view.props) host.setProp(node, name, view.props[name])
+        for (const name in view.props) adoptProp(node, name, view.props[name])
         return {
           _tag: "Element",
           v: view,

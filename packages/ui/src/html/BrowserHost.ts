@@ -63,6 +63,16 @@
  * and puts the Model's value back after the user changes it and the Model
  * didn't follow, whether `update` rejected the change or nothing handled it.
  *
+ * A server-rendered control the user changed before its instance adopted
+ * keeps what it shows, and the host sends its state to the element's
+ * `onInput` and `onChange` as if the events had just fired, then puts the
+ * Model's value back as above if `update` didn't take it. A control counts as
+ * changed when it differs from both the server's HTML and the Model's value,
+ * so a field the browser filled in, by autofill or by restoring a form, is
+ * reported too, and so is one showing what the browser made of a value it
+ * can't show, such as a range input clamped to its `max`. A focused text
+ * field gets no `change`, as the browser sends it when focus leaves.
+ *
  * **Example** (Mounting an app)
  *
  * ```ts
@@ -141,6 +151,80 @@ const controlled: ReadonlySet<string> = new Set(["value", "checked", "selected",
 
 const emptyValue = (name: string): unknown => name === "value" ? "" : false
 
+/** Input types whose `change` the browser fires when the field loses focus, not when the value changes. */
+const changeOnBlur: ReadonlySet<string> = new Set(["text", "search", "url", "tel", "email", "password", "number"])
+
+const isRadio = (node: globalThis.Node): node is HTMLInputElement =>
+  (node as globalThis.Element).localName === "input" && (node as HTMLInputElement).type === "radio"
+
+/**
+ * The radio buttons `radio` unchecks when it's checked, itself included: those in its tree with its name
+ * and its form owner, which may be a form they're outside of, named by their `form` attribute.
+ */
+const radioGroup = (radio: HTMLInputElement): ReadonlyArray<HTMLInputElement> => {
+  if (radio.name === "") return [radio]
+  const root = radio.getRootNode() as Document | DocumentFragment
+  return Array.from(root.querySelectorAll<HTMLInputElement>(`input[type="radio"]`)).filter((other) =>
+    other.name === radio.name && other.form === radio.form
+  )
+}
+
+/** Whether `option` is disabled, by its own attribute or by its `optgroup`'s. */
+const optionDisabled = (option: HTMLOptionElement): boolean =>
+  option.disabled || (option.parentElement?.localName === "optgroup" && option.parentElement.hasAttribute("disabled"))
+
+/** The property the user changes on `node`, if it's a control. */
+const userProp = (node: globalThis.Node): string | undefined => {
+  switch ((node as globalThis.Element).localName) {
+    case "input": {
+      const type = (node as HTMLInputElement).type
+      return type === "checkbox" || type === "radio" ? "checked" : "value"
+    }
+    case "textarea":
+    case "select":
+      return "value"
+    case "option":
+      return "selected"
+    default:
+      return undefined
+  }
+}
+
+/**
+ * Whether a `select`'s options differ from those its HTML selects: the ones with the `selected`
+ * attribute, the last of them for a single select, or else the first option that isn't disabled, itself
+ * or by its group, as a browser picks for a drop-down.
+ */
+const selectionChanged = (select: HTMLSelectElement): boolean => {
+  const options = Array.from(select.options)
+  const marked = options.map((option) => option.hasAttribute("selected"))
+  if (select.multiple) return options.some((option, i) => option.selected !== marked[i])
+  const last = marked.lastIndexOf(true)
+  const index = last !== -1 ? last : select.size > 1 ? -1 : options.findIndex((option) => !optionDisabled(option))
+  return options.some((option, i) => option.selected !== (i === index))
+}
+
+/** Whether `control` differs from the default the server's HTML gave it. */
+const changedFromDefault = (control: globalThis.Element): boolean => {
+  switch (control.localName) {
+    case "input":
+    case "textarea": {
+      const field = control as HTMLInputElement
+      return userProp(field) === "checked" ? field.checked !== field.defaultChecked : field.value !== field.defaultValue
+    }
+    case "select":
+      return selectionChanged(control as HTMLSelectElement)
+    default:
+      return false
+  }
+}
+
+/** The control an option's change is reported on and held for: its `select`, if it has one. */
+const controlOf = (node: globalThis.Node): globalThis.Element => {
+  const element = node as globalThis.Element
+  return element.localName === "option" ? element.closest("select") ?? element : element
+}
+
 interface Bound {
   readonly handlers: Readonly<Record<string, View.Handler<unknown, any>>>
   readonly dispatch: Renderer.Dispatch
@@ -188,6 +272,14 @@ const fieldsOf = (form: HTMLFormElement, submitter: HTMLElement | null) => {
   return { fields, entries }
 }
 
+/** The payload of `input` and `change` from `source`, the control that changed. */
+const controlPayload = (source: globalThis.Element): unknown => {
+  const control = source as HTMLInputElement
+  return control.localName === "input"
+    ? { value: control.value, checked: control.checked === true }
+    : { value: String(control.value ?? "") }
+}
+
 /**
  * Builds the payload a handler gets: plain data, read from the event and the
  * elements involved.
@@ -210,12 +302,8 @@ const payloadOf = (name: string, event: Event, target: EventTarget | null, eleme
       return { key: e.key ?? "", ...modifiers(event), composing }
     }
     case "input":
-    case "change": {
-      const source = (target !== null && "value" in (target as object) ? target : element) as HTMLInputElement
-      return source.localName === "input"
-        ? { value: source.value, checked: source.checked === true }
-        : { value: String(source.value ?? "") }
-    }
+    case "change":
+      return controlPayload((target !== null && "value" in (target as object) ? target : element) as globalThis.Element)
     case "submit": {
       const form = (element.localName === "form" ? element : target) as HTMLFormElement
       return fieldsOf(form, (event as SubmitEvent).submitter ?? null)
@@ -478,11 +566,7 @@ export const makeHost = (
     switch (element.localName) {
       case "input": {
         // A radio button unchecks the others in its group.
-        if (element.type !== "radio" || element.name === "") return
-        const root = element.form ?? element.ownerDocument
-        for (const other of root.querySelectorAll(`input[type="radio"]`)) {
-          if ((other as HTMLInputElement).name === element.name) restoreNode(other)
-        }
+        if (isRadio(element)) { for (const other of radioGroup(element)) restoreNode(other) }
         return
       }
       case "select": {
@@ -513,6 +597,61 @@ export const makeHost = (
       })
     }
     restoring.add(target as globalThis.Node)
+  }
+
+  // -- edits before adoption -------------------------------------------------
+  // A server-rendered control the user changed before its instance adopted keeps what it shows, and the
+  // change is reported to its `onInput` and `onChange` at the commit, as if the events had just fired.
+  // A change is told from an untouched control by its live state differing from the server's default.
+  /** Controls changed before they adopted, whose Model value isn't written until the commit reports them. */
+  const edited = new Set<globalThis.Element>()
+  /**
+   * Whether each control adoption has touched since the last commit was changed, read before adoption
+   * wrote to it. Adoption's own writes change controls: checking one radio button unchecks the user's, and
+   * selecting an option unselects the others, so a control read after one of them would look changed, or
+   * untouched, depending on which was adopted first. A radio group is read as one. A textarea is read
+   * when hydration inspects it, just before adopting it: adoption rebuilds its text, which moves the
+   * default, and an untouched textarea's value with it.
+   */
+  const changedBefore = new Map<globalThis.Node, boolean>()
+
+  /** Whether `control` was changed when adoption first touched it, or any button of its radio group. */
+  const wasChanged = (control: globalThis.Element): boolean => {
+    let changed = changedBefore.get(control)
+    if (changed === undefined) {
+      const group = isRadio(control) ? radioGroup(control) : [control]
+      changed = group.some(changedFromDefault)
+      for (const member of group) changedBefore.set(member, changed)
+    }
+    return changed
+  }
+
+  /** Sends `name` for `control` to the innermost handler for it, from `control` up, as the event would go. */
+  const report = (control: globalThis.Element, name: string) => {
+    for (let node: globalThis.Node | null = control; node !== null; node = node.parentNode) {
+      const entry = bound.get(node)
+      const handler = entry?.handlers[name]
+      if (entry !== undefined && handler !== undefined) return entry.dispatch(name, handler, controlPayload(control))
+    }
+  }
+
+  /**
+   * Reports each held control's state as its `input` and `change`. A radio group is reported by the
+   * checked button. A focused text field gets no `change`: the browser fires it when focus leaves.
+   */
+  const reportEdits = () => {
+    const controls = Array.from(edited)
+    edited.clear()
+    for (const node of controls) {
+      const control = node as HTMLInputElement
+      if (!control.isConnected || (isRadio(control) && !control.checked)) continue
+      report(control, "input")
+      const typing = control.localName === "textarea" ||
+        (control.localName === "input" && changeOnBlur.has(control.type))
+      if (!typing || control.ownerDocument.activeElement !== control) report(control, "change")
+      // A radio button restores its whole group.
+      restoreSoon(control)
+    }
   }
 
   // -- drag and drop ---------------------------------------------------------
@@ -754,13 +893,28 @@ export const makeHost = (
   }
   for (const name of alwaysEvents) listen(name)
 
+  /**
+   * Sets a property of an adopted element. A control the user changed from the server's default, to
+   * other than the Model's value, is held: it keeps what it shows, and the commit reports it. In a changed
+   * radio group that holds the user's button, and the one the Model checks, which would uncheck it.
+   */
+  const adoptProp = (node: globalThis.Node, name: string, value: unknown): void => {
+    if (name === userProp(node)) {
+      const control = controlOf(node)
+      if (wasChanged(control) && (node as any)[name] !== (value === undefined ? emptyValue(name) : value)) {
+        edited.add(control)
+      }
+    }
+    host.setProp(node, name, value)
+  }
+
   // The element `createElement` made last, until its events are set: it has no entry yet, and its
   // tag is known without asking the node.
   let fresh: globalThis.Node | undefined
   // Whether its tag is `form` in any case, so only such an element is asked what it is.
   let freshMayBeForm = false
 
-  return {
+  const host: Renderer.Host<globalThis.Node> & { readonly dispose: () => void } = {
     createElement(tag) {
       freshMayBeForm = tag.length === 4 && (tag === "form" || tag.toLowerCase() === "form")
       return fresh = elements.svgTags.has(tag) ? document.createElementNS(SVG, tag) : document.createElement(tag)
@@ -839,6 +993,8 @@ export const makeHost = (
           }
           values.set(name, value)
         }
+        // A control changed before it adopted shows the change until the commit reports it.
+        if (edited.size > 0 && edited.has(controlOf(node)) && name === userProp(node)) return
         // Skip a no-op, so a caret in the middle of the text stays where it is.
         if (element[name] !== value) element[name] = value
         return
@@ -891,6 +1047,7 @@ export const makeHost = (
         switch (node.nodeType) {
           case 1: {
             const tag = (node as globalThis.Element).localName
+            if (tag === "textarea") changedBefore.set(node, changedFromDefault(node as globalThis.Element))
             return { _tag: "Element", tag, textOnly: server.textOnlyTags.has(tag) }
           }
           case 3:
@@ -901,9 +1058,12 @@ export const makeHost = (
             return { _tag: "Other" }
         }
       },
-      getAttr: (node, name) => (node as globalThis.Element).getAttribute(name) ?? undefined
+      getAttr: (node, name) => (node as globalThis.Element).getAttribute(name) ?? undefined,
+      adoptProp
     },
     commit() {
+      changedBefore.clear()
+      if (edited.size > 0) reportEdits()
       for (const dialog of shown) {
         if (!dialog.open || !dialog.isConnected) shown.delete(dialog)
       }
@@ -927,6 +1087,7 @@ export const makeHost = (
       active = undefined
     }
   }
+  return host
 }
 
 /**
@@ -1080,8 +1241,9 @@ export interface MountOptions<V extends View.Elements, RF = never> {
  * An instance whose provided Layer is still building keeps the server's
  * nodes until the Layer is ready, and everything else is live at once. A
  * waiting instance is inert: its buttons do nothing, links still navigate through
- * the Router, a `<form>` submits natively, and typed input is overwritten
- * when it adopts. Head sync starts once no instance is waiting.
+ * the Router, and a `<form>` submits natively. What the user types or picks
+ * in its fields stays, and reaches the fields' `onInput` and `onChange` when
+ * it adopts. Head sync starts once no instance is waiting.
  *
  * **Example** (Launching an app)
  *
