@@ -5,11 +5,7 @@ import { Locator, Scene, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 
-const EditorMessage = UiSchema.TaggedEnum({
-  ToggledBold: { pressed: Schema.Boolean },
-  ClickedRow: {},
-  DismissedTip: {}
-})
+const EditorMessage = UiSchema.TaggedEnum({ ToggledBold: { pressed: Schema.Boolean }, ClickedRow: {} })
 
 // A consumer that keeps the value in its Model. The row around the toggle
 // counts the clicks the toggle leaves alone.
@@ -23,8 +19,7 @@ const Editor = Component.define({
   init: () => ({ bold: false, rowClicks: 0 }),
   update: {
     ToggledBold: (model, { pressed }) => ({ ...model, bold: pressed }),
-    ClickedRow: (model) => ({ ...model, rowClicks: model.rowClicks + 1 }),
-    DismissedTip: (model) => model
+    ClickedRow: (model) => ({ ...model, rowClicks: model.rowClicks + 1 })
   },
   view: (model, h) =>
     h.div.onClick(EditorMessage.ClickedRow()).children(
@@ -36,31 +31,32 @@ const Editor = Component.define({
     )
 })
 
+const ToolbarMessage = UiSchema.TaggedEnum({ ToggledBold: { pressed: Schema.Boolean }, DismissedTip: {} })
+
 // The toggle stacked on a tooltip trigger: the tooltip's part has its own
 // handler layer, so both hear the click.
 const Toolbar = Component.define({
   name: "Toolbar",
   model: Schema.Struct({ bold: Schema.Boolean, open: Schema.Boolean }),
-  message: EditorMessage,
+  message: ToolbarMessage,
   elements: Html
 }).make({
   init: () => ({ bold: false, open: true }),
   update: {
     ToggledBold: (model, { pressed }) => ({ ...model, bold: pressed }),
-    ClickedRow: (model) => model,
     DismissedTip: (model) => ({ ...model, open: false })
   },
   view: (model, h) =>
     Tooltip(h, {
       key: "bold",
       props: { open: model.open },
-      onEmit: (event) => event._tag === "Dismissed" ? EditorMessage.DismissedTip() : undefined,
+      onEmit: (event) => event._tag === "Dismissed" ? ToolbarMessage.DismissedTip() : undefined,
       view: (t) =>
         h.span(
           Toggle(h, {
             element: t.trigger(h.button),
             props: { pressed: model.bold },
-            onToggle: ({ pressed }) => EditorMessage.ToggledBold({ pressed })
+            onToggle: ({ pressed }) => ToolbarMessage.ToggledBold({ pressed })
           }).class("tool").attr("aria-label", "Bold").children("B"),
           t.positioner(h.div).children("Bold")
         )
@@ -68,8 +64,7 @@ const Toolbar = Component.define({
 })
 
 const toggle = Locator.tag("button")
-const rowClicks = (s: { readonly get: (locator: Locator.Locator) => Locator.Node }) =>
-  s.get(Locator.tag("output")).children?.[0]?.text
+const rowClicks = Locator.tag("output")
 const h = View.makeHelper<typeof EditorMessage.Type, {}, Html.Elements>({}, Html)
 
 describe("Toggle", () => {
@@ -87,7 +82,7 @@ describe("Toggle", () => {
       s.fire(toggle, "click")
       assert.strictEqual(s.get(toggle).attrs?.["aria-pressed"], "false")
       // The toggle handled both clicks, so the row heard neither.
-      assert.strictEqual(rowClicks(s), "0")
+      assert.strictEqual(Locator.textOf(s.get(rowClicks)), "0")
 
       s.props({ disabled: true })
       assert.deepStrictEqual(s.get(toggle).attrs, {
@@ -100,7 +95,7 @@ describe("Toggle", () => {
       // A disabled toggle sets no click handler, so a click that reached it
       // would go to the row. The browser gives a disabled button none.
       s.fire(toggle, "click")
-      assert.strictEqual(rowClicks(s), "1")
+      assert.strictEqual(Locator.textOf(s.get(rowClicks)), "1")
       assert.strictEqual(s.get(toggle).attrs?.["aria-pressed"], "false")
     }))
 
