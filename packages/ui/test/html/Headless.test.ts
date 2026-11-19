@@ -185,7 +185,9 @@ const Twin = Component.define({ name: "Twin", model: Schema.Null, message: Schem
         h.div(
           m.trigger(h.button).children("Actions"),
           Menu(h, {
-            ...(twin.client ? { ref: TwinActions } : { key: "Actions" }),
+            // On the server another key: a child's path is its author's and its segment, so this one would
+            // clash at the ref's path there too.
+            ...(twin.client ? { ref: TwinActions } : { key: "again" }),
             props: { items },
             view: () => h.span("again")
           })

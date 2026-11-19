@@ -315,7 +315,7 @@ describe("headless components", () => {
       yield* TestHost.settle
       // Menu and Dialog each run their own update, and what they emit reaches whoever declared them.
       assert.deepStrictEqual(updates(root), [
-        "/Picker/Dialog[confirm]/Menu[actions] DomEvent Pick",
+        "/Picker/Menu[actions] DomEvent Pick",
         "/Picker Emit Picked",
         "/Picker/Dialog[confirm] DomEvent Close",
         "/Picker Emit Closed",
@@ -324,7 +324,7 @@ describe("headless components", () => {
       assert.deepStrictEqual(root.model(), ["picked c", "closed", "clicked c"])
       assert.include(root.text(), "picked c, closed, clicked c")
       assert.deepStrictEqual((root.get(Locator.text("Copy", { exact: true })) as TestHost.TestElement).owners, {
-        click: ["/Picker/Dialog[confirm]/Menu[actions]", "/Picker/Dialog[confirm]", "/Picker"]
+        click: ["/Picker/Menu[actions]", "/Picker/Dialog[confirm]", "/Picker"]
       })
     })))
 
@@ -339,13 +339,13 @@ describe("headless components", () => {
       click(root, "break")
       yield* TestHost.settle
       assert.deepStrictEqual(updates(root), [
-        "/Shell/Board[board]/Menu[actions]/Bell[bell] DomEvent Ring",
+        "/Shell/Board[board]/Bell[bell] DomEvent Ring",
         "/Shell/Board[board] Emit Rang",
-        "/Shell/Board[board]/Menu[actions]/Bell[bell] DomEvent Ring",
+        "/Shell/Board[board]/Bell[bell] DomEvent Ring",
         "/Shell/Board[board] Emit Rang",
         "/Shell/Board[board] Failure Failed"
       ])
-      assert.deepStrictEqual(failures(root), ["/Shell/Board[board]/Menu[actions]/Bell[bell] update"])
+      assert.deepStrictEqual(failures(root), ["/Shell/Board[board]/Bell[bell] update"])
       assert.include(root.text(), "bell down")
       assert.include(root.text(), "Rang, Rang, Failed")
     })))
@@ -368,7 +368,7 @@ describe("headless components", () => {
         entry._tag === "Failed" ? [entry.path + " " + entry.in + " " + Cause.squash(entry.cause)] : []
       )
     const twice =
-      "/Opener view Error: /Opener renders two children with the ref Actions, in the view it gives /Opener/Menu[Actions]"
+      "/Opener view Error: /Opener renders two children at Menu[Actions], in the view it gives /Opener/Menu[Actions]"
 
     it.effect("fail the parent on its first render", () =>
       provideHost(Effect.gen(function*() {
@@ -441,13 +441,12 @@ describe("headless components", () => {
         yield* Effect.flip(TestHost.settle)
         assert.strictEqual(root.text(), "crashed")
         assert.deepStrictEqual(failed(root), [
-          "/Nested view Error: /Nested renders two children with the ref Spare, in the view it gives " +
-          "/Nested/Menu[outer]/Menu[inner]"
+          "/Nested view Error: /Nested renders two children at Menu[Spare], in the view it gives /Nested/Menu[inner]"
         ])
       })))
 
     it("fail a Scene step the same way", () => {
-      const twice = /\/Opener renders two children with the ref Actions, in the view it gives \/Opener\/Menu\[Actions\]/
+      const twice = /\/Opener renders two children at Menu\[Actions\], in the view it gives \/Opener\/Menu\[Actions\]/
       assert.throws(() => Scene.start(Opener, { twin: "mount" }).current.view(), twice)
       // Nothing in the view sends `Twin` or `Swap`, so the scene starts from the Model they make.
       assert.throws(() => Scene.start(Opener, { twin: "never" }).given((model) => ({ ...model, twin: true })), twice)
@@ -553,7 +552,7 @@ describe("headless components", () => {
       click(root, "break")
       yield* TestHost.settle
       assert.deepStrictEqual(failures(root), [
-        "/Shell/Board[board]/Menu[actions]/Bell[bell] update",
+        "/Shell/Board[board]/Bell[bell] update",
         "/Shell/Board[board] fallback"
       ])
       assert.strictEqual(root.text(), "board down")

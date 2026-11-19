@@ -308,7 +308,7 @@ it.layer(AppTest, { buildPerTest: true })("App", (it) => {
       assert.include(result.html, "Milk")
       // The paths of the instances that adopted the server's state.
       // The editor sits in the Collapsible's `body` slot, under its path.
-      assert.include(result.adopted, "/App/NotePage[/notes/n1]/Collapsible[note]/[body]/NoteEditor[Editor[n1]]")
+      assert.include(result.adopted, "/App/NotePage[/notes/n1]/NoteEditor[Editor[n1]]")
     }))
 })
 
