@@ -318,8 +318,17 @@ model.advanced
   `ai-docs/src/10_ui/index.md`, which `LLMS.md` includes. Base UI's
   callback names are never event names: Switch has `onToggle` and a
   Checkbox emits `Toggled`, not `CheckedChange`.
-- `update` always uses `Message.match`, even for a union with one
-  member, so a new message is a type error until it is handled.
+- `update` is a record with one function per message tag, even for a
+  union with one member. A reader sees every message handled, and a new
+  message is a type error until it has a key. Use the function form only
+  for a catch-all, or for an `update` that doesn't dispatch on the tag,
+  such as `update: (model) => model`.
+- Logic that several tags share is a function above the component. When
+  it is the whole handler, give it a handler's parameters,
+  `(model, message, $)`, so it is the key's value: `LeftTrigger: left`.
+  Otherwise the handlers call it with `model` and `$`. Type its `$` as
+  `Component.Update` over the component's Model, message, events and
+  props types, which every tag's `$` fits. `Tooltip.ts` has both.
 
 ## State
 

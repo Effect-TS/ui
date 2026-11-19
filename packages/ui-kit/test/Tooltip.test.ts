@@ -42,12 +42,11 @@ const Toolbar = Component.define({
   elements: Html
 }).make({
   init: () => ({ open: true, pressed: 0, dismissed: 0 }),
-  update: (model, message) =>
-    ToolbarMessage.match(message, {
-      PressedBold: () => ({ ...model, pressed: model.pressed + 1 }),
-      OpenedBoldTip: () => ({ ...model, open: true }),
-      DismissedBoldTip: () => ({ ...model, open: false, dismissed: model.dismissed + 1 })
-    }),
+  update: {
+    PressedBold: (model) => ({ ...model, pressed: model.pressed + 1 }),
+    OpenedBoldTip: (model) => ({ ...model, open: true }),
+    DismissedBoldTip: (model) => ({ ...model, open: false, dismissed: model.dismissed + 1 })
+  },
   view: (model, h) =>
     h.div(
       Tooltip(h, {
@@ -78,11 +77,10 @@ const Grouped = Component.define({
   elements: Html
 }).make({
   init: () => ({ tip: null }),
-  update: (model, message) =>
-    GroupedMessage.match(message, {
-      OpenedTip: ({ tip }) => ({ tip }),
-      DismissedTip: ({ tip }) => (model.tip === tip ? { tip: null } : model)
-    }),
+  update: {
+    OpenedTip: (_model, { tip }) => ({ tip }),
+    DismissedTip: (model, { tip }) => (model.tip === tip ? { tip: null } : model)
+  },
   view: (model, h) =>
     TooltipProvider(h, {
       props: {},
@@ -117,14 +115,13 @@ const Independent = Component.define({
   elements: Html
 }).make({
   init: () => ({ bold: false, italic: false, requests: 0 }),
-  update: (model, message, $) =>
-    IndependentMessage.match(message, {
-      OpenedTip: ({ tip }) => ({ ...model, [tip]: true }),
-      DismissedTip: ({ tip }) =>
-        tip === "bold"
-          ? { ...model, bold: $.props.keep, requests: model.requests + 1 }
-          : { ...model, italic: false }
-    }),
+  update: {
+    OpenedTip: (model, { tip }) => ({ ...model, [tip]: true }),
+    DismissedTip: (model, { tip }, $) =>
+      tip === "bold"
+        ? { ...model, bold: $.props.keep, requests: model.requests + 1 }
+        : { ...model, italic: false }
+  },
   view: (model, h) =>
     h.div(
       TooltipProvider(h, {
@@ -176,15 +173,13 @@ const Deferred = Component.define({
   elements: Html
 }).make({
   init: () => ({ bold: false, italic: false, underline: false, requests: 0 }),
-  update: (model, message) =>
-    DeferredMessage.match(message, {
-      RequestedOpen: () => model,
-      RequestedClose: (
-        { tip }
-      ) => (tip === "bold" ? { ...model, requests: model.requests + 1 } : { ...model, [tip]: false }),
-      AcceptedOpen: ({ tip }) => ({ ...model, [tip]: true }),
-      AcceptedClose: ({ tip }) => ({ ...model, [tip]: false })
-    }),
+  update: {
+    RequestedOpen: (model) => model,
+    RequestedClose: (model, { tip }) =>
+      tip === "bold" ? { ...model, requests: model.requests + 1 } : { ...model, [tip]: false },
+    AcceptedOpen: (model, { tip }) => ({ ...model, [tip]: true }),
+    AcceptedClose: (model, { tip }) => ({ ...model, [tip]: false })
+  },
   view: (model, h) =>
     h.div(
       TooltipProvider(h, {

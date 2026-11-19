@@ -281,11 +281,10 @@ export const Avatar = Component.define({
     report: null,
     delayElapsed: !((props.fallbackDelay ?? 0) > 0)
   }),
-  update: (model, message) =>
-    Message.match(message, {
-      ChangedImageStatus: ({ source, status }) => ({ ...model, report: { source, status } }),
-      ElapsedFallbackDelay: () => ({ ...model, delayElapsed: true })
-    }),
+  update: {
+    ChangedImageStatus: (model, { source, status }) => ({ ...model, report: { source, status } }),
+    ElapsedFallbackDelay: (model) => ({ ...model, delayElapsed: true })
+  },
   subscriptions: (model, props) => [
     !model.delayElapsed &&
     Subscription.make(

@@ -22,11 +22,10 @@ const Settings = Component.define({
   elements: Html
 }).make({
   init: () => ({ notify: false, rowClicks: 0 }),
-  update: (model, message) =>
-    SettingsMessage.match(message, {
-      ToggledNotify: ({ checked }) => ({ ...model, notify: checked }),
-      ClickedRow: () => ({ ...model, rowClicks: model.rowClicks + 1 })
-    }),
+  update: {
+    ToggledNotify: (model, { checked }) => ({ ...model, notify: checked }),
+    ClickedRow: (model) => ({ ...model, rowClicks: model.rowClicks + 1 })
+  },
   view: (model, h) =>
     h.div.onClick(SettingsMessage.ClickedRow()).children(
       Switch(h, {

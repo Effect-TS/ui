@@ -78,10 +78,9 @@
  *   elements: Html
  * }).make({
  *   init: () => ({ terms: false }),
- *   update: (model, message) =>
- *     SignupMessage.match(message, {
- *       ToggledTerms: ({ checked }) => ({ ...model, terms: checked })
- *     }),
+ *   update: {
+ *     ToggledTerms: (model, { checked }) => ({ ...model, terms: checked })
+ *   },
  *   view: (model, h) =>
  *     Checkbox(h, {
  *       props: { checked: model.terms, name: "terms", required: true },
@@ -238,15 +237,14 @@ export const Checkbox = Component.define({
   elements: Html
 }).make({
   init: () => ({}),
-  update: (model, message, $) =>
-    Message.match(message, {
-      ClickedRoot: () =>
-        interactive($.props)
-          ? $.emit(CheckboxEvents.Toggled({ checked: !$.props.checked }))
-          : model,
-      // Enter means nothing to a checkbox: the message only cancels it.
-      PressedEnter: () => model
-    }),
+  update: {
+    ClickedRoot: (model, _message, $) =>
+      interactive($.props)
+        ? $.emit(CheckboxEvents.Toggled({ checked: !$.props.checked }))
+        : model,
+    // Enter means nothing to a checkbox: the message only cancels it.
+    PressedEnter: (model) => model
+  },
   parts: (_model, p) => {
     const indeterminate = p.props.indeterminate === true
     const hidden = field(p.props)

@@ -49,10 +49,9 @@
  *   elements: Html
  * }).make({
  *   init: () => ({ name: "Ada" }),
- *   update: (model, message) =>
- *     ProfileMessage.match(message, {
- *       UpdatedName: ({ value }) => ({ ...model, name: value })
- *     }),
+ *   update: {
+ *     UpdatedName: (model, { value }) => ({ ...model, name: value })
+ *   },
  *   view: (model, h) =>
  *     h.label(
  *       "Name",

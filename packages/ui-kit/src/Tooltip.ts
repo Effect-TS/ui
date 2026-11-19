@@ -103,10 +103,9 @@
  *   elements: Html
  * }).make({
  *   init: () => ({ boldTip: false }),
- *   update: (model, message) =>
- *     ToolbarMessage.match(message, {
- *       ToggledBoldTip: ({ open }) => ({ ...model, boldTip: open })
- *     }),
+ *   update: {
+ *     ToggledBoldTip: (model, { open }) => ({ ...model, boldTip: open })
+ *   },
  *   view: (model, h) =>
  *     Tooltip(h, {
  *       key: "bold",
@@ -353,6 +352,25 @@ const newestOf = (turns: ReadonlyArray<number>): number | null => {
 // A disabled tooltip never shows, whatever `open` says.
 const shownBy = (props: TooltipProps): boolean => props.open && props.disabled !== true
 
+// `$` in any handler of the Tooltip's `update`: a tag's `$` fits the one
+// over the whole message type.
+type TooltipUpdate = Component.Update<typeof Model.Type, typeof Message.Type, TooltipEvents, TooltipProps>
+
+// The user closed the tooltip, if it shows. Any wait for `closeDelay` is over.
+const dismiss = (model: typeof Model.Type, $: TooltipUpdate, instant = model.instant) =>
+  shownBy($.props)
+    ? $.set({ ...model, instant }).run(Command.interrupt(WaitBeforeClosing)).emit(dismissed)
+    : model
+
+// The pointer left the trigger or the positioner: a pending open stops, and
+// an open tooltip closes after `closeDelay` unless keyboard focus holds it.
+const left = (model: typeof Model.Type, _message: unknown, $: TooltipUpdate) => {
+  const next = { ...model, hovered: false, pressed: false }
+  if (!shownBy($.props)) return $.set(next).run(Command.interrupt(WaitBeforeOpening))
+  if (model.focused) return next
+  return $.set(next).run(WaitBeforeClosing({ delay: $.props.closeDelay ?? 0 }))
+}
+
 // A data attribute is present, with an empty value, or absent.
 const flag = (on: boolean | undefined): string | undefined => on === true ? "" : undefined
 
@@ -510,20 +528,19 @@ export const TooltipProvider = Component.define({
   elements: Html
 }).make({
   init: () => ({ open: false, instant: false, turns: [], next: 1 }),
-  update: (model, message, $) =>
-    ProviderMessage.match(message, {
-      ChangedShown: ({ turns }) => {
-        const open = turns.length > 0
-        const next = { ...model, open, turns, next: Math.max(model.next, ...turns.map((turn) => turn + 1)) }
-        if (open) return $.set({ ...next, instant: true }).run(Command.interrupt(WaitBeforeCooling))
-        // The last one closed: the window starts.
-        if (model.open) {
-          return $.set({ ...next, instant: true }).run(WaitBeforeCooling({ timeout: $.props.timeout ?? 400 }))
-        }
-        return next
-      },
-      CompletedWaitBeforeCooling: () => (model.open ? model : { ...model, instant: false })
-    }),
+  update: {
+    ChangedShown: (model, { turns }, $) => {
+      const open = turns.length > 0
+      const next = { ...model, open, turns, next: Math.max(model.next, ...turns.map((turn) => turn + 1)) }
+      if (open) return $.set({ ...next, instant: true }).run(Command.interrupt(WaitBeforeCooling))
+      // The last one closed: the window starts.
+      if (model.open) {
+        return $.set({ ...next, instant: true }).run(WaitBeforeCooling({ timeout: $.props.timeout ?? 400 }))
+      }
+      return next
+    },
+    CompletedWaitBeforeCooling: (model) => (model.open ? model : { ...model, instant: false })
+  },
   parts: () => ({})
 })
 
@@ -576,71 +593,60 @@ export const Tooltip = Component.define({
   elements: Html
 }).make({
   init: () => ({ hovered: false, focused: false, pressed: false, instant: null, turn: 0, yieldedTo: null }),
-  update: (model, message, $) => {
-    const props = $.props
-    const enabled = props.disabled !== true
-    const shown = shownBy(props)
-    // The user closed the tooltip. Any wait for `closeDelay` is over.
-    const dismiss = (instant = model.instant) =>
-      $.set({ ...model, instant }).run(Command.interrupt(WaitBeforeClosing)).emit(dismissed)
-    // The pointer left the trigger or the positioner: a pending open stops, and
-    // an open tooltip closes after `closeDelay` unless keyboard focus holds it.
-    const left = () => {
-      const next = { ...model, hovered: false, pressed: false }
-      if (!shown) return $.set(next).run(Command.interrupt(WaitBeforeOpening))
-      if (model.focused) return next
-      return $.set(next).run(WaitBeforeClosing({ delay: props.closeDelay ?? 0 }))
+  update: {
+    EnteredTrigger: (model, { instant }, $) => {
+      const next = { ...model, hovered: true }
+      if ($.props.disabled === true) return next
+      if (shownBy($.props)) return $.set(next).run(Command.interrupt(WaitBeforeClosing))
+      // A provider's group is open, or closed less than `timeout` ago.
+      if (instant) return $.set({ ...next, instant: "delay" }).run(Command.interrupt(WaitBeforeOpening)).emit(opened)
+      return $.set(next).run(WaitBeforeOpening({ delay: $.props.delay ?? 600 }))
+    },
+    LeftTrigger: left,
+    EnteredPositioner: (model, _message, $) =>
+      $.set({ ...model, hovered: true }).run(Command.interrupt(WaitBeforeClosing)),
+    LeftPositioner: left,
+    FocusedTrigger: (model, _message, $) => {
+      const next = { ...model, focused: !model.pressed, pressed: false }
+      if (model.pressed || $.props.disabled === true || shownBy($.props)) return next
+      return $.set({ ...next, instant: "focus" }).run(Command.interrupt(WaitBeforeOpening)).emit(opened)
+    },
+    BlurredTrigger: (model, _message, $) => {
+      const next = { ...model, focused: false, pressed: false }
+      return shownBy($.props) && !model.hovered ? $.set(next).emit(dismissed) : next
+    },
+    // A mouse press only marks the focus that follows it, and stops a
+    // pending open. The click that follows, or Enter or Space on the
+    // native button, closes an open tooltip.
+    PressedTrigger: (model, _message, $) => {
+      const next = { ...model, pressed: true }
+      return $.props.closeOnClick !== false ? $.set(next).run(Command.interrupt(WaitBeforeOpening)) : next
+    },
+    ClickedTrigger: (model, _message, $) => $.props.closeOnClick !== false ? dismiss(model, $, "dismiss") : model,
+    PressedEscape: (model, _message, $) => dismiss(model, $, "dismiss"),
+    // A press is outside the tooltip when the pointer is on neither the
+    // trigger nor the positioner.
+    PressedDocument: (model, _message, $) => model.hovered ? model : dismiss(model, $),
+    CompletedWaitBeforeOpening: (model, _message, $) =>
+      $.props.disabled !== true && !$.props.open && model.hovered
+        ? $.set({ ...model, instant: null }).emit(opened)
+        : model,
+    CompletedWaitBeforeClosing: (model, _message, $) =>
+      shownBy($.props) && !model.hovered && !model.focused
+        ? $.set({ ...model, instant: null }).emit(dismissed)
+        : model,
+    // The shown tooltips of the group changed. Its turn follows whether it
+    // is shown, as the consumer decided, not whether it asked: a closed
+    // tooltip gives its turn up, and a newly shown one takes the next.
+    // Another tooltip shown after this one asks it to close once, whatever
+    // holds it open, so a refusal isn't met with a second request.
+    ChangedGroup: (model, { newest, next }, $) => {
+      if (!shownBy($.props)) return { ...model, turn: 0, yieldedTo: null }
+      if (model.turn === 0) return { ...model, turn: next, yieldedTo: null }
+      return newest !== null && newest !== model.turn && newest !== model.yieldedTo
+        ? $.set({ ...model, yieldedTo: newest }).run(Command.interrupt(WaitBeforeClosing)).emit(dismissed)
+        : model
     }
-    return Message.match(message, {
-      EnteredTrigger: ({ instant }) => {
-        const next = { ...model, hovered: true }
-        if (!enabled) return next
-        if (shown) return $.set(next).run(Command.interrupt(WaitBeforeClosing))
-        // A provider's group is open, or closed less than `timeout` ago.
-        if (instant) return $.set({ ...next, instant: "delay" }).run(Command.interrupt(WaitBeforeOpening)).emit(opened)
-        return $.set(next).run(WaitBeforeOpening({ delay: props.delay ?? 600 }))
-      },
-      LeftTrigger: left,
-      EnteredPositioner: () => $.set({ ...model, hovered: true }).run(Command.interrupt(WaitBeforeClosing)),
-      LeftPositioner: left,
-      FocusedTrigger: () => {
-        const next = { ...model, focused: !model.pressed, pressed: false }
-        if (model.pressed || !enabled || shown) return next
-        return $.set({ ...next, instant: "focus" }).run(Command.interrupt(WaitBeforeOpening)).emit(opened)
-      },
-      BlurredTrigger: () => {
-        const next = { ...model, focused: false, pressed: false }
-        return shown && !model.hovered ? $.set(next).emit(dismissed) : next
-      },
-      // A mouse press only marks the focus that follows it, and stops a
-      // pending open. The click that follows, or Enter or Space on the
-      // native button, closes an open tooltip.
-      PressedTrigger: () => {
-        const next = { ...model, pressed: true }
-        return props.closeOnClick !== false ? $.set(next).run(Command.interrupt(WaitBeforeOpening)) : next
-      },
-      ClickedTrigger: () => shown && props.closeOnClick !== false ? dismiss("dismiss") : model,
-      PressedEscape: () => shown ? dismiss("dismiss") : model,
-      // A press is outside the tooltip when the pointer is on neither the
-      // trigger nor the positioner.
-      PressedDocument: () => shown && !model.hovered ? dismiss() : model,
-      CompletedWaitBeforeOpening: () =>
-        enabled && !props.open && model.hovered ? $.set({ ...model, instant: null }).emit(opened) : model,
-      CompletedWaitBeforeClosing: () =>
-        shown && !model.hovered && !model.focused ? $.set({ ...model, instant: null }).emit(dismissed) : model,
-      // The shown tooltips of the group changed. Its turn follows whether it
-      // is shown, as the consumer decided, not whether it asked: a closed
-      // tooltip gives its turn up, and a newly shown one takes the next.
-      // Another tooltip shown after this one asks it to close once, whatever
-      // holds it open, so a refusal isn't met with a second request.
-      ChangedGroup: ({ newest, next }) => {
-        if (!shown) return { ...model, turn: 0, yieldedTo: null }
-        if (model.turn === 0) return { ...model, turn: next, yieldedTo: null }
-        return newest !== null && newest !== model.turn && newest !== model.yieldedTo
-          ? $.set({ ...model, yieldedTo: newest }).run(Command.interrupt(WaitBeforeClosing)).emit(dismissed)
-          : model
-      }
-    })
   },
   parts: (model, p) => {
     const shown = shownBy(p.props)
