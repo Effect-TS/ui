@@ -13,21 +13,21 @@ const PosterMessage = UiSchema.TaggedEnum({ ClickedPost: {}, ClickedDrop: {}, Co
 const Poster = Component.define({ name: "Poster", model: Schema.Number, message: PosterMessage, elements: Html })
   .make({
     init: () => 0,
-    update: (model, message, $) =>
-      PosterMessage.match(message, {
-        ClickedPost: () =>
-          $.set(model + 1).send(ToastProvider, {
-            _tag: "AddedToast",
-            toast: {
-              id: "t" + (model + 1),
-              title: "Toast",
-              priority: model === 0 ? "high" : "low",
-              type: model === 0 ? "loading" : "success"
-            }
-          }),
-        CompletedUpload: () => $.set(model).send(ToastProvider, { _tag: "UpdatedToast", id: "t1", type: "success" }),
-        ClickedDrop: () => $.set(model).send(ToastProvider, { _tag: "ClosedToast", id: "t" + model })
-      }),
+    update: {
+      ClickedPost: (model, _message, $) =>
+        $.set(model + 1).send(ToastProvider, {
+          _tag: "AddedToast",
+          toast: {
+            id: "t" + (model + 1),
+            title: "Toast",
+            priority: model === 0 ? "high" : "low",
+            type: model === 0 ? "loading" : "success"
+          }
+        }),
+      CompletedUpload: (model, _message, $) =>
+        $.set(model).send(ToastProvider, { _tag: "UpdatedToast", id: "t1", type: "success" }),
+      ClickedDrop: (model, _message, $) => $.set(model).send(ToastProvider, { _tag: "ClosedToast", id: "t" + model })
+    },
     view: (_, h) =>
       h.div(
         h.button.attr("id", "post").onClick(PosterMessage.ClickedPost()).children("Post"),
@@ -46,11 +46,13 @@ const Page = Component.define({
   elements: Html
 }).make({
   init: () => "",
-  update: (_, message) => message.id,
+  update: {
+    Dismissed: (_, { id }) => id
+  },
   view: (dismissed, h) =>
     ToastProvider(h, {
       props: { timeout: h.props.timeout, limit: 2 },
-      onEmit: ({ id }) => PageMessage.Dismissed({ id }),
+      onEmit: { Dismissed: ({ id }) => PageMessage.Dismissed({ id }) },
       view: (t) =>
         h.div(
           Poster(h, {}),

@@ -105,11 +105,13 @@
  * // Any component below the provider can send to it.
  * const Editor = Component.define({ name: "Editor", model: Schema.Null, message: EditorMessage, elements: Html }).make({
  *   init: () => null,
- *   update: (model, _message, $) =>
- *     $.set(model).send(ToastProvider, {
- *       _tag: "AddedToast",
- *       toast: { id: "saved", title: "Saved", type: "success" }
- *     }),
+ *   update: {
+ *     ClickedSave: (model, _message, $) =>
+ *       $.set(model).send(ToastProvider, {
+ *         _tag: "AddedToast",
+ *         toast: { id: "saved", title: "Saved", type: "success" }
+ *       })
+ *   },
  *   view: (_, h) => h.button.onClick(EditorMessage.ClickedSave()).children("Save")
  * })
  *
@@ -533,6 +535,47 @@ const stackOf = (toasts: ReadonlyArray<Entry>, limit: number) => {
   return stack
 }
 
+// `$` in any handler of the provider's `update`: a tag's `$` fits the one
+// over the whole message type.
+type ProviderUpdate = Component.Update<Model, Message, ToastProviderEvents, ToastProviderProps>
+
+// The toast `id` while it shows. A closing one only waits for its exit.
+const shown = (model: Model, id: string) =>
+  model.toasts.find((toast) => toast.id === id && toast.transition !== "ending")
+
+const replace = (model: Model, entry: Entry) => model.toasts.map((toast) => (toast.id === entry.id ? entry : toast))
+
+// Start a toast's timer, unless the timers are paused, or stop it.
+const timer = (model: Model, $: ProviderUpdate, entry: Entry) =>
+  timed(entry, $.props) ? (pausedBy(model) ? [] : [wait(entry, $.props)]) : [stop(entry.id)]
+
+// Move to `next`, pausing every timer or starting them again when the pause
+// changes.
+const settle = (model: Model, $: ProviderUpdate, next: Model) => {
+  const step = $.set(next)
+  const paused = pausedBy(model)
+  if (!paused && pausedBy(next)) return step.run(Command.interrupt(WaitBeforeDismissal))
+  if (paused && !pausedBy(next)) {
+    return step.run(...next.toasts.filter((toast) => timed(toast, $.props)).map((toast) => wait(toast, $.props)))
+  }
+  return step
+}
+
+// A toast that shows starts closing. Once none shows, the pointer is taken
+// to have left, since a viewport that empties sends no mouseleave.
+const close = (model: Model, $: ProviderUpdate, id: string, user: boolean) => {
+  const entry = shown(model, id)
+  if (entry === undefined) return model
+  const toasts = replace(model, { ...entry, transition: "ending", height: 0 })
+  const showing = toasts.some((toast) => toast.transition !== "ending")
+  const step = settle(model, $, { ...model, toasts, hovering: showing && model.hovering }).run(stop(id))
+  return user ? step.emit(ToastProviderEvents.Dismissed({ id })) : step
+}
+
+// The user closed the toast, with the close part or Escape, or its timeout
+// ran out.
+const dismiss = (model: Model, { id }: { readonly id: string }, $: ProviderUpdate) => close(model, $, id, true)
+
 // A part that takes the toast it draws with the builder, as `{ element, toast }`.
 const withToast = <Tag extends string, R>(part: View.Part<Tag, [toast: ToastItem], R>) =>
   View.wrapPart(
@@ -589,77 +632,50 @@ export const ToastProvider = Component.define({
   elements: Html
 }).make({
   init: () => ({ toasts: [], hovering: false, focused: false, windowFocused: true, closeFocused: null }),
-  update: (model, message, $) => {
-    const props = $.props
-    const paused = pausedBy(model)
-    // The toast `id` while it shows. A closing one only waits for its exit.
-    const shown = (id: string) => model.toasts.find((toast) => toast.id === id && toast.transition !== "ending")
-    const replace = (entry: Entry) => model.toasts.map((toast) => (toast.id === entry.id ? entry : toast))
-    // Start a toast's timer, unless the timers are paused, or stop it.
-    const timer = (entry: Entry) => (timed(entry, props) ? (paused ? [] : [wait(entry, props)]) : [stop(entry.id)])
-    // Move to `next`, pausing every timer or starting them again when the
-    // pause changes.
-    const settle = (next: Model) => {
-      const step = $.set(next)
-      if (!paused && pausedBy(next)) return step.run(Command.interrupt(WaitBeforeDismissal))
-      if (paused && !pausedBy(next)) {
-        return step.run(...next.toasts.filter((toast) => timed(toast, props)).map((toast) => wait(toast, props)))
-      }
-      return step
-    }
-    // A toast that shows starts closing. Once none shows, the pointer is
-    // taken to have left, since a viewport that empties sends no mouseleave.
-    const close = (id: string, user: boolean) => {
-      const entry = shown(id)
+  update: {
+    // A toast that shows is replaced in place. One that is closing is added
+    // again, as new.
+    AddedToast: (model, { toast }, $) => {
+      const existing = shown(model, toast.id)
+      const entry: Entry = { ...toast, transition: existing?.transition ?? "starting", height: existing?.height ?? 0 }
+      const toasts = existing === undefined
+        ? [entry, ...model.toasts.filter((other) => other.id !== toast.id)]
+        : replace(model, entry)
+      return $.set({ ...model, toasts }).run(...timer(model, $, entry))
+    },
+    // A running timer goes on, unless the update sets a timeout. One starts
+    // when the update makes the toast timed, as when a loading toast gets
+    // its result.
+    UpdatedToast: (model, { _tag, id, ...changes }, $) => {
+      const entry = shown(model, id)
       if (entry === undefined) return model
-      const toasts = replace({ ...entry, transition: "ending", height: 0 })
-      const showing = toasts.some((toast) => toast.transition !== "ending")
-      const step = settle({ ...model, toasts, hovering: showing && model.hovering }).run(stop(id))
-      return user ? step.emit(ToastProviderEvents.Dismissed({ id })) : step
-    }
-    return Message.match(message, {
-      // A toast that shows is replaced in place. One that is closing is
-      // added again, as new.
-      AddedToast: ({ toast }) => {
-        const existing = shown(toast.id)
-        const entry: Entry = { ...toast, transition: existing?.transition ?? "starting", height: existing?.height ?? 0 }
-        const toasts = existing === undefined
-          ? [entry, ...model.toasts.filter((other) => other.id !== toast.id)]
-          : replace(entry)
-        return $.set({ ...model, toasts }).run(...timer(entry))
-      },
-      // A running timer goes on, unless the update sets a timeout. One starts
-      // when the update makes the toast timed, as when a loading toast gets
-      // its result.
-      UpdatedToast: ({ _tag, id, ...changes }) => {
-        const entry = shown(id)
-        if (entry === undefined) return model
-        const next: Entry = { ...entry, ...changes }
-        const step = $.set({ ...model, toasts: replace(next) })
-        const running = timed(entry, props) && timed(next, props) && changes.timeout === undefined
-        return running ? step : step.run(...timer(next))
-      },
-      ClosedToast: ({ id }) => close(id, false),
-      ClickedClose: ({ id }) => close(id, true),
-      PressedEscape: ({ id }) => close(id, true),
-      CompletedWaitBeforeDismissal: ({ id }) => (paused ? model : close(id, true)),
-      EnteredViewport: () => settle({ ...model, hovering: true }),
-      LeftViewport: () => settle({ ...model, hovering: false }),
-      FocusedViewport: () => settle({ ...model, focused: true }),
-      BlurredViewport: () => settle({ ...model, focused: false }),
-      FocusedWindow: () => settle({ ...model, windowFocused: true }),
-      BlurredWindow: () => settle({ ...model, windowFocused: false }),
-      FocusedClose: ({ id }) => ({ ...model, closeFocused: id }),
-      BlurredClose: ({ id }) => (model.closeFocused === id ? { ...model, closeFocused: null } : model),
-      // The first measure ends the starting style. A closing toast keeps
-      // its height at 0, so the toasts behind it move up.
-      MeasuredToast: ({ id, height }) => {
-        const entry = shown(id)
-        return entry === undefined ? model : { ...model, toasts: replace({ ...entry, transition: "shown", height }) }
-      },
-      FinishedExit: ({ id }) =>
-        shown(id) === undefined ? { ...model, toasts: model.toasts.filter((toast) => toast.id !== id) } : model
-    })
+      const next: Entry = { ...entry, ...changes }
+      const step = $.set({ ...model, toasts: replace(model, next) })
+      const running = timed(entry, $.props) && timed(next, $.props) && changes.timeout === undefined
+      return running ? step : step.run(...timer(model, $, next))
+    },
+    ClosedToast: (model, { id }, $) => close(model, $, id, false),
+    ClickedClose: dismiss,
+    PressedEscape: dismiss,
+    CompletedWaitBeforeDismissal: (model, message, $) => (pausedBy(model) ? model : dismiss(model, message, $)),
+    EnteredViewport: (model, _message, $) => settle(model, $, { ...model, hovering: true }),
+    LeftViewport: (model, _message, $) => settle(model, $, { ...model, hovering: false }),
+    FocusedViewport: (model, _message, $) => settle(model, $, { ...model, focused: true }),
+    BlurredViewport: (model, _message, $) => settle(model, $, { ...model, focused: false }),
+    FocusedWindow: (model, _message, $) => settle(model, $, { ...model, windowFocused: true }),
+    BlurredWindow: (model, _message, $) => settle(model, $, { ...model, windowFocused: false }),
+    FocusedClose: (model, { id }) => ({ ...model, closeFocused: id }),
+    BlurredClose: (model, { id }) => (model.closeFocused === id ? { ...model, closeFocused: null } : model),
+    // The first measure ends the starting style. A closing toast keeps its
+    // height at 0, so the toasts behind it move up.
+    MeasuredToast: (model, { id, height }) => {
+      const entry = shown(model, id)
+      return entry === undefined
+        ? model
+        : { ...model, toasts: replace(model, { ...entry, transition: "shown", height }) }
+    },
+    FinishedExit: (model, { id }) =>
+      shown(model, id) === undefined ? { ...model, toasts: model.toasts.filter((toast) => toast.id !== id) } : model
   },
   parts: (model, p) => {
     const expanded = expandedBy(model)
