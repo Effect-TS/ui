@@ -9,6 +9,10 @@
  * compared shallowly. Dirty instances render in one flush, parents before
  * children.
  *
+ * One render comes before its flush: a message or a query result for an
+ * instance renders the dirty instances above it first, so its `update` reads
+ * current props. The instance's own view still waits for the flush.
+ *
  * The renderer only talks to a `Host`, which the `Renderer` service provides,
  * so switching target is a Layer swap. `Host` is public so third parties can
  * implement one.

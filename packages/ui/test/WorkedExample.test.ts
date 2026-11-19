@@ -4,7 +4,7 @@
  */
 import { Component, Router } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Locator, TestHost } from "@effect/ui/testing"
+import { Locator, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Layer, Schema } from "effect"
 import { TestClock } from "effect/testing"
@@ -20,8 +20,8 @@ const setup = (url: string) => {
   return { server, deps }
 }
 
-const run = <A, E>(deps: Layer.Layer<any>, effect: Effect.Effect<A, E, any>) =>
-  effect.pipe(Effect.provide(deps), Effect.scoped, Effect.provide(TestHost.layer())) as Effect.Effect<A, E>
+const run = <A, E>(deps: Layer.Layer<any>, effect: Effect.Effect<A, E, any>, flush?: TestHost.Flush) =>
+  effect.pipe(Effect.provide(deps), Effect.scoped, Effect.provide(TestHost.layer({ flush }))) as Effect.Effect<A, E>
 
 const mount = Effect.flatMap(Router.currentRoute(users.AppRoute), (route) => TestHost.mount(users.App, { route }))
 
@@ -246,7 +246,63 @@ describe("the worked example", () => {
         // Neither save reached the server: the first was cut mid-request.
         assert.strictEqual(server.calls.rename, 0)
         assert.notInclude(["B", "C"], server.users.get("1")?.name)
-      })
+      }),
+      // The flush that removes the form runs before the first save's fiber takes a step, so the save
+      // never begins. A flush after that step cuts it mid-request instead, and the user it patched is
+      // fetched again.
+      "queued"
     )
   })
+
+  // What the tree did, as the facts and what followed from each, without the entries' numbers: a
+  // render that ran earlier or later numbers them differently and changes nothing else.
+  const timelineOf = (flush: TestHost.Flush) => {
+    const { deps } = setup("/users/1")
+    return run(
+      deps,
+      Effect.gen(function*() {
+        const root = yield* mount
+        yield* TestHost.settle
+        yield* TestClock.adjust("10 millis")
+        click(root, "Rename")
+        yield* TestHost.settle
+        rename(root, "B")
+        yield* TestHost.settle
+        yield* TestClock.adjust("100 millis")
+        yield* TestHost.settle
+        yield* TestClock.adjust("100 millis")
+        yield* TestHost.settle
+        yield* navigate("/")
+        yield* TestClock.adjust("10 millis")
+        yield* TestHost.settle
+        const log = root.log()
+        const mounted = log.filter((entry) => entry._tag === "Mounted")
+        assert.isAbove(mounted.length, 3)
+        for (const entry of mounted) {
+          const replay = Story.fromLog(
+            entry.component as Component.Component<any, any, any, any, any, any, any, any, any>,
+            log,
+            { path: entry.path }
+          )
+          assert.isUndefined(replay.divergence, entry.path)
+        }
+        return {
+          text: root.text(),
+          timeline: TestHost.formatTimeline(log).replace(/ ?\(?(after )?#\d+\)? ?/g, " ")
+        }
+      }),
+      flush
+    )
+  }
+
+  it.effect("one script replays and gives one timeline, whenever the render flush runs", () =>
+    Effect.gen(function*() {
+      const expected = yield* timelineOf("queued")
+      assert.include(expected.timeline, "Update")
+      for (const flush of ["first", "last", { seed: 1 }] as const) {
+        const actual = yield* timelineOf(flush)
+        assert.strictEqual(actual.text, expected.text, JSON.stringify(flush))
+        assert.strictEqual(actual.timeline, expected.timeline, JSON.stringify(flush))
+      }
+    }))
 })

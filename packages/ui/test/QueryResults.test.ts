@@ -189,8 +189,8 @@ const makeApp = (options?: {
 }
 
 /** Runs a test on a fresh TestHost, with the app's reads and Commands built for the whole test. */
-const run = <A, E>(layer: Layer.Layer<any>, effect: Effect.Effect<A, E, any>) =>
-  effect.pipe(Effect.provide(layer), Effect.scoped, Effect.provide(TestHost.layer())) as Effect.Effect<A, E>
+const run = <A, E>(layer: Layer.Layer<any>, effect: Effect.Effect<A, E, any>, flush?: TestHost.Flush) =>
+  effect.pipe(Effect.provide(layer), Effect.scoped, Effect.provide(TestHost.layer({ flush }))) as Effect.Effect<A, E>
 
 /** Starts what is due and lets the fetches finish: each fetcher sleeps 10 ms. */
 const load = TestHost.settle.pipe(Effect.andThen(TestClock.adjust("10 millis")), Effect.andThen(TestHost.settle))
@@ -955,7 +955,9 @@ describe("Query results", () => {
           "command fold",
           "view Success"
         ])
-      })
+      }),
+      // Counts renders: a flush between the two Commands' messages is one more view.
+      "queued"
     )
   })
 

@@ -417,6 +417,10 @@ describe("optional owners, reports and onChange", () => {
       assert.deepStrictEqual(updatesAt(root.log(), group).map((entry) => entry.message), [
         { _tag: "ChangedOn", on: true }
       ])
+      const [clicked, told] = updatesAt(root.log(), reader)
+      assert.strictEqual(clicked.causedBy, undefined)
+      assert.strictEqual(changed.causedBy, clicked.seq)
+      assert.strictEqual(told.causedBy, clicked.seq)
     })))
 
   it.effect("a report and a shared value that answer each other fail the owner", () =>
