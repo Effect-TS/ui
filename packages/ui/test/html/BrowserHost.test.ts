@@ -461,6 +461,36 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(app.innerHTML).toBe(html(["f", "g", "h"]))
         expect(kept?.isConnected).toBe(false)
       }).pipe(Effect.scoped))
+
+    it.effect("an element's only child keeps its node until its key or its tag changes", () =>
+      Effect.gen(function*() {
+        // The rows are the child's tag, its key and its text.
+        const Only = Component.define({
+          name: "Only",
+          model: Schema.Array(Schema.String),
+          message: ListMessage,
+          elements: Html
+        }).make({
+          init: (): ReadonlyArray<string> => ["p", "a", "one"],
+          update: (_, message) => message.rows,
+          view: ([tag, key, text], h) =>
+            h.div(tag === "p" ? h.p.key(key!).children(text!) : h.span.key(key!).children(text!))
+        })
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Only, {}, app)
+        const first = app.querySelector("p")
+        root.send(ListMessage.Set({ rows: ["p", "a", "two"] }))
+        yield* tick
+        expect(app.innerHTML).toBe("<div><p>two</p></div>")
+        expect(app.querySelector("p")).toBe(first)
+        root.send(ListMessage.Set({ rows: ["p", "b", "two"] }))
+        yield* tick
+        expect(app.innerHTML).toBe("<div><p>two</p></div>")
+        expect(app.querySelector("p")).not.toBe(first)
+        root.send(ListMessage.Set({ rows: ["span", "b", "two"] }))
+        yield* tick
+        expect(app.innerHTML).toBe("<div><span>two</span></div>")
+      }).pipe(Effect.scoped))
   })
 
   describe("lazy", () => {
@@ -535,33 +565,45 @@ describe("BrowserHost", { concurrent: false }, () => {
         assert.strictEqual(app.innerHTML, "<div><p>2</p><ul><li>A</li><li class=\"on\">c</li></ul></div>")
       }).pipe(Effect.scoped))
 
-    it.effect("patches a node it gives again when the node holds more than elements and text", () =>
-      Effect.gen(function*() {
-        // The frame's argument never changes, but its feature child shows a fallback until the Layer is ready.
-        class Leaf extends Feature.Service<Leaf>()("Leaf", { props: Schema.Struct({}) }) {}
-        const LeafImpl = Component.define({
-          name: "LeafImpl",
-          model: Schema.Null,
-          message: Schema.Never,
-          elements: Html
-        })
-          .make({ init: () => null, update: (m) => m, view: (_, h) => h.p("ready") })
-        const ready = yield* Deferred.make<void>()
-        const FrameDef = Component.define({ name: "Frame", model: Schema.Null, message: Schema.Never, elements: Html })
-        const frame = (h: Component.Helper<typeof FrameDef>, title: string) =>
-          h.section(h.h2(title), Leaf.render(h, { key: "leaf", props: {}, fallback: () => h.p("loading") }))
-        const Frame = Component.provide(
-          FrameDef.make({ init: () => null, update: (m) => m, view: (_, h) => h.lazy(frame, "Title") }),
-          Layer.merge(Leaf.toLayer(LeafImpl), Layer.effectDiscard(Deferred.await(ready)))
-        )
-        const app = yield* container
-        yield* BrowserHost.mountEffect(Frame, {}, app)
-        yield* tick
-        assert.strictEqual(app.innerHTML, "<section><h2>Title</h2><p>loading</p></section>")
-        yield* Deferred.succeed(ready, undefined)
-        yield* tick
-        assert.strictEqual(app.innerHTML, "<section><h2>Title</h2><p>ready</p></section>")
-      }).pipe(Effect.scoped))
+    it.effect.each([false, true])(
+      "patches a node it gives again when the node holds a child, alone: %s",
+      (alone) =>
+        Effect.gen(function*() {
+          // The frame's argument never changes, but its feature child shows a fallback until the Layer is ready.
+          class Leaf extends Feature.Service<Leaf>()("Leaf", { props: Schema.Struct({}) }) {}
+          const LeafImpl = Component.define({
+            name: "LeafImpl",
+            model: Schema.Null,
+            message: Schema.Never,
+            elements: Html
+          })
+            .make({ init: () => null, update: (m) => m, view: (_, h) => h.p("ready") })
+          const ready = yield* Deferred.make<void>()
+          const FrameDef = Component.define({
+            name: "Frame",
+            model: Schema.Null,
+            message: Schema.Never,
+            elements: Html
+          })
+          const frame = (h: Component.Helper<typeof FrameDef>, title: string) =>
+            h.section(
+              alone ? undefined : h.h2(title),
+              Leaf.render(h, { key: "leaf", props: {}, fallback: () => h.p("loading") })
+            )
+          const Frame = Component.provide(
+            FrameDef.make({ init: () => null, update: (m) => m, view: (_, h) => h.lazy(frame, "Title") }),
+            Layer.merge(Leaf.toLayer(LeafImpl), Layer.effectDiscard(Deferred.await(ready)))
+          )
+          const app = yield* container
+          yield* BrowserHost.mountEffect(Frame, {}, app)
+          yield* tick
+          const heading = alone ? "" : "<h2>Title</h2>"
+          assert.strictEqual(app.innerHTML, `<section>${heading}<p>loading</p></section>`)
+          yield* Deferred.succeed(ready, undefined)
+          yield* tick
+          assert.strictEqual(app.innerHTML, `<section>${heading}<p>ready</p></section>`)
+        }).pipe(Effect.scoped)
+    )
 
     it.effect("puts controlled properties back under a node it gives again, as under one the view keeps or builds", () =>
       Effect.gen(function*() {

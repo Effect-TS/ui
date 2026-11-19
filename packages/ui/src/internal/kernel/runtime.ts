@@ -187,7 +187,8 @@ interface RElement {
   readonly _tag: "Element"
   v: View.Element<any, any>
   readonly node: unknown
-  children: Array<Rendered>
+  /** One child is held as it is, and none as `undefined`: only two or more take a list. */
+  children: Rendered | Array<Rendered> | undefined
   // Set only on an element that has them, so most records hold four fields.
   mount?: RunningMount | undefined
   /** The mounts of the element's owned layers, by owner and mount name. */
@@ -225,6 +226,13 @@ class Layered {
 }
 
 const none: ReadonlyArray<never> = []
+
+/** A rendered element's children as a list, made for the one child that is held without one. */
+const listOf = (children: Rendered | Array<Rendered> | undefined): ReadonlyArray<Rendered> =>
+  children === undefined ? none : Array.isArray(children) ? children : [children]
+/** How a rendered element holds a list of children. */
+const packed = (children: Array<Rendered>): Rendered | Array<Rendered> | undefined =>
+  children.length > 1 ? children : children[0]
 
 /**
  * The list an instance holds until it adds to it: frozen, so an append to it fails loudly. Compare
@@ -323,7 +331,7 @@ const findChild = (rendered: ReadonlyArray<Rendered>, key: string): RChild | RFa
   for (const r of rendered) {
     let found: RChild | RFallback | undefined
     if (r._tag === "Element") {
-      found = findChild(r.children, key)
+      found = findChild(listOf(r.children), key)
     } else if (r._tag === "Detached") {
       found = findChild([r.inner], key)
     } else if (r._tag === "Child" || r._tag === "Fallback") {
@@ -957,7 +965,7 @@ const serializeTree = (
           tag: rendered.v.tag,
           attrs: rendered.v.attrs,
           props: rendered.v.props,
-          children: rendered.children.map((child) => serialize(inst, child, under))
+          children: listOf(rendered.children).map((child) => serialize(inst, child, under))
         }
       case "Child":
         return instance(rendered.inst, under)
@@ -1728,9 +1736,13 @@ const setup = (
       case "Outlet":
         out.push(rendered.inst)
         return
-      case "Element":
-        for (const child of rendered.children) placed(child, out)
+      case "Element": {
+        const children = rendered.children
+        if (children === undefined) return
+        if (!Array.isArray(children)) return placed(children, out)
+        for (const child of children) placed(child, out)
         return
+      }
       case "Fallback":
         return placed(rendered.inner, out)
       // A detached child's view is out of the document, and its head with it.
@@ -4558,7 +4570,7 @@ const setup = (
       case "Detached":
         return releaseRendered(rendered.inner)
       case "Element": {
-        for (const child of rendered.children) releaseRendered(child)
+        for (const child of listOf(rendered.children)) releaseRendered(child)
         return
       }
       case "Text":
@@ -4582,7 +4594,7 @@ const setup = (
             if (layer.owner === who.owner && layer.refKey === key) return rendered.node
           }
         }
-        return firstDefined(rendered.children, (child) => findRef(child, key, who, author))
+        return firstDefined(listOf(rendered.children), (child) => findRef(child, key, who, author))
       }
       case "Fallback":
         return findRef(rendered.inner, key, who, author)
@@ -5044,7 +5056,7 @@ const setup = (
     inst: Instance,
     view: View.Element<any, any>,
     node: unknown,
-    children: Array<Rendered>,
+    children: Rendered | Array<Rendered> | undefined,
     env: Env
   ): RElement => {
     const rendered: RElement = { _tag: "Element", v: view, node, children }
@@ -5066,11 +5078,16 @@ const setup = (
         if (attrs !== View.noFields) { for (const name in attrs) host.setAttr(node, name, attrs[name]) }
         setEvents(inst, node, view)
         const views = view.children
-        checkKeys(inst, views)
-        const children: Array<Rendered> = new Array(views.length)
+        let children: Rendered | Array<Rendered> | undefined
         // The element is new and empty, so its children go in as they are made, without reading the host.
-        for (let index = 0; index < views.length; index++) {
-          insertNodes(node, children[index] = create(inst, views[index]!, env), undefined)
+        if (views.length === 1) {
+          insertNodes(node, children = create(inst, views[0]!, env), undefined)
+        } else if (views.length > 0) {
+          checkKeys(inst, views)
+          children = new Array(views.length)
+          for (let index = 0; index < views.length; index++) {
+            insertNodes(node, children[index] = create(inst, views[index]!, env), undefined)
+          }
         }
         // Properties go after the children, so a `select`'s `value` has its options to match.
         const props = view.props
@@ -5479,7 +5496,7 @@ const setup = (
         placeEach(node, children, undefined)
         for (const name in view.props) adoptProp(node, name, view.props[name])
         adoptedUpTo = next
-        return renderedElement(inst, view, node, children, env)
+        return renderedElement(inst, view, node, packed(children), env)
       }
       case "Child":
       case "Outlet": {
@@ -5846,7 +5863,7 @@ const setup = (
       const old = at === undefined ? undefined : olds[at]!
       if (old === undefined || !same(old, view) || kept.has(old)) continue
       kept.add(old)
-      if (old._tag === "Element") releaseRemoved(old.children, (view as View.Element<any, any>).children)
+      if (old._tag === "Element") releaseRemoved(listOf(old.children), (view as View.Element<any, any>).children)
     }
     for (const old of olds) if (!kept.has(old)) releaseRendered(old)
   }
@@ -5897,8 +5914,10 @@ const setup = (
   const plainTree = (rendered: RElement): number => {
     let props = rendered.v.props === View.noFields ? 0 : 1
     const children = rendered.children
-    for (let i = 0; i < children.length; i++) {
-      const child = children[i]!
+    if (children === undefined) return props
+    const one = !Array.isArray(children)
+    for (let i = 0, length = one ? 1 : children.length; i < length; i++) {
+      const child = one ? children : children[i]!
       if (child._tag === "Text") continue
       const below = child._tag === "Element" ? plainTree(child) : -1
       if (below < 0) return -1
@@ -5911,7 +5930,7 @@ const setup = (
    * children first, so a select's value wins over its options' `selected`.
    */
   const restoreControlled = (rendered: RElement): void => {
-    const children = rendered.children
+    const children = listOf(rendered.children)
     for (let i = 0; i < children.length; i++) {
       const child = children[i]!
       if (child._tag === "Element") restoreControlled(child)
@@ -5945,8 +5964,25 @@ const setup = (
       setEvents(inst, node, element)
     }
     const children = rendered.children
-    if (children.length > 0 || element.children.length > 0) {
-      rendered.children = patchList(inst, node, children, element.children, undefined, env)
+    const views = element.children
+    if (children === undefined) {
+      if (views.length > 0) rendered.children = packed(createList(inst, node, views, undefined, env))
+    } else if (Array.isArray(children)) {
+      rendered.children = packed(patchList(inst, node, children, views, undefined, env))
+    } else {
+      // One child, patched as `patchList` patches the two kinds most nodes are, without a list for it.
+      const view = views.length === 1 ? views[0]! : undefined
+      if (
+        view !== undefined && view._tag === "Element" && children._tag === "Element" &&
+        children.v.tag === view.tag && children.v.elementKey === view.elementKey
+      ) {
+        patchElement(inst, children, view, env)
+      } else if (view !== undefined && view._tag === "Text" && children._tag === "Text") {
+        if (view.text !== children.v.text) host.setText(children.node, view.text)
+        children.v = view
+      } else {
+        rendered.children = packed(patchList(inst, node, [children], views, undefined, env))
+      }
     }
     patchProps(node, prev.props, element.props)
     // A mount belongs to the element, not to one view run: it keeps running across patches, and
@@ -6273,7 +6309,7 @@ const setup = (
             : undefined
           rendered.ownedMounts = startOwnedMounts(inst, view, rendered.node, env)
         }
-        for (const child of rendered.children) toggleMounts(inst, child, env, start)
+        for (const child of listOf(rendered.children)) toggleMounts(inst, child, env, start)
         return
       }
       case "Fallback":
@@ -6310,7 +6346,10 @@ const setup = (
       case "Element": {
         // The element's `onMount` work ends with it.
         stopMounts(inst, rendered)
-        for (const child of rendered.children) closeAll(inst, child)
+        const children = rendered.children
+        if (children === undefined) return
+        if (!Array.isArray(children)) return closeAll(inst, children)
+        for (const child of children) closeAll(inst, child)
         return
       }
       case "Text":
