@@ -407,7 +407,8 @@ export const make: {
    * `elements`, then the component's own vocabulary, then the registered
    * one, and is typed with `elements`, or else the component's vocabulary.
    * The content shows where the view places each slot, at the path the
-   * runtime gives it, such as `/Panel/[body]/Editor[e]`.
+   * runtime gives it, such as `/Panel/Editor[e]`: with no parent, the
+   * component's own path stands in for its author's.
    */
   <C extends AnyComponent, V extends View.Elements = never>(
     component: C,
