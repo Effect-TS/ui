@@ -11,7 +11,9 @@ import { Effect, Schema } from "effect"
 const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 60)))
 
 // happy-dom has no popover API, which the non-modal dialogs use: what they
-// rely on is that showing and hiding one changes `:popover-open`.
+// rely on is that showing and hiding one changes `:popover-open`, and that
+// showing a dialog focuses its first field, as a browser does before the
+// dialog's own mount starts.
 const popovers = Effect.acquireRelease(
   Effect.sync(() => {
     const showing = new Set<Element>()
@@ -20,6 +22,7 @@ const popovers = Effect.acquireRelease(
     const matches = elementProto.matches
     proto.showPopover = function(this: HTMLElement) {
       showing.add(this)
+      if (this.localName === "dialog") this.querySelector<HTMLElement>("input, button")?.focus()
     }
     proto.hidePopover = function(this: HTMLElement) {
       showing.delete(this)
@@ -155,7 +158,11 @@ const Page = Component.define({
             s.portal(h.dialog)?.children(
               s.popup(h.div.attr("class", "popup-a")).children(
                 h.input.attr("id", "first"),
-                props.marked ? s.initialFocus(h.input.attr("id", "second")) : h.input.attr("id", "second")
+                props.marked ? s.initialFocus(h.input.attr("id", "second")) : h.input.attr("id", "second"),
+                props.siblings
+                  ? h.button.attr("id", "open-b").onClick(Message.Opened({ which: "b", triggerId: null, method: null }))
+                    .children("Open B")
+                  : null
               )
             )
           )
@@ -165,7 +172,11 @@ const Page = Component.define({
           key: "b",
           props: { open: model.b, modal: props.modal },
           onEmit: on("b"),
-          view: (s) => h.div(s.portal(h.dialog)?.children(s.popup(h.div).children(h.input.attr("id", "b-field"))))
+          view: (s) =>
+            h.div(
+              s.trigger(h.button.attr("id", "trigger-b")).children("B"),
+              s.portal(h.dialog)?.children(s.popup(h.div).children(h.input.attr("id", "b-field")))
+            )
         })
         : null
     )
@@ -204,6 +215,42 @@ describe("Dialog in a document", { concurrent: false }, () => {
           assert.deepStrictEqual(dismissals(log()), ["Dismissed b outside-press"], String(modal))
         }))
       }
+    }))
+
+  it.effect("a dialog that isn't a modal takes no sibling's focus handoff as focus leaving it, but the user's", () =>
+    Effect.gen(function*() {
+      const { app, log } = yield* mountPage({ modal: false, siblings: true })
+      // A button in A opens B, and B takes focus as it shows.
+      byId("open-b").click()
+      yield* tick
+      yield* tick
+      assert.deepStrictEqual(dismissals(log()), [])
+      assert.strictEqual(document.activeElement?.id, "b-field")
+      // One Escape closes B, which gives focus back to its trigger, outside A.
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+      yield* tick
+      yield* tick
+      assert.deepStrictEqual(dismissals(log()), ["Dismissed b escape-key"])
+      assert.strictEqual(document.activeElement?.id, "trigger-b")
+      assert.strictEqual(app.querySelectorAll("dialog").length, 1)
+      // Focus the user moves out of A still closes it.
+      byId("page").focus()
+      yield* tick
+      assert.deepStrictEqual(dismissals(log()), ["Dismissed b escape-key", "Dismissed a focus-out"])
+    }))
+
+  it.effect("of two dialogs open from the start, the upper one takes focus, and neither closes", () =>
+    Effect.gen(function*() {
+      const focused: Array<string> = []
+      const record = (event: FocusEvent) => focused.push((event.target as Element).id)
+      document.addEventListener("focusin", record)
+      yield* Effect.addFinalizer(() => Effect.sync(() => document.removeEventListener("focusin", record)))
+      const { log } = yield* mountPage({ modal: false, siblings: true, b: true })
+      yield* tick
+      assert.deepStrictEqual(dismissals(log()), [])
+      assert.strictEqual(document.activeElement?.id, "b-field")
+      // The lower one doesn't take focus after the browser gave it to the upper one.
+      assert.notInclude(focused.slice(focused.indexOf("b-field")), "first")
     }))
 
   it.effect("a press on another of the dialog's triggers is no press outside, and focus goes back to the latest", () =>

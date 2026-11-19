@@ -102,7 +102,10 @@
  * `--nested-dialogs`, the inner one `data-nested`, and only the inner one hears
  * Escape and outside presses. Two dialogs under one parent each take a `key`.
  * Of two dialogs open side by side, the one opened later is on top, as in the
- * browser's top layer, and only it hears Escape and outside presses.
+ * browser's top layer, and only it hears Escape and outside presses. Focus
+ * a dialog moves by itself, into it as it opens or back to its trigger as it
+ * closes, doesn't close another one with `modal: false`. Focus the user
+ * moves out of it still does.
  *
  * **Triggers drawn elsewhere**
  *
@@ -469,6 +472,29 @@ const onTop = (node: HTMLDialogElement): boolean => {
   )
 }
 
+// Focus a dialog moves, into itself as it opens or back to a trigger as it
+// closes, is no user's: a dialog that isn't a modal doesn't take it as focus
+// leaving it.
+let handingOff = 0
+const handOff = (element: HTMLElement | null | undefined): void => {
+  if (element == null) return
+  handingOff++
+  try {
+    element.focus()
+  } finally {
+    handingOff--
+  }
+}
+
+// Whether focus went into a dialog above this one: a sibling shown later, or
+// one the browser is showing and has focused before its mount starts.
+const inDialogAbove = (node: HTMLDialogElement, target: Node): boolean => {
+  const other = (target instanceof Element ? target : target.parentElement)?.closest("dialog")
+  if (other == null || other === node || other.contains(node)) return false
+  const index = showing.findIndex((entry) => entry.node === other)
+  return index === -1 || index > showing.findIndex((entry) => entry.node === node)
+}
+
 // Whether an animation ends by itself: a looping one, such as a spinner's,
 // doesn't hold a transition.
 const finite = (animation: Animation): boolean => {
@@ -522,8 +548,8 @@ const TrackDialog = Mount.makeStream(
       const focusFirst = () => {
         if (!current.initialFocus) {
           // A modal's page is inert, so focus can't stay on the trigger.
-          if (current.modal === true) popup().focus()
-          else if (trigger !== null) trigger.focus()
+          if (current.modal === true) handOff(popup())
+          else handOff(trigger)
           return
         }
         const marked = Array.from(node.querySelectorAll<HTMLElement>("[autofocus]")).find((element) =>
@@ -532,7 +558,7 @@ const TrackDialog = Mount.makeStream(
         // An open by touch focuses the popup, so a field doesn't open the
         // on-screen keyboard, unless the consumer marked an element.
         const fallback = current.openMethod === "touch" ? undefined : tabbables(node, popup())[0]
-        ;(marked ?? fallback ?? popup()).focus()
+        handOff(marked ?? fallback ?? popup())
       }
 
       const onKeyDown = (event: KeyboardEvent) => {
@@ -551,12 +577,12 @@ const TrackDialog = Mount.makeStream(
         const last = items.at(-1)
         if (first === undefined || last === undefined) {
           event.preventDefault()
-          popup().focus()
+          handOff(popup())
         } else if (
           !node.contains(active) || (event.shiftKey ? active === first || active === popup() : active === last)
         ) {
           event.preventDefault()
-          ;(event.shiftKey ? last : first).focus()
+          handOff(event.shiftKey ? last : first)
         }
       }
 
@@ -576,10 +602,10 @@ const TrackDialog = Mount.makeStream(
         const target = event.target as Node | null
         focusInside = target !== null && node.contains(target)
         if (focusInside) lastFocused = target as HTMLElement
-        if (focusInside || target === null || !current.open || !topmost()) return
+        if (focusInside || target === null || !current.open || !topmost() || inDialogAbove(node, target)) return
         if (current.modal === "trap-focus") {
-          popup().focus()
-        } else if (current.modal === false && current.dismissible && !onTrigger(target)) {
+          handOff(popup())
+        } else if (current.modal === false && current.dismissible && handingOff === 0 && !onTrigger(target)) {
           send(Message.FocusedOutside())
         }
       }
@@ -603,7 +629,7 @@ const TrackDialog = Mount.makeStream(
             if (++tries < 10) frame(refocus)
             return
           }
-          if (element.isConnected && node.contains(element)) element.focus()
+          if (element.isConnected && node.contains(element)) handOff(element)
         }
         frame(refocus)
       }
@@ -642,8 +668,9 @@ const TrackDialog = Mount.makeStream(
           const unlock = args.modal === true ? lockScroll(document) : undefined
           // The browser focuses a dialog when it shows, each its own way.
           // Ours comes after it, the frame the host showed it in.
+          // Of dialogs opening together, the one on top takes focus.
           frame(() => {
-            if (current.open) focusFirst()
+            if (current.open && topmost()) focusFirst()
             focusInside = node.contains(document.activeElement)
             if (focusInside) lastFocused = document.activeElement as HTMLElement
             if (!current.mounted) frame(() => send(Message.RenderedFirstFrame()))
@@ -676,7 +703,7 @@ const TrackDialog = Mount.makeStream(
               const target = document.querySelector<HTMLElement>(
                 `[data-final-focus="${CSS.escape(portalId)}"]`
               ) ?? trigger
-              if (target?.isConnected === true) target.focus()
+              if (target?.isConnected === true) handOff(target)
             })
           })
       )
