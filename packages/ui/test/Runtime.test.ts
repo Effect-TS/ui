@@ -3209,6 +3209,43 @@ describe("Runtime", () => {
         provideHost
       ))
 
+    it.effect("a mount that reads its args again starts from the latest ones", () =>
+      Effect.gen(function*() {
+        const gate = yield* Deferred.make<void>()
+        const seen: Array<number> = []
+        const read = (changes: Stream.Stream<{ readonly n: number }>, count: number) =>
+          Stream.runForEach(Stream.take(changes, count), ({ n }) => Effect.sync(() => seen.push(n)))
+        const Draw = Mount.make("Draw", { args: { n: Schema.Number } }, (_node, _args, changes) =>
+          Effect.gen(function*() {
+            yield* read(changes, 2)
+            yield* Deferred.await(gate)
+            yield* read(changes, 1)
+            return Component.noop
+          }))
+        const Chart = Component.define({ name: "Reread", model: Schema.Number, message: Schema.Number, elements: Tiny })
+          .make({
+            init: () =>
+              0,
+            update: (_, n) =>
+              n,
+            view: (n, h) =>
+              h.field.onMount(Draw({ n }))
+          })
+        const root = yield* TestHost.mount(Chart, {})
+        yield* TestHost.settle
+        root.send(1)
+        yield* TestHost.settle
+        // Nothing reads these args when they arrive.
+        root.send(2)
+        yield* TestHost.settle
+        yield* Deferred.succeed(gate, undefined)
+        yield* TestHost.settle
+        assert.deepStrictEqual(seen, [0, 1, 2])
+      }).pipe(
+        Effect.provide(Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })),
+        provideHost
+      ))
+
     it.effect("a render that adds, swaps or drops an element's mount starts and stops it", () =>
       Effect.gen(function*() {
         const events: Array<string> = []

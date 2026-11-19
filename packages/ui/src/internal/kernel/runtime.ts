@@ -15,7 +15,6 @@ import * as Fiber from "effect/Fiber"
 import * as Latch from "effect/Latch"
 import * as Layer from "effect/Layer"
 import * as Option from "effect/Option"
-import * as PubSub from "effect/PubSub"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Scheduler from "effect/Scheduler"
 import * as Schema from "effect/Schema"
@@ -37,6 +36,7 @@ import * as Executor from "../executor.ts"
 import * as headFold from "../headFold.ts"
 import * as match from "../match.ts"
 import { isKeyed, keyOf } from "../match.ts"
+import * as mountArgs from "../mountArgs.ts"
 import { isNoop } from "../noop.ts"
 import {
   checkAuthorPlacements,
@@ -192,14 +192,14 @@ interface RElement {
 }
 
 /**
- * A started mount: its Scope, the mount the element last rendered with, and the cell its `changes`
- * Stream reads. The PubSub is built when `changes` is first read and keeps one value for each reader.
+ * A started mount: its Scope, the mount the element last rendered with, and the args its `changes`
+ * Stream reads, kept from when `changes` is first read.
  */
 interface RunningMount {
   readonly scope: Scope.Closeable
   cutBy: number | undefined
   mount: View.Mount<any>
-  pubsub: PubSub.PubSub<unknown> | undefined
+  args: mountArgs.MountArgs | undefined
 }
 
 interface OwnedMount {
@@ -4567,16 +4567,15 @@ const setup = (
     if (!host.runsMounts) return undefined
     const mountScope = Scope.forkUnsafe(renderer.scope, "sequential")
     const causedBy = origin
-    const running: RunningMount = { scope: mountScope, mount, pubsub: undefined, cutBy: undefined }
+    const running: RunningMount = { scope: mountScope, mount, args: undefined, cutBy: undefined }
     // A mount that never reads its args' changes pays nothing for them.
     const changes = Stream.suspend(() => {
-      let pubsub = running.pubsub
-      if (pubsub === undefined) {
-        pubsub = running.pubsub = Effect.runSync(PubSub.sliding<unknown>({ capacity: 1, replay: 1 }))
-        PubSub.publishUnsafe(pubsub, running.mount.args)
-        addFinalizer(mountScope, PubSub.shutdown(pubsub))
+      let args = running.args
+      if (args === undefined) {
+        const made = args = running.args = mountArgs.make(running.mount.args)
+        addFinalizer(mountScope, Effect.sync(() => mountArgs.close(made)))
       }
-      return Stream.fromPubSub(pubsub)
+      return mountArgs.changes(args)
     })
     afterCommit(() =>
       whenReady(env, (envCtx) => {
@@ -4636,9 +4635,8 @@ const setup = (
     const previous = running.mount
     if (previous === mount) return
     running.mount = mount
-    if (running.pubsub === undefined || Mount.sameArgs(previous, mount)) return
-    // `publishUnsafe` drops a value when the buffer is full. `publish` slides it out, and never suspends.
-    Effect.runSync(PubSub.publish(running.pubsub, mount.args))
+    if (running.args === undefined || Mount.sameArgs(previous, mount)) return
+    mountArgs.publish(running.args, mount.args)
   }
 
   // -- owned layers ---------------------------------------------------------
