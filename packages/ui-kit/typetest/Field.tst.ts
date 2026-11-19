@@ -45,6 +45,27 @@ describe("Field", () => {
     })
   })
 
+  it("a group's parts return the builders they were given, and a member is another kit call's element", () => {
+    Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
+      init: () => null,
+      update: (model) => model,
+      view: (_, h) =>
+        Field(h, {
+          view: (f) => {
+            expect(f.legend(h.div)).type.toBe<Element<"div">>()
+            expect(f.group(h.fieldset)).type.toBe<Element<"fieldset">>()
+            expect(f.member(h.input)).type.toBe<InputElement<Msg>>()
+            expect(f.member(h.button)).type.toBe<Element<"button">>()
+            return f.root(h.div).children(
+              f.group(h.div).children(
+                Checkbox(h, { props: { checked: false }, view: (s) => s.root(f.member(h.button)) })
+              )
+            )
+          }
+        })
+    })
+  })
+
   it("the control is another kit call's element", () => {
     Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
@@ -73,6 +94,7 @@ describe("Field", () => {
             expect(f.label).type.not.toBeCallableWith({ element: h.label })
             expect(f.control).type.not.toBeCallableWith(h.div)
             expect(f.control).type.not.toBeCallableWith({ element: h.input })
+            expect(f.member).type.not.toBeCallableWith(h.div)
             expect(f.description).type.not.toBeCallableWith({ element: h.p })
             expect(f.error).type.not.toBeCallableWith({ element: h.div })
             return f.root(h.div)

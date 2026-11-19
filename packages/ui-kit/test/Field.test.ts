@@ -22,10 +22,32 @@ const standIn = {
     )
 }
 
+// A field around a group of two controls, such as a range slider's thumbs.
+const groupStandIn = {
+  elements: Html,
+  view: (
+    f: Component.Headless.Parts<typeof Field>,
+    h: View.Helper<never, FieldProps> & View.Tags<Html.Elements, never>
+  ) =>
+    f.root(h.div).children(
+      f.legend(h.div.class("legend")).children("Price"),
+      f.group(h.div).children(
+        f.member(h.input.attr("aria-label", "Minimum")),
+        f.member(h.input.attr("aria-label", "Maximum"))
+      ),
+      f.description(h.p).children("In dollars"),
+      f.error(h.span)?.children("Enter a range")
+    )
+}
+
 const label = Locator.tag("label")
 const control = Locator.tag("input")
 const description = Locator.tag("p")
 const error = Locator.tag("span")
+const legend = Locator.attr("class", "legend")
+const group = Locator.attr("role", "group")
+const minimum = Locator.attr("aria-label", "Minimum")
+const maximum = Locator.attr("aria-label", "Maximum")
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
 const parts = (props: FieldProps) => Story.parts(Field, { model: { focused: false, touched: false }, props })
@@ -63,6 +85,43 @@ describe("Field", () => {
       s.fire(control, "blur")
       assert.deepStrictEqual(state(), [undefined, ""])
     }))
+
+  it.effect("the legend names the group, and each member points at the description and the error", () =>
+    Effect.gen(function*() {
+      const s = yield* Scene.make(Field, { described: true, invalid: true }, groupStandIn)
+      const id = s.get(legend).attrs?.id
+      assert.isString(id)
+      assert.strictEqual(s.get(group).attrs?.["aria-labelledby"], id)
+      assert.isUndefined(s.get(group).attrs?.["aria-invalid"])
+      const ids = [s.get(description).attrs?.id, s.get(error).attrs?.id]
+      for (const member of [minimum, maximum]) {
+        assert.isUndefined(s.get(member).attrs?.id)
+        assert.strictEqual(s.get(member).attrs?.["aria-describedby"], `${ids[0]} ${ids[1]}`)
+        assert.strictEqual(s.get(member).attrs?.["aria-invalid"], "true")
+      }
+    }))
+
+  it.effect("focus moving between members keeps the field focused, and it is touched once focus leaves the group", () =>
+    Effect.gen(function*() {
+      const s = yield* Scene.make(Field, { described: true }, groupStandIn)
+      const state = () => [s.get(group).attrs?.["data-focused"], s.get(maximum).attrs?.["data-touched"]]
+      s.fire(minimum, "focusin", { within: false })
+      assert.deepStrictEqual(state(), ["", undefined])
+      s.fire(minimum, "focusout", { within: true }).expectIgnored().fire(maximum, "focusin", { within: true })
+      assert.deepStrictEqual(state(), ["", undefined])
+      s.fire(maximum, "focusout", { within: false })
+      assert.deepStrictEqual(state(), [undefined, ""])
+    }))
+
+  it("a group is a group unless its element says otherwise, and a disabled field disables its members", () => {
+    const f = parts({})
+    assert.strictEqual(attrsOf(f.group(h.div)).role, "group")
+    assert.strictEqual(attrsOf(f.group(h.div).attr("role", "radiogroup")).role, "radiogroup")
+    assert.isUndefined(attrsOf(f.group(h.fieldset)).role)
+    const member = attrsOf(parts({ disabled: true }).member(h.input).disabled(false))
+    assert.strictEqual(member.disabled, "")
+    assert.strictEqual(member["data-disabled"], "")
+  })
 
   it("field state overrides stale attributes without replacing consumer attributes", () => {
     const f = parts({ invalid: false, dirty: true, filled: true })
@@ -130,6 +189,10 @@ describe("Field", () => {
     assert.throws(() => f.label(h.span as any), /a part for <label> was given <span>/)
     assert.throws(
       () => f.control(h.div as any),
+      /a part for <input> or <textarea> or <select> or <button> was given <div>/
+    )
+    assert.throws(
+      () => f.member(h.div as any),
       /a part for <input> or <textarea> or <select> or <button> was given <div>/
     )
     assert.throws(() => f.description(h.p), /Field: the description was drawn without the described prop/)

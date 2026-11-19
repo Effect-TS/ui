@@ -1,11 +1,13 @@
-import type { Component, Mount } from "@effect/ui"
-import { View } from "@effect/ui"
-import { Slider, type SliderEvents, type SliderProps } from "@effect/ui-kit"
-import { Html } from "@effect/ui/html"
+// @vitest-environment happy-dom
+import type { Mount } from "@effect/ui"
+import { Component, View } from "@effect/ui"
+import { Field, Slider, type SliderEvents, type SliderProps } from "@effect/ui-kit"
+import { BrowserHost, Html } from "@effect/ui/html"
 import { HtmlScene } from "@effect/ui/html/testing"
 import { Locator, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
+import { container, tick } from "./utils/document.ts"
 
 type Parts = Component.Headless.Parts<typeof Slider>
 type H = View.Helper<never, SliderProps> & View.Tags<Html.Elements, never>
@@ -237,6 +239,70 @@ describe("Slider", () => {
       s.mounted(tracked(s), pressed(0, 0.2, true))
       s.mounted(tracked(s), moved(0.8)).emitted({ _tag: "Moved", value: [60, 60] })
     }))
+
+  it.effect("a range slider in a field is named by the legend, described, and focused and touched as a whole", () =>
+    Effect.gen(function*() {
+      const Price = Component.define({ name: "Price", model: Schema.Struct({}), message: Schema.Never, elements: Html })
+        .make({
+          init: () => ({}),
+          update: (model) => model,
+          view: (_, h) =>
+            h.div(
+              Field(h, {
+                props: { invalid: true, described: true },
+                view: (f) =>
+                  f.root(h.div.class("field")).children(
+                    f.legend(h.div).children("Price"),
+                    Slider(h, {
+                      props: { value: [20, 80], disabled: f.disabled },
+                      view: (s) =>
+                        s.root(f.group(h.div)).children(
+                          s.control(h.div).children(
+                            s.track(h.div).children(
+                              s.thumb({
+                                element: h.div,
+                                index: 0,
+                                input: f.member(h.input).attr("aria-label", "Minimum")
+                              }),
+                              s.thumb({
+                                element: h.div,
+                                index: 1,
+                                input: f.member(h.input).attr("aria-label", "Maximum")
+                              })
+                            )
+                          )
+                        )
+                    }),
+                    f.description(h.p).children("In dollars"),
+                    f.error(h.span)?.children("Enter a range")
+                  )
+              }),
+              h.button("After")
+            )
+        })
+      const app = yield* container
+      yield* BrowserHost.mountEffect(Price, {}, app)
+      yield* tick
+      const field = app.querySelector(".field")!
+      const group = app.querySelector("[role=group]")!
+      const [minimum, maximum] = Array.from(app.querySelectorAll("input"))
+      const ids = [app.querySelector("p")!.id, app.querySelector("span")!.id].join(" ")
+      assert.strictEqual(app.querySelector(`#${group.getAttribute("aria-labelledby")}`)?.textContent, "Price")
+      for (const input of [minimum!, maximum!]) {
+        assert.strictEqual(input.getAttribute("aria-describedby"), ids)
+        assert.strictEqual(input.getAttribute("aria-invalid"), "true")
+      }
+      const state = () => [field.hasAttribute("data-focused"), field.hasAttribute("data-touched")]
+      minimum!.focus()
+      yield* tick
+      assert.deepStrictEqual(state(), [true, false])
+      maximum!.focus()
+      yield* tick
+      assert.deepStrictEqual(state(), [true, false])
+      app.querySelector("button")!.focus()
+      yield* tick
+      assert.deepStrictEqual(state(), [false, true])
+    }).pipe(Effect.scoped))
 
   it("the thumb keeps the consumer's attributes on the input, but the slider's own win, present or absent", () => {
     const element = h.input

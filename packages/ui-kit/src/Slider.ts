@@ -25,7 +25,7 @@
  * visually hidden range input and puts it inside `element`, before the
  * children you chain afterward. Because you hand over the input's builder,
  * what you set on it stays: its `name`, its `aria-label`, or a
- * `Field`'s `f.control`. `index` picks the value the thumb shows, and is
+ * `Field`'s `f.control` or `f.member`. `index` picks the value the thumb shows, and is
  * required when `value` is an array.
  *
  * The kit sets no layout. `thumb` gets `--slider-thumb-position` and
@@ -43,9 +43,12 @@
  * input, but the slider's other parts follow the `disabled` prop, so pass
  * `disabled: f.disabled` as well.
  *
- * A range slider can't use `Field` yet. Name the group with plain HTML,
- * such as `s.root(h.fieldset)` with a `<legend>`, and each thumb with an
- * `aria-label` on its input. Don't pass `f.control` to more than one
+ * In a `Field`, a range slider is the field's group. Draw the root with
+ * `s.root(f.group(h.div))`, the field's `f.legend` to name it, and each
+ * thumb's input with `f.member(h.input)` and an `aria-label` of its own,
+ * such as "Minimum". Each input then points at the description and the
+ * error. The field is focused while either thumb has focus, and touched
+ * once focus leaves the slider. Don't pass `f.control` to more than one
  * input, since that gives two elements one `id`. Two thumbs get
  * `aria-valuetext` saying which end each one is, unless you set one.
  *
@@ -60,7 +63,7 @@
  *
  * `thumb` also gets `data-index`. A `Field`'s data attributes, such as
  * `data-invalid` and `data-touched`, go on its parts and on the input
- * `f.control` decorates.
+ * `f.control` or `f.member` decorates.
  *
  * **Keyboard**
  *
