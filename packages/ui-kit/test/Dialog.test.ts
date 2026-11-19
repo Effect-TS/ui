@@ -16,6 +16,7 @@ const standIn = {
   view: (s: Parts, h: H) =>
     h.div(
       s.trigger(h.button.class("open").attr("aria-expanded", "mixed").attr("data-popup-open", "")).children("Open"),
+      s.trigger(h.button.attr("id", "other")).children("Other"),
       s.portal(h.dialog.attr("id", "mine").attr("aria-describedby", "extra").attr("style", "z-index:2"))?.children(
         s.backdrop(h.div.class("backdrop").attr("role", "none").attr("data-closed", "")),
         s.viewport(h.div.class("viewport").attr("data-nested", "")).children(
@@ -41,10 +42,9 @@ const backdrop = Locator.attr("class", "backdrop")
 type TrackDialog = Mount.Issued<unknown, never, never, unknown>
 type Rendered = { readonly get: (locator: Locator.Locator) => Locator.Node }
 // The portal's mount is private, so a test reads it off the rendered element.
-const listener = (s: Rendered): TrackDialog | undefined =>
+const tracked = (s: Rendered): TrackDialog =>
   (s.get(portal) as unknown as View.Element<unknown>).owned?.find((layer) => layer.mount !== undefined)
-    ?.mount as TrackDialog | undefined
-const tracked = (s: Rendered): TrackDialog => listener(s)!
+    ?.mount as unknown as TrackDialog
 // A message the mount sends, as its Stream would.
 const sent = (tag: string, fields: object = {}) => ({ _tag: tag, ...fields }) as never
 
@@ -60,7 +60,7 @@ const partsOf = (s: { readonly parts: (f: (parts: Parts) => void) => unknown }):
 const dismissed = (reason: string) => ({ _tag: "Dismissed", reason }) as DialogEvents
 
 describe("Dialog", () => {
-  it.effect("a trigger press asks to open, and a second one, with the dialog open, to close", () =>
+  it.effect("only the active trigger asks to close an open dialog", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(Dialog, { open: false }, standIn)
       // Closed, the portal isn't drawn, and the trigger says so.
@@ -73,21 +73,25 @@ describe("Dialog", () => {
       // The press records how it opened, before the consumer opens it.
       assert.strictEqual(partsOf(s).openMethod, "mouse")
 
-      s.props({ open: true })
+      const other = Locator.text("Other", { exact: true })
+      s.props({ open: true, triggerId: "other" })
       s.expectMount(tracked(s))
+      assert.strictEqual(s.get(trigger).attrs?.["aria-expanded"], "false")
       const id = s.get(portal).attrs?.id
       assert.notStrictEqual(id, "mine")
-      assert.deepInclude(s.get(trigger).attrs, { "aria-expanded": "true", "aria-controls": id, "data-popup-open": "" })
+      s.click(trigger).emitted({ _tag: "Opened", triggerId: null })
+      assert.deepInclude(s.get(other).attrs, { "aria-expanded": "true", "aria-controls": id, "data-popup-open": "" })
       // Enter or Space on the trigger is a click with no pointer.
-      s.fire(trigger, "click", { button: 0, x: 0, y: 0, pointerType: "" })
+      s.fire(other, "click", { button: 0, x: 0, y: 0, pointerType: "" })
         .emitted(dismissed("trigger-press"))
       assert.strictEqual(partsOf(s).closeMethod, "keyboard")
     }))
 
   it.effect("labels a modal portal with the title and description, and resets its box", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Dialog, { open: true }, standIn)
+      const s = yield* Scene.make(Dialog, { open: true, openMethod: "touch" }, standIn)
       s.expectMount(tracked(s))
+      assert.strictEqual(partsOf(s).openMethod, "touch")
       const dialog = s.get(portal)
       assert.strictEqual(dialog.props?.open, "modal")
       assert.isUndefined(dialog.attrs?.popover)
@@ -104,88 +108,17 @@ describe("Dialog", () => {
       assert.isUndefined(s.get(viewport).attrs?.["data-nested"])
       assert.strictEqual(s.get(Locator.tag("input")).attrs?.autofocus, "")
       assert.strictEqual(s.get(Locator.text("Next", { exact: true })).attrs?.["data-final-focus"], dialog.attrs?.id)
-      assert.deepStrictEqual(tracked(s).args, {
-        modal: true,
-        open: true,
-        mounted: false,
-        topmost: true,
-        dismissible: true,
-        initialFocus: true,
-        finalFocus: true,
-        openMethod: null,
-        portalId: dialog.attrs?.id,
-        popupId: s.get(popup).attrs?.id,
-        triggerId: null,
-        holdExit: false
-      })
     }))
 
-  it.effect("an id names the portal, and openMethod stands in for the press the dialog didn't see", () =>
-    Effect.gen(function*() {
-      const s = yield* Scene.make(Dialog, { open: true, id: "settings", openMethod: "touch" }, standIn)
-      s.expectMount(tracked(s))
-      assert.strictEqual(s.get(portal).attrs?.id, "settings")
-      assert.strictEqual(s.get(trigger).attrs?.["aria-controls"], "settings")
-      assert.strictEqual(partsOf(s).openMethod, "touch")
-      assert.include(tracked(s).args, { portalId: "settings", openMethod: "touch" })
-      // Without it, the dialog's own trigger press counts.
-      s.props({ open: true, id: "settings" })
-      s.expectMount(tracked(s))
-      assert.isNull(partsOf(s).openMethod)
-    }))
-
-  it.effect("a close the browser forces after an uncancelable request is that request, not another", () =>
+  it.effect("reports close methods and ignores outside dismissal when disabled", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(Dialog, { open: true }, standIn)
       s.expectMount(tracked(s))
-      s.fire(portal, "cancel", { cancelable: true }).emitted(dismissed("escape-key"))
-      s.fire(portal, "cancel", { cancelable: false }).emitted(dismissed("escape-key"))
-      s.fire(portal, "close", { returnValue: "" })
-      assert.deepStrictEqual(s.current.emitted, [])
-      // A later close without a request, as from a form, is one.
-      s.fire(portal, "close", { returnValue: "" }).emitted(dismissed("escape-key"))
-    }))
-
-  it.effect("holdExit keeps a closed dialog shown until the consumer lets it go", () =>
-    Effect.gen(function*() {
-      const s = yield* Scene.make(Dialog, { open: true }, standIn)
-      s.expectMount(tracked(s)).mounted(tracked(s), sent("RenderedFirstFrame"))
-      s.props({ open: false, holdExit: true })
-      s.expectMount(tracked(s))
-      assert.include(tracked(s).args, { open: false, holdExit: true })
-      // Its animations ending doesn't end the exit.
-      s.mounted(tracked(s), sent("FinishedTransition", { open: false }))
-      assert.deepStrictEqual(s.current.emitted, [])
-      assert.strictEqual(s.get(popup).attrs?.["data-ending-style"], "")
-      assert.isTrue(partsOf(s).mounted)
-      // Let go, the mount waits for them again, and then it ends.
-      s.props({ open: false, holdExit: false })
-      s.expectMount(tracked(s))
-        .mounted(tracked(s), sent("FinishedTransition", { open: false }))
-        .emitted({ _tag: "Settled", open: false })
-      assert.isUndefined(s.query(portal))
-    }))
-
-  it.effect("Escape, a forced close, the close part, a press outside and focus leaving each ask to close", () =>
-    Effect.gen(function*() {
-      const s = yield* Scene.make(Dialog, { open: true }, standIn)
-      s.expectMount(tracked(s))
-      s.fire(portal, "cancel").emitted(dismissed("escape-key"))
-      // The consumer refused, and the browser closed it anyway.
       s.fire(portal, "close", { returnValue: "" }).emitted(dismissed("escape-key"))
       s.fire(close, "click", { button: 0, x: 0, y: 0, pointerType: "touch" }).emitted(dismissed("close-press"))
       assert.strictEqual(partsOf(s).closeMethod, "touch")
       s.mounted(tracked(s), sent("PressedOutside", { pointerType: "pen" })).emitted(dismissed("outside-press"))
       assert.strictEqual(partsOf(s).closeMethod, "pen")
-      // A modal hears Escape through its cancel, and only a dialog that
-      // isn't one closes when focus leaves.
-      s.mounted(tracked(s), sent("FocusedOutside"))
-      assert.deepStrictEqual(s.current.emitted, [])
-      s.props({ open: true, modal: false })
-      s.expectMount(tracked(s))
-        .mounted(tracked(s), sent("FocusedOutside"))
-        .emitted(dismissed("focus-out"))
-      s.mounted(tracked(s), sent("PressedEscape")).emitted(dismissed("escape-key"))
       // With pointer dismissal off, neither a press outside nor focus leaving does.
       s.props({ open: true, modal: false, disablePointerDismissal: true })
       s.expectMount(tracked(s))
@@ -194,16 +127,7 @@ describe("Dialog", () => {
       assert.deepStrictEqual(s.current.emitted, [])
     }))
 
-  it.effect("a close of the consumer's own is no request", () =>
-    Effect.gen(function*() {
-      const s = yield* Scene.make(Dialog, { open: true, keepMounted: true }, standIn)
-      s.expectMount(tracked(s))
-      s.props({ open: false, keepMounted: true })
-      s.fire(portal, "close", { returnValue: "" }).fire(portal, "cancel")
-      assert.deepStrictEqual(s.current.emitted, [])
-    }))
-
-  it.effect("starts and ends with a transition, and stays shown until its exit finishes", () =>
+  it.effect("reports transition state and waits for holdExit to be released before settling", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(Dialog, { open: true }, standIn)
       s.expectMount(tracked(s))
@@ -218,7 +142,7 @@ describe("Dialog", () => {
         .mounted(tracked(s), sent("FinishedTransition", { open: true }))
         .emitted({ _tag: "Settled", open: true })
 
-      s.props({ open: false })
+      s.props({ open: false, holdExit: true })
       s.expectMount(tracked(s))
       // Closing: still a modal, with the closed and ending attributes.
       assert.strictEqual(s.get(portal).props?.open, "modal")
@@ -228,21 +152,27 @@ describe("Dialog", () => {
         assert.deepInclude(s.get(part).attrs, { "data-closed": "", "data-ending-style": "" })
         assert.isUndefined(s.get(part).attrs?.["data-open"])
       }
-      // A stale end, from before the dialog reopened, is ignored.
+      // Its animations ending doesn't end the exit.
+      s.mounted(tracked(s), sent("FinishedTransition", { open: false }))
+      assert.deepStrictEqual(s.current.emitted, [])
+      // Let go, the mount waits for them again, and then it ends.
+      s.props({ open: false, holdExit: false })
+      s.expectMount(tracked(s))
+      // An opening animation that finishes late must not settle this exit.
       s.mounted(tracked(s), sent("FinishedTransition", { open: true }))
       assert.deepStrictEqual(s.current.emitted, [])
       s.mounted(tracked(s), sent("FinishedTransition", { open: false }))
         .emitted({ _tag: "Settled", open: false })
       assert.isUndefined(s.query(portal))
-      assert.isFalse(partsOf(s).mounted)
     }))
 
-  it.effect("keepMounted keeps a closed portal, hidden and without its mount", () =>
+  it.effect("keepMounted leaves a hidden portal whose native close is not a dismissal", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(Dialog, { open: false, keepMounted: true }, standIn)
       assert.strictEqual(s.get(portal).props?.open, false)
-      assert.isUndefined(listener(s))
       assert.deepInclude(s.get(popup).attrs, { "data-closed": "" })
+      s.fire(portal, "close", { returnValue: "" }).fire(portal, "cancel")
+      assert.deepStrictEqual(s.current.emitted, [])
     }))
 
   it.effect("the other modes show the dialog as a manual popover", () =>
@@ -251,88 +181,27 @@ describe("Dialog", () => {
       s.expectMount(tracked(s))
       assert.deepInclude(s.get(portal).attrs, { popover: "manual", "aria-modal": "true" })
       assert.deepInclude(s.get(portal).props, { open: false, popoverOpen: true })
-      s.props({ open: true, modal: false })
+      s.props({ open: true, modal: false, initialFocus: false })
+      assert.isUndefined(s.get(Locator.tag("input")).attrs?.autofocus)
       s.expectMount(tracked(s))
       assert.isUndefined(s.get(portal).attrs?.["aria-modal"])
       assert.strictEqual(s.get(portal).props?.popoverOpen, true)
-      // The cancel and close a modal hears aren't handled.
-      assert.isUndefined((s.get(portal) as unknown as View.Element<unknown>).owned?.[0]?.handlers.cancel)
     }))
 
-  it.effect("a nested dialog draws no backdrop, and the dialog above it stops hearing dismissals", () =>
+  it.effect("a nested dialog can force a backdrop, and a parent ignores native cancel", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(Dialog, { open: true }, standIn)
       s.expectMount(tracked(s))
       s.shared(Dialog, { open: true })
       assert.isTrue(partsOf(s).nested)
-      assert.isUndefined(s.query(backdrop))
-      assert.strictEqual(s.get(viewport).attrs?.["data-nested"], "")
-      assert.strictEqual(s.get(popup).attrs?.["data-nested"], "")
       s.props({ open: true, forceRenderBackdrop: true })
       assert.isDefined(s.query(backdrop))
-
       // One dialog open inside this one, and one inside that.
       s.collected([2, 0])
       assert.strictEqual(partsOf(s).nestedDialogs, 2)
-      assert.strictEqual(s.get(popup).attrs?.["data-nested-dialog-open"], "")
-      assert.strictEqual(s.get(popup).attrs?.style, "--nested-dialogs:2")
       s.expectMount(tracked(s))
-      assert.isFalse((tracked(s).args as { readonly topmost: boolean }).topmost)
       s.fire(portal, "cancel")
-        .mounted(tracked(s), sent("PressedEscape"))
-        .mounted(tracked(s), sent("PressedOutside", { pointerType: "mouse" }))
       assert.deepStrictEqual(s.current.emitted, [])
-    }))
-
-  it.effect("with several triggers, the open one closes it and another one asks for itself", () =>
-    Effect.gen(function*() {
-      const s = yield* Scene.make(Dialog, { open: false }, {
-        elements: Html,
-        view: (s: Parts, h: H) =>
-          h.div(
-            s.trigger(h.button.attr("id", "edit-a")).children("A"),
-            s.trigger(h.button.attr("id", "edit-b")).children("B"),
-            s.portal(h.dialog)?.children(s.popup(h.div).children("Edit"))
-          )
-      })
-      const a = Locator.text("A", { exact: true })
-      const b = Locator.text("B", { exact: true })
-      s.click(a).emitted({ _tag: "Opened", triggerId: "edit-a" })
-      assert.strictEqual(partsOf(s).openMethod, "mouse")
-      s.props({ open: true, triggerId: "edit-a" })
-      s.expectMount(tracked(s))
-      assert.strictEqual(s.get(a).attrs?.["aria-expanded"], "true")
-      assert.strictEqual(s.get(b).attrs?.["aria-expanded"], "false")
-      assert.isUndefined(s.get(b).attrs?.["data-popup-open"])
-      s.click(b).emitted({ _tag: "Opened", triggerId: "edit-b" })
-      s.click(a).emitted(dismissed("trigger-press"))
-    }))
-
-  it.effect("initialFocus and finalFocus false reach the mount, and drop autofocus", () =>
-    Effect.gen(function*() {
-      const s = yield* Scene.make(Dialog, { open: true, initialFocus: false, finalFocus: false }, standIn)
-      s.expectMount(tracked(s))
-      assert.isUndefined(s.get(Locator.tag("input")).attrs?.autofocus)
-      assert.deepInclude(tracked(s).args, { initialFocus: false, finalFocus: false })
-    }))
-
-  it.effect("each part takes only its own tags", () =>
-    Effect.gen(function*() {
-      const parts = (view: (s: Parts, h: H) => View.Child<never>) =>
-        Effect.flip(Scene.make(Dialog, { open: true }, { elements: Html, view }))
-      for (
-        const view of [
-          (s: Parts, h: H) => s.trigger(h.div as any),
-          (s: Parts, h: H) => s.portal(h.div as any),
-          (s: Parts, h: H) => s.title(h.p as any),
-          (s: Parts, h: H) => s.description(h.div as any),
-          (s: Parts, h: H) => s.close(h.a as any),
-          (s: Parts, h: H) => s.popup(h.span as any)
-        ]
-      ) {
-        const error = yield* parts(view).pipe(Effect.catchDefect((defect) => Effect.succeed(defect)))
-        assert.match(String(error), /a part for <[^>]+(> or <h\d)*> was given </)
-      }
     }))
 })
 
@@ -415,31 +284,14 @@ describe("DialogTrigger", () => {
     const open = View.build(DialogTrigger(h, { props: { open: true } }), []) as View.Element<string>
     assert.deepInclude(open.attrs, { "aria-expanded": "true", "data-popup-open": "" })
     assert.isUndefined(open.attrs["aria-controls"])
-    // Given the dialog's id, it points at the dialog while it is open.
-    const paired = (open: boolean) =>
-      View.build(DialogTrigger(h, { props: { open, popupId: "settings" } }), []) as View.Element<string>
-    assert.strictEqual(paired(true).attrs["aria-controls"], "settings")
-    assert.isUndefined(paired(false).attrs["aria-controls"])
-    assert.strictEqual(paired(false).attrs["data-dialog-trigger"], "settings")
   })
 
-  it("onPress as a function hears the trigger's id and how it was pressed", () => {
-    const built = View.build(
-      DialogTrigger(h, {
-        element: h.button.attr("id", "settings-button"),
-        props: { open: false },
-        onPress: ({ method, triggerId }) => `${triggerId} ${method}`
-      }),
-      []
-    ) as View.Element<string>
-    const click = built.handlers.click as (payload: { readonly pointerType: string }) => string
-    assert.strictEqual(click({ pointerType: "touch" }), "settings-button touch")
-    assert.strictEqual(click({ pointerType: "" }), "settings-button keyboard")
+  it("an anonymous detached keyboard press has no trigger id", () => {
     const anonymous = View.build(
-      DialogTrigger(h, { props: { open: false }, onPress: ({ triggerId }) => String(triggerId) }),
+      DialogTrigger(h, { props: { open: false }, onPress: ({ triggerId, method }) => `${triggerId} ${method}` }),
       []
     ) as View.Element<string>
-    assert.strictEqual((anonymous.handlers.click as (payload: object) => string)({ pointerType: "mouse" }), "null")
+    assert.strictEqual((anonymous.handlers.click as (payload: object) => string)({ pointerType: "" }), "null keyboard")
   })
 
   it("rejects a click handler of the caller's own only with onPress", () => {

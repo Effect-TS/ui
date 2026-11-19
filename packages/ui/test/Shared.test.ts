@@ -569,7 +569,6 @@ describe("optional owners, reports and onChange in a Story", () => {
 
 describe("a component that reads its own kind", () => {
   const NestMessage = UiSchema.TaggedEnum({ ChangedBelow: { open: Schema.Number } })
-  /** Shares its depth, and counts the open nests below it from their reports. */
   const Nest = Component.define({
     name: "Nest",
     props: Schema.Struct({ open: Schema.Boolean }),
@@ -608,18 +607,16 @@ describe("a component that reads its own kind", () => {
       })
     }
   })
-  // `get` throws unless exactly one text matches.
-  const shows = (root: TestHost.TestRoot<any, any, any>, texts: ReadonlyArray<string>) =>
-    texts.forEach((text) => root.get(Locator.text(text, { exact: true })))
 
   it.effect("reads the nearest instance of its own kind above it, and reports to it", () =>
     provideHost(Effect.gen(function*() {
       const root = yield* TestHost.mount(Nests, {})
       yield* TestHost.settle
-      shows(root, ["a outer 2", "b nested 1", "c nested 0"])
+      const labels = () => root.all(Locator.tag("span")).map(Locator.textOf)
+      assert.deepStrictEqual(labels(), ["a outer 2", "b nested 1", "c nested 0"])
       root.send(Toggle.Toggled())
       yield* TestHost.settle
-      shows(root, ["a outer 1", "b nested 0", "c nested 0"])
+      assert.deepStrictEqual(labels(), ["a outer 1", "b nested 0", "c nested 0"])
     })))
 
   it.effect("in a scene and a story, reads only what was given: never its own value", () =>

@@ -395,6 +395,7 @@ describe("BrowserHost", { concurrent: false }, () => {
   describe("events", () => {
     const Message = UiSchema.TaggedEnum({
       Clicked: { where: Schema.String },
+      PointerClicked: { pointerType: Schema.String },
       Key: { key: Schema.String, shift: Schema.Boolean },
       Submitted: { title: Schema.String, tags: Schema.Array(Schema.String) },
       Focused: { where: Schema.String }
@@ -409,6 +410,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       update: (log, message) =>
         Message.match(message, {
           Clicked: ({ where }) => [...log, `click ${where}`],
+          PointerClicked: ({ pointerType }) => [...log, pointerType],
           Key: ({ key, shift }) => [...log, `key ${key}${shift ? " shift" : ""}`],
           Submitted: ({ tags, title }) => [...log, `submit ${title} [${tags.join(",")}]`],
           Focused: ({ where }) => [...log, `focus ${where}`]
@@ -423,6 +425,7 @@ describe("BrowserHost", { concurrent: false }, () => {
             .on("focus", Message.Focused({ where: "div" })).children(
               h.input.attr("aria-label", "Focus me")
             ),
+          h.button.onClick(({ pointerType }) => Message.PointerClicked({ pointerType })).children("Pointer"),
           h.input.attr("aria-label", "Keys")
             .onKeyDown(({ key, shift }) => Message.Key({ key, shift }))
             .onFocus(Message.Focused({ where: "keys" })),
@@ -452,20 +455,9 @@ describe("BrowserHost", { concurrent: false }, () => {
 
     it.effect("a click reports the pointer of the pointerdown before it, and none for a click from the keyboard", () =>
       Effect.gen(function*() {
-        const Message = UiSchema.TaggedEnum({ Clicked: { pointerType: Schema.String } })
-        const Pointers = Component.define({
-          name: "Pointers",
-          model: Schema.Array(Schema.String),
-          message: Message,
-          elements: Html
-        }).make({
-          init: (): ReadonlyArray<string> => [],
-          update: (log, message) => Message.match(message, { Clicked: ({ pointerType }) => [...log, pointerType] }),
-          view: (_, h) => h.button.onClick(({ pointerType }) => Message.Clicked({ pointerType })).children("Press")
-        })
         const app = yield* container
-        const root = yield* BrowserHost.mountEffect(Pointers, {}, app)
-        const button = HtmlLocator.getByRole(app, "button", { name: "Press" }) as HTMLButtonElement
+        const root = yield* BrowserHost.mountEffect(Events, {}, app)
+        const button = HtmlLocator.getByRole(app, "button", { name: "Pointer" })
         const click = (detail: number) => button.dispatchEvent(new MouseEvent("click", { bubbles: true, detail }))
         // No pointerdown yet: a mouse.
         click(1)

@@ -44,11 +44,12 @@ const container = Effect.acquireRelease(
   (element) => Effect.sync(() => element.remove())
 )
 
+const OpenMethod = Schema.NullOr(Schema.Literals(["mouse", "touch", "pen", "keyboard"]))
+
 const Message = UiSchema.TaggedEnum({
-  Opened: { which: Schema.String, triggerId: Schema.NullOr(Schema.String), method: Schema.NullOr(Schema.String) },
+  Opened: { which: Schema.String, triggerId: Schema.NullOr(Schema.String), method: OpenMethod },
   Dismissed: { which: Schema.String, reason: Schema.String },
-  Settled: { which: Schema.String, open: Schema.Boolean },
-  Finished: {}
+  Settled: { which: Schema.String, open: Schema.Boolean }
 })
 
 const Config = Schema.Struct({
@@ -61,7 +62,8 @@ const Config = Schema.Struct({
   triggers: Schema.Boolean,
   detached: Schema.Boolean,
   marked: Schema.Boolean,
-  openMethod: Schema.NullOr(Schema.Literals(["mouse", "touch", "pen", "keyboard"])),
+  finalFocus: Schema.optional(Schema.Boolean),
+  openMethod: OpenMethod,
   refuse: Schema.Boolean
 })
 type Config = typeof Config.Type
@@ -87,7 +89,7 @@ const Page = Component.define({
     a: Schema.Boolean,
     b: Schema.Boolean,
     triggerId: Schema.NullOr(Schema.String),
-    method: Schema.NullOr(Schema.String),
+    method: OpenMethod,
     log: Schema.Array(Schema.String)
   }),
   message: Message,
@@ -115,8 +117,7 @@ const Page = Component.define({
         [which]: model.config.refuse ? model[which as "a" | "b"] : false,
         log: [...model.log, `Dismissed ${which} ${reason}`]
       }),
-      Settled: ({ open, which }) => ({ ...model, log: [...model.log, `Settled ${which} ${open}`] }),
-      Finished: () => model
+      Settled: ({ open, which }) => ({ ...model, log: [...model.log, `Settled ${which} ${open}`] })
     }),
   view: (model, h) => {
     const props = model.config
@@ -142,7 +143,8 @@ const Page = Component.define({
           modal: props.modal,
           id: props.detached ? "settings" : undefined,
           triggerId: model.triggerId,
-          openMethod: props.openMethod ?? (model.method as "touch" | null)
+          finalFocus: props.finalFocus,
+          openMethod: props.openMethod ?? model.method
         },
         onEmit: on("a"),
         view: (s) =>
@@ -188,7 +190,7 @@ const mountPage = Effect.fnUntraced(function*(overrides: Partial<Config>) {
   const app = yield* container
   const root = yield* BrowserHost.mountEffect(Page, config(overrides), app)
   yield* tick
-  return { app, log: () => root.model()!.log, root }
+  return { app, log: () => root.model()!.log }
 })
 
 const byId = (id: string) => document.getElementById(id)!
@@ -266,15 +268,18 @@ describe("Dialog in a document", { concurrent: false }, () => {
       yield* tick
       yield* tick
       assert.strictEqual(document.activeElement?.id, "tb")
-    }).pipe(Effect.scoped))
+    }))
 
-  it.effect("an open by touch focuses the popup, unless an element is marked for initial focus", () =>
+  it.effect("a touch-opened dialog honors marked initial focus and can skip return focus", () =>
     Effect.gen(function*() {
-      yield* mountPage({ openMethod: "touch" })
-      assert.match(document.activeElement?.id ?? "", /popup$/)
-      yield* mountPage({ openMethod: "touch", marked: true })
+      const { app } = yield* mountPage({ openMethod: "touch", marked: true, finalFocus: false })
       assert.strictEqual(document.activeElement?.id, "second")
-    }).pipe(Effect.scoped))
+      app.querySelector("dialog")!.dispatchEvent(new Event("cancel", { cancelable: true }))
+      yield* tick
+      yield* tick
+      assert.isNull(app.querySelector("dialog"))
+      assert.strictEqual(document.activeElement, document.body)
+    }))
 
   it.effect("a close the browser forces after a refused Escape is one request, and focus stays where it was", () =>
     Effect.gen(function*() {
@@ -283,6 +288,8 @@ describe("Dialog in a document", { concurrent: false }, () => {
       byId("second").focus()
       dialog.dispatchEvent(new Event("cancel", { cancelable: true }))
       yield* tick
+      assert.deepStrictEqual(dismissals(log()), ["Dismissed a escape-key"])
+      assert.isTrue(dialog.open)
       // The browser won't let the next one be cancelled, and closes the dialog.
       dialog.dispatchEvent(new Event("cancel", { cancelable: false }))
       HTMLDialogElement.prototype.close.call(dialog)
@@ -291,7 +298,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(dismissals(log()), ["Dismissed a escape-key", "Dismissed a escape-key"])
       assert.isTrue(dialog.open)
       assert.strictEqual(document.activeElement?.id, "second")
-    }).pipe(Effect.scoped))
+    }))
 
   it.effect("a looping animation inside the dialog doesn't hold its close", () =>
     Effect.gen(function*() {
@@ -309,7 +316,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(dismissals(log()), ["Dismissed a focus-out"])
       assert.isNull(app.querySelector("dialog"))
       assert.include(log(), "Settled a false")
-    }).pipe(Effect.scoped))
+    }))
 
   it.effect("a detached trigger reports how it was pressed, points at the dialog, and gets focus back", () =>
     Effect.gen(function*() {
@@ -323,7 +330,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(opens(log()), ["Opened a detached touch"])
       assert.strictEqual(trigger.getAttribute("aria-controls"), "settings")
       assert.strictEqual(document.querySelector("dialog")?.id, "settings")
-      assert.match(document.activeElement?.id ?? "", /popup$/)
+      assert.strictEqual(document.activeElement, document.querySelector(".popup-a"))
       press(trigger)
       yield* tick
       // A press on the trigger is the trigger's, not one outside.
@@ -333,5 +340,5 @@ describe("Dialog in a document", { concurrent: false }, () => {
       yield* tick
       assert.deepStrictEqual(dismissals(log()), ["Dismissed a escape-key"])
       assert.strictEqual(document.activeElement?.id, "detached")
-    }).pipe(Effect.scoped))
+    }))
 })
