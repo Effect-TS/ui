@@ -204,6 +204,37 @@ describe("Runtime", () => {
         assert.strictEqual(root.text(), View.idOf("/ROWS/BADGE[A]", "label") + View.idOf("/ROWS/BADGE[B]", "label"))
       })))
 
+    it.effect("a view is read once for each render, even when reading it puts another in its place", () =>
+      provideHost(Effect.gen(function*() {
+        const state = { model: Schema.Null, message: Schema.Never }
+        const Badge = Component.define({ ...state, name: "Badge" }).make({
+          init: () => null,
+          update: () => null,
+          view: (_, h) => h.el("li", h.id("label"))
+        })
+        const view = function(
+          this: typeof Badge,
+          ...[model, props, running, queries, path]: Parameters<Component.Any["view"]>
+        ) {
+          return Badge.view(model, props, running, queries, path?.toUpperCase())
+        }
+        // The first read gives `make`'s view, and installs the wrapper for the reads after it.
+        const Swapping = Object.defineProperty(Object.create(Badge) as typeof Badge, "view", {
+          configurable: true,
+          get(this: typeof Badge) {
+            Object.defineProperty(this, "view", { value: view })
+            return Badge.view
+          }
+        })
+        const Rows = Component.define({ ...state, name: "Rows" }).make({
+          init: () => null,
+          update: () => null,
+          view: (_, h) => h.el("ul", { ...Badge(h, { key: "a" }), component: Swapping })
+        })
+        const root = yield* TestHost.mount(Rows, {})
+        assert.strictEqual(root.text(), View.idOf("/Rows/Badge[a]", "label"))
+      })))
+
     it.effect("closing the mount's Scope unmounts every instance", () =>
       Effect.gen(function*() {
         const testHost = yield* TestHost.TestHost
