@@ -26,6 +26,7 @@ Switch(h, {
 - [Dialog](src/Dialog.ts): a popup in the top layer whose open state lives in your Model, as a modal, a focus trap or a non-modal panel, with `DialogTrigger` to open it from another component.
 - [Field](src/Field.ts): a label, a description and an error for a form control, with its validity, touched and focused state.
 - [Input](src/Input.ts): a native text input whose value lives in your Model.
+- [Meter](src/Meter.ts): a measurement within a known range, such as disk usage, whose value lives in your Model, with a label, a value text and an indicator sized to the value.
 - [Progress](src/Progress.ts): a progress bar whose value lives in your Model, with a label, a value text and an indicator sized to the value.
 - [Switch](src/Switch.ts): a controlled on/off setting.
 - [Toast](src/Toast.ts): `ToastProvider`, a stack of notifications that components inside it post to, which close after a timeout.
