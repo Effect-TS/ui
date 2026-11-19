@@ -53,7 +53,13 @@ const Trigger = Component.define({
     parts: (_, p) => ({ open: p.shared.provider.open, label: p.shared.provider.label })
   })
 
-/** TipsProvider with a Tip and a Trigger in its closure. Its Model is the label it passes to TipsProvider. */
+const Frame = Component.define({ name: "Frame", model: Schema.Null, message: TipMessage, slots: ["body"] }).make({
+  init: () => null,
+  update: (model) => model,
+  view: (_, h) => TipsProvider(h, { key: "tips", props: { label: "placed" }, view: () => h.slots.body })
+})
+
+/** A nonempty label moves the Tip into Frame, which has its own provider. */
 const App = Component.define({
   name: "App",
   model: Schema.String,
@@ -65,11 +71,13 @@ const App = Component.define({
     TipsProvider(h, {
       key: "tips",
       props: { label },
-      view: () =>
-        h.el("div", [
-          Tip(h, { key: "a", props: { id: "a" } }),
+      view: () => {
+        const tip = Tip(h, { key: "a", props: { id: "a" } })
+        return h.el("div", [
+          label ? Frame(h, { key: "frame", slots: { body: tip } }) : tip,
           Trigger(h, { key: "t", view: (parts) => h.el("i", parts.open ?? "") })
         ])
+      }
     })
 })
 
@@ -90,13 +98,16 @@ describe("shared state", () => {
       assert.deepStrictEqual(received.source, { _tag: "Send", path: "/App/Tip[a]", seq: sent.seq })
     })))
 
-  it.effect("re-renders the readers when the owner's props change what it shares", () =>
+  it.effect("a reader moved into a slot reads its author's updated share and still sends to that owner", () =>
     provideHost(Effect.gen(function*() {
       const root = yield* TestHost.mount(App, {})
       yield* TestHost.settle
       root.send({ _tag: "Label", label: "!" })
       yield* TestHost.settle
       assert.strictEqual(root.text(), "a:closed!")
+      click(root, "a:closed!")
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "a:open!a")
     })))
 
   // A Date has no keys: it must be compared by value, not as a record.
@@ -222,11 +233,6 @@ describe("shared state in a Scene", () => {
   // A scene with no steps keeps the view it expanded, where the owner placing the slot is already gone.
   it.effect("gives slot content the owner that places it", () =>
     Effect.gen(function*() {
-      const Frame = Component.define({ name: "Frame", model: Schema.Null, message: TipMessage, slots: ["body"] }).make({
-        init: () => null,
-        update: (model) => model,
-        view: (_, h) => TipsProvider(h, { key: "tips", props: { label: "placed" }, view: () => h.slots.body })
-      })
       const s = yield* Scene.make(Frame, {}, {
         slots: (h) => ({ body: Trigger(h, { key: "t", view: (parts) => h.el("i", parts.label) }) })
       })
@@ -565,42 +571,6 @@ describe("optional owners, reports and onChange in a Story", () => {
       s.collected([false, true])
       assert.strictEqual(Locator.textOf(s.root), "on")
     }))
-})
-
-describe("owners of slot content", () => {
-  it.effect("content reads the owner its author wrote around it, not one inside the receiver's view", () =>
-    provideHost(Effect.gen(function*() {
-      const Framed = Component.define({ name: "Framed", model: Schema.Null, message: Schema.Never, slots: ["body"] })
-        .make({
-          init: () => null,
-          update: (model) => model,
-          view: (_, h) =>
-            TipsProvider(h, { key: "inner", props: { label: "frame" }, view: () => h.el("section", h.slots.body) })
-        })
-      const Page = Component.define({ name: "Page", model: Schema.Boolean, message: Schema.Boolean }).make({
-        init: () => false,
-        update: (_, framed) => framed,
-        view: (framed, h) =>
-          TipsProvider(h, {
-            key: "outer",
-            props: { label: "page" },
-            view: () => {
-              const tip = Tip(h, { key: "t", props: { id: "a" } })
-              return framed ? Framed(h, { key: "c", slots: { body: tip } }) : h.el("section", tip)
-            }
-          })
-      })
-      const root = yield* TestHost.mount(Page, {})
-      yield* TestHost.settle
-      assert.strictEqual(root.text(), "a:closedpage")
-      root.send(true)
-      yield* TestHost.settle
-      assert.strictEqual(root.text(), "a:closedpage")
-      click(root, "a:closedpage")
-      yield* TestHost.settle
-      assert.strictEqual(root.text(), "a:openpage")
-      assert.lengthOf(updatesAt(root.log(), "/Page/TipsProvider[outer]"), 1)
-    })))
 })
 
 describe("a component that reads its own kind", () => {

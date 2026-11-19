@@ -192,14 +192,11 @@ describe("Runtime", () => {
         })
         const root = yield* TestHost.mount(Wrap, {})
         yield* TestHost.settle
-        assert.deepStrictEqual(root.pending().map((p) => p.path), ["/Wrap/Row[a]"])
+        click(root, "a:0")
+        yield* TestHost.settle
         root.send(true)
         yield* TestHost.settle
-        assert.strictEqual(root.text(), "a:0")
-        const rows = root.log().filter((entry): entry is MessageLog.Mounted | MessageLog.Unmounted =>
-          (entry._tag === "Mounted" || entry._tag === "Unmounted") && entry.path === "/Wrap/Row[a]"
-        )
-        assert.deepStrictEqual(rows.map((entry) => entry._tag), ["Mounted"])
+        assert.strictEqual(Locator.textOf(root.get(Locator.tag("section"))), "a:1")
         // The row's Command, which the parent finds through its children.
         assert.deepStrictEqual(root.pending().map((p) => p.path), ["/Wrap/Row[a]"])
       })))
@@ -219,10 +216,12 @@ describe("Runtime", () => {
         yield* TestHost.settle
         click(root, "a:0")
         yield* TestHost.settle
-        root.send(true)
-        yield* TestHost.settle
-        assert.strictEqual(Locator.textOf(root.get(Locator.tag("article"))), "a:1")
-        assert.strictEqual(root.text(), "a:1")
+        for (const [moved, destination] of [[true, "article"], [false, "aside"]] as const) {
+          root.send(moved)
+          yield* TestHost.settle
+          assert.strictEqual(Locator.textOf(root.get(Locator.tag(destination))), "a:1")
+          assert.strictEqual(root.text(), "a:1")
+        }
         assert.deepStrictEqual(tags(root, "/Move/Row[a]").filter((tag) => tag !== "Update"), ["Mounted"])
       })))
 

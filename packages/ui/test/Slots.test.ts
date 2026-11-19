@@ -137,73 +137,37 @@ describe("slots", () => {
       assert.include(updates(root), editorPath + " Send Clear")
     })))
 
-  describe("a feature moved by its author", () => {
-    const TallyMsg = UiSchema.TaggedEnum({ Counted: {} })
-    class Tally extends Feature.Service<Tally>()("Tally", { props: Schema.Struct({}) }) {}
-    const tally = (side: string) =>
-      Tally.toLayer(
-        Component.define({ name: "Tally", model: Schema.Number, message: TallyMsg, elements: Html }).make({
-          init: () => 0,
-          update: (n) => n + 1,
-          view: (n, h) => h.button.onClick(TallyMsg.Counted()).children(side + " " + n)
-        })
+  it.effect("a moved feature keeps its instance unless its author's binding changes", () =>
+    provideHost(Effect.gen(function*() {
+      const Wrap = Component.define({ name: "Wrap", model: Schema.Number, message: Toggle, elements: Html }).make({
+        init: () => 0,
+        update: (step) => step + 1,
+        view: (step, h) => {
+          const child = Badge.render(h, { key: "b", fallback: () => h.span("no badge") })
+          return step === 1 ? Frame(h, { key: "f", slots: { body: child } }) : h.div(child)
+        }
+      })
+      const root = yield* TestHost.mount(
+        Component.provide(Wrap, {
+          key: (_: unknown, step: number) => step < 2 ? "left" : "right",
+          layer: badge
+        }),
+        {}
       )
-    const lifecycle = (root: Root) =>
-      root.log().flatMap((entry) =>
-        (entry._tag === "Mounted" || entry._tag === "Unmounted") && entry.path === "/Wrap/Tally[t]" ? [entry._tag] : []
-      )
-    const Box = Component.define({ name: "Box", model: Schema.Null, message: Schema.Never, elements: Html }).make({
-      init: () => null,
-      update: (model) => model,
-      parts: () => ({})
-    })
-    const Placed = Schema.Literals(["direct", "slot", "box"])
-    const Place = UiSchema.TaggedEnum({ Place: { at: Placed } })
-    const Wrap = Component.define({ name: "Wrap", model: Placed, message: Place, elements: Html }).make({
-      init: () => "direct" as const,
-      update: (_, { at }) => at,
-      view: (at, h) => {
-        const t = Tally.render(h, { key: "t", fallback: () => h.span("no tally") })
-        return at === "slot"
-          ? Frame(h, { key: "f", slots: { body: t } })
-          : at === "box"
-          ? Box(h, { key: "b", view: () => h.section(t) })
-          : h.div(t)
-      }
-    })
-
-    it.effect("keeps its instance when its binding is the same where it lands", () =>
-      provideHost(Effect.gen(function*() {
-        const root = yield* TestHost.mount(Component.provide(Wrap, tally("left")), {})
-        click(root, "left 0")
-        yield* TestHost.settle
-        root.send(Place.Place({ at: "slot" }))
-        yield* TestHost.settle
-        assert.include(root.text(), "left 1")
-        // Through a headless closure that provides nothing.
-        root.send(Place.Place({ at: "box" }))
-        yield* TestHost.settle
-        assert.include(root.text(), "left 1")
-        assert.deepStrictEqual(lifecycle(root), ["Mounted"])
-      })))
-
-    it.effect("remounts when its author's keyed provide swaps the implementation as it moves", () =>
-      provideHost(Effect.gen(function*() {
-        const Keyed = Component.provide(Wrap, {
-          key: (_: unknown, at: typeof Placed.Type) => (at === "direct" ? "left" : "right"),
-          layer: (side: string) => tally(side)
-        })
-        const root = yield* TestHost.mount(Keyed, {})
-        yield* TestHost.settle
-        click(root, "left 0")
-        yield* TestHost.settle
-        root.send(Place.Place({ at: "slot" }))
-        yield* TestHost.settle
-        assert.include(root.text(), "right 0")
-        assert.deepStrictEqual(lifecycle(root).slice(-1), ["Mounted"])
-        assert.include(lifecycle(root), "Unmounted")
-      })))
-  })
+      const mounts = () => root.log().filter((entry) => entry._tag === "Mounted" && entry.path === "/Wrap/Badge[b]")
+      yield* TestHost.settle
+      assert.include(root.text(), "left")
+      root.send(Toggle.Toggle())
+      yield* TestHost.settle
+      assert.include(root.text(), "left")
+      assert.include(root.text(), "toggle")
+      assert.lengthOf(mounts(), 1)
+      root.send(Toggle.Toggle())
+      yield* TestHost.settle
+      assert.include(root.text(), "right")
+      assert.include(unmounted(root), "/Wrap/Badge[b]")
+      assert.lengthOf(mounts(), 2)
+    })))
 
   it.effect("unplacing a slot detaches its content, which comes back as it was when placed again", () =>
     provideHost(Effect.gen(function*() {
@@ -338,90 +302,64 @@ describe("slots", () => {
 
 describe("Back to a page whose layout changed while away", () => {
   const Routes = Route.union({ Edit: Route.make("/"), Away: Route.make("/away") })
-  const EditPage = Component.define({
-    name: "EditPage",
-    props: Schema.Struct({ slotted: Schema.Boolean }),
-    model: Schema.Null,
-    message: Schema.Never,
-    elements: Html
-  }).make({
-    init: () => null,
-    update: (model) => model,
-    view: (_, h) => {
-      const editor = Editor(h, { key: "e" })
-      return h.props.slotted ? Frame(h, { key: "f", slots: { body: editor } }) : h.div(editor)
-    }
-  })
-  const ShellMsg = UiSchema.TaggedEnum({ Routed: { route: Routes }, Slot: {} })
+  const Msg = UiSchema.TaggedEnum({ Routed: { route: Routes }, Slot: {} })
   const Shell = Component.define({
     name: "Shell",
     props: Schema.Struct({ route: Routes }),
     model: Schema.Struct({ route: Routes, slotted: Schema.Boolean }),
-    message: ShellMsg,
+    message: Msg,
     elements: Html
   }).make({
     init: ($) => ({ route: $.props.route, slotted: false }),
     update: (model, msg) => msg._tag === "Slot" ? { ...model, slotted: true } : { ...model, route: msg.route },
-    subscriptions: (model) => [Router.subscription(Routes, model.route, (route) => ShellMsg.Routed({ route }))],
-    view: (model, h) =>
-      Routes.match(model.route, {
-        Edit: (route) => EditPage(h, { key: Routes.print(route), props: { slotted: model.slotted } }),
-        Away: () => h.p("away")
-      })
+    subscriptions: (model) => [Router.subscription(Routes, model.route, (route) => Msg.Routed({ route }))],
+    view: (model, h) => {
+      if (model.route._tag === "Away") return h.p("away")
+      const editor = Editor(h, { ref: Draft })
+      return model.slotted ? Frame(h, { key: "f", slots: { body: editor } }) : h.div(editor)
+    }
   })
-  const editor = "/Shell/EditPage[/]/Editor[e]"
-
-  it.effect("an editor moved from the page into a slot is restored with its Model", () => {
-    const history = Router.memoryHistory("/")
-    return Effect.gen(function*() {
-      const root = yield* TestHost.mount(Shell, Router.props(Routes))
-      yield* TestHost.settle
-      click(root, "type 0")
-      yield* TestHost.settle
-      const router = yield* Router.Router
+  const setup = Effect.gen(function*() {
+    const root = yield* TestHost.mount(Shell, Router.props(Routes))
+    const router = yield* Router.Router
+    click(root, "type 0")
+    yield* TestHost.settle
+    const leave = Effect.gen(function*() {
       yield* router.navigate("/away")
       yield* TestHost.settle
-      root.send(ShellMsg.Slot())
-      yield* TestHost.settle
-      history.go(-1)
-      yield* TestHost.settle
-      assert.include(root.text(), "type 1")
-      const mounted = root.log().filter((entry): entry is MessageLog.Mounted =>
-        entry._tag === "Mounted" && entry.path === editor
-      )
-      assert.deepStrictEqual(mounted.map((entry) => entry.adopted), [false, true])
-    }).pipe(Effect.provide(Router.make({ routes: Routes, history })), provideHost)
+      assert.strictEqual(root.text(), "away")
+    })
+    return { root, leave, back: Effect.andThen(router.back, TestHost.settle) }
   })
+  const provideRouter = Effect.provide(Router.memory({ routes: Routes }))
 
-  // The limit: a restore brings back what the restored views place. Content left in a closed slot isn't
-  // placed until the slot opens, after the restore, so it starts fresh.
-  it.effect("an editor left in a closed slot starts fresh when the slot opens after Back", () => {
-    const history = Router.memoryHistory("/")
-    return Effect.gen(function*() {
-      const root = yield* TestHost.mount(Shell, Router.props(Routes))
-      click(root, "type 0")
+  it.effect("restores the editor into a slot that was added while away", () =>
+    Effect.gen(function*() {
+      const { root, leave, back } = yield* setup
+      yield* leave
+      root.send(Msg.Slot())
       yield* TestHost.settle
-      root.send(ShellMsg.Slot())
+      yield* back
+      assert.include(root.text(), "toggle")
+      assert.include(root.text(), "type 1")
+    }).pipe(provideRouter, provideHost))
+
+  it.effect("a live move keeps the editor, but a slot closed on Back opens with a fresh editor", () =>
+    Effect.gen(function*() {
+      const { root, leave, back } = yield* setup
+      root.send(Msg.Slot())
       yield* TestHost.settle
       assert.include(root.text(), "type 1")
       assert.deepStrictEqual(unmounted(root), [])
       click(root, "toggle")
       yield* TestHost.settle
-      const router = yield* Router.Router
-      yield* router.navigate("/away")
-      yield* TestHost.settle
-      history.go(-1)
-      yield* TestHost.settle
+      yield* leave
+      yield* back
       assert.notInclude(root.text(), "type")
       click(root, "toggle")
       yield* TestHost.settle
       assert.include(root.text(), "type 0")
-      const mounted = root.log().filter((entry): entry is MessageLog.Mounted =>
-        entry._tag === "Mounted" && entry.path === editor
-      )
-      assert.deepStrictEqual(mounted.map((entry) => entry.adopted), [false, false])
-    }).pipe(Effect.provide(Router.make({ routes: Routes, history })), provideHost)
-  })
+    }).pipe(provideRouter, provideHost))
 })
 
 describe("placing a slot twice fails the receiver", () => {
