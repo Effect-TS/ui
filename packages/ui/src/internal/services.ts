@@ -158,6 +158,11 @@ export interface OnServer {
  * source. It returns `undefined` when it can't attach, and the runtime runs
  * the Stream instead.
  *
+ * `latest` returns the declaration of the key from the latest
+ * `subscriptions` result, which may be a newer object than the one the hook
+ * was read from, so a source that calls back into user code, such as
+ * `Html.onDocument`'s handler, runs the current one.
+ *
  * `Router.subscription` uses it, so a navigation reaches the root inside the
  * flush whose Command made it.
  *
@@ -170,7 +175,8 @@ export interface Direct {
   readonly [direct]?: (
     context: Context.Context<never>,
     emit: (message: unknown, accepted: () => void) => void,
-    fail: (cause: Cause.Cause<unknown>) => void
+    fail: (cause: Cause.Cause<unknown>) => void,
+    latest: () => unknown
   ) => { readonly initial: Effect.Effect<void>; readonly close: () => void } | undefined
 }
 

@@ -388,6 +388,8 @@ interface SubscriptionRun {
   readonly deps: ReadonlyArray<Subscription.Dep> | undefined
   readonly scope: Scope.Closeable
   fiber: Fiber.Fiber<unknown, unknown> | undefined
+  /** The declaration from the latest `subscriptions` result that listed the key. */
+  latest: Subscription.Subscription<any, any>
 }
 
 /** One query's cache watcher, registered from its watch marker. */
@@ -3590,13 +3592,19 @@ const setup = (
       closeUnder(inst, running.scope)
     }
     for (const [key, subscription] of byKey) {
-      if (subscriptions.has(key)) continue
+      const existing = subscriptions.get(key)
+      if (existing !== undefined) {
+        // A running key keeps its Stream, and an attached one reads its declaration from here.
+        existing.latest = subscription
+        continue
+      }
       const { deps, name } = subscription
       const running: SubscriptionRun = {
         name,
         deps,
         scope: Scope.forkUnsafe(inst.scope, "sequential"),
-        fiber: undefined
+        fiber: undefined,
+        latest: subscription
       }
       subscriptions.set(key, running)
       record(inst, { _tag: "SubscriptionStarted", key, name, deps })
@@ -3614,7 +3622,7 @@ const setup = (
           inst.dispatch(message, source)
         }, (cause) => {
           if (current()) step(() => failInstance(inst, cause, "subscription", key))
-        })
+        }, () => running.latest)
         if (attachedTo !== undefined) addFinalizer(running.scope, Effect.sync(attachedTo.close))
         const fiber = forkLater(
           context,

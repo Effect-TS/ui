@@ -135,13 +135,10 @@
 import * as Command from "@effect/ui/Command"
 import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
-import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
-import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
-import * as Stream from "effect/Stream"
 import { flag, withStyle } from "./internal/attributes.ts"
 
 /**
@@ -314,31 +311,15 @@ const WaitBeforeClosing = Command.make(
 // handled is skipped. And a mouse press anywhere, in the capture phase so a
 // handler that stops the event can't hide it: `update` knows from `hovered`
 // whether the press was outside the tooltip.
-const TrackDismissal = Mount.makeStream(
-  "TrackDismissal",
-  { args: {} },
-  (node: HTMLElement) =>
-    Stream.callback<"PressedEscape" | "PressedDocument">((queue) => {
-      const document = node.ownerDocument
-      const onKeyDown = (event: KeyboardEvent) => {
-        if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return
-        event.preventDefault()
-        Queue.offerUnsafe(queue, "PressedEscape")
-      }
-      const onMouseDown = () => Queue.offerUnsafe(queue, "PressedDocument")
-      return Effect.acquireRelease(
-        Effect.sync(() => {
-          document.addEventListener("keydown", onKeyDown)
-          document.addEventListener("mousedown", onMouseDown, true)
-        }),
-        () =>
-          Effect.sync(() => {
-            document.removeEventListener("keydown", onKeyDown)
-            document.removeEventListener("mousedown", onMouseDown, true)
-          })
-      )
-    })
-)
+const dismissals = (shown: boolean) => [
+  shown && Html.onDocument(
+    "keydown",
+    ({ composing, defaultPrevented, key }) =>
+      key === "Escape" && !composing && !defaultPrevented ? Message.PressedEscape() : undefined,
+    { preventDefault: true }
+  ),
+  shown && Html.onDocument("mousedown", Message.PressedDocument(), { capture: true })
+]
 
 const opened = TooltipEvents.Opened()
 const dismissed = TooltipEvents.Dismissed()
@@ -640,6 +621,8 @@ export const Tooltip = Component.define({
         : model
     }
   },
+  // Only an open tooltip listens on the document.
+  subscriptions: (_model, props) => dismissals(shownBy(props)),
   parts: (model, p) => {
     const shown = shownBy(p.props)
     const side = p.props.side ?? "top"
@@ -674,17 +657,13 @@ export const Tooltip = Component.define({
           .forward((node) => node.attr("style", withStyle(node.attrs.style, `anchor-name:${anchor}`)))
     )
     const positioner = p.part("div", (b) => {
-      let decorated = placed(b)
+      const decorated = placed(b)
         .attr("role", "presentation")
         .popover("manual", shown)
         .forward((node) => node.attr("style", withStyle(node.attrs.style, placement(anchor, p.props))))
-      if (p.props.disableHoverablePopup !== true) {
-        decorated = decorated
-          .on("mouseenter", Message.EnteredPositioner())
-          .on("mouseleave", Message.LeftPositioner())
-      }
-      // Only an open tooltip listens on the document.
-      return shown ? decorated.onMount(TrackDismissal().pipe(Mount.map((tag) => Message[tag]()))) : decorated
+      return p.props.disableHoverablePopup === true
+        ? decorated
+        : decorated.on("mouseenter", Message.EnteredPositioner()).on("mouseleave", Message.LeftPositioner())
     })
     const popup = p.part("div", instant)
     const arrow = p.part("div", (b) => instant(b).attr("aria-hidden", "true"))

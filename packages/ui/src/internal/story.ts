@@ -17,6 +17,7 @@ import type * as Component from "../Component.ts"
 import * as Feature from "../Feature.ts"
 import * as MessageLog from "../MessageLog.ts"
 import * as Query from "../Query.ts"
+import type * as Subscription from "../Subscription.ts"
 import * as Locator from "../testing/Locator.ts"
 import type { AwaitedQuery, KeyedLoad, Pending, QueryInfo, StreamTarget, Target } from "../testing/Steps.ts"
 import * as View from "../View.ts"
@@ -59,6 +60,8 @@ export interface State<Props, Model, Msg, Events> {
   readonly sent: ReadonlyArray<Component.Send>
   readonly interrupted: ReadonlyArray<Pending<Msg>["command"]>
   readonly loadingMore: ReadonlyArray<string>
+  /** The current `subscriptions` result, falsy entries dropped. Throws on a duplicate key, as the runtime fails. */
+  readonly declared: () => ReadonlyArray<Subscription.Subscription<any, any>>
   readonly subscriptions: () => ReadonlyArray<string>
   readonly queryInfo: () => ReadonlyArray<QueryInfo>
   readonly defaultPrevented: boolean
@@ -562,6 +565,19 @@ export const record = <Props, Model, Msg, Events>(
   // A view value is a `Locator.Node` tree; a child is a node with no tag or text.
   const root = () => view() as Locator.Node
   const context = () => boundOf(fields.component)?.context(fields.model, fields.props, fields.results)
+  const declared = () => {
+    const keys = new Set<string>()
+    const out: Array<Subscription.Subscription<any, any>> = []
+    for (const sub of fields.component.subscriptions?.(fields.model, fields.props, fields.results) ?? []) {
+      // The runtime fails the instance for it, so a test that reads the keys fails too.
+      if (keys.has(sub.key)) {
+        throw subscriptionKeys.duplicateKey("/" + fields.component.definition.name, sub.key)
+      }
+      keys.add(sub.key)
+      out.push(sub)
+    }
+    return out
+  }
   const story: State<Props, Model, Msg, Events> = {
     component: fields.component,
     props: fields.props,
@@ -576,17 +592,8 @@ export const record = <Props, Model, Msg, Events>(
     defaultPrevented: fields.defaultPrevented,
     ack: fields.ack,
     view,
-    subscriptions: () => {
-      const keys: Array<string> = []
-      for (const sub of fields.component.subscriptions?.(fields.model, fields.props, fields.results) ?? []) {
-        // The runtime fails the instance for it, so a test that reads the keys fails too.
-        if (keys.includes(sub.key)) {
-          throw subscriptionKeys.duplicateKey("/" + fields.component.definition.name, sub.key)
-        }
-        keys.push(sub.key)
-      }
-      return keys
-    },
+    declared,
+    subscriptions: () => declared().map((sub) => sub.key),
     queryInfo: () => {
       const bound = boundOf(fields.component)
       if (bound === undefined) return []

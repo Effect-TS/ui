@@ -1,10 +1,10 @@
-import type { Mount } from "@effect/ui"
 import { Component, UiSchema, View } from "@effect/ui"
 import { Tooltip, type TooltipProps, TooltipProvider } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
-import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
+import { HtmlScene, TestGlobalEvents } from "@effect/ui/html/testing"
+import { Locator, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Schema } from "effect"
+import { Effect, Layer, Schema } from "effect"
 import { TestClock } from "effect/testing"
 
 const standIn = {
@@ -211,22 +211,13 @@ const trigger = Locator.tag("button")
 const positioner = Locator.attr("role", "presentation")
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
-// The positioner's document listener is private, so a test reads it off the
-// rendered element. It's there only while the tooltip shows.
-type TrackDismissal = Mount.Issued<unknown, never, never, "PressedEscape" | "PressedDocument">
-type Rendered = { readonly get: (locator: Locator.Locator) => Locator.Node }
-const listener = (s: Rendered): TrackDismissal | undefined =>
-  (s.get(positioner) as unknown as View.Element<unknown>).owned?.find((layer) => layer.mount !== undefined)
-    ?.mount as TrackDismissal | undefined
-const trackDismissal = (s: Rendered): TrackDismissal => listener(s)!
-
 // The message a wait would have produced: the Command's own result.
 const completed = (tag: "CompletedWaitBeforeOpening" | "CompletedWaitBeforeClosing") => ({ _tag: tag }) as never
 
 describe("Tooltip", () => {
   it.effect("hover opens after the delay and stays open across the offset until the pointer leaves", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Tooltip, { open: false }, standIn)
+      const s = yield* HtmlScene.make(Tooltip, { open: false }, standIn)
       s.fire(trigger, "mouseenter")
       const [opening] = s.current.pending
       assert.deepStrictEqual(opening?.command.args, { delay: 600 })
@@ -234,7 +225,6 @@ describe("Tooltip", () => {
         .emitted({ _tag: "Opened" })
       assert.isFalse(s.get(positioner).props?.popoverOpen)
       s.props({ open: true, side: "bottom", sideOffset: 8 })
-      s.expectMount(trackDismissal(s))
 
       assert.isTrue(s.get(positioner).props?.popoverOpen)
       // Each part draws the children it was given.
@@ -251,20 +241,41 @@ describe("Tooltip", () => {
         .emitted({ _tag: "Dismissed" })
     }))
 
-  it.effect("document Escape dismisses without trigger focus", () =>
+  it.effect("listens on the document only while it shows", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Tooltip, { open: true }, standIn)
-      s.mounted(trackDismissal(s), "PressedEscape").emitted({ _tag: "Dismissed" })
+      const s = yield* HtmlScene.make(Tooltip, { open: false }, standIn)
+      assert.deepStrictEqual(s.subscriptions, [])
+      s.props({ open: true })
+      assert.deepStrictEqual(s.subscriptions, [
+        `@effect/ui/html/document:"keydown"`,
+        `@effect/ui/html/document:"mousedown","capture"`
+      ])
+    }))
+
+  it.effect("document Escape dismisses without trigger focus and cancels its default", () =>
+    Effect.gen(function*() {
+      const s = yield* HtmlScene.make(Tooltip, { open: true }, standIn)
+      s.fireDocument("keydown", { key: "Escape" })
+        .expectDefaultPrevented()
+        .emitted({ _tag: "Dismissed" })
+    }))
+
+  it.effect("document Escape skips another key, a composition and an Escape already handled", () =>
+    Effect.gen(function*() {
+      const s = yield* HtmlScene.make(Tooltip, { open: true }, standIn)
+      s.fireDocument("keydown", { key: "a" }).expectIgnored().expectDefaultPrevented(false)
+        .fireDocument("keydown", { key: "Escape", composing: true }).expectIgnored()
+        .fireDocument("keydown", { key: "Escape", defaultPrevented: true }).expectIgnored()
+      assert.deepStrictEqual(s.current.emitted, [])
     }))
 
   it.effect("focus from a press neither opens the tooltip nor holds it open", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Tooltip, { open: false }, standIn)
+      const s = yield* HtmlScene.make(Tooltip, { open: false }, standIn)
       s.fire(trigger, "mousedown")
         .fire(trigger, "focus")
       assert.deepStrictEqual(s.current.emitted, [])
       s.props({ open: true })
-      s.expectMount(trackDismissal(s))
         .fire(trigger, "mouseleave")
       s.resolve(s.current.pending[0]!.command, completed("CompletedWaitBeforeClosing"))
         .emitted({ _tag: "Dismissed" })
@@ -272,8 +283,8 @@ describe("Tooltip", () => {
 
   it.effect("activation dismisses on click rather than mousedown unless closeOnClick is false", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Tooltip, { open: true }, standIn)
-      s.expectMount(trackDismissal(s)).fire(trigger, "click")
+      const s = yield* HtmlScene.make(Tooltip, { open: true }, standIn)
+      s.fire(trigger, "click")
         .emitted({ _tag: "Dismissed" })
       s.fire(trigger, "mousedown")
       assert.deepStrictEqual(s.current.emitted, [])
@@ -284,19 +295,20 @@ describe("Tooltip", () => {
 
   it.effect("a press outside closes the tooltip at once, while focus or the close delay holds it open", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Tooltip, { open: false, closeDelay: 300 }, standIn)
+      const s = yield* HtmlScene.make(Tooltip, { open: false, closeDelay: 300 }, standIn)
       s.fire(trigger, "focus")
         .emitted({ _tag: "Opened" })
         .props({ open: true, closeDelay: 300 })
       // A press with the pointer on the trigger or the positioner is inside.
-      s.expectMount(trackDismissal(s)).fire(positioner, "mouseenter")
-        .mounted(trackDismissal(s), "PressedDocument")
+      s.fire(positioner, "mouseenter")
+        .fireDocument("mousedown")
+        .expectDefaultPrevented(false)
       assert.deepStrictEqual(s.current.emitted, [])
       // Keyboard focus holds the tooltip open after the pointer leaves, and
       // a press elsewhere that leaves focus on the trigger still closes it.
       s.fire(positioner, "mouseleave")
       assert.deepStrictEqual(s.current.pending, [])
-      s.mounted(trackDismissal(s), "PressedDocument")
+      s.fireDocument("mousedown")
         .emitted({ _tag: "Dismissed" })
 
       // Without focus, the close delay holds it open, and a press ends the wait.
@@ -304,14 +316,14 @@ describe("Tooltip", () => {
         .fire(trigger, "blur")
         .fire(trigger, "mouseleave")
       assert.deepStrictEqual(s.current.pending.map((run) => run.command.args), [{ delay: 300 }])
-      s.mounted(trackDismissal(s), "PressedDocument")
+      s.fireDocument("mousedown")
         .emitted({ _tag: "Dismissed" })
       assert.deepStrictEqual(s.current.pending, [])
     }))
 
   it.effect("a disabled tooltip never shows and emits nothing", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Tooltip, { open: true, disabled: true }, standIn)
+      const s = yield* HtmlScene.make(Tooltip, { open: true, disabled: true }, standIn)
       assert.isFalse(s.get(positioner).props?.popoverOpen)
       assert.isUndefined(s.get(trigger).attrs?.disabled)
       s.fire(trigger, "mouseenter")
@@ -319,7 +331,7 @@ describe("Tooltip", () => {
         .fire(trigger, "mousedown")
         .fire(trigger, "click")
       // It doesn't listen on the document either.
-      assert.isUndefined(listener(s))
+      assert.deepStrictEqual(s.subscriptions, [])
       assert.deepStrictEqual(s.current.pending, [])
       assert.deepStrictEqual(s.current.emitted, [])
     }))
@@ -353,6 +365,17 @@ describe("Tooltip", () => {
       assert.strictEqual(Locator.textOf(root.get(Locator.tag("output"))), "pressed 1, dismissed 1")
       assert.isUndefined(root.get(trigger).attrs?.["data-popup-open"])
     }).pipe(Effect.provide(TestHost.layer())))
+
+  it.effect("in a whole app, Escape on the document dismisses the open tooltip, which then stops listening", () =>
+    Effect.gen(function*() {
+      const root = yield* TestHost.mount(Toolbar, {})
+      yield* TestHost.settle
+      assert.isFalse(yield* TestGlobalEvents.fire("document", "keydown", { key: "a" }))
+      assert.isTrue(yield* TestGlobalEvents.fire("document", "keydown", { key: "Escape" }))
+      yield* TestHost.settle
+      assert.strictEqual(Locator.textOf(root.get(Locator.tag("output"))), "pressed 0, dismissed 1")
+      assert.isFalse(yield* TestGlobalEvents.fire("document", "keydown", { key: "Escape" }))
+    }).pipe(Effect.provide(Layer.merge(TestHost.layer(), TestGlobalEvents.layer))))
 
   it.effect("after one tooltip of a group closes, another opens at once inside the timeout and waits outside it", () =>
     Effect.gen(function*() {

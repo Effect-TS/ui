@@ -35,3 +35,9 @@ export * as HtmlScene from "./HtmlScene.ts"
  * @since 0.1.0
  */
 export * as Ssr from "./Ssr.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
+export * as TestGlobalEvents from "./TestGlobalEvents.ts"
