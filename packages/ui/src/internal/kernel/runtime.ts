@@ -1861,14 +1861,15 @@ const setup = (
   }
 
   // -- failure --------------------------------------------------------------
+  /** `f` is passed `inst`, so a call on a hot path needs no closure. */
   const guard = <A>(
     inst: Instance,
     where: MessageLog.FailedIn,
-    f: () => A,
+    f: (inst: Instance) => A,
     name?: string
   ): A | undefined => {
     try {
-      return f()
+      return f(inst)
     } catch (error) {
       failInstance(inst, Cause.die(error), where, name)
       return undefined
@@ -2978,31 +2979,26 @@ const setup = (
     readonly first: Component.Next<any, any, any, any> | undefined
     readonly adopted: Adopted
   }
-  /** Runs `init`: undefined when it threw, or when the host doesn't show the component's elements. */
-  const initOf = (inst: Instance): Component.Next<any, any, any, any> | undefined => {
+  /** Runs `init`, once the host is known to show the component's elements. */
+  const initOf = (inst: Instance): Component.Next<any, any, any, any> => {
     const component = inst.component
-    try {
-      const elements = component.elements()
-      if (elements !== undefined && host.elements !== "any" && !host.elements.includes(elements.name)) {
-        throw new Error(
-          `${component.definition.name} renders ${elements.name} elements, and this host shows ${
-            host.elements.join(", ")
-          }`
-        )
-      }
-      findOwners(inst)
-      return component.init(inst.props)
-    } catch (error) {
-      failInstance(inst, Cause.die(error), "init")
-      return undefined
+    const elements = component.elements()
+    if (elements !== undefined && host.elements !== "any" && !host.elements.includes(elements.name)) {
+      throw new Error(
+        `${component.definition.name} renders ${elements.name} elements, and this host shows ${
+          host.elements.join(", ")
+        }`
+      )
     }
+    findOwners(inst)
+    return component.init(inst.props)
   }
   /**
    * What the instance starts from: `init`'s result, and the Model it adopts from the server or from
    * history restore instead of `init`'s.
    */
   const startFrom = (inst: Instance, serverModel: Adopted): Start => {
-    const first = initOf(inst)
+    const first = guard(inst, "init", initOf)
     const component = inst.component
     let adopted = serverModel
     // An owner of shared state isn't restored from history: a reload would reopen what nobody hovers.
@@ -4822,18 +4818,7 @@ const setup = (
   /** The instance's view. A headless instance's is the closure it was declared with, run against its parts. */
   const viewOf = (inst: Instance): View.Node<any, any> | undefined => {
     const owner = inst.owner
-    if (owner === undefined) {
-      // No closure for `guard`: this runs for every instance that renders.
-      try {
-        return checked(
-          inst,
-          inst.component.view(inst.model, inst.props, runningOf(inst), inst.results, inst.path, sharedOf(inst), inst)
-        )
-      } catch (error) {
-        failInstance(inst, Cause.die(error), "view")
-        return undefined
-      }
-    }
+    if (owner === undefined) return guard(inst, "view", ownView)
     const parts = guard(inst, "view", () => ({
       value: (inst.component as unknown as Component.Headless.Any).parts(inst.model, inst.props, {
         owner,
@@ -4846,6 +4831,12 @@ const setup = (
     // A closure is the consumer's code: what goes wrong in it is logged as `content`.
     return guard(inst, "content", () => checked(inst, View.toNode(inst.content!(parts.value))))
   }
+
+  const ownView = (inst: Instance): View.Node<any, any> =>
+    checked(
+      inst,
+      inst.component.view(inst.model, inst.props, runningOf(inst), inst.results, inst.path, sharedOf(inst), inst)
+    )
 
   /** Checks a fresh view's child paths, which its fallbacks are checked against as they're shown. */
   const checked = (inst: Instance, tree: View.Node<any, any>): View.Node<any, any> => {
