@@ -16,7 +16,7 @@ const standIn = {
     s.root(h.div.attr("role", "progressbar").attr("aria-labelledby", "heading")).children(
       s.label(h.span.class("label")).children("Storage"),
       s.value(h.span.class("value").attr("aria-hidden", "false")),
-      s.track(h.div.class("track")).children(s.indicator(h.div.class("fill")))
+      s.track(h.div.class("track")).children(s.indicator(h.div.class("fill")).attr("style", "background:red;width:1px"))
     )
 }
 
@@ -51,6 +51,9 @@ describe("Meter", () => {
       assert.strictEqual(s.get(value).attrs?.["aria-hidden"], "true")
       assert.strictEqual(Locator.textOf(s.get(value)), "40%")
 
+      const custom = built(parts({ value: 40 }).value(h.span).children("four"))
+      assert.deepStrictEqual(custom.children, [{ _tag: "Text", text: "four" }])
+
       s.props({ value: 150, min: 50, max: 250, valueText: "150 units" })
       const next = s.get(root).attrs
       assert.strictEqual(next?.["aria-valuemin"], "50")
@@ -58,7 +61,10 @@ describe("Meter", () => {
       assert.strictEqual(next?.["aria-valuenow"], "150")
       assert.strictEqual(next?.["aria-valuetext"], "150 units")
       assert.strictEqual(Locator.textOf(s.get(value)), "150 units")
-      assert.strictEqual(s.get(indicator).attrs?.style, "inset-inline-start:0;height:inherit;width:50%")
+      assert.strictEqual(
+        s.get(indicator).attrs?.style,
+        "background:red;width:1px;inset-inline-start:0;height:inherit;width:50%"
+      )
     }))
 
   it("a value outside the range is clamped, NaN counts as min, and an empty range is 0%", () => {
