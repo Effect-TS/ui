@@ -50,6 +50,8 @@ const save = NoteDef.update((model, _msg, $) => $.set(model).run(Save.make()))
 const audit = NoteDef.update((model, _msg, $) => $.set(model).run(Audit.make()))
 const touch = NoteDef.update((model) => ({ ...model, edits: model.edits + 1 }))
 
+const shared = { Saved: touch, Deleted: touch }
+
 describe("Component.define", () => {
   it("H supports pure views without a registered vocabulary", () => {
     expect<View.H>().type.toBe<View.H<never>>()
@@ -163,11 +165,65 @@ describe("Component.define", () => {
     expect<Component.Requirements<typeof Note>>().type.toBe<GetUser | Save>()
   })
 
+  it("infers headless requirements from an inline update handler", () => {
+    const Note = NoteDef.make({
+      init: () => ({ body: "", edits: 0 }),
+      update: { Edited: touch, SaveClicked: (model, _msg, $) => $.set(model).run(Save.make()), Saved: shared.Saved },
+      parts: (model) => ({ body: model.body })
+    })
+    expect<Component.Headless.Requirements<typeof Note>>().type.toBe<GetUser | Save>()
+  })
+
+  it("rejects the diagnostic string as a stale record entry", () => {
+    const init = () => ({ body: "", edits: 0 })
+    const update = {
+      Edited: touch,
+      SaveClicked: touch,
+      Saved: touch,
+      Deleted: "'Deleted' is not a tag of this component's message" as const
+    }
+    expect(NoteDef.make).type.not.toBeCallableWith({
+      init,
+      update,
+      view: (_: Model, h: Component.Helper<typeof NoteDef>) => h.p()
+    })
+  })
+
   it("rejects a record with a missing tag", () => {
     expect(NoteDef.make).type.not.toBeCallableWith({
       init: () => ({ body: "", edits: 0 }),
       update: { Edited: touch, SaveClicked: touch },
       view: (_: Model, h: Component.Helper<typeof NoteDef>) => h.p()
+    })
+  })
+
+  it("rejects a record key that is no tag, and names it", () => {
+    NoteDef.make({
+      init: () => ({ body: "", edits: 0 }),
+      update: {
+        Edited: touch,
+        SaveClicked: touch,
+        Saved: touch,
+        // @ts-expect-error 'Deleted' is not a tag of this component's message
+        Deleted: touch
+      },
+      view: (_: Model, h: Component.Helper<typeof NoteDef>) => h.p()
+    })
+  })
+
+  it("rejects stale handlers in a spread and in a record variable", () => {
+    const init = () => ({ body: "", edits: 0 })
+    const view = (_: Model, h: Component.Helper<typeof NoteDef>) => h.p()
+    const record = { ...shared, Edited: touch, SaveClicked: touch }
+    expect(NoteDef.make).type.not.toBeCallableWith({
+      init,
+      update: { ...shared, Edited: touch, SaveClicked: touch },
+      view
+    })
+    expect(NoteDef.make).type.not.toBeCallableWith({
+      init,
+      update: record,
+      parts: (model: Model) => ({ body: model.body })
     })
   })
 
