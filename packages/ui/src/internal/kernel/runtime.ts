@@ -636,11 +636,8 @@ export interface Root {
   readonly waiting: () => ReadonlyArray<string>
   /** On the server: calls `f` once nothing is in flight. */
   readonly whenIdle: (f: () => void) => void
-  /** On the server: settles what's left synchronously, stops the tree and serialises it once. */
-  readonly finish: () => {
-    readonly nodes: ReadonlyArray<Renderer.ServerNode>
-    readonly state: Renderer.State
-  }
+  /** On the server: settles what's left synchronously and stops the tree. Returns its cache, if it made one. */
+  readonly freeze: () => queryCore.Cache | undefined
 }
 
 /** The options `start` takes. */
@@ -664,10 +661,6 @@ interface ServerOptions {
   readonly host: Renderer.Host<any>
   /** False with a budget of 0: the per-request cache starts no fetch. */
   readonly fetches: boolean
-  /** Written into the state for the client: the HTML is built at deploy or held in a CDN. */
-  readonly static: boolean
-  /** Called at `finish`, before the cache is serialised and its fetches are interrupted. */
-  readonly onFinish?: ((cache: ReturnType<typeof Query.internals>) => void) | undefined
 }
 
 /** A Schema as JSON. */
@@ -833,7 +826,8 @@ export const prerender = (
     readonly budget: Duration.Input
     readonly elements: ReadonlyArray<string> | "any"
     readonly static?: boolean | undefined
-    readonly onFinish?: ServerOptions["onFinish"]
+    /** Called once the tree is frozen, before the cache is serialised and its fetches are interrupted. */
+    readonly onFinish?: ((cache: ReturnType<typeof Query.internals>) => void) | undefined
   }
 ): Effect.Effect<Renderer.Prerendered<any>> =>
   withProps(rootProps, (props) =>
@@ -846,7 +840,7 @@ export const prerender = (
         const host = serverHost.make(options.elements)
         const ctx = Context.add(yield* Effect.context<never>(), Scope.Scope, scope)
         const startOptions: Options = {
-          server: { host, fetches: started, static: options.static === true, onFinish: options.onFinish }
+          server: { host, fetches: started }
         }
         const cell = yield* makeQueryCache(ctx, startOptions)
         const root = yield* start(component, props, host.createElement("#root"), ctx, cell, startOptions)
@@ -858,11 +852,142 @@ export const prerender = (
             Effect.sleep(budget)
           )
         }
-        const out = root.finish()
+        const cache = root.freeze()
+        if (cache !== undefined) options.onFinish?.(cache)
+        // In the same synchronous step as the freeze: see `serializeTree`.
+        const out = serializeTree(root.instance, cache, ctx, options.static === true)
         return { nodes: out.nodes, state: out.state, model: root.model(), head: root.head() }
       }),
       (scope, exit) => Scope.close(scope, exit)
     ))
+
+/** `ctx` with the runtime's scheduler as its Scheduler, so work forked with it drains with the runtime's. */
+const onScheduler = (ctx: Context.Context<any>): Context.Context<any> => {
+  const scheduler = Context.get(ctx, Executor.CurrentExecutor).scheduler
+  return scheduler === undefined ? ctx : Context.add(ctx, Scheduler.Scheduler, scheduler)
+}
+
+/** A `Redacted` in an instance's state defers it and its subtree, so the client builds them fresh. */
+const warnRedacted = (inst: Instance, ctx: Context.Context<any>) => {
+  if (warnedRedacted.has(inst.component)) return
+  warnedRedacted.add(inst.component)
+  Effect.runForkWith(onScheduler(ctx))(
+    Effect.logWarning(
+      `${inst.component.definition.name}: its state holds a Schema.Redacted, so the server sends no state for it and the ` +
+        "client builds it and everything under it fresh, without hydration. Keep the secret in a leaf component " +
+        "or in a service."
+    )
+  )
+}
+
+/**
+ * Serialises a frozen tree once, in document order, with the state the client adopts. It is outside
+ * `setup`, and only `prerender` calls it, so a bundle that never renders on a server leaves it out.
+ */
+const serializeTree = (
+  root: Instance,
+  cache: queryCore.Cache | undefined,
+  ctx: Context.Context<any>,
+  isStatic: boolean
+) => {
+  // In the same synchronous step as the Models: fetches in flight are interrupted, and their entries
+  // revert to cold and aren't shipped. Nothing is dispatched for them.
+  const query = cache === undefined ? {} : cache.dehydrate()
+  const state: Record<string, unknown> = {}
+  const collected: Record<string, unknown> = {}
+  const deferredPaths: Array<string> = []
+  const statuses: Record<string, Shipped> = {}
+  /** Ships a status other than `Ready`: the client starts from it. */
+  const ship = (path: string, status: Status) => {
+    if (status._tag === "Pending" || status._tag === "Failed") statuses[path] = status._tag
+  }
+  // `under`: inside a deferred instance, whose subtree the client builds fresh.
+  const instance = (inst: Instance, under: boolean): Renderer.ServerNode => {
+    let inner = under
+    if (!under) {
+      const codec = stateCodecOf(inst.component)
+      // A failed instance, and one kept off the server, are built fresh. One whose Layer is pending
+      // or failed ships its status with its state.
+      let encoded = inst.failure !== undefined || inst.deferred
+        ? Option.none()
+        : codec.encode(inst.model, inst.results)
+      if (codec.redacted) warnRedacted(inst, ctx)
+      // What an owner's reports last sent: the client compares its reports with it. An owner whose
+      // message can't be shipped, a `Redacted` in its Schema included, is deferred with its subtree, as a
+      // Model adopted without it would get the same message again.
+      const last = inst.owning?.collected
+      let baseline: Option.Option<unknown> = Option.none()
+      if (Option.isSome(encoded) && last !== undefined) {
+        const message = inst.component.definition.message
+        baseline = holdsRedacted(message.ast) ? Option.none() : jsonCodecOf(message).encode(last.message)
+        if (Option.isNone(baseline)) encoded = Option.none()
+      }
+      if (Option.isNone(encoded)) {
+        deferredPaths.push(inst.path)
+        inner = true
+      } else {
+        state[inst.path] = encoded.value
+        if (Option.isSome(baseline)) collected[inst.path] = baseline.value
+        if (inst.component.layer !== undefined) ship(inst.path, inst.env.status)
+      }
+    }
+    return {
+      _tag: "Range",
+      path: inst.path,
+      children: inst.failure !== undefined ? [] : inst.rendered.map((rendered) => serialize(inst, rendered, inner))
+    }
+  }
+  const serialize = (inst: Instance, rendered: Rendered, under: boolean): Renderer.ServerNode => {
+    switch (rendered._tag) {
+      case "Text":
+        return { _tag: "Text", text: rendered.v.text }
+      case "Element":
+        return {
+          _tag: "Element",
+          tag: rendered.v.tag,
+          attrs: rendered.v.attrs,
+          props: rendered.v.props,
+          children: rendered.children.map((child) => serialize(inst, child, under))
+        }
+      case "Child":
+        return instance(rendered.inst, under)
+      case "Outlet":
+        return {
+          _tag: "Range",
+          path: rendered.inst.path,
+          children: rendered.inst.rendered.map((child) => serialize(rendered.inst, child, under))
+        }
+      case "Fallback": {
+        // A failed child: the client builds it fresh. A feature whose Layer isn't ready: the client
+        // adopts the fallback while its status is the one shipped.
+        const path = `${inst.path}/${segment(rendered.v)}`
+        if (!under) {
+          if (rendered.failedChild) deferredPaths.push(path)
+          else ship(path, rendered.status)
+        }
+        return { _tag: "Range", path, children: [serialize(inst, rendered.inner, true)] }
+      }
+      case "Detached": {
+        // Out of the document, so no nodes: the state of its subtree is still sent, and the client builds
+        // its nodes from that state, detached.
+        serialize(inst, rendered.inner, under)
+        return { _tag: "Range", path: `${inst.path}/${segment(rendered.v)}`, children: [] }
+      }
+    }
+  }
+  const nodes = [instance(root, false)]
+  return {
+    nodes,
+    state: {
+      ...state,
+      "~deferred": deferredPaths,
+      ...(Object.keys(statuses).length > 0 ? { "~status": statuses } : {}),
+      "~query": query,
+      ...(Object.keys(collected).length > 0 ? { "~reported": collected } : {}),
+      ...(isStatic ? { "~static": true } : {})
+    }
+  }
+}
 
 /** `Query`'s functions, where a query or a component's bound queries are at hand: the module is loaded. */
 const queryModule = (): queryCore.Loaded => queryCore.loaded!
@@ -891,9 +1016,8 @@ const makeQueryCache = (
   options: Options | undefined
 ): Effect.Effect<CacheCell> => {
   const server = options?.server
-  const scheduler = Context.get(ctx, Executor.CurrentExecutor).scheduler
   // Its fetches and timers run on the runtime's scheduler, so `TestHost.settle` drains them.
-  const context = scheduler === undefined ? ctx : Context.add(ctx, Scheduler.Scheduler, scheduler)
+  const context = onScheduler(ctx)
   const cacheOptions: queryCore.CacheOptions = {
     visibility: Context.get(ctx, queryCore.Visibility),
     connectivity: Context.get(ctx, queryCore.Connectivity),
@@ -6205,124 +6329,6 @@ const setup = (
     return undefined
   }
 
-  /** A `Redacted` in an instance's state defers it and its subtree, so the client builds them fresh. */
-  const warnRedacted = (inst: Instance) => {
-    if (warnedRedacted.has(inst.component)) return
-    warnedRedacted.add(inst.component)
-    forkNow(
-      ctx,
-      Effect.logWarning(
-        `${inst.component.definition.name}: its state holds a Schema.Redacted, so the server sends no state for it and the ` +
-          "client builds it and everything under it fresh, without hydration. Keep the secret in a leaf component " +
-          "or in a service."
-      )
-    )
-  }
-
-  /** Serialises the tree once, in document order, with the state the client adopts. */
-  const finish = () => {
-    if (scheduled || dirty.size > 0 || deferred.length > 0 || reportsDue.size > 0) flush()
-    frozen = true
-    if (cache !== undefined) server?.onFinish?.(cache)
-    // In the same synchronous step as the Models: fetches in flight are interrupted, and their entries
-    // revert to cold and aren't shipped. Nothing is dispatched for them.
-    const query = cache === undefined ? {} : cache.dehydrate()
-    const state: Record<string, unknown> = {}
-    const collected: Record<string, unknown> = {}
-    const deferredPaths: Array<string> = []
-    const statuses: Record<string, Shipped> = {}
-    /** Ships a status other than `Ready`: the client starts from it. */
-    const ship = (path: string, status: Status) => {
-      if (status._tag === "Pending" || status._tag === "Failed") statuses[path] = status._tag
-    }
-    // `under`: inside a deferred instance, whose subtree the client builds fresh.
-    const instance = (inst: Instance, under: boolean): Renderer.ServerNode => {
-      let inner = under
-      if (!under) {
-        const codec = stateCodecOf(inst.component)
-        // A failed instance, and one kept off the server, are built fresh. One whose Layer is pending
-        // or failed ships its status with its state.
-        let encoded = inst.failure !== undefined || inst.deferred
-          ? Option.none()
-          : codec.encode(inst.model, inst.results)
-        if (codec.redacted) warnRedacted(inst)
-        // What an owner's reports last sent: the client compares its reports with it. An owner whose
-        // message can't be shipped, a `Redacted` in its Schema included, is deferred with its subtree, as a
-        // Model adopted without it would get the same message again.
-        const last = inst.owning?.collected
-        let baseline: Option.Option<unknown> = Option.none()
-        if (Option.isSome(encoded) && last !== undefined) {
-          const message = inst.component.definition.message
-          baseline = holdsRedacted(message.ast) ? Option.none() : jsonCodecOf(message).encode(last.message)
-          if (Option.isNone(baseline)) encoded = Option.none()
-        }
-        if (Option.isNone(encoded)) {
-          deferredPaths.push(inst.path)
-          inner = true
-        } else {
-          state[inst.path] = encoded.value
-          if (Option.isSome(baseline)) collected[inst.path] = baseline.value
-          if (inst.component.layer !== undefined) ship(inst.path, inst.env.status)
-        }
-      }
-      return {
-        _tag: "Range",
-        path: inst.path,
-        children: inst.failure !== undefined ? [] : inst.rendered.map((rendered) => serialize(inst, rendered, inner))
-      }
-    }
-    const serialize = (inst: Instance, rendered: Rendered, under: boolean): Renderer.ServerNode => {
-      switch (rendered._tag) {
-        case "Text":
-          return { _tag: "Text", text: rendered.v.text }
-        case "Element":
-          return {
-            _tag: "Element",
-            tag: rendered.v.tag,
-            attrs: rendered.v.attrs,
-            props: rendered.v.props,
-            children: rendered.children.map((child) => serialize(inst, child, under))
-          }
-        case "Child":
-          return instance(rendered.inst, under)
-        case "Outlet":
-          return {
-            _tag: "Range",
-            path: rendered.inst.path,
-            children: rendered.inst.rendered.map((child) => serialize(rendered.inst, child, under))
-          }
-        case "Fallback": {
-          // A failed child: the client builds it fresh. A feature whose Layer isn't ready: the client
-          // adopts the fallback while its status is the one shipped.
-          const path = `${inst.path}/${segment(rendered.v)}`
-          if (!under) {
-            if (rendered.failedChild) deferredPaths.push(path)
-            else ship(path, rendered.status)
-          }
-          return { _tag: "Range", path, children: [serialize(inst, rendered.inner, true)] }
-        }
-        case "Detached": {
-          // Out of the document, so no nodes: the state of its subtree is still sent, and the client builds
-          // its nodes from that state, detached.
-          serialize(inst, rendered.inner, under)
-          return { _tag: "Range", path: `${inst.path}/${segment(rendered.v)}`, children: [] }
-        }
-      }
-    }
-    const nodes = [instance(root, false)]
-    return {
-      nodes,
-      state: {
-        ...state,
-        "~deferred": deferredPaths,
-        ...(Object.keys(statuses).length > 0 ? { "~status": statuses } : {}),
-        "~query": query,
-        ...(Object.keys(collected).length > 0 ? { "~reported": collected } : {}),
-        ...(server?.static === true ? { "~static": true } : {})
-      }
-    }
-  }
-
   const runsOf = (inst: Instance): Array<Pending> =>
     inst.runs.map((run) => ({ path: inst.path, name: run.command.name, status: run.status }))
   const pendingOf = (inst: Instance): Array<Pending> => [
@@ -6368,6 +6374,10 @@ const setup = (
       idleWaiters.push(f)
       checkIdle()
     },
-    finish
+    freeze: () => {
+      if (scheduled || dirty.size > 0 || deferred.length > 0 || reportsDue.size > 0) flush()
+      frozen = true
+      return cache
+    }
   }
 }
