@@ -1490,6 +1490,46 @@ describe("HtmlServer", { concurrent: false }, () => {
       yield* TestHost.settle
       expect(result.document.title).toBe("mounted")
     })))
+  it.effect("compares the client's first fold, so a head that mounts while an instance waits isn't a mismatch", () =>
+    hosted(Effect.gen(function*() {
+      class Slow extends Context.Service<Slow, string>()("test/Slow") {}
+      const Waiting = Component.define({
+        name: "Waiting",
+        model: Schema.Struct({}),
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => ({}),
+        update: (model) => model,
+        view: (_, h) => h.p("waiting")
+      }).pipe(Component.provide(Layer.effect(Slow, Effect.as(Effect.sleep("30 millis"), "ready"))))
+      const Titled = Component.define({
+        name: "Titled",
+        model: Schema.Struct({}),
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => ({}),
+        update: (model) => model,
+        head: () => [Head.title("mounted")],
+        view: (_, h) => h.p("titled")
+      })
+      const Message = UiSchema.TaggedEnum({ Mounted: {} })
+      // Nothing has a head until the mount's message places the child that does.
+      const Page = Component.define({ name: "Page", model: Schema.Boolean, message: Message, elements: Html }).make({
+        init: () => false,
+        update: () => true,
+        view: (titled, h) =>
+          h.div.onMount(mountSending("Title", Message.Mounted())).children(
+            Waiting(h, { key: "w", props: {} }),
+            titled && Titled(h, { key: "t", props: {} })
+          )
+      })
+      const result = yield* ssr(Page, {})
+      expect(result.adopted).toEqual(["/Page", "/Page/Waiting[w]"])
+      yield* TestHost.settle
+      expect(result.document.title).toBe("mounted")
+    })))
   it.effect("compares the head the client evaluated, over the instance tree, not one rebuilt from paths", () =>
     hosted(Effect.gen(function*() {
       // Alternates per evaluation, so evaluating it again after adoption would agree with the server.

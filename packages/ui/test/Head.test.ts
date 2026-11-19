@@ -160,19 +160,18 @@ describe("Head", () => {
         })
       const Page = leaf("Page", [Head.title("Page")])
       const Aside = leaf("Aside")
-      const Footer = leaf("Footer")
-      // Headless: no head and no reduceHead, with a child that has one.
-      const Layout = Component.define({ name: "Layout", model: Schema.Null, message: Schema.Never, elements: Shaped })
-        .make({
+      const Note = leaf("Note")
+      /** No head and no reduceHead of its own. */
+      const holding = (name: string, ...children: ReadonlyArray<readonly [string, ReturnType<typeof leaf>]>) =>
+        Component.define({ name, model: Schema.Null, message: Schema.Never, elements: Shaped }).make({
           init: () => null,
           update: (model) => model,
-          view: (_, h) => h.box(Page(h, { key: "page", props: {} }), Aside(h, { key: "aside", props: {} }))
+          view: (_, h) => h.box(...children.map(([key, child]) => child(h, { key, props: {} })))
         })
-      const App = Component.define({ name: "App", model: Schema.Null, message: Schema.Never, elements: Shaped }).make({
-        init: () => null,
-        update: (model) => model,
-        view: (_, h) => h.box(Layout(h, { key: "layout", props: {} }), Footer(h, { key: "footer", props: {} }))
-      })
+      // One with a child that has a head, and one with nothing that has a head anywhere below it.
+      const Layout = holding("Layout", ["page", Page], ["aside", Aside])
+      const Footer = holding("Footer", ["note", Note])
+      const App = holding("App", ["layout", Layout], ["footer", Footer])
       const root = yield* TestHost.mount(App, {})
       yield* TestHost.settle
       const leafAt = (path: string, entries: ReadonlyArray<string> = []): Shape => ({ path, entries, children: [] })
@@ -185,7 +184,7 @@ describe("Head", () => {
             entries: [],
             children: [leafAt("/App/Layout[layout]/Page[page]", ["Title"]), leafAt("/App/Layout[layout]/Aside[aside]")]
           },
-          leafAt("/App/Footer[footer]")
+          { path: "/App/Footer[footer]", entries: [], children: [leafAt("/App/Footer[footer]/Note[note]")] }
         ]
       })
     }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))

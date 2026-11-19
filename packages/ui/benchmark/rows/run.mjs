@@ -13,7 +13,8 @@
 // scratchpad/rows.bundle.js; delete it when done.
 //
 // Variants, rendering the same table (see harness.ts): @effect/ui's `plain` (one component), `lazy`
-// (`plain` with each row behind `h.lazy`) and `component` (a child component per row), and React's `react-plain`, `react-component` (a row
+// (`plain` with each row behind `h.lazy`), `component` (a child component per row) and `titled` (`component` with a title in the
+// table's head), and React's `react-plain`, `react-component` (a row
 // component, unmemoized) and `react-memo` (a row component under React.memo); see react.mjs. The
 // default is @effect/ui's `plain` and `component`. React variants run from scratchpad/rows-react.bundle.js, built the same
 // way from react.mjs with the React in @effect/ui's dev dependencies (the run

@@ -1,16 +1,17 @@
-import { Component, UiSchema } from "@effect/ui"
+import { Component, Head, UiSchema } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { Effect, Exit, Schema, Scope } from "effect"
 import { init, install, update } from "./harness.ts"
 import type { Model as TableModel } from "./harness.ts"
 
-// The keyed table of js-framework-benchmark (krausest), on @effect/ui. Three variants render the same
+// The keyed table of js-framework-benchmark (krausest), on @effect/ui. Four variants render the same
 // DOM (see harness.ts):
 //
 //   plain      every row is plain elements in the table's own view: one component in total.
 //   lazy       plain, with each row behind `h.lazy`: a row whose row and selection are the same isn't
 //              built again or patched.
 //   component  a child component per row (key + props), which skips rendering when its props are equal.
+//   titled     component, with a title in the table's head: the head is folded after each render.
 
 const Row = Schema.Struct({ id: Schema.Number, label: Schema.String })
 const Model = Schema.Struct({ rows: Schema.Array(Row), selected: Schema.Number, nextId: Schema.Number })
@@ -70,6 +71,17 @@ const RowView = Component.define({
     )
 })
 
+const componentRows = (model: TableModel, h: Component.Helper<typeof TableDef>) =>
+  h.table.class("table").children(
+    h.tbody.children(model.rows.map((row) =>
+      RowView(h, {
+        key: String(row.id),
+        props: { row, selected: row.id === model.selected },
+        onEmit: (message) => message
+      })
+    ))
+  )
+
 /** The variants' table components, starting from `start`'s Model. */
 const tables = (start: () => TableModel) => ({
   plain: Component.define(app).make({
@@ -101,20 +113,8 @@ const tables = (start: () => TableModel) => ({
         h.tbody.children(model.rows.map((row) => h.lazy(lazyRow, row, row.id === model.selected)))
       )
   }),
-  component: Component.define(app).make({
-    init: start,
-    update,
-    view: (model, h) =>
-      h.table.class("table").children(
-        h.tbody.children(model.rows.map((row) =>
-          RowView(h, {
-            key: String(row.id),
-            props: { row, selected: row.id === model.selected },
-            onEmit: (message) => message
-          })
-        ))
-      )
-  })
+  component: TableDef.make({ init: start, update, view: componentRows }),
+  titled: TableDef.make({ init: start, update, head: () => [Head.title("Rows")], view: componentRows })
 })
 
 type Table = ReturnType<typeof tables>["plain"]
@@ -129,7 +129,12 @@ const mount = (component: Table) => async (container: HTMLElement) => {
 }
 
 const empty = tables(init)
-install({ plain: mount(empty.plain), lazy: mount(empty.lazy), component: mount(empty.component) })
+install({
+  plain: mount(empty.plain),
+  lazy: mount(empty.lazy),
+  component: mount(empty.component),
+  titled: mount(empty.titled)
+})
 
 // -- server rendering and hydration ---------------------------------------------------------------
 // The same tables, starting with 1,000 rows. `ssr` renders one on the server (renderToHtml, then
@@ -150,7 +155,11 @@ const renderTable = async (name: VariantName, profile = false) => {
   if (profile) console.profileEnd("render")
   return { html: rendered.html, json, render }
 }
-const hydrateTable = async (name: VariantName, { html, json }: Awaited<ReturnType<typeof renderTable>>, profile = false) => {
+const hydrateTable = async (
+  name: VariantName,
+  { html, json }: Awaited<ReturnType<typeof renderTable>>,
+  profile = false
+) => {
   const component = full[name]
   const container = document.body.appendChild(document.createElement("div"))
   container.innerHTML = html

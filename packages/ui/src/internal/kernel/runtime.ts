@@ -488,6 +488,8 @@ export interface Instance {
   // empty Map or Set costs about 150 bytes.
   /** `Unmounted` is logged: the instance left the tree, though its Scope may still be closing. */
   left: boolean
+  /** How many instances that declare a head are in the tree at or below it: see `declaresHead`. */
+  heads: number
   /** The containers of the detached children its view declares, unregistered when it leaves. */
   parked: Set<unknown> | undefined
   /**
@@ -740,6 +742,9 @@ const neutralFold: View.HeadFold<Head.Entry, Head.Head> = { merge: Head.merge, t
 
 /** The fold of a component's vocabulary, or the title-only one. */
 const foldOf = (component: Component.Any): View.HeadFold => component.elements()?.head ?? neutralFold
+/** Whether an instance of `component` can add to the head: it has entries of its own, or reduces the ones below it. */
+const declaresHead = (component: Component.Any): boolean =>
+  component.head !== undefined || component.reduceHead !== undefined
 
 /** One instance's part of the head, over its state when it was read: its entries, its reducer and the instances it placed. */
 interface HeadPart {
@@ -1642,6 +1647,10 @@ const setup = (
   let viewChanged = false
   // The root vocabulary's fold, or the title-only one.
   const rootFold = foldOf(component)
+  // Under a root fold that folds a subtree with no entries and no `reduce` to nothing, such subtrees
+  // are left out of the tree: most instances, such as a list's rows, have no head. A host-neutral root
+  // may hand the fold to a vocabulary that sees every node, so its tree is built whole.
+  const skipsEmpty = rootFold !== neutralFold && headFold.skipsEmpty(rootFold.merge)
   const emptyHead: unknown = rootFold.merge(emptyTree)
   let merged: unknown = emptyHead
   // The title of `merged`, for the router's hook.
@@ -1664,9 +1673,14 @@ const setup = (
   /**
    * One instance's part of the head, read now: its entries, its `reduceHead` over its Model and the
    * instances its view placed. A closed or failed instance has none, and nor does one still waiting to
-   * adopt, whose Model isn't there yet, or one whose `head` throws, which `onError` is told.
+   * adopt, whose Model isn't there yet, or one whose `head` throws, which `onError` is told. With
+   * `below` false the instances it placed aren't looked for: none of them has a part the fold keeps.
    */
-  const headPart = (inst: Instance, onError: (inst: Instance, error: unknown) => void): HeadPart | undefined => {
+  const headPart = (
+    inst: Instance,
+    onError: (inst: Instance, error: unknown) => void,
+    below = true
+  ): HeadPart | undefined => {
     if (inst.closed || inst.failure !== undefined || inst.waiting) return undefined
     const head = inst.component.head
     let entries: ReadonlyArray<unknown> = none
@@ -1680,8 +1694,11 @@ const setup = (
     }
     const reduce = inst.component.reduceHead
     const model = inst.model
-    const children: Array<Instance> = []
-    for (const rendered of inst.rendered) placed(rendered, children)
+    let children: Array<Instance> = emptyList
+    if (below) {
+      children = []
+      for (const rendered of inst.rendered) placed(rendered, children)
+    }
     return { inst, entries, reduce: reduce === undefined ? undefined : (below) => reduce(model, below), children }
   }
   /** Adds the instances a rendered node places to `out`, in document order: a fallback's content included. */
@@ -1718,10 +1735,7 @@ const setup = (
     options?: Head.MergeOptions
   ): { readonly head: unknown; readonly title: string | undefined } => {
     let fold = rootFold
-    // Under a root fold that folds a subtree with no entries and no `reduce` to nothing, such subtrees
-    // are left out of the tree: most instances, such as a list's rows, have no head. A host-neutral root
-    // may hand the fold to a vocabulary that sees every node, so its tree is built whole.
-    const skip = rootFold !== neutralFold && headFold.skipsEmpty(rootFold.merge)
+    const skip = skipsEmpty
     const node = (inst: Instance): Head.Tree<unknown, unknown> | undefined => {
       const part = partOf(inst)
       if (part === undefined) return skip ? undefined : { path: inst.path, ...emptyTree }
@@ -1813,10 +1827,20 @@ const setup = (
       viewChanged = false
       const conflicts: Array<Head.Conflict> = []
       const parts: Array<HeadPart> = []
+      // A subtree where nothing declares a head folds to nothing, and this fold leaves such subtrees out,
+      // so it's passed by without a walk of what it rendered. While hydration records each instance's part
+      // every instance is read, as the record is of the tree as it was adopted.
+      const prune = skipsEmpty && adoption === undefined
       const next = foldTree(
         root,
         (inst) => {
-          const part = headPart(inst, failHead)
+          let below = true
+          if (prune) {
+            const heads = inst.heads
+            if (heads === 0) return undefined
+            below = heads > (declaresHead(inst.component) ? 1 : 0)
+          }
+          const part = headPart(inst, failHead, below)
           if (part !== undefined && adoption !== undefined) parts.push(part)
           return part
         },
@@ -1874,6 +1898,9 @@ const setup = (
     if (inst.left) return
     inst.left = true
     inst.lazy = undefined
+    if (declaresHead(inst.component)) {
+      for (let at: Instance | undefined = inst; at !== undefined; at = at.parent) at.heads--
+    }
     // At once, not when the Scope closes: the host may hand out a container's handle again.
     if (inst.parked !== undefined) {
       for (const container of inst.parked) unpark(inst, container)
@@ -2550,6 +2577,7 @@ const setup = (
     clash: Instance["clash"] = undefined
     deferred: Instance["deferred"] = false
     lazy: Instance["lazy"] = undefined
+    heads: Instance["heads"] = 0
   }
 
   /**
@@ -2656,6 +2684,7 @@ const setup = (
     declare clash: Instance["clash"]
     declare deferred: Instance["deferred"]
     declare lazy: Instance["lazy"]
+    declare heads: Instance["heads"]
     /**
      * From the moment its Scope or an ancestor's starts closing, not once it has: see `Instance.closed`.
      */
@@ -2791,6 +2820,11 @@ const setup = (
       owner === undefined || parent === undefined ? undefined : parent.author
     )
     addInstanceFinalizer(inst)
+    if (declaresHead(component)) {
+      for (let at: Instance | undefined = inst; at !== undefined; at = at.parent) {
+        at.heads++
+      }
+    }
     // `parentEnv` is the Env at the child node, but for a feature's implementation, which is passed no slots.
     if (component.definition.slots.length > 0) slottedBy.set(inst, { values: slots, env: parentEnv, placed: new Map() })
     if (owner !== undefined) owners.set(owner, inst)
