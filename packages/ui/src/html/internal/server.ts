@@ -212,7 +212,9 @@ export const makeWriter = (): ServerSink & { readonly html: () => string; readon
       bare = false
       if (skips) return
       const plain = plainAttributes(tag, attrs, props)
-      if (plain === undefined) {
+      // Where `toHtml` reads a `value`: among the attributes, and a textarea's or a select's own, which
+      // needn't be among its props' keys.
+      if (plain === undefined || tag === "textarea" || tag === "select") {
         const value = props.value
         // An object or a function.
         if (Object(value) === value) {

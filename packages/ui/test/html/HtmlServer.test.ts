@@ -10,7 +10,8 @@ import {
   Renderer,
   Router,
   Subscription,
-  UiSchema
+  UiSchema,
+  View
 } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
@@ -433,6 +434,70 @@ describe("HtmlServer", { concurrent: false }, () => {
       expect(rendered.state).toEqual({ "/Late": null, "~deferred": ["/Late/Off[o]"], "~query": {} })
       expect(read).toBe(1)
     }))
+
+  const hiddenValues: ReadonlyArray<readonly [string, ReadonlyArray<"textarea" | "select" | "input">]> = [
+    ["a textarea's", ["textarea"]],
+    ["a select's", ["select"]],
+    ["both, before an input's object value", ["textarea", "select", "input"]]
+  ]
+
+  it.effect.each(hiddenValues)(
+    "reads a value that isn't among the props' keys once, after the render's Layers are released: %s",
+    ([, parts]) =>
+      Effect.gen(function*() {
+        let released = false
+        // What each read of it gave.
+        const tracked = () => {
+          const reads: Array<string> = []
+          const value = {
+            toString() {
+              reads.push(released ? "released" : "live")
+              return reads.at(-1)!
+            }
+          }
+          return { reads, value }
+        }
+        const values = { textarea: tracked(), select: tracked(), input: tracked() }
+        // An element written by hand: its `value` isn't enumerable.
+        const hidden = <Msg>(node: View.Content<Msg, never>, value: unknown): View.Node<Msg> => ({
+          ...(View.toNode(node) as View.Element<Msg>),
+          props: Object.defineProperty({}, "value", { value })
+        })
+        const Page = Component.define({
+          name: "Hidden",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) =>
+            h.div.children(...parts.map((part) =>
+              part === "textarea"
+                ? hidden(h.textarea, values.textarea.value)
+                : part === "select"
+                ? hidden(h.select.children(h.option.children("released")), values.select.value)
+                : h.input.prop("value", values.input.value)
+            ))
+        }).pipe(Component.provide(Layer.effectDiscard(Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            released = true
+          })
+        ))))
+        const rendered = yield* HtmlServer.renderToHtml(Page, {})
+        const html = {
+          textarea: "<textarea>released</textarea>",
+          select: "<select><option selected>released</option></select>",
+          input: "<input value=\"released\">"
+        }
+        expect(rendered.html).toBe(
+          `<!--[/Hidden--><div>${parts.map((part) => html[part]).join("")}</div><!--]/Hidden-->`
+        )
+        for (const part of ["textarea", "select", "input"] as const) {
+          expect(values[part].reads, part).toEqual(parts.includes(part) ? ["released"] : [])
+        }
+      })
+  )
 
   it.effect("keeps winning HTML aliases through updates and removals without folding SVG attributes", () =>
     Effect.gen(function*() {
