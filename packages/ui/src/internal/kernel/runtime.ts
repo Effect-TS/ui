@@ -1076,14 +1076,14 @@ const serializeTree = (
     }
   }
   instance(root, false)
-  return {
-    ...state,
-    "~deferred": deferredPaths,
-    ...(Object.keys(statuses).length > 0 ? { "~status": statuses } : {}),
-    "~query": query,
-    ...(Object.keys(collected).length > 0 ? { "~reported": collected } : {}),
-    ...(isStatic ? { "~static": true } : {})
-  }
+  // Added to the record the paths are on, in the order a copy of it would have them: copying a record
+  // with a key for each instance costs more than everything else done with it.
+  state["~deferred"] = deferredPaths
+  if (Object.keys(statuses).length > 0) state["~status"] = statuses
+  state["~query"] = query
+  if (Object.keys(collected).length > 0) state["~reported"] = collected
+  if (isStatic) state["~static"] = true
+  return state
 }
 
 /** `Query`'s functions, where a query or a component's bound queries are at hand: the module is loaded. */

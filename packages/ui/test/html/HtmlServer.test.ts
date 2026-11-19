@@ -1609,6 +1609,71 @@ describe("HtmlServer", { concurrent: false }, () => {
       expect(rendered.state["~query"]).toEqual({})
     }))
 
+  it.effect("returns the state as a plain record: each path in document order, then the reserved keys", () =>
+    Effect.gen(function*() {
+      class GetText extends Query.Service<GetText>()("GetText", {
+        args: {},
+        success: Schema.String,
+        error: Schema.Never,
+        staleTime: "30 seconds"
+      }, Effect.succeed(() => Effect.succeed("data"))) {}
+      const Changed = UiSchema.TaggedEnum({ ChangedOn: { on: Schema.Boolean } })
+      const Group = Component.define({
+        name: "Group",
+        model: Schema.Number,
+        message: Changed,
+        shares: {
+          value: (count) => count,
+          collects: {
+            schema: Schema.Boolean,
+            onChange: (collected) => Changed.ChangedOn({ on: collected.includes(true) })
+          }
+        }
+      }).make({ init: () => 0, update: (count) => count + 1, parts: (count) => ({ count }) })
+      const leaf = { model: Schema.Null, message: Schema.Never, elements: Html } as const
+      const made = { init: () => null, update: (model: null) => model } as const
+      const Item = Component.define({ ...leaf, name: "Item", shared: { group: { owner: Group, report: () => true } } })
+        .make({ ...made, view: (_, h) => h.span("item") })
+      const Asks = Component.define({ ...leaf, name: "Asks", queries: { text: { query: GetText, args: () => ({}) } } })
+        .make({ ...made, view: (_, h) => h.p("asks") }).pipe(Component.provide(GetText.layer))
+      const Off = Component.define({ ...leaf, name: "Off" }).make({ ...made, view: (_, h) => h.p("off") }).pipe(
+        Component.provide(Layer.empty, { server: false })
+      )
+      const Slow = Component.define({ ...leaf, name: "Slow" }).make({ ...made, view: (_, h) => h.p("slow") }).pipe(
+        Component.provide(Layer.effectDiscard(Effect.sleep("1 second")))
+      )
+      const Page = Component.define({ ...leaf, name: "Page" }).make({
+        ...made,
+        view: (_, h) =>
+          h.div(
+            Slow(h, { key: "s", props: {} }),
+            Group(h, { key: "g", view: () => Item(h, { key: "i", props: {} }) }),
+            Off(h, { key: "o", props: {} }),
+            Asks(h, { key: "a", props: {} })
+          )
+      })
+
+      const fiber = yield* Effect.forkChild(HtmlServer.renderToHtml(Page, {}, { budget: "50 millis", static: true }))
+      yield* TestClock.adjust("50 millis")
+      const { state } = yield* Fiber.join(fiber)
+      // A copy made from it, or its JSON, would be the same for any prototype, and for any order.
+      assert.strictEqual(Object.getPrototypeOf(state), Object.prototype)
+      const entries: ReadonlyArray<readonly [string, unknown]> = [
+        ["/Page", null],
+        ["/Page/Slow[s]", null],
+        ["/Page/Group[g]", 1],
+        ["/Page/Group[g]/Item[i]", null],
+        ["/Page/Asks[a]", { model: null, queries: { text: ["{}", 0, "data", 0, false] } }],
+        ["~deferred", ["/Page/Off[o]"]],
+        ["~status", { "/Page/Slow[s]": "Pending" }],
+        ["~query", { GetText: [["{}", 0, "data", 0]] }],
+        ["~reported", { "/Page/Group[g]": { _tag: "ChangedOn", on: true } }],
+        ["~static", true]
+      ]
+      assert.deepStrictEqual(Reflect.ownKeys(state), entries.map(([key]) => key))
+      assert.deepStrictEqual(Object.entries(state), entries.map((entry) => [...entry]))
+    }))
+
   it.effect("closes everything it started when the render is interrupted", () =>
     Effect.gen(function*() {
       let acquired = 0
