@@ -427,16 +427,16 @@ const expandRoot = <Msg>(
   // path is its author's path and its segment, wherever the author's trees place it. Nor can two of them
   // place one slot.
   const written = [checkChildPaths("/" + name, view)]
-  // Content is shown under `children`, where a query looks. `path` is its outlet's, and `author` the path of
-  // whoever wrote it, which its children's paths start with.
+  // What every child's path starts with: the path of whoever wrote it. With no parent above the story's
+  // component, the content passed for its slots gets the component's too, as the runtime gives a root's.
+  const author = "/" + name
+  // Content is shown under `children`, where a query looks. `path` is its outlet's.
   // `own`: the story's component wrote it, so its refs count with the component's. Content the story
-  // passed for its slots was written by a parent, and so were the closures in it. With no parent above the
-  // story's component, its children's paths start with the component's, as the runtime gives a root's.
+  // passed for its slots was written by a parent, and so were the closures in it.
   // `reads`: what the feature slots there read, if their services aren't ready. See `Fields.slotStatus`.
   const content = (
     input: View.Input<any, any>,
     path: string,
-    author: string,
     depth: number,
     own: boolean,
     owners: Owners,
@@ -446,12 +446,10 @@ const expandRoot = <Msg>(
     const paths = checkContentPaths(path, nodes)
     if (own) written.push(paths)
     const scope = (label: string) => checkContentPaths(label, nodes)
-    return nodes.map((child) => expand(child, author, depth, own, owners, scope, reads))
+    return nodes.map((child) => expand(child, depth, own, owners, scope, reads))
   }
-  // `author`: the path of whoever wrote `node`.
   const expand = (
     node: View.Node<any, any>,
-    author: string,
     depth: number,
     own: boolean,
     owners: Owners,
@@ -467,16 +465,13 @@ const expandRoot = <Msg>(
         if (input === undefined) return node
         return {
           ...node,
-          children: content(input, "/" + name + "/" + slotSegment(node.name), "/" + name, 1, false, owners, undefined)
-        } as View.Node<
-          any,
-          any
-        >
+          children: content(input, "/" + name + "/" + slotSegment(node.name), 1, false, owners, undefined)
+        } as View.Node<any, any>
       }
       case "Element": {
         let changed = false
         const children = node.children.map((child) => {
-          const next = expand(child, author, depth, own, owners, scope, reads)
+          const next = expand(child, depth, own, owners, scope, reads)
           if (next !== child) changed = true
           return next
         })
@@ -493,7 +488,7 @@ const expandRoot = <Msg>(
           // It renders against settled services, so the feature slots in it show.
           replaced.push(node)
           const shown = node.fallback === undefined ? emptyText : View.toNode(node.fallback(result))
-          return expand(shown, author, depth, own, owners, scope, undefined)
+          return expand(shown, depth, own, owners, scope, undefined)
         }
         if (node.slots !== undefined) {
           // A child's view isn't run, but what the parent passed for its slots is the parent's.
@@ -503,7 +498,6 @@ const expandRoot = <Msg>(
             const placed = content(
               node.slots[slot],
               childPath + "/" + slotSegment(slot),
-              author,
               depth + 1,
               own,
               owners,
@@ -529,7 +523,6 @@ const expandRoot = <Msg>(
         // An owner expanded here is the nearest one for the readers in its closure.
         const inner = expand(
           tree,
-          author,
           depth + 1,
           own,
           ownersBelow(owners, component, model, node.props),
@@ -545,7 +538,7 @@ const expandRoot = <Msg>(
       }
     }
   }
-  const expanded = expand(view, "/" + name, 0, true, root, (label) => checkChildPaths(label, view), slotStatus)
+  const expanded = expand(view, 0, true, root, (label) => checkChildPaths(label, view), slotStatus)
   checkAuthorPaths("/" + name, written)
   checkAuthorPlacements("/" + name, written)
   if (replaced.length > 0) expandedChildren.set(expanded, replaced)

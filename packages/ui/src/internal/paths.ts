@@ -201,13 +201,18 @@ export const checkFallbackPaths = (
  */
 export const checkAuthorPaths = (path: string, written: ReadonlyArray<ChildPaths>): void => {
   if (written.length < 2) return
-  const children = new Map<string, Set<string>>()
+  // The keys of each name's children: one tree's own map while no other tree has the name, as for most.
+  const children = new Map<string, ReadonlyMap<string, unknown> | Set<string>>()
   const refs = new Set<string>()
   for (const paths of written) {
     if (paths.paths !== undefined) {
       for (const [name, keys] of paths.paths) {
         let taken = children.get(name)
-        if (taken === undefined) children.set(name, taken = new Set())
+        if (taken === undefined) {
+          children.set(name, keys)
+          continue
+        }
+        if (!(taken instanceof Set)) children.set(name, taken = new Set(taken.keys()))
         for (const [key, node] of keys) {
           if (taken.has(key)) {
             failure(path, `at ${segment(node)}, in the view it gives ${paths.path}${keyHint(name, node)}`)
@@ -226,7 +231,7 @@ export const checkAuthorPaths = (path: string, written: ReadonlyArray<ChildPaths
 }
 
 /**
- * Throws when two of `written`, as `checkAuthorRefs` takes them, place one of
+ * Throws when two of `written`, as `checkAuthorPaths` takes them, place one of
  * the author's slots between them. Each tree's own are checked as it renders.
  *
  * @internal
