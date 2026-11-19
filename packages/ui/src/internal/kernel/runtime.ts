@@ -4894,12 +4894,13 @@ const setup = (
   }
 
   const ownView = (inst: Instance): View.Node<any, any> => {
-    const view = inst.component.view
+    const component = inst.component
     // A view that `make` built reads the path only for `h.id`. Any other is given the path itself.
-    const path = View.takesPathSource(view) ? inst : inst.path
+    const path = View.takesPathSource(component.view) ? inst : inst.path
+    // Called on its component, as a hand-written view method may read `this`.
     return checked(
       inst,
-      view(inst.model, inst.props, runningOf(inst), inst.results, path as string, sharedOf(inst), inst)
+      component.view(inst.model, inst.props, runningOf(inst), inst.results, path as string, sharedOf(inst), inst)
     )
   }
 

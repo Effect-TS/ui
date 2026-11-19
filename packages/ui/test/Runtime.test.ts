@@ -175,7 +175,7 @@ describe("Runtime", () => {
         assert.sameMembers(root.pending().map((p) => p.path), ["/List/Row[c]", "/List/Row[a]", "/List/Row[d]"])
       })))
 
-    it.effect("a view wrapped by hand is given each row's path as a string, and passes it on to h.id", () =>
+    it.effect("a view wrapped by hand is called on its component with each row's path as a string", () =>
       provideHost(Effect.gen(function*() {
         const state = { model: Schema.Null, message: Schema.Never }
         const Badge = Component.define({ ...state, name: "Badge" }).make({
@@ -184,9 +184,13 @@ describe("Runtime", () => {
           view: (_, h) => h.el("li", h.id("label"))
         })
         const given: Array<unknown> = []
-        // The fifth parameter typed as a string, as the public type has it.
-        const view: Component.Any["view"] = (model, props, running, queries, path?: string) => {
-          given.push(path)
+        // A method, as a hand-written view can be, with the fifth parameter typed as a string, as the
+        // public type has it.
+        const view = function(
+          this: typeof Badge,
+          ...[model, props, running, queries, path]: Parameters<Component.Any["view"]>
+        ) {
+          given.push([this.definition.name, path])
           return Badge.view(model, props, running, queries, path?.toUpperCase())
         }
         const Wrapped = Object.assign(Object.create(Badge) as typeof Badge, { view })
@@ -196,7 +200,7 @@ describe("Runtime", () => {
           view: (_, h) => h.el("ul", ["a", "b"].map((key) => ({ ...Badge(h, { key }), component: Wrapped })))
         })
         const root = yield* TestHost.mount(Rows, {})
-        assert.deepStrictEqual(given, ["/Rows/Badge[a]", "/Rows/Badge[b]"])
+        assert.deepStrictEqual(given, [["Badge", "/Rows/Badge[a]"], ["Badge", "/Rows/Badge[b]"]])
         assert.strictEqual(root.text(), View.idOf("/ROWS/BADGE[A]", "label") + View.idOf("/ROWS/BADGE[B]", "label"))
       })))
 
