@@ -320,7 +320,7 @@ export const parts = <Props, Events, Parts, R, Rcv>(
   const lookup = state ?? record
   return component.parts(model, record.props, {
     owner: { path: "/" + component.definition.name, depth: 0 },
-    shared: engine.sharedLookup(engine.sharedGiven.get(lookup), engine.rootOwners(component, model, record.props))
+    shared: engine.rootShared(engine.sharedGiven.get(lookup))
   })
 }
 

@@ -126,3 +126,66 @@ describe("shared state", () => {
     expect(Scene.make(TipsProvider, {}, { elements: Html, view: (_, h) => h.span() })).type.not.toRaiseError()
   })
 })
+
+describe("a component that reads its own kind", () => {
+  const NestMessage = UiSchema.TaggedEnum({ ChangedBelow: { open: Schema.Number }, ChangedAbove: {} })
+
+  it("reads its own shares and reports its own collects, with no requirement", () => {
+    const Nest = Component.define({
+      name: "Nest",
+      props: Schema.Struct({ open: Schema.Boolean }),
+      model: Schema.Number,
+      message: NestMessage,
+      shares: {
+        value: (_, props) => ({ open: props.open }),
+        collects: { schema: Schema.Number, onChange: (counts) => NestMessage.ChangedBelow({ open: counts.length }) }
+      },
+      shared: {
+        parent: {
+          owner: "self",
+          optional: true,
+          report: (below, props) => {
+            expect(below).type.toBe<number>()
+            return props.open ? below + 1 : 0
+          },
+          onChange: (value) => {
+            expect(value).type.toBe<{ open: boolean }>()
+            return NestMessage.ChangedAbove()
+          }
+        }
+      }
+    }).make({
+      init: () => 0,
+      update: (model) => model,
+      parts: (_, p) => {
+        expect(p.shared.parent).type.toBe<{ open: boolean } | undefined>()
+        return {}
+      }
+    })
+    expect<Component.Requirements<typeof Nest>>().type.toBe<never>()
+  })
+
+  it("rejects a read of its own kind that isn't optional, reports what it doesn't collect, or shares nothing", () => {
+    expect(Component.define).type.not.toBeCallableWith({
+      name: "Required",
+      model: Schema.Null,
+      message: NestMessage,
+      shares: () => ({ open: true }),
+      shared: { parent: { owner: "self" as const } }
+    })
+    expect(Component.define).type.not.toBeCallableWith({
+      name: "Uncollected",
+      model: Schema.Null,
+      message: NestMessage,
+      shares: () => ({ open: true }),
+      shared: { parent: { owner: "self" as const, optional: true as const, report: () => 1 } }
+    })
+    const Bare = Component.define({
+      name: "Bare",
+      model: Schema.Null,
+      message: NestMessage,
+      shared: { parent: { owner: "self", optional: true } }
+    })
+    expect(Bare.make).type.not.toBeCallableWith({ init: () => null, update: (model: null) => model, parts: () => ({}) })
+  })
+})

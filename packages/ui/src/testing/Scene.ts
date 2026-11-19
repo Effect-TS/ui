@@ -221,7 +221,9 @@ export interface Steps<C extends AnyComponent, Parts = never, Report = never> ex
    * Clicks the one element `target` matches: the innermost element with a
    * `click` handler, that element or an ancestor, sends its message. A
    * string means `Locator.text(target)`. Throws when nothing or several
-   * elements match, or when nothing handles the click. An interaction.
+   * elements match, or when nothing handles the click. An interaction. The
+   * payload is a mouse's primary button at the origin with no modifier keys:
+   * `fire` sends a click with another, such as a tap's `pointerType`.
    */
   click(target: string | Locator.Locator): this
   /**

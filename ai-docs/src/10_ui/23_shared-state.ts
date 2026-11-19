@@ -4,8 +4,8 @@
  * Share part of a headless component's state with every component below it:
  * a tooltip provider that knows which tooltip is open, tooltips that read it
  * and tell it when they're focused, and a scene of one tooltip with no
- * provider mounted. Then an optional owner, the reports readers give it, and
- * a reader's `onChange`.
+ * provider mounted. Then an optional owner, the reports readers give it, a
+ * reader's `onChange`, and a component that reads its own kind.
  */
 import { Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
@@ -249,4 +249,46 @@ export const panels = Effect.gen(function*() {
   group.collected([false, false])
   group.collected([false, true])
     .expect(Locator.text("open")).toExist()
+})
+
+// ---------------------------------------------------------------------------
+// A component that reads its own kind
+// ---------------------------------------------------------------------------
+
+const MenuMessage = UiSchema.TaggedEnum({ ChangedOpenBelow: { count: Schema.Number } })
+
+// A menu reads the menu it's nested in, and tells it how many menus below it
+// are open. `owner: "self"` names the component being defined, which can't
+// name itself yet. The outermost menu has none above it, so the entry is
+// `optional: true`. `shares` comes first, so `report` is typed by `collects`.
+export const Menu = Component.define({
+  name: "Menu",
+  props: Schema.Struct({ open: Schema.Boolean }),
+  // How many menus below this one are open.
+  model: Schema.Number,
+  message: MenuMessage,
+  shares: {
+    value: (_, props) => ({ open: props.open }),
+    collects: {
+      schema: Schema.Number,
+      onChange: (counts) => MenuMessage.ChangedOpenBelow({ count: counts.reduce((sum, count) => sum + count, 0) })
+    }
+  },
+  shared: { parent: { owner: "self", optional: true, report: (below, props) => (props.open ? below + 1 : 0) } },
+  elements: Html
+}).make({
+  init: () => 0,
+  update: (_, message) => MenuMessage.match(message, { ChangedOpenBelow: ({ count }) => count }),
+  parts: (below, p) => ({ nested: p.shared.parent !== undefined, openBelow: below })
+})
+
+// In a scene, the component itself is the owner its `"self"` entry reads.
+export const nestedMenu = Effect.gen(function*() {
+  const menu = yield* Scene.make(Menu, { open: true }, {
+    elements: Html,
+    view: (parts, h) => h.p.children(parts.nested ? "nested" : "outermost")
+  })
+  menu.expect(Locator.text("outermost")).toExist()
+  menu.shared(Menu, { open: true })
+    .expect(Locator.text("nested")).toExist()
 })

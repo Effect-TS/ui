@@ -258,6 +258,13 @@ Model, so the log records every change. In a `Scene`,
 each send to the owner is acknowledged with
 `s.sent(TooltipProvider, message)`.
 
+A component can read its own kind, as a submenu reads the menu it's in:
+`shared: { parent: { owner: "self", optional: true } }` reads the nearest
+instance of the same component above it. The outermost one has none, so the
+entry is `optional: true`, and the component must have `shares` itself. Write
+`shares` before `shared`, so `report` and `onChange` are typed by it. In a
+`Scene`, the component itself is the owner: `s.shared(Menu, value)`.
+
 Every owner update re-runs its closure, and headless children in it
 re-render each time, so put normal components directly under an owner.
 Every reader re-renders when the shared value changes, so keep readers few

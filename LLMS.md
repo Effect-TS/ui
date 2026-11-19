@@ -271,6 +271,13 @@ Model, so the log records every change. In a `Scene`,
 each send to the owner is acknowledged with
 `s.sent(TooltipProvider, message)`.
 
+A component can read its own kind, as a submenu reads the menu it's in:
+`shared: { parent: { owner: "self", optional: true } }` reads the nearest
+instance of the same component above it. The outermost one has none, so the
+entry is `optional: true`, and the component must have `shares` itself. Write
+`shares` before `shared`, so `report` and `onChange` are typed by it. In a
+`Scene`, the component itself is the owner: `s.shared(Menu, value)`.
+
 Every owner update re-runs its closure, and headless children in it
 re-render each time, so put normal components directly under an owner.
 Every reader re-renders when the shared value changes, so keep readers few
@@ -393,8 +400,8 @@ client, not the services.
   Share part of a headless component's state with every component below it:
   a tooltip provider that knows which tooltip is open, tooltips that read it
   and tell it when they're focused, and a scene of one tooltip with no
-  provider mounted. Then an optional owner, the reports readers give it, and
-  a reader's `onChange`.
+  provider mounted. Then an optional owner, the reports readers give it, a
+  reader's `onChange`, and a component that reads its own kind.
 - **[Mounts](./ai-docs/src/10_ui/24_mounts.ts)**:
   Start work with an element's host node: a mount that measures a box once,
   a mount that attaches a third-party editor and reports each change, and a

@@ -450,6 +450,36 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(root.model()).toEqual(["click inner", "click outer"])
       }).pipe(Effect.scoped))
 
+    it.effect("a click reports the pointer of the pointerdown before it, and none for a click from the keyboard", () =>
+      Effect.gen(function*() {
+        const Message = UiSchema.TaggedEnum({ Clicked: { pointerType: Schema.String } })
+        const Pointers = Component.define({
+          name: "Pointers",
+          model: Schema.Array(Schema.String),
+          message: Message,
+          elements: Html
+        }).make({
+          init: (): ReadonlyArray<string> => [],
+          update: (log, message) => Message.match(message, { Clicked: ({ pointerType }) => [...log, pointerType] }),
+          view: (_, h) => h.button.onClick(({ pointerType }) => Message.Clicked({ pointerType })).children("Press")
+        })
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Pointers, {}, app)
+        const button = HtmlLocator.getByRole(app, "button", { name: "Press" }) as HTMLButtonElement
+        const click = (detail: number) => button.dispatchEvent(new MouseEvent("click", { bubbles: true, detail }))
+        // No pointerdown yet: a mouse.
+        click(1)
+        // A tap, whose click WebKit reports as a mouse's.
+        button.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }))
+        click(1)
+        // Enter on the button: a click with no pointer, whatever pressed last.
+        click(0)
+        button.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "pen" }))
+        click(1)
+        yield* tick
+        expect(root.model()).toEqual(["mouse", "touch", "", "pen"])
+      }).pipe(Effect.scoped))
+
     it.effect("a handler a render takes away no longer gets the event: the next element out does", () =>
       Effect.gen(function*() {
         const Toggle = Component.define({

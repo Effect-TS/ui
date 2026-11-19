@@ -249,6 +249,29 @@ const canonicalAttrs = (attrs: Readonly<Record<string, string>>): Readonly<Recor
   return out
 }
 
+/**
+ * What a pointer event's `pointerType` names, or `undefined` for an event
+ * with none, such as a `mousedown` in a browser that sends it as a plain
+ * `MouseEvent`, or a type no browser sends today.
+ */
+const pointerTypeOf = (event: Event): Html.PointerType | undefined => {
+  const type = (event as { readonly pointerType?: unknown }).pointerType
+  return type === "mouse" || type === "touch" || type === "pen" || type === "" ? type : undefined
+}
+
+/**
+ * The `pointerType` of a click-like event's payload. A click with `detail`
+ * 0, or a pointer event with an empty `pointerType`, came from no pointer:
+ * the keyboard, or a script. Otherwise the last `pointerdown` says which
+ * pointer it was, since a browser may report a tap's `click` as a mouse's,
+ * as WebKit does. Without one, the event's own type, and `"mouse"` last.
+ */
+const pressedWith = (name: string, event: Event, last: Html.PointerType | undefined): Html.PointerType => {
+  const own = pointerTypeOf(event)
+  if (own === "" || (name === "click" && (event as MouseEvent).detail === 0)) return ""
+  return last ?? own ?? "mouse"
+}
+
 const modifiers = (event: Event) => {
   const e = event as KeyboardEvent
   return { shift: e.shiftKey === true, ctrl: e.ctrlKey === true, alt: e.altKey === true, meta: e.metaKey === true }
@@ -284,7 +307,13 @@ const controlPayload = (source: globalThis.Element): unknown => {
  * Builds the payload a handler gets: plain data, read from the event and the
  * elements involved.
  */
-const payloadOf = (name: string, event: Event, target: EventTarget | null, element: globalThis.Element): unknown => {
+const payloadOf = (
+  name: string,
+  event: Event,
+  target: EventTarget | null,
+  element: globalThis.Element,
+  pointer: Html.PointerType | undefined
+): unknown => {
   switch (name) {
     case "click":
     case "dblclick":
@@ -292,7 +321,13 @@ const payloadOf = (name: string, event: Event, target: EventTarget | null, eleme
     case "mousedown":
     case "mouseup": {
       const e = event as MouseEvent
-      return { button: e.button ?? 0, x: e.clientX ?? 0, y: e.clientY ?? 0, ...modifiers(event) }
+      return {
+        button: e.button ?? 0,
+        x: e.clientX ?? 0,
+        y: e.clientY ?? 0,
+        ...modifiers(event),
+        pointerType: pressedWith(name, event, pointer)
+      }
     }
     case "keydown":
     case "keyup": {
@@ -373,6 +408,12 @@ export const makeHost = (
   // The last value the renderer set for each controlled property: what the element must show.
   const wanted = new WeakMap<globalThis.Node, Map<string, unknown>>()
   const listening = new Map<string, (event: Event) => void>()
+  // The pointer of the last `pointerdown`, which the click-like events that follow it report.
+  let lastPointer: Html.PointerType | undefined
+  const onPointerDown = (event: Event) => {
+    lastPointer = pointerTypeOf(event) || undefined
+  }
+  document.addEventListener("pointerdown", onPointerDown, { capture: true })
   const view = document.defaultView
   const later: (f: () => void) => void = view !== null && typeof view.requestAnimationFrame === "function"
     ? (f) => {
@@ -870,7 +911,7 @@ export const makeHost = (
           handler,
           name === "dragend"
             ? dragEndPayload(event as DragEvent)
-            : payloadOf(name, event, event.target, node as globalThis.Element),
+            : payloadOf(name, event, event.target, node as globalThis.Element, lastPointer),
           preventDefault === true ? () => event.preventDefault() : undefined
         )
         break
@@ -1086,6 +1127,7 @@ export const makeHost = (
       syncHead.release()
       for (const [name, f] of listening) document.removeEventListener(name, f, { capture: true })
       listening.clear()
+      document.removeEventListener("pointerdown", onPointerDown, { capture: true })
       cancelExitCheck()
       cancelOver()
       active = undefined

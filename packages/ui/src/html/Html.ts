@@ -184,8 +184,26 @@ export interface ScrollOptions {
 // ---------------------------------------------------------------------------
 
 /**
+ * What pressed an element: `"mouse"`, `"touch"` or `"pen"`, or `""` for a
+ * click no pointer made, such as a button activated with Enter or Space.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export type PointerType = "mouse" | "touch" | "pen" | ""
+
+/**
  * The payload of `click`, `dblclick`, `contextmenu`, `mousedown` and
- * `mouseup`: the button, the position in the viewport, and the modifier keys.
+ * `mouseup`: the button, the position in the viewport, the modifier keys,
+ * and the kind of pointer.
+ *
+ * **Details**
+ *
+ * `pointerType` is `""` for a click from the keyboard or a script. Otherwise
+ * the browser host reads it from the `pointerdown` before the event, since
+ * some browsers report a tap's `click` as a mouse's. A browser that sends no
+ * pointer events reports `"mouse"`.
  *
  * @stability experimental
  * @category events
@@ -199,6 +217,7 @@ export interface PointerPayload {
   readonly ctrl: boolean
   readonly alt: boolean
   readonly meta: boolean
+  readonly pointerType: PointerType
 }
 
 /**

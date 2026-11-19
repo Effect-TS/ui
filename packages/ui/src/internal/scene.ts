@@ -422,10 +422,7 @@ export class SceneCursor extends Cursor {
     f(
       component.parts(this.state.model, this.state.props, {
         owner: { path: "/" + this.state.component.definition.name, depth: 0 },
-        shared: engine.sharedLookup(
-          engine.sharedGiven.get(this.state),
-          engine.rootOwners(this.state.component, this.state.model, this.state.props)
-        )
+        shared: engine.rootShared(engine.sharedGiven.get(this.state))
       })
     )
     return this
@@ -489,7 +486,16 @@ const describeInteraction = (state: engine.State<any, any, any, any>): string =>
  *
  * @internal
  */
-export const pointer = { button: 0, x: 0, y: 0, shift: false, ctrl: false, alt: false, meta: false }
+export const pointer = {
+  button: 0,
+  x: 0,
+  y: 0,
+  shift: false,
+  ctrl: false,
+  alt: false,
+  meta: false,
+  pointerType: "mouse" as const
+}
 
 /**
  * Starts a scene cursor over `component`, or over the stand-in a headless or slotted scene builds from
