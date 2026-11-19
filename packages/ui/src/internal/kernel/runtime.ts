@@ -1102,6 +1102,9 @@ const start = (
 
 const isClosed = (scope: Scope.Scope): boolean => scope.state._tag === "Closed"
 
+/** For a fiber that runs a cleanup, which nothing interrupts. */
+const uninterruptibly: Effect.RunOptions = { uninterruptible: true }
+
 const setup = (
   component: Component.Any,
   rootProps: unknown,
@@ -1277,8 +1280,11 @@ const setup = (
   const withScheduler = (context: Context.Context<any>): Context.Context<any> =>
     executor.scheduler === undefined ? context : Context.add(context, Scheduler.Scheduler, executor.scheduler)
   /** Starts at once, so a Layer that builds synchronously is ready for the first frame. */
-  const forkNow = <A, E>(context: Context.Context<any>, effect: Effect.Effect<A, E, any>): Fiber.Fiber<A, E> =>
-    Effect.runForkWith(withScheduler(context))(effect)
+  const forkNow = <A, E>(
+    context: Context.Context<any>,
+    effect: Effect.Effect<A, E, any>,
+    options?: Effect.RunOptions
+  ): Fiber.Fiber<A, E> => Effect.runForkWith(withScheduler(context))(effect, options)
   /**
    * Starts on the scheduler, never inside the `update` that issued it. A navigation Command starts
    * sooner, in the deferred work of the flush its `update` caused: see `startRun`.
@@ -1310,7 +1316,7 @@ const setup = (
   /** What a close returned: nothing left, or an Effect, run now, that a fiber is returned for if it waits. */
   const settleClose = (rest: Effect.Effect<void> | undefined): Fiber.Fiber<void> | undefined => {
     if (rest === undefined || (Exit.isExit(rest) && Exit.isSuccess(rest))) return undefined
-    const fiber = forkNow(ctx, Effect.uninterruptible(rest))
+    const fiber = forkNow(ctx, rest, uninterruptibly)
     // Ended in the fork: nothing is left to wait for.
     if (fiber.pollUnsafe() !== undefined) return undefined
     track(closing, fiber)
@@ -1344,8 +1350,15 @@ const setup = (
    * The close interrupts the fiber and waits for it to exit, so its cleanup runs before whatever the
    * Scope's owner closes next, such as the Layer that provides its services.
    */
-  const interruptOnClose = (scope: Scope.Scope, fiber: Fiber.Fiber<unknown, unknown>) =>
-    addFinalizer(scope, Fiber.interrupt(fiber))
+  const interruptOnClose = (scope: Scope.Scope, fiber: Fiber.Fiber<unknown, unknown>) => {
+    if (isClosed(scope)) return addFinalizer(scope, Fiber.interrupt(fiber))
+    // Interrupted as the finalizer is called, not by an Effect it returns: a fiber that has ended, or
+    // ends as it's interrupted, leaves the close nothing to run, so the close takes no fiber.
+    scopeAddFinalizerUnsafe(scope, {}, () => {
+      fiber.interruptUnsafe()
+      return fiber.pollUnsafe() === undefined ? Fiber.await(fiber) : Exit.void
+    })
+  }
 
   // -- query cache ---------------------------------------------------------
   // Made at the mount when the app has loaded the `Query` module by then, and otherwise when it loads it.
@@ -2391,7 +2404,7 @@ const setup = (
    * included, the release stays the instance's: the instance's close waits for it.
    */
   const releaseSelection = (selection: Selection, retired: Retired) => {
-    const fiber = forkNow(ctx, Effect.uninterruptible(releaseOf(retired)))
+    const fiber = forkNow(ctx, releaseOf(retired), uninterruptibly)
     if (fiber.pollUnsafe() !== undefined) return
     track(closing, fiber)
     track(selection.releasing, fiber)
