@@ -2562,16 +2562,19 @@ const setup = (
       apply(inst, next, entrySeq, false)
     })
 
-  /** What the host calls for an event on an element `inst` rendered. Made the first time it's asked for. */
-  const makeFire = (inst: Instance): Renderer.Dispatch => fireOn.bind(inst)
-  // Bound to each instance, not a closure made for it: one object instead of two.
+  /**
+   * An instance's one bound function, which serves twice: the host calls it for an event on an element
+   * the instance rendered, with the event's name, and the Scope that holds the instance's finalizer
+   * calls it with an `Exit` as the instance closes. Bound, not a closure: one object for each instance.
+   */
   function fireOn(
-    this: Instance,
-    event: string,
-    handler: unknown,
-    payload: unknown,
-    onMessage: (() => void) | undefined
-  ): void {
+    this: Inst,
+    event: string | Exit.Exit<unknown, unknown>,
+    handler?: unknown,
+    payload?: unknown,
+    onMessage?: (() => void) | undefined
+  ): Effect.Effect<void> | undefined {
+    if (typeof event !== "string") return this.finalize()
     if (this.closed || this.waiting) return
     const message = typeof handler === "function"
       ? guard(this, "domEvent", () => (handler as (payload: unknown) => unknown)(payload), event)
@@ -2674,7 +2677,8 @@ const setup = (
     runs: Array<Run> = emptyList
     left = false
     cause: number | undefined = undefined
-    private fired: Renderer.Dispatch | undefined = undefined
+    /** The instance's event dispatch and finalizer: see `fireOn`. */
+    private fired: OmitThisParameter<typeof fireOn> | undefined = undefined
     /**
      * The instance's Scope, made when it's first asked for. Until then the instance's finalizer, `held`,
      * is registered in its parent's Scope: most instances fork nothing and start no work.
@@ -2775,7 +2779,7 @@ const setup = (
           // finalizer moves into it. `close` frees the slot.
           this.held = false
           own = Scope.makeUnsafe("sequential")
-          scopeAddFinalizerUnsafe(own, this, this.finalize.bind(this))
+          scopeAddFinalizerUnsafe(own, this, this.bound())
           const scope = own
           scopeAddFinalizerUnsafe(under, this, (exit) => Scope.close(scope, exit))
         } else {
@@ -2794,8 +2798,7 @@ const setup = (
         return
       }
       if (own === undefined) this.held = true
-      // Bound, not a closure: one object for each instance.
-      scopeAddFinalizerUnsafe(under, this, this.finalize.bind(this))
+      scopeAddFinalizerUnsafe(under, this, this.bound())
     }
     /** Run by the Scope that holds the instance's finalizer. */
     finalize(): Effect.Effect<void> {
@@ -2831,7 +2834,11 @@ const setup = (
       else dispatchTo(this, message, source)
     }
     get fire(): Renderer.Dispatch {
-      return this.fired ??= this.component === outletComponent ? this.author.fire : makeFire(this)
+      return this.component === outletComponent ? this.author.fire : (this.fired ??= fireOn.bind(this))
+    }
+    /** What the Scope that holds the instance's finalizer calls. */
+    private bound(): (exit: Exit.Exit<unknown, unknown>) => Effect.Effect<void> {
+      return (this.fired ??= fireOn.bind(this)) as (exit: Exit.Exit<unknown, unknown>) => Effect.Effect<void>
     }
   }
 
