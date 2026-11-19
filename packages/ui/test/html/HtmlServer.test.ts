@@ -810,11 +810,8 @@ describe("HtmlServer", { concurrent: false }, () => {
 
     it.effect("reports an edit made while the instance waits for its Layer", () =>
       Effect.gen(function*() {
-        class Store extends Context.Service<Store, string>()("test/FormStore") {}
         const seen: Array<string> = []
-        const Form = makeForm(seen).pipe(
-          Component.provide(Layer.effect(Store, Effect.as(Effect.sleep("50 millis"), "ready")))
-        )
+        const Form = makeForm(seen).pipe(Component.provide(Layer.effectDiscard(Effect.sleep("50 millis"))))
         const fiber = yield* Effect.forkChild(HtmlServer.renderToHtml(Form, {}))
         yield* TestClock.adjust("50 millis")
         const rendered = yield* Fiber.join(fiber)

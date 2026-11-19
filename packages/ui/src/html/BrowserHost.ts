@@ -191,17 +191,38 @@ const userProp = (node: globalThis.Node): string | undefined => {
 }
 
 /**
- * Which of a `select`'s options its HTML selects: those with the `selected` attribute, the last of them
- * for a single select, or else the first option that isn't disabled, itself or by its group, as a browser
- * picks for a drop-down.
+ * Whether a `select`'s options differ from those its HTML selects: the ones with the `selected`
+ * attribute, the last of them for a single select, or else the first option that isn't disabled, itself
+ * or by its group, as a browser picks for a drop-down.
  */
-const defaultSelection = (select: HTMLSelectElement): ReadonlyArray<boolean> => {
+const selectionChanged = (select: HTMLSelectElement): boolean => {
   const options = Array.from(select.options)
   const marked = options.map((option) => option.hasAttribute("selected"))
-  if (select.multiple) return marked
+  if (select.multiple) return options.some((option, i) => option.selected !== marked[i])
   const last = marked.lastIndexOf(true)
   const index = last !== -1 ? last : select.size > 1 ? -1 : options.findIndex((option) => !optionDisabled(option))
-  return options.map((_, i) => i === index)
+  return options.some((option, i) => option.selected !== (i === index))
+}
+
+/** Whether `control` differs from the default the server's HTML gave it. */
+const changedFromDefault = (control: globalThis.Element): boolean => {
+  switch (control.localName) {
+    case "input":
+    case "textarea": {
+      const field = control as HTMLInputElement
+      return userProp(field) === "checked" ? field.checked !== field.defaultChecked : field.value !== field.defaultValue
+    }
+    case "select":
+      return selectionChanged(control as HTMLSelectElement)
+    default:
+      return false
+  }
+}
+
+/** The control an option's change is reported on and held for: its `select`, if it has one. */
+const controlOf = (node: globalThis.Node): globalThis.Element => {
+  const element = node as globalThis.Element
+  return element.localName === "option" ? element.closest("select") ?? element : element
 }
 
 interface Bound {
@@ -545,8 +566,7 @@ export const makeHost = (
     switch (element.localName) {
       case "input": {
         // A radio button unchecks the others in its group.
-        if (element.type !== "radio" || element.name === "") return
-        for (const other of radioGroup(element)) restoreNode(other)
+        if (isRadio(element)) { for (const other of radioGroup(element)) restoreNode(other) }
         return
       }
       case "select": {
@@ -584,63 +604,24 @@ export const makeHost = (
   // change is reported to its `onInput` and `onChange` at the commit, as if the events had just fired.
   // A change is told from an untouched control by its live state differing from the server's default.
   /** Controls changed before they adopted, whose Model value isn't written until the commit reports them. */
-  const edited = new Set<globalThis.Node>()
+  const edited = new Set<globalThis.Element>()
   /**
    * Whether each control adoption has touched since the last commit was changed, read before adoption
    * wrote to it. Adoption's own writes change controls: checking one radio button unchecks the user's, and
    * selecting an option unselects the others, so a control read after one of them would look changed, or
-   * untouched, depending on which was adopted first. A radio group is read as one.
+   * untouched, depending on which was adopted first. A radio group is read as one. A textarea is read
+   * when hydration inspects it, just before adopting it: adoption rebuilds its text, which moves the
+   * default, and an untouched textarea's value with it.
    */
   const changedBefore = new Map<globalThis.Node, boolean>()
-  /**
-   * Whether a server textarea differed from its text when hydration last read it, just before adopting
-   * it. Adoption rebuilds the text, which moves the default, and an untouched textarea's value with it.
-   */
-  const textareaChanged = new WeakMap<globalThis.Node, boolean>()
 
-  /** Whether the user changed `element` from the default the server's HTML gave it. */
-  const changedFromDefault = (element: globalThis.Element): boolean => {
-    switch (element.localName) {
-      case "input": {
-        const input = element as HTMLInputElement
-        return input.type === "checkbox" || input.type === "radio"
-          ? input.checked !== input.defaultChecked
-          : input.value !== input.defaultValue
-      }
-      case "textarea": {
-        const textarea = element as HTMLTextAreaElement
-        return textareaChanged.get(element) ?? textarea.value !== textarea.defaultValue
-      }
-      case "option":
-        // An option outside a `select`, by the attribute, since not every DOM has `defaultSelected`.
-        return (element as HTMLOptionElement).selected !== element.hasAttribute("selected")
-      case "select": {
-        const defaults = defaultSelection(element as HTMLSelectElement)
-        return Array.from((element as HTMLSelectElement).options).some((option, i) => option.selected !== defaults[i])
-      }
-      default:
-        return false
-    }
-  }
-
-  /** The control an option's change is reported on and held for: its `select`, if it has one. */
-  const controlOf = (node: globalThis.Node): globalThis.Node =>
-    (node as globalThis.Element).localName === "option"
-      ? (node as globalThis.Element).closest("select") ?? node
-      : node
-
-  /** Whether `node`'s control was changed when adoption first touched it, or any button of its radio group. */
-  const wasChanged = (node: globalThis.Node): boolean => {
-    const control = controlOf(node)
+  /** Whether `control` was changed when adoption first touched it, or any button of its radio group. */
+  const wasChanged = (control: globalThis.Element): boolean => {
     let changed = changedBefore.get(control)
-    if (changed !== undefined) return changed
-    if (isRadio(control)) {
-      const group = radioGroup(control)
-      changed = group.some((radio) => radio.checked !== radio.defaultChecked)
-      for (const radio of group) changedBefore.set(radio, changed)
-    } else {
-      changed = changedFromDefault(control as globalThis.Element)
-      changedBefore.set(control, changed)
+    if (changed === undefined) {
+      const group = isRadio(control) ? radioGroup(control) : [control]
+      changed = group.some(changedFromDefault)
+      for (const member of group) changedBefore.set(member, changed)
     }
     return changed
   }
@@ -918,10 +899,12 @@ export const makeHost = (
    * radio group that holds the user's button, and the one the Model checks, which would uncheck it.
    */
   const adoptProp = (node: globalThis.Node, name: string, value: unknown): void => {
-    if (
-      name === userProp(node) && wasChanged(node) &&
-      (node as any)[name] !== (value === undefined ? emptyValue(name) : value)
-    ) edited.add(controlOf(node))
+    if (name === userProp(node)) {
+      const control = controlOf(node)
+      if (wasChanged(control) && (node as any)[name] !== (value === undefined ? emptyValue(name) : value)) {
+        edited.add(control)
+      }
+    }
     host.setProp(node, name, value)
   }
 
@@ -1064,10 +1047,7 @@ export const makeHost = (
         switch (node.nodeType) {
           case 1: {
             const tag = (node as globalThis.Element).localName
-            if (tag === "textarea") {
-              const textarea = node as HTMLTextAreaElement
-              textareaChanged.set(node, textarea.value !== textarea.defaultValue)
-            }
+            if (tag === "textarea") changedBefore.set(node, changedFromDefault(node as globalThis.Element))
             return { _tag: "Element", tag, textOnly: server.textOnlyTags.has(tag) }
           }
           case 3:
@@ -1102,8 +1082,6 @@ export const makeHost = (
     dispose: () => {
       for (const [name, f] of listening) document.removeEventListener(name, f, { capture: true })
       listening.clear()
-      edited.clear()
-      changedBefore.clear()
       cancelExitCheck()
       cancelOver()
       active = undefined
