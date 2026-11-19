@@ -450,9 +450,11 @@ export interface LayerReady extends InstanceBase {
  *
  * **Details**
  *
- * `redacted` is `true` when the feature slots below didn't get `cause`: a
- * handled failure on the server, whose slots get a cause that says a
- * provided Layer failed on the server, as the client's do.
+ * `redacted` is `true` when the feature slots below got a cause that says
+ * a provided Layer failed on the server: for a handled failure on the
+ * server, whose `cause` is the one its handler got, and on a client that
+ * adopted that failure. A replay passes the slots that substitute, not
+ * `cause`.
  *
  * @stability experimental
  * @category models

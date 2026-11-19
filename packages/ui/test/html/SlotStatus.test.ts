@@ -16,9 +16,9 @@ const EditorView = Component.define({ name: "EditorView", model: Schema.Null, me
     update: (model) => model,
     view: (_, h) => h.p("editor")
   })
-// The failure branch shows its cause, so the server and the client must pass the same one.
+// The failure branch shows its cause, stack included, so the server and the client must pass the same one.
 const shown = (result: AsyncResult.AsyncResult<never, unknown>) =>
-  AsyncResult.isFailure(result) ? String(Cause.squash(result.cause)) : "loading"
+  AsyncResult.isFailure(result) ? Cause.pretty(result.cause) : "loading"
 
 const Message = UiSchema.TaggedEnum({ Failed: {} })
 const Page = Component.define({ name: "Page", model: Schema.String, message: Message, elements: Html }).make({
@@ -86,6 +86,7 @@ describe("slot status after SSR", { concurrent: false }, () => {
   it.effect("a slot whose Layer failed on the server ships Failed, and the client adopts its failure branch, cause included", () =>
     Effect.gen(function*() {
       let builds = 0
+      const handled: Array<unknown> = []
       const Broken = Component.provide(
         Page,
         Editor.toLayer(EditorView).pipe(
@@ -94,28 +95,45 @@ describe("slot status after SSR", { concurrent: false }, () => {
             return Effect.fail("offline")
           })))
         ),
-        { onFailure: () => Message.Failed() }
+        {
+          onFailure: (result: AsyncResult.Failure<never, string>) => {
+            handled.push(Cause.squash(result.cause))
+            return Message.Failed()
+          }
+        }
       )
       const { app, before, log, rendered, serverLog } = yield* hydrate(Broken, "0 millis")
-      // The server's cause isn't in the page: both sides pass the fallback the same redacted one.
+      // The server's cause isn't in the page, nor is a stack: both sides pass the fallback the same redacted one.
       expect(rendered.html).not.toContain("offline")
+      expect(rendered.html).not.toMatch(/\sat .*:\d+:\d+/)
       expect(rendered.html).toContain("<p>Error: [@effect/ui] A provided Layer failed on the server</p>")
       expect(rendered.state["~deferred"]).toEqual([])
       expect(rendered.state["~status"]).toEqual({ "/Page": "Failed", [slot]: "Failed" })
       expect(rendered.state["/Page"]).toBe("failed")
+      // The server's handler got the original cause. The client, adopting the failure, doesn't run it.
+      expect(handled).toEqual(["offline"])
       // The server built it once. The client adopts the failure without building it again.
       expect(builds).toBe(1)
       expect(app.querySelector("p")).toBe(before)
       expect(app.textContent).toBe("Error: [@effect/ui] A provided Layer failed on the server")
-      expect(log.entries().filter((entry) => entry._tag === "LayerFailed").map((entry) => entry.path)).toEqual([
-        "/Page"
-      ])
+      expect(log.entries().flatMap((entry) => entry._tag === "LayerFailed" ? [[entry.path, entry.redacted]] : []))
+        .toEqual([["/Page", true]])
       // The server's log keeps the cause the handler got, and says the slots didn't get it, so a view
       // replayed from it shows what the page did.
       const failed = serverLog.entries().filter((entry) => entry._tag === "LayerFailed")
       expect(failed.map((entry) => [entry.redacted, Cause.squash(entry.cause)])).toEqual([[true, "offline"]])
       const encode = MessageLog.makeEncoder().encode
-      for (const entries of [serverLog.entries(), serverLog.entries().map(encode), log.entries()]) {
+      // The client's frame says so too: a Wire replay passes the slots the substitute, not a defect decoded from JSON.
+      expect(log.entries().map(encode).flatMap((frame) => frame._tag === "LayerFailed" ? [frame.redacted] : []))
+        .toEqual([true])
+      for (
+        const entries of [
+          serverLog.entries(),
+          serverLog.entries().map(encode),
+          log.entries(),
+          log.entries().map(encode)
+        ]
+      ) {
         expect(textOf(replay.viewOf(Story.fromLog(Broken, entries)))).toBe(
           "Error: [@effect/ui] A provided Layer failed on the server"
         )

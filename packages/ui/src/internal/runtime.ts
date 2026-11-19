@@ -2436,8 +2436,9 @@ const setup = (
         if (inst.closed) {
           // `init` failed before a keyed provide could select: nothing is built.
         } else if (adoptsFailure) {
+          // The slots get the substitute the server's did: a replay of this log renders it, not its JSON form.
           const cause = serverFailure()
-          lifecycle({ _tag: "LayerFailed", cause })
+          lifecycle({ _tag: "LayerFailed", cause, redacted: true })
           failEnv(own, cause)
         } else if (shared !== undefined) {
           whenReady(own, ready, fail)
