@@ -1078,6 +1078,16 @@ export const makeHost = (
       if (shown.size > 0) closeShownIn(node)
       node.parentNode?.removeChild(node)
     },
+    removeChildren: (parent, nodes) => {
+      if (shown.size > 0) { for (const node of nodes) closeShownIn(node) }
+      // A parent that holds these nodes and nothing else, as a list's element usually does, is cleared
+      // in one step.
+      if ((parent.nodeType === 1 || parent.nodeType === 11) && parent.childNodes.length === nodes.length) {
+        parent.textContent = ""
+        return
+      }
+      for (const node of nodes) node.parentNode?.removeChild(node)
+    },
     parentOf: (node) => node.parentNode ?? undefined,
     nextOf: (node) => node.nextSibling ?? undefined,
     setEvents(node, handlers, dispatch, options) {

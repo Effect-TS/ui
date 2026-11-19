@@ -5419,6 +5419,10 @@ const setup = (
     if (replaced === undefined && start === newLength) {
       if (start === oldLength) return olds
       // The list only got shorter: the olds left over go, and the rest stay in place.
+      if (start === 0) {
+        destroyAll(inst, parentNode, olds)
+        return []
+      }
       for (let index = start; index < oldLength; index++) destroy(inst, olds[index]!)
       return olds.slice(0, start)
     }
@@ -5516,7 +5520,10 @@ const setup = (
       previous = at
       result[index] = next
     }
-    if (matched < oldLength) {
+    if (matched === 0) {
+      // Every old goes, before any new node is placed.
+      destroyAll(inst, parentNode, olds)
+    } else if (matched < oldLength) {
       // What wasn't matched: the keyed olds left in the map, and the olds at a position no node took.
       // A marked old isn't among them: `taken` is no index.
       const goneKeyed = byKey === undefined ? undefined : new Set(byKey.values())
@@ -6039,6 +6046,23 @@ const setup = (
     const nodes = nodesOf(rendered)
     closeAll(inst, rendered)
     for (let index = 0; index < nodes.length; index++) host.remove(nodes[index])
+  }
+
+  /** Destroys every node of a list, in one step when the host can clear their parent. */
+  const destroyAll = (inst: Instance, parentNode: unknown, olds: ReadonlyArray<Rendered>) => {
+    if (host.removeChildren === undefined) {
+      for (let index = 0; index < olds.length; index++) destroy(inst, olds[index]!)
+      return
+    }
+    // Collected first, as `destroy` does: closing a child empties what it rendered.
+    const nodes: Array<unknown> = []
+    for (let index = 0; index < olds.length; index++) {
+      const old = olds[index]!
+      if (old._tag === "Element" || old._tag === "Text") nodes.push(old.node)
+      else nodes.push(...nodesOf(old))
+    }
+    for (let index = 0; index < olds.length; index++) closeAll(inst, olds[index]!)
+    host.removeChildren(parentNode, nodes)
   }
 
   // -- root -----------------------------------------------------------------

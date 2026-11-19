@@ -392,6 +392,61 @@ describe("BrowserHost", { concurrent: false }, () => {
       ))
   })
 
+  describe("lists", () => {
+    const ListMessage = UiSchema.TaggedEnum({ Set: { rows: Schema.Array(Schema.String) } })
+    // A child's nodes are a list of their own, among the parent's other nodes.
+    const Shown = Component.define({
+      name: "Shown",
+      props: Schema.Struct({ rows: Schema.Array(Schema.String) }),
+      model: Schema.Null,
+      message: Schema.Never,
+      elements: Html
+    }).make({
+      init: () => null,
+      update: (model) => model,
+      view: (_, h) => h.props.rows.length === 0 ? h.span("none") : h.em(h.props.rows.join(""))
+    })
+    const Lists = Component.define({
+      name: "Lists",
+      model: Schema.Array(Schema.String),
+      message: ListMessage,
+      elements: Html
+    }).make({
+      init: (): ReadonlyArray<string> => ["a", "b", "c"],
+      update: (_, message) => message.rows,
+      view: (rows, h) =>
+        h.div(
+          h.ul(rows.map((row) => h.li.key(row).children(row))),
+          h.ol(h.li("first"), rows.map((row) => h.li.key(row).children(row)), "last"),
+          h.p("before", Shown(h, { key: "shown", props: { rows } }), "after")
+        )
+    })
+
+    it.effect("a list that loses every row keeps the nodes beside it, whether it's emptied or replaced", () =>
+      Effect.gen(function*() {
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Lists, {}, app)
+        const html = (rows: ReadonlyArray<string>) => {
+          const items = rows.map((row) => `<li>${row}</li>`).join("")
+          const shown = rows.length === 0 ? "<span>none</span>" : `<em>${rows.join("")}</em>`
+          return `<div><ul>${items}</ul><ol><li>first</li>${items}last</ol><p>before${shown}after</p></div>`
+        }
+        expect(app.innerHTML).toBe(html(["a", "b", "c"]))
+        root.send(ListMessage.Set({ rows: [] }))
+        yield* tick
+        expect(app.innerHTML).toBe(html([]))
+        root.send(ListMessage.Set({ rows: ["d", "e"] }))
+        yield* tick
+        expect(app.innerHTML).toBe(html(["d", "e"]))
+        const kept = app.querySelector("ul li")
+        // Every row is new: the old ones go before the new ones are placed.
+        root.send(ListMessage.Set({ rows: ["f", "g", "h"] }))
+        yield* tick
+        expect(app.innerHTML).toBe(html(["f", "g", "h"]))
+        expect(kept?.isConnected).toBe(false)
+      }).pipe(Effect.scoped))
+  })
+
   describe("events", () => {
     const Message = UiSchema.TaggedEnum({
       Clicked: { where: Schema.String },
