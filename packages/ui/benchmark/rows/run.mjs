@@ -41,7 +41,8 @@
 // per variant and round, with 2 unmeasured and 9 measured runs (the round's figure is their median):
 // `render` is HtmlServer.renderToHtml plus serializeState, `hydrate` is BrowserHost.mountEffect over
 // that HTML with its state until `adopted`. Both run in the page, so they use the browser's engine, not
-// Node's.
+// Node's. Separately, first-hydrate measures one mount-to-adopted sample per fresh client page,
+// using HTML and state rendered on another page. Neither DOM parsing nor bundle load is timed.
 //
 // --runtime kernel bundles @effect/ui with the runtime in src/internal/kernel in place of
 // src/internal/runtime.ts, so the two can be compared on one machine. React variants ignore it.
@@ -249,11 +250,16 @@ if (only === undefined || only === "memory") {
 const ssrVariants = variants.filter((v) => !isReact(v))
 if ((only === undefined || only === "ssr") && ssrVariants.length > 0) {
   const keys = ["render", "hydrate"]
+  const first = Object.fromEntries(ssrVariants.map((v) => [v, []]))
   const results = Object.fromEntries(ssrVariants.map((v) => [v, Object.fromEntries(keys.map((k) => [k, []]))]))
   for (let round = 0; round < rounds; round++) {
     for (let i = 0; i < ssrVariants.length; i++) {
       const variant = ssrVariants[(i + round) % ssrVariants.length]
       const page = await open(variant)
+      const fixture = await page.evaluate((v) => window.renderTable(v), variant)
+      const client = await open(variant)
+      first[variant].push(await client.evaluate(([v, f]) => window.hydrateTable(v, f), [variant, fixture]))
+      await client.close()
       const runs = []
       for (let j = 0; j < 11; j++) runs.push(await page.evaluate((v) => window.ssr(v), variant))
       for (const key of keys) {
@@ -263,7 +269,8 @@ if ((only === undefined || only === "ssr") && ssrVariants.length > 0) {
       await page.close()
     }
   }
-  console.log("server rendering, 1k rows: " + rounds + " rounds, median (min-max) ms")
+  console.log("first-hydrate, 1k rows (fresh client page):", ssrVariants.map((v) => v + " " + stat(first[v])).join(" | "), "ms")
+  console.log("warm server rendering, 1k rows: " + rounds + " rounds, median (min-max) ms")
   for (const key of keys) {
     console.log(key.padEnd(11), ssrVariants.map((v) => v + " " + stat(results[v][key])).join(" | "))
   }

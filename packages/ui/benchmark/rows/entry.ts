@@ -138,23 +138,28 @@ install({ plain: mount(empty.plain), lazy: mount(empty.lazy), component: mount(e
 const full = tables(() => update(init(), { _tag: "Run", count: 1000 }))
 const check = (condition: boolean, message: string) => {
   if (!condition) throw new Error("bench check failed: " + message)
-} // With `profile`, each phase runs in a console profile of its own: `render`, then `hydrate`.
-;(window as any).ssr = async (name: "plain" | "lazy" | "component", profile = false) => {
+}
+type VariantName = keyof typeof full
+const renderTable = async (name: VariantName, profile = false) => {
   const component = full[name]
   if (profile) console.profile("render")
-  let start = performance.now()
+  const start = performance.now()
   const rendered = await Effect.runPromise(HtmlServer.renderToHtml(component, {}, { budget: 0 }))
   const json = HtmlServer.serializeState(rendered.state)
   const render = performance.now() - start
   if (profile) console.profileEnd("render")
+  return { html: rendered.html, json, render }
+}
+const hydrateTable = async (name: VariantName, { html, json }: Awaited<ReturnType<typeof renderTable>>, profile = false) => {
+  const component = full[name]
   const container = document.body.appendChild(document.createElement("div"))
-  container.innerHTML = rendered.html
+  container.innerHTML = html
   const first = container.querySelector("tr")
   check(container.querySelectorAll("tr").length === 1000, "the server rendered every row")
   const state = JSON.parse(json)
   const scope = Effect.runSync(Scope.make())
   if (profile) console.profile("hydrate")
-  start = performance.now()
+  const start = performance.now()
   const root = await Effect.runPromise(
     Scope.provide(BrowserHost.mountEffect(component, {}, container, { state }), scope)
   )
@@ -164,5 +169,11 @@ const check = (condition: boolean, message: string) => {
   check(container.querySelector("tr") === first && container.querySelectorAll("tr").length === 1000, "adopted")
   await Effect.runPromise(Scope.close(scope, Exit.void))
   container.remove()
-  return { render, hydrate }
+  return hydrate
+}
+;(window as any).renderTable = renderTable
+;(window as any).hydrateTable = hydrateTable
+;(window as any).ssr = async (name: VariantName, profile = false) => {
+  const fixture = await renderTable(name, profile)
+  return { render: fixture.render, hydrate: await hydrateTable(name, fixture, profile) }
 }

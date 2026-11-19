@@ -5400,6 +5400,8 @@ const setup = (
   /**
    * Adopts the server's nodes from `first` up to `stop` for `views`, one by one. From the first that doesn't
    * match, the server's nodes go and the views left are built fresh: what was adopted before it stays.
+   * A matching element therefore survives a mismatch among its children. This is kernel-specific:
+   * callers of the default runtime must not rely on node identity in a mismatched instance.
    */
   const adoptList = (
     inst: Instance,
