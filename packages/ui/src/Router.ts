@@ -1419,6 +1419,10 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       for (const check of pending.checks) check.dropped()
     }
     const listeners = new Set<(location: Location) => void>()
+    const publish = (next: Location) => {
+      Effect.runSync(SubscriptionRef.set(ref, next))
+      for (const listener of Array.from(listeners)) listener(next)
+    }
     /** Whether a route at `url` is on the current page: the same tag and pathname. */
     const samePage = (route: { readonly _tag: string }, url: string) =>
       route._tag === current.route._tag && pathnameOf(url) === pathnameOf(current.url)
@@ -1464,8 +1468,7 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
           blocks: blocked
         }
       }
-      Effect.runSync(SubscriptionRef.set(ref, next))
-      for (const listener of Array.from(listeners)) listener(next)
+      publish(next)
     }
 
     /** Writes `url` as a new or the current entry, and moves to it. */
@@ -1522,7 +1525,13 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
           options.onHash?.(hash, "push", index)
         }
         if (source === "href") {
-          set({ ...current, action: "replace", seq: current.seq + 1 }, { quiet: true, scroll: false })
+          const next: Location = { ...current, action: "replace", seq: current.seq + 1 }
+          if (pending === undefined) set(next, { quiet: true, scroll: false })
+          else {
+            // Deliver the repeat without restarting the pending navigation or changing how it settles.
+            current = next
+            publish(next)
+          }
         }
         return "navigated"
       }
@@ -1723,8 +1732,9 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       delivered: (seq) => {
         const root = primary()
         if (
-          pending !== undefined && pending.location.seq === seq && pending.since === undefined && root !== undefined
+          pending !== undefined && seq >= pending.location.seq && pending.since === undefined && root !== undefined
         ) {
+          // A later repeat also delivers the pending route.
           // Delivered inside a flush, the root renders it in that flush; otherwise in the next.
           pending.since = root.flushing() ? root.flush() : root.flush() + 1
         }

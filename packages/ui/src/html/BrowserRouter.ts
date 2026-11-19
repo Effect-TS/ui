@@ -287,13 +287,12 @@ const make = (options: Options, inFragment: boolean): Layer.Layer<Router.Service
         const text = (settled.title ?? "").trim() ||
           (container.querySelector("h1")?.textContent ?? "").trim() ||
           new URL(settled.location.url, location.href).pathname
-        const seq = settled.location.seq
         live.textContent = ""
         cancelAnnouncement?.()
         cancelAnnouncement = nextFrame(() => {
           cancelAnnouncement = undefined
-          // A navigation that started before the frame makes this one obsolete.
-          if (router.location().seq === seq) live.textContent = text
+          // Repeats deliver the held route object; only a new route makes the announcement obsolete.
+          if (router.location().route === settled.location.route) live.textContent = text
         })
       }
     }

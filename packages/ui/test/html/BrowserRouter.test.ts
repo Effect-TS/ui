@@ -352,6 +352,56 @@ describe("BrowserRouter", { concurrent: false }, () => {
       expect(urls).toEqual(["/?utm_source=news", "/?utm_source=news"])
     }).pipe(Effect.scoped))
 
+  it.effect("repeating Slow while its Layer is pending still scrolls and announces when ready", () =>
+    Effect.gen(function*() {
+      const { app } = yield* start("/")
+      window.scrollTo(0, 80)
+      clickReporting(link(app, "Slow"))
+      yield* tick
+      expect(window.location.pathname).toBe("/slow")
+      expect(window.scrollY).toBe(80)
+      clickReporting(link(app, "Slow"))
+      yield* tick
+      expect(window.scrollY).toBe(80)
+      yield* TestClock.adjust("1 second")
+      yield* tick
+      expect(window.scrollY).toBe(0)
+      expect(region()?.textContent).toBe("Slow · App")
+    }).pipe(Effect.scoped))
+
+  it.effect("repeating Slow after Back preserves the entry's pending scroll restoration", () =>
+    Effect.gen(function*() {
+      const { app } = yield* start("/slow")
+      yield* TestClock.adjust("1 second")
+      yield* tick
+      window.scrollTo(0, 90)
+      clickReporting(link(app, "Home"))
+      yield* tick
+      expect(window.scrollY).toBe(0)
+      window.history.back()
+      yield* tick
+      expect(window.location.pathname).toBe("/slow")
+      clickReporting(link(app, "Slow"))
+      yield* tick
+      yield* TestClock.adjust("1 second")
+      yield* tick
+      expect(window.scrollY).toBe(90)
+    }).pipe(Effect.scoped))
+
+  it.effect("repeating Person 1 preserves its queued announcement", () =>
+    Effect.gen(function*() {
+      const frames = manualFrames()
+      const { app } = yield* start("/", { window: frames.window })
+      clickReporting(link(app, "Person 1"))
+      yield* tick
+      expect(document.title).toBe("Person 1 · App")
+      expect(region()?.textContent).toBe("")
+      clickReporting(link(app, "Person 1"))
+      yield* tick
+      frames.run()
+      expect(region()?.textContent).toBe("Person 1 · App")
+    }).pipe(Effect.scoped))
+
   it.effect("leaves modified clicks, targets, downloads and other origins to the browser", () =>
     Effect.gen(function*() {
       const { app } = yield* start("/")
