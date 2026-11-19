@@ -2307,7 +2307,10 @@ export type Helper<D> = D extends Definition<
  * without running the child's view. Content the view stops placing is kept
  * out of the document, as a `detached` child is, and comes back as it was
  * when the view places it again. Content the view never placed isn't
- * created. A child in the content has the parent's path and its own
+ * created. A page restored on back or forward gets back the content its
+ * views place as it renders: content left in a closed slot isn't among it,
+ * so it starts fresh when the slot opens. A child in the content has the
+ * parent's path and its own
  * segment, wherever the view places it. A definition with slots
  * finishes with `view`, not `parts`.
  *

@@ -218,7 +218,9 @@ the document, as a `detached` child is, and comes back as it was when it
 places the slot again. A slot it never placed isn't created. A slot the
 parent leaves out shows nothing. A child in a slot has the path of the
 parent that wrote it and its own segment, wherever it's placed, such as
-`/NotePage/NoteEditor[Editor[n1]]`.
+`/NotePage/NoteEditor[Editor[n1]]`. Back and forward restore a slot's
+content only if the slot is open when the page renders again. Content left
+in a closed slot starts fresh when the slot opens.
 
 Use slots when the child owns the frame and its state, and the parent owns
 what goes inside. Use a headless component when the parent draws all the

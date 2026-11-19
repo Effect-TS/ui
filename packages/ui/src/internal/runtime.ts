@@ -440,8 +440,12 @@ export interface Instance {
    * still be placed again in this flush, or an outlet whose receiver stopped placing it.
    */
   site: RChild | ROutlet | undefined
-  /** The Env at the node that declared it: a move keeps the instance only where its services come from the same place. */
-  readonly placedIn: Env
+  /**
+   * The Env its declaration resolved against, before a feature's own Context is merged in: a move keeps
+   * the instance only where that is the same Env. An Env's services are set once, so the same Env binds
+   * the same implementation; a keyed provide that selects another one makes a new Env.
+   */
+  placedIn: Env
   /** Declared `detached`, or an outlet its receiver stopped placing: its element mounts, and its subtree's, are stopped. */
   detached: boolean
   /** The entry that started the step that last marked it dirty, until it renders. */
@@ -5071,7 +5075,7 @@ const setup = (
     }
     const path = `${inst.author.path}/${segment(view)}`
     const found = live.get(path)
-    if (found !== undefined && movable(inst, found, component, childEnv)) return move(inst, found, view, childEnv)
+    if (found !== undefined && movable(inst, found, component, env)) return move(inst, found, view, env)
     const child = makeInstance(
       component,
       view.props,
@@ -5096,6 +5100,8 @@ const setup = (
     // it would cost more than anything else here.
     if (inst.children === noChildren) inst.children = new Set()
     inst.children.add(child)
+    // A feature's Env is made fresh on each resolution: the one it resolved against is what a move compares.
+    child.placedIn = env
     const rendered: RChild = { _tag: "Child", v: view, inst: child }
     child.site = rendered
     return rendered
