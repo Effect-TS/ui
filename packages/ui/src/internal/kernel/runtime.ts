@@ -2639,7 +2639,6 @@ const setup = (
   ): Instance => {
     // A child's Scope is made when it's needed: see `Inst.scope`.
     const ownScope = parent === undefined ? Scope.forkUnsafe(rootScope, "sequential") : undefined
-    const bound = queryCore.boundOf(component)
     const depth = parent === undefined ? 0 : parent.depth + 1
     const owner: View.Owner | undefined = content === undefined ? undefined : { path, depth }
     const inst: Instance = new Inst(
@@ -2665,21 +2664,6 @@ const setup = (
       recorded.add(inst)
     }
 
-    // Entries about the Layer wait until the instance's first entry, `Mounted` or `Waiting`, is logged.
-    let buffering = true
-    const early: Array<() => void> = []
-    const lifecycle = (draft: Draft) => {
-      if (buffering) early.push(() => record(inst, draft))
-      else record(inst, draft)
-    }
-    const logEarly = () => {
-      buffering = false
-      for (const f of early.splice(0)) f()
-    }
-    let constructing = true
-    let failedEarly: Cause.Cause<unknown> | undefined
-    let pending = false
-
     // Hydration: the Model and query results the server rendered this path with, unless it deferred the path.
     const fromServer: Adopted = hydrating !== undefined &&
         (parent === undefined || parent.adoptsChildren) &&
@@ -2687,10 +2671,6 @@ const setup = (
         Object.hasOwn(hydrating.state, path)
       ? stateCodecOf(component).decode(hydrating.state[path])
       : Option.none()
-    // The status the server recorded for the instance's provide, when it wasn't ready there.
-    const shipped = Option.isSome(fromServer) ? shippedStatus(path) : undefined
-    // The server rendered the instance with its services: if its Layer is still building here, it waits.
-    const awaits = range !== undefined && Option.isSome(fromServer) && shipped === undefined
     // An owner adopting the server's Model starts from what its reports last sent there.
     const collectedOnServer = Option.isSome(fromServer) && component.definition.collects !== undefined
       ? Option.flatMap(
@@ -2699,45 +2679,9 @@ const setup = (
       )
       : Option.none()
 
-    /**
-     * What the instance starts from: `init`'s result, and the Model it adopts from the server or from
-     * history restore instead of `init`'s.
-     */
-    const startFrom = (serverModel: Adopted) => {
-      const first = guard(inst, "init", () => {
-        const elements = component.elements()
-        if (elements !== undefined && host.elements !== "any" && !host.elements.includes(elements.name)) {
-          throw new Error(
-            `${component.definition.name} renders ${elements.name} elements, and this host shows ${
-              host.elements.join(", ")
-            }`
-          )
-        }
-        findOwners(inst)
-        return component.init(inst.props)
-      })
-      let adopted = serverModel
-      // An owner of shared state isn't restored from history: a reload would reopen what nobody hovers.
-      if (
-        first !== undefined && Option.isNone(adopted) && hooks !== undefined &&
-        component.definition.shares === undefined
-      ) {
-        const restored = hooks.restore(path)
-        if (restored !== undefined) {
-          adopted = Option.map(
-            stateCodecOf(component).decode(restored),
-            (state) => ({ model: state.model, results: restoreQueries(component, state.results) })
-          )
-        }
-      }
-      return { first, adopted }
-    }
-    /**
-     * Read before the Layer builds, when a keyed provide selects the Layer from the starting Model.
-     * `begin` takes it, so `init` runs once.
-     */
-    let selectedFrom: ReturnType<typeof startFrom> | undefined
-
+    // No closure is made here: an instance without a Layer, most of them, starts without one.
+    let layer: LayerStart | undefined
+    let selected: Start | undefined
     // A provided Layer builds in the background. The instance renders at once; its Commands,
     // Subscriptions and mounts, and its descendants', wait for it.
     if (component.layer !== undefined) {
@@ -2746,114 +2690,242 @@ const setup = (
         inst.env = buildingEnv(parentEnv, true)
         inst.deferred = true
       } else {
-        // A keyed provide selects from the Model the instance starts with: the server's when it
-        // hydrates, else history's or `init`'s. Each selection builds in a Scope of its own.
-        let keys: Keys = none
-        let buildScope: Scope.Closeable | undefined
-        if (component.layerKeys !== undefined) {
-          let model: unknown
-          if (Option.isSome(fromServer)) model = fromServer.value.model
-          else {
-            const { adopted, first } = selectedFrom = startFrom(fromServer)
-            model = Option.isSome(adopted) ? adopted.value.model : first?.model
-          }
-          keys = readKeys(component, props, model)
-          if (server !== undefined) {
-            // The server builds once, from the Model it starts with.
-            buildScope = Scope.forkUnsafe(inst.scope, "sequential")
-          } else {
-            buildScope = Scope.makeUnsafe("sequential")
-            const selection: Selection = {
-              parentEnv,
-              keys,
-              model,
-              props,
-              due: false,
-              scope: buildScope,
-              retired: undefined,
-              releasing: new Set(),
-              issued: new Set(),
-              held: [],
-              skipped: false
-            }
-            inst.selection = selection
-            // Added before the instance's runs and Subscriptions start, so it closes after them.
-            addFinalizer(inst.scope, closeSelection(selection))
-          }
-        }
-        // Forked now, before the run-stop finalizer below, so a build that waits for its parent's Env
-        // still closes after the instance's runs.
-        buildScope ??= Scope.forkUnsafe(inst.scope, "sequential")
-        const sharedLayer = component.sharedLayer
-        // Failed on the server: the client adopts the failure, which the Model already handled, and builds nothing.
-        const adoptsFailure = shipped === "Failed"
-        const shared = sharedLayer !== undefined && !adoptsFailure ? acquireShared(parentEnv, sharedLayer) : undefined
-        const own = shared !== undefined ? shared.env : buildingEnv(parentEnv)
-        inst.env = own
-        if (shared !== undefined) {
-          addFinalizer(inst.scope, Effect.suspend(() => releaseShared(parentEnv, sharedLayer!, shared)))
-        }
-        let settleBuild: (() => void) | undefined
-        const buildStamp = shared !== undefined ? shared.stamp : ++builds
-        const fail = (cause: Cause.Cause<unknown>) => {
-          settleBuild?.()
-          lastFailedBuild = Math.max(lastFailedBuild, buildStamp)
-          // `init` failed, or a keyed provide has selected again since.
-          if (inst.closed || inst.env !== own) return
-          // A handled failure on the server: its slots get `serverFailure`, not `cause`. See `ownFailed`.
-          const redacted = server !== undefined && component.layerFailure !== undefined
-          lifecycle({ _tag: "LayerFailed", cause, ...(redacted ? { redacted } : undefined) })
-          if (component.layerFailure === undefined && constructing) failedEarly = cause
-          else ownFailed(inst, own, cause, logEarly)
-        }
-        const ready = () => {
-          if (!inst.closed && pending) lifecycle({ _tag: "LayerReady" })
-        }
-        if (inst.closed) {
-          // `init` failed before a keyed provide could select: nothing is built.
-        } else if (adoptsFailure) {
-          // The slots get the substitute the server's did: a replay of this log renders it, not its JSON form.
-          const cause = serverFailure()
-          lifecycle({ _tag: "LayerFailed", cause, redacted: true })
-          failEnv(own, cause)
-        } else if (shared !== undefined) {
-          whenReady(own, ready, fail)
-        } else {
-          buildOwn(inst, parentEnv, own, buildScope, () => component.layer!(props, keysOrThrow(keys)), ready, fail)
-        }
-        if (!inst.closed && own.ctx === undefined && own.failure === undefined && failedEarly === undefined) {
-          pending = true
-          if (awaits) own.status = awaitingStatus
-          lifecycle({ _tag: "LayerPending", status: awaits ? "Awaiting" : "Pending" })
-          settleBuild = countBuilding(own, buildScope)
-        }
-        // Added after the Layer's Scopes, which all exist by now, so the close stops the instance's runs
-        // and waits for their cleanup before the services they use are released.
-        addFinalizer(inst.scope, Effect.suspend(() => awaitRuns(stopRuns(inst))))
+        layer = new LayerStart(inst, range, fromServer)
+        selected = startLayer(inst, layer, parentEnv, fromServer)
       }
     }
+    if (layer === undefined) {
+      begin(inst, range, fromServer, undefined, collectedOnServer, undefined)
+      return inst
+    }
 
-    /**
-     * Runs `init` and renders. An instance adopting a Model (from the server, or from
-     * history restore) replays `init` only for its Commands, every one of them: the adopted
-     * Model wins and events are dropped. Given the server's nodes, it adopts them when its
-     * view matches, and otherwise builds fresh.
-     */
-    const begin = (range: Range | undefined, serverModel: Adopted) => {
-      const { adopted, first } = selectedFrom ?? startFrom(serverModel)
-      selectedFrom = undefined
-      let mountedSeq = -1
-      if (first !== undefined) {
-        inst.model = Option.isSome(adopted) ? adopted.value.model : first.model
-        inst.results = Option.isSome(adopted) ? adopted.value.results : undefined
-        inst.adoptsChildren = Option.isSome(serverModel)
-        if (Option.isSome(serverModel) && Option.isSome(collectedOnServer)) {
-          inst.owning!.collected = { message: collectedOnServer.value }
-          inst.owning!.restored = true
-          // Compared once the pass settles and nothing below waits to adopt, readers or none: one that reported
-          // on the server may not mount here.
-          dueReports(inst)
+    if (layer.failedEarly !== undefined) {
+      layer.constructing = false
+      layer.logEarly()
+      failInstance(inst, layer.failedEarly, "layer")
+      return inst
+    }
+
+    // Hydration: an instance the server rendered with its services, whose provided Layer is still
+    // building here, keeps the server's nodes, inert, and adopts them once the Layer is ready: its status
+    // is `Awaiting`. If the Layer fails and the component handles it, the instance is built fresh and gets
+    // its failure message. One the server rendered while its Layer was pending adopts at once, as its
+    // feature slots showed their fallbacks there too.
+    if (layer.awaits && layer.pending && Option.isSome(fromServer)) {
+      awaitLayer(inst, layer, range!, fromServer, collectedOnServer)
+    } else begin(inst, range, fromServer, selected, collectedOnServer, layer)
+    layer.constructing = false
+    return inst
+  }
+
+  /**
+   * A provided Layer's part in an instance's start. Its entries wait until the instance's first entry,
+   * `Mounted` or `Waiting`, is logged. A failure while the instance is still being made fails it once
+   * it's made.
+   */
+  class LayerStart {
+    readonly inst: Instance
+    /** The server rendered the instance with its services: if its Layer is still building here, it waits. */
+    readonly awaits: boolean
+    /** The status the server recorded for the instance's provide, when it wasn't ready there. */
+    readonly shipped: Shipped | undefined
+    buffering = true
+    readonly early: Array<() => void> = []
+    constructing = true
+    failedEarly: Cause.Cause<unknown> | undefined = undefined
+    pending = false
+    constructor(inst: Instance, range: Range | undefined, fromServer: Adopted) {
+      this.inst = inst
+      this.shipped = Option.isSome(fromServer) ? shippedStatus(inst.path) : undefined
+      this.awaits = range !== undefined && Option.isSome(fromServer) && this.shipped === undefined
+    }
+    lifecycle(draft: Draft) {
+      if (this.buffering) this.early.push(() => record(this.inst, draft))
+      else record(this.inst, draft)
+    }
+    readonly logEarly = () => {
+      this.buffering = false
+      for (const f of this.early.splice(0)) f()
+    }
+  }
+
+  /**
+   * Starts building an instance's provided Layer. Returns what a keyed provide selected from, which
+   * `begin` takes, so `init` runs once.
+   */
+  const startLayer = (
+    inst: Instance,
+    layer: LayerStart,
+    parentEnv: Env,
+    fromServer: Adopted
+  ): Start | undefined => {
+    const component = inst.component
+    const props = inst.props
+    let selected: Start | undefined
+    // A keyed provide selects from the Model the instance starts with: the server's when it
+    // hydrates, else history's or `init`'s. Each selection builds in a Scope of its own.
+    let keys: Keys = none
+    let buildScope: Scope.Closeable | undefined
+    if (component.layerKeys !== undefined) {
+      let model: unknown
+      if (Option.isSome(fromServer)) model = fromServer.value.model
+      else {
+        const { adopted, first } = selected = startFrom(inst, fromServer)
+        model = Option.isSome(adopted) ? adopted.value.model : first?.model
+      }
+      keys = readKeys(component, props, model)
+      if (server !== undefined) {
+        // The server builds once, from the Model it starts with.
+        buildScope = Scope.forkUnsafe(inst.scope, "sequential")
+      } else {
+        buildScope = Scope.makeUnsafe("sequential")
+        const selection: Selection = {
+          parentEnv,
+          keys,
+          model,
+          props,
+          due: false,
+          scope: buildScope,
+          retired: undefined,
+          releasing: new Set(),
+          issued: new Set(),
+          held: [],
+          skipped: false
         }
+        inst.selection = selection
+        // Added before the instance's runs and Subscriptions start, so it closes after them.
+        addFinalizer(inst.scope, closeSelection(selection))
+      }
+    }
+    // Forked now, before the run-stop finalizer below, so a build that waits for its parent's Env
+    // still closes after the instance's runs.
+    buildScope ??= Scope.forkUnsafe(inst.scope, "sequential")
+    const sharedLayer = component.sharedLayer
+    // Failed on the server: the client adopts the failure, which the Model already handled, and builds nothing.
+    const adoptsFailure = layer.shipped === "Failed"
+    const shared = sharedLayer !== undefined && !adoptsFailure ? acquireShared(parentEnv, sharedLayer) : undefined
+    const own = shared !== undefined ? shared.env : buildingEnv(parentEnv)
+    inst.env = own
+    if (shared !== undefined) {
+      addFinalizer(inst.scope, Effect.suspend(() => releaseShared(parentEnv, sharedLayer!, shared)))
+    }
+    let settleBuild: (() => void) | undefined
+    const buildStamp = shared !== undefined ? shared.stamp : ++builds
+    const fail = (cause: Cause.Cause<unknown>) => {
+      settleBuild?.()
+      lastFailedBuild = Math.max(lastFailedBuild, buildStamp)
+      // `init` failed, or a keyed provide has selected again since.
+      if (inst.closed || inst.env !== own) return
+      // A handled failure on the server: its slots get `serverFailure`, not `cause`. See `ownFailed`.
+      const redacted = server !== undefined && component.layerFailure !== undefined
+      layer.lifecycle({ _tag: "LayerFailed", cause, ...(redacted ? { redacted } : undefined) })
+      if (component.layerFailure === undefined && layer.constructing) layer.failedEarly = cause
+      else ownFailed(inst, own, cause, layer.logEarly)
+    }
+    const ready = () => {
+      if (!inst.closed && layer.pending) layer.lifecycle({ _tag: "LayerReady" })
+    }
+    if (inst.closed) {
+      // `init` failed before a keyed provide could select: nothing is built.
+    } else if (adoptsFailure) {
+      // The slots get the substitute the server's did: a replay of this log renders it, not its JSON form.
+      const cause = serverFailure()
+      layer.lifecycle({ _tag: "LayerFailed", cause, redacted: true })
+      failEnv(own, cause)
+    } else if (shared !== undefined) {
+      whenReady(own, ready, fail)
+    } else {
+      buildOwn(inst, parentEnv, own, buildScope, () => component.layer!(props, keysOrThrow(keys)), ready, fail)
+    }
+    if (!inst.closed && own.ctx === undefined && own.failure === undefined && layer.failedEarly === undefined) {
+      layer.pending = true
+      if (layer.awaits) own.status = awaitingStatus
+      layer.lifecycle({ _tag: "LayerPending", status: layer.awaits ? "Awaiting" : "Pending" })
+      settleBuild = countBuilding(own, buildScope)
+    }
+    // Added after the Layer's Scopes, which all exist by now, so the close stops the instance's runs
+    // and waits for their cleanup before the services they use are released.
+    addFinalizer(inst.scope, Effect.suspend(() => awaitRuns(stopRuns(inst))))
+    return selected
+  }
+
+  /** What an instance starts from: `init`'s result, and the Model it adopts instead of `init`'s. */
+  interface Start {
+    readonly first: Component.Next<any, any, any, any> | undefined
+    readonly adopted: Adopted
+  }
+  /** Runs `init`: undefined when it threw, or when the host doesn't show the component's elements. */
+  const initOf = (inst: Instance): Component.Next<any, any, any, any> | undefined => {
+    const component = inst.component
+    try {
+      const elements = component.elements()
+      if (elements !== undefined && host.elements !== "any" && !host.elements.includes(elements.name)) {
+        throw new Error(
+          `${component.definition.name} renders ${elements.name} elements, and this host shows ${
+            host.elements.join(", ")
+          }`
+        )
+      }
+      findOwners(inst)
+      return component.init(inst.props)
+    } catch (error) {
+      failInstance(inst, Cause.die(error), "init")
+      return undefined
+    }
+  }
+  /**
+   * What the instance starts from: `init`'s result, and the Model it adopts from the server or from
+   * history restore instead of `init`'s.
+   */
+  const startFrom = (inst: Instance, serverModel: Adopted): Start => {
+    const first = initOf(inst)
+    const component = inst.component
+    let adopted = serverModel
+    // An owner of shared state isn't restored from history: a reload would reopen what nobody hovers.
+    if (
+      first !== undefined && Option.isNone(adopted) && hooks !== undefined &&
+      component.definition.shares === undefined
+    ) {
+      const restored = hooks.restore(inst.path)
+      if (restored !== undefined) {
+        adopted = Option.map(
+          stateCodecOf(component).decode(restored),
+          (state) => ({ model: state.model, results: restoreQueries(component, state.results) })
+        )
+      }
+    }
+    return { first, adopted }
+  }
+
+  /**
+   * Runs `init` and renders. An instance adopting a Model (from the server, or from
+   * history restore) replays `init` only for its Commands, every one of them: the adopted
+   * Model wins and events are dropped. Given the server's nodes, it adopts them when its
+   * view matches, and otherwise builds fresh. `selected` is what a keyed provide already read.
+   */
+  const begin = (
+    inst: Instance,
+    range: Range | undefined,
+    serverModel: Adopted,
+    selected: Start | undefined,
+    collectedOnServer: Option.Option<unknown>,
+    layer: LayerStart | undefined
+  ) => {
+    const { adopted, first } = selected ?? startFrom(inst, serverModel)
+    const bound = queryCore.boundOf(inst.component)
+    let mountedSeq = -1
+    if (first !== undefined) {
+      inst.model = Option.isSome(adopted) ? adopted.value.model : first.model
+      inst.results = Option.isSome(adopted) ? adopted.value.results : undefined
+      inst.adoptsChildren = Option.isSome(serverModel)
+      if (Option.isSome(serverModel) && Option.isSome(collectedOnServer)) {
+        inst.owning!.collected = { message: collectedOnServer.value }
+        inst.owning!.restored = true
+        // Compared once the pass settles and nothing below waits to adopt, readers or none: one that reported
+        // on the server may not mount here.
+        dueReports(inst)
+      }
+      if (log.enabled) {
         mountedSeq = record(inst, {
           _tag: "Mounted",
           props: inst.props,
@@ -2865,120 +2937,116 @@ const setup = (
           adopted: Option.isSome(adopted)
         })
       }
-      logEarly()
-      if (first === undefined) return
-      // Before any child mounts: the readers below read it as they render.
-      if (!refreshShares(inst, mountedSeq)) return
-      // The first emission of each watch is written as its result before the first render, parent before
-      // child, so a new instance over a warm entry never commits "Loading". An instance adopting the
-      // server's state renders it first, to match the server's nodes, and gets the emissions after.
-      const early: NonNullable<Instance["mounting"]> = []
-      if (Option.isNone(serverModel) && bound !== undefined) {
-        inst.mounting = early
-        syncSubscriptions(inst, true)
-        // The keyed queries' first values, and whatever their `onChange` causes, before the first view.
-        drainKeyed(inst)
-        inst.mounting = undefined
-        if (inst.closed || inst.failure !== undefined) return
+    }
+    layer?.logEarly()
+    if (first === undefined) return
+    // Before any child mounts: the readers below read it as they render.
+    if (!refreshShares(inst, mountedSeq)) return
+    // The first emission of each watch is written as its result before the first render, parent before
+    // child, so a new instance over a warm entry never commits "Loading". An instance adopting the
+    // server's state renders it first, to match the server's nodes, and gets the emissions after.
+    let early: Instance["mounting"]
+    if (Option.isNone(serverModel) && bound !== undefined) {
+      inst.mounting = early = []
+      syncSubscriptions(inst, true)
+      // The keyed queries' first values, and whatever their `onChange` causes, before the first view.
+      drainKeyed(inst)
+      inst.mounting = undefined
+      if (inst.closed || inst.failure !== undefined) return
+    }
+    // The updates folded before the first view may have changed a keyed provide's key.
+    reselect(inst)
+    if (inst.closed) return
+    const tree = viewOf(inst)
+    if (tree === undefined) return
+    const plan = range !== undefined && Option.isSome(serverModel) ? matchList(inst, [tree], range.nodes) : undefined
+    let rendered: Rendered
+    try {
+      rendered = plan !== undefined ? adoptNode(inst, tree, plan[0]!, inst.env) : create(inst, tree, inst.env)
+      throwClash(inst)
+    } catch (error) {
+      failInstance(inst, Cause.die(error), "view")
+      return
+    }
+    if (plan !== undefined) {
+      // Adopted: the markers go, and the server's nodes are the instance's.
+      range!.claimed = true
+      host.remove(range!.open)
+      host.remove(range!.close)
+    }
+    inst.rendered = [rendered]
+    viewChanged = true
+    if (inst.failure !== undefined) return
+    if (Option.isSome(adopted)) {
+      apply(inst, { model: inst.model, commands: none, events: none }, mountedSeq, true)
+      const commands = first.commands
+      for (let index = 0; index < commands.length; index++) {
+        issue(inst, commands[index], { seq: mountedSeq, index }, index)
       }
-      // The updates folded before the first view may have changed a keyed provide's key.
-      reselect(inst)
-      if (inst.closed) return
-      const tree = viewOf(inst)
-      if (tree === undefined) return
-      const plan = range !== undefined && Option.isSome(serverModel) ? matchList(inst, [tree], range.nodes) : undefined
-      const rendered = guard(
-        inst,
-        "view",
-        () => {
-          const rendered = plan !== undefined ? adoptNode(inst, tree, plan[0]!, inst.env) : create(inst, tree, inst.env)
-          throwClash(inst)
-          return rendered
-        }
-      )
-      if (rendered === undefined) return
-      if (plan !== undefined) {
-        // Adopted: the markers go, and the server's nodes are the instance's.
-        range!.claimed = true
-        host.remove(range!.open)
-        host.remove(range!.close)
-      }
-      inst.rendered = [rendered]
-      viewChanged = true
-      if (inst.failure !== undefined) return
-      if (Option.isSome(adopted)) {
-        apply(inst, { model: inst.model, commands: [], events: [] }, mountedSeq, true)
-        first.commands.forEach((command, index) => issue(inst, command, { seq: mountedSeq, index }, index))
-      } else apply(inst, { ...first, model: inst.model }, mountedSeq, true)
-      // The Commands of the updates folded before the render: issued where `init`'s are, after them.
+    } else apply(inst, inst.model === first.model ? first : { ...first, model: inst.model }, mountedSeq, true)
+    // The Commands of the updates folded before the render: issued where `init`'s are, after them.
+    if (early !== undefined) {
       for (const entry of early) issue(inst, entry.command, entry.issued, undefined)
     }
+  }
 
-    if (failedEarly !== undefined) {
-      constructing = false
-      logEarly()
-      failInstance(inst, failedEarly, "layer")
-      return inst
-    }
-
-    // Hydration: an instance the server rendered with its services, whose provided Layer is still
-    // building here, keeps the server's nodes, inert, and adopts them once the Layer is ready: its status
-    // is `Awaiting`. If the Layer fails and the component handles it, the instance is built fresh and gets
-    // its failure message. One the server rendered while its Layer was pending adopts at once, as its
-    // feature slots showed their fallbacks there too.
-    if (awaits && pending) {
-      const raw: Rendered = { _tag: "Text", v: emptyText, node: undefined }
-      // Its first entry: `Mounted` comes when the Layer is ready, and the Layer's entries come as they happen.
-      record(inst, {
-        _tag: "Waiting",
-        props: inst.props,
-        model: fromServer.value.model,
-        ...(bound === undefined ? undefined : { queries: fromServer.value.results ?? bound.empty })
-      })
-      logEarly()
-      inst.waiting = true
-      waiting++
-      range.claimed = true
-      inst.rendered = [range.open, ...range.nodes, range.close].map((node) => ({ ...raw, node }))
-      const resume = (adopt: boolean) => {
-        if (inst.closed || !inst.waiting) return
-        inst.waiting = false
-        const nodes = inst.rendered.flatMap(nodesOf)
-        inst.rendered = []
-        range.claimed = false
-        // The placement its parent rendered while it waited: it adopts with the one it was placed with, the
-        // server's, and its subtree's head is recorded from that. The latest comes after. Built fresh, it
-        // starts from the latest.
-        const held = heldPlacement.get(inst)
-        heldPlacement.delete(inst)
-        if (held !== undefined && !adopt) {
-          inst.props = held.props
-          setPlacement(inst, held)
-        }
-        begin(range, adopt ? fromServer : Option.none())
-        if (adopt) recordAdopted(inst)
-        if (held !== undefined && adopt && !inst.closed && inst.failure === undefined) applyPlacement(inst, held)
-        if (!range.claimed) {
-          // Rebuilt: the new nodes take the server's place.
-          const parentNode = host.parentOf(range.open)
-          if (inst.failure === undefined && parentNode !== undefined) {
-            for (const node of inst.rendered.flatMap(nodesOf)) host.insertBefore(parentNode, node, range.open)
-          }
-          for (const node of nodes) host.remove(node)
-        }
-        viewChanged = true
-        settleWaiting()
+  /**
+   * Keeps the server's nodes of an instance whose Layer is still building, and adopts them once it's
+   * ready. See `makeInstance`.
+   */
+  const awaitLayer = (
+    inst: Instance,
+    layer: LayerStart,
+    range: Range,
+    fromServer: Option.Some<{ readonly model: unknown; readonly results: componentQueries.Results | undefined }>,
+    collectedOnServer: Option.Option<unknown>
+  ) => {
+    const bound = queryCore.boundOf(inst.component)
+    const raw: Rendered = { _tag: "Text", v: emptyText, node: undefined }
+    // Its first entry: `Mounted` comes when the Layer is ready, and the Layer's entries come as they happen.
+    record(inst, {
+      _tag: "Waiting",
+      props: inst.props,
+      model: fromServer.value.model,
+      ...(bound === undefined ? undefined : { queries: fromServer.value.results ?? bound.empty })
+    })
+    layer.logEarly()
+    inst.waiting = true
+    waiting++
+    range.claimed = true
+    inst.rendered = [range.open, ...range.nodes, range.close].map((node) => ({ ...raw, node }))
+    const resume = (adopt: boolean) => {
+      if (inst.closed || !inst.waiting) return
+      inst.waiting = false
+      const nodes = inst.rendered.flatMap(nodesOf)
+      inst.rendered = []
+      range.claimed = false
+      // The placement its parent rendered while it waited: it adopts with the one it was placed with, the
+      // server's, and its subtree's head is recorded from that. The latest comes after. Built fresh, it
+      // starts from the latest.
+      const held = heldPlacement.get(inst)
+      heldPlacement.delete(inst)
+      if (held !== undefined && !adopt) {
+        inst.props = held.props
+        setPlacement(inst, held)
       }
-      whenReady(inst.env, () => defer(() => resume(true)), () => {
-        if (component.layerFailure !== undefined) defer(() => resume(false))
-      })
-      constructing = false
-      return inst
+      begin(inst, range, adopt ? fromServer : Option.none(), undefined, collectedOnServer, layer)
+      if (adopt) recordAdopted(inst)
+      if (held !== undefined && adopt && !inst.closed && inst.failure === undefined) applyPlacement(inst, held)
+      if (!range.claimed) {
+        // Rebuilt: the new nodes take the server's place.
+        const parentNode = host.parentOf(range.open)
+        if (inst.failure === undefined && parentNode !== undefined) {
+          for (const node of inst.rendered.flatMap(nodesOf)) host.insertBefore(parentNode, node, range.open)
+        }
+        for (const node of nodes) host.remove(node)
+      }
+      viewChanged = true
+      settleWaiting()
     }
-
-    begin(range, fromServer)
-    constructing = false
-    return inst
+    whenReady(inst.env, () => defer(() => resume(true)), () => {
+      if (inst.component.layerFailure !== undefined) defer(() => resume(false))
+    })
   }
 
   const apply = (inst: Instance, next: Component.Next<any, any, any, any>, entrySeq: number, initial: boolean) => {
@@ -2989,7 +3057,10 @@ const setup = (
     const mounting = inst.mounting
     if (mounting !== undefined) {
       // Before the first render: nothing is issued or marked dirty, and only the watches follow the Model.
-      next.commands.forEach((command, index) => mounting.push({ command, issued: { seq: entrySeq, index } }))
+      const commands = next.commands
+      for (let index = 0; index < commands.length; index++) {
+        mounting.push({ command: commands[index], issued: { seq: entrySeq, index } })
+      }
       // The first render, which makes the children, comes first.
       if (queueSends(inst, next, entrySeq)) defer(() => deliverSends(inst))
       syncSubscriptions(inst, true)
@@ -2997,9 +3068,10 @@ const setup = (
       if (next.events.length > 0) defer(() => deliverEvents(inst, next.events, entrySeq))
       return
     }
-    next.commands.forEach((command, index) =>
-      issue(inst, command, { seq: entrySeq, index }, initial ? index : undefined)
-    )
+    const commands = next.commands
+    for (let index = 0; index < commands.length; index++) {
+      issue(inst, commands[index], { seq: entrySeq, index }, initial ? index : undefined)
+    }
     if (!initial) markDirty(inst)
     // Delivered at the end of the render just marked, so a child it mounts can receive them.
     queueSends(inst, next, entrySeq)
@@ -4627,15 +4699,16 @@ const setup = (
   const viewOf = (inst: Instance): View.Node<any, any> | undefined => {
     const owner = inst.owner
     if (owner === undefined) {
-      return guard(
-        inst,
-        "view",
-        () =>
-          checked(
-            inst,
-            inst.component.view(inst.model, inst.props, runningOf(inst), inst.results, inst.path, sharedOf(inst), inst)
-          )
-      )
+      // No closure for `guard`: this runs for every instance that renders.
+      try {
+        return checked(
+          inst,
+          inst.component.view(inst.model, inst.props, runningOf(inst), inst.results, inst.path, sharedOf(inst), inst)
+        )
+      } catch (error) {
+        failInstance(inst, Cause.die(error), "view")
+        return undefined
+      }
     }
     const parts = guard(inst, "view", () => ({
       value: (inst.component as unknown as Component.Headless.Any).parts(inst.model, inst.props, {

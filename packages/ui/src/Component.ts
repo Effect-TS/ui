@@ -926,10 +926,11 @@ const makeUpdate = (model: unknown, props: unknown, queries: unknown, message: u
     "~message": message
   })
 
-const makeInit = (props: unknown): Init<any, any, any, any> => ({
-  props,
-  set: (model) => makeStep(model, [], [], [], []) as Step<any, any, any, never>
-})
+const initSet = (model: unknown) => makeStep(model, [], [], [], []) as Step<any, any, any, never>
+const makeInit = (props: unknown): Init<any, any, any, any> => ({ props, set: initSet })
+
+// The effects of an `init` or `update` that returned a bare Model: shared, as nothing writes to them.
+const noEffects: ReadonlyArray<never> = []
 
 /**
  * Returns `true` if `u` is a step.
@@ -950,7 +951,7 @@ const toNext = (result: unknown): Next<any, any, any, any> =>
       lists: (result as Step<any, any, any>).lists,
       sends: (result as Step<any, any, any>).sends
     }
-    : { model: result, commands: [], events: [] }
+    : { model: result, commands: noEffects, events: noEffects }
 
 /**
  * What a parent needs from a child: its props and events contract and its
