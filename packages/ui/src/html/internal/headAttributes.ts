@@ -1,5 +1,5 @@
 /** Shared attribute rules for head tags and document ownership markers. */
-import { attributeName } from "./attributeName.ts"
+import { attributeName } from "../../internal/attributeName.ts"
 
 /** @internal */
 export const marker = "data-eui"

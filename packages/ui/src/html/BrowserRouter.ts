@@ -282,7 +282,7 @@ const make = (options: Options, inFragment: boolean): Layer.Layer<Router.Service
       }
       if (region !== undefined) {
         const live = region
-        const text = (settled.head.title ?? "").trim() ||
+        const text = (settled.title ?? "").trim() ||
           (container.querySelector("h1")?.textContent ?? "").trim() ||
           new URL(settled.location.url, location.href).pathname
         const seq = settled.location.seq

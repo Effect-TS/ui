@@ -3,6 +3,12 @@ import { Html, HtmlServer } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 
+// The registration is module state, and Node reuses a worker across test files: it's cleared when the test
+// ends, so a later file's components without `elements` stay host-neutral.
+const unregister = Effect.sync(() =>
+  (View.registerElements as (elements: View.Vocabulary<any> | undefined) => void)(undefined)
+)
+
 // Runs in the default node environment: there is no DOM here.
 describe("@effect/ui/html/register", () => {
   it.effect("registers Html when imported, without a DOM", () =>
@@ -25,5 +31,5 @@ describe("@effect/ui/html/register", () => {
       })
       const rendered = yield* HtmlServer.renderToHtml(Greeting, {})
       assert.include(rendered.html, "<p>Hello</p>")
-    }))
+    }).pipe(Effect.ensuring(unregister)))
 })

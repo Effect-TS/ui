@@ -2,7 +2,9 @@
  * @title Routing and the document head
  *
  * Define typed routes with `Route` and keep the current route in the root's
- * Model. The app also sets the title and meta tags with `Head`. This entry
+ * Model. Each page's `head` option sets its title with `Head` and its meta
+ * tags with `HtmlHead`. The root adds a title template and `lang`, and the
+ * mount folds them into one document head. This entry
  * module mounts it with `BrowserRouter`. The routes are in
  * `fixtures/routes.ts` and the root component is in `fixtures/App.ts`.
  */

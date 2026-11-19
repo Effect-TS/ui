@@ -1,4 +1,5 @@
 import { Command, Component, Head, type MessageLog, Query, type Renderer, Route, Router, UiSchema } from "@effect/ui"
+import type { HtmlHead } from "@effect/ui/html"
 import * as componentQueries from "@effect/ui/internal/queries"
 import * as runtime from "@effect/ui/internal/runtime"
 import { Locator, TestHost } from "@effect/ui/testing"
@@ -208,7 +209,7 @@ describe("Router", { concurrent: false }, () => {
       Effect.provide(Router.make({
         routes,
         history: Router.memoryHistory("/"),
-        onSettled: (done) => settled.push(done.head.title)
+        onSettled: (done) => settled.push(done.title)
       })),
       Effect.provide(TestHost.layer())
     )
@@ -291,28 +292,28 @@ describe("Router", { concurrent: false }, () => {
       Effect.gen(function*() {
         const root = yield* mount
         yield* TestHost.settle
-        assert.strictEqual(root.head().title, "Home · App")
-        assert.strictEqual(root.head().html.lang, "en")
-        assert.deepStrictEqual(root.head().meta.map((meta) => meta.content), ["The home page"])
+        assert.strictEqual(root.head<HtmlHead.HtmlHead>().title, "Home · App")
+        assert.strictEqual(root.head<HtmlHead.HtmlHead>().html.lang, "en")
+        assert.deepStrictEqual(root.head<HtmlHead.HtmlHead>().meta.map((meta) => meta.content), ["The home page"])
 
         click(root, "Person 1")
         yield* TestHost.settle
         assert.deepStrictEqual(history.entries(), ["/", "/people/1"])
-        assert.strictEqual(root.head().title, "Person 1 · App")
-        assert.deepStrictEqual(root.head().meta.map((meta) => meta.content), ["About Person 1"])
+        assert.strictEqual(root.head<HtmlHead.HtmlHead>().title, "Person 1 · App")
+        assert.deepStrictEqual(root.head<HtmlHead.HtmlHead>().meta.map((meta) => meta.content), ["About Person 1"])
         assert.deepStrictEqual(root.model()?.outcomes, ["navigated"])
         // Settling waits for provided Layers, not Commands: the loading title is the one announced.
-        assert.deepStrictEqual(settled.map((done) => [done.location.action, done.location.url, done.head.title]), [
+        assert.deepStrictEqual(settled.map((done) => [done.location.action, done.location.url, done.title]), [
           ["push", "/people/1", "Loading · App"]
         ])
 
         click(root, "Back")
         yield* TestHost.settle
         assert.strictEqual(root.model()?.route._tag, "Home")
-        assert.strictEqual(root.head().title, "Home · App")
+        assert.strictEqual(root.head<HtmlHead.HtmlHead>().title, "Home · App")
         history.go(1)
         yield* TestHost.settle
-        assert.strictEqual(root.head().title, "Person 1 · App")
+        assert.strictEqual(root.head<HtmlHead.HtmlHead>().title, "Person 1 · App")
         assert.deepStrictEqual(settled.map((done) => done.location.action), ["push", "pop", "pop"])
 
         // Route changes arrive as Subscription messages, so they're in the log.
@@ -589,7 +590,7 @@ describe("Router", { concurrent: false }, () => {
         assert.strictEqual(settled.length, 0)
         yield* TestClock.adjust("1 second")
         yield* TestHost.settle
-        assert.deepStrictEqual(settled.map((done) => done.head.title), ["Slow · App"])
+        assert.deepStrictEqual(settled.map((done) => done.title), ["Slow · App"])
       })
     )
   })
@@ -681,9 +682,9 @@ describe("Router", { concurrent: false }, () => {
         yield* router.navigate("/people/1")
         yield* TestHost.settle
         assert.strictEqual(root.text(), "down")
-        assert.strictEqual(root.head().title, "App")
+        assert.strictEqual(root.head<HtmlHead.HtmlHead>().title, "App")
         // The removed page's title is never announced.
-        assert.deepStrictEqual(settled.map((done) => done.head.title), ["App"])
+        assert.deepStrictEqual(settled.map((done) => done.title), ["App"])
       })
     )
   })

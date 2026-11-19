@@ -5,6 +5,7 @@
  * second to build.
  */
 import { Command, Component, Head, Query, Route, Router, UiSchema } from "@effect/ui"
+import { Html, HtmlHead } from "@effect/ui/html"
 import { Context, Effect, Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 
@@ -26,11 +27,12 @@ export type AppRoute = typeof AppRoute.Type
 export const Home = Component.define({
   name: "Home",
   model: Schema.Struct({}),
-  message: Schema.Never
+  message: Schema.Never,
+  elements: Html
 }).make({
   init: () => ({}),
   update: (model) => model,
-  head: () => [Head.title("Home"), Head.meta({ name: "description", content: "The home page" })],
+  head: () => [Head.title("Home"), HtmlHead.meta({ name: "description", content: "The home page" })],
   view: (_, h) => h.el("h1", "Home")
 })
 
@@ -88,6 +90,7 @@ export const Person = Component.define({
     visits: Schema.Number
   }),
   message: PersonMessage,
+  elements: Html,
   queries: {
     person: {
       query: GetPerson,
@@ -105,7 +108,7 @@ export const Person = Component.define({
       Visited: () => ({ ...model, visits: model.visits + 1 }),
       Bump: () => ({ ...model, count: model.count + 1 })
     }),
-  head: (model) => [Head.title(model.name), Head.meta({ name: "description", content: `About ${model.name}` })],
+  head: (model) => [Head.title(model.name), HtmlHead.meta({ name: "description", content: `About ${model.name}` })],
   view: (model, h) =>
     h.el(
       "div",
@@ -121,7 +124,8 @@ export class SlowData extends Context.Service<SlowData, { readonly text: string 
 export const Slow = Component.define({
   name: "Slow",
   model: Schema.Struct({}),
-  message: Schema.Never
+  message: Schema.Never,
+  elements: Html
 }).make({
   init: () => ({}),
   update: (model) => model,
@@ -150,7 +154,8 @@ export const App = Component.define({
   name: "App",
   props: Schema.Struct({ route: AppRoute }),
   model: Schema.Struct({ route: AppRoute, outcomes: Schema.Array(Schema.String), blocked: Schema.Boolean }),
-  message: AppMessage
+  message: AppMessage,
+  elements: Html
 }).make({
   init: ($) => ({ route: $.props.route, outcomes: [], blocked: false }),
   update: (model, message, $) =>
@@ -166,7 +171,7 @@ export const App = Component.define({
     Router.subscription(AppRoute, model.route, (route) => AppMessage.ChangedRoute({ route })),
     model.blocked && Router.blocked("editing")
   ],
-  head: () => [Head.titleTemplate((title) => `${title} · App`), Head.lang("en")],
+  head: () => [Head.titleTemplate((title) => `${title} · App`), HtmlHead.lang("en")],
   view: (model, h) => {
     const go = (label: string, route: AppRoute) => h.el("button").on("click", AppMessage.Go({ route })).children(label)
     return h.el(

@@ -1,4 +1,4 @@
-import { Component, Mount, Renderer, Route, Router, UiSchema, type View } from "@effect/ui"
+import { Component, type Head, Mount, Renderer, Route, Router, UiSchema, type View } from "@effect/ui"
 import { TestHost } from "@effect/ui/testing"
 import { Effect, Schema, type Scope } from "effect"
 import { describe, expect, it } from "tstyche"
@@ -75,7 +75,7 @@ describe("Effect props", () => {
       Effect.Effect<Renderer.Root<AppRoute, never>, never, Router.Router | Renderer.Renderer | Scope.Scope>
     >()
     expect(Renderer.prerender(App, Router.props(AppRoute))).type.toBe<
-      Effect.Effect<Renderer.Prerendered<AppRoute>, never, Router.Router>
+      Effect.Effect<Renderer.Prerendered<AppRoute, Head.Head>, never, Router.Router>
     >()
     expect(TestHost.mount(App, Router.props(AppRoute))).type.toBe<
       Effect.Effect<TestHost.TestRoot<AppRoute, never, never>, never, Router.Router | TestHost.TestHost | Scope.Scope>

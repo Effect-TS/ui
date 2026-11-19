@@ -1237,7 +1237,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       expect(app.innerHTML).toBe("<p>leaf</p>")
     }).pipe(Effect.scoped))
 
-  it.effect("compares the head at adoption, so a mount update while an instance waits isn't a mismatch", () =>
+  it.effect("compares the client's first fold, so a mount update while an instance waits isn't a mismatch", () =>
     hosted(Effect.gen(function*() {
       class Slow extends Context.Service<Slow, string>()("test/Slow") {}
       const Waiting = Component.define({
@@ -1289,7 +1289,8 @@ describe("HtmlServer", { concurrent: false }, () => {
       expect(unstable.problems).toEqual(["head title: the server has \"server\", the client \"client\""])
       expect(runs).toBe(2)
 
-      // Siblings whose keys make one path look like the other's descendant: no template applies.
+      // Siblings whose keys make one path look like the other's descendant: no template applies, and both
+      // folds report the siblings' conflict rather than a head mismatch.
       const Box = Component.define({
         name: "Box",
         props: Schema.Struct({ title: Schema.String }),
@@ -1316,8 +1317,11 @@ describe("HtmlServer", { concurrent: false }, () => {
             Box(h, { key: "a]/Box[b", props: { title: "B" } })
           )
       })
-      const siblings = yield* ssr(Siblings, {})
-      expect(siblings.head.title).toBe("B")
+      const siblings = yield* Effect.flip(ssr(Siblings, {}))
+      const conflict = "HeadConflict: Head: /Siblings/Box[a] and /Siblings/Box[a]%2FBox[b] both set title, " +
+        "and the later one, /Siblings/Box[a]%2FBox[b], wins"
+      expect(siblings.problems).toEqual([conflict, conflict])
+      yield* TestHost.expectProblem("HeadConflict")
 
       // A template that really applies, and differs on the client, still fails.
       let templates = 0
@@ -1340,7 +1344,124 @@ describe("HtmlServer", { concurrent: false }, () => {
         "head title: the server has \"Inner (server)\", the client \"Inner (client)\""
       ])
     })))
-  it.effect("snapshots the instances adoption saw, so removing one while an instance waits isn't a mismatch", () =>
+  it.effect("compares the head a waiting child's subtree had with the props it was placed with", () =>
+    hosted(Effect.gen(function*() {
+      class Slow extends Context.Service<Slow, string>()("test/Slow") {}
+      const titled = (suffix: () => string) => {
+        const Grandchild = Component.define({
+          name: "Grandchild",
+          model: Schema.Struct({}),
+          message: Schema.Never,
+          props: Schema.Struct({ title: Schema.String }),
+          elements: Html
+        }).make({
+          init: () => ({}),
+          update: (model) => model,
+          head: (_, props) => [Head.title(props.title + suffix())],
+          view: (_, h) => h.p("grandchild")
+        })
+        const Child = Component.define({
+          name: "Child",
+          model: Schema.Struct({}),
+          message: Schema.Never,
+          props: Schema.Struct({ title: Schema.String }),
+          elements: Html
+        }).make({
+          init: () => ({}),
+          update: (model) => model,
+          head: (_, props) => [Head.titleTemplate((title) => `${props.title}: ${title}`)],
+          // The title is in the nodes too: the child adopts them with the props it was placed with.
+          view: (_, h) => h.div(h.span(h.props.title), Grandchild(h, { key: "g", props: { title: h.props.title } }))
+        }).pipe(Component.provide(Layer.effect(Slow, Effect.as(Effect.sleep("30 millis"), "ready"))))
+        const Message = UiSchema.TaggedEnum({ Mounted: {} })
+        return Component.define({
+          name: "Parent",
+          model: Schema.String,
+          message: Message,
+          elements: Html
+        }).make({
+          init: () => "Server",
+          update: () => "Mounted",
+          view: (title, h) =>
+            h.div.onMount(mountSending("Rename", Message.Mounted())).children(
+              Child(h, { key: "c", props: { title } })
+            )
+        })
+      }
+
+      const matching = yield* ssr(titled(() => ""), {})
+      expect(matching.adopted).toEqual(["/Parent", "/Parent/Child[c]", "/Parent/Child[c]/Grandchild[g]"])
+      expect(matching.head.title).toBe("Server: Server")
+      yield* TestHost.settle
+      expect(matching.root.head<Head.Head>().title).toBe("Mounted: Mounted")
+      expect(matching.document.title).toBe("Mounted: Mounted")
+      expect(matching.container.textContent).toContain("Mounted")
+
+      let calls = 0
+      const drifting = yield* Effect.flip(ssr(titled(() => calls++ === 0 ? "" : "!"), {}))
+      expect(drifting.problems).toEqual([
+        "head title: the server has \"Server: Server\", the client \"Server: Server!\""
+      ])
+    })))
+
+  it.effect("adopts a waiting child with the slots it was placed with, and applies the new ones after", () =>
+    hosted(Effect.gen(function*() {
+      class Slow extends Context.Service<Slow, string>()("test/Slow") {}
+      const titled = (suffix: () => string) => {
+        const Grandchild = Component.define({
+          name: "Grandchild",
+          model: Schema.Struct({}),
+          message: Schema.Never,
+          props: Schema.Struct({ title: Schema.String }),
+          elements: Html
+        }).make({
+          init: () => ({}),
+          update: (model) => model,
+          head: (_, props) => [Head.title(props.title + suffix())],
+          view: (_, h) => h.p(h.props.title)
+        })
+        const Framed = Component.define({
+          name: "Framed",
+          model: Schema.Struct({}),
+          message: Schema.Never,
+          elements: Html,
+          slots: ["body"]
+        }).make({
+          init: () => ({}),
+          update: (model) => model,
+          view: (_, h) => h.div(h.slots.body)
+        }).pipe(Component.provide(Layer.effect(Slow, Effect.as(Effect.sleep("30 millis"), "ready"))))
+        const Message = UiSchema.TaggedEnum({ Mounted: {} })
+        return Component.define({
+          name: "Parent",
+          model: Schema.String,
+          message: Message,
+          elements: Html
+        }).make({
+          init: () => "Server",
+          update: () => "Mounted",
+          // The slot's content changes while the child waits: it adopts what it was placed with, "Server".
+          view: (title, h) =>
+            h.div.onMount(mountSending("Rename", Message.Mounted())).children(
+              Framed(h, { key: "c", slots: { body: Grandchild(h, { key: "g", props: { title } }) } })
+            )
+        })
+      }
+
+      const matching = yield* ssr(titled(() => ""), {})
+      expect(matching.adopted).toEqual(["/Parent", "/Parent/Framed[c]", "/Parent/Framed[c]/[body]/Grandchild[g]"])
+      expect(matching.head.title).toBe("Server")
+      yield* TestHost.settle
+      expect(matching.root.head<Head.Head>().title).toBe("Mounted")
+      expect(matching.document.title).toBe("Mounted")
+      expect(matching.container.textContent).toBe("Mounted")
+
+      let calls = 0
+      const drifting = yield* Effect.flip(ssr(titled(() => calls++ === 0 ? "" : "!"), {}))
+      expect(drifting.problems).toEqual(["head title: the server has \"Server\", the client \"Server!\""])
+    })))
+
+  it.effect("compares the client's first fold, so removing an instance while another waits isn't a mismatch", () =>
     hosted(Effect.gen(function*() {
       class Slow extends Context.Service<Slow, string>()("test/Slow") {}
       const Waiting = Component.define({
@@ -1452,7 +1573,57 @@ describe("HtmlServer", { concurrent: false }, () => {
       expect(Schema.decodeUnknownSync(MessageLog.Wire)(JSON.parse(JSON.stringify(wire)))).toEqual(wire)
     }).pipe(Effect.scoped))
 
-  it.effect("reports the template results the client's merge computed, without calling templates again", () =>
+  it.effect("drops the placement held for a waiting instance its parent removes, and never applies it", () =>
+    Effect.gen(function*() {
+      class Slow extends Context.Service<Slow, string>()("test/Slow") {}
+      const Panel = Component.define({
+        name: "Panel",
+        props: Schema.Struct({ id: Schema.String }),
+        model: Schema.Struct({}),
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => ({}),
+        update: (model) => model,
+        view: (_, h) => h.p(`panel ${h.props.id}`)
+      }).pipe(Component.provide(Layer.effect(Slow, Effect.as(Effect.sleep("50 millis"), "ready"))))
+      const Page = Component.define({
+        name: "Page",
+        model: Schema.String,
+        message: Schema.String,
+        elements: Html
+      }).make({
+        init: () => "a",
+        update: (_, id) => id,
+        view: (id, h) => h.div(id === "" ? h.p("gone") : Panel(h, { key: "p", props: { id } }))
+      })
+
+      const fiber = yield* Effect.forkChild(HtmlServer.renderToHtml(Page, {}))
+      yield* TestClock.adjust("50 millis")
+      const rendered = yield* Fiber.join(fiber)
+      const app = yield* container(rendered.html)
+      const log = MessageLog.makeMemory({ size: 1000 })
+      const root = yield* BrowserHost.mountEffect(Page, {}, app, { state: rendered.state }).pipe(
+        Effect.provideService(MessageLog.MessageLog, log)
+      )
+      // New props while it waits are held, not applied: the server's nodes stay as they are.
+      root.send("b")
+      yield* tick
+      expect(app.textContent).toBe("panel a")
+      root.send("")
+      yield* tick
+      expect(app.textContent).toBe("gone")
+      yield* TestClock.adjust("50 millis")
+      yield* tick
+      yield* root.adopted
+
+      const panel = log.entries().filter((entry): entry is MessageLog.InstanceEntry =>
+        "path" in entry && entry.path === "/Page/Panel[p]"
+      )
+      expect(panel.map((entry) => entry._tag)).toEqual(["Waiting", "LayerPending", "Unmounted"])
+    }).pipe(Effect.scoped))
+
+  it.effect("calls a title template once in the server's fold and once in the client's first fold", () =>
     hosted(Effect.gen(function*() {
       const Leaf = Component.define({
         name: "Leaf",
@@ -1481,21 +1652,21 @@ describe("HtmlServer", { concurrent: false }, () => {
         return { Parent, calls: () => calls }
       }
 
-      // One call on the server's merge and one on the client's; reporting adds none. Both return
-      // "server", which is what the client shows, so hydration agrees.
+      // One call in the server's fold and one in the client's. Both return "server", which is what the
+      // client shows, so hydration agrees.
       const agrees = withTemplate((calls) => calls < 2 ? "server" : "client")
       const result = yield* ssr(agrees.Parent, {})
       expect(agrees.calls()).toBe(2)
       expect(result.head.title).toBe("server")
       expect(result.document.title).toBe("server")
 
-      // The client's one call differs from the server's, and the report shows the client's.
+      // The client's one call differs from the server's, and the mismatch shows the client's result.
       const differs = withTemplate((calls) => calls < 1 ? "server" : "client")
       const error = yield* Effect.flip(ssr(differs.Parent, {}))
       expect(differs.calls()).toBe(2)
       expect(error.problems).toEqual(["head title: the server has \"server\", the client \"client\""])
     })))
-  it.effect("leaves an instance its own title template fails out of the adoption head, as the server does", () =>
+  it.effect("leaves an instance its own title template fails out of the client's fold, as the server does", () =>
     hosted(Effect.gen(function*() {
       const Leaf = Component.define({
         name: "Leaf",
@@ -1531,8 +1702,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       }).make({
         init: () => ({}),
         update: (model) => model,
-        // Two siblings: the later one's title wins the first merge, so the earlier one's template only
-        // throws in the merge after the fallback renders. Mounting drains both before it reports.
+        // Two siblings, each failed by its own template in the fold: neither contributes, on either side.
         view: (_, h) =>
           h.div(
             Broken(h, { key: "a", props: {}, fallback: () => h.p("fallback a") }),
@@ -1545,7 +1715,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       expect(result.container.textContent).toBe("fallback afallback b")
     })))
 
-  it.effect("keeps no template results outside an adoption report", () =>
+  it.effect("calls a title template once per fold", () =>
     Effect.gen(function*() {
       let calls = 0
       // One entry shared by every head evaluation, so a cache keyed on entries would keep it.
@@ -1583,14 +1753,13 @@ describe("HtmlServer", { concurrent: false }, () => {
         }
       })
 
-      // A plain mount: each of the four merges (mount and three updates) calls the template.
+      // A plain mount: each of the four folds (mount and three updates) calls the template.
       const app = yield* container("")
       const mounted = yield* BrowserHost.mountEffect(Layout, {}, app)
       yield* bumpThrice(mounted)
       expect(calls).toBe(4)
 
-      // Hydration: one call on the server's merge, one on the client's, then one per update once
-      // the report is made.
+      // Hydration: one call in the server's fold, one in the client's first, then one per update.
       calls = 0
       yield* hosted(Effect.gen(function*() {
         const result = yield* ssr(Layout, {})

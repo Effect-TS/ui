@@ -4,7 +4,7 @@
  * whose provided Layer takes a second to build.
  */
 import { Component, Head, Query, Route, Router, UiSchema } from "@effect/ui"
-import { Html } from "@effect/ui/html"
+import { Html, HtmlHead } from "@effect/ui/html"
 import { Context, Effect, Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 
@@ -25,7 +25,7 @@ export const Home = Component.define({
 }).make({
   init: () => ({}),
   update: (model) => model,
-  head: () => [Head.title("Home"), Head.meta({ name: "description", content: "Home page" })],
+  head: () => [Head.title("Home"), HtmlHead.meta({ name: "description", content: "Home page" })],
   view: (_, h) => h.h1("Home")
 })
 
@@ -56,8 +56,8 @@ export const Person = Component.define({
   update: (model) => model,
   head: (model) => [
     Head.title(`Person ${model.id}`),
-    Head.meta({ name: "description", content: `About person ${model.id}` }),
-    Head.jsonLd({ "@type": "Person", identifier: model.id })
+    HtmlHead.meta({ name: "description", content: `About person ${model.id}` }),
+    HtmlHead.jsonLd({ "@type": "Person", identifier: model.id })
   ],
   view: (model, h) =>
     h.div(
@@ -101,7 +101,7 @@ export const App = Component.define({
     Router.subscription(AppRoute, model.route, (route) => Message.ChangedRoute({ route })),
     model.blocked && Router.blocked("editing")
   ],
-  head: () => [Head.titleTemplate((title) => `${title} · App`), Head.lang("en"), Head.htmlClass("routed")],
+  head: () => [Head.titleTemplate((title) => `${title} · App`), HtmlHead.lang("en"), HtmlHead.htmlClass("routed")],
   view: ({ route }, h) =>
     h.div(
       h.nav(

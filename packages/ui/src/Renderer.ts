@@ -31,7 +31,6 @@ import * as Schema from "effect/Schema"
 import * as SchemaTransformation from "effect/SchemaTransformation"
 import type * as Scope from "effect/Scope"
 import type * as Component from "./Component.ts"
-import type * as Head from "./Head.ts"
 import * as runtime from "./internal/runtime.ts"
 import * as services from "./internal/services.ts"
 import type * as View from "./View.ts"
@@ -87,10 +86,12 @@ export type Dispatch = (
  * on hosts that never run `onMount` work. `commit` is called once at the end
  * of each flush and after mounting, for hosts that apply changes in a batch.
  *
- * `head` receives the tree's merged document head after the commit, on every
- * flush where an instance with a `head` option rendered or an instance went
- * away. The host diffs it against what it applied last. A host without a
- * document, such as a native one, leaves it out and head entries are ignored.
+ * `head` receives the head the runtime folded, in the root vocabulary's form
+ * (an `HtmlHead` for `Html`), after the commit of every flush that changed
+ * a view, once every instance has adopted. The host diffs it against what it
+ * applied last. A mount with `head: false` never calls it. A host without a
+ * document, such as a native one, leaves it out and the head is only
+ * computed.
  *
  * `hydration` lets the renderer read nodes a server rendered, so `mount` with
  * a server `state` adopts them. A host without it builds every node fresh.
@@ -133,7 +134,7 @@ export interface Host<Node> {
     | ((node: Node, attrs: Readonly<Record<string, string>>) => Readonly<Record<string, string>>)
     | undefined
   readonly commit?: (() => void) | undefined
-  readonly head?: ((head: Head.Head) => void) | undefined
+  readonly head?: ((head: any) => void) | undefined
   readonly hydration?: Hydration<Node> | undefined
   readonly createContainer?: (() => Node) | undefined
 }
@@ -155,24 +156,6 @@ export interface Host<Node> {
  * `setProp`, so the host can keep what the user changed in the server's
  * nodes before they adopted. A host without it gets `setProp`.
  *
- * `adopted`, if given, is called once every instance has adopted, with the head
- * the tree had at adoption: each instance's entries and child instances as
- * they were when it mounted (a waiting child's when it adopted), merged in
- * tree order. An instance that failed in the flush it mounted in, a title
- * template that throws included, contributes nothing, as on the server.
- * Updates since then, including removed instances, don't count. Title
- * templates reuse the results the client's live merges computed. A template
- * no live merge ever applied to that title, because an ancestor rendered
- * again while the child holding the title waited, is called once for the
- * report; with `head` pure, as it must be, that gives the adoption-time
- * result. Because `head` is pure and the Model is adopted, the head equals
- * the server's merged head, so a host or a test can check one against the
- * other.
- *
- * It's called after the live head merge of the flush that finished adoption
- * and before that flush commits, so the document head may not show it yet.
- * `root.adopted` completes after it.
- *
  * @stability experimental
  * @category models
  * @since 0.1.0
@@ -187,7 +170,6 @@ export interface Hydration<Node> {
     | { readonly _tag: "Other" }
   getAttr(node: Node, name: string): string | undefined
   readonly adoptProp?: ((node: Node, name: string, value: unknown) => void) | undefined
-  readonly adopted?: ((head: Head.Head) => void) | undefined
 }
 
 /**
@@ -261,18 +243,19 @@ export type ServerNode =
 
 /**
  * The result of `prerender`: the tree to serialise, the state the client
- * adopts, the root's Model and the merged head.
+ * adopts, the root's Model and the folded head.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface Prerendered<out Model> {
+export interface Prerendered<out Model, out H = unknown> {
   readonly nodes: ReadonlyArray<ServerNode>
   readonly state: State
   /** The root's Model after the server run, or `undefined` if the root failed. */
   readonly model: Model | undefined
-  readonly head: Head.Head
+  /** The head folded with the root vocabulary's merge: an `HtmlHead` for `Html`. */
+  readonly head: H
 }
 
 /**
@@ -425,7 +408,7 @@ export interface Root<out Model, in Msg> {
    * without hydration. Head sync and the router's announcements start with
    * the commit of the flush that finished adoption, which may still be
    * running when this completes, so don't expect the document head to show
-   * the adopted head yet.
+   * it yet.
    */
   readonly adopted: Effect.Effect<void>
 }
@@ -476,6 +459,14 @@ export type HostOf<V> = [V] extends [never] ? never : V extends View.Elements ? 
  * of each watch after adoption is delivered to `update`, and the view
  * doesn't change, since it equals the adopted snapshot.
  *
+ * The mount owns the head: on every flush that changed a view it folds the
+ * placed tree's head with the root vocabulary's merge, and gives it to the
+ * host's `head` once every instance has adopted. Two siblings that set one
+ * single slot, such as the title, are reported to `Query.Problems` as a
+ * `Head.Conflict`. With `head: false`, for a mount embedded in a page
+ * something else owns, the head is computed and the Router still reads its
+ * title, but the host is never given it.
+ *
  * **Gotchas**
  *
  * Any Effect passed as `props` is run, so a root's props can't themselves be
@@ -509,6 +500,7 @@ export const mount: <
       | undefined
     readonly state?: State | undefined
     readonly query?: QueryOptions | undefined
+    readonly head?: boolean | undefined
   }
 ) => Effect.Effect<Root<Model, Msg>, never, R | RF | RP | HostOf<V> | Renderer | Scope.Scope> = runtime.mount as any
 
@@ -584,9 +576,9 @@ export const prerender: <
     readonly elements?: ReadonlyArray<string> | "any" | undefined
     readonly static?: boolean | undefined
   }
-) => Effect.Effect<Prerendered<Model>, never, R | RP> = (component, props, options) =>
+) => Effect.Effect<Prerendered<Model, View.HeadValue<V>>, never, R | RP> = (component, props, options) =>
   runtime.prerender(component as any, props, {
     budget: options?.budget ?? "500 millis",
     elements: options?.elements ?? "any",
     static: options?.static
-  })
+  }) as Effect.Effect<Prerendered<any, any>>

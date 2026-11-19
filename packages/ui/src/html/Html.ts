@@ -114,6 +114,7 @@ import type * as Component from "../Component.ts"
 import type * as Mount from "../Mount.ts"
 import * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
+import * as HtmlHead from "./HtmlHead.ts"
 
 // ---------------------------------------------------------------------------
 // host
@@ -1270,6 +1271,8 @@ export type Tags<Msg> =
 export interface Elements extends View.Elements {
   readonly Tags: Tags<this["Msg"]>
   readonly Host: Host
+  readonly Head: HtmlHead.Entry
+  readonly HeadValue: HtmlHead.HtmlHead
 }
 
 /**
@@ -1290,6 +1293,19 @@ export const Elements: Elements | undefined = undefined
  * @since 0.1.0
  */
 export const name = "html"
+
+/**
+ * How the vocabulary folds its head: `HtmlHead.merge`, with the title read
+ * from the folded `HtmlHead`.
+ *
+ * @stability experimental
+ * @category vocabulary
+ * @since 0.1.0
+ */
+export const head: View.HeadFold<HtmlHead.Entry, HtmlHead.HtmlHead> = {
+  merge: HtmlHead.merge,
+  title: (head) => head.title
+}
 
 const makeTags = (): Readonly<Record<string, VoidElement<any, any, any, any>>> => {
   const out: Record<string, VoidElement<any, any, any, any>> = {}

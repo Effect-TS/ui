@@ -443,8 +443,6 @@ export interface Instance {
   model: unknown
   /** The query results, beside the Model: what each query last returned. */
   results: componentQueries.Results | undefined
-  /** The entries from the component's `head`, as of the last render. */
-  head: ReadonlyArray<Head.Entry>
   onEmit: (events: unknown) => unknown
   onFailure: ((failure: AsyncResult.Failure<never, unknown>) => unknown) | undefined
   failure: Cause.Cause<unknown> | undefined
@@ -466,8 +464,6 @@ export interface Instance {
   waiting: boolean
   /** Hydration: whether this instance's children may adopt the server's Models. */
   adoptsChildren: boolean
-  /** Hydration: the instance's head entries and child instances as they were when it mounted. */
-  readonly snapshot: Snapshot | undefined
   /** On the server: the client builds this instance fresh, because its Layer wasn't built. */
   deferred: boolean
   readonly runs: Array<Run>
@@ -611,8 +607,14 @@ export interface Root {
    * condition reads this.
    */
   readonly buildsPendingSince: (flush: number) => number
-  /** The merged head, as last given to the host. */
-  readonly head: () => Head.Head
+  /** The head the last fold computed, in the root vocabulary's form, whether or not the host applies it. */
+  readonly head: () => unknown
+  /**
+   * Hydration: the head of the state every instance adopted, each evaluated at its adoption, before any
+   * update of its own. `undefined` until the last instance adopts, and on a mount that didn't hydrate or
+   * didn't ask for it with the `adoptionHead` option.
+   */
+  readonly adoptionHead: () => unknown
   /** Completes once no child is waiting to adopt the server's nodes. */
   readonly adopted: Effect.Effect<void>
   /** Hydration: the paths of the children still waiting for their Layer before they adopt. */
@@ -637,6 +639,10 @@ interface Options {
   readonly server?: ServerOptions | undefined
   /** Cache-wide options for the query cache the runtime owns. */
   readonly query?: Renderer.QueryOptions | undefined
+  /** `false`: the head is computed but never given to the host. */
+  readonly head?: boolean | undefined
+  /** Hydration: keeps the head of the adopted state for `Root.adoptionHead`, as `Ssr` asks, to compare it. */
+  readonly adoptionHead?: boolean | undefined
 }
 
 interface ServerOptions {
@@ -722,11 +728,22 @@ const intentGuardMillis = 30_000
 const emptyText: View.Text = { _tag: "Text", text: "" }
 const ignoreEvents = () => undefined
 
-/**
- * What merging a tree with no entries gives: `Head.empty`'s fields in an object of its own, as a
- * merge's result is, so a root that closes still tells the host its head is gone.
- */
-const noHead: Head.Head = { ...Head.empty }
+/** How a root folds its head when its vocabulary has no fold of its own: the title only. */
+const neutralFold: View.HeadFold<Head.Entry, Head.Head> = { merge: Head.merge, title: (head) => head.title }
+
+/** The fold of a component's vocabulary, or the title-only one. */
+const foldOf = (component: Component.Any): View.HeadFold => component.elements()?.head ?? neutralFold
+
+/** One instance's part of the head, over its state when it was read: its entries, its reducer and the instances it placed. */
+interface HeadPart {
+  readonly inst: Instance
+  readonly entries: ReadonlyArray<unknown>
+  readonly reduce: ((below: unknown) => unknown) | undefined
+  readonly children: ReadonlyArray<Instance>
+}
+
+/** A tree with no entries, which folds to the vocabulary's empty head. */
+const emptyTree: Head.Tree<any, any> = { entries: [], children: [] }
 
 /** An entry about an instance, without what `record` adds. */
 type Draft = MessageLog.InstanceEntry extends infer E
@@ -740,16 +757,6 @@ type TreeDraft = Exclude<MessageLog.Entry, MessageLog.InstanceEntry> extends inf
 let sessions = 0
 /** Each runtime's interrupter id for the Layer builds it ends: negative, so never a fiber's. */
 let buildInterrupters = 0
-
-/** Hydration: what an instance contributed to the head when it mounted, and its child instances then. */
-interface Snapshot {
-  entries: ReadonlyArray<Head.Entry>
-  children: ReadonlyArray<Snapshot>
-  /** Set once the merge of the flush the instance mounted in has run. */
-  settled: boolean
-  /** The instance failed before its snapshot settled, as in a title template that throws in that merge. */
-  failed: boolean
-}
 
 /** The server's nodes for one instance: between its two markers. */
 interface Range {
@@ -972,11 +979,10 @@ const setup = (
     if (adoptedDone) return
     adoptedDone = true
     hydrating = undefined
-    // Reported after this flush's live merge, so it reuses the templates that merge applied. `adopted`
-    // completes with the report.
+    // `adopted` completes at the end of this flush.
     reportPending = true
     // Head sync starts with the flush after adoption.
-    headDirty = true
+    viewChanged = true
     wake()
   }
 
@@ -1341,7 +1347,6 @@ const setup = (
     sendPasses.clear()
     sharedPasses.clear()
     drain()
-    settleSnapshots()
     if (reportPending) reportAdoption()
     host.commit?.()
     afterCommitHooks()
@@ -1350,9 +1355,9 @@ const setup = (
     checkIdle()
   }
   /**
-   * Renders what's dirty, runs deferred work and merges the head, until none
-   * is left. A title template that throws fails its instance, so the fallback
-   * renders and the head is merged again.
+   * Renders what's dirty, runs deferred work and folds the head, until none
+   * is left. A `head`, `reduceHead` or title template that throws fails its
+   * instance, so the fallback renders and the head is folded again.
    */
   function drain() {
     draining = true
@@ -1387,7 +1392,7 @@ const setup = (
         if (!next!.closed) renderDirty(next!)
         else checkPendingRefs()
       }
-      mergeHead()
+      foldHead()
     } while (dirty.size > 0 || deferred.length > 0 || isHolding() || reportsDue.size > 0)
   }
   /**
@@ -1414,105 +1419,145 @@ const setup = (
   }
 
   // -- head and the router's hook --------------------------------------------
-  // Set when an instance with `head` rendered, or the tree lost an instance.
-  let headDirty = false
-  let merged: Head.Head = Head.empty
+  // Set when a view changed: an instance rendered, or the tree lost or failed an instance.
+  let viewChanged = false
+  // The root vocabulary's fold, or the title-only one.
+  const rootFold = foldOf(component)
+  const emptyHead: unknown = rootFold.merge(emptyTree)
+  let merged: unknown = emptyHead
+  // The title of `merged`, for the router's hook.
+  let mergedTitle: string | undefined
+  // Hydration, for a mount that reads `adoptionHead`: each instance's part over the state it adopted, until
+  // every instance has adopted. The mount's tree is recorded from its first kept fold, and a subtree that
+  // waited for its Layer as it adopts, before the placement its parent rendered meanwhile reaches it. Then
+  // the fold of those parts is the head of the adopted state.
+  let adoption: Map<Instance, HeadPart> | undefined = hydrating !== undefined && options?.adoptionHead === true
+    ? new Map()
+    : undefined
+  let adoptionHead: unknown = undefined
   // Set when `merged` holds a head the host hasn't been given.
   let headChanged = false
+  /** Whether this mount gives its head to the host. An embedded mount computes it and leaves the document alone. */
+  const ownsHead = options?.head !== false
   let rootInstance: Instance | undefined
   let handle: services.RootHandle | undefined
 
-  /** Whether an instance with a `head` option has rendered. Until one has, the merged head is empty. */
-  let headed = false
-
-  const updateHead = (inst: Instance) => {
-    const head = inst.component.head
-    if (head === undefined) return
-    headed = true
-    const entries = guard(inst, "head", () => head(inst.model, inst.props, inst.results))
-    if (entries === undefined) return
-    inst.head = entries
-    headDirty = true
-  }
-
   /**
-   * Title template results, kept per entry and title so the adoption report
-   * reuses what the live merges computed instead of calling templates again.
-   * It exists only while a hydrating root has a report to make, and is dropped
-   * once the report is made.
+   * One instance's part of the head, read now: its entries, its `reduceHead` over its Model and the
+   * instances its view placed. A closed or failed instance has none, and nor does one still waiting to
+   * adopt, whose Model isn't there yet, or one whose `head` throws, which `onError` is told.
    */
-  let templates: WeakMap<Head.TitleTemplate, Head.TitleTemplate> | undefined =
-    hydrating !== undefined && hydration?.adopted !== undefined ? new WeakMap() : undefined
-  const memoized = (entries: ReadonlyArray<Head.Entry>): ReadonlyArray<Head.Entry> =>
-    templates === undefined ? entries : entries.map((entry) => {
-      if (entry._tag !== "TitleTemplate" || templates === undefined) return entry
-      let found = templates.get(entry)
-      if (found === undefined) {
-        const results = new Map<string, string>()
-        found = {
-          _tag: "TitleTemplate",
-          apply: (title) => {
-            if (results.has(title)) return results.get(title)!
-            const result = entry.apply(title)
-            results.set(title, result)
-            return result
-          }
-        }
-        templates.set(entry, found)
+  const headPart = (inst: Instance, onError: (inst: Instance, error: unknown) => void): HeadPart | undefined => {
+    if (inst.closed || inst.failure !== undefined || inst.waiting) return undefined
+    const head = inst.component.head
+    let entries: ReadonlyArray<unknown> = none
+    if (head !== undefined) {
+      try {
+        entries = head(inst.model, inst.props, inst.results)
+      } catch (error) {
+        onError(inst, error)
+        return undefined
       }
-      return found
-    })
+    }
+    const reduce = inst.component.reduceHead
+    const model = inst.model
+    const children: Array<Instance> = []
+    for (const rendered of inst.rendered) placed(rendered, children)
+    return { inst, entries, reduce: reduce === undefined ? undefined : (below) => reduce(model, below), children }
+  }
+  /** Adds the instances a rendered node places to `out`, in document order: a fallback's content included. */
+  const placed = (rendered: Rendered, out: Array<Instance>): void => {
+    switch (rendered._tag) {
+      case "Child":
+      case "Outlet":
+        out.push(rendered.inst)
+        return
+      case "Element":
+        for (const child of rendered.children) placed(child, out)
+        return
+      case "Fallback":
+        return placed(rendered.inner, out)
+      // A detached child's view is out of the document, and its head with it.
+      case "Detached":
+      case "Text":
+        return
+    }
+  }
+  /**
+   * Folds the head of the tree under `root`, one node per instance that `partOf` has a part for. What
+   * throws in the fold is `onError`'s, with the instance that declared it.
+   *
+   * The fold is the root vocabulary's, or under a host-neutral root, the first vocabulary's in the tree
+   * with a fold of its own, so an Html child keeps its entries. A `reduceHead` of another vocabulary
+   * than the fold's has its value laid over `below`: a host-neutral one sets the title and keeps the Html
+   * fields.
+   */
+  const foldTree = (
+    root: Instance,
+    partOf: (inst: Instance) => HeadPart | undefined,
+    onError: (inst: Instance, error: unknown) => void,
+    options?: Head.MergeOptions
+  ): { readonly head: unknown; readonly title: string | undefined } => {
+    let fold = rootFold
+    const node = (inst: Instance): Head.Tree<unknown, unknown> => {
+      const part = partOf(inst)
+      if (part === undefined) return { path: inst.path, ...emptyTree }
+      const own = foldOf(inst.component)
+      if (fold === neutralFold) fold = own
+      const reduce = part.reduce
+      return {
+        path: inst.path,
+        entries: part.entries,
+        children: part.children.map(node),
+        reduce: reduce === undefined ? undefined : (below) => {
+          const value = reduce(below)
+          return own === fold ? value : { ...(below as object), ...(value as object) }
+        },
+        onError: (error) => onError(inst, error)
+      }
+    }
+    const tree = node(root)
+    const head = fold.merge(tree, options)
+    return { head, title: fold.title(head) }
+  }
+  const failHead = (inst: Instance, error: unknown) => failInstance(inst, Cause.die(error), "head")
+  /** The adoption head skips what throws, as the server does. The live fold is what fails the instance. */
+  const skipHead = () => {}
 
-  /** The head entries in document order. A child's fallback contributes none, and a detached child none. */
-  const headTree = (inst: Instance): Head.Tree => ({
-    entries: inst.closed || inst.failure !== undefined ? [] : memoized(inst.head),
-    children: inst.closed || inst.failure !== undefined ? [] : inst.rendered.flatMap(headChildren),
-    // A throwing title template fails the instance that declared it.
-    onError: (error) => failInstance(inst, Cause.die(error), "head")
-  })
-  const headChildren = (rendered: Rendered): Array<Head.Tree> =>
-    rendered._tag === "Child" || rendered._tag === "Outlet"
-      ? [headTree(rendered.inst)]
-      : rendered._tag === "Element"
-      ? rendered.children.flatMap(headChildren)
-      : []
-
-  /** The child instances an instance rendered, as their snapshots. A failed or detached child has none. */
-  const snapshotChildren = (rendered: Rendered): Array<Snapshot> =>
-    rendered._tag === "Child"
-      ? rendered.inst.snapshot === undefined || rendered.inst.failure !== undefined ? [] : [rendered.inst.snapshot]
-      : rendered._tag === "Element"
-      ? rendered.children.flatMap(snapshotChildren)
-      : rendered._tag === "Outlet"
-      ? rendered.inst.rendered.flatMap(snapshotChildren)
-      : []
-  const snapshotTree = (snapshot: Snapshot): Head.Tree => ({
-    entries: memoized(snapshot.entries),
-    children: snapshot.children.filter((child) => !child.failed).map(snapshotTree),
-    onError: () => {}
-  })
-  /** Snapshots taken in this flush. Its merge has run once the flush gets to `settleSnapshots`. */
-  const unsettled: Array<Snapshot> = []
-  const settleSnapshots = () => {
-    for (const snapshot of unsettled.splice(0)) snapshot.settled = true
+  /**
+   * Hydration: records the part of each instance in the subtree of one that waited, as it adopts: their
+   * heads are evaluated now, over the state they adopted and the placement they had. One still waiting is
+   * recorded when it adopts.
+   */
+  const recordAdopted = (inst: Instance) => {
+    const parts = adoption
+    if (parts === undefined) return
+    const visit = (inst: Instance) => {
+      if (parts.has(inst)) return
+      const part = headPart(inst, skipHead)
+      if (part === undefined) return
+      parts.set(inst, part)
+      for (const child of part.children) visit(child)
+    }
+    visit(inst)
+  }
+  /**
+   * Once every instance has adopted, the head of the adopted state: `folded`, or the fold of the recorded
+   * parts.
+   */
+  const settleAdoptionHead = (folded?: unknown) => {
+    const parts = adoption
+    if (parts === undefined || !adoptedDone || rootInstance === undefined) return
+    adoption = undefined
+    adoptionHead = folded !== undefined ? folded : foldTree(rootInstance, (inst) => parts.get(inst), skipHead).head
   }
 
   /**
-   * Reports the head the tree had at adoption: each instance's entries and
-   * children as they were when it mounted, a waiting child's from when it
-   * adopted. It runs after the live merge of the flush that finished
-   * adoption, whose template results it reuses. A template is only called for
-   * the report when no live merge applied it to that title, which happens
-   * when an ancestor rendered again while the child holding the title waited.
+   * Once every instance has adopted: the fetch-free window closes and `adopted` completes.
    */
   let reportPending = false
   const reportAdoption = () => {
     reportPending = false
-    const root = rootInstance
-    if (hydration?.adopted !== undefined && root?.snapshot !== undefined) {
-      hydration.adopted(root.snapshot.failed ? Head.empty : Head.merge(snapshotTree(root.snapshot)))
-    }
-    templates = undefined
     // The fetch-free window closes at adoption, unless a navigation closed it first.
     cache.closeWindow()
     for (const f of adoptedWaiters.splice(0)) f()
@@ -1525,23 +1570,39 @@ const setup = (
   }
 
   /**
-   * Merges the live tree's head once nothing is left to render. A title template
-   * that throws fails its instance, which sets `headDirty` again: that merge saw
-   * the removed subtree, so it's discarded. With the root failed nothing is left
-   * to render and the next merge is final; otherwise the flush renders the
-   * fallback first.
+   * Folds the head once nothing is left to render, if a view changed. What throws in the fold fails
+   * its instance: that fold saw the removed subtree, so it's discarded. A failed child leaves its parent
+   * to render, so the drain renders the fallback and folds again. With the root failed nothing is left
+   * to render, and the next fold here is final. Sibling conflicts go to `Query.Problems`, from the fold
+   * that's kept.
    */
-  const mergeHead = () => {
+  const foldHead = () => {
     const root = rootInstance
     if (root === undefined) return
-    while (headDirty && dirty.size === 0 && deferred.length === 0) {
-      headDirty = false
-      // No instance has entries to give, so the tree isn't read: an instance that goes away costs nothing here.
-      const next = headed ? Head.merge(headTree(root)) : noHead
-      if (!headDirty) {
-        merged = next
-        headChanged = true
-      }
+    while (viewChanged && dirty.size === 0 && deferred.length === 0) {
+      viewChanged = false
+      const conflicts: Array<Head.Conflict> = []
+      const parts: Array<HeadPart> = []
+      const next = foldTree(
+        root,
+        (inst) => {
+          const part = headPart(inst, failHead)
+          if (part !== undefined && adoption !== undefined) parts.push(part)
+          return part
+        },
+        failHead,
+        { onConflict: (conflict) => conflicts.push(conflict) }
+      )
+      if (viewChanged || dirty.size > 0 || deferred.length > 0) continue
+      merged = next.head
+      mergedTitle = next.title
+      headChanged = true
+      for (const conflict of conflicts) report(conflict)
+      if (adoption === undefined) continue
+      // Without an instance that waited, the first kept fold is already the adopted state's.
+      const first = adoption.size === 0
+      for (const part of parts) if (!adoption.has(part.inst)) adoption.set(part.inst, part)
+      settleAdoptionHead(first ? next.head : undefined)
     }
   }
 
@@ -1550,11 +1611,11 @@ const setup = (
     if (!adoptedDone) return
     if (headChanged) {
       headChanged = false
-      host.head?.(merged)
+      if (ownsHead) host.head?.(merged)
     }
-    // A head still to merge belongs to the flush already scheduled, which calls the hook.
-    if (hooks !== undefined && handle !== undefined && !headDirty) {
-      hooks.afterFlush(handle, { flush: flushes, head: merged, buildsPendingSince })
+    // A head still to fold belongs to the flush already scheduled, which calls the hook.
+    if (hooks !== undefined && handle !== undefined && !viewChanged) {
+      hooks.afterFlush(handle, { flush: flushes, title: mergedTitle, buildsPendingSince })
     }
   }
 
@@ -1628,8 +1689,6 @@ const setup = (
     update?: MessageLog.Failed["update"]
   ) => {
     if (inst.closed) return
-    // Failing in the flush it mounted in, its head merge included, keeps it out of the adoption snapshot.
-    if (inst.snapshot !== undefined && !inst.snapshot.settled) inst.snapshot.failed = true
     const failedSeq = record(inst, {
       _tag: "Failed",
       props: inst.props,
@@ -1643,7 +1702,7 @@ const setup = (
       Effect.logError(`${inst.path} failed in ${where}${name === undefined ? "" : ` (${name})`}`, cause)
     )
     inst.failure = cause
-    headDirty = true
+    viewChanged = true
     close(inst)
     const parent = inst.parent
     if (parent === undefined) {
@@ -2135,7 +2194,7 @@ const setup = (
     swapForPlaceholder(inst, () => {
       for (const rendered of inst.rendered) closeAll(inst, rendered)
     })
-    headDirty = true
+    viewChanged = true
   }
 
   // -- instances ------------------------------------------------------------
@@ -2259,7 +2318,6 @@ const setup = (
       props,
       model: undefined,
       results: undefined,
-      head: [],
       onEmit,
       onFailure,
       failure: undefined,
@@ -2271,9 +2329,6 @@ const setup = (
       },
       waiting: false,
       adoptsChildren: false,
-      snapshot: hydrating === undefined || hydration?.adopted === undefined
-        ? undefined
-        : { entries: [], children: [], settled: false, failed: false },
       deferred: false,
       runs: [],
       left: false,
@@ -2551,13 +2606,7 @@ const setup = (
         host.remove(range!.close)
       }
       inst.rendered = [rendered]
-      updateHead(inst)
-      // Frozen at mount: later updates, removals and re-keys don't change what adoption looked like.
-      if (inst.snapshot !== undefined) {
-        inst.snapshot.entries = inst.head
-        inst.snapshot.children = inst.rendered.flatMap(snapshotChildren)
-        unsettled.push(inst.snapshot)
-      }
+      viewChanged = true
       if (inst.failure !== undefined) return
       if (Option.isSome(adopted)) {
         apply(inst, { model: inst.model, commands: [], events: [] }, mountedSeq, true)
@@ -2599,7 +2648,18 @@ const setup = (
         const nodes = inst.rendered.flatMap(nodesOf)
         inst.rendered = []
         range.claimed = false
+        // The placement its parent rendered while it waited: it adopts with the one it was placed with, the
+        // server's, and its subtree's head is recorded from that. The latest comes after. Built fresh, it
+        // starts from the latest.
+        const held = heldPlacement.get(inst)
+        heldPlacement.delete(inst)
+        if (held !== undefined && !adopt) {
+          inst.props = held.props
+          setPlacement(inst, held)
+        }
         begin(range, adopt ? fromServer : Option.none())
+        if (adopt) recordAdopted(inst)
+        if (held !== undefined && adopt && !inst.closed && inst.failure === undefined) applyPlacement(inst, held)
         if (!range.claimed) {
           // Rebuilt: the new nodes take the server's place.
           const parentNode = host.parentOf(range.open)
@@ -2608,7 +2668,7 @@ const setup = (
           }
           for (const node of nodes) host.remove(node)
         }
-        headDirty = true
+        viewChanged = true
         settleWaiting()
       }
       whenReady(inst.env, () => defer(() => resume(true)), () => {
@@ -4520,6 +4580,39 @@ const setup = (
     for (const author of refChecks) checkRefs(author)
   }
 
+  /**
+   * Hydration: the latest placement a parent rendered for an instance while it waited to adopt, applied once
+   * it has. One that unmounts first never reads it.
+   */
+  const heldPlacement = new WeakMap<Instance, View.Child<any, any>>()
+  /** Writes a placement's slots and a headless child's closure, and returns the instance's slots. */
+  const setPlacement = (inst: Instance, child: View.Child<any, any>): Slotted | undefined => {
+    const slotted = slottedBy.get(inst)
+    if (slotted !== undefined) slotted.values = child.slots
+    if (inst.owner !== undefined) inst.content = child.view
+    return slotted
+  }
+  /** A held placement, applied: slots, a headless child's closure, and new props as `changeProps` does. */
+  const applyPlacement = (inst: Instance, child: View.Child<any, any>) => {
+    const slotted = setPlacement(inst, child)
+    if (!propsEqual(child.props, inst.props)) changeProps(inst, child.props)
+    if (inst.closed) return
+    markDirty(inst)
+    if (slotted !== undefined) refreshOutlets(slotted)
+  }
+  /** New props from the parent: written to the log, then the watches, keyed queries and shares follow them. */
+  const changeProps = (inst: Instance, props: unknown) => {
+    inst.props = props
+    if (inst.selection !== undefined) inst.selection.due = true
+    // Before the result writes the new props cause, so a replay opens them against these props.
+    const changedSeq = record(inst, { _tag: "PropsChanged", props })
+    // Watches first: new args over a settled entry write its value before this render, and the
+    // keyed queries' results are written before it too.
+    syncSubscriptions(inst)
+    drainKeyed(inst)
+    if (!inst.closed) refreshShares(inst, changedSeq)
+  }
+
   const render = (inst: Instance) => {
     if (inst.component === outletComponent) return renderOutlet(inst)
     if (inst.waiting) return
@@ -4544,7 +4637,7 @@ const setup = (
     // Its closures render with it, so all it wrote is current. A closure that rendered alone is checked
     // in the drain, after the render that holds it.
     if (inst.owner === undefined) checkRefs(inst)
-    if (!inst.closed) updateHead(inst)
+    if (!inst.closed) viewChanged = true
     deliverSends(inst)
   }
 
@@ -4587,6 +4680,7 @@ const setup = (
   const outletComponent: Component.Any = {
     definition: { name: "[outlet]", slots: [] },
     head: undefined,
+    reduceHead: undefined,
     subscriptions: undefined,
     layer: undefined,
     "~queries": undefined,
@@ -4655,7 +4749,6 @@ const setup = (
       owning: undefined,
       owners: undefined,
       seen: undefined,
-      head: [],
       onEmit: ignoreEvents,
       onFailure: undefined,
       failure: undefined,
@@ -4669,7 +4762,6 @@ const setup = (
       // The content's children adopt the server's state when the instance placing it and the one that
       // wrote it both did.
       adoptsChildren: parent.adoptsChildren && author.adoptsChildren,
-      snapshot: undefined,
       deferred: false,
       runs: [],
       left: false,
@@ -5525,23 +5617,20 @@ const setup = (
         }
         instance.onEmit = child.onEmit
         instance.onFailure = child.onFailure
+        if (instance.waiting) {
+          // Held until it adopts the server's nodes, which it does with the placement it had: props, slots and
+          // a headless child's closure. The latest one is applied once it has.
+          heldPlacement.set(instance, child)
+          rendered.v = child
+          return rendered
+        }
         // Read first: most children are passed no slots, and this is cheaper than the map.
         const slotted = child.slots !== undefined || rendered.v.slots !== undefined
           ? slottedBy.get(instance)
           : undefined
         if (slotted !== undefined) slotted.values = child.slots
         const changed = !propsEqual(child.props, instance.props)
-        if (changed) {
-          instance.props = child.props
-          if (instance.selection !== undefined) instance.selection.due = true
-          // Before the result writes the new props cause, so a replay opens them against these props.
-          const changedSeq = record(instance, { _tag: "PropsChanged", props: child.props })
-          // Watches first: new args over a settled entry write its value before this render, and the
-          // keyed queries' results are written before it too.
-          syncSubscriptions(instance)
-          drainKeyed(instance)
-          if (!instance.closed) refreshShares(instance, changedSeq)
-        }
+        if (changed) changeProps(instance, child.props)
         // A headless child's view is the closure, which is new on every render of whoever declared it.
         if (instance.owner !== undefined) instance.content = child.view
         if ((changed || instance.owner !== undefined) && !instance.closed) {
@@ -5701,7 +5790,7 @@ const setup = (
     for (const node of nodes) host.insertBefore(container, node, undefined)
     toggleMounts(inst, rendered, inst.env, false)
     if (rendered._tag === "Child") record(rendered.inst, { _tag: "Detached" })
-    headDirty = true
+    viewChanged = true
     return { _tag: "Detached", v: rendered.v, inner: rendered, node: placeholder, container }
   }
 
@@ -5715,7 +5804,7 @@ const setup = (
     unpark(inst, detached.container)
     toggleMounts(inst, inner, env, true)
     if (inner._tag === "Child") record(inner.inst, { _tag: "Attached" })
-    headDirty = true
+    viewChanged = true
     return inner
   }
 
@@ -5760,7 +5849,7 @@ const setup = (
       case "Outlet":
       case "Child": {
         inst.children.delete(rendered.inst)
-        headDirty = true
+        viewChanged = true
         releaseWatches(rendered.inst)
         leave(rendered.inst)
         closeUnder(inst, rendered.inst.scope)
@@ -5813,9 +5902,10 @@ const setup = (
       rootFallbackNodes = []
       host.commit?.()
       // The tree's entries go with it, so the host puts the shell's values back.
-      if (merged !== Head.empty) {
-        merged = Head.empty
-        host.head?.(merged)
+      if (merged !== emptyHead) {
+        merged = emptyHead
+        mergedTitle = undefined
+        if (ownsHead && adoptedDone) host.head?.(merged)
       }
     })
   )
@@ -5855,12 +5945,11 @@ const setup = (
     hydrating = undefined
     reportPending = true
   }
-  // Mounting drains like a flush, so failures it causes (a title template that throws included) settle
-  // before the snapshots do. `onMount` work runs after the commit, so its updates come later.
+  // Mounting drains like a flush, its head fold included. `onMount` work runs after the commit, so its
+  // updates come later: on a hydrating mount, the head this fold computes is the fold of the server's state.
   drain()
   depth--
   origin = undefined
-  settleSnapshots()
   if (reportPending) reportAdoption()
   host.commit?.()
 
@@ -6053,6 +6142,11 @@ const setup = (
     flush: () => flushes,
     buildsPendingSince,
     head: () => merged,
+    adoptionHead: () => {
+      // No fold was kept since the last instance adopted: the root failed in it, say.
+      settleAdoptionHead()
+      return adoptionHead
+    },
     adopted: Effect.callback<void>((resume) => {
       if (adoptedDone && !reportPending) resume(Effect.void)
       else adoptedWaiters.push(() => resume(Effect.void))

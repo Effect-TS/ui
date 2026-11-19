@@ -36,6 +36,7 @@ import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Command from "./Command.ts"
 import type * as Component from "./Component.ts"
 import type * as Feature from "./Feature.ts"
+import type * as Head from "./Head.ts"
 import type * as MountModule from "./Mount.ts"
 import type * as Renderer from "./Renderer.ts"
 
@@ -1560,6 +1561,11 @@ export const shorthand = <
  * service a host's Layer provides to say it can show these elements, which
  * `mount` requires for the root.
  *
+ * `Head` is the entry type a component's `head` returns, and `HeadValue`
+ * the value the vocabulary's merge folds them into, which `reduceHead` maps.
+ * A vocabulary that declares neither has `Head`'s host-neutral title
+ * entries. Read them with `HeadEntry` and `HeadValue`.
+ *
  * @stability experimental
  * @category models
  * @since 0.1.0
@@ -1568,6 +1574,47 @@ export interface Elements {
   readonly Msg: unknown
   readonly Tags: unknown
   readonly Host: unknown
+  readonly Head?: unknown
+  readonly HeadValue?: unknown
+}
+
+/**
+ * The entries a component of vocabulary `V` may return from `head`: the
+ * vocabulary's `Head`, or `Head.Entry` when `V` is `never` or declares none.
+ *
+ * @stability experimental
+ * @category utility types
+ * @since 0.1.0
+ */
+export type HeadEntry<V> = [V] extends [never] ? Head.Entry
+  : V extends { readonly Head: infer E } ? E
+  : Head.Entry
+
+/**
+ * The folded head of vocabulary `V`, which `reduceHead` receives and
+ * returns: the vocabulary's `HeadValue`, or `Head.Head` when `V` is
+ * `never` or declares none.
+ *
+ * @stability experimental
+ * @category utility types
+ * @since 0.1.0
+ */
+export type HeadValue<V> = [V] extends [never] ? Head.Head
+  : V extends { readonly HeadValue: infer H } ? H
+  : Head.Head
+
+/**
+ * How a vocabulary folds its head: `merge` folds a tree of entries into the
+ * vocabulary's value, reporting conflicts, and `title` reads the title out of
+ * that value for the Router's announcement.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface HeadFold<E = any, H = any> {
+  readonly merge: (tree: Head.Tree<E, H>, options?: Head.MergeOptions) => H
+  readonly title: (head: H) => string | undefined
 }
 
 /**
@@ -1592,6 +1639,11 @@ export interface Vocabulary<out V extends Elements = Elements> {
    * goes anywhere when it's left out.
    */
   readonly textParents?: ReadonlyArray<string> | undefined
+  /**
+   * How the vocabulary folds its head, when the root of a mount is of this
+   * vocabulary. Without it, `Head.merge` folds the title only.
+   */
+  readonly head?: HeadFold | undefined
   /**
    * Phantom: the type-level half of the vocabulary. A vocabulary written as a
    * module, such as `Html`, exports it as an `undefined` value, so the module

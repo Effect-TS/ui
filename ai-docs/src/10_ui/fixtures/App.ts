@@ -1,4 +1,5 @@
 import { Command, Component, Head, Router, UiSchema } from "@effect/ui"
+import { HtmlHead } from "@effect/ui/html"
 import { Schema } from "effect"
 import { NotePage } from "./pages/notes/NotePage.ts"
 import { NotesIndex } from "./pages/NotesIndex.ts"
@@ -43,7 +44,7 @@ export const App = Component.define({
   // App-wide head defaults go in the root's `head`, not in the HTML shell.
   // The template wraps the title a page below sets, giving
   // "All notes · Notes".
-  head: () => [Head.titleTemplate((title) => `${title} · Notes`), Head.lang("en")],
+  head: () => [Head.titleTemplate((title) => `${title} · Notes`), HtmlHead.lang("en")],
   view: ({ route }, h) =>
     h.div(
       h.header(
