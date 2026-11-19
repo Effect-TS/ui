@@ -398,7 +398,8 @@ describe("BrowserHost", { concurrent: false }, () => {
       PointerClicked: { pointerType: Schema.String },
       Key: { key: Schema.String, shift: Schema.Boolean },
       Submitted: { title: Schema.String, tags: Schema.Array(Schema.String) },
-      Focused: { where: Schema.String }
+      Focused: { where: Schema.String },
+      FocusMoved: { event: Schema.String, within: Schema.Boolean }
     })
     const Events = Component.define({
       name: "Events",
@@ -413,7 +414,8 @@ describe("BrowserHost", { concurrent: false }, () => {
           PointerClicked: ({ pointerType }) => [...log, pointerType],
           Key: ({ key, shift }) => [...log, `key ${key}${shift ? " shift" : ""}`],
           Submitted: ({ tags, title }) => [...log, `submit ${title} [${tags.join(",")}]`],
-          Focused: ({ where }) => [...log, `focus ${where}`]
+          Focused: ({ where }) => [...log, `focus ${where}`],
+          FocusMoved: ({ event, within }) => [...log, `${event}${within ? " within" : ""}`]
         }),
       view: (_, h) =>
         h.div(
@@ -425,6 +427,10 @@ describe("BrowserHost", { concurrent: false }, () => {
             .on("focus", Message.Focused({ where: "div" })).children(
               h.input.attr("aria-label", "Focus me")
             ),
+          h.div
+            .on("focusin", ({ within }) => Message.FocusMoved({ event: "focusin", within }))
+            .on("focusout", ({ within }) => Message.FocusMoved({ event: "focusout", within }))
+            .children(h.input.attr("aria-label", "First"), h.input.attr("aria-label", "Second")),
           h.button.onClick(({ pointerType }) => Message.PointerClicked({ pointerType })).children("Pointer"),
           h.input.attr("aria-label", "Keys")
             .onKeyDown(({ key, shift }) => Message.Key({ key, shift }))
@@ -509,6 +515,18 @@ describe("BrowserHost", { concurrent: false }, () => {
         ;(HtmlLocator.getByRole(app, "textbox", { name: "Keys" }) as HTMLInputElement).focus()
         yield* tick
         expect(root.model()).toEqual(["focus keys"])
+      }).pipe(Effect.scoped))
+
+    it.effect("focusin and focusout say whether focus moved within the element", () =>
+      Effect.gen(function*() {
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Events, {}, app)
+        const focus = (name: string) => (HtmlLocator.getByRole(app, "textbox", { name }) as HTMLInputElement).focus()
+        focus("First")
+        focus("Second")
+        focus("Keys")
+        yield* tick
+        expect(root.model()).toEqual(["focusin", "focusout within", "focusin within", "focusout", "focus keys"])
       }).pipe(Effect.scoped))
 
     it.effect("payloads are plain data", () =>

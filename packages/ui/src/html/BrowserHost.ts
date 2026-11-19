@@ -364,6 +364,12 @@ const payloadOf = (
       return { cancelable: event.cancelable }
     case "scroll":
       return { top: element.scrollTop, left: element.scrollLeft }
+    case "focusin":
+    case "focusout": {
+      // Where focus came from or goes. `null` when that is another window, or nowhere.
+      const other = (event as FocusEvent).relatedTarget as globalThis.Node | null
+      return { within: other !== null && element.contains(other) }
+    }
     default:
       return {}
   }
