@@ -1004,7 +1004,8 @@ describe("BrowserHost", { concurrent: false }, () => {
         close.call(rejecting.dialog()!)
         yield* tick
         expect(rejecting.dialog()!.open).toBe(true)
-        expect(rejecting.root.model()!.log).toEqual(["escape rejected", "escape rejected", "closed"])
+        // The cancel says so, so the app can tell the close that follows is the same request.
+        expect(rejecting.root.model()!.log).toEqual(["escape rejected", "escape rejected, forced", "closed"])
         expect(calls).toEqual(["showModal Delete note?", "showModal Delete note?"])
 
         calls.length = 0

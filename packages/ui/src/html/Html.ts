@@ -498,8 +498,11 @@ export type EventsOf<K extends string> =
   & (K extends "textarea" | "select" ? { readonly input: ValuePayload; readonly change: ValuePayload } : {})
   & (K extends "form" ? { readonly submit: SubmitPayload; readonly reset: {} } : {})
   & (K extends "details" ? { readonly toggle: TogglePayload } : {})
-  & (K extends "dialog" ?
-    { readonly toggle: TogglePayload; readonly close: { readonly returnValue: string }; readonly cancel: {} }
+  & (K extends "dialog" ? {
+      readonly toggle: TogglePayload
+      readonly close: { readonly returnValue: string }
+      readonly cancel: { readonly cancelable: boolean }
+    }
     : {})
   & (K extends "img" | "iframe" | "video" | "audio" ? { readonly load: {}; readonly error: {} } : {})
 
@@ -960,7 +963,9 @@ export class VoidElement<
   /**
    * Sugar for `on("cancel", handler)`, on a `dialog`: a close request, such
    * as Escape. For a modal the browser host cancels it, and the Model
-   * decides whether the dialog closes.
+   * decides whether the dialog closes. `cancelable` is `false` when the
+   * browser won't let the request be cancelled, as after repeated cancelled
+   * requests: it closes the dialog itself, and `onClose` follows.
    *
    * @since 0.1.0
    */

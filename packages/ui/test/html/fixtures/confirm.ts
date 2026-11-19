@@ -6,7 +6,7 @@ const State = Schema.Literals(["closed", "open", "modal"])
 
 export const ConfirmMessage = UiSchema.TaggedEnum({
   Ask: {},
-  Escaped: {},
+  Escaped: { forced: Schema.Boolean },
   Chosen: { choice: Schema.String },
   Closed: {},
   Mode: { state: State },
@@ -30,10 +30,10 @@ export const Confirm = Component.define({
   update: (model, message) =>
     ConfirmMessage.match(message, {
       Ask: () => ({ ...model, state: "modal" as const }),
-      Escaped: () =>
+      Escaped: ({ forced }) =>
         model.acceptEscape
           ? { ...model, state: "closed" as const, log: [...model.log, "escape"] }
-          : { ...model, log: [...model.log, "escape rejected"] },
+          : { ...model, log: [...model.log, forced ? "escape rejected, forced" : "escape rejected"] },
       Chosen: ({ choice }) => ({ ...model, state: "closed" as const, log: [...model.log, choice] }),
       Closed: () => ({ ...model, log: [...model.log, "closed"] }),
       Mode: ({ state }) => ({ ...model, state }),
@@ -41,7 +41,7 @@ export const Confirm = Component.define({
     }),
   view: (model, h) => {
     const dialog = h.dialog.attr("aria-label", "Delete note?")
-      .onCancel(ConfirmMessage.Escaped())
+      .onCancel(({ cancelable }) => ConfirmMessage.Escaped({ forced: cancelable === false }))
       .onClose(ConfirmMessage.Closed())
     return h.div(
       h.button.onClick(ConfirmMessage.Ask()).children("Ask"),

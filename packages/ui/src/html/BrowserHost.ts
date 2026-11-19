@@ -360,6 +360,8 @@ const payloadOf = (
     }
     case "close":
       return { returnValue: (element as HTMLDialogElement).returnValue ?? "" }
+    case "cancel":
+      return { cancelable: event.cancelable }
     case "scroll":
       return { top: element.scrollTop, left: element.scrollLeft }
     default:
