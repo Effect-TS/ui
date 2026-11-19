@@ -270,6 +270,43 @@ interface RChild {
   readonly inst: Instance
 }
 
+// The records a page holds most of, one for each element, text and child, are made by classes with
+// their `_tag` on the prototype: a field less on each.
+class ElementRecord implements RElement {
+  declare readonly _tag: "Element"
+  declare mount?: RunningMount | undefined
+  declare ownedMounts?: ReadonlyArray<OwnedMount> | undefined
+  v: View.Element<any, any>
+  readonly node: unknown
+  children: Rendered | Array<Rendered> | undefined
+  constructor(v: View.Element<any, any>, node: unknown, children: Rendered | Array<Rendered> | undefined) {
+    this.v = v
+    this.node = node
+    this.children = children
+  }
+}
+class TextRecord implements RText {
+  declare readonly _tag: "Text"
+  v: View.Text
+  readonly node: unknown
+  constructor(v: View.Text, node: unknown) {
+    this.v = v
+    this.node = node
+  }
+}
+class ChildRecord implements RChild {
+  declare readonly _tag: "Child"
+  v: View.Child<any, any>
+  readonly inst: Instance
+  constructor(v: View.Child<any, any>, inst: Instance) {
+    this.v = v
+    this.inst = inst
+  }
+}
+Object.defineProperty(ElementRecord.prototype, "_tag", { value: "Element" })
+Object.defineProperty(TextRecord.prototype, "_tag", { value: "Text" })
+Object.defineProperty(ChildRecord.prototype, "_tag", { value: "Child" })
+
 /** A placed outlet: what the receiver's parent passed for one slot, rendered by an instance of its own. */
 interface ROutlet {
   readonly _tag: "Outlet"
@@ -1957,7 +1994,7 @@ const setup = (
     else if (inst.parent === undefined) host.insertBefore(container, placeholder, undefined)
     release()
     for (const node of nodes) host.remove(node)
-    inst.rendered = [{ _tag: "Text", v: emptyText, node: placeholder }]
+    inst.rendered = [new TextRecord(emptyText, placeholder)]
   }
 
   /** Swaps the instance's nodes for an empty text node, closing its Scope. */
@@ -3196,7 +3233,6 @@ const setup = (
     collectedOnServer: Option.Option<unknown>
   ) => {
     const bound = queryCore.boundOf(inst.component)
-    const raw: Rendered = { _tag: "Text", v: emptyText, node: undefined }
     // Its first entry: `Mounted` comes when the Layer is ready, and the Layer's entries come as they happen.
     record(inst, {
       _tag: "Waiting",
@@ -3208,7 +3244,7 @@ const setup = (
     inst.waiting = true
     waiting++
     range.claimed = true
-    inst.rendered = rangeNodes(range).map((node) => ({ ...raw, node }))
+    inst.rendered = rangeNodes(range).map((node) => new TextRecord(emptyText, node))
     const resume = (adopt: boolean) => {
       if (inst.closed || !inst.waiting) return
       inst.waiting = false
@@ -5059,7 +5095,7 @@ const setup = (
     children: Rendered | Array<Rendered> | undefined,
     env: Env
   ): RElement => {
-    const rendered: RElement = { _tag: "Element", v: view, node, children }
+    const rendered: RElement = new ElementRecord(view, node, children)
     if (view.mount !== undefined) rendered.mount = startMount(inst.author, view.mount, node, env, inst)
     if (view.owned !== undefined && view.owned.length > 0) {
       const owned = startOwnedMounts(inst, view, node, env)
@@ -5071,7 +5107,7 @@ const setup = (
   const create = (inst: Instance, view: View.Node<any, any>, env: Env): Rendered => {
     switch (view._tag) {
       case "Text":
-        return { _tag: "Text", v: view, node: host.createText(view.text) }
+        return new TextRecord(view, host.createText(view.text))
       case "Element": {
         const node = host.createElement(view.tag)
         const attrs = view.attrs
@@ -5133,7 +5169,7 @@ const setup = (
       }
     } catch (error) {
       contentFailed(out, error)
-      out.rendered = [{ _tag: "Text", v: emptyText, node: host.createText("") }]
+      out.rendered = [new TextRecord(emptyText, host.createText(""))]
     }
     failClash(out)
     if (inst.children === noChildren) inst.children = new Set()
@@ -5328,7 +5364,7 @@ const setup = (
     // it would cost more than anything else here.
     if (inst.children === noChildren) inst.children = new Set()
     inst.children.add(child)
-    return { _tag: "Child", v: view, inst: child }
+    return new ChildRecord(view, child)
   }
 
   /**
@@ -5470,11 +5506,11 @@ const setup = (
         if (kind?._tag === "Text") {
           if (kind.text !== view.text) return undefined
           adoptedUpTo = host.nextOf(node)
-          return { _tag: "Text", v: view, node }
+          return new TextRecord(view, node)
         }
         if (view.text !== "") return undefined
         adoptedUpTo = node
-        return { _tag: "Text", v: view, node: host.createText("") }
+        return new TextRecord(view, host.createText(""))
       }
       case "Element": {
         if (kind?._tag !== "Element" || kind.tag !== view.tag) return undefined
