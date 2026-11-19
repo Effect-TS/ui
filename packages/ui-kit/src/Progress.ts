@@ -86,9 +86,9 @@
  */
 import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
-import * as View from "@effect/ui/View"
 import * as Schema from "effect/Schema"
-import { flag, visuallyHidden, withStyle } from "./internal/attributes.ts"
+import { flag, withStyle } from "./internal/attributes.ts"
+import { nvdaLabel, percentText, placeInRange } from "./internal/range.ts"
 
 /**
  * Props for the value of a `Progress`.
@@ -138,8 +138,6 @@ export type ProgressProps = typeof ProgressProps.Type
  */
 export type ProgressStatus = "indeterminate" | "progressing" | "complete"
 
-const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max)
-
 // The value within the range, its share of the range as a percentage, and
 // the status, or nulls while the value is unknown.
 const resolve = (props: ProgressProps) => {
@@ -148,18 +146,10 @@ const resolve = (props: ProgressProps) => {
   if (props.value === null || !Number.isFinite(props.value)) {
     return { min, max, value: null, percentage: null, status: "indeterminate" as ProgressStatus }
   }
-  const value = clamp(props.value, min, max)
-  const raw = ((props.value - min) * 100) / (max - min)
-  const percentage = clamp(Number.isNaN(raw) ? 0 : raw, 0, 100)
+  const { percentage, value } = placeInRange(props.value, min, max)
   const status: ProgressStatus = value === max ? "complete" : "progressing"
   return { min, max, value, percentage, status }
 }
-
-// Hidden content after the consumer's children, which NVDA needs before it
-// reads the bar's label.
-const nvdaLabel = View.toNode(
-  new Html.Element<never>("span").attr("role", "presentation").attr("style", visuallyHidden).children("x")
-)
 
 /**
  * A headless progress bar. Call it with the consumer's `h`, the `props`,
@@ -206,7 +196,7 @@ export const Progress = Component.define({
   update: (model) => model,
   parts: (_model, p) => {
     const { max, min, percentage, status, value } = resolve(p.props)
-    const valueText = p.props.valueText ?? (percentage === null ? undefined : `${Math.round(percentage)}%`)
+    const valueText = p.props.valueText ?? (percentage === null ? undefined : percentText(percentage))
     // What the indicator adds to its inline style: nothing while indeterminate.
     const size = percentage === null ? undefined : `inset-inline-start:0;height:inherit;width:${percentage}%`
     const labelId = p.id("label")
