@@ -53,7 +53,7 @@
             "**/index.mts",
             "**/index.cts",
             "**/ai-docs/**/*",
-            "**/examples/**/*",
+            "./examples/**/*",
             "**/test/**/*",
             "**/Generated.ts",
             "**/packages/tools/**/*"

@@ -59,8 +59,8 @@ const fakeFileForUpload = (uploadId: number): FakeFile =>
 const MILLISECONDS_PER_MEGABYTE = 100
 
 // Each upload is its own group, so cancelling one leaves the others running.
-// `switch` lets the user click while an upload runs, and a restarted upload
-// starts once its cancelled run has exited.
+// With `switch`, a restarted upload starts once its cancelled run has exited,
+// and Story and Scene steps can send messages while an upload is pending.
 export const UploadFile = Command.make(
   "UploadFile",
   {
