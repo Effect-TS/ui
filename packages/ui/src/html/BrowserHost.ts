@@ -157,14 +157,21 @@ const changeOnBlur: ReadonlySet<string> = new Set(["text", "search", "url", "tel
 const isRadio = (node: globalThis.Node): node is HTMLInputElement =>
   (node as globalThis.Element).localName === "input" && (node as HTMLInputElement).type === "radio"
 
-/** The radio buttons `radio` unchecks when it's checked, itself included. */
+/**
+ * The radio buttons `radio` unchecks when it's checked, itself included: those in its tree with its name
+ * and its form owner, which may be a form they're outside of, named by their `form` attribute.
+ */
 const radioGroup = (radio: HTMLInputElement): ReadonlyArray<HTMLInputElement> => {
   if (radio.name === "") return [radio]
-  const root = radio.form ?? radio.ownerDocument
+  const root = radio.getRootNode() as Document | DocumentFragment
   return Array.from(root.querySelectorAll<HTMLInputElement>(`input[type="radio"]`)).filter((other) =>
-    other.name === radio.name
+    other.name === radio.name && other.form === radio.form
   )
 }
+
+/** Whether `option` is disabled, by its own attribute or by its `optgroup`'s. */
+const optionDisabled = (option: HTMLOptionElement): boolean =>
+  option.disabled || (option.parentElement?.localName === "optgroup" && option.parentElement.hasAttribute("disabled"))
 
 /** The property the user changes on `node`, if it's a control. */
 const userProp = (node: globalThis.Node): string | undefined => {
@@ -185,14 +192,15 @@ const userProp = (node: globalThis.Node): string | undefined => {
 
 /**
  * Which of a `select`'s options its HTML selects: those with the `selected` attribute, the last of them
- * for a single select, or else the first option that isn't disabled, as a browser picks for a drop-down.
+ * for a single select, or else the first option that isn't disabled, itself or by its group, as a browser
+ * picks for a drop-down.
  */
 const defaultSelection = (select: HTMLSelectElement): ReadonlyArray<boolean> => {
   const options = Array.from(select.options)
   const marked = options.map((option) => option.hasAttribute("selected"))
   if (select.multiple) return marked
   const last = marked.lastIndexOf(true)
-  const index = last !== -1 ? last : select.size > 1 ? -1 : options.findIndex((option) => !option.disabled)
+  const index = last !== -1 ? last : select.size > 1 ? -1 : options.findIndex((option) => !optionDisabled(option))
   return options.map((_, i) => i === index)
 }
 
