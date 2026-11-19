@@ -14,5 +14,5 @@ Other changes:
 
 - `Router.Settled.head` is now `Settled.title: string | undefined`.
 - `Renderer.Prerendered` takes the head type as a second parameter.
-- `Renderer.Hydration.adopted` is removed. `ssr` compares the server's head with the client's fold of the server's state, each instance evaluated when it adopts, including one that waited for its Layer. Hydration adopts a waiting child with the props it was placed with, so its nodes and its subtree's head match the server, then applies props its parent passed while it waited.
+- `Renderer.Hydration.adopted` is removed. `ssr` compares the server's head with the client's fold of the server's state, each instance evaluated when it adopts, including one that waited for its Layer. Hydration adopts a waiting child with the placement it had (props, slots and a headless closure), so its nodes and its subtree's head match the server, then applies the latest placement its parent rendered while it waited.
 - `TestRoot.head` returns the root vocabulary's head. Write `root.head<HtmlHead.HtmlHead>()` to read an `Html` root's.

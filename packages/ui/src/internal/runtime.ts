@@ -2274,9 +2274,10 @@ const setup = (
     // Both normally done already by whoever closed the Scope.
     releaseWatches(inst)
     leave(inst)
-    // A child that closes while it waits no longer holds up adoption.
+    // A child that closes while it waits no longer holds up adoption, and the placement held for it goes.
     if (inst.waiting) {
       inst.waiting = false
+      heldPlacement.delete(inst)
       settleWaiting()
     }
   }
@@ -2643,17 +2644,20 @@ const setup = (
         const nodes = inst.rendered.flatMap(nodesOf)
         inst.rendered = []
         range.claimed = false
-        // Props its parent passed while it waited: it adopts with those it was placed with, the server's, and
-        // gets these after. Built fresh, it starts from them.
-        const held = heldProps.has(inst) ? { props: heldProps.get(inst) } : undefined
-        heldProps.delete(inst)
-        if (held !== undefined && !adopt) inst.props = held.props
+        // The placement its parent rendered while it waited: it adopts with the one it was placed with, the
+        // server's, and its subtree's head is recorded from that. The latest comes after. Built fresh, it
+        // starts from the latest.
+        const held = heldPlacement.get(inst)
+        heldPlacement.delete(inst)
+        if (held !== undefined && !adopt) {
+          inst.props = held.props
+          const slotted = slottedBy.get(inst)
+          if (slotted !== undefined) slotted.values = held.slots
+          if (inst.owner !== undefined) inst.content = held.view
+        }
         begin(range, adopt ? fromServer : Option.none())
         if (adopt) recordAdopted(inst)
-        if (held !== undefined && adopt && !inst.closed && inst.failure === undefined) {
-          changeProps(inst, held.props)
-          if (!inst.closed) markDirty(inst)
-        }
+        if (held !== undefined && adopt && !inst.closed && inst.failure === undefined) applyPlacement(inst, held)
         if (!range.claimed) {
           // Rebuilt: the new nodes take the server's place.
           const parentNode = host.parentOf(range.open)
@@ -4574,8 +4578,21 @@ const setup = (
     for (const author of refChecks) checkRefs(author)
   }
 
-  /** Hydration: the props a parent passed an instance while it waited to adopt, applied once it has. */
-  const heldProps = new Map<Instance, unknown>()
+  /**
+   * Hydration: the latest placement a parent rendered for an instance while it waited to adopt, applied once
+   * it has. Dropped when the instance unmounts first.
+   */
+  const heldPlacement = new Map<Instance, View.Child<any, any>>()
+  /** A held placement, applied: new props as `changeProps` does, slots, and a headless child's closure. */
+  const applyPlacement = (inst: Instance, child: View.Child<any, any>) => {
+    const slotted = slottedBy.get(inst)
+    if (slotted !== undefined) slotted.values = child.slots
+    if (inst.owner !== undefined) inst.content = child.view
+    if (!propsEqual(child.props, inst.props)) changeProps(inst, child.props)
+    if (inst.closed) return
+    markDirty(inst)
+    if (slotted !== undefined) refreshOutlets(slotted)
+  }
   /** New props from the parent: written to the log, then the watches, keyed queries and shares follow them. */
   const changeProps = (inst: Instance, props: unknown) => {
     inst.props = props
@@ -5593,18 +5610,20 @@ const setup = (
         }
         instance.onEmit = child.onEmit
         instance.onFailure = child.onFailure
+        if (instance.waiting) {
+          // Held until it adopts the server's nodes, which it does with the placement it had: props, slots and
+          // a headless child's closure. The latest one is applied once it has.
+          heldPlacement.set(instance, child)
+          rendered.v = child
+          return rendered
+        }
         // Read first: most children are passed no slots, and this is cheaper than the map.
         const slotted = child.slots !== undefined || rendered.v.slots !== undefined
           ? slottedBy.get(instance)
           : undefined
         if (slotted !== undefined) slotted.values = child.slots
-        let changed = !propsEqual(child.props, instance.props)
-        if (instance.waiting) {
-          // Held until it adopts the server's nodes, which it does with the props it was placed with.
-          if (changed) heldProps.set(instance, child.props)
-          else heldProps.delete(instance)
-          changed = false
-        } else if (changed) changeProps(instance, child.props)
+        const changed = !propsEqual(child.props, instance.props)
+        if (changed) changeProps(instance, child.props)
         // A headless child's view is the closure, which is new on every render of whoever declared it.
         if (instance.owner !== undefined) instance.content = child.view
         if ((changed || instance.owner !== undefined) && !instance.closed) {

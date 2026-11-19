@@ -250,9 +250,9 @@ const stepLimit = 10_000
  * of the server's state, made once every instance has adopted: each
  * instance's head as it evaluated at its adoption, before any `onMount`
  * work or later update. An instance that waited for its Layer adopts with
- * the props it was placed with, even when its parent passed it new ones
- * while it waited, and its subtree counts as it was then. The new props
- * reach it right after.
+ * the placement it had, its props, slots and headless closure, even when its
+ * parent rendered a new one while it waited, and its subtree counts as it
+ * was then. The latest placement reaches it right after.
  *
  * `frames` projects the container after each client commit, starting from
  * the server's markup, for `root.frames()`. It defaults to the container's

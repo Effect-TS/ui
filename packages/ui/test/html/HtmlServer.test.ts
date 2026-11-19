@@ -1485,6 +1485,63 @@ describe("HtmlServer", { concurrent: false }, () => {
       expect(drifting.problems).toEqual(["head title: the server has \"Server\", the client \"Server!\""])
     })))
 
+  it.effect("adopts a waiting child with the slots it was placed with, and applies the new ones after", () =>
+    hosted(Effect.gen(function*() {
+      class Slow extends Context.Service<Slow, string>()("test/Slow") {}
+      const titled = (suffix: () => string) => {
+        const Grandchild = Component.define({
+          name: "Grandchild",
+          model: Schema.Struct({}),
+          message: Schema.Never,
+          props: Schema.Struct({ title: Schema.String }),
+          elements: Html
+        }).make({
+          init: () => ({}),
+          update: (model) => model,
+          head: (_, props) => [Head.title(props.title + suffix())],
+          view: (_, h) => h.p(h.props.title)
+        })
+        const Framed = Component.define({
+          name: "Framed",
+          model: Schema.Struct({}),
+          message: Schema.Never,
+          elements: Html,
+          slots: ["body"]
+        }).make({
+          init: () => ({}),
+          update: (model) => model,
+          view: (_, h) => h.div(h.slots.body)
+        }).pipe(Component.provide(Layer.effect(Slow, Effect.as(Effect.sleep("30 millis"), "ready"))))
+        const Message = UiSchema.TaggedEnum({ Mounted: {} })
+        return Component.define({
+          name: "Parent",
+          model: Schema.String,
+          message: Message,
+          elements: Html
+        }).make({
+          init: () => "Server",
+          update: () => "Mounted",
+          // The slot's content changes while the child waits: it adopts what it was placed with, "Server".
+          view: (title, h) =>
+            h.div.onMount(mountSending("Rename", Message.Mounted())).children(
+              Framed(h, { key: "c", slots: { body: Grandchild(h, { key: "g", props: { title } }) } })
+            )
+        })
+      }
+
+      const matching = yield* ssr(titled(() => ""), {})
+      expect(matching.adopted).toEqual(["/Parent", "/Parent/Framed[c]", "/Parent/Framed[c]/[body]/Grandchild[g]"])
+      expect(matching.head.title).toBe("Server")
+      yield* TestHost.settle
+      expect(matching.root.head<Head.Head>().title).toBe("Mounted")
+      expect(matching.document.title).toBe("Mounted")
+      expect(matching.container.textContent).toBe("Mounted")
+
+      let calls = 0
+      const drifting = yield* Effect.flip(ssr(titled(() => calls++ === 0 ? "" : "!"), {}))
+      expect(drifting.problems).toEqual(["head title: the server has \"Server\", the client \"Server!\""])
+    })))
+
   it.effect("compares the client's first fold, so removing an instance while another waits isn't a mismatch", () =>
     hosted(Effect.gen(function*() {
       class Slow extends Context.Service<Slow, string>()("test/Slow") {}
@@ -1595,6 +1652,56 @@ describe("HtmlServer", { concurrent: false }, () => {
         "loaded"
       ])
       expect(Schema.decodeUnknownSync(MessageLog.Wire)(JSON.parse(JSON.stringify(wire)))).toEqual(wire)
+    }).pipe(Effect.scoped))
+
+  it.effect("drops the placement held for a waiting instance its parent removes, and never applies it", () =>
+    Effect.gen(function*() {
+      class Slow extends Context.Service<Slow, string>()("test/Slow") {}
+      const Panel = Component.define({
+        name: "Panel",
+        props: Schema.Struct({ id: Schema.String }),
+        model: Schema.Struct({}),
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => ({}),
+        update: (model) => model,
+        view: (_, h) => h.p(`panel ${h.props.id}`)
+      }).pipe(Component.provide(Layer.effect(Slow, Effect.as(Effect.sleep("50 millis"), "ready"))))
+      const Page = Component.define({
+        name: "Page",
+        model: Schema.String,
+        message: Schema.String,
+        elements: Html
+      }).make({
+        init: () => "a",
+        update: (_, id) => id,
+        view: (id, h) => h.div(id === "" ? h.p("gone") : Panel(h, { key: "p", props: { id } }))
+      })
+
+      const fiber = yield* Effect.forkChild(HtmlServer.renderToHtml(Page, {}))
+      yield* TestClock.adjust("50 millis")
+      const rendered = yield* Fiber.join(fiber)
+      const app = yield* container(rendered.html)
+      const log = MessageLog.makeMemory({ size: 1000 })
+      const root = yield* BrowserHost.mountEffect(Page, {}, app, { state: rendered.state }).pipe(
+        Effect.provideService(MessageLog.MessageLog, log)
+      )
+      // New props while it waits are held, not applied: the server's nodes stay as they are.
+      root.send("b")
+      yield* tick
+      expect(app.textContent).toBe("panel a")
+      root.send("")
+      yield* tick
+      expect(app.textContent).toBe("gone")
+      yield* TestClock.adjust("50 millis")
+      yield* tick
+      yield* root.adopted
+
+      const panel = log.entries().filter((entry): entry is MessageLog.InstanceEntry =>
+        "path" in entry && entry.path === "/Page/Panel[p]"
+      )
+      expect(panel.map((entry) => entry._tag)).toEqual(["Waiting", "LayerPending", "Unmounted"])
     }).pipe(Effect.scoped))
 
   it.effect("calls a title template once in the server's fold and once in the client's first fold", () =>
