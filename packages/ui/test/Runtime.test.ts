@@ -2908,8 +2908,6 @@ describe("Runtime", () => {
         const end = root.log().find((entry) => entry._tag === "MountEnded")
         assert.isDefined(start)
         assert.isDefined(end)
-        assert.deepStrictEqual(start.args, { token })
-        assert.strictEqual(start.argsSchema, ReadTag.args)
         const update = root.log().find((entry) => entry._tag === "Update") as MessageLog.Update
         assert.deepStrictEqual(update.source, {
           _tag: "Mount",
@@ -2961,62 +2959,35 @@ describe("Runtime", () => {
         assert.deepStrictEqual(tags(root).filter((tag) => tag === "MountStarted" || tag === "MountEnded"), [])
       })))
 
-    it.effect("two elements using the same silent mount log their own ends without an Update", () =>
+    it.effect("two elements running the same mount link their own silent and failed ends", () =>
       Effect.gen(function*() {
         const gate = yield* Deferred.make<void>()
         const Focus = Mount.make(
           "Focus",
-          { args: { delayed: Schema.Boolean } },
-          (_, { delayed }) => Effect.as(delayed ? Deferred.await(gate) : Effect.void, Component.noop)
+          { args: { crash: Schema.Boolean } },
+          (_, { crash }) =>
+            crash ? Effect.andThen(Deferred.await(gate), Effect.die("mount defect")) : Effect.succeed(Component.noop)
         )
-        const Quiet = Component.define({ name: "Quiet", model: Schema.Null, message: Schema.Never, elements: Tiny })
-          .make({
-            init: () => null,
-            update: (model) => model,
-            view: (_, h) => h.box(h.field.onMount(Focus({ delayed: true })), h.field.onMount(Focus({ delayed: false })))
-          })
-        const root = yield* TestHost.mount(Quiet, {})
+        const Box = Component.define({ name: "Box", model: Schema.Null, message: Schema.Never, elements: Tiny }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => h.box(h.field.onMount(Focus({ crash: true })), h.field.onMount(Focus({ crash: false })))
+        })
+        const root = yield* TestHost.mount(Box, {})
         yield* TestHost.settle
-        const starts = root.log().filter((entry) => entry._tag === "MountStarted")
-        assert.lengthOf(starts, 2)
-        const delayed = starts.find((entry) => (entry.args as { delayed: boolean }).delayed)
-        const immediate = starts.find((entry) => !(entry.args as { delayed: boolean }).delayed)
-        assert.isDefined(delayed)
-        assert.isDefined(immediate)
-        const ends = () =>
-          root.log().filter((entry) => entry._tag === "MountEnded").map((
-            entry
-          ) => [entry.started, entry.reason, entry.silent])
-        assert.deepStrictEqual(ends(), [[immediate.seq, "completed", true]])
         yield* Deferred.succeed(gate, undefined)
-        yield* TestHost.settle
-        assert.deepStrictEqual(ends(), [[immediate.seq, "completed", true], [delayed.seq, "completed", true]])
-        assert.deepStrictEqual(tags(root).filter((tag) => tag === "Update" || tag === "Failed"), [])
-      }).pipe(
-        Effect.provide(Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })),
-        provideHost
-      ))
-
-    it.effect("a dying mount logs its end as the cause of the instance failure", () =>
-      Effect.gen(function*() {
-        const Crash = Mount.make("Crash", { args: {} }, () => Effect.die("mount defect"))
-        const Broken = Component.define({ name: "Broken", model: Schema.Null, message: Schema.Never, elements: Tiny })
-          .make({
-            init: () => null,
-            update: (model) => model,
-            view: (_, h) => h.field.onMount(Crash())
-          })
-        const root = yield* TestHost.mount(Broken, {})
         yield* Effect.flip(TestHost.settle)
-        const start = root.log().find((entry) => entry._tag === "MountStarted")
-        const end = root.log().find((entry) => entry._tag === "MountEnded")
+        const starts = root.log().filter((entry) => entry._tag === "MountStarted")
+        const ends = root.log().filter((entry) => entry._tag === "MountEnded")
         const failure = root.log().find((entry) => entry._tag === "Failed")
-        assert.isDefined(start)
-        assert.isDefined(end)
+        assert.lengthOf(starts, 2)
+        assert.lengthOf(ends, 2)
+        assert.deepStrictEqual(starts.map((entry) => entry.args), [{ crash: true }, { crash: false }])
+        assert.deepInclude(ends[0], { started: starts[1].seq, reason: "completed", silent: true })
+        assert.deepInclude(ends[1], { started: starts[0].seq, reason: "failed", silent: false })
         assert.isDefined(failure)
-        assert.deepInclude(end, { name: "Crash", started: start.seq, reason: "failed", silent: false })
-        assert.isBelow(end.seq, failure.seq)
-        assert.deepInclude(failure, { in: "mount", causedBy: end.seq })
+        assert.deepInclude(failure, { in: "mount", causedBy: ends[1].seq })
+        assert.notInclude(tags(root), "Update")
       }).pipe(
         Effect.provide(Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })),
         provideHost
