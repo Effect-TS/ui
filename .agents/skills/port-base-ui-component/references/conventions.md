@@ -374,13 +374,15 @@ portal. The details are in the JSDoc of `popover` and `modal` in
   delay or the consumer keeps open. A popup that opens with focus inside
   handles Escape on the focused part. One that opens without focus, such
   as `Tooltip` on hover, hears neither on a part, so it listens on its
-  document: a stream mount on the popover, applied only while the popup
-  shows, reports Escape and mouse presses, as `Tooltip`'s `TrackDismissal`
-  does. No service gives a Subscription the document, so it's a mount and
-  not an entry in `subscriptions`. Which presses are outside is the
-  component's call: `Tooltip` already tracks whether the pointer is on its
-  parts, so its `update` decides, and a popup that doesn't track the
-  pointer compares the press's target in the mount. The popup stays open
+  document: `subscriptions` holds `Html.onDocument` entries gated on the
+  popup showing, one for Escape and one for mouse presses in the capture
+  phase, as `Tooltip` does. The Escape entry cancels the key's default and
+  skips one that's `defaultPrevented`, so a field inside or an enclosing
+  dialog keeps its own. Which presses are outside is the component's call:
+  `Tooltip` already tracks whether the pointer is on its parts, so its
+  `update` decides. The payload doesn't carry the press's target, so a
+  popup that doesn't track the pointer, or that moves focus in the same
+  handler, still uses a stream mount on the popover. The popup stays open
   until the consumer passes `open: false`, so a consumer can refuse.
 - `.popover("auto", open)` with `onToggle` follows the browser: it closes
   on Escape, an outside click, or another auto popover opening, and the

@@ -1188,15 +1188,35 @@ const signals = (document: Document) => {
   }
 }
 
+// `Html.onDocument` and `Html.onWindow` listen here. Each Subscription removes its own listener as
+// it stops. A pointer payload's `pointerType` comes from the event alone.
+const globalEventsOf = (document: Document): Html.GlobalEvents => ({
+  listen: (target, name, { capture }, listener) => {
+    const on = target === "document" ? document : document.defaultView
+    if (on === null) return () => {}
+    const f = (event: Event) =>
+      listener(
+        {
+          ...(payloadOf(name, event, event.target, document.documentElement, undefined) as object),
+          defaultPrevented: event.defaultPrevented
+        },
+        () => event.preventDefault()
+      )
+    on.addEventListener(name, f, { capture })
+    return () => on.removeEventListener(name, f, { capture })
+  }
+})
+
 /**
- * Provides the DOM host as the `Renderer`, `Html.Host`, and the document's
- * `Query.Visibility` and `Query.Connectivity`, for the life of the Layer.
+ * Provides the DOM host as the `Renderer`, `Html.Host`, the document's
+ * `Query.Visibility` and `Query.Connectivity`, and its events as
+ * `Html.GlobalEvents`, for the life of the Layer.
  *
  * **Details**
  *
  * `document` defaults to the global `document`. Closing the Layer removes the
- * host's listeners. The signals use the document and its `defaultView`,
- * never globals.
+ * host's listeners. The signals and `Html.GlobalEvents` use the document and
+ * its `defaultView`, never globals.
  *
  * @stability experimental
  * @category layers
@@ -1214,7 +1234,8 @@ export const layer = (options?: {
     return Context.make(Renderer.Renderer, { host }).pipe(
       Context.add(Html.Host, htmlHost),
       Context.add(Query.Visibility, signal.visibility),
-      Context.add(Query.Connectivity, signal.connectivity)
+      Context.add(Query.Connectivity, signal.connectivity),
+      Context.add(Html.GlobalEvents, globalEventsOf(document))
     )
   }))
 

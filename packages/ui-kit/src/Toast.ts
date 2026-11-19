@@ -376,14 +376,14 @@ const TrackToast = Mount.makeStream(
     Stream.switchMap(changes, ({ ending }) => (ending ? exited(node) : heights(node)))
 )
 
-type ViewportFact = "FocusedViewport" | "BlurredViewport" | "FocusedWindow" | "BlurredWindow" | "LeftViewport"
+type ViewportFact = "FocusedViewport" | "BlurredViewport" | "LeftViewport"
 
 // The roots in a viewport that can take focus: not closing, not limited.
 const focusable =
   "[role=dialog]:not([data-ending-style]):not([inert]),[role=alertdialog]:not([data-ending-style]):not([inert])"
 
-// What the viewport needs from its document and window: F6 into the
-// viewport and back, keyboard focus inside it, the window's focus, a pointer
+// What the viewport needs from its document: F6 into the viewport and back,
+// keyboard focus inside it, a pointer
 // that left while the toast under it was removed, and focus that a closing
 // toast left with nowhere to stay. `empty`: no toast shows, so F6 is the page's.
 // `hovering`: what the Model believes about the pointer.
@@ -394,7 +394,6 @@ const TrackViewport = Mount.makeStream(
     Stream.callback<ViewportFact>((queue) =>
       Effect.gen(function*() {
         const document = node.ownerDocument
-        const window = document.defaultView
         let { empty, hovering } = args
         let focused = false
         // Where focus was before it entered the viewport, by F6, Tab or a
@@ -475,9 +474,6 @@ const TrackViewport = Mount.makeStream(
             document.addEventListener("mouseover", onMouseOver, { capture: true, signal })
             node.addEventListener("focusin", onFocusIn, { signal })
             node.addEventListener("focusout", onFocusOut, { signal })
-            // Focus events don't bubble, so these hear only the window's own.
-            window?.addEventListener("focus", () => Queue.offerUnsafe(queue, "FocusedWindow"), { signal })
-            window?.addEventListener("blur", () => Queue.offerUnsafe(queue, "BlurredWindow"), { signal })
             return () => {
               observer.disconnect()
               controller.abort()
@@ -493,6 +489,12 @@ const TrackViewport = Mount.makeStream(
       })
     )
 )
+
+// The window's focus, since the timers pause while it's elsewhere.
+const windowFocus = [
+  Html.onWindow("focus", Message.FocusedWindow()),
+  Html.onWindow("blur", Message.BlurredWindow())
+]
 
 // The stack is expanded while the pointer is on it or keyboard focus is in it.
 const expandedBy = (model: Model): boolean => model.hovering || model.focused
@@ -677,6 +679,7 @@ export const ToastProvider = Component.define({
     FinishedExit: (model, { id }) =>
       shown(model, id) === undefined ? { ...model, toasts: model.toasts.filter((toast) => toast.id !== id) } : model
   },
+  subscriptions: () => windowFocus,
   parts: (model, p) => {
     const expanded = expandedBy(model)
     const stack = stackOf(model.toasts, p.props.limit ?? 3)

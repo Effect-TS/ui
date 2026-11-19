@@ -2,9 +2,10 @@
 import { Component, UiSchema } from "@effect/ui"
 import { ToastProvider } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
+import { TestGlobalEvents } from "@effect/ui/html/testing"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Schema } from "effect"
+import { Effect, Layer, Schema } from "effect"
 import { TestClock } from "effect/testing"
 
 // The first post is a loading toast; Complete turns it into a timed success.
@@ -116,6 +117,27 @@ describe("ToastProvider", { concurrent: false }, () => {
       yield* wait(1)
       assert.strictEqual(dismissed(), "t1")
     }).pipe(Effect.provide(TestHost.layer())))
+
+  it.effect("the timers pause while the window doesn't have focus, and restart in full when it's back", () =>
+    Effect.gen(function*() {
+      const root = yield* TestHost.mount(Page, { timeout: 1000 })
+      const fire = (id: string) => Locator.fire(root.get(Locator.attr("id", id)), "click")
+      const dismissed = () => Locator.textOf(root.get(Locator.tag("output")))
+      const wait = (millis: number) =>
+        TestHost.settle.pipe(Effect.andThen(TestClock.adjust(`${millis} millis`)), Effect.andThen(TestHost.settle))
+
+      fire("post")
+      fire("complete")
+      yield* wait(500)
+      yield* TestGlobalEvents.fire("window", "blur")
+      yield* wait(2000)
+      assert.strictEqual(dismissed(), "")
+      yield* TestGlobalEvents.fire("window", "focus")
+      yield* wait(999)
+      assert.strictEqual(dismissed(), "")
+      yield* wait(1)
+      assert.strictEqual(dismissed(), "t1")
+    }).pipe(Effect.provide(Layer.merge(TestHost.layer(), TestGlobalEvents.layer))))
 
   it.effect("a collapsed stack exposes a focused Close and reports only user dismissals", () =>
     Effect.gen(function*() {

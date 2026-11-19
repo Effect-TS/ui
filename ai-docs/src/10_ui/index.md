@@ -287,6 +287,24 @@ acknowledges the mount running, and `mounted(DrawChart, result)` sends what
 the body would have produced. A mount nothing acknowledged fails the next message step
 and the end of the test.
 
+### Document and window events
+
+Keys and presses that no element hears, such as a game's arrow keys or an
+Escape that closes a popup opened by hovering, are entries in
+`subscriptions`: `Html.onDocument("keydown", handler, options)`, and
+`Html.onWindow("focus" | "blur", handler)` for the window's focus. The
+handler and `preventDefault` mean what they mean on an element, and the
+payload adds `defaultPrevented`, so a listener can skip a key an element
+already took. `capture: true` hears a press before any element can stop it.
+Gate an entry on the Model to listen only while it's needed. The listener
+always runs the handler from the latest `subscriptions` result, so it may
+read the Model. An instance has one listener per target, event and phase.
+`BrowserHost.layer` provides the source; elsewhere nothing fires. A
+`Story` delivers one with `s.subscription(key, message)`, an `HtmlScene`
+fires one with `s.fireDocument("keydown", { key: "Escape" })`, and a
+`TestHost` test adds `TestGlobalEvents.layer` and calls
+`TestGlobalEvents.fire("document", "keydown", { key: "Escape" })`.
+
 ### Organizing an app
 
 The examples below are one notes app. Each example is an entry module, for

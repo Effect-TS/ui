@@ -79,6 +79,8 @@ import * as Locator from "../../testing/Locator.ts"
 import type * as Scene from "../../testing/Scene.ts"
 import type * as View from "../../View.ts"
 import type * as Html from "../Html.ts"
+import * as fireGlobal from "../internal/fireGlobal.ts"
+import * as globalEvents from "../internal/globalEvents.ts"
 import * as HtmlLocator from "./HtmlLocator.ts"
 
 /**
@@ -179,6 +181,33 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Scene.Step
    * always cancels a drop on a target, so the default is cancelled.
    */
   drop(locator: Locator.Locator, payload?: Partial<Html.DropPayload>): this
+  /**
+   * Fires `event` on the document, as the browser host delivers it to the
+   * component's `Html.onDocument` listeners. Missing payload fields default
+   * as `keydown` and `click` default them, and `defaultPrevented` to
+   * `false`.
+   *
+   * **Details**
+   *
+   * The capture listener runs first, then the bubble one. Each is read
+   * from the `subscriptions` result current as its phase starts, as in a
+   * browser, so a bubble listener the capture listener's message added
+   * runs, and one it removed doesn't. A listener's `preventDefault`
+   * applies to its own message, and the bubble listener sees in
+   * `defaultPrevented` what the capture listener cancelled.
+   *
+   * It throws when nothing listens for `event` on the document, listing
+   * the active keys, and is ignored when no listener produced a message.
+   */
+  fireDocument<K extends keyof Html.DocumentEvents>(
+    event: K,
+    payload?: Partial<Html.GlobalPayload<Html.DocumentEvents[K]>>
+  ): this
+  /** Fires `event` on the window, as `fireDocument` does for `Html.onWindow`'s listeners. */
+  fireWindow<K extends keyof Html.WindowEvents>(
+    event: K,
+    payload?: Partial<Html.GlobalPayload<Html.WindowEvents[K]>>
+  ): this
 
   /** Asserts on the elements `locator` matches in the current view. */
   expect(locator: Locator.Locator): Expect<this>
@@ -525,6 +554,47 @@ class StepsImpl extends internal.SceneCursor {
   /** A drop on a target is always cancelled by the host. */
   private markPrevented(): this {
     return this.replace(engine.update(this.state, { defaultPrevented: true }))
+  }
+  fireDocument(event: string, payload?: object): this {
+    return this.fireGlobal("fireDocument", "document", event, payload)
+  }
+  fireWindow(event: string, payload?: object): this {
+    return this.fireGlobal("fireWindow", "window", event, payload)
+  }
+  private fireGlobal(
+    step: string,
+    target: "document" | "window",
+    event: string,
+    given: object | undefined
+  ): this {
+    let cancelled = false
+    let handled = false
+    return this.act(step, "message", (state) => {
+      let out = state
+      let heard = false
+      cancelled = fireGlobal.fire(event, given, (capture) => {
+        const declared = out.declared().map(globalEvents.listenerOf).find((declared) =>
+          declared !== undefined && declared.target === target && declared.event === event &&
+          declared.capture === capture
+        )
+        if (declared === undefined) return []
+        heard = true
+        return [(payload, preventDefault) =>
+          globalEvents.run(declared, payload, preventDefault, (message, cancel) => {
+            cancel()
+            handled = true
+            out = engine.dispatch(out, message)
+          })]
+      })
+      if (!heard) {
+        throw new Error(
+          `${this.name(step)}: nothing listens for ${JSON.stringify(event)} on the ${target}; active keys: ${
+            JSON.stringify(state.subscriptions())
+          }`
+        )
+      }
+      return out
+    }, () => ({ interaction: handled ? "handled" : "ignored", defaultPrevented: cancelled }))
   }
   override expect(locator: Locator.Locator): object {
     return this.expectation(locator, {
