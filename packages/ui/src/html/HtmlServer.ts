@@ -20,19 +20,20 @@
  * **Example** (Rendering a page)
  *
  * ```ts
- * import { HtmlServer } from "@effect/ui/html"
+ * import { Html, HtmlHead, HtmlServer } from "@effect/ui/html"
  * import { Effect, Schema } from "effect"
  * import { Component, Head } from "@effect/ui"
  *
  * const App = Component.define({
  *   name: "App",
  *   model: Schema.Struct({}),
- *   message: Schema.Never
+ *   message: Schema.Never,
+ *   elements: Html
  * }).make({
  *   init: () => ({}),
  *   update: (model) => model,
- *   head: () => [Head.title("Home"), Head.lang("en")],
- *   view: (_, h) => h.el("h1", "Home")
+ *   head: () => [Head.title("Home"), HtmlHead.lang("en")],
+ *   view: (_, h) => h.h1("Home")
  * })
  *
  * const page = Effect.gen(function*() {
@@ -180,14 +181,17 @@ export const renderToHtml = <
   Renderer.prerender(component, props, { budget: options?.budget, elements: [Html.name], static: options?.static })
     .pipe(
       Effect.provideService(Html.Host, serverHtmlHost),
-      Effect.map((rendered) => ({
-        html: server.toHtml(rendered.nodes),
-        state: rendered.state,
-        model: rendered.model,
-        head: server.headTags(rendered.head),
-        htmlAttributes: server.attributes(server.htmlOwned(rendered.head)),
-        bodyAttributes: server.attributes(server.bodyOwned(rendered.head))
-      }))
+      Effect.map((rendered) => {
+        const head = server.htmlHead(rendered.head)
+        return {
+          html: server.toHtml(rendered.nodes),
+          state: rendered.state,
+          model: rendered.model,
+          head: server.headTags(head),
+          htmlAttributes: server.attributes(server.htmlOwned(head)),
+          bodyAttributes: server.attributes(server.bodyOwned(head))
+        }
+      })
     ) as any
 
 /**

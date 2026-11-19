@@ -98,7 +98,6 @@ import * as SubscriptionRef from "effect/SubscriptionRef"
 import type * as Types from "effect/Types"
 import * as Command from "./Command.ts"
 import type * as Component from "./Component.ts"
-import type * as Head from "./Head.ts"
 import * as services from "./internal/services.ts"
 import { canonical, pairsWithout, withPairs } from "./internal/url.ts"
 import * as Query from "./Query.ts"
@@ -1037,8 +1036,8 @@ export interface Settled {
   readonly index: number
   /** The root's container. */
   readonly container: unknown
-  /** The merged head after the flush. */
-  readonly head: Head.Head
+  /** The title of the head folded in the flush, which the navigation announcement reads. */
+  readonly title: string | undefined
   /** Whether the navigation stayed on the page, so it isn't announced and focus stays. */
   readonly quiet: boolean
   /**
@@ -1646,7 +1645,7 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
           from: done.from,
           index: done.index,
           container: root.container,
-          head: info.head,
+          title: info.title,
           quiet: done.quiet,
           scroll: done.scroll
         })

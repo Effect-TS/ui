@@ -1,4 +1,5 @@
 import { Component, Head, UiSchema } from "@effect/ui"
+import { HtmlHead } from "@effect/ui/html"
 import { Layer, Match, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { ListNotes } from "../notes/queries/ListNotes.ts"
@@ -36,7 +37,7 @@ export const NotesIndexNoDeps = Component.define({
     }),
   // Every mounted instance contributes head entries. They merge in document
   // order, and the later entry wins.
-  head: () => [Head.title("All notes"), Head.meta({ name: "description", content: "Every note you wrote" })],
+  head: () => [Head.title("All notes"), HtmlHead.meta({ name: "description", content: "Every note you wrote" })],
   view: (model, h) =>
     AsyncResult.match(h.queries.notes, {
       onInitial: () => h.p("Loading notes…"),

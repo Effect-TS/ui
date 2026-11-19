@@ -1,9 +1,10 @@
 /**
- * The browser host's head sync: it diffs each merged `Head.Head` against the
- * document, owning only marked tags plus `<title>` and `lang` / `dir`.
+ * The browser host's head sync: it diffs each folded `HtmlHead.HtmlHead` against the
+ * document, owning only marked tags plus `<title>` and `lang` / `dir`. Every host on one
+ * document shares one sync, so they share the shell's baseline.
  */
-import * as Head from "../../Head.ts"
-import * as headAttributes from "../../internal/headAttributes.ts"
+import * as Head from "../HtmlHead.ts"
+import * as headAttributes from "./headAttributes.ts"
 
 type Warn = (message: string) => void
 
@@ -37,7 +38,7 @@ const wanted = (tag: Wanted["tag"], pairs: ReadonlyArray<readonly [string, strin
   }
 }
 
-const wantedOf = (head: Head.Head): Array<Wanted> => [
+const wantedOf = (head: Head.HtmlHead): Array<Wanted> => [
   ...head.meta.map((entry) => wanted("meta", Head.attributes(entry), "")),
   ...head.links.map((entry) => wanted("link", Head.attributes(entry), "")),
   ...head.jsonLd.map((entry) => wanted("script", [["type", ldType]], entry.json))
@@ -57,12 +58,49 @@ interface Owner {
   data: ReadonlySet<string>
 }
 
+interface Shared {
+  readonly sync: (head: Head.HtmlHead) => void
+  hosts: number
+}
+
+/** The sync of each document with a live host: one baseline per document, not per host. */
+const shared = new WeakMap<Document, Shared>()
+
 /**
- * Makes the `head` member of the DOM host.
+ * Makes the `head` member of the DOM host, and `release` for its `dispose`.
+ *
+ * **Details**
+ *
+ * Hosts on one document share one sync, made with the first host's `warn`,
+ * so the shell's values are captured once, before any host writes. Once
+ * every host on the document is released, the next one captures the shell
+ * again.
  *
  * @internal
  */
-export const make = (document: Document, warn: Warn): (head: Head.Head) => void => {
+export const make = (
+  document: Document,
+  warn: Warn
+): { readonly sync: (head: Head.HtmlHead) => void; readonly release: () => void } => {
+  let entry = shared.get(document)
+  if (entry === undefined) {
+    entry = { sync: makeSync(document, warn), hosts: 0 }
+    shared.set(document, entry)
+  }
+  const current = entry
+  current.hosts++
+  let released = false
+  return {
+    sync: current.sync,
+    release: () => {
+      if (released) return
+      released = true
+      if (--current.hosts === 0 && shared.get(document) === current) shared.delete(document)
+    }
+  }
+}
+
+const makeSync = (document: Document, warn: Warn): (head: Head.HtmlHead) => void => {
   const root = document.documentElement
   const html: Owner = { element: root, original: new Map(), tokens: new Set(), data: new Set() }
   const body: Owner | undefined = document.body === null
@@ -98,7 +136,7 @@ export const make = (document: Document, warn: Warn): (head: Head.Head) => void 
     return out
   }
 
-  const checkShell = (head: Head.Head) => {
+  const checkShell = (head: Head.HtmlHead) => {
     // Attributes are compared directly rather than through selectors built from entry values.
     const shellTags = [...document.head.children].filter((element) => !element.hasAttribute(Head.marker))
     const unmarked = (tag: string, attributes: ReadonlyArray<readonly [string, string]>) =>
@@ -143,7 +181,7 @@ export const make = (document: Document, warn: Warn): (head: Head.Head) => void 
     }
     // An attribute the server listed in the marker must hold what the head wants: HTML keeps the first
     // copy of a duplicated attribute, so the shell's own copy shadows it.
-    const missing = (owner: Owner | undefined, want: Head.Head["body"]) => {
+    const missing = (owner: Owner | undefined, want: Head.HtmlHead["body"]) => {
       if (owner === undefined) return
       const names = listed(owner.element)
       if (names.includes("class")) {
@@ -178,7 +216,7 @@ export const make = (document: Document, warn: Warn): (head: Head.Head) => void 
     return false
   }
 
-  const element = (owner: Owner | undefined, want: Head.Head["body"], extra: ReadonlyArray<string>) => {
+  const element = (owner: Owner | undefined, want: Head.HtmlHead["body"], extra: ReadonlyArray<string>) => {
     if (owner === undefined) return
     const set: Array<string> = [...extra]
     // Class tokens are owned once an entry contributes them, and removed once none does.

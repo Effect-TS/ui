@@ -1,12 +1,12 @@
-import { Component, Head, type MessageLog } from "@effect/ui"
+import { Component, Head, type MessageLog, UiSchema } from "@effect/ui"
 import { TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 
-const node = (entries: ReadonlyArray<Head.Entry>, ...children: ReadonlyArray<Head.Tree>): Head.Tree => ({
-  entries,
-  children
-})
+const node = (
+  entries: ReadonlyArray<Head.Entry>,
+  ...children: ReadonlyArray<Head.Tree>
+): Head.Tree => ({ entries, children })
 
 describe("Head", () => {
   it("chains title templates outward, never on the instance's own title", () => {
@@ -16,74 +16,6 @@ describe("Head", () => {
     assert.strictEqual(Head.merge(app(people(node([Head.title("Ada")])))).title, "Ada · People · App")
     assert.strictEqual(Head.merge(app(people())).title, "People · App")
     assert.strictEqual(Head.merge(node([Head.titleTemplate((t) => `${t}!`), Head.title("Root")])).title, "Root")
-  })
-
-  it("lets the later entry win per identity, in document order", () => {
-    const head = Head.merge(node(
-      [
-        Head.meta({ name: "description", content: "root" }),
-        Head.link({ rel: "canonical", href: "/a" }),
-        Head.lang("en")
-      ],
-      node([Head.meta({ name: "description", content: "first" }), Head.link({ rel: "canonical", href: "/b" })]),
-      node([
-        Head.meta({ name: "description", content: "second" }),
-        Head.meta({ property: "og:title", content: "Ada" }),
-        Head.link({ rel: "alternate", href: "/fr", hreflang: "fr" }),
-        Head.link({ rel: "alternate", href: "/de", hreflang: "de" }),
-        Head.lang("fr")
-      ])
-    ))
-    assert.deepStrictEqual(head.meta.map((meta) => meta.content), ["second", "Ada"])
-    assert.deepStrictEqual(head.links.map((link) => link.attributes.href), ["/b", "/fr", "/de"])
-    assert.strictEqual(head.html.lang, "fr")
-  })
-
-  it("unions class tokens in order of first contribution and keeps one data attribute per name", () => {
-    const head = Head.merge(node(
-      [Head.htmlClass("h-full  dark"), Head.bodyClass(["a b"]), Head.htmlData("data-theme", "light")],
-      node([Head.htmlClass(["dark", "x"]), Head.htmlData("data-theme", "dark"), Head.bodyData("data-page", "")])
-    ))
-    assert.deepStrictEqual(head.html.class, ["h-full", "dark", "x"])
-    assert.deepStrictEqual(head.body.class, ["a", "b"])
-    assert.deepStrictEqual(head.html.data, { "data-theme": "dark" })
-    assert.deepStrictEqual(head.body.data, { "data-page": "" })
-  })
-
-  it("lets later data aliases win within a node and across descendants", () => {
-    const head = Head.merge(node(
-      [
-        Head.htmlData("data-THEME", "first"),
-        Head.htmlData("data-theme", "middle"),
-        Head.htmlData("data-THEME", "last"),
-        Head.bodyData("data-PAGE", "first"),
-        Head.bodyData("data-page", "middle")
-      ],
-      node([Head.bodyData("data-PAGE", "last")])
-    ))
-    assert.deepStrictEqual(head.html.data, { "data-theme": "last" })
-    assert.deepStrictEqual(head.body.data, { "data-page": "last" })
-  })
-
-  it("rejects the marker as a data name", () => {
-    assert.throws(() => Head.htmlData("data-eui" as any, "x"), /marker/)
-  })
-
-  it("serialises JSON-LD canonically and escapes <", () => {
-    const a = Head.jsonLd({ b: 1, a: { d: [1, "x"], c: "</script>" }, z: undefined })
-    const b = Head.jsonLd({ a: { c: "</script>", d: [1, "x"] }, b: 1 })
-    assert.strictEqual(a.json, "{\"a\":{\"c\":\"\\u003c/script>\",\"d\":[1,\"x\"]},\"b\":1}")
-    assert.strictEqual(a.json, b.json)
-    const head = Head.merge(
-      node([a], node([b]), node([Head.jsonLd({ b: 2 }, { key: "k" }), Head.jsonLd({ b: 3 }, { key: "k" })]))
-    )
-    assert.deepStrictEqual(head.jsonLd.map((entry) => entry.json), [a.json, "{\"b\":3}"])
-  })
-
-  it("reports what JSON can't hold, with its path", () => {
-    assert.throws(() => Head.jsonLd({ a: { when: new Map() } } as any), /\$\.a\.when is a Map/)
-    assert.throws(() => Head.jsonLd({ list: [1, Number.NaN] }), /\$\.list\[1\] is NaN/)
-    assert.throws(() => Head.jsonLd([1] as any), /not an array/)
   })
 
   it("skips a throwing template and reports it to its node", () => {
@@ -98,6 +30,53 @@ describe("Head", () => {
     assert.strictEqual(Head.merge(tree).title, "Ada")
     assert.strictEqual(errors.length, 1)
     assert.throws(() => Head.merge({ ...tree, onError: undefined }), /bad template/)
+  })
+
+  it("reports two siblings that set the title, and the later one wins", () => {
+    const conflicts: Array<Head.Conflict> = []
+    const head = Head.merge(
+      {
+        path: "/App",
+        entries: [Head.titleTemplate((title) => `${title} · App`), Head.title("App")],
+        children: [
+          { path: "/App/A[a]", entries: [Head.title("A")], children: [] },
+          {
+            path: "/App/B[b]",
+            entries: [],
+            children: [{ path: "/App/B[b]/C[c]", entries: [Head.title("C")], children: [] }]
+          }
+        ]
+      },
+      { onConflict: (conflict) => conflicts.push(conflict) }
+    )
+    assert.strictEqual(head.title, "C · App")
+    assert.deepStrictEqual(conflicts.map((conflict) => [conflict._tag, conflict.slot, conflict.paths]), [
+      ["HeadConflict", "title", ["/App/A[a]", "/App/B[b]/C[c]"]]
+    ])
+    // A descendant overriding its ancestor's title isn't a conflict.
+    conflicts.length = 0
+    Head.merge(
+      {
+        path: "/A",
+        entries: [Head.title("A")],
+        children: [{ path: "/A/B", entries: [Head.title("B")], children: [] }]
+      },
+      { onConflict: (conflict) => conflicts.push(conflict) }
+    )
+    assert.deepStrictEqual(conflicts, [])
+  })
+
+  it("applies each node's reduce bottom up, over its entries and its children's values", () => {
+    const head = Head.merge({
+      entries: [],
+      reduce: (below) => ({ title: `[${below.title}]` }),
+      children: [{
+        entries: [Head.title("Inner")],
+        reduce: (below) => ({ title: below.title?.toUpperCase() }),
+        children: []
+      }]
+    })
+    assert.strictEqual(head.title, "[INNER]")
   })
 
   it.effect("fails only the instance whose title template throws", () =>
@@ -164,7 +143,6 @@ describe("Head", () => {
         init: () => 0,
         update: (model) => model,
         head: () => [
-          Head.lang("en"),
           Head.titleTemplate(() => {
             throw new Error("bad template")
           })
@@ -176,8 +154,7 @@ describe("Head", () => {
       assert.strictEqual(crashed._tag, "RootCrashed")
       assert.strictEqual(root.text(), "down")
       // The failed root and the page under it contribute nothing.
-      assert.strictEqual(root.head().title, undefined)
-      assert.strictEqual(root.head().html.lang, undefined)
+      assert.deepStrictEqual(root.head(), { title: undefined })
     }).pipe(Effect.provide(TestHost.layer())))
 
   it.effect("head gets the props, and follows a props-only change", () =>
@@ -232,5 +209,88 @@ describe("Head", () => {
       root.send(true)
       yield* TestHost.settle
       assert.strictEqual(root.head().title, "Page")
+    }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
+
+  it.effect("a component placed in a child's fallback contributes its head", () =>
+    Effect.gen(function*() {
+      const Notice = Component.define({ name: "Notice", model: Schema.Null, message: Schema.Never }).make({
+        init: () => null,
+        update: (model) => model,
+        head: () => [Head.title("Unavailable")],
+        view: (_, h) => h.text("unavailable")
+      })
+      const Broken = Component.define({ name: "Broken", model: Schema.Null, message: Schema.Never }).make({
+        init: () => null,
+        update: (model) => model,
+        head: () => [Head.title("Broken")],
+        view: (): never => {
+          throw new Error("view")
+        }
+      })
+      const App = Component.define({ name: "App", model: Schema.Null, message: Schema.Never }).make({
+        init: () => null,
+        update: (model) => model,
+        head: () => [Head.titleTemplate((title) => `${title} · App`)],
+        view: (_, h) =>
+          h.el("main", Broken(h, { key: "b", props: {}, fallback: () => Notice(h, { key: "n", props: {} }) }))
+      })
+      const root = yield* TestHost.mount(App, {})
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "unavailable")
+      assert.strictEqual(root.head().title, "Unavailable · App")
+    }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
+
+  it.effect("reports siblings that set the title to Query.Problems with both paths, and applies the later one", () =>
+    Effect.gen(function*() {
+      const Titled = Component.define({
+        name: "Titled",
+        props: Schema.Struct({ title: Schema.String }),
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        head: (_, props) => [Head.title(props.title)],
+        view: (_, h) => h.text(h.props.title)
+      })
+      const App = Component.define({ name: "App", model: Schema.Null, message: Schema.Never }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) =>
+          h.el(
+            "main",
+            Titled(h, { key: "first", props: { title: "First" } }),
+            Titled(h, { key: "second", props: { title: "Second" } })
+          )
+      })
+      const root = yield* TestHost.mount(App, {})
+      const [conflict] = yield* TestHost.expectProblem("HeadConflict")
+      assert.deepStrictEqual((conflict as Head.Conflict).paths, ["/App/Titled[first]", "/App/Titled[second]"])
+      assert.strictEqual((conflict as Head.Conflict).slot, "title")
+      yield* TestHost.settle
+      assert.strictEqual(root.head().title, "Second")
+    }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
+
+  it.effect("reduceHead maps the folded head of the instance and what it placed, and the root's result is final", () =>
+    Effect.gen(function*() {
+      const Message = UiSchema.TaggedEnum({ Shout: {} })
+      const Page = Component.define({ name: "Page", model: Schema.Null, message: Schema.Never }).make({
+        init: () => null,
+        update: (model) => model,
+        head: () => [Head.title("page")],
+        view: (_, h) => h.text("page")
+      })
+      const App = Component.define({ name: "App", model: Schema.Boolean, message: Message }).make({
+        init: () => false,
+        update: () => true,
+        reduceHead: (loud, below) => loud ? { title: below.title?.toUpperCase() } : below,
+        view: (_, h) => h.el("main", Page(h, { key: "page", props: {} }))
+      })
+      const root = yield* TestHost.mount(App, {})
+      yield* TestHost.settle
+      assert.strictEqual(root.head().title, "page")
+      root.send(Message.Shout())
+      yield* TestHost.settle
+      assert.strictEqual(root.head().title, "PAGE")
     }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
 })

@@ -565,8 +565,12 @@ export interface Root<out Model, in Msg, out Events> {
     read: R,
     args: Query.Query.Args<R>
   ) => TestQuery.Entry<Query.Query.Success<R>, Query.Query.Error<R>> | undefined
-  /** The tree's merged document head, as last given to the host. */
-  readonly head: () => Head.Head
+  /**
+   * The head the tree's last fold computed, in the root vocabulary's form,
+   * whether or not the host applies it. Name the form to read it, such as
+   * `root.head<HtmlHead.HtmlHead>()` for an `Html` root.
+   */
+  readonly head: <H = Head.Head>() => H
   /** The `frames` projection after each commit, without consecutive repeats. */
   readonly frames: () => ReadonlyArray<string>
 }
@@ -701,7 +705,7 @@ export const register = (
       pending,
       fetches: () => entries().filter((entry): entry is MessageLog.FetchStarted => entry._tag === "FetchStarted"),
       entry: (read, args) => root.cache.inspect(Query.defOf(read), args) as any,
-      head: root.head,
+      head: root.head as <H>() => H,
       frames
     }
   })

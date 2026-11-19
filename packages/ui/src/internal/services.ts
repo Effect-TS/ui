@@ -6,7 +6,6 @@
 import type * as Cause from "effect/Cause"
 import * as Context from "effect/Context"
 import type * as Effect from "effect/Effect"
-import type * as Head from "../Head.ts"
 import type { Refs as RefsShape, Renderer as RendererShape } from "../Renderer.ts"
 import type * as Route from "../Route.ts"
 
@@ -49,8 +48,8 @@ export interface RootHandle {
  */
 export interface FlushInfo {
   readonly flush: number
-  /** The merged head, as last given to the host. */
-  readonly head: Head.Head
+  /** The title of the head this flush folded, whether or not the host applies it. */
+  readonly title: string | undefined
   /** Provided Layer builds that began in `flush` or later and are still pending, tree-wide. */
   readonly buildsPendingSince: (flush: number) => number
 }

@@ -59,7 +59,6 @@ import * as Fiber from "effect/Fiber"
 import type * as Scope from "effect/Scope"
 import * as TestClock from "effect/testing/TestClock"
 import type * as Component from "../../Component.ts"
-import * as Head from "../../Head.ts"
 import * as runtime from "../../internal/runtime.ts"
 import * as MessageLog from "../../MessageLog.ts"
 import * as Query from "../../Query.ts"
@@ -68,6 +67,7 @@ import * as TestHost from "../../testing/TestHost.ts"
 import type * as View from "../../View.ts"
 import * as BrowserHost from "../BrowserHost.ts"
 import * as Html from "../Html.ts"
+import * as HtmlHead from "../HtmlHead.ts"
 import * as HtmlServer from "../HtmlServer.ts"
 import * as markers from "../internal/markers.ts"
 import * as server from "../internal/server.ts"
@@ -97,7 +97,7 @@ export interface Ssr<out Model, in Msg, out Events = never> {
   readonly html: string
   readonly state: Renderer.State
   readonly model: Model | undefined
-  readonly head: Head.Head
+  readonly head: HtmlHead.HtmlHead
   readonly document: Document
   readonly container: globalThis.Element
   readonly root: TestHost.Root<Model, Msg, Events>
@@ -185,7 +185,7 @@ const markersLeft = (container: globalThis.Element): Array<string> => {
 const show = (value: unknown): string => value === undefined ? "nothing" : JSON.stringify(value)
 
 /** The differences between two merged heads, one line per field or identity. */
-const compareHeads = (serverHead: Head.Head, client: Head.Head): Array<string> => {
+const compareHeads = (serverHead: HtmlHead.HtmlHead, client: HtmlHead.HtmlHead): Array<string> => {
   const problems: Array<string> = []
   const same = (what: string, a: unknown, b: unknown) => {
     if (a !== b) problems.push(`head ${what}: the server has ${show(a)}, the client ${show(b)}`)
@@ -202,11 +202,11 @@ const compareHeads = (serverHead: Head.Head, client: Head.Head): Array<string> =
   }
   byName("html", serverHead.html.data, client.html.data)
   byName("body", serverHead.body.data, client.body.data)
-  const entries = (head: Head.Head) =>
+  const entries = (head: HtmlHead.HtmlHead) =>
     new Map<string, string>([
-      ...head.meta.map((entry) => [Head.identity(entry), JSON.stringify(Head.attributes(entry))] as const),
-      ...head.links.map((entry) => [Head.identity(entry), JSON.stringify(Head.attributes(entry))] as const),
-      ...head.jsonLd.map((entry) => [Head.identity(entry), entry.json] as const)
+      ...head.meta.map((entry) => [HtmlHead.identity(entry), JSON.stringify(HtmlHead.attributes(entry))] as const),
+      ...head.links.map((entry) => [HtmlHead.identity(entry), JSON.stringify(HtmlHead.attributes(entry))] as const),
+      ...head.jsonLd.map((entry) => [HtmlHead.identity(entry), entry.json] as const)
     ])
   const a = entries(serverHead)
   const b = entries(client)
@@ -245,6 +245,12 @@ const stepLimit = 10_000
  * waiting paths. A Layer that sleeps on a clock other than the one it is
  * given is not seen: either phase then spends its whole budget before it
  * gives up.
+ *
+ * The head check compares the server's folded head with the client's fold
+ * of the server's state: the head the mount's first render computes, before
+ * any `onMount` work or later update. An instance still waiting for its
+ * Layer at that render isn't in the client's fold, so give a test the
+ * Layers ready when a waiting subtree contributes head entries.
  *
  * `frames` projects the container after each client commit, starting from
  * the server's markup, for `root.frames()`. It defaults to the container's
@@ -372,6 +378,7 @@ export const ssr = <
       }
     }
     const rendered = (yield* Fiber.join(serverFiber)) as Renderer.Prerendered<Model>
+    const serverHead = server.htmlHead(rendered.head)
     if (now() < start + budget) yield* TestClock.setTime(start + budget)
 
     const problems: Array<string> = []
@@ -381,9 +388,9 @@ export const ssr = <
       for (const problem of serverCache.checkWire(state["~query"] ?? {})) problems.push(`~query: ${problem}`)
     }
     const html = server.toHtml(rendered.nodes)
-    const page = `<!doctype html><html ${server.attributes(server.htmlOwned(rendered.head))}><head>${
-      server.headTags(rendered.head)
-    }</head><body ${server.attributes(server.bodyOwned(rendered.head))}><div id="app">${html}</div></body></html>`
+    const page = `<!doctype html><html ${server.attributes(server.htmlOwned(serverHead))}><head>${
+      server.headTags(serverHead)
+    }</head><body ${server.attributes(server.bodyOwned(serverHead))}><div id="app">${html}</div></body></html>`
     const document = new DOMParser().parseFromString(page, "text/html")
     const container = document.getElementById("app")!
     const before = serverNodes(container)
@@ -418,16 +425,8 @@ export const ssr = <
         return false
       })
     }
-    // The head as the runtime evaluated it at adoption, merged over its own instance tree.
-    let adoptionHead: Head.Head | undefined
     const recording: Renderer.Host<globalThis.Node> = {
       ...host,
-      hydration: {
-        ...host.hydration!,
-        adopted: (head) => {
-          adoptionHead = head
-        }
-      },
       commit: () => {
         host.commit?.()
         judge()
@@ -446,6 +445,9 @@ export const ssr = <
         )
       )
     ) as Effect.Effect<runtime.Root & Renderer.Root<any, any>, never, Exclude<R | RP, Html.Host> | Scope.Scope>
+    // The mount's first render works from the decoded state alone, and its fold runs before any
+    // `onMount` work: this is the fold of the server's state, as the client evaluates it.
+    const clientHead = server.htmlHead(mounted.head())
     const root = yield* TestHost.register(testHost, mounted, clientLog, () => frames.slice())
     let adoptedDone = false
     yield* Effect.forkChild(Effect.andThen(mounted.adopted, Effect.sync(() => adoptedDone = true)))
@@ -492,7 +494,7 @@ export const ssr = <
       problems.push(`${path}: no instance adopted the server's nodes under this path`)
     }
     for (const path of markersLeft(container)) problems.push(`${path}: its markers are still in the document`)
-    problems.push(...compareHeads(rendered.head, adoptionHead ?? Head.empty))
+    problems.push(...compareHeads(serverHead, clientHead))
     if (!isStatic) {
       for (const entry of log) {
         // A caller-only fetch (`stored: false`) is allowed: only a fetch the cache stores defeats hydration.
@@ -513,7 +515,7 @@ export const ssr = <
       html,
       state,
       model: rendered.model,
-      head: rendered.head,
+      head: serverHead,
       document,
       container,
       root: root as TestHost.Root<Model, Msg, Events>,

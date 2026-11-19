@@ -30,4 +30,10 @@ export * as Html from "./Html.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * as HtmlHead from "./HtmlHead.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * as HtmlServer from "./HtmlServer.ts"

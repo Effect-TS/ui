@@ -2,10 +2,10 @@
  * Server HTML: the tree, the head tags and the `<html>` / `<body>` attributes
  * as escaped strings.
  */
-import * as Head from "../../Head.ts"
-import * as headAttributes from "../../internal/headAttributes.ts"
 import type * as Renderer from "../../Renderer.ts"
+import * as Head from "../HtmlHead.ts"
 import * as elements from "./elements.ts"
+import * as headAttributes from "./headAttributes.ts"
 import * as markers from "./markers.ts"
 
 // ---------------------------------------------------------------------------
@@ -158,7 +158,20 @@ const tag = (name: string, pairs: ReadonlyArray<readonly [string, string]>): str
   } ${Head.marker}>`
 
 /** @internal */
-export const headTags = (head: Head.Head): string => {
+/**
+ * The folded head of a root as an `HtmlHead`: a host-neutral root's `Head.Head` holds only the title.
+ *
+ * @internal
+ */
+export const htmlHead = (head: unknown): Head.HtmlHead => {
+  const value = head as Partial<Head.HtmlHead> | undefined
+  return value !== undefined && value.meta !== undefined
+    ? value as Head.HtmlHead
+    : { ...Head.empty, title: value?.title }
+}
+
+/** @internal */
+export const headTags = (head: Head.HtmlHead): string => {
   let out = head.title === undefined ? "" : `<title ${Head.marker}>${escapeText(head.title)}</title>`
   for (const entry of head.meta) out += tag("meta", Head.attributes(entry))
   for (const entry of head.links) out += tag("link", Head.attributes(entry))
@@ -169,14 +182,14 @@ export const headTags = (head: Head.Head): string => {
 
 /** The attributes the head sets on `<html>`, in the order the browser host lists them in the marker. */
 /** @internal */
-export const htmlOwned = (head: Head.Head): ReadonlyArray<readonly [string, string]> => [
+export const htmlOwned = (head: Head.HtmlHead): ReadonlyArray<readonly [string, string]> => [
   ...(head.html.lang === undefined ? [] : [["lang", head.html.lang] as const]),
   ...(head.html.dir === undefined ? [] : [["dir", head.html.dir] as const]),
   ...bodyOwned({ ...head, body: head.html })
 ]
 
 /** @internal */
-export const bodyOwned = (head: Head.Head): ReadonlyArray<readonly [string, string]> => [
+export const bodyOwned = (head: Head.HtmlHead): ReadonlyArray<readonly [string, string]> => [
   ...(head.body.class.length === 0 ? [] : [["class", head.body.class.join(" ")] as const]),
   ...Object.entries(head.body.data)
 ]

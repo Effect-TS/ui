@@ -342,8 +342,8 @@ const payloadOf = (name: string, event: Event, target: EventTarget | null, eleme
  * the `html` vocabulary and host-neutral components. A component of another
  * vocabulary fails as a child when it mounts.
  *
- * The host keeps the document head in sync with the tree's merged
- * `Head.Head`. It owns only tags marked `data-eui`, plus `<title>` and
+ * The host keeps the document head in sync with the tree's folded
+ * `HtmlHead`. It owns only tags marked `data-eui`, plus `<title>` and
  * `lang` / `dir` on `<html>`, and restores the shell's value once no entry
  * sets one. Static titles, `lang`, classes and `data-*` on `<html>` and
  * `<body>` belong in the root component's `head`, not in the shell: HTML
@@ -351,7 +351,9 @@ const payloadOf = (name: string, event: Event, target: EventTarget | null, eleme
  * hide the framework's. `warn` reports a shell that conflicts with the head
  * on the first sync, and defaults to `console.warn`. The check runs in every
  * build, as `effect` has no development switch; it looks at the shell once,
- * and `warn: () => {}` silences it.
+ * and `warn: () => {}` silences it. Every host on one document shares one
+ * baseline of the shell's values, captured by the first, so a second mount
+ * doesn't take the first one's title for the shell's.
  *
  * @stability experimental
  * @category constructors
@@ -1041,7 +1043,7 @@ export const makeHost = (
     elements: [Html.name],
     controlled,
     runsMounts: true,
-    head: syncHead,
+    head: (head) => syncHead.sync(server.htmlHead(head)),
     hydration: {
       firstChild: (node) => node.firstChild ?? undefined,
       inspect(node) {
@@ -1081,6 +1083,7 @@ export const makeHost = (
       showPopovers()
     },
     dispose: () => {
+      syncHead.release()
       for (const [name, f] of listening) document.removeEventListener(name, f, { capture: true })
       listening.clear()
       cancelExitCheck()
@@ -1200,6 +1203,13 @@ export interface MountOptions<V extends View.Elements, RF = never> {
   /** The `state` of `HtmlServer.renderToHtml`, to hydrate the server's HTML. */
   readonly state?: Renderer.State | undefined
   readonly query?: Renderer.QueryOptions | undefined
+  /**
+   * Whether this mount owns the document head: `true` by default. A mount
+   * embedded in a page that something else owns, such as a widget, passes
+   * `false`: it computes its head and never writes `document.title` or a
+   * head tag.
+   */
+  readonly head?: boolean | undefined
 }
 
 /**
@@ -1249,6 +1259,13 @@ export interface MountOptions<V extends View.Elements, RF = never> {
  * the Router, and a `<form>` submits natively. What the user types or picks
  * in its fields stays, and reaches the fields' `onInput` and `onChange` when
  * it adopts. Head sync starts once no instance is waiting.
+ *
+ * **The head.** The mount owns the document head: `<title>`, the marked
+ * head tags and the `<html>` and `<body>` attributes follow the tree's
+ * folded `HtmlHead`. A mount embedded in a page that another mount, or the
+ * server, owns passes `head: false`: it still computes its head, and its
+ * Router announces the title, but it leaves the document alone. With two
+ * mounts on one document, only the one that owns the head writes it.
  *
  * **Example** (Launching an app)
  *

@@ -61,7 +61,6 @@
 import type * as Effect from "effect/Effect"
 import type * as Scope from "effect/Scope"
 import type * as Component from "../Component.ts"
-import type * as Head from "../Head.ts"
 import * as replay from "../internal/replay.ts"
 import * as cursor from "../internal/steps.ts"
 import * as engine from "../internal/story.ts"
@@ -328,7 +327,8 @@ export const parts = <Props, Events, Parts, R, Rcv>(
 /**
  * One instance's head entries for a Model and props, or for the Model,
  * props and queries of a story's or a scene's record: what its `head` option returns, or none without one.
- * The merge across the tree is a runtime test's.
+ * The entries are typed by the component's vocabulary. The fold across the
+ * tree is a runtime test's.
  *
  * **Details**
  *
@@ -366,8 +366,8 @@ export const head: {
     component: Component.Component<Name, Props, Model, Msg, Events, R, V, any, Rcv>,
     model: Model,
     ...props: {} extends Props ? [props?: Props] : [props: Props]
-  ): ReadonlyArray<Head.Entry>
-  <Props, Model, Msg, Events>(record: Shared.Record<Props, Model, Msg, Events>): ReadonlyArray<Head.Entry>
+  ): ReadonlyArray<View.HeadEntry<V>>
+  <Props, Model, Msg, Events>(record: Shared.Record<Props, Model, Msg, Events>): ReadonlyArray<unknown>
 } = (
   self: AnyComponent | Shared.Record<any, any, any, any>,
   model?: unknown,

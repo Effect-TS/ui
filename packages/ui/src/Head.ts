@@ -1,27 +1,28 @@
 /**
- * Document head: the title, meta and link tags, JSON-LD blocks, and the
- * `lang`, `dir`, `class` and `data-*` attributes of `<html>` and `<body>`.
+ * The host-neutral part of a component's head: the title, title templates,
+ * and the fold that turns a tree of entries into one value.
  *
  * Any component can contribute head entries through a pure `head` option,
- * a function of its Model. Entries belong to their instance and live and die
- * with it. On every flush where an instance with `head` rendered, the runtime
- * collects the entries of the mounted tree in document order and merges them
- * into one `Head`, which the host applies: the browser host diffs it against
- * the document, the server renderer will print it, and `TestHost` exposes it.
+ * a function of its Model, props and queries. On every flush that changed a
+ * view, the runtime folds the entries of the placed tree, fallback content
+ * included, into one value with the root vocabulary's merge, and a mount that
+ * owns the document hands it to its host. A component on a host-neutral
+ * vocabulary may contribute only `title` and `titleTemplate`. The HTML
+ * vocabulary adds `meta`, `link`, JSON-LD and the `<html>` and `<body>`
+ * attributes in `HtmlHead`.
  *
- * **Merge rules**
+ * **The fold**
  *
- * - The later entry wins per identity, so a descendant overrides its
- *   ancestors and, between siblings, the later one wins.
- * - The title, `lang`, `dir` and `<link rel="canonical">` each have one entry.
- *   A meta tag is identified by its `key`, else its `name` or `property`; a
- *   link by its `key`, else `rel` plus `href`; a JSON-LD block by its `key`,
- *   else its canonical form.
- * - `class` tokens are unioned in the order they were first contributed, and
- *   `data-*` attributes have one entry per name.
- * - A `titleTemplate` applies to a title set by a descendant, never to its own
- *   instance's title. The winning title passes through its ancestors'
- *   templates outward, nearest first.
+ * Each node's value is its own entries followed by its children's values, in
+ * document order, so a descendant overrides its ancestors. A component's
+ * `reduceHead` then maps that value, and the root's result is final.
+ *
+ * - **Titles.** A `titleTemplate` applies to a title set by a descendant,
+ *   never to its own instance's title, so the title passes through its
+ *   ancestors' templates outward, nearest first.
+ * - **Conflicts.** When two siblings set one single slot, such as the title,
+ *   the later one wins and the merge reports a `Conflict` naming both paths.
+ *   The runtime sends it to `Query.Problems`.
  *
  * **Example** (A layout template and a page title)
  *
@@ -29,45 +30,34 @@
  * import { Head } from "@effect/ui"
  *
  * const head = Head.merge({
- *   entries: [Head.titleTemplate((title) => `${title} · App`), Head.lang("en")],
+ *   entries: [Head.titleTemplate((title) => `${title} · App`)],
  *   children: [{
  *     entries: [Head.titleTemplate((title) => `${title} · People`), Head.title("People")],
- *     children: [{ entries: [Head.title("Ada"), Head.meta({ name: "description", content: "Ada's page" })], children: [] }]
+ *     children: [{ entries: [Head.title("Ada")], children: [] }]
  *   }]
  * })
  *
  * head.title // => "Ada · People · App"
- * head.html.lang // => "en"
- * head.meta.map((meta) => meta.content) // => ["Ada's page"]
  * ```
  *
  * @stability experimental
  * @since 0.1.0
  */
-import * as headAttributes from "./internal/headAttributes.ts"
+import * as Data from "effect/Data"
+import * as headFold from "./internal/headFold.ts"
 
 /**
- * One head entry, as a component's `head` option returns it.
+ * A host-neutral head entry: a title or a title template.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export type Entry =
-  | Title
-  | TitleTemplate
-  | Meta
-  | Link
-  | Lang
-  | Dir
-  | JsonLd
-  | HtmlClass
-  | BodyClass
-  | HtmlData
-  | BodyData
+export type Entry = Title | TitleTemplate
 
 /**
- * The document title.
+ * The title: the document's, a window's or a screen's, as the host gives it
+ * a meaning. The Router's navigation announcement reads it.
  *
  * @stability experimental
  * @category models
@@ -91,185 +81,7 @@ export interface TitleTemplate {
 }
 
 /**
- * A `<meta>` tag, named by `name` or by `property`.
- *
- * @stability experimental
- * @category models
- * @since 0.1.0
- */
-export interface Meta {
-  readonly _tag: "Meta"
-  readonly name: string | undefined
-  readonly property: string | undefined
-  readonly content: string
-  readonly key: string | undefined
-}
-
-/**
- * The attributes a `<link>` tag may have.
- *
- * **Details**
- *
- * Links have no `nonce` and no event attributes.
- *
- * @stability experimental
- * @category models
- * @since 0.1.0
- */
-export interface LinkAttributes {
-  readonly rel: string
-  readonly href: string
-  readonly hreflang?: string | undefined
-  readonly type?: string | undefined
-  readonly media?: string | undefined
-  readonly as?: string | undefined
-  readonly sizes?: string | undefined
-  readonly crossorigin?: string | undefined
-  readonly imagesrcset?: string | undefined
-  readonly imagesizes?: string | undefined
-}
-
-/**
- * A `<link>` tag.
- *
- * @stability experimental
- * @category models
- * @since 0.1.0
- */
-export interface Link {
-  readonly _tag: "Link"
-  readonly attributes: LinkAttributes
-  readonly key: string | undefined
-}
-
-/**
- * The `lang` attribute of `<html>`.
- *
- * @stability experimental
- * @category models
- * @since 0.1.0
- */
-export interface Lang {
-  readonly _tag: "Lang"
-  readonly code: string
-}
-
-/**
- * The `dir` attribute of `<html>`.
- *
- * @stability experimental
- * @category models
- * @since 0.1.0
- */
-export interface Dir {
-  readonly _tag: "Dir"
-  readonly dir: "ltr" | "rtl"
-}
-
-/**
- * A JSON-LD block, rendered as `<script type="application/ld+json">`.
- *
- * **Details**
- *
- * `json` is the canonical form: keys sorted recursively, undefined properties
- * dropped, and `<` escaped as `\u003c`, so it's safe inside a script tag and
- * two equal values always print the same.
- *
- * @stability experimental
- * @category models
- * @since 0.1.0
- */
-export interface JsonLd {
-  readonly _tag: "JsonLd"
-  readonly value: object
-  readonly json: string
-  readonly key: string | undefined
-}
-
-/**
- * Class tokens for `<html>`.
- *
- * @stability experimental
- * @category models
- * @since 0.1.0
- */
-export interface HtmlClass {
-  readonly _tag: "HtmlClass"
-  readonly tokens: ReadonlyArray<string>
-}
-
-/**
- * Class tokens for `<body>`.
- *
- * @stability experimental
- * @category models
- * @since 0.1.0
- */
-export interface BodyClass {
-  readonly _tag: "BodyClass"
-  readonly tokens: ReadonlyArray<string>
-}
-
-/**
- * A `data-*` attribute of `<html>`.
- *
- * @stability experimental
- * @category models
- * @since 0.1.0
- */
-export interface HtmlData {
-  readonly _tag: "HtmlData"
-  readonly name: `data-${string}`
-  readonly value: string
-}
-
-/**
- * A `data-*` attribute of `<body>`.
- *
- * @stability experimental
- * @category models
- * @since 0.1.0
- */
-export interface BodyData {
-  readonly _tag: "BodyData"
-  readonly name: `data-${string}`
-  readonly value: string
-}
-
-/**
- * A `data-*` attribute name. `data-eui` is the framework's marker, so it's
- * excluded.
- *
- * @stability experimental
- * @category utility types
- * @since 0.1.0
- */
-export type DataName<N extends string> = N extends "data-eui" ? never : N extends `data-${string}` ? N : never
-
-/**
- * What a JSON-LD block accepts: an object whose properties aren't functions,
- * dates, bigints or symbols. Deeper levels are checked when the entry is
- * built.
- *
- * @stability experimental
- * @category utility types
- * @since 0.1.0
- */
-export type JsonLdValue<A extends object> =
-  & A
-  & { readonly [K in keyof A]: A[K] extends Function | Date | bigint | symbol ? never : A[K] }
-
-/**
- * The marker attribute on every head tag the framework writes.
- *
- * @stability experimental
- * @category constants
- * @since 0.1.0
- */
-export const marker = headAttributes.marker
-
-/**
- * Sets the document title.
+ * Sets the title.
  *
  * @stability experimental
  * @category constructors
@@ -283,7 +95,8 @@ export const title = (text: string): Title => ({ _tag: "Title", text })
  * **Details**
  *
  * It never applies to a title set by its own instance. Templates chain
- * outward: the nearest ancestor's applies first.
+ * outward: the nearest ancestor's applies first. When an instance has
+ * several, the last one counts.
  *
  * @stability experimental
  * @category constructors
@@ -292,235 +105,7 @@ export const title = (text: string): Title => ({ _tag: "Title", text })
 export const titleTemplate = (apply: (title: string) => string): TitleTemplate => ({ _tag: "TitleTemplate", apply })
 
 /**
- * Adds a `<meta>` tag, named by `name` or by `property`.
- *
- * **Details**
- *
- * Its identity is `key`, else the `name` or `property`. `http-equiv` meta tags
- * and `<meta charset>` belong to the shell and aren't entries.
- *
- * @stability experimental
- * @category constructors
- * @since 0.1.0
- */
-export const meta = (
-  options:
-    | { readonly name: string; readonly content: string; readonly key?: string | undefined }
-    | { readonly property: string; readonly content: string; readonly key?: string | undefined }
-): Meta => ({
-  _tag: "Meta",
-  name: "name" in options ? options.name : undefined,
-  property: "property" in options ? options.property : undefined,
-  content: options.content,
-  key: options.key
-})
-
-/**
- * Adds a `<link>` tag.
- *
- * **Details**
- *
- * `rel="canonical"` has one entry. Other links are identified by `key`,
- * else by `rel` plus `href`.
- *
- * @stability experimental
- * @category constructors
- * @since 0.1.0
- */
-export const link = (options: LinkAttributes & { readonly key?: string | undefined }): Link => {
-  const { key, ...attributes } = options
-  return { _tag: "Link", attributes, key }
-}
-
-/**
- * Sets the `lang` attribute of `<html>`.
- *
- * @stability experimental
- * @category constructors
- * @since 0.1.0
- */
-export const lang = (code: string): Lang => ({ _tag: "Lang", code })
-
-/**
- * Sets the `dir` attribute of `<html>`.
- *
- * @stability experimental
- * @category constructors
- * @since 0.1.0
- */
-export const dir = (dir: "ltr" | "rtl"): Dir => ({ _tag: "Dir", dir })
-
-/**
- * Adds a JSON-LD block.
- *
- * **Details**
- *
- * The value is an object, never a top-level array: use `@graph` for several
- * nodes. It's identified by `key`, else by its canonical form, and the host
- * rewrites a block only when its canonical form changes.
- *
- * The type rejects functions, dates, bigints and symbols one level deep. When
- * the entry is built, deeper levels are checked too: an object whose prototype
- * isn't `Object.prototype` or `null` (a `Date`, `Map`, `Option` or class
- * instance), or an array holding `NaN`, `Infinity` or `undefined`, throws an
- * error naming its JSON path. In a `head` option that fails the instance.
- * The check runs in every build, not only in development: `effect` has no
- * development switch, and it shares the walk the canonical serialisation
- * makes anyway.
- *
- * **Example** (Describing a person)
- *
- * ```ts import.meta.vitest
- * import { Head } from "@effect/ui"
- *
- * const entry = Head.jsonLd({ "@context": "https://schema.org", "@type": "Person", name: "Ada <Lovelace>" })
- *
- * entry.json // => '{"@context":"https://schema.org","@type":"Person","name":"Ada \\u003cLovelace>"}'
- * ```
- *
- * @stability experimental
- * @category constructors
- * @since 0.1.0
- */
-export const jsonLd = <const A extends object>(
-  value: JsonLdValue<A>,
-  options?: { readonly key?: string | undefined }
-): JsonLd => {
-  if (Array.isArray(value)) throw new Error("Head.jsonLd takes an object, not an array. Use @graph for several nodes.")
-  return { _tag: "JsonLd", value, json: canonicalJson(value), key: options?.key }
-}
-
-const splitTokens = (tokens: string | ReadonlyArray<string>): ReadonlyArray<string> =>
-  (typeof tokens === "string" ? [tokens] : tokens).flatMap((token) => token.split(/[\t\n\f\r ]+/)).filter((t) =>
-    t !== ""
-  )
-
-/**
- * Adds class tokens to `<html>`. Strings are split on ASCII whitespace.
- *
- * **Details**
- *
- * A token becomes the framework's once any entry contributes it, and the
- * browser host removes it once no entry does, even if it was in the shell.
- * Tokens no entry ever contributed are never touched.
- *
- * @stability experimental
- * @category constructors
- * @since 0.1.0
- */
-export const htmlClass = (tokens: string | ReadonlyArray<string>): HtmlClass => ({
-  _tag: "HtmlClass",
-  tokens: splitTokens(tokens)
-})
-
-/**
- * Adds class tokens to `<body>`. Strings are split on ASCII whitespace.
- *
- * @stability experimental
- * @category constructors
- * @since 0.1.0
- */
-export const bodyClass = (tokens: string | ReadonlyArray<string>): BodyClass => ({
-  _tag: "BodyClass",
-  tokens: splitTokens(tokens)
-})
-
-const checkDataName = (name: string) => {
-  if (name === marker) throw new Error(`${marker} is the framework's marker and can't be set from head`)
-}
-
-/**
- * Sets a `data-*` attribute of `<html>`. `""` means present and empty.
- *
- * **Details**
- *
- * When the last entry for a name goes away, the browser host removes the
- * attribute, or restores the value the shell had.
- *
- * @stability experimental
- * @category constructors
- * @since 0.1.0
- */
-export const htmlData = <const N extends string>(name: N & DataName<N>, value: string): HtmlData => {
-  checkDataName(name)
-  return { _tag: "HtmlData", name: name as `data-${string}`, value }
-}
-
-/**
- * Sets a `data-*` attribute of `<body>`. `""` means present and empty.
- *
- * @stability experimental
- * @category constructors
- * @since 0.1.0
- */
-export const bodyData = <const N extends string>(name: N & DataName<N>, value: string): BodyData => {
-  checkDataName(name)
-  return { _tag: "BodyData", name: name as `data-${string}`, value }
-}
-
-// ---------------------------------------------------------------------------
-// JSON-LD
-// ---------------------------------------------------------------------------
-
-const pathOf = (path: string, key: string | number): string =>
-  typeof key === "number"
-    ? `${path}[${key}]`
-    : /^[A-Za-z_$][\w$]*$/.test(key)
-    ? `${path}.${key}`
-    : `${path}[${JSON.stringify(key)}]`
-
-const canonical = (value: unknown, path: string): unknown => {
-  if (value === null || typeof value === "string" || typeof value === "boolean") return value
-  if (typeof value === "number") return value
-  if (Array.isArray(value)) {
-    return value.map((item, index) => {
-      if (item === undefined || (typeof item === "number" && !Number.isFinite(item))) {
-        throw new Error(`Head.jsonLd: ${pathOf(path, index)} is ${String(item)}, which JSON can't hold`)
-      }
-      return canonical(item, pathOf(path, index))
-    })
-  }
-  if (typeof value === "object") {
-    const proto = Object.getPrototypeOf(value)
-    if (proto !== Object.prototype && proto !== null) {
-      const name = proto?.constructor?.name
-      throw new Error(`Head.jsonLd: ${path} is a${name === undefined ? "n object" : ` ${name}`}, not a plain object`)
-    }
-    const out: Record<string, unknown> = {}
-    for (const key of Object.keys(value).sort()) {
-      const item = (value as Record<string, unknown>)[key]
-      if (item === undefined) continue
-      out[key] = canonical(item, pathOf(path, key))
-    }
-    return out
-  }
-  throw new Error(`Head.jsonLd: ${path} is a ${typeof value}, which JSON can't hold`)
-}
-
-/**
- * The canonical JSON of a value: keys sorted recursively, undefined
- * properties dropped and `<` escaped as `\u003c`.
- *
- * @stability experimental
- * @category utils
- * @since 0.1.0
- */
-export const canonicalJson = (value: object): string => JSON.stringify(canonical(value, "$")).replaceAll("<", "\\u003c")
-
-// ---------------------------------------------------------------------------
-// Merge
-// ---------------------------------------------------------------------------
-
-/**
- * The merged head of a tree, ready for a host.
- *
- * **Details**
- *
- * `title` has the templates applied. `meta`, `links` and `jsonLd` hold one
- * entry per identity, in the order each identity was first contributed, with
- * the value of the last entry. `html` and `body` hold the attributes set on
- * those elements; `class` lists tokens in the order they were first
- * contributed.
+ * The folded head of a host-neutral tree.
  *
  * @stability experimental
  * @category models
@@ -528,203 +113,140 @@ export const canonicalJson = (value: object): string => JSON.stringify(canonical
  */
 export interface Head {
   readonly title: string | undefined
-  readonly meta: ReadonlyArray<Meta>
-  readonly links: ReadonlyArray<Link>
-  readonly jsonLd: ReadonlyArray<JsonLd>
-  readonly html: {
-    readonly lang: string | undefined
-    readonly dir: "ltr" | "rtl" | undefined
-    readonly class: ReadonlyArray<string>
-    readonly data: Readonly<Record<string, string>>
-  }
-  readonly body: {
-    readonly class: ReadonlyArray<string>
-    readonly data: Readonly<Record<string, string>>
-  }
 }
 
 /**
- * The head with no entries.
- *
- * @stability experimental
- * @category constants
- * @since 0.1.0
- */
-export const empty: Head = {
-  title: undefined,
-  meta: [],
-  links: [],
-  jsonLd: [],
-  html: { lang: undefined, dir: undefined, class: [], data: {} },
-  body: { class: [], data: {} }
-}
-
-/**
- * The entries of a tree of instances: each instance's own entries and its
- * children, in document order.
+ * A tree of head entries: each node's own entries and its children, in
+ * document order. The runtime builds one node per instance.
  *
  * **Details**
  *
- * `onError` is called when one of the node's own title templates throws.
- * The merge then skips that template. Without `onError` the error is
+ * `path` names the node in a `Conflict`. `reduce` maps the node's value,
+ * its own entries merged with its children's values, as a component's
+ * `reduceHead` does. `onError` is called when one of the node's own title
+ * templates or its `reduce` throws: the merge then skips that template, or
+ * keeps the value the `reduce` was given. Without `onError` the error is
  * rethrown.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface Tree {
-  readonly entries: ReadonlyArray<Entry>
-  readonly children: ReadonlyArray<Tree>
+export interface Tree<E = Entry, H = Head> {
+  readonly path?: string | undefined
+  readonly entries: ReadonlyArray<E>
+  readonly children: ReadonlyArray<Tree<E, H>>
+  readonly reduce?: ((below: H) => H) | undefined
   readonly onError?: ((error: unknown) => void) | undefined
 }
 
 /**
- * The identity of a meta, link or JSON-LD entry: two entries with the same
- * identity are the same entry, and the later one wins.
+ * Two siblings set the same single slot, such as the title. The later one
+ * wins. `paths` holds the earlier sibling's path, then the later one's.
  *
  * @stability experimental
- * @category utils
+ * @category problems
  * @since 0.1.0
  */
-export const identity = (entry: Meta | Link | JsonLd): string => {
-  switch (entry._tag) {
-    case "Meta":
-      return entry.key !== undefined
-        ? `meta key:${entry.key}`
-        : entry.name !== undefined
-        ? `meta name:${entry.name}`
-        : `meta property:${entry.property}`
-    case "Link": {
-      const normalized = new Map(headAttributes.normalize(attributes(entry)))
-      return normalized.get("rel") === "canonical"
-        ? "link canonical"
-        : entry.key !== undefined
-        ? `link key:${entry.key}`
-        : `link ${normalized.get("rel")} ${normalized.get("href")}`
-    }
-    case "JsonLd":
-      return entry.key !== undefined ? `jsonld key:${entry.key}` : `jsonld ${entry.json}`
-  }
+export class Conflict extends Data.TaggedClass("HeadConflict")<{
+  readonly message: string
+  readonly slot: string
+  readonly paths: readonly [string, string]
+}> {}
+
+/**
+ * Options of a merge: where it reports a `Conflict`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface MergeOptions {
+  readonly onConflict?: ((conflict: Conflict) => void) | undefined
 }
 
 /**
- * The attributes of a meta or link tag, in a stable order, without the
- * marker.
+ * Makes the `Conflict` for a slot two siblings set.
  *
  * @stability experimental
- * @category utils
+ * @category constructors
  * @since 0.1.0
  */
-export const attributes = (entry: Meta | Link): ReadonlyArray<readonly [string, string]> => {
-  if (entry._tag === "Meta") {
-    return [
-      entry.name !== undefined ? ["name", entry.name] as const : ["property", entry.property!] as const,
-      ["content", entry.content]
-    ]
-  }
-  const out: Array<readonly [string, string]> = []
-  for (const [name, value] of Object.entries(entry.attributes)) {
-    if (value !== undefined) out.push([name, value])
-  }
-  return out
-}
-
-interface Template {
-  readonly apply: (title: string) => string
-  readonly node: Tree
-}
-
-const applyTemplate = (text: string, template: Template): string => {
-  try {
-    return template.apply(text)
-  } catch (error) {
-    if (template.node.onError === undefined) throw error
-    template.node.onError(error)
-    return text
-  }
-}
+export const conflict = (slot: string, earlier: string, later: string): Conflict =>
+  new Conflict({
+    message: `Head: ${earlier} and ${later} both set ${slot}, and the later one, ${later}, wins`,
+    slot,
+    paths: [earlier, later]
+  })
 
 /**
- * Merges a tree's entries into one `Head`.
+ * The template rule: the title a node passes up. That's the title its
+ * children passed up, through the node's own template, or else the node's own
+ * title.
  *
  * **Details**
  *
- * Entries are read in pre-order, so the later entry wins per identity. The
- * winning title passes through the `titleTemplate` of each ancestor of the
- * instance that set it, nearest first. An instance's own template never
- * applies to its own title, and when an instance has several templates the
- * last one counts. A template that throws is reported to its node's
- * `onError` and skipped.
+ * `entries` may hold any vocabulary's entries: only `Title` and
+ * `TitleTemplate` are read, and the last of each counts. A template that
+ * throws is reported to `onError` and skipped, or rethrown without it.
+ *
+ * @stability experimental
+ * @category utils
+ * @since 0.1.0
+ */
+export const resolveTitle = (
+  node: {
+    readonly entries: ReadonlyArray<{ readonly _tag: string }>
+    readonly onError?: ((error: unknown) => void) | undefined
+  },
+  below: string | undefined
+): string | undefined => {
+  let own: string | undefined
+  let template: TitleTemplate | undefined
+  for (const entry of node.entries) {
+    if (entry._tag === "Title") own = (entry as Title).text
+    else if (entry._tag === "TitleTemplate") template = entry as TitleTemplate
+  }
+  if (below === undefined) return own
+  if (template === undefined) return below
+  try {
+    return template.apply(below)
+  } catch (error) {
+    if (node.onError === undefined) throw error
+    node.onError(error)
+    return below
+  }
+}
+
+const hasTitle = (entries: ReadonlyArray<{ readonly _tag: string }>): boolean =>
+  entries.some((entry) => entry._tag === "Title")
+
+/**
+ * Folds a host-neutral tree into its title, applying each node's `reduce`
+ * bottom up.
+ *
+ * **Details**
+ *
+ * Entries of other vocabularies are ignored. Two siblings that both pass a
+ * title up are reported to `onConflict`, and the later one wins.
  *
  * @stability experimental
  * @category combinators
  * @since 0.1.0
  */
-export const merge = (tree: Tree): Head => {
-  let title: { readonly text: string; readonly templates: ReadonlyArray<Template> } | undefined
-  const meta = new Map<string, Meta>()
-  const links = new Map<string, Link>()
-  const json = new Map<string, JsonLd>()
-  let lang: string | undefined
-  let dirValue: "ltr" | "rtl" | undefined
-  const htmlClasses = new Set<string>()
-  const bodyClasses = new Set<string>()
-  const htmlDataMap = new Map<string, string>()
-  const bodyDataMap = new Map<string, string>()
-  const visit = (node: Tree, templates: ReadonlyArray<Template>) => {
-    let own: Template | undefined
-    for (const entry of node.entries) {
-      switch (entry._tag) {
-        case "Title":
-          title = { text: entry.text, templates }
-          break
-        case "TitleTemplate":
-          own = { apply: entry.apply, node }
-          break
-        case "Meta":
-          meta.set(identity(entry), entry)
-          break
-        case "Link":
-          links.set(identity(entry), entry)
-          break
-        case "JsonLd":
-          json.set(identity(entry), entry)
-          break
-        case "Lang":
-          lang = entry.code
-          break
-        case "Dir":
-          dirValue = entry.dir
-          break
-        case "HtmlClass":
-          for (const token of entry.tokens) htmlClasses.add(token)
-          break
-        case "BodyClass":
-          for (const token of entry.tokens) bodyClasses.add(token)
-          break
-        case "HtmlData": {
-          const name = headAttributes.name(entry.name)
-          if (name !== undefined) htmlDataMap.set(name, entry.value)
-          break
-        }
-        case "BodyData": {
-          const name = headAttributes.name(entry.name)
-          if (name !== undefined) bodyDataMap.set(name, entry.value)
-          break
-        }
-      }
-    }
-    const inner = own === undefined ? templates : [own, ...templates]
-    for (const child of node.children) visit(child, inner)
-  }
-  visit(tree, [])
-  return {
-    title: title === undefined ? undefined : title.templates.reduce(applyTemplate, title.text),
-    meta: [...meta.values()],
-    links: [...links.values()],
-    jsonLd: [...json.values()],
-    html: { lang, dir: dirValue, class: [...htmlClasses], data: Object.fromEntries(htmlDataMap) },
-    body: { class: [...bodyClasses], data: Object.fromEntries(bodyDataMap) }
-  }
-}
+export const merge = <E extends { readonly _tag: string } = Entry>(
+  tree: Tree<E, Head>,
+  options?: MergeOptions
+): Head =>
+  headFold.fold(tree, {
+    combine: (node, children) => {
+      let below: string | undefined
+      for (const child of children) if (child.title !== undefined) below = child.title
+      return { title: resolveTitle(node, below) }
+    },
+    slots: (head) => new Map(head.title === undefined ? [] : [["title", head.title]]),
+    ownSlots: (entries) => hasTitle(entries) ? ["title"] : []
+  }, options?.onConflict === undefined ? undefined : reportTo(options.onConflict))
+
+const reportTo = (onConflict: (conflict: Conflict) => void) => (slot: string, earlier: string, later: string) =>
+  onConflict(conflict(slot, earlier, later))
