@@ -1,7 +1,14 @@
+// Size of a minimal counter client bundled with Vite against the packed @effect/ui.
+//
+// Run from the repository root, after `pnpm build`:
+//
+//   pnpm bundle-size [--json <file>] [--base <file>]
+//
+// --json writes the result and --base adds deltas against an earlier --json file. The table is also
+// appended to $GITHUB_STEP_SUMMARY when that is set.
 import assert from "node:assert/strict"
 import { execFileSync } from "node:child_process"
 import * as fs from "node:fs"
-import { createRequire } from "node:module"
 import { tmpdir } from "node:os"
 import * as path from "node:path"
 import { parseArgs } from "node:util"
@@ -11,12 +18,14 @@ import { build, version as vite } from "vite"
 
 const { values: { base, json } } = parseArgs({ options: { base: { type: "string" }, json: { type: "string" } } })
 const ui = path.resolve(import.meta.dirname, "../..")
-const effectManifest = createRequire(import.meta.url).resolve("effect/package.json")
-const effect = JSON.parse(fs.readFileSync(effectManifest, "utf8")).version
+const effectDir = path.join(ui, "node_modules/effect")
+const effect = JSON.parse(fs.readFileSync(path.join(effectDir, "package.json"), "utf8")).version
 const target = "es2023"
 
 async function checkCounter(code) {
-  const window = new Window({ settings: { enableJavaScriptEvaluation: true } })
+  const window = new Window({
+    settings: { enableJavaScriptEvaluation: true, suppressInsecureJavaScriptEnvironmentWarning: true }
+  })
   try {
     const document = window.document
     document.body.innerHTML = '<div id="app"></div>'
@@ -45,9 +54,10 @@ async function measure() {
     fs.mkdirSync(installed, { recursive: true })
     execFileSync("pnpm", ["pack", "--out", packed], { cwd: ui })
     execFileSync("tar", ["-xzf", packed, "--strip-components=1", "-C", installed])
-    fs.symlinkSync(path.dirname(effectManifest), path.join(modules, "effect"), "dir")
+    fs.symlinkSync(effectDir, path.join(modules, "effect"))
     const input = path.join(root, "counter.ts")
     fs.copyFileSync(path.join(import.meta.dirname, "counter.ts"), input)
+    // `mode` and `format` are Vite's defaults, pinned because the report states them.
     const { output } = await build({
       configFile: false,
       root,
@@ -66,7 +76,7 @@ async function measure() {
 
 const result = await measure()
 const headers = ["Vite", "effect", "Node", "Raw bytes", "Gzip bytes"]
-const row = [vite, effect, result.node, result.raw, result.gzip]
+const row = [result.vite, result.effect, result.node, result.raw, result.gzip]
 if (base) {
   const previous = JSON.parse(fs.readFileSync(base, "utf8"))
   for (const metric of ["raw", "gzip"]) {
