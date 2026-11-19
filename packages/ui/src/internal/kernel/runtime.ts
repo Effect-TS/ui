@@ -5173,7 +5173,12 @@ const setup = (
     return rendered
   }
 
+  // How many views were built, not adopted. Hydration places an element's children only when this moved
+  // while it adopted them: the server's nodes it kept are already where they go.
+  let created = 0
+
   const create = (inst: Instance, view: View.Node<any, any>, env: Env): Rendered => {
+    created++
     switch (view._tag) {
       case "Text":
         return new TextRecord(view, host.createText(view.text))
@@ -5238,6 +5243,7 @@ const setup = (
       }
     } catch (error) {
       contentFailed(out, error)
+      created++
       out.rendered = [new TextRecord(emptyText, host.createText(""))]
     }
     failClash(out)
@@ -5579,6 +5585,7 @@ const setup = (
         }
         if (view.text !== "") return undefined
         adoptedUpTo = node
+        created++
         return new TextRecord(view, host.createText(""))
       }
       case "Element": {
@@ -5589,6 +5596,7 @@ const setup = (
         }
         setEvents(inst, node, view)
         checkKeys(inst, view.children)
+        const before = created
         // Content the host parses as text has no nodes or markers to adopt, so its children are built fresh.
         const children = adoptList(
           inst,
@@ -5598,7 +5606,8 @@ const setup = (
           env
         )
         if (kind.textOnly === true) removeUpTo(hydration!.firstChild(node), undefined)
-        placeEach(node, children, undefined)
+        // Whatever was built under here isn't in the document yet, and goes among the nodes that were kept.
+        if (created !== before) placeEach(node, children, undefined)
         for (const name in view.props) adoptProp(node, name, view.props[name])
         adoptedUpTo = next
         return renderedElement(inst, view, node, packed(children), env)
