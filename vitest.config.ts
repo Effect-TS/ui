@@ -26,6 +26,14 @@ const project = (
   return [mergeConfig(shared, cfg)]
 }
 
+const example = (name: string) =>
+  project(name, path.join("examples", name), true, {
+    test: {
+      include: ["src/**/*.test.ts"],
+      setupFiles: ["@effect/ui/html/register"]
+    }
+  })
+
 export const exclude = [
   "**/.*/**",
   "**/node_modules/**",
@@ -72,7 +80,8 @@ export default defineConfig({
       ...project("scripts", "scripts", true, { test: { include: ["codemods/jsdoc.test.ts"] } }),
       // Node reuses workers across test files, which skips re-importing the effect module graph for every file.
       ...project("@effect/ui", "packages/ui", true, { test: { isolate: !isNode } }),
-      ...project("@effect/ui-kit", "packages/ui-kit")
+      ...project("@effect/ui-kit", "packages/ui-kit"),
+      ...example("interrupting-commands")
     ]
   }
 })
