@@ -1,13 +1,14 @@
 import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
 import { describe, it } from "@effect/vitest"
-import { Array, Effect } from "effect"
+import { Effect } from "effect"
 import { FAKE_FILES, UploadFile, Uploads } from "./Uploads.ts"
 
-const firstFile = Array.headNonEmpty(FAKE_FILES)
-const uploadFirst = UploadFile({ uploadId: 0, sizeMegabytes: firstFile.sizeMegabytes })
+const [firstFile] = FAKE_FILES
 
 const uploadButton = HtmlLocator.role("button", { name: "Upload a file" })
+const cancelFirst = HtmlLocator.role("button", { name: "Cancel upload 0" })
+const restartFirst = HtmlLocator.role("button", { name: "Restart upload 0" })
 const cancelAll = HtmlLocator.role("button", { name: "Cancel all" })
 
 describe("Uploads", () => {
@@ -25,8 +26,8 @@ describe("Uploads", () => {
       s.click(uploadButton)
         .expect(Locator.text(firstFile.name)).toExist()
         .expect(Locator.text("Uploading")).toExist()
-        .expect(HtmlLocator.role("button", { name: "Cancel upload 0" })).toExist()
-        .resolve(uploadFirst, undefined)
+        .expect(cancelFirst).toExist()
+        .resolve(UploadFile, undefined)
         .expect(Locator.text("Done")).toExist()
     }))
 
@@ -34,12 +35,12 @@ describe("Uploads", () => {
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Uploads, {})
       s.click(uploadButton)
-        .click(HtmlLocator.role("button", { name: "Cancel upload 0" }))
+        .click(cancelFirst)
         .expect(Locator.text("Cancelled")).toExist()
-        .expect(HtmlLocator.role("button", { name: "Restart upload 0" })).toExist()
-        .click(HtmlLocator.role("button", { name: "Restart upload 0" }))
+        .expect(restartFirst).toExist()
+        .click(restartFirst)
         .expect(Locator.text("Uploading")).toExist()
-        .resolve(uploadFirst, undefined)
+        .resolve(UploadFile, undefined)
         .expect(Locator.text("Done")).toExist()
     }))
 

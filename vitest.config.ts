@@ -26,12 +26,12 @@ const project = (
   return [mergeConfig(shared, cfg)]
 }
 
-// An example's tests sit beside its components, and a setup file registers the HTML elements once.
+// An example's tests sit beside its components, and the HTML elements are registered once for all of them.
 const example = (name: string) =>
   project(name, path.join("examples", name), true, {
     test: {
       include: ["src/**/*.test.ts"],
-      setupFiles: [path.join(import.meta.dirname, "examples", name, "src/vitest-setup.ts")]
+      setupFiles: ["@effect/ui/html/register"]
     }
   })
 

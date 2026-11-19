@@ -1,5 +1,5 @@
 import { Command, Component, Head, UiSchema } from "@effect/ui"
-import { Array, Duration, Effect, Option, Schema } from "effect"
+import { Duration, Effect, Schema } from "effect"
 
 // MODEL
 
@@ -20,7 +20,12 @@ export const UploadsModel = Schema.Struct({
 })
 export type UploadsModel = typeof UploadsModel.Type
 
-export const initialModel: UploadsModel = { uploadId: 0, uploads: [] }
+const isUploading = (upload: Upload): boolean => upload.status === "Uploading"
+
+const withStatus = (model: UploadsModel, uploadId: number, status: UploadStatus): UploadsModel => ({
+  ...model,
+  uploads: model.uploads.map((upload) => upload.id === uploadId ? { ...upload, status } : upload)
+})
 
 // MESSAGE
 
@@ -41,18 +46,13 @@ export interface FakeFile {
   readonly sizeMegabytes: number
 }
 
-export const FAKE_FILES: Array.NonEmptyReadonlyArray<FakeFile> = [
+export const FAKE_FILES: ReadonlyArray<FakeFile> = [
   { name: "vacation-photos.zip", sizeMegabytes: 48 },
   { name: "demo-recording.mp4", sizeMegabytes: 87 },
   { name: "quarterly-report.pdf", sizeMegabytes: 12 },
   { name: "design-assets.sketch", sizeMegabytes: 34 },
   { name: "database-backup.sql", sizeMegabytes: 61 }
 ]
-
-const fakeFileForUpload = (uploadId: number): FakeFile =>
-  Array.get(FAKE_FILES, uploadId % FAKE_FILES.length).pipe(
-    Option.getOrElse(() => Array.headNonEmpty(FAKE_FILES))
-  )
 
 // COMMAND
 
@@ -75,15 +75,6 @@ const uploadFile = (upload: Upload) =>
   UploadFile({ uploadId: upload.id, sizeMegabytes: upload.sizeMegabytes }).pipe(
     Command.as(UploadsMessage.CompletedUploadFile({ uploadId: upload.id }))
   )
-
-// UPDATE
-
-const isUploading = (upload: Upload): boolean => upload.status === "Uploading"
-
-const withStatus = (model: UploadsModel, uploadId: number, status: UploadStatus): UploadsModel => ({
-  ...model,
-  uploads: model.uploads.map((upload) => upload.id === uploadId ? { ...upload, status } : upload)
-})
 
 // VIEW
 
@@ -137,11 +128,13 @@ const UploadRow = UploadsDef.fragment((h, upload: Upload) =>
   )
 )
 
+// COMPONENT
+
 export const Uploads = UploadsDef.make({
-  init: () => initialModel,
+  init: () => ({ uploadId: 0, uploads: [] }),
   update: {
     ClickedStartUpload: (model, _message, $) => {
-      const file = fakeFileForUpload(model.uploadId)
+      const file = FAKE_FILES[model.uploadId % FAKE_FILES.length]
       const upload: Upload = {
         id: model.uploadId,
         fileName: file.name,
@@ -159,12 +152,10 @@ export const Uploads = UploadsDef.make({
         : model,
     // With no group, the interrupt stops every run of `UploadFile`.
     ClickedCancelAllUploads: (model, _message, $) =>
-      model.uploads.some(isUploading)
-        ? $.set({
-          ...model,
-          uploads: model.uploads.map((upload) => isUploading(upload) ? { ...upload, status: "Cancelled" } : upload)
-        }).run(Command.interrupt(UploadFile))
-        : model,
+      $.set({
+        ...model,
+        uploads: model.uploads.map((upload) => isUploading(upload) ? { ...upload, status: "Cancelled" } : upload)
+      }).run(Command.interrupt(UploadFile)),
     ClickedRestartUpload: (model, { uploadId }, $) => {
       const upload = model.uploads.find((upload) => upload.id === uploadId && upload.status === "Cancelled")
       return upload === undefined
@@ -183,13 +174,13 @@ export const Uploads = UploadsDef.make({
             .class("px-4 py-2 rounded-md bg-blue-500 text-white font-medium hover:bg-blue-600 transition")
             .children("Upload a file"),
           model.uploads.some(isUploading) &&
-            h.button.key("CancelAll").onClick(UploadsMessage.ClickedCancelAllUploads())
+            h.button.onClick(UploadsMessage.ClickedCancelAllUploads())
               .class("px-4 py-2 rounded-md border border-red-300 text-red-600 font-medium hover:bg-red-50 transition")
               .children("Cancel all")
         ),
         model.uploads.length === 0
-          ? h.p.key("NoUploads").class("text-center text-gray-500").children("Nothing here yet. Start an upload.")
-          : h.ul.key("UploadList").class("flex flex-col gap-3").children(
+          ? h.p.class("text-center text-gray-500").children("Nothing here yet. Start an upload.")
+          : h.ul.class("flex flex-col gap-3").children(
             model.uploads.map((upload) => UploadRow(h, upload))
           )
       )

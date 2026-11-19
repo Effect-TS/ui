@@ -8,20 +8,6 @@
     "declaration": false,
     "declarationMap": false,
     "composite": false,
-    "incremental": false,
-    "plugins": [
-      {
-        "name": "@effect/language-service",
-        "effectFn": ["untraced"],
-        "namespaceImportPackages": [],
-        "diagnosticSeverity": {
-          "floatingEffect": "off",
-          "globalJson": "off",
-          "globalJsonInEffect": "off",
-          "unstableApiUsage": "off",
-          "effectFnOpportunity": "error"
-        }
-      }
-    ]
+    "incremental": false
   }
 }

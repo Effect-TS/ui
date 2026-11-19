@@ -1,11 +1,9 @@
 import { Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Array, Effect, Option } from "effect"
+import { Effect } from "effect"
 import { FAKE_FILES, UploadFile, Uploads, UploadsMessage, type UploadsModel } from "./Uploads.ts"
 
-const firstFile = Array.headNonEmpty(FAKE_FILES)
-const secondFile = Option.getOrThrow(Array.get(FAKE_FILES, 1))
-const thirdFile = Option.getOrThrow(Array.get(FAKE_FILES, 2))
+const [firstFile, secondFile, thirdFile] = FAKE_FILES
 
 const uploadFirst = UploadFile({ uploadId: 0, sizeMegabytes: firstFile.sizeMegabytes })
 const uploadSecond = UploadFile({ uploadId: 1, sizeMegabytes: secondFile.sizeMegabytes })
