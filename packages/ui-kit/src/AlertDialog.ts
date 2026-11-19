@@ -121,12 +121,10 @@
  * @since 0.1.0
  */
 import type * as Component from "@effect/ui/Component"
-import * as View from "@effect/ui/View"
+import type * as View from "@effect/ui/View"
 import type * as AsyncResult from "effect/reactivity/AsyncResult"
-import * as Schema from "effect/Schema"
+import * as Struct from "effect/Struct"
 import { Dialog, type DialogEvents, DialogProps } from "./Dialog.ts"
-
-const { disablePointerDismissal: _disablePointerDismissal, modal: _modal, ...fields } = DialogProps.fields
 
 /**
  * Controls whether the alert dialog is open and where focus goes: a
@@ -143,7 +141,7 @@ const { disablePointerDismissal: _disablePointerDismissal, modal: _modal, ...fie
  * @category schemas
  * @since 0.1.0
  */
-export const AlertDialogProps = Schema.Struct(fields)
+export const AlertDialogProps = DialogProps.mapFields(Struct.omit(["modal", "disablePointerDismissal"]))
 
 /**
  * The props of an `AlertDialog`.
@@ -164,13 +162,11 @@ export type AlertDialogProps = typeof AlertDialogProps.Type
 export type AlertDialogParts = Component.Headless.Parts<typeof Dialog>
 
 // The portal is the element the dialog is labelled on, so its role goes
-// there. Written in `forward`, so it wins over a `role` or `closedby` the
+// there. Set with `forward`, so it wins over a `role` or `closedby` the
 // consumer set on the builder or chained after the part. `closedby` keeps
 // the browser from closing the modal on a backdrop click.
-const alert = <B extends View.PartTarget<"dialog">>(element: B): B =>
-  (element as unknown as View.ElementBuilder<unknown>).forward((node) =>
-    node.attr("role", "alertdialog").attr("closedby", "closerequest")
-  ) as unknown as B
+const alert = (node: View.ElementBuilder<any, any, any, any>) =>
+  node.attr("role", "alertdialog").attr("closedby", "closerequest")
 
 /**
  * A headless alert dialog. Call it as a `Dialog`, with the consumer's `h`, a
@@ -205,17 +201,9 @@ export const AlertDialog = <Msg, RV = never, RF = never>(
       /** The alert dialog's whole view, from its parts. */
       readonly view: (parts: AlertDialogParts) => View.Content<NoInfer<Msg>, RV>
     }
-): ReturnType<typeof Dialog<Msg, RV, RF>> => {
-  const { view } = options
-  return Dialog<Msg, RV, RF>(h, {
+): ReturnType<typeof Dialog<Msg, RV, RF>> =>
+  Dialog<Msg, RV, RF>(h, {
     ...options,
     props: { ...options.props, modal: true, disablePointerDismissal: true },
-    view: (s) => {
-      const portal = View.wrapPart(
-        s.portal,
-        <B extends View.PartTarget<"dialog">>(element: B): ReturnType<B["attr"]> | undefined => s.portal(alert(element))
-      )
-      return view({ ...s, portal })
-    }
+    view: (s) => options.view({ ...s, portal: (element) => s.portal(element)?.forward(alert) })
   })
-}

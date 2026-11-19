@@ -4,11 +4,10 @@ import { Dialog, DialogTrigger } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
+import { byId, container, press, tick } from "./utils/document.ts"
 
 // The dialog's document work, in a DOM: what a press, a focus move or a
 // close does once the dialog shows.
-
-const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 60)))
 
 // happy-dom has no popover API, which the non-modal dialogs use: what they
 // rely on is that showing and hiding one changes `:popover-open`, and that
@@ -37,11 +36,6 @@ const popovers = Effect.acquireRelease(
     }
   }),
   (restore) => Effect.sync(restore)
-)
-
-const container = Effect.acquireRelease(
-  Effect.sync(() => document.body.appendChild(document.createElement("div"))),
-  (element) => Effect.sync(() => element.remove())
 )
 
 const OpenMethod = Schema.NullOr(Schema.Literals(["mouse", "touch", "pen", "keyboard"]))
@@ -192,11 +186,6 @@ const mountPage = Effect.fnUntraced(function*(overrides: Partial<Config>) {
   return { app, log: () => root.model()!.log }
 })
 
-const byId = (id: string) => document.getElementById(id)!
-const press = (target: Element, pointerType = "mouse") =>
-  target.dispatchEvent(
-    new PointerEvent("pointerdown", { bubbles: true, composed: true, isPrimary: true, pointerType, button: 0 })
-  )
 const dismissals = (log: ReadonlyArray<string>) => log.filter((line) => line.startsWith("Dismissed"))
 const opens = (log: ReadonlyArray<string>) => log.filter((line) => line.startsWith("Opened"))
 
