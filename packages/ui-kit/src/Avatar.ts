@@ -73,7 +73,6 @@ import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Subscription from "@effect/ui/Subscription"
 import * as UiSchema from "@effect/ui/UiSchema"
-import * as View from "@effect/ui/View"
 import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
@@ -88,6 +87,7 @@ const Source = Schema.Struct({
   referrerPolicy: Schema.optional(Schema.String)
 })
 type Source = typeof Source.Type
+const sourceFields = Object.keys(Source.fields) as ReadonlyArray<keyof Source>
 
 /**
  * The image source and fallback delay for an `Avatar`.
@@ -169,16 +169,10 @@ const statusOf = (report: Report | null, source: Source): AvatarImageLoadingStat
 
 // Reports `"loading"`, then how the load settled. A missing source is
 // `"error"` at once.
-const loadImage = (source: Source): Subscription.Subscription<typeof Message.Type> =>
+const loadImage = (source: Source) =>
   Subscription.make(
     "image",
-    [
-      source.src ?? null,
-      source.srcSet ?? null,
-      source.sizes ?? null,
-      source.crossOrigin ?? null,
-      source.referrerPolicy ?? null
-    ],
+    sourceFields.map((field) => source[field] ?? null),
     () => {
       const report = (status: AvatarImageLoadingStatus) => Message.ChangedImageStatus({ source, status })
       return hasImage(source)
@@ -285,7 +279,7 @@ export const Avatar = Component.define({
     const showsFallback = status !== "loaded" && model.delayElapsed
     return {
       imageLoadingStatus: status,
-      root: View.wrapPart(root, <Msg, R = never>(element: AvatarSpan<Msg, R>): AvatarSpan<Msg, R> => root(element)),
+      root: <Msg, R = never>(element: AvatarSpan<Msg, R>): AvatarSpan<Msg, R> => root(element),
       // The image and the fallback are applied before they're dropped, so a
       // wrong tag throws in every state.
       image: <Msg, R = never>(element: AvatarImg<Msg, R>): AvatarImg<Msg, R> | undefined => {

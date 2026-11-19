@@ -111,8 +111,8 @@ export const make = (): Html.Images & TestImages => {
       const key = encode(source)
       const matching = Array.from(pending).filter((entry) => entry.source === key)
       if (matching.length === 0) {
-        const sources = new Set(Array.from(pending, (entry) => entry.source))
-        throw new Error(`TestImages: no load of ${key} is pending; pending: [${Array.from(sources).join(", ")}]`)
+        const sources = [...new Set(Array.from(pending, (entry) => entry.source))].join(", ")
+        throw new Error(`TestImages: no load of ${key} is pending; pending: [${sources}]`)
       }
       for (const entry of matching) {
         pending.delete(entry)

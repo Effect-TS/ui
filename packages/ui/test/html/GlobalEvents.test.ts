@@ -142,13 +142,14 @@ describe("Html.onDocument and Html.onWindow", () => {
     }).pipe(Effect.provide(testLayer)))
 })
 
-const ParentMessage = UiSchema.TaggedEnum({ Set: { listen: Schema.Literals(["always", "true", "false", "none"]) } })
+const PreventDefault = Schema.Literals(["always", true, false])
+const ParentMessage = UiSchema.TaggedEnum({ Set: { listen: Schema.NullOr(PreventDefault) } })
 
 // A child listens for keys with the `preventDefault` its parent picks, or not
-// at all. Its handler emits a message for every key but Escape.
+// at all for `null`. Its handler emits a message for every key but Escape.
 const Listener = Component.define({
   name: "Listener",
-  props: Schema.Struct({ preventDefault: Schema.Literals(["always", "true", "false"]) }),
+  props: Schema.Struct({ preventDefault: PreventDefault }),
   model: Schema.Null,
   message: Message,
   elements: Html
@@ -157,29 +158,19 @@ const Listener = Component.define({
   update: (model) => model,
   view: (_, h) => h.span(),
   subscriptions: (_, { preventDefault }) => [
-    Html.onDocument(
-      "keydown",
-      ({ key }) => key === "Escape" ? undefined : Message.Pressed({ key }),
-      { preventDefault: preventDefault === "always" ? "always" : preventDefault === "true" }
-    )
+    Html.onDocument("keydown", ({ key }) => key === "Escape" ? undefined : Message.Pressed({ key }), { preventDefault })
   ]
 })
 
 const Parent = Component.define({
   name: "Parent",
-  model: Schema.Literals(["always", "true", "false", "none"]),
+  model: Schema.NullOr(PreventDefault),
   message: ParentMessage,
   elements: Html
 }).make({
   init: () => "always" as const,
   update: { Set: (_, { listen }) => listen },
-  view: (listen, h) =>
-    h.div(
-      ...(["always", "true", "false", "none"] as const).map((to) =>
-        h.button.attr("id", to).onClick(ParentMessage.Set({ listen: to }))
-      ),
-      listen === "none" ? undefined : Listener(h, { props: { preventDefault: listen } })
-    )
+  view: (listen, h) => h.div(listen === null ? undefined : Listener(h, { props: { preventDefault: listen } }))
 })
 
 describe("BrowserHost's GlobalEvents", { concurrent: false }, () => {
@@ -209,18 +200,19 @@ describe("BrowserHost's GlobalEvents", { concurrent: false }, () => {
 
   it.effect("a key pressed before the parent renders goes by the declaration that render gives", () =>
     Effect.gen(function*() {
-      yield* BrowserHost.mountEffect(Parent, {}, yield* container)
+      const root = yield* BrowserHost.mountEffect(Parent, {}, yield* container)
+      const set = (listen: typeof PreventDefault.Type | null) => root.send(ParentMessage.Set({ listen }))
       yield* tick
       // A current "always" listener cancels even when its handler emits nothing.
       assert.isTrue(press(document.body, "Escape"))
-      // Each click is followed by a press before the scheduled render.
-      byId("true").click()
+      // Each change is followed by a press before the scheduled render.
+      set(true)
       assert.isFalse(press(document.body, "Escape"))
-      byId("false").click()
+      set(false)
       assert.isFalse(press(document.body, "x"))
-      byId("always").click()
+      set("always")
       yield* tick
-      byId("none").click()
+      set(null)
       assert.isFalse(press(document.body, "Escape"))
     }).pipe(Effect.scoped))
 

@@ -639,8 +639,9 @@ const listenFor = (
     handler,
     preventDefault: options?.preventDefault
   }
-  // The runtime attaches the listener here and runs no Stream, as for `Router.prefetch`. Each event
-  // goes to the declaration the pending renders leave, and nowhere once they remove it.
+  // The runtime attaches the listener here and runs no Stream, as for `Router.prefetch`. `enter`
+  // renders the pending ancestors first, so an event goes to the latest declaration, or nowhere if
+  // they removed it.
   const direct: NonNullable<services.Direct[typeof services.direct]> = (context, emit, fail, enter) => ({
     initial: Effect.void,
     close: Context.get(context, GlobalEvents).listen(

@@ -70,24 +70,19 @@ describe("Avatar", () => {
         init: () => ada.src,
         update: { Picked: (_, { src }) => src },
         view: (src, h) =>
-          h.div(
-            h.button.attr("id", "ada").onClick(Message.Picked(ada)),
-            h.button.attr("id", "grace").onClick(Message.Picked(grace)),
-            Avatar(h, {
-              props: { src },
-              view: (s) => s.root(h.span).children(s.image(h.img), s.fallback(h.span.class("fallback"))?.children("AL"))
-            })
-          )
+          Avatar(h, {
+            props: { src },
+            view: (s) => s.root(h.span).children(s.image(h.img), s.fallback(h.span.class("fallback"))?.children("AL"))
+          })
       })
       const root = yield* TestHost.mount(Page, {}, {
         frames: (root) => root.query(image) ? "image" : root.query(fallback) ? "fallback" : "none"
       })
-      const pick = (id: string) => Locator.fire(root.get(Locator.attr("id", id)), "click")
       yield* TestHost.settle
       // Ada's load settles after the page picks Grace, but before it renders.
-      pick("grace")
+      root.send(Message.Picked(grace))
       yield* TestImages.load(ada)
-      pick("ada")
+      root.send(Message.Picked(ada))
       yield* TestHost.settle
       assert.deepStrictEqual(root.frames(), ["fallback"])
       yield* TestImages.load(ada)

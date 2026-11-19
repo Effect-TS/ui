@@ -2,4 +2,4 @@
 "@effect/ui": minor
 ---
 
-Add `Html.Images`, which loads an image the page doesn't show, so a component can wait for one from its `subscriptions`. `BrowserHost.layer` provides it over its document. Its default never settles. In a `TestHost` test, provide `TestImages.layer` from `@effect/ui/html/testing` and settle loads with `TestImages.load(source)` or `TestImages.fail(source)`.
+Add `Html.Images`, a service that loads an image off the page, so a component can wait for it in `subscriptions`. `BrowserHost.layer` provides it. By default a load never settles. A `TestHost` test provides `TestImages.layer` from `@effect/ui/html/testing` and settles loads with `TestImages.load(source)` or `TestImages.fail(source)`.

@@ -3608,13 +3608,13 @@ const setup = (
       }
       subscriptions.set(key, running)
       record(inst, { _tag: "SubscriptionStarted", key, name, deps })
+      const current = () => !inst.closed && subscriptions.get(key) === running
       const go = (envCtx: Context.Context<any>) => {
-        if (inst.closed || subscriptions.get(key) !== running) return
+        if (!current()) return
         const source: MessageLog.Source = { _tag: "Subscription", key, name, deps }
         const context = withCache(
           Context.add(Context.add(envCtx, Scope.Scope, running.scope), services.CurrentRoot, () => handle)
         )
-        const current = () => !inst.closed && subscriptions.get(key) === running
         // Rendering the ancestors may stop this key, or change its declaration, as for a query result.
         const enter = (f: (latest: Subscription.Subscription<any, any>) => void) =>
           step(() => {
