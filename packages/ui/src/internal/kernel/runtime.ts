@@ -364,7 +364,8 @@ interface Run {
   readonly command: Command.Issued<any, any, never, "Effect"> | Command.Issued<any, any, never, "Stream">
   readonly issued: MessageLog.Issued
   /** The run at the cache, begun at issue. `undefined` for a `Command.make` Command. */
-  readonly handle: Query.RunHandle | undefined
+  /** The cache's run. A run issued before the app loaded `Query` has none until its work loads it. */
+  handle: Query.RunHandle | undefined
   status: schedule.Status
   fiber: Fiber.Fiber<unknown, unknown> | undefined
   done: boolean
@@ -3386,12 +3387,7 @@ const setup = (
         const runs = command.service === undefined ? undefined : cache ?? cell.get()
         if (runs !== undefined) {
           try {
-            handle = runs.beginRun({
-              command: command.name,
-              invalidates: command.invalidates as ReadonlyArray<Query.Target>,
-              optimistic: command.optimistic as ReadonlyArray<Query.Patch>,
-              afterRefetch: command._tag === "Effect" && command.afterRefetch !== undefined
-            })
+            handle = beginRun(runs, command)
           } catch (error) {
             // Like a throw in `update`: the run doesn't start and the issuing instance fails.
             failInstance(inst, Cause.die(error), initIndex === undefined ? "update" : "init", command.name)
@@ -3562,12 +3558,19 @@ const setup = (
           const work: Effect.Effect<unknown, unknown, any> = command._tag === "Effect"
             ? command.work
             : Stream.runForEach(command.work, (element) => Effect.sync(() => send(command.resolve(element as never))))
-          return run.handle === undefined
-            ? work
-            : run.handle.run(
-              work,
-              command.writes as ((success: unknown) => ReadonlyArray<Query.Write>) | undefined
-            )
+          const writes = command.writes as ((success: unknown) => ReadonlyArray<Query.Write>) | undefined
+          if (run.handle !== undefined) return run.handle.run(work, writes)
+          if (writes === undefined) return work
+          // Issued before the app loaded `Query`, so with nothing to invalidate or patch: both are made
+          // by `Query`. Work that loaded it can still write, and its run begins once it has succeeded.
+          return Effect.uninterruptibleMask((restore) =>
+            Effect.flatMap(restore(work), (success) => {
+              const made = cache ?? cell.get()
+              if (made === undefined) return Effect.succeed(success)
+              run.handle = beginRun(made, command)
+              return run.handle.run(Effect.succeed(success), writes)
+            })
+          )
         }
       )
       const fiber = fork(context, Effect.onExit(program, (exit) => Scope.close(scope, exit)))
@@ -3579,6 +3582,14 @@ const setup = (
     // keyed provide's due read starts against the selection the read leaves.
     onceSelected(inst, go, () => stopRun(inst, run))
   }
+
+  const beginRun = (made: queryCore.Cache, command: Run["command"]): Query.RunHandle =>
+    made.beginRun({
+      command: command.name,
+      invalidates: command.invalidates as ReadonlyArray<Query.Target>,
+      optimistic: command.optimistic as ReadonlyArray<Query.Patch>,
+      afterRefetch: command._tag === "Effect" && command.afterRefetch !== undefined
+    })
 
   /**
    * A run's fiber exited. The cache has already had its patch removal, `writes` and invalidation, from
