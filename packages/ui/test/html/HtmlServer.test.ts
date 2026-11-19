@@ -1515,7 +1515,7 @@ describe("HtmlServer", { concurrent: false }, () => {
           ["/Page", null],
           ["/Page/Slow[s]", null],
           ["/Page/Group[g]", 1],
-          ["/Page/Group[g]/Item[i]", null],
+          ["/Page/Item[i]", null],
           ["/Page/Asks[a]", { model: null, queries: { text: ["{}", 0, "data", 0, false] } }],
           ["~deferred", ["/Page/Off[o]"]],
           ["~status", { "/Page/Slow[s]": "Pending" }],
@@ -1898,7 +1898,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       }
 
       const matching = yield* ssr(titled(() => ""), {})
-      expect(matching.adopted).toEqual(["/Parent", "/Parent/Framed[c]", "/Parent/Framed[c]/[body]/Grandchild[g]"])
+      expect(matching.adopted).toEqual(["/Parent", "/Parent/Framed[c]", "/Parent/Grandchild[g]"])
       expect(matching.head.title).toBe("Server")
       yield* TestHost.settle
       expect(matching.root.head<Head.Head>().title).toBe("Mounted")

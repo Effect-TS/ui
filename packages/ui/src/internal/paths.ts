@@ -226,25 +226,46 @@ export const checkFallbackPaths = (
 /**
  * Throws when two of `written`, the paths of one author's view, of each
  * closure it gave a headless child and of the content it passed for a child's
- * slots, hold children with refs of one key. The
- * author wrote all of them, and a send finds a child by its ref's key alone,
- * across all of them. One view's own refs are checked as it renders.
+ * slots, hold children at one path, or with refs of one key. The author wrote
+ * all of them: a child's path is the author's path and its segment, wherever
+ * it is placed, and a send finds a child by its ref's key alone, across all of
+ * them. One view's own are checked as it renders.
  *
  * @internal
  */
-export const checkAuthorRefs = (at: At, written: ReadonlyArray<ChildPaths>): void => {
-  const taken = new Set<string>()
+export const checkAuthorPaths = (at: At, written: ReadonlyArray<ChildPaths>): void => {
+  if (written.length < 2) return
+  // The keys of each name's children: one tree's own map while no other tree has the name, as for most.
+  const children = new Map<string, ReadonlyMap<string, unknown> | Set<string>>()
+  const refs = new Set<string>()
   for (const paths of written) {
-    if (paths.refs === undefined) continue
-    for (const key of paths.refs.keys()) {
-      if (taken.has(key)) failure(at, `with the ref ${key}, in the view it gives ${pathAt(paths.at)}`)
-      taken.add(key)
+    if (paths.paths !== undefined) {
+      for (const [name, keys] of paths.paths) {
+        let taken = children.get(name)
+        if (taken === undefined) {
+          children.set(name, keys)
+          continue
+        }
+        if (!(taken instanceof Set)) children.set(name, taken = new Set(taken.keys()))
+        for (const [key, node] of keys) {
+          if (taken.has(key)) {
+            failure(at, `at ${segment(node)}, in the view it gives ${pathAt(paths.at)}${keyHint(name, node)}`)
+          }
+          taken.add(key)
+        }
+      }
+    }
+    if (paths.refs !== undefined) {
+      for (const key of paths.refs.keys()) {
+        if (refs.has(key)) failure(at, `with the ref ${key}, in the view it gives ${pathAt(paths.at)}`)
+        refs.add(key)
+      }
     }
   }
 }
 
 /**
- * Throws when two of `written`, as `checkAuthorRefs` takes them, place one of
+ * Throws when two of `written`, as `checkAuthorPaths` takes them, place one of
  * the author's slots between them. Each tree's own are checked as it renders.
  *
  * @internal

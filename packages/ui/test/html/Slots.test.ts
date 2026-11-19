@@ -77,7 +77,7 @@ describe("slots on the server", () => {
         assert.include(result.html, `<!--]/Page/Card[c]/[${slot}]-->`)
       }
       assert.include(result.adopted, "/Page/Card[c]")
-      assert.include(result.adopted, "/Page/Card[c]/[body]/Counter[n]")
+      assert.include(result.adopted, "/Page/Counter[n]")
       assert.strictEqual(result.container.querySelector("h2")!.textContent, "[note]")
       assert.strictEqual(result.container.querySelector("aside")!.childNodes.length, 1)
       assert.strictEqual(result.container.querySelector("aside")!.textContent, "")

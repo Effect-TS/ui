@@ -226,10 +226,14 @@ children's events and failures map to the parent's messages, the parent's
 `$.send` and refs reach into it, and its services come from where the
 parent declared the child, not from the child's Layers. A parent re-render
 updates the content without running the child's view. The child decides
-whether and where each slot shows. A slot it doesn't place isn't mounted,
-and a slot it places again mounts fresh. A slot the parent leaves out shows
-nothing. A child in a slot gets a path under the slot, such as
-`/NotePage/Collapsible[note]/[body]/NoteEditor[Editor[n1]]`.
+whether and where each slot shows. A slot it stops placing is kept out of
+the document, as a `detached` child is, and comes back as it was when it
+places the slot again. A slot it never placed isn't created. A slot the
+parent leaves out shows nothing. A child in a slot has the path of the
+parent that wrote it and its own segment, wherever it's placed, such as
+`/NotePage/NoteEditor[Editor[n1]]`. Back and forward restore a slot's
+content only if the slot is open when the page renders again. Content left
+in a closed slot starts fresh when the slot opens.
 
 Use slots when the child owns the frame and its state, and the parent owns
 what goes inside. Use a headless component when the parent draws all the

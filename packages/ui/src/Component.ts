@@ -2309,8 +2309,14 @@ export type Helper<D> = D extends Definition<
  * messages, its children's events and failures map to them, `$.send` and
  * refs reach into it from the parent, and it resolves services where the
  * parent declared the child. A parent's re-render patches only the content,
- * without running the child's view. Content the view doesn't place is not
- * mounted, and a slot placed again starts over. A definition with slots
+ * without running the child's view. Content the view stops placing is kept
+ * out of the document, as a `detached` child is, and comes back as it was
+ * when the view places it again. Content the view never placed isn't
+ * created. A page restored on back or forward gets back the content its
+ * views place as it renders: content left in a closed slot isn't among it,
+ * so it starts fresh when the slot opens. A child in the content has the
+ * parent's path and its own
+ * segment, wherever the view places it. A definition with slots
  * finishes with `view`, not `parts`.
  *
  * **Gotchas**
