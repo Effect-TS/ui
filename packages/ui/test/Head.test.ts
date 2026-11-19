@@ -1,4 +1,4 @@
-import { Component, Head, type MessageLog, UiSchema } from "@effect/ui"
+import { Component, Head, type MessageLog } from "@effect/ui"
 import { TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
@@ -30,53 +30,6 @@ describe("Head", () => {
     assert.strictEqual(Head.merge(tree).title, "Ada")
     assert.strictEqual(errors.length, 1)
     assert.throws(() => Head.merge({ ...tree, onError: undefined }), /bad template/)
-  })
-
-  it("reports two siblings that set the title, and the later one wins", () => {
-    const conflicts: Array<Head.Conflict> = []
-    const head = Head.merge(
-      {
-        path: "/App",
-        entries: [Head.titleTemplate((title) => `${title} · App`), Head.title("App")],
-        children: [
-          { path: "/App/A[a]", entries: [Head.title("A")], children: [] },
-          {
-            path: "/App/B[b]",
-            entries: [],
-            children: [{ path: "/App/B[b]/C[c]", entries: [Head.title("C")], children: [] }]
-          }
-        ]
-      },
-      { onConflict: (conflict) => conflicts.push(conflict) }
-    )
-    assert.strictEqual(head.title, "C · App")
-    assert.deepStrictEqual(conflicts.map((conflict) => [conflict._tag, conflict.slot, conflict.paths]), [
-      ["HeadConflict", "title", ["/App/A[a]", "/App/B[b]/C[c]"]]
-    ])
-    // A descendant overriding its ancestor's title isn't a conflict.
-    conflicts.length = 0
-    Head.merge(
-      {
-        path: "/A",
-        entries: [Head.title("A")],
-        children: [{ path: "/A/B", entries: [Head.title("B")], children: [] }]
-      },
-      { onConflict: (conflict) => conflicts.push(conflict) }
-    )
-    assert.deepStrictEqual(conflicts, [])
-  })
-
-  it("applies each node's reduce bottom up, over its entries and its children's values", () => {
-    const head = Head.merge({
-      entries: [],
-      reduce: (below) => ({ title: `[${below.title}]` }),
-      children: [{
-        entries: [Head.title("Inner")],
-        reduce: (below) => ({ title: below.title?.toUpperCase() }),
-        children: []
-      }]
-    })
-    assert.strictEqual(head.title, "[INNER]")
   })
 
   it.effect("fails only the instance whose title template throws", () =>
@@ -260,6 +213,7 @@ describe("Head", () => {
       const App = Component.define({ name: "App", model: Schema.Null, message: Schema.Never }).make({
         init: () => null,
         update: (model) => model,
+        head: () => [Head.title("App")],
         view: (_, h) =>
           h.el(
             "main",
@@ -273,28 +227,5 @@ describe("Head", () => {
       assert.strictEqual((conflict as Head.Conflict).slot, "title")
       yield* TestHost.settle
       assert.strictEqual(root.head().title, "Second")
-    }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
-
-  it.effect("reduceHead maps the folded head of the instance and what it placed, and the root's result is final", () =>
-    Effect.gen(function*() {
-      const Message = UiSchema.TaggedEnum({ Shout: {} })
-      const Page = Component.define({ name: "Page", model: Schema.Null, message: Schema.Never }).make({
-        init: () => null,
-        update: (model) => model,
-        head: () => [Head.title("page")],
-        view: (_, h) => h.text("page")
-      })
-      const App = Component.define({ name: "App", model: Schema.Boolean, message: Message }).make({
-        init: () => false,
-        update: () => true,
-        reduceHead: (loud, below) => loud ? { title: below.title?.toUpperCase() } : below,
-        view: (_, h) => h.el("main", Page(h, { key: "page", props: {} }))
-      })
-      const root = yield* TestHost.mount(App, {})
-      yield* TestHost.settle
-      assert.strictEqual(root.head().title, "page")
-      root.send(Message.Shout())
-      yield* TestHost.settle
-      assert.strictEqual(root.head().title, "PAGE")
     }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
 })

@@ -10,13 +10,6 @@ const node = (
 ): Head.Tree<HtmlHead.Entry, HtmlHead.HtmlHead> => ({ entries, children })
 
 describe("HtmlHead", () => {
-  it("applies Head's title rule", () => {
-    const head = HtmlHead.merge(
-      node([Head.titleTemplate((title) => `${title} · App`), Head.title("App")], node([Head.title("Ada")]))
-    )
-    assert.strictEqual(head.title, "Ada · App")
-  })
-
   it("lets the later entry win per identity, in document order", () => {
     const head = HtmlHead.merge(node(
       [

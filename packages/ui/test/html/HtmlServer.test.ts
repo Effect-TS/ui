@@ -1344,90 +1344,6 @@ describe("HtmlServer", { concurrent: false }, () => {
         "head title: the server has \"Inner (server)\", the client \"Inner (client)\""
       ])
     })))
-  it.effect("compares the head of a child that waits for its Layer once it adopts, matching or not", () =>
-    hosted(Effect.gen(function*() {
-      class Slow extends Context.Service<Slow, string>()("test/Slow") {}
-      const titled = (title: () => string) => {
-        const Child = Component.define({
-          name: "Child",
-          model: Schema.Struct({}),
-          message: Schema.Never,
-          elements: Html
-        }).make({
-          init: () => ({}),
-          update: (model) => model,
-          head: () => [Head.title(title())],
-          view: (_, h) => h.p("child")
-        }).pipe(Component.provide(Layer.effect(Slow, Effect.as(Effect.sleep("30 millis"), "ready"))))
-        const Message = UiSchema.TaggedEnum({ Mounted: {} })
-        return Component.define({
-          name: "Parent",
-          model: Schema.String,
-          message: Message,
-          elements: Html
-        }).make({
-          init: () => "Parent",
-          update: () => "Mounted",
-          head: (title) => [Head.title(title)],
-          // An early `onMount` update while the child waits: the comparison still uses the adopted state.
-          view: (_, h) =>
-            h.div.onMount(mountSending("Rename", Message.Mounted())).children(Child(h, { key: "c", props: {} }))
-        })
-      }
-
-      const matching = yield* ssr(titled(() => "Child"), {})
-      expect(matching.adopted).toEqual(["/Parent", "/Parent/Child[c]"])
-      expect(matching.head.title).toBe("Child")
-
-      let calls = 0
-      const drifting = yield* Effect.flip(ssr(titled(() => calls++ === 0 ? "Child" : "Drift"), {}))
-      expect(drifting.problems).toEqual(["head title: the server has \"Child\", the client \"Drift\""])
-    })))
-
-  it.effect("compares a waiting child's head with the props it was placed with, and then follows new ones", () =>
-    hosted(Effect.gen(function*() {
-      class Slow extends Context.Service<Slow, string>()("test/Slow") {}
-      const titled = (suffix: () => string) => {
-        const Child = Component.define({
-          name: "Child",
-          model: Schema.Struct({}),
-          message: Schema.Never,
-          props: Schema.Struct({ title: Schema.String }),
-          elements: Html
-        }).make({
-          init: () => ({}),
-          update: (model) => model,
-          head: (_, props) => [Head.title(props.title + suffix())],
-          view: (_, h) => h.p("child")
-        }).pipe(Component.provide(Layer.effect(Slow, Effect.as(Effect.sleep("30 millis"), "ready"))))
-        const Message = UiSchema.TaggedEnum({ Mounted: {} })
-        return Component.define({
-          name: "Parent",
-          model: Schema.String,
-          message: Message,
-          elements: Html
-        }).make({
-          init: () => "Server",
-          update: () => "Mounted",
-          // The child's props change while it waits: the adopted state still placed it with "Server".
-          view: (title, h) =>
-            h.div.onMount(mountSending("Rename", Message.Mounted())).children(
-              Child(h, { key: "c", props: { title } })
-            )
-        })
-      }
-
-      const matching = yield* ssr(titled(() => ""), {})
-      expect(matching.head.title).toBe("Server")
-      yield* TestHost.settle
-      expect(matching.root.head<Head.Head>().title).toBe("Mounted")
-      expect(matching.document.title).toBe("Mounted")
-
-      let calls = 0
-      const drifting = yield* Effect.flip(ssr(titled(() => calls++ === 0 ? "" : "!"), {}))
-      expect(drifting.problems).toEqual(["head title: the server has \"Server\", the client \"Server!\""])
-    })))
-
   it.effect("compares the head a waiting child's subtree had with the props it was placed with", () =>
     hosted(Effect.gen(function*() {
       class Slow extends Context.Service<Slow, string>()("test/Slow") {}
@@ -1453,6 +1369,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         }).make({
           init: () => ({}),
           update: (model) => model,
+          head: (_, props) => [Head.titleTemplate((title) => `${props.title}: ${title}`)],
           // The title is in the nodes too: the child adopts them with the props it was placed with.
           view: (_, h) => h.div(h.span(h.props.title), Grandchild(h, { key: "g", props: { title: h.props.title } }))
         }).pipe(Component.provide(Layer.effect(Slow, Effect.as(Effect.sleep("30 millis"), "ready"))))
@@ -1474,15 +1391,17 @@ describe("HtmlServer", { concurrent: false }, () => {
 
       const matching = yield* ssr(titled(() => ""), {})
       expect(matching.adopted).toEqual(["/Parent", "/Parent/Child[c]", "/Parent/Child[c]/Grandchild[g]"])
-      expect(matching.head.title).toBe("Server")
+      expect(matching.head.title).toBe("Server: Server")
       yield* TestHost.settle
-      expect(matching.root.head<Head.Head>().title).toBe("Mounted")
-      expect(matching.document.title).toBe("Mounted")
+      expect(matching.root.head<Head.Head>().title).toBe("Mounted: Mounted")
+      expect(matching.document.title).toBe("Mounted: Mounted")
       expect(matching.container.textContent).toContain("Mounted")
 
       let calls = 0
       const drifting = yield* Effect.flip(ssr(titled(() => calls++ === 0 ? "" : "!"), {}))
-      expect(drifting.problems).toEqual(["head title: the server has \"Server\", the client \"Server!\""])
+      expect(drifting.problems).toEqual([
+        "head title: the server has \"Server: Server\", the client \"Server: Server!\""
+      ])
     })))
 
   it.effect("adopts a waiting child with the slots it was placed with, and applies the new ones after", () =>

@@ -302,21 +302,6 @@ const mountIn = Effect.fnUntraced(function*(title: string, options?: { readonly 
 })
 
 describe("BrowserHost head ownership", { concurrent: false }, () => {
-  it("a mount with head: false computes its head and leaves the document alone", () =>
-    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
-      document.title = "Shell"
-      document.head.insertAdjacentHTML("beforeend", "<meta name=\"description\" content=\"Shell\">")
-      const shell = document.head.innerHTML
-      const widget = yield* mountIn("Widget", { head: false })
-      yield* tick
-      expect((widget.head() as HtmlHead.HtmlHead).title).toBe("Widget")
-      widget.send(Rename.Rename({ title: "Renamed" }))
-      yield* tick
-      expect((widget.head() as HtmlHead.HtmlHead).title).toBe("Renamed")
-      expect(document.title).toBe("Shell")
-      expect(document.head.innerHTML).toBe(shell)
-    }))))
-
   it("with two mounts on one document, only the one that owns the head writes it", () =>
     Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       document.title = "Shell"
@@ -325,10 +310,13 @@ describe("BrowserHost head ownership", { concurrent: false }, () => {
       yield* tick
       expect(document.title).toBe("App")
       expect([...document.head.querySelectorAll("meta")].map((meta) => meta.content)).toEqual(["App"])
+      const ownedHead = document.head.innerHTML
       widget.send(Rename.Rename({ title: "Renamed" }))
-      app.send(Rename.Rename({ title: "Home" }))
       yield* tick
       expect((widget.head() as HtmlHead.HtmlHead).title).toBe("Renamed")
+      expect(document.head.innerHTML).toBe(ownedHead)
+      app.send(Rename.Rename({ title: "Home" }))
+      yield* tick
       expect(document.title).toBe("Home")
       expect([...document.head.querySelectorAll("meta")].map((meta) => meta.content)).toEqual(["Home"])
     }))))
