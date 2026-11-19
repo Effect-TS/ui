@@ -506,6 +506,8 @@ describe("BrowserRouter", { concurrent: false }, () => {
       const { app, router } = yield* start("/")
       clickReporting(link(app, "Person 2 bio"))
       yield* tick
+      // Happy DOM has no layout; make a scroll back to the anchor observable.
+      app.querySelector<HTMLElement>("#bio")!.scrollIntoView = () => window.scrollTo(0, 300)
       window.scrollTo(0, 100)
       clickReporting(link(app, "Person 2 bio"))
       yield* tick
