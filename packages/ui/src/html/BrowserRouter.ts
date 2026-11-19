@@ -255,7 +255,7 @@ const make = (options: Options, inFragment: boolean): Layer.Layer<Router.Service
       else body.setAttribute("tabindex", tabindex)
     }
 
-    const onSettled = (settled: Router.Settled, isCurrent: () => boolean) => {
+    const onSettled = (settled: Router.Settled) => {
       const { action, hash } = settled.location
       if (settled.quiet) {
         // Within the page: no announcement and no focus move, and scroll only for a pop or when asked.
@@ -287,11 +287,13 @@ const make = (options: Options, inFragment: boolean): Layer.Layer<Router.Service
         const text = (settled.title ?? "").trim() ||
           (container.querySelector("h1")?.textContent ?? "").trim() ||
           new URL(settled.location.url, location.href).pathname
+        const seq = settled.location.seq
         live.textContent = ""
         cancelAnnouncement?.()
         cancelAnnouncement = nextFrame(() => {
           cancelAnnouncement = undefined
-          if (isCurrent()) live.textContent = text
+          // A navigation that started before the frame makes this one obsolete.
+          if (router.location().seq === seq) live.textContent = text
         })
       }
     }

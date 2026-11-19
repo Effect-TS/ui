@@ -255,8 +255,7 @@ describe("Router", { concurrent: false }, () => {
       assert.strictEqual(yield* router.navigate("/search?utm=2&q=x"), "navigated")
       yield* Effect.yieldNow
       assert.deepStrictEqual(messages, [x])
-      assert.strictEqual(router.location().seq, 1)
-      assert.strictEqual(router.location().action, "replace")
+      assert.strictEqual(router.location().seq, 0)
       assert.strictEqual(router.location().url, "/search?q=x&utm=1")
       assert.deepStrictEqual(history.entries(), ["/search?q=x&utm=1"])
 
@@ -265,7 +264,7 @@ describe("Router", { concurrent: false }, () => {
       yield* router.navigate("/search?q=x#top", { replace: true })
       yield* Effect.yieldNow
       assert.deepStrictEqual(messages, [x, x, x])
-      assert.strictEqual(router.location().seq, 3)
+      assert.strictEqual(router.location().seq, 0)
       assert.strictEqual(router.location().hash, "#top")
       assert.deepStrictEqual(history.entries(), ["/search?q=x&utm=1", "/search?q=x&utm=1#top"])
     }).pipe(Effect.provide(Router.memory({ routes, history })))
@@ -615,12 +614,12 @@ describe("Router", { concurrent: false }, () => {
         assert.deepStrictEqual(history.entries(), ["/people/2", "/people/1"])
         assert.strictEqual(settled.length, 1)
 
-        // Both links deliver the current route; together they settle once.
+        // The current URL, and a hash within it, aren't navigations: nothing settles.
         yield* router.navigate("/people/1")
         yield* router.navigate("/people/1#bio")
         yield* TestHost.settle
         assert.deepStrictEqual(history.entries(), ["/people/2", "/people/1", "/people/1#bio"])
-        assert.strictEqual(settled.length, 2)
+        assert.strictEqual(settled.length, 1)
         assert.strictEqual(root.model()?.route._tag, "Person")
 
         // A search that doesn't decode is the catch-all route, not a page load.
