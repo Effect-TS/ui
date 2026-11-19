@@ -3582,9 +3582,21 @@ const setup = (
           // by `Query`. Its run begins when the cache is made, which can be while this work goes on.
           return Effect.uninterruptibleMask((restore) =>
             Effect.flatMap(Effect.exit(restore(work)), (exit) => {
-              // Work that loaded `Query` can write to a cache nothing has asked for yet.
-              if (exit._tag === "Success" && cache === undefined) cell.get()
-              if (run.handle !== undefined) return run.handle.run(exit, writes)
+              let sets: ReadonlyArray<Query.Write> | undefined
+              if (run.handle === undefined && exit._tag === "Success") {
+                // No cache has been made, so `writes` is called here. A throw fails the run, as at the cache.
+                try {
+                  sets = writes(exit.value)
+                } catch (error) {
+                  early?.delete(run)
+                  return Effect.die(error)
+                }
+                // Only `Query` makes a write, so it is loaded: the cache is made now, and begins this run.
+                if (sets.length > 0) cell.get()
+              }
+              const handle = run.handle
+              const made = sets
+              if (handle !== undefined) return handle.run(exit, made === undefined ? writes : () => made)
               // Its work is over: a cache made from here on has no run to begin for it.
               early?.delete(run)
               return exit
