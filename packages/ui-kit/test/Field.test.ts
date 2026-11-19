@@ -6,14 +6,14 @@ import { Locator, Scene, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 
+type Parts = Component.Headless.Parts<typeof Field>
+type H = View.Helper<never, FieldProps> & View.Tags<Html.Elements, never>
+
 // A field with every part. The control already describes itself with a hint
 // of the consumer's own.
 const standIn = {
   elements: Html,
-  view: (
-    f: Component.Headless.Parts<typeof Field>,
-    h: View.Helper<never, FieldProps> & View.Tags<Html.Elements, never>
-  ) =>
+  view: (f: Parts, h: H) =>
     f.root(h.div).children(
       f.label(h.label).children("Name"),
       f.control(h.input.attr("aria-describedby", "hint")),
@@ -63,6 +63,16 @@ describe("Field", () => {
       s.fire(control, "blur")
       assert.deepStrictEqual(state(), [undefined, ""])
     }))
+
+  it("a group is a group unless its element says otherwise, and a disabled field disables its members", () => {
+    const f = parts({})
+    assert.strictEqual(attrsOf(f.group(h.div)).role, "group")
+    assert.strictEqual(attrsOf(f.group(h.div).attr("role", "radiogroup")).role, "radiogroup")
+    assert.isUndefined(attrsOf(f.group(h.fieldset)).role)
+    const member = attrsOf(parts({ disabled: true }).member(h.input).disabled(false))
+    assert.strictEqual(member.disabled, "")
+    assert.strictEqual(member["data-disabled"], "")
+  })
 
   it("field state overrides stale attributes without replacing consumer attributes", () => {
     const f = parts({ invalid: false, dirty: true, filled: true })
@@ -130,6 +140,10 @@ describe("Field", () => {
     assert.throws(() => f.label(h.span as any), /a part for <label> was given <span>/)
     assert.throws(
       () => f.control(h.div as any),
+      /a part for <input> or <textarea> or <select> or <button> was given <div>/
+    )
+    assert.throws(
+      () => f.member(h.div as any),
       /a part for <input> or <textarea> or <select> or <button> was given <div>/
     )
     assert.throws(() => f.description(h.p), /Field: the description was drawn without the described prop/)

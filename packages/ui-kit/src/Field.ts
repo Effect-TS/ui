@@ -1,8 +1,9 @@
 /**
- * Groups a form control with its label, description and error message, and
- * reports whether the control is invalid, touched or focused on each of
- * them. The label names the control, and the control points at the
- * description and the error, without the consumer writing an id.
+ * Groups a form control, or a group of them, with its label, description
+ * and error message, and reports whether the control is invalid, touched
+ * or focused on each of them. The label names the control, and the
+ * control points at the description and the error, without the consumer
+ * writing an id.
  *
  * `Field` is a headless component: it keeps whether its control has focus
  * and whether it was ever left, and generates the ids.
@@ -14,6 +15,9 @@
  * | `root`        | any element, usually a `<div>`                      |
  * | `label`       | `<label>`                                           |
  * | `control`     | `<input>`, `<textarea>`, `<select>` or `<button>`   |
+ * | `legend`      | any element, the group's visible name               |
+ * | `group`       | any element, around the group's controls            |
+ * | `member`      | `<input>`, `<textarea>`, `<select>` or `<button>`   |
  * | `description` | any element, usually a `<p>`                        |
  * | `error`       | any element, usually a `<div>`                      |
  *
@@ -27,6 +31,13 @@
  * `Input(h, { element: f.control(h.input), props })` for a text input, and
  * `s.root(f.control(h.button))` for a checkbox or a switch.
  *
+ * A field has either one `control` and a `label`, or a `group` of
+ * `member`s and a `legend`. The group is for a control made of several
+ * focusable elements, such as a range slider's thumbs, or for a set of
+ * controls, such as checkboxes. For a range slider, draw the slider's root
+ * with `s.root(f.group(h.div))` and each thumb's input with
+ * `f.member(h.input)`.
+ *
  * `error` returns `undefined` unless the field is invalid and enabled, so
  * write `f.error(h.div)?.children(message)`. The message is the consumer's:
  * validate in `update`, pass the outcome as `invalid` and the text as the
@@ -38,8 +49,8 @@
  *
  * - `data-disabled`
  * - `data-invalid` / `data-valid`, neither while `invalid` is left out
- * - `data-touched`: the control has lost focus at least once
- * - `data-focused`: the control has focus
+ * - `data-touched`: the control, or the group, has lost focus at least once
+ * - `data-focused`: the control, or one of the group's members, has focus
  * - `data-dirty`
  * - `data-filled`
  *
@@ -63,6 +74,17 @@
  * A disabled field disables its control, which then submits nothing. A
  * control's own parts don't hear of it: pass `disabled: f.disabled` to a
  * checkbox whose indicator shows `data-disabled`.
+ *
+ * In a group, the legend names the group and each member keeps its own
+ * name, from a wrapping `<label>` or an `aria-label`. Draw the legend, or
+ * the group points at an id nothing has. The description and the error
+ * are read on each member, where focus lands.
+ *
+ * Focus moving from one member to another neither touches the field nor
+ * drops its focus. Focus leaving the window counts as leaving the group,
+ * as it counts as leaving a single control. An element between the group
+ * and a member that handles `focusin` or `focusout` itself hides them from
+ * the field, because only the innermost handler gets a bubbling event.
  *
  * `touched` and `focused` are the field's own. Give the field another
  * `key` to start over, such as after the form is reset.
@@ -189,29 +211,37 @@ const lostFocus = Subscription.make("lostFocus", Stream.make(Message.BlurredCont
  * - every part: the data attributes
  * - `label`: `for`, the control's id
  * - `control`: `id` and `aria-invalid`
- * - `description` and `error`: `id`
+ * - `member`: `aria-invalid`
+ * - `legend`, `description` and `error`: `id`
  *
  * A part writes them when it is applied, so an attribute the consumer
  * chains after it is the consumer's to answer for. Leave the control's
  * `id` to the field: the label points at it.
  *
- * `control` adds the ids of the description and the shown error to the
- * element's `aria-describedby`, next to the consumer's own, set before
- * the part or after it.
+ * `control` and `member` add the ids of the description and the shown
+ * error to the element's `aria-describedby`, next to the consumer's own,
+ * set before the part or after it. `group` adds the legend's id to
+ * `aria-labelledby` the same way.
  *
- * A disabled field writes `disabled` and `data-disabled` on the control
- * when the element is built, so they win over what the consumer chains and
- * over another kit call on the same element. It also leaves out the hidden
- * input a checkbox or a switch drawn on the control keeps its form value
- * in, so a disabled field submits nothing. An enabled field does none of
- * it, so the control keeps its own.
+ * `group` sets `role="group"` when the element is built, unless it is a
+ * `<fieldset>` or has a role of its own by then, such as one chained
+ * after the part or another kit call's. `aria-invalid` isn't allowed on a
+ * group, so it goes on the members only.
+ *
+ * A disabled field writes `disabled` and `data-disabled` on the control,
+ * and on each member, when the element is built, so they win over what
+ * the consumer chains and over another kit call on the same element. It
+ * also leaves out the hidden input a checkbox or a switch drawn on the
+ * control keeps its form value in, so a disabled field submits nothing.
+ * An enabled field does none of it, so the control keeps its own.
  *
  * `control` handles `focus` and `blur` on a layer of its own, so the
- * consumer's handlers for them, and another kit call's, still run. A
- * disabled field reports neither: it shows no focus, and isn't touched
- * until it is enabled and left. A field disabled while its control has
- * focus drops the focus, and shows it again only when the control is
- * focused again.
+ * consumer's handlers for them, and another kit call's, still run.
+ * `group` does the same with `focusin` and `focusout`, and `member`
+ * handles no focus event. A disabled field shows no focus, and isn't
+ * touched until it is enabled and left. A field disabled while its
+ * control has focus drops the focus, and shows it again only when the
+ * control is focused again.
  *
  * @stability experimental
  * @category components
@@ -246,6 +276,7 @@ export const Field = Component.define({
     const controlId = p.id("control")
     const descriptionId = p.id("description")
     const errorId = p.id("error")
+    const legendId = p.id("legend")
     // An attribute a part sets to `undefined` is removed from the
     // consumer's builder too, so a consumer's `data-invalid` can't report
     // a state the field isn't in.
@@ -263,6 +294,23 @@ export const Field = Component.define({
       flags(builder).attr("data-disabled", flag(disabled))
     const describedBy = [described && descriptionId, showsError && errorId].filter((id) => id !== false).join(" ")
     const error = p.part((b) => state(b).attr("id", errorId))
+    // `control`, with the id and the focus handlers, or `member`, with
+    // neither.
+    const formControl = (own: boolean) =>
+      p.part(["input", "textarea", "select", "button"], (b) => {
+        const control = (own
+          ? flags(b).attr("id", controlId).onFocus(Message.FocusedControl()).onBlur(Message.BlurredControl())
+          : flags(b))
+          .attr("aria-invalid", showsError ? "true" : undefined)
+          // A token list: added to the consumer's own.
+          .attr("aria-describedby", describedBy === "" ? undefined : describedBy)
+        // Written when the control is built, after another kit call on the
+        // same element wrote its own and added its children. An enabled
+        // field leaves all of it alone.
+        return disabled
+          ? control.forward((node) => withoutField(View.build(node.attr("data-disabled", "").disabled(true), [])))
+          : control
+      })
     return {
       disabled,
       invalid,
@@ -273,21 +321,27 @@ export const Field = Component.define({
       focused,
       root: p.part(state),
       label: p.part("label", (b) => state(b).attr("for", controlId)),
-      control: p.part(["input", "textarea", "select", "button"], (b) => {
-        const control = flags(b)
-          .attr("id", controlId)
-          .attr("aria-invalid", showsError ? "true" : undefined)
+      control: formControl(true),
+      legend: p.part((b) => state(b).attr("id", legendId)),
+      group: p.part((b) =>
+        state(b)
           // A token list: added to the consumer's own.
-          .attr("aria-describedby", describedBy === "" ? undefined : describedBy)
-          .onFocus(Message.FocusedControl())
-          .onBlur(Message.BlurredControl())
-        // Written when the control is built, after another kit call on the
-        // same element wrote its own and added its children. An enabled
-        // field leaves all of it alone.
-        return disabled
-          ? control.forward((node) => withoutField(View.build(node.attr("data-disabled", "").disabled(true), [])))
-          : control
-      }),
+          .attr("aria-labelledby", legendId)
+          .on("focusin", Message.FocusedControl())
+          // Focus moving between members neither leaves the field nor
+          // touches it. The part is for any element, so the payload isn't
+          // typed.
+          .on(
+            "focusout",
+            (payload) => (payload as Html.FocusWithinPayload).within ? undefined : Message.BlurredControl()
+          )
+          // Read when the element is built, so a role chained after the
+          // part, or another kit call's, is kept.
+          .forward((node) =>
+            node.attrs.role === undefined && node.tag !== "fieldset" ? node.attr("role", "group") : node
+          )
+      ),
+      member: formControl(false),
       description: p.part((b) => {
         if (!described) {
           throw new Error(

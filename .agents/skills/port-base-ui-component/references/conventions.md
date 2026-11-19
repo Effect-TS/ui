@@ -77,6 +77,24 @@ control's own prop, from the context's parts: `disabled: f.disabled`. To
 undo markup the control added to that element, such as the hidden input,
 keep the helper beside the one that adds it (`internal/field.ts`).
 
+A group control, one with several focusable elements such as a range
+slider, a checkbox group or a radio group, reaches a Field through
+`f.group` and `f.member` instead of `f.control`. Its root takes
+`f.group`, `s.root(f.group(h.div))`, which names it with
+`aria-labelledby` from `f.legend` and tracks focus with `focusin` and
+`focusout`. Each focusable element takes `f.member`, which writes
+`aria-describedby`, `aria-invalid` and the data attributes, but no id and
+no focus handlers. Each member keeps its own name. Don't apply `f.control`
+to more than one element, since that gives two elements one id, and don't
+handle `focusin` or `focusout` on an element between the group and its
+members, since that hides them from the field.
+
+ARIA allows `aria-invalid` on `radiogroup` and not on `radio`, the reverse
+of a checkbox or a slider. So RadioGroup takes `invalid: f.invalid` and
+writes `aria-invalid` on its root, and the radio's root removes the one
+`f.member` wrote. The radio's part is applied after `f.member`, so it
+writes last.
+
 When a view function with `view` needs state, keep its call. Wrap the
 headless component in a function with the same options; the consumer may
 need to add a `key`. A one-element view function returns a builder, but a
@@ -424,8 +442,8 @@ portal. The details are in the JSDoc of `popover` and `modal` in
 - A data attribute is present with an empty value, or absent:
   `.attr("data-checked", on ? "" : undefined)`.
 - Attributes only a Field has, such as `data-invalid` and
-  `data-touched`, reach the control through `f.control`, so the control
-  doesn't set them. One both write, such as `disabled`, is the field's
+  `data-touched`, reach the control through `f.control` or `f.member`,
+  so the control doesn't set them. One both write, such as `disabled`, is the field's
   while the field is disabled. Attributes that come from a Form context
   wait for that component.
 - ARIA follows Base UI's source, not just its docs page. Prefer a native

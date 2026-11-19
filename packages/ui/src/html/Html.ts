@@ -453,6 +453,27 @@ export interface DropTargetOptions extends View.EventOptions {
 }
 
 /**
+ * The payload of `focusin` and `focusout`: whether the other end of the
+ * move is inside the handler's element. For `focusin` that is where focus
+ * came from, and for `focusout` where it goes.
+ *
+ * **Details**
+ *
+ * An element that handles both can tell focus moving between its
+ * descendants from focus arriving or leaving: `within` is `true` for the
+ * first, and `false` for the second. Focus coming from or going to
+ * another window, or nowhere, counts as outside, as does an event a script
+ * dispatched with a `relatedTarget` that isn't a node, such as the window.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface FocusWithinPayload {
+  readonly within: boolean
+}
+
+/**
  * The events every HTML element has, with their payloads.
  *
  * **Details**
@@ -478,8 +499,8 @@ export interface Events {
   readonly keyup: KeyPayload
   readonly focus: {}
   readonly blur: {}
-  readonly focusin: {}
-  readonly focusout: {}
+  readonly focusin: FocusWithinPayload
+  readonly focusout: FocusWithinPayload
   readonly scroll: ScrollPayload
   readonly dragstart: {}
   readonly dragend: DragEndPayload

@@ -28,6 +28,9 @@ describe("Field", () => {
         Field(h, {
           props: { described: true },
           view: (f) => {
+            expect(f.legend(h.div)).type.toBe<Element<"div">>()
+            expect(f.group(h.fieldset)).type.toBe<Element<"fieldset">>()
+            expect(f.member(h.input)).type.toBe<InputElement<Msg>>()
             expect(f.focused).type.toBe<boolean>()
             expect(f.label(h.label.class("label"))).type.toBe<Element<"label">>()
             expect(f.control(h.input)).type.toBe<InputElement<Msg>>()
@@ -73,6 +76,7 @@ describe("Field", () => {
             expect(f.label).type.not.toBeCallableWith({ element: h.label })
             expect(f.control).type.not.toBeCallableWith(h.div)
             expect(f.control).type.not.toBeCallableWith({ element: h.input })
+            expect(f.member).type.not.toBeCallableWith(h.div)
             expect(f.description).type.not.toBeCallableWith({ element: h.p })
             expect(f.error).type.not.toBeCallableWith({ element: h.div })
             return f.root(h.div)
