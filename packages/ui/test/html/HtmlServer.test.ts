@@ -57,6 +57,75 @@ const container = (html: string) =>
     (element) => Effect.sync(() => element.remove())
   )
 
+/** Whether the suite runs on the kernel, which adopts node by node. The runtime it replaces adopts an instance whole. */
+const kernel = process.env.UI_RUNTIME === "kernel"
+
+/**
+ * Three rows under a list, rendered on the server and hydrated from `tamper`'s copy of the HTML. Each row
+ * has a button with a handler and a mount, and a Subscription.
+ */
+const hydrateRows = Effect.fnUntraced(function*(tamper: (html: string) => string) {
+  const mounted: Array<Element> = []
+  let streams = 0
+  const Seen = Mount.make("Seen", { args: {} }, (element: Element) =>
+    Effect.sync(() => {
+      mounted.push(element)
+      return RowMessage.Seen()
+    }))
+  const RowMessage = UiSchema.TaggedEnum({ Clicked: {}, Seen: {} })
+  const Row = Component.define({
+    name: "Row",
+    props: Schema.Struct({ label: Schema.String }),
+    model: Schema.Number,
+    message: RowMessage,
+    elements: Html
+  }).make({
+    init: () => 0,
+    update: (clicks, message) => message._tag === "Clicked" ? clicks + 1 : clicks,
+    subscriptions: () => [
+      Subscription.make("stream", 0, (): Stream.Stream<never> => {
+        streams++
+        return Stream.never
+      })
+    ],
+    view: (clicks, h) =>
+      h.li(
+        h.button.onClick(RowMessage.Clicked()).onMount(Seen()).children(h.props.label),
+        h.span(`${clicks} clicked`),
+        h.em(`row ${h.props.label}`)
+      )
+  })
+  const Rows = Component.define({ name: "Rows", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+    init: () => null,
+    update: (model) => model,
+    view: (_, h) => h.ul(...["A", "B", "C"].map((label) => Row(h, { key: label, props: { label } })))
+  })
+  const rendered = yield* HtmlServer.renderToHtml(Rows, {})
+  const html = tamper(rendered.html)
+  assert.notStrictEqual(html, rendered.html)
+  const app = yield* container(html)
+  const server = { items: [...app.querySelectorAll("li")], buttons: [...app.querySelectorAll("button")] }
+  const root = yield* BrowserHost.mountEffect(Rows, {}, app, { state: rendered.state })
+  yield* root.adopted
+  yield* tick
+  /** Fails if a handler, a mount or a Subscription started twice, on a node that stayed or one that went. */
+  const startedOnce = Effect.gen(function*() {
+    const buttons = [...app.querySelectorAll("button")]
+    assert.deepStrictEqual(buttons.map((button) => button.textContent), ["A", "B", "C"])
+    assert.deepStrictEqual([...app.querySelectorAll("em")].map((em) => em.textContent), ["row A", "row B", "row C"])
+    assert.strictEqual(app.querySelector("ul")!.childNodes.length, 3)
+    assert.sameMembers(mounted, buttons)
+    assert.strictEqual(streams, 3)
+    for (const button of buttons) button.click()
+    yield* tick
+    assert.deepStrictEqual(
+      [...app.querySelectorAll("span")].map((span) => span.textContent),
+      ["1 clicked", "1 clicked", "1 clicked"]
+    )
+  })
+  return { app, server, startedOnce }
+})
+
 describe("HtmlServer", { concurrent: false }, () => {
   it.effect("drops unsafe attribute names on the server, fresh client and hydrated client", () =>
     Effect.gen(function*() {
@@ -950,7 +1019,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       expect(app.querySelector("p")!.textContent).toBe("server:server")
     }).pipe(Effect.scoped))
 
-  it.effect("rebuilds only the instance whose nodes don't match", () =>
+  it.effect("rebuilds nothing outside the instance whose nodes don't match", () =>
     Effect.gen(function*() {
       const Item = Component.define({
         name: "Item",
@@ -979,14 +1048,52 @@ describe("HtmlServer", { concurrent: false }, () => {
       })
       const rendered = yield* HtmlServer.renderToHtml(List, {})
       const app = yield* container(rendered.html.replace("<li>A</li>", "<li>changed</li>"))
-      const [first, second] = app.querySelectorAll("li")
+      const second = app.querySelectorAll("li")[1]
       yield* BrowserHost.mountEffect(List, {}, app, { state: rendered.state })
       const [a, b] = app.querySelectorAll("li")
       expect(a.textContent).toBe("A")
-      expect(a).not.toBe(first)
       expect(b).toBe(second)
       expect(app.querySelector("ul")!.childNodes.length).toBe(2)
     }).pipe(Effect.scoped))
+
+  for (
+    const [where, tamper] of [
+      ["at the end of a row", (html: string) => html.replace("row C", "stale")],
+      ["after a row's own nodes", (html: string) => html.replace("<!--]/Rows/Row[C]-->", "<hr>$&")]
+    ] as const
+  ) {
+    it.effect(`a mismatch ${where} keeps the rows beside it, and starts nothing twice`, () =>
+      Effect.gen(function*() {
+        const { app, server, startedOnce } = yield* hydrateRows(tamper)
+        const items = [...app.querySelectorAll("li")]
+        assert.strictEqual(items[0], server.items[0])
+        assert.strictEqual(items[1], server.items[1])
+        yield* startedOnce
+      }).pipe(Effect.scoped))
+  }
+
+  it.effect.skipIf(!kernel)("keeps the nodes before a mismatch in the view it's in", () =>
+    Effect.gen(function*() {
+      const { app, server, startedOnce } = yield* hydrateRows((html) => html.replace("row C", "stale"))
+      assert.deepStrictEqual([...app.querySelectorAll("li")], server.items)
+      assert.deepStrictEqual([...app.querySelectorAll("button")], server.buttons)
+      yield* startedOnce
+    }).pipe(Effect.scoped))
+
+  it.effect.skipIf(!kernel)(
+    "keeps the rows before a node the view doesn't render, and builds the rest once",
+    () =>
+      Effect.gen(function*() {
+        // A stray element between the second row and the third, where the list's view has the third.
+        const { app, server, startedOnce } = yield* hydrateRows((html) =>
+          html.replace("<!--[/Rows/Row[C]-->", "<hr>$&")
+        )
+        const items = [...app.querySelectorAll("li")]
+        assert.strictEqual(items[0], server.items[0])
+        assert.strictEqual(items[1], server.items[1])
+        yield* startedOnce
+      }).pipe(Effect.scoped)
+  )
   it.effect("fails the parent whose view has two children at one path when it adopts", () =>
     Effect.gen(function*() {
       // The server renders two keys; the client's view at adoption renders one of them twice.

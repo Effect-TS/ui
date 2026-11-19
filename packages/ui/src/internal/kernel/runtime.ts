@@ -767,22 +767,9 @@ let buildInterrupters = 0
 interface Range {
   readonly open: unknown
   readonly close: unknown
-  readonly nodes: ReadonlyArray<unknown>
   /** Whether the instance took these nodes, so whoever declared the child leaves them in place. */
   claimed: boolean
 }
-
-/** How a view matches the server's nodes. */
-type Plan =
-  | {
-    readonly _tag: "Element"
-    readonly node: unknown
-    /** `undefined` when the element's server content is text only: its children are built fresh. */
-    readonly children: ReadonlyArray<Plan> | undefined
-  }
-  | { readonly _tag: "Text"; readonly node: unknown }
-  // A child's range, or an outlet's.
-  | { readonly _tag: "Child"; readonly range: Range }
 
 // ---------------------------------------------------------------------------
 // mount
@@ -3082,21 +3069,19 @@ const setup = (
     if (inst.closed) return
     const tree = viewOf(inst)
     if (tree === undefined) return
-    const plan = range !== undefined && Option.isSome(serverModel) ? matchList(inst, [tree], range.nodes) : undefined
+    let taken: Rendered | undefined
     let rendered: Rendered
     try {
-      rendered = plan !== undefined ? adoptNode(inst, tree, plan[0]!, inst.env) : create(inst, tree, inst.env)
+      if (range !== undefined && Option.isSome(serverModel)) {
+        taken = adoptNode(inst, tree, host.nextOf(range.open), range.close, inst.env)
+      }
+      rendered = taken ?? create(inst, tree, inst.env)
       throwClash(inst)
     } catch (error) {
       failInstance(inst, Cause.die(error), "view")
       return
     }
-    if (plan !== undefined) {
-      // Adopted: the markers go, and the server's nodes are the instance's.
-      range!.claimed = true
-      host.remove(range!.open)
-      host.remove(range!.close)
-    }
+    if (taken !== undefined) claim(range!)
     inst.rendered = [rendered]
     viewChanged = true
     if (inst.failure !== undefined) return
@@ -3137,7 +3122,7 @@ const setup = (
     inst.waiting = true
     waiting++
     range.claimed = true
-    inst.rendered = [range.open, ...range.nodes, range.close].map((node) => ({ ...raw, node }))
+    inst.rendered = rangeNodes(range).map((node) => ({ ...raw, node }))
     const resume = (adopt: boolean) => {
       if (inst.closed || !inst.waiting) return
       inst.waiting = false
@@ -5015,21 +5000,16 @@ const setup = (
     const out = makeOutlet(inst, view)
     const views = checkedViews(out)
     try {
-      const plan = range === undefined ? undefined : matchList(out, views, range.nodes)
-      const rendered: Array<Rendered> = new Array(views.length)
-      if (plan !== undefined) {
-        // Adopted: the markers go, and the server's nodes are the content's.
-        for (let index = 0; index < views.length; index++) {
-          rendered[index] = adoptNode(out, views[index]!, plan[index]!, out.env)
-        }
-        host.remove(range!.open)
-        host.remove(range!.close)
+      if (range !== undefined) {
+        // The markers go, and the server's nodes that match are the content's.
+        out.rendered = adoptList(out, views, host.nextOf(range.open), range.close, out.env)
+        host.remove(range.open)
+        host.remove(range.close)
       } else {
-        // Built fresh: the server's nodes go, and the parent places the new ones.
-        if (range !== undefined) removeRange(range)
+        const rendered: Array<Rendered> = new Array(views.length)
         for (let index = 0; index < views.length; index++) rendered[index] = create(out, views[index]!, out.env)
+        out.rendered = rendered
       }
-      out.rendered = rendered
     } catch (error) {
       contentFailed(out, error)
       out.rendered = [{ _tag: "Text", v: emptyText, node: host.createText("") }]
@@ -5296,119 +5276,103 @@ const setup = (
     const shown = fallbackOf(inst, view, status, failedChild)
     let inner: Rendered | undefined
     if (range !== undefined) {
-      const plan = shippedStatus(`${inst.path}/${segment(view)}`) === status._tag
-        ? matchList(inst, [shown], range.nodes)
-        : undefined
-      if (plan !== undefined) {
-        inner = adoptNode(inst, shown, plan[0]!, settled(env))
-        range.claimed = true
-        host.remove(range.open)
-        host.remove(range.close)
-      } else {
-        removeRange(range)
+      if (shippedStatus(`${inst.path}/${segment(view)}`) === status._tag) {
+        inner = adoptNode(inst, shown, host.nextOf(range.open), range.close, settled(env))
       }
+      if (inner !== undefined) claim(range)
+      else removeRange(range)
     }
     return { _tag: "Fallback", v: view, inner: inner ?? create(inst, shown, settled(env)), status, failedChild }
   }
 
   // -- hydration ------------------------------------------------------------
-  /** The range that starts at `open`, the marker for `path`, up to its closing marker. */
-  const rangeFrom = (open: unknown, path: string): Range | undefined => {
-    const nodes: Array<unknown> = []
-    for (let node = host.nextOf(open); node !== undefined; node = host.nextOf(node)) {
+  /** The range that starts at `open`, the marker for `path`, up to its closing marker, looked for before `stop`. */
+  const rangeFrom = (open: unknown, path: string, stop: unknown): Range | undefined => {
+    for (let node = host.nextOf(open); node !== undefined && node !== stop; node = host.nextOf(node)) {
       const kind = hydration!.inspect(node)
-      if (kind._tag === "Close" && kind.path === path) return { open, close: node, nodes, claimed: false }
-      nodes.push(node)
+      if (kind._tag === "Close" && kind.path === path) return { open, close: node, claimed: false }
     }
     return undefined
   }
 
-  const removeRange = (range: Range) => {
-    host.remove(range.open)
-    for (const node of range.nodes) host.remove(node)
-    host.remove(range.close)
-  }
-
-  const childNodes = (node: unknown): Array<unknown> => {
+  /** A range's nodes, its markers included. */
+  const rangeNodes = (range: Range): Array<unknown> => {
     const out: Array<unknown> = []
-    for (let child = hydration!.firstChild(node); child !== undefined; child = host.nextOf(child)) out.push(child)
+    for (let node = range.open; node !== range.close; node = host.nextOf(node)) out.push(node)
+    out.push(range.close)
     return out
   }
 
-  /**
-   * Matches a view against the server's nodes: the instance's own nodes one by
-   * one, and each child by its marker range, which the child matches
-   * itself. A server never writes an empty text node, so an empty text matches
-   * nothing and is created.
-   */
-  const matchList = (
-    inst: Instance,
-    views: ReadonlyArray<View.Node<any, any>>,
-    nodes: ReadonlyArray<unknown>
-  ): Array<Plan> | undefined => {
-    const out: Array<Plan> = []
-    let index = 0
-    for (const view of views) {
-      const node = nodes[index]
-      const kind = node === undefined ? undefined : hydration!.inspect(node)
-      switch (view._tag) {
-        case "Text": {
-          if (kind?._tag === "Text") {
-            if (kind.text !== view.text) return undefined
-            out.push({ _tag: "Text", node })
-            index++
-          } else if (view.text === "") {
-            out.push({ _tag: "Text", node: undefined })
-          } else {
-            return undefined
-          }
-          break
-        }
-        case "Element": {
-          if (kind?._tag !== "Element" || kind.tag !== view.tag) return undefined
-          // Content the host parses as text has no nodes or markers to adopt, so its children are built fresh.
-          const children = kind.textOnly === true ? undefined : matchList(inst, view.children, childNodes(node))
-          if (children === undefined && kind.textOnly !== true) return undefined
-          out.push({ _tag: "Element", node, children })
-          index++
-          break
-        }
-        case "Child":
-        case "Outlet": {
-          // An outlet's content matches itself against the range, as a child does, and builds fresh if it can't.
-          const path = view._tag === "Child" ? `${inst.path}/${segment(view)}` : outletPath(inst.author, view.name)
-          if (kind?._tag !== "Open" || kind.path !== path) return undefined
-          const range = rangeFrom(node, path)
-          if (range === undefined) return undefined
-          out.push({ _tag: "Child", range })
-          index += range.nodes.length + 2
-          break
-        }
-      }
-    }
-    return index === nodes.length ? out : undefined
+  const removeRange = (range: Range) => {
+    removeUpTo(range.open, range.close)
+    host.remove(range.close)
   }
 
-  /** Like `create`, but takes the server's nodes a matched view points at. */
-  const adoptNode = (inst: Instance, view: View.Node<any, any>, plan: Plan, env: Env): Rendered => {
+  /** Removes `node` and the siblings after it, up to `stop`. */
+  const removeUpTo = (node: unknown, stop: unknown) => {
+    while (node !== undefined && node !== stop) {
+      const next = host.nextOf(node)
+      host.remove(node)
+      node = next
+    }
+  }
+
+  // The server's node after what `adoptNode` last adopted.
+  let adoptedUpTo: unknown
+
+  /** Adopted: what's left of the server's nodes in the range goes, with its markers. */
+  const claim = (range: Range) => {
+    range.claimed = true
+    removeUpTo(adoptedUpTo, range.close)
+    host.remove(range.open)
+    host.remove(range.close)
+  }
+
+  /**
+   * Adopts the server's node `node` for `view`, with everything under it, in one pass: nothing is
+   * matched ahead. `undefined` when `node`, which is `stop` or missing once the server's nodes run out,
+   * isn't what the view renders: nothing was adopted then. A child matches by its marker range, which it
+   * adopts itself. A server never writes an empty text node, so an empty text takes no node and is created.
+   */
+  const adoptNode = (
+    inst: Instance,
+    view: View.Node<any, any>,
+    node: unknown,
+    stop: unknown,
+    env: Env
+  ): Rendered | undefined => {
+    const kind = node === undefined || node === stop ? undefined : hydration!.inspect(node)
     switch (view._tag) {
       case "Text": {
-        const node = (plan as Extract<Plan, { _tag: "Text" }>).node
-        return { _tag: "Text", v: view, node: node ?? host.createText(view.text) }
+        if (kind?._tag === "Text") {
+          if (kind.text !== view.text) return undefined
+          adoptedUpTo = host.nextOf(node)
+          return { _tag: "Text", v: view, node }
+        }
+        if (view.text !== "") return undefined
+        adoptedUpTo = node
+        return { _tag: "Text", v: view, node: host.createText("") }
       }
       case "Element": {
-        const { children: plans, node } = plan as Extract<Plan, { _tag: "Element" }>
+        if (kind?._tag !== "Element" || kind.tag !== view.tag) return undefined
+        const next = host.nextOf(node)
         for (const name in view.attrs) {
           if (hydration!.getAttr(node, name) !== view.attrs[name]) host.setAttr(node, name, view.attrs[name])
         }
         setEvents(inst, node, view)
-        if (plans === undefined) { for (const child of childNodes(node)) host.remove(child) }
         checkKeys(inst, view.children)
-        const children = plans === undefined
-          ? view.children.map((child) => create(inst, child, env))
-          : view.children.map((child, index) => adoptNode(inst, child, plans[index]!, env))
+        // Content the host parses as text has no nodes or markers to adopt, so its children are built fresh.
+        const children = adoptList(
+          inst,
+          view.children,
+          kind.textOnly === true ? undefined : hydration!.firstChild(node),
+          undefined,
+          env
+        )
+        if (kind.textOnly === true) removeUpTo(hydration!.firstChild(node), undefined)
         place(node, children, undefined)
         for (const name in view.props) adoptProp(node, name, view.props[name])
+        adoptedUpTo = next
         return {
           _tag: "Element",
           v: view,
@@ -5419,10 +5383,43 @@ const setup = (
         }
       }
       case "Child":
-        return createChild(inst, view, env, (plan as Extract<Plan, { _tag: "Child" }>).range)
-      case "Outlet":
-        return createOutlet(inst, view, (plan as Extract<Plan, { _tag: "Child" }>).range)
+      case "Outlet": {
+        const path = view._tag === "Child" ? `${inst.path}/${segment(view)}` : outletPath(inst.author, view.name)
+        if (kind?._tag !== "Open" || kind.path !== path) return undefined
+        const range = rangeFrom(node, path, stop)
+        if (range === undefined) return undefined
+        const next = host.nextOf(range.close)
+        // A child's content matches itself against the range, as an outlet's does, and builds fresh what doesn't.
+        const made = view._tag === "Child" ? createChild(inst, view, env, range) : createOutlet(inst, view, range)
+        adoptedUpTo = next
+        return made
+      }
     }
+  }
+
+  /**
+   * Adopts the server's nodes from `first` up to `stop` for `views`, one by one. From the first that doesn't
+   * match, the server's nodes go and the views left are built fresh: what was adopted before it stays.
+   */
+  const adoptList = (
+    inst: Instance,
+    views: ReadonlyArray<View.Node<any, any>>,
+    first: unknown,
+    stop: unknown,
+    env: Env
+  ): Array<Rendered> => {
+    const out: Array<Rendered> = new Array(views.length)
+    let node = first
+    let index = 0
+    for (; index < views.length; index++) {
+      const made = adoptNode(inst, views[index]!, node, stop, env)
+      if (made === undefined) break
+      out[index] = made
+      node = adoptedUpTo
+    }
+    removeUpTo(node, stop)
+    for (; index < views.length; index++) out[index] = create(inst, views[index]!, env)
+    return out
   }
 
   // -- diff -----------------------------------------------------------------
@@ -6262,7 +6259,7 @@ const setup = (
     for (let node = hydration.firstChild(container); node !== undefined; node = host.nextOf(node)) {
       const kind = hydration.inspect(node)
       if (kind._tag === "Open" && kind.path === rootPath) {
-        rootRange = rangeFrom(node, rootPath)
+        rootRange = rangeFrom(node, rootPath, undefined)
         break
       }
     }

@@ -96,15 +96,13 @@ describe("slots on the server", () => {
       app.innerHTML = rendered.html
       const article = app.querySelector("article")!
       const title = app.querySelector("h2")!
-      const paragraph = app.querySelector("p")!
 
       const root = yield* BrowserHost.mountEffect(Page, {}, app, { state: rendered.state })
       yield* root.adopted
       yield* tick
-      // Card and the slots that match keep the server's nodes; the body is built again.
+      // Card and the slots that match keep the server's nodes; the body shows the client's content.
       assert.strictEqual(app.querySelector("article"), article)
       assert.strictEqual(app.querySelector("h2"), title)
-      assert.notStrictEqual(app.querySelector("p"), paragraph)
       assert.strictEqual(app.querySelector("p")!.textContent, "from the client")
       assert.strictEqual(app.querySelectorAll("p").length, 1)
       assert.notInclude(app.innerHTML, "<!--")

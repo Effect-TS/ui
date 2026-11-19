@@ -78,6 +78,8 @@ const shared: ViteUserConfig = {
 const kernelRuntime = path.join(import.meta.dirname, "packages/ui/src/internal/kernel/runtime.ts")
 const runtimeFile = path.join(import.meta.dirname, "packages/ui/src/internal/runtime.ts")
 const onKernel: ViteUserConfig = {
+  // For the tests of what only the kernel does.
+  test: { env: { UI_RUNTIME: "kernel" } },
   plugins: [{
     name: "kernel-runtime",
     enforce: "pre",
