@@ -1428,13 +1428,12 @@ const setup = (
   // The fold of the tree being folded: the root's, or under a host-neutral root, the first vocabulary
   // in the tree with a fold of its own, so an Html child keeps its entries.
   let folding = rootFold
-  // Hydration: each instance's node from the first kept fold that saw it, which evaluated the state it
-  // adopted, until every instance has adopted. Then the fold of those nodes, the head of the adopted state.
+  // Hydration: each instance's node over the state it adopted, until every instance has adopted. The
+  // mount's tree is recorded from its first kept fold, and a subtree that waited for its Layer as it adopts,
+  // before the props its parent passed meanwhile reach it. Then the fold of those nodes is the head of the
+  // adopted state.
   let adoption: Map<Instance, HeadRecord> | undefined = hydrating === undefined ? undefined : new Map()
   let adoptionHead: unknown = undefined
-  // Hydration: the props each instance that waited for its Layer was placed with, the server's, until its
-  // node is recorded. A parent can pass it new ones meanwhile, and the adopted state's head uses these.
-  const placedProps = new Map<Instance, unknown>()
   // The nodes of the fold under way, when it records them.
   let seen: Array<HeadRecord> | undefined
   // Set when `merged` holds a head the host hasn't been given.
@@ -1458,7 +1457,7 @@ const setup = (
     if (folding === neutralFold) folding = fold
     const children = inst.rendered.flatMap(placedBy)
     const reduce = reducer(inst, fold)
-    if (seen !== undefined) seen.push({ inst, fold, entries: placedEntries(inst) ?? entries, reduce, children })
+    if (seen !== undefined) seen.push({ inst, fold, entries, reduce, children })
     return {
       path: inst.path,
       entries,
@@ -1478,21 +1477,6 @@ const setup = (
     return (below) => {
       const value = reduce(model, below)
       return fold === folding ? value : { ...(below as object), ...(value as object) }
-    }
-  }
-  /**
-   * The entries of an instance that waited, over the props it was placed with, when it has new ones. One that
-   * throws over them is left out of the adopted state's head, as the server leaves it out.
-   */
-  const placedEntries = (inst: Instance): ReadonlyArray<unknown> | undefined => {
-    if (!placedProps.has(inst)) return undefined
-    const props = placedProps.get(inst)
-    placedProps.delete(inst)
-    if (propsEqual(props, inst.props)) return undefined
-    try {
-      return inst.component.head!(inst.model, props, inst.results)
-    } catch {
-      return none
     }
   }
   /** The instances a rendered node places, in document order: a fallback's content included. */
@@ -1533,8 +1517,32 @@ const setup = (
   }
 
   /**
-   * Records the nodes of a kept fold on a hydrating mount, and once every instance has adopted, folds
-   * them. Without an instance that waited, the first fold is already the adopted state's.
+   * Hydration: records the node of each instance in the subtree of one that waited, as it adopts: their
+   * heads are evaluated now, over the state they adopted and the props they were placed with. One still
+   * waiting is recorded when it adopts. One whose head throws is left out, as the fold fails it.
+   */
+  const recordAdopted = (inst: Instance) => {
+    const records = adoption
+    if (records === undefined) return
+    const visit = (inst: Instance) => {
+      if (records.has(inst) || inst.closed || inst.failure !== undefined || inst.waiting) return
+      const head = inst.component.head
+      let entries: ReadonlyArray<unknown>
+      try {
+        entries = head === undefined ? none : head(inst.model, inst.props, inst.results)
+      } catch {
+        return
+      }
+      const fold = foldOf(inst.component)
+      const children = inst.rendered.flatMap(placedBy)
+      records.set(inst, { inst, fold, entries, reduce: reducer(inst, fold), children })
+      for (const child of children) visit(child)
+    }
+    visit(inst)
+  }
+  /**
+   * Records the nodes of a kept fold, and once every instance has adopted, folds them. Without an instance
+   * that waited, the first fold is already the adopted state's.
    */
   const recordAdoption = (nodes: ReadonlyArray<HeadRecord>, next: unknown) => {
     const records = adoption
@@ -1547,7 +1555,6 @@ const setup = (
     const records = adoption
     if (records === undefined || rootInstance === undefined) return
     adoption = undefined
-    placedProps.clear()
     adoptionHead = folded !== undefined ? folded : foldAdopted(records, rootInstance)
   }
 
@@ -2626,7 +2633,6 @@ const setup = (
         ...(bound === undefined ? undefined : { queries: fromServer.value.results ?? bound.empty })
       })
       logEarly()
-      if (adoption !== undefined) placedProps.set(inst, inst.props)
       inst.waiting = true
       waiting++
       range.claimed = true
@@ -2637,7 +2643,17 @@ const setup = (
         const nodes = inst.rendered.flatMap(nodesOf)
         inst.rendered = []
         range.claimed = false
+        // Props its parent passed while it waited: it adopts with those it was placed with, the server's, and
+        // gets these after. Built fresh, it starts from them.
+        const held = heldProps.has(inst) ? { props: heldProps.get(inst) } : undefined
+        heldProps.delete(inst)
+        if (held !== undefined && !adopt) inst.props = held.props
         begin(range, adopt ? fromServer : Option.none())
+        if (adopt) recordAdopted(inst)
+        if (held !== undefined && adopt && !inst.closed && inst.failure === undefined) {
+          changeProps(inst, held.props)
+          if (!inst.closed) markDirty(inst)
+        }
         if (!range.claimed) {
           // Rebuilt: the new nodes take the server's place.
           const parentNode = host.parentOf(range.open)
@@ -4558,6 +4574,21 @@ const setup = (
     for (const author of refChecks) checkRefs(author)
   }
 
+  /** Hydration: the props a parent passed an instance while it waited to adopt, applied once it has. */
+  const heldProps = new Map<Instance, unknown>()
+  /** New props from the parent: written to the log, then the watches, keyed queries and shares follow them. */
+  const changeProps = (inst: Instance, props: unknown) => {
+    inst.props = props
+    if (inst.selection !== undefined) inst.selection.due = true
+    // Before the result writes the new props cause, so a replay opens them against these props.
+    const changedSeq = record(inst, { _tag: "PropsChanged", props })
+    // Watches first: new args over a settled entry write its value before this render, and the
+    // keyed queries' results are written before it too.
+    syncSubscriptions(inst)
+    drainKeyed(inst)
+    if (!inst.closed) refreshShares(inst, changedSeq)
+  }
+
   const render = (inst: Instance) => {
     if (inst.component === outletComponent) return renderOutlet(inst)
     if (inst.waiting) return
@@ -5567,18 +5598,13 @@ const setup = (
           ? slottedBy.get(instance)
           : undefined
         if (slotted !== undefined) slotted.values = child.slots
-        const changed = !propsEqual(child.props, instance.props)
-        if (changed) {
-          instance.props = child.props
-          if (instance.selection !== undefined) instance.selection.due = true
-          // Before the result writes the new props cause, so a replay opens them against these props.
-          const changedSeq = record(instance, { _tag: "PropsChanged", props: child.props })
-          // Watches first: new args over a settled entry write its value before this render, and the
-          // keyed queries' results are written before it too.
-          syncSubscriptions(instance)
-          drainKeyed(instance)
-          if (!instance.closed) refreshShares(instance, changedSeq)
-        }
+        let changed = !propsEqual(child.props, instance.props)
+        if (instance.waiting) {
+          // Held until it adopts the server's nodes, which it does with the props it was placed with.
+          if (changed) heldProps.set(instance, child.props)
+          else heldProps.delete(instance)
+          changed = false
+        } else if (changed) changeProps(instance, child.props)
         // A headless child's view is the closure, which is new on every render of whoever declared it.
         if (instance.owner !== undefined) instance.content = child.view
         if ((changed || instance.owner !== undefined) && !instance.closed) {

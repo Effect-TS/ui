@@ -1428,6 +1428,63 @@ describe("HtmlServer", { concurrent: false }, () => {
       expect(drifting.problems).toEqual(["head title: the server has \"Server\", the client \"Server!\""])
     })))
 
+  it.effect("compares the head a waiting child's subtree had with the props it was placed with", () =>
+    hosted(Effect.gen(function*() {
+      class Slow extends Context.Service<Slow, string>()("test/Slow") {}
+      const titled = (suffix: () => string) => {
+        const Grandchild = Component.define({
+          name: "Grandchild",
+          model: Schema.Struct({}),
+          message: Schema.Never,
+          props: Schema.Struct({ title: Schema.String }),
+          elements: Html
+        }).make({
+          init: () => ({}),
+          update: (model) => model,
+          head: (_, props) => [Head.title(props.title + suffix())],
+          view: (_, h) => h.p("grandchild")
+        })
+        const Child = Component.define({
+          name: "Child",
+          model: Schema.Struct({}),
+          message: Schema.Never,
+          props: Schema.Struct({ title: Schema.String }),
+          elements: Html
+        }).make({
+          init: () => ({}),
+          update: (model) => model,
+          // The title is in the nodes too: the child adopts them with the props it was placed with.
+          view: (_, h) => h.div(h.span(h.props.title), Grandchild(h, { key: "g", props: { title: h.props.title } }))
+        }).pipe(Component.provide(Layer.effect(Slow, Effect.as(Effect.sleep("30 millis"), "ready"))))
+        const Message = UiSchema.TaggedEnum({ Mounted: {} })
+        return Component.define({
+          name: "Parent",
+          model: Schema.String,
+          message: Message,
+          elements: Html
+        }).make({
+          init: () => "Server",
+          update: () => "Mounted",
+          view: (title, h) =>
+            h.div.onMount(mountSending("Rename", Message.Mounted())).children(
+              Child(h, { key: "c", props: { title } })
+            )
+        })
+      }
+
+      const matching = yield* ssr(titled(() => ""), {})
+      expect(matching.adopted).toEqual(["/Parent", "/Parent/Child[c]", "/Parent/Child[c]/Grandchild[g]"])
+      expect(matching.head.title).toBe("Server")
+      yield* TestHost.settle
+      expect(matching.root.head<Head.Head>().title).toBe("Mounted")
+      expect(matching.document.title).toBe("Mounted")
+      expect(matching.container.textContent).toContain("Mounted")
+
+      let calls = 0
+      const drifting = yield* Effect.flip(ssr(titled(() => calls++ === 0 ? "" : "!"), {}))
+      expect(drifting.problems).toEqual(["head title: the server has \"Server\", the client \"Server!\""])
+    })))
+
   it.effect("compares the client's first fold, so removing an instance while another waits isn't a mismatch", () =>
     hosted(Effect.gen(function*() {
       class Slow extends Context.Service<Slow, string>()("test/Slow") {}

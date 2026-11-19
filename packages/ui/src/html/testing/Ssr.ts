@@ -249,9 +249,10 @@ const stepLimit = 10_000
  * The head check compares the server's folded head with the client's fold
  * of the server's state, made once every instance has adopted: each
  * instance's head as it evaluated at its adoption, before any `onMount`
- * work or later update. An instance that waited for its Layer counts with
- * its adopted Model and the props it was placed with, even when its parent
- * passed it new ones while it waited.
+ * work or later update. An instance that waited for its Layer adopts with
+ * the props it was placed with, even when its parent passed it new ones
+ * while it waited, and its subtree counts as it was then. The new props
+ * reach it right after.
  *
  * `frames` projects the container after each client commit, starting from
  * the server's markup, for `root.frames()`. It defaults to the container's
