@@ -79,13 +79,14 @@ const makeApp = (layout: "list" | "moved") => {
   const NotesDef = Component.define({
     name: "Notes",
     model: Schema.Struct({
+      folder: Schema.String,
       archived: Schema.Array(Schema.String),
       saved: Schema.Array(Schema.String),
       missed: Schema.Number
     }),
     message: NotesMessage,
     elements: Html,
-    queries: { notes: { query: ListNotes, args: () => ({ folder: "inbox" }) } }
+    queries: { notes: { query: ListNotes, args: (model) => ({ folder: model.folder }) } }
   })
 
   const Notes = Composed.make(NotesDef, {
@@ -103,10 +104,14 @@ const makeApp = (layout: "list" | "moved") => {
         onEmit: (key, event) => NotesMessage.RowSaved({ id: key, title: event.title })
       }
     },
-    init: () => ({ archived: [], saved: [], missed: 0 }),
+    init: () => ({ folder: "inbox", archived: [], saved: [], missed: 0 }),
     update: (model, message, $) =>
       NotesMessage.match(message, {
-        Archived: ({ id }) => ({ ...model, archived: [...model.archived, id] }),
+        // Only a note the list has is archived.
+        Archived: ({ id }) =>
+          AsyncResult.isSuccess($.queries.notes) && $.queries.notes.value.some((note) => note.id === id)
+            ? { ...model, archived: [...model.archived, id] }
+            : model,
         Retitled: ({ id, title }) =>
           Option.match($.children.rows.at(id), {
             onNone: () => ({ ...model, missed: model.missed + 1 }),
@@ -132,6 +137,29 @@ const makeApp = (layout: "list" | "moved") => {
 
   return { server, Notes, layer: Layer.mergeAll(ListNotes.layer, Reload.layer, SaveNote.layer) }
 }
+
+// One row, the one its props name, and a count of its saves.
+const Picked = Composed.make(
+  Component.define({
+    name: "Picked",
+    props: Schema.Struct({ id: Schema.String }),
+    model: Schema.Struct({ saves: Schema.Number }),
+    message: Schema.TaggedStruct("RowSaved", {}),
+    elements: Html
+  }),
+  {
+    children: {
+      rows: {
+        component: Row,
+        each: (_model, props) => [{ key: props.id, props: { note: note(props.id) } }],
+        onEmit: () => ({ _tag: "RowSaved" as const })
+      }
+    },
+    init: () => ({ saves: 0 }),
+    update: (model) => ({ saves: model.saves + 1 }),
+    view: (_model, h) => h.div(...h.children.rows.all().map(([, row]) => row))
+  }
+)
 
 // The inputs of one session: messages for the owner and for its rows, and one refetch that brings a new note.
 const session = (app: ReturnType<typeof makeApp>) =>
@@ -230,7 +258,7 @@ describe("Composed", () => {
       const moved = yield* session(makeApp("moved"))
 
       assert.deepStrictEqual(encode(placed.model), {
-        own: { archived: ["n1"], saved: ["n2=draft 2"], missed: 1 },
+        own: { folder: "inbox", archived: ["n1"], saved: ["n2=draft 2"], missed: 1 },
         children: {
           rows: [
             { key: "n2", generation: 1, model: { draft: "draft 2" } },
@@ -283,23 +311,6 @@ describe("Composed", () => {
   })
 
   it.effect("follows a change of props that changes which rows exist", () => {
-    const Picked = Composed.make(
-      Component.define({
-        name: "Picked",
-        props: Schema.Struct({ id: Schema.String }),
-        model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
-      }),
-      {
-        children: {
-          rows: { component: Row, each: (_model, props) => [{ key: props.id, props: { note: note(props.id) } }] }
-        },
-        init: () => ({}),
-        update: (model) => model,
-        view: (_model, h) => h.div(...h.children.rows.all().map(([, row]) => row))
-      }
-    )
     const Pick = Schema.TaggedStruct("Pick", { id: Schema.String })
     const Picker = Component.define({ name: "Picker", model: Schema.String, message: Pick, elements: Html }).make({
       init: () => "a",
@@ -317,6 +328,19 @@ describe("Composed", () => {
       assert.isUndefined(replay.divergence)
       assert.deepStrictEqual(replay.model.children.rows.map((row) => row.key), ["b"])
     }).pipe(Effect.provide(SaveNote.layer), Effect.scoped, Effect.provide(TestHost.layer()))
+  })
+
+  it("drops a late Command result that arrives before the props change is reconciled", () => {
+    const s = Story.start(Picked, { id: "a" })
+    s.send(Composed.childMessage("rows", "a", RowMessage.Typed({ value: "old" })))
+    s.send(Composed.childMessage("rows", "a", RowMessage.Save())).keepPending(SaveNote)
+    s.props({ id: "b" }).subscription("~composed/Reconcile", { _tag: "~composed/Reconcile" })
+    // The props name `a` again, and the old save ends before the message that would make the rows match.
+    s.props({ id: "a" })
+    assert.deepStrictEqual(s.model.children.rows.map((row) => row.key), ["b"])
+    s.resolve(SaveNote, undefined)
+    assert.deepStrictEqual(s.model.children.rows, [{ key: "a", generation: 2, model: { draft: "Note a" } }])
+    assert.strictEqual(s.model.own.saves, 0)
   })
 
   it("fails the transition that gives one key to two members", () => {

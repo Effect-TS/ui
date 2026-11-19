@@ -19,16 +19,15 @@
  * @since 0.1.0
  */
 import * as Option from "effect/Option"
-import * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import * as Command from "./Command.ts"
 import * as Component from "./Component.ts"
+import * as componentQueries from "./internal/queries.ts"
 import * as Subscription from "./Subscription.ts"
 import type * as View from "./View.ts"
 
 const childTag = "~composed/Child"
-const queryTag = "~composed/QueryChanged"
 const reconcileTag = "~composed/Reconcile"
 
 /**
@@ -103,23 +102,14 @@ export type ChildMessage<C> = {
 }[keyof C]
 
 /**
- * The owner's message for a query whose result changed and that has no
- * `onChange` of its own, so that the children follow it.
+ * The owner's message that only makes the children match `each`.
  *
- * @stability experimental
- * @category models
- * @since 0.1.0
- */
-export interface QueryChanged {
-  readonly _tag: typeof queryTag
-  readonly name: string
-}
-
-/**
- * The owner's message for props that changed which members `each` returns.
- * A props change never reaches `update`, so a Subscription of the owner
- * sends this one step after the change, and its `update` makes the
- * children match.
+ * **Details**
+ *
+ * A query without an `onChange` sends it when its result changes. A props
+ * change never reaches `update`, so a Subscription of the owner sends it
+ * one step after a change of props that changes which members `each`
+ * returns.
  *
  * @stability experimental
  * @category models
@@ -247,37 +237,53 @@ export const childMessage = <const K extends string, M>(child: K, key: string, m
   readonly message: M
 } => ({ _tag: childTag, child, key, message })
 
-const memberMessage = (child: string, entry: Entry<any>, message: unknown) => ({
+const memberMessage = (child: string, key: string, generation: number, message: unknown) => ({
   _tag: childTag,
   child,
-  key: entry.key,
-  generation: entry.generation,
+  key,
+  generation,
   message
 })
 
+const ReconcileSchema = Schema.TaggedStruct(reconcileTag, {})
+const reconcileMessage: Reconcile = { _tag: reconcileTag }
+const reconcileSubscription = [Subscription.make(reconcileTag, Stream.succeed(reconcileMessage))]
+
 type Kids = { readonly [name: string]: ReadonlyArray<Entry<any>> }
 
+// Each collection's props by key, as `each` returned them.
+type Inputs = { readonly [name: string]: Map<string, unknown> }
+
+// One transition: `queue` holds the messages it has still to take.
 interface State {
   own: unknown
   kids: Kids
   generations: number
+  readonly props: unknown
+  readonly queries: unknown
+  readonly queue: Array<any>
   readonly commands: Array<Command.Command<any, any>>
   readonly events: Array<unknown>
 }
 
 const maxPasses = 100
 
+const failure = (owner: string, what: string): Error => new Error("Composed: " + JSON.stringify(owner) + " " + what)
+
+// Neither is carried through a transition.
+const sendsOrLoadsMore = (next: any): boolean => (next.sends?.length ?? 0) > 0 || (next.lists?.length ?? 0) > 0
+
+// Whether the stored members are the ones `each` returns, in its order.
+const matches = (stored: ReadonlyArray<Entry<any>>, wanted: ReadonlyArray<{ readonly key: string }>): boolean =>
+  stored.length === wanted.length && wanted.every((entry, index) => stored[index].key === entry.key)
+
 const checkChild = (owner: string, name: string, component: any): void => {
   const fail = (what: string): never => {
-    throw new Error(
-      "Composed: " + JSON.stringify(owner) + " children." + name + " " + what
-    )
+    throw failure(owner, "children." + name + " " + what)
   }
-  if (typeof component?.update !== "function" || typeof component?.view !== "function") {
-    fail("is not a plain component")
-  }
+  if (!Component.isComponent(component)) fail("is not a plain component")
   const definition = component.definition
-  if (definition.queries !== undefined && Object.keys(definition.queries).length > 0) fail("declares queries")
+  if (componentQueries.boundOf(component) !== undefined) fail("declares queries")
   if (component.subscriptions !== undefined) fail("declares subscriptions")
   if (definition.shares !== undefined || definition.shared !== undefined) fail("shares or reads shared state")
   if (definition.slots.length > 0) fail("declares slots")
@@ -354,7 +360,7 @@ export const make = <
   Name,
   Props,
   Model<M, C>,
-  Msg | ChildMessage<C> | QueryChanged | Reconcile,
+  Msg | ChildMessage<C> | Reconcile,
   Events,
   Exclude<
     | Component.StepRequirements<UI | U>
@@ -369,30 +375,32 @@ export const make = <
   const specs = options.children as { readonly [name: string]: Keyed<any, any, any, any, any> }
   const names = Object.keys(specs)
   for (const name of names) checkChild(definition.name, name, specs[name].component)
-  const shells: { [name: string]: any } = {}
-  for (const name of names) shells[name] = makeShell(specs[name].component)
+  const shells = Object.fromEntries(names.map((name) => [name, makeShell(specs[name].component)]))
+  const emptyKids: Kids = Object.fromEntries(names.map((name) => [name, []]))
+  const fail = (what: string): never => {
+    throw failure(definition.name, what)
+  }
 
-  // The sends of the owner's `update` that is running, and the children it sees.
-  let running: { readonly kids: Kids; readonly sends: Array<unknown> } | undefined
+  // The transition whose owner `update` is running.
+  let running: State | undefined
 
+  // The owner's `$`: with its children, and with the query results the transition has.
   const handles = ($: object): object => {
-    const scope = running!
-    const children: { [name: string]: unknown } = {}
-    for (const name of names) {
-      children[name] = {
-        keys: scope.kids[name].map((entry) => entry.key),
-        at: (key: string) => {
-          const entry = scope.kids[name].find((entry) => entry.key === key)
-          return entry === undefined ? Option.none() : Option.some({
-            model: entry.model,
-            send: (message: unknown) => {
-              scope.sends.push(memberMessage(name, entry, message))
-            }
-          })
-        }
-      }
-    }
-    return Object.assign(Object.create($), { children })
+    const state = running!
+    const kids = state.kids
+    const children = Object.fromEntries(names.map((name) => [name, {
+      get keys() {
+        return kids[name].map((entry) => entry.key)
+      },
+      at: (key: string) =>
+        Option.map(Option.fromUndefinedOr(kids[name].find((entry) => entry.key === key)), (entry) => ({
+          model: entry.model,
+          send: (message: unknown) => {
+            state.queue.push(memberMessage(name, entry.key, entry.generation, message))
+          }
+        }))
+    }]))
+    return Object.assign(Object.create($), { children, queries: state.queries })
   }
 
   // The definition's own component: its `init` and `update` are the pure steps the transition runs.
@@ -402,77 +410,55 @@ export const make = <
       options.update(model as M, message as Msg, handles($) as any),
     view: (_model: unknown, h: any) => h.text("")
   })
+  const ownQueries = componentQueries.boundOf(Own)
 
-  const collect = (state: State, queue: Array<unknown>, name: string, entry: Entry<any>, next: any): void => {
-    if ((next.sends?.length ?? 0) > 0 || (next.lists?.length ?? 0) > 0) {
-      throw new Error(
-        "Composed: " + JSON.stringify(definition.name) + " children." + name + " sends to a child or loads more"
-      )
-    }
-    for (const command of next.commands) {
-      state.commands.push(
-        Command.map(
-          command,
-          (message: unknown) => Component.isNoop(message) ? message : memberMessage(name, entry, message)
-        )
-      )
-    }
+  const collect = (state: State, name: string, { generation, key }: Entry<any>, next: any): void => {
+    if (sendsOrLoadsMore(next)) fail("children." + name + " sends to a child or loads more")
+    // The member's key and generation and not the member, whose Model a running Command would hold.
+    const fromMember = (message: unknown) =>
+      Component.isNoop(message) ? message : memberMessage(name, key, generation, message)
+    for (const command of next.commands) state.commands.push(Command.map(command, fromMember))
     const onEmit = specs[name].onEmit
     if (onEmit === undefined) return
     for (const event of next.events) {
-      const message = onEmit(entry.key, event)
-      if (message !== undefined) queue.push(message)
+      const message = onEmit(key, event)
+      if (message !== undefined) state.queue.push(message)
     }
   }
 
   // Makes the children match `each`, and returns each collection's props by key.
-  const reconcile = (
-    state: State,
-    queue: Array<unknown>,
-    props: unknown,
-    queries: unknown
-  ): { readonly [name: string]: Map<string, unknown> } => {
+  const reconcile = (state: State): Inputs => {
     const inputs: { [name: string]: Map<string, unknown> } = {}
-    let kids: { [name: string]: ReadonlyArray<Entry<any>> } | undefined
     for (const name of names) {
       const spec = specs[name]
-      const wanted = spec.each(state.own, props, queries)
+      const wanted = spec.each(state.own, state.props, state.queries)
       const byKey = new Map<string, unknown>()
       for (const entry of wanted) {
         if (byKey.has(entry.key)) {
-          throw new Error(
-            "Composed: " + JSON.stringify(definition.name) + " children." + name + " has two members with the key " +
-              JSON.stringify(entry.key)
-          )
+          fail("children." + name + " has two members with the key " + JSON.stringify(entry.key))
         }
         byKey.set(entry.key, entry.props)
       }
       inputs[name] = byKey
       const before = state.kids[name]
+      if (matches(before, wanted)) continue
       const existing = new Map(before.map((entry) => [entry.key, entry]))
-      let same = before.length === wanted.length
-      const after = wanted.map((entry, index) => {
+      const after = wanted.map((entry) => {
         const kept = existing.get(entry.key)
-        if (kept !== undefined) {
-          if (before[index] !== kept) same = false
-          return kept
-        }
-        same = false
+        if (kept !== undefined) return kept
         const next = spec.component.init(entry.props)
         const made = { key: entry.key, generation: state.generations++, model: next.model }
-        collect(state, queue, name, made, next)
+        collect(state, name, made, next)
         return made
       })
-      if (!same) (kids ??= { ...state.kids })[name] = after
+      state.kids = { ...state.kids, [name]: after }
     }
-    if (kids !== undefined) state.kids = kids
     return inputs
   }
 
   const deliver = (
     state: State,
-    queue: Array<unknown>,
-    inputs: { readonly [name: string]: Map<string, unknown> },
+    inputs: Inputs,
     message: {
       readonly child: string
       readonly key: string
@@ -497,86 +483,70 @@ export const make = <
       after[index] = { ...entry, model: next.model }
       state.kids = { ...state.kids, [message.child]: after }
     }
-    collect(state, queue, message.child, entry, next)
+    collect(state, message.child, entry, next)
   }
 
-  // One transition: the messages in `queue`, and every message they lead to, until none is left.
-  const run = (state: State, queue: Array<any>, props: unknown, queries: unknown): void => {
-    let inputs = reconcile(state, queue, props, queries)
+  // One transition: the messages in the queue, and every message they lead to, until none is left.
+  const run = (state: State): void => {
+    // Before any message, so that one for a member that left since the last transition finds it gone.
+    let inputs = reconcile(state)
     let passes = 0
-    while (queue.length > 0) {
-      if (++passes > maxPasses) {
-        throw new Error(
-          "Composed: " + JSON.stringify(definition.name) + " didn't settle after " + maxPasses + " messages"
-        )
-      }
-      const message = queue.shift()
-      if (message?._tag === queryTag || message?._tag === reconcileTag) continue
+    while (state.queue.length > 0) {
+      if (++passes > maxPasses) fail("didn't settle after " + maxPasses + " messages")
+      const message = state.queue.shift()
+      if (message?._tag === reconcileTag) continue
       if (message?._tag === childTag) {
-        deliver(state, queue, inputs, message)
-      } else {
-        running = { kids: state.kids, sends: [] }
-        let next: any
-        const sends = running.sends
-        try {
-          next = Own.update(state.own, message, props, queries)
-        } finally {
-          running = undefined
-        }
-        if ((next.sends?.length ?? 0) > 0 || (next.lists?.length ?? 0) > 0) {
-          throw new Error("Composed: " + JSON.stringify(definition.name) + " sends to a ref or loads more")
-        }
-        state.own = next.model
-        state.commands.push(...next.commands)
-        state.events.push(...next.events)
-        queue.push(...sends)
+        deliver(state, inputs, message)
+        continue
       }
-      inputs = reconcile(state, queue, props, queries)
+      running = state
+      let next: any
+      try {
+        next = Own.update(state.own, message, state.props)
+      } finally {
+        running = undefined
+      }
+      if (sendsOrLoadsMore(next)) fail("sends to a ref or loads more")
+      state.commands.push(...next.commands)
+      state.events.push(...next.events)
+      // Within a transition only the owner's Model changes what `each` returns.
+      if (next.model === state.own) continue
+      state.own = next.model
+      inputs = reconcile(state)
     }
   }
 
-  const emptyKids: { [name: string]: ReadonlyArray<Entry<any>> } = {}
-  for (const name of names) emptyKids[name] = []
-
-  const declared = (definition.queries ?? {}) as { readonly [name: string]: any }
-  const queryNames = Object.keys(declared)
-  const queries: { [name: string]: unknown } = {}
-  for (const name of queryNames) {
-    queries[name] = declared[name].onChange === undefined
-      ? { ...declared[name], onChange: () => ({ _tag: queryTag, name }) }
-      : declared[name]
-  }
-  // What `each` reads in `init`, before any result is in.
-  const unloaded: { [name: string]: unknown } = {}
-  for (const name of queryNames) unloaded[name] = "queryMany" in declared[name] ? [] : AsyncResult.initial(true)
-
-  const finish = (step: any, state: State): any => {
-    const ran = state.commands.length > 0 ? step.run(...state.commands) : step
-    return state.events.length > 0 ? ran.emit(...state.events) : ran
-  }
+  // The owner's queries as the component declares them: `args` takes the owner's Model, and a query
+  // without an `onChange` gets one, so that the children follow its result.
+  const queries = Object.fromEntries(
+    Object.entries((definition.queries ?? {}) as { readonly [name: string]: any }).map(([name, query]) => [name, {
+      ...query,
+      args: (model: Model<any, any>, props: unknown, results: unknown) => query.args(model.own, props, results),
+      onChange: query.onChange ?? (() => reconcileMessage)
+    }])
+  )
 
   const strict = (model: Model<any, any>, h: any): object => {
-    const children: { [name: string]: unknown } = {}
-    for (const name of names) {
+    const children = Object.fromEntries(names.map((name) => {
       let inputs: Map<string, unknown> | undefined
       const propsOf = () =>
         inputs ??= new Map(specs[name].each(model.own, h.props, h.queries).map((entry) => [entry.key, entry.props]))
-      const placeable = () => model.children[name].filter((entry: Entry<any>) => propsOf().has(entry.key))
+      let placed: ReadonlyArray<Entry<any>> | undefined
+      const placeable = () => placed ??= model.children[name].filter((entry: Entry<any>) => propsOf().has(entry.key))
       const node = (entry: Entry<any>) =>
         shells[name](h, {
           key: name + ":" + entry.key,
           props: { model: entry.model, props: propsOf().get(entry.key) },
-          onEmit: (message: unknown) => memberMessage(name, entry, message)
+          onEmit: (message: unknown) => memberMessage(name, entry.key, entry.generation, message)
         })
-      children[name] = {
+      return [name, {
         get keys() {
-          return placeable().map((entry: Entry<any>) => entry.key)
+          return placeable().map((entry) => entry.key)
         },
-        at: (key: string) =>
-          Option.map(Option.fromNullishOr(placeable().find((entry: Entry<any>) => entry.key === key)), node),
-        all: () => placeable().map((entry: Entry<any>) => [entry.key, node(entry)] as const)
-      }
-    }
+        at: (key: string) => Option.map(Option.fromUndefinedOr(placeable().find((entry) => entry.key === key)), node),
+        all: () => placeable().map((entry) => [entry.key, node(entry)] as const)
+      }]
+    }))
     return Object.assign(Object.create(h), {
       children,
       place: (component: any, placed: object) => component(h, placed)
@@ -606,12 +576,11 @@ export const make = <
           message: specs[name].component.message
         })
       ),
-      Schema.TaggedStruct(queryTag, { name: Schema.String }),
-      Schema.TaggedStruct(reconcileTag, {})
+      ReconcileSchema
     ]),
     events: definition.events,
     elements: definition.elements,
-    ...(queryNames.length > 0 ? { queries } : {})
+    ...(ownQueries === undefined ? {} : { queries })
   }).make({
     init: ($: any) => {
       const first = Own.init($.props)
@@ -619,35 +588,40 @@ export const make = <
         own: first.model,
         kids: emptyKids,
         generations: 0,
+        props: $.props,
+        // What `each` reads before any result is in.
+        queries: ownQueries?.context(first.model, $.props, undefined).queries ?? {},
+        queue: [],
         commands: [...first.commands],
         events: [...first.events]
       }
-      run(state, [], $.props, unloaded)
-      return finish($.set({ own: state.own, children: state.kids, generations: state.generations }), state)
+      run(state)
+      return $.set({ own: state.own, children: state.kids, generations: state.generations })
+        .run(...state.commands)
+        .emit(...state.events)
     },
     update: (model: Model<any, any>, message: unknown, $: any) => {
       const state: State = {
         own: model.own,
         kids: model.children,
         generations: model.generations,
+        props: $.props,
+        queries: $.queries,
+        queue: [message],
         commands: [],
         events: []
       }
-      run(state, [message], $.props, $.queries)
+      run(state)
       const next = state.own === model.own && state.kids === model.children
         ? model
         : { own: state.own, children: state.kids, generations: state.generations }
-      return finish($.set(next), state)
+      return $.set(next).run(...state.commands).emit(...state.events)
     },
     // A props change doesn't reach `update`: while the children don't match `each`, this asks for the message that does.
     subscriptions: (model: Model<any, any>, props: unknown, results: unknown) =>
-      names.some((name) => {
-          const wanted = specs[name].each(model.own, props, results)
-          const stored = model.children[name]
-          return wanted.length !== stored.length || wanted.some((entry, index) => entry.key !== stored[index].key)
-        })
-        ? [Subscription.make(reconcileTag, Stream.succeed({ _tag: reconcileTag }))]
-        : [],
+      names.every((name) => matches(model.children[name], specs[name].each(model.own, props, results)))
+        ? []
+        : reconcileSubscription,
     view: (model: Model<any, any>, h: any) => options.view(model.own, strict(model, h) as any)
   })
 }
