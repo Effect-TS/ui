@@ -4207,10 +4207,6 @@ const setup = (
     return parked.has(top)
   }
 
-  // Mount Scopes of removed elements. Closing a Scope is asynchronous, so a mount that was waiting
-  // for its commit or its Layer checks this before it starts.
-  const removedMounts = new WeakSet<Scope.Closeable>()
-
   /**
    * `inst` is whose mount it is: it gets the message, and the failure. The Scope is forked from
    * `renderer`, the instance rendering the element, so the mount ends with that instance too.
@@ -4239,7 +4235,7 @@ const setup = (
     afterCommit(() =>
       whenReady(env, (envCtx) => {
         // A detached child's element starts its mount when the child is attached.
-        if (inst.closed || isClosed(mountScope) || removedMounts.has(mountScope) || isParked(node)) return
+        if (inst.closed || isClosed(mountScope) || isParked(node)) return
         const { args, argsSchema, name } = running.mount
         const started = record(inst, { _tag: "MountStarted", name, args, argsSchema }, causedBy)
         let silent: boolean | undefined
@@ -4273,13 +4269,12 @@ const setup = (
               : Exit.isSuccess(exit) && !isClosed(mountScope)
               ? "completed"
               : "closed"
-            // A scope close can interrupt synchronously inside a different step. Only an explicit
-            // element removal supplies a cause; closing the whole instance does not.
-            const ended = under(
-              reason === "closed" ? running.cutBy : undefined,
-              () => record(inst, { _tag: "MountEnded", name, started, reason, silent: silent === true })
-            )
-            if (failure !== undefined) under(ended, () => failInstance(inst, failure, "mount", name))
+            // The body can exit inside another step, such as the one whose close interrupted it. Its
+            // end starts its own: only an element's removal gives it a cause, and a failure follows it.
+            under(reason === "closed" ? running.cutBy : undefined, () => {
+              record(inst, { _tag: "MountEnded", name, started, reason, silent: silent === true })
+              if (failure !== undefined) failInstance(inst, failure, "mount", name)
+            }, true)
           })
         )
       })
@@ -4416,7 +4411,6 @@ const setup = (
   const stopMount = (under: Instance, running: RunningMount | undefined) => {
     if (running === undefined) return
     running.cutBy = origin
-    removedMounts.add(running.scope)
     closeUnder(under, running.scope)
   }
 
