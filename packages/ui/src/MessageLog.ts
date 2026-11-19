@@ -141,9 +141,9 @@ export interface Issued {
  * `shared` lists the owner under, the owner's path, and the owner's entry
  * that last changed the value. `Collected` is an owner's `collects.onChange` for
  * a change in its readers' reports. `Mount` is an
- * `onMount` result, with the mount's name and the args its element last
- * rendered with, and `Dispatch` is a message sent from outside the tree,
- * such as `TestHost`'s `root.send`.
+ * `onMount` result, pointing at its `MountStarted` entry and carrying the
+ * mount's name and the args its element last rendered with. `Dispatch` is
+ * a message sent from outside the tree, such as `TestHost`'s `root.send`.
  *
  * `Emit`, `Failure`, `Send` and `Shared` name the other instance's path as well as
  * its entry, so a ring buffer that has dropped that entry still says where
@@ -176,6 +176,8 @@ export type Source =
   | { readonly _tag: "Collected" }
   | {
     readonly _tag: "Mount"
+    /** The `seq` of this mount's `MountStarted` entry. */
+    readonly seq: number
     readonly name: string
     readonly args: unknown
     /** The mount's args Schema, which the Wire encodes `args` through. */
@@ -192,7 +194,7 @@ export type Source =
  * An entry without `causedBy` is a fact: something that reached the tree
  * from outside it. The session starting is one. So is an `Update` whose
  * message came from a DOM event, a Command's result, a Subscription, a mount
- * or `root.send`, a `QueryChanged`, a Layer build or a Command run ending,
+ * or `root.send`, a `QueryChanged`, a Layer build, Command run or mount body ending,
  * and a `FetchStarted` a timer, a host signal or a Command's own work
  * started.
  *
@@ -203,7 +205,9 @@ export type Source =
  * that last made the rendered instance dirty, so when one flush renders
  * what two messages changed, an instance both changed names the later one.
  * `CommandInterrupted` names the fact whose handling stopped the run, where
- * `issued` names the entry that started it. A `FetchStarted` with trigger
+ * `issued` names the entry that started it. When a render stops a mount,
+ * `MountEnded.causedBy` names the fact whose render stopped it, and
+ * `started` names its `MountStarted` entry. A `FetchStarted` with trigger
  * `"watch"` names the fact whose render declared the query's args. A
  * reader's shared `onChange` `Update` names the fact that changed the
  * owner's value, and an owner's `collects.onChange` `Update` the fact that
@@ -538,6 +542,46 @@ export interface SubscriptionStopped extends InstanceBase {
 }
 
 /**
+ * An element's mount body started after commit, with these args.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface MountStarted extends InstanceBase {
+  readonly _tag: "MountStarted"
+  readonly name: string
+  readonly args: unknown
+  /** The mount's args Schema, which the Wire encodes `args` through. */
+  readonly argsSchema: Schema.Top
+}
+
+/**
+ * The mount body returned, its Scope closed first, or the body failed.
+ *
+ * **Details**
+ *
+ * A completed body's Scope outlives it. Releasing that Scope when the
+ * element goes writes no further entry. New args published to a running
+ * mount write no entry either: each mount-sourced `Update` carries the
+ * args its element last rendered with. Hosts that don't run mounts (the
+ * server and `TestHost`) log neither mount starts nor ends.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface MountEnded extends InstanceBase {
+  readonly _tag: "MountEnded"
+  readonly name: string
+  /** The `seq` of this mount's `MountStarted` entry. */
+  readonly started: number
+  readonly reason: "completed" | "closed" | "failed"
+  /** True when the body gave at least one result and every result mapped to `Component.noop`. */
+  readonly silent: boolean
+}
+
+/**
  * A Command run ended with a result.
  *
  * **Details**
@@ -782,6 +826,8 @@ export type InstanceEntry =
   | Unmounted
   | Detached
   | Attached
+  | MountStarted
+  | MountEnded
   | CommandAwaiting
   | CommandEnded
   | CommandInterrupted
@@ -896,7 +942,7 @@ export const fanout = <const Layers extends ReadonlyArray<Layer.Layer<never, any
  * @category Wire
  * @since 0.1.0
  */
-export const wireVersion = 5
+export const wireVersion = 6
 
 /**
  * Where a log comes from, as `Hello` reports it.
@@ -949,7 +995,7 @@ const SourceWire = Schema.Union([
   Schema.TaggedStruct("Send", { path: Schema.String, seq: Schema.Number }),
   Schema.TaggedStruct("Shared", { name: Schema.String, path: Schema.String, seq: Schema.Number }),
   Schema.TaggedStruct("Collected", {}),
-  Schema.TaggedStruct("Mount", { name: Schema.String, args: Schema.Json }),
+  Schema.TaggedStruct("Mount", { name: Schema.String, seq: Schema.Number, args: Schema.Json }),
   Schema.TaggedStruct("Dispatch", {})
 ])
 const RunWire = {
@@ -1064,6 +1110,14 @@ export const Wire = Schema.Union([
   Schema.TaggedStruct("Unmounted", InstanceWire),
   Schema.TaggedStruct("Detached", InstanceWire),
   Schema.TaggedStruct("Attached", InstanceWire),
+  Schema.TaggedStruct("MountStarted", { ...InstanceWire, name: Schema.String, args: Schema.Json }),
+  Schema.TaggedStruct("MountEnded", {
+    ...InstanceWire,
+    name: Schema.String,
+    started: Schema.Number,
+    reason: Schema.Literals(["completed", "closed", "failed"]),
+    silent: Schema.Boolean
+  }),
   Schema.TaggedStruct("CommandAwaiting", {
     ...InstanceWire,
     name: Schema.String,
@@ -1295,6 +1349,22 @@ export const makeEncoder = (options?: {
               }
             })
           }
+        case "MountStarted":
+          return {
+            _tag: "MountStarted",
+            ...instanceBase(entry),
+            name: entry.name,
+            args: encodeArgs(entry.argsSchema, entry.args)
+          }
+        case "MountEnded":
+          return {
+            _tag: "MountEnded",
+            ...instanceBase(entry),
+            name: entry.name,
+            started: entry.started,
+            reason: entry.reason,
+            silent: entry.silent
+          }
         case "CommandAwaiting":
           return {
             _tag: "CommandAwaiting",
@@ -1371,7 +1441,7 @@ const encodeSource = (source: Source): typeof SourceWire.Type => {
     case "Command":
       return { ...source, spanId: source.spanId ?? null, traceId: source.traceId ?? null }
     case "Mount":
-      return { _tag: "Mount", name: source.name, args: encodeArgs(source.argsSchema, source.args) }
+      return { _tag: "Mount", name: source.name, seq: source.seq, args: encodeArgs(source.argsSchema, source.args) }
     case "Subscription":
       return { _tag: "Subscription", ...encodeSubscription(source) }
     default:

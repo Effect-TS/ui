@@ -10,32 +10,29 @@
  *
  * The body gets the host node, the args and a Stream of the args, and ends
  * with its own result. The view maps that result to a message with
- * `Mount.map`. For now, a mount with nothing to report ends in a
- * `Completed*` message, such as `CompletedDrawChart`, because a silent mount
- * leaves nothing in the `MessageLog`. A mount that reports as it goes, such
- * as a widget's events, is defined with `Mount.makeStream`, and its body is
- * a Stream of results.
+ * `Mount.map`. When there is nothing to report, return `Component.noop`.
+ * It sends no message, but the log still records when the body starts and
+ * ends. Use `Mount.makeStream` for a mount that reports as it goes, such as
+ * a widget that sends events. Its body is a Stream of results.
  *
  * **Example** (A mount that follows its args)
  *
  * ```ts import.meta.vitest
- * import { Mount, UiSchema } from "@effect/ui"
+ * import { Component, Mount } from "@effect/ui"
  * import { Effect, Schema, Stream } from "effect"
  *
  * declare const draw: (canvas: HTMLCanvasElement, points: ReadonlyArray<number>) => void
- *
- * const Message = UiSchema.TaggedEnum({ CompletedDrawChart: {} })
  *
  * const DrawChart = Mount.make(
  *   "DrawChart",
  *   { args: { points: Schema.Array(Schema.Number) } },
  *   (canvas: HTMLCanvasElement, _args, changes) =>
- *     Stream.runForEach(changes, ({ points }) => Effect.sync(() => draw(canvas, points)))
+ *     Stream.runForEach(changes, ({ points }) => Effect.sync(() => draw(canvas, points))).pipe(
+ *       Effect.as(Component.noop)
+ *     )
  * )
  *
- * // In a view: `h.canvas.onMount(drawChart(model.points))`
- * const drawChart = (points: ReadonlyArray<number>) =>
- *   DrawChart({ points }).pipe(Mount.map(() => Message.CompletedDrawChart()))
+ * // In a view: `h.canvas.onMount(DrawChart({ points: model.points }))`
  * ```
  *
  * @stability experimental
@@ -325,9 +322,8 @@ export const isDefinition = (u: unknown): u is Definition.Any => Predicate.hasPr
  *   that falls behind gets only the latest.
  *
  * The body ends with its own result, which a view maps to a message with
- * `map`. It may end with `Component.noop`, which sends nothing, but for now
- * a mount with nothing to report ends in a `Completed*` message instead,
- * because a silent mount leaves nothing in the `MessageLog`. Its
+ * `map`. When there is nothing to report, return `Component.noop`: the log
+ * records `MountEnded` with `silent: true` instead of an `Update`. The body's
  * requirements join those of the component that renders it.
  *
  * **Gotchas**

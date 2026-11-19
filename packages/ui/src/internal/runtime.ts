@@ -195,6 +195,7 @@ interface RElement {
  */
 interface RunningMount {
   readonly scope: Scope.Closeable
+  cutBy: number | undefined
   mount: View.Mount<any>
   pubsub: PubSub.PubSub<unknown> | undefined
 }
@@ -4212,18 +4213,19 @@ const setup = (
 
   /**
    * `inst` is whose mount it is: it gets the message, and the failure. The Scope is forked from
-   * `under`, the instance rendering the element, so the mount ends with that instance too.
+   * `renderer`, the instance rendering the element, so the mount ends with that instance too.
    */
   const startMount = (
     inst: Instance,
     mount: View.Mount<any>,
     node: unknown,
     env: Env,
-    under: Instance = inst
+    renderer: Instance = inst
   ): RunningMount | undefined => {
     if (!host.runsMounts) return undefined
-    const mountScope = Scope.forkUnsafe(under.scope, "sequential")
-    const running: RunningMount = { scope: mountScope, mount, pubsub: undefined }
+    const mountScope = Scope.forkUnsafe(renderer.scope, "sequential")
+    const causedBy = origin
+    const running: RunningMount = { scope: mountScope, mount, pubsub: undefined, cutBy: undefined }
     // A mount that never reads its args' changes pays nothing for them.
     const changes = Stream.suspend(() => {
       let pubsub = running.pubsub
@@ -4237,16 +4239,21 @@ const setup = (
     afterCommit(() =>
       whenReady(env, (envCtx) => {
         // A detached child's element starts its mount when the child is attached.
-        if (inst.closed || removedMounts.has(mountScope) || isParked(node)) return
+        if (inst.closed || isClosed(mountScope) || removedMounts.has(mountScope) || isParked(node)) return
+        const { args, argsSchema, name } = running.mount
+        const started = record(inst, { _tag: "MountStarted", name, args, argsSchema }, causedBy)
+        let silent: boolean | undefined
         const send = (result: unknown) =>
           Effect.sync(() => {
             // The latest render's map, so what it closes over is current.
             const latest = running.mount
             const message = latest.resolve(result as never)
-            // A result mapped to `Component.noop` sends nothing, and logs nothing.
-            if (isNoop(message)) return
+            const noop = isNoop(message)
+            silent = noop && silent !== false
+            if (noop) return
             inst.dispatch(message, {
               _tag: "Mount",
+              seq: started,
               name: latest.name,
               args: latest.args,
               argsSchema: latest.argsSchema
@@ -4254,14 +4261,22 @@ const setup = (
           })
         const fiber = forkNow(
           withCache(Context.add(Context.add(envCtx, Scope.Scope, mountScope), services.Refs, refsOf(inst))),
-          Effect.suspend(() => mount.run(node, running.mount.args, changes, send))
+          Effect.suspend(() => mount.run(node, args, changes, send))
         )
         interruptOnClose(mountScope, fiber)
-        fiber.addObserver((exit) => {
-          if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) {
-            step(() => failInstance(inst, exit.cause, "mount", mount.name))
-          }
-        })
+        fiber.addObserver((exit) =>
+          step(() => {
+            const failure = Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause) ? exit.cause : undefined
+            const reason = failure !== undefined ? "failed" : Exit.isSuccess(exit) ? "completed" : "closed"
+            // A scope close can interrupt synchronously inside a different step. Only an explicit
+            // element removal supplies a cause; closing the whole instance does not.
+            const ended = under(
+              reason === "closed" ? running.cutBy : undefined,
+              () => record(inst, { _tag: "MountEnded", name, started, reason, silent: silent === true })
+            )
+            if (failure !== undefined) under(ended, () => failInstance(inst, failure, "mount", name))
+          })
+        )
       })
     )
     return running
@@ -4395,6 +4410,7 @@ const setup = (
   /** Ends a mount of an element `under` rendered: its Scope is forked from `under`'s. */
   const stopMount = (under: Instance, running: RunningMount | undefined) => {
     if (running === undefined) return
+    running.cutBy = origin
     removedMounts.add(running.scope)
     closeUnder(under, running.scope)
   }
