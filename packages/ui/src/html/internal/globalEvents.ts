@@ -27,10 +27,8 @@ export interface Listener {
  *
  * @internal
  */
-export const listenerOf = (subscription: unknown): Listener | undefined =>
-  typeof subscription === "object" && subscription !== null
-    ? (subscription as { readonly [listener]?: Listener })[listener]
-    : undefined
+export const listenerOf = (subscription: object): Listener | undefined =>
+  (subscription as { readonly [listener]?: Listener })[listener]
 
 /**
  * Runs `declared`'s handler with `payload`, as the browser host runs an
@@ -53,20 +51,3 @@ export const run = (
 }
 
 const noop = () => {}
-
-const modifiers = { shift: false, ctrl: false, alt: false, meta: false }
-
-/**
- * A full payload for a test's event: `given` over a key's or a pointer's
- * defaults, with `defaultPrevented` false unless given.
- *
- * @internal
- */
-export const payloadOf = (event: string, given: object | undefined): Record<string, unknown> => {
-  const defaults = event === "keydown" || event === "keyup"
-    ? { key: "", ...modifiers, composing: false }
-    : event === "click" || event === "mousedown" || event === "mouseup"
-    ? { button: 0, x: 0, y: 0, ...modifiers, pointerType: "mouse" }
-    : {}
-  return { ...defaults, defaultPrevented: false, ...given }
-}

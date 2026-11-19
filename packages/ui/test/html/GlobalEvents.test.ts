@@ -69,6 +69,22 @@ const Phases = Component.define({
   ]
 })
 
+// The capture listener's message turns the bubble listener on.
+const Enables = Component.define({
+  name: "Enables",
+  model: Schema.Array(Schema.String),
+  message: PhaseMessage,
+  elements: Html
+}).make({
+  init: (): ReadonlyArray<string> => [],
+  update: (log, { what }) => [...log, what],
+  view: (log, h) => h.output(log.join(",")),
+  subscriptions: (log) => [
+    Html.onDocument("mousedown", PhaseMessage.Heard({ what: "capture" }), { capture: true }),
+    log.length > 0 && Html.onDocument("mousedown", PhaseMessage.Heard({ what: "bubble" }))
+  ]
+})
+
 const testLayer = Layer.merge(TestHost.layer(), TestGlobalEvents.layer)
 
 describe("Html.onDocument and Html.onWindow", () => {
@@ -146,6 +162,18 @@ describe("Html.onDocument and Html.onWindow", () => {
       const exit = yield* Effect.exit(TestHost.settle)
       assert.isTrue(Exit.isFailure(exit))
       assert.include(String(Exit.isFailure(exit) ? exit.cause : ""), "boom")
+    }).pipe(Effect.provide(testLayer)))
+
+  it.effect("the test tools deliver an event to a bubble listener its capture listener added, as a browser does", () =>
+    Effect.gen(function*() {
+      const s = yield* HtmlScene.make(Enables, {})
+      s.fireDocument("mousedown").expect(Locator.tag("output")).toHaveText("capture,bubble")
+
+      const root = yield* TestHost.mount(Enables, {})
+      yield* TestHost.settle
+      yield* TestGlobalEvents.fire("document", "mousedown")
+      yield* TestHost.settle
+      assert.deepStrictEqual(root.model(), ["capture", "bubble"])
     }).pipe(Effect.provide(testLayer)))
 })
 

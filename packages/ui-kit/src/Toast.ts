@@ -490,6 +490,12 @@ const TrackViewport = Mount.makeStream(
     )
 )
 
+// The window's focus, since the timers pause while it's elsewhere.
+const windowFocus = [
+  Html.onWindow("focus", Message.FocusedWindow()),
+  Html.onWindow("blur", Message.BlurredWindow())
+]
+
 // The stack is expanded while the pointer is on it or keyboard focus is in it.
 const expandedBy = (model: Model): boolean => model.hovering || model.focused
 
@@ -673,11 +679,7 @@ export const ToastProvider = Component.define({
     FinishedExit: (model, { id }) =>
       shown(model, id) === undefined ? { ...model, toasts: model.toasts.filter((toast) => toast.id !== id) } : model
   },
-  // The timers pause while the window doesn't have focus.
-  subscriptions: () => [
-    Html.onWindow("focus", Message.FocusedWindow()),
-    Html.onWindow("blur", Message.BlurredWindow())
-  ],
+  subscriptions: () => windowFocus,
   parts: (model, p) => {
     const expanded = expandedBy(model)
     const stack = stackOf(model.toasts, p.props.limit ?? 3)

@@ -109,7 +109,6 @@ import * as Cause from "effect/Cause"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Option from "effect/Option"
-import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import * as Command from "../Command.ts"
@@ -633,8 +632,6 @@ const listenFor = (
   options: GlobalEventOptions | undefined
 ): Subscription.Subscription<any> => {
   const capture = options?.capture === true
-  const name = `@effect/ui/html/${target}`
-  const deps = capture ? [event, "capture"] : [event]
   const declared: globalEvents.Listener = {
     target,
     event,
@@ -642,47 +639,23 @@ const listenFor = (
     handler,
     preventDefault: options?.preventDefault
   }
-  const listen = (
-    events: GlobalEvents,
-    current: () => globalEvents.Listener,
-    onMessage: (message: unknown, cancel: () => void) => void,
-    fail: (error: unknown) => void
-  ) =>
-    events.listen(target, event, { capture }, (payload, preventDefault) => {
+  // The runtime attaches the listener here and runs no Stream, as for `Router.prefetch`. Each event
+  // goes to the handler of the latest `subscriptions` result, and cancels its default as the
+  // message is taken.
+  const direct: NonNullable<services.Direct[typeof services.direct]> = (context, emit, fail, latest) => ({
+    initial: Effect.void,
+    close: Context.get(context, GlobalEvents).listen(target, event, { capture }, (payload, preventDefault) => {
       try {
-        globalEvents.run(current(), payload, preventDefault, onMessage)
+        globalEvents.run(globalEvents.listenerOf(latest()) ?? declared, payload, preventDefault, emit)
       } catch (error) {
-        fail(error)
+        fail(Cause.die(error))
       }
     })
-  // The runtime attaches instead of running the Stream, and always calls the handler of the latest
-  // `subscriptions` result. The Stream keeps the one it was declared with.
-  const direct: NonNullable<services.Direct[typeof services.direct]> = (context, emit, fail, latest) => {
-    const events = Context.get(context, GlobalEvents)
-    const close = listen(
-      events,
-      () => globalEvents.listenerOf(latest()) ?? declared,
-      emit,
-      (error) => fail(Cause.die(error))
-    )
-    return { initial: Effect.void, close }
-  }
-  const stream = Stream.callback<unknown>((queue) =>
-    Effect.acquireRelease(
-      Effect.gen(function*() {
-        const events = yield* GlobalEvents
-        return listen(events, () => declared, (message, cancel) => {
-          cancel()
-          Queue.offerUnsafe(queue, message)
-        }, (error) => Queue.failCauseUnsafe(queue, Cause.die(error)))
-      }),
-      (remove) => Effect.sync(remove)
-    )
-  )
-  return Object.assign(Subscription.make(name, deps, () => stream), {
-    [globalEvents.listener]: declared,
-    [services.direct]: direct
   })
+  return Object.assign(
+    Subscription.make(`@effect/ui/html/${target}`, capture ? [event, "capture"] : [event], () => Stream.never),
+    { [globalEvents.listener]: declared, [services.direct]: direct }
+  )
 }
 
 /**

@@ -79,6 +79,7 @@ import * as Locator from "../../testing/Locator.ts"
 import type * as Scene from "../../testing/Scene.ts"
 import type * as View from "../../View.ts"
 import type * as Html from "../Html.ts"
+import * as fireGlobal from "../internal/fireGlobal.ts"
 import * as globalEvents from "../internal/globalEvents.ts"
 import * as HtmlLocator from "./HtmlLocator.ts"
 
@@ -188,11 +189,12 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Scene.Step
    *
    * **Details**
    *
-   * The capture listener runs first, then the bubble one. Each runs the
-   * handler of the `subscriptions` result current when it runs, so one
-   * that the first listener's message removed doesn't run. A listener's
-   * `preventDefault` applies to its own message, and the bubble listener
-   * sees in `defaultPrevented` what the capture listener cancelled.
+   * The capture listener runs first, then the bubble one. Each is read
+   * from the `subscriptions` result current as its phase starts, as in a
+   * browser, so a bubble listener the capture listener's message added
+   * runs, and one it removed doesn't. A listener's `preventDefault`
+   * applies to its own message, and the bubble listener sees in
+   * `defaultPrevented` what the capture listener cancelled.
    *
    * It throws when nothing listens for `event` on the document, listing
    * the active keys, and is ignored when no listener produced a message.
@@ -563,39 +565,33 @@ class StepsImpl extends internal.SceneCursor {
     step: string,
     target: "document" | "window",
     event: string,
-    given: { readonly defaultPrevented?: boolean } | undefined
+    given: object | undefined
   ): this {
     let cancelled = false
     let handled = false
-    const listening = (state: engine.State<any, any, any, any>, capture: boolean) =>
-      state.declared().map(globalEvents.listenerOf).find((declared) =>
-        declared !== undefined && declared.target === target && declared.event === event &&
-        declared.capture === capture
-      )
     return this.act(step, "message", (state) => {
-      const phases = [true, false].filter((capture) => listening(state, capture) !== undefined)
-      if (phases.length === 0) {
+      let out = state
+      let heard = false
+      cancelled = fireGlobal.fire(event, given, (capture) => {
+        const declared = out.declared().map(globalEvents.listenerOf).find((declared) =>
+          declared !== undefined && declared.target === target && declared.event === event &&
+          declared.capture === capture
+        )
+        if (declared === undefined) return []
+        heard = true
+        return [(payload, preventDefault) =>
+          globalEvents.run(declared, payload, preventDefault, (message, cancel) => {
+            cancel()
+            handled = true
+            out = engine.dispatch(out, message)
+          })]
+      })
+      if (!heard) {
         throw new Error(
           `${this.name(step)}: nothing listens for ${JSON.stringify(event)} on the ${target}; active keys: ${
             JSON.stringify(state.subscriptions())
           }`
         )
-      }
-      let out = state
-      for (const capture of phases) {
-        const declared = listening(out, capture)
-        if (declared === undefined) continue
-        const payload = globalEvents.payloadOf(event, {
-          ...given,
-          defaultPrevented: given?.defaultPrevented === true || cancelled
-        })
-        globalEvents.run(declared, payload, () => {
-          cancelled = true
-        }, (message, cancel) => {
-          cancel()
-          handled = true
-          out = engine.dispatch(out, message)
-        })
       }
       return out
     }, () => ({ interaction: handled ? "handled" : "ignored", defaultPrevented: cancelled }))

@@ -311,14 +311,14 @@ const WaitBeforeClosing = Command.make(
 // handled is skipped. And a mouse press anywhere, in the capture phase so a
 // handler that stops the event can't hide it: `update` knows from `hovered`
 // whether the press was outside the tooltip.
-const dismissals = (shown: boolean) => [
-  shown && Html.onDocument(
+const dismissals = [
+  Html.onDocument(
     "keydown",
     ({ composing, defaultPrevented, key }) =>
       key === "Escape" && !composing && !defaultPrevented ? Message.PressedEscape() : undefined,
     { preventDefault: true }
   ),
-  shown && Html.onDocument("mousedown", Message.PressedDocument(), { capture: true })
+  Html.onDocument("mousedown", Message.PressedDocument(), { capture: true })
 ]
 
 const opened = TooltipEvents.Opened()
@@ -622,7 +622,7 @@ export const Tooltip = Component.define({
     }
   },
   // Only an open tooltip listens on the document.
-  subscriptions: (_model, props) => dismissals(shownBy(props)),
+  subscriptions: (_model, props) => shownBy(props) ? dismissals : [],
   parts: (model, p) => {
     const shown = shownBy(p.props)
     const side = p.props.side ?? "top"

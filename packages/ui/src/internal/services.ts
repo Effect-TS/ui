@@ -8,6 +8,7 @@ import * as Context from "effect/Context"
 import type * as Effect from "effect/Effect"
 import type { Refs as RefsShape, Renderer as RendererShape } from "../Renderer.ts"
 import type * as Route from "../Route.ts"
+import type * as Subscription from "../Subscription.ts"
 
 /** @internal */
 export const Renderer = Context.Service<RendererShape, RendererShape>("@effect/ui/Renderer")
@@ -176,7 +177,7 @@ export interface Direct {
     context: Context.Context<never>,
     emit: (message: unknown, accepted: () => void) => void,
     fail: (cause: Cause.Cause<unknown>) => void,
-    latest: () => unknown
+    latest: () => Subscription.Subscription<unknown, unknown>
   ) => { readonly initial: Effect.Effect<void>; readonly close: () => void } | undefined
 }
 

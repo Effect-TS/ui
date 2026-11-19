@@ -49,7 +49,7 @@ import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as Html from "../Html.ts"
-import * as globalEvents from "../internal/globalEvents.ts"
+import * as fireGlobal from "../internal/fireGlobal.ts"
 
 /**
  * The events `fire` takes for each target, with their payloads.
@@ -73,7 +73,9 @@ export interface Targets {
 export interface TestGlobalEvents {
   /**
    * Fires `event` on `target`: the capture listeners, then the bubble
-   * ones, each in the order it was added. Missing payload fields default as
+   * ones, each in the order it was added. A phase runs the listeners
+   * listening as it starts, as in a browser, but for one an earlier
+   * listener's message removed. Missing payload fields default as
    * `HtmlScene`'s `fireDocument` defaults them. Returns whether a
    * listener cancelled the default.
    */
@@ -99,7 +101,7 @@ interface Entry {
   readonly target: string
   readonly event: string
   readonly capture: boolean
-  readonly listener: (payload: unknown, preventDefault: () => void) => void
+  readonly listener: fireGlobal.Listener
 }
 
 /**
@@ -111,37 +113,24 @@ interface Entry {
  * @since 0.1.0
  */
 export const make = (): Html.GlobalEvents & TestGlobalEvents => {
-  const entries: Array<Entry> = []
+  const entries = new Set<Entry>()
   return {
     listen: (target, event, { capture }, listener) => {
       const entry: Entry = { target, event, capture, listener }
-      entries.push(entry)
+      entries.add(entry)
       return () => {
-        const index = entries.indexOf(entry)
-        if (index >= 0) entries.splice(index, 1)
+        entries.delete(entry)
       }
     },
-    fire: (target, event, payload) => {
-      let cancelled = false
-      const given = payload as { readonly defaultPrevented?: boolean } | undefined
-      // Taken now, so a listener added by an earlier one's message doesn't run, and one it removed doesn't either.
-      const matching = entries.filter((entry) => entry.target === target && entry.event === event)
-      for (const capture of [true, false]) {
-        for (const entry of matching) {
-          if (entry.capture !== capture || !entries.includes(entry)) continue
-          entry.listener(
-            globalEvents.payloadOf(event as string, {
-              ...given,
-              defaultPrevented: given?.defaultPrevented === true || cancelled
-            }),
-            () => {
-              cancelled = true
-            }
-          )
+    fire: (target, event, payload) =>
+      fireGlobal.fire(event as string, payload, function*(capture) {
+        // Copied as the phase starts. A listener an earlier one's message removed is skipped.
+        for (const entry of Array.from(entries)) {
+          if (entry.target === target && entry.event === event && entry.capture === capture && entries.has(entry)) {
+            yield entry.listener
+          }
         }
-      }
-      return cancelled
-    }
+      })
   }
 }
 
