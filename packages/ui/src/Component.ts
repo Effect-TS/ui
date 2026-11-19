@@ -560,6 +560,12 @@ export declare namespace Shared {
  * shared value. An owner may be listed under more than one name, but only
  * one of them may have an `onChange`: `define` throws otherwise.
  *
+ * `owner: "self"` names the component being defined, which can't name
+ * itself yet: an instance reads the nearest instance of its own kind above
+ * it, as a nested menu or dialog reads the one it's in. Such an entry is
+ * `optional: true`, since the outermost instance has none above it, and the
+ * component must share state itself.
+ *
  * `report` and `onChange` are typed by `define`, which knows the reader's
  * Model and props and the owner's value. Here they're `unknown`.
  *
@@ -572,6 +578,12 @@ export type SharedRead =
   | {
     readonly owner: Headless.Any
     readonly optional?: boolean | undefined
+    readonly report?: unknown
+    readonly onChange?: unknown
+  }
+  | {
+    readonly owner: "self"
+    readonly optional: true
     readonly report?: unknown
     readonly onChange?: unknown
   }
@@ -1815,23 +1827,58 @@ type OwnersAreHeadless<SV> = [SV] extends [never] ? unknown : {
 type Listed<SR> = (<T>() => T extends SR ? 1 : 2) extends (<T>() => T extends SharedReads ? 1 : 2) ? {} : SR
 
 // One entry of `shared`, for the owner inferred for it: `report` and `onChange` take their parameter types from
-// here. `SR` holds what's written, and `optional` with it, and this checks it against the owner.
-type SharedEntry<E, O, Model, Props, Msg> = [E] extends [Headless.Any] ? O : {
-  readonly owner: O
-  readonly optional?: boolean | undefined
-  readonly report?:
-    | ([Shared.Report<O>] extends [never] ? "This owner collects no reports: its shares has no collects"
-      : (model: Model, props: Props) => Shared.Report<O>)
-    | undefined
-  readonly onChange?: ((value: Shared.Value<O>) => Msg) | undefined
+// here. `SR` holds what's written, and `optional` with it, and this checks it against the owner. An entry for
+// `"self"` reads the component's own `shares`, `SV` and `Rp`, and is optional.
+type SharedEntry<E, O, Model, Props, Msg, SV, Rp> = [E] extends [Headless.Any] ? O
+  : [O] extends ["self"] ? {
+      readonly owner: O
+      readonly optional: true
+      readonly report?:
+        | ([Rp] extends [never] ? "This component collects no reports: its shares has no collects"
+          : (model: Model, props: Props) => Rp)
+        | undefined
+      readonly onChange?: ((value: SV) => Msg) | undefined
+    }
+  : {
+    readonly owner: O
+    readonly optional?: boolean | undefined
+    readonly report?:
+      | ([Shared.Report<O>] extends [never] ? "This owner collects no reports: its shares has no collects"
+        : (model: Model, props: Props) => Shared.Report<O>)
+      | undefined
+    readonly onChange?: ((value: Shared.Value<O>) => Msg) | undefined
+  }
+
+// An owner listed in `shared` is a headless component with `shares`, or the component itself. `make` checks
+// that one which reads itself shares: `SV` here would be fixed before `shares` is inferred.
+type OwnersOnly<SO> = {
+  readonly [K in keyof SO]: [SO[K]] extends ["self"] ? unknown
+    : [Shared.Of<SO[K]>] extends [never] ? {
+        readonly owner: "A component in shared must be a headless component with shares"
+      }
+    : unknown
 }
 
-// An owner listed in `shared` is a headless component with `shares`.
-type OwnersOnly<SO> = {
-  readonly [K in keyof SO]: [Shared.Of<SO[K]>] extends [never] ? {
-      readonly owner: "A component in shared must be a headless component with shares"
-    }
-    : unknown
+// Whether `shared`, as `define` keeps it, has an entry for `"self"`.
+type ReadsSelf<SR> = {
+  readonly [K in keyof SR]: SR[K] extends { readonly owner: infer O } ? "self" extends O ? true : never : never
+}[keyof SR]
+
+// A component that reads its own kind must be an owner itself.
+type SelfShares<SR, SV> = [ReadsSelf<SR>] extends [never] ? unknown
+  : [SV] extends [never] ? { readonly "A component that reads its own kind must share state: add shares": never }
+  : unknown
+
+// The component being defined, as a `"self"` entry of `shared` names it: an owner with its own props, events,
+// receives, shared value and reports, so the read is typed by its `shares`.
+type SelfOwner<Name extends string, Props, Events, Rcv, SV, Rp> =
+  | Headless<Props, Events, unknown, never, Rcv, Shared<Name>, SV, Rp>
+  | "self"
+
+// `shared` as `define` keeps it, each `"self"` entry naming the component.
+type ResolveSelf<SR, S> = {
+  readonly [K in keyof SR]: SR[K] extends { readonly owner: "self" } ? Omit<SR[K], "owner"> & { readonly owner: S }
+    : SR[K]
 }
 
 /**
@@ -1968,31 +2015,33 @@ export interface Definition<
       readonly [T in TagOf<Msg>]: Model
     },
     Sub extends Subscription.Subscription<Msg, any> = never
-  >(options: {
-    readonly init: ($: Init<Model, Msg, Events, Props>) => UI
-    readonly update:
-      | ((model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L>) => U)
-      | UpdateRecord<Model, Msg, Events, Props, L, UR>
-    /** A headless component has no view to place slots in, so a definition with slots can't take `parts`. */
-    readonly parts: [Sl] extends [never] ?
-      (model: Model, p: PartsHelper<Msg, Props, V> & QueryHelpers<L> & SharedHelpers<SR>) => Parts
-      : never
-    readonly subscriptions?:
-      | ((
-        model: Model,
-        props: Props,
-        queries: { readonly [K in keyof L]: QueryResultOf<L[K]> }
-      ) => ReadonlyArray<Sub | false | null | undefined>)
-      | undefined
-    readonly head?:
-      | ((
-        model: Model,
-        props: Props,
-        queries: { readonly [K in keyof L]: QueryResultOf<L[K]> }
-      ) => ReadonlyArray<View.HeadEntry<V>>)
-      | undefined
-    readonly reduceHead?: ((model: Model, below: View.HeadValue<V>) => View.HeadValue<V>) | undefined
-  }): Headless<
+  >(
+    options: {
+      readonly init: ($: Init<Model, Msg, Events, Props>) => UI
+      readonly update:
+        | ((model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L>) => U)
+        | UpdateRecord<Model, Msg, Events, Props, L, UR>
+      /** A headless component has no view to place slots in, so a definition with slots can't take `parts`. */
+      readonly parts: [Sl] extends [never] ?
+        (model: Model, p: PartsHelper<Msg, Props, V> & QueryHelpers<L> & SharedHelpers<SR>) => Parts
+        : never
+      readonly subscriptions?:
+        | ((
+          model: Model,
+          props: Props,
+          queries: { readonly [K in keyof L]: QueryResultOf<L[K]> }
+        ) => ReadonlyArray<Sub | false | null | undefined>)
+        | undefined
+      readonly head?:
+        | ((
+          model: Model,
+          props: Props,
+          queries: { readonly [K in keyof L]: QueryResultOf<L[K]> }
+        ) => ReadonlyArray<View.HeadEntry<V>>)
+        | undefined
+      readonly reduceHead?: ((model: Model, below: View.HeadValue<V>) => View.HeadValue<V>) | undefined
+    } & SelfShares<SR, SV>
+  ): Headless<
     Props,
     Events,
     Parts,
@@ -2020,31 +2069,34 @@ export interface Definition<
     UV extends View.Content<Msg, any> = View.Node<Msg>,
     Sub extends Subscription.Subscription<Msg, any> = never
   >(
-    options: {
-      readonly init: ($: Init<Model, Msg, Events, Props>) => UI
-      readonly update:
-        | ((model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L>) => U)
-        | UpdateRecord<Model, Msg, Events, Props, L, UR>
-      readonly view: (
-        model: Model,
-        h: View.Helper<Msg, Props> & View.Tags<V, Msg> & QueryHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>
-      ) => UV
-      readonly subscriptions?:
-        | ((
+    options:
+      & {
+        readonly init: ($: Init<Model, Msg, Events, Props>) => UI
+        readonly update:
+          | ((model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L>) => U)
+          | UpdateRecord<Model, Msg, Events, Props, L, UR>
+        readonly view: (
           model: Model,
-          props: Props,
-          queries: { readonly [K in keyof L]: QueryResultOf<L[K]> }
-        ) => ReadonlyArray<Sub | false | null | undefined>)
-        | undefined
-      readonly head?:
-        | ((
-          model: Model,
-          props: Props,
-          queries: { readonly [K in keyof L]: QueryResultOf<L[K]> }
-        ) => ReadonlyArray<View.HeadEntry<V>>)
-        | undefined
-      readonly reduceHead?: ((model: Model, below: View.HeadValue<V>) => View.HeadValue<V>) | undefined
-    } & OwnersAreHeadless<SV>
+          h: View.Helper<Msg, Props> & View.Tags<V, Msg> & QueryHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>
+        ) => UV
+        readonly subscriptions?:
+          | ((
+            model: Model,
+            props: Props,
+            queries: { readonly [K in keyof L]: QueryResultOf<L[K]> }
+          ) => ReadonlyArray<Sub | false | null | undefined>)
+          | undefined
+        readonly head?:
+          | ((
+            model: Model,
+            props: Props,
+            queries: { readonly [K in keyof L]: QueryResultOf<L[K]> }
+          ) => ReadonlyArray<View.HeadEntry<V>>)
+          | undefined
+        readonly reduceHead?: ((model: Model, below: View.HeadValue<V>) => View.HeadValue<V>) | undefined
+      }
+      & OwnersAreHeadless<SV>
+      & SelfShares<SR, SV>
   ): Component<
     Name,
     Props,
@@ -2442,7 +2494,7 @@ export const define = <
   SV = never,
   Rp = never,
   // The owner of each entry of `shared`, inferred before `report` and `onChange` are typed.
-  SO extends { readonly [name: string]: Headless.Any } = {}
+  SO extends { readonly [name: string]: Headless.Any | "self" } = {}
 >(
   options: {
     readonly name: Name
@@ -2480,11 +2532,23 @@ export const define = <
      * component tells an owner whose `shares` has `collects`. `onChange` is its message when the
      * value changes, delivered once per owner round before the next render, with the latest value.
      * One `onChange` per owner: `define` throws for an owner listed twice with one each.
+     * `owner: "self"` reads the nearest instance of this component above, and is `optional: true`;
+     * write `shares` before `shared`, so `report` and `onChange` are typed by it.
      */
     readonly shared?:
       | (
         & SR
-        & { readonly [K in keyof SO]: SharedEntry<SR[K & keyof SR], SO[K], Model, Props, NoInfer<Msg>> }
+        & {
+          readonly [K in keyof SO]: SharedEntry<
+            SR[K & keyof SR],
+            SO[K],
+            Model,
+            Props,
+            NoInfer<Msg>,
+            NoInfer<SV>,
+            NoInfer<Rp>
+          >
+        }
         & NoInfer<OwnersOnly<SO>>
       )
       | undefined
@@ -2516,10 +2580,35 @@ export const define = <
       }
       | undefined
   }
-): Definition<Name, Props, Model, Msg, Events, V, L, Tagged<Msg, Tags>, Sl, Listed<SR>, SV, Rp> => {
+): Definition<
+  Name,
+  Props,
+  Model,
+  Msg,
+  Events,
+  V,
+  L,
+  Tagged<Msg, Tags>,
+  Sl,
+  ResolveSelf<Listed<SR>, SelfOwner<Name, Props, Events, Tagged<Msg, Tags>, SV, Rp>>,
+  SV,
+  Rp
+> => {
   const shares = options.shares
-  if (options.shared !== undefined) sharedReads.check(options.name, options.shared)
-  const definition: Definition<Name, Props, Model, Msg, Events, V, L, Tagged<Msg, Tags>, Sl, Listed<SR>, SV, Rp> = {
+  const definition: Definition<
+    Name,
+    Props,
+    Model,
+    Msg,
+    Events,
+    V,
+    L,
+    Tagged<Msg, Tags>,
+    Sl,
+    ResolveSelf<Listed<SR>, SelfOwner<Name, Props, Events, Tagged<Msg, Tags>, SV, Rp>>,
+    SV,
+    Rp
+  > = {
     name: options.name,
     props: options.props ?? (Schema.Struct({}) as any),
     model: options.model,
@@ -2529,7 +2618,7 @@ export const define = <
     queries: options.queries,
     elements: options.elements,
     slots: options.slots ?? [],
-    shared: options.shared,
+    shared: options.shared as any,
     shares: typeof shares === "function" ? shares : shares?.value,
     collects: shares !== undefined && typeof shares !== "function" && "collects" in shares
       ? shares.collects
@@ -2542,8 +2631,11 @@ export const define = <
     }) as any,
     view: (view) => view,
     fragment: (fragment) => fragment,
-    make: (rest: any) => finish(definition, rest) as any
+    // The type of `shared` names the component in each `"self"` entry. The value keeps `"self"`, which `finish`
+    // resolves once the component exists.
+    make: (rest: any) => finish(definition as any, rest) as any
   }
+  sharedReads.check(definition as any)
   return definition
 }
 
@@ -2597,8 +2689,9 @@ const finish = (
       `${definition.name}: only a headless component can share state, so finish it with parts in place of view`
     )
   }
-  const reads = sharedReads.readsOf(definition)
-  return makeComponent(view === undefined ? HeadlessProto : Proto, {
+  // Read once the component exists, since an entry for `"self"` names it.
+  let reads: ReadonlyArray<sharedReads.Read> = []
+  const component: Any = makeComponent(view === undefined ? HeadlessProto : Proto, {
     definition,
     props: definition.props,
     model: definition.model,
@@ -2675,6 +2768,8 @@ const finish = (
     layerOnServer: true,
     "~queries": bound
   })
+  reads = sharedReads.readsOf(definition, component)
+  return component
 }
 
 // `h.shared` and `p.shared`: each listed owner's current value, by local name.

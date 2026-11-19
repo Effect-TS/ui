@@ -184,8 +184,26 @@ export interface ScrollOptions {
 // ---------------------------------------------------------------------------
 
 /**
+ * What pressed an element: `"mouse"`, `"touch"` or `"pen"`, or `""` for a
+ * click no pointer made, such as a button activated with Enter or Space.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export type PointerType = "mouse" | "touch" | "pen" | ""
+
+/**
  * The payload of `click`, `dblclick`, `contextmenu`, `mousedown` and
- * `mouseup`: the button, the position in the viewport, and the modifier keys.
+ * `mouseup`: the button, the position in the viewport, the modifier keys,
+ * and the kind of pointer.
+ *
+ * **Details**
+ *
+ * `pointerType` is `""` for a click from the keyboard or a script. Otherwise
+ * the browser host reads it from the `pointerdown` before the event, since
+ * some browsers report a tap's `click` as a mouse's. A browser that sends no
+ * pointer events reports `"mouse"`.
  *
  * @stability experimental
  * @category events
@@ -199,6 +217,7 @@ export interface PointerPayload {
   readonly ctrl: boolean
   readonly alt: boolean
   readonly meta: boolean
+  readonly pointerType: PointerType
 }
 
 /**
@@ -479,8 +498,11 @@ export type EventsOf<K extends string> =
   & (K extends "textarea" | "select" ? { readonly input: ValuePayload; readonly change: ValuePayload } : {})
   & (K extends "form" ? { readonly submit: SubmitPayload; readonly reset: {} } : {})
   & (K extends "details" ? { readonly toggle: TogglePayload } : {})
-  & (K extends "dialog" ?
-    { readonly toggle: TogglePayload; readonly close: { readonly returnValue: string }; readonly cancel: {} }
+  & (K extends "dialog" ? {
+      readonly toggle: TogglePayload
+      readonly close: { readonly returnValue: string }
+      readonly cancel: { readonly cancelable: boolean }
+    }
     : {})
   & (K extends "img" | "iframe" | "video" | "audio" ? { readonly load: {}; readonly error: {} } : {})
 
@@ -941,7 +963,9 @@ export class VoidElement<
   /**
    * Sugar for `on("cancel", handler)`, on a `dialog`: a close request, such
    * as Escape. For a modal the browser host cancels it, and the Model
-   * decides whether the dialog closes.
+   * decides whether the dialog closes. `cancelable` is `false` when the
+   * browser won't let the request be cancelled, as after repeated cancelled
+   * requests: it closes the dialog itself, and `onClose` follows.
    *
    * @since 0.1.0
    */

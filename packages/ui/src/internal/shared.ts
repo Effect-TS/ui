@@ -19,8 +19,13 @@ export interface Read {
 const none: ReadonlyArray<Read> = []
 const cache = new WeakMap<object, ReadonlyArray<Read>>()
 
-/** A definition's `shared` entries, in order. @internal */
-export const readsOf = (definition: Component.Definition.Any): ReadonlyArray<Read> => {
+/**
+ * A definition's `shared` entries, in order. `self` is the component `make` built from it, which an
+ * entry for `"self"` names: `make` reads them first, and every later read is of the ones it kept.
+ *
+ * @internal
+ */
+export const readsOf = (definition: Component.Definition.Any, self?: Component.Any): ReadonlyArray<Read> => {
   const shared = definition.shared
   if (shared === undefined) return none
   let reads = cache.get(shared)
@@ -31,7 +36,7 @@ export const readsOf = (definition: Component.Definition.Any): ReadonlyArray<Rea
         ? { name, owner: entry, optional: false, report: undefined, onChange: undefined }
         : {
           name,
-          owner: entry.owner,
+          owner: entry.owner === "self" ? self as unknown as Component.Headless.Any : entry.owner,
           optional: entry.optional === true,
           report: entry.report as Read["report"],
           onChange: entry.onChange as Read["onChange"]
@@ -43,16 +48,30 @@ export const readsOf = (definition: Component.Definition.Any): ReadonlyArray<Rea
 }
 
 /**
- * Throws for a `shared` option that gives one owner two `onChange`s: a reader gets one message per
- * round of an owner. Aliases of an owner with one `onChange` among them are fine.
+ * Throws for a definition whose `shared` gives one owner two `onChange`s: a reader gets one message per
+ * round of an owner. Aliases of an owner with one `onChange` among them are fine. Throws too for an
+ * entry for `"self"` that isn't optional, or in a component that shares nothing.
  *
  * @internal
  */
-export const check = (name: string, shared: Component.SharedReads): void => {
-  const handled = new Map<object, string>()
+export const check = (definition: Component.Definition.Any): void => {
+  const { name, shared } = definition
+  if (shared === undefined) return
+  const handled = new Map<Component.Definition.Any, string>()
   for (const [key, entry] of Object.entries(shared)) {
-    if (typeof entry === "function" || entry.onChange === undefined) continue
-    const owner = entry.owner.definition
+    if (typeof entry === "function") continue
+    if (entry.owner === "self") {
+      if (definition.shares === undefined) {
+        throw new Error(`${name} reads its own kind under ${key}, so it must share state: add shares`)
+      }
+      if (entry.optional !== true) {
+        throw new Error(
+          `${name} reads its own kind under ${key}, and the outermost one has none above it: add optional: true`
+        )
+      }
+    }
+    if (entry.onChange === undefined) continue
+    const owner = entry.owner === "self" ? definition : entry.owner.definition
     const before = handled.get(owner)
     if (before !== undefined) {
       throw new Error(

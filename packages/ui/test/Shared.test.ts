@@ -566,3 +566,86 @@ describe("optional owners, reports and onChange in a Story", () => {
       assert.strictEqual(Locator.textOf(s.root), "on")
     }))
 })
+
+describe("a component that reads its own kind", () => {
+  const NestMessage = UiSchema.TaggedEnum({ ChangedBelow: { open: Schema.Number } })
+  const Nest = Component.define({
+    name: "Nest",
+    props: Schema.Struct({ open: Schema.Boolean }),
+    model: Schema.Number,
+    message: NestMessage,
+    shares: {
+      value: (_, props) => ({ open: props.open }),
+      collects: {
+        schema: Schema.Number,
+        onChange: (counts) => NestMessage.ChangedBelow({ open: counts.reduce((sum, count) => sum + count, 0) })
+      }
+    },
+    shared: { parent: { owner: "self", optional: true, report: (below, props) => (props.open ? 1 + below : 0) } }
+  }).make({
+    init: () => 0,
+    update: (_, message) => NestMessage.match(message, { ChangedBelow: ({ open }) => open }),
+    parts: (below, p) => ({ nested: p.shared.parent !== undefined, below })
+  })
+  const Toggle = UiSchema.TaggedEnum({ Toggled: {} })
+  const Nests = Component.define({ name: "Nests", model: Schema.Boolean, message: Toggle }).make({
+    init: () => true,
+    update: (open) => !open,
+    view: (open, h) => {
+      const label = (name: string, parts: { readonly nested: boolean; readonly below: number }) =>
+        h.el("span", `${name} ${parts.nested ? "nested" : "outer"} ${parts.below}`)
+      return Nest(h, {
+        props: { open: true },
+        view: (a) =>
+          h.el("div", [
+            label("a", a),
+            Nest(h, {
+              props: { open: true },
+              view: (b) => h.el("div", [label("b", b), Nest(h, { props: { open }, view: (c) => label("c", c) })])
+            })
+          ])
+      })
+    }
+  })
+
+  it.effect("reads the nearest instance of its own kind above it, and reports to it", () =>
+    provideHost(Effect.gen(function*() {
+      const root = yield* TestHost.mount(Nests, {})
+      yield* TestHost.settle
+      const labels = () => root.all(Locator.tag("span")).map(Locator.textOf)
+      assert.deepStrictEqual(labels(), ["a outer 2", "b nested 1", "c nested 0"])
+      root.send(Toggle.Toggled())
+      yield* TestHost.settle
+      assert.deepStrictEqual(labels(), ["a outer 1", "b nested 0", "c nested 0"])
+    })))
+
+  it.effect("in a scene and a story, reads only what was given: never its own value", () =>
+    Effect.gen(function*() {
+      assert.deepStrictEqual(Story.parts(Nest, { model: 0, props: { open: true } }), { nested: false, below: 0 })
+      const scene = yield* Scene.make(Nest, { open: true }, {
+        view: (parts, h) => h.el("p", parts.nested ? "nested" : "outermost")
+      })
+      scene.expect(Locator.text("outermost")).toExist()
+      scene.shared(Nest, { open: true }).expect(Locator.text("nested")).toExist()
+    }).pipe(Effect.scoped))
+
+  it("rejects a read of its own kind that isn't optional, or in a component that shares nothing", () => {
+    const self = { owner: "self", optional: true } as const
+    assert.throws(
+      () =>
+        Component.define({ name: "Bare", model: Schema.Null, message: Schema.Never, shared: { parent: self } as any }),
+      /Bare reads its own kind under parent, so it must share state: add shares/
+    )
+    assert.throws(
+      () =>
+        Component.define({
+          name: "Required",
+          model: Schema.Null,
+          message: Schema.Never,
+          shares: () => null,
+          shared: { parent: { owner: "self" } } as any
+        }),
+      /Required reads its own kind under parent, and the outermost one has none above it: add optional: true/
+    )
+  })
+})

@@ -126,6 +126,9 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Scene.Step
    *
    * **Details**
    *
+   * - The payload is a mouse's primary button at the origin with no
+   *   modifier keys. `fire` sends a click with another, such as a tap's
+   *   `pointerType`.
    * - A disabled `button`, `input`, `select` or `textarea`, or one inside a
    *   disabled `fieldset`, throws: the browser sends it nothing.
    * - A submit button submits its form: `submit` goes to the form with the

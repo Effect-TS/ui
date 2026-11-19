@@ -395,6 +395,7 @@ describe("BrowserHost", { concurrent: false }, () => {
   describe("events", () => {
     const Message = UiSchema.TaggedEnum({
       Clicked: { where: Schema.String },
+      PointerClicked: { pointerType: Schema.String },
       Key: { key: Schema.String, shift: Schema.Boolean },
       Submitted: { title: Schema.String, tags: Schema.Array(Schema.String) },
       Focused: { where: Schema.String }
@@ -409,6 +410,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       update: (log, message) =>
         Message.match(message, {
           Clicked: ({ where }) => [...log, `click ${where}`],
+          PointerClicked: ({ pointerType }) => [...log, pointerType],
           Key: ({ key, shift }) => [...log, `key ${key}${shift ? " shift" : ""}`],
           Submitted: ({ tags, title }) => [...log, `submit ${title} [${tags.join(",")}]`],
           Focused: ({ where }) => [...log, `focus ${where}`]
@@ -423,6 +425,7 @@ describe("BrowserHost", { concurrent: false }, () => {
             .on("focus", Message.Focused({ where: "div" })).children(
               h.input.attr("aria-label", "Focus me")
             ),
+          h.button.onClick(({ pointerType }) => Message.PointerClicked({ pointerType })).children("Pointer"),
           h.input.attr("aria-label", "Keys")
             .onKeyDown(({ key, shift }) => Message.Key({ key, shift }))
             .onFocus(Message.Focused({ where: "keys" })),
@@ -448,6 +451,25 @@ describe("BrowserHost", { concurrent: false }, () => {
         HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name: "Plain" }))
         yield* tick
         expect(root.model()).toEqual(["click inner", "click outer"])
+      }).pipe(Effect.scoped))
+
+    it.effect("a click reports the pointer of the pointerdown before it, and none for a click from the keyboard", () =>
+      Effect.gen(function*() {
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Events, {}, app)
+        const button = HtmlLocator.getByRole(app, "button", { name: "Pointer" })
+        const click = (detail: number) => button.dispatchEvent(new MouseEvent("click", { bubbles: true, detail }))
+        // No pointerdown yet: a mouse.
+        click(1)
+        // A tap, whose click WebKit reports as a mouse's.
+        button.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }))
+        click(1)
+        // Enter on the button: a click with no pointer, whatever pressed last.
+        click(0)
+        button.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "pen" }))
+        click(1)
+        yield* tick
+        expect(root.model()).toEqual(["mouse", "touch", "", "pen"])
       }).pipe(Effect.scoped))
 
     it.effect("a handler a render takes away no longer gets the event: the next element out does", () =>
@@ -974,7 +996,8 @@ describe("BrowserHost", { concurrent: false }, () => {
         close.call(rejecting.dialog()!)
         yield* tick
         expect(rejecting.dialog()!.open).toBe(true)
-        expect(rejecting.root.model()!.log).toEqual(["escape rejected", "escape rejected", "closed"])
+        // The cancel says so, so the app can tell the close that follows is the same request.
+        expect(rejecting.root.model()!.log).toEqual(["escape rejected", "escape rejected, forced", "closed"])
         expect(calls).toEqual(["showModal Delete note?", "showModal Delete note?"])
 
         calls.length = 0
