@@ -521,13 +521,12 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Events, {}, app)
-        const focus = (name: string) => (HtmlLocator.getByRole(app, "textbox", { name }) as HTMLInputElement).focus()
-        focus("First")
-        focus("Second")
-        focus("Keys")
+        const input = (name: string) => HtmlLocator.getByRole(app, "textbox", { name }) as HTMLInputElement
+        input("First").focus()
+        input("Second").focus()
+        input("Keys").focus()
         // A script may name any event target as the other end, such as the window, which no element contains.
-        HtmlLocator.getByRole(app, "textbox", { name: "First" })
-          .dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: window }))
+        input("First").dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: window }))
         yield* tick
         expect(root.model()).toEqual([
           "focusin",

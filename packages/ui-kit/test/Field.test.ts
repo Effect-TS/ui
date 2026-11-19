@@ -6,14 +6,14 @@ import { Locator, Scene, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 
+type Parts = Component.Headless.Parts<typeof Field>
+type H = View.Helper<never, FieldProps> & View.Tags<Html.Elements, never>
+
 // A field with every part. The control already describes itself with a hint
 // of the consumer's own.
 const standIn = {
   elements: Html,
-  view: (
-    f: Component.Headless.Parts<typeof Field>,
-    h: View.Helper<never, FieldProps> & View.Tags<Html.Elements, never>
-  ) =>
+  view: (f: Parts, h: H) =>
     f.root(h.div).children(
       f.label(h.label).children("Name"),
       f.control(h.input.attr("aria-describedby", "hint")),
@@ -25,10 +25,7 @@ const standIn = {
 // A field around a group of two controls, such as a range slider's thumbs.
 const groupStandIn = {
   elements: Html,
-  view: (
-    f: Component.Headless.Parts<typeof Field>,
-    h: View.Helper<never, FieldProps> & View.Tags<Html.Elements, never>
-  ) =>
+  view: (f: Parts, h: H) =>
     f.root(h.div).children(
       f.legend(h.div.class("legend")).children("Price"),
       f.group(h.div).children(

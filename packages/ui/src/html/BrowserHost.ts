@@ -305,16 +305,15 @@ const controlPayload = (source: globalThis.Element): unknown => {
 
 /**
  * Whether `target`, where focus came from or goes, is inside `element`.
- * `null` is another window or nowhere. An event a script made can name any
- * event target, such as the window, and `contains` throws for one that isn't
- * a node. Only the browser can tell: a node from another realm, such as an
- * iframe's adopted into this document, fails `instanceof Node`, and an object
- * can fake `nodeType`.
+ * `null`, another window or nowhere, is not. An event a script made can name
+ * any event target, such as the window, and `contains` throws for one that
+ * isn't a node. Only the browser can tell: a node from another realm, such as
+ * an iframe's adopted into this document, fails `instanceof Node`, and an
+ * object can fake `nodeType`.
  */
 const containsTarget = (element: globalThis.Element, target: EventTarget | null): boolean => {
-  if (target === null) return false
   try {
-    return element.contains(target as globalThis.Node)
+    return element.contains(target as globalThis.Node | null)
   } catch {
     return false
   }

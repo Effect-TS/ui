@@ -187,8 +187,6 @@ export const FieldProps = Schema.Struct({
  */
 export type FieldProps = typeof FieldProps.Type
 
-const formControls = ["input", "textarea", "select", "button"] as const
-
 const Message = UiSchema.TaggedEnum({ FocusedControl: {}, BlurredControl: {} })
 
 // A control disabled while it has focus loses it without a blur event, so
@@ -240,10 +238,10 @@ const lostFocus = Subscription.make("lostFocus", Stream.make(Message.BlurredCont
  * `control` handles `focus` and `blur` on a layer of its own, so the
  * consumer's handlers for them, and another kit call's, still run.
  * `group` does the same with `focusin` and `focusout`, and `member`
- * handles no focus event. A disabled field reports no focus and no
- * visit: it shows no focus, and isn't touched until it is enabled and
- * left. A field disabled while its control has focus drops the focus,
- * and shows it again only when the control is focused again.
+ * handles no focus event. A disabled field shows no focus, and isn't
+ * touched until it is enabled and left. A field disabled while its
+ * control has focus drops the focus, and shows it again only when the
+ * control is focused again.
  *
  * @stability experimental
  * @category components
@@ -296,21 +294,16 @@ export const Field = Component.define({
       flags(builder).attr("data-disabled", flag(disabled))
     const describedBy = [described && descriptionId, showsError && errorId].filter((id) => id !== false).join(" ")
     const error = p.part((b) => state(b).attr("id", errorId))
-    // What `control` and `member` both write besides the state: the ARIA
-    // that marks them invalid and points at the description and the error.
-    const describe = <B extends { readonly attr: (name: string, value: string | undefined) => B }>(builder: B): B =>
-      builder
-        .attr("aria-invalid", showsError ? "true" : undefined)
-        // A token list: added to the consumer's own.
-        .attr("aria-describedby", describedBy === "" ? undefined : describedBy)
     // `control`, with the id and the focus handlers, or `member`, with
     // neither.
     const formControl = (own: boolean) =>
-      p.part(formControls, (b) => {
-        const described = describe(own ? flags(b).attr("id", controlId) : flags(b))
-        const control = own
-          ? described.onFocus(Message.FocusedControl()).onBlur(Message.BlurredControl())
-          : described
+      p.part(["input", "textarea", "select", "button"], (b) => {
+        const control = (own
+          ? flags(b).attr("id", controlId).onFocus(Message.FocusedControl()).onBlur(Message.BlurredControl())
+          : flags(b))
+          .attr("aria-invalid", showsError ? "true" : undefined)
+          // A token list: added to the consumer's own.
+          .attr("aria-describedby", describedBy === "" ? undefined : describedBy)
         // Written when the control is built, after another kit call on the
         // same element wrote its own and added its children. An enabled
         // field leaves all of it alone.
