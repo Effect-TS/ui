@@ -233,11 +233,12 @@ describe("Composed", () => {
         own: { archived: ["n1"], saved: ["n2=draft 2"], missed: 1 },
         children: {
           rows: [
-            { key: "n2", model: { draft: "draft 2" } },
-            { key: "n3", model: { draft: "three" } },
-            { key: "n4", model: { draft: "Note n4" } }
+            { key: "n2", generation: 1, model: { draft: "draft 2" } },
+            { key: "n3", generation: 2, model: { draft: "three" } },
+            { key: "n4", generation: 3, model: { draft: "Note n4" } }
           ]
-        }
+        },
+        generations: 4
       })
       // The second layout shows other things, and holds the same.
       assert.isTrue(placed.text.includes("edit n2"))
@@ -264,8 +265,58 @@ describe("Composed", () => {
     s.send(Composed.childMessage("rows", "n1", RowMessage.Save()))
     // The row's Command is the owner's to run: its result comes back as the row's message.
     s.resolve(SaveNote, undefined)
-    assert.deepStrictEqual(s.model.children.rows, [{ key: "n1", model: { draft: "one" } }])
+    assert.deepStrictEqual(s.model.children.rows, [{ key: "n1", generation: 0, model: { draft: "one" } }])
     assert.deepStrictEqual(s.model.own.saved, ["n1=one"])
+  })
+
+  it("drops the result of a Command whose row left, when another row has its key", () => {
+    const { Notes } = makeApp("list")
+    const s = Story.start(Notes, {}).loaded("notes", [note("n1")])
+    s.send(Composed.childMessage("rows", "n1", RowMessage.Typed({ value: "old" })))
+    s.send(Composed.childMessage("rows", "n1", RowMessage.Save())).keepPending(SaveNote)
+    // The row leaves with its save in flight, and a refetch brings its key back.
+    s.loaded("notes", [])
+    s.loaded("notes", [note("n1")])
+    s.resolve(SaveNote, undefined)
+    assert.deepStrictEqual(s.model.children.rows.map((row) => row.model), [{ draft: "Note n1" }])
+    assert.deepStrictEqual(s.model.own.saved, [])
+  })
+
+  it.effect("follows a change of props that changes which rows exist", () => {
+    const Picked = Composed.make(
+      Component.define({
+        name: "Picked",
+        props: Schema.Struct({ id: Schema.String }),
+        model: Schema.Struct({}),
+        message: Schema.Never,
+        elements: Html
+      }),
+      {
+        children: {
+          rows: { component: Row, each: (_model, props) => [{ key: props.id, props: { note: note(props.id) } }] }
+        },
+        init: () => ({}),
+        update: (model) => model,
+        view: (_model, h) => h.div(...h.children.rows.all().map(([, row]) => row))
+      }
+    )
+    const Pick = Schema.TaggedStruct("Pick", { id: Schema.String })
+    const Picker = Component.define({ name: "Picker", model: Schema.String, message: Pick, elements: Html }).make({
+      init: () => "a",
+      update: (_id, message) => message.id,
+      view: (id, h) => h.main(Picked(h, { key: "picked", props: { id } }))
+    })
+    return Effect.gen(function*() {
+      const root = yield* TestHost.mount(Picker, {})
+      yield* TestHost.settle
+      root.send({ _tag: "Pick", id: "b" })
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "edit bNote b")
+      // The props change and the message that follows it are in the log, so a replay ends with the same row.
+      const replay = Story.fromLog(Picked, root.log(), { path: "/Picker/Picked[picked]" })
+      assert.isUndefined(replay.divergence)
+      assert.deepStrictEqual(replay.model.children.rows.map((row) => row.key), ["b"])
+    }).pipe(Effect.provide(SaveNote.layer), Effect.scoped, Effect.provide(TestHost.layer()))
   })
 
   it("fails the transition that gives one key to two members", () => {

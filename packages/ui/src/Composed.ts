@@ -21,12 +21,15 @@
 import * as Option from "effect/Option"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Schema from "effect/Schema"
+import * as Stream from "effect/Stream"
 import * as Command from "./Command.ts"
 import * as Component from "./Component.ts"
+import * as Subscription from "./Subscription.ts"
 import type * as View from "./View.ts"
 
 const childTag = "~composed/Child"
 const queryTag = "~composed/QueryChanged"
+const reconcileTag = "~composed/Reconcile"
 
 /**
  * A keyed collection of one component. `each` returns the members the
@@ -51,6 +54,8 @@ export interface Keyed<C, Model, Props, Queries, Msg> {
 
 /**
  * One member of a keyed collection as the owner's Model stores it.
+ * `generation` tells it from a member that had its key before: every member
+ * the owner creates gets the next one.
  *
  * @stability experimental
  * @category models
@@ -58,11 +63,13 @@ export interface Keyed<C, Model, Props, Queries, Msg> {
  */
 export interface Entry<C> {
   readonly key: string
+  readonly generation: number
   readonly model: Component.Model<C>
 }
 
 /**
- * The Model of a composed component: its own, and its children's by name.
+ * The Model of a composed component: its own, its children's by name, and
+ * how many children it has created, which is the next member's generation.
  *
  * @stability experimental
  * @category models
@@ -71,10 +78,15 @@ export interface Entry<C> {
 export interface Model<Own, C> {
   readonly own: Own
   readonly children: { readonly [K in keyof C]: ReadonlyArray<Entry<C[K]>> }
+  readonly generations: number
 }
 
 /**
- * A message for one child, as the owner receives it.
+ * A message for one child, as the owner receives it. With a `generation`
+ * it is for that member only: the owner drops it when the member is gone,
+ * even if another one has its key. A child's own messages carry one, from
+ * its view and from its Commands. Without it, it is for the member that has
+ * the key.
  *
  * @stability experimental
  * @category models
@@ -85,6 +97,7 @@ export type ChildMessage<C> = {
     readonly _tag: typeof childTag
     readonly child: K
     readonly key: string
+    readonly generation?: number
     readonly message: Component.Message<C[K]>
   }
 }[keyof C]
@@ -100,6 +113,20 @@ export type ChildMessage<C> = {
 export interface QueryChanged {
   readonly _tag: typeof queryTag
   readonly name: string
+}
+
+/**
+ * The owner's message for props that changed which members `each` returns.
+ * A props change never reaches `update`, so a Subscription of the owner
+ * sends this one step after the change, and its `update` makes the
+ * children match.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Reconcile {
+  readonly _tag: typeof reconcileTag
 }
 
 /**
@@ -206,7 +233,8 @@ export type Helper<Msg, Props, V, L, C> =
   }
 
 /**
- * A message for the child `key` of the collection `child`.
+ * A message for the child `key` of the collection `child`, whichever
+ * member has that key when it arrives.
  *
  * @stability experimental
  * @category constructors
@@ -219,11 +247,20 @@ export const childMessage = <const K extends string, M>(child: K, key: string, m
   readonly message: M
 } => ({ _tag: childTag, child, key, message })
 
+const memberMessage = (child: string, entry: Entry<any>, message: unknown) => ({
+  _tag: childTag,
+  child,
+  key: entry.key,
+  generation: entry.generation,
+  message
+})
+
 type Kids = { readonly [name: string]: ReadonlyArray<Entry<any>> }
 
 interface State {
   own: unknown
   kids: Kids
+  generations: number
   readonly commands: Array<Command.Command<any, any>>
   readonly events: Array<unknown>
 }
@@ -268,7 +305,14 @@ const makeShell = (component: any): any =>
  *
  * In this prototype a child has no queries, Subscriptions, slots or shared
  * state: `make` throws for one that does. A child's Commands run on the
- * owner, and its `h.isRunning` and `h.id` see nothing of its own.
+ * owner, and its `h.isRunning` and `h.id` see nothing of its own. A
+ * Command of a child that left isn't interrupted: it runs to its end and the
+ * owner drops its result.
+ *
+ * Membership follows the owner's messages and query results in the
+ * transition that takes them. It follows a change of props one step later,
+ * through the owner's `~composed/Reconcile` Subscription. Until then the
+ * view places the members that are in both.
  *
  * @stability experimental
  * @category constructors
@@ -310,7 +354,7 @@ export const make = <
   Name,
   Props,
   Model<M, C>,
-  Msg | ChildMessage<C> | QueryChanged,
+  Msg | ChildMessage<C> | QueryChanged | Reconcile,
   Events,
   Exclude<
     | Component.StepRequirements<UI | U>
@@ -342,7 +386,7 @@ export const make = <
           return entry === undefined ? Option.none() : Option.some({
             model: entry.model,
             send: (message: unknown) => {
-              scope.sends.push(childMessage(name, key, message))
+              scope.sends.push(memberMessage(name, entry, message))
             }
           })
         }
@@ -359,7 +403,7 @@ export const make = <
     view: (_model: unknown, h: any) => h.text("")
   })
 
-  const collect = (state: State, queue: Array<unknown>, name: string, key: string, next: any): void => {
+  const collect = (state: State, queue: Array<unknown>, name: string, entry: Entry<any>, next: any): void => {
     if ((next.sends?.length ?? 0) > 0 || (next.lists?.length ?? 0) > 0) {
       throw new Error(
         "Composed: " + JSON.stringify(definition.name) + " children." + name + " sends to a child or loads more"
@@ -369,14 +413,14 @@ export const make = <
       state.commands.push(
         Command.map(
           command,
-          (message: unknown) => Component.isNoop(message) ? message : childMessage(name, key, message)
+          (message: unknown) => Component.isNoop(message) ? message : memberMessage(name, entry, message)
         )
       )
     }
     const onEmit = specs[name].onEmit
     if (onEmit === undefined) return
     for (const event of next.events) {
-      const message = onEmit(key, event)
+      const message = onEmit(entry.key, event)
       if (message !== undefined) queue.push(message)
     }
   }
@@ -415,8 +459,9 @@ export const make = <
         }
         same = false
         const next = spec.component.init(entry.props)
-        collect(state, queue, name, entry.key, next)
-        return { key: entry.key, model: next.model }
+        const made = { key: entry.key, generation: state.generations++, model: next.model }
+        collect(state, queue, name, made, next)
+        return made
       })
       if (!same) (kids ??= { ...state.kids })[name] = after
     }
@@ -428,23 +473,31 @@ export const make = <
     state: State,
     queue: Array<unknown>,
     inputs: { readonly [name: string]: Map<string, unknown> },
-    message: { readonly child: string; readonly key: string; readonly message: unknown }
+    message: {
+      readonly child: string
+      readonly key: string
+      readonly generation?: number
+      readonly message: unknown
+    }
   ): void => {
     const entries = state.kids[message.child]
     const index = entries === undefined ? -1 : entries.findIndex((entry) => entry.key === message.key)
     // A child that is gone: what is still in flight for it, a Command's result say, settles here.
     if (index === -1) return
+    const entry = entries[index]
+    // Another member has its key now.
+    if (message.generation !== undefined && message.generation !== entry.generation) return
     const next = specs[message.child].component.update(
-      entries[index].model,
+      entry.model,
       message.message,
       inputs[message.child].get(message.key)
     )
-    if (next.model !== entries[index].model) {
+    if (next.model !== entry.model) {
       const after = entries.slice()
-      after[index] = { key: message.key, model: next.model }
+      after[index] = { ...entry, model: next.model }
       state.kids = { ...state.kids, [message.child]: after }
     }
-    collect(state, queue, message.child, message.key, next)
+    collect(state, queue, message.child, entry, next)
   }
 
   // One transition: the messages in `queue`, and every message they lead to, until none is left.
@@ -458,7 +511,7 @@ export const make = <
         )
       }
       const message = queue.shift()
-      if (message?._tag === queryTag) continue
+      if (message?._tag === queryTag || message?._tag === reconcileTag) continue
       if (message?._tag === childTag) {
         deliver(state, queue, inputs, message)
       } else {
@@ -513,7 +566,7 @@ export const make = <
         shells[name](h, {
           key: name + ":" + entry.key,
           props: { model: entry.model, props: propsOf().get(entry.key) },
-          onEmit: (message: unknown) => childMessage(name, entry.key, message)
+          onEmit: (message: unknown) => memberMessage(name, entry, message)
         })
       children[name] = {
         get keys() {
@@ -537,8 +590,11 @@ export const make = <
       own: definition.model,
       children: Schema.Struct(Object.fromEntries(names.map((name) => [
         name,
-        Schema.Array(Schema.Struct({ key: Schema.String, model: specs[name].component.model }))
-      ])))
+        Schema.Array(
+          Schema.Struct({ key: Schema.String, generation: Schema.Number, model: specs[name].component.model })
+        )
+      ]))),
+      generations: Schema.Number
     }),
     message: Schema.Union([
       definition.message,
@@ -546,10 +602,12 @@ export const make = <
         Schema.TaggedStruct(childTag, {
           child: Schema.Literal(name),
           key: Schema.String,
+          generation: Schema.optionalKey(Schema.Number),
           message: specs[name].component.message
         })
       ),
-      Schema.TaggedStruct(queryTag, { name: Schema.String })
+      Schema.TaggedStruct(queryTag, { name: Schema.String }),
+      Schema.TaggedStruct(reconcileTag, {})
     ]),
     events: definition.events,
     elements: definition.elements,
@@ -560,20 +618,36 @@ export const make = <
       const state: State = {
         own: first.model,
         kids: emptyKids,
+        generations: 0,
         commands: [...first.commands],
         events: [...first.events]
       }
       run(state, [], $.props, unloaded)
-      return finish($.set({ own: state.own, children: state.kids }), state)
+      return finish($.set({ own: state.own, children: state.kids, generations: state.generations }), state)
     },
     update: (model: Model<any, any>, message: unknown, $: any) => {
-      const state: State = { own: model.own, kids: model.children, commands: [], events: [] }
+      const state: State = {
+        own: model.own,
+        kids: model.children,
+        generations: model.generations,
+        commands: [],
+        events: []
+      }
       run(state, [message], $.props, $.queries)
       const next = state.own === model.own && state.kids === model.children
         ? model
-        : { own: state.own, children: state.kids }
+        : { own: state.own, children: state.kids, generations: state.generations }
       return finish($.set(next), state)
     },
+    // A props change doesn't reach `update`: while the children don't match `each`, this asks for the message that does.
+    subscriptions: (model: Model<any, any>, props: unknown, results: unknown) =>
+      names.some((name) => {
+          const wanted = specs[name].each(model.own, props, results)
+          const stored = model.children[name]
+          return wanted.length !== stored.length || wanted.some((entry, index) => entry.key !== stored[index].key)
+        })
+        ? [Subscription.make(reconcileTag, Stream.succeed({ _tag: reconcileTag }))]
+        : [],
     view: (model: Model<any, any>, h: any) => options.view(model.own, strict(model, h) as any)
   })
 }
