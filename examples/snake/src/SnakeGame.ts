@@ -35,6 +35,16 @@ const generateApplePosition = (snake: Snake.Snake) =>
     Command.map((position) => SnakeGameMessage.CompletedGenerateApplePosition({ position }))
   )
 
+// What a new game starts from. A restart resets these and keeps the apple and
+// the high score.
+const NEW_GAME = {
+  snake: Snake.create(GAME.INITIAL_POSITION),
+  direction: GAME.INITIAL_DIRECTION,
+  nextDirection: GAME.INITIAL_DIRECTION,
+  gameState: "NotStarted",
+  points: 0
+} satisfies Partial<SnakeGameModel>
+
 // The keys `update` matches, in lower case only, as Foldkit's does.
 const MOVE_DIRECTIONS: ReadonlyMap<string, Direction.Direction> = new Map([
   ["ArrowUp", "Up"],
@@ -61,9 +71,7 @@ const tickInterval = (points: number): number => Math.max(GAME_SPEED.MIN_INTERVA
 const cellClass = (x: number, y: number, model: SnakeGameModel): string => {
   const cell = { x, y }
   if (Position.equivalence(cell, model.snake[0])) return "bg-green-700"
-  if (Array.some(Array.tailNonEmpty(model.snake), (segment) => Position.equivalence(cell, segment))) {
-    return "bg-green-500"
-  }
+  if (Snake.contains(model.snake, cell)) return "bg-green-500"
   if (Position.equivalence(cell, model.apple)) return "bg-red-500"
   return "bg-gray-800"
 }
@@ -91,18 +99,9 @@ const Grid = SnakeGameDef.fragment((h, model: SnakeGameModel) =>
 )
 
 export const SnakeGame = SnakeGameDef.make({
-  init: ($) => {
-    const snake = Snake.create(GAME.INITIAL_POSITION)
-    return $.set({
-      snake,
-      apple: { x: 15, y: 15 },
-      direction: GAME.INITIAL_DIRECTION,
-      nextDirection: GAME.INITIAL_DIRECTION,
-      gameState: "NotStarted",
-      points: 0,
-      highScore: 0
-    }).run(generateApplePosition(snake))
-  },
+  init: ($) =>
+    $.set({ ...NEW_GAME, apple: { x: 15, y: 15 }, highScore: 0 })
+      .run(generateApplePosition(NEW_GAME.snake)),
   update: {
     PressedKey: (model, { key }, $) => {
       const direction = MOVE_DIRECTIONS.get(key)
@@ -113,15 +112,7 @@ export const SnakeGame = SnakeGameDef.make({
         return { ...model, gameState: NEXT_ON_SPACE[model.gameState] }
       }
       if (key === "r") {
-        const snake = Snake.create(GAME.INITIAL_POSITION)
-        return $.set({
-          ...model,
-          snake,
-          direction: GAME.INITIAL_DIRECTION,
-          nextDirection: GAME.INITIAL_DIRECTION,
-          gameState: "NotStarted",
-          points: 0
-        }).run(generateApplePosition(snake))
+        return $.set({ ...model, ...NEW_GAME }).run(generateApplePosition(NEW_GAME.snake))
       }
       return model
     },
@@ -158,7 +149,7 @@ export const SnakeGame = SnakeGameDef.make({
       (interval) =>
         Stream.tick(Duration.millis(interval)).pipe(
           Stream.drop(1),
-          Stream.map(() => SnakeGameMessage.TickedClock())
+          Stream.as(SnakeGameMessage.TickedClock())
         )
     ),
     // Listens in every state, since R restarts after game over. A message

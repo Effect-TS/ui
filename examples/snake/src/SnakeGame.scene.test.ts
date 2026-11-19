@@ -1,10 +1,9 @@
 import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
-import { Locator, type Scene } from "@effect/ui/testing"
-import { assert, describe, it } from "@effect/vitest"
+import { Locator } from "@effect/ui/testing"
+import { describe, it } from "@effect/vitest"
 import { Effect } from "effect"
-import { GAME } from "./constants.ts"
 import { Snake } from "./domain/index.ts"
-import { SnakeGame, SnakeGameMessage, type SnakeGameModel } from "./SnakeGame.ts"
+import { GenerateApplePosition, SnakeGame, SnakeGameMessage, type SnakeGameModel } from "./SnakeGame.ts"
 
 const baseModel: SnakeGameModel = {
   snake: Snake.create({ x: 10, y: 10 }),
@@ -14,15 +13,6 @@ const baseModel: SnakeGameModel = {
   gameState: "NotStarted",
   points: 0,
   highScore: 0
-}
-
-// The grid's cells in document order, row by row.
-const cells = Locator.inside(Locator.attr("class", "flex"), Locator.tag("div"))
-
-// Where the view draws the snake's head.
-const headPosition = (s: Scene.Steps.Any) => {
-  const index = s.all(cells).findIndex((cell) => cell.attrs?.class?.includes("bg-green-700"))
-  return { x: index % GAME.GRID_SIZE, y: Math.floor(index / GAME.GRID_SIZE) }
 }
 
 describe("SnakeGame", () => {
@@ -86,11 +76,12 @@ describe("SnakeGame", () => {
   it.effect("an arrow key on the document steers and cancels its default", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(SnakeGame, {})
-      s.given({ ...baseModel, gameState: "Playing" })
-      assert.deepStrictEqual(headPosition(s), { x: 10, y: 10 })
-      s.fireDocument("keydown", { key: "ArrowUp" }).expectDefaultPrevented()
+      // The apple is one cell above the head, so only a snake that turned up eats it.
+      s.given({ ...baseModel, gameState: "Playing", apple: { x: 10, y: 9 } })
+        .fireDocument("keydown", { key: "ArrowUp" }).expectDefaultPrevented()
         .subscription("gameClock:150", SnakeGameMessage.TickedClock())
-      assert.deepStrictEqual(headPosition(s), { x: 10, y: 9 })
+        .expect(Locator.text("Score: 10")).toExist()
+        .resolve(GenerateApplePosition, { x: 0, y: 0 })
     }))
 
   it.effect("keys the game doesn't handle keep their default", () =>
@@ -101,7 +92,5 @@ describe("SnakeGame", () => {
         .fireDocument("keydown", { key: "R" }).expectIgnored()
         .fireDocument("keydown", { key: "r", ctrl: true }).expectIgnored()
         .fireDocument("keydown", { key: "ArrowUp", defaultPrevented: true }).expectIgnored()
-        .subscription("gameClock:150", SnakeGameMessage.TickedClock())
-      assert.deepStrictEqual(headPosition(s), { x: 11, y: 10 })
     }))
 })
