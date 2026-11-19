@@ -1344,6 +1344,46 @@ describe("HtmlServer", { concurrent: false }, () => {
         "head title: the server has \"Inner (server)\", the client \"Inner (client)\""
       ])
     })))
+  it.effect("compares the head of a child that waits for its Layer once it adopts, matching or not", () =>
+    hosted(Effect.gen(function*() {
+      class Slow extends Context.Service<Slow, string>()("test/Slow") {}
+      const titled = (title: () => string) => {
+        const Child = Component.define({
+          name: "Child",
+          model: Schema.Struct({}),
+          message: Schema.Never,
+          elements: Html
+        }).make({
+          init: () => ({}),
+          update: (model) => model,
+          head: () => [Head.title(title())],
+          view: (_, h) => h.p("child")
+        }).pipe(Component.provide(Layer.effect(Slow, Effect.as(Effect.sleep("30 millis"), "ready"))))
+        const Message = UiSchema.TaggedEnum({ Mounted: {} })
+        return Component.define({
+          name: "Parent",
+          model: Schema.String,
+          message: Message,
+          elements: Html
+        }).make({
+          init: () => "Parent",
+          update: () => "Mounted",
+          head: (title) => [Head.title(title)],
+          // An early `onMount` update while the child waits: the comparison still uses the adopted state.
+          view: (_, h) =>
+            h.div.onMount(mountSending("Rename", Message.Mounted())).children(Child(h, { key: "c", props: {} }))
+        })
+      }
+
+      const matching = yield* ssr(titled(() => "Child"), {})
+      expect(matching.adopted).toEqual(["/Parent", "/Parent/Child[c]"])
+      expect(matching.head.title).toBe("Child")
+
+      let calls = 0
+      const drifting = yield* Effect.flip(ssr(titled(() => calls++ === 0 ? "Child" : "Drift"), {}))
+      expect(drifting.problems).toEqual(["head title: the server has \"Child\", the client \"Drift\""])
+    })))
+
   it.effect("compares the client's first fold, so removing an instance while another waits isn't a mismatch", () =>
     hosted(Effect.gen(function*() {
       class Slow extends Context.Service<Slow, string>()("test/Slow") {}

@@ -609,6 +609,11 @@ export interface Root {
   readonly buildsPendingSince: (flush: number) => number
   /** The head the last fold computed, in the root vocabulary's form, whether or not the host applies it. */
   readonly head: () => unknown
+  /**
+   * Hydration: the head of the state every instance adopted, each evaluated at its adoption, before any
+   * update of its own. `undefined` until the last instance adopts, and on a mount that didn't hydrate.
+   */
+  readonly adoptionHead: () => unknown
   /** Completes once no child is waiting to adopt the server's nodes. */
   readonly adopted: Effect.Effect<void>
   /** Hydration: the paths of the children still waiting for their Layer before they adopt. */
@@ -722,6 +727,18 @@ const ignoreEvents = () => undefined
 
 /** How a root folds its head when its vocabulary has no fold of its own: the title only. */
 const neutralFold: View.HeadFold<Head.Entry, Head.Head> = { merge: Head.merge, title: (head) => head.title }
+
+/** The fold of a component's vocabulary, or the title-only one. */
+const foldOf = (component: Component.Any): View.HeadFold => component.elements()?.head ?? neutralFold
+
+/** One instance's fold node, as a hydrating mount records it: its entries and reducer, over the state it adopted. */
+interface HeadRecord {
+  readonly inst: Instance
+  readonly fold: View.HeadFold
+  readonly entries: ReadonlyArray<unknown>
+  readonly reduce: ((below: unknown) => unknown) | undefined
+  readonly children: ReadonlyArray<Instance>
+}
 
 /** A tree with no entries, which folds to the vocabulary's empty head. */
 const emptyTree: Head.Tree<any, any> = { entries: [], children: [] }
@@ -1403,9 +1420,20 @@ const setup = (
   // Set when a view changed: an instance rendered, or the tree lost or failed an instance.
   let viewChanged = false
   // The root vocabulary's fold, or the title-only one.
-  const headFold: View.HeadFold = component.elements()?.head ?? neutralFold
-  const emptyHead: unknown = headFold.merge(emptyTree)
+  const rootFold = foldOf(component)
+  const emptyHead: unknown = rootFold.merge(emptyTree)
   let merged: unknown = emptyHead
+  // The fold that computed `merged`.
+  let mergedFold = rootFold
+  // The fold of the tree being folded: the root's, or under a host-neutral root, the first vocabulary
+  // in the tree with a fold of its own, so an Html child keeps its entries.
+  let folding = rootFold
+  // Hydration: each instance's node from the first kept fold that saw it, which evaluated the state it
+  // adopted, until every instance has adopted. Then the fold of those nodes, the head of the adopted state.
+  let adoption: Map<Instance, HeadRecord> | undefined = hydrating === undefined ? undefined : new Map()
+  let adoptionHead: unknown = undefined
+  // The nodes of the fold under way, when it records them.
+  let seen: Array<HeadRecord> | undefined
   // Set when `merged` holds a head the host hasn't been given.
   let headChanged = false
   /** Whether this mount gives its head to the host. An embedded mount computes it and leaves the document alone. */
@@ -1423,30 +1451,85 @@ const setup = (
     const head = inst.component.head
     const entries = head === undefined ? none : guard(inst, "head", () => head(inst.model, inst.props, inst.results))
     if (entries === undefined) return { path: inst.path, ...emptyTree }
-    const reduce = inst.component.reduceHead
+    const fold = foldOf(inst.component)
+    if (folding === neutralFold) folding = fold
+    const children = inst.rendered.flatMap(placedBy)
+    const reduce = reducer(inst, fold)
+    seen?.push({ inst, fold, entries, reduce, children })
     return {
       path: inst.path,
       entries,
-      children: inst.rendered.flatMap(headChildren),
-      reduce: reduce === undefined ? undefined : (below) => reduce(inst.model, below),
+      children: children.map(headNode),
+      reduce,
       onError: (error) => failInstance(inst, Cause.die(error), "head")
     }
   }
+  /**
+   * An instance's `reduceHead` over its Model now. Under another vocabulary's fold, its value is laid
+   * over `below`: a host-neutral reducer sets the title and keeps the Html fields.
+   */
+  const reducer = (inst: Instance, fold: View.HeadFold): ((below: unknown) => unknown) | undefined => {
+    const reduce = inst.component.reduceHead
+    if (reduce === undefined) return undefined
+    const model = inst.model
+    return (below) => {
+      const value = reduce(model, below)
+      return fold === folding ? value : { ...(below as object), ...(value as object) }
+    }
+  }
   /** The instances a rendered node places, in document order: a fallback's content included. */
-  const headChildren = (rendered: Rendered): Array<Head.Tree<unknown, unknown>> => {
+  const placedBy = (rendered: Rendered): Array<Instance> => {
     switch (rendered._tag) {
       case "Child":
       case "Outlet":
-        return [headNode(rendered.inst)]
+        return [rendered.inst]
       case "Element":
-        return rendered.children.flatMap(headChildren)
+        return rendered.children.flatMap(placedBy)
       case "Fallback":
-        return headChildren(rendered.inner)
+        return placedBy(rendered.inner)
       // A detached child's view is out of the document, and its head with it.
       case "Detached":
       case "Text":
         return []
     }
+  }
+
+  /** The fold of the recorded nodes: the head of the state each instance adopted. */
+  const foldAdopted = (records: ReadonlyMap<Instance, HeadRecord>, root: Instance): unknown => {
+    folding = rootFold
+    const build = (inst: Instance): Head.Tree<unknown, unknown> => {
+      const record = records.get(inst)
+      if (record === undefined) return { path: inst.path, ...emptyTree }
+      if (folding === neutralFold) folding = record.fold
+      // A template or reducer that throws here threw nowhere else: it's skipped, as the server skips it.
+      return {
+        path: inst.path,
+        entries: record.entries,
+        children: record.children.map(build),
+        reduce: record.reduce,
+        onError: () => {}
+      }
+    }
+    const tree = build(root)
+    return folding.merge(tree)
+  }
+
+  /**
+   * Records the nodes of a kept fold on a hydrating mount, and once every instance has adopted, folds
+   * them. Without an instance that waited, the first fold is already the adopted state's.
+   */
+  const recordAdoption = (nodes: ReadonlyArray<HeadRecord>, next: unknown) => {
+    const records = adoption
+    if (records === undefined) return
+    const first = records.size === 0
+    for (const node of nodes) if (!records.has(node.inst)) records.set(node.inst, node)
+    if (adoptedDone) finishAdoptionHead(first ? next : undefined)
+  }
+  const finishAdoptionHead = (folded: unknown) => {
+    const records = adoption
+    if (records === undefined || rootInstance === undefined) return
+    adoption = undefined
+    adoptionHead = folded !== undefined ? folded : foldAdopted(records, rootInstance)
   }
 
   /**
@@ -1477,11 +1560,19 @@ const setup = (
     if (root === undefined || !viewChanged || dirty.size > 0 || deferred.length > 0) return
     viewChanged = false
     const conflicts: Array<Head.Conflict> = []
-    const next = headFold.merge(headNode(root), { onConflict: (conflict) => conflicts.push(conflict) })
+    folding = rootFold
+    const nodes: Array<HeadRecord> | undefined = adoption === undefined ? undefined : []
+    seen = nodes
+    const tree = headNode(root)
+    seen = undefined
+    const fold = folding
+    const next = fold.merge(tree, { onConflict: (conflict) => conflicts.push(conflict) })
     if (viewChanged || dirty.size > 0 || deferred.length > 0) return
     merged = next
+    mergedFold = fold
     headChanged = true
     for (const conflict of conflicts) report(conflict)
+    if (nodes !== undefined) recordAdoption(nodes, next)
   }
 
   /** After the nodes commit: head sync, then the router's hook. Both wait until every instance has adopted. */
@@ -1493,7 +1584,7 @@ const setup = (
     }
     // A head still to fold belongs to the flush already scheduled, which calls the hook.
     if (hooks !== undefined && handle !== undefined && !viewChanged) {
-      hooks.afterFlush(handle, { flush: flushes, title: headFold.title(merged), buildsPendingSince })
+      hooks.afterFlush(handle, { flush: flushes, title: mergedFold.title(merged), buildsPendingSince })
     }
   }
 
@@ -5741,6 +5832,7 @@ const setup = (
       // The tree's entries go with it, so the host puts the shell's values back.
       if (merged !== emptyHead) {
         merged = emptyHead
+        mergedFold = rootFold
         if (ownsHead && adoptedDone) host.head?.(merged)
       }
     })
@@ -5978,6 +6070,10 @@ const setup = (
     flush: () => flushes,
     buildsPendingSince,
     head: () => merged,
+    adoptionHead: () => {
+      if (adoptedDone) finishAdoptionHead(undefined)
+      return adoptionHead
+    },
     adopted: Effect.callback<void>((resume) => {
       if (adoptedDone && !reportPending) resume(Effect.void)
       else adoptedWaiters.push(() => resume(Effect.void))

@@ -8,11 +8,11 @@ The mount now folds the head once per flush, over the placed view tree. A compon
 
 New `reduceHead: (model, below) => head` component option. `below` is the folded head of the instance and everything its view placed, and the root's result is final. A layout can use it to derive `og:title` from the title that won, for example.
 
-New `head: false` mount option for `BrowserHost.mount`, `BrowserHost.mountEffect` and `Renderer.mount`. An embedded mount still computes its head, but never writes `document.title`, a head tag or a document attribute. Hosts on one document now share one baseline of the shell's values.
+New `head: false` mount option for `BrowserHost.mount`, `BrowserHost.mountEffect` and `Renderer.mount`. An embedded mount still computes its head, but never writes `document.title`, a head tag or a document attribute. Hosts on one document now share one baseline of the shell's values, which goes back to the document when the last host that wrote it is disposed.
 
 Other changes:
 
 - `Router.Settled.head` is now `Settled.title: string | undefined`.
 - `Renderer.Prerendered` takes the head type as a second parameter.
-- `Renderer.Hydration.adopted` is removed. `ssr` compares the server's head with the client's first fold of the server's state.
+- `Renderer.Hydration.adopted` is removed. `ssr` compares the server's head with the client's fold of the server's state, each instance evaluated when it adopts, including one that waited for its Layer.
 - `TestRoot.head` returns the root vocabulary's head. Write `root.head<HtmlHead.HtmlHead>()` to read an `Html` root's.

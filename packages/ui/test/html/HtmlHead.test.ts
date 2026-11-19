@@ -1,5 +1,5 @@
 import { Component, Head, UiSchema } from "@effect/ui"
-import { Html, HtmlHead } from "@effect/ui/html"
+import { Html, HtmlHead, HtmlServer } from "@effect/ui/html"
 import { TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
@@ -210,4 +210,44 @@ describe("HtmlHead", () => {
       ])
       assert.deepStrictEqual(post.jsonLd.map((entry) => JSON.parse(entry.json)["@type"]), ["WebSite", "BlogPosting"])
     }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
+
+  const Neutral = Component.define({ name: "Neutral", model: Schema.Null, message: Schema.Never }).make({
+    init: () => null,
+    update: (model) => model,
+    reduceHead: () => ({ title: "Neutral" }),
+    view: (_, h) => h.text("neutral")
+  })
+  const Page = Component.define({ name: "Page", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+    init: () => null,
+    update: (model) => model,
+    head: () => [HtmlHead.lang("en"), HtmlHead.meta({ name: "description", content: "Page" })],
+    view: (_, h) => h.main(Neutral(h, { key: "n", props: {} }))
+  })
+  const Shell = Component.define({ name: "Shell", model: Schema.Null, message: Schema.Never }).make({
+    init: () => null,
+    update: (model) => model,
+    head: () => [Head.title("Shell")],
+    view: (_, h) => Page(h, { key: "p", props: {} })
+  })
+
+  it.effect("lets a host-neutral reducer under an Html root change the title and keep the Html fields", () =>
+    Effect.gen(function*() {
+      const root = yield* TestHost.mount(Page, {})
+      yield* TestHost.settle
+      const head = root.head<HtmlHead.HtmlHead>()
+      assert.strictEqual(head.title, "Neutral")
+      assert.strictEqual(head.html.lang, "en")
+      assert.deepStrictEqual(head.meta.map((meta) => meta.content), ["Page"])
+      const shell = yield* TestHost.mount(Shell, {})
+      yield* TestHost.settle
+      assert.strictEqual(shell.head<HtmlHead.HtmlHead>().html.lang, "en")
+    }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
+
+  it.effect("keeps an Html child's entries under a host-neutral root", () =>
+    Effect.gen(function*() {
+      const rendered = yield* HtmlServer.renderToHtml(Shell, {})
+      assert.include(rendered.head, "<title data-eui>Neutral</title>")
+      assert.include(rendered.head, "content=\"Page\"")
+      assert.include(rendered.htmlAttributes, "lang=\"en\"")
+    }))
 })

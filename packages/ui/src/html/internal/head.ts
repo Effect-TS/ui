@@ -61,6 +61,8 @@ interface Owner {
 interface Shared {
   readonly sync: (head: Head.HtmlHead) => void
   hosts: number
+  /** Whether a host has written the document, so the shell's values need putting back. */
+  written: boolean
 }
 
 /** The sync of each document with a live host: one baseline per document, not per host. */
@@ -72,9 +74,10 @@ const shared = new WeakMap<Document, Shared>()
  * **Details**
  *
  * Hosts on one document share one sync, made with the first host's `warn`,
- * so the shell's values are captured once, before any host writes. Once
- * every host on the document is released, the next one captures the shell
- * again.
+ * so the shell's values are captured once, before any host writes. When
+ * the last host on the document is released, the shell's values go back if
+ * any host wrote, and the next host captures the shell again. A server's
+ * head that no host synced stays as it is.
  *
  * @internal
  */
@@ -84,18 +87,23 @@ export const make = (
 ): { readonly sync: (head: Head.HtmlHead) => void; readonly release: () => void } => {
   let entry = shared.get(document)
   if (entry === undefined) {
-    entry = { sync: makeSync(document, warn), hosts: 0 }
+    entry = { sync: makeSync(document, warn), hosts: 0, written: false }
     shared.set(document, entry)
   }
   const current = entry
   current.hosts++
   let released = false
   return {
-    sync: current.sync,
+    sync: (head) => {
+      current.written = true
+      current.sync(head)
+    },
     release: () => {
       if (released) return
       released = true
-      if (--current.hosts === 0 && shared.get(document) === current) shared.delete(document)
+      if (--current.hosts > 0 || shared.get(document) !== current) return
+      shared.delete(document)
+      if (current.written) current.sync(Head.empty)
     }
   }
 }

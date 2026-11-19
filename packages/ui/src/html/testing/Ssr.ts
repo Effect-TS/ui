@@ -247,10 +247,10 @@ const stepLimit = 10_000
  * gives up.
  *
  * The head check compares the server's folded head with the client's fold
- * of the server's state: the head the mount's first render computes, before
- * any `onMount` work or later update. An instance still waiting for its
- * Layer at that render isn't in the client's fold, so give a test the
- * Layers ready when a waiting subtree contributes head entries.
+ * of the server's state, made once every instance has adopted: each
+ * instance's head as it evaluated at its adoption, before any `onMount`
+ * work or later update. An instance that waited for its Layer counts with
+ * the head it evaluated when it adopted.
  *
  * `frames` projects the container after each client commit, starting from
  * the server's markup, for `root.frames()`. It defaults to the container's
@@ -445,9 +445,6 @@ export const ssr = <
         )
       )
     ) as Effect.Effect<runtime.Root & Renderer.Root<any, any>, never, Exclude<R | RP, Html.Host> | Scope.Scope>
-    // The mount's first render works from the decoded state alone, and its fold runs before any
-    // `onMount` work: this is the fold of the server's state, as the client evaluates it.
-    const clientHead = server.htmlHead(mounted.head())
     const root = yield* TestHost.register(testHost, mounted, clientLog, () => frames.slice())
     let adoptedDone = false
     yield* Effect.forkChild(Effect.andThen(mounted.adopted, Effect.sync(() => adoptedDone = true)))
@@ -467,6 +464,9 @@ export const ssr = <
     }
     // `adopted` can resume before the flush that adopted the last instance commits; its nodes are claimed by now.
     judge()
+    // The fold of the server's state as the client evaluates it: each instance at its adoption, a waiting
+    // one included, before any update such as an `onMount`'s.
+    const clientHead = server.htmlHead(mounted.adoptionHead())
 
     // -- checks ---------------------------------------------------------------
     const log = clientLog.entries()

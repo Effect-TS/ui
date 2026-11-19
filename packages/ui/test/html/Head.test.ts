@@ -198,6 +198,31 @@ describe("BrowserHost head", { concurrent: false }, () => {
     expect(document.body.hasAttribute("data-eui")).toBe(false)
   })
 
+  it("hands the shell's values to the next host once the last one is disposed", () => {
+    document.title = "Shell"
+    document.documentElement.setAttribute("lang", "fr")
+    const first = BrowserHost.makeHost(document)
+    first.head!(
+      head(Head.title("First"), HtmlHead.lang("en"), HtmlHead.meta({ name: "description", content: "First" }))
+    )
+    first.dispose()
+    expect(document.title).toBe("Shell")
+    expect(document.documentElement.getAttribute("lang")).toBe("fr")
+    expect(document.head.querySelector("meta")).toBeNull()
+    const { apply } = sync()
+    apply(head(Head.title("Second")))
+    expect(document.title).toBe("Second")
+    apply(HtmlHead.empty)
+    expect(document.title).toBe("Shell")
+  })
+
+  it("leaves the server's head in place when a host that never synced is disposed", () => {
+    document.head.innerHTML = `<title data-eui>Ada</title><meta name="description" content="About Ada" data-eui>`
+    BrowserHost.makeHost(document).dispose()
+    expect(document.title).toBe("Ada")
+    expect(document.head.querySelector("meta")).not.toBeNull()
+  })
+
   it("keeps unmarked shell tags and warns when an entry duplicates one", () => {
     document.head.innerHTML = `<meta name="description" content="Shell"><link rel="canonical" href="/shell">` +
       `<script type="application/ld+json">{}</script>`
