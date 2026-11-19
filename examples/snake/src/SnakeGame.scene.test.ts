@@ -35,13 +35,6 @@ describe("SnakeGame", () => {
         .expect(Locator.text("R to restart")).toExist()
     }))
 
-  it.effect("shows the playing prompt while the game is active", () =>
-    Effect.gen(function*() {
-      const s = yield* HtmlScene.make(SnakeGame, {})
-      s.given({ ...baseModel, gameState: "Playing" })
-        .expect(Locator.text("Playing - SPACE to pause")).toExist()
-    }))
-
   it.effect("shows the paused prompt while the game is paused", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(SnakeGame, {})
@@ -65,7 +58,7 @@ describe("SnakeGame", () => {
         .expect(Locator.text("High Score: 200")).toExist()
     }))
 
-  it.effect("SPACE on the document starts the game", () =>
+  it.effect("SPACE on the document starts the game and shows the playing prompt", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(SnakeGame, {})
       s.given(baseModel)

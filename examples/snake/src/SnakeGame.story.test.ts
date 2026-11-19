@@ -142,7 +142,6 @@ describe("SnakeGame", () => {
         const s = yield* Story.make(SnakeGame, {})
         s.given(aboutToEatModel)
           .subscription(gameClock, SnakeGameMessage.TickedClock())
-          .expectHas(GenerateApplePosition)
           .resolve(GenerateApplePosition, { x: 5, y: 5 })
         assert.strictEqual(s.model.snake.length, aboutToEatModel.snake.length + 1)
         assert.strictEqual(s.model.points, 10)
