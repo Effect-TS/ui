@@ -2247,35 +2247,45 @@ const setup = (
       })
 
   /** What the host calls for an event on an element `inst` rendered. Made the first time it's asked for. */
-  const makeFire = (inst: Instance): Renderer.Dispatch => (event, handler, payload, onMessage) => {
-      if (inst.closed || inst.waiting) return
-      const message = typeof handler === "function"
-        ? guard(inst, "domEvent", () => (handler as (payload: unknown) => unknown)(payload), event)
-        : handler
-      if (message === undefined) return
-      // Before the message is sent, so the host can still act on its event.
-      onMessage?.()
-      inst.dispatch(message, { _tag: "DomEvent", name: event })
+  const makeFire = (inst: Instance): Renderer.Dispatch => fireOn.bind(inst)
+  // Bound to each instance, not a closure made for it: one object instead of two.
+  function fireOn(
+    this: Instance,
+    event: string,
+    handler: unknown,
+    payload: unknown,
+    onMessage: (() => void) | undefined
+  ): void {
+    const inst = this
+    if (inst.closed || inst.waiting) return
+    const message = typeof handler === "function"
+      ? guard(inst, "domEvent", () => (handler as (payload: unknown) => unknown)(payload), event)
+      : handler
+    if (message === undefined) return
+    // Before the message is sent, so the host can still act on its event.
+    onMessage?.()
+    inst.dispatch(message, { _tag: "DomEvent", name: event })
+  }
+
+  /**
+   * The instance's finalizer. Descendants, Subscriptions and mounts use child Scopes forked later, so
+   * they close first. Then Commands stop, and the close waits for them to exit. One finalizer, run as
+   * the Scope closes: a Scope that holds nothing else needs no Map, and a close with no run to wait
+   * for ends without a fiber.
+   */
+  const finishInstance = (inst: Instance): Effect.Effect<void> => {
+    // However the instance goes, a removed ancestor and failure included, its owners forget it.
+    if (inst.owners !== undefined) { for (const owner of inst.owners.values()) owner.readers?.delete(inst) }
+    const waits = stopRuns(inst)
+    if (waits.length === 0) {
+      unmounted(inst)
+      return Effect.void
     }
+    return Effect.andThen(awaitRuns(waits), Effect.sync(() => unmounted(inst)))
+  }
 
   /** Adds the instance's finalizer to its Scope. */
-  const addInstanceFinalizer = (inst: Instance) => {
-    // Descendants, Subscriptions and mounts use child Scopes forked later, so they close first. Then
-    // Commands stop, and the close waits for them to exit. One finalizer, run as the Scope
-    // closes: a Scope that holds nothing else needs no Map, and a close with no run to wait for
-    // ends without a fiber.
-    const finalizer = () => {
-      // However the instance goes, a removed ancestor and failure included, its owners forget it.
-      if (inst.owners !== undefined) { for (const owner of inst.owners.values()) owner.readers?.delete(inst) }
-      const waits = stopRuns(inst)
-      if (waits.length === 0) {
-        unmounted(inst)
-        return Effect.void
-      }
-      return Effect.andThen(awaitRuns(waits), Effect.sync(() => unmounted(inst)))
-    }
-    ;(inst as Inst).hold(finalizer)
-  }
+  const addInstanceFinalizer = (inst: Instance) => (inst as Inst).hold()
 
   /**
    * Stops an instance's runs as it closes, and returns what the close waits for: every run fiber,
@@ -2298,16 +2308,41 @@ const setup = (
     }
   }
 
+  /** The fields of an instance that most instances never set. */
+  class Rare {
+    owning: Owning | undefined = undefined
+    selection: Instance["selection"] = undefined
+    parked: Instance["parked"] = undefined
+    closes: Instance["closes"] = undefined
+    subscriptions: Instance["subscriptions"] = undefined
+    watches: Instance["watches"] = undefined
+    watchesSynced: Instance["watchesSynced"] = false
+    watched: Instance["watched"] = undefined
+    prefetch: Instance["prefetch"] = undefined
+    keyed: Instance["keyed"] = undefined
+    keyedQueued: Instance["keyedQueued"] = false
+    loadMores: Instance["loadMores"] = undefined
+    mounting: Instance["mounting"] = undefined
+    outbox: Instance["outbox"] = emptyList
+    shares: Instance["shares"] = undefined
+    readers: Instance["readers"] = undefined
+    owners: Instance["owners"] = undefined
+    seen: Instance["seen"] = undefined
+    clash: Instance["clash"] = undefined
+    deferred: Instance["deferred"] = false
+  }
+
   /**
    * An instance: one shape for every instance, so V8 keeps it in fast mode. The fields a feature
    * needs are `undefined` until the feature first does, and collections start out shared and empty.
    */
   class Inst implements Instance {
+    /** The fields most instances never set, made when one is first set. */
+    private rare: Rare | undefined = undefined
     readonly born = ++instancesMade
     author: Instance
     content: ((parts: any) => View.Content<any, any>) | undefined
     env: Env
-    selection: Selection | undefined = undefined
     children: Set<Instance> = noChildren
     props: unknown
     model: unknown = undefined
@@ -2316,38 +2351,20 @@ const setup = (
     onFailure: ((failure: AsyncResult.Failure<never, unknown>) => unknown) | undefined
     failure: Cause.Cause<unknown> | undefined = undefined
     childPaths: ChildPaths | undefined = undefined
-    clash: unknown = undefined
     rendered: Array<Rendered> = emptyList
     waiting = false
     adoptsChildren = false
-    deferred = false
     runs: Array<Run> = emptyList
     left = false
-    parked: Set<unknown> | undefined = undefined
-    closes: Set<Fiber.Fiber<void>> | undefined = undefined
-    subscriptions: Map<string, SubscriptionRun> | undefined = undefined
-    watches: Map<string, WatchRun> | undefined = undefined
-    watchesSynced = false
-    watched: Set<string> | undefined = undefined
-    prefetch: Instance["prefetch"] = undefined
-    keyed: Map<string, KeyedRun> | undefined = undefined
-    keyedQueued = false
     cause: number | undefined = undefined
-    loadMores: Set<() => void> | undefined = undefined
-    mounting: Instance["mounting"] = undefined
-    outbox: Instance["outbox"] = emptyList
-    shares: unknown = undefined
-    readers: Set<Instance> | undefined = undefined
-    readonly owning: Owning | undefined
-    owners: Map<Component.Definition.Any, Instance> | undefined = undefined
-    seen: Map<Instance, unknown> | undefined = undefined
     private fired: Renderer.Dispatch | undefined = undefined
     /**
      * The instance's Scope, made when it's first asked for. Until then the instance's finalizer, `held`,
      * is registered in its parent's Scope: most instances fork nothing and start no work.
      */
     private own: Scope.Closeable | undefined
-    private held: (() => Effect.Effect<void>) | undefined = undefined
+    /** Whether its finalizer waits in its parent's Scope. */
+    private held = false
     /** Closed before it had a Scope of its own. */
     private dead = false
     readonly path: string
@@ -2381,9 +2398,202 @@ const setup = (
       this.props = props
       this.onEmit = onEmit
       this.onFailure = onFailure
-      this.owning = component.definition.shares === undefined
-        ? undefined
-        : { seq: -1, round: false, collected: undefined, restored: false }
+      if (component.definition.shares !== undefined) {
+        ;(this.rare = new Rare()).owning = { seq: -1, round: false, collected: undefined, restored: false }
+      }
+    }
+    get owning(): Owning | undefined {
+      return this.rare === undefined ? undefined : this.rare.owning
+    }
+    get selection(): Instance["selection"] {
+      return this.rare === undefined ? undefined : this.rare.selection
+    }
+    set selection(value: Instance["selection"]) {
+      if (this.rare === undefined) {
+        if (value === undefined) return
+        this.rare = new Rare()
+      }
+      this.rare.selection = value
+    }
+    get parked(): Instance["parked"] {
+      return this.rare === undefined ? undefined : this.rare.parked
+    }
+    set parked(value: Instance["parked"]) {
+      if (this.rare === undefined) {
+        if (value === undefined) return
+        this.rare = new Rare()
+      }
+      this.rare.parked = value
+    }
+    get closes(): Instance["closes"] {
+      return this.rare === undefined ? undefined : this.rare.closes
+    }
+    set closes(value: Instance["closes"]) {
+      if (this.rare === undefined) {
+        if (value === undefined) return
+        this.rare = new Rare()
+      }
+      this.rare.closes = value
+    }
+    get subscriptions(): Instance["subscriptions"] {
+      return this.rare === undefined ? undefined : this.rare.subscriptions
+    }
+    set subscriptions(value: Instance["subscriptions"]) {
+      if (this.rare === undefined) {
+        if (value === undefined) return
+        this.rare = new Rare()
+      }
+      this.rare.subscriptions = value
+    }
+    get watches(): Instance["watches"] {
+      return this.rare === undefined ? undefined : this.rare.watches
+    }
+    set watches(value: Instance["watches"]) {
+      if (this.rare === undefined) {
+        if (value === undefined) return
+        this.rare = new Rare()
+      }
+      this.rare.watches = value
+    }
+    get watchesSynced(): Instance["watchesSynced"] {
+      return this.rare === undefined ? false : this.rare.watchesSynced
+    }
+    set watchesSynced(value: Instance["watchesSynced"]) {
+      if (this.rare === undefined) {
+        if (value === false) return
+        this.rare = new Rare()
+      }
+      this.rare.watchesSynced = value
+    }
+    get watched(): Instance["watched"] {
+      return this.rare === undefined ? undefined : this.rare.watched
+    }
+    set watched(value: Instance["watched"]) {
+      if (this.rare === undefined) {
+        if (value === undefined) return
+        this.rare = new Rare()
+      }
+      this.rare.watched = value
+    }
+    get prefetch(): Instance["prefetch"] {
+      return this.rare === undefined ? undefined : this.rare.prefetch
+    }
+    set prefetch(value: Instance["prefetch"]) {
+      if (this.rare === undefined) {
+        if (value === undefined) return
+        this.rare = new Rare()
+      }
+      this.rare.prefetch = value
+    }
+    get keyed(): Instance["keyed"] {
+      return this.rare === undefined ? undefined : this.rare.keyed
+    }
+    set keyed(value: Instance["keyed"]) {
+      if (this.rare === undefined) {
+        if (value === undefined) return
+        this.rare = new Rare()
+      }
+      this.rare.keyed = value
+    }
+    get keyedQueued(): Instance["keyedQueued"] {
+      return this.rare === undefined ? false : this.rare.keyedQueued
+    }
+    set keyedQueued(value: Instance["keyedQueued"]) {
+      if (this.rare === undefined) {
+        if (value === false) return
+        this.rare = new Rare()
+      }
+      this.rare.keyedQueued = value
+    }
+    get loadMores(): Instance["loadMores"] {
+      return this.rare === undefined ? undefined : this.rare.loadMores
+    }
+    set loadMores(value: Instance["loadMores"]) {
+      if (this.rare === undefined) {
+        if (value === undefined) return
+        this.rare = new Rare()
+      }
+      this.rare.loadMores = value
+    }
+    get mounting(): Instance["mounting"] {
+      return this.rare === undefined ? undefined : this.rare.mounting
+    }
+    set mounting(value: Instance["mounting"]) {
+      if (this.rare === undefined) {
+        if (value === undefined) return
+        this.rare = new Rare()
+      }
+      this.rare.mounting = value
+    }
+    get outbox(): Instance["outbox"] {
+      return this.rare === undefined ? emptyList : this.rare.outbox
+    }
+    set outbox(value: Instance["outbox"]) {
+      if (this.rare === undefined) {
+        if (value === emptyList) return
+        this.rare = new Rare()
+      }
+      this.rare.outbox = value
+    }
+    get shares(): Instance["shares"] {
+      return this.rare === undefined ? undefined : this.rare.shares
+    }
+    set shares(value: Instance["shares"]) {
+      if (this.rare === undefined) {
+        if (value === undefined) return
+        this.rare = new Rare()
+      }
+      this.rare.shares = value
+    }
+    get readers(): Instance["readers"] {
+      return this.rare === undefined ? undefined : this.rare.readers
+    }
+    set readers(value: Instance["readers"]) {
+      if (this.rare === undefined) {
+        if (value === undefined) return
+        this.rare = new Rare()
+      }
+      this.rare.readers = value
+    }
+    get owners(): Instance["owners"] {
+      return this.rare === undefined ? undefined : this.rare.owners
+    }
+    set owners(value: Instance["owners"]) {
+      if (this.rare === undefined) {
+        if (value === undefined) return
+        this.rare = new Rare()
+      }
+      this.rare.owners = value
+    }
+    get seen(): Instance["seen"] {
+      return this.rare === undefined ? undefined : this.rare.seen
+    }
+    set seen(value: Instance["seen"]) {
+      if (this.rare === undefined) {
+        if (value === undefined) return
+        this.rare = new Rare()
+      }
+      this.rare.seen = value
+    }
+    get clash(): Instance["clash"] {
+      return this.rare === undefined ? undefined : this.rare.clash
+    }
+    set clash(value: Instance["clash"]) {
+      if (this.rare === undefined) {
+        if (value === undefined) return
+        this.rare = new Rare()
+      }
+      this.rare.clash = value
+    }
+    get deferred(): Instance["deferred"] {
+      return this.rare === undefined ? false : this.rare.deferred
+    }
+    set deferred(value: Instance["deferred"]) {
+      if (this.rare === undefined) {
+        if (value === false) return
+        this.rare = new Rare()
+      }
+      this.rare.deferred = value
     }
     /**
      * From the moment its Scope or an ancestor's starts closing, not once it has: see `Instance.closed`.
@@ -2402,32 +2612,34 @@ const setup = (
         // Forked now, so it closes before what its parent forked earlier. Its finalizer moves into it.
         const under = this.parent!.scope
         own = Scope.forkUnsafe(under, "sequential")
-        const held = this.held
-        if (held !== undefined) {
-          this.held = undefined
+        if (this.held) {
+          this.held = false
           scopeRemoveFinalizerUnsafe(under, this)
-          scopeAddFinalizerUnsafe(own, this, held)
+          scopeAddFinalizerUnsafe(own, this, this.finalize.bind(this))
         }
       }
       return this.own = own
     }
     /** Adds the instance's finalizer: to its Scope, or to its parent's until it has one. */
-    hold(finalizer: () => Effect.Effect<void>): void {
+    hold(): void {
       const own = this.own
       const under = own ?? this.parent!.scope
       if (under.state._tag === "Closed") {
         if (own === undefined) this.dead = true
-        track(closing, forkNow(ctx, Effect.suspend(finalizer)))
-      } else if (own !== undefined) {
-        scopeAddFinalizerUnsafe(own, this, finalizer)
-      } else {
-        this.held = finalizer
-        scopeAddFinalizerUnsafe(under, this, () => {
-          this.dead = true
-          this.held = undefined
-          return finalizer()
-        })
+        track(closing, forkNow(ctx, Effect.suspend(() => finishInstance(this))))
+        return
       }
+      if (own === undefined) this.held = true
+      // Bound, not a closure: one object for each instance.
+      scopeAddFinalizerUnsafe(under, this, this.finalize.bind(this))
+    }
+    /** Run by the Scope that holds the instance's finalizer. */
+    finalize(): Effect.Effect<void> {
+      if (this.held) {
+        this.held = false
+        this.dead = true
+      }
+      return finishInstance(this)
     }
     /** Closes the instance's Scope, or runs its finalizer when it has none. What's left of the close. */
     close(): Effect.Effect<void> | undefined {
@@ -2435,12 +2647,11 @@ const setup = (
       if (own !== undefined) return Scope.closeUnsafe(own, Exit.void) as Effect.Effect<void> | undefined
       if (this.dead) return undefined
       this.dead = true
-      const held = this.held
-      if (held === undefined) return undefined
-      this.held = undefined
+      if (!this.held) return undefined
+      this.held = false
       scopeRemoveFinalizerUnsafe(this.parent!.scope, this)
       try {
-        return held()
+        return finishInstance(this)
       } catch (defect) {
         return Effect.die(defect)
       }
@@ -4658,7 +4869,11 @@ const setup = (
 
   /** Checks a fresh view's child paths, which its fallbacks are checked against as they're shown. */
   const checked = (inst: Instance, tree: View.Node<any, any>): View.Node<any, any> => {
-    inst.childPaths = checkChildPaths(inst.path, tree)
+    const paths = checkChildPaths(inst.path, tree)
+    // A view with no child, ref or outlet has nothing to check its fallbacks or refs against.
+    inst.childPaths = paths.paths === undefined && paths.refs === undefined && paths.placed === undefined
+      ? undefined
+      : paths
     inst.clash = undefined
     // Its author's refs are checked once the author's other trees are current too.
     if (inst.owner !== undefined) refChecks.add(inst.author)
