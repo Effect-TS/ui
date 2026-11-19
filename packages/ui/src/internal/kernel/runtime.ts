@@ -222,6 +222,12 @@ class Layered {
 const none: ReadonlyArray<never> = []
 
 /**
+ * The list an instance holds until it adds to it: frozen, so an append to it fails loudly. Compare
+ * with it before the first append.
+ */
+const emptyList: Array<never> = Object.freeze([]) as unknown as Array<never>
+
+/**
  * For each event a part handles, the paths of the instances that get it, deepest owner first and the
  * view's author last. An event only the author handles isn't listed. What `TestElement.owners` shows.
  *
@@ -466,7 +472,7 @@ export interface Instance {
   adoptsChildren: boolean
   /** On the server: the client builds this instance fresh, because its Layer wasn't built. */
   deferred: boolean
-  readonly runs: Array<Run>
+  runs: Array<Run>
   // The collections below are made on their first entry: most instances never hold one, and an
   // empty Map or Set costs about 150 bytes.
   /** `Unmounted` is logged: the instance left the tree, though its Scope may still be closing. */
@@ -2198,14 +2204,8 @@ const setup = (
   }
 
   // -- instances ------------------------------------------------------------
-  /**
-   * Sets the instance's `dispatch` and `fire`, and adds its finalizers to its Scope: the closures
-   * that live as long as it does. They are made here, so their context holds the instance and
-   * `bound`, and not every local of `makeInstance`.
-   */
-  const instanceHandlers = (inst: Instance, bound: componentQueries.Bound | undefined) => {
-    const handlers = inst as { -readonly [K in "dispatch" | "fire"]: Instance[K] }
-    handlers.dispatch = (message, source) =>
+  /** Runs `update` for a message to `inst`, in a step of its own. */
+  const dispatchTo = (inst: Instance, message: unknown, source: MessageLog.Source) =>
       step(() => {
         renderAbove(inst)
         if (inst.closed || inst.waiting || frozen) return
@@ -2221,6 +2221,7 @@ const setup = (
           busy--
         }
         if (next === undefined) return
+        const bound = componentQueries.boundOf(component)
         const entrySeq = record(inst, {
           _tag: "Update",
           source,
@@ -2236,7 +2237,9 @@ const setup = (
         })
         apply(inst, next, entrySeq, false)
       })
-    handlers.fire = (event, handler, payload, onMessage) => {
+
+  /** What the host calls for an event on an element `inst` rendered. Made the first time it's asked for. */
+  const makeFire = (inst: Instance): Renderer.Dispatch => (event, handler, payload, onMessage) => {
       if (inst.closed || inst.waiting) return
       const message = typeof handler === "function"
         ? guard(inst, "domEvent", () => (handler as (payload: unknown) => unknown)(payload), event)
@@ -2247,6 +2250,8 @@ const setup = (
       inst.dispatch(message, { _tag: "DomEvent", name: event })
     }
 
+  /** Adds the instance's finalizer to its Scope. */
+  const addInstanceFinalizer = (inst: Instance) => {
     // Descendants, Subscriptions and mounts use child Scopes forked later, so they close first. Then
     // Commands stop, and the close waits for them to exit. One finalizer, run as the Scope
     // closes: a Scope that holds nothing else needs no Map, and a close with no run to wait for
@@ -2286,6 +2291,102 @@ const setup = (
     }
   }
 
+  /**
+   * An instance: one shape for every instance, so V8 keeps it in fast mode. The fields a feature
+   * needs are `undefined` until the feature first does, and collections start out shared and empty.
+   */
+  class Inst implements Instance {
+    readonly born = ++instancesMade
+    author: Instance
+    content: ((parts: any) => View.Content<any, any>) | undefined
+    env: Env
+    selection: Selection | undefined = undefined
+    children: Set<Instance> = noChildren
+    props: unknown
+    model: unknown = undefined
+    results: componentQueries.Results | undefined = undefined
+    onEmit: (events: unknown) => unknown
+    onFailure: ((failure: AsyncResult.Failure<never, unknown>) => unknown) | undefined
+    failure: Cause.Cause<unknown> | undefined = undefined
+    childPaths: ChildPaths | undefined = undefined
+    clash: unknown = undefined
+    rendered: Array<Rendered> = emptyList
+    waiting = false
+    adoptsChildren = false
+    deferred = false
+    runs: Array<Run> = emptyList
+    left = false
+    parked: Set<unknown> | undefined = undefined
+    closes: Set<Fiber.Fiber<void>> | undefined = undefined
+    subscriptions: Map<string, SubscriptionRun> | undefined = undefined
+    watches: Map<string, WatchRun> | undefined = undefined
+    watchesSynced = false
+    watched: Set<string> | undefined = undefined
+    prefetch: Instance["prefetch"] = undefined
+    keyed: Map<string, KeyedRun> | undefined = undefined
+    keyedQueued = false
+    cause: number | undefined = undefined
+    loadMores: Set<() => void> | undefined = undefined
+    mounting: Instance["mounting"] = undefined
+    outbox: Instance["outbox"] = emptyList
+    shares: unknown = undefined
+    readers: Set<Instance> | undefined = undefined
+    readonly owning: Owning | undefined
+    owners: Map<Component.Definition.Any, Instance> | undefined = undefined
+    seen: Map<Instance, unknown> | undefined = undefined
+    private fired: Renderer.Dispatch | undefined = undefined
+    readonly path: string
+    readonly depth: number
+    readonly component: Component.Any
+    readonly parent: Instance | undefined
+    readonly owner: View.Owner | undefined
+    readonly scope: Scope.Closeable
+    constructor(
+      path: string,
+      depth: number,
+      component: Component.Any,
+      parent: Instance | undefined,
+      owner: View.Owner | undefined,
+      scope: Scope.Closeable,
+      env: Env,
+      props: unknown,
+      onEmit: (events: unknown) => unknown,
+      onFailure: ((failure: AsyncResult.Failure<never, unknown>) => unknown) | undefined,
+      content: ((parts: any) => View.Content<any, any>) | undefined,
+      author: Instance | undefined
+    ) {
+      this.path = path
+      this.depth = depth
+      this.component = component
+      this.parent = parent
+      this.owner = owner
+      this.scope = scope
+      this.author = author ?? this
+      this.content = content
+      this.env = env
+      this.props = props
+      this.onEmit = onEmit
+      this.onFailure = onFailure
+      this.owning = component.definition.shares === undefined
+        ? undefined
+        : { seq: -1, round: false, collected: undefined, restored: false }
+    }
+    /**
+     * From the moment its Scope or an ancestor's starts closing, not once it has: see `Instance.closed`.
+     */
+    get closed(): boolean {
+      return isClosed(this.scope) || this.parent?.closed === true
+    }
+    /** An outlet's messages go to the author of its content. */
+    dispatch(message: unknown, source: MessageLog.Source): void {
+      if (this.component === outletComponent) this.author.dispatch(message, source)
+      else dispatchTo(this, message, source)
+    }
+    get fire(): Renderer.Dispatch {
+      return this.fired ??= this.component === outletComponent ? this.author.fire : makeFire(this)
+    }
+  }
+
   const makeInstance = (
     component: Component.Any,
     props: unknown,
@@ -2302,65 +2403,23 @@ const setup = (
     const bound = componentQueries.boundOf(component)
     const depth = parent === undefined ? 0 : parent.depth + 1
     const owner: View.Owner | undefined = content === undefined ? undefined : { path, depth }
-    const inst: Instance = {
+    const inst: Instance = new Inst(
       path,
-      born: ++instancesMade,
       depth,
       component,
       parent,
-      author: undefined as any,
       owner,
-      content,
       scope,
-      env: parentEnv,
-      selection: undefined,
-      children: noChildren,
+      parentEnv,
       props,
-      model: undefined,
-      results: undefined,
       onEmit,
       onFailure,
-      failure: undefined,
-      childPaths: undefined,
-      clash: undefined,
-      rendered: [],
-      get closed() {
-        return isClosed(this.scope) || this.parent?.closed === true
-      },
-      waiting: false,
-      adoptsChildren: false,
-      deferred: false,
-      runs: [],
-      left: false,
-      parked: undefined,
-      closes: undefined,
-      subscriptions: undefined,
-      watches: undefined,
-      watchesSynced: false,
-      watched: undefined,
-      prefetch: undefined,
-      keyed: undefined,
-      keyedQueued: false,
-      cause: undefined,
-      loadMores: undefined,
-      mounting: undefined,
-      outbox: [],
-      shares: undefined,
-      readers: undefined,
-      owning: component.definition.shares === undefined
-        ? undefined
-        : { seq: -1, round: false, collected: undefined, restored: false },
-      owners: undefined,
-      seen: undefined,
-      dispatch: undefined as any,
-      fire: undefined as any
-    }
-    // Made outside this function, the closures the instance keeps hold it alone, and not the
-    // locals of its mount: see `instanceHandlers`.
-    instanceHandlers(inst, bound)
+      content,
+      owner === undefined || parent === undefined ? undefined : parent.author
+    )
+    addInstanceFinalizer(inst)
     // `parentEnv` is the Env at the child node, but for a feature's implementation, which is passed no slots.
     if (component.definition.slots.length > 0) slottedBy.set(inst, { values: slots, env: parentEnv, placed: new Map() })
-    inst.author = owner === undefined || parent === undefined ? inst : parent.author
     if (owner !== undefined) owners.set(owner, inst)
     if (recording > 0) {
       inst.watched = new Set()
@@ -2765,6 +2824,7 @@ const setup = (
     let queued = false
     next.sends.forEach((send, index) => {
       if (send.ref === undefined) return
+      if (inst.outbox === emptyList) inst.outbox = []
       inst.outbox.push({ send, issued: { seq: entrySeq, index } })
       queued = true
     })
@@ -3016,7 +3076,7 @@ const setup = (
   const deliverSends = (inst: Instance) => {
     if (inst.outbox.length === 0 || inst.closed) return
     const outbox = inst.outbox
-    inst.outbox = []
+    inst.outbox = emptyList
     if (!countSends(inst, "its children")) return
     for (const { issued, send } of outbox) {
       if (inst.closed) return
@@ -3131,6 +3191,7 @@ const setup = (
           cancelWait: undefined,
           cutBy: undefined
         }
+        if (inst.runs === emptyList) inst.runs = []
         inst.runs.push(run)
         // Issued before a keyed provide's due read: a change of key keeps it.
         dueSelection(inst)?.issued.add(run)
@@ -4728,59 +4789,23 @@ const setup = (
     // Who wrote the content: the author of the tree the receiver's child node sits in.
     const author = receiver.parent === undefined ? receiver : receiver.parent.author
     const name = view.name
-    const out: Instance = {
-      path: outletPath(receiver, name),
-      born: ++instancesMade,
-      depth: parent.depth + 1,
-      component: outletComponent,
+    const out: Instance = new Inst(
+      outletPath(receiver, name),
+      parent.depth + 1,
+      outletComponent,
       parent,
-      author,
-      owner: undefined,
-      content: undefined,
-      scope: Scope.forkUnsafe(parent.scope, "sequential"),
-      env: slotted.env,
-      selection: undefined,
-      children: noChildren,
-      props: undefined,
-      model: undefined,
-      results: undefined,
-      shares: undefined,
-      readers: undefined,
-      owning: undefined,
-      owners: undefined,
-      seen: undefined,
-      onEmit: ignoreEvents,
-      onFailure: undefined,
-      failure: undefined,
-      childPaths: undefined,
-      clash: undefined,
-      rendered: [],
-      get closed() {
-        return isClosed(this.scope) || this.parent?.closed === true
-      },
-      waiting: false,
-      // The content's children adopt the server's state when the instance placing it and the one that
-      // wrote it both did.
-      adoptsChildren: parent.adoptsChildren && author.adoptsChildren,
-      deferred: false,
-      runs: [],
-      left: false,
-      parked: undefined,
-      closes: undefined,
-      subscriptions: undefined,
-      watches: undefined,
-      watchesSynced: false,
-      watched: undefined,
-      prefetch: undefined,
-      keyed: undefined,
-      keyedQueued: false,
-      cause: undefined,
-      loadMores: undefined,
-      mounting: undefined,
-      outbox: [],
-      dispatch: author.dispatch,
-      fire: author.fire
-    }
+      undefined,
+      Scope.forkUnsafe(parent.scope, "sequential"),
+      slotted.env,
+      undefined,
+      ignoreEvents,
+      undefined,
+      undefined,
+      author
+    )
+    // The content's children adopt the server's state when the instance placing it and the one that
+    // wrote it both did.
+    out.adoptsChildren = parent.adoptsChildren && author.adoptsChildren
     outletOf.set(out, { slotted, view, content: undefined })
     slotted.placed.set(name, out)
     scopeAddFinalizerUnsafe(out.scope, out, () => {
