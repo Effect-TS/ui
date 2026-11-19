@@ -52,11 +52,22 @@ const escapedTextTags: ReadonlySet<string> = new Set(["textarea", "title"])
 /** Elements whose first newline the HTML parser drops. */
 const newlineTags: ReadonlySet<string> = new Set(["pre", "textarea", "listing"])
 
+// Most text and values need no escaping, and are returned as they are without a replace.
+const textSpecial = /[&<>]/
+const attributeSpecial = /[&"<>]/
+
 const escapeText = (text: string): string =>
-  text.replace(/[&<>]/g, (char) => char === "&" ? "&amp;" : char === "<" ? "&lt;" : "&gt;")
+  textSpecial.test(text)
+    ? text.replace(/[&<>]/g, (char) => char === "&" ? "&amp;" : char === "<" ? "&lt;" : "&gt;")
+    : text
 
 const escapeAttribute = (value: string): string =>
-  value.replace(/[&"<>]/g, (char) => char === "&" ? "&amp;" : char === "\"" ? "&quot;" : char === "<" ? "&lt;" : "&gt;")
+  attributeSpecial.test(value)
+    ? value.replace(
+      /[&"<>]/g,
+      (char) => char === "&" ? "&amp;" : char === "\"" ? "&quot;" : char === "<" ? "&lt;" : "&gt;"
+    )
+    : value
 
 type ServerNode = Renderer.ServerNode
 type ServerElement = Extract<ServerNode, { readonly _tag: "Element" }>
@@ -110,6 +121,25 @@ const textContent = (node: ServerElement, value: unknown): string => {
   return new RegExp(`</${node.tag}|<!--`, "i").test(text) ? "" : text
 }
 
+/**
+ * An element's attributes as HTML, for one with no property and no alias among its attribute names, as
+ * most are. `undefined` for any other: `elementAttributes` writes those.
+ */
+const plainAttributes = (node: ServerElement): string | undefined => {
+  for (const _ in node.props) return undefined
+  if (node.tag === "option") return undefined
+  const svg = elements.svgTags.has(node.tag)
+  const attrs = node.attrs
+  let out = ""
+  for (const name in attrs) {
+    const normalized = elements.attributeName(name, svg)
+    if (normalized !== name) return undefined
+    const value = attrs[name]!
+    out += value === "" ? ` ${name}` : ` ${name}="${escapeAttribute(value)}"`
+  }
+  return out
+}
+
 /** @internal */
 export const toHtml = (nodes: ReadonlyArray<ServerNode>, selectValue?: string): string => {
   let out = ""
@@ -123,8 +153,12 @@ export const toHtml = (nodes: ReadonlyArray<ServerNode>, selectValue?: string): 
         break
       case "Element": {
         out += `<${node.tag}`
-        for (const [name, value] of elementAttributes(node, selectValue)) {
-          out += value === "" ? ` ${name}` : ` ${name}="${escapeAttribute(value)}"`
+        const plain = plainAttributes(node)
+        if (plain !== undefined) out += plain
+        else {
+          for (const [name, value] of elementAttributes(node, selectValue)) {
+            out += value === "" ? ` ${name}` : ` ${name}="${escapeAttribute(value)}"`
+          }
         }
         out += ">"
         if (voidTags.has(node.tag)) break
