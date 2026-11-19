@@ -103,22 +103,21 @@ const Page = Component.define({
     method: null,
     log: []
   }),
-  update: (model, message) =>
-    Message.match(message, {
-      Opened: ({ method, triggerId, which }) => ({
-        ...model,
-        [which]: true,
-        triggerId,
-        method,
-        log: [...model.log, `Opened ${which} ${triggerId} ${method}`]
-      }),
-      Dismissed: ({ reason, which }) => ({
-        ...model,
-        [which]: model.config.refuse ? model[which as "a" | "b"] : false,
-        log: [...model.log, `Dismissed ${which} ${reason}`]
-      }),
-      Settled: ({ open, which }) => ({ ...model, log: [...model.log, `Settled ${which} ${open}`] })
+  update: {
+    Opened: (model, { method, triggerId, which }) => ({
+      ...model,
+      [which]: true,
+      triggerId,
+      method,
+      log: [...model.log, `Opened ${which} ${triggerId} ${method}`]
     }),
+    Dismissed: (model, { reason, which }) => ({
+      ...model,
+      [which]: model.config.refuse ? model[which as "a" | "b"] : false,
+      log: [...model.log, `Dismissed ${which} ${reason}`]
+    }),
+    Settled: (model, { open, which }) => ({ ...model, log: [...model.log, `Settled ${which} ${open}`] })
+  },
   view: (model, h) => {
     const props = model.config
     const on = (which: string) => ({

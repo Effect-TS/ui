@@ -214,7 +214,9 @@ const Nested = Component.define({
   elements: Html
 }).make({
   init: () => ({ inner: true }),
-  update: (model, message) => NestedMessage.match(message, { DismissedInner: () => ({ ...model, inner: false }) }),
+  update: {
+    DismissedInner: (model) => ({ ...model, inner: false })
+  },
   view: (model, h) =>
     Dialog(h, {
       key: "outer",

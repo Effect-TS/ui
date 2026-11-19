@@ -132,11 +132,10 @@
  *   elements: Html
  * }).make({
  *   init: () => ({ settings: true }),
- *   update: (model, message) =>
- *     ToolbarMessage.match(message, {
- *       OpenedSettings: () => ({ ...model, settings: true }),
- *       DismissedSettings: () => ({ ...model, settings: false })
- *     }),
+ *   update: {
+ *     OpenedSettings: (model) => ({ ...model, settings: true }),
+ *     DismissedSettings: (model) => ({ ...model, settings: false })
+ *   },
  *   view: (model, h) =>
  *     Dialog(h, {
  *       props: { open: model.settings },
@@ -380,6 +379,20 @@ const methodOf = (pointerType: string): DialogInteraction =>
 
 const statusOf = (model: Model, props: DialogProps): DialogTransitionStatus =>
   props.open ? (model.mounted ? null : "starting") : model.mounted ? "ending" : null
+
+// `$` in any handler of the Dialog's `update`: a tag's `$` fits the one
+// over the whole message type.
+type DialogUpdate = Component.Update<Model, Message, DialogEvents, DialogProps>
+
+// Only the topmost dialog hears Escape and presses outside.
+const topmost = (model: Model): boolean => model.nestedOpen === 0
+
+const dismiss = (
+  model: Model,
+  $: DialogUpdate,
+  reason: DialogDismissReason,
+  closeMethod: DialogInteraction | null
+) => $.set({ ...model, closeMethod }).emit(DialogEvents.Dismissed({ reason }))
 
 // The browser gives a dialog a centred box with a border, padding, a
 // background and a size. The kit empties it, so the parts inside lay out
@@ -894,55 +907,50 @@ export const Dialog = Component.define({
   elements: Html
 }).make({
   init: () => ({ mounted: false, nestedOpen: 0, forcedClose: false, openMethod: null, closeMethod: null }),
-  update: (model, message, $) => {
-    const props = $.props
-    // Only the topmost dialog hears Escape and presses outside.
-    const topmost = model.nestedOpen === 0
-    const dismiss = (reason: DialogDismissReason, closeMethod: DialogInteraction | null) =>
-      $.set({ ...model, closeMethod }).emit(DialogEvents.Dismissed({ reason }))
-    return Message.match(message, {
-      ClickedTrigger: ({ pointerType, triggerId }) => {
-        const method = methodOf(pointerType)
-        if (props.open && (props.triggerId == null || props.triggerId === triggerId)) {
-          return dismiss("trigger-press", method)
-        }
-        return $.set({ ...model, openMethod: method }).emit(DialogEvents.Opened({ triggerId }))
-      },
-      ClickedClose: ({ pointerType }) => props.open ? dismiss("close-press", methodOf(pointerType)) : model,
-      CancelledModal: ({ forced }) => {
-        const next = { ...model, forcedClose: forced }
-        return props.open && topmost
-          ? $.set({ ...next, closeMethod: "keyboard" }).emit(DialogEvents.Dismissed({ reason: "escape-key" }))
-          : next
-      },
-      // Every close comes here, the consumer's included. One while `open` still
-      // says true is the browser's: after a request it wouldn't let be
-      // cancelled, which was reported, or a close without one, which wasn't.
-      ClosedModal: () =>
-        model.forcedClose
-          ? { ...model, forcedClose: false }
-          : props.open
-          ? dismiss("escape-key", "keyboard")
-          : model,
-      PressedEscape: () => props.open && topmost ? dismiss("escape-key", "keyboard") : model,
-      PressedOutside: ({ pointerType }) =>
-        props.open && topmost && props.disablePointerDismissal !== true
-          ? dismiss("outside-press", methodOf(pointerType))
-          : model,
-      FocusedOutside: () =>
-        props.open && topmost && props.modal === false && props.disablePointerDismissal !== true
-          ? dismiss("focus-out", null)
-          : model,
-      RenderedFirstFrame: () => props.open && !model.mounted ? { ...model, mounted: true } : model,
-      FinishedTransition: ({ open }) => {
-        if (open !== props.open) return model
-        if (open) return $.set(model).emit(DialogEvents.Settled({ open }))
-        return model.mounted && props.holdExit !== true
-          ? $.set({ ...model, mounted: false }).emit(DialogEvents.Settled({ open }))
-          : model
-      },
-      ChangedNested: ({ count }) => ({ ...model, nestedOpen: count })
-    })
+  update: {
+    ClickedTrigger: (model, { pointerType, triggerId }, $) => {
+      const method = methodOf(pointerType)
+      if ($.props.open && ($.props.triggerId == null || $.props.triggerId === triggerId)) {
+        return dismiss(model, $, "trigger-press", method)
+      }
+      return $.set({ ...model, openMethod: method }).emit(DialogEvents.Opened({ triggerId }))
+    },
+    ClickedClose: (model, { pointerType }, $) =>
+      $.props.open ? dismiss(model, $, "close-press", methodOf(pointerType)) : model,
+    CancelledModal: (model, { forced }, $) => {
+      const next = { ...model, forcedClose: forced }
+      return $.props.open && topmost(model)
+        ? $.set({ ...next, closeMethod: "keyboard" }).emit(DialogEvents.Dismissed({ reason: "escape-key" }))
+        : next
+    },
+    // Every close comes here, the consumer's included. One while `open` still
+    // says true is the browser's: after a request it wouldn't let be
+    // cancelled, which was reported, or a close without one, which wasn't.
+    ClosedModal: (model, _message, $) =>
+      model.forcedClose
+        ? { ...model, forcedClose: false }
+        : $.props.open
+        ? dismiss(model, $, "escape-key", "keyboard")
+        : model,
+    PressedEscape: (model, _message, $) =>
+      $.props.open && topmost(model) ? dismiss(model, $, "escape-key", "keyboard") : model,
+    PressedOutside: (model, { pointerType }, $) =>
+      $.props.open && topmost(model) && $.props.disablePointerDismissal !== true
+        ? dismiss(model, $, "outside-press", methodOf(pointerType))
+        : model,
+    FocusedOutside: (model, _message, $) =>
+      $.props.open && topmost(model) && $.props.modal === false && $.props.disablePointerDismissal !== true
+        ? dismiss(model, $, "focus-out", null)
+        : model,
+    RenderedFirstFrame: (model, _message, $) => $.props.open && !model.mounted ? { ...model, mounted: true } : model,
+    FinishedTransition: (model, { open }, $) => {
+      if (open !== $.props.open) return model
+      if (open) return $.set(model).emit(DialogEvents.Settled({ open }))
+      return model.mounted && $.props.holdExit !== true
+        ? $.set({ ...model, mounted: false }).emit(DialogEvents.Settled({ open }))
+        : model
+    },
+    ChangedNested: (model, { count }) => ({ ...model, nestedOpen: count })
   },
   parts: (model, p) => {
     const props = p.props
