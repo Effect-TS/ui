@@ -143,23 +143,6 @@ const plainAttributes = (
   return out
 }
 
-const isEnumerable = Object.prototype.propertyIsEnumerable
-
-/**
- * Whether the enumerable properties read the same now as later, with nothing of theirs called: each
- * is the object's own and holds its value, and its `value` is no object or function, whose
- * `toString` would be called.
- */
-const settled = (props: Readonly<Record<string, unknown>>): boolean => {
-  for (const name in props) {
-    const own = Object.getOwnPropertyDescriptor(props, name)
-    if (own === undefined || !("value" in own) || (name === "value" && Object(own.value) === own.value)) {
-      return false
-    }
-  }
-  return true
-}
-
 /**
  * An open element whose end needs more than its closing tag. Most elements
  * have none.
@@ -179,20 +162,50 @@ interface Frame {
   readonly option: Map<string, string> | undefined
 }
 
-/** The tags whose element needs a `Frame` wherever it is. Built for the first writer, so a client leaves it out. */
+/** The tags whose element needs a `Frame` wherever it is. Built for the first write, so a client leaves it out. */
 let framedTags: ReadonlySet<string> | undefined
 
+// What a tape holds before the values of each call: `Open` has three, the others one.
+const Text = 0
+const Open = 1
+const Close = 2
+const Enter = 3
+const Leave = 4
+
 /**
- * Writes a server tree as HTML as it is walked, for a runtime that has no nodes to give `toHtml`.
+ * Takes a server tree as it is walked, for a runtime that has no nodes to give `toHtml`, and writes it
+ * as HTML when `html` is called.
  *
- * It is written while the render's Scope is open, and `toHtml` runs after it has closed. A string
- * or a number held by a property reads the same either way. A getter may not, nor an object's
- * `toString`, so the writer refuses a tree that has one where `toHtml` would call it, without
- * calling it, and `toHtml` writes that tree from the nodes.
+ * The walk only keeps what the nodes would hold: the texts, the tags and paths, and each element's
+ * `attrs` and `props` as the objects they are. Nothing of those two is read before `html`, which is
+ * called where `toHtml` is, once the render's Scope has closed, and reads of them what `toHtml` reads,
+ * in the same order.
  *
  * @internal
  */
-export const makeWriter = (): ServerSink & { readonly html: () => string; readonly refused: () => boolean } => {
+export const makeWriter = (): ServerSink & { readonly html: () => string } => {
+  const tape: Array<unknown> = []
+  return {
+    html: () => write(tape),
+    text(value) {
+      tape.push(Text, value)
+    },
+    open(tag, attrs, props) {
+      tape.push(Open, tag, attrs, props)
+    },
+    close(tag) {
+      tape.push(Close, tag)
+    },
+    enter(path) {
+      tape.push(Enter, path)
+    },
+    leave(path) {
+      tape.push(Leave, path)
+    }
+  }
+}
+
+const write = (tape: ReadonlyArray<any>): string => {
   const framed = framedTags ??= new Set([...voidTags, ...textOnlyTags, ...newlineTags, "select"])
   let out = ""
   let depth = 0
@@ -203,101 +216,108 @@ export const makeWriter = (): ServerSink & { readonly html: () => string; readon
   let bare = false
   /**
    * Whether what is written is left out: inside a void or a text-only element, of which only the text
-   * is kept, and for good once the tree is refused. Nothing of an element is read there.
+   * is kept. Nothing of an element is read there.
    */
   let skips = false
-  let refused = false
   /** The value of the select the options being written belong to. */
   let selectValue: string | undefined
-  return {
-    html: () => out,
-    refused: () => refused,
-    text(value) {
-      bare = false
-      if (text !== undefined) text += value
-      if (!skips) out += escapeText(value)
-    },
-    enter(path) {
-      bare = false
-      if (!skips) out += markers.open(path)
-    },
-    leave(path) {
-      if (!skips) out += markers.close(path)
-    },
-    open(tag, attrs, props) {
-      depth++
-      bare = false
-      if (skips) return
-      const plain = plainAttributes(tag, attrs, props)
-      // With plain attributes no property is enumerable. `toHtml` reads a `value` that isn't, too.
-      if ((plain === undefined && !settled(props)) || ("value" in props && !isEnumerable.call(props, "value"))) {
-        refused = skips = true
-        frame = text = undefined
+  for (let at = 0; at < tape.length;) {
+    switch (tape[at++]) {
+      case Text: {
+        const value: string = tape[at++]
+        bare = false
+        if (text !== undefined) text += value
+        if (!skips) out += escapeText(value)
+        break
+      }
+      case Enter: {
+        const path: string = tape[at++]
+        bare = false
+        if (!skips) out += markers.open(path)
+        break
+      }
+      case Leave: {
+        const path: string = tape[at++]
+        if (!skips) out += markers.close(path)
+        break
+      }
+      case Open: {
+        const tag: string = tape[at++]
+        const attrs: Readonly<Record<string, string>> = tape[at++]
+        const props: Readonly<Record<string, unknown>> = tape[at++]
+        depth++
+        bare = false
+        if (skips) break
+        const plain = plainAttributes(tag, attrs, props)
+        // Most elements: outside a select, and closed by their closing tag.
+        if (selectValue === undefined && !framed.has(tag)) {
+          out += `<${tag}${plain ?? written(elementAttributes(tag, attrs, props))}>`
+          // Read for nothing, as `toHtml` does: a getter is called as often either way.
+          void props.value
+          break
+        }
+        out += `<${tag}`
+        let option: Map<string, string> | undefined
+        if (plain !== undefined) out += `${plain}>`
+        else {
+          const attributes = elementAttributes(tag, attrs, props)
+          if (tag === "option" && selectValue !== undefined && !Object.hasOwn(props, "selected")) {
+            const value = attributes.get("value")
+            if (value === undefined) option = attributes
+            else if (value === selectValue) attributes.set("selected", "")
+          }
+          if (option === undefined) out += `${written(attributes)}>`
+        }
+        const kind = voidTags.has(tag) ? "void" : textOnlyTags.has(tag) ? "text" : undefined
+        const value = kind === "void" ? undefined : props.value
+        const inside = tag === "select" && value !== undefined
+          ? String(value)
+          : tag === "option" || tag === "optgroup"
+          ? selectValue
+          : undefined
+        if (kind === undefined && option === undefined && inside === selectValue && !newlineTags.has(tag)) break
+        const gathers = kind === "text" || option !== undefined
+        frame = { parent: frame, depth, before: out, text, gathers, selectValue, kind, value, option }
         out = ""
-        return
+        bare = true
+        skips = kind !== undefined
+        if (gathers) text = ""
+        selectValue = inside
+        break
       }
-      // Most elements: outside a select, and closed by their closing tag.
-      if (selectValue === undefined && !framed.has(tag)) {
-        out += `<${tag}${plain ?? written(elementAttributes(tag, attrs, props))}>`
-        return
-      }
-      out += `<${tag}`
-      let option: Map<string, string> | undefined
-      if (plain !== undefined) out += `${plain}>`
-      else {
-        const attributes = elementAttributes(tag, attrs, props)
-        if (tag === "option" && selectValue !== undefined && !Object.hasOwn(props, "selected")) {
-          const value = attributes.get("value")
-          if (value === undefined) option = attributes
-          else if (value === selectValue) attributes.set("selected", "")
+      case Close: {
+        const tag: string = tape[at++]
+        const open = frame
+        if (open === undefined || open.depth !== depth) {
+          depth--
+          if (!skips) out += `</${tag}>`
+          break
         }
-        if (option === undefined) out += `${written(attributes)}>`
-      }
-      const kind = voidTags.has(tag) ? "void" : textOnlyTags.has(tag) ? "text" : undefined
-      const value = props.value
-      const inside = tag === "select" && value !== undefined
-        ? String(value)
-        : tag === "option" || tag === "optgroup"
-        ? selectValue
-        : undefined
-      if (kind === undefined && option === undefined && inside === selectValue && !newlineTags.has(tag)) return
-      const gathers = kind === "text" || option !== undefined
-      frame = { parent: frame, depth, before: out, text, gathers, selectValue, kind, value, option }
-      out = ""
-      bare = true
-      skips = kind !== undefined
-      if (gathers) text = ""
-      selectValue = inside
-    },
-    close(tag) {
-      const open = frame
-      if (open === undefined || open.depth !== depth) {
         depth--
-        if (!skips) out += `</${tag}>`
-        return
-      }
-      depth--
-      // No element inside one that skips has a `Frame`, so the one around this doesn't skip.
-      skips = false
-      if (open.kind === "void") out = open.before
-      else {
-        let before = open.before
-        if (open.option !== undefined) {
-          if (text === open.selectValue) open.option.set("selected", "")
-          before += `${written(open.option)}>`
+        // No element inside one that skips has a `Frame`, so the one around this doesn't skip.
+        skips = false
+        if (open.kind === "void") out = open.before
+        else {
+          let before = open.before
+          if (open.option !== undefined) {
+            if (text === open.selectValue) open.option.set("selected", "")
+            before += `${written(open.option)}>`
+          }
+          let inner = open.kind === "text"
+            ? textContent(tag, bare && tag === "textarea" && open.value !== undefined ? String(open.value) : text!)
+            : out
+          if (newlineTags.has(tag) && inner.startsWith("\n")) inner = `\n${inner}`
+          out = `${before}${inner}</${tag}>`
         }
-        let inner = open.kind === "text"
-          ? textContent(tag, bare && tag === "textarea" && open.value !== undefined ? String(open.value) : text!)
-          : out
-        if (newlineTags.has(tag) && inner.startsWith("\n")) inner = `\n${inner}`
-        out = `${before}${inner}</${tag}>`
+        frame = open.parent
+        if (open.gathers) text = open.text === undefined ? undefined : open.text + text
+        selectValue = open.selectValue
+        bare = false
+        break
       }
-      frame = open.parent
-      if (open.gathers) text = open.text === undefined ? undefined : open.text + text
-      selectValue = open.selectValue
-      bare = false
     }
   }
+  return out
 }
 
 const textOf = (nodes: ReadonlyArray<Renderer.ServerNode>): string =>

@@ -500,8 +500,10 @@ describe("HtmlServer", { concurrent: false }, () => {
   )
 
   // The render reads an element's enumerable props once itself, before the HTML is written.
-  const getters: ReadonlyArray<readonly [string, "textarea" | "input", boolean, string, number]> = [
+  const getters: ReadonlyArray<readonly [string, "textarea" | "p" | "input", boolean, string, number]> = [
     ["a textarea's, not enumerable", "textarea", false, "<textarea>released</textarea>", 0],
+    // Read although nothing is written from it.
+    ["a p's, not enumerable", "p", false, "<p></p>", 0],
     ["an input's, enumerable", "input", true, "<input value=\"released\">", 1]
   ]
 
@@ -540,6 +542,73 @@ describe("HtmlServer", { concurrent: false }, () => {
         expect(rendered.html).toBe(`<!--[/Getter--><div>${html}</div><!--]/Getter-->`)
         expect(before).toBe(rendering)
         expect(calls.slice(before)).toEqual(["released"])
+      })
+  )
+
+  // What an element written by hand is given, and what each call of `read` gives. The render reads an
+  // element's attrs and props once itself, before its Layers are released.
+  type Late = Partial<Pick<View.Element<never>, "attrs" | "props">> & { readonly release?: () => void }
+  const lates: ReadonlyArray<
+    readonly [string, "p" | "input", (read: () => string) => Late, string, ReadonlyArray<string>]
+  > = [
+    [
+      "a getter among its attrs",
+      "p",
+      (read) => ({ attrs: Object.defineProperty({}, "title", { enumerable: true, get: read }) }),
+      "<p title=\"released\"></p>",
+      ["live", "released"]
+    ],
+    [
+      "props that are a Proxy",
+      "input",
+      (read) => ({
+        props: new Proxy({ value: "" }, {
+          get: (target, name) => name === "value" ? read() : Reflect.get(target, name)
+        })
+      }),
+      "<input value=\"released\">",
+      ["live", "released"]
+    ],
+    [
+      "props a Layer's finalizer changes",
+      "input",
+      () => {
+        const props = { value: "live" }
+        return { props, release: () => void (props.value = "released") }
+      },
+      "<input value=\"released\">",
+      []
+    ]
+  ]
+
+  it.effect.each(lates)(
+    "writes an element as it is once the render's Layers are released: %s",
+    ([, tag, make, html, reads]) =>
+      Effect.gen(function*() {
+        let released = false
+        const calls: Array<string> = []
+        const late = make(() => {
+          calls.push(released ? "released" : "live")
+          return calls.at(-1)!
+        })
+        const Page = Component.define({
+          name: "Late",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => h.div.children({ ...(View.toNode(h[tag]) as View.Element<never>), ...late })
+        }).pipe(Component.provide(Layer.effectDiscard(Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            released = true
+            late.release?.()
+          })
+        ))))
+        const rendered = yield* HtmlServer.renderToHtml(Page, {})
+        expect(rendered.html).toBe(`<!--[/Late--><div>${html}</div><!--]/Late-->`)
+        expect(calls).toEqual(reads)
       })
   )
 

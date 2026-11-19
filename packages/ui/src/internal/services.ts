@@ -155,11 +155,6 @@ export interface ServerSink {
   readonly close: (tag: string) => void
   readonly enter: (path: string) => void
   readonly leave: (path: string) => void
-  /**
-   * Whether the sink took none of the tree, asked once the tree is written.
-   * The render then gives the tree as nodes, as it does without a sink.
-   */
-  readonly refused?: (() => boolean) | undefined
 }
 
 /** @internal */

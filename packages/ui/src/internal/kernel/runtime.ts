@@ -867,7 +867,7 @@ export const prerender = (
     readonly budget: Duration.Input
     readonly elements: ReadonlyArray<string> | "any"
     readonly static?: boolean | undefined
-    /** Where the frozen tree is written, for a caller that writes it itself. The render then builds no `nodes`, unless the sink refuses the tree. */
+    /** Where the frozen tree is written, for a caller that writes it itself. The render then builds no `nodes`. */
     readonly sink?: services.ServerSink | undefined
     /** Called once the tree is frozen, before the cache is serialised and its fetches are interrupted. */
     readonly onFinish?: ((cache: ReturnType<typeof Query.internals>) => void) | undefined
@@ -899,7 +899,7 @@ export const prerender = (
         if (cache !== undefined) options.onFinish?.(cache)
         // In the same synchronous step as the freeze: see `serializeTree`.
         const nodes: Array<Renderer.ServerNode> = []
-        const state = serializeTree(root.instance, cache, ctx, options.static === true, nodes, options.sink)
+        const state = serializeTree(root.instance, cache, ctx, options.static === true, options.sink ?? nodeSink(nodes))
         return { nodes, state, model: root.model(), head: root.head() }
       }),
       (scope, exit) => Scope.close(scope, exit)
@@ -970,19 +970,18 @@ const nodeSink = (nodes: Array<Renderer.ServerNode>): services.ServerSink => {
 const noSink: services.ServerSink = { text() {}, open() {}, close() {}, enter() {}, leave() {} }
 
 /**
- * Writes a frozen tree once, in document order, to the sink `given` or else into `nodes`, and returns
- * the state the client adopts. It is outside `setup`, and only `prerender` calls it, so a bundle that
- * never renders on a server leaves it out.
+ * Writes a frozen tree to `to` once, in document order, and returns the state the client adopts. It is
+ * outside `setup`, and only `prerender` calls it, so a bundle that never renders on a server leaves
+ * it out.
  */
 const serializeTree = (
   root: Instance,
   cache: queryCore.Cache | undefined,
   ctx: Context.Context<any>,
   isStatic: boolean,
-  nodes: Array<Renderer.ServerNode>,
-  given: services.ServerSink | undefined
+  to: services.ServerSink
 ): Renderer.State => {
-  let sink = given ?? nodeSink(nodes)
+  let sink = to
   // In the same synchronous step as the Models: fetches in flight are interrupted, and their entries
   // revert to cold and aren't shipped. Nothing is dispatched for them.
   const query = cache === undefined ? {} : cache.dehydrate()
@@ -1077,11 +1076,6 @@ const serializeTree = (
     }
   }
   instance(root, false)
-  // The state is collected. Under a deferred instance the walk collects none, so this one only writes.
-  if (given?.refused?.() === true) {
-    sink = nodeSink(nodes)
-    instance(root, true)
-  }
   return {
     ...state,
     "~deferred": deferredPaths,
