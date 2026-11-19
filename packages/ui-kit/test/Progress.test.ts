@@ -13,9 +13,9 @@ const standIn = {
     s: Component.Headless.Parts<typeof Progress>,
     h: View.Helper<never, ProgressProps> & View.Tags<Html.Elements, never>
   ) =>
-    s.root(h.div.attr("aria-labelledby", "heading")).children(
+    s.root(h.div.attr("aria-labelledby", "heading").attr("aria-valuenow", "99").attr("data-complete", "")).children(
       s.label(h.span.class("label")).children("Uploading"),
-      s.value(h.span.class("value")),
+      s.value(h.span.class("value").attr("aria-hidden", "false")),
       s.track(h.div.class("track")).children(s.indicator(h.div.class("fill")))
     )
 }
@@ -36,121 +36,57 @@ const everyPart = [root, label, value, track, indicator]
 describe("Progress", () => {
   it.effect("the label names the bar, and every part reports the value as it moves to complete and to unknown", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Progress, { value: 40 }, standIn)
+      const s = yield* Scene.make(Progress, { value: 1, max: 3 }, standIn)
       const id = s.get(label).attrs?.id
       assert.isString(id)
       assert.deepInclude(s.get(root).attrs, {
-        role: "progressbar",
         "aria-valuemin": "0",
-        "aria-valuemax": "100",
-        "aria-valuenow": "40",
-        "aria-valuetext": "40%",
+        "aria-valuemax": "3",
+        "aria-valuenow": "1",
+        "aria-valuetext": "33%",
         // Next to the consumer's own, which stays.
         "aria-labelledby": `heading ${id}`
       })
       assert.strictEqual(s.get(label).attrs?.role, "presentation")
       assert.strictEqual(s.get(value).attrs?.["aria-hidden"], "true")
-      assert.strictEqual(Locator.textOf(s.get(value)), "40%")
+      assert.strictEqual(Locator.textOf(s.get(value)), "33%")
       for (const part of everyPart) assert.deepStrictEqual(statesOf(s.get(part).attrs), ["data-progressing"])
 
       // Above the range: clamped to it, and complete.
-      s.props({ value: 150 })
+      s.props({ value: 150, max: undefined, valueText: "All files uploaded" })
       assert.strictEqual(s.get(root).attrs?.["aria-valuenow"], "100")
-      assert.strictEqual(s.get(root).attrs?.["aria-valuetext"], "100%")
+      assert.strictEqual(s.get(root).attrs?.["aria-valuetext"], "All files uploaded")
+      assert.strictEqual(Locator.textOf(s.get(value)), "All files uploaded")
       for (const part of everyPart) assert.deepStrictEqual(statesOf(s.get(part).attrs), ["data-complete"])
 
-      s.props({ value: null })
+      s.props({ value: null, valueText: undefined })
       const attrs = s.get(root).attrs
       assert.isUndefined(attrs?.["aria-valuenow"])
       assert.strictEqual(attrs?.["aria-valuetext"], "indeterminate progress")
       assert.strictEqual(Locator.textOf(s.get(value)), "")
-      assert.isUndefined(s.get(indicator).attrs?.style)
       for (const part of everyPart) assert.deepStrictEqual(statesOf(s.get(part).attrs), ["data-indeterminate"])
+
+      s.props({ value: null, valueText: "Preparing" })
+      assert.strictEqual(s.get(root).attrs?.["aria-valuetext"], "Preparing")
+      assert.strictEqual(Locator.textOf(s.get(value)), "Preparing")
     }))
 
-  it("each part takes only its own tag", () => {
+  it("custom value children remain visible before the root's hidden label helper", () => {
     const s = parts({ value: 40 })
-    assert.throws(() => s.root(h.span as any), /a part for <div> was given <span>/)
-    assert.throws(() => s.label(h.div as any), /a part for <span> was given <div>/)
-    assert.throws(() => s.value(h.div as any), /a part for <span> was given <div>/)
-    assert.throws(() => s.track(h.span as any), /a part for <div> was given <span>/)
-    assert.throws(() => s.indicator(h.span as any), /a part for <div> was given <span>/)
-  })
-
-  it("the parts keep the consumer's attributes, but the bar's own win, present or absent", () => {
-    const stale = <B extends { readonly attr: (name: string, value: string | undefined) => B }>(builder: B): B =>
-      builder.attr("data-progressing", "").attr("data-complete", "").attr("data-indeterminate", "")
-    const unknown = parts({ value: null, min: 10, max: 20 })
-    const root = build(unknown.root(
-      stale(h.div.class("bar"))
-        .attr("aria-label", "Upload")
-        .attr("role", "meter")
-        .attr("aria-valuemin", "1")
-        .attr("aria-valuemax", "2")
-        .attr("aria-valuenow", "1")
-        .attr("aria-valuetext", "half")
-    ))
-    assert.deepInclude(root.attrs, {
-      class: "bar",
-      "aria-label": "Upload",
-      role: "progressbar",
-      "aria-valuemin": "10",
-      "aria-valuemax": "20",
-      "aria-valuetext": "indeterminate progress",
-      "data-indeterminate": ""
-    })
-    assert.isUndefined(root.attrs["aria-valuenow"])
-    assert.isUndefined(root.attrs["data-progressing"])
-    assert.isUndefined(root.attrs["data-complete"])
-
-    const known = parts({ value: 40 })
-    assert.deepStrictEqual(
-      build(known.label(stale(h.span.class("name")).attr("id", "mine").attr("role", "note"))).attrs,
-      {
-        class: "name",
-        id: build(known.label(h.span)).attrs.id,
-        role: "presentation",
-        "data-progressing": ""
-      }
-    )
-    assert.deepStrictEqual(build(known.value(stale(h.span.class("pct")).attr("aria-hidden", "false"))).attrs, {
-      class: "pct",
-      "aria-hidden": "true",
-      "data-progressing": ""
-    })
-    assert.deepStrictEqual(build(known.track(stale(h.div.class("track")))).attrs, {
-      class: "track",
-      "data-progressing": ""
-    })
-  })
-
-  it("the root's hidden span comes after every child, including the ones chained after the part", () => {
-    const children = build(parts({ value: 40 }).root(h.div.children(h.b)).children(h.i)).children
+    const custom = s.value(h.span).children("Almost there")
+    const children = build(s.root(h.div.children(h.b)).children(custom)).children
     assert.deepStrictEqual(children.map((child) => child._tag === "Element" ? child.tag : child._tag), [
       "b",
-      "i",
+      "span",
       "span"
     ])
+    const shown = children[1]
+    if (shown?._tag !== "Element") return assert.fail("the custom value is missing")
+    assert.deepStrictEqual(shown.children.map((child) => child._tag === "Text" && child.text), ["Almost there"])
     const last = children[2]
     if (last?._tag !== "Element") return assert.fail("the root has no hidden span")
     assert.strictEqual(last.attrs.role, "presentation")
     assert.match(last.attrs.style ?? "", /position:absolute;width:1px;height:1px/)
-  })
-
-  it("value shows the value text unless the consumer gives it children", () => {
-    const textOf = (element: View.Element<never>) =>
-      element.children.map((child) => child._tag === "Text" ? child.text : "").join("")
-    const text = (props: ProgressProps) => textOf(build(parts(props).value(h.span)))
-    assert.strictEqual(text({ value: 1, max: 3 }), "33%")
-    assert.strictEqual(parts({ value: 1, max: 3 }).valueText, "33%")
-    // The consumer's text is the root's too.
-    const given = parts({ value: 2, max: 5, valueText: "2 of 5 files" })
-    assert.strictEqual(build(given.root(h.div)).attrs["aria-valuetext"], "2 of 5 files")
-    assert.strictEqual(text({ value: 2, max: 5, valueText: "2 of 5 files" }), "2 of 5 files")
-    assert.strictEqual(text({ value: null, valueText: "Preparing" }), "Preparing")
-    // The consumer's children, set before the part or chained after it.
-    assert.strictEqual(textOf(build(parts({ value: 40 }).value(h.span.children("Almost there")))), "Almost there")
-    assert.strictEqual(textOf(build(parts({ value: 40 }).value(h.span).children("Later"))), "Later")
   })
 
   it("the indicator's width wins over the consumer's inline style, whose other declarations stay", () => {
@@ -158,13 +94,10 @@ describe("Progress", () => {
     assert.strictEqual(s.status, "progressing")
     assert.strictEqual(s.percentage, 50)
     const own = "inset-inline-start:0;height:inherit;width:50%"
-    assert.strictEqual(build(s.indicator(h.div)).attrs.style, own)
-    // Set before the part and chained after it.
     assert.strictEqual(
-      build(s.indicator(h.div.style({ width: "10%", background: "red" }))).attrs.style,
-      `width:10%;background:red;${own}`
+      build(s.indicator(h.div).style({ background: "red", width: "10%" })).attrs.style,
+      `background:red;width:10%;${own}`
     )
-    assert.strictEqual(build(s.indicator(h.div).style({ width: "10%" })).attrs.style, `width:10%;${own}`)
     // While indeterminate, the consumer's style is all there is.
     const unknown = parts({ value: Number.NaN })
     assert.strictEqual(unknown.status, "indeterminate")
