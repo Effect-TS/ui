@@ -6666,7 +6666,7 @@ const setup = (
       throw new Error(
         `${
           childPath(inst.author, rendered.v)
-        } is declared detached, and this host has no createContainer to hold its nodes`
+        } isn't placed by its parent's view, and this host has no createContainer to hold its nodes`
       )
     }
     const container = host.createContainer()

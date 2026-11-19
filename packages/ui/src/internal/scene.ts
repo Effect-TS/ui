@@ -161,8 +161,10 @@ const followMounts = (
         if (layer.mount !== undefined && layer.owner.path === own) follow(layer.mount, own, node, olds)
       }
     }
-    // A slotted child and an outlet show their content under `children`: an outlet's is a parent's.
-    const below = authored && node._tag !== "Outlet"
+    // A slotted child and an outlet show their content under `children`: an outlet's is a parent's. A
+    // `"model"` child's view is the child's, and what the component placed in its slots is the component's.
+    const shownBy = engine.ownerOf(node)
+    const below = shownBy === "parent" || (shownBy === undefined && authored && node._tag !== "Outlet")
     if (old === undefined) {
       // Nothing to match against: every mount below is new.
       for (const child of childrenOf(node)) walk(undefined, child, below)

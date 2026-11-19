@@ -32,6 +32,7 @@
  *
  * const TodoItem = Component.define({
  *   name: "TodoItem",
+ *   lifetime: "view",
  *   props: Schema.Struct({ todo: Todo }),
  *   model: Schema.Struct({}),
  *   message: TodoItemMessage,
@@ -67,8 +68,10 @@ import * as Predicate from "effect/Predicate"
 import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Schema from "effect/Schema"
 import type * as Types from "effect/Types"
+import type * as Child from "./Child.ts"
 import * as Command from "./Command.ts"
 import * as child from "./internal/child.ts"
+import * as children from "./internal/children.ts"
 import * as internalNoop from "./internal/noop.ts"
 import * as queryCore from "./internal/queryCore.ts"
 import * as childRef from "./internal/ref.ts"
@@ -955,6 +958,45 @@ const toNext = (result: unknown): Next<any, any, any, any> =>
     : { model: result, commands: noEffects, events: noEffects }
 
 /**
+ * Where a component's state lives.
+ *
+ * **Details**
+ *
+ * A `"view"` component is called inline in a view, `Tooltip(h, { key })`,
+ * and lives while the view renders it. A `"model"` component is listed in
+ * its parent's `children` and lives while it is listed: the view only
+ * decides whether it is shown, with `h.children.<name>()`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type Lifetime = "view" | "model"
+
+/**
+ * The type error of a direct call to a `"model"` component.
+ *
+ * @stability experimental
+ * @category utility types
+ * @since 0.1.0
+ */
+export type ModelCallHint = "A component with lifetime 'model' is declared in `children` and placed with h.children"
+
+// A call signature's `this` is compared contravariantly, so an erased lifetime, `Lifetime`, takes `any`: every
+// component fits it, a `"model"` one included, and a call through it compiles.
+type InlineCall<Lt> = [Lt] extends ["model"] ? ModelCallHint : [Lt] extends ["view"] ? unknown : any
+
+/**
+ * The lifetime of a component: `Lifetime` when it is erased.
+ *
+ * @stability experimental
+ * @category utility types
+ * @since 0.1.0
+ */
+export type LifetimeOf<C> = C extends Mountable<infer _P, infer _E, infer _R, infer _Rcv, infer _Sl, infer Lt> ? Lt
+  : never
+
+/**
  * What a parent needs from a child: its props and events contract and its
  * requirements. Model and message are the child's business and are erased.
  *
@@ -972,9 +1014,14 @@ const toNext = (result: unknown): Next<any, any, any, any> =>
  * @category models
  * @since 0.1.0
  */
-export interface Mountable<in out Props, out Events, out R = never, in Rcv = never, in Sl extends string = never>
-  extends Pipeable.Pipeable
-{
+export interface Mountable<
+  in out Props,
+  out Events,
+  out R = never,
+  in Rcv = never,
+  in Sl extends string = never,
+  out Lt extends Lifetime = Lifetime
+> extends Pipeable.Pipeable {
   /**
    * Declares a child of this component in a parent's view, from the parent's
    * `h`, which types `onEmit`, `onFailure` and `fallback` against the
@@ -988,7 +1035,10 @@ export interface Mountable<in out Props, out Events, out R = never, in Rcv = nev
   // failed would stand in for it and accept the map. With `Msg` given and
   // `SC` not, `SC` isn't inferred, and nothing could check the map's names
   // or requirements, so the call takes no slots.
+  // `this` is the only part that depends on the lifetime. A `"model"` component's is a message, which no
+  // call's `this` fits, so a direct call fails on the callee with it, before its arguments are checked.
   <Msg, RF = never, const SC extends object = never>(
+    this: InlineCall<Lt>,
     h: View.Helper<Msg, unknown>,
     options:
       & View.Child.Options<Props, Events, NoInfer<Msg>, Rcv>
@@ -1004,7 +1054,7 @@ export interface Mountable<in out Props, out Events, out R = never, in Rcv = nev
       // are required.
       & (0 extends 1 & Props ? { readonly props: Props } : {})
   ): View.Child<Msg, R | NoInfer<RF> | SlotRequirements<SC>>
-  readonly [TypeId]: Mountable.Variance<Props, Events, R, Rcv, Sl>
+  readonly [TypeId]: Mountable.Variance<Props, Events, R, Rcv, Sl, Lt>
   /** What `define` returned. `provide` keeps it, so `definition.name` is the name the component was defined with. */
   readonly definition: Definition.Any
   readonly props: Schema.Codec<Props, any>
@@ -1080,12 +1130,20 @@ export declare namespace Mountable {
    * @category models
    * @since 0.1.0
    */
-  export interface Variance<in out Props, out Events, out R, in Rcv = never, in Sl extends string = never> {
+  export interface Variance<
+    in out Props,
+    out Events,
+    out R,
+    in Rcv = never,
+    in Sl extends string = never,
+    out Lt extends Lifetime = Lifetime
+  > {
     readonly _Props: Types.Invariant<Props>
     readonly _Events: Types.Covariant<Events>
     readonly _R: Types.Covariant<R>
     readonly _Rcv: Types.Contravariant<Rcv>
     readonly _Sl: Types.Contravariant<Sl>
+    readonly _Lt: Types.Covariant<Lt>
   }
 }
 
@@ -1106,8 +1164,9 @@ export interface Component<
   out V extends View.Elements = never,
   out L = {},
   in out Rcv = never,
-  in Sl extends string = never
-> extends Mountable<Props, Events, R, Rcv, Sl> {
+  in Sl extends string = never,
+  out Lt extends Lifetime = Lifetime
+> extends Mountable<Props, Events, R, Rcv, Sl, Lt> {
   /** What `define` returned. `provide` keeps it, so `definition.name` is the name the component was defined with. */
   readonly definition: Definition.Of<Name>
   readonly model: Schema.Codec<Model, any>
@@ -1471,6 +1530,34 @@ type CheckedSlots<Sl extends string, SC, Msg> = {
 type SlotNames<SC> = SC extends unknown ? keyof SC : never
 type SlotRequirements<SC> = SC extends unknown ? View.Requirements<SC[keyof SC]> : never
 
+// `h.children`: how the view places each entry of `children`. An optional child is `undefined` while it doesn't
+// exist, and a keyed one takes its key first.
+type ChildrenHelpers<Ch, Msg> = [keyof Ch] extends [never] ? {}
+  : { readonly children: { readonly [K in keyof Ch]: ChildPlacement<Ch[K], Msg> } }
+type ChildPlacement<E, Msg> = E extends Child.Entry<any, any, infer K, infer R, infer Sl>
+  ? K extends "optional" ? Place<R, Sl, Msg, []> | undefined
+  : K extends "keyed" ? Place<R, Sl, Msg, [key: string]>
+  : Place<R, Sl, Msg, []>
+  : E extends Child.Shape<any, any, infer R, infer Sl, any> ? Place<R, Sl, Msg, []>
+  : never
+// A placement takes only slot content: props and `onEmit` are the entry's.
+type Place<R, Sl extends string, Msg, Key extends ReadonlyArray<string>> = [Sl] extends [never]
+  ? (...key: Key) => View.Child<Msg, R>
+  : <const SC extends object = never>(
+    ...args: [...Key, options?: SlotOptions<Sl, SC, NoInfer<Msg>>]
+  ) => View.Child<Msg, R | SlotRequirements<SC>>
+// A listed child lives whether or not it's shown, so its requirements are the parent's either way.
+type ChildrenRequirements<Ch> = { readonly [K in keyof Ch]: ChildRequirements<Ch[K]> }[keyof Ch]
+type ChildRequirements<E> = E extends Child.Entry<any, any, any, infer R, any> ? R
+  : E extends Child.Shape<any, any, infer R, never, any> ? R
+  : never
+// A component listed bare has lifetime "model" and takes no props. An entry's component is checked by its constructor.
+type CheckedChildren<Ch> = {
+  readonly [K in keyof Ch]: Ch[K] extends Child.Shape<infer P, any, any, never, infer Lt>
+    ? [Lt] extends ["view"] ? Child.ViewChildHint : {} extends P ? unknown : Child.BarePropsHint
+    : unknown
+}
+
 /**
  * Any component.
  *
@@ -1805,7 +1892,16 @@ const makeComponent = (
   proto: object,
   fields: { readonly [key: string]: unknown }
 ): any => {
-  const component = (_h: unknown, options: child.Options) => child.make(component as any, options)
+  const component = (_h: unknown, options: child.Options) => {
+    // The types reject this call. A call through `Component.Any` gets here.
+    if ((fields.definition as Definition.Any).lifetime === "model") {
+      const name = (fields.definition as Definition.Any).name
+      throw new Error(
+        `${name} has lifetime "model", so it isn't called in a view: list it in its parent's children and place it with h.children`
+      )
+    }
+    return child.make(component as any, options)
+  }
   Object.setPrototypeOf(component, proto)
   for (const key of Object.keys(fields)) {
     Object.defineProperty(component, key, { value: fields[key], enumerable: true, writable: true, configurable: true })
@@ -1951,9 +2047,12 @@ export interface Definition<
   Sl extends string = never,
   SR = {},
   SV = never,
-  Rp = never
+  Rp = never,
+  Lt extends Lifetime = "view"
 > {
   readonly name: Name
+  /** Where the component's state lives: `"view"` or `"model"`. */
+  readonly lifetime: Lt
   readonly props: Schema.Codec<Props, any>
   readonly model: Schema.Codec<Model, any>
   readonly message: Schema.Codec<Msg, any>
@@ -2019,16 +2118,23 @@ export interface Definition<
     UR extends { readonly [T in TagOf<Msg>]: Model | Step<Model, Msg, Events, any, L> } = {
       readonly [T in TagOf<Msg>]: Model
     },
-    Sub extends Subscription.Subscription<Msg, any> = never
+    Sub extends Subscription.Subscription<Msg, any> = never,
+    // Read only so that `children` is typed the same in both overloads: an argument's functions take the types the
+    // first overload tried gives them.
+    _Ch extends Child.Children<Model, Msg> = {}
   >(
     options: {
+      readonly children?: _Ch | undefined
       readonly init: ($: Init<Model, Msg, Events, Props>) => UI
       readonly update:
         | ((model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L>) => U)
         | UpdateRecord<Model, Msg, Events, Props, L, UR>
-      /** A headless component has no view to place slots in, so a definition with slots can't take `parts`. */
-      readonly parts: [Sl] extends [never] ?
-        (model: Model, p: PartsHelper<Msg, Props, V> & QueryHelpers<L> & SharedHelpers<SR>) => Parts
+      /**
+       * A headless component has no view to place slots in, so a definition with slots can't take `parts`.
+       * Its view is written where it is placed, so its lifetime is `"view"`.
+       */
+      readonly parts: [Sl] extends [never] ? [Lt] extends ["model"] ? HeadlessModelHint
+        : (model: Model, p: PartsHelper<Msg, Props, V> & QueryHelpers<L> & SharedHelpers<SR>) => Parts
         : never
       readonly subscriptions?:
         | ((
@@ -2072,17 +2178,30 @@ export interface Definition<
       readonly [T in TagOf<Msg>]: Model
     },
     UV extends View.Content<Msg, any> = View.Node<Msg>,
-    Sub extends Subscription.Subscription<Msg, any> = never
+    Sub extends Subscription.Subscription<Msg, any> = never,
+    Ch extends Child.Children<Model, Msg> = {}
   >(
     options:
       & {
+        /**
+         * The children whose state the Model owns, by name. Each lives while it is listed, whether or
+         * not the view shows it, and `view` places it with `h.children.<name>()`. Write it before
+         * `view`, so `h.children` is typed by it.
+         */
+        readonly children?: (Ch & CheckedChildren<Ch>) | undefined
         readonly init: ($: Init<Model, Msg, Events, Props>) => UI
         readonly update:
           | ((model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L>) => U)
           | UpdateRecord<Model, Msg, Events, Props, L, UR>
         readonly view: (
           model: Model,
-          h: View.Helper<Msg, Props> & View.Tags<V, Msg> & QueryHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>
+          h:
+            & View.Helper<Msg, Props>
+            & View.Tags<V, Msg>
+            & QueryHelpers<L>
+            & SlotHelpers<Sl>
+            & SharedHelpers<SR>
+            & ChildrenHelpers<Ch, Msg>
         ) => UV
         readonly subscriptions?:
           | ((
@@ -2113,15 +2232,26 @@ export interface Definition<
       | View.Requirements<UV>
       | Subscription.Requirements<Sub>
       | QueryServices<L>
-      | SharedRequirements<SR>,
+      | SharedRequirements<SR>
+      | ChildrenRequirements<Ch>,
       Command.FrameworkService
     >,
     V,
     L,
     Rcv,
-    Sl
+    Sl,
+    Lt
   >
 }
+
+/**
+ * The type error of `parts` on a headless definition with `lifetime: "model"`.
+ *
+ * @stability experimental
+ * @category utility types
+ * @since 0.1.0
+ */
+export type HeadlessModelHint = "A headless component is written where it is placed, so its lifetime is 'view'"
 
 /**
  * Types for definitions: what a component keeps of the one it was made from.
@@ -2146,6 +2276,7 @@ export declare namespace Definition {
    */
   export interface Any {
     readonly name: string
+    readonly lifetime: Lifetime
     readonly props: Schema.Codec<any, any>
     readonly model: Schema.Codec<any, any>
     readonly message: Schema.Codec<any, any>
@@ -2190,6 +2321,7 @@ export declare namespace Definition {
  *
  * const NoteListDef = Component.define({
  *   name: "NoteList",
+ *   lifetime: "view",
  *   model: Schema.Struct({ notes: Schema.Array(Note) }),
  *   message: Schema.Never
  * })
@@ -2220,14 +2352,16 @@ export type Helper<D> = D extends Definition<
   infer Sl,
   infer SR,
   infer _SV,
-  infer _Rp
+  infer _Rp,
+  infer _Lt
 > ? View.Helper<Msg, P> & View.Tags<V, Msg> & QueryHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>
   : never
 
 /**
- * Defines a component, in two steps. `define` takes the name, the Schemas,
- * `queries` and `elements`, and `make` on the definition it returns takes
- * `init`, `update`, `view`, `subscriptions`, `head` and `reduceHead`.
+ * Defines a component, in two steps. `define` takes the name, the
+ * `lifetime`, the Schemas, `queries` and `elements`, and `make` on the
+ * definition it returns takes `children`, `init`, `update`, `view`,
+ * `subscriptions`, `head` and `reduceHead`.
  *
  * **Details**
  *
@@ -2239,6 +2373,15 @@ export type Helper<D> = D extends Definition<
  * belong to the first step. A definition is named with a `Def` suffix and
  * usually stays unexported. A component written in one piece chains the two
  * steps.
+ *
+ * `lifetime` says how long the component's Model lives. A `"view"`
+ * component is called in a view, `Counter(h, { key, props })`, and lives
+ * while the view renders it: dropped from the view, it unmounts. A `"model"`
+ * component is listed in its parent's `children`, with its props and
+ * `onEmit` as functions of the parent's Model, and the parent's view places
+ * it with `h.children.<name>()`. It lives while it is listed, placed or not,
+ * so a hidden tab keeps its draft. A route page and the mounted root may be
+ * either. A headless component is `"view"`.
  *
  * `init` and `update` get `$`, a step holding the current Model and props.
  * `view` gets `h`, bound to the component's message type and carrying the
@@ -2310,9 +2453,9 @@ export type Helper<D> = D extends Definition<
  * refs reach into it from the parent, and it resolves services where the
  * parent declared the child. A parent's re-render patches only the content,
  * without running the child's view. Content the view stops placing is kept
- * out of the document, as a `detached` child is, and comes back as it was
- * when the view places it again. Content the view never placed isn't
- * created. A page restored on back or forward gets back the content its
+ * out of the document, as an unplaced `"model"` child is, and comes back
+ * as it was when the view places it again. Content the view never placed
+ * isn't created. A page restored on back or forward gets back the content its
  * views place as it renders: content left in a closed slot isn't among it,
  * so it starts fresh when the slot opens. A child in the content has the
  * parent's path and its own
@@ -2338,6 +2481,7 @@ export type Helper<D> = D extends Definition<
  *
  * const Counter = Component.define({
  *   name: "Counter",
+ *   lifetime: "view",
  *   props: Schema.Struct({ initial: Schema.Number }),
  *   model: Schema.Struct({ count: Schema.Number }),
  *   message: CounterMessage
@@ -2382,6 +2526,7 @@ import { Query } from "@effect/ui"
  *
  * const UserPage = Component.define({
  *   name: "UserPage",
+ *   lifetime: "view",
  *   props: Schema.Struct({ id: Schema.String }),
  *   model: Schema.Struct({}),
  *   message: Schema.Never,
@@ -2417,6 +2562,7 @@ import { Query } from "@effect/ui"
  *
  * const NotePageDef = Component.define({
  *   name: "NotePage",
+ *   lifetime: "view",
  *   model: Schema.Struct({ body: Schema.String, edits: Schema.Number, error: Schema.NullOr(Schema.String) }),
  *   message: NotePageMessage
  * })
@@ -2452,6 +2598,7 @@ import { Query } from "@effect/ui"
  *
  * const Card = Component.define({
  *   name: "Card",
+ *   lifetime: "view",
  *   model: Schema.Boolean,
  *   message: Schema.Literal("ClickedToggle"),
  *   slots: ["title", "body"]
@@ -2464,6 +2611,7 @@ import { Query } from "@effect/ui"
  *
  * export const Page = Component.define({
  *   name: "Page",
+ *   lifetime: "view",
  *   model: Schema.Number,
  *   message: Schema.Literal("ClickedLike")
  * }).make({
@@ -2505,10 +2653,17 @@ export const define = <
   SV = never,
   Rp = never,
   // The owner of each entry of `shared`, inferred before `report` and `onChange` are typed.
-  SO extends { readonly [name: string]: Headless.Any | "self" } = {}
+  SO extends { readonly [name: string]: Headless.Any | "self" } = {},
+  const Lt extends Lifetime = never
 >(
   options: {
     readonly name: Name
+    /**
+     * Where the component's state lives. A `"view"` component is called in a view and lives while
+     * the view renders it. A `"model"` component is listed in its parent's `children` and lives while
+     * it is listed, shown or not. A headless component's is `"view"`.
+     */
+    readonly lifetime: Lt
     readonly props?: Schema.Codec<Props, any> | undefined
     readonly model: Schema.Codec<Model, any>
     readonly message: Schema.Codec<Msg, any>
@@ -2603,7 +2758,8 @@ export const define = <
   Sl,
   ResolveSelf<Listed<SR>, SelfOwner<Name, Props, Events, Tagged<Msg, Tags>, SV, Rp>>,
   SV,
-  Rp
+  Rp,
+  Lt
 > => {
   const shares = options.shares
   const definition: Definition<
@@ -2618,9 +2774,11 @@ export const define = <
     Sl,
     ResolveSelf<Listed<SR>, SelfOwner<Name, Props, Events, Tagged<Msg, Tags>, SV, Rp>>,
     SV,
-    Rp
+    Rp,
+    Lt
   > = {
     name: options.name,
+    lifetime: checkLifetime(options.name, options.lifetime),
     props: options.props ?? (Schema.Struct({}) as any),
     model: options.model,
     message: options.message,
@@ -2650,6 +2808,13 @@ export const define = <
   return definition
 }
 
+const checkLifetime = <Lt extends Lifetime>(name: string, lifetime: Lt): Lt => {
+  if (lifetime !== "view" && lifetime !== "model") {
+    throw new Error(`${name} needs a lifetime, "view" or "model", and has ${String(lifetime)}`)
+  }
+  return lifetime
+}
+
 // The cases of `message` with one of `tags`, or `Schema.Never` without any.
 const receivesOf = (message: Schema.Codec<any, any>, tags: ReadonlyArray<string>): Schema.Codec<any, any> =>
   tags.length === 0 ? Schema.Never : message.check(
@@ -2672,6 +2837,7 @@ const bindQueries = (component: string, queries: unknown): ReturnType<queryCore.
 const finish = (
   definition: Definition.Any,
   options: {
+    readonly children?: { readonly [name: string]: unknown } | undefined
     readonly init: ($: Init<any, any, any, any>) => unknown
     readonly update: AnyUpdate | { readonly [tag: string]: AnyUpdate }
     readonly view?: ((model: any, h: any) => View.Content<any, any>) | undefined
@@ -2703,6 +2869,15 @@ const finish = (
   if (parts !== undefined && definition.slots.length > 0) {
     throw new Error(`${definition.name} declares slots, so it needs a view to place them and can't take parts`)
   }
+  if (parts !== undefined && definition.lifetime === "model") {
+    throw new Error(
+      `${definition.name} is headless, so its view is written where it is placed and its lifetime is "view"`
+    )
+  }
+  if (parts !== undefined && options.children !== undefined) {
+    throw new Error(`${definition.name} is headless and has no view to place children in: give it a view`)
+  }
+  const listed = options.children === undefined ? undefined : children.make(definition.name, options.children)
   // Made once, so a slot forwarded as another's content is the same value on every render.
   const outlets: Record<string, View.Outlet> = {}
   for (const name of definition.slots) outlets[name] = { _tag: "Outlet", name }
@@ -2752,7 +2927,14 @@ const finish = (
         const lazies = lazy?.lazy as View.Lazies | undefined
         lazies?.begin()
         try {
-          const node = View.toNode(view(model, h))
+          let node: View.Node<any, any>
+          if (listed === undefined) {
+            node = View.toNode(view(model, h))
+          } else {
+            const rendered = children.render(definition.name, listed, model)
+            h.children = rendered.helpers
+            node = rendered.hold(View.toNode(view(model, h)))
+          }
           lazies?.end()
           return node
         } catch (error) {
@@ -2800,7 +2982,8 @@ const finish = (
     layerFailure: undefined,
     sharedLayer: undefined,
     layerOnServer: true,
-    "~queries": bound
+    "~queries": bound,
+    "~children": listed
   })
   reads = sharedReads.readsOf(definition, component)
   return component
@@ -2879,9 +3062,16 @@ export interface LocalOption {
  * @since 0.1.0
  */
 export type Provided<C, ROut, RIn> = C extends
-  Component<infer N, infer P, infer M, infer Msg, infer E, infer _R, infer V, infer L, infer Rcv, infer Sl>
-  ? Component<N, P, M, Msg, E, Exclude<Requirements<C>, Exclude<ROut, RuntimeService>> | RIn, V, L, Rcv, Sl>
-  : Mountable<Props<C>, Events<C>, Exclude<Requirements<C>, Exclude<ROut, RuntimeService>> | RIn, Receives<C>, Slots<C>>
+  Component<infer N, infer P, infer M, infer Msg, infer E, infer _R, infer V, infer L, infer Rcv, infer Sl, infer Lt>
+  ? Component<N, P, M, Msg, E, Exclude<Requirements<C>, Exclude<ROut, RuntimeService>> | RIn, V, L, Rcv, Sl, Lt>
+  : Mountable<
+    Props<C>,
+    Events<C>,
+    Exclude<Requirements<C>, Exclude<ROut, RuntimeService>> | RIn,
+    Receives<C>,
+    Slots<C>,
+    LifetimeOf<C>
+  >
 
 /**
  * Services the runtime owns or reads once at mount: the framework services,
@@ -3184,6 +3374,7 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F } ? "onFailure" ext
  *
  * const Row = Component.define({
  *   name: "Row",
+ *   lifetime: "view",
  *   props: Schema.Struct({ id: Schema.String }),
  *   model: Schema.Struct({}),
  *   message: RowMessage
@@ -3225,6 +3416,7 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F } ? "onFailure" ext
  *
  * const RoomView = Component.define({
  *   name: "RoomView",
+ *   lifetime: "view",
  *   model: Schema.Struct({ room: Schema.String, joined: Schema.String }),
  *   message: RoomMessage
  * }).make({

@@ -11,6 +11,7 @@ export const CollapsibleMessage = UiSchema.TaggedEnum({ ClickedToggle: {} })
 
 export const Collapsible = Component.define({
   name: "Collapsible",
+  lifetime: "view",
   model: Schema.Struct({ open: Schema.Boolean }),
   message: CollapsibleMessage,
   elements: Html,
@@ -23,8 +24,8 @@ export const Collapsible = Component.define({
   // `h.slots.<name>` places a slot's content: once per render, anywhere in
   // the view. A parent's re-render patches only the content, so this view
   // doesn't run for it. Leaving a slot out of the view keeps its content out
-  // of the document, as a `detached` child is, and placing it again brings
-  // it back as it was.
+  // of the document, as an unplaced `"model"` child is, and placing it
+  // again brings it back as it was.
   view: (model, h) =>
     h.section(
       h.header(

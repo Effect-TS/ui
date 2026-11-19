@@ -63,6 +63,7 @@ import type * as Renderer from "./Renderer.ts"
  *
  * export const Counter = Component.define({
  *   name: "Counter",
+ *   lifetime: "view",
  *   model: Schema.Number,
  *   message: Schema.Literal("ClickedIncrement")
  * }).make({
@@ -322,18 +323,19 @@ export type MountHint =
  * failure boundary: a failed child shows `fallback`, or nothing, until its
  * key changes, and the parent's optional `onFailure` is also messaged.
  *
- * A child dropped from the view unmounts, and its Model goes with it. Declare
- * it with `detached: true` instead when the user should find it as they left
- * it, such as a hidden tab with a half-filled form or a wizard step. Its nodes
- * leave the document and the runtime keeps them, so the child keeps its
+ * A child dropped from the view unmounts, and its Model goes with it: a
+ * component with `lifetime: "view"` lives while a view declares it. When the
+ * user should find a child as they left it, such as a hidden tab with a
+ * half-filled form or a wizard step, give the child `lifetime: "model"` and
+ * list it in its parent's `children`. The parent's view places it with
+ * `h.children`, and while the view doesn't, the child is detached: its
+ * nodes leave the document and the runtime keeps them, so it keeps its
  * Model, its Commands in flight, its Subscriptions and what the user typed
- * into its inputs. It still gets props, `$.send` and query results, and its
- * events reach the parent through the `onEmit` of the latest render. It
- * contributes no head entries, a ref lookup inside it finds nothing, and its
- * element mounts stop until it is attached again, when they start anew. The
- * log records `Detached` and `Attached`. A server render writes no nodes
- * for a detached child but sends its state, and the client builds its nodes,
- * detached, from the server's Model.
+ * into its inputs. It contributes no head entries, a ref lookup inside it
+ * finds nothing, and its element mounts stop until it is placed again, when
+ * they start anew. The log records `Detached` and `Attached`. A server
+ * render writes no nodes for a detached child but sends its state, and the
+ * client builds its nodes, detached, from the server's Model.
  *
  * **Gotchas**
  *
@@ -348,10 +350,10 @@ export type MountHint =
  * keeps the Model when `cond` changes, and `init` doesn't run again. Key each
  * branch when the component's Model holds state that shouldn't carry over.
  *
- * A detached child costs what a shown one does. Declare a wizard step once it
- * has been visited, `detached: step !== model.current`, rather than every
- * step up front. Its Subscriptions keep running, so gate one on the Model
- * when it should pause. A dialog or popover open inside it closes when it is
+ * A detached child costs what a shown one does. List a wizard step with
+ * `Child.optional` once it has been visited, rather than every step up
+ * front. Its Subscriptions keep running, so gate one on the Model when it
+ * should pause. A dialog or popover open inside it closes when it is
  * detached, and focus inside it is lost. A host without `createContainer`
  * fails the parent of a detached child.
  *
@@ -379,7 +381,7 @@ export interface Child<out Msg, out R = never> {
   readonly view: ((parts: any) => Content<Msg, any>) | undefined
   /** What the parent passed for each of the child's slots. */
   readonly slots: Readonly<Record<string, Input<any, any>>> | undefined
-  /** The child's nodes are out of the document, and its instance goes on. */
+  /** A `"model"` child its parent's view doesn't place: its nodes are out of the document, and its instance goes on. */
   readonly detached?: boolean | undefined
   /** Phantom: the child's requirements surface in its parent's. */
   readonly "~R"?: (_: never) => R
@@ -435,12 +437,6 @@ export declare namespace Child {
       readonly onEmit?: ((events: Events) => Msg | undefined) | EmitHandlers<Events, Msg> | undefined
       /** Also tells the parent that the child failed. The failure stays in the child either way. */
       readonly onFailure?: ((failure: AsyncResult.Failure<never, unknown>) => Msg | undefined) | undefined
-      /**
-       * Takes the child's nodes out of the document while it stays declared.
-       * Its Model, Commands, Subscriptions, props and `onEmit` go on, and its
-       * element mounts stop until it is attached again. `false` by default.
-       */
-      readonly detached?: boolean | undefined
     }
     & ({} extends Props ? { readonly props?: Props | undefined } : { readonly props: Props })
 

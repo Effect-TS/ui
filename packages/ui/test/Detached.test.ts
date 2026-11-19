@@ -1,5 +1,5 @@
-import { Command, Component, Head, type MessageLog, Mount, Renderer, UiSchema } from "@effect/ui"
-import { Locator, Scene, TestHost } from "@effect/ui/testing"
+import { Child, Command, Component, Head, type MessageLog, Mount, Renderer, UiSchema } from "@effect/ui"
+import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Deferred, Effect, Option, Schema } from "effect"
 
@@ -35,6 +35,7 @@ const makeForm = (saving: Deferred.Deferred<void>) => {
   )
   return Component.define({
     name: "Profile",
+    lifetime: "model",
     model: FormModel,
     message: FormMsg,
     events: FormEvents,
@@ -59,11 +60,12 @@ const makeForm = (saving: Deferred.Deferred<void>) => {
   })
 }
 
-const Billing = Component.define({ name: "Billing", model: Schema.Null, message: Schema.Never }).make({
-  init: () => null,
-  update: (model) => model,
-  view: (_, h) => h.el("p", "billing")
-})
+const Billing = Component.define({ name: "Billing", lifetime: "model", model: Schema.Null, message: Schema.Never })
+  .make({
+    init: () => null,
+    update: (model) => model,
+    view: (_, h) => h.el("p", "billing")
+  })
 
 const SettingsMsg = UiSchema.TaggedEnum({
   Show: { tab: Schema.String },
@@ -73,8 +75,12 @@ const SettingsMsg = UiSchema.TaggedEnum({
 const SettingsModel = Schema.Struct({ tab: Schema.String, saved: Schema.Array(Schema.String) })
 
 const makeSettings = (Profile: ReturnType<typeof makeForm>) => {
-  const Form = Profile.ref("Form")
-  return Component.define({ name: "Settings", model: SettingsModel, message: SettingsMsg }).make({
+  const Form = Profile.ref("profile")
+  return Component.define({ name: "Settings", lifetime: "view", model: SettingsModel, message: SettingsMsg }).make({
+    children: {
+      profile: Child.one(Profile, { onEmit: (event) => SettingsMsg.Saved({ text: event.text }) }),
+      billing: Billing
+    },
     head: () => [Head.title("Settings")],
     init: () => ({ tab: "profile", saved: [] }),
     update: (model, message, $) =>
@@ -86,13 +92,9 @@ const makeSettings = (Profile: ReturnType<typeof makeForm>) => {
     view: (model, h) =>
       h.el(
         "main",
-        Profile(h, {
-          ref: Form,
-          detached: model.tab !== "profile",
-          // Reads the tab at each render: an emit while detached sees the latest.
-          onEmit: (event) => SettingsMsg.Saved({ text: event.text + "@" + model.tab })
-        }),
-        Billing(h, { key: "billing", detached: model.tab !== "billing" })
+        h.el("button").on("click", SettingsMsg.Show({ tab: "profile" })).children("profile-tab"),
+        h.el("button").on("click", SettingsMsg.Show({ tab: "billing" })).children("billing-tab"),
+        model.tab === "profile" ? h.children.profile() : h.children.billing()
       )
   })
 }
@@ -155,12 +157,36 @@ const withoutContainer = () => {
 }
 
 describe("detached children", () => {
-  it.effect("a hidden tab keeps its draft and its save, gets messages, and emits through the latest onEmit", () =>
+  it.effect("a story keeps a hidden tab's draft, delivers sends to it, and takes its events", () =>
+    Effect.gen(function*() {
+      const s = yield* Story.make(makeSettings(makeForm(yield* Deferred.make<void>())), {})
+      s.sendChild("profile", FormMsg.Typed())
+        .send(SettingsMsg.Show({ tab: "billing" }))
+        .sendChild("profile", FormMsg.Saved({ text: "a" }))
+        .send(SettingsMsg.Show({ tab: "profile" }))
+      assert.deepStrictEqual(s.children, { profile: { draft: "a", saved: "a" }, billing: null })
+      assert.deepStrictEqual(s.model.saved, ["a"])
+      s.send(SettingsMsg.Clear())
+      assert.deepStrictEqual(s.children.profile, { draft: "", saved: "a" })
+    }))
+
+  it.effect("a scene clicks into a shown model child and keeps its draft while it is hidden", () =>
+    Effect.gen(function*() {
+      const s = yield* Scene.make(makeSettings(makeForm(yield* Deferred.make<void>())), {})
+      s.click("draft:")
+        .expect(Locator.text("draft:a")).toExist()
+        .click("billing-tab")
+        .expect(Locator.text("draft:a")).toBeAbsent()
+        .click("profile-tab")
+        .expect(Locator.text("draft:a")).toExist()
+    }))
+
+  it.effect("a hidden tab keeps its draft and its save, gets messages, and emits", () =>
     provideHost(Effect.gen(function*() {
       const saving = yield* Deferred.make<void>()
       const root = yield* TestHost.mount(makeSettings(makeForm(saving)), {})
       yield* TestHost.settle
-      assert.strictEqual(root.text(), "draft:savesaved:")
+      assert.strictEqual(root.text(), "profile-tabbilling-tabdraft:savesaved:")
 
       click(root, "draft:")
       yield* TestHost.settle
@@ -169,23 +195,23 @@ describe("detached children", () => {
       root.send(SettingsMsg.Show({ tab: "billing" }))
       yield* TestHost.settle
       assert.strictEqual(root.head().title, "Settings")
-      assert.strictEqual(root.text(), "billing")
+      assert.strictEqual(root.text(), "profile-tabbilling-tabbilling")
 
       // The save ends while the form is out of the document, and its emit reaches the parent.
       yield* Deferred.succeed(saving, undefined)
       yield* TestHost.settle
-      assert.deepStrictEqual(root.model()?.saved, ["a@billing"])
+      assert.deepStrictEqual(root.model()?.saved, ["a"])
       root.send(SettingsMsg.Clear())
       yield* TestHost.settle
 
       root.send(SettingsMsg.Show({ tab: "profile" }))
       yield* TestHost.settle
       assert.strictEqual(root.head().title, "Profile")
-      assert.strictEqual(root.text(), "draft:savesaved:a")
-      assert.deepStrictEqual(lifecycle(root, "/Settings/Profile[Form]"), ["Mounted", "Detached", "Attached"])
+      assert.strictEqual(root.text(), "profile-tabbilling-tabdraft:savesaved:a")
+      assert.deepStrictEqual(lifecycle(root, "/Settings/Profile[profile]"), ["Mounted", "Detached", "Attached"])
     })))
 
-  it.effect("keeps a nested detached child detached when its parent is attached, and detaches a new key", () =>
+  it.effect("keeps a nested model child detached when its parent is placed, and detaches a new key", () =>
     provideHost(Effect.gen(function*() {
       const Input = Renderer.ref("Input")
       const Look = Command.make("Look", { args: {} }, () =>
@@ -195,6 +221,7 @@ describe("detached children", () => {
         }))
       const Leaf = Component.define({
         name: "Leaf",
+        lifetime: "model",
         props: Schema.Struct({ label: Schema.String }),
         model: Schema.NullOr(Schema.Boolean),
         message: Schema.Boolean
@@ -203,27 +230,27 @@ describe("detached children", () => {
         update: (_, found) => found,
         view: (found, h) => h.el("i", `${h.props.label}:${found}`).ref(Input)
       })
-      const State = Schema.Struct({ outer: Schema.Boolean, inner: Schema.Boolean, key: Schema.String })
+      const Inner = Schema.Struct({ inner: Schema.Boolean, key: Schema.String })
+      const OuterMsg = UiSchema.TaggedEnum({ Set: { inner: Schema.Boolean, key: Schema.String } })
       const Outer = Component.define({
         name: "Outer",
-        props: Schema.Struct({ inner: Schema.Boolean, key: Schema.String }),
-        model: Schema.Null,
-        message: Schema.Never
+        lifetime: "model",
+        model: Inner,
+        message: OuterMsg,
+        receives: ["Set"]
       }).make({
-        init: () => null,
-        update: (model) => model,
-        view: (_, h) =>
-          h.el(
-            "section",
-            "outer ",
-            Leaf(h, { key: h.props.key, props: { label: h.props.key }, detached: h.props.inner })
-          )
+        children: { leaf: Child.keyed(Leaf, { props: (model) => [[model.key, { label: model.key }]] }) },
+        init: () => ({ inner: true, key: "a" }),
+        update: (_, { inner, key }) => ({ inner, key }),
+        view: (model, h) => h.el("section", "outer ", model.inner ? null : h.children.leaf(model.key))
       })
-      const Page = Component.define({ name: "Page", model: State, message: State }).make({
+      const State = Schema.Struct({ outer: Schema.Boolean, inner: Schema.Boolean, key: Schema.String })
+      const OuterRef = Outer.ref("outer")
+      const Page = Component.define({ name: "Page", lifetime: "view", model: State, message: State }).make({
+        children: { outer: Outer },
         init: () => ({ outer: true, inner: true, key: "a" }),
-        update: (_, next) => next,
-        view: (state, h) =>
-          h.el("div", Outer(h, { key: "o", props: { inner: state.inner, key: state.key }, detached: state.outer }))
+        update: (_, next, $) => $.set(next).send(OuterRef, OuterMsg.Set({ inner: next.inner, key: next.key })),
+        view: (state, h) => h.el("div", state.outer ? null : h.children.outer())
       })
       const root = yield* TestHost.mount(Page, {})
       yield* TestHost.settle
@@ -240,8 +267,8 @@ describe("detached children", () => {
       root.send({ outer: false, inner: false, key: "c" })
       yield* TestHost.settle
       assert.strictEqual(root.text(), "outer c:true")
-      assert.deepStrictEqual(lifecycle(root, "/Page/Outer[o]/Leaf[a]"), ["Mounted", "Detached", "Unmounted"])
-      assert.deepStrictEqual(lifecycle(root, "/Page/Outer[o]/Leaf[b]"), [
+      assert.deepStrictEqual(lifecycle(root, "/Page/Outer[outer]/Leaf[leaf[a]]"), ["Mounted", "Detached", "Unmounted"])
+      assert.deepStrictEqual(lifecycle(root, "/Page/Outer[outer]/Leaf[leaf[b]]"), [
         "Mounted",
         "Detached",
         "Attached",
@@ -249,57 +276,61 @@ describe("detached children", () => {
       ])
     })))
 
-  it.effect("shows a child that failed while detached as its fallback once attached", () =>
+  it.effect("keeps a child that failed while detached failed once placed", () =>
     provideHost(Effect.gen(function*() {
       const Msg = UiSchema.TaggedEnum({ Break: {} })
       const Boom = Command.make("Boom", { args: {} }, () => Effect.die("boom"))
-      const Fragile = Component.define({ name: "Fragile", model: Schema.Null, message: Msg, receives: ["Break"] })
-        .make({ init: () => null, update: (_, __, $) => $.run(Boom()), view: (_, h) => h.el("p", "fine") })
-      const Ref = Fragile.ref("F")
+      const Fragile = Component.define({
+        name: "Fragile",
+        lifetime: "model",
+        model: Schema.Null,
+        message: Msg,
+        receives: ["Break"]
+      }).make({ init: () => null, update: (_, __, $) => $.run(Boom()), view: (_, h) => h.el("p", "fine") })
+      const Ref = Fragile.ref("fragile")
       const PageMsg = UiSchema.TaggedEnum({ Detach: { detached: Schema.Boolean }, Break: {} })
-      const Page = Component.define({ name: "Page", model: Schema.Boolean, message: PageMsg }).make({
+      const Page = Component.define({ name: "Page", lifetime: "view", model: Schema.Boolean, message: PageMsg }).make({
+        children: { fragile: Fragile },
         init: () => false,
         update: (_, message, $) => message._tag === "Break" ? $.send(Ref, Msg.Break()) : message.detached,
-        view: (detached, h) => h.el("div", Fragile(h, { ref: Ref, detached, fallback: () => h.el("p", "down") }))
+        view: (detached, h) => h.el("div", "page ", detached ? null : h.children.fragile())
       })
       const root = yield* TestHost.mount(Page, {})
       yield* TestHost.settle
+      assert.strictEqual(root.text(), "page fine")
       root.send(PageMsg.Detach({ detached: true }))
       root.send(PageMsg.Break())
       yield* TestHost.settle
-      assert.strictEqual(root.text(), "")
+      assert.strictEqual(root.text(), "page ")
       assert.include(
         Cause.pretty((root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed).cause),
         "boom"
       )
       root.send(PageMsg.Detach({ detached: false }))
       yield* TestHost.settle
-      assert.strictEqual(root.text(), "down")
+      assert.strictEqual(root.text(), "page ")
     })))
 
-  it.effect("keeps slot content and a headless child's view current while detached", () =>
+  it.effect("places a model child with the slot content of the render that places it", () =>
     provideHost(Effect.gen(function*() {
-      const Frame = Component.define({ name: "Frame", model: Schema.Null, message: Schema.Never, slots: ["body"] })
-        .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("article", h.slots.body) })
-      const Listbox = Component.define({ name: "Listbox", model: Schema.Null, message: Schema.Never }).make({
-        init: () => null,
-        update: (model) => model,
-        parts: (_, p) => ({ id: p.id("list") })
-      })
+      const Frame = Component.define({
+        name: "Frame",
+        lifetime: "model",
+        model: Schema.Null,
+        message: Schema.Never,
+        slots: ["body"]
+      }).make({ init: () => null, update: (model) => model, view: (_, h) => h.el("article", h.slots.body) })
       const State = Schema.Struct({ detached: Schema.Boolean, label: Schema.String })
-      const Page = Component.define({ name: "Page", model: State, message: State }).make({
+      const Page = Component.define({ name: "Page", lifetime: "view", model: State, message: State }).make({
+        children: { frame: Frame },
         init: () => ({ detached: false, label: "one" }),
         update: (_, next) => next,
         view: (state, h) =>
-          h.el(
-            "div",
-            Frame(h, { key: "f", detached: state.detached, slots: { body: h.el("b", "slot " + state.label) } }),
-            Listbox(h, { key: "l", detached: state.detached, view: () => h.el("ul", " list " + state.label) })
-          )
+          h.el("div", state.detached ? null : h.children.frame({ slots: { body: h.el("b", "slot " + state.label) } }))
       })
       const root = yield* TestHost.mount(Page, {})
       yield* TestHost.settle
-      assert.strictEqual(root.text(), "slot one list one")
+      assert.strictEqual(root.text(), "slot one")
       root.send({ detached: true, label: "one" })
       yield* TestHost.settle
       assert.strictEqual(root.text(), "")
@@ -307,21 +338,26 @@ describe("detached children", () => {
       yield* TestHost.settle
       root.send({ detached: false, label: "two" })
       yield* TestHost.settle
-      assert.strictEqual(root.text(), "slot two list two")
+      assert.strictEqual(root.text(), "slot two")
     })))
 
   it.effect("fails the parent on a host that can't hold detached nodes", () =>
     Effect.gen(function*() {
-      const Tabs = Component.define({ name: "Tabs", model: Schema.Null, message: Schema.Never }).make({
-        init: () => null,
-        update: (model) => model,
-        view: (_, h) => h.el("div", Billing(h, { key: "b", detached: true }))
-      })
-      const Page = Component.define({ name: "Page", model: Schema.Null, message: Schema.Never }).make({
-        init: () => null,
-        update: (model) => model,
-        view: (_, h) => Tabs(h, { key: "t", fallback: () => h.el("p", "down") })
-      })
+      const Tabs = Component.define({ name: "Tabs", lifetime: "view", model: Schema.Null, message: Schema.Never }).make(
+        {
+          children: { billing: Billing },
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => h.el("div")
+        }
+      )
+      const Page = Component.define({ name: "Page", lifetime: "view", model: Schema.Null, message: Schema.Never }).make(
+        {
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => Tabs(h, { key: "t", fallback: () => h.el("p", "down") })
+        }
+      )
       const root = yield* TestHost.mount(Page, {})
       yield* TestHost.settle
       assert.strictEqual(root.text(), "down")
@@ -329,7 +365,8 @@ describe("detached children", () => {
       assert.strictEqual(failed.path, "/Page/Tabs[t]")
       assert.include(Cause.pretty(failed.cause), "this host has no createContainer")
     }).pipe(Effect.provide(Renderer.layer(withoutContainer())), provideHost))
-  it.effect("restarts a reattached parent's slot mounts but not those of a child still detached", () =>
+
+  it.effect("restarts a placed child's slot mounts but not those of a child still detached", () =>
     Effect.gen(function*() {
       const running = new Set<string>()
       const track = (name: string) =>
@@ -340,24 +377,37 @@ describe("detached children", () => {
             Effect.acquireRelease(Effect.sync(() => running.add(name)), () => Effect.sync(() => running.delete(name)))
               .pipe(Effect.andThen(Effect.never))
         )()
-      const Frame = Component.define({ name: "Frame", model: Schema.Null, message: Schema.Never, slots: ["body"] })
-        .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("article", h.slots.body) })
+      const Frame = Component.define({
+        name: "Frame",
+        lifetime: "model",
+        model: Schema.Null,
+        message: Schema.Never,
+        slots: ["body"]
+      }).make({ init: () => null, update: (model) => model, view: (_, h) => h.el("article", h.slots.body) })
       const Reveal = Command.make("Reveal", { args: {} }, () => Effect.succeed(true))
-      const Inner = Component.define({ name: "Inner", model: Schema.Boolean, message: Schema.Boolean }).make({
-        init: ($) => $.set(false).run(Reveal()),
-        update: (_, shown) => shown,
-        view: (shown, h) => h.el("div", shown ? h.el("i").onMount(track("inner")) : null)
+      const Inner = Component.define({
+        name: "Inner",
+        lifetime: "model",
+        model: Schema.Boolean,
+        message: Schema.Boolean
       })
+        .make({
+          init: ($) => $.set(false).run(Reveal()),
+          update: (_, shown) => shown,
+          view: (shown, h) => h.el("div", shown ? h.el("i").onMount(track("inner")) : null)
+        })
       const State = Schema.Struct({ frame: Schema.Boolean, inner: Schema.Boolean })
-      const Page = Component.define({ name: "Page", model: State, message: State }).make({
+      const Page = Component.define({ name: "Page", lifetime: "view", model: State, message: State }).make({
+        children: { frame: Frame, inner: Inner },
         init: () => ({ frame: true, inner: false }),
         update: (_, next) => next,
         view: (state, h) =>
-          Frame(h, {
-            key: "f",
-            detached: state.frame,
-            slots: { body: [h.el("b").onMount(track("slot")), Inner(h, { key: "i", detached: state.inner })] }
-          })
+          h.el(
+            "main",
+            state.frame ? null : h.children.frame({
+              slots: { body: [h.el("b").onMount(track("slot")), state.inner ? null : h.children.inner()] }
+            })
+          )
       })
       const root = yield* TestHost.mount(Page, {})
       const step = Effect.fnUntraced(function*(state: typeof State.Type) {
@@ -386,14 +436,20 @@ describe("detached children", () => {
         { args: {} },
         () => Effect.sync(() => void started++).pipe(Effect.andThen(Effect.never))
       )
-      const Tabs = Component.define({ name: "Tabs", props: Schema.Boolean, model: Schema.Null, message: Schema.Never })
-        .make({
-          init: () => null,
-          update: (model) => model,
-          view: (_, h) => h.el("div", Billing(h, { key: "b", detached: h.props }))
-        })
+      const Tabs = Component.define({
+        name: "Tabs",
+        lifetime: "view",
+        props: Schema.Boolean,
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        children: { billing: Billing },
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => h.el("div", h.props ? null : h.children.billing())
+      })
       const State = Schema.Struct({ key: Schema.String, detached: Schema.Boolean, tracked: Schema.Boolean })
-      const Page = Component.define({ name: "Page", model: State, message: State }).make({
+      const Page = Component.define({ name: "Page", lifetime: "view", model: State, message: State }).make({
         init: () => ({ key: "a", detached: true, tracked: false }),
         update: (_, next) => next,
         view: (state, h) =>
@@ -422,20 +478,27 @@ describe("detached children", () => {
       assert.strictEqual(started, 1)
     }).pipe(provideHost))
 
-  it("a Scene counts a mount in a detached child's slot as new once the child is attached", () => {
+  it("a Scene counts a mount in a model child's slot as new once the child is placed", () => {
     const Track = Mount.make("Track", { args: {} }, () => Effect.never)
-    const Frame = Component.define({ name: "Frame", model: Schema.Null, message: Schema.Never, slots: ["body"] })
-      .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("article", h.slots.body) })
-    const Page = Component.define({ name: "Page", model: Schema.Boolean, message: Schema.Boolean }).make({
-      init: () => true,
-      update: (detached) => !detached,
-      view: (detached, h) =>
-        h.el(
-          "div",
-          h.el("button").on("click", true).children("toggle"),
-          Frame(h, { key: "f", detached, slots: { body: h.el("b").onMount(Track()) } })
-        )
-    })
+    const Frame = Component.define({
+      name: "Frame",
+      lifetime: "model",
+      model: Schema.Null,
+      message: Schema.Never,
+      slots: ["body"]
+    }).make({ init: () => null, update: (model) => model, view: (_, h) => h.el("article", h.slots.body) })
+    const Page = Component.define({ name: "Page", lifetime: "view", model: Schema.Boolean, message: Schema.Boolean })
+      .make({
+        children: { frame: Frame },
+        init: () => true,
+        update: (detached) => !detached,
+        view: (detached, h) =>
+          h.el(
+            "div",
+            h.el("button").on("click", true).children("toggle"),
+            detached ? null : h.children.frame({ slots: { body: h.el("b").onMount(Track()) } })
+          )
+      })
     const s = Scene.start(Page, {})
     assert.throws(() => s.expectMount(Track()), /no rendered mount matches Track/)
     s.click(Locator.text("toggle")).expectMount(Track())

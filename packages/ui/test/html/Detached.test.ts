@@ -10,13 +10,25 @@ import { Effect, Schema } from "effect"
 let inits = { avatar: 0, profile: 0 }
 const side = (count: number) => count === 0 ? "server" : "client"
 
-const Avatar = Component.define({ name: "Avatar", model: Schema.String, message: Schema.Never, elements: Html }).make({
+const Avatar = Component.define({
+  name: "Avatar",
+  lifetime: "view",
+  model: Schema.String,
+  message: Schema.Never,
+  elements: Html
+}).make({
   init: () => "avatar from the " + side(inits.avatar++),
   update: (model) => model,
   view: (text, h) => h.i(text)
 })
 
-const Profile = Component.define({ name: "Profile", model: Schema.String, message: Schema.Never, elements: Html })
+const Profile = Component.define({
+  name: "Profile",
+  lifetime: "model",
+  model: Schema.String,
+  message: Schema.Never,
+  elements: Html
+})
   .make({
     init: () => "draft from the " + side(inits.profile++),
     update: (model) => model,
@@ -25,25 +37,27 @@ const Profile = Component.define({ name: "Profile", model: Schema.String, messag
 
 const Settings = Component.define({
   name: "Settings",
+  lifetime: "view",
   model: Schema.String,
   message: UiSchema.TaggedEnum({ Show: { tab: Schema.String } }),
   elements: Html
 }).make({
+  children: { profile: Profile },
   init: () => "billing",
   update: (_, { tab }) => tab,
-  view: (tab, h) => h.main(h.h1(tab), Profile(h, { key: "p", detached: tab !== "profile" }))
+  view: (tab, h) => h.main(h.h1(tab), tab === "profile" ? h.children.profile() : null)
 })
 
-describe("detached children on the server", () => {
-  it.effect("writes no nodes for a detached child, and the client builds them from the server's state", () =>
+describe("model children on the server", () => {
+  it.effect("writes no nodes for a model child the view doesn't place, and the client builds them from the server's state", () =>
     Effect.gen(function*() {
       inits = { avatar: 0, profile: 0 }
       // Fails if the client rebuilt nodes the server wrote, or didn't adopt a Model the server sent.
       const result = yield* ssr(Settings, {})
-      assert.include(result.html, "<!--[/Settings/Profile[p]--><!--]/Settings/Profile[p]-->")
+      assert.include(result.html, "<!--[/Settings/Profile[profile]--><!--]/Settings/Profile[profile]-->")
       assert.notInclude(result.html, "draft from")
-      assert.include(result.adopted, "/Settings/Profile[p]")
-      assert.include(result.adopted, "/Settings/Profile[p]/Avatar[a]")
+      assert.include(result.adopted, "/Settings/Profile[profile]")
+      assert.include(result.adopted, "/Settings/Profile[profile]/Avatar[a]")
 
       result.root.send({ _tag: "Show", tab: "profile" })
       yield* TestHost.settle

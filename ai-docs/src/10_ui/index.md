@@ -34,14 +34,70 @@ renders the child with a ref from `Child.ref("Name")`, and its `update` calls
 `$.send(ref, message)`. Don't send what the child shows: that belongs in its
 props.
 
-A child the view stops declaring unmounts and loses its Model. To hide a tab
-or a wizard step the user will come back to, keep declaring it with
-`detached: tab !== "profile"`: its nodes leave the document, and its Model,
-Commands in flight and typed input stay. It still gets props, sends and query
-results, and emits through the latest `onEmit`. Its element mounts stop
-until it's attached again, and its Subscriptions keep running, so gate those
-on the Model. Declare a wizard step once it has been visited, not every step
-up front.
+### Choosing a lifetime
+
+Every `Component.define` takes `lifetime: "view"` or `lifetime: "model"`.
+It says how long the component's Model lives.
+
+A `"view"` component is called in a view, `NoteEditor(h, { key, props })`,
+and lives while the view renders it. A child the view stops declaring
+unmounts and loses its Model. Pick `"view"` for most components: rows,
+inputs, menus, anything whose state is fine to lose when it goes away.
+
+A `"model"` component lives as long as its parent lists it. The parent
+lists it in `children` in `make`, with props and `onEmit` as functions of
+the parent's Model, and its view places it with `h.children`:
+
+```ts
+const Settings = SettingsDef.make({
+  children: {
+    profile: Child.one(Profile, { props: (model) => ({ user: model.user }), onEmit: (e) => SavedProfile(e) }),
+    billing: Billing,
+    step: Child.optional(Step, { props: (model) => model.visited ? {} : null }),
+    rows: Child.keyed(Row, { props: (model) => model.ids.map((id) => [id, { id }]) })
+  },
+  init: () => ({ tab: "profile", user, visited: false, ids: [] }),
+  update,
+  view: (model, h) => h.main(model.tab === "profile" ? h.children.profile() : h.children.billing())
+})
+```
+
+A listed child the view doesn't place keeps its Model, its Commands in
+flight, its Subscriptions and what the user typed. Its nodes are kept out
+of the document, its element mounts stop until it's placed again, and the
+log records `Detached` and `Attached`. It still gets props, sends and query
+results, and emits through `onEmit`. Pick `"model"` for a tab, a wizard
+step or a panel the user comes back to and expects to find as they left
+it. The mounted root may be either. A `"model"` route page is listed with
+`Child.keyed` on its route's path, `props: (model) => [[AppRoute.printPath(model.route), props]]`,
+and placed with `h.children.page(path)`: it lives as long as the route, and keeps its Model while
+the view shows something else in its place.
+
+- `Child.one(C, options)` is always listed. A bare `C` is `Child.one(C)`.
+- `Child.optional(C, options)` is listed while `props` returns props, and
+  removed when it returns `null`, `undefined` or `false`. List a wizard
+  step once it has been visited, not every step up front.
+- `Child.keyed(C, options)` lists one child per `[key, props]` entry, placed
+  with `h.children.rows(key)`.
+
+A `"model"` child's ref is named by its key in `children`:
+`Profile.ref("profile")`, and `Row.ref("rows").at(id)` for a keyed row.
+`Story` runs listed children with their parent: `s.children.profile` reads
+a child's Model, shown or hidden, and `.sendChild("profile", message)`
+delivers a message to it. A Story fails if a `"model"` child runs a Command.
+
+Calling a `"model"` component in a view, or listing a `"view"` component in
+`children`, is a type error. A headless component is always `"view"`.
+
+A listed child costs what a shown one does, about 8 KiB for a hidden row.
+In a virtualised list, use `"view"` rows, or remove rows from `children`.
+Gate a hidden child's Subscriptions on its Model when they should pause.
+A dialog or popover open inside it closes when it's hidden.
+
+An item that can move between parents, such as a card between board
+columns, is listed on the parents' common ancestor. Which column it sits
+in is plain Model data there, and each column's content places the cards
+the ancestor passes it through slots.
 
 ### Naming
 
@@ -214,7 +270,7 @@ children's events and failures map to the parent's messages, the parent's
 parent declared the child, not from the child's Layers. A parent re-render
 updates the content without running the child's view. The child decides
 whether and where each slot shows. A slot it stops placing is kept out of
-the document, as a `detached` child is, and comes back as it was when it
+the document, as an unplaced `"model"` child is, and comes back as it was when it
 places the slot again. A slot it never placed isn't created. A slot the
 parent leaves out shows nothing. A child in a slot has the path of the
 parent that wrote it and its own segment, wherever it's placed, such as
