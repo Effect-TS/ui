@@ -19,6 +19,7 @@ export interface Options {
   readonly onFailure?: ((failure: AsyncResult.Failure<never, unknown>) => unknown) | undefined
   readonly view?: ((parts: any) => View.Content<any, any>) | undefined
   readonly slots?: Readonly<Record<string, View.Input<any, any>>> | undefined
+  readonly detached?: boolean | undefined
 }
 
 /** @internal */
@@ -42,7 +43,8 @@ export const make = (
     fallback: options.fallback,
     onFailure: options.onFailure,
     view: options.view,
-    slots: options.slots
+    slots: options.slots,
+    detached: options.detached === true
   }
 }
 

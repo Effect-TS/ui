@@ -34,6 +34,15 @@ renders the child with a ref from `Child.ref("Name")`, and its `update` calls
 `$.send(ref, message)`. Don't send what the child shows: that belongs in its
 props.
 
+A child the view stops declaring unmounts and loses its Model. To hide a tab
+or a wizard step the user will come back to, keep declaring it with
+`detached: tab !== "profile"`: its nodes leave the document, and its Model,
+Commands in flight and typed input stay. It still gets props, sends and query
+results, and emits through the latest `onEmit`. Its element mounts stop
+until it's attached again, and its Subscriptions keep running, so gate those
+on the Model. Declare a wizard step once it has been visited, not every step
+up front.
+
 ### Naming
 
 Name messages, events, Commands and mounts as Foldkit does

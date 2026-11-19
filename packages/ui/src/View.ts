@@ -319,6 +319,19 @@ export type MountHint =
  * failure boundary: a failed child shows `fallback`, or nothing, until its
  * key changes, and the parent's optional `onFailure` is also messaged.
  *
+ * A child dropped from the view unmounts, and its Model goes with it. Declare
+ * it with `detached: true` instead when the user should find it as they left
+ * it, such as a hidden tab with a half-filled form or a wizard step. Its nodes
+ * leave the document and the runtime keeps them, so the child keeps its
+ * Model, its Commands in flight, its Subscriptions and what the user typed
+ * into its inputs. It still gets props, `$.send` and query results, and its
+ * events reach the parent through the `onEmit` of the latest render. It
+ * contributes no head entries, a ref lookup inside it finds nothing, and its
+ * element mounts stop until it is attached again, when they start anew. The
+ * log records `Detached` and `Attached`. A server render writes no nodes
+ * for a detached child but sends its state, and the client builds its nodes,
+ * detached, from the server's Model.
+ *
  * **Gotchas**
  *
  * A child without a key has the empty key, at `Name[]`, so it must be the only
@@ -331,6 +344,13 @@ export type MountHint =
  * declared them: `cond ? Listbox(h, { props: a }) : Listbox(h, { props: b })`
  * keeps the Model when `cond` changes, and `init` doesn't run again. Key each
  * branch when the component's Model holds state that shouldn't carry over.
+ *
+ * A detached child costs what a shown one does. Declare a wizard step once it
+ * has been visited, `detached: step !== model.current`, rather than every
+ * step up front. Its Subscriptions keep running, so gate one on the Model
+ * when it should pause. A dialog or popover open inside it closes when it is
+ * detached, and focus inside it is lost. A host without `createContainer`
+ * fails the parent of a detached child.
  *
  * @stability experimental
  * @category models
@@ -356,6 +376,8 @@ export interface Child<out Msg, out R = never> {
   readonly view: ((parts: any) => Content<Msg, any>) | undefined
   /** What the parent passed for each of the child's slots. */
   readonly slots: Readonly<Record<string, Input<any, any>>> | undefined
+  /** The child's nodes are out of the document, and its instance goes on. */
+  readonly detached?: boolean | undefined
   /** Phantom: the child's requirements surface in its parent's. */
   readonly "~R"?: (_: never) => R
 }
@@ -410,6 +432,12 @@ export declare namespace Child {
       readonly onEmit?: ((events: Events) => Msg | undefined) | EmitHandlers<Events, Msg> | undefined
       /** Also tells the parent that the child failed. The failure stays in the child either way. */
       readonly onFailure?: ((failure: AsyncResult.Failure<never, unknown>) => Msg | undefined) | undefined
+      /**
+       * Takes the child's nodes out of the document while it stays declared.
+       * Its Model, Commands, Subscriptions, props and `onEmit` go on, and its
+       * element mounts stop until it is attached again. `false` by default.
+       */
+      readonly detached?: boolean | undefined
     }
     & ({} extends Props ? { readonly props?: Props | undefined } : { readonly props: Props })
 

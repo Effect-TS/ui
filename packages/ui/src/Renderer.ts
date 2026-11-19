@@ -95,6 +95,10 @@ export type Dispatch = (
  * `hydration` lets the renderer read nodes a server rendered, so `mount` with
  * a server `state` adopts them. A host without it builds every node fresh.
  *
+ * `createContainer` makes a node that holds the nodes of a `detached` child
+ * out of the document, such as a `DocumentFragment`. It is never inserted.
+ * A host without it fails the parent of a child declared `detached`.
+ *
  * @stability experimental
  * @category models
  * @since 0.1.0
@@ -131,6 +135,7 @@ export interface Host<Node> {
   readonly commit?: (() => void) | undefined
   readonly head?: ((head: Head.Head) => void) | undefined
   readonly hydration?: Hydration<Node> | undefined
+  readonly createContainer?: (() => Node) | undefined
 }
 
 /**
