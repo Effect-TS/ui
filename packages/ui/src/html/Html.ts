@@ -118,8 +118,9 @@ import type * as Mount from "../Mount.ts"
 import * as Renderer from "../Renderer.ts"
 import * as Subscription from "../Subscription.ts"
 import * as View from "../View.ts"
-import * as HtmlHead from "./HtmlHead.ts"
+import type * as HtmlHead from "./HtmlHead.ts"
 import * as globalEvents from "./internal/globalEvents.ts"
+import * as headMerge from "./internal/headMerge.ts"
 
 // ---------------------------------------------------------------------------
 // host
@@ -1671,7 +1672,7 @@ export const name = "html"
  * @since 0.1.0
  */
 export const head: View.HeadFold<HtmlHead.Entry, HtmlHead.HtmlHead> = {
-  merge: HtmlHead.merge,
+  merge: headMerge.merge,
   title: (head) => head.title
 }
 
