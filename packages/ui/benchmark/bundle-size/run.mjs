@@ -2,7 +2,10 @@
 //
 // Run from the repository root, after `pnpm build`:
 //
-//   pnpm bundle-size [--json <file>] [--base <file>] [--runtime kernel]
+//   pnpm bundle-size [--json <file>] [--base <file>] [--runtime kernel] [--vocabulary]
+//
+// The 45,000-byte kernel gzip target is for the unchanged counter. Pass --vocabulary
+// for the separate Html.vocabulary comparison; both run the same click assertion.
 //
 // --json writes the result and --base adds deltas against an earlier --json file. --runtime kernel
 // bundles the runtime in internal/kernel in place of the default one. The table is also
@@ -17,8 +20,8 @@ import { gzipSync } from "node:zlib"
 import { Window } from "happy-dom"
 import { build, version as vite } from "vite"
 
-const { values: { base, json, runtime } } = parseArgs({
-  options: { base: { type: "string" }, json: { type: "string" }, runtime: { type: "string", default: "default" } }
+const { values: { base, json, runtime, vocabulary } } = parseArgs({
+  options: { vocabulary: { type: "boolean", default: false }, base: { type: "string" }, json: { type: "string" }, runtime: { type: "string", default: "default" } }
 })
 assert.ok(runtime === "default" || runtime === "kernel", "--runtime is default or kernel")
 const ui = path.resolve(import.meta.dirname, "../..")
@@ -69,7 +72,10 @@ async function measure() {
     execFileSync("tar", ["-xzf", packed, "--strip-components=1", "-C", installed])
     fs.symlinkSync(effectDir, path.join(modules, "effect"))
     const input = path.join(root, "counter.ts")
-    fs.copyFileSync(path.join(import.meta.dirname, "counter.ts"), input)
+    const source = fs.readFileSync(path.join(import.meta.dirname, "counter.ts"), "utf8")
+    const binding = "elements: Html"
+    if (vocabulary) assert.equal(source.split(binding).length, 2, "expected exactly one vocabulary binding")
+    fs.writeFileSync(input, vocabulary ? source.replace(binding, "elements: Html.vocabulary") : source)
     // `mode` and `format` are Vite's defaults, pinned because the report states them.
     const { output } = await build({
       configFile: false,
@@ -88,11 +94,13 @@ async function measure() {
   }
 }
 
-const result = await measure()
-const headers = ["Runtime", "Vite", "effect", "Node", "Raw bytes", "Gzip bytes"]
-const row = [runtime, result.vite, result.effect, result.node, result.raw, result.gzip]
+const elements = vocabulary ? "Html.vocabulary" : "Html"
+const result = { ...await measure(), elements }
+const headers = ["Runtime", "Elements", "Vite", "effect", "Node", "Raw bytes", "Gzip bytes"]
+const row = [runtime, elements, result.vite, result.effect, result.node, result.raw, result.gzip]
 if (base) {
   const previous = JSON.parse(fs.readFileSync(base, "utf8"))
+  assert.equal(previous.elements ?? "Html", elements, "baseline uses a different vocabulary")
   for (const metric of ["raw", "gzip"]) {
     assert.ok(Number.isSafeInteger(previous[metric]), "invalid baseline: missing " + metric + " bytes")
     const delta = result[metric] - previous[metric]
