@@ -119,7 +119,7 @@ export interface Location {
   readonly url: string
   readonly hash: string
   readonly action: Action
-  /** Counts navigations: 0 for the initial location. */
+  /** Counts delivered locations, including repeat href navigations; 0 for the initial location. */
   readonly seq: number
 }
 
@@ -170,13 +170,12 @@ export type SearchPatch<R> = [R] extends [{ readonly search: infer Q }] ? { read
  *
  * **Details**
  *
- * `changes` starts with the current location, then emits each route change.
- * A change to the `#hash` alone within the same route isn't a route change.
- * `navigate` takes an href: one the routes parse is pushed (or replaced), and
- * anything else is a full page load. A navigation to the current route, with
- * the same tag and printed route, keeps the URL with its undeclared params,
- * so it bumps no sequence and delivers no route; only a new `#hash` is
- * written.
+ * `changes` starts with the current location. Following a parsed href with
+ * `navigate` delivers a location even if its tag and printed route match the
+ * current one. In that case the router delivers the held route as a quiet
+ * replace, keeping the URL (including undeclared params) and writing history
+ * only if the hash changes. An unparsed href is a full page load. Typed
+ * `push` and `replace` calls do not deliver the current route again.
  *
  * @stability experimental
  * @category models
@@ -284,7 +283,7 @@ export class Replace extends Command.Service<Replace>()(
  *
  * The route must be a complete value of `routes`, such as one built with
  * `routes.make`; pass the union given to the Router Layer or one of its
- * subsets. A route equal to the current one does nothing. It returns
+ * subsets. Unlike following an href, pushing the current route sends no message. It returns
  * `"blocked"` without navigating while a `Router.blocked` Subscription holds
  * a block. Map the outcome to a message with `Command.map`, or end it with
  * no message with `Command.asNoop`, which also hides a `"blocked"`
@@ -304,8 +303,8 @@ export const push = <U extends Routes>(
  *
  * **Details**
  *
- * Typed like `push`. A replace that stays on the page, with the same tag and
- * pathname, settles quietly: it isn't announced and leaves focus and scroll
+ * Like `push`, replacing the current route sends no message. A replace that
+ * stays on the page, with the same tag and pathname, settles quietly: it isn't announced and leaves focus and scroll
  * alone. A search that a page writes as the user types is better written with
  * `patchSearch`. The component requires `Replace`.
  *
@@ -600,7 +599,7 @@ export const props = <U extends Routes>(routes: U): Effect.Effect<{ readonly rou
  * Hydrated hash roots skip that report, and so do roots hydrated from a
  * `static: true` render whose route differs from the Router's in its search
  * only, as a page prerendered at `/search` and opened at `/search?q=x`.
- * Later locations are always delivered.
+ * Later locations are always delivered, including a link followed to the held route.
  * The key stays stable as the held route changes. A subset only sees its own
  * routes. On the server the root is checked once without running its Streams,
  * regardless of the navigation sequence.
@@ -1019,6 +1018,7 @@ export interface History {
  * neither announces it nor moves focus. These are quiet:
  *
  * - a `patchSearch`, replace or push;
+ * - following an href to the current route;
  * - a replace to the same page: the same tag and pathname;
  * - back and forward between entries of the same page.
  *
@@ -1064,8 +1064,8 @@ export interface Options {
   readonly onSettled?: ((settled: Settled) => void) | undefined
   /**
    * Called for a change to the `#hash` alone within the same route, with the
-   * index of the history entry it moved to. `onLeave` was called for the entry
-   * it left, so a pop can restore that entry's scroll position.
+   * history entry index. Delivering a repeat href without a hash change does
+   * not call this hook.
    */
   readonly onHash?: ((hash: string, action: "push" | "pop", index: number) => void) | undefined
   /** Called before the Router leaves the history entry at `index`. */
@@ -1493,7 +1493,7 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       }
     }
 
-    const navigate = (href: string, replace: boolean): Outcome => {
+    const navigate = (href: string, replace: boolean, source: "href" | "route"): Outcome => {
       if (blocks.size > 0) return "blocked"
       const [url, hash] = split(href)
       const found = routes.resolve(url)
@@ -1505,22 +1505,25 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       const route = found.value.route
       const printed = canonical(routes, found.value, url)
       // A route equal to the current one, by tag and printed route, keeps the URL with its undeclared
-      // params and isn't a navigation. Only the hash can change.
+      // params. Only the hash can change.
       if (
         printed === current.url ||
         (route._tag === current.route._tag && routes.print(route) === routes.print(current.route))
       ) {
-        if (hash === current.hash) return "navigated"
-        // A change to the hash alone: a new entry, and no route change.
-        if (replace) replaceNow(current.url + hash, writeState({ index }))
-        else {
-          flush()
-          leave()
-          index++
-          history.push(current.url + hash, writeState({ index }))
+        if (hash !== current.hash) {
+          if (replace) replaceNow(current.url + hash, writeState({ index }))
+          else {
+            flush()
+            leave()
+            index++
+            history.push(current.url + hash, writeState({ index }))
+          }
+          current = { ...current, hash }
+          options.onHash?.(hash, "push", index)
         }
-        current = { ...current, hash }
-        options.onHash?.(hash, "push", index)
+        if (source === "href") {
+          set({ ...current, action: "replace", seq: current.seq + 1 }, { quiet: true, scroll: false })
+        }
         return "navigated"
       }
       // A replace that stays on the page is quiet; a push, such as a `?page=2` link, is loud.
@@ -1667,9 +1670,9 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       routes,
       location: () => current,
       changes: SubscriptionRef.changes(ref),
-      navigate: (href, navigateOptions) => Effect.sync(() => navigate(href, navigateOptions?.replace === true)),
-      push: (route) => Effect.sync(() => navigate(routes.print(route) as string, false)),
-      replace: (route) => Effect.sync(() => navigate(routes.print(route) as string, true)),
+      navigate: (href, navigateOptions) => Effect.sync(() => navigate(href, navigateOptions?.replace === true, "href")),
+      push: (route) => Effect.sync(() => navigate(routes.print(route) as string, false, "route")),
+      replace: (route) => Effect.sync(() => navigate(routes.print(route) as string, true, "route")),
       patchSearch: (route, search, patchOptions) =>
         Effect.sync(() => patch(route, search, patchOptions?.history !== "push", patchOptions?.scroll === true)),
       back: Effect.sync(() => {

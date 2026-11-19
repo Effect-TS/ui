@@ -3,7 +3,7 @@ import { Command, Component, Query, Route, Router, UiSchema } from "@effect/ui"
 import { BrowserHost, BrowserRouter, Html, HtmlServer } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, expect, it } from "@effect/vitest"
-import { Context, Effect, Exit, Layer, Option, Schema, Scope } from "effect"
+import { Context, Effect, Exit, Layer, Option, Schema, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { describe } from "vitest"
 import { App, AppRoute, People } from "./fixtures/routed.ts"
@@ -335,6 +335,23 @@ describe("BrowserRouter", { concurrent: false }, () => {
       expect(document.title).toBe("Person 1 · App")
     }).pipe(Effect.scoped))
 
+  it.effect("clicking the current route notifies subscribers without scrolling, announcing or adding history", () =>
+    Effect.gen(function*() {
+      const { app, router } = yield* start("/?utm_source=news")
+      const urls: Array<string> = []
+      yield* Stream.runForEach(router.changes, ({ url }) => Effect.sync(() => urls.push(url))).pipe(Effect.forkScoped)
+      yield* Effect.yieldNow
+      const entries = window.history.length
+      window.scrollTo(0, 80)
+      expect(clickReporting(link(app, "Home"))).toBe(true)
+      yield* tick
+      expect(window.location.pathname + window.location.search).toBe("/?utm_source=news")
+      expect(window.history.length).toBe(entries)
+      expect(window.scrollY).toBe(80)
+      expect(region()?.textContent).toBe("")
+      expect(urls).toEqual(["/?utm_source=news", "/?utm_source=news"])
+    }).pipe(Effect.scoped))
+
   it.effect("leaves modified clicks, targets, downloads and other origins to the browser", () =>
     Effect.gen(function*() {
       const { app } = yield* start("/")
@@ -472,7 +489,7 @@ describe("BrowserRouter", { concurrent: false }, () => {
       yield* tick
       expect(window.location.hash).toBe("#top")
       expect(window.scrollY).toBe(40)
-      // A #hash change sends no route change and announces nothing.
+      // Traversing entries that differ only by hash announces nothing.
       expect(region()?.textContent).toBe(announced)
     }).pipe(Effect.scoped))
 
