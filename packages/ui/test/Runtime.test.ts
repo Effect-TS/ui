@@ -25,6 +25,7 @@ import {
   LayerMap,
   Metric,
   Option,
+  Queue,
   Redacted,
   Scheduler,
   Schema,
@@ -1790,6 +1791,44 @@ describe("Runtime", () => {
         const failed = root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
         assert.deepStrictEqual([failed.in, failed.name], ["subscription", "room:\"42\""])
         assert.include(Cause.pretty(failed.cause), "/Twice: two Subscriptions share the key room:\"42\"")
+      })))
+
+    it.effect("a Stream's message is dropped when rendering the ancestors first removes its key", () =>
+      provideHost(Effect.gen(function*() {
+        const feed = yield* Queue.unbounded<string>()
+        const Receiver = Component.define({
+          name: "Receiver",
+          model: Schema.Array(Schema.String),
+          message: Schema.String,
+          props: Schema.Struct({ listen: Schema.Boolean })
+        }).make({
+          init: () => [],
+          update: (model, message) => [...model, message],
+          view: (model, h) => h.text(model.join(",")),
+          subscriptions: (_, props) => props.listen ? [Subscription.make("feed", Stream.fromQueue(feed))] : []
+        })
+        const Parent = Component.define({ name: "Parent", model: Schema.Boolean, message: Schema.Boolean }).make({
+          init: () => true,
+          update: (_, listen) => listen,
+          view: (listen, h) => Receiver(h, { key: "r", props: { listen } })
+        })
+        const root = yield* TestHost.mount(Parent, {})
+        yield* TestHost.settle
+        // The Stream's fiber takes from the queue on the scheduler, which `settle` doesn't wait for.
+        const received = Effect.andThen(Effect.yieldNow, TestHost.settle)
+        Queue.offerUnsafe(feed, "a")
+        yield* received
+        assert.strictEqual(root.text(), "a")
+        // The message is on its way when the parent stops listening, before the parent renders.
+        Queue.offerUnsafe(feed, "b")
+        root.send(false)
+        yield* received
+        // The receiver kept its Model, so it stayed mounted, and never took "b".
+        assert.strictEqual(root.text(), "a")
+        assert.deepStrictEqual(tags(root, "/Parent/Receiver[r]").filter((tag) => tag.startsWith("Subscription")), [
+          "SubscriptionStarted",
+          "SubscriptionStopped"
+        ])
       })))
   })
 
