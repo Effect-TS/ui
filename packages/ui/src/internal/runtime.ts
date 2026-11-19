@@ -4267,7 +4267,12 @@ const setup = (
         fiber.addObserver((exit) =>
           step(() => {
             const failure = Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause) ? exit.cause : undefined
-            const reason = failure !== undefined ? "failed" : Exit.isSuccess(exit) ? "completed" : "closed"
+            // A later finalizer can hold the close open while the body returns before its interrupt.
+            const reason = failure !== undefined
+              ? "failed"
+              : Exit.isSuccess(exit) && !isClosed(mountScope)
+              ? "completed"
+              : "closed"
             // A scope close can interrupt synchronously inside a different step. Only an explicit
             // element removal supplies a cause; closing the whole instance does not.
             const ended = under(

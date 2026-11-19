@@ -3091,6 +3091,42 @@ describe("Runtime", () => {
         provideHost
       ))
 
+    it.effect("a mount returning during scope closure logs one closed end caused by removal", () =>
+      Effect.gen(function*() {
+        const finishBody = yield* Deferred.make<void>()
+        const finishClose = yield* Deferred.make<void>()
+        const Hold = Mount.make("Hold", { args: {} }, () =>
+          Effect.gen(function*() {
+            // Register after the interrupt finalizer so this gate holds the close ahead of it.
+            yield* Effect.yieldNow
+            yield* Effect.addFinalizer(() => Deferred.await(finishClose))
+            yield* Deferred.await(finishBody)
+            return Component.noop
+          }))
+        const Box = Component.define({ name: "Box", model: Schema.Boolean, message: Schema.String, elements: Tiny })
+          .make({
+            init: () => true,
+            update: () => false,
+            view: (shown, h) => h.box(shown ? h.field.onMount(Hold()) : null)
+          })
+        const root = yield* TestHost.mount(Box, {})
+        yield* TestHost.settle
+        root.send("hide")
+        yield* TestHost.settle
+        yield* Deferred.succeed(finishBody, undefined)
+        yield* TestHost.settle
+        yield* Deferred.succeed(finishClose, undefined)
+        yield* TestHost.settle
+        const hide = root.log().find((entry) => entry._tag === "Update" && entry.message === "hide")
+        assert.isDefined(hide)
+        const ends = root.log().filter((entry) => entry._tag === "MountEnded")
+        assert.lengthOf(ends, 1)
+        assert.deepInclude(ends[0], { reason: "closed", causedBy: hide.seq, silent: true })
+      }).pipe(
+        Effect.provide(Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })),
+        provideHost
+      ))
+
     it.effect("a mount's result goes through the Mount.map of the latest render", () =>
       Effect.gen(function*() {
         const gate = yield* Deferred.make<void>()
