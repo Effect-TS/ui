@@ -1847,6 +1847,17 @@ type UnknownTag<T> = `'${T & string}' is not a tag of this component's message` 
   readonly _UnknownTag: unique symbol
 }
 
+// A record `update`: a function for each tag, returning what `UR` holds for it. `UR` is inferred from the
+// record, so a key that is no tag is in it too, and its value is the error.
+type UpdateRecord<Model, Msg, Events, Props, L, UR> = {
+  readonly [T in keyof UR]: T extends TagOf<Msg> ? (
+      model: Model,
+      msg: Tagged<Msg, T>,
+      $: Update<Model, Msg, Events, Props, L, Tagged<Msg, T>>
+    ) => UR[T]
+    : UnknownTag<T>
+}
+
 /**
  * What `define` returns: a component's name, Schemas, queries and
  * vocabulary. `update`, `view` and `fragment` written in pieces are typed
@@ -1952,14 +1963,7 @@ export interface Definition<
     readonly init: ($: Init<Model, Msg, Events, Props>) => UI
     readonly update:
       | ((model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L>) => U)
-      | {
-        readonly [T in keyof UR]: T extends TagOf<Msg> ? (
-            model: Model,
-            msg: Tagged<Msg, T>,
-            $: Update<Model, Msg, Events, Props, L, Tagged<Msg, T>>
-          ) => UR[T]
-          : UnknownTag<T>
-      }
+      | UpdateRecord<Model, Msg, Events, Props, L, UR>
     /** A headless component has no view to place slots in, so a definition with slots can't take `parts`. */
     readonly parts: [Sl] extends [never] ?
       (model: Model, p: PartsHelper<Msg, Props, V> & QueryHelpers<L> & SharedHelpers<SR>) => Parts
@@ -2010,14 +2014,7 @@ export interface Definition<
       readonly init: ($: Init<Model, Msg, Events, Props>) => UI
       readonly update:
         | ((model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L>) => U)
-        | {
-          readonly [T in keyof UR]: T extends TagOf<Msg> ? (
-              model: Model,
-              msg: Tagged<Msg, T>,
-              $: Update<Model, Msg, Events, Props, L, Tagged<Msg, T>>
-            ) => UR[T]
-            : UnknownTag<T>
-        }
+        | UpdateRecord<Model, Msg, Events, Props, L, UR>
       readonly view: (
         model: Model,
         h: View.Helper<Msg, Props> & View.Tags<V, Msg> & QueryHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>
