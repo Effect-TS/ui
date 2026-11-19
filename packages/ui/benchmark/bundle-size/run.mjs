@@ -4,8 +4,8 @@
 //
 //   pnpm bundle-size [--json <file>] [--base <file>] [--runtime kernel] [--vocabulary]
 //
-// The 45,000-byte kernel gzip target is for the unchanged counter. Pass --vocabulary
-// for the separate Html.vocabulary comparison; both run the same click assertion.
+// Added gzip bytes are the counter total minus a separately bundled effect-only client.
+// Pass --vocabulary to measure the opt-in counter with the same click assertion.
 //
 // --json writes the result and --base adds deltas against an earlier --json file. --runtime kernel
 // bundles the runtime in internal/kernel in place of the default one. The table is also
@@ -29,15 +29,22 @@ const effectDir = path.join(ui, "node_modules/effect")
 const effect = JSON.parse(fs.readFileSync(path.join(effectDir, "package.json"), "utf8")).version
 const target = "es2023"
 
-async function checkCounter(code) {
+async function checkClient(code, baseline) {
   const window = new Window({
     settings: { enableJavaScriptEvaluation: true, suppressInsecureJavaScriptEnvironmentWarning: true }
   })
   try {
     const document = window.document
     document.body.innerHTML = '<div id="app"></div>'
+    const app = document.getElementById("app")
+    app.dataset.model = "7"
+    app.dataset.message = JSON.stringify({ _tag: "Decrement" })
     window.eval(code)
     await window.happyDOM.waitUntilComplete()
+    if (baseline) {
+      assert.equal(app.textContent, "6", "baseline did not run the Layer with the decoded model and message")
+      return
+    }
     const count = () => document.querySelector("#app span")?.textContent
     assert.equal(count(), "0", "counter did not mount")
     const increment = [...document.querySelectorAll("button")].find((button) => button.textContent === "+")
@@ -59,6 +66,22 @@ const kernelPlugin = (installed) => ({
   }
 })
 
+async function bundle(root, installed, input, baseline) {
+  // `mode` and `format` are Vite's defaults, pinned because the report states them.
+  const { output } = await build({
+    configFile: false,
+    root,
+    mode: "production",
+    logLevel: "warn",
+    plugins: runtime === "kernel" ? [kernelPlugin(installed)] : [],
+    build: { target, write: false, rolldownOptions: { input, output: { format: "es" } } }
+  })
+  assert.ok(output.length === 1 && output[0].type === "chunk", "expected one JavaScript chunk")
+  const code = output[0].code
+  await checkClient(code, baseline)
+  return { raw: Buffer.byteLength(code), gzip: gzipSync(code, { level: 9 }).length }
+}
+
 async function measure() {
   assert.ok(fs.existsSync(path.join(ui, "dist/index.js")), "Missing @effect/ui dist. Run pnpm build first.")
   const root = fs.mkdtempSync(path.join(tmpdir(), "ui-bundle-size-"))
@@ -76,19 +99,11 @@ async function measure() {
     const binding = "elements: Html"
     if (vocabulary) assert.equal(source.split(binding).length, 2, "expected exactly one vocabulary binding")
     fs.writeFileSync(input, vocabulary ? source.replace(binding, "elements: Html.vocabulary") : source)
-    // `mode` and `format` are Vite's defaults, pinned because the report states them.
-    const { output } = await build({
-      configFile: false,
-      root,
-      mode: "production",
-      logLevel: "warn",
-      plugins: runtime === "kernel" ? [kernelPlugin(installed)] : [],
-      build: { target, write: false, rolldownOptions: { input, output: { format: "es" } } }
-    })
-    assert.ok(output.length === 1 && output[0].type === "chunk", "expected one JavaScript chunk")
-    const code = output[0].code
-    await checkCounter(code)
-    return { raw: Buffer.byteLength(code), gzip: gzipSync(code, { level: 9 }).length, vite, effect, node: process.version }
+    const baselineInput = path.join(root, "effect-only.ts")
+    fs.copyFileSync(path.join(import.meta.dirname, "effect-only.ts"), baselineInput)
+    const counter = await bundle(root, installed, input, false)
+    const baseline = await bundle(root, installed, baselineInput, true)
+    return { ...counter, baselineGzip: baseline.gzip, addedGzip: counter.gzip - baseline.gzip, vite, effect, node: process.version }
   } finally {
     fs.rmSync(root, { recursive: true, force: true })
   }
@@ -96,8 +111,8 @@ async function measure() {
 
 const elements = vocabulary ? "Html.vocabulary" : "Html"
 const result = { ...await measure(), elements }
-const headers = ["Runtime", "Elements", "Vite", "effect", "Node", "Raw bytes", "Gzip bytes"]
-const row = [runtime, elements, result.vite, result.effect, result.node, result.raw, result.gzip]
+const headers = ["Runtime", "Elements", "Vite", "effect", "Node", "Raw bytes", "Gzip bytes", "Effect-only gzip B", "Added gzip B"]
+const row = [runtime, elements, result.vite, result.effect, result.node, result.raw, result.gzip, result.baselineGzip, result.addedGzip]
 if (base) {
   const previous = JSON.parse(fs.readFileSync(base, "utf8"))
   assert.equal(previous.elements ?? "Html", elements, "baseline uses a different vocabulary")
