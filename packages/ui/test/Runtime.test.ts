@@ -1315,6 +1315,55 @@ describe("Runtime", () => {
         assert.strictEqual(root.pending().length, 3)
       })))
 
+    it.effect("siblings close newest first, even when an older one subscribes after it mounts", () =>
+      provideHost(Effect.gen(function*() {
+        const stopped: Array<string> = []
+        const Job = Command.make(
+          "test/Job",
+          { args: { name: Schema.String } },
+          ({ name }) => Effect.onInterrupt(Effect.never, () => Effect.sync(() => stopped.push(name)))
+        )
+        const Worker = Component.define({
+          name: "Worker",
+          props: Schema.Struct({ name: Schema.String, listen: Schema.Boolean }),
+          model: Schema.Null,
+          message: Schema.Null
+        }).make({
+          init: ($) => $.set(null).run(Job({ name: $.props.name })),
+          update: (model) => model,
+          view: (_, h) => h.text(h.props.name),
+          subscriptions: (_, props) => props.listen ? [Subscription.make("listen", Stream.never)] : []
+        })
+        const Step = Schema.Literals(["mounted", "listening", "dropped"])
+        const App = Component.define({ name: "App", model: Step, message: Step }).make({
+          init: () => "mounted" as const,
+          update: (_, step) => step,
+          view: (step, h) =>
+            h.el(
+              "div",
+              step === "dropped" ? null : Worker(h, { key: "a", props: { name: "A", listen: step === "listening" } }),
+              Worker(h, { key: "b", props: { name: "B", listen: false } })
+            )
+        })
+        const run = Effect.fnUntraced(function*(steps: ReadonlyArray<typeof Step.Type>) {
+          stopped.length = 0
+          const scope = yield* Scope.make()
+          const root = yield* TestHost.mount(App, {}).pipe(Scope.provide(scope))
+          yield* TestHost.settle
+          for (const step of steps) {
+            root.send(step)
+            yield* TestHost.settle
+          }
+          const before = [...stopped]
+          yield* Scope.close(scope, Exit.void)
+          return { before, after: [...stopped] }
+        })
+        // A subscribes after both have mounted.
+        assert.deepStrictEqual(yield* run(["listening"]), { before: [], after: ["B", "A"] })
+        // A goes after subscribing late: it closes then, and once.
+        assert.deepStrictEqual(yield* run(["listening", "dropped"]), { before: ["A"], after: ["A", "B"] })
+      })))
+
     it.effect("h.isRunning ends when an interrupted run's fiber exits, and the instance re-renders", () =>
       provideHost(Effect.gen(function*() {
         const server = makeServer()

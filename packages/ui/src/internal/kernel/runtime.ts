@@ -2450,13 +2450,18 @@ const setup = (
         own = Scope.makeUnsafe("sequential")
         Scope.closeUnsafe(own, Exit.void)
       } else {
-        // Forked now, so it closes before what its parent forked earlier. Its finalizer moves into it.
         const under = this.parent!.scope
-        own = Scope.forkUnsafe(under, "sequential")
-        if (this.held) {
+        if (this.held && under.state._tag === "Open") {
+          // It takes the slot its finalizer held in the parent, so it closes among its siblings where
+          // one forked when the instance was made would: a late Scope doesn't make it close first. Its
+          // finalizer moves into it. `close` frees the slot.
           this.held = false
-          scopeRemoveFinalizerUnsafe(under, this)
+          own = Scope.makeUnsafe("sequential")
           scopeAddFinalizerUnsafe(own, this, this.finalize.bind(this))
+          const scope = own
+          scopeAddFinalizerUnsafe(under, this, (exit) => Scope.close(scope, exit))
+        } else {
+          own = Scope.forkUnsafe(under, "sequential")
         }
       }
       return this.own = own
@@ -2485,7 +2490,12 @@ const setup = (
     /** Closes the instance's Scope, or runs its finalizer when it has none. What's left of the close. */
     close(): Effect.Effect<void> | undefined {
       const own = this.own
-      if (own !== undefined) return Scope.closeUnsafe(own, Exit.void) as Effect.Effect<void> | undefined
+      if (own !== undefined) {
+        // A Scope made late sits in its finalizer's slot in the parent's, which closing it doesn't free.
+        const under = (this.parent as Inst | undefined)?.own
+        if (under !== undefined) scopeRemoveFinalizerUnsafe(under, this)
+        return Scope.closeUnsafe(own, Exit.void) as Effect.Effect<void> | undefined
+      }
       if (this.dead) return undefined
       this.dead = true
       if (!this.held) return undefined
