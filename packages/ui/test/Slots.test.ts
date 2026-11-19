@@ -137,29 +137,6 @@ describe("slots", () => {
       assert.include(updates(root), editorPath + " Send Clear")
     })))
 
-  it.effect("wrapping a child in a slotted component keeps its instance and its path", () =>
-    provideHost(Effect.gen(function*() {
-      const Wrapped = UiSchema.TaggedEnum({ Wrapped: {} })
-      const Wrap = Component.define({ name: "Wrap", model: Schema.Boolean, message: Wrapped, elements: Html }).make({
-        init: () => false,
-        update: () => true,
-        view: (wide, h) =>
-          wide ? Frame(h, { key: "f", slots: { body: Editor(h, { key: "e" }) } }) : h.div(Editor(h, { key: "e" }))
-      })
-      const root = yield* TestHost.mount(Wrap, {})
-      click(root, "type 0")
-      yield* TestHost.settle
-      root.send(Wrapped.Wrapped())
-      yield* TestHost.settle
-      assert.include(root.text(), "type 1")
-      assert.include(root.text(), "toggle")
-      assert.deepStrictEqual(unmounted(root), [])
-      assert.deepStrictEqual(
-        root.log().flatMap((entry) => entry._tag === "Mounted" ? [entry.path] : []),
-        ["/Wrap", "/Wrap/Editor[e]", "/Wrap/Frame[f]"]
-      )
-    })))
-
   describe("a feature moved by its author", () => {
     const TallyMsg = UiSchema.TaggedEnum({ Counted: {} })
     class Tally extends Feature.Service<Tally>()("Tally", { props: Schema.Struct({}) }) {}
@@ -422,10 +399,12 @@ describe("Back to a page whose layout changed while away", () => {
     const history = Router.memoryHistory("/")
     return Effect.gen(function*() {
       const root = yield* TestHost.mount(Shell, Router.props(Routes))
-      root.send(ShellMsg.Slot())
-      yield* TestHost.settle
       click(root, "type 0")
       yield* TestHost.settle
+      root.send(ShellMsg.Slot())
+      yield* TestHost.settle
+      assert.include(root.text(), "type 1")
+      assert.deepStrictEqual(unmounted(root), [])
       click(root, "toggle")
       yield* TestHost.settle
       const router = yield* Router.Router
