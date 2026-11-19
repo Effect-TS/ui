@@ -3246,6 +3246,85 @@ describe("Runtime", () => {
         provideHost
       ))
 
+    it.effect("a reader of a mount's args that starts while new ones arrive gets them once", () =>
+      Effect.gen(function*() {
+        const seen: Array<string> = []
+        const Draw = Mount.make(
+          "Draw",
+          { args: { n: Schema.Number } },
+          (_node, _args, changes) =>
+            Effect.gen(function*() {
+              const second = Stream.runForEach(changes, ({ n }) => Effect.sync(() => seen.push("second " + n)))
+              yield* Effect.forkScoped(Stream.runForEach(changes, ({ n }) => {
+                seen.push("first " + n)
+                return n === 1 ? Effect.forkScoped(second, { startImmediately: true }) : Effect.void
+              }))
+              return Component.noop
+            })
+        )
+        const Chart = Component.define({
+          name: "StartsReader",
+          model: Schema.Number,
+          message: Schema.Number,
+          elements: Tiny
+        })
+          .make({
+            init: () => 0,
+            update: (_, n) => n,
+            view: (n, h) => h.field.onMount(Draw({ n }))
+          })
+        const root = yield* TestHost.mount(Chart, {})
+        yield* TestHost.settle
+        root.send(1)
+        yield* TestHost.settle
+        assert.deepStrictEqual(seen, ["first 0", "first 1", "second 1"])
+      }).pipe(
+        Effect.provide(Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })),
+        provideHost
+      ))
+
+    it.effect("readers of a mount's args get new ones in the order they began to wait", () =>
+      Effect.gen(function*() {
+        const gate = yield* Deferred.make<void>()
+        const seen: Array<string> = []
+        const Draw = Mount.make("Draw", { args: { n: Schema.Number } }, (_node, _args, changes) =>
+          Effect.gen(function*() {
+            // The first reader is still busy with the first args when the second begins to wait.
+            yield* Effect.forkScoped(Stream.runForEach(changes, ({ n }) => {
+              seen.push("first " + n)
+              return n === 0 ? Deferred.await(gate) : Effect.void
+            }))
+            yield* Effect.forkScoped(
+              Stream.runForEach(changes, ({ n }) =>
+                Effect.sync(() =>
+                  seen.push("second " + n)
+                ))
+            )
+            return Component.noop
+          }))
+        const Chart = Component.define({
+          name: "WaitOrder",
+          model: Schema.Number,
+          message: Schema.Number,
+          elements: Tiny
+        })
+          .make({
+            init: () => 0,
+            update: (_, n) => n,
+            view: (n, h) => h.field.onMount(Draw({ n }))
+          })
+        const root = yield* TestHost.mount(Chart, {})
+        yield* TestHost.settle
+        yield* Deferred.succeed(gate, undefined)
+        yield* TestHost.settle
+        root.send(1)
+        yield* TestHost.settle
+        assert.deepStrictEqual(seen, ["first 0", "second 0", "second 1", "first 1"])
+      }).pipe(
+        Effect.provide(Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })),
+        provideHost
+      ))
+
     it.effect("a render that adds, swaps or drops an element's mount starts and stops it", () =>
       Effect.gen(function*() {
         const events: Array<string> = []
