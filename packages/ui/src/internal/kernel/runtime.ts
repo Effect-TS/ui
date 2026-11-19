@@ -188,9 +188,10 @@ interface RElement {
   v: View.Element<any, any>
   readonly node: unknown
   children: Array<Rendered>
-  mount: RunningMount | undefined
+  // Set only on an element that has them, so most records hold four fields.
+  mount?: RunningMount | undefined
   /** The mounts of the element's owned layers, by owner and mount name. */
-  ownedMounts: ReadonlyArray<OwnedMount> | undefined
+  ownedMounts?: ReadonlyArray<OwnedMount> | undefined
 }
 
 /**
@@ -4963,6 +4964,23 @@ const setup = (
     deliverSends(inst)
   }
 
+  /** The record of an element whose node and children are made: its mounts start now. */
+  const renderedElement = (
+    inst: Instance,
+    view: View.Element<any, any>,
+    node: unknown,
+    children: Array<Rendered>,
+    env: Env
+  ): RElement => {
+    const rendered: RElement = { _tag: "Element", v: view, node, children }
+    if (view.mount !== undefined) rendered.mount = startMount(inst.author, view.mount, node, env, inst)
+    if (view.owned !== undefined && view.owned.length > 0) {
+      const owned = startOwnedMounts(inst, view, node, env)
+      if (owned !== undefined) rendered.ownedMounts = owned
+    }
+    return rendered
+  }
+
   const create = (inst: Instance, view: View.Node<any, any>, env: Env): Rendered => {
     switch (view._tag) {
       case "Text":
@@ -4982,14 +5000,7 @@ const setup = (
         // Properties go after the children, so a `select`'s `value` has its options to match.
         const props = view.props
         if (props !== View.noFields) { for (const name in props) host.setProp(node, name, props[name]) }
-        return {
-          _tag: "Element",
-          v: view,
-          node,
-          children,
-          mount: view.mount !== undefined ? startMount(inst.author, view.mount, node, env, inst) : undefined,
-          ownedMounts: startOwnedMounts(inst, view, node, env)
-        }
+        return renderedElement(inst, view, node, children, env)
       }
       case "Child":
         return createChild(inst, view, env)
@@ -5393,14 +5404,7 @@ const setup = (
         placeEach(node, children, undefined)
         for (const name in view.props) adoptProp(node, name, view.props[name])
         adoptedUpTo = next
-        return {
-          _tag: "Element",
-          v: view,
-          node,
-          children,
-          mount: view.mount !== undefined ? startMount(inst.author, view.mount, node, env, inst) : undefined,
-          ownedMounts: startOwnedMounts(inst, view, node, env)
-        }
+        return renderedElement(inst, view, node, children, env)
       }
       case "Child":
       case "Outlet": {
