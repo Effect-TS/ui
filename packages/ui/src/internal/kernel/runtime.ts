@@ -24,7 +24,7 @@ import * as Command from "../../Command.ts"
 import type * as Component from "../../Component.ts"
 import * as Feature from "../../Feature.ts"
 import * as Head from "../../Head.ts"
-import * as MessageLog from "../../MessageLog.ts"
+import type * as MessageLog from "../../MessageLog.ts"
 import * as Mount from "../../Mount.ts"
 import type * as Query from "../../Query.ts"
 import type * as Renderer from "../../Renderer.ts"
@@ -35,6 +35,7 @@ import * as Executor from "../executor.ts"
 import * as headFold from "../headFold.ts"
 import * as match from "../match.ts"
 import { isKeyed, keyOf } from "../match.ts"
+import * as messageLog from "../messageLog.ts"
 import * as mountArgs from "../mountArgs.ts"
 import { isNoop } from "../noop.ts"
 import {
@@ -979,7 +980,7 @@ const setup = (
 ): Root & Renderer.Root<any, any> => {
   const server = options?.server
   const host: Renderer.Host<any> = server !== undefined ? server.host : Context.get(ctx, services.Renderer).host
-  const log = Context.get(ctx, MessageLog.MessageLog)
+  const log = Context.get(ctx, messageLog.MessageLog)
   const executor = Context.get(ctx, Executor.CurrentExecutor)
   const clock = Context.get(ctx, Clock.Clock)
   const rootScope = Context.get(ctx, Scope.Scope)
