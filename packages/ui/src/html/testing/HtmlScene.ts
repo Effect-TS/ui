@@ -32,6 +32,7 @@
  *
  * const Weather = Component.define({
  *   name: "Weather",
+ *   lifetime: "view",
  *   model: Schema.Struct({ zip: Schema.String, forecast: Schema.String }),
  *   message: Message,
  *   elements: Html

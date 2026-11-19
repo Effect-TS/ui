@@ -16,6 +16,7 @@ export const ConfirmMessage = UiSchema.TaggedEnum({
 /** A confirm dialog: Escape is accepted only with `acceptEscape`, and its form's choice closes it. */
 export const Confirm = Component.define({
   name: "Confirm",
+  lifetime: "view",
   props: Schema.Struct({ state: State, acceptEscape: Schema.Boolean }),
   model: Schema.Struct({
     state: State,
@@ -63,6 +64,7 @@ export const Confirm = Component.define({
 /** Two modals, one nested in the other, both open from the start. */
 export const Nested = Component.define({
   name: "Nested",
+  lifetime: "view",
   model: Schema.Null,
   message: Schema.Never,
   elements: Html

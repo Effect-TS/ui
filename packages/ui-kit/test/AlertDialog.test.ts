@@ -10,6 +10,7 @@ const Message = UiSchema.TaggedEnum({ Dismissed: {} })
 
 const Page = Component.define({
   name: "Page",
+  lifetime: "view",
   props: Schema.Struct({}),
   model: Schema.Struct({ open: Schema.Boolean }),
   message: Message,

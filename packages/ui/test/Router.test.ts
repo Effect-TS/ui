@@ -136,6 +136,7 @@ describe("Router", { concurrent: false }, () => {
     const subscriber = (name: string, map: (route: typeof routes.Type) => typeof routes.Type) =>
       Component.define({
         name,
+        lifetime: "view",
         props: Schema.Struct({ route: routes }),
         model: Schema.Struct({ route: routes }),
         message: routes
@@ -171,6 +172,7 @@ describe("Router", { concurrent: false }, () => {
     let onRoute = () => {}
     const Root = Component.define({
       name: "Root",
+      lifetime: "view",
       props: Schema.Struct({ route: routes }),
       model: Schema.Struct({ route: routes, following: Schema.Boolean }),
       message: Message
@@ -633,6 +635,7 @@ describe("Router", { concurrent: false }, () => {
     const { layer, settled } = setup()
     const Page = Component.define({
       name: "Page",
+      lifetime: "view",
       model: Schema.Number,
       message: Schema.Never
     }).make({
@@ -643,6 +646,7 @@ describe("Router", { concurrent: false }, () => {
     })
     const Layout = Component.define({
       name: "Layout",
+      lifetime: "view",
       model: Schema.Number,
       message: Schema.Never
     }).make({
@@ -657,6 +661,7 @@ describe("Router", { concurrent: false }, () => {
     })
     const Shell = Component.define({
       name: "Shell",
+      lifetime: "view",
       props: Schema.Struct({ route: AppRoute }),
       model: AppRoute,
       message: Schema.Struct({ route: AppRoute })
@@ -737,6 +742,7 @@ describe("Router.patchSearch", { concurrent: false }, () => {
   /** Holds its whole route as props, and writes the search with patchSearch. */
   const SearchPage = Component.define({
     name: "SearchPage",
+    lifetime: "view",
     props: Schema.Struct({ route: SearchOnly }),
     model: Schema.Struct({ outcomes: Schema.Array(Schema.String), dirty: Schema.Boolean }),
     message: PageMessage
@@ -770,6 +776,7 @@ describe("Router.patchSearch", { concurrent: false }, () => {
   const makeApp = (key: (route: typeof SearchOnly.Type) => string) =>
     Component.define({
       name: "App",
+      lifetime: "view",
       props: Schema.Struct({ route: Routes }),
       model: Schema.Struct({ route: Routes }),
       message: AppMessage
@@ -1188,6 +1195,7 @@ describe("Router.prefetch", { concurrent: false }, () => {
       Effect.gen(function*() {
         const Twice = Component.define({
           name: "Twice",
+          lifetime: "view",
           model: Schema.Struct({}),
           message: Schema.Never
         }).make({

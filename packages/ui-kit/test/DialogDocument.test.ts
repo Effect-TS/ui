@@ -77,6 +77,7 @@ const config = (overrides: Partial<Config>): Config => ({
 
 const Page = Component.define({
   name: "Page",
+  lifetime: "view",
   props: Config,
   model: Schema.Struct({
     config: Config,

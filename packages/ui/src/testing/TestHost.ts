@@ -23,6 +23,7 @@
  *
  * const Counter = Component.define({
  *   name: "Counter",
+ *   lifetime: "view",
  *   model: Schema.Number,
  *   message: Msg
  * }).make({
@@ -1054,6 +1055,7 @@ export const stub = <Self, Props, Events, Receives = never>(
   const Message = Schema.Union([Emit, feature.receives])
   const component = Component.define({
     name,
+    lifetime: "view",
     props: feature.props,
     model: Schema.Number,
     message: Message,

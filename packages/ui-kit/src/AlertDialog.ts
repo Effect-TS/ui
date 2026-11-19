@@ -76,6 +76,7 @@
  *
  * const Editor = Component.define({
  *   name: "Editor",
+ *   lifetime: "view",
  *   model: Schema.Struct({ confirming: Schema.Boolean }),
  *   message: EditorMessage,
  *   elements: Html

@@ -14,7 +14,7 @@ declare const needsClock: View.Child<never, Clock>
 
 describe("Switch", () => {
   it("returns what view returns, with the consumer's message type and the children's requirements", () => {
-    Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
+    Component.define({ name: "App", lifetime: "view", model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
       update: (model) => model,
       view: (_, h) => {
@@ -39,7 +39,7 @@ describe("Switch", () => {
   })
 
   it("root takes only a button, thumb only a span, and onToggle only the consumer's message", () => {
-    Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
+    Component.define({ name: "App", lifetime: "view", model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
       update: (model) => model,
       view: (_, h) => {

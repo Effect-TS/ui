@@ -33,6 +33,7 @@ it.effect("omits reads with Redacted args, success or error schemas from the ser
   }, Effect.succeed(() => Effect.succeed("ok"))) {}
   const App = Component.define({
     name: "Secrets",
+    lifetime: "view",
     model: Schema.Struct({}),
     message: Schema.Never,
     elements: Html,
@@ -81,6 +82,7 @@ const hydrationCase = <A>(name: string, schema: Schema.Codec<A>, value: A, exclu
     }, Effect.succeed(() => Effect.succeed(value))) {}
     const App = Component.define({
       name: "App",
+      lifetime: "view",
       model: Schema.Struct({ value: schema }),
       message: Schema.Never,
       elements: Html,

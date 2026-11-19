@@ -9,6 +9,7 @@ import { Settings } from "./fixtures/settings.ts"
 
 const Board = Component.define({
   name: "Board",
+  lifetime: "view",
   model: Schema.Array(Schema.String),
   message: Schema.String,
   elements: Html
@@ -78,6 +79,7 @@ describe("HtmlScene", () => {
       )
       const Chart = Component.define({
         name: "Chart",
+        lifetime: "view",
         model: Schema.Struct({ points: Schema.Array(Schema.Number), width: Schema.Number }),
         message: Message,
         elements: Html
@@ -196,6 +198,7 @@ describe("HtmlScene", () => {
   describe("a click's defaults", () => {
     const Checkout = Component.define({
       name: "Checkout",
+      lifetime: "view",
       model: Schema.Struct({ log: Schema.Array(Schema.String), zip: Schema.String }),
       message: Schema.String,
       elements: Html

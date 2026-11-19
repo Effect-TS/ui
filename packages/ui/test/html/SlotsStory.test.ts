@@ -6,6 +6,7 @@ import { Effect, Schema } from "effect"
 
 const Note = Component.define({
   name: "Note",
+  lifetime: "view",
   model: Schema.Number,
   message: Schema.Never,
   events: UiSchema.TaggedEnum({ Saved: { text: Schema.String } }),
@@ -14,6 +15,7 @@ const Note = Component.define({
 
 const Panel = Component.define({
   name: "Panel",
+  lifetime: "view",
   model: Schema.Null,
   message: Schema.Never,
   elements: Html,
@@ -27,6 +29,7 @@ const Panel = Component.define({
 const PageMsg = UiSchema.TaggedEnum({ Bump: {}, Saved: { text: Schema.String } })
 const Page = Component.define({
   name: "Page",
+  lifetime: "view",
   model: Schema.Struct({ bumps: Schema.Number, saved: Schema.String }),
   message: PageMsg,
   elements: Html
@@ -74,7 +77,13 @@ describe("slots in a story", () => {
     }))
 
   it("a ref key in the view and in content fails the story, as it fails the parent", () => {
-    const Twice = Component.define({ name: "Twice", model: Schema.Null, message: Schema.Never, elements: Html })
+    const Twice = Component.define({
+      name: "Twice",
+      lifetime: "view",
+      model: Schema.Null,
+      message: Schema.Never,
+      elements: Html
+    })
       .make({
         init: () => null,
         update: (model) => model,
@@ -99,12 +108,24 @@ describe("View queries", () => {
 })
 
 describe("headless closures in slot content", () => {
-  const Headless = Component.define({ name: "Headless", model: Schema.Null, message: Schema.Never, elements: Html })
+  const Headless = Component.define({
+    name: "Headless",
+    lifetime: "view",
+    model: Schema.Null,
+    message: Schema.Never,
+    elements: Html
+  })
     .make({ init: () => null, update: (model) => model, parts: () => ({}) })
 
   it.effect("childEmit finds a child a headless closure renders in content the story's component passes", () =>
     Effect.gen(function*() {
-      const Parent = Component.define({ name: "Parent", model: Schema.String, message: Schema.String, elements: Html })
+      const Parent = Component.define({
+        name: "Parent",
+        lifetime: "view",
+        model: Schema.String,
+        message: Schema.String,
+        elements: Html
+      })
         .make({
           init: () => "",
           update: (_, text) => text,
@@ -126,6 +147,7 @@ describe("headless closures in slot content", () => {
     Effect.gen(function*() {
       const Receiver = Component.define({
         name: "Receiver",
+        lifetime: "view",
         model: Schema.Null,
         message: Schema.Never,
         elements: Html,

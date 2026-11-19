@@ -13,7 +13,7 @@ declare const needsClock: View.Child<never, Clock>
 
 describe("Avatar", () => {
   it("each part returns the builder it was given, and children keep their requirements", () => {
-    Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
+    Component.define({ name: "App", lifetime: "view", model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
       update: (model) => model,
       view: (_, h) =>
@@ -35,7 +35,7 @@ describe("Avatar", () => {
   })
 
   it("root and fallback take only a span builder, and image only an img builder", () => {
-    Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
+    Component.define({ name: "App", lifetime: "view", model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
       update: (model) => model,
       view: (_, h) =>

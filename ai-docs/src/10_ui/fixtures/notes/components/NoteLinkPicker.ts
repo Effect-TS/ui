@@ -20,6 +20,7 @@ const excerpt = (body: string) => (body.length > 60 ? body.slice(0, 60) + "…" 
 // Model or loaded data change, and `{ noteId }` doesn't change while typing.
 export const NoteLinkPickerNoDeps = Component.define({
   name: "NoteLinkPicker",
+  lifetime: "view",
   // The note being edited, which can't link to itself.
   props: Schema.Struct({ noteId: Schema.String }),
   // The value is the consumer's. The Listbox only reads it, as `selected`.

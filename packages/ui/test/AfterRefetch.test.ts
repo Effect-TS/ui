@@ -96,6 +96,7 @@ const makeApp = (options?: {
   }
   const Card = Component.define({
     name: "Card",
+    lifetime: "view",
     props: Schema.Struct({ id: Schema.String, tag: Schema.String }),
     model: Schema.Struct({ done: Schema.Array(Schema.String) }),
     message: CardMessage,
@@ -140,6 +141,7 @@ const makeApp = (options?: {
   const ListMessage = UiSchema.TaggedEnum({ Set: { cards: Schema.Array(Schema.String) } })
   const List = Component.define({
     name: "List",
+    lifetime: "view",
     props: Schema.Struct({ cards: Schema.Array(Schema.String) }),
     model: Schema.Array(Schema.String),
     message: ListMessage
@@ -379,6 +381,7 @@ describe("Command.afterRefetch", () => {
     const order: Array<string> = []
     const Board = Component.define({
       name: "Board",
+      lifetime: "view",
       model: Schema.Struct({ renamed: Schema.Boolean }),
       message: BoardMessage,
       queries: {
@@ -749,6 +752,7 @@ describe("Command.afterRefetch", () => {
     const ItemsMessage = UiSchema.TaggedEnum({ More: {}, Touch: {}, Touched: {} })
     const ItemsView = Component.define({
       name: "ItemsView",
+      lifetime: "view",
       model: Schema.Struct({ touched: Schema.Boolean }),
       message: ItemsMessage,
       queries: { items: { query: ListItems, args: () => ({}) } }

@@ -26,6 +26,7 @@
  *
  * const App = Component.define({
  *   name: "App",
+ *   lifetime: "view",
  *   model: Schema.Struct({}),
  *   message: Schema.Never,
  *   elements: Html

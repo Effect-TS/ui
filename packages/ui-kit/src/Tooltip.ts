@@ -98,6 +98,7 @@
  *
  * const Toolbar = Component.define({
  *   name: "Toolbar",
+ *   lifetime: "view",
  *   model: Schema.Struct({ boldTip: Schema.Boolean }),
  *   message: ToolbarMessage,
  *   elements: Html
@@ -475,6 +476,7 @@ const WaitBeforeCooling = Command.make(
  */
 export const TooltipProvider = Component.define({
   name: "TooltipProvider",
+  lifetime: "view",
   props: TooltipProviderProps,
   // `open`: a tooltip below shows. `instant`: the next hover skips its
   // delay, while one shows and for `timeout` after the last one closed.
@@ -549,6 +551,7 @@ export const TooltipProvider = Component.define({
  */
 export const Tooltip = Component.define({
   name: "Tooltip",
+  lifetime: "view",
   props: TooltipProps,
   model: Model,
   message: Message,

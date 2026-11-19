@@ -19,6 +19,7 @@
  *
  * const Photo = Component.define({
  *   name: "Photo",
+ *   lifetime: "view",
  *   model: Schema.String,
  *   message: Message,
  *   elements: Html

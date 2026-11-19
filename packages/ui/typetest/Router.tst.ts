@@ -45,6 +45,7 @@ describe("Router.patchSearch", () => {
     const Message = UiSchema.TaggedEnum({ Typed: { value: Schema.String }, Patched: {} })
     const Box = Component.define({
       name: "Box",
+      lifetime: "view",
       props: Schema.Struct({ route: SearchRoute }),
       model: Schema.Struct({ typed: Schema.Number }),
       message: Message

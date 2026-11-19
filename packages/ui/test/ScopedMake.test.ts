@@ -12,6 +12,7 @@ const save = TodoItemMessage.Save()
 const Hello = Mount.make("Hello", { args: {} }, () => Effect.succeed(Component.noop))
 const Greeting = Component.define({
   name: "Greeting",
+  lifetime: "view",
   model: Schema.Struct({}),
   message: Schema.String,
   elements: Html

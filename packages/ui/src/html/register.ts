@@ -16,6 +16,7 @@
  *
  * const Greeting = Component.define({
  *   name: "Greeting",
+ *   lifetime: "view",
  *   model: Schema.Struct({}),
  *   message: Schema.Never
  * }).make({

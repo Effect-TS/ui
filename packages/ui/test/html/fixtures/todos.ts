@@ -25,6 +25,7 @@ export const TodoItemEvents = UiSchema.TaggedEnum({
 
 export const TodoItem = Component.define({
   name: "TodoItem",
+  lifetime: "view",
   props: Schema.Struct({ todo: Todo }),
   model: Schema.Struct({}),
   message: TodoItemMessage,
@@ -71,6 +72,7 @@ export type TodoAppModel = typeof TodoAppModel.Type
 
 export const TodoApp = Component.define({
   name: "TodoApp",
+  lifetime: "view",
   model: TodoAppModel,
   message: TodoAppMessage,
   elements: Html

@@ -16,7 +16,7 @@ type Span<R> = Html.Element<Msg, R, Html.EventsOf<"span">, HTMLSpanElement, "spa
 
 describe("Meter", () => {
   it("each part returns the builder it was given, with the consumer's message type and the children's requirements", () => {
-    Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
+    Component.define({ name: "App", lifetime: "view", model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
       update: (model) => model,
       view: (_, h) =>
@@ -38,7 +38,7 @@ describe("Meter", () => {
   })
 
   it("root, track and indicator take only a div, and label and value only a span", () => {
-    Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
+    Component.define({ name: "App", lifetime: "view", model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
       update: (model) => model,
       view: (_, h) =>

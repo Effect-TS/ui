@@ -37,6 +37,7 @@ const ToolbarMessage = UiSchema.TaggedEnum({ PressedBold: {}, OpenedBoldTip: {},
 
 const Toolbar = Component.define({
   name: "Toolbar",
+  lifetime: "view",
   model: Schema.Struct({ open: Schema.Boolean, pressed: Schema.Number, dismissed: Schema.Number }),
   message: ToolbarMessage,
   elements: Html
@@ -72,6 +73,7 @@ const GroupedMessage = UiSchema.TaggedEnum({ OpenedTip: { tip: Tip }, DismissedT
 
 const Grouped = Component.define({
   name: "Grouped",
+  lifetime: "view",
   model: Schema.Struct({ tip: Schema.NullOr(Tip) }),
   message: GroupedMessage,
   elements: Html
@@ -109,6 +111,7 @@ const IndependentMessage = UiSchema.TaggedEnum({ OpenedTip: { tip: Tip }, Dismis
 
 const Independent = Component.define({
   name: "Independent",
+  lifetime: "view",
   props: Schema.Struct({ keep: Schema.Boolean, closeDelay: Schema.Number }),
   model: Schema.Struct({ bold: Schema.Boolean, italic: Schema.Boolean, requests: Schema.Number }),
   message: IndependentMessage,
@@ -163,6 +166,7 @@ const DeferredMessage = UiSchema.TaggedEnum({
 
 const Deferred = Component.define({
   name: "Deferred",
+  lifetime: "view",
   model: Schema.Struct({
     bold: Schema.Boolean,
     italic: Schema.Boolean,

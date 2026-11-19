@@ -10,6 +10,7 @@ type TodoMessage = typeof TodoMessage.Type
 const NewTodo = Html.ref("NewTodo", "input")
 const Item = Component.define({
   name: "Item",
+  lifetime: "view",
   props: Schema.Struct({ title: Schema.String }),
   model: Schema.String,
   message: Schema.Never,
@@ -69,6 +70,7 @@ describe("Html", () => {
       Effect.gen(function*() {
         const Todos = Component.define({
           name: "Todos",
+          lifetime: "view",
           model: Schema.String,
           message: TodoMessage,
           elements: Html
@@ -206,6 +208,7 @@ describe("Html", () => {
         )
         const Page = Component.define({
           name: "Styled",
+          lifetime: "view",
           model: Schema.Null,
           message: Schema.Never,
           elements: Html
@@ -327,6 +330,7 @@ describe("Html", () => {
       Effect.gen(function*() {
         const Classes = Component.define({
           name: "Classes",
+          lifetime: "view",
           model: Schema.Struct({ saving: Schema.Boolean }),
           message: Schema.Never,
           elements: Html

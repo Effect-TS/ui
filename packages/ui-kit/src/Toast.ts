@@ -103,7 +103,7 @@
  * const EditorMessage = UiSchema.TaggedEnum({ ClickedSave: {} })
  *
  * // Any component below the provider can send to it.
- * const Editor = Component.define({ name: "Editor", model: Schema.Null, message: EditorMessage, elements: Html }).make({
+ * const Editor = Component.define({ name: "Editor", lifetime: "view", model: Schema.Null, message: EditorMessage, elements: Html }).make({
  *   init: () => null,
  *   update: {
  *     ClickedSave: (model, _message, $) =>
@@ -115,7 +115,7 @@
  *   view: (_, h) => h.button.onClick(EditorMessage.ClickedSave()).children("Save")
  * })
  *
- * const App = Component.define({ name: "App", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+ * const App = Component.define({ name: "App", lifetime: "view", model: Schema.Null, message: Schema.Never, elements: Html }).make({
  *   init: () => null,
  *   update: (model) => model,
  *   view: (_, h) =>
@@ -620,6 +620,7 @@ const withToast = <Tag extends string, R>(part: View.Part<Tag, [toast: ToastItem
  */
 export const ToastProvider = Component.define({
   name: "ToastProvider",
+  lifetime: "view",
   props: ToastProviderProps,
   model: Model,
   message: Message,
