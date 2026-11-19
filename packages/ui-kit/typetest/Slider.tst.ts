@@ -34,6 +34,7 @@ describe("Slider", () => {
             expect(s.control(h.div).children(needsClock)).type.toBe<Div<Clock>>()
             expect(s.values).type.toBe<ReadonlyArray<number>>()
             expect(s.orientation).type.toBe<"horizontal" | "vertical">()
+            expect(s.thumb({ element: h.span, input: h.input })).type.toBe<Span<never>>()
             const thumb = s.thumb({
               element: h.span.onClick(Msg.Clicked()),
               input: f.control(h.input.onMount(NeedsClock()))

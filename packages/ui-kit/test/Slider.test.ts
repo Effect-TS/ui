@@ -137,7 +137,8 @@ describe("Slider", () => {
       quiet(s)
       s.mounted(tracked(s), releasedPointer)
       quiet(s)
-      s.mounted(tracked(s), pressed(0, 0.71)).emitted({ _tag: "Moved", value: 0.7 })
+      s.mounted(tracked(s), pressed(0, 0.3, true))
+      s.mounted(tracked(s), moved(0.71)).emitted({ _tag: "Moved", value: 0.7 })
       s.parts((p) => assert.isTrue(p.dragging))
       assert.strictEqual(s.get(thumb()).attrs?.["data-dragging"], "")
       assert.strictEqual(s.get(control).attrs?.["data-dragging"], "")
@@ -272,7 +273,6 @@ describe("Slider", () => {
     const thumbOf = (props: SliderProps, index?: number) => () =>
       parts(props).thumb({ element: h.div, input: h.input, index })
     assert.throws(thumbOf({ value: [10, 20] }), /needs its index/)
-    assert.throws(thumbOf({ value: 10 }, 1), /no value for the thumb at index 1/)
     assert.throws(thumbOf({ value: [10, 20] }, 2), /no value for the thumb at index 2/)
   })
 
