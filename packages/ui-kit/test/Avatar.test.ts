@@ -1,4 +1,4 @@
-import { Component, View } from "@effect/ui"
+import { Component, UiSchema, View } from "@effect/ui"
 import { Avatar, type AvatarProps } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { TestImages } from "@effect/ui/html/testing"
@@ -57,25 +57,42 @@ describe("Avatar", () => {
       assert.isDefined(s.query(fallback))
     }))
 
-  it.effect("on TestHost, the image shows once TestImages loads it", () =>
+  it.effect("on TestHost, the fallback shows until the current source's load settles, even if an old load settles as the source changes", () =>
     Effect.gen(function*() {
+      const grace = { src: "/grace.png" }
+      const Message = UiSchema.TaggedEnum({ Picked: { src: Schema.String } })
       const Page = Component.define({
         name: "Page",
-        model: Schema.Null,
-        message: Schema.Never,
+        model: Schema.String,
+        message: Message,
         elements: Html
       }).make({
-        init: () => null,
-        update: (model) => model,
-        view: (_, h) => Avatar(h, { props: ada, view: (s) => standIn.view(s, h) })
+        init: () => ada.src,
+        update: { Picked: (_, { src }) => src },
+        view: (src, h) =>
+          h.div(
+            h.button.attr("id", "ada").onClick(Message.Picked(ada)),
+            h.button.attr("id", "grace").onClick(Message.Picked(grace)),
+            Avatar(h, {
+              props: { src },
+              view: (s) => s.root(h.span).children(s.image(h.img), s.fallback(h.span.class("fallback"))?.children("AL"))
+            })
+          )
       })
-      const root = yield* TestHost.mount(Page, {})
+      const root = yield* TestHost.mount(Page, {}, {
+        frames: (root) => root.query(image) ? "image" : root.query(fallback) ? "fallback" : "none"
+      })
+      const pick = (id: string) => Locator.fire(root.get(Locator.attr("id", id)), "click")
       yield* TestHost.settle
-      assert.isDefined(root.query(fallback))
+      // Ada's load settles after the page picks Grace, but before it renders.
+      pick("grace")
+      yield* TestImages.load(ada)
+      pick("ada")
+      yield* TestHost.settle
+      assert.deepStrictEqual(root.frames(), ["fallback"])
       yield* TestImages.load(ada)
       yield* TestHost.settle
-      assert.isDefined(root.query(image))
-      assert.isUndefined(root.query(fallback))
+      assert.deepStrictEqual(root.frames(), ["fallback", "image"])
     }).pipe(Effect.provide(Layer.merge(TestHost.layer(), TestImages.layer))))
 
   it("the image keeps the consumer's attributes, but its own win, present or absent, before the part or after, and come last with src after the rest", () => {

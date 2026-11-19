@@ -3614,12 +3614,18 @@ const setup = (
         const context = withCache(
           Context.add(Context.add(envCtx, Scope.Scope, running.scope), services.CurrentRoot, () => handle)
         )
-        // Attached to its source, it dispatches synchronously, and only its first check waits.
         const current = () => !inst.closed && subscriptions.get(key) === running
+        // Rendering the ancestors may stop this key, as for a query result: its message is then dropped.
+        const deliver = (message: unknown, accepted?: () => void) =>
+          step(() => {
+            renderAbove(inst)
+            if (!current()) return
+            accepted?.()
+            inst.dispatch(message, source)
+          })
+        // Attached to its source, it dispatches synchronously, and only its first check waits.
         const attachedTo = (subscription as services.Direct)[services.direct]?.(context, (message, accepted) => {
-          if (!current()) return
-          accepted()
-          inst.dispatch(message, source)
+          if (current()) deliver(message, accepted)
         }, (cause) => {
           if (current()) step(() => failInstance(inst, cause, "subscription", key))
         }, () => running.latest)
@@ -3628,7 +3634,7 @@ const setup = (
           context,
           attachedTo !== undefined
             ? attachedTo.initial
-            : Stream.runForEach(subscription.stream, (message) => Effect.sync(() => inst.dispatch(message, source)))
+            : Stream.runForEach(subscription.stream, (message) => Effect.sync(() => deliver(message)))
         )
         running.fiber = fiber
         interruptOnClose(running.scope, fiber)
