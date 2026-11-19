@@ -14,5 +14,5 @@ Other changes:
 
 - `Router.Settled.head` is now `Settled.title: string | undefined`.
 - `Renderer.Prerendered` takes the head type as a second parameter.
-- `Renderer.Hydration.adopted` is removed. `ssr` compares the server's head with the client's fold of the server's state, each instance evaluated when it adopts, including one that waited for its Layer.
+- `Renderer.Hydration.adopted` is removed. `ssr` compares the server's head with the client's fold of the server's state, each instance evaluated when it adopts, including one that waited for its Layer, over the props it was placed with.
 - `TestRoot.head` returns the root vocabulary's head. Write `root.head<HtmlHead.HtmlHead>()` to read an `Html` root's.

@@ -1432,6 +1432,9 @@ const setup = (
   // adopted, until every instance has adopted. Then the fold of those nodes, the head of the adopted state.
   let adoption: Map<Instance, HeadRecord> | undefined = hydrating === undefined ? undefined : new Map()
   let adoptionHead: unknown = undefined
+  // Hydration: the props each instance that waited for its Layer was placed with, the server's, until its
+  // node is recorded. A parent can pass it new ones meanwhile, and the adopted state's head uses these.
+  const placedProps = new Map<Instance, unknown>()
   // The nodes of the fold under way, when it records them.
   let seen: Array<HeadRecord> | undefined
   // Set when `merged` holds a head the host hasn't been given.
@@ -1455,7 +1458,7 @@ const setup = (
     if (folding === neutralFold) folding = fold
     const children = inst.rendered.flatMap(placedBy)
     const reduce = reducer(inst, fold)
-    seen?.push({ inst, fold, entries, reduce, children })
+    if (seen !== undefined) seen.push({ inst, fold, entries: placedEntries(inst) ?? entries, reduce, children })
     return {
       path: inst.path,
       entries,
@@ -1475,6 +1478,21 @@ const setup = (
     return (below) => {
       const value = reduce(model, below)
       return fold === folding ? value : { ...(below as object), ...(value as object) }
+    }
+  }
+  /**
+   * The entries of an instance that waited, over the props it was placed with, when it has new ones. One that
+   * throws over them is left out of the adopted state's head, as the server leaves it out.
+   */
+  const placedEntries = (inst: Instance): ReadonlyArray<unknown> | undefined => {
+    if (!placedProps.has(inst)) return undefined
+    const props = placedProps.get(inst)
+    placedProps.delete(inst)
+    if (propsEqual(props, inst.props)) return undefined
+    try {
+      return inst.component.head!(inst.model, props, inst.results)
+    } catch {
+      return none
     }
   }
   /** The instances a rendered node places, in document order: a fallback's content included. */
@@ -1529,6 +1547,7 @@ const setup = (
     const records = adoption
     if (records === undefined || rootInstance === undefined) return
     adoption = undefined
+    placedProps.clear()
     adoptionHead = folded !== undefined ? folded : foldAdopted(records, rootInstance)
   }
 
@@ -2607,6 +2626,7 @@ const setup = (
         ...(bound === undefined ? undefined : { queries: fromServer.value.results ?? bound.empty })
       })
       logEarly()
+      if (adoption !== undefined) placedProps.set(inst, inst.props)
       inst.waiting = true
       waiting++
       range.claimed = true

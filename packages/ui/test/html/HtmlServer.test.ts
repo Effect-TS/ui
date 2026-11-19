@@ -1384,6 +1384,50 @@ describe("HtmlServer", { concurrent: false }, () => {
       expect(drifting.problems).toEqual(["head title: the server has \"Child\", the client \"Drift\""])
     })))
 
+  it.effect("compares a waiting child's head with the props it was placed with, and then follows new ones", () =>
+    hosted(Effect.gen(function*() {
+      class Slow extends Context.Service<Slow, string>()("test/Slow") {}
+      const titled = (suffix: () => string) => {
+        const Child = Component.define({
+          name: "Child",
+          model: Schema.Struct({}),
+          message: Schema.Never,
+          props: Schema.Struct({ title: Schema.String }),
+          elements: Html
+        }).make({
+          init: () => ({}),
+          update: (model) => model,
+          head: (_, props) => [Head.title(props.title + suffix())],
+          view: (_, h) => h.p("child")
+        }).pipe(Component.provide(Layer.effect(Slow, Effect.as(Effect.sleep("30 millis"), "ready"))))
+        const Message = UiSchema.TaggedEnum({ Mounted: {} })
+        return Component.define({
+          name: "Parent",
+          model: Schema.String,
+          message: Message,
+          elements: Html
+        }).make({
+          init: () => "Server",
+          update: () => "Mounted",
+          // The child's props change while it waits: the adopted state still placed it with "Server".
+          view: (title, h) =>
+            h.div.onMount(mountSending("Rename", Message.Mounted())).children(
+              Child(h, { key: "c", props: { title } })
+            )
+        })
+      }
+
+      const matching = yield* ssr(titled(() => ""), {})
+      expect(matching.head.title).toBe("Server")
+      yield* TestHost.settle
+      expect(matching.root.head<Head.Head>().title).toBe("Mounted")
+      expect(matching.document.title).toBe("Mounted")
+
+      let calls = 0
+      const drifting = yield* Effect.flip(ssr(titled(() => calls++ === 0 ? "" : "!"), {}))
+      expect(drifting.problems).toEqual(["head title: the server has \"Server\", the client \"Server!\""])
+    })))
+
   it.effect("compares the client's first fold, so removing an instance while another waits isn't a mismatch", () =>
     hosted(Effect.gen(function*() {
       class Slow extends Context.Service<Slow, string>()("test/Slow") {}
