@@ -255,7 +255,7 @@ const make = (options: Options, inFragment: boolean): Layer.Layer<Router.Service
       else body.setAttribute("tabindex", tabindex)
     }
 
-    const onSettled = (settled: Router.Settled) => {
+    const onSettled = (settled: Router.Settled, isCurrent: () => boolean) => {
       const { action, hash } = settled.location
       if (settled.quiet) {
         // Within the page: no announcement and no focus move, and scroll only for a pop or when asked.
@@ -291,8 +291,7 @@ const make = (options: Options, inFragment: boolean): Layer.Layer<Router.Service
         cancelAnnouncement?.()
         cancelAnnouncement = nextFrame(() => {
           cancelAnnouncement = undefined
-          // Repeats deliver the held route object; only a new route makes the announcement obsolete.
-          if (router.location().route === settled.location.route) live.textContent = text
+          if (isCurrent()) live.textContent = text
         })
       }
     }

@@ -402,6 +402,32 @@ describe("BrowserRouter", { concurrent: false }, () => {
       expect(region()?.textContent).toBe("Person 1 · App")
     }).pipe(Effect.scoped))
 
+  it.effect("a redirect reusing its route object announces only after the new visit settles", () =>
+    Effect.gen(function*() {
+      const frames = manualFrames()
+      const slow = AppRoute.make({ _tag: "Slow" })
+      const routes = Route.union(AppRoute.routes, Route.redirect("/old-slow", () => slow))
+      const { router } = yield* start("/", { routes, window: frames.window })
+
+      yield* router.navigate("/old-slow")
+      yield* tick
+      yield* TestClock.adjust("1 second")
+      yield* tick
+      expect(document.title).toBe("Slow · App")
+
+      // Keep the first visit's announcement frame queued across both navigations.
+      yield* router.navigate("/")
+      yield* router.navigate("/old-slow")
+      frames.run()
+      expect(region()?.textContent).toBe("")
+
+      yield* tick
+      yield* TestClock.adjust("1 second")
+      yield* tick
+      frames.run()
+      expect(region()?.textContent).toBe("Slow · App")
+    }).pipe(Effect.scoped))
+
   it.effect("leaves modified clicks, targets, downloads and other origins to the browser", () =>
     Effect.gen(function*() {
       const { app } = yield* start("/")

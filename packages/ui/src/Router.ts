@@ -1060,8 +1060,8 @@ export interface Settled {
 export interface Options {
   readonly routes: Route.AnyUnion
   readonly history: History
-  /** Called once per navigation, when it settles. */
-  readonly onSettled?: ((settled: Settled) => void) | undefined
+  /** Called when a navigation settles. `isCurrent` stays true across repeat notifications, but not a new visit. */
+  readonly onSettled?: ((settled: Settled, isCurrent: () => boolean) => void) | undefined
   /**
    * Called for a change to the `#hash` alone within the same route, with the
    * history entry index. Delivering a repeat href without a hash change does
@@ -1278,6 +1278,7 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       history.replace(initialUrl + startHash, writeState({ index }))
     }
     let current: Location = { route: resolved.value.route, url: initialUrl, hash: startHash, action: "initial", seq: 0 }
+    let visitSeq = current.seq
     const ref = yield* SubscriptionRef.make(current)
     // Each key's holders: two instances may block under one key.
     const blocks = new Map<string, number>()
@@ -1484,7 +1485,6 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
         // A quiet replace stays on the page, so its path is the current one.
         if (mode.quiet) replaceQuiet(href, writeState({ index }))
         else replaceNow(href, writeState({ index }))
-        set({ ...location, action: "replace", seq }, mode)
       } else {
         leave()
         // The Model snapshot also goes into the entry itself, so it survives a reload.
@@ -1492,8 +1492,9 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
         index++
         for (const key of snapshots.keys()) if (key >= index) snapshots.delete(key)
         history.push(href, writeState({ index }))
-        set({ ...location, action: "push", seq }, mode)
       }
+      visitSeq = seq
+      set({ ...location, action: replace ? "replace" : "push", seq }, mode)
     }
 
     const navigate = (href: string, replace: boolean, source: "href" | "route"): Outcome => {
@@ -1611,7 +1612,8 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       leave()
       index = target
       const saved = snapshots.get(target) ?? entry?.snapshot
-      set({ route: found.value.route, url: printed, hash, action: "pop", seq: current.seq + 1 }, {
+      visitSeq = current.seq + 1
+      set({ route: found.value.route, url: printed, hash, action: "pop", seq: visitSeq }, {
         quiet,
         scroll: true
       }, saved)
@@ -1671,7 +1673,7 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
           title: info.title,
           quiet: done.quiet,
           scroll: done.scroll
-        })
+        }, () => visitSeq <= done.location.seq)
       }
     }
 
