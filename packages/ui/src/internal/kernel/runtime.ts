@@ -797,7 +797,8 @@ export const mount = (
   options?: Options
 ): Effect.Effect<Root & Renderer.Root<any, any>, never, Scope.Scope | Renderer.Renderer> =>
   withProps(rootProps, (props) =>
-    Effect.contextWith((ctx: Context.Context<Scope.Scope | Renderer.Renderer>) => {
+    Effect.contextWith((caller: Context.Context<Scope.Scope | Renderer.Renderer>) => {
+      const ctx = onScheduler(caller)
       const startOptions = { ...options, server: undefined }
       return Effect.flatMap(
         makeQueryCache(ctx, startOptions),
@@ -832,7 +833,7 @@ export const prerender = (
         const budget = Duration.fromInputUnsafe(options.budget)
         const started = !Duration.isZero(budget)
         const host = serverHost.make(options.elements)
-        const ctx = Context.add(yield* Effect.context<never>(), Scope.Scope, scope)
+        const ctx = onScheduler(Context.add(yield* Effect.context<never>(), Scope.Scope, scope))
         const startOptions: Options = {
           server: { host, fetches: started }
         }
@@ -855,17 +856,32 @@ export const prerender = (
       (scope, exit) => Scope.close(scope, exit)
     ))
 
-/** `ctx` with the runtime's scheduler as its Scheduler, so work forked with it drains with the runtime's. */
+/**
+ * `ctx` with the root's scheduler as its Scheduler, for everything the root forks: the executor's, so
+ * the work drains with the runtime's, or else the caller's with one dispatcher for every fiber. A
+ * fiber otherwise makes a dispatcher of its own, which queues a task of its own: the Commands one
+ * flush issued would each resume in their own task, with a render after each. On one dispatcher they
+ * resume in one task, and what they send is rendered once.
+ */
 const onScheduler = (ctx: Context.Context<any>): Context.Context<any> => {
-  const scheduler = Context.get(ctx, Executor.CurrentExecutor).scheduler
-  return scheduler === undefined ? ctx : Context.add(ctx, Scheduler.Scheduler, scheduler)
+  const callers = Context.get(ctx, Scheduler.Scheduler)
+  let dispatcher: Scheduler.SchedulerDispatcher | undefined
+  return Context.add(
+    ctx,
+    Scheduler.Scheduler,
+    Context.get(ctx, Executor.CurrentExecutor).scheduler ?? {
+      executionMode: callers.executionMode,
+      shouldYield: (fiber) => callers.shouldYield(fiber),
+      makeDispatcher: () => dispatcher ??= callers.makeDispatcher()
+    }
+  )
 }
 
 /** A `Redacted` in an instance's state defers it and its subtree, so the client builds them fresh. */
 const warnRedacted = (inst: Instance, ctx: Context.Context<any>) => {
   if (warnedRedacted.has(inst.component)) return
   warnedRedacted.add(inst.component)
-  Effect.runForkWith(onScheduler(ctx))(
+  Effect.runForkWith(ctx)(
     Effect.logWarning(
       `${inst.component.definition.name}: its state holds a Schema.Redacted, so the server sends no state for it and the ` +
         "client builds it and everything under it fresh, without hydration. Keep the secret in a leaf component " +
@@ -1010,8 +1026,6 @@ const makeQueryCache = (
   options: Options | undefined
 ): Effect.Effect<CacheCell> => {
   const server = options?.server
-  // Its fetches and timers run on the runtime's scheduler, so `TestHost.settle` drains them.
-  const context = onScheduler(ctx)
   const cacheOptions: queryCore.CacheOptions = {
     visibility: Context.get(ctx, queryCore.Visibility),
     connectivity: Context.get(ctx, queryCore.Connectivity),
@@ -1027,7 +1041,7 @@ const makeQueryCache = (
     if (cell.made !== undefined) return cell.made
     const query = queryCore.loaded
     if (query === undefined) return undefined
-    const built = query.buildCache(context, cacheOptions)
+    const built = query.buildCache(ctx, cacheOptions)
     cell.made = built.cache
     dispose = built.dispose
     // Made for a root that has closed: it is disposed at once, with nothing in it.
@@ -1052,7 +1066,7 @@ const makeQueryCache = (
         closed = true
         return dispose ?? Effect.void
       })
-  ).pipe(Effect.provideContext(context))
+  ).pipe(Effect.provideContext(ctx))
 }
 
 /**

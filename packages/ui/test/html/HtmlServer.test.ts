@@ -2491,4 +2491,41 @@ describe("HtmlServer queries", { concurrent: false }, () => {
         "/Page/Panel[p]: still waiting for its Layer to adopt when the budget was spent"
       ])
     })))
+
+  // The runtime it replaces resumes each fetch in a task of its own, and renders after each.
+  it.effect.skipIf(!kernel)(
+    "renders once for the fetches of one flush that end together",
+    () =>
+      Effect.gen(function*() {
+        class GetText extends Query.Service<GetText>()("GetText", {
+          args: { id: Schema.Number },
+          success: Schema.String,
+          error: Schema.Never,
+          staleTime: "30 seconds"
+        }, Effect.succeed(({ id }) => Effect.as(Effect.yieldNow, `text ${id}`))) {}
+        let renders = 0
+        const Page = Component.define({
+          name: "Page",
+          model: Schema.Struct({}),
+          message: Schema.Never,
+          elements: Html,
+          queries: {
+            first: { query: GetText, args: () => ({ id: 1 }) },
+            second: { query: GetText, args: () => ({ id: 2 }) },
+            third: { query: GetText, args: () => ({ id: 3 }) }
+          }
+        }).make({
+          init: () => ({}),
+          update: (model) => model,
+          view: (_, h) => {
+            renders++
+            const text = (result: AsyncResult.AsyncResult<string>) => AsyncResult.isSuccess(result) ? result.value : "…"
+            return h.p(`${text(h.queries.first)}, ${text(h.queries.second)}, ${text(h.queries.third)}`)
+          }
+        }).pipe(Component.provide(GetText.layer))
+        const rendered = yield* HtmlServer.renderToHtml(Page, {})
+        expect(rendered.html).toContain("<p>text 1, text 2, text 3</p>")
+        expect(renders).toBe(2)
+      })
+  )
 })

@@ -25,6 +25,9 @@ import { maxTitle, TodoApp } from "./fixtures/todos.ts"
 /** Lets the render flush, Commands and the controlled-property restore run. */
 const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))
 
+/** Whether the suite runs on the kernel. */
+const kernel = process.env.UI_RUNTIME === "kernel"
+
 const container = Effect.acquireRelease(
   Effect.sync(() => document.body.appendChild(document.createElement("div"))),
   (element) => Effect.sync(() => element.remove())
@@ -1741,4 +1744,32 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(app.childNodes.length).toBe(0)
       }).pipe(Effect.scoped))
   })
+
+  // The runtime it replaces resumes each Command in a task of its own, and renders after each.
+  it.effect.skipIf(!kernel)(
+    "renders once for the Commands of one flush that end together",
+    () =>
+      Effect.gen(function*() {
+        const Message = UiSchema.TaggedEnum({ Loaded: {} })
+        class Load extends Command.Service<Load>()(
+          "Load",
+          { args: { id: Schema.Number } },
+          Effect.succeed(() => Effect.succeed(Message.Loaded()))
+        ) {}
+        let renders = 0
+        const Page = Component.define({ name: "Page", model: Schema.Number, message: Message, elements: Html }).make({
+          init: ($) => $.set(0).run(Load.make({ id: 1 }), Load.make({ id: 2 }), Load.make({ id: 3 })),
+          update: (loaded) => loaded + 1,
+          view: (loaded, h) => {
+            renders++
+            return h.p(`${loaded} loaded`)
+          }
+        }).pipe(Component.provide(Load.layer))
+        const app = yield* container
+        yield* BrowserHost.mountEffect(Page, {}, app)
+        yield* tick
+        expect(app.textContent).toBe("3 loaded")
+        expect(renders).toBe(2)
+      }).pipe(Effect.scoped)
+  )
 })
