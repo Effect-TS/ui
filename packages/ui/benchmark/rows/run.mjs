@@ -4,7 +4,8 @@
 // Run from the repository root:
 //
 //   node packages/ui/benchmark/rows/run.mjs [--rounds 5] [--ops create1k,swap] [--variants plain]
-//     [--memory-only | --time-only] [--profile plain:replace1k] [--chromium <path>]
+//     [--memory-only | --time-only | --ssr-only] [--profile plain:replace1k] [--chromium <path>]
+//     [--runtime kernel]
 //
 // The browser is --chromium, else $CHROMIUM, else `chromium` on PATH, else the Chromium that the
 // `playwright` dev dependency installed. entry.ts is bundled with esbuild (minified IIFE, es2023,
@@ -36,6 +37,15 @@
 // 5 times, `cycle` after 5 create-then-clear cycles of 1,000 rows (back to an empty table, so
 // it tracks `ready` unless something is retained) and `10k` after 10,000 rows.
 //
+// Server rendering and hydration, in milliseconds, of the same table holding 1,000 rows, on a fresh page
+// per variant and round, with 2 unmeasured and 9 measured runs (the round's figure is their median):
+// `render` is HtmlServer.renderToHtml plus serializeState, `hydrate` is BrowserHost.mountEffect over
+// that HTML with its state until `adopted`. Both run in the page, so they use the browser's engine, not
+// Node's.
+//
+// --runtime kernel bundles @effect/ui with the runtime in src/internal/kernel in place of
+// src/internal/runtime.ts, so the two can be compared on one machine. React variants ignore it.
+//
 // --profile variant:op profiles 20 steps of one operation, from an unminified bundle, and prints
 // the functions with the most self time across them (line numbers are the bundle's). The last
 // step's profile goes to scratchpad/rows-<variant>-<op>.cpuprofile.
@@ -56,6 +66,8 @@ const { values: args } = parseArgs({
     variants: { type: "string", default: "plain,component" },
     "memory-only": { type: "boolean", default: false },
     "time-only": { type: "boolean", default: false },
+    "ssr-only": { type: "boolean", default: false },
+    runtime: { type: "string", default: "default" },
     profile: { type: "string" },
     chromium: { type: "string" }
   }
@@ -71,8 +83,18 @@ const bundles = {
   react: { entry: "react.mjs", out: path.join(process.cwd(), "scratchpad/rows-react.bundle.js") }
 }
 const bundleOf = (variant) => isReact(variant) ? bundles.react : bundles.effect
+// Points every import of the runtime at the kernel, for --runtime kernel.
+const runtimePlugin = {
+  name: "runtime",
+  setup(build) {
+    const kernel = path.join(import.meta.dirname, "../../src/internal/kernel/runtime.ts")
+    build.onResolve({ filter: /internal\/runtime(\.ts)?$/ }, () => ({ path: kernel }))
+  }
+}
+if (args.runtime !== "default" && args.runtime !== "kernel") throw new Error("--runtime is default or kernel")
 for (const bundle of new Set(variants.map(bundleOf))) {
   await build({
+    plugins: bundle === bundles.effect && args.runtime === "kernel" ? [runtimePlugin] : [],
     entryPoints: [path.join(import.meta.dirname, bundle.entry)],
     bundle: true,
     minify: args.profile === undefined,
@@ -151,7 +173,10 @@ if (args.profile !== undefined) {
   process.exit(0)
 }
 
-if (!args["memory-only"]) {
+const only = args["memory-only"] ? "memory" : args["time-only"] ? "time" : args["ssr-only"] ? "ssr" : undefined
+console.log("runtime: " + args.runtime)
+
+if (only === undefined || only === "time") {
   const page = await open(variants[0])
   const ops = args.ops?.split(",") ?? await page.evaluate(() => window.opNames)
   await page.close()
@@ -175,7 +200,7 @@ if (!args["memory-only"]) {
   }
 }
 
-if (!args["time-only"]) {
+if (only === undefined || only === "memory") {
   const keys = ["ready", "1k", "replace", "cycle", "10k"]
   const results = Object.fromEntries(variants.map((v) => [v, Object.fromEntries(keys.map((k) => [k, []]))]))
   for (let round = 0; round < rounds; round++) {
@@ -205,6 +230,35 @@ if (!args["time-only"]) {
   console.log("memory: " + rounds + " rounds, median (min-max) MiB")
   for (const key of keys) {
     console.log(key.padEnd(11), variants.map((v) => v + " " + stat(results[v][key])).join(" | "))
+  }
+  if (results.plain !== undefined && results.component !== undefined) {
+    // What a row component costs over the same row as plain elements.
+    const median = (values) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)]
+    const bytes = (median(results.component["10k"]) - median(results.plain["10k"])) * 1024 * 1024 / 10000
+    console.log("per row component, over a plain row at 10k: " + Math.round(bytes) + " bytes")
+  }
+}
+
+const ssrVariants = variants.filter((v) => !isReact(v))
+if ((only === undefined || only === "ssr") && ssrVariants.length > 0) {
+  const keys = ["render", "hydrate"]
+  const results = Object.fromEntries(ssrVariants.map((v) => [v, Object.fromEntries(keys.map((k) => [k, []]))]))
+  for (let round = 0; round < rounds; round++) {
+    for (let i = 0; i < ssrVariants.length; i++) {
+      const variant = ssrVariants[(i + round) % ssrVariants.length]
+      const page = await open(variant)
+      const runs = []
+      for (let j = 0; j < 11; j++) runs.push(await page.evaluate((v) => window.ssr(v), variant))
+      for (const key of keys) {
+        const measured = runs.slice(2).map((run) => run[key]).sort((a, b) => a - b)
+        results[variant][key].push(measured[Math.floor(measured.length / 2)])
+      }
+      await page.close()
+    }
+  }
+  console.log("server rendering, 1k rows: " + rounds + " rounds, median (min-max) ms")
+  for (const key of keys) {
+    console.log(key.padEnd(11), ssrVariants.map((v) => v + " " + stat(results[v][key])).join(" | "))
   }
 }
 await browser.close()

@@ -1,7 +1,8 @@
 import { Component, UiSchema } from "@effect/ui"
-import { BrowserHost, Html } from "@effect/ui/html"
+import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { Effect, Exit, Schema, Scope } from "effect"
 import { init, install, update } from "./harness.ts"
+import type { Model as TableModel } from "./harness.ts"
 
 // The keyed table of js-framework-benchmark (krausest), on @effect/ui. Two variants render the same
 // DOM (see harness.ts):
@@ -22,27 +23,6 @@ const Message = UiSchema.TaggedEnum({
 })
 
 const app = { name: "Table", model: Model, message: Message, elements: Html } as const
-const Plain = Component.define(app).make({
-  init,
-  update,
-  view: (model, h) =>
-    h.table.class("table").children(
-      h.tbody.children(model.rows.map((row) =>
-        h.tr.key(String(row.id)).class(row.id === model.selected && "danger").children(
-          h.td.class("col-md-1").children(String(row.id)),
-          h.td.class("col-md-4").children(
-            h.a.onClick(Message.Select({ id: row.id })).children(row.label)
-          ),
-          h.td.class("col-md-1").children(
-            h.a.onClick(Message.Remove({ id: row.id })).children(
-              h.span.class("glyphicon", "glyphicon-remove").attr("aria-hidden", "true")
-            )
-          ),
-          h.td.class("col-md-6")
-        )
-      ))
-    )
-})
 
 const RowMessage = UiSchema.TaggedEnum({ Select: {}, Remove: {} })
 const RowView = Component.define({
@@ -72,22 +52,49 @@ const RowView = Component.define({
       h.td.class("col-md-6")
     )
 })
-const Components = Component.define(app).make({
-  init,
-  update,
-  view: (model, h) =>
-    h.table.class("table").children(
-      h.tbody.children(model.rows.map((row) =>
-        RowView(h, {
-          key: String(row.id),
-          props: { row, selected: row.id === model.selected },
-          onEmit: (message) => message
-        })
-      ))
-    )
+
+/** Both variants' table components, starting from `start`'s Model. */
+const tables = (start: () => TableModel) => ({
+  plain: Component.define(app).make({
+    init: start,
+    update,
+    view: (model, h) =>
+      h.table.class("table").children(
+        h.tbody.children(model.rows.map((row) =>
+          h.tr.key(String(row.id)).class(row.id === model.selected && "danger").children(
+            h.td.class("col-md-1").children(String(row.id)),
+            h.td.class("col-md-4").children(
+              h.a.onClick(Message.Select({ id: row.id })).children(row.label)
+            ),
+            h.td.class("col-md-1").children(
+              h.a.onClick(Message.Remove({ id: row.id })).children(
+                h.span.class("glyphicon", "glyphicon-remove").attr("aria-hidden", "true")
+              )
+            ),
+            h.td.class("col-md-6")
+          )
+        ))
+      )
+  }),
+  component: Component.define(app).make({
+    init: start,
+    update,
+    view: (model, h) =>
+      h.table.class("table").children(
+        h.tbody.children(model.rows.map((row) =>
+          RowView(h, {
+            key: String(row.id),
+            props: { row, selected: row.id === model.selected },
+            onEmit: (message) => message
+          })
+        ))
+      )
+  })
 })
 
-const mount = (component: typeof Plain) => async (container: HTMLElement) => {
+type Table = ReturnType<typeof tables>["plain"]
+
+const mount = (component: Table) => async (container: HTMLElement) => {
   const scope = Effect.runSync(Scope.make())
   const root = await Effect.runPromise(Scope.provide(BrowserHost.mountEffect(component, {}, container), scope))
   return {
@@ -96,4 +103,37 @@ const mount = (component: typeof Plain) => async (container: HTMLElement) => {
   }
 }
 
-install({ plain: mount(Plain), component: mount(Components) })
+const empty = tables(init)
+install({ plain: mount(empty.plain), component: mount(empty.component) })
+
+// -- server rendering and hydration ---------------------------------------------------------------
+// The same tables, starting with 1,000 rows. `ssr` renders one on the server (renderToHtml, then
+// serializeState), puts the HTML in a container and hydrates it until `adopted`: both in milliseconds.
+
+const full = tables(() => update(init(), { _tag: "Run", count: 1000 }))
+const check = (condition: boolean, message: string) => {
+  if (!condition) throw new Error("bench check failed: " + message)
+}
+;(window as any).ssr = async (name: "plain" | "component") => {
+  const component = full[name]
+  let start = performance.now()
+  const rendered = await Effect.runPromise(HtmlServer.renderToHtml(component, {}, { budget: 0 }))
+  const json = HtmlServer.serializeState(rendered.state)
+  const render = performance.now() - start
+  const container = document.body.appendChild(document.createElement("div"))
+  container.innerHTML = rendered.html
+  const first = container.querySelector("tr")
+  check(container.querySelectorAll("tr").length === 1000, "the server rendered every row")
+  const state = JSON.parse(json)
+  const scope = Effect.runSync(Scope.make())
+  start = performance.now()
+  const root = await Effect.runPromise(
+    Scope.provide(BrowserHost.mountEffect(component, {}, container, { state }), scope)
+  )
+  await Effect.runPromise(root.adopted)
+  const hydrate = performance.now() - start
+  check(container.querySelector("tr") === first && container.querySelectorAll("tr").length === 1000, "adopted")
+  await Effect.runPromise(Scope.close(scope, Exit.void))
+  container.remove()
+  return { render, hydrate }
+}
