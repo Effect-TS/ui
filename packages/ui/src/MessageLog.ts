@@ -279,6 +279,13 @@ export interface Update extends InstanceBase {
    * component with queries has them.
    */
   readonly queries?: Component.Results | undefined
+  /**
+   * The `instance` of the provider whose Layer entries this instance's
+   * feature slots read: itself for a component with a provided Layer, or the
+   * one above whose services it renders with. Absent when the services it
+   * renders with are always ready.
+   */
+  readonly boundary?: number | undefined
 }
 
 /**
@@ -305,6 +312,13 @@ export interface Mounted extends InstanceBase {
   readonly commands: ReadonlyArray<Command.Command<any, any>>
   readonly events: ReadonlyArray<unknown>
   readonly adopted: boolean
+  /**
+   * The `instance` of the provider whose Layer entries this instance's
+   * feature slots read: itself for a component with a provided Layer, or the
+   * one above whose services it renders with. Absent when the services it
+   * renders with are always ready.
+   */
+  readonly boundary?: number | undefined
 }
 
 /**
@@ -371,6 +385,13 @@ export interface Waiting extends InstanceBase {
   readonly model: unknown
   /** The query results the server rendered the path with. Only a component with queries has them. */
   readonly queries?: Component.Results | undefined
+  /**
+   * The `instance` of the provider whose Layer entries this instance's
+   * feature slots read: itself for a component with a provided Layer, or the
+   * one above whose services it renders with. Absent when the services it
+   * renders with are always ready.
+   */
+  readonly boundary?: number | undefined
 }
 
 /**
@@ -393,8 +414,16 @@ export interface Unmounted extends InstanceBase {
 
 /**
  * An instance's provided Layer is still building once the instance is
- * created. Its Commands, Subscriptions and mounts, and its descendants', wait
- * for it.
+ * created, or once a keyed provide selected again. Its Commands,
+ * Subscriptions and mounts, and its descendants', wait for it.
+ *
+ * **Details**
+ *
+ * `status` is what the instance's feature slots record until the Layer
+ * settles: `Pending` at mount, `Rebuilding` after a keyed provide selected
+ * again, and `Awaiting` for an instance the server rendered with its services
+ * that waits for the client's build. A Wire frame without it, from an older
+ * log, is `Pending`.
  *
  * @stability experimental
  * @category models
@@ -402,6 +431,7 @@ export interface Unmounted extends InstanceBase {
  */
 export interface LayerPending extends InstanceBase {
   readonly _tag: "LayerPending"
+  readonly status: "Pending" | "Rebuilding" | "Awaiting"
 }
 
 /**
@@ -418,6 +448,14 @@ export interface LayerReady extends InstanceBase {
 /**
  * A provided Layer failed to build.
  *
+ * **Details**
+ *
+ * `redacted` is `true` when the feature slots below got a cause that says
+ * a provided Layer failed on the server: for a handled failure on the
+ * server, whose `cause` is the one its handler got, and on a client that
+ * adopted that failure. A replay passes the slots that substitute, not
+ * `cause`.
+ *
  * @stability experimental
  * @category models
  * @since 0.1.0
@@ -425,6 +463,7 @@ export interface LayerReady extends InstanceBase {
 export interface LayerFailed extends InstanceBase {
   readonly _tag: "LayerFailed"
   readonly cause: Cause.Cause<unknown>
+  readonly redacted?: boolean | undefined
 }
 
 /**
@@ -939,7 +978,8 @@ export const Wire = Schema.Union([
     ...InstanceWire,
     props: Schema.Json,
     model: Schema.Json,
-    queries: Schema.optionalKey(Schema.Json)
+    queries: Schema.optionalKey(Schema.Json),
+    boundary: Schema.optionalKey(Schema.Number)
   }),
   Schema.TaggedStruct("Mounted", {
     ...InstanceWire,
@@ -948,7 +988,8 @@ export const Wire = Schema.Union([
     queries: Schema.optionalKey(Schema.Json),
     commands: Schema.Array(CommandWire),
     events: Schema.Array(Schema.Json),
-    adopted: Schema.Boolean
+    adopted: Schema.Boolean,
+    boundary: Schema.optionalKey(Schema.Number)
   }),
   Schema.TaggedStruct("Update", {
     ...InstanceWire,
@@ -963,13 +1004,21 @@ export const Wire = Schema.Union([
     sends: Schema.Array(Schema.Union([
       Schema.Struct({ ref: Schema.String, message: Schema.Json }),
       Schema.Struct({ owner: Schema.String, message: Schema.Json })
-    ]))
+    ])),
+    boundary: Schema.optionalKey(Schema.Number)
   }),
   Schema.TaggedStruct("PropsChanged", { ...InstanceWire, props: Schema.Json }),
   Schema.TaggedStruct("QueryChanged", { ...InstanceWire, name: Schema.String, result: Schema.Json }),
-  Schema.TaggedStruct("LayerPending", InstanceWire),
+  Schema.TaggedStruct("LayerPending", {
+    ...InstanceWire,
+    status: Schema.optionalKey(Schema.Literals(["Pending", "Rebuilding", "Awaiting"]))
+  }),
   Schema.TaggedStruct("LayerReady", InstanceWire),
-  Schema.TaggedStruct("LayerFailed", { ...InstanceWire, cause: CauseWire }),
+  Schema.TaggedStruct("LayerFailed", {
+    ...InstanceWire,
+    cause: CauseWire,
+    redacted: Schema.optionalKey(Schema.Boolean)
+  }),
   Schema.TaggedStruct("Failed", {
     ...InstanceWire,
     props: Schema.Json,
@@ -1128,7 +1177,8 @@ export const makeEncoder = (options?: {
             ...instanceBase(entry),
             props: props(entry),
             model: capped(entry.component, "model", entry.model),
-            ...encodeQueries(entry.component, entry.queries)
+            ...encodeQueries(entry.component, entry.queries),
+            ...boundaryOf(entry)
           }
         case "Mounted":
           return {
@@ -1139,7 +1189,8 @@ export const makeEncoder = (options?: {
             ...encodeQueries(entry.component, entry.queries),
             commands: entry.commands.map(encodeCommand),
             events: events(entry),
-            adopted: entry.adopted
+            adopted: entry.adopted,
+            ...boundaryOf(entry)
           }
         case "Update":
           return {
@@ -1156,7 +1207,8 @@ export const makeEncoder = (options?: {
             sends: entry.sends.map((send) => {
               const encoded = encodeSend(send)
               return { ...encoded, message: cap(encoded.message) }
-            })
+            }),
+            ...boundaryOf(entry)
           }
         case "PropsChanged":
           return { _tag: "PropsChanged", ...instanceBase(entry), props: props(entry) }
@@ -1179,11 +1231,17 @@ export const makeEncoder = (options?: {
           }
         }
         case "LayerPending":
+          return { _tag: "LayerPending", ...instanceBase(entry), status: entry.status }
         case "LayerReady":
         case "Unmounted":
           return { _tag: entry._tag, ...instanceBase(entry) }
         case "LayerFailed":
-          return { _tag: "LayerFailed", ...instanceBase(entry), cause: encodeCause(entry.cause) }
+          return {
+            _tag: "LayerFailed",
+            ...instanceBase(entry),
+            cause: encodeCause(entry.cause),
+            ...(entry.redacted === true ? { redacted: true } : undefined)
+          }
         case "Failed":
           return {
             _tag: "Failed",
@@ -1247,6 +1305,9 @@ const base = (entry: Base) => ({
   session: entry.session,
   ...(entry.causedBy === undefined ? undefined : { causedBy: entry.causedBy })
 })
+const boundaryOf = (entry: { readonly boundary?: number | undefined }) =>
+  entry.boundary === undefined ? undefined : { boundary: entry.boundary }
+
 const instanceBase = (entry: InstanceBase) => ({
   ...base(entry),
   path: entry.path,

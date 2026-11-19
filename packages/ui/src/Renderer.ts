@@ -193,8 +193,8 @@ export interface Hydration<Node> {
  * **Details**
  *
  * `~deferred` lists instances the client builds fresh instead of adopting:
- * a provided Layer that missed the budget or was kept off the server, and a
- * child that failed. A deferred path covers its subtree.
+ * a provided Layer kept off the server, and state that can't be shipped. A
+ * deferred path covers its subtree.
  *
  * `~query` holds every entry that settled on the server, a typed Failure
  * included, by query name and args key. The client's cache hydrates from it,
