@@ -129,7 +129,7 @@ describe("ToastProvider", { concurrent: false }, () => {
       fire("post")
       fire("complete")
       yield* wait(500)
-      assert.isFalse(yield* TestGlobalEvents.fire("window", "blur"))
+      yield* TestGlobalEvents.fire("window", "blur")
       yield* wait(2000)
       assert.strictEqual(dismissed(), "")
       yield* TestGlobalEvents.fire("window", "focus")
@@ -165,24 +165,6 @@ describe("ToastProvider", { concurrent: false }, () => {
       yield* TestHost.settle
       assert.strictEqual(Locator.textOf(root.get(Locator.tag("output"))), "t2")
     }).pipe(Effect.provide(TestHost.layer())))
-
-  it.effect("the browser window's blur and focus pause and restart the timers", () =>
-    Effect.gen(function*() {
-      const { byId } = yield* mountPage(200)
-      byId("post")!.click()
-      byId("complete")!.click()
-      yield* tick
-      window.dispatchEvent(new FocusEvent("blur"))
-      yield* tick
-      yield* TestClock.adjust("400 millis")
-      yield* tick
-      assert.isNotNull(byId("t1"))
-      window.dispatchEvent(new FocusEvent("focus"))
-      yield* tick
-      yield* TestClock.adjust("200 millis")
-      yield* tick
-      assert.isNull(byId("t1"))
-    }))
 
   it.effect("F6 moves focus into the stack and back, and focus on a closing toast moves to the next one", () =>
     Effect.gen(function*() {

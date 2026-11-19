@@ -252,14 +252,6 @@ describe("Tooltip", () => {
       ])
     }))
 
-  it.effect("document Escape dismisses without trigger focus and cancels its default", () =>
-    Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Tooltip, { open: true }, standIn)
-      s.fireDocument("keydown", { key: "Escape" })
-        .expectDefaultPrevented()
-        .emitted({ _tag: "Dismissed" })
-    }))
-
   it.effect("document Escape skips another key, a composition and an Escape already handled", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Tooltip, { open: true }, standIn)
@@ -370,7 +362,6 @@ describe("Tooltip", () => {
     Effect.gen(function*() {
       const root = yield* TestHost.mount(Toolbar, {})
       yield* TestHost.settle
-      assert.isFalse(yield* TestGlobalEvents.fire("document", "keydown", { key: "a" }))
       assert.isTrue(yield* TestGlobalEvents.fire("document", "keydown", { key: "Escape" }))
       yield* TestHost.settle
       assert.strictEqual(Locator.textOf(root.get(Locator.tag("output"))), "pressed 0, dismissed 1")

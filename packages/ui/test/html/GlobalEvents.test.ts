@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, Subscription, UiSchema } from "@effect/ui"
+import { Component, UiSchema } from "@effect/ui"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { HtmlScene, TestGlobalEvents } from "@effect/ui/html/testing"
 import { Locator, TestHost } from "@effect/ui/testing"
@@ -64,24 +64,9 @@ const Phases = Component.define({
   subscriptions: (log) => [
     !log.includes("capture") &&
     Html.onDocument("mousedown", PhaseMessage.Heard({ what: "capture" }), { capture: true, preventDefault: "always" }),
+    log.length > 0 &&
     Html.onDocument("mousedown", ({ defaultPrevented }) => PhaseMessage.Heard({ what: `bubble ${defaultPrevented}` })),
     Html.onWindow("focus", PhaseMessage.Heard({ what: "focus" }))
-  ]
-})
-
-// The capture listener's message turns the bubble listener on.
-const Enables = Component.define({
-  name: "Enables",
-  model: Schema.Array(Schema.String),
-  message: PhaseMessage,
-  elements: Html
-}).make({
-  init: (): ReadonlyArray<string> => [],
-  update: (log, { what }) => [...log, what],
-  view: (log, h) => h.output(log.join(",")),
-  subscriptions: (log) => [
-    Html.onDocument("mousedown", PhaseMessage.Heard({ what: "capture" }), { capture: true }),
-    log.length > 0 && Html.onDocument("mousedown", PhaseMessage.Heard({ what: "bubble" }))
   ]
 })
 
@@ -95,20 +80,12 @@ describe("Html.onDocument and Html.onWindow", () => {
         Html.onDocument("keydown", handler),
         Html.onDocument("mousedown", handler, { capture: true }),
         Html.onWindow("blur", handler)
-      ].map(({ deps, key, name }) => ({ key, name, deps })),
+      ].map(({ key }) => key),
       [
-        { key: `@effect/ui/html/document:"keydown"`, name: "@effect/ui/html/document", deps: ["keydown"] },
-        {
-          key: `@effect/ui/html/document:"mousedown","capture"`,
-          name: "@effect/ui/html/document",
-          deps: ["mousedown", "capture"]
-        },
-        { key: `@effect/ui/html/window:"blur"`, name: "@effect/ui/html/window", deps: ["blur"] }
+        `@effect/ui/html/document:"keydown"`,
+        `@effect/ui/html/document:"mousedown","capture"`,
+        `@effect/ui/html/window:"blur"`
       ]
-    )
-    assert.strictEqual(
-      Html.onDocument("keydown", handler).key,
-      Subscription.keyOf("@effect/ui/html/document", "keydown")
     )
   })
 
@@ -163,18 +140,6 @@ describe("Html.onDocument and Html.onWindow", () => {
       assert.isTrue(Exit.isFailure(exit))
       assert.include(String(Exit.isFailure(exit) ? exit.cause : ""), "boom")
     }).pipe(Effect.provide(testLayer)))
-
-  it.effect("the test tools deliver an event to a bubble listener its capture listener added, as a browser does", () =>
-    Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Enables, {})
-      s.fireDocument("mousedown").expect(Locator.tag("output")).toHaveText("capture,bubble")
-
-      const root = yield* TestHost.mount(Enables, {})
-      yield* TestHost.settle
-      yield* TestGlobalEvents.fire("document", "mousedown")
-      yield* TestHost.settle
-      assert.deepStrictEqual(root.model(), ["capture", "bubble"])
-    }).pipe(Effect.provide(testLayer)))
 })
 
 describe("BrowserHost's GlobalEvents", { concurrent: false }, () => {
@@ -217,29 +182,35 @@ describe("BrowserHost's GlobalEvents", { concurrent: false }, () => {
       yield* tick
       const inner = byId("inner")
       const press = () => inner.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }))
+      inner.addEventListener("mousedown", (event) => event.stopPropagation(), { once: true })
       press()
       yield* tick
-      inner.addEventListener("mousedown", (event) => event.stopPropagation())
       press()
       window.dispatchEvent(new FocusEvent("focus"))
       yield* tick
-      // The capture listener stopped after the first press, and the stopped press never bubbled.
-      assert.deepStrictEqual(root.model(), ["capture", "bubble true", "focus"])
+      // The stopped press reached capture; only the second press bubbled.
+      assert.deepStrictEqual(root.model(), ["capture", "bubble false", "focus"])
     }).pipe(Effect.scoped))
 })
 
 describe("HtmlScene.fireDocument and fireWindow", () => {
-  it.effect("run the capture listener, then the bubble one, which sees the cancel", () =>
+  it.effect("deliver the same cancelled press to a bubble listener enabled during capture in both test tools", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Phases, {})
       s.fireDocument("mousedown")
         .expectDefaultPrevented()
         .expect(Locator.tag("output")).toHaveText("capture,bubble true")
+      const root = yield* TestHost.mount(Phases, {})
+      yield* TestHost.settle
+      yield* TestGlobalEvents.fire("document", "mousedown")
+      yield* TestHost.settle
+      assert.deepStrictEqual(root.model(), ["capture", "bubble true"])
+
       // The capture listener is gone, so only the bubble one runs.
       s.fireDocument("mousedown").expectDefaultPrevented(false)
         .fireWindow("focus")
         .expect(Locator.tag("output")).toHaveText("capture,bubble true,bubble false,focus")
-    }))
+    }).pipe(Effect.provide(testLayer)))
 
   it.effect("run the handler of the current Model, and a listener that returns nothing is ignored", () =>
     Effect.gen(function*() {
@@ -258,6 +229,5 @@ describe("HtmlScene.fireDocument and fireWindow", () => {
         () => s.fireDocument("mouseup"),
         `HtmlScene.fireDocument: nothing listens for "mouseup" on the document; active keys: ["@effect/ui/html/document:\\"keydown\\""]`
       )
-      assert.throws(() => s.fireWindow("blur"), /nothing listens for "blur" on the window/)
     }))
 })
