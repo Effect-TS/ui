@@ -835,6 +835,43 @@ describe("Runtime", () => {
         yield* TestHost.settle
         assert.deepStrictEqual(root.model(), { shown: true, found: true })
       })))
+
+    it.effect("what one bare-Model init returns can't give another instance a Command or an event", () =>
+      provideHost(Effect.gen(function*() {
+        let ran = 0
+        // Never returns, so a run sends `Quiet` nothing to update with.
+        const Count = Command.make("Count", { args: {} }, () => Effect.andThen(Effect.sync(() => ran++), Effect.never))
+        const Quiet = Component.define({
+          name: "Quiet",
+          model: Schema.Number,
+          message: Schema.Never,
+          events: Schema.String
+        })
+          .make({ init: () => 0, update: (n) => n, view: (_, h) => h.text("quiet") })
+        const next = Quiet.init({})
+        for (const effects of [next.commands, next.events] as Array<Array<unknown>>) {
+          try {
+            effects.push(Count())
+          } catch {
+            // Refused, as it should be.
+          }
+        }
+        const Parent = Component.define({
+          name: "Parent",
+          model: Schema.Array(Schema.Unknown),
+          message: Schema.Unknown
+        })
+          .make({
+            // Steps, so only `Quiet` starts from a bare Model.
+            init: ($) => $.set([]),
+            update: (heard, message, $) => $.set([...heard, message]),
+            view: (_, h) => Quiet(h, { onEmit: (event) => event })
+          })
+        const root = yield* TestHost.mount(Parent, {})
+        yield* TestHost.settle
+        assert.strictEqual(ran, 0)
+        assert.deepStrictEqual(root.model(), [])
+      })))
   })
 
   describe("run owners", () => {

@@ -929,8 +929,9 @@ const makeUpdate = (model: unknown, props: unknown, queries: unknown, message: u
 const initSet = (model: unknown) => makeStep(model, [], [], [], []) as Step<any, any, any, never>
 const makeInit = (props: unknown): Init<any, any, any, any> => ({ props, set: initSet })
 
-// The effects of an `init` or `update` that returned a bare Model: shared, as nothing writes to them.
-const noEffects: ReadonlyArray<never> = []
+// The effects of an `init` or `update` that returned a bare Model: shared, and frozen, since `init` hands
+// them to its caller.
+const noEffects: ReadonlyArray<never> = Object.freeze([])
 
 /**
  * Returns `true` if `u` is a step.
