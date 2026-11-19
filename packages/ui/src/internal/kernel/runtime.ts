@@ -2338,7 +2338,7 @@ const setup = (
    */
   class Inst implements Instance {
     /** The fields most instances never set, made when one is first set. */
-    private rare: Rare | undefined = undefined
+    rare: Rare | undefined = undefined
     readonly born = ++instancesMade
     author: Instance
     content: ((parts: any) => View.Content<any, any>) | undefined
@@ -2402,199 +2402,27 @@ const setup = (
         ;(this.rare = new Rare()).owning = { seq: -1, round: false, collected: undefined, restored: false }
       }
     }
-    get owning(): Owning | undefined {
-      return this.rare === undefined ? undefined : this.rare.owning
-    }
-    get selection(): Instance["selection"] {
-      return this.rare === undefined ? undefined : this.rare.selection
-    }
-    set selection(value: Instance["selection"]) {
-      if (this.rare === undefined) {
-        if (value === undefined) return
-        this.rare = new Rare()
-      }
-      this.rare.selection = value
-    }
-    get parked(): Instance["parked"] {
-      return this.rare === undefined ? undefined : this.rare.parked
-    }
-    set parked(value: Instance["parked"]) {
-      if (this.rare === undefined) {
-        if (value === undefined) return
-        this.rare = new Rare()
-      }
-      this.rare.parked = value
-    }
-    get closes(): Instance["closes"] {
-      return this.rare === undefined ? undefined : this.rare.closes
-    }
-    set closes(value: Instance["closes"]) {
-      if (this.rare === undefined) {
-        if (value === undefined) return
-        this.rare = new Rare()
-      }
-      this.rare.closes = value
-    }
-    get subscriptions(): Instance["subscriptions"] {
-      return this.rare === undefined ? undefined : this.rare.subscriptions
-    }
-    set subscriptions(value: Instance["subscriptions"]) {
-      if (this.rare === undefined) {
-        if (value === undefined) return
-        this.rare = new Rare()
-      }
-      this.rare.subscriptions = value
-    }
-    get watches(): Instance["watches"] {
-      return this.rare === undefined ? undefined : this.rare.watches
-    }
-    set watches(value: Instance["watches"]) {
-      if (this.rare === undefined) {
-        if (value === undefined) return
-        this.rare = new Rare()
-      }
-      this.rare.watches = value
-    }
-    get watchesSynced(): Instance["watchesSynced"] {
-      return this.rare === undefined ? false : this.rare.watchesSynced
-    }
-    set watchesSynced(value: Instance["watchesSynced"]) {
-      if (this.rare === undefined) {
-        if (value === false) return
-        this.rare = new Rare()
-      }
-      this.rare.watchesSynced = value
-    }
-    get watched(): Instance["watched"] {
-      return this.rare === undefined ? undefined : this.rare.watched
-    }
-    set watched(value: Instance["watched"]) {
-      if (this.rare === undefined) {
-        if (value === undefined) return
-        this.rare = new Rare()
-      }
-      this.rare.watched = value
-    }
-    get prefetch(): Instance["prefetch"] {
-      return this.rare === undefined ? undefined : this.rare.prefetch
-    }
-    set prefetch(value: Instance["prefetch"]) {
-      if (this.rare === undefined) {
-        if (value === undefined) return
-        this.rare = new Rare()
-      }
-      this.rare.prefetch = value
-    }
-    get keyed(): Instance["keyed"] {
-      return this.rare === undefined ? undefined : this.rare.keyed
-    }
-    set keyed(value: Instance["keyed"]) {
-      if (this.rare === undefined) {
-        if (value === undefined) return
-        this.rare = new Rare()
-      }
-      this.rare.keyed = value
-    }
-    get keyedQueued(): Instance["keyedQueued"] {
-      return this.rare === undefined ? false : this.rare.keyedQueued
-    }
-    set keyedQueued(value: Instance["keyedQueued"]) {
-      if (this.rare === undefined) {
-        if (value === false) return
-        this.rare = new Rare()
-      }
-      this.rare.keyedQueued = value
-    }
-    get loadMores(): Instance["loadMores"] {
-      return this.rare === undefined ? undefined : this.rare.loadMores
-    }
-    set loadMores(value: Instance["loadMores"]) {
-      if (this.rare === undefined) {
-        if (value === undefined) return
-        this.rare = new Rare()
-      }
-      this.rare.loadMores = value
-    }
-    get mounting(): Instance["mounting"] {
-      return this.rare === undefined ? undefined : this.rare.mounting
-    }
-    set mounting(value: Instance["mounting"]) {
-      if (this.rare === undefined) {
-        if (value === undefined) return
-        this.rare = new Rare()
-      }
-      this.rare.mounting = value
-    }
-    get outbox(): Instance["outbox"] {
-      return this.rare === undefined ? emptyList : this.rare.outbox
-    }
-    set outbox(value: Instance["outbox"]) {
-      if (this.rare === undefined) {
-        if (value === emptyList) return
-        this.rare = new Rare()
-      }
-      this.rare.outbox = value
-    }
-    get shares(): Instance["shares"] {
-      return this.rare === undefined ? undefined : this.rare.shares
-    }
-    set shares(value: Instance["shares"]) {
-      if (this.rare === undefined) {
-        if (value === undefined) return
-        this.rare = new Rare()
-      }
-      this.rare.shares = value
-    }
-    get readers(): Instance["readers"] {
-      return this.rare === undefined ? undefined : this.rare.readers
-    }
-    set readers(value: Instance["readers"]) {
-      if (this.rare === undefined) {
-        if (value === undefined) return
-        this.rare = new Rare()
-      }
-      this.rare.readers = value
-    }
-    get owners(): Instance["owners"] {
-      return this.rare === undefined ? undefined : this.rare.owners
-    }
-    set owners(value: Instance["owners"]) {
-      if (this.rare === undefined) {
-        if (value === undefined) return
-        this.rare = new Rare()
-      }
-      this.rare.owners = value
-    }
-    get seen(): Instance["seen"] {
-      return this.rare === undefined ? undefined : this.rare.seen
-    }
-    set seen(value: Instance["seen"]) {
-      if (this.rare === undefined) {
-        if (value === undefined) return
-        this.rare = new Rare()
-      }
-      this.rare.seen = value
-    }
-    get clash(): Instance["clash"] {
-      return this.rare === undefined ? undefined : this.rare.clash
-    }
-    set clash(value: Instance["clash"]) {
-      if (this.rare === undefined) {
-        if (value === undefined) return
-        this.rare = new Rare()
-      }
-      this.rare.clash = value
-    }
-    get deferred(): Instance["deferred"] {
-      return this.rare === undefined ? false : this.rare.deferred
-    }
-    set deferred(value: Instance["deferred"]) {
-      if (this.rare === undefined) {
-        if (value === false) return
-        this.rare = new Rare()
-      }
-      this.rare.deferred = value
-    }
+    // The rare fields, read from and written to `rare` by the accessors defined below the class.
+    declare readonly owning: Owning | undefined
+    declare selection: Instance["selection"]
+    declare parked: Instance["parked"]
+    declare closes: Instance["closes"]
+    declare subscriptions: Instance["subscriptions"]
+    declare watches: Instance["watches"]
+    declare watchesSynced: Instance["watchesSynced"]
+    declare watched: Instance["watched"]
+    declare prefetch: Instance["prefetch"]
+    declare keyed: Instance["keyed"]
+    declare keyedQueued: Instance["keyedQueued"]
+    declare loadMores: Instance["loadMores"]
+    declare mounting: Instance["mounting"]
+    declare outbox: Instance["outbox"]
+    declare shares: Instance["shares"]
+    declare readers: Instance["readers"]
+    declare owners: Instance["owners"]
+    declare seen: Instance["seen"]
+    declare clash: Instance["clash"]
+    declare deferred: Instance["deferred"]
     /**
      * From the moment its Scope or an ancestor's starts closing, not once it has: see `Instance.closed`.
      */
@@ -2664,6 +2492,23 @@ const setup = (
     get fire(): Renderer.Dispatch {
       return this.fired ??= this.component === outletComponent ? this.author.fire : makeFire(this)
     }
+  }
+
+  for (const name of Object.keys(new Rare()) as Array<keyof Rare>) {
+    const empty = new Rare()[name]
+    Object.defineProperty(Inst.prototype, name, {
+      get(this: { rare: Rare | undefined }) {
+        const rare = this.rare
+        return rare === undefined ? empty : rare[name]
+      },
+      set(this: { rare: Rare | undefined }, value: unknown) {
+        if (this.rare === undefined) {
+          if (value === empty) return
+          this.rare = new Rare()
+        }
+        ;(this.rare as any)[name] = value
+      }
+    })
   }
 
   const makeInstance = (

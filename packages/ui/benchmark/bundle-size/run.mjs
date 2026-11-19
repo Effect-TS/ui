@@ -2,9 +2,10 @@
 //
 // Run from the repository root, after `pnpm build`:
 //
-//   pnpm bundle-size [--json <file>] [--base <file>]
+//   pnpm bundle-size [--json <file>] [--base <file>] [--runtime kernel]
 //
-// --json writes the result and --base adds deltas against an earlier --json file. The table is also
+// --json writes the result and --base adds deltas against an earlier --json file. --runtime kernel
+// bundles the runtime in internal/kernel in place of the default one. The table is also
 // appended to $GITHUB_STEP_SUMMARY when that is set.
 import assert from "node:assert/strict"
 import { execFileSync } from "node:child_process"
@@ -16,7 +17,10 @@ import { gzipSync } from "node:zlib"
 import { Window } from "happy-dom"
 import { build, version as vite } from "vite"
 
-const { values: { base, json } } = parseArgs({ options: { base: { type: "string" }, json: { type: "string" } } })
+const { values: { base, json, runtime } } = parseArgs({
+  options: { base: { type: "string" }, json: { type: "string" }, runtime: { type: "string", default: "default" } }
+})
+assert.ok(runtime === "default" || runtime === "kernel", "--runtime is default or kernel")
 const ui = path.resolve(import.meta.dirname, "../..")
 const effectDir = path.join(ui, "node_modules/effect")
 const effect = JSON.parse(fs.readFileSync(path.join(effectDir, "package.json"), "utf8")).version
@@ -43,6 +47,15 @@ async function checkCounter(code) {
   }
 }
 
+// Points the package's import of its runtime at the kernel's.
+const kernelPlugin = (installed) => ({
+  name: "kernel-runtime",
+  enforce: "pre",
+  resolveId(source) {
+    if (/(^|\/)internal\/runtime\.js$/.test(source)) return path.join(installed, "dist/internal/kernel/runtime.js")
+  }
+})
+
 async function measure() {
   assert.ok(fs.existsSync(path.join(ui, "dist/index.js")), "Missing @effect/ui dist. Run pnpm build first.")
   const root = fs.mkdtempSync(path.join(tmpdir(), "ui-bundle-size-"))
@@ -63,6 +76,7 @@ async function measure() {
       root,
       mode: "production",
       logLevel: "warn",
+      plugins: runtime === "kernel" ? [kernelPlugin(installed)] : [],
       build: { target, write: false, rolldownOptions: { input, output: { format: "es" } } }
     })
     assert.ok(output.length === 1 && output[0].type === "chunk", "expected one JavaScript chunk")
@@ -75,8 +89,8 @@ async function measure() {
 }
 
 const result = await measure()
-const headers = ["Vite", "effect", "Node", "Raw bytes", "Gzip bytes"]
-const row = [result.vite, result.effect, result.node, result.raw, result.gzip]
+const headers = ["Runtime", "Vite", "effect", "Node", "Raw bytes", "Gzip bytes"]
+const row = [runtime, result.vite, result.effect, result.node, result.raw, result.gzip]
 if (base) {
   const previous = JSON.parse(fs.readFileSync(base, "utf8"))
   for (const metric of ["raw", "gzip"]) {
