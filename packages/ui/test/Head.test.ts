@@ -176,7 +176,7 @@ describe("Head", () => {
       const root = yield* TestHost.mount(App, {})
       yield* TestHost.settle
       const leafAt = (path: string, entries: ReadonlyArray<string> = []): Shape => ({ path, entries, children: [] })
-      assert.deepStrictEqual(root.head(), {
+      assert.deepStrictEqual(root.head() as unknown, {
         path: "/App",
         entries: [],
         children: [
