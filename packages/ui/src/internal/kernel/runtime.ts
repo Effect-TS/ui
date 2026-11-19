@@ -34,6 +34,7 @@ import * as Subscription from "../../Subscription.ts"
 import * as View from "../../View.ts"
 import { propsEqual, sharedEqual } from "../equal.ts"
 import * as Executor from "../executor.ts"
+import * as headFold from "../headFold.ts"
 import * as match from "../match.ts"
 import { isKeyed, keyOf } from "../match.ts"
 import { isNoop } from "../noop.ts"
@@ -1515,16 +1516,27 @@ const setup = (
     options?: Head.MergeOptions
   ): { readonly head: unknown; readonly title: string | undefined } => {
     let fold = rootFold
-    const node = (inst: Instance): Head.Tree<unknown, unknown> => {
+    // Under a root fold that folds a subtree with no entries and no `reduce` to nothing, such subtrees
+    // are left out of the tree: most instances, such as a list's rows, have no head. A host-neutral root
+    // may hand the fold to a vocabulary that sees every node, so its tree is built whole.
+    const skip = rootFold !== neutralFold && headFold.skipsEmpty(rootFold.merge)
+    const node = (inst: Instance): Head.Tree<unknown, unknown> | undefined => {
       const part = partOf(inst)
-      if (part === undefined) return { path: inst.path, ...emptyTree }
+      if (part === undefined) return skip ? undefined : { path: inst.path, ...emptyTree }
       const own = foldOf(inst.component)
       if (fold === neutralFold) fold = own
       const reduce = part.reduce
+      const below = part.children
+      const children: Array<Head.Tree<unknown, unknown>> = []
+      for (let index = 0; index < below.length; index++) {
+        const child = node(below[index]!)
+        if (child !== undefined) children.push(child)
+      }
+      if (skip && reduce === undefined && part.entries.length === 0 && children.length === 0) return undefined
       return {
         path: inst.path,
         entries: part.entries,
-        children: part.children.map(node),
+        children,
         reduce: reduce === undefined ? undefined : (below) => {
           const value = reduce(below)
           return own === fold ? value : { ...(below as object), ...(value as object) }
@@ -1532,7 +1544,7 @@ const setup = (
         onError: (error) => onError(inst, error)
       }
     }
-    const tree = node(root)
+    const tree = node(root) ?? emptyTree
     const head = fold.merge(tree, options)
     return { head, title: fold.title(head) }
   }

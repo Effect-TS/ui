@@ -2,6 +2,7 @@ import { Component, Head, type MessageLog } from "@effect/ui"
 import { TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
+import { Tiny } from "./fixtures/vocabulary.ts"
 
 const node = (
   entries: ReadonlyArray<Head.Entry>,
@@ -30,6 +31,28 @@ describe("Head", () => {
     assert.strictEqual(Head.merge(tree).title, "Ada")
     assert.strictEqual(errors.length, 1)
     assert.throws(() => Head.merge({ ...tree, onError: undefined }), /bad template/)
+  })
+
+  it("a subtree with no entries and no reduce changes neither the value nor the conflicts", () => {
+    const at = (
+      path: string,
+      entries: ReadonlyArray<Head.Entry>,
+      ...children: ReadonlyArray<Head.Tree>
+    ): Head.Tree => ({
+      path,
+      entries,
+      children
+    })
+    const merged = (tree: Head.Tree) => {
+      const conflicts: Array<ReadonlyArray<string>> = []
+      const head = Head.merge(tree, { onConflict: (conflict) => conflicts.push(conflict.paths) })
+      return { head, conflicts }
+    }
+    const a = at("/a", [Head.title("A")])
+    const b = at("/b", [Head.title("B")])
+    const headless = at("/h", [], at("/h/x", []), at("/h/y", [], at("/h/y/z", [])))
+    assert.deepStrictEqual(merged(at("/", [], headless, a, headless, b, headless)), merged(at("/", [], a, b)))
+    assert.deepStrictEqual(merged(at("/", [], a, b)).conflicts, [["/a", "/b"]])
   })
 
   it.effect("fails only the instance whose title template throws", () =>
@@ -105,7 +128,7 @@ describe("Head", () => {
       })
       const root = yield* TestHost.mount(App, {}, { fallback: (_, h) => h.text("down") })
       yield* TestHost.settle
-      assert.deepStrictEqual(root.head(), { title: "Ada · App" })
+      assert.deepStrictEqual(root.head() as unknown, { title: "Ada · App" })
       root.send(true)
       const crashed = yield* Effect.flip(TestHost.settle)
       assert.strictEqual(crashed._tag, "RootCrashed")
@@ -113,6 +136,59 @@ describe("Head", () => {
       // The failed root and the page under it contribute nothing: the title it had goes.
       assert.deepStrictEqual(root.head(), { title: undefined })
     }).pipe(Effect.provide(TestHost.layer())))
+
+  it.effect("a vocabulary's own fold gets every instance, headless ones included, in document order", () =>
+    Effect.gen(function*() {
+      interface Shape {
+        readonly path: string | undefined
+        readonly entries: ReadonlyArray<string>
+        readonly children: ReadonlyArray<Shape>
+      }
+      const shape = (tree: Head.Tree<{ readonly _tag: string }, unknown>): Shape => ({
+        path: tree.path,
+        entries: tree.entries.map((entry) => entry._tag),
+        children: tree.children.map(shape)
+      })
+      // The fold's value is the shape of the tree it was given.
+      const Shaped = { ...Tiny, head: { merge: shape, title: () => undefined } }
+      const leaf = (name: string, head?: ReadonlyArray<Head.Entry>) =>
+        Component.define({ name, model: Schema.Null, message: Schema.Never, elements: Shaped }).make({
+          init: () => null,
+          update: (model) => model,
+          head: head === undefined ? undefined : () => head,
+          view: (_, h) => h.label(name)
+        })
+      const Page = leaf("Page", [Head.title("Page")])
+      const Aside = leaf("Aside")
+      const Footer = leaf("Footer")
+      // Headless: no head and no reduceHead, with a child that has one.
+      const Layout = Component.define({ name: "Layout", model: Schema.Null, message: Schema.Never, elements: Shaped })
+        .make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => h.box(Page(h, { key: "page", props: {} }), Aside(h, { key: "aside", props: {} }))
+        })
+      const App = Component.define({ name: "App", model: Schema.Null, message: Schema.Never, elements: Shaped }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => h.box(Layout(h, { key: "layout", props: {} }), Footer(h, { key: "footer", props: {} }))
+      })
+      const root = yield* TestHost.mount(App, {})
+      yield* TestHost.settle
+      const leafAt = (path: string, entries: ReadonlyArray<string> = []): Shape => ({ path, entries, children: [] })
+      assert.deepStrictEqual(root.head(), {
+        path: "/App",
+        entries: [],
+        children: [
+          {
+            path: "/App/Layout[layout]",
+            entries: [],
+            children: [leafAt("/App/Layout[layout]/Page[page]", ["Title"]), leafAt("/App/Layout[layout]/Aside[aside]")]
+          },
+          leafAt("/App/Footer[footer]")
+        ]
+      })
+    }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
 
   it.effect("head gets the props, and follows a props-only change", () =>
     Effect.gen(function*() {
