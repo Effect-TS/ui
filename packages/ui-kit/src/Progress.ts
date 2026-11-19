@@ -207,6 +207,8 @@ export const Progress = Component.define({
   parts: (_model, p) => {
     const { max, min, percentage, status, value } = resolve(p.props)
     const valueText = p.props.valueText ?? (percentage === null ? undefined : `${Math.round(percentage)}%`)
+    // What the indicator adds to its inline style: nothing while indeterminate.
+    const size = percentage === null ? undefined : `inset-inline-start:0;height:inherit;width:${percentage}%`
     const labelId = p.id("label")
     // An attribute a part sets to `undefined` is removed from the consumer's
     // builder too, so a consumer's `data-complete` can't report a state the
@@ -242,14 +244,9 @@ export const Progress = Component.define({
               : node.children(valueText)
           )),
       track: p.part("div", state),
-      indicator: p.part("div", (b) => {
-        const indicator = state(b)
-        if (percentage === null) return indicator
-        const own = `inset-inline-start:0;height:inherit;width:${percentage}%`
-        // After the consumer's inline style, set before the part or chained
-        // after it, so the width wins and the consumer's other declarations stay.
-        return indicator.forward((node) => node.attr("style", withStyle(node.attrs.style, own)))
-      })
+      indicator: p.part("div", (b) =>
+        state(b)
+          .forward((node) => size === undefined ? node : node.attr("style", withStyle(node.attrs.style, size))))
     }
   }
 })

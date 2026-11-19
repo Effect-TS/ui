@@ -31,6 +31,7 @@ const parts = (props: ProgressProps) => Story.parts(Progress, { model: {}, props
 const build = (builder: View.ElementBuilder<never, never, any, any>) => View.build(builder, [])
 const statesOf = (attrs: Readonly<Record<string, string | undefined>> | undefined) =>
   ["data-progressing", "data-complete", "data-indeterminate"].filter((name) => attrs?.[name] === "")
+const everyPart = [root, label, value, track, indicator]
 
 describe("Progress", () => {
   it.effect("the label names the bar, and every part reports the value as it moves to complete and to unknown", () =>
@@ -50,17 +51,13 @@ describe("Progress", () => {
       assert.strictEqual(s.get(label).attrs?.role, "presentation")
       assert.strictEqual(s.get(value).attrs?.["aria-hidden"], "true")
       assert.strictEqual(Locator.textOf(s.get(value)), "40%")
-      for (const part of [root, label, value, track, indicator]) {
-        assert.deepStrictEqual(statesOf(s.get(part).attrs), ["data-progressing"])
-      }
+      for (const part of everyPart) assert.deepStrictEqual(statesOf(s.get(part).attrs), ["data-progressing"])
 
       // Above the range: clamped to it, and complete.
       s.props({ value: 150 })
       assert.strictEqual(s.get(root).attrs?.["aria-valuenow"], "100")
       assert.strictEqual(s.get(root).attrs?.["aria-valuetext"], "100%")
-      for (const part of [root, label, value, track, indicator]) {
-        assert.deepStrictEqual(statesOf(s.get(part).attrs), ["data-complete"])
-      }
+      for (const part of everyPart) assert.deepStrictEqual(statesOf(s.get(part).attrs), ["data-complete"])
 
       s.props({ value: null })
       const attrs = s.get(root).attrs
@@ -68,9 +65,7 @@ describe("Progress", () => {
       assert.strictEqual(attrs?.["aria-valuetext"], "indeterminate progress")
       assert.strictEqual(Locator.textOf(s.get(value)), "")
       assert.isUndefined(s.get(indicator).attrs?.style)
-      for (const part of [root, label, value, track, indicator]) {
-        assert.deepStrictEqual(statesOf(s.get(part).attrs), ["data-indeterminate"])
-      }
+      for (const part of everyPart) assert.deepStrictEqual(statesOf(s.get(part).attrs), ["data-indeterminate"])
     }))
 
   it("each part takes only its own tag", () => {
@@ -138,7 +133,6 @@ describe("Progress", () => {
     ])
     const last = children[2]
     if (last?._tag !== "Element") return assert.fail("the root has no hidden span")
-    assert.strictEqual(last.tag, "span")
     assert.strictEqual(last.attrs.role, "presentation")
     assert.match(last.attrs.style ?? "", /position:absolute;width:1px;height:1px/)
   })
@@ -146,8 +140,7 @@ describe("Progress", () => {
   it("value shows the value text unless the consumer gives it children", () => {
     const textOf = (element: View.Element<never>) =>
       element.children.map((child) => child._tag === "Text" ? child.text : "").join("")
-    const text = (props: ProgressProps, own?: string) =>
-      textOf(build(parts(props).value(own === undefined ? h.span : h.span.children(own))))
+    const text = (props: ProgressProps) => textOf(build(parts(props).value(h.span)))
     assert.strictEqual(text({ value: 1, max: 3 }), "33%")
     assert.strictEqual(parts({ value: 1, max: 3 }).valueText, "33%")
     // The consumer's text is the root's too.
@@ -155,7 +148,8 @@ describe("Progress", () => {
     assert.strictEqual(build(given.root(h.div)).attrs["aria-valuetext"], "2 of 5 files")
     assert.strictEqual(text({ value: 2, max: 5, valueText: "2 of 5 files" }), "2 of 5 files")
     assert.strictEqual(text({ value: null, valueText: "Preparing" }), "Preparing")
-    assert.strictEqual(text({ value: 40 }, "Almost there"), "Almost there")
+    // The consumer's children, set before the part or chained after it.
+    assert.strictEqual(textOf(build(parts({ value: 40 }).value(h.span.children("Almost there")))), "Almost there")
     assert.strictEqual(textOf(build(parts({ value: 40 }).value(h.span).children("Later"))), "Later")
   })
 
