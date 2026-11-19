@@ -3222,6 +3222,44 @@ describe("Runtime", () => {
         provideHost
       ))
 
+    it.effect("a reader of a mount's args that outlives the mount ends when the element is removed", () =>
+      Effect.gen(function*() {
+        const seen: Array<number> = []
+        let reader: Fiber.Fiber<void> | undefined
+        // The reader isn't the mount's fiber or in its Scope, so only the end of `changes` ends it.
+        const Draw = Mount.make(
+          "Draw",
+          { args: { n: Schema.Number } },
+          (_node, _args, changes) =>
+            Effect.gen(function*() {
+              reader = yield* Effect.forkDetach(
+                Stream.runForEach(changes, ({ n }) => Effect.sync(() => seen.push(n)))
+              )
+              return Component.noop
+            })
+        )
+        const Chart = Component.define({
+          name: "OutlivedReader",
+          model: Schema.Boolean,
+          message: Schema.Boolean,
+          elements: Tiny
+        }).make({
+          init: () => true,
+          update: (_, shown) => shown,
+          view: (shown, h) => h.box(shown ? h.field.onMount(Draw({ n: 0 })) : null)
+        })
+        const root = yield* TestHost.mount(Chart, {})
+        yield* TestHost.settle
+        assert.deepStrictEqual(seen, [0])
+        assert.isUndefined(reader?.pollUnsafe())
+        root.send(false)
+        yield* TestHost.settle
+        assert.strictEqual(reader?.pollUnsafe()?._tag, "Success")
+      }).pipe(
+        Effect.provide(Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })),
+        provideHost
+      ))
+
     it.effect("a mount returning during scope closure logs one closed end caused by removal", () =>
       Effect.gen(function*() {
         const finishBody = yield* Deferred.make<void>()
