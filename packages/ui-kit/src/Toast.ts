@@ -152,7 +152,7 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import { flag } from "./internal/attributes.ts"
+import { flag, withStyle } from "./internal/attributes.ts"
 
 /**
  * The content of a toast, as a sender posts it in `AddedToast`.
@@ -268,14 +268,8 @@ export type ToastProviderEvents = typeof ToastProviderEvents.Type
 // the viewport's and the toasts' mounts, and the timers.
 const Message = UiSchema.TaggedEnum({
   AddedToast: { toast: ToastData },
-  UpdatedToast: {
-    id: Schema.String,
-    title: Schema.optional(Schema.String),
-    description: Schema.optional(Schema.String),
-    type: Schema.optional(Schema.String),
-    timeout: Schema.optional(Schema.Number),
-    priority: Schema.optional(Schema.Literals(["low", "high"]))
-  },
+  // Every field but `id` is optional, so a toast's fields are also a change's.
+  UpdatedToast: ToastData.fields,
   ClosedToast: { id: Schema.String },
   ClickedClose: { id: Schema.String },
   PressedEscape: { id: Schema.String },
@@ -328,23 +322,15 @@ const WaitBeforeDismissal = Command.make(
 
 type Tracked = { readonly _tag: "Measured"; readonly height: number } | { readonly _tag: "Finished" }
 
-// Measures a toast's natural height, again whenever its size or content
-// changes, and reports when its exit transition has finished. `ending`
-// follows the toast: the wait starts when it turns true, and a toast added
-// again while it's ending is measured again. `id` names the toast in the
-// log.
-const TrackToast = Mount.makeStream(
-  "TrackToast",
-  { args: { id: Schema.String, ending: Schema.Boolean } },
-  (node: HTMLElement, _args, changes) =>
-    Stream.callback<Tracked>((queue) =>
-      Effect.gen(function*() {
+// A toast's natural height, again whenever its size or content changes.
+const heights = (node: HTMLElement) =>
+  Stream.callback<Tracked>((queue) =>
+    Effect.acquireRelease(
+      Effect.sync(() => {
         let last = -1
-        let ending = false
         // The height the toast would have without the consumer's stacking
         // styles, which may clamp it.
         const measure = () => {
-          if (ending) return
           const previous = node.style.height
           node.style.height = "auto"
           const height = node.offsetHeight
@@ -353,42 +339,39 @@ const TrackToast = Mount.makeStream(
           last = height
           Queue.offerUnsafe(queue, { _tag: "Measured", height })
         }
-        // Once the transitions the ending style starts have run. Without
-        // any, at once.
-        const finish = (round: number) =>
-          requestAnimationFrame(() => {
-            const animations = typeof node.getAnimations === "function" ? node.getAnimations() : []
-            void Promise.allSettled(animations.map((animation) => animation.finished)).then(() => {
-              if (ending && round === rounds) Queue.offerUnsafe(queue, { _tag: "Finished" })
-            })
-          })
-        let rounds = 0
-        yield* Effect.acquireRelease(
-          Effect.sync(() => {
-            const resize = typeof ResizeObserver === "function" ? new ResizeObserver(measure) : undefined
-            const mutation = typeof MutationObserver === "function" ? new MutationObserver(measure) : undefined
-            resize?.observe(node)
-            mutation?.observe(node, { childList: true, subtree: true, characterData: true })
-            return () => {
-              resize?.disconnect()
-              mutation?.disconnect()
-            }
-          }),
-          (disconnect) => Effect.sync(disconnect)
-        )
-        yield* Stream.runForEach(changes, (args) =>
-          Effect.sync(() => {
-            rounds += 1
-            ending = args.ending
-            if (ending) {
-              finish(rounds)
-            } else {
-              last = -1
-              measure()
-            }
-          })).pipe(Effect.forkScoped)
-      })
+        const resize = typeof ResizeObserver === "function" ? new ResizeObserver(measure) : undefined
+        const mutation = new MutationObserver(measure)
+        resize?.observe(node)
+        mutation.observe(node, { childList: true, subtree: true, characterData: true })
+        measure()
+        return () => {
+          resize?.disconnect()
+          mutation.disconnect()
+        }
+      }),
+      (disconnect) => Effect.sync(disconnect)
     )
+  )
+
+// Once the transitions the ending style starts have run. Without any, at
+// once.
+const exited = (node: HTMLElement) =>
+  Stream.fromEffect(Effect.promise(async (): Promise<Tracked> => {
+    await new Promise(requestAnimationFrame)
+    const animations = typeof node.getAnimations === "function" ? node.getAnimations() : []
+    await Promise.allSettled(animations.map((animation) => animation.finished))
+    return { _tag: "Finished" }
+  }))
+
+// Measures a toast until it closes, then reports when its exit transition
+// has finished. `ending` follows the toast, so one added again while it's
+// ending is measured again, and its cut wait reports nothing. `id` names
+// the toast in the log.
+const TrackToast = Mount.makeStream(
+  "TrackToast",
+  { args: { id: Schema.String, ending: Schema.Boolean } },
+  (node: HTMLElement, _args, changes) =>
+    Stream.switchMap(changes, ({ ending }) => (ending ? exited(node) : heights(node)))
 )
 
 type ViewportFact = "FocusedViewport" | "BlurredViewport" | "FocusedWindow" | "BlurredWindow" | "LeftViewport"
@@ -399,8 +382,8 @@ const focusable =
 
 // What the viewport needs from its document and window: F6 into the
 // viewport and back, keyboard focus inside it, the window's focus, a pointer
-// that left while the toast under it was removed, and focus that sat on a
-// toast as it closed. `empty`: no toast shows, so F6 is the page's.
+// that left while the toast under it was removed, and focus that a closing
+// toast left with nowhere to stay. `empty`: no toast shows, so F6 is the page's.
 // `hovering`: what the Model believes about the pointer.
 const TrackViewport = Mount.makeStream(
   "TrackViewport",
@@ -454,12 +437,6 @@ const TrackViewport = Mount.makeStream(
           focused = false
           Queue.offerUnsafe(queue, "BlurredViewport")
         }
-        const onWindowFocus = (event: FocusEvent) => {
-          if (event.target === window) Queue.offerUnsafe(queue, "FocusedWindow")
-        }
-        const onWindowBlur = (event: FocusEvent) => {
-          if (event.target === window) Queue.offerUnsafe(queue, "BlurredWindow")
-        }
         // A toast removed under the pointer sends no mouseleave.
         const onMouseOver = (event: MouseEvent) => {
           if (hovering && !node.contains(event.target as Node | null)) {
@@ -467,43 +444,41 @@ const TrackViewport = Mount.makeStream(
             Queue.offerUnsafe(queue, "LeftViewport")
           }
         }
-        // Focus goes back to where it was before it entered the viewport, or
-        // else leaves the stack, so the stack collapses and the timers of
-        // later toasts run: an empty viewport never keeps focus.
-        const leave = () => {
-          if (!restore()) (document.activeElement as HTMLElement | null)?.blur()
-        }
-        // A toast that closes with focus inside hands it to the next toast,
-        // or else focus leaves the viewport.
+        // Focus never stays on a toast that closes, nor in a viewport with no
+        // toast to take it. It moves to the next toast. With none left, it
+        // goes back to where it was before it entered the viewport, or else
+        // it's blurred, so the stack collapses and the timers of later toasts
+        // run.
         const handOff = (records: ReadonlyArray<MutationRecord>) => {
-          for (const record of records) {
-            const closing = record.target as HTMLElement
-            if (!closing.hasAttribute("data-ending-style") || !closing.contains(document.activeElement)) continue
-            const roots = Array.from(node.querySelectorAll<HTMLElement>(focusable))
-            const after = roots.find((root) => closing.compareDocumentPosition(root) & 4)
-            const next = after ?? roots.at(-1)
-            if (next !== undefined) next.focus()
-            else leave()
+          const active = document.activeElement as HTMLElement | null
+          if (!node.contains(active)) return
+          const roots = Array.from(node.querySelectorAll<HTMLElement>(focusable))
+          const closing = records.find(({ target }) =>
+            (target as Element).hasAttribute("data-ending-style") && target.contains(active)
+          )?.target
+          if (roots.length === 0) {
+            if (!restore()) active?.blur()
+          } else if (closing !== undefined) {
+            const next = roots.find((root) => closing.compareDocumentPosition(root) & 4) ?? roots.at(-1)!
+            next.focus()
           }
         }
         yield* Effect.acquireRelease(
           Effect.sync(() => {
-            const observer = typeof MutationObserver === "function" ? new MutationObserver(handOff) : undefined
-            observer?.observe(node, { subtree: true, attributes: true, attributeFilter: ["data-ending-style"] })
-            document.addEventListener("keydown", onKeyDown)
-            document.addEventListener("mouseover", onMouseOver, true)
-            node.addEventListener("focusin", onFocusIn)
-            node.addEventListener("focusout", onFocusOut)
-            window?.addEventListener("focus", onWindowFocus, true)
-            window?.addEventListener("blur", onWindowBlur, true)
+            const observer = new MutationObserver(handOff)
+            observer.observe(node, { subtree: true, attributes: true, attributeFilter: ["data-ending-style"] })
+            const controller = new AbortController()
+            const { signal } = controller
+            document.addEventListener("keydown", onKeyDown, { signal })
+            document.addEventListener("mouseover", onMouseOver, { capture: true, signal })
+            node.addEventListener("focusin", onFocusIn, { signal })
+            node.addEventListener("focusout", onFocusOut, { signal })
+            // Focus events don't bubble, so these hear only the window's own.
+            window?.addEventListener("focus", () => Queue.offerUnsafe(queue, "FocusedWindow"), { signal })
+            window?.addEventListener("blur", () => Queue.offerUnsafe(queue, "BlurredWindow"), { signal })
             return () => {
-              observer?.disconnect()
-              document.removeEventListener("keydown", onKeyDown)
-              document.removeEventListener("mouseover", onMouseOver, true)
-              node.removeEventListener("focusin", onFocusIn)
-              node.removeEventListener("focusout", onFocusOut)
-              window?.removeEventListener("focus", onWindowFocus, true)
-              window?.removeEventListener("blur", onWindowBlur, true)
+              observer.disconnect()
+              controller.abort()
             }
           }),
           (remove) => Effect.sync(remove)
@@ -512,18 +487,16 @@ const TrackViewport = Mount.makeStream(
           Effect.sync(() => {
             empty = next.empty
             hovering = next.hovering
-            // The last toast closed with focus on the viewport itself, as
-            // after F6, which the hand-off doesn't see.
-            if (empty && node.contains(document.activeElement)) leave()
           })).pipe(Effect.forkScoped)
       })
     )
 )
 
-const dismissed = (id: string) => ToastProviderEvents.Dismissed({ id })
+// The stack is expanded while the pointer is on it or keyboard focus is in it.
+const expandedBy = (model: Model): boolean => model.hovering || model.focused
 
-// The timers run while nothing expands the stack and the window has focus.
-const pausedBy = (model: Model): boolean => model.hovering || model.focused || !model.windowFocused
+// The timers run while the stack is collapsed and the window has focus.
+const pausedBy = (model: Model): boolean => expandedBy(model) || !model.windowFocused
 
 const timeoutOf = (toast: ToastData, props: ToastProviderProps): number => toast.timeout ?? props.timeout ?? 5000
 
@@ -540,21 +513,20 @@ const stop = (id: string) => Command.interrupt(WaitBeforeDismissal, { id })
 const hidden =
   "position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"
 
-// The parts add their declarations, in `forward`, after the consumer's
-// inline style, so theirs win and the consumer's others stay.
-const withStyle = (consumer: string | undefined, own: string): string =>
-  consumer === undefined || consumer.trim() === "" ? own : consumer.replace(/;\s*$/, "") + ";" + own
-
 // Where each toast sits in the stack: its index from the front, the height
-// of the toasts in front of it, and whether it's past the limit. A closing
-// toast keeps its place in the list but leaves the count.
+// of the toasts in front of it, its own height, and whether it's past the
+// limit. A closing toast keeps its place in the list but leaves the count.
 const stackOf = (toasts: ReadonlyArray<Entry>, limit: number) => {
-  const stack = new Map<string, { readonly index: number; readonly offset: number; readonly limited: boolean }>()
+  const stack = new Map<
+    string,
+    { readonly index: number; readonly offset: number; readonly height: number; readonly limited: boolean }
+  >()
   let visible = 0
   let offset = 0
   toasts.forEach((toast, index) => {
     const ending = toast.transition === "ending"
-    stack.set(toast.id, { index: ending ? index : visible, offset, limited: !ending && visible >= limit })
+    const limited = !ending && visible >= limit
+    stack.set(toast.id, { index: ending ? index : visible, offset, height: toast.height, limited })
     offset += toast.height
     if (!ending) visible += 1
   })
@@ -620,7 +592,8 @@ export const ToastProvider = Component.define({
   update: (model, message, $) => {
     const props = $.props
     const paused = pausedBy(model)
-    const find = (id: string) => model.toasts.find((toast) => toast.id === id)
+    // The toast `id` while it shows. A closing one only waits for its exit.
+    const shown = (id: string) => model.toasts.find((toast) => toast.id === id && toast.transition !== "ending")
     const replace = (entry: Entry) => model.toasts.map((toast) => (toast.id === entry.id ? entry : toast))
     // Start a toast's timer, unless the timers are paused, or stop it.
     const timer = (entry: Entry) => (timed(entry, props) ? (paused ? [] : [wait(entry, props)]) : [stop(entry.id)])
@@ -637,35 +610,34 @@ export const ToastProvider = Component.define({
     // A toast that shows starts closing. Once none shows, the pointer is
     // taken to have left, since a viewport that empties sends no mouseleave.
     const close = (id: string, user: boolean) => {
-      const entry = find(id)
-      if (entry === undefined || entry.transition === "ending") return model
+      const entry = shown(id)
+      if (entry === undefined) return model
       const toasts = replace({ ...entry, transition: "ending", height: 0 })
       const showing = toasts.some((toast) => toast.transition !== "ending")
       const step = settle({ ...model, toasts, hovering: showing && model.hovering }).run(stop(id))
-      return user ? step.emit(dismissed(id)) : step
+      return user ? step.emit(ToastProviderEvents.Dismissed({ id })) : step
     }
     return Message.match(message, {
       // A toast that shows is replaced in place. One that is closing is
       // added again, as new.
       AddedToast: ({ toast }) => {
-        const existing = find(toast.id)
-        if (existing !== undefined && existing.transition !== "ending") {
-          const entry: Entry = { ...toast, transition: existing.transition, height: existing.height }
-          return $.set({ ...model, toasts: replace(entry) }).run(...timer(entry))
-        }
-        const entry: Entry = { ...toast, transition: "starting", height: 0 }
-        const toasts = [entry, ...model.toasts.filter((other) => other.id !== toast.id)]
+        const existing = shown(toast.id)
+        const entry: Entry = { ...toast, transition: existing?.transition ?? "starting", height: existing?.height ?? 0 }
+        const toasts = existing === undefined
+          ? [entry, ...model.toasts.filter((other) => other.id !== toast.id)]
+          : replace(entry)
         return $.set({ ...model, toasts }).run(...timer(entry))
       },
-      // The timer starts again when the update sets a timeout or starts it,
-      // as when a loading toast gets its result.
+      // A running timer goes on, unless the update sets a timeout. One starts
+      // when the update makes the toast timed, as when a loading toast gets
+      // its result.
       UpdatedToast: ({ _tag, id, ...changes }) => {
-        const entry = find(id)
-        if (entry === undefined || entry.transition === "ending") return model
+        const entry = shown(id)
+        if (entry === undefined) return model
         const next: Entry = { ...entry, ...changes }
-        const restart = !timed(entry, props) || changes.timeout !== undefined
         const step = $.set({ ...model, toasts: replace(next) })
-        return !timed(next, props) || restart ? step.run(...timer(next)) : step
+        const running = timed(entry, props) && timed(next, props) && changes.timeout === undefined
+        return running ? step : step.run(...timer(next))
       },
       ClosedToast: ({ id }) => close(id, false),
       ClickedClose: ({ id }) => close(id, true),
@@ -682,20 +654,16 @@ export const ToastProvider = Component.define({
       // The first measure ends the starting style. A closing toast keeps
       // its height at 0, so the toasts behind it move up.
       MeasuredToast: ({ id, height }) => {
-        const entry = find(id)
-        if (entry === undefined || entry.transition === "ending") return model
-        return { ...model, toasts: replace({ ...entry, transition: "shown", height }) }
+        const entry = shown(id)
+        return entry === undefined ? model : { ...model, toasts: replace({ ...entry, transition: "shown", height }) }
       },
       FinishedExit: ({ id }) =>
-        find(id)?.transition === "ending"
-          ? { ...model, toasts: model.toasts.filter((toast) => toast.id !== id) }
-          : model
+        shown(id) === undefined ? { ...model, toasts: model.toasts.filter((toast) => toast.id !== id) } : model
     })
   },
   parts: (model, p) => {
-    const expanded = model.hovering || model.focused
+    const expanded = expandedBy(model)
     const stack = stackOf(model.toasts, p.props.limit ?? 3)
-    const entries = new Map(model.toasts.map((entry) => [entry.id, entry]))
     const toasts: ReadonlyArray<ToastItem> = model.toasts.map(({ height: _, transition, ...data }) => ({
       ...data,
       transitionStatus: transition === "shown" ? undefined : transition,
@@ -719,11 +687,6 @@ export const ToastProvider = Component.define({
         )
       )
     )
-    const typed = <B extends { readonly attr: (name: string, value: string | undefined) => B }>(
-      builder: B,
-      toast: ToastItem
-    ): B => builder.attr("data-type", entries.get(toast.id)?.type)
-
     const viewport = p.part("div", (b) =>
       b.attr("role", "region")
         .attr("tabindex", "-1")
@@ -743,26 +706,25 @@ export const ToastProvider = Component.define({
         }))
 
     const rootPart = p.part("div", (b, toast: ToastItem) => {
-      const entry = entries.get(toast.id)
       const place = stack.get(toast.id)
-      const high = entry?.priority === "high"
-      const ending = entry?.transition === "ending"
+      const high = toast.priority === "high"
+      const ending = toast.transitionStatus === "ending"
       const vars = place === undefined ? undefined : [
         `--toast-index:${place.index}`,
         `--toast-offset-y:${place.offset}px`,
-        entry !== undefined && entry.height > 0 ? `--toast-height:${entry.height}px` : undefined
+        place.height > 0 ? `--toast-height:${place.height}px` : undefined
       ].filter((declaration) => declaration !== undefined).join(";")
       return b.attr("role", high ? "alertdialog" : "dialog")
         .attr("tabindex", "0")
         .attr("aria-modal", "false")
-        .attr("aria-labelledby", entry?.title !== undefined ? p.id("title", toast.id) : undefined)
-        .attr("aria-describedby", entry?.description !== undefined ? p.id("description", toast.id) : undefined)
+        .attr("aria-labelledby", toast.title !== undefined ? p.id("title", toast.id) : undefined)
+        .attr("aria-describedby", toast.description !== undefined ? p.id("description", toast.id) : undefined)
         .attr("aria-hidden", high && !model.focused ? "true" : undefined)
-        .attr("inert", flag(place?.limited))
+        .attr("inert", flag(toast.limited))
         .attr("data-expanded", flag(expanded))
-        .attr("data-limited", flag(place?.limited))
-        .attr("data-type", entry?.type)
-        .attr("data-starting-style", flag(entry?.transition === "starting"))
+        .attr("data-limited", flag(toast.limited))
+        .attr("data-type", toast.type)
+        .attr("data-starting-style", flag(toast.transitionStatus === "starting"))
         .attr("data-ending-style", flag(ending))
         .onKeyDown(({ key }) => (key === "Escape" ? Message.PressedEscape({ id: toast.id }) : undefined))
         .onMount(
@@ -776,29 +738,31 @@ export const ToastProvider = Component.define({
         )
         .forward((node) => (vars === undefined ? node : node.attr("style", withStyle(node.attrs.style, vars))))
     })
-    // The key keeps a toast's element, and its mount, as the list changes.
+    // The key keeps a toast's element, and its mount, as the list changes. A
+    // part can't set it, so the builder gets it first.
     const root = View.wrapPart(
       rootPart,
-      <B extends View.PartTarget<"div">>(
+      <B extends View.PartTarget<"div"> & { readonly key: (key: string) => View.PartTarget<"div"> }>(
         { element, toast }: { readonly element: B; readonly toast: ToastItem }
-      ): ReturnType<B["attr"]> =>
-        (rootPart(element, toast) as unknown as View.ElementBuilder<Message>).key(toast.id) as any
+      ): ReturnType<B["attr"]> => rootPart(element.key(toast.id), toast)
     )
     const contentPart = p.part("div", (b, toast: ToastItem) =>
       b.attr("data-expanded", flag(expanded))
-        .attr(
-          "data-behind",
-          flag((stack.get(toast.id)?.index ?? 0) > 0 && entries.get(toast.id)?.transition !== "ending")
-        ))
-    const titlePart = p.part((b, toast: ToastItem) => typed(b.attr("id", p.id("title", toast.id)), toast))
-    const descriptionPart = p.part((b, toast: ToastItem) => typed(b.attr("id", p.id("description", toast.id)), toast))
-    const actionPart = p.part("button", (b, toast: ToastItem) => typed(b.attr("type", "button"), toast))
+        .attr("data-behind", flag((stack.get(toast.id)?.index ?? 0) > 0 && toast.transitionStatus !== "ending")))
+    const titlePart = p.part((b, toast: ToastItem) =>
+      b.attr("id", p.id("title", toast.id)).attr("data-type", toast.type)
+    )
+    const descriptionPart = p.part((b, toast: ToastItem) =>
+      b.attr("id", p.id("description", toast.id)).attr("data-type", toast.type)
+    )
+    const actionPart = p.part("button", (b, toast: ToastItem) => b.attr("type", "button").attr("data-type", toast.type))
     // Hidden from screen readers while the stack is collapsed, since a
     // keyboard user reaches it by focusing the viewport, which expands the
     // stack. It stays exposed while it has focus, as after a press that
     // ended outside the stack.
     const closePart = p.part("button", (b, toast: ToastItem) =>
-      typed(b.attr("type", "button"), toast)
+      b.attr("type", "button")
+        .attr("data-type", toast.type)
         .attr("aria-hidden", expanded || model.closeFocused === toast.id ? undefined : "true")
         .onClick(Message.ClickedClose({ id: toast.id }))
         .onFocus(Message.FocusedClose({ id: toast.id }))

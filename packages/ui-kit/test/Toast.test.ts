@@ -4,7 +4,7 @@ import { ToastProvider, type ToastProviderProps } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { Locator, Scene, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Schema, Scope } from "effect"
+import { Effect, Schema } from "effect"
 import { TestClock } from "effect/testing"
 
 const standIn = {
@@ -140,10 +140,7 @@ const mountPage = Effect.fnUntraced(function*(timeout: number) {
     Effect.sync(() => document.body.appendChild(document.createElement("div"))),
     (element) => Effect.sync(() => element.remove())
   )
-  yield* Effect.flatMap(
-    Scope.Scope,
-    (scope) => Scope.provide(BrowserHost.mountEffect(Page, { timeout }, container), scope)
-  )
+  yield* BrowserHost.mountEffect(Page, { timeout }, container)
   yield* tick
   return {
     byId: (id: string) => container.querySelector<HTMLElement>("#" + id),
