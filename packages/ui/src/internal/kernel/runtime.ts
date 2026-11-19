@@ -1350,15 +1350,8 @@ const setup = (
    * The close interrupts the fiber and waits for it to exit, so its cleanup runs before whatever the
    * Scope's owner closes next, such as the Layer that provides its services.
    */
-  const interruptOnClose = (scope: Scope.Scope, fiber: Fiber.Fiber<unknown, unknown>) => {
-    if (isClosed(scope)) return addFinalizer(scope, Fiber.interrupt(fiber))
-    // Interrupted as the finalizer is called, not by an Effect it returns: a fiber that has ended, or
-    // ends as it's interrupted, leaves the close nothing to run, so the close takes no fiber.
-    scopeAddFinalizerUnsafe(scope, {}, () => {
-      fiber.interruptUnsafe()
-      return fiber.pollUnsafe() === undefined ? Fiber.await(fiber) : Exit.void
-    })
-  }
+  const interruptOnClose = (scope: Scope.Scope, fiber: Fiber.Fiber<unknown, unknown>) =>
+    addFinalizer(scope, Fiber.interrupt(fiber))
 
   // -- query cache ---------------------------------------------------------
   // Made at the mount when the app has loaded the `Query` module by then, and otherwise when it loads it.

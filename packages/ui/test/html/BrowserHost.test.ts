@@ -9,13 +9,14 @@ import {
   type Renderer,
   Route,
   Router,
+  Subscription,
   UiSchema,
   View
 } from "@effect/ui"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, expect, it } from "@effect/vitest"
-import { Context, Deferred, Effect, Exit, Layer, Option, Schema, Scope } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, Layer, Option, Schema, Scope, Stream } from "effect"
 import { describe, vi } from "vitest"
 import { collectGarbage } from "../utils/gc.ts"
 import { Confirm, ConfirmMessage, Nested } from "./fixtures/confirm.ts"
@@ -1744,6 +1745,29 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(app.childNodes.length).toBe(0)
       }).pipe(Effect.scoped))
   })
+
+  it.effect("a mount and a Subscription stopped by a close are interrupted by the fiber that closes", () =>
+    Effect.gen(function*() {
+      const interruptors: Array<ReadonlyArray<number>> = []
+      const record = <A, E>(exit: Exit.Exit<A, E>) =>
+        Effect.sync(() => {
+          if (Exit.isFailure(exit)) interruptors.push([...Cause.interruptors(exit.cause)])
+        })
+      const Held = Mount.make("Held", { args: {} }, () => Effect.onExit(Effect.never, record))
+      const Page = Component.define({ name: "Page", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+        init: () => null,
+        update: (model) => model,
+        subscriptions: () => [Subscription.make("held", Stream.onExit(Stream.never, record))],
+        view: (_, h) => h.p.onMount(Held()).children("held")
+      })
+      const app = yield* container
+      const scope = yield* Scope.make()
+      yield* BrowserHost.mountEffect(Page, {}, app).pipe(Scope.provide(scope))
+      yield* tick
+      yield* Scope.close(scope, Exit.void)
+      const closer = yield* Effect.fiberId
+      expect(interruptors).toEqual([[closer], [closer]])
+    }).pipe(Effect.scoped))
 
   // The runtime it replaces resumes each Command in a task of its own, and renders after each.
   it.effect.skipIf(!kernel)(
