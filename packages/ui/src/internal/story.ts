@@ -36,6 +36,7 @@ import * as componentQueries from "./queries.ts"
 import * as childRef from "./ref.ts"
 import * as schedule from "./schedule.ts"
 import * as sharedReads from "./shared.ts"
+import type { SlotResult } from "./slotStatus.ts"
 import * as subscriptionKeys from "./subscriptions.ts"
 
 /**
@@ -155,13 +156,6 @@ export type Fields<Props, Model, Msg, Events> =
 
 // What a failed slot without a `fallback` shows.
 const emptyText: View.Node<never, never> = { _tag: "Text", text: "" }
-
-/**
- * What a slot's `fallback` is passed: `Initial` while it's pending, `Failure` once it failed.
- *
- * @internal
- */
-export type SlotResult = AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>
 
 // -- headless children ------------------------------------------------------
 // A story shows a headless child expanded: the closure it was declared with, run against the parts of the
@@ -487,7 +481,8 @@ const expandRoot = <Msg>(
         const component = node.component as unknown as Component.Headless.Any
         const childPath = path + "/" + segment(node)
         placed.push({ child: node, path: childPath, scope })
-        const result = status?.get(childPath) ?? (Feature.isService(node.component) ? reads : undefined)
+        const result = status?.get(childPath) ??
+          (reads !== undefined && Feature.isService(node.component) ? reads : undefined)
         if (result !== undefined) {
           // The slot shows its `fallback`, whose children share the paths of the content that declared it.
           // It renders against settled services, so the feature slots in it show.

@@ -13,6 +13,7 @@ import * as Locator from "../testing/Locator.ts"
 import type * as View from "../View.ts"
 import * as match from "./match.ts"
 import { noop } from "./noop.ts"
+import type { SlotResult } from "./slotStatus.ts"
 import { Cursor } from "./steps.ts"
 import * as cursor from "./steps.ts"
 import * as engine from "./story.ts"
@@ -63,7 +64,7 @@ type ChildTarget = Component.Any | Component.Headless.Any | Feature.Any
 const withSlot = (
   state: engine.State<any, any, any, any>,
   found: engine.Occurrence,
-  result: AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>
+  result: SlotResult
 ): engine.State<any, any, any, any> => {
   const statuses = new Map(engine.childStatuses.get(state))
   statuses.set(engine.pathOf(state, found), result)

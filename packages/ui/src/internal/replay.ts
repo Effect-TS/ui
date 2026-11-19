@@ -12,7 +12,7 @@ import * as MessageLog from "../MessageLog.ts"
 import type { Divergence, Replay } from "../testing/Story.ts"
 import type * as View from "../View.ts"
 import * as componentQueries from "./queries.ts"
-import { serverFailure } from "./slotStatus.ts"
+import { serverFailure, type SlotResult } from "./slotStatus.ts"
 import * as engine from "./story.ts"
 
 /**
@@ -22,7 +22,7 @@ import * as engine from "./story.ts"
 interface Reached {
   readonly component: engine.Fields<any, any, any, any>["component"]
   /** `undefined` while the services the slots read are ready. */
-  readonly slotStatus: engine.SlotResult | undefined
+  readonly slotStatus: SlotResult | undefined
   readonly running: (name: string, groupKey: string | undefined) => boolean
 }
 const reachedOf = new WeakMap<object, Reached>()
@@ -57,8 +57,27 @@ export const viewOf = (replay: Replay<any, any, any, any, any>): View.Node<any, 
   })
 }
 
+// A Layer entry is the provider's, at its own path: the instances whose `boundary` it is read it.
+type Layer = Extract<MessageLog.Entry | MessageLog.Wire, { _tag: "LayerPending" | "LayerReady" | "LayerFailed" }>
+const layerTags: ReadonlySet<string> = new Set(["LayerPending", "LayerReady", "LayerFailed"])
+const isLayer = (entry: { readonly _tag: string }): entry is Layer => layerTags.has(entry._tag)
+// The entries about the replayed path: those that carry its state, and those that end one of its runs.
+type Ended = Extract<
+  MessageLog.Entry | MessageLog.Wire,
+  { _tag: "CommandEnded" | "CommandInterrupted" | "CommandDropped" }
+>
+const ownTags: ReadonlySet<string> = new Set([
+  "Update",
+  "Mounted",
+  "QueryChanged",
+  "PropsChanged",
+  "CommandEnded",
+  "CommandInterrupted",
+  "CommandDropped"
+])
+
 /** A logged cause back as a Cause: a Wire frame holds its reasons as JSON. */
-const causeOf = (entry: MessageLog.LayerFailed | Extract<MessageLog.Wire, { _tag: "LayerFailed" }>) => {
+const causeOf = (entry: Extract<Layer, { _tag: "LayerFailed" }>) => {
   if (entry.redacted === true) return serverFailure()
   if (typeof entry.component !== "string") return (entry as MessageLog.LayerFailed).cause
   const reasons = (entry as Extract<MessageLog.Wire, { _tag: "LayerFailed" }>).cause.reasons as ReadonlyArray<any>
@@ -111,32 +130,8 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
         component.definition.name
     )?.path
   if (path === undefined) throw new Error(`${label}: the log has no entry for ${component.definition.name}`)
-  // The entries that write the instance's Layer status or end one of its runs.
-  type Lifecycle =
-    | MessageLog.LayerPending
-    | MessageLog.LayerReady
-    | MessageLog.LayerFailed
-    | MessageLog.CommandEnded
-    | MessageLog.CommandInterrupted
-    | MessageLog.CommandDropped
-    | Extract<
-      MessageLog.Wire,
-      { _tag: "LayerPending" | "LayerReady" | "LayerFailed" | "CommandEnded" | "CommandInterrupted" | "CommandDropped" }
-    >
-  const lifecycleTags = new Set([
-    "LayerPending",
-    "LayerReady",
-    "LayerFailed",
-    "CommandEnded",
-    "CommandInterrupted",
-    "CommandDropped"
-  ])
-  // A Layer entry is the provider's, at its own path: the instances whose `boundary` it is read it.
-  const layerTags = new Set(["LayerPending", "LayerReady", "LayerFailed"])
-  const all = entries.filter((entry): entry is Stateful | Lifecycle =>
-    "path" in entry &&
-    (layerTags.has(entry._tag) ||
-      entry.path === path && (stateful.includes(entry as Stateful) || lifecycleTags.has(entry._tag)))
+  const all = entries.filter((entry): entry is Stateful | Layer | Ended =>
+    "path" in entry && (isLayer(entry) || entry.path === path && ownTags.has(entry._tag))
   )
   // The replay starts at the first Model. Props and query results written before it are in that Update's record, or
   // belong to an earlier mount.
@@ -214,8 +209,14 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
 
   // A path can hold one instance after another, and the one leaving can still log after the next
   // has mounted, so each instance's state is tracked by its number. The result is the last one's.
-  // What each provider's Layer last logged, by its instance: `undefined` once ready.
-  const layers = new Map<number, engine.SlotResult | undefined>()
+  // The last entry each provider's Layer logged, by its instance.
+  const layers = new Map<number, Layer>()
+  /** What the feature slots reading the provider `boundary` show: nothing once its Layer is ready. */
+  const slotStatusOf = (boundary: number | undefined): SlotResult | undefined => {
+    const entry = boundary === undefined ? undefined : layers.get(boundary)
+    if (entry === undefined || entry._tag === "LayerReady") return undefined
+    return entry._tag === "LayerPending" ? AsyncResult.initial(true) : AsyncResult.failure(causeOf(entry))
+  }
   interface State {
     model: Model
     props: unknown
@@ -263,30 +264,25 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
     }
     reachedOf.set(out, {
       component: component as any,
-      slotStatus: reached.boundary === undefined ? undefined : layers.get(reached.boundary),
+      slotStatus: slotStatusOf(reached.boundary),
       running: (name, key) => runs.some((run) => run.name === name && (key === undefined || run.group === key))
     })
     return out
   }
   // Before the first Model, only what the Layers logged counts: the slots read it from there on.
-  const fold = (entry: Stateful | Lifecycle) => {
-    if (entry._tag === "LayerPending") layers.set(entry.instance, AsyncResult.initial(true))
-    else if (entry._tag === "LayerReady") layers.set(entry.instance, undefined)
-    else if (entry._tag === "LayerFailed") layers.set(entry.instance, AsyncResult.failure(causeOf(entry)))
+  for (let index = 0; index < start; index++) {
+    const entry = all[index]!
+    if (isLayer(entry)) layers.set(entry.instance, entry)
   }
-  for (const entry of all.slice(0, start)) fold(entry)
   for (const entry of all.slice(start + 1)) {
-    if (entry._tag === "LayerPending" || entry._tag === "LayerReady" || entry._tag === "LayerFailed") {
-      fold(entry)
+    if (isLayer(entry)) {
+      layers.set(entry.instance, entry)
       continue
     }
     const state = states.get(entry.instance)
-    switch (entry._tag) {
-      case "CommandEnded":
-      case "CommandInterrupted":
-      case "CommandDropped":
-        state?.runs.delete(`${entry.issued.seq}:${entry.issued.index}`)
-        continue
+    if (entry._tag === "CommandEnded" || entry._tag === "CommandInterrupted" || entry._tag === "CommandDropped") {
+      state?.runs.delete(`${entry.issued.seq}:${entry.issued.index}`)
+      continue
     }
     if (entry._tag === "QueryChanged") {
       // Without a Model yet, the write is in the instance's first surviving `Update`.

@@ -5,6 +5,14 @@
  * @internal
  */
 import * as Cause from "effect/Cause"
+import type * as AsyncResult from "effect/reactivity/AsyncResult"
+
+/**
+ * What a slot's `fallback` is passed: `Initial` while it's pending, `Failure` once it failed.
+ *
+ * @internal
+ */
+export type SlotResult = AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>
 
 /**
  * What a slot's `fallback` gets for a handled Layer failure on the server, and on a client that adopts
