@@ -990,6 +990,9 @@ const formatEntry = (entry: MessageLog.Entry): string => {
       return `${head} ${entry.name}${entry.silent ? " (silent)" : ""}${
         entry.waitEnded === undefined ? "" : ` (wait ${entry.waitEnded})`
       }`
+    case "MountEnded":
+      return `${head} ${entry.name} (${entry.reason})${entry.silent ? " (silent)" : ""}`
+    case "MountStarted":
     case "CommandInterrupted":
       return `${head} ${entry.name}`
     case "CommandAwaiting":

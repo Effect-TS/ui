@@ -95,11 +95,9 @@ const saveNote = (note: Note) =>
 Never write a no-op message, such as `Noop` or a tag added only so a result
 has something to send. A Command with nothing to report ends in `Component.noop`,
 usually through `Command.asNoop`. It sends nothing, and the log still records
-its `CommandEnded` with `silent: true`. A component with no messages takes
-`message: Schema.Never`. A mount with nothing to report ends in a
-`Completed*` message instead, such as `CompletedDrawChart`, because a silent
-mount leaves nothing in the `MessageLog`. That rule is temporary, and goes
-once the log records mounts that send nothing.
+its `CommandEnded` with `silent: true`. A mount that returns `Component.noop`
+likewise sends no message and logs `MountEnded` with `silent: true`. A
+component with no messages takes `message: Schema.Never`.
 
 Effect UI differs from Foldkit in three places:
 
@@ -108,7 +106,7 @@ Effect UI differs from Foldkit in three places:
   name for the child.
 - A message listed in `receives` has no prefix of its own. It is named like
   any other message, for the fact it reports.
-- A Command needs no `Completed*` message. `Component.noop` is enough.
+- A Command or mount with nothing to report needs no `Completed*` message. `Component.noop` is enough.
 
 ### Stateless view wrappers
 
@@ -274,8 +272,7 @@ work that ends with one result, or `Mount.makeStream` for work that sends a
 result per event for as long as the element lives. Annotate `node` with the
 node the body needs. A view issues it with its args and maps the result to a
 message: `h.canvas.onMount(DrawChart({ points }).pipe(Mount.map(toMessage)))`.
-End a mount with nothing to report in a `Completed*` message, as Naming
-describes. An element takes one mount. Args with no real Schema, such as a
+If the body has nothing to report, end it with `Effect.as(Component.noop)`. An element takes one mount. Args with no real Schema, such as a
 callback, need `Schema.declare`. Mounts never run on the server or in
 `TestHost`. A `Scene` tracks the mounts in its view:
 `expectMount(DrawChart({ points }))` asserts on the rendered args and

@@ -2904,16 +2904,37 @@ describe("Runtime", () => {
         const root = yield* TestHost.mount(Auto, {})
         yield* TestHost.settle
         assert.strictEqual(root.text(), "field")
+        const start = root.log().find((entry) => entry._tag === "MountStarted")
+        const end = root.log().find((entry) => entry._tag === "MountEnded")
+        assert.isDefined(start)
+        assert.isDefined(end)
         const update = root.log().find((entry) => entry._tag === "Update") as MessageLog.Update
         assert.deepStrictEqual(update.source, {
           _tag: "Mount",
           name: "ReadTag",
+          seq: start.seq,
           args: { token },
           argsSchema: ReadTag.args
         })
         // The Wire encodes the args through the definition's Schema, redacted.
-        const wire = MessageLog.makeEncoder().encode(update) as Extract<MessageLog.Wire, { _tag: "Update" }>
-        assert.deepStrictEqual(wire.source, { _tag: "Mount", name: "ReadTag", args: { token: { "~redacted": true } } })
+        const encoder = MessageLog.makeEncoder()
+        const wire = encoder.encode(update) as Extract<MessageLog.Wire, { _tag: "Update" }>
+        const args = { token: { "~redacted": true } }
+        assert.deepStrictEqual(wire.source, { _tag: "Mount", name: "ReadTag", seq: start.seq, args })
+        assert.deepInclude(encoder.encode(start), { _tag: "MountStarted", path: "/Auto", name: "ReadTag", args })
+        assert.deepInclude(encoder.encode(end), {
+          _tag: "MountEnded",
+          path: "/Auto",
+          name: "ReadTag",
+          started: start.seq,
+          reason: "completed",
+          silent: false
+        })
+        assert.deepStrictEqual(tags(root).filter((tag) => ["MountStarted", "Update", "MountEnded"].includes(tag)), [
+          "MountStarted",
+          "Update",
+          "MountEnded"
+        ])
       }).pipe(
         Effect.provide(Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })),
         provideHost
@@ -2935,25 +2956,38 @@ describe("Runtime", () => {
         const root = yield* TestHost.mount(Auto, {})
         yield* TestHost.settle
         assert.strictEqual(root.text(), "waiting")
+        assert.deepStrictEqual(tags(root).filter((tag) => tag === "MountStarted" || tag === "MountEnded"), [])
       })))
 
-    it.effect("a mount that ends with Component.noop sends nothing and logs no update", () =>
+    it.effect("two elements running the same mount link their own silent and failed ends", () =>
       Effect.gen(function*() {
-        let ran = 0
-        const Focus = Mount.make("Focus", { args: {} }, () =>
-          Effect.sync(() =>
-            void ran++
-          ).pipe(Effect.as(Component.noop)))
-        const Quiet = Component.define({ name: "Quiet", model: Schema.Null, message: Schema.Never, elements: Tiny })
-          .make({
-            init: () => null,
-            update: (model) => model,
-            view: (_, h) => h.box(h.field.onMount(Focus()))
-          })
-        const root = yield* TestHost.mount(Quiet, {})
+        const gate = yield* Deferred.make<void>()
+        const Focus = Mount.make(
+          "Focus",
+          { args: { crash: Schema.Boolean } },
+          (_, { crash }) =>
+            crash ? Effect.andThen(Deferred.await(gate), Effect.die("mount defect")) : Effect.succeed(Component.noop)
+        )
+        const Box = Component.define({ name: "Box", model: Schema.Null, message: Schema.Never, elements: Tiny }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => h.box(h.field.onMount(Focus({ crash: true })), h.field.onMount(Focus({ crash: false })))
+        })
+        const root = yield* TestHost.mount(Box, {})
         yield* TestHost.settle
-        assert.strictEqual(ran, 1)
-        assert.deepStrictEqual(tags(root).filter((tag) => tag === "Update" || tag === "Failed"), [])
+        yield* Deferred.succeed(gate, undefined)
+        yield* Effect.flip(TestHost.settle)
+        const starts = root.log().filter((entry) => entry._tag === "MountStarted")
+        const ends = root.log().filter((entry) => entry._tag === "MountEnded")
+        const failure = root.log().find((entry) => entry._tag === "Failed")
+        assert.lengthOf(starts, 2)
+        assert.lengthOf(ends, 2)
+        assert.deepStrictEqual(starts.map((entry) => entry.args), [{ crash: true }, { crash: false }])
+        assert.deepInclude(ends[0], { started: starts[1].seq, reason: "completed", silent: true })
+        assert.deepInclude(ends[1], { started: starts[0].seq, reason: "failed", silent: false })
+        assert.isDefined(failure)
+        assert.deepInclude(failure, { in: "mount", causedBy: ends[1].seq })
+        assert.notInclude(tags(root), "Update")
       }).pipe(
         Effect.provide(Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })),
         provideHost
@@ -3011,10 +3045,54 @@ describe("Runtime", () => {
         assert.deepStrictEqual(seen, [0, 1, 2])
         assert.deepStrictEqual(runs, [0])
         assert.strictEqual(closed, 0)
-        root.send(Msg.Hide())
+        const hideMessage = Msg.Hide()
+        root.send(hideMessage)
         yield* TestHost.settle
         assert.strictEqual(closed, 1)
         assert.deepStrictEqual(runs, [0])
+        const starts = root.log().filter((entry) => entry._tag === "MountStarted")
+        const ends = root.log().filter((entry) => entry._tag === "MountEnded")
+        const hide = root.log().find((entry) => entry._tag === "Update" && entry.message === hideMessage)
+        assert.lengthOf(starts, 1)
+        assert.lengthOf(ends, 1)
+        assert.isDefined(hide)
+        assert.deepInclude(ends[0], { started: starts[0].seq, reason: "closed", causedBy: hide.seq, silent: false })
+      }).pipe(
+        Effect.provide(Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })),
+        provideHost
+      ))
+
+    it.effect("a mount returning during scope closure logs one closed end caused by removal", () =>
+      Effect.gen(function*() {
+        const finishBody = yield* Deferred.make<void>()
+        const finishClose = yield* Deferred.make<void>()
+        const Hold = Mount.make("Hold", { args: {} }, () =>
+          Effect.gen(function*() {
+            // Register after the interrupt finalizer so this gate holds the close ahead of it.
+            yield* Effect.yieldNow
+            yield* Effect.addFinalizer(() => Deferred.await(finishClose))
+            yield* Deferred.await(finishBody)
+            return Component.noop
+          }))
+        const Box = Component.define({ name: "Box", model: Schema.Boolean, message: Schema.String, elements: Tiny })
+          .make({
+            init: () => true,
+            update: () => false,
+            view: (shown, h) => h.box(shown ? h.field.onMount(Hold()) : null)
+          })
+        const root = yield* TestHost.mount(Box, {})
+        yield* TestHost.settle
+        root.send("hide")
+        yield* TestHost.settle
+        yield* Deferred.succeed(finishBody, undefined)
+        yield* TestHost.settle
+        yield* Deferred.succeed(finishClose, undefined)
+        yield* TestHost.settle
+        const hide = root.log().find((entry) => entry._tag === "Update" && entry.message === "hide")
+        assert.isDefined(hide)
+        const ends = root.log().filter((entry) => entry._tag === "MountEnded")
+        assert.lengthOf(ends, 1)
+        assert.deepInclude(ends[0], { reason: "closed", causedBy: hide.seq, silent: true })
       }).pipe(
         Effect.provide(Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })),
         provideHost
@@ -3190,6 +3268,7 @@ describe("Runtime", () => {
       yield* TestClock.adjust("1 second")
       yield* TestHost.settle
       assert.strictEqual(mounts, 0)
+      assert.deepStrictEqual(tags(root).filter((tag) => tag === "MountStarted" || tag === "MountEnded"), [])
     }).pipe(
       Effect.provide(Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })),
       provideHost

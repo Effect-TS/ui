@@ -1364,10 +1364,9 @@ export class ElementBuilder<
    * such as a widget's events, is defined with `Mount.makeStream`.
    *
    * A body that is an `Effect<void>` doesn't compile here, because a `void`
-   * type can hold any value, which would be sent as a message. For now, end a
-   * mount with nothing to report in a `Completed*` message, because a silent
-   * mount leaves nothing in the `MessageLog`. `Effect.as(Component.noop)`
-   * also compiles, and sends nothing.
+   * type can hold any value, which would be sent as a message. When there is
+   * nothing to report, use `Effect.as(Component.noop)`. This sends no message;
+   * the log records the body's completion as `MountEnded` with `silent: true`.
    *
    * @since 0.1.0
    */
