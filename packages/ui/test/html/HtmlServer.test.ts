@@ -861,6 +861,82 @@ describe("HtmlServer", { concurrent: false }, () => {
         // The browser still fires the focused field's `change` when it loses focus.
         expect(seen).toEqual(["Input name=typed", "Change choice=b", "Change agree=true"])
       }).pipe(Effect.scoped))
+
+    // The client Model picks what the server's HTML didn't, so the adoption writes reach the edited group.
+    const Choice = Component.define({
+      name: "Choice",
+      model: Schema.Struct({ choice: Schema.String, pick: Schema.String }),
+      message: Message,
+      elements: Html
+    })
+    const choiceView = (order: ReadonlyArray<string>, seen: Array<string>) =>
+      Choice.make({
+        init: () => ({ choice: "a", pick: "" }),
+        update: (model, message) => {
+          seen.push(`${message._tag} ${message.field}=${message.value}`)
+          return { ...model, [message.field]: message.value }
+        },
+        view: (model, h) =>
+          h.form(
+            ...order.map((value) =>
+              h.input.attr("type", "radio").attr("name", "choice").attr("aria-label", value)
+                .checked(model.choice === value).onChange(() => Message.Change({ field: "choice", value }))
+            ),
+            h.select.attr("aria-label", "Pick").value(model.pick)
+              .onChange(({ value }) => Message.Change({ field: "pick", value }))
+              .children(h.option.attr("value", "a").children("A"), h.option.attr("value", "b").children("B"))
+          )
+      })
+
+    // Adoption's writes to one button change the others, so whether the group was changed is read first.
+    for (const order of [["c", "a", "b"], ["a", "b", "c"]]) {
+      for (const picked of [undefined, "b"]) {
+        const name = picked === undefined
+          ? "checks the Model's radio in a group the user didn't touch"
+          : "keeps the radio the user picked over the Model's"
+        it.effect(`${name}, in order ${order.join("")}`, () =>
+          Effect.gen(function*() {
+            const seen: Array<string> = []
+            const Form = choiceView(order, seen)
+            const rendered = yield* HtmlServer.renderToHtml(Form, {})
+            const app = yield* container(rendered.html)
+            const radios = ["a", "b", "c"].map((label) => field<HTMLInputElement>(app, label))
+            if (picked !== undefined) field<HTMLInputElement>(app, picked).checked = true
+            const shown = picked ?? "c"
+            const expected = ["a", "b", "c"].map((label) => label === shown)
+
+            const root = yield* BrowserHost.mountEffect(Form, {}, app, {
+              state: { ...rendered.state, "/Choice": { choice: "c", pick: "" } }
+            })
+            // Right after the adoption commits, before any restore.
+            expect(radios.map((radio) => radio.checked)).toEqual(expected)
+            yield* root.adopted
+            yield* tick
+            expect(radios.map((radio) => radio.checked)).toEqual(expected)
+            expect(root.model()).toMatchObject({ choice: shown })
+            expect(seen).toEqual(picked === undefined ? [] : [`Change choice=${picked}`])
+          }).pipe(Effect.scoped))
+      }
+    }
+
+    it.effect("gives an untouched select the Model's value, though the browser picked its first option", () =>
+      Effect.gen(function*() {
+        const seen: Array<string> = []
+        const Form = choiceView(["a"], seen)
+        const rendered = yield* HtmlServer.renderToHtml(Form, {})
+        const app = yield* container(rendered.html)
+        const pick = field<HTMLSelectElement>(app, "Pick")
+        expect(pick.value).toBe("a")
+
+        const root = yield* BrowserHost.mountEffect(Form, {}, app, {
+          state: { ...rendered.state, "/Choice": { choice: "a", pick: "b" } }
+        })
+        yield* root.adopted
+        yield* tick
+        expect(pick.value).toBe("b")
+        expect(root.model()).toMatchObject({ pick: "b" })
+        expect(seen).toEqual([])
+      }).pipe(Effect.scoped))
   })
 
   it.effect("a keyed provide selects its Layer from the Model the client adopts", () =>
