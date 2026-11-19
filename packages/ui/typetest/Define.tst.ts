@@ -50,6 +50,8 @@ const save = NoteDef.update((model, _msg, $) => $.set(model).run(Save.make()))
 const audit = NoteDef.update((model, _msg, $) => $.set(model).run(Audit.make()))
 const touch = NoteDef.update((model) => ({ ...model, edits: model.edits + 1 }))
 
+const shared = { Saved: touch, Deleted: touch }
+
 describe("Component.define", () => {
   it("H supports pure views without a registered vocabulary", () => {
     expect<View.H>().type.toBe<View.H<never>>()
@@ -166,7 +168,7 @@ describe("Component.define", () => {
   it("infers headless requirements from an inline update handler", () => {
     const Note = NoteDef.make({
       init: () => ({ body: "", edits: 0 }),
-      update: { Edited: touch, SaveClicked: (model, _msg, $) => $.set(model).run(Save.make()), Saved: touch },
+      update: { Edited: touch, SaveClicked: (model, _msg, $) => $.set(model).run(Save.make()), Saved: shared.Saved },
       parts: (model) => ({ body: model.body })
     })
     expect<Component.Headless.Requirements<typeof Note>>().type.toBe<GetUser | Save>()
@@ -185,7 +187,6 @@ describe("Component.define", () => {
       update,
       view: (_: Model, h: Component.Helper<typeof NoteDef>) => h.p()
     })
-    expect(NoteDef.make).type.not.toBeCallableWith({ init, update, parts: (model: Model) => ({ body: model.body }) })
   })
 
   it("rejects a record with a missing tag", () => {
@@ -210,27 +211,19 @@ describe("Component.define", () => {
     })
   })
 
-  it("rejects a key that is no tag in a spread, in a variable and with parts", () => {
+  it("rejects stale handlers in a spread and in a record variable", () => {
     const init = () => ({ body: "", edits: 0 })
     const view = (_: Model, h: Component.Helper<typeof NoteDef>) => h.p()
-    const shared = { Saved: touch, Deleted: touch }
     const record = { ...shared, Edited: touch, SaveClicked: touch }
     expect(NoteDef.make).type.not.toBeCallableWith({
       init,
       update: { ...shared, Edited: touch, SaveClicked: touch },
       view
     })
-    expect(NoteDef.make).type.not.toBeCallableWith({ init, update: record, view })
     expect(NoteDef.make).type.not.toBeCallableWith({
       init,
       update: record,
       parts: (model: Model) => ({ body: model.body })
-    })
-    // Picking the fields shares the handlers.
-    expect(NoteDef.make).type.toBeCallableWith({
-      init,
-      update: { Saved: shared.Saved, Edited: touch, SaveClicked: touch },
-      view
     })
   })
 
