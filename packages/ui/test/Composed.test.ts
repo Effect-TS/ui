@@ -286,7 +286,7 @@ describe("Composed", () => {
       assert.deepStrictEqual(encode(replay.model), encode(placed.model))
     }))
 
-  it("drops the result of a Command whose row left, when another row has its key", () => {
+  it("drops the old row's save but accepts its replacement's save at the same key", () => {
     const { Notes } = makeApp("list")
     const s = Story.start(Notes, {}).loaded("notes", [note("n1")])
     s.send(Composed.childMessage("rows", "n1", RowMessage.Typed({ value: "old" })))
@@ -297,6 +297,11 @@ describe("Composed", () => {
     s.resolve(SaveNote, undefined)
     assert.deepStrictEqual(s.model.children.rows.map((row) => row.model), [{ draft: "Note n1" }])
     assert.deepStrictEqual(s.model.own.saved, [])
+
+    s.send(NotesMessage.Retitled({ id: "n1", title: "replacement" }))
+    s.send(Composed.childMessage("rows", "n1", RowMessage.Save()))
+    s.resolve(SaveNote, undefined)
+    assert.deepStrictEqual(s.model.own.saved, ["n1=replacement"])
   })
 
   it.effect("follows a change of props that changes which rows exist", () => {
