@@ -233,6 +233,7 @@ const emptyList: Array<never> = Object.freeze([]) as unknown as Array<never>
  *
  * @internal
  */
+// oxlint-disable-next-line effect/no-unused-internal -- read through the runtime the kernel stands in for
 export const eventOwners = (
   handlers: Readonly<Record<string, unknown>>
 ): Readonly<Record<string, ReadonlyArray<string>>> => {
@@ -819,6 +820,7 @@ export const mount = (
  *
  * @internal
  */
+// oxlint-disable-next-line effect/no-unused-internal -- read through the runtime the kernel stands in for
 export const prerender = (
   component: Component.Any,
   rootProps: unknown,
@@ -2214,37 +2216,37 @@ const setup = (
   // -- instances ------------------------------------------------------------
   /** Runs `update` for a message to `inst`, in a step of its own. */
   const dispatchTo = (inst: Instance, message: unknown, source: MessageLog.Source) =>
-      step(() => {
-        renderAbove(inst)
-        if (inst.closed || inst.waiting || frozen) return
-        const component = inst.component
-        let next: ReturnType<typeof component.update>
-        busy++
-        try {
-          next = component.update(inst.model, message as never, inst.props, inst.results)
-        } catch (error) {
-          // No `Update` is logged for it, so the failure carries the message.
-          return failInstance(inst, Cause.die(error), "update", undefined, { message, source })
-        } finally {
-          busy--
-        }
-        if (next === undefined) return
-        const bound = componentQueries.boundOf(component)
-        const entrySeq = record(inst, {
-          _tag: "Update",
-          source,
-          message,
-          props: inst.props,
-          model: next.model,
-          commands: next.commands,
-          events: next.events,
-          lists: next.lists ?? [],
-          sends: next.sends ?? [],
-          // What `update` saw in `$.queries`, so a replay from any surviving entry sees it too.
-          ...(bound === undefined ? undefined : { queries: inst.results ?? bound.empty })
-        })
-        apply(inst, next, entrySeq, false)
+    step(() => {
+      renderAbove(inst)
+      if (inst.closed || inst.waiting || frozen) return
+      const component = inst.component
+      let next: ReturnType<typeof component.update>
+      busy++
+      try {
+        next = component.update(inst.model, message as never, inst.props, inst.results)
+      } catch (error) {
+        // No `Update` is logged for it, so the failure carries the message.
+        return failInstance(inst, Cause.die(error), "update", undefined, { message, source })
+      } finally {
+        busy--
+      }
+      if (next === undefined) return
+      const bound = componentQueries.boundOf(component)
+      const entrySeq = record(inst, {
+        _tag: "Update",
+        source,
+        message,
+        props: inst.props,
+        model: next.model,
+        commands: next.commands,
+        events: next.events,
+        lists: next.lists ?? [],
+        sends: next.sends ?? [],
+        // What `update` saw in `$.queries`, so a replay from any surviving entry sees it too.
+        ...(bound === undefined ? undefined : { queries: inst.results ?? bound.empty })
       })
+      apply(inst, next, entrySeq, false)
+    })
 
   /** What the host calls for an event on an element `inst` rendered. Made the first time it's asked for. */
   const makeFire = (inst: Instance): Renderer.Dispatch => fireOn.bind(inst)
@@ -2256,15 +2258,14 @@ const setup = (
     payload: unknown,
     onMessage: (() => void) | undefined
   ): void {
-    const inst = this
-    if (inst.closed || inst.waiting) return
+    if (this.closed || this.waiting) return
     const message = typeof handler === "function"
-      ? guard(inst, "domEvent", () => (handler as (payload: unknown) => unknown)(payload), event)
+      ? guard(this, "domEvent", () => (handler as (payload: unknown) => unknown)(payload), event)
       : handler
     if (message === undefined) return
     // Before the message is sent, so the host can still act on its event.
     onMessage?.()
-    inst.dispatch(message, { _tag: "DomEvent", name: event })
+    this.dispatch(message, { _tag: "DomEvent", name: event })
   }
 
   /**
