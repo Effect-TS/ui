@@ -23,7 +23,11 @@
  *
  * Naming the checkbox is the consumer's job: a `<label>` around the root or
  * one pointing at its `id`, an `aria-label` or `aria-labelledby` on the
- * button, or text inside it.
+ * button, or text inside it. A `Field` does it, and adds a description,
+ * an error and the validity state: draw the root on its control,
+ * `s.root(f.control(h.button))`. A disabled field disables the button, but
+ * the checkbox's other parts follow the `disabled` prop, so pass
+ * `disabled: f.disabled` as well.
  *
  * **Data attributes**
  *

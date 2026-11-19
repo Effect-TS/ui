@@ -65,10 +65,17 @@ Decide by what the component does in Base UI, counting what the port
 puts off and not only what it implements. `Checkbox` is headless although
 its Model is empty, because the indicator's transition state and Enter's
 form submission both need an instance. A context that may or may not be
-above the component, such as Field, doesn't count: a reader of shared
-state doesn't compile without its owner above it, so an optional context
-reaches the control through a part on the consumer's builder,
-`s.root(f.control(h.button))`.
+above the component, such as Field, doesn't count: a view function has
+no instance to read shared state with, and one way to reach a control
+has to work for both kinds. So an optional context reaches the control
+through a part on the consumer's builder, `s.root(f.control(h.button))`,
+and the control's source doesn't change. `Field` is the worked example:
+its `control` writes what another kit call on the element also writes,
+such as `disabled`, in `forward`. The part reaches only the element it is
+applied to. What the control's other parts depend on is passed as the
+control's own prop, from the context's parts: `disabled: f.disabled`. To
+undo markup the control added to that element, such as the hidden input,
+keep the helper beside the one that adds it (`internal/field.ts`).
 
 When a view function with `view` needs state, keep its call. Wrap the
 headless component in a function with the same options; the consumer may
@@ -381,8 +388,11 @@ portal. The details are in the JSDoc of `popover` and `modal` in
 - Use Base UI's names, on the parts Base UI puts them on.
 - A data attribute is present with an empty value, or absent:
   `.attr("data-checked", on ? "" : undefined)`.
-- Attributes that come from a Field or Form context wait for those
-  components.
+- Attributes only a Field has, such as `data-invalid` and
+  `data-touched`, reach the control through `f.control`, so the control
+  doesn't set them. One both write, such as `disabled`, is the field's
+  while the field is disabled. Attributes that come from a Form context
+  wait for that component.
 - ARIA follows Base UI's source, not just its docs page. Prefer a native
   attribute (`disabled`) where Base UI's native mode uses one.
 

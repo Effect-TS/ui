@@ -14,7 +14,9 @@
  * It adds no markup.
  *
  * Naming the input is the caller's job: a `<label>` around it or one
- * pointing at its `id`, or an `aria-label`.
+ * pointing at its `id`, or an `aria-label`. A `Field` does it, and
+ * adds a description, an error and the validity state: pass its control
+ * as `element`, `Input(h, { element: f.control(h.input), props })`.
  *
  * **Data attributes**
  *
