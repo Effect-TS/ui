@@ -1,9 +1,21 @@
 // @vitest-environment happy-dom
-import { Command, Component, MessageLog, Mount, Query, type Renderer, Route, Router, UiSchema, View } from "@effect/ui"
+import {
+  Command,
+  Component,
+  Feature,
+  MessageLog,
+  Mount,
+  Query,
+  type Renderer,
+  Route,
+  Router,
+  UiSchema,
+  View
+} from "@effect/ui"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, expect, it } from "@effect/vitest"
-import { Context, Effect, Exit, Layer, Option, Schema, Scope } from "effect"
+import { Context, Deferred, Effect, Exit, Layer, Option, Schema, Scope } from "effect"
 import { describe, vi } from "vitest"
 import { collectGarbage } from "../utils/gc.ts"
 import { Confirm, ConfirmMessage, Nested } from "./fixtures/confirm.ts"
@@ -444,6 +456,107 @@ describe("BrowserHost", { concurrent: false }, () => {
         yield* tick
         expect(app.innerHTML).toBe(html(["f", "g", "h"]))
         expect(kept?.isConnected).toBe(false)
+      }).pipe(Effect.scoped))
+  })
+
+  describe("lazy", () => {
+    const Item = Schema.Struct({ id: Schema.Number, label: Schema.String })
+    const LazyMessage = UiSchema.TaggedEnum({
+      Select: { id: Schema.Number },
+      Rename: { id: Schema.Number, label: Schema.String },
+      Remove: { id: Schema.Number },
+      Tick: {}
+    })
+    const ItemsDef = Component.define({
+      name: "Items",
+      model: Schema.Struct({ items: Schema.Array(Item), selected: Schema.Number, ticks: Schema.Number }),
+      message: LazyMessage,
+      elements: Html
+    })
+    const built: Array<string> = []
+    const row = (h: Component.Helper<typeof ItemsDef>, item: typeof Item.Type, selected: boolean) => {
+      built.push(item.label)
+      return h.li.key(String(item.id)).class(selected && "on").children(item.label)
+    }
+    const Items = ItemsDef.make({
+      init: () => ({
+        items: [{ id: 1, label: "a" }, { id: 2, label: "b" }, { id: 3, label: "c" }],
+        selected: 0,
+        ticks: 0
+      }),
+      update: (model, message) =>
+        LazyMessage.match(message, {
+          Select: ({ id }) => ({ ...model, selected: id }),
+          Rename: ({ id, label }) => ({
+            ...model,
+            items: model.items.map((item) => item.id === id ? { id, label } : item)
+          }),
+          Remove: ({ id }) => ({ ...model, items: model.items.filter((item) => item.id !== id) }),
+          Tick: () => ({ ...model, ticks: model.ticks + 1 })
+        }),
+      view: (model, h) =>
+        h.div(
+          h.p(String(model.ticks)),
+          h.ul(model.items.map((item) => h.lazy(row, item, item.id === model.selected)))
+        )
+    })
+
+    it.effect("builds a row again only when one of its arguments changes, and keeps every row's nodes", () =>
+      Effect.gen(function*() {
+        built.length = 0
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Items, {}, app)
+        const step = Effect.fnUntraced(function*(message: typeof LazyMessage.Type) {
+          built.length = 0
+          root.send(message)
+          yield* tick
+          return [...built]
+        })
+        assert.deepStrictEqual(built, ["a", "b", "c"])
+        const items = () => [...app.querySelectorAll("li")]
+        const [a, b, c] = items()
+        assert.deepStrictEqual(yield* step(LazyMessage.Tick()), [])
+        assert.strictEqual(app.innerHTML, "<div><p>1</p><ul><li>a</li><li>b</li><li>c</li></ul></div>")
+        assert.deepStrictEqual(yield* step(LazyMessage.Select({ id: 2 })), ["b"])
+        assert.deepStrictEqual(yield* step(LazyMessage.Select({ id: 3 })), ["b", "c"])
+        assert.deepStrictEqual(yield* step(LazyMessage.Rename({ id: 1, label: "A" })), ["A"])
+        assert.strictEqual(
+          app.innerHTML,
+          "<div><p>1</p><ul><li>A</li><li>b</li><li class=\"on\">c</li></ul></div>"
+        )
+        assert.deepStrictEqual(yield* step(LazyMessage.Remove({ id: 2 })), [])
+        assert.deepStrictEqual(items(), [a, c])
+        assert.strictEqual(b!.isConnected, false)
+        assert.deepStrictEqual(yield* step(LazyMessage.Tick()), [])
+        assert.strictEqual(app.innerHTML, "<div><p>2</p><ul><li>A</li><li class=\"on\">c</li></ul></div>")
+      }).pipe(Effect.scoped))
+
+    it.effect("patches a node it gives again when the node holds more than elements and text", () =>
+      Effect.gen(function*() {
+        // The frame's argument never changes, but its feature child shows a fallback until the Layer is ready.
+        class Leaf extends Feature.Service<Leaf>()("Leaf", { props: Schema.Struct({}) }) {}
+        const LeafImpl = Component.define({
+          name: "LeafImpl",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        })
+          .make({ init: () => null, update: (m) => m, view: (_, h) => h.p("ready") })
+        const ready = yield* Deferred.make<void>()
+        const FrameDef = Component.define({ name: "Frame", model: Schema.Null, message: Schema.Never, elements: Html })
+        const frame = (h: Component.Helper<typeof FrameDef>, title: string) =>
+          h.section(h.h2(title), Leaf.render(h, { key: "leaf", props: {}, fallback: () => h.p("loading") }))
+        const Frame = Component.provide(
+          FrameDef.make({ init: () => null, update: (m) => m, view: (_, h) => h.lazy(frame, "Title") }),
+          Layer.merge(Leaf.toLayer(LeafImpl), Layer.effectDiscard(Deferred.await(ready)))
+        )
+        const app = yield* container
+        yield* BrowserHost.mountEffect(Frame, {}, app)
+        yield* tick
+        assert.strictEqual(app.innerHTML, "<section><h2>Title</h2><p>loading</p></section>")
+        yield* Deferred.succeed(ready, undefined)
+        yield* tick
+        assert.strictEqual(app.innerHTML, "<section><h2>Title</h2><p>ready</p></section>")
       }).pipe(Effect.scoped))
   })
 

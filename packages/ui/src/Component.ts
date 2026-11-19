@@ -1021,7 +1021,9 @@ export interface Mountable<in out Props, out Events, out R = never, in Rcv = nev
     /** The instance's path, which `h.id` derives ids from. Without it, the root path `/<name>`. */
     path?: string | undefined,
     /** Answers `h.shared`: an owner's current value. Without it, a component that reads shared state throws. */
-    shared?: SharedLookup | undefined
+    shared?: SharedLookup | undefined,
+    /** Where `h.lazy` keeps its nodes between renders. Without it, `h.lazy` builds every time. */
+    lazy?: View.LazyStore | undefined
   ) => View.Node<any, R>
   readonly subscriptions:
     | ((model: any, props: Props, queries?: Results | undefined) => ReadonlyArray<Subscription.Subscription<any, R>>)
@@ -1120,7 +1122,8 @@ export interface Component<
     running?: ((name: string, groupKey: string | undefined) => boolean) | undefined,
     queries?: Results | undefined,
     path?: string | undefined,
-    shared?: SharedLookup | undefined
+    shared?: SharedLookup | undefined,
+    lazy?: View.LazyStore | undefined
   ) => View.Node<Msg, R>
   readonly subscriptions:
     | ((
@@ -2720,13 +2723,15 @@ const finish = (
         running?: View.Running,
         results?: Results,
         path?: string,
-        shared?: SharedLookup
+        shared?: SharedLookup,
+        lazy?: View.LazyStore
       ) => {
         const h: any = View.makeHelper(
           props,
           elements ?? View.registeredElements(),
           running,
-          path ?? ("/" + definition.name)
+          path ?? ("/" + definition.name),
+          lazy
         )
         if (definition.slots.length > 0) h.slots = outlets
         if (bound !== undefined) {
@@ -2736,7 +2741,12 @@ const finish = (
           h.patched = context.patched
         }
         if (reads.length > 0) h.shared = readShared(definition.name, reads, shared)
-        return View.toNode(view(model, h))
+        const lazies = lazy?.lazy as View.Lazies | undefined
+        if (lazies === undefined) return View.toNode(view(model, h))
+        lazies.begin()
+        const node = View.toNode(view(model, h))
+        lazies.end()
+        return node
       },
     parts: parts === undefined
       ? undefined

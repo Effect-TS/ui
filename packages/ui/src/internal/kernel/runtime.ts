@@ -429,6 +429,8 @@ type Settled = AsyncResult.Success<any, any> | AsyncResult.Failure<any, any>
 /** @internal */
 export interface Instance {
   readonly path: string
+  /** What `h.lazy` built in the last render. */
+  lazy: View.Lazies | undefined
   /** Counts the root's instances in creation order: the check after a push skips older ones. */
   readonly born: number
   readonly depth: number
@@ -2429,6 +2431,7 @@ const setup = (
     seen: Instance["seen"] = undefined
     clash: Instance["clash"] = undefined
     deferred: Instance["deferred"] = false
+    lazy: Instance["lazy"] = undefined
   }
 
   /**
@@ -2522,6 +2525,7 @@ const setup = (
     declare seen: Instance["seen"]
     declare clash: Instance["clash"]
     declare deferred: Instance["deferred"]
+    declare lazy: Instance["lazy"]
     /**
      * From the moment its Scope or an ancestor's starts closing, not once it has: see `Instance.closed`.
      */
@@ -4628,7 +4632,7 @@ const setup = (
         () =>
           checked(
             inst,
-            inst.component.view(inst.model, inst.props, runningOf(inst), inst.results, inst.path, sharedOf(inst))
+            inst.component.view(inst.model, inst.props, runningOf(inst), inst.results, inst.path, sharedOf(inst), inst)
           )
       )
     }
@@ -5596,6 +5600,16 @@ const setup = (
     }
   }
 
+  /** Whether a rendered element holds only elements and text. */
+  const plainTree = (rendered: RElement): boolean => {
+    const children = rendered.children
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i]!
+      if (child._tag !== "Text" && (child._tag !== "Element" || !plainTree(child))) return false
+    }
+    return true
+  }
+
   const patchElement = (
     inst: Instance,
     rendered: Extract<Rendered, { readonly _tag: "Element" }>,
@@ -5603,6 +5617,9 @@ const setup = (
     env: Env
   ): void => {
     const prev = rendered.v
+    // The view it was patched to last time, such as what `h.lazy` gave again: with only elements and
+    // text below, nothing would change. A child below may still have to change, such as a fallback.
+    if (element === prev && plainTree(rendered)) return
     const node = rendered.node
     // One record, as when no attribute is set or a builder is reused: nothing changed.
     if (prev.attrs !== element.attrs) patchAttrs(node, prev.attrs, element.attrs)

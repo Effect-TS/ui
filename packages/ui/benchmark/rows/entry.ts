@@ -4,10 +4,12 @@ import { Effect, Exit, Schema, Scope } from "effect"
 import { init, install, update } from "./harness.ts"
 import type { Model as TableModel } from "./harness.ts"
 
-// The keyed table of js-framework-benchmark (krausest), on @effect/ui. Two variants render the same
+// The keyed table of js-framework-benchmark (krausest), on @effect/ui. Three variants render the same
 // DOM (see harness.ts):
 //
 //   plain      every row is plain elements in the table's own view: one component in total.
+//   lazy       plain, with each row behind `h.lazy`: a row whose row and selection are the same isn't
+//              built again or patched.
 //   component  a child component per row (key + props), which skips rendering when its props are equal.
 
 const Row = Schema.Struct({ id: Schema.Number, label: Schema.String })
@@ -23,6 +25,21 @@ const Message = UiSchema.TaggedEnum({
 })
 
 const app = { name: "Table", model: Model, message: Message, elements: Html } as const
+const TableDef = Component.define(app)
+
+const lazyRow = (h: Component.Helper<typeof TableDef>, row: typeof Row.Type, selected: boolean) =>
+  h.tr.key(String(row.id)).class(selected && "danger").children(
+    h.td.class("col-md-1").children(String(row.id)),
+    h.td.class("col-md-4").children(
+      h.a.onClick(Message.Select({ id: row.id })).children(row.label)
+    ),
+    h.td.class("col-md-1").children(
+      h.a.onClick(Message.Remove({ id: row.id })).children(
+        h.span.class("glyphicon", "glyphicon-remove").attr("aria-hidden", "true")
+      )
+    ),
+    h.td.class("col-md-6")
+  )
 
 const RowMessage = UiSchema.TaggedEnum({ Select: {}, Remove: {} })
 const RowView = Component.define({
@@ -53,7 +70,7 @@ const RowView = Component.define({
     )
 })
 
-/** Both variants' table components, starting from `start`'s Model. */
+/** The variants' table components, starting from `start`'s Model. */
 const tables = (start: () => TableModel) => ({
   plain: Component.define(app).make({
     init: start,
@@ -74,6 +91,14 @@ const tables = (start: () => TableModel) => ({
             h.td.class("col-md-6")
           )
         ))
+      )
+  }),
+  lazy: TableDef.make({
+    init: start,
+    update,
+    view: (model, h) =>
+      h.table.class("table").children(
+        h.tbody.children(model.rows.map((row) => h.lazy(lazyRow, row, row.id === model.selected)))
       )
   }),
   component: Component.define(app).make({
@@ -104,7 +129,7 @@ const mount = (component: Table) => async (container: HTMLElement) => {
 }
 
 const empty = tables(init)
-install({ plain: mount(empty.plain), component: mount(empty.component) })
+install({ plain: mount(empty.plain), lazy: mount(empty.lazy), component: mount(empty.component) })
 
 // -- server rendering and hydration ---------------------------------------------------------------
 // The same tables, starting with 1,000 rows. `ssr` renders one on the server (renderToHtml, then
@@ -114,7 +139,7 @@ const full = tables(() => update(init(), { _tag: "Run", count: 1000 }))
 const check = (condition: boolean, message: string) => {
   if (!condition) throw new Error("bench check failed: " + message)
 } // With `profile`, each phase runs in a console profile of its own: `render`, then `hydrate`.
-;(window as any).ssr = async (name: "plain" | "component", profile = false) => {
+;(window as any).ssr = async (name: "plain" | "lazy" | "component", profile = false) => {
   const component = full[name]
   if (profile) console.profile("render")
   let start = performance.now()

@@ -1768,6 +1768,108 @@ export interface Helper<Msg, Props> {
    * the same on the server and the client, and different for every instance.
    */
   id(name: string, key?: string | number | undefined): string
+  /**
+   * The node `fn` builds from `args`, built again only when an argument
+   * changes. `fn` gets this helper first, then `args`.
+   *
+   * **Details**
+   *
+   * The arguments are compared with `===` to the ones of the last render's
+   * call with the same `fn` and first argument. When they're the same, `fn`
+   * isn't called and the last node is used again. The runtime doesn't patch
+   * a node that holds only elements and text when it's used again, so it
+   * doesn't set a controlled property in it again either. `BrowserHost` still
+   * puts one back after an event.
+   *
+   * `fn` must depend only on its arguments: what it reads from the helper,
+   * such as `h.isRunning`, may be out of date. Declare it outside the view,
+   * since a new function each render never matches. The first argument tells
+   * calls apart, so give each call its own, such as the row it shows. A call
+   * whose first argument an earlier call of the same render used is built
+   * every render.
+   *
+   * **Example** (Rows built again only when they change)
+   *
+   * ```ts
+   * import "@effect/ui/html/register"
+   * import type { View } from "@effect/ui"
+   *
+   * type Row = { readonly id: number; readonly label: string }
+   *
+   * const row = (h: View.H<never>, row: Row, selected: boolean) =>
+   *   h.tr.key(String(row.id)).class(selected && "danger").children(row.label)
+   *
+   * const rows = (h: View.H<never>, rows: ReadonlyArray<Row>, selected: number) =>
+   *   h.tbody.children(rows.map((item) => h.lazy(row, item, item.id === selected)))
+   * ```
+   */
+  lazy<H, A extends ReadonlyArray<unknown>, C extends Content<Msg, any>>(
+    this: H,
+    fn: (h: H, ...args: A) => C,
+    ...args: A
+  ): Node<Msg, Requirements<C>>
+}
+
+/**
+ * What `h.lazy` keeps between one instance's renders: for each first
+ * argument, the last call's function, arguments and node.
+ *
+ * @internal
+ */
+export class Lazies {
+  entries = new Map<unknown, LazyEntry>()
+  /** The render the entries were last used in, and how many were. */
+  round = 1
+  used = 0
+  begin(): void {
+    this.round++
+    this.used = 0
+  }
+  /** Drops the entries this render didn't use, such as a removed row's. */
+  end(): void {
+    const entries = this.entries
+    const round = this.round
+    if (this.used === entries.size) return
+    // When most go, the rest move to a new Map: a Map keeps its size after deletes.
+    if (this.used * 4 <= entries.size) {
+      const kept = new Map<unknown, LazyEntry>()
+      for (const [key, entry] of entries) {
+        if (entry.round === round) kept.set(key, entry)
+      }
+      this.entries = kept
+      return
+    }
+    for (const [key, entry] of entries) {
+      if (entry.round !== round) entries.delete(key)
+    }
+  }
+}
+
+interface LazyEntry {
+  fn: Function
+  args: ReadonlyArray<unknown>
+  node: Node<any, any>
+  round: number
+}
+
+/**
+ * Where a host keeps what `h.lazy` built between one instance's renders: an
+ * object it keeps for the instance, with `lazy` `undefined` at first.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface LazyStore {
+  lazy: unknown
+}
+
+const sameArgs = (a: ReadonlyArray<unknown>, b: ReadonlyArray<unknown>): boolean => {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false
+  }
+  return true
 }
 
 /**
@@ -1785,11 +1887,46 @@ class HelperImpl<Msg, Props> implements Helper<Msg, Props> {
   readonly elements: Vocabulary<any> | undefined
   readonly runningFn: Running
   readonly instancePath: string
-  constructor(props: Props, elements: Vocabulary<any> | undefined, running: Running | undefined, path: string) {
+  readonly store: LazyStore | undefined
+  constructor(
+    props: Props,
+    elements: Vocabulary<any> | undefined,
+    running: Running | undefined,
+    path: string,
+    store: LazyStore | undefined
+  ) {
     this.props = props
     this.elements = elements
     this.runningFn = running ?? notRunning
     this.instancePath = path
+    this.store = store
+  }
+  lazy(this: any, fn: (h: any, ...args: Array<any>) => Content<Msg, any>, ...args: Array<any>): any {
+    const store = this.store
+    if (store === undefined) return toNode(fn(this, ...args))
+    const lazies = (store.lazy ??= new Lazies()) as Lazies
+    const key = args.length === 0 ? fn : args[0]
+    const entry = lazies.entries.get(key)
+    const round = lazies.round
+    if (entry !== undefined && entry.fn === fn && sameArgs(entry.args, args)) {
+      if (entry.round !== round) {
+        entry.round = round
+        lazies.used++
+      }
+      return entry.node
+    }
+    const node = toNode(fn(this, ...args))
+    // A key an earlier call of this render took stays theirs.
+    if (entry !== undefined && entry.round === round) return node
+    if (entry === undefined) lazies.entries.set(key, { fn, args, node, round })
+    else {
+      entry.fn = fn
+      entry.args = args
+      entry.node = node
+      entry.round = round
+    }
+    lazies.used++
+    return node
   }
   isRunning(command: Command.Definition.Any, group?: unknown): boolean {
     return this.runningFn(Command.nameOf(command), Command.groupKeyOf(command, group))
@@ -1856,9 +1993,10 @@ export const makeHelper = <Msg, Props, V extends Elements = never>(
   props: Props,
   elements: Vocabulary<V> | undefined,
   running?: Running | undefined,
-  path?: string | undefined
+  path?: string | undefined,
+  store?: LazyStore | undefined
 ): Helper<Msg, Props> & Tags<V, Msg> => {
-  if (elements === undefined) return new HelperImpl(props, undefined, running, path ?? "") as any
+  if (elements === undefined) return new HelperImpl(props, undefined, running, path ?? "", store) as any
   let Class = helperClasses.get(elements)
   if (Class === undefined) {
     const Made = class extends HelperImpl<any, any> {}
@@ -1866,7 +2004,7 @@ export const makeHelper = <Msg, Props, V extends Elements = never>(
     helperClasses.set(elements, Made)
     Class = Made
   }
-  return new Class(props, elements, running, path ?? "") as any
+  return new Class(props, elements, running, path ?? "", store) as any
 }
 
 /**

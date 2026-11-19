@@ -12,10 +12,10 @@
 // production) straight from packages/ui/src, so it measures the working tree. The bundle goes to
 // scratchpad/rows.bundle.js; delete it when done.
 //
-// Variants, rendering the same table (see harness.ts): @effect/ui's `plain` (one component) and
-// `component` (a child component per row), and React's `react-plain`, `react-component` (a row
+// Variants, rendering the same table (see harness.ts): @effect/ui's `plain` (one component), `lazy`
+// (`plain` with each row behind `h.lazy`) and `component` (a child component per row), and React's `react-plain`, `react-component` (a row
 // component, unmemoized) and `react-memo` (a row component under React.memo); see react.mjs. The
-// default is @effect/ui's two. React variants run from scratchpad/rows-react.bundle.js, built the same
+// default is @effect/ui's `plain` and `component`. React variants run from scratchpad/rows-react.bundle.js, built the same
 // way from react.mjs with the React in @effect/ui's dev dependencies (the run
 // prints its version), so a page loads one framework only.
 //
