@@ -3148,6 +3148,9 @@ const setup = (
       const nodes = inst.rendered.flatMap(nodesOf)
       inst.rendered = []
       range.claimed = false
+      // Where its nodes go. Read before it renders: adopting removes the markers.
+      const parentNode = host.parentOf(range.open)
+      const after = host.nextOf(range.close)
       // The placement its parent rendered while it waited: it adopts with the one it was placed with, the
       // server's, and its subtree's head is recorded from that. The latest comes after. Built fresh, it
       // starts from the latest.
@@ -3158,16 +3161,12 @@ const setup = (
         setPlacement(inst, held)
       }
       begin(inst, range, adopt ? fromServer : Option.none(), undefined, collectedOnServer, layer)
+      // Rebuilt: the server's nodes go. Adopted, the ones it kept are in place, and what it built fresh for
+      // the rest isn't in the document yet. Nothing above it renders now, so it places its own nodes.
+      if (!range.claimed) { for (const node of nodes) host.remove(node) }
+      if (inst.failure === undefined && parentNode !== undefined) place(parentNode, inst.rendered, after)
       if (adopt) recordAdopted(inst)
       if (held !== undefined && adopt && !inst.closed && inst.failure === undefined) applyPlacement(inst, held)
-      if (!range.claimed) {
-        // Rebuilt: the new nodes take the server's place.
-        const parentNode = host.parentOf(range.open)
-        if (inst.failure === undefined && parentNode !== undefined) {
-          for (const node of inst.rendered.flatMap(nodesOf)) host.insertBefore(parentNode, node, range.open)
-        }
-        for (const node of nodes) host.remove(node)
-      }
       viewChanged = true
       settleWaiting()
     }

@@ -7,7 +7,7 @@ import {
   MessageLog,
   Mount,
   Query,
-  type Renderer,
+  Renderer,
   Router,
   Subscription,
   UiSchema
@@ -1069,6 +1069,78 @@ describe("HtmlServer", { concurrent: false }, () => {
         assert.strictEqual(items[0], server.items[0])
         assert.strictEqual(items[1], server.items[1])
         yield* startedOnce
+      }).pipe(Effect.scoped))
+  }
+
+  for (
+    const [what, tamper] of [
+      // A stray element before the second button, in the slot's content, and one after the slot, in the child's.
+      [
+        "part of its view",
+        (html: string) => html.replace("<button>go</button>", "<hr>$&").replace("<!--]/Page/Card[c]-->", "<hr>$&")
+      ],
+      // A stray element where the child's view starts.
+      ["all of its view", (html: string) => html.replace("<!--[/Page/Card[c]/[body]-->", "<hr>$&")]
+    ] as const
+  ) {
+    it.effect(`places what a child that waited for its Layer builds fresh, ${what}, where the server's nodes were`, () =>
+      Effect.gen(function*() {
+        class Store extends Context.Service<Store, string>()("test/Store") {}
+        const Go = Html.ref("Go", "button")
+        const mounted: Array<Element> = []
+        const looked: Array<Option.Option<Element>> = []
+        const Message = UiSchema.TaggedEnum({ Look: {}, Done: {} })
+        const Seen = Mount.make("Seen", { args: {} }, (element: Element) =>
+          Effect.sync(() => {
+            mounted.push(element)
+            return Message.Done()
+          }))
+        const Look = Command.make("Look", { args: {} }, () =>
+          Effect.gen(function*() {
+            const refs = yield* Renderer.Refs
+            looked.push(yield* refs.lookup(Go))
+            return Message.Done()
+          }))
+        const Card = Component.define({
+          name: "Card",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html,
+          slots: ["body"]
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => h.slots.body
+        }).pipe(Component.provide(Layer.effect(Store, Effect.as(Effect.sleep("50 millis"), "ready"))))
+        const Page = Component.define({ name: "Page", model: Schema.Null, message: Message, elements: Html }).make({
+          init: () => null,
+          update: (model, message, $) => message._tag === "Look" ? $.set(model).run(Look()) : model,
+          view: (_, h) =>
+            h.main(
+              h.i("before"),
+              Card(h, {
+                key: "c",
+                slots: { body: [h.button("first"), h.button.ref(Go).onMount(Seen()).children("go")] }
+              }),
+              h.b("after")
+            )
+        })
+        const fiber = yield* Effect.forkChild(HtmlServer.renderToHtml(Page, {}))
+        yield* TestClock.adjust("50 millis")
+        const rendered = yield* Fiber.join(fiber)
+        const html = tamper(rendered.html)
+        assert.include(html, "<hr>")
+        const app = yield* container(html)
+        const root = yield* BrowserHost.mountEffect(Page, {}, app, { state: rendered.state })
+        yield* TestClock.adjust("50 millis")
+        yield* root.adopted
+        yield* tick
+        root.send(Message.Look())
+        yield* tick
+        const main = app.querySelector("main")!
+        assert.deepStrictEqual([...main.childNodes].map((node) => node.textContent), ["before", "first", "go", "after"])
+        assert.deepStrictEqual(mounted, [main.childNodes[2]])
+        assert.deepStrictEqual(looked, [Option.some(main.childNodes[2])])
       }).pipe(Effect.scoped))
   }
 
