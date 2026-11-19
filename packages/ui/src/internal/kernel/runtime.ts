@@ -865,6 +865,8 @@ export const prerender = (
     readonly budget: Duration.Input
     readonly elements: ReadonlyArray<string> | "any"
     readonly static?: boolean | undefined
+    /** Where the frozen tree is written, for a caller that writes it itself. The render then builds no `nodes`. */
+    readonly sink?: services.ServerSink | undefined
     /** Called once the tree is frozen, before the cache is serialised and its fetches are interrupted. */
     readonly onFinish?: ((cache: ReturnType<typeof Query.internals>) => void) | undefined
   }
@@ -894,8 +896,9 @@ export const prerender = (
         const cache = root.freeze()
         if (cache !== undefined) options.onFinish?.(cache)
         // In the same synchronous step as the freeze: see `serializeTree`.
-        const out = serializeTree(root.instance, cache, ctx, options.static === true)
-        return { nodes: out.nodes, state: out.state, model: root.model(), head: root.head() }
+        const nodes: Array<Renderer.ServerNode> = []
+        const state = serializeTree(root.instance, cache, ctx, options.static === true, options.sink ?? nodeSink(nodes))
+        return { nodes, state, model: root.model(), head: root.head() }
       }),
       (scope, exit) => Scope.close(scope, exit)
     ))
@@ -934,16 +937,49 @@ const warnRedacted = (inst: Instance, ctx: Context.Context<any>) => {
   )
 }
 
+/** The sink that builds `Prerendered.nodes`, for a caller that gave none of its own. */
+const nodeSink = (nodes: Array<Renderer.ServerNode>): services.ServerSink => {
+  let children = nodes
+  const parents: Array<Array<Renderer.ServerNode>> = []
+  const into = (next: Array<Renderer.ServerNode>) => {
+    parents.push(children)
+    children = next
+  }
+  const out = () => {
+    children = parents.pop()!
+  }
+  return {
+    text: (text) => children.push({ _tag: "Text", text }),
+    open(tag, attrs, props) {
+      const inner: Array<Renderer.ServerNode> = []
+      children.push({ _tag: "Element", tag, attrs, props, children: inner })
+      into(inner)
+    },
+    close: out,
+    enter(path) {
+      const inner: Array<Renderer.ServerNode> = []
+      children.push({ _tag: "Range", path, children: inner })
+      into(inner)
+    },
+    leave: out
+  }
+}
+
+const noSink: services.ServerSink = { text() {}, open() {}, close() {}, enter() {}, leave() {} }
+
 /**
- * Serialises a frozen tree once, in document order, with the state the client adopts. It is outside
- * `setup`, and only `prerender` calls it, so a bundle that never renders on a server leaves it out.
+ * Writes a frozen tree to `to` once, in document order, and returns the state the client adopts. It is
+ * outside `setup`, and only `prerender` calls it, so a bundle that never renders on a server leaves
+ * it out.
  */
 const serializeTree = (
   root: Instance,
   cache: queryCore.Cache | undefined,
   ctx: Context.Context<any>,
-  isStatic: boolean
-) => {
+  isStatic: boolean,
+  to: services.ServerSink
+): Renderer.State => {
+  let sink = to
   // In the same synchronous step as the Models: fetches in flight are interrupted, and their entries
   // revert to cold and aren't shipped. Nothing is dispatched for them.
   const query = cache === undefined ? {} : cache.dehydrate()
@@ -956,7 +992,7 @@ const serializeTree = (
     if (status._tag === "Pending" || status._tag === "Failed") statuses[path] = status._tag
   }
   // `under`: inside a deferred instance, whose subtree the client builds fresh.
-  const instance = (inst: Instance, under: boolean): Renderer.ServerNode => {
+  const instance = (inst: Instance, under: boolean) => {
     let inner = under
     if (!under) {
       const codec = stateCodecOf(inst.component)
@@ -985,32 +1021,33 @@ const serializeTree = (
         if (inst.component.layer !== undefined) ship(inst.path, inst.env.status)
       }
     }
-    return {
-      _tag: "Range",
-      path: inst.path,
-      children: inst.failure !== undefined ? [] : inst.rendered.map((rendered) => serialize(inst, rendered, inner))
+    sink.enter(inst.path)
+    if (inst.failure === undefined) {
+      for (const rendered of inst.rendered) serialize(inst, rendered, inner)
     }
+    sink.leave(inst.path)
   }
-  const serialize = (inst: Instance, rendered: Rendered, under: boolean): Renderer.ServerNode => {
+  const serialize = (inst: Instance, rendered: Rendered, under: boolean): void => {
     switch (rendered._tag) {
       case "Text":
-        return { _tag: "Text", text: rendered.v.text }
-      case "Element":
-        return {
-          _tag: "Element",
-          tag: rendered.v.tag,
-          attrs: rendered.v.attrs,
-          props: rendered.v.props,
-          children: listOf(rendered.children).map((child) => serialize(inst, child, under))
-        }
+        return sink.text(rendered.v.text)
+      case "Element": {
+        const view = rendered.v
+        sink.open(view.tag, view.attrs, view.props)
+        const children = rendered.children
+        if (Array.isArray(children)) {
+          for (const child of children) serialize(inst, child, under)
+        } else if (children !== undefined) serialize(inst, children, under)
+        return sink.close(view.tag)
+      }
       case "Child":
         return instance(rendered.inst, under)
-      case "Outlet":
-        return {
-          _tag: "Range",
-          path: rendered.inst.path,
-          children: rendered.inst.rendered.map((child) => serialize(rendered.inst, child, under))
-        }
+      case "Outlet": {
+        const outlet = rendered.inst
+        sink.enter(outlet.path)
+        for (const child of outlet.rendered) serialize(outlet, child, under)
+        return sink.leave(outlet.path)
+      }
       case "Fallback": {
         // A failed child: the client builds it fresh. A feature whose Layer isn't ready: the client
         // adopts the fallback while its status is the one shipped.
@@ -1019,27 +1056,31 @@ const serializeTree = (
           if (rendered.failedChild) deferredPaths.push(path)
           else ship(path, rendered.status)
         }
-        return { _tag: "Range", path, children: [serialize(inst, rendered.inner, true)] }
+        sink.enter(path)
+        serialize(inst, rendered.inner, true)
+        return sink.leave(path)
       }
       case "Detached": {
         // Out of the document, so no nodes: the state of its subtree is still sent, and the client builds
         // its nodes from that state, detached.
+        const path = `${inst.path}/${segment(rendered.v)}`
+        const shown = sink
+        sink = noSink
         serialize(inst, rendered.inner, under)
-        return { _tag: "Range", path: `${inst.path}/${segment(rendered.v)}`, children: [] }
+        sink = shown
+        sink.enter(path)
+        return sink.leave(path)
       }
     }
   }
-  const nodes = [instance(root, false)]
+  instance(root, false)
   return {
-    nodes,
-    state: {
-      ...state,
-      "~deferred": deferredPaths,
-      ...(Object.keys(statuses).length > 0 ? { "~status": statuses } : {}),
-      "~query": query,
-      ...(Object.keys(collected).length > 0 ? { "~reported": collected } : {}),
-      ...(isStatic ? { "~static": true } : {})
-    }
+    ...state,
+    "~deferred": deferredPaths,
+    ...(Object.keys(statuses).length > 0 ? { "~status": statuses } : {}),
+    "~query": query,
+    ...(Object.keys(collected).length > 0 ? { "~reported": collected } : {}),
+    ...(isStatic ? { "~static": true } : {})
   }
 }
 

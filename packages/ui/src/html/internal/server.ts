@@ -2,6 +2,7 @@
  * Server HTML: the tree, the head tags and the `<html>` / `<body>` attributes
  * as escaped strings.
  */
+import type { ServerSink } from "../../internal/services.ts"
 import type * as Renderer from "../../Renderer.ts"
 import * as Head from "../HtmlHead.ts"
 import * as elements from "./elements.ts"
@@ -69,28 +70,26 @@ const escapeAttribute = (value: string): string =>
     )
     : value
 
-type ServerNode = Renderer.ServerNode
-type ServerElement = Extract<ServerNode, { readonly _tag: "Element" }>
-
-const textOf = (nodes: ReadonlyArray<ServerNode>): string =>
-  nodes.map((node) => node._tag === "Text" ? node.text : textOf(node.children)).join("")
-
 /**
  * An element's attributes, with its controlled properties written as the
  * attributes that give the same initial state. Other properties are set when
  * the client adopts the element.
  */
-const elementAttributes = (node: ServerElement, selectValue: string | undefined): Map<string, string> => {
+const elementAttributes = (
+  tag: string,
+  attrs: Readonly<Record<string, string>>,
+  props: Readonly<Record<string, unknown>>
+): Map<string, string> => {
   const out = new Map<string, string>()
-  const svg = elements.svgTags.has(node.tag)
-  for (const [name, value] of Object.entries(node.attrs)) {
+  const svg = elements.svgTags.has(tag)
+  for (const [name, value] of Object.entries(attrs)) {
     const normalized = elements.attributeName(name, svg)
     if (normalized !== undefined) out.set(normalized, value)
   }
-  for (const [name, value] of Object.entries(node.props)) {
+  for (const [name, value] of Object.entries(props)) {
     switch (name) {
       case "value":
-        if (node.tag !== "textarea" && node.tag !== "select" && value !== undefined) out.set("value", String(value))
+        if (tag !== "textarea" && tag !== "select" && value !== undefined) out.set("value", String(value))
         break
       case "checked":
       case "selected":
@@ -101,9 +100,13 @@ const elementAttributes = (node: ServerElement, selectValue: string | undefined)
         break
     }
   }
-  if (node.tag === "option" && selectValue !== undefined && !Object.hasOwn(node.props, "selected")) {
-    const value = out.get("value") ?? textOf(node.children)
-    if (value === selectValue) out.set("selected", "")
+  return out
+}
+
+const written = (attributes: Map<string, string>): string => {
+  let out = ""
+  for (const [name, value] of attributes) {
+    out += value === "" ? ` ${name}` : ` ${name}="${escapeAttribute(value)}"`
   }
   return out
 }
@@ -113,23 +116,23 @@ const elementAttributes = (node: ServerElement, selectValue: string | undefined)
  * value. Raw text that could end the element early is left out; the client
  * builds the children anyway.
  */
-const textContent = (node: ServerElement, value: unknown): string => {
-  const text = node.children.length === 0 && node.tag === "textarea" && value !== undefined
-    ? String(value)
-    : textOf(node.children)
-  if (escapedTextTags.has(node.tag)) return escapeText(text)
-  return new RegExp(`</${node.tag}|<!--`, "i").test(text) ? "" : text
+const textContent = (tag: string, text: string): string => {
+  if (escapedTextTags.has(tag)) return escapeText(text)
+  return new RegExp(`</${tag}|<!--`, "i").test(text) ? "" : text
 }
 
 /**
  * An element's attributes as HTML, for one with no property and no alias among its attribute names, as
  * most are. `undefined` for any other: `elementAttributes` writes those.
  */
-const plainAttributes = (node: ServerElement): string | undefined => {
-  for (const _ in node.props) return undefined
-  if (node.tag === "option") return undefined
-  const svg = elements.svgTags.has(node.tag)
-  const attrs = node.attrs
+const plainAttributes = (
+  tag: string,
+  attrs: Readonly<Record<string, string>>,
+  props: Readonly<Record<string, unknown>>
+): string | undefined => {
+  for (const _ in props) return undefined
+  if (tag === "option") return undefined
+  const svg = elements.svgTags.has(tag)
   let out = ""
   for (const name in attrs) {
     const normalized = elements.attributeName(name, svg)
@@ -140,8 +143,133 @@ const plainAttributes = (node: ServerElement): string | undefined => {
   return out
 }
 
-/** @internal */
-export const toHtml = (nodes: ReadonlyArray<ServerNode>, selectValue?: string): string => {
+/**
+ * An open element whose end needs more than its closing tag. Most elements
+ * have none.
+ */
+interface Frame {
+  readonly parent: Frame | undefined
+  readonly depth: number
+  /** What was written before the element's content, which `out` holds until its end. */
+  readonly before: string
+  /** The enclosing element's text so far, when this one gathers its own. */
+  readonly text: string | undefined
+  readonly gathers: boolean
+  readonly selectValue: string | undefined
+  readonly kind: "void" | "text" | undefined
+  readonly value: unknown
+  /** An option whose value is its text: its attributes, written once the text is known. */
+  readonly option: Map<string, string> | undefined
+}
+
+/** The tags whose element needs a `Frame` wherever it is. Built for the first writer, so a client leaves it out. */
+let framedTags: ReadonlySet<string> | undefined
+
+/**
+ * Writes a server tree as HTML as it is walked, for a runtime that has no nodes to give `toHtml`.
+ *
+ * @internal
+ */
+export const makeWriter = (): ServerSink & { readonly html: () => string } => {
+  const framed = framedTags ??= new Set([...voidTags, ...textOnlyTags, ...newlineTags, "select"])
+  let out = ""
+  let depth = 0
+  let frame: Frame | undefined
+  /** The text under the nearest element that needs it: a text-only one, or an option without a value. */
+  let text: string | undefined
+  /** Whether the innermost open element has a `Frame` and no children yet. */
+  let bare = false
+  /** The value of the select the options being written belong to. */
+  let selectValue: string | undefined
+  return {
+    html: () => out,
+    text(value) {
+      bare = false
+      out += escapeText(value)
+      if (text !== undefined) text += value
+    },
+    enter(path) {
+      bare = false
+      out += markers.open(path)
+    },
+    leave(path) {
+      out += markers.close(path)
+    },
+    open(tag, attrs, props) {
+      depth++
+      bare = false
+      const plain = plainAttributes(tag, attrs, props)
+      // Most elements: outside a select, and closed by their closing tag.
+      if (selectValue === undefined && !framed.has(tag)) {
+        out += `<${tag}${plain ?? written(elementAttributes(tag, attrs, props))}>`
+        return
+      }
+      out += `<${tag}`
+      let option: Map<string, string> | undefined
+      if (plain !== undefined) out += `${plain}>`
+      else {
+        const attributes = elementAttributes(tag, attrs, props)
+        if (tag === "option" && selectValue !== undefined && !Object.hasOwn(props, "selected")) {
+          const value = attributes.get("value")
+          if (value === undefined) option = attributes
+          else if (value === selectValue) attributes.set("selected", "")
+        }
+        if (option === undefined) out += `${written(attributes)}>`
+      }
+      const kind = voidTags.has(tag) ? "void" : textOnlyTags.has(tag) ? "text" : undefined
+      const value = props.value
+      const inside = tag === "select" && value !== undefined
+        ? String(value)
+        : tag === "option" || tag === "optgroup"
+        ? selectValue
+        : undefined
+      if (kind === undefined && option === undefined && inside === selectValue && !newlineTags.has(tag)) return
+      const gathers = kind === "text" || option !== undefined
+      frame = { parent: frame, depth, before: out, text, gathers, selectValue, kind, value, option }
+      out = ""
+      bare = true
+      if (gathers) text = ""
+      selectValue = inside
+    },
+    close(tag) {
+      const open = frame
+      if (open === undefined || open.depth !== depth) {
+        depth--
+        out += `</${tag}>`
+        return
+      }
+      depth--
+      if (open.kind === "void") out = open.before
+      else {
+        let before = open.before
+        if (open.option !== undefined) {
+          if (text === open.selectValue) open.option.set("selected", "")
+          before += `${written(open.option)}>`
+        }
+        let inner = open.kind === "text"
+          ? textContent(tag, bare && tag === "textarea" && open.value !== undefined ? String(open.value) : text!)
+          : out
+        if (newlineTags.has(tag) && inner.startsWith("\n")) inner = `\n${inner}`
+        out = `${before}${inner}</${tag}>`
+      }
+      frame = open.parent
+      if (open.gathers) text = open.text === undefined ? undefined : open.text + text
+      selectValue = open.selectValue
+      bare = false
+    }
+  }
+}
+
+const textOf = (nodes: ReadonlyArray<Renderer.ServerNode>): string =>
+  nodes.map((node) => node._tag === "Text" ? node.text : textOf(node.children)).join("")
+
+/**
+ * The HTML of a server tree: what a writer gives for the same tree, for a
+ * caller that has the nodes.
+ *
+ * @internal
+ */
+export const toHtml = (nodes: ReadonlyArray<Renderer.ServerNode>, selectValue?: string): string => {
   let out = ""
   for (const node of nodes) {
     switch (node._tag) {
@@ -152,29 +280,38 @@ export const toHtml = (nodes: ReadonlyArray<ServerNode>, selectValue?: string): 
         out += markers.open(node.path) + toHtml(node.children, selectValue) + markers.close(node.path)
         break
       case "Element": {
-        out += `<${node.tag}`
-        const plain = plainAttributes(node)
+        const tag = node.tag
+        out += `<${tag}`
+        const plain = plainAttributes(tag, node.attrs, node.props)
         if (plain !== undefined) out += plain
         else {
-          for (const [name, value] of elementAttributes(node, selectValue)) {
-            out += value === "" ? ` ${name}` : ` ${name}="${escapeAttribute(value)}"`
-          }
+          const attributes = elementAttributes(tag, node.attrs, node.props)
+          if (
+            tag === "option" && selectValue !== undefined && !Object.hasOwn(node.props, "selected") &&
+            (attributes.get("value") ?? textOf(node.children)) === selectValue
+          ) attributes.set("selected", "")
+          out += written(attributes)
         }
         out += ">"
-        if (voidTags.has(node.tag)) break
+        if (voidTags.has(tag)) break
         const value = node.props.value
-        let inner = textOnlyTags.has(node.tag)
-          ? textContent(node, value)
+        let inner = textOnlyTags.has(tag)
+          ? textContent(
+            tag,
+            node.children.length === 0 && tag === "textarea" && value !== undefined
+              ? String(value)
+              : textOf(node.children)
+          )
           : toHtml(
             node.children,
-            node.tag === "select" && value !== undefined
+            tag === "select" && value !== undefined
               ? String(value)
-              : node.tag === "option" || node.tag === "optgroup"
+              : tag === "option" || tag === "optgroup"
               ? selectValue
               : undefined
           )
-        if (newlineTags.has(node.tag) && inner.startsWith("\n")) inner = `\n${inner}`
-        out += `${inner}</${node.tag}>`
+        if (newlineTags.has(tag) && inner.startsWith("\n")) inner = `\n${inner}`
+        out += `${inner}</${tag}>`
         break
       }
     }

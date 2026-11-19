@@ -138,6 +138,25 @@ export interface Page {
 /** @internal */
 export const RootHooks = Context.Service<RootHooks, RootHooks>("@effect/ui/internal/RootHooks")
 
+/**
+ * What a server render writes its frozen tree to, in document order: an
+ * element's content between its `open` and `close`, and an instance's, or a
+ * child's `fallback`, between `enter` and `leave` of its path.
+ *
+ * @internal
+ */
+export interface ServerSink {
+  readonly text: (text: string) => void
+  readonly open: (
+    tag: string,
+    attrs: Readonly<Record<string, string>>,
+    props: Readonly<Record<string, unknown>>
+  ) => void
+  readonly close: (tag: string) => void
+  readonly enter: (path: string) => void
+  readonly leave: (path: string) => void
+}
+
 /** @internal */
 export const CurrentRoot = Context.Reference<() => RootHandle | undefined>("@effect/ui/internal/CurrentRoot", {
   defaultValue: () => () => undefined
