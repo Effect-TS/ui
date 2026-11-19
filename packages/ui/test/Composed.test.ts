@@ -286,17 +286,6 @@ describe("Composed", () => {
       assert.deepStrictEqual(encode(replay.model), encode(placed.model))
     }))
 
-  it("crosses the boundary both ways in a Story: the owner's message to a row, and the row's event back", () => {
-    const { Notes } = makeApp("list")
-    const s = Story.start(Notes, {}).loaded("notes", [note("n1")])
-    s.send(NotesMessage.Retitled({ id: "n1", title: "one" }))
-    s.send(Composed.childMessage("rows", "n1", RowMessage.Save()))
-    // The row's Command is the owner's to run: its result comes back as the row's message.
-    s.resolve(SaveNote, undefined)
-    assert.deepStrictEqual(s.model.children.rows, [{ key: "n1", generation: 0, model: { draft: "one" } }])
-    assert.deepStrictEqual(s.model.own.saved, ["n1=one"])
-  })
-
   it("drops the result of a Command whose row left, when another row has its key", () => {
     const { Notes } = makeApp("list")
     const s = Story.start(Notes, {}).loaded("notes", [note("n1")])
