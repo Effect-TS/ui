@@ -1,5 +1,5 @@
 import { Component, UiSchema } from "@effect/ui"
-import { Dialog, DialogTrigger } from "@effect/ui-kit"
+import { Dialog, DialogTrigger, type DialogTriggerPress } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 import { describe, expect, it } from "tstyche"
@@ -68,6 +68,10 @@ describe("Dialog", () => {
           },
           view: (s) => {
             expect(Dialog).type.not.toBeCallableWith(h, { props: {}, view: () => s.trigger(h.button) })
+            expect(Dialog).type.not.toBeCallableWith(h, {
+              props: { open: true, openMethod: "stylus" },
+              view: () => s.trigger(h.button)
+            })
             return s.trigger(h.button)
           }
         })
@@ -107,6 +111,33 @@ describe("DialogTrigger", () => {
         expect(DialogTrigger).type.not.toBeCallableWith(h, { props: { open: false }, onPress: "other" })
         expect(DialogTrigger).type.not.toBeCallableWith(h, { element: h.div, props: { open: false } })
         return DialogTrigger(h, { props: { open: false } })
+      }
+    })
+  })
+
+  it("onPress may be a function of the press, and popupId pairs it with a dialog's id", () => {
+    App.make({
+      init: () => null,
+      update: (model) => model,
+      view: (_, h) => {
+        const trigger = DialogTrigger(h, {
+          props: { open: true, popupId: "settings" },
+          onPress: (press) => {
+            expect(press).type.toBe<DialogTriggerPress>()
+            expect(press.method).type.toBe<"mouse" | "touch" | "pen" | "keyboard">()
+            expect(press.triggerId).type.toBe<string | null>()
+            return Msg.Clicked()
+          }
+        })
+        expect(DialogTrigger).type.not.toBeCallableWith(h, { props: { open: false }, onPress: () => "other" })
+        expect(DialogTrigger).type.not.toBeCallableWith(h, { props: { open: false, popupId: 1 } })
+        return h.div(
+          trigger,
+          Dialog(h, {
+            props: { open: true, id: "settings", openMethod: "touch", holdExit: false },
+            view: (s) => s.portal(h.dialog) ?? h.div
+          })
+        )
       }
     })
   })

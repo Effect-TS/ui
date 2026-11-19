@@ -57,7 +57,10 @@
  * frame after the dialog opens and `data-ending-style` while it closes, so a
  * transition can start from and end in a hidden style. The dialog stays in the
  * top layer until the transitions and animations in it finish, then closes and
- * emits `Settled`.
+ * emits `Settled`. One that loops, such as a spinner's, doesn't count. For an
+ * exit the kit can't see, such as one run by an animation library, set
+ * `holdExit` while it runs: the dialog stays in its ending state until it is
+ * cleared.
  *
  * **Keyboard**
  *
@@ -65,8 +68,9 @@
  * press them. Escape asks the topmost open dialog to close, wherever focus is.
  * When the dialog opens, focus moves to the `initialFocus` element, or else
  * to the first element in the popup that Tab reaches, or else to the popup.
- * Opened by touch, it focuses the popup, so a field doesn't open the on-screen
- * keyboard. When the dialog closes with focus inside it, focus moves to the
+ * Opened by touch, it focuses the popup instead of the first field, so the
+ * on-screen keyboard doesn't open, but still focuses an `initialFocus` element.
+ * When the dialog closes with focus inside it, focus moves to the
  * `finalFocus` element, or else to the trigger that opened it. Tab stays
  * inside a modal dialog, and inside one with `modal: "trap-focus"`.
  *
@@ -97,6 +101,16 @@
  * above it by itself: the outer popup gets `data-nested-dialog-open` and
  * `--nested-dialogs`, the inner one `data-nested`, and only the inner one hears
  * Escape and outside presses. Two dialogs under one parent each take a `key`.
+ * Of two dialogs open side by side, the one opened later is on top, as in the
+ * browser's top layer, and only it hears Escape and outside presses.
+ *
+ * **Triggers drawn elsewhere**
+ *
+ * A `DialogTrigger` opens a dialog from another part of the page. Give the
+ * dialog an `id` and the trigger the same `popupId`: the dialog then counts a
+ * press on the trigger as the trigger's, not a press outside, and gives focus
+ * back to it when it closes. Store the press's method and pass it as the
+ * dialog's `openMethod`, so an open by touch is treated as one.
  *
  * **Example** (A settings dialog whose open state lives in the consumer's Model)
  *
@@ -185,6 +199,25 @@ export const DialogModal = Schema.Union([Schema.Boolean, Schema.Literal("trap-fo
 export type DialogModal = typeof DialogModal.Type
 
 /**
+ * How the user opened or closed a dialog. `keyboard` covers Enter and Space
+ * on a button and Escape.
+ *
+ * @stability experimental
+ * @category schemas
+ * @since 0.1.0
+ */
+export const DialogInteraction = Schema.Literals(["mouse", "touch", "pen", "keyboard"])
+
+/**
+ * How the user opened or closed a dialog.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type DialogInteraction = typeof DialogInteraction.Type
+
+/**
  * Controls whether the dialog is open, how it treats the page behind it, and
  * where focus goes.
  *
@@ -203,6 +236,15 @@ export type DialogModal = typeof DialogModal.Type
  * - `forceRenderBackdrop`: a nested dialog draws its backdrop too.
  * - `initialFocus`: `false` leaves focus where it is when the dialog opens.
  * - `finalFocus`: `false` leaves focus where it is when the dialog closes.
+ * - `id`: the portal's `id`, generated when left out. Set it to pair the
+ *   dialog with a `DialogTrigger` drawn somewhere else, as its `popupId`.
+ * - `openMethod`: how the user opened the dialog, for a dialog opened from a
+ *   `DialogTrigger`, whose press reports it. It wins over the one the
+ *   dialog's own trigger records, and decides the focus of a touch open.
+ * - `holdExit`: a closed dialog stays shown, in its ending state, while this
+ *   is `true`, for an exit animation that the consumer runs itself. Set it
+ *   back to `false` once that animation ends, and the dialog closes and
+ *   emits `Settled`.
  *
  * @stability experimental
  * @category schemas
@@ -216,7 +258,10 @@ export const DialogProps = Schema.Struct({
   keepMounted: Schema.optional(Schema.Boolean),
   forceRenderBackdrop: Schema.optional(Schema.Boolean),
   initialFocus: Schema.optional(Schema.Boolean),
-  finalFocus: Schema.optional(Schema.Boolean)
+  finalFocus: Schema.optional(Schema.Boolean),
+  id: Schema.optional(Schema.String),
+  openMethod: Schema.optional(Schema.NullOr(DialogInteraction)),
+  holdExit: Schema.optional(Schema.Boolean)
 })
 
 /**
@@ -227,25 +272,6 @@ export const DialogProps = Schema.Struct({
  * @since 0.1.0
  */
 export type DialogProps = typeof DialogProps.Type
-
-/**
- * How the user opened or closed a dialog. `keyboard` covers Enter and Space
- * on a button and Escape.
- *
- * @stability experimental
- * @category schemas
- * @since 0.1.0
- */
-export const DialogInteraction = Schema.Literals(["mouse", "touch", "pen", "keyboard"])
-
-/**
- * How the user opened or closed a dialog.
- *
- * @stability experimental
- * @category models
- * @since 0.1.0
- */
-export type DialogInteraction = typeof DialogInteraction.Type
 
 /**
  * Why a dialog asks to close: a press on its open trigger, a press outside
@@ -316,8 +342,9 @@ const Message = UiSchema.TaggedEnum({
   // click: `""` for Enter or Space.
   ClickedTrigger: { triggerId: Schema.NullOr(Schema.String), pointerType: Schema.String },
   ClickedClose: { pointerType: Schema.String },
-  // A modal's close request, Escape, and a close the browser forced.
-  CancelledModal: {},
+  // A modal's close request, Escape, and a close the browser forced. A
+  // request the browser won't let be cancelled is followed by its close.
+  CancelledModal: { cancelable: Schema.Boolean },
   ClosedModal: {},
   PressedEscape: {},
   PressedOutside: { pointerType: Schema.String },
@@ -333,9 +360,11 @@ type Message = typeof Message.Type
 // Only what the consumer would never store. `mounted`: the dialog shows, from
 // the first frame after it opens until its exit ends. `nestedOpen`: the open
 // dialogs inside this one. The methods are how it was last opened and closed.
+// `forcedClose`: a close the browser forces is on its way.
 const Model = Schema.Struct({
   mounted: Schema.Boolean,
   nestedOpen: Schema.Number,
+  forcedClose: Schema.Boolean,
   openMethod: Schema.NullOr(DialogInteraction),
   closeMethod: Schema.NullOr(DialogInteraction)
 })
@@ -419,11 +448,33 @@ const TrackDialogArgs = {
   initialFocus: Schema.Boolean,
   finalFocus: Schema.Boolean,
   openMethod: Schema.NullOr(DialogInteraction),
+  triggerId: Schema.NullOr(Schema.String),
+  holdExit: Schema.Boolean,
   portalId: Schema.String,
   popupId: Schema.String
 }
 
 type TrackDialogArgs = Schema.Struct<typeof TrackDialogArgs>["Type"]
+
+// The dialogs showing, in the order they started showing. One nested in
+// another is above it, and of two others the later one is, as in the top
+// layer. Only an open dialog with none open above it hears Escape, presses
+// outside and focus moving, so it doesn't take what happens in one above it.
+const showing: Array<{ readonly node: HTMLDialogElement; readonly open: () => boolean }> = []
+const onTop = (node: HTMLDialogElement): boolean => {
+  const mine = showing.findIndex((entry) => entry.node === node)
+  return showing.every((other, index) =>
+    other.node === node || !other.open() ||
+    !(node.contains(other.node) || (!other.node.contains(node) && index > mine))
+  )
+}
+
+// Whether an animation ends by itself: a looping one, such as a spinner's,
+// doesn't hold a transition.
+const finite = (animation: Animation): boolean => {
+  const end = animation.effect?.getComputedTiming().endTime
+  return typeof end === "number" && Number.isFinite(end)
+}
 
 // Everything the dialog does in the document while it shows, on the portal,
 // as an element takes one mount: it focuses the dialog's content, reports
@@ -444,12 +495,29 @@ const TrackDialog = Mount.makeStream(
       let current: TrackDialogArgs = args
       const send = (message: Message) => Queue.offerUnsafe(queue, message)
       const popup = (): HTMLElement => (document.getElementById(current.popupId) as HTMLElement | null) ?? node
-      // The trigger the dialog is open for, found now: it loses `aria-controls`
-      // once the dialog closes.
-      const trigger = document.querySelector<HTMLElement>(`[aria-controls="${CSS.escape(args.portalId)}"]`)
+      const entry = { node, open: () => current.open }
+      const topmost = () => current.topmost && onTop(node)
+      // Every trigger the dialog is open for points at it, its own and a
+      // `DialogTrigger` given its `popupId`, and every trigger is marked
+      // with its id, so a press on one is the trigger's, not a press outside.
+      const controls = `[aria-controls="${CSS.escape(args.portalId)}"]`
+      const triggers = `[data-dialog-trigger="${CSS.escape(args.portalId)}"]`
+      const onTrigger = (target: Node): boolean =>
+        (target instanceof Element ? target : target.parentElement)?.closest(`${controls},${triggers}`) != null ||
+        trigger?.contains(target) === true
+      // The trigger focus goes back to: the one `triggerId` names, or else the
+      // one that had focus when the dialog opened, or else the first that
+      // points at it. Kept, since a trigger stops pointing at a closed dialog.
+      const findTrigger = (): HTMLElement | null =>
+        (current.triggerId === null ? null : document.getElementById(current.triggerId)) ??
+          (document.activeElement instanceof HTMLElement && document.activeElement.matches(controls)
+            ? document.activeElement
+            : document.querySelector<HTMLElement>(controls))
+      let trigger = findTrigger()
       // Whether focus was in the dialog when it last moved, so a close only
-      // moves focus that the dialog had.
+      // moves focus that the dialog had, and the element it was on.
       let focusInside = node.contains(document.activeElement)
+      let lastFocused: HTMLElement | null = focusInside ? document.activeElement as HTMLElement : null
 
       const focusFirst = () => {
         if (!current.initialFocus) {
@@ -458,15 +526,17 @@ const TrackDialog = Mount.makeStream(
           else if (trigger !== null) trigger.focus()
           return
         }
-        if (current.openMethod === "touch") return popup().focus()
         const marked = Array.from(node.querySelectorAll<HTMLElement>("[autofocus]")).find((element) =>
           !inNested(node, element)
         )
-        ;(marked ?? tabbables(node, popup())[0] ?? popup()).focus()
+        // An open by touch focuses the popup, so a field doesn't open the
+        // on-screen keyboard, unless the consumer marked an element.
+        const fallback = current.openMethod === "touch" ? undefined : tabbables(node, popup())[0]
+        ;(marked ?? fallback ?? popup()).focus()
       }
 
       const onKeyDown = (event: KeyboardEvent) => {
-        if (!current.open || !current.topmost) return
+        if (!current.open || !topmost()) return
         if (event.key === "Escape") {
           if (current.modal === true || event.defaultPrevented || event.isComposing) return
           // So a dialog this one is inside doesn't take it as its own.
@@ -491,35 +561,61 @@ const TrackDialog = Mount.makeStream(
       }
 
       const onPointerDown = (event: PointerEvent) => {
-        if (!current.open || !current.topmost || !current.dismissible) return
+        if (!current.open || !current.dismissible || !topmost()) return
         if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) return
         const target = event.target as Node | null
         if (target === null) return
         const content = document.getElementById(current.popupId)
-        // A press on the trigger is the trigger's.
         const inside = content === null ? target !== node && node.contains(target) : content.contains(target)
-        if (inside || trigger?.contains(target) === true) return
+        // A press on a trigger is the trigger's.
+        if (inside || onTrigger(target)) return
         send(Message.PressedOutside({ pointerType: event.pointerType }))
       }
 
       const onFocusIn = (event: FocusEvent) => {
         const target = event.target as Node | null
         focusInside = target !== null && node.contains(target)
-        if (focusInside || target === null || !current.open || !current.topmost) return
+        if (focusInside) lastFocused = target as HTMLElement
+        if (focusInside || target === null || !current.open || !topmost()) return
         if (current.modal === "trap-focus") {
           popup().focus()
-        } else if (current.modal === false && current.dismissible && trigger?.contains(target) !== true) {
+        } else if (current.modal === false && current.dismissible && !onTrigger(target)) {
           send(Message.FocusedOutside())
         }
       }
 
+      // A modal whose consumer refused Escape until the browser closed it
+      // anyway. The cancel was reported; the close isn't. The host shows the
+      // dialog again, which moves focus to its first field, so focus goes back
+      // to where it was.
+      let restore: HTMLElement | null = null
+      const onCancel = (event: Event) => {
+        if (event.target === node && !event.cancelable && current.open) restore = lastFocused
+      }
+      const onClose = (event: Event) => {
+        if (event.target !== node || restore === null) return
+        const element = restore
+        restore = null
+        let tries = 0
+        const refocus = () => {
+          if (!current.open || !node.isConnected) return
+          if (!node.open) {
+            if (++tries < 10) frame(refocus)
+            return
+          }
+          if (element.isConnected && node.contains(element)) element.focus()
+        }
+        frame(refocus)
+      }
+
       // A transition's end: the next frame, once what it started has finished.
-      // A newer change makes an older wait stale.
+      // A newer change makes an older wait stale. A closed dialog held by
+      // `holdExit` waits for the consumer.
       let generation = 0
       const settle = (open: boolean) => {
         const mine = ++generation
         frame(() => {
-          const running = node.getAnimations({ subtree: true }).map((animation) => animation.finished)
+          const running = node.getAnimations({ subtree: true }).filter(finite).map((animation) => animation.finished)
           Promise.allSettled(running).then(() => {
             if (mine === generation && node.isConnected) send(Message.FinishedTransition({ open }))
           })
@@ -528,22 +624,28 @@ const TrackDialog = Mount.makeStream(
       const onChange = (next: TrackDialogArgs) => {
         const previous = current
         current = next
+        if (next.open && next.triggerId !== previous.triggerId) trigger = findTrigger() ?? trigger
         if (next.open && next.mounted && !previous.mounted) settle(true)
-        else if (!next.open && next.mounted && (previous.open || !previous.mounted)) settle(false)
+        else if (!next.open && next.mounted && next.holdExit) generation++
+        else if (!next.open && next.mounted && (previous.open || !previous.mounted || previous.holdExit)) settle(false)
         else if (next.open && !previous.open && previous.mounted) generation++
       }
 
       return Effect.acquireRelease(
         Effect.sync(() => {
+          showing.push(entry)
           document.addEventListener("keydown", onKeyDown)
           document.addEventListener("pointerdown", onPointerDown, true)
           document.addEventListener("focusin", onFocusIn, true)
+          node.addEventListener("cancel", onCancel)
+          node.addEventListener("close", onClose)
           const unlock = args.modal === true ? lockScroll(document) : undefined
           // The browser focuses a dialog when it shows, each its own way.
           // Ours comes after it, the frame the host showed it in.
           frame(() => {
             if (current.open) focusFirst()
             focusInside = node.contains(document.activeElement)
+            if (focusInside) lastFocused = document.activeElement as HTMLElement
             if (!current.mounted) frame(() => send(Message.RenderedFirstFrame()))
           })
           return unlock
@@ -552,9 +654,12 @@ const TrackDialog = Mount.makeStream(
         ),
         (unlock) =>
           Effect.sync(() => {
+            showing.splice(showing.indexOf(entry), 1)
             document.removeEventListener("keydown", onKeyDown)
             document.removeEventListener("pointerdown", onPointerDown, true)
             document.removeEventListener("focusin", onFocusIn, true)
+            node.removeEventListener("cancel", onCancel)
+            node.removeEventListener("close", onClose)
             unlock?.()
             generation++
             if (!focusInside) return
@@ -579,6 +684,19 @@ const TrackDialog = Mount.makeStream(
 )
 
 /**
+ * A press on a `DialogTrigger`: the trigger's `id`, if it has one, and how
+ * the user pressed it.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface DialogTriggerPress {
+  readonly triggerId: string | null
+  readonly method: DialogInteraction
+}
+
+/**
  * A `<button>` builder: what `DialogTrigger` accepts as `element`, from the
  * caller's `h.button`, and what it returns.
  *
@@ -596,17 +714,22 @@ export type DialogTriggerElement<Msg, R = never> = Html.Element<
 
 /**
  * A button that opens a dialog drawn somewhere else, such as in another
- * component. Call it with the caller's `h`, the dialog's `open`, and the
- * message a press sends as `onPress`, then chain the label.
+ * component. Call it with the caller's `h`, whether the dialog is open for
+ * this trigger, the dialog's `id` as `popupId`, and what a press sends as
+ * `onPress`, then chain the label.
  *
  * **Details**
  *
- * It sets the trigger's `aria-haspopup="dialog"`, `aria-expanded` and
- * `data-popup-open`, in `forward`, so they win over the caller's. It doesn't
- * set `aria-controls`, since the dialog's id is the dialog's own. Focus goes
- * back to it after a modal dialog closes, as the browser puts it back where
- * it was, but not after the other modes: draw the dialog's `finalFocus` part
- * on it for that.
+ * It sets the trigger's `aria-haspopup="dialog"`, `aria-expanded`,
+ * `data-popup-open`, and `aria-controls` while the dialog is open, in
+ * `forward`, so they win over the caller's. Give the dialog the same `id`
+ * prop: the dialog then finds the trigger by its `aria-controls`, so a press
+ * on it isn't a press outside, and focus goes back to it when the dialog
+ * closes.
+ *
+ * `onPress` is a message, or a function of the press, which carries the
+ * trigger's `id` and how the user pressed it. Store the method and pass it
+ * as the dialog's `openMethod`, so an open by touch focuses the popup.
  *
  * Given `onPress`, a click handler of the caller's own, set on `element` or
  * chained after the call, throws at render: pass the message as `onPress`.
@@ -620,14 +743,18 @@ export const DialogTrigger = <Msg, R = never>(
   options: {
     /** The caller's `h.button`, to stack a part on it. `h.button` when left out. */
     readonly element?: DialogTriggerElement<Msg, R> | undefined
-    readonly props: { readonly open: boolean }
-    /** The message a press sends, with a click, Space or Enter. */
-    readonly onPress?: NoInfer<Msg> | undefined
+    readonly props: {
+      readonly open: boolean
+      /** The dialog's `id`, which `aria-controls` points at while it is open. */
+      readonly popupId?: string | undefined
+    }
+    /** What a press sends, with a click, Space or Enter. */
+    readonly onPress?: NoInfer<Msg> | ((press: DialogTriggerPress) => NoInfer<Msg>) | undefined
   }
 ): DialogTriggerElement<Msg, R> => {
   const element: DialogTriggerElement<Msg, R> = options.element ?? h.button
   const { onPress } = options
-  const open = options.props.open
+  const { open, popupId } = options.props
   return element.forward((node) => {
     if (onPress !== undefined && node.handlers.click !== undefined) {
       throw new Error(
@@ -637,8 +764,14 @@ export const DialogTrigger = <Msg, R = never>(
     const button = node
       .attr("aria-haspopup", "dialog")
       .attr("aria-expanded", open ? "true" : "false")
+      .attr("aria-controls", open ? popupId : undefined)
       .attr("data-popup-open", flag(open))
-    return onPress === undefined ? button : button.onClick(onPress)
+      .attr("data-dialog-trigger", popupId)
+    if (onPress === undefined) return button
+    if (typeof onPress !== "function") return button.onClick(onPress)
+    const triggerId = node.attrs.id === undefined || node.attrs.id === "" ? null : node.attrs.id
+    const press = onPress as (press: DialogTriggerPress) => Msg
+    return button.onClick(({ pointerType }) => press({ triggerId, method: methodOf(pointerType) }))
   })
 }
 
@@ -668,7 +801,8 @@ const idOf = (builder: unknown): string | null => {
  *
  * Each part's attributes win over the ones the consumer set on the builder
  * it passes in, including the ones a state leaves absent: on the trigger
- * `aria-haspopup`, `aria-expanded`, `aria-controls` and `data-popup-open`; on the
+ * `aria-haspopup`, `aria-expanded`, `aria-controls`, `data-popup-open`, and
+ * `data-dialog-trigger`, which the dialog tells its triggers by; on the
  * portal `id`, `aria-modal`, `popover` and `open`; `role` on the backdrop;
  * the data attributes on the backdrop, viewport and popup; `id` and `tabindex`
  * on the popup; `id` on the title and description; `autofocus` on
@@ -710,7 +844,7 @@ export const Dialog = Component.define({
   },
   elements: Html
 }).make({
-  init: () => ({ mounted: false, nestedOpen: 0, openMethod: null, closeMethod: null }),
+  init: () => ({ mounted: false, nestedOpen: 0, forcedClose: false, openMethod: null, closeMethod: null }),
   update: (model, message, $) => {
     const props = $.props
     // Only the topmost dialog hears Escape and presses outside.
@@ -726,10 +860,22 @@ export const Dialog = Component.define({
         return $.set({ ...model, openMethod: method }).emit(DialogEvents.Opened({ triggerId }))
       },
       ClickedClose: ({ pointerType }) => props.open ? dismiss("close-press", methodOf(pointerType)) : model,
-      CancelledModal: () => props.open && topmost ? dismiss("escape-key", "keyboard") : model,
+      CancelledModal: ({ cancelable }) => {
+        // A test host's cancel may carry no payload: only `false` is forced.
+        const forced = { ...model, forcedClose: cancelable === false }
+        return props.open && topmost
+          ? $.set({ ...forced, closeMethod: "keyboard" }).emit(DialogEvents.Dismissed({ reason: "escape-key" }))
+          : forced
+      },
       // Every close comes here, the consumer's included. One while `open` still
-      // says true is the browser's, after cancelled Escapes.
-      ClosedModal: () => props.open ? dismiss("escape-key", "keyboard") : model,
+      // says true is the browser's: after a request it wouldn't let be
+      // cancelled, which was reported, or a close without one, which wasn't.
+      ClosedModal: () =>
+        model.forcedClose
+          ? { ...model, forcedClose: false }
+          : props.open
+          ? dismiss("escape-key", "keyboard")
+          : model,
       PressedEscape: () => props.open && topmost ? dismiss("escape-key", "keyboard") : model,
       PressedOutside: ({ pointerType }) =>
         props.open && topmost && props.disablePointerDismissal !== true
@@ -743,7 +889,9 @@ export const Dialog = Component.define({
       FinishedTransition: ({ open }) => {
         if (open !== props.open) return model
         if (open) return $.set(model).emit(DialogEvents.Settled({ open }))
-        return model.mounted ? $.set({ ...model, mounted: false }).emit(DialogEvents.Settled({ open })) : model
+        return model.mounted && props.holdExit !== true
+          ? $.set({ ...model, mounted: false }).emit(DialogEvents.Settled({ open }))
+          : model
       },
       ChangedNested: ({ count }) => ({ ...model, nestedOpen: count })
     })
@@ -756,7 +904,8 @@ export const Dialog = Component.define({
     const transitionStatus = statusOf(model, props)
     const nested = p.shared.parent !== undefined
     const nestedDialogs = model.nestedOpen
-    const portalId = p.id("portal")
+    const portalId = props.id ?? p.id("portal")
+    const openMethod = props.openMethod ?? model.openMethod
     const popupId = p.id("popup")
     const titleId = p.id("title")
     const descriptionId = p.id("description")
@@ -781,6 +930,7 @@ export const Dialog = Component.define({
         .attr("aria-expanded", active ? "true" : "false")
         .attr("aria-controls", active ? portalId : undefined)
         .attr("data-popup-open", flag(active))
+        .attr("data-dialog-trigger", portalId)
         .onClick(({ pointerType }) => Message.ClickedTrigger({ triggerId, pointerType }))
     })
     const trigger = View.wrapPart(
@@ -798,7 +948,9 @@ export const Dialog = Component.define({
       // A modal is the browser's; the other modes are a manual popover, which
       // shows in the top layer without making the page inert.
       const placed = modal === true
-        ? dialog.attr("popover", undefined).modal(shown).onCancel(Message.CancelledModal()).onClose(
+        ? dialog.attr("popover", undefined).modal(shown).onCancel(({ cancelable }) =>
+          Message.CancelledModal({ cancelable })
+        ).onClose(
           Message.ClosedModal()
         )
         : dialog.open(false).popover("manual", shown)
@@ -812,7 +964,9 @@ export const Dialog = Component.define({
           dismissible: props.disablePointerDismissal !== true,
           initialFocus: props.initialFocus !== false,
           finalFocus: props.finalFocus !== false,
-          openMethod: model.openMethod,
+          openMethod,
+          triggerId: props.triggerId ?? null,
+          holdExit: props.holdExit === true,
           portalId,
           popupId
         }).pipe(Mount.map((message) => message))
@@ -855,7 +1009,7 @@ export const Dialog = Component.define({
       transitionStatus,
       nested,
       nestedDialogs,
-      openMethod: model.openMethod,
+      openMethod,
       closeMethod: model.closeMethod,
       trigger,
       portal,

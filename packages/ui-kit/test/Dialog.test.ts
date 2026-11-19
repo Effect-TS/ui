@@ -114,8 +114,56 @@ describe("Dialog", () => {
         finalFocus: true,
         openMethod: null,
         portalId: dialog.attrs?.id,
-        popupId: s.get(popup).attrs?.id
+        popupId: s.get(popup).attrs?.id,
+        triggerId: null,
+        holdExit: false
       })
+    }))
+
+  it.effect("an id names the portal, and openMethod stands in for the press the dialog didn't see", () =>
+    Effect.gen(function*() {
+      const s = yield* Scene.make(Dialog, { open: true, id: "settings", openMethod: "touch" }, standIn)
+      s.expectMount(tracked(s))
+      assert.strictEqual(s.get(portal).attrs?.id, "settings")
+      assert.strictEqual(s.get(trigger).attrs?.["aria-controls"], "settings")
+      assert.strictEqual(partsOf(s).openMethod, "touch")
+      assert.include(tracked(s).args, { portalId: "settings", openMethod: "touch" })
+      // Without it, the dialog's own trigger press counts.
+      s.props({ open: true, id: "settings" })
+      s.expectMount(tracked(s))
+      assert.isNull(partsOf(s).openMethod)
+    }))
+
+  it.effect("a close the browser forces after an uncancelable request is that request, not another", () =>
+    Effect.gen(function*() {
+      const s = yield* Scene.make(Dialog, { open: true }, standIn)
+      s.expectMount(tracked(s))
+      s.fire(portal, "cancel", { cancelable: true }).emitted(dismissed("escape-key"))
+      s.fire(portal, "cancel", { cancelable: false }).emitted(dismissed("escape-key"))
+      s.fire(portal, "close", { returnValue: "" })
+      assert.deepStrictEqual(s.current.emitted, [])
+      // A later close without a request, as from a form, is one.
+      s.fire(portal, "close", { returnValue: "" }).emitted(dismissed("escape-key"))
+    }))
+
+  it.effect("holdExit keeps a closed dialog shown until the consumer lets it go", () =>
+    Effect.gen(function*() {
+      const s = yield* Scene.make(Dialog, { open: true }, standIn)
+      s.expectMount(tracked(s)).mounted(tracked(s), sent("RenderedFirstFrame"))
+      s.props({ open: false, holdExit: true })
+      s.expectMount(tracked(s))
+      assert.include(tracked(s).args, { open: false, holdExit: true })
+      // Its animations ending doesn't end the exit.
+      s.mounted(tracked(s), sent("FinishedTransition", { open: false }))
+      assert.deepStrictEqual(s.current.emitted, [])
+      assert.strictEqual(s.get(popup).attrs?.["data-ending-style"], "")
+      assert.isTrue(partsOf(s).mounted)
+      // Let go, the mount waits for them again, and then it ends.
+      s.props({ open: false, holdExit: false })
+      s.expectMount(tracked(s))
+        .mounted(tracked(s), sent("FinishedTransition", { open: false }))
+        .emitted({ _tag: "Settled", open: false })
+      assert.isUndefined(s.query(portal))
     }))
 
   it.effect("Escape, a forced close, the close part, a press outside and focus leaving each ask to close", () =>
@@ -363,8 +411,35 @@ describe("DialogTrigger", () => {
     assert.deepInclude(closed.attrs, { "aria-haspopup": "dialog", "aria-expanded": "false" })
     assert.isUndefined(closed.attrs["data-popup-open"])
     assert.strictEqual(closed.handlers.click, "open")
+    assert.isUndefined(closed.attrs["aria-controls"])
     const open = View.build(DialogTrigger(h, { props: { open: true } }), []) as View.Element<string>
     assert.deepInclude(open.attrs, { "aria-expanded": "true", "data-popup-open": "" })
+    assert.isUndefined(open.attrs["aria-controls"])
+    // Given the dialog's id, it points at the dialog while it is open.
+    const paired = (open: boolean) =>
+      View.build(DialogTrigger(h, { props: { open, popupId: "settings" } }), []) as View.Element<string>
+    assert.strictEqual(paired(true).attrs["aria-controls"], "settings")
+    assert.isUndefined(paired(false).attrs["aria-controls"])
+    assert.strictEqual(paired(false).attrs["data-dialog-trigger"], "settings")
+  })
+
+  it("onPress as a function hears the trigger's id and how it was pressed", () => {
+    const built = View.build(
+      DialogTrigger(h, {
+        element: h.button.attr("id", "settings-button"),
+        props: { open: false },
+        onPress: ({ method, triggerId }) => `${triggerId} ${method}`
+      }),
+      []
+    ) as View.Element<string>
+    const click = built.handlers.click as (payload: { readonly pointerType: string }) => string
+    assert.strictEqual(click({ pointerType: "touch" }), "settings-button touch")
+    assert.strictEqual(click({ pointerType: "" }), "settings-button keyboard")
+    const anonymous = View.build(
+      DialogTrigger(h, { props: { open: false }, onPress: ({ triggerId }) => String(triggerId) }),
+      []
+    ) as View.Element<string>
+    assert.strictEqual((anonymous.handlers.click as (payload: object) => string)({ pointerType: "mouse" }), "null")
   })
 
   it("rejects a click handler of the caller's own only with onPress", () => {
