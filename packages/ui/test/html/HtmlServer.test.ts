@@ -347,6 +347,29 @@ describe("HtmlServer", { concurrent: false }, () => {
       }
     }).pipe(Effect.scoped))
 
+  it.effect("escapes text, keeps a leading newline, and selects the option whose text is the select's value", () =>
+    Effect.gen(function*() {
+      const Page = Component.define({
+        name: "Text",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) =>
+          h.div.children(
+            h.p.children("a<b>&c"),
+            h.pre.children("\nx"),
+            h.select.value("b").children(h.option.children("a"), h.option.children("b"))
+          )
+      })
+      const rendered = yield* HtmlServer.renderToHtml(Page, {})
+      expect(rendered.html).toBe(
+        "<!--[/Text--><div><p>a&lt;b&gt;&amp;c</p><pre>\n\nx</pre><select><option>a</option><option selected>b</option></select></div><!--]/Text-->"
+      )
+    }))
+
   it.effect("keeps winning HTML aliases through updates and removals without folding SVG attributes", () =>
     Effect.gen(function*() {
       // What each step sets, and what the elements then hold. The HTML parser folds
