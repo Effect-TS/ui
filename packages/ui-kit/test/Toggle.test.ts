@@ -48,11 +48,14 @@ describe("Toggle", () => {
       yield* TestHost.settle
       const after = root.get(toggle).attrs
       assert.strictEqual(after?.["aria-pressed"], "true")
+      assert.strictEqual(after?.["data-pressed"], "")
       assert.isUndefined(after?.["data-popup-open"])
 
       Locator.fire(root.get(toggle), "click")
       yield* TestHost.settle
-      assert.strictEqual(root.get(toggle).attrs?.["aria-pressed"], "false")
+      const released = root.get(toggle).attrs
+      assert.strictEqual(released?.["aria-pressed"], "false")
+      assert.isUndefined(released?.["data-pressed"])
     }).pipe(Effect.provide(TestHost.layer())))
 
   it("the toggle's own attributes win before and after the call, the consumer's others stay, and a click handler clashes with onToggle", () => {
@@ -68,8 +71,14 @@ describe("Toggle", () => {
     // Set on the element before the call, the state leaves each one absent.
     const before = View.build(Toggle(h, { element: own(h.button), props: { pressed: false } }), [])
     assert.deepStrictEqual(before.attrs, { class: "tool", type: "button", "aria-pressed": "false" })
-    // Chained after the call, the state sets each one.
     const onToggle = ({ pressed }: { readonly pressed: boolean }) => ToolbarMessage.ToggledBold({ pressed })
+    const { click } = View.build(Toggle(h, { props: { pressed: false }, onToggle }), []).handlers
+    assert.deepStrictEqual(
+      typeof click === "function" ? click({}) : click,
+      ToolbarMessage.ToggledBold({ pressed: true })
+    )
+
+    // Chained after the call, the state sets each one.
     const props = { pressed: true, disabled: true }
     const after = View.build(own(Toggle(h, { props, onToggle })), [])
     assert.isUndefined(after.handlers.click)
@@ -87,13 +96,16 @@ describe("Toggle", () => {
       View.build(Toggle(h, { element: h.button.onClick(clicked), props: { pressed: false } }), []).handlers,
       { click: clicked }
     )
-    assert.throws(
-      () => View.build(Toggle(h, { element: h.button.onClick(clicked), props: { pressed: false }, onToggle }), []),
-      /Toggle: the element already handles click/
-    )
-    assert.throws(
-      () => View.build(Toggle(h, { props, onToggle }).onClick(clicked), []),
-      /Toggle: the element already handles click/
-    )
+    for (const disabled of [false, true]) {
+      const props = { pressed: false, disabled }
+      assert.throws(
+        () => View.build(Toggle(h, { element: h.button.onClick(clicked), props, onToggle }), []),
+        /Toggle: the element already handles click/
+      )
+      assert.throws(
+        () => View.build(Toggle(h, { props, onToggle }).onClick(clicked), []),
+        /Toggle: the element already handles click/
+      )
+    }
   })
 })
