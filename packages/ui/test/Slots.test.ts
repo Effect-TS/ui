@@ -16,6 +16,7 @@ const updates = (root: Root) =>
     entry._tag === "Update" ? [entry.path + " " + entry.source._tag + " " + (entry.message as any)._tag] : []
   )
 const unmounted = (root: Root) => root.log().flatMap((entry) => entry._tag === "Unmounted" ? [entry.path] : [])
+const detached = (root: Root) => root.log().flatMap((entry) => entry._tag === "Detached" ? [entry.path] : [])
 const failures = (root: Root) =>
   root.log().flatMap((entry) => entry._tag === "Failed" ? [entry.path + " " + entry.in] : [])
 
@@ -91,7 +92,7 @@ const Page = Component.define({ name: "Page", model: Schema.String, message: Pag
       })
     )
 })
-const editorPath = "/Page/Frame[f]/[body]/Editor[Draft]"
+const editorPath = "/Page/Editor[Draft]"
 
 class Badge extends Feature.Service<Badge>()("Badge", { props: Schema.Struct({}) }) {}
 const badge = (text: string) =>
@@ -136,16 +137,42 @@ describe("slots", () => {
       assert.include(updates(root), editorPath + " Send Clear")
     })))
 
-  it.effect("unplacing a slot unmounts its content, which starts over when placed again", () =>
+  it.effect("wrapping a child in a slotted component keeps its instance and its path", () =>
+    provideHost(Effect.gen(function*() {
+      const Wrapped = UiSchema.TaggedEnum({ Wrapped: {} })
+      const Wrap = Component.define({ name: "Wrap", model: Schema.Boolean, message: Wrapped, elements: Html }).make({
+        init: () => false,
+        update: () => true,
+        view: (wide, h) =>
+          wide ? Frame(h, { key: "f", slots: { body: Editor(h, { key: "e" }) } }) : h.div(Editor(h, { key: "e" }))
+      })
+      const root = yield* TestHost.mount(Wrap, {})
+      click(root, "type 0")
+      yield* TestHost.settle
+      root.send(Wrapped.Wrapped())
+      yield* TestHost.settle
+      assert.include(root.text(), "type 1")
+      assert.include(root.text(), "toggle")
+      assert.deepStrictEqual(unmounted(root), [])
+      assert.deepStrictEqual(
+        root.log().flatMap((entry) => entry._tag === "Mounted" ? [entry.path] : []),
+        ["/Wrap", "/Wrap/Editor[e]", "/Wrap/Frame[f]"]
+      )
+    })))
+
+  it.effect("unplacing a slot detaches its content, which comes back as it was when placed again", () =>
     provideHost(Effect.gen(function*() {
       const root = yield* TestHost.mount(Page, {})
       click(root, "type 0")
       click(root, "toggle")
       yield* TestHost.settle
-      assert.include(unmounted(root), editorPath)
+      assert.notInclude(root.text(), "type")
+      assert.deepStrictEqual(unmounted(root), [])
+      assert.include(detached(root), editorPath)
       click(root, "toggle")
       yield* TestHost.settle
-      assert.include(root.text(), "type 0")
+      assert.include(root.text(), "type 1")
+      assert.deepStrictEqual(unmounted(root), [])
     })))
 
   it.effect("content resolves services where the parent declared the child, not from the child's Layer", () =>
@@ -226,7 +253,7 @@ describe("slots", () => {
       assert.strictEqual(root.model(), true)
     })))
 
-  it.effect("forwarded content keeps its path under the first receiver, and closes with the one that places it", () =>
+  it.effect("forwarded content keeps its author's path, and the receiver that places it detaches it", () =>
     provideHost(Effect.gen(function*() {
       const Outer = slotted("Outer").make({
         init: () => null,
@@ -245,10 +272,11 @@ describe("slots", () => {
       const root = yield* TestHost.mount(Top, {})
       click(root, "type 0")
       yield* TestHost.settle
-      assert.deepStrictEqual(updates(root), ["/Top/Outer[o]/[body]/Editor[e] DomEvent Typed", "/Top Emit Changed"])
+      assert.deepStrictEqual(updates(root), ["/Top/Editor[e] DomEvent Typed", "/Top Emit Changed"])
       click(root, "toggle")
       yield* TestHost.settle
-      assert.include(unmounted(root), "/Top/Outer[o]/[body]/Editor[e]")
+      assert.deepStrictEqual(unmounted(root), [])
+      assert.include(detached(root), "/Top/Editor[e]")
     })))
 
   it.effect("navigating away from a view with a placed slot succeeds", () =>
