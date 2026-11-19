@@ -1077,12 +1077,15 @@ const serializeTree = (
   }
   instance(root, false)
   // Added to the record the paths are on, in the order a copy of it would have them: copying a record
-  // with a key for each instance costs more than everything else done with it.
-  state["~deferred"] = deferredPaths
-  if (Object.keys(statuses).length > 0) state["~status"] = statuses
-  state["~query"] = query
-  if (Object.keys(collected).length > 0) state["~reported"] = collected
-  if (isStatic) state["~static"] = true
+  // with a key for each instance costs more than everything else done with it. Defined as a copy would
+  // define them, so each is the record's own whatever `Object.prototype` has under its name.
+  const add = (key: string, value: unknown) =>
+    Object.defineProperty(state, key, { value, writable: true, enumerable: true, configurable: true })
+  add("~deferred", deferredPaths)
+  if (Object.keys(statuses).length > 0) add("~status", statuses)
+  add("~query", query)
+  if (Object.keys(collected).length > 0) add("~reported", collected)
+  if (isStatic) add("~static", true)
   return state
 }
 
