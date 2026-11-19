@@ -1207,16 +1207,38 @@ const globalEventsOf = (document: Document): Html.GlobalEvents => ({
   }
 })
 
+// Loads in a detached <img>. A cached image may already be complete.
+const imagesOf = (document: Document): Html.Images => ({
+  load: (source) =>
+    Effect.callback((resume) => {
+      const image = document.createElement("img")
+      const settle = (status: "loaded" | "error") => resume(Effect.succeed(status))
+      if (source.referrerPolicy !== undefined) image.referrerPolicy = source.referrerPolicy
+      image.crossOrigin = source.crossOrigin ?? null
+      if (source.sizes !== undefined) image.sizes = source.sizes
+      if (source.srcSet !== undefined) image.srcset = source.srcSet
+      if (source.src !== undefined) image.src = source.src
+      if (image.complete) return settle(image.naturalWidth > 0 ? "loaded" : "error")
+      image.onload = () => settle("loaded")
+      image.onerror = () => settle("error")
+      return Effect.sync(() => {
+        image.onload = null
+        image.onerror = null
+      })
+    })
+})
+
 /**
  * Provides the DOM host as the `Renderer`, `Html.Host`, the document's
- * `Query.Visibility` and `Query.Connectivity`, and its events as
- * `Html.GlobalEvents`, for the life of the Layer.
+ * `Query.Visibility` and `Query.Connectivity`, its events as
+ * `Html.GlobalEvents`, and an `Html.Images` over it, for the life of the
+ * Layer.
  *
  * **Details**
  *
  * `document` defaults to the global `document`. Closing the Layer removes the
- * host's listeners. The signals and `Html.GlobalEvents` use the document and
- * its `defaultView`, never globals.
+ * host's listeners. The signals, `Html.GlobalEvents` and `Html.Images` use
+ * the document and its `defaultView`, never globals.
  *
  * @stability experimental
  * @category layers
@@ -1235,7 +1257,8 @@ export const layer = (options?: {
       Context.add(Html.Host, htmlHost),
       Context.add(Query.Visibility, signal.visibility),
       Context.add(Query.Connectivity, signal.connectivity),
-      Context.add(Html.GlobalEvents, globalEventsOf(document))
+      Context.add(Html.GlobalEvents, globalEventsOf(document)),
+      Context.add(Html.Images, imagesOf(document))
     )
   }))
 

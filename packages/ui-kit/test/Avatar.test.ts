@@ -1,10 +1,10 @@
-import type { Component } from "@effect/ui"
-import { View } from "@effect/ui"
-import { Avatar, AvatarLoadImage, type AvatarProps } from "@effect/ui-kit"
+import { Component, View } from "@effect/ui"
+import { Avatar, type AvatarProps } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
-import { Locator, Scene, Story } from "@effect/ui/testing"
+import { TestImages } from "@effect/ui/html/testing"
+import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { Effect, Layer, Schema } from "effect"
 
 const standIn = {
   elements: Html,
@@ -22,23 +22,28 @@ const image = Locator.tag("img")
 const fallback = Locator.attr("class", "fallback")
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
+const ada = { src: "/ada.png" }
+const adaKey = `image:"/ada.png",null,null,null,null`
+const loaded = { _tag: "ChangedImageStatus", source: ada, status: "loaded" } as const
+
 describe("Avatar", () => {
   it.effect("a restored source shows the fallback until its new load settles", () =>
     Effect.gen(function*() {
-      const ada = { src: "/ada.png" }
-      const loaded = { source: ada, status: "loaded" } as const
       const s = yield* Scene.make(Avatar, ada, standIn)
-      s.mounted(AvatarLoadImage(ada), loaded)
+      s.subscription(adaKey, loaded)
       assert.isDefined(s.query(image))
 
       for (
-        const report of [{ source: {}, status: "error" }, { source: { src: "/grace.png" }, status: "loading" }] as const
+        const [key, source, status] of [
+          ["image:null,null,null,null,null", {}, "error"],
+          [`image:"/grace.png",null,null,null,null`, { src: "/grace.png" }, "loading"]
+        ] as const
       ) {
-        s.props(report.source).mounted(AvatarLoadImage(report.source), report).props(ada)
+        s.props(source).subscription(key, { _tag: "ChangedImageStatus", source, status }).props(ada)
         assert.isDefined(s.query(Locator.attr("data-status", "loading")))
         assert.isUndefined(s.query(image))
         assert.isDefined(s.query(fallback))
-        s.mounted(AvatarLoadImage(ada), loaded)
+        s.subscription(adaKey, loaded)
         assert.isDefined(s.query(image))
         assert.isUndefined(s.query(fallback))
       }
@@ -47,11 +52,31 @@ describe("Avatar", () => {
   it.effect("the fallback waits for its delay, and then shows whenever the image isn't loaded", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(Avatar, { src: "/ada.png", fallbackDelay: 600 }, standIn)
-      s.expectMount(AvatarLoadImage({ src: "/ada.png" }))
       assert.isUndefined(s.query(fallback))
       s.subscription("fallbackDelay:600", { _tag: "ElapsedFallbackDelay" })
       assert.isDefined(s.query(fallback))
     }))
+
+  it.effect("on TestHost, the image shows once TestImages loads it", () =>
+    Effect.gen(function*() {
+      const Page = Component.define({
+        name: "Page",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => Avatar(h, { props: ada, view: (s) => standIn.view(s, h) })
+      })
+      const root = yield* TestHost.mount(Page, {})
+      yield* TestHost.settle
+      assert.isDefined(root.query(fallback))
+      yield* TestImages.load(ada)
+      yield* TestHost.settle
+      assert.isDefined(root.query(image))
+      assert.isUndefined(root.query(fallback))
+    }).pipe(Effect.provide(Layer.merge(TestHost.layer(), TestImages.layer))))
 
   it("the image keeps the consumer's attributes, but its own win, present or absent, before the part or after, and come last with src after the rest", () => {
     const element = h.img
