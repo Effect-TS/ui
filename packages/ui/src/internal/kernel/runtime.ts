@@ -50,7 +50,7 @@ import {
 import * as componentQueries from "../queries.ts"
 import * as schedule from "../schedule.ts"
 import { holdsRedacted } from "../schemaRedact.ts"
-import { scopeAddFinalizerUnsafe } from "../scope.ts"
+import { scopeAddFinalizerUnsafe, scopeRemoveFinalizerUnsafe } from "../scope.ts"
 import * as serverHost from "../serverHost.ts"
 import * as services from "../services.ts"
 import * as sharedReads from "../shared.ts"
@@ -1114,8 +1114,10 @@ const setup = (
    * finalizers start at once, as in a fiber started now: only a close left with something to wait
    * for takes a fiber, which is returned.
    */
-  const closeScope = (scope: Scope.Closeable): Fiber.Fiber<void> | undefined => {
-    const rest = Scope.closeUnsafe(scope, Exit.void)
+  const closeScope = (scope: Scope.Closeable): Fiber.Fiber<void> | undefined =>
+    settleClose(Scope.closeUnsafe(scope, Exit.void))
+  /** What a close returned: nothing left, or an Effect, run now, that a fiber is returned for if it waits. */
+  const settleClose = (rest: Effect.Effect<void> | undefined): Fiber.Fiber<void> | undefined => {
     if (rest === undefined || (Exit.isExit(rest) && Exit.isSuccess(rest))) return undefined
     const fiber = forkNow(ctx, Effect.uninterruptible(rest))
     // Ended in the fork: nothing is left to wait for.
@@ -1128,7 +1130,13 @@ const setup = (
    * `owner`'s own close waits for it before its services go, and so does a key change.
    */
   const closeUnder = (owner: Instance | undefined, scope: Scope.Closeable) => {
-    const fiber = closeScope(scope)
+    closedUnder(owner, closeScope(scope))
+  }
+  /** Closes an instance, as `closeUnder` closes its Scope, without making a Scope it never needed. */
+  const closeInstance = (owner: Instance | undefined, inst: Instance) => {
+    closedUnder(owner, settleClose((inst as Inst).close()))
+  }
+  const closedUnder = (owner: Instance | undefined, fiber: Fiber.Fiber<void> | undefined) => {
     if (fiber === undefined || owner === undefined || isClosed(owner.scope)) return
     if (owner.closes === undefined) {
       // Added after the instance's Layer and selection, so it runs before they close.
@@ -1682,7 +1690,7 @@ const setup = (
       // replacement created meanwhile must see the count without this instance's watchers.
       releaseWatches(inst)
       leave(inst)
-      closeUnder(inst.parent, inst.scope)
+      closeInstance(inst.parent, inst)
     })
     inst.parent?.children.delete(inst)
   }
@@ -2266,8 +2274,7 @@ const setup = (
       }
       return Effect.andThen(awaitRuns(waits), Effect.sync(() => unmounted(inst)))
     }
-    if (inst.scope.state._tag === "Closed") track(closing, forkNow(ctx, Effect.suspend(finalizer)))
-    else scopeAddFinalizerUnsafe(inst.scope, inst, finalizer)
+    ;(inst as Inst).hold(finalizer)
   }
 
   /**
@@ -2335,19 +2342,26 @@ const setup = (
     owners: Map<Component.Definition.Any, Instance> | undefined = undefined
     seen: Map<Instance, unknown> | undefined = undefined
     private fired: Renderer.Dispatch | undefined = undefined
+    /**
+     * The instance's Scope, made when it's first asked for. Until then the instance's finalizer, `held`,
+     * is registered in its parent's Scope: most instances fork nothing and start no work.
+     */
+    private own: Scope.Closeable | undefined
+    private held: (() => Effect.Effect<void>) | undefined = undefined
+    /** Closed before it had a Scope of its own. */
+    private dead = false
     readonly path: string
     readonly depth: number
     readonly component: Component.Any
     readonly parent: Instance | undefined
     readonly owner: View.Owner | undefined
-    readonly scope: Scope.Closeable
     constructor(
       path: string,
       depth: number,
       component: Component.Any,
       parent: Instance | undefined,
       owner: View.Owner | undefined,
-      scope: Scope.Closeable,
+      scope: Scope.Closeable | undefined,
       env: Env,
       props: unknown,
       onEmit: (events: unknown) => unknown,
@@ -2360,7 +2374,7 @@ const setup = (
       this.component = component
       this.parent = parent
       this.owner = owner
-      this.scope = scope
+      this.own = scope
       this.author = author ?? this
       this.content = content
       this.env = env
@@ -2375,7 +2389,61 @@ const setup = (
      * From the moment its Scope or an ancestor's starts closing, not once it has: see `Instance.closed`.
      */
     get closed(): boolean {
-      return isClosed(this.scope) || this.parent?.closed === true
+      const own = this.own
+      return (own === undefined ? this.dead : isClosed(own)) || this.parent?.closed === true
+    }
+    get scope(): Scope.Closeable {
+      let own = this.own
+      if (own !== undefined) return own
+      if (this.dead) {
+        own = Scope.makeUnsafe("sequential")
+        Scope.closeUnsafe(own, Exit.void)
+      } else {
+        // Forked now, so it closes before what its parent forked earlier. Its finalizer moves into it.
+        const under = this.parent!.scope
+        own = Scope.forkUnsafe(under, "sequential")
+        const held = this.held
+        if (held !== undefined) {
+          this.held = undefined
+          scopeRemoveFinalizerUnsafe(under, this)
+          scopeAddFinalizerUnsafe(own, this, held)
+        }
+      }
+      return this.own = own
+    }
+    /** Adds the instance's finalizer: to its Scope, or to its parent's until it has one. */
+    hold(finalizer: () => Effect.Effect<void>): void {
+      const own = this.own
+      const under = own ?? this.parent!.scope
+      if (under.state._tag === "Closed") {
+        if (own === undefined) this.dead = true
+        track(closing, forkNow(ctx, Effect.suspend(finalizer)))
+      } else if (own !== undefined) {
+        scopeAddFinalizerUnsafe(own, this, finalizer)
+      } else {
+        this.held = finalizer
+        scopeAddFinalizerUnsafe(under, this, () => {
+          this.dead = true
+          this.held = undefined
+          return finalizer()
+        })
+      }
+    }
+    /** Closes the instance's Scope, or runs its finalizer when it has none. What's left of the close. */
+    close(): Effect.Effect<void> | undefined {
+      const own = this.own
+      if (own !== undefined) return Scope.closeUnsafe(own, Exit.void) as Effect.Effect<void> | undefined
+      if (this.dead) return undefined
+      this.dead = true
+      const held = this.held
+      if (held === undefined) return undefined
+      this.held = undefined
+      scopeRemoveFinalizerUnsafe(this.parent!.scope, this)
+      try {
+        return held()
+      } catch (defect) {
+        return Effect.die(defect)
+      }
     }
     /** An outlet's messages go to the author of its content. */
     dispatch(message: unknown, source: MessageLog.Source): void {
@@ -2399,7 +2467,8 @@ const setup = (
     content?: ((parts: any) => View.Content<any, any>) | undefined,
     slots?: Slotted["values"]
   ): Instance => {
-    const scope = Scope.forkUnsafe(parent?.scope ?? rootScope, "sequential")
+    // A child's Scope is made when it's needed: see `Inst.scope`.
+    const ownScope = parent === undefined ? Scope.forkUnsafe(rootScope, "sequential") : undefined
     const bound = componentQueries.boundOf(component)
     const depth = parent === undefined ? 0 : parent.depth + 1
     const owner: View.Owner | undefined = content === undefined ? undefined : { path, depth }
@@ -2409,7 +2478,7 @@ const setup = (
       component,
       parent,
       owner,
-      scope,
+      ownScope,
       parentEnv,
       props,
       onEmit,
@@ -2521,7 +2590,7 @@ const setup = (
           keys = readKeys(component, props, model)
           if (server !== undefined) {
             // The server builds once, from the Model it starts with.
-            buildScope = Scope.forkUnsafe(scope, "sequential")
+            buildScope = Scope.forkUnsafe(inst.scope, "sequential")
           } else {
             buildScope = Scope.makeUnsafe("sequential")
             const selection: Selection = {
@@ -2539,12 +2608,12 @@ const setup = (
             }
             inst.selection = selection
             // Added before the instance's runs and Subscriptions start, so it closes after them.
-            addFinalizer(scope, closeSelection(selection))
+            addFinalizer(inst.scope, closeSelection(selection))
           }
         }
         // Forked now, before the run-stop finalizer below, so a build that waits for its parent's Env
         // still closes after the instance's runs.
-        buildScope ??= Scope.forkUnsafe(scope, "sequential")
+        buildScope ??= Scope.forkUnsafe(inst.scope, "sequential")
         const sharedLayer = component.sharedLayer
         // Failed on the server: the client adopts the failure, which the Model already handled, and builds nothing.
         const adoptsFailure = shipped === "Failed"
@@ -2552,7 +2621,7 @@ const setup = (
         const own = shared !== undefined ? shared.env : buildingEnv(parentEnv)
         inst.env = own
         if (shared !== undefined) {
-          addFinalizer(scope, Effect.suspend(() => releaseShared(parentEnv, sharedLayer!, shared)))
+          addFinalizer(inst.scope, Effect.suspend(() => releaseShared(parentEnv, sharedLayer!, shared)))
         }
         let settleBuild: (() => void) | undefined
         const buildStamp = shared !== undefined ? shared.stamp : ++builds
@@ -2590,7 +2659,7 @@ const setup = (
         }
         // Added after the Layer's Scopes, which all exist by now, so the close stops the instance's runs
         // and waits for their cleanup before the services they use are released.
-        addFinalizer(scope, Effect.suspend(() => awaitRuns(stopRuns(inst))))
+        addFinalizer(inst.scope, Effect.suspend(() => awaitRuns(stopRuns(inst))))
       }
     }
 
@@ -5877,7 +5946,7 @@ const setup = (
         viewChanged = true
         releaseWatches(rendered.inst)
         leave(rendered.inst)
-        closeUnder(inst, rendered.inst.scope)
+        closeInstance(inst, rendered.inst)
         return
       }
       case "Fallback":
