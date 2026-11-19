@@ -1,0 +1,221 @@
+/**
+ * A modal dialog that interrupts the user with something they must answer
+ * before going on, such as confirming that a draft is discarded.
+ *
+ * `AlertDialog` is a function that declares a headless `Dialog` with three
+ * things fixed: the dialog has `role="alertdialog"`, it always opens as a
+ * modal, and a press outside the popup doesn't ask it to close. Everything
+ * else is the `Dialog`'s: the parts, the events, focus, transitions and
+ * nesting. The consumer owns whether it is open, passes it as `open`, and
+ * stores what the `Opened` and `Dismissed` events report.
+ *
+ * **Anatomy**
+ *
+ * | Part           | Element                                              |
+ * | :------------- | :--------------------------------------------------- |
+ * | `trigger`      | `<button>` that opens the alert dialog               |
+ * | `portal`       | `<dialog>` in the top layer, around the parts below  |
+ * | `backdrop`     | `<div>` that covers the page                         |
+ * | `viewport`     | `<div>` that positions the popup                     |
+ * | `popup`        | `<div>` with the alert dialog's content              |
+ * | `title`        | a heading, `<h1>` to `<h6>`, that labels it          |
+ * | `description`  | `<p>` that describes it                              |
+ * | `close`        | `<button>` that closes it                            |
+ * | `initialFocus` | any element, focused when it opens                   |
+ * | `finalFocus`   | any element, focused when it closes                  |
+ *
+ * Each part takes the consumer's builder and returns it with the part
+ * applied, and the consumer adds the children, as for a `Dialog`. The portal
+ * returns `undefined` while the alert dialog is closed, unless
+ * `keepMounted`. Give it a `title` and a `description`: the portal is
+ * labelled by the one and described by the other, which a screen reader
+ * announces as the alert dialog opens.
+ *
+ * **Data attributes**
+ *
+ * The same as a `Dialog`'s, each present with an empty value or absent:
+ *
+ * - `trigger`: `data-popup-open`
+ * - `backdrop`: `data-open` / `data-closed`, `data-starting-style`,
+ *   `data-ending-style`
+ * - `viewport` and `popup`: the backdrop's, and `data-nested` and
+ *   `data-nested-dialog-open`
+ *
+ * **Keyboard**
+ *
+ * The trigger and the close button are native buttons, so Enter and Space
+ * press them. Escape asks the alert dialog to close, with `escape-key`.
+ * Focus moves into the popup when it opens, stays inside while it shows, and
+ * goes back to the trigger when it closes, as in a modal `Dialog`. Put
+ * `initialFocus` on the least destructive answer, such as Cancel.
+ *
+ * **Dismissal**
+ *
+ * The alert dialog asks to close only from its trigger, its close part and
+ * Escape. A press outside the popup, on the backdrop included, asks nothing,
+ * and the portal's `closedby` stays `"closerequest"`, so the browser doesn't
+ * close it on a backdrop click either. Answers other than closing, such as
+ * Discard, are the consumer's buttons, which send the consumer's messages.
+ *
+ * An alert dialog drawn inside a `Dialog`'s popup is nested in it, as a
+ * `Dialog` would be: the outer popup gets `data-nested-dialog-open`, and only
+ * the alert dialog hears Escape. A `DialogTrigger` opens one drawn
+ * elsewhere, paired with it by its `id`. It renders a `Dialog` instance, so
+ * an alert dialog and a dialog under one parent each take a `key`, and a
+ * `Scene` of the consumer names it `Dialog`.
+ *
+ * **Example** (Confirming that a draft is discarded)
+ *
+ * ```ts import.meta.vitest
+ * import { Component, UiSchema } from "@effect/ui"
+ * import { Html, HtmlServer } from "@effect/ui/html"
+ * import { AlertDialog } from "@effect/ui-kit"
+ * import { Effect, Schema } from "effect"
+ *
+ * const EditorMessage = UiSchema.TaggedEnum({ AskedDiscard: {}, Kept: {}, Discarded: {} })
+ *
+ * const Editor = Component.define({
+ *   name: "Editor",
+ *   model: Schema.Struct({ confirming: Schema.Boolean }),
+ *   message: EditorMessage,
+ *   elements: Html
+ * }).make({
+ *   init: () => ({ confirming: true }),
+ *   update: {
+ *     AskedDiscard: (model) => ({ ...model, confirming: true }),
+ *     Kept: (model) => ({ ...model, confirming: false }),
+ *     Discarded: (model) => ({ ...model, confirming: false })
+ *   },
+ *   view: (model, h) =>
+ *     AlertDialog(h, {
+ *       props: { open: model.confirming },
+ *       onEmit: {
+ *         Opened: () => EditorMessage.AskedDiscard(),
+ *         Dismissed: () => EditorMessage.Kept(),
+ *         Settled: () => undefined
+ *       },
+ *       view: (s) =>
+ *         h.div(
+ *           s.trigger(h.button).children("Discard draft"),
+ *           s.portal(h.dialog)?.children(
+ *             s.popup(h.div.class("popup")).children(
+ *               s.title(h.h2).children("Discard draft?"),
+ *               s.description(h.p).children("You can't undo this."),
+ *               s.initialFocus(s.close(h.button)).children("Cancel"),
+ *               h.button.onClick(EditorMessage.Discarded()).children("Discard")
+ *             )
+ *           )
+ *         )
+ *     })
+ * })
+ *
+ * // The portal is an alert dialog, labelled by its title.
+ * const { html } = await Effect.runPromise(HtmlServer.renderToHtml(Editor, {}))
+ * const title = /<h2 id="([^"]+)"/.exec(html)?.[1]
+ * if (title === undefined || !/<dialog[^>]* role="alertdialog"/.test(html) || !html.includes(`aria-labelledby="${title}"`)) {
+ *   throw new Error("the portal isn't an alert dialog labelled by its title")
+ * }
+ * ```
+ *
+ * @stability experimental
+ * @since 0.1.0
+ */
+import type * as Component from "@effect/ui/Component"
+import * as View from "@effect/ui/View"
+import type * as AsyncResult from "effect/reactivity/AsyncResult"
+import * as Schema from "effect/Schema"
+import { Dialog, type DialogEvents, DialogProps } from "./Dialog.ts"
+
+const { disablePointerDismissal: _disablePointerDismissal, modal: _modal, ...fields } = DialogProps.fields
+
+/**
+ * Controls whether the alert dialog is open and where focus goes: a
+ * `Dialog`'s props without `modal` and `disablePointerDismissal`, which an
+ * alert dialog fixes.
+ *
+ * **Details**
+ *
+ * - `open`: whether the alert dialog shows. Required: the consumer owns it.
+ * - `triggerId`, `keepMounted`, `forceRenderBackdrop`, `initialFocus`,
+ *   `finalFocus`, `id`, `openMethod` and `holdExit`: as for a `Dialog`.
+ *
+ * @stability experimental
+ * @category schemas
+ * @since 0.1.0
+ */
+export const AlertDialogProps = Schema.Struct(fields)
+
+/**
+ * The props of an `AlertDialog`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type AlertDialogProps = typeof AlertDialogProps.Type
+
+/**
+ * What an `AlertDialog`'s `view` gets: a `Dialog`'s parts and plain values.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type AlertDialogParts = Component.Headless.Parts<typeof Dialog>
+
+// The portal is the element the dialog is labelled on, so its role goes
+// there. Written in `forward`, so it wins over a `role` or `closedby` the
+// consumer set on the builder or chained after the part. `closedby` keeps
+// the browser from closing the modal on a backdrop click.
+const alert = <B extends View.PartTarget<"dialog">>(element: B): B =>
+  (element as unknown as View.ElementBuilder<unknown>).forward((node) =>
+    node.attr("role", "alertdialog").attr("closedby", "closerequest")
+  ) as unknown as B
+
+/**
+ * A headless alert dialog. Call it as a `Dialog`, with the consumer's `h`, a
+ * `key` when it needs one, `props`, `onEmit` and a `view` closure that draws
+ * the trigger with `s.trigger` and the alert dialog with `s.portal` and the
+ * parts inside it.
+ *
+ * **Details**
+ *
+ * It declares a `Dialog` with `modal: true` and `disablePointerDismissal:
+ * true`, so it emits the `Dialog`'s events. `Dismissed` carries
+ * `trigger-press`, `escape-key` or `close-press`, never `outside-press` or
+ * `focus-out`.
+ *
+ * On top of the `Dialog`'s attributes, the portal's `role="alertdialog"` and
+ * `closedby="closerequest"` win over the consumer's, whether the consumer set
+ * them on the builder it passes in or chained them after the part.
+ *
+ * @stability experimental
+ * @category components
+ * @since 0.1.0
+ */
+export const AlertDialog = <Msg, RV = never, RF = never>(
+  h: View.Helper<Msg, unknown>,
+  options:
+    & View.Child.Options<AlertDialogProps, DialogEvents, NoInfer<Msg>>
+    & {
+      /** Shown if the alert dialog fails, until its key changes. Without it, it is blank. */
+      readonly fallback?:
+        | ((result: AsyncResult.Failure<never, unknown>) => View.Content<NoInfer<Msg>, RF>)
+        | undefined
+      /** The alert dialog's whole view, from its parts. */
+      readonly view: (parts: AlertDialogParts) => View.Content<NoInfer<Msg>, RV>
+    }
+): ReturnType<typeof Dialog<Msg, RV, RF>> => {
+  const { view } = options
+  return Dialog<Msg, RV, RF>(h, {
+    ...options,
+    props: { ...options.props, modal: true, disablePointerDismissal: true },
+    view: (s) => {
+      const portal = View.wrapPart(
+        s.portal,
+        <B extends View.PartTarget<"dialog">>(element: B): ReturnType<B["attr"]> | undefined => s.portal(alert(element))
+      )
+      return view({ ...s, portal })
+    }
+  })
+}
