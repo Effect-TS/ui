@@ -1,8 +1,6 @@
 import { Command, Component, Head, UiSchema } from "@effect/ui"
 import { Duration, Effect, Schema } from "effect"
 
-// MODEL
-
 export const UploadStatus = Schema.Literals(["Uploading", "Done", "Cancelled"])
 export type UploadStatus = typeof UploadStatus.Type
 
@@ -27,10 +25,6 @@ const withStatus = (model: UploadsModel, uploadId: number, status: UploadStatus)
   uploads: model.uploads.map((upload) => upload.id === uploadId ? { ...upload, status } : upload)
 })
 
-// MESSAGE
-
-// An interrupt sends no message, so there is nothing like Foldkit's
-// `CompletedCancelUploadFile`: a cancel is marked in the Model by the click.
 export const UploadsMessage = UiSchema.TaggedEnum({
   ClickedStartUpload: {},
   ClickedCancelUpload: { uploadId: Schema.Number },
@@ -38,8 +32,6 @@ export const UploadsMessage = UiSchema.TaggedEnum({
   ClickedRestartUpload: { uploadId: Schema.Number },
   CompletedUploadFile: { uploadId: Schema.Number }
 })
-
-// FAKE FILES
 
 export interface FakeFile {
   readonly name: string
@@ -54,15 +46,8 @@ export const FAKE_FILES: ReadonlyArray<FakeFile> = [
   { name: "database-backup.sql", sizeMegabytes: 61 }
 ]
 
-// COMMAND
-
 const MILLISECONDS_PER_MEGABYTE = 100
 
-// Uploading is I/O, so it is a `Command.Service`: a real app swaps the fake
-// body for one that captures an HTTP client, and a test can provide a fake.
-// Each upload is its own group, so cancelling one leaves the others running.
-// With `switch`, a restarted upload starts once its cancelled run has exited,
-// and Story and Scene steps can send messages while an upload is pending.
 export class UploadFile extends Command.Service<UploadFile>()(
   "uploads/UploadFile",
   {
@@ -77,8 +62,6 @@ export class UploadFile extends Command.Service<UploadFile>()(
       )
   })
 ) {}
-
-// VIEW
 
 const BADGE_CLASS: Record<UploadStatus, string> = {
   Uploading: "bg-blue-100 text-blue-700",
@@ -130,10 +113,6 @@ const UploadRow = UploadsDef.fragment((h, upload: Upload) =>
   )
 )
 
-// COMPONENT
-
-// The component as defined, which requires `UploadFile`, for a test that
-// provides its own Layers.
 export const UploadsNoDeps = UploadsDef.make({
   init: () => ({ uploadId: 0, uploads: [] }),
   update: {
@@ -150,15 +129,12 @@ export const UploadsNoDeps = UploadsDef.make({
       )
     },
 
-    // Once `update` interrupts a run, the run delivers nothing, so marking the
-    // upload cancelled here can't be undone by a late `CompletedUploadFile`.
-    // A finished or cancelled upload has no run to interrupt.
+    // An interrupted run cannot deliver a late completion that would undo cancellation.
     ClickedCancelUpload: (model, { uploadId }, $) =>
       model.uploads.some((upload) => upload.id === uploadId && isUploading(upload))
         ? $.set(withStatus(model, uploadId, "Cancelled")).run(Command.interrupt(UploadFile, { uploadId }))
         : model,
 
-    // With no group, the interrupt stops every run of `UploadFile`.
     ClickedCancelAllUploads: (model, _message, $) =>
       $.set({
         ...model,
@@ -199,5 +175,4 @@ export const UploadsNoDeps = UploadsDef.make({
     )
 })
 
-// The component the app and its tests use, with `UploadFile`'s Layer provided.
 export const Uploads = UploadsNoDeps.pipe(Component.provide(UploadFile.layer))
