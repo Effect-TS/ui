@@ -46,6 +46,7 @@ import {
   checkFallbackPaths,
   type ChildPaths,
   segment,
+  segmentOf,
   slotSegment
 } from "../paths.ts"
 import type * as prefetch from "../prefetch.ts"
@@ -2585,13 +2586,17 @@ const setup = (
     private held = false
     /** Closed before it had a Scope of its own. */
     private dead = false
-    readonly path: string
+    /** Its path once made: a root's, a feature's or a headless instance's at once, others' when asked for. */
+    private named: string | undefined
+    /** The key of the child it was declared as, which its path ends with. */
+    readonly key: string
     readonly depth: number
     readonly component: Component.Any
     readonly parent: Instance | undefined
     readonly owner: View.Owner | undefined
     constructor(
-      path: string,
+      named: string | undefined,
+      key: string,
       depth: number,
       component: Component.Any,
       parent: Instance | undefined,
@@ -2604,7 +2609,8 @@ const setup = (
       content: ((parts: any) => View.Content<any, any>) | undefined,
       author: Instance | undefined
     ) {
-      this.path = path
+      this.named = named
+      this.key = key
       this.depth = depth
       this.component = component
       this.parent = parent
@@ -2619,6 +2625,13 @@ const setup = (
       if (component.definition.shares !== undefined) {
         ;(this.rare = new Rare()).owning = { seq: -1, round: false, collected: undefined, restored: false }
       }
+    }
+    /**
+     * Made the first time it's asked for, from its parent's path and its own segment: most instances
+     * are never asked, and a string for each row would outweigh the row's other fields.
+     */
+    get path(): string {
+      return this.named ??= this.parent!.path + "/" + segmentOf(this.component, this.key)
     }
     // The rare fields, read from and written to `rare` by the accessors defined below the class.
     declare readonly owning: Owning | undefined
@@ -2743,7 +2756,8 @@ const setup = (
   const makeInstance = (
     component: Component.Any,
     props: unknown,
-    path: string,
+    named: string | undefined,
+    key: string,
     parent: Instance | undefined,
     parentEnv: Env,
     onEmit: (events: unknown) => unknown,
@@ -2755,9 +2769,14 @@ const setup = (
     // A child's Scope is made when it's needed: see `Inst.scope`.
     const ownScope = parent === undefined ? Scope.forkUnsafe(rootScope, "sequential") : undefined
     const depth = parent === undefined ? 0 : parent.depth + 1
-    const owner: View.Owner | undefined = content === undefined ? undefined : { path, depth }
+    // Hydration reads state by path, and a headless instance's parts derive ids from it: made here then.
+    const path = named === undefined && (hydrating !== undefined || content !== undefined)
+      ? parent!.path + "/" + segmentOf(component, key)
+      : named
+    const owner: View.Owner | undefined = content === undefined ? undefined : { path: path!, depth }
     const inst: Instance = new Inst(
-      path,
+      content === undefined ? named : path,
+      key,
       depth,
       component,
       parent,
@@ -2782,14 +2801,14 @@ const setup = (
     // Hydration: the Model and query results the server rendered this path with, unless it deferred the path.
     const fromServer: Adopted = hydrating !== undefined &&
         (parent === undefined || parent.adoptsChildren) &&
-        !hydrating.deferred.has(path) &&
-        Object.hasOwn(hydrating.state, path)
-      ? stateCodecOf(component).decode(hydrating.state[path])
+        !hydrating.deferred.has(path!) &&
+        Object.hasOwn(hydrating.state, path!)
+      ? stateCodecOf(component).decode(hydrating.state[path!])
       : Option.none()
     // An owner adopting the server's Model starts from what its reports last sent there.
     const collectedOnServer = Option.isSome(fromServer) && component.definition.collects !== undefined
       ? Option.flatMap(
-        Option.fromUndefinedOr(hydrating!.state["~reported"]?.[path]),
+        Option.fromUndefinedOr(hydrating!.state["~reported"]?.[path!]),
         jsonCodecOf(component.definition.message).decode
       )
       : Option.none()
@@ -4823,12 +4842,12 @@ const setup = (
   const ownView = (inst: Instance): View.Node<any, any> =>
     checked(
       inst,
-      inst.component.view(inst.model, inst.props, runningOf(inst), inst.results, inst.path, sharedOf(inst), inst)
+      inst.component.view(inst.model, inst.props, runningOf(inst), inst.results, inst, sharedOf(inst), inst)
     )
 
   /** Checks a fresh view's child paths, which its fallbacks are checked against as they're shown. */
   const checked = (inst: Instance, tree: View.Node<any, any>): View.Node<any, any> => {
-    const paths = checkChildPaths(inst.path, tree)
+    const paths = checkChildPaths(inst, tree)
     // A view with no child, ref or outlet has nothing to check its fallbacks or refs against.
     inst.childPaths = paths.paths === undefined && paths.refs === undefined && paths.placed === undefined
       ? undefined
@@ -4854,8 +4873,8 @@ const setup = (
     const written: Array<ChildPaths> = author.childPaths === undefined ? [] : [author.childPaths]
     closurePaths(author, written)
     try {
-      checkAuthorRefs(author.path, written)
-      checkAuthorPlacements(author.path, written)
+      checkAuthorRefs(author, written)
+      checkAuthorPlacements(author, written)
     } catch (error) {
       failInstance(author, Cause.die(error), "view")
     }
@@ -5029,6 +5048,7 @@ const setup = (
     const name = view.name
     const out: Instance = new Inst(
       outletPath(receiver, name),
+      "",
       parent.depth + 1,
       outletComponent,
       parent,
@@ -5080,7 +5100,7 @@ const setup = (
           node._tag === "Outlet" && node.noText !== noText ? { _tag: "Outlet", name: node.name, noText } : node
         )
       }
-      out.childPaths = checkContentPaths(out.path, views)
+      out.childPaths = checkContentPaths(out, views)
       out.clash = undefined
       checkKeys(out, views)
       // The author's refs are checked once its other trees are current too.
@@ -5180,11 +5200,12 @@ const setup = (
           : inst.path + ": " + component.definition.name + " has its own view, so declaring it as a child takes none"
       )
     }
-    const path = `${inst.path}/${segment(view)}`
     const child = makeInstance(
       component,
       view.props,
-      path,
+      // A feature's segment names the feature, not the component that implements it.
+      component === target ? undefined : `${inst.path}/${segment(view)}`,
+      view.key,
       inst,
       childEnv,
       view.onEmit,
@@ -6271,6 +6292,7 @@ const setup = (
     component,
     rootProps,
     rootPath,
+    "",
     undefined,
     readyEnv(withCache(ctx)),
     () => undefined,

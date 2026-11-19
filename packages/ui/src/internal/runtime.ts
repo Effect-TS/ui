@@ -4551,7 +4551,7 @@ const setup = (
 
   /** Checks a fresh view's child paths, which its fallbacks are checked against as they're shown. */
   const checked = (inst: Instance, tree: View.Node<any, any>): View.Node<any, any> => {
-    inst.childPaths = checkChildPaths(inst.path, tree)
+    inst.childPaths = checkChildPaths(inst, tree)
     inst.clash = undefined
     // Its author's refs are checked once the author's other trees are current too.
     if (inst.owner !== undefined) refChecks.add(inst.author)
@@ -4573,8 +4573,8 @@ const setup = (
     const written: Array<ChildPaths> = author.childPaths === undefined ? [] : [author.childPaths]
     closurePaths(author, written)
     try {
-      checkAuthorRefs(author.path, written)
-      checkAuthorPlacements(author.path, written)
+      checkAuthorRefs(author, written)
+      checkAuthorPlacements(author, written)
     } catch (error) {
       failInstance(author, Cause.die(error), "view")
     }
@@ -4841,7 +4841,7 @@ const setup = (
           node._tag === "Outlet" && node.noText !== noText ? { _tag: "Outlet", name: node.name, noText } : node
         )
       }
-      out.childPaths = checkContentPaths(out.path, views)
+      out.childPaths = checkContentPaths(out, views)
       out.clash = undefined
       checkKeys(out, views)
       // The author's refs are checked once its other trees are current too.

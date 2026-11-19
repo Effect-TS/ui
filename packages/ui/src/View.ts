@@ -1885,19 +1885,20 @@ class HelperImpl<Msg, Props> implements Helper<Msg, Props> {
   readonly props: Props
   readonly elements: Vocabulary<any> | undefined
   readonly runningFn: Running
-  readonly instancePath: string
+  /** The instance's path, or the instance, whose path is read only when `id` is called. */
+  readonly at: string | { readonly path: string }
   readonly store: LazyStore | undefined
   constructor(
     props: Props,
     elements: Vocabulary<any> | undefined,
     running: Running | undefined,
-    path: string,
+    at: string | { readonly path: string },
     store: LazyStore | undefined
   ) {
     this.props = props
     this.elements = elements
     this.runningFn = running ?? notRunning
-    this.instancePath = path
+    this.at = at
     this.store = store
   }
   lazy(this: any, fn: (h: any, ...args: Array<any>) => Content<Msg, any>, ...args: Array<any>): any {
@@ -1931,7 +1932,8 @@ class HelperImpl<Msg, Props> implements Helper<Msg, Props> {
     return this.runningFn(Command.nameOf(command), Command.groupKeyOf(command, group))
   }
   id(name: string, key?: string | number | undefined): string {
-    return idOf(this.instancePath, name, key)
+    const at = this.at
+    return idOf(typeof at === "string" ? at : at.path, name, key)
   }
   el(tag: string, ...inputs: ReadonlyArray<Input<Msg, any>>): any {
     const textParents = this.elements?.textParents
@@ -1992,7 +1994,7 @@ export const makeHelper = <Msg, Props, V extends Elements = never>(
   props: Props,
   elements: Vocabulary<V> | undefined,
   running?: Running | undefined,
-  path?: string | undefined,
+  path?: string | { readonly path: string } | undefined,
   store?: LazyStore | undefined
 ): Helper<Msg, Props> & Tags<V, Msg> => {
   if (elements === undefined) return new HelperImpl(props, undefined, running, path ?? "", store) as any
