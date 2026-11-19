@@ -3615,11 +3615,14 @@ const setup = (
           Context.add(Context.add(envCtx, Scope.Scope, running.scope), services.CurrentRoot, () => handle)
         )
         const current = () => !inst.closed && subscriptions.get(key) === running
-        // Rendering the ancestors may stop this key, as for a query result: its message is then dropped.
-        const deliver = (message: unknown, accepted?: () => void) =>
+        // Rendering the ancestors may stop this key, or change its declaration, as for a query result.
+        const enter = (f: (latest: Subscription.Subscription<any, any>) => void) =>
           step(() => {
             renderAbove(inst)
-            if (!current()) return
+            if (current()) f(running.latest)
+          })
+        const deliver = (message: unknown, accepted?: () => void) =>
+          enter(() => {
             accepted?.()
             inst.dispatch(message, source)
           })
@@ -3628,7 +3631,7 @@ const setup = (
           if (current()) deliver(message, accepted)
         }, (cause) => {
           if (current()) step(() => failInstance(inst, cause, "subscription", key))
-        }, () => running.latest)
+        }, enter)
         if (attachedTo !== undefined) addFinalizer(running.scope, Effect.sync(attachedTo.close))
         const fiber = forkLater(
           context,

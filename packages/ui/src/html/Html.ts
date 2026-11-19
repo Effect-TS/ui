@@ -640,17 +640,22 @@ const listenFor = (
     preventDefault: options?.preventDefault
   }
   // The runtime attaches the listener here and runs no Stream, as for `Router.prefetch`. Each event
-  // goes to the handler of the latest `subscriptions` result, and cancels its default as the
-  // message is taken.
-  const direct: NonNullable<services.Direct[typeof services.direct]> = (context, emit, fail, latest) => ({
+  // goes to the declaration the pending renders leave, and nowhere once they remove it.
+  const direct: NonNullable<services.Direct[typeof services.direct]> = (context, emit, fail, enter) => ({
     initial: Effect.void,
-    close: Context.get(context, GlobalEvents).listen(target, event, { capture }, (payload, preventDefault) => {
-      try {
-        globalEvents.run(globalEvents.listenerOf(latest()) ?? declared, payload, preventDefault, emit)
-      } catch (error) {
-        fail(Cause.die(error))
-      }
-    })
+    close: Context.get(context, GlobalEvents).listen(
+      target,
+      event,
+      { capture },
+      (payload, preventDefault) =>
+        enter((latest) => {
+          try {
+            globalEvents.run(globalEvents.listenerOf(latest) ?? declared, payload, preventDefault, emit)
+          } catch (error) {
+            fail(Cause.die(error))
+          }
+        })
+    )
   })
   return Object.assign(
     Subscription.make(`@effect/ui/html/${target}`, capture ? [event, "capture"] : [event], () => Stream.never),
