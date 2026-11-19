@@ -198,6 +198,11 @@ export const makeHost = (): Renderer.Host<TestNode> & {
       operations.push(`create ${JSON.stringify(text)}`)
       return { _tag: "Text", text, parent: undefined, fire: fireFrom }
     },
+    // A detached child's nodes go in an element that is never inserted, so no query reaches them.
+    createContainer() {
+      operations.push("create container")
+      return makeElement("#container")
+    },
     setText(node, text) {
       operations.push(`text ${describe(node)} -> ${JSON.stringify(text)}`)
       ;(node as TestText).text = text

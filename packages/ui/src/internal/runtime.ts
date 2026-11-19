@@ -173,7 +173,7 @@ const sameKeys = (a: Keys, b: Keys): boolean =>
 // Rendered tree
 // ---------------------------------------------------------------------------
 
-type Rendered = RElement | RText | RChild | RFallback | ROutlet
+type Rendered = RElement | RText | RChild | RFallback | ROutlet | RDetached
 
 /**
  * A rendered element. A patch updates it in place, so a node that stays keeps
@@ -283,6 +283,18 @@ interface RFallback {
   readonly failedChild: boolean
 }
 
+/**
+ * A child declared `detached`: what it shows is patched as usual, in `container`, and `node`, an empty
+ * text node, stands in the parent's tree for it.
+ */
+interface RDetached {
+  readonly _tag: "Detached"
+  v: View.Child<any, any>
+  inner: RChild | RFallback
+  readonly node: unknown
+  readonly container: unknown
+}
+
 /** How many times one instance may deliver sends in a flush before it fails. */
 const maxSendPasses = 100
 
@@ -299,6 +311,8 @@ const findChild = (rendered: ReadonlyArray<Rendered>, key: string): RChild | RFa
     let found: RChild | RFallback | undefined
     if (r._tag === "Element") {
       found = findChild(r.children, key)
+    } else if (r._tag === "Detached") {
+      found = findChild([r.inner], key)
     } else if (r._tag === "Child" || r._tag === "Fallback") {
       if (r.v.ref !== undefined && r.v.ref.key === key) return r
       if (r._tag === "Fallback") found = findChild([r.inner], key)
@@ -460,6 +474,8 @@ export interface Instance {
   // empty Map or Set costs about 150 bytes.
   /** `Unmounted` is logged: the instance left the tree, though its Scope may still be closing. */
   left: boolean
+  /** The containers of the detached children its view declares, unregistered when it leaves. */
+  parked: Set<unknown> | undefined
   /**
    * The closes still running of Scopes forked from this instance's and closed early: removed
    * descendants, stopped Subscriptions and mounts. Their cleanup can use this instance's services,
@@ -1446,7 +1462,7 @@ const setup = (
       return found
     })
 
-  /** The head entries in document order. A child's fallback contributes none. */
+  /** The head entries in document order. A child's fallback contributes none, and a detached child none. */
   const headTree = (inst: Instance): Head.Tree => ({
     entries: inst.closed || inst.failure !== undefined ? [] : memoized(inst.head),
     children: inst.closed || inst.failure !== undefined ? [] : inst.rendered.flatMap(headChildren),
@@ -1460,7 +1476,7 @@ const setup = (
       ? rendered.children.flatMap(headChildren)
       : []
 
-  /** The child instances an instance rendered, as their snapshots. A failed child has none. */
+  /** The child instances an instance rendered, as their snapshots. A failed or detached child has none. */
   const snapshotChildren = (rendered: Rendered): Array<Snapshot> =>
     rendered._tag === "Child"
       ? rendered.inst.snapshot === undefined || rendered.inst.failure !== undefined ? [] : [rendered.inst.snapshot]
@@ -1564,6 +1580,10 @@ const setup = (
   const leave = (inst: Instance) => {
     if (inst.left) return
     inst.left = true
+    // At once, not when the Scope closes: the host may hand out a container's handle again.
+    if (inst.parked !== undefined) {
+      for (const container of inst.parked) unpark(inst, container)
+    }
     // Its reports go with it.
     markReports(inst)
     for (const child of inst.children) leave(child)
@@ -2256,6 +2276,7 @@ const setup = (
       deferred: false,
       runs: [],
       left: false,
+      parked: undefined,
       closes: undefined,
       subscriptions: undefined,
       watches: undefined,
@@ -4094,6 +4115,7 @@ const setup = (
       case "Outlet":
         return releaseWatches(rendered.inst)
       case "Fallback":
+      case "Detached":
         return releaseRendered(rendered.inner)
       case "Element": {
         for (const child of rendered.children) releaseRendered(child)
@@ -4124,6 +4146,9 @@ const setup = (
       }
       case "Fallback":
         return findRef(rendered.inner, key, who, author)
+      case "Detached":
+        // A detached child's nodes are out of the document: a ref in it finds none.
+        return undefined
       case "Child":
         return rendered.inst.owner === undefined
           ? firstInOutlets(
@@ -4148,13 +4173,38 @@ const setup = (
     lookup: <Node>(ref: Renderer.Ref<Node>) =>
       Effect.callback<Option.Option<Node>>((resume) => {
         afterCommit(() => {
-          const node = inst.closed
+          const found = inst.closed
             ? undefined
             : firstDefined(inst.rendered, (rendered) => findRef(rendered, ref.key, inst, inst.author))
+          // A node in a detached child, the instance's own included, is out of the document.
+          const node = found === undefined || isParked(found) ? undefined : found
           resume(Effect.succeed(Option.fromUndefinedOr(node as Node | undefined)))
         })
       })
   })
+
+  /**
+   * The containers that hold detached children's nodes. A host's handles may be numbers or strings, which a
+   * host may hand out again. Each container belongs to the instance whose view declared the child, so it is
+   * unregistered when the child is attached or removed, or when that instance leaves, whichever comes first.
+   * The parked child failing doesn't end it: its fallback stays.
+   */
+  const parked = new Set<unknown>()
+  const park = (owner: Instance, container: unknown) => {
+    parked.add(container)
+    ;(owner.parked ??= new Set()).add(container)
+  }
+  const unpark = (owner: Instance, container: unknown) => {
+    parked.delete(container)
+    owner.parked?.delete(container)
+  }
+  /** Whether `node` is in a detached child: its topmost ancestor is a container. */
+  const isParked = (node: unknown): boolean => {
+    if (parked.size === 0) return false
+    let top = node
+    for (let up = host.parentOf(top); up !== undefined; up = host.parentOf(up)) top = up
+    return parked.has(top)
+  }
 
   // Mount Scopes of removed elements. Closing a Scope is asynchronous, so a mount that was waiting
   // for its commit or its Layer checks this before it starts.
@@ -4186,7 +4236,8 @@ const setup = (
     })
     afterCommit(() =>
       whenReady(env, (envCtx) => {
-        if (inst.closed || removedMounts.has(mountScope)) return
+        // A detached child's element starts its mount when the child is attached.
+        if (inst.closed || removedMounts.has(mountScope) || isParked(node)) return
         const send = (result: unknown) =>
           Effect.sync(() => {
             // The latest render's map, so what it closes over is current.
@@ -4346,6 +4397,14 @@ const setup = (
     if (running === undefined) return
     removedMounts.add(running.scope)
     closeUnder(under, running.scope)
+  }
+
+  /** Ends an element's mount and those of its owned layers. */
+  const stopMounts = (under: Instance, rendered: RElement) => {
+    stopMount(under, rendered.mount)
+    if (rendered.ownedMounts !== undefined) {
+      for (const entry of rendered.ownedMounts) stopMount(under, entry.running)
+    }
   }
 
   /** The element's mount after a patch: kept for the same definition, else stopped and started anew. */
@@ -4599,6 +4658,7 @@ const setup = (
       deferred: false,
       runs: [],
       left: false,
+      parked: undefined,
       closes: undefined,
       subscriptions: undefined,
       watches: undefined,
@@ -4701,7 +4761,18 @@ const setup = (
     }
   }
 
+  /** A declared child, detached if its view says so. */
   const createChild = (inst: Instance, view: View.Child<any, any>, env: Env, range?: Range): Rendered => {
+    const made = makeChild(inst, view, env, range)
+    return view.detached ? detach(inst, made) : made
+  }
+
+  const makeChild = (
+    inst: Instance,
+    view: View.Child<any, any>,
+    env: Env,
+    range?: Range
+  ): RChild | RFallback => {
     const target = view.component
     const status = env.status
     if (Feature.isService(target) && status._tag !== "Ready") {
@@ -4817,7 +4888,7 @@ const setup = (
     view: View.Child<any, any>,
     failure: Cause.Cause<unknown>,
     env: Env
-  ): Rendered => fallbackSlot(inst, view, { _tag: "Failed", cause: failure }, true, env, undefined)
+  ): RFallback => fallbackSlot(inst, view, { _tag: "Failed", cause: failure }, true, env, undefined)
 
   /**
    * A slot showing its `fallback` for `status`. Given the server's range, it adopts the server's
@@ -5012,8 +5083,8 @@ const setup = (
       case "Element":
         return rendered._tag === "Element" && rendered.v.tag === view.tag && rendered.v.elementKey === view.elementKey
       case "Child":
-        return (rendered._tag === "Child" || rendered._tag === "Fallback") && rendered.v.component === view.component &&
-          rendered.v.key === view.key
+        return (rendered._tag === "Child" || rendered._tag === "Fallback" || rendered._tag === "Detached") &&
+          rendered.v.component === view.component && rendered.v.key === view.key
       case "Outlet":
         return rendered._tag === "Outlet" && rendered.v.name === view.name
     }
@@ -5367,13 +5438,58 @@ const setup = (
         rendered.v = text
         return rendered
       }
-      case "Fallback": {
+      case "Fallback":
+      case "Child": {
         const child = view as View.Child<any, any>
+        const next = patchChild(inst, rendered, child, env)
+        return child.detached ? detach(inst, next) : next
+      }
+      case "Detached":
+        return patchDetached(inst, rendered, view as View.Child<any, any>, env)
+      case "Outlet": {
+        const out = rendered.inst
+        const outlet = outletOf.get(out)!
+        // Moved between an element that holds text and one that can't: its content is checked again.
+        const moved = outlet.view.noText !== (view as View.Outlet).noText
+        outlet.view = rendered.v = view as View.Outlet
+        if (moved || isStale(out, outlet)) renderOutlet(out)
+        return rendered
+      }
+    }
+  }
+
+  /** A detached child after a patch: patched in its container, then attached if its view says so. */
+  const patchDetached = (
+    inst: Instance,
+    rendered: RDetached,
+    child: View.Child<any, any>,
+    env: Env
+  ): Rendered => {
+    const next = patchChild(inst, rendered.inner, child, env)
+    rendered.v = child
+    if (next !== rendered.inner) {
+      // It shows something else now, such as a feature once its Layer is ready: that goes in the container.
+      place(rendered.container, [next], undefined)
+      // A child that `patchChild` didn't keep is a new instance.
+      if (next._tag === "Child") record(next.inst, { _tag: "Detached" })
+      rendered.inner = next
+    }
+    return child.detached ? rendered : attach(inst, rendered, env)
+  }
+
+  const patchChild = (
+    inst: Instance,
+    rendered: RChild | RFallback,
+    child: View.Child<any, any>,
+    env: Env
+  ): RChild | RFallback => {
+    switch (rendered._tag) {
+      case "Fallback": {
         const status = rendered.failedChild ? rendered.status : env.status
         if (status._tag === "Ready") {
           // Ready now: the fallback goes, and the feature mounts in its place.
           destroy(inst, rendered.inner)
-          return createChild(inst, child, env)
+          return makeChild(inst, child, env)
         }
         const shown = fallbackOf(inst, child, status, rendered.failedChild)
         return {
@@ -5384,23 +5500,13 @@ const setup = (
           failedChild: rendered.failedChild
         }
       }
-      case "Outlet": {
-        const out = rendered.inst
-        const outlet = outletOf.get(out)!
-        // Moved between an element that holds text and one that can't: its content is checked again.
-        const moved = outlet.view.noText !== (view as View.Outlet).noText
-        outlet.view = rendered.v = view as View.Outlet
-        if (moved || isStale(out, outlet)) renderOutlet(out)
-        return rendered
-      }
       case "Child": {
-        const child = view as View.Child<any, any>
         const instance = rendered.inst
         if (instance.closed) {
           for (const node of nodesOf(rendered)) host.remove(node)
           // Failed: the child shows its fallback until the key changes.
           if (instance.failure !== undefined) return failedChild(inst, child, instance.failure, env)
-          return createChild(inst, child, env)
+          return makeChild(inst, child, env)
         }
         instance.onEmit = child.onEmit
         instance.onFailure = child.onFailure
@@ -5463,7 +5569,8 @@ const setup = (
   const collectNodes = (rendered: Rendered, out: Array<unknown>): void => {
     switch (rendered._tag) {
       case "Element":
-      case "Text": {
+      case "Text":
+      case "Detached": {
         out.push(rendered.node)
         return
       }
@@ -5518,7 +5625,7 @@ const setup = (
     for (let index = items.length - 1; index >= 0; index--) {
       const item = items[index]!
       const moves = stays === undefined || stays[index] !== 1
-      if (item._tag === "Element" || item._tag === "Text") {
+      if (item._tag === "Element" || item._tag === "Text" || item._tag === "Detached") {
         // One node: the common case, with no range to find.
         const node = item.node
         if (moves && (host.parentOf(node) !== parentNode || host.nextOf(node) !== next)) {
@@ -5541,6 +5648,7 @@ const setup = (
     switch (rendered._tag) {
       case "Element":
       case "Text":
+      case "Detached":
         return host.insertBefore(parentNode, rendered.node, ref)
       case "Fallback":
         return insertNodes(parentNode, rendered.inner, ref)
@@ -5549,6 +5657,86 @@ const setup = (
         const items = rendered.inst.rendered
         for (let index = 0; index < items.length; index++) insertNodes(parentNode, items[index]!, ref)
       }
+    }
+  }
+
+  // -- detached children ------------------------------------------------------
+  /**
+   * Moves a child's nodes out of the document, into a container of their own, and puts an empty text node
+   * in their place. The child goes on rendering into them. Its element mounts stop until it's attached.
+   */
+  const detach = (inst: Instance, rendered: RChild | RFallback): RDetached => {
+    if (host.createContainer === undefined) {
+      throw new Error(
+        `${inst.path}/${
+          segment(rendered.v)
+        } is declared detached, and this host has no createContainer to hold its nodes`
+      )
+    }
+    const container = host.createContainer()
+    park(inst, container)
+    const placeholder = host.createText("")
+    const nodes = nodesOf(rendered)
+    const parentNode = nodes.length === 0 ? undefined : host.parentOf(nodes[0])
+    if (parentNode !== undefined) {
+      host.insertBefore(parentNode, placeholder, nodes[0])
+      // Removed first, so the host lets go of what it showed in them, such as an open dialog.
+      for (const node of nodes) host.remove(node)
+    }
+    for (const node of nodes) host.insertBefore(container, node, undefined)
+    toggleMounts(inst, rendered, inst.env, false)
+    if (rendered._tag === "Child") record(rendered.inst, { _tag: "Detached" })
+    headDirty = true
+    return { _tag: "Detached", v: rendered.v, inner: rendered, node: placeholder, container }
+  }
+
+  /** Puts a detached child's nodes back where its placeholder is, and starts its element mounts again. */
+  const attach = (inst: Instance, detached: RDetached, env: Env): RChild | RFallback => {
+    const inner = detached.inner
+    const parentNode = host.parentOf(detached.node)
+    // Not in the host yet, as when its parent is new too: whoever places the parent's nodes places these.
+    if (parentNode !== undefined) insertNodes(parentNode, inner, detached.node)
+    host.remove(detached.node)
+    unpark(inst, detached.container)
+    toggleMounts(inst, inner, env, true)
+    if (inner._tag === "Child") record(inner.inst, { _tag: "Attached" })
+    headDirty = true
+    return inner
+  }
+
+  /**
+   * Stops the mounts of the elements `rendered` shows, or starts them anew, at any depth below it but
+   * for what a child detached on its own shows. A stopped mount's record stays on its element, so a patch
+   * while detached updates it as usual, and `startMount` doesn't start one in a container.
+   */
+  const toggleMounts = (inst: Instance, rendered: Rendered, env: Env, start: boolean): void => {
+    // No mount ever started.
+    if (!host.runsMounts) return
+    switch (rendered._tag) {
+      case "Element": {
+        stopMounts(inst, rendered)
+        if (start) {
+          // As `create` starts them.
+          const view = rendered.v
+          rendered.mount = view.mount !== undefined
+            ? startMount(inst.author, view.mount, rendered.node, env, inst)
+            : undefined
+          rendered.ownedMounts = startOwnedMounts(inst, view, rendered.node, env)
+        }
+        for (const child of rendered.children) toggleMounts(inst, child, env, start)
+        return
+      }
+      case "Fallback":
+        return toggleMounts(inst, rendered.inner, settled(env), start)
+      case "Child":
+      case "Outlet": {
+        const child = rendered.inst
+        for (const item of child.rendered) toggleMounts(child, item, child.env, start)
+        return
+      }
+      case "Detached":
+      case "Text":
+        return
     }
   }
 
@@ -5565,12 +5753,13 @@ const setup = (
       }
       case "Fallback":
         return closeAll(inst, rendered.inner)
+      case "Detached": {
+        unpark(inst, rendered.container)
+        return closeAll(inst, rendered.inner)
+      }
       case "Element": {
         // The element's `onMount` work ends with it.
-        stopMount(inst, rendered.mount)
-        if (rendered.ownedMounts !== undefined) {
-          for (const entry of rendered.ownedMounts) stopMount(inst, entry.running)
-        }
+        stopMounts(inst, rendered)
         for (const child of rendered.children) closeAll(inst, child)
         return
       }
@@ -5805,6 +5994,12 @@ const setup = (
             else ship(path, rendered.status)
           }
           return { _tag: "Range", path, children: [serialize(inst, rendered.inner, true)] }
+        }
+        case "Detached": {
+          // Out of the document, so no nodes: the state of its subtree is still sent, and the client builds
+          // its nodes from that state, detached.
+          serialize(inst, rendered.inner, under)
+          return { _tag: "Range", path: `${inst.path}/${segment(rendered.v)}`, children: [] }
         }
       }
     }

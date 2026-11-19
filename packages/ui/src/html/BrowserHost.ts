@@ -920,6 +920,7 @@ export const makeHost = (
       return fresh = elements.svgTags.has(tag) ? document.createElementNS(SVG, tag) : document.createElement(tag)
     },
     createText: (text) => document.createTextNode(text),
+    createContainer: () => document.createDocumentFragment(),
     setText(node, text) {
       const t = node as globalThis.Text
       if (t.data !== text) t.data = text

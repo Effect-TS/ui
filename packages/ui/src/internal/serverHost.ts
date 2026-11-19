@@ -26,6 +26,7 @@ const node = (): Node => ({ parent: undefined, children: [] })
 export const make = (elements: ReadonlyArray<string> | "any"): Renderer.Host<Node> => ({
   createElement: node,
   createText: node,
+  createContainer: node,
   setText() {},
   setAttr() {},
   setProp() {},
