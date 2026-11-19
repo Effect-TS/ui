@@ -113,25 +113,29 @@ install({ plain: mount(empty.plain), component: mount(empty.component) })
 const full = tables(() => update(init(), { _tag: "Run", count: 1000 }))
 const check = (condition: boolean, message: string) => {
   if (!condition) throw new Error("bench check failed: " + message)
-}
-;(window as any).ssr = async (name: "plain" | "component") => {
+} // With `profile`, each phase runs in a console profile of its own: `render`, then `hydrate`.
+;(window as any).ssr = async (name: "plain" | "component", profile = false) => {
   const component = full[name]
+  if (profile) console.profile("render")
   let start = performance.now()
   const rendered = await Effect.runPromise(HtmlServer.renderToHtml(component, {}, { budget: 0 }))
   const json = HtmlServer.serializeState(rendered.state)
   const render = performance.now() - start
+  if (profile) console.profileEnd("render")
   const container = document.body.appendChild(document.createElement("div"))
   container.innerHTML = rendered.html
   const first = container.querySelector("tr")
   check(container.querySelectorAll("tr").length === 1000, "the server rendered every row")
   const state = JSON.parse(json)
   const scope = Effect.runSync(Scope.make())
+  if (profile) console.profile("hydrate")
   start = performance.now()
   const root = await Effect.runPromise(
     Scope.provide(BrowserHost.mountEffect(component, {}, container, { state }), scope)
   )
   await Effect.runPromise(root.adopted)
   const hydrate = performance.now() - start
+  if (profile) console.profileEnd("hydrate")
   check(container.querySelector("tr") === first && container.querySelectorAll("tr").length === 1000, "adopted")
   await Effect.runPromise(Scope.close(scope, Exit.void))
   container.remove()

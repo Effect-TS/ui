@@ -48,7 +48,8 @@
 //
 // --profile variant:op profiles 20 steps of one operation, from an unminified bundle, and prints
 // the functions with the most self time across them (line numbers are the bundle's). The last
-// step's profile goes to scratchpad/rows-<variant>-<op>.cpuprofile.
+// step's profile goes to scratchpad/rows-<variant>-<op>.cpuprofile. The ops `render` and
+// `hydrate` profile that phase of 20 server renders of 1k rows.
 //
 // Treat results as exploratory: compare paired runs of the same command across revisions on one
 // machine; absolute figures depend on the machine and the browser.
@@ -142,12 +143,18 @@ if (args.profile !== undefined) {
   const [variant, op] = args.profile.split(":")
   const page = await open(variant)
   const cdp = await page.context().newCDPSession(page)
-  await page.evaluate(([v, o]) => window.bench(v, o, 2, 2), [variant, op])
+  // The ops `render` and `hydrate` profile one phase of `ssr`.
+  const ssr = op === "render" || op === "hydrate"
+  if (ssr) { for (let i = 0; i < 3; i++) await page.evaluate((v) => window.ssr(v), variant) }
+  else await page.evaluate(([v, o]) => window.bench(v, o, 2, 2), [variant, op])
   await cdp.send("Profiler.enable")
   await cdp.send("Profiler.setSamplingInterval", { interval: 50 })
   const profiles = []
-  cdp.on("Profiler.consoleProfileFinished", ({ profile }) => profiles.push(profile))
-  await page.evaluate(([v, o]) => window.bench(v, o, 0, 20, true), [variant, op])
+  cdp.on("Profiler.consoleProfileFinished", ({ profile, title }) => {
+    if (!ssr || title === op) profiles.push(profile)
+  })
+  if (ssr) { for (let i = 0; i < 20; i++) await page.evaluate((v) => window.ssr(v, true), variant) }
+  else await page.evaluate(([v, o]) => window.bench(v, o, 0, 20, true), [variant, op])
   const file = path.join(process.cwd(), "scratchpad/rows-" + variant + "-" + op + ".cpuprofile")
   fs.writeFileSync(file, JSON.stringify(profiles.at(-1)))
   const self = new Map()
