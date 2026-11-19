@@ -22,9 +22,8 @@ export const Collapsible = Component.define({
   update: (model) => ({ open: !model.open }),
   // `h.slots.<name>` places a slot's content: once per render, anywhere in
   // the view. A parent's re-render patches only the content, so this view
-  // doesn't run for it. Leaving a slot out of the view keeps its content out
-  // of the document, as a `detached` child is, and placing it again brings
-  // it back as it was.
+  // doesn't run for it. Leaving a slot out of the view unmounts its content,
+  // and placing it again mounts it fresh.
   view: (model, h) =>
     h.section(
       h.header(

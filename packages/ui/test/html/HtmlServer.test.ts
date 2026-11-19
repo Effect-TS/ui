@@ -1449,7 +1449,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       }
 
       const matching = yield* ssr(titled(() => ""), {})
-      expect(matching.adopted).toEqual(["/Parent", "/Parent/Framed[c]", "/Parent/Grandchild[g]"])
+      expect(matching.adopted).toEqual(["/Parent", "/Parent/Framed[c]", "/Parent/Framed[c]/[body]/Grandchild[g]"])
       expect(matching.head.title).toBe("Server")
       yield* TestHost.settle
       expect(matching.root.head<Head.Head>().title).toBe("Mounted")

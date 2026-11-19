@@ -182,12 +182,12 @@ describe("Runtime", () => {
         assert.deepStrictEqual(root.container.children, [])
       }).pipe(Effect.provide(TestHost.layer())))
 
-    it.effect("a child its parent wraps in a new element keeps its instance", () =>
+    it.effect("a child made again at its path before the old one closes is still its parent's child", () =>
       provideHost(Effect.gen(function*() {
         const Wrap = Component.define({ name: "Wrap", model: Schema.Boolean, message: Schema.Boolean }).make({
           init: () => false,
           update: (_, changed) => changed,
-          // A wrapper with another tag is a new element: the row moves into it.
+          // A wrapper with another tag is a new element: the row in it mounts before the old one closes.
           view: (changed, h) => h.el(changed ? "section" : "div", Row(h, { key: "a", props: { id: "a" } }))
         })
         const root = yield* TestHost.mount(Wrap, {})
@@ -199,31 +199,12 @@ describe("Runtime", () => {
         const rows = root.log().filter((entry): entry is MessageLog.Mounted | MessageLog.Unmounted =>
           (entry._tag === "Mounted" || entry._tag === "Unmounted") && entry.path === "/Wrap/Row[a]"
         )
-        assert.deepStrictEqual(rows.map((entry) => entry._tag), ["Mounted"])
-        // The row's Command, which the parent finds through its children.
+        assert.deepStrictEqual(rows.map((entry) => entry._tag), ["Mounted", "Mounted", "Unmounted"])
+        // One path, two instances: the number says which of them unmounted.
+        assert.notStrictEqual(rows[0].instance, rows[1].instance)
+        assert.strictEqual(rows[2].instance, rows[0].instance)
+        // The new row's Command, which the parent finds through its children.
         assert.deepStrictEqual(root.pending().map((p) => p.path), ["/Wrap/Row[a]"])
-      })))
-
-    it.effect("a child that moves to another element of its parent's view keeps its instance", () =>
-      provideHost(Effect.gen(function*() {
-        const Move = Component.define({ name: "Move", model: Schema.Boolean, message: Schema.Boolean }).make({
-          init: () => false,
-          update: (_, moved) => moved,
-          view: (moved, h) =>
-            h.el("div", [
-              h.el("aside", moved ? [] : Row(h, { key: "a", props: { id: "a" } })),
-              h.el("article", moved ? Row(h, { key: "a", props: { id: "a" } }) : [])
-            ])
-        })
-        const root = yield* TestHost.mount(Move, {})
-        yield* TestHost.settle
-        click(root, "a:0")
-        yield* TestHost.settle
-        root.send(true)
-        yield* TestHost.settle
-        assert.strictEqual(Locator.textOf(root.get(Locator.tag("article"))), "a:1")
-        assert.strictEqual(root.text(), "a:1")
-        assert.deepStrictEqual(tags(root, "/Move/Row[a]").filter((tag) => tag !== "Update"), ["Mounted"])
       })))
 
     const RowsMessage = UiSchema.TaggedEnum({

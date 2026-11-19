@@ -24,8 +24,8 @@ import * as View from "../View.ts"
 import { sharedEqual } from "./equal.ts"
 import { isNoop } from "./noop.ts"
 import {
-  checkAuthorPaths,
   checkAuthorPlacements,
+  checkAuthorRefs,
   checkChildPaths,
   checkContentPaths,
   childName,
@@ -422,15 +422,11 @@ const expandRoot = <Msg>(
 ): View.Node<Msg, any> => {
   const replaced: Array<View.Child<any, any>> = []
   const placed: Array<Occurrence> = []
-  // As the runtime does: two children at one path, or with one ref key, fail the view or the closure that
-  // holds them, and so do two across the view and the closures it gives its headless children. A child's
-  // path is its author's path and its segment, wherever the author's trees place it. Nor can two of them
-  // place one slot.
+  // As the runtime does: two children at one path fail the view or the closure that holds them, and
+  // so do two children with one ref key across the view and the closures it gives its headless children.
+  // Nor can two of them place one slot.
   const written = [checkChildPaths("/" + name, view)]
-  // What every child's path starts with: the path of whoever wrote it. With no parent above the story's
-  // component, the content passed for its slots gets the component's too, as the runtime gives a root's.
-  const author = "/" + name
-  // Content is shown under `children`, where a query looks. `path` is its outlet's.
+  // Content is shown under `children`, where a query looks, at the path the runtime gives it.
   // `own`: the story's component wrote it, so its refs count with the component's. Content the story
   // passed for its slots was written by a parent, and so were the closures in it.
   // `reads`: what the feature slots there read, if their services aren't ready. See `Fields.slotStatus`.
@@ -446,10 +442,11 @@ const expandRoot = <Msg>(
     const paths = checkContentPaths(path, nodes)
     if (own) written.push(paths)
     const scope = (label: string) => checkContentPaths(label, nodes)
-    return nodes.map((child) => expand(child, depth, own, owners, scope, reads))
+    return nodes.map((child) => expand(child, path, depth, own, owners, scope, reads))
   }
   const expand = (
     node: View.Node<any, any>,
+    path: string,
     depth: number,
     own: boolean,
     owners: Owners,
@@ -466,12 +463,15 @@ const expandRoot = <Msg>(
         return {
           ...node,
           children: content(input, "/" + name + "/" + slotSegment(node.name), 1, false, owners, undefined)
-        } as View.Node<any, any>
+        } as View.Node<
+          any,
+          any
+        >
       }
       case "Element": {
         let changed = false
         const children = node.children.map((child) => {
-          const next = expand(child, depth, own, owners, scope, reads)
+          const next = expand(child, path, depth, own, owners, scope, reads)
           if (next !== child) changed = true
           return next
         })
@@ -479,7 +479,7 @@ const expandRoot = <Msg>(
       }
       case "Child": {
         const component = node.component as unknown as Component.Headless.Any
-        const childPath = author + "/" + segment(node)
+        const childPath = path + "/" + segment(node)
         placed.push({ child: node, path: childPath, scope })
         const result = status?.get(childPath) ??
           (reads !== undefined && Feature.isService(node.component) ? reads : undefined)
@@ -488,7 +488,7 @@ const expandRoot = <Msg>(
           // It renders against settled services, so the feature slots in it show.
           replaced.push(node)
           const shown = node.fallback === undefined ? emptyText : View.toNode(node.fallback(result))
-          return expand(shown, depth, own, owners, scope, undefined)
+          return expand(shown, path, depth, own, owners, scope, undefined)
         }
         if (node.slots !== undefined) {
           // A child's view isn't run, but what the parent passed for its slots is the parent's.
@@ -523,6 +523,7 @@ const expandRoot = <Msg>(
         // An owner expanded here is the nearest one for the readers in its closure.
         const inner = expand(
           tree,
+          childPath,
           depth + 1,
           own,
           ownersBelow(owners, component, model, node.props),
@@ -538,8 +539,8 @@ const expandRoot = <Msg>(
       }
     }
   }
-  const expanded = expand(view, 0, true, root, (label) => checkChildPaths(label, view), slotStatus)
-  checkAuthorPaths("/" + name, written)
+  const expanded = expand(view, "/" + name, 0, true, root, (label) => checkChildPaths(label, view), slotStatus)
+  checkAuthorRefs("/" + name, written)
   checkAuthorPlacements("/" + name, written)
   if (replaced.length > 0) expandedChildren.set(expanded, replaced)
   // A root the expansion left as it was may be a node the component cached and another story shows,
