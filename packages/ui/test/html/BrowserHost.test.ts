@@ -559,7 +559,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         assert.strictEqual(app.innerHTML, "<section><h2>Title</h2><p>ready</p></section>")
       }).pipe(Effect.scoped))
 
-    it.effect("puts a controlled property back under a node it gives again, as under one the view keeps", () =>
+    it.effect("puts controlled properties back under a node it gives again, as under one the view keeps or builds", () =>
       Effect.gen(function*() {
         const FieldsDef = Component.define({
           name: "Fields",
@@ -567,23 +567,39 @@ describe("BrowserHost", { concurrent: false }, () => {
           message: LazyMessage,
           elements: Html
         })
+        // The option asks for `a` and the select for `b`: the select is set after its options, so `b` wins.
         const field = (h: Component.Helper<typeof FieldsDef>, label: string) =>
-          h.input.attr("aria-label", label).value("fixed")
+          h.div(
+            h.input.attr("aria-label", label).value("fixed"),
+            h.select.value("b").children(
+              h.option.attr("value", "a").selected(true).children("A"),
+              h.option.attr("value", "b").children("B")
+            )
+          )
         let kept: View.Node<typeof LazyMessage.Type> | undefined
         const Fields = FieldsDef.make({
           init: () => 0,
           update: (ticks) => ticks + 1,
-          view: (ticks, h) => h.div(h.p(String(ticks)), h.lazy(field, "lazy"), kept ??= View.toNode(field(h, "kept")))
+          view: (ticks, h) =>
+            h.div(
+              h.p(String(ticks)),
+              field(h, "built"),
+              h.lazy(field, "lazy"),
+              kept ??= View.toNode(field(h, "kept"))
+            )
         })
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Fields, {}, app)
         const inputs = [...app.querySelectorAll("input")]
+        const selects = [...app.querySelectorAll("select")]
+        assert.deepStrictEqual(selects.map((select) => select.value), ["b", "b", "b"])
         // Changed by a script, with no event for the host to restore after.
         for (const input of inputs) input.value = "edited"
         root.send(LazyMessage.Tick())
         yield* tick
         assert.strictEqual(app.querySelector("p")!.textContent, "1")
-        assert.deepStrictEqual(inputs.map((input) => input.value), ["fixed", "fixed"])
+        assert.deepStrictEqual(inputs.map((input) => input.value), ["fixed", "fixed", "fixed"])
+        assert.deepStrictEqual(selects.map((select) => select.value), ["b", "b", "b"])
       }).pipe(Effect.scoped))
 
     it("builds again what a render that threw built", () => {

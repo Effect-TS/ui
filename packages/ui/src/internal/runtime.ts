@@ -5542,15 +5542,18 @@ const setup = (
     }
     return props
   }
-  /** Re-applies the controlled properties under a rendered element, as a patch to the same view does. */
+  /**
+   * Re-applies the controlled properties under a rendered element, as a patch to the same view does:
+   * children first, so a select's value wins over its options' `selected`.
+   */
   const restoreControlled = (rendered: RElement): void => {
-    const props = rendered.v.props
-    if (props !== View.noFields) patchProps(rendered.node, props, props)
     const children = rendered.children
     for (let i = 0; i < children.length; i++) {
       const child = children[i]!
       if (child._tag === "Element") restoreControlled(child)
     }
+    const props = rendered.v.props
+    if (props !== View.noFields) patchProps(rendered.node, props, props)
   }
 
   const patchElement = (

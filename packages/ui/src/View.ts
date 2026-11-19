@@ -1776,10 +1776,9 @@ export interface Helper<Msg, Props> {
    *
    * The arguments are compared with `===` to the ones of the last render's
    * call with the same `fn` and first argument. When they're the same, `fn`
-   * isn't called and the last node is used again. The runtime doesn't patch
-   * a node that holds only elements and text when it's used again, so it
-   * doesn't set a controlled property in it again either. `BrowserHost` still
-   * puts one back after an event.
+   * isn't called and the last node is used again. When that node holds only
+   * elements and text, the runtime skips its patch and only sets its
+   * controlled properties again, such as an input's `value`.
    *
    * `fn` must depend only on its arguments: what it reads from the helper,
    * such as `h.isRunning`, may be out of date. Declare it outside the view,
