@@ -447,6 +447,8 @@ interface SubscriptionRun {
   readonly deps: ReadonlyArray<Subscription.Dep> | undefined
   readonly scope: Scope.Closeable
   fiber: Fiber.Fiber<unknown, unknown> | undefined
+  /** The declaration from the latest `subscriptions` result that listed the key. */
+  latest: Subscription.Subscription<any, any>
 }
 
 /** One query's cache watcher, registered from its watch marker. */
@@ -4274,37 +4276,52 @@ const setup = (
       closeUnder(inst, running.scope)
     }
     for (const [key, subscription] of byKey) {
-      if (subscriptions.has(key)) continue
+      const existing = subscriptions.get(key)
+      if (existing !== undefined) {
+        // A running key keeps its Stream, and an attached one reads its declaration from here.
+        existing.latest = subscription
+        continue
+      }
       const { deps, name } = subscription
       const running: SubscriptionRun = {
         name,
         deps,
         scope: Scope.forkUnsafe(inst.scope, "sequential"),
-        fiber: undefined
+        fiber: undefined,
+        latest: subscription
       }
       subscriptions.set(key, running)
       record(inst, { _tag: "SubscriptionStarted", key, name, deps })
+      const current = () => !inst.closed && subscriptions.get(key) === running
       const go = (envCtx: Context.Context<any>) => {
-        if (inst.closed || subscriptions.get(key) !== running) return
+        if (!current()) return
         const source: MessageLog.Source = { _tag: "Subscription", key, name, deps }
         const context = withCache(
           Context.add(Context.add(envCtx, Scope.Scope, running.scope), services.CurrentRoot, () => handle)
         )
+        // Rendering the ancestors may stop this key, or change its declaration, as for a query result.
+        const enter = (f: (latest: Subscription.Subscription<any, any>) => void) =>
+          step(() => {
+            renderAbove(inst)
+            if (current()) f(running.latest)
+          })
+        const deliver = (message: unknown, accepted?: () => void) =>
+          enter(() => {
+            accepted?.()
+            inst.dispatch(message, source)
+          })
         // Attached to its source, it dispatches synchronously, and only its first check waits.
-        const current = () => !inst.closed && subscriptions.get(key) === running
         const attachedTo = (subscription as services.Direct)[services.direct]?.(context, (message, accepted) => {
-          if (!current()) return
-          accepted()
-          inst.dispatch(message, source)
+          if (current()) deliver(message, accepted)
         }, (cause) => {
           if (current()) step(() => failInstance(inst, cause, "subscription", key))
-        })
+        }, enter)
         if (attachedTo !== undefined) addFinalizer(running.scope, Effect.sync(attachedTo.close))
         const fiber = forkLater(
           context,
           attachedTo !== undefined
             ? attachedTo.initial
-            : Stream.runForEach(subscription.stream, (message) => Effect.sync(() => inst.dispatch(message, source)))
+            : Stream.runForEach(subscription.stream, (message) => Effect.sync(() => deliver(message)))
         )
         running.fiber = fiber
         interruptOnClose(running.scope, fiber)
