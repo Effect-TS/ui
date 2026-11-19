@@ -19,6 +19,14 @@ Every pull request and every push to `main` publishes snapshot builds of both pa
 pnpm add https://pkg.pr.new/Effect-TS/ui/@effect/ui@<sha>
 ```
 
+## Examples
+
+`examples/` holds apps ported from [Foldkit's examples](https://github.com/devinjameson/foldkit/tree/main/examples). Each one is a private workspace package that `pnpm check`, `pnpm lint` and `pnpm test` cover. Run one with Vite:
+
+```sh
+pnpm --filter interrupting-commands dev
+```
+
 ## Development
 
 The repository is a pnpm workspace, set up like the [Effect monorepo](https://github.com/Effect-TS/effect). `nix develop` (or direnv) gives you Node and pnpm.

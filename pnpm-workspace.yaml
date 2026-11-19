@@ -1,5 +1,6 @@
 packages:
   - ai-docs
+  - examples/*
   - packages/*
   - packages/tools/*
 

@@ -26,6 +26,15 @@ const project = (
   return [mergeConfig(shared, cfg)]
 }
 
+// An example's tests sit beside its components, and a setup file registers the HTML elements once.
+const example = (name: string) =>
+  project(name, path.join("examples", name), true, {
+    test: {
+      include: ["src/**/*.test.ts"],
+      setupFiles: [path.join(import.meta.dirname, "examples", name, "src/vitest-setup.ts")]
+    }
+  })
+
 export const exclude = [
   "**/.*/**",
   "**/node_modules/**",
@@ -72,7 +81,8 @@ export default defineConfig({
       ...project("scripts", "scripts", true, { test: { include: ["codemods/jsdoc.test.ts"] } }),
       // Node reuses workers across test files, which skips re-importing the effect module graph for every file.
       ...project("@effect/ui", "packages/ui", true, { test: { isolate: !isNode } }),
-      ...project("@effect/ui-kit", "packages/ui-kit")
+      ...project("@effect/ui-kit", "packages/ui-kit"),
+      ...example("interrupting-commands")
     ]
   }
 })

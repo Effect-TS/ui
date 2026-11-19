@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "include": ["src/**/*.ts", "vite.config.ts"],
+  "compilerOptions": {
+    "rootDir": ".",
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "composite": false,
+    "incremental": false,
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "effectFn": ["untraced"],
+        "namespaceImportPackages": [],
+        "diagnosticSeverity": {
+          "floatingEffect": "off",
+          "globalJson": "off",
+          "globalJsonInEffect": "off",
+          "unstableApiUsage": "off",
+          "effectFnOpportunity": "error"
+        }
+      }
+    ]
+  }
+}
