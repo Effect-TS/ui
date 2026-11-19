@@ -70,12 +70,12 @@ export class UploadFile extends Command.Service<UploadFile>()(
     group: ["uploadId"],
     mode: "switch"
   },
-  Effect.succeed(({ uploadId, sizeMegabytes }) =>
-    Effect.gen(function*() {
-      yield* Effect.sleep(Duration.millis(sizeMegabytes * MILLISECONDS_PER_MEGABYTE))
-      return UploadsMessage.CompletedUploadFile({ uploadId })
-    })
-  )
+  Effect.gen(function*() {
+    return ({ uploadId, sizeMegabytes }) =>
+      Effect.sleep(Duration.millis(sizeMegabytes * MILLISECONDS_PER_MEGABYTE)).pipe(
+        Effect.as(UploadsMessage.CompletedUploadFile({ uploadId }))
+      )
+  })
 ) {}
 
 const uploadFile = (upload: Upload) => UploadFile.make({ uploadId: upload.id, sizeMegabytes: upload.sizeMegabytes })
