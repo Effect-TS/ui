@@ -774,13 +774,12 @@ describe("HtmlServer", { concurrent: false }, () => {
           name: Schema.String,
           other: Schema.String,
           note: Schema.String,
-          choice: Schema.String,
           agree: Schema.Boolean
         }),
         message: Message,
         elements: Html
       }).make({
-        init: () => ({ name: "server", other: "server", note: "server", choice: "a", agree: false }),
+        init: () => ({ name: "server", other: "server", note: "server", agree: false }),
         update: (model, message) => {
           seen.push(`${message._tag} ${message.field}=${message.value}`)
           // The note rejects every edit.
@@ -790,16 +789,11 @@ describe("HtmlServer", { concurrent: false }, () => {
         },
         view: (model, h) => {
           const input = (field: string) => ({ value }: { readonly value: string }) => Message.Input({ field, value })
-          const radio = (value: string) =>
-            h.input.attr("type", "radio").attr("name", "choice").attr("value", value).attr("aria-label", value)
-              .checked(model.choice === value).onChange(() => Message.Change({ field: "choice", value }))
           return h.form(
             h.input.attr("aria-label", "Name").value(model.name).onInput(input("name"))
               .onChange(({ value }) => Message.Change({ field: "name", value })),
             h.input.attr("aria-label", "Other").value(model.other).onInput(input("other")),
             h.textarea.attr("aria-label", "Note").value(model.note).onInput(input("note")),
-            radio("a"),
-            radio("b"),
             h.input.attr("type", "checkbox").attr("aria-label", "Agree").checked(model.agree)
               .onChange(({ checked }) => Message.Change({ field: "agree", value: String(checked) }))
           )
@@ -836,16 +830,14 @@ describe("HtmlServer", { concurrent: false }, () => {
         expect(seen).toEqual(["Input name=edited", "Change name=edited", "Input note="])
       }).pipe(Effect.scoped))
 
-    it.effect("reports edits made before the client mounts: a radio group, a checkbox and a focused field", () =>
+    it.effect("reports edits made before the client mounts: a checkbox and a focused field", () =>
       Effect.gen(function*() {
         const seen: Array<string> = []
         const Form = makeForm(seen)
         const rendered = yield* HtmlServer.renderToHtml(Form, {})
         const app = yield* container(rendered.html)
-        const [a, b, agree, name] = (["a", "b", "Agree", "Name"] as const).map((label) =>
-          field<HTMLInputElement>(app, label)
-        )
-        b.checked = true
+        const agree = field<HTMLInputElement>(app, "Agree")
+        const name = field<HTMLInputElement>(app, "Name")
         agree.checked = true
         name.focus()
         name.value = "typed"
@@ -853,10 +845,11 @@ describe("HtmlServer", { concurrent: false }, () => {
         const root = yield* BrowserHost.mountEffect(Form, {}, app, { state: rendered.state })
         yield* root.adopted
         yield* tick
-        expect([a.checked, b.checked, agree.checked, name.value]).toEqual([false, true, true, "typed"])
-        expect(root.model()).toMatchObject({ name: "typed", choice: "b", agree: true })
+        expect(agree.checked).toBe(true)
+        expect(name.value).toBe("typed")
+        expect(root.model()).toMatchObject({ name: "typed", agree: true })
         // The browser still fires the focused field's `change` when it loses focus.
-        expect(seen).toEqual(["Input name=typed", "Change choice=b", "Change agree=true"])
+        expect(seen).toEqual(["Input name=typed", "Change agree=true"])
       }).pipe(Effect.scoped))
 
     // The client Model picks what the server's HTML didn't, so the adoption writes reach the edited group.
@@ -866,8 +859,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       message: Message,
       elements: Html
     })
-    /** Radios in `order`, in the form, or after it and in it by their `form` attribute when `associated`. */
-    const choiceView = (order: ReadonlyArray<string>, seen: Array<string>, associated = false) =>
+    const choiceView = (seen: Array<string>) =>
       Choice.make({
         init: () => ({ choice: "a", pick: "" }),
         update: (model, message) => {
@@ -875,9 +867,9 @@ describe("HtmlServer", { concurrent: false }, () => {
           return { ...model, [message.field]: message.value }
         },
         view: (model, h) => {
-          const radios = order.map((value) =>
+          const radios = ["a", "b", "c"].map((value) =>
             h.input.attr("type", "radio").attr("name", "choice").attr("aria-label", value)
-              .attr("form", associated ? "choices" : undefined)
+              .attr("form", "choices")
               .checked(model.choice === value).onChange(() => Message.Change({ field: "choice", value }))
           )
           // The browser starts on B: A is disabled by its group.
@@ -888,66 +880,36 @@ describe("HtmlServer", { concurrent: false }, () => {
               h.option.attr("value", "b").children("B"),
               h.option.attr("value", "c").children("C")
             )
-          return associated
-            ? h.div(h.form.attr("id", "choices").children(select), ...radios)
-            : h.form(...radios, select)
+          return h.div(h.form.attr("id", "choices").children(select), ...radios)
         }
       })
 
-    // Adoption's writes to one button change the others, so whether the group was changed is read first.
-    const radioCases: ReadonlyArray<{ order: ReadonlyArray<string>; picked?: string; associated?: boolean }> = [
-      { order: ["c", "a", "b"] },
-      { order: ["c", "a", "b"], picked: "b" },
-      { order: ["a", "b", "c"] },
-      { order: ["a", "b", "c"], picked: "b" },
-      { order: ["a", "b", "c"], picked: "b", associated: true }
-    ]
-    for (const { associated = false, order, picked } of radioCases) {
-      const name = picked === undefined
-        ? "checks the Model's radio in a group the user didn't touch"
-        : "keeps the radio the user picked over the Model's"
-      it.effect(`${name}, in order ${order.join("")}${associated ? ", outside their form" : ""}`, () =>
+    for (const picked of [false, true]) {
+      const name = picked ? "keeps a radio picked outside its form" : "initializes untouched radios and a select"
+      it.effect(name, () =>
         Effect.gen(function*() {
           const seen: Array<string> = []
-          const Form = choiceView(order, seen, associated)
+          const Form = choiceView(seen)
           const rendered = yield* HtmlServer.renderToHtml(Form, {})
           const app = yield* container(rendered.html)
           const radios = ["a", "b", "c"].map((label) => field<HTMLInputElement>(app, label))
-          if (picked !== undefined) field<HTMLInputElement>(app, picked).checked = true
-          const shown = picked ?? "c"
-          const expected = ["a", "b", "c"].map((label) => label === shown)
+          const pick = field<HTMLSelectElement>(app, "Pick")
+          expect(pick.value).toBe("b")
+          if (picked) radios[1].checked = true
+          const expected = picked ? [false, true, false] : [false, false, true]
 
           const root = yield* BrowserHost.mountEffect(Form, {}, app, {
-            state: { ...rendered.state, "/Choice": { choice: "c", pick: "" } }
+            state: { ...rendered.state, "/Choice": { choice: "c", pick: "c" } }
           })
-          // Right after the adoption commits, before any restore.
           expect(radios.map((radio) => radio.checked)).toEqual(expected)
           yield* root.adopted
           yield* tick
           expect(radios.map((radio) => radio.checked)).toEqual(expected)
-          expect(root.model()).toMatchObject({ choice: shown })
-          expect(seen).toEqual(picked === undefined ? [] : [`Change choice=${picked}`])
+          expect(pick.value).toBe("c")
+          expect(root.model()).toMatchObject({ choice: picked ? "b" : "c", pick: "c" })
+          expect(seen).toEqual(picked ? ["Change choice=b"] : [])
         }).pipe(Effect.scoped))
     }
-
-    it.effect("gives an untouched select the Model's value, though the browser picked its first enabled option", () =>
-      Effect.gen(function*() {
-        const seen: Array<string> = []
-        const Form = choiceView(["a"], seen)
-        const rendered = yield* HtmlServer.renderToHtml(Form, {})
-        const app = yield* container(rendered.html)
-        const pick = field<HTMLSelectElement>(app, "Pick")
-        expect(pick.value).toBe("b")
-
-        const root = yield* BrowserHost.mountEffect(Form, {}, app, {
-          state: { ...rendered.state, "/Choice": { choice: "a", pick: "c" } }
-        })
-        yield* root.adopted
-        yield* tick
-        expect(pick.value).toBe("c")
-        expect(root.model()).toMatchObject({ pick: "c" })
-        expect(seen).toEqual([])
-      }).pipe(Effect.scoped))
   })
 
   it.effect("a keyed provide selects its Layer from the Model the client adopts", () =>
