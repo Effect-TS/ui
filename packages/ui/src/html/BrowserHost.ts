@@ -304,6 +304,23 @@ const controlPayload = (source: globalThis.Element): unknown => {
 }
 
 /**
+ * Whether `target`, where focus came from or goes, is inside `element`.
+ * `null` is another window or nowhere. An event a script made can name any
+ * event target, such as the window, and `contains` throws for one that isn't
+ * a node. Only the browser can tell: a node from another realm, such as an
+ * iframe's adopted into this document, fails `instanceof Node`, and an object
+ * can fake `nodeType`.
+ */
+const containsTarget = (element: globalThis.Element, target: EventTarget | null): boolean => {
+  if (target === null) return false
+  try {
+    return element.contains(target as globalThis.Node)
+  } catch {
+    return false
+  }
+}
+
+/**
  * Builds the payload a handler gets: plain data, read from the event and the
  * elements involved.
  */
@@ -365,13 +382,8 @@ const payloadOf = (
     case "scroll":
       return { top: element.scrollTop, left: element.scrollLeft }
     case "focusin":
-    case "focusout": {
-      // Where focus came from or goes: `null` for another window or nowhere, and any event target in an
-      // event a script made, such as the window. `contains` throws for a target that isn't a node, and
-      // checking `nodeType` instead of `instanceof` keeps a node from another realm.
-      const other = (event as FocusEvent).relatedTarget as Partial<globalThis.Node> | null
-      return { within: typeof other?.nodeType === "number" && element.contains(other as globalThis.Node) }
-    }
+    case "focusout":
+      return { within: containsTarget(element, (event as FocusEvent).relatedTarget) }
     default:
       return {}
   }
