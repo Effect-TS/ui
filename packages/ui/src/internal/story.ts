@@ -243,17 +243,6 @@ const ownersBelow = (
 }
 
 /**
- * The owners above the story's view: the story's component, when it's an owner.
- *
- * @internal
- */
-export const rootOwners = (
-  component: { readonly definition: Component.Definition.Any },
-  model: unknown,
-  props: unknown
-): Owners => ownersBelow(noOwners, component, model, props)
-
-/**
  * What the story's component itself reads: only given values, as nothing is above it. A component that
  * reads its own kind doesn't read itself.
  *
@@ -670,7 +659,7 @@ export const expandedView = (fields: Fields<any, any, any, any>): View.Node<any,
     fields.childModels,
     storySlots.get(fields.component),
     fields.shared,
-    rootOwners(fields.component, fields.model, fields.props),
+    ownersBelow(noOwners, fields.component, fields.model, fields.props),
     fields.childStatus,
     fields.slotStatus
   )

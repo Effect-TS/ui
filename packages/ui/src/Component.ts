@@ -2595,7 +2595,6 @@ export const define = <
   Rp
 > => {
   const shares = options.shares
-  if (options.shared !== undefined) sharedReads.check(options.name, options.shared, shares !== undefined)
   const definition: Definition<
     Name,
     Props,
@@ -2636,6 +2635,7 @@ export const define = <
     // resolves once the component exists.
     make: (rest: any) => finish(definition as any, rest) as any
   }
+  sharedReads.check(definition as any)
   return definition
 }
 
@@ -2768,8 +2768,7 @@ const finish = (
     layerOnServer: true,
     "~queries": bound
   })
-  sharedReads.bindSelf(definition, component)
-  reads = sharedReads.readsOf(definition)
+  reads = sharedReads.readsOf(definition, component)
   return component
 }
 

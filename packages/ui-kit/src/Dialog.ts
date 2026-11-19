@@ -345,9 +345,10 @@ const Message = UiSchema.TaggedEnum({
   // click: `""` for Enter or Space.
   ClickedTrigger: { triggerId: Schema.NullOr(Schema.String), pointerType: Schema.String },
   ClickedClose: { pointerType: Schema.String },
-  // A modal's close request, Escape, and a close the browser forced. A
-  // request the browser won't let be cancelled is followed by its close.
-  CancelledModal: { cancelable: Schema.Boolean },
+  // A modal's close request, Escape, and a close the browser forced.
+  // `forced`: the browser won't let the request be cancelled, and its close
+  // follows.
+  CancelledModal: { forced: Schema.Boolean },
   ClosedModal: {},
   PressedEscape: {},
   PressedOutside: { pointerType: Schema.String },
@@ -414,6 +415,11 @@ const tabbableSelector = [
   "[contenteditable=\"true\"]"
 ].join(",")
 
+// The nearest element matching `selector` from `target`, which may be a text
+// node.
+const closestOf = (target: Node, selector: string): Element | null | undefined =>
+  (target instanceof Element ? target : target.parentElement)?.closest(selector)
+
 // Whether `element` is inside a dialog nested in `dialog`: its content is that
 // dialog's to focus.
 const inNested = (dialog: Element, element: Element): boolean => element.parentElement?.closest("dialog") !== dialog
@@ -464,8 +470,9 @@ type TrackDialogArgs = Schema.Struct<typeof TrackDialogArgs>["Type"]
 // layer. Only an open dialog with none open above it hears Escape, presses
 // outside and focus moving, so it doesn't take what happens in one above it.
 const showing: Array<{ readonly node: HTMLDialogElement; readonly open: () => boolean }> = []
+const orderOf = (node: Element): number => showing.findIndex((entry) => entry.node === node)
 const onTop = (node: HTMLDialogElement): boolean => {
-  const mine = showing.findIndex((entry) => entry.node === node)
+  const mine = orderOf(node)
   return showing.every((other, index) =>
     other.node === node || !other.open() ||
     !(node.contains(other.node) || (!other.node.contains(node) && index > mine))
@@ -489,10 +496,10 @@ const handOff = (element: HTMLElement | null | undefined): void => {
 // Whether focus went into a dialog above this one: a sibling shown later, or
 // one the browser is showing and has focused before its mount starts.
 const inDialogAbove = (node: HTMLDialogElement, target: Node): boolean => {
-  const other = (target instanceof Element ? target : target.parentElement)?.closest("dialog")
+  const other = closestOf(target, "dialog")
   if (other == null || other === node || other.contains(node)) return false
-  const index = showing.findIndex((entry) => entry.node === other)
-  return index === -1 || index > showing.findIndex((entry) => entry.node === node)
+  const index = orderOf(other)
+  return index === -1 || index > orderOf(node)
 }
 
 // Whether an animation ends by itself: a looping one, such as a spinner's,
@@ -527,10 +534,9 @@ const TrackDialog = Mount.makeStream(
       // `DialogTrigger` given its `popupId`, and every trigger is marked
       // with its id, so a press on one is the trigger's, not a press outside.
       const controls = `[aria-controls="${CSS.escape(args.portalId)}"]`
-      const triggers = `[data-dialog-trigger="${CSS.escape(args.portalId)}"]`
+      const anyTrigger = `${controls},[data-dialog-trigger="${CSS.escape(args.portalId)}"]`
       const onTrigger = (target: Node): boolean =>
-        (target instanceof Element ? target : target.parentElement)?.closest(`${controls},${triggers}`) != null ||
-        trigger?.contains(target) === true
+        closestOf(target, anyTrigger) != null || trigger?.contains(target) === true
       // The trigger focus goes back to: the one `triggerId` names, or else the
       // one that had focus when the dialog opened, or else the first that
       // points at it. Kept, since a trigger stops pointing at a closed dialog.
@@ -555,31 +561,34 @@ const TrackDialog = Mount.makeStream(
         const marked = Array.from(node.querySelectorAll<HTMLElement>("[autofocus]")).find((element) =>
           !inNested(node, element)
         )
+        const root = popup()
         // An open by touch focuses the popup, so a field doesn't open the
         // on-screen keyboard, unless the consumer marked an element.
-        const fallback = current.openMethod === "touch" ? undefined : tabbables(node, popup())[0]
-        handOff(marked ?? fallback ?? popup())
+        handOff(marked ?? (current.openMethod === "touch" ? undefined : tabbables(node, root)[0]) ?? root)
       }
 
       const onKeyDown = (event: KeyboardEvent) => {
+        const escape = event.key === "Escape"
+        // A modal's Escape comes to `onCancel`, and only `trap-focus` keeps Tab.
+        if (escape ? current.modal === true : event.key !== "Tab" || current.modal !== "trap-focus") return
         if (!current.open || !topmost()) return
-        if (event.key === "Escape") {
-          if (current.modal === true || event.defaultPrevented || event.isComposing) return
+        if (escape) {
+          if (event.defaultPrevented || event.isComposing) return
           // So a dialog this one is inside doesn't take it as its own.
           event.preventDefault()
           send(Message.PressedEscape())
           return
         }
-        if (event.key !== "Tab" || current.modal !== "trap-focus") return
-        const items = tabbables(node, popup())
+        const root = popup()
+        const items = tabbables(node, root)
         const active = document.activeElement
         const first = items[0]
         const last = items.at(-1)
         if (first === undefined || last === undefined) {
           event.preventDefault()
-          handOff(popup())
+          handOff(root)
         } else if (
-          !node.contains(active) || (event.shiftKey ? active === first || active === popup() : active === last)
+          !node.contains(active) || (event.shiftKey ? active === first || active === root : active === last)
         ) {
           event.preventDefault()
           handOff(event.shiftKey ? last : first)
@@ -602,10 +611,12 @@ const TrackDialog = Mount.makeStream(
         const target = event.target as Node | null
         focusInside = target !== null && node.contains(target)
         if (focusInside) lastFocused = target as HTMLElement
-        if (focusInside || target === null || !current.open || !topmost() || inDialogAbove(node, target)) return
+        // The browser keeps focus in a modal.
+        if (focusInside || target === null || current.modal === true || !current.open) return
+        if (!topmost() || inDialogAbove(node, target)) return
         if (current.modal === "trap-focus") {
           handOff(popup())
-        } else if (current.modal === false && current.dismissible && handingOff === 0 && !onTrigger(target)) {
+        } else if (current.dismissible && handingOff === 0 && !onTrigger(target)) {
           send(Message.FocusedOutside())
         }
       }
@@ -710,6 +721,28 @@ const TrackDialog = Mount.makeStream(
     })
 )
 
+// A builder that takes attributes: an element's, or the one a part is given.
+interface Attributed<B> {
+  readonly attr: (name: string, value: string | undefined) => B
+}
+
+// What marks a trigger, the dialog's own part and a `DialogTrigger` alike:
+// the dialog's mount finds both by these. `active`: the dialog is open for
+// this trigger.
+const triggerAttrs = <B extends Attributed<B>>(builder: B, active: boolean, popupId: string | undefined): B =>
+  builder
+    .attr("aria-haspopup", "dialog")
+    .attr("aria-expanded", active ? "true" : "false")
+    .attr("aria-controls", active ? popupId : undefined)
+    .attr("data-popup-open", flag(active))
+    .attr("data-dialog-trigger", popupId)
+
+// The `id` a builder had when a part was applied to it.
+const idOf = (builder: unknown): string | null => {
+  const id = (builder as { readonly attrs?: Readonly<Record<string, string>> | undefined }).attrs?.id
+  return id === undefined || id === "" ? null : id
+}
+
 /**
  * A press on a `DialogTrigger`: the trigger's `id`, if it has one, and how
  * the user pressed it.
@@ -788,24 +821,13 @@ export const DialogTrigger = <Msg, R = never>(
         "DialogTrigger: the element already handles click, which DialogTrigger would replace. Send the message from onPress"
       )
     }
-    const button = node
-      .attr("aria-haspopup", "dialog")
-      .attr("aria-expanded", open ? "true" : "false")
-      .attr("aria-controls", open ? popupId : undefined)
-      .attr("data-popup-open", flag(open))
-      .attr("data-dialog-trigger", popupId)
+    const button = triggerAttrs(node, open, popupId)
     if (onPress === undefined) return button
     if (typeof onPress !== "function") return button.onClick(onPress)
-    const triggerId = node.attrs.id === undefined || node.attrs.id === "" ? null : node.attrs.id
+    const triggerId = idOf(node)
     const press = onPress as (press: DialogTriggerPress) => Msg
     return button.onClick(({ pointerType }) => press({ triggerId, method: methodOf(pointerType) }))
   })
-}
-
-// The `id` a builder had when a part was applied to it.
-const idOf = (builder: unknown): string | null => {
-  const id = (builder as { readonly attrs?: Readonly<Record<string, string>> | undefined }).attrs?.id
-  return id === undefined || id === "" ? null : id
 }
 
 /**
@@ -887,12 +909,11 @@ export const Dialog = Component.define({
         return $.set({ ...model, openMethod: method }).emit(DialogEvents.Opened({ triggerId }))
       },
       ClickedClose: ({ pointerType }) => props.open ? dismiss("close-press", methodOf(pointerType)) : model,
-      CancelledModal: ({ cancelable }) => {
-        // A test host's cancel may carry no payload: only `false` is forced.
-        const forced = { ...model, forcedClose: cancelable === false }
+      CancelledModal: ({ forced }) => {
+        const next = { ...model, forcedClose: forced }
         return props.open && topmost
-          ? $.set({ ...forced, closeMethod: "keyboard" }).emit(DialogEvents.Dismissed({ reason: "escape-key" }))
-          : forced
+          ? $.set({ ...next, closeMethod: "keyboard" }).emit(DialogEvents.Dismissed({ reason: "escape-key" }))
+          : next
       },
       // Every close comes here, the consumer's included. One while `open` still
       // says true is the browser's: after a request it wouldn't let be
@@ -939,25 +960,20 @@ export const Dialog = Component.define({
     // An attribute a part sets to `undefined` is removed from the consumer's
     // builder too, so a consumer's `data-open` can't report a state the
     // dialog isn't in.
-    const states = <B extends { readonly attr: (name: string, value: string | undefined) => B }>(builder: B): B =>
+    const states = <B extends Attributed<B>>(builder: B): B =>
       builder
         .attr("data-open", flag(open))
         .attr("data-closed", flag(!open))
         .attr("data-starting-style", flag(transitionStatus === "starting"))
         .attr("data-ending-style", flag(transitionStatus === "ending"))
-    const nesting = <B extends { readonly attr: (name: string, value: string | undefined) => B }>(builder: B): B =>
+    const nesting = <B extends Attributed<B>>(builder: B): B =>
       states(builder)
         .attr("data-nested", flag(nested))
         .attr("data-nested-dialog-open", flag(nestedDialogs > 0))
 
     const triggerPart = p.part("button", (b, triggerId: string | null) => {
       const active = open && (props.triggerId == null || props.triggerId === triggerId)
-      return b
-        .attr("aria-haspopup", "dialog")
-        .attr("aria-expanded", active ? "true" : "false")
-        .attr("aria-controls", active ? portalId : undefined)
-        .attr("data-popup-open", flag(active))
-        .attr("data-dialog-trigger", portalId)
+      return triggerAttrs(b, active, portalId)
         .onClick(({ pointerType }) => Message.ClickedTrigger({ triggerId, pointerType }))
     })
     const trigger = View.wrapPart(
@@ -975,11 +991,10 @@ export const Dialog = Component.define({
       // A modal is the browser's; the other modes are a manual popover, which
       // shows in the top layer without making the page inert.
       const placed = modal === true
-        ? dialog.attr("popover", undefined).modal(shown).onCancel(({ cancelable }) =>
-          Message.CancelledModal({ cancelable })
-        ).onClose(
-          Message.ClosedModal()
-        )
+        // A test host's cancel may carry no payload: only `false` is forced.
+        ? dialog.attr("popover", undefined).modal(shown)
+          .onCancel(({ cancelable }) => Message.CancelledModal({ forced: cancelable === false }))
+          .onClose(Message.ClosedModal())
         : dialog.open(false).popover("manual", shown)
       if (!shown) return placed
       return placed.onMount(
@@ -996,7 +1011,7 @@ export const Dialog = Component.define({
           holdExit: props.holdExit === true,
           portalId,
           popupId
-        }).pipe(Mount.map((message) => message))
+        })
       )
     })
     // Applied before deciding, so a wrong tag throws in every state.
