@@ -1072,24 +1072,45 @@ describe("HtmlServer", { concurrent: false }, () => {
       }).pipe(Effect.scoped))
   }
 
+  // A child whose slot holds another child, with two buttons in a slot of its own, and a node after it.
+  // `partly` puts a stray element before the second button, and one after the outer slot.
+  const partly = (html: string) =>
+    html.replace("<button>go</button>", "<hr>$&").replace("<!--]/Page/Card[c]-->", "<hr>$&")
   for (
-    const [what, tamper] of [
-      // A stray element before the second button, in the slot's content, and one after the slot, in the child's.
-      [
-        "part of its view",
-        (html: string) => html.replace("<button>go</button>", "<hr>$&").replace("<!--]/Page/Card[c]-->", "<hr>$&")
-      ],
+    const [name, at, tamper, order] of [
+      ["a child builds fresh among the server's nodes", "child", partly, [
+        "before",
+        "first",
+        "go",
+        "tail",
+        "mid",
+        "after"
+      ]],
+      ["the root's child builds fresh among the server's nodes", "root", partly, ["first", "go", "tail"]],
+      ["a child that waited for its Layer builds fresh among the server's nodes", "waiting", partly, [
+        "before",
+        "mid",
+        "first",
+        "go",
+        "tail",
+        "after"
+      ]],
       // A stray element where the child's view starts.
-      ["all of its view", (html: string) => html.replace("<!--[/Page/Card[c]/[body]-->", "<hr>$&")]
+      [
+        "a child that waited for its Layer builds fresh in place of the server's nodes",
+        "waiting",
+        (html: string) => html.replace("<!--[/Page/Card[c]/[body]-->", "<hr>$&"),
+        ["before", "mid", "first", "go", "tail", "after"]
+      ]
     ] as const
   ) {
-    it.effect(`places what a child that waited for its Layer builds fresh, ${what}, where the server's nodes were`, () =>
+    it.effect(`places what ${name}`, () =>
       Effect.gen(function*() {
         class Store extends Context.Service<Store, string>()("test/Store") {}
         const Go = Html.ref("Go", "button")
         const mounted: Array<Element> = []
         const looked: Array<Option.Option<Element>> = []
-        const Message = UiSchema.TaggedEnum({ Look: {}, Done: {} })
+        const Message = UiSchema.TaggedEnum({ Look: {}, Move: {}, Done: {} })
         const Seen = Mount.make("Seen", { args: {} }, (element: Element) =>
           Effect.sync(() => {
             mounted.push(element)
@@ -1101,29 +1122,37 @@ describe("HtmlServer", { concurrent: false }, () => {
             looked.push(yield* refs.lookup(Go))
             return Message.Done()
           }))
-        const Card = Component.define({
-          name: "Card",
-          model: Schema.Null,
-          message: Schema.Never,
-          elements: Html,
-          slots: ["body"]
-        }).make({
-          init: () => null,
-          update: (model) => model,
-          view: (_, h) => h.slots.body
-        }).pipe(Component.provide(Layer.effect(Store, Effect.as(Effect.sleep("50 millis"), "ready"))))
-        const Page = Component.define({ name: "Page", model: Schema.Null, message: Message, elements: Html }).make({
-          init: () => null,
-          update: (model, message, $) => message._tag === "Look" ? $.set(model).run(Look()) : model,
-          view: (_, h) =>
-            h.main(
-              h.i("before"),
-              Card(h, {
-                key: "c",
-                slots: { body: [h.button("first"), h.button.ref(Go).onMount(Seen()).children("go")] }
-              }),
-              h.b("after")
-            )
+        const slotted = (name: string) =>
+          Component.define({ name, model: Schema.Null, message: Schema.Never, elements: Html, slots: ["body"] }).make({
+            init: () => null,
+            update: (model) => model,
+            view: (_, h) => h.slots.body
+          })
+        const Inner = slotted("Inner")
+        const Ready = slotted("Card")
+        const Card = at === "waiting"
+          ? Ready.pipe(Component.provide(Layer.effect(Store, Effect.as(Effect.sleep("50 millis"), "ready"))))
+          : Ready
+        const Page = Component.define({ name: "Page", model: Schema.Boolean, message: Message, elements: Html }).make({
+          init: () => false,
+          update: (moved, message, $) =>
+            message._tag === "Look" ? $.set(moved).run(Look()) : message._tag === "Move" ? true : moved,
+          view: (moved, h) => {
+            const card = Card(h, {
+              key: "c",
+              slots: {
+                body: [
+                  Inner(h, {
+                    key: "i",
+                    slots: { body: [h.button("first"), h.button.ref(Go).onMount(Seen()).children("go")] }
+                  }),
+                  h.u("tail")
+                ]
+              }
+            })
+            const mid = h.s.key("m").children("mid")
+            return at === "root" ? card : h.main(h.i("before"), moved ? [mid, card] : [card, mid], h.b("after"))
+          }
         })
         const fiber = yield* Effect.forkChild(HtmlServer.renderToHtml(Page, {}))
         yield* TestClock.adjust("50 millis")
@@ -1131,16 +1160,28 @@ describe("HtmlServer", { concurrent: false }, () => {
         const html = tamper(rendered.html)
         assert.include(html, "<hr>")
         const app = yield* container(html)
+        const server: Array<Node> = [...app.querySelectorAll("*")]
         const root = yield* BrowserHost.mountEffect(Page, {}, app, { state: rendered.state })
-        yield* TestClock.adjust("50 millis")
+        if (at === "waiting") {
+          // Moved while it waits. Once it has adopted, a move would place all its nodes, one left out too.
+          root.send(Message.Move())
+          yield* tick
+          yield* TestClock.adjust("50 millis")
+        }
         yield* root.adopted
         yield* tick
         root.send(Message.Look())
         yield* tick
-        const main = app.querySelector("main")!
-        assert.deepStrictEqual([...main.childNodes].map((node) => node.textContent), ["before", "first", "go", "after"])
-        assert.deepStrictEqual(mounted, [main.childNodes[2]])
-        assert.deepStrictEqual(looked, [Option.some(main.childNodes[2])])
+        const nodes = [...(app.querySelector("main") ?? app).childNodes]
+        assert.deepStrictEqual(nodes.map((node) => node.textContent), [...order])
+        // The kernel keeps the nodes that match. The runtime it replaces builds the child again.
+        assert.deepStrictEqual(
+          nodes.filter((node) => !server.includes(node)).map((node) => node.textContent),
+          kernel && tamper === partly ? ["go"] : ["first", "go", "tail"]
+        )
+        const go = nodes[order.indexOf("go")]
+        assert.deepStrictEqual(mounted, [go])
+        assert.deepStrictEqual(looked, [Option.some(go)])
       }).pipe(Effect.scoped))
   }
 

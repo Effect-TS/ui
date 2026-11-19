@@ -3164,7 +3164,7 @@ const setup = (
       // Rebuilt: the server's nodes go. Adopted, the ones it kept are in place, and what it built fresh for
       // the rest isn't in the document yet. Nothing above it renders now, so it places its own nodes.
       if (!range.claimed) { for (const node of nodes) host.remove(node) }
-      if (inst.failure === undefined && parentNode !== undefined) place(parentNode, inst.rendered, after)
+      if (inst.failure === undefined && parentNode !== undefined) placeEach(parentNode, inst.rendered, after)
       if (adopt) recordAdopted(inst)
       if (held !== undefined && adopt && !inst.closed && inst.failure === undefined) applyPlacement(inst, held)
       viewChanged = true
@@ -5390,7 +5390,7 @@ const setup = (
           env
         )
         if (kind.textOnly === true) removeUpTo(hydration!.firstChild(node), undefined)
-        place(node, children, undefined)
+        placeEach(node, children, undefined)
         for (const name in view.props) adoptProp(node, name, view.props[name])
         adoptedUpTo = next
         return {
@@ -6094,6 +6094,26 @@ const setup = (
     }
   }
 
+  /**
+   * As `place`, for what hydration adopted. An item there can hold nodes built fresh among the server's,
+   * so every node is checked, not each item's last. Returns the first node, or `ref` when there is none.
+   */
+  const placeEach = (parentNode: unknown, items: ReadonlyArray<Rendered>, ref: unknown): unknown => {
+    let next = ref
+    for (let index = items.length - 1; index >= 0; index--) {
+      let item = items[index]!
+      while (item._tag === "Fallback") item = item.inner
+      if (item._tag === "Child" || item._tag === "Outlet") {
+        next = placeEach(parentNode, item.inst.rendered, next)
+        continue
+      }
+      const node = item.node
+      if (host.parentOf(node) !== parentNode || host.nextOf(node) !== next) host.insertBefore(parentNode, node, next)
+      next = node
+    }
+    return next
+  }
+
   /** Puts an item's nodes before `ref`, in their order, without collecting them. */
   const insertNodes = (parentNode: unknown, rendered: Rendered, ref: unknown): void => {
     switch (rendered._tag) {
@@ -6303,7 +6323,7 @@ const setup = (
   rootInstance = root
   // Added after the root forked its Scope, so it runs before that Scope closes.
   addFinalizer(rootScope, Effect.sync(() => leave(root)))
-  if (root.failure === undefined) place(container, root.rendered, rootRef)
+  if (root.failure === undefined) placeEach(container, root.rendered, rootRef)
   started = true
   if (waiting === 0 && !adoptedDone) {
     adoptedDone = true
