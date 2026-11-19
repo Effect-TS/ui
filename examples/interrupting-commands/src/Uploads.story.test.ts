@@ -5,9 +5,9 @@ import { FAKE_FILES, UploadFile, Uploads, UploadsMessage, type UploadsModel } fr
 
 const [firstFile, secondFile, thirdFile] = FAKE_FILES
 
-const uploadFirst = UploadFile({ uploadId: 0, sizeMegabytes: firstFile.sizeMegabytes })
-const uploadSecond = UploadFile({ uploadId: 1, sizeMegabytes: secondFile.sizeMegabytes })
-const uploadThird = UploadFile({ uploadId: 2, sizeMegabytes: thirdFile.sizeMegabytes })
+const uploadFirst = UploadFile.make({ uploadId: 0, sizeMegabytes: firstFile.sizeMegabytes })
+const uploadSecond = UploadFile.make({ uploadId: 1, sizeMegabytes: secondFile.sizeMegabytes })
+const uploadThird = UploadFile.make({ uploadId: 2, sizeMegabytes: thirdFile.sizeMegabytes })
 
 const startUpload = UploadsMessage.ClickedStartUpload()
 const cancelFirst = UploadsMessage.ClickedCancelUpload({ uploadId: 0 })

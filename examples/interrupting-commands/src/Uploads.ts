@@ -58,21 +58,23 @@ export const FAKE_FILES: ReadonlyArray<FakeFile> = [
 
 const MILLISECONDS_PER_MEGABYTE = 100
 
+// Uploading is I/O, so it is a `Command.Service`: a real app swaps the fake
+// body for one that captures an HTTP client, and a test can provide a fake.
 // Each upload is its own group, so cancelling one leaves the others running.
 // With `switch`, a restarted upload starts once its cancelled run has exited,
 // and Story and Scene steps can send messages while an upload is pending.
-export const UploadFile = Command.make(
-  "UploadFile",
+export class UploadFile extends Command.Service<UploadFile>()(
+  "uploads/UploadFile",
   {
     args: { uploadId: Schema.Number, sizeMegabytes: Schema.Number },
     group: ["uploadId"],
     mode: "switch"
   },
-  ({ sizeMegabytes }) => Effect.sleep(Duration.millis(sizeMegabytes * MILLISECONDS_PER_MEGABYTE))
-)
+  Effect.succeed(({ sizeMegabytes }) => Effect.sleep(Duration.millis(sizeMegabytes * MILLISECONDS_PER_MEGABYTE)))
+) {}
 
 const uploadFile = (upload: Upload) =>
-  UploadFile({ uploadId: upload.id, sizeMegabytes: upload.sizeMegabytes }).pipe(
+  UploadFile.make({ uploadId: upload.id, sizeMegabytes: upload.sizeMegabytes }).pipe(
     Command.as(UploadsMessage.CompletedUploadFile({ uploadId: upload.id }))
   )
 
@@ -130,7 +132,9 @@ const UploadRow = UploadsDef.fragment((h, upload: Upload) =>
 
 // COMPONENT
 
-export const Uploads = UploadsDef.make({
+// The component as defined, which requires `UploadFile`, for a test that
+// provides its own Layers.
+export const UploadsNoDeps = UploadsDef.make({
   init: () => ({ uploadId: 0, uploads: [] }),
   update: {
     ClickedStartUpload: (model, _message, $) => {
@@ -186,3 +190,6 @@ export const Uploads = UploadsDef.make({
       )
     )
 })
+
+// The component the app and its tests use, with `UploadFile`'s Layer provided.
+export const Uploads = UploadsNoDeps.pipe(Component.provide(UploadFile.layer))
