@@ -194,7 +194,7 @@ export const renderToHtml = <
       Effect.map((rendered) => {
         const head = server.htmlHead(rendered.head)
         return {
-          // A runtime that doesn't write to a sink gives the nodes.
+          // A runtime that doesn't write to a sink gives the nodes, as does one whose tree the writer refused.
           html: writer.html() + server.toHtml(rendered.nodes),
           state: rendered.state,
           model: rendered.model,

@@ -168,9 +168,14 @@ let framedTags: ReadonlySet<string> | undefined
 /**
  * Writes a server tree as HTML as it is walked, for a runtime that has no nodes to give `toHtml`.
  *
+ * It is written while the render's Scope is open, and `toHtml` runs after it has closed. A string
+ * or a number given as a `value` reads the same either way. An object's `toString` may not, so the
+ * writer refuses a tree that has one where `toHtml` would read it, without reading it, and `toHtml`
+ * writes that tree from the nodes.
+ *
  * @internal
  */
-export const makeWriter = (): ServerSink & { readonly html: () => string } => {
+export const makeWriter = (): ServerSink & { readonly html: () => string; readonly refused: () => boolean } => {
   const framed = framedTags ??= new Set([...voidTags, ...textOnlyTags, ...newlineTags, "select"])
   let out = ""
   let depth = 0
@@ -179,26 +184,44 @@ export const makeWriter = (): ServerSink & { readonly html: () => string } => {
   let text: string | undefined
   /** Whether the innermost open element has a `Frame` and no children yet. */
   let bare = false
+  /**
+   * Whether what is written is left out: inside a void or a text-only element, of which only the text
+   * is kept, and for good once the tree is refused. Nothing of an element is read there.
+   */
+  let skips = false
+  let refused = false
   /** The value of the select the options being written belong to. */
   let selectValue: string | undefined
   return {
     html: () => out,
+    refused: () => refused,
     text(value) {
       bare = false
-      out += escapeText(value)
       if (text !== undefined) text += value
+      if (!skips) out += escapeText(value)
     },
     enter(path) {
       bare = false
-      out += markers.open(path)
+      if (!skips) out += markers.open(path)
     },
     leave(path) {
-      out += markers.close(path)
+      if (!skips) out += markers.close(path)
     },
     open(tag, attrs, props) {
       depth++
       bare = false
+      if (skips) return
       const plain = plainAttributes(tag, attrs, props)
+      if (plain === undefined) {
+        const value = props.value
+        // An object or a function.
+        if (Object(value) === value) {
+          refused = skips = true
+          frame = text = undefined
+          out = ""
+          return
+        }
+      }
       // Most elements: outside a select, and closed by their closing tag.
       if (selectValue === undefined && !framed.has(tag)) {
         out += `<${tag}${plain ?? written(elementAttributes(tag, attrs, props))}>`
@@ -228,6 +251,7 @@ export const makeWriter = (): ServerSink & { readonly html: () => string } => {
       frame = { parent: frame, depth, before: out, text, gathers, selectValue, kind, value, option }
       out = ""
       bare = true
+      skips = kind !== undefined
       if (gathers) text = ""
       selectValue = inside
     },
@@ -235,10 +259,12 @@ export const makeWriter = (): ServerSink & { readonly html: () => string } => {
       const open = frame
       if (open === undefined || open.depth !== depth) {
         depth--
-        out += `</${tag}>`
+        if (!skips) out += `</${tag}>`
         return
       }
       depth--
+      // No element inside one that skips has a `Frame`, so the one around this doesn't skip.
+      skips = false
       if (open.kind === "void") out = open.before
       else {
         let before = open.before

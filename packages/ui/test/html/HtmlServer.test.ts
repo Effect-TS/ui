@@ -370,6 +370,70 @@ describe("HtmlServer", { concurrent: false }, () => {
       )
     }))
 
+  it.effect("never reads the properties of markup it leaves out", () =>
+    Effect.gen(function*() {
+      // `String` of it throws.
+      const unreadable: unknown = Object.create(null)
+      const Page = Component.define({
+        name: "LeftOut",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) =>
+          h.div.children(
+            h.textarea.children(h.el("span").prop("value", unreadable).children("only text")),
+            h.el("br").children(h.el("span").prop("value", unreadable).children("none"))
+          )
+      })
+      const rendered = yield* HtmlServer.renderToHtml(Page, {})
+      expect(rendered.html).toBe("<!--[/LeftOut--><div><textarea>only text</textarea><br></div><!--]/LeftOut-->")
+    }))
+
+  it.effect("reads an object given as a value once, after the render's Layers are released", () =>
+    Effect.gen(function*() {
+      const Off = Component.define({
+        name: "Off",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => h.p("off")
+      }).pipe(Component.provide(Layer.empty, { server: false }))
+      let released = false
+      let read = 0
+      const value = {
+        toString() {
+          read++
+          return released ? "released" : "live"
+        }
+      }
+      const Page = Component.define({
+        name: "Late",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => h.div.children(h.input.prop("value", value), Off(h, { key: "o", props: {} }))
+      }).pipe(Component.provide(Layer.effectDiscard(Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          released = true
+        })
+      ))))
+      const rendered = yield* HtmlServer.renderToHtml(Page, {})
+      expect(rendered.html).toBe(
+        "<!--[/Late--><div><input value=\"released\"><!--[/Late/Off[o]--><p>off</p><!--]/Late/Off[o]--></div><!--]/Late-->"
+      )
+      expect(rendered.state).toEqual({ "/Late": null, "~deferred": ["/Late/Off[o]"], "~query": {} })
+      expect(read).toBe(1)
+    }))
+
   it.effect("keeps winning HTML aliases through updates and removals without folding SVG attributes", () =>
     Effect.gen(function*() {
       // What each step sets, and what the elements then hold. The HTML parser folds
