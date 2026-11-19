@@ -53,14 +53,21 @@ it.effect("a range slider in a field is named by the legend, described, and focu
       assert.strictEqual(input.getAttribute("aria-describedby"), ids)
       assert.strictEqual(input.getAttribute("aria-invalid"), "true")
     }
-    const state = () => [field.hasAttribute("data-focused"), field.hasAttribute("data-touched")]
+    const assertState = (focused: boolean, touched: boolean) => {
+      for (const part of [field, group, minimum!, maximum!]) {
+        assert.strictEqual(part.hasAttribute("data-focused"), focused)
+        assert.strictEqual(part.hasAttribute("data-touched"), touched)
+      }
+    }
     minimum!.focus()
     yield* tick
-    assert.deepStrictEqual(state(), [true, false])
+    assert.strictEqual(document.activeElement, minimum)
+    assertState(true, false)
     maximum!.focus()
     yield* tick
-    assert.deepStrictEqual(state(), [true, false])
+    assert.strictEqual(document.activeElement, maximum)
+    assertState(true, false)
     app.querySelector("button")!.focus()
     yield* tick
-    assert.deepStrictEqual(state(), [false, true])
+    assertState(false, true)
   }).pipe(Effect.scoped))

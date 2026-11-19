@@ -66,6 +66,7 @@ describe("Field", () => {
 
   it("a group is a group unless its element says otherwise, and a disabled field disables its members", () => {
     const f = parts({})
+    assert.strictEqual(attrsOf(f.group(h.div)).role, "group")
     assert.strictEqual(attrsOf(f.group(h.div).attr("role", "radiogroup")).role, "radiogroup")
     assert.isUndefined(attrsOf(f.group(h.fieldset)).role)
     const member = attrsOf(parts({ disabled: true }).member(h.input).disabled(false))
