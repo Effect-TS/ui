@@ -345,6 +345,16 @@ model.advanced
   the consumer keeps the value in its Model.
 - A component's Model holds only interaction state the consumer would
   never store: the active row, the typeahead buffer.
+- The exception is a queue the app posts to, such as `ToastProvider`'s
+  toasts. Its items outlive the app's interest in them: a closing toast
+  keeps its content on screen until its exit transition ends, and the
+  limit, timers and focus hand-off all read the list. So the owner keeps
+  the list in its Model, and the components inside its closure post facts
+  to it with `$.send(Owner, message)` through `receives` (`AddedToast`,
+  `UpdatedToast`, `ClosedToast`), each naming an item by an id the sender
+  picks. The owner emits an event for what the user did, such as
+  `Dismissed`, and nothing for what a sender asked. Its settings, such as
+  `timeout` and `limit`, are still props.
 - A disabled or read-only control reports nothing. A component's `update`
   checks `disabled` and `readOnly`, so no message gets through even if an
   event fires. A view function sets no handler in those states.

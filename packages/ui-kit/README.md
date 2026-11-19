@@ -25,4 +25,5 @@ Switch(h, {
 - [Field](src/Field.ts): a label, a description and an error for a form control, with its validity, touched and focused state.
 - [Input](src/Input.ts): a native text input whose value lives in your Model.
 - [Switch](src/Switch.ts): a controlled on/off setting.
+- [Toast](src/Toast.ts): `ToastProvider`, a stack of notifications that components inside it post to, which close after a timeout.
 - [Tooltip](src/Tooltip.ts): a popup shown when its trigger is hovered or focused, with `TooltipProvider` to open neighbouring tooltips without the delay.

@@ -142,6 +142,7 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
+import { flag, withStyle } from "./internal/attributes.ts"
 
 /**
  * The side of the trigger a tooltip shows on.
@@ -371,9 +372,6 @@ const left = (model: typeof Model.Type, _message: unknown, $: TooltipUpdate) => 
   return $.set(next).run(WaitBeforeClosing({ delay: $.props.closeDelay ?? 0 }))
 }
 
-// A data attribute is present, with an empty value, or absent.
-const flag = (on: boolean | undefined): string | undefined => on === true ? "" : undefined
-
 // `position-area` for each side and alignment. `x-start` and `y-start`
 // follow the writing direction.
 const areas: Record<TooltipSide, Record<TooltipAlign, string>> = {
@@ -407,12 +405,6 @@ const placement = (anchor: string, props: TooltipProps): string => {
     props.disableHoverablePopup === true ? "pointer-events:none" : undefined
   ].filter((declaration) => declaration !== undefined).join(";")
 }
-
-// The trigger and the positioner add their declarations, in `forward`,
-// after the consumer's inline style, so theirs win and the consumer's
-// others stay, including a style chained after the part.
-const withStyle = (consumer: string | undefined, own: string): string =>
-  consumer === undefined || consumer.trim() === "" ? own : consumer.replace(/;\s*$/, "") + ";" + own
 
 /**
  * The props of a `TooltipProvider`.
