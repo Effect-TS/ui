@@ -22,6 +22,7 @@ Switch(h, {
 - [Avatar](src/Avatar.ts): an image with a fallback.
 - [Button](src/Button.ts): a native button that can stay focusable while disabled.
 - [Checkbox](src/Checkbox.ts): a controlled checkbox with an indicator.
+- [Dialog](src/Dialog.ts): a popup in the top layer whose open state lives in your Model, as a modal, a focus trap or a non-modal panel, with `DialogTrigger` to open it from another component.
 - [Field](src/Field.ts): a label, a description and an error for a form control, with its validity, touched and focused state.
 - [Input](src/Input.ts): a native text input whose value lives in your Model.
 - [Switch](src/Switch.ts): a controlled on/off setting.

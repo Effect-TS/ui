@@ -406,6 +406,9 @@ const placement = (anchor: string, props: TooltipProps): string => {
   ].filter((declaration) => declaration !== undefined).join(";")
 }
 
+// The trigger and the positioner add their declarations with `withStyle`,
+// in `forward`, so they also win over a style chained after the part.
+
 /**
  * The props of a `TooltipProvider`.
  *
