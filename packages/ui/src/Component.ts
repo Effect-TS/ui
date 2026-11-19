@@ -70,7 +70,7 @@ import type * as Types from "effect/Types"
 import * as Command from "./Command.ts"
 import * as child from "./internal/child.ts"
 import * as internalNoop from "./internal/noop.ts"
-import * as componentQueries from "./internal/queries.ts"
+import * as queryCore from "./internal/queryCore.ts"
 import * as childRef from "./internal/ref.ts"
 import * as sharedReads from "./internal/shared.ts"
 import type * as Query from "./Query.ts"
@@ -2647,6 +2647,17 @@ const receivesOf = (message: Schema.Codec<any, any>, tags: ReadonlyArray<string>
     })
   )
 
+/**
+ * Binds `queries` through `Query`, which an app with a query has loaded. Without it nothing in the
+ * record can be a query: an empty record binds nothing, and any other fails `Query`'s first check.
+ */
+const bindQueries = (component: string, queries: unknown): ReturnType<queryCore.Loaded["bind"]> => {
+  if (queries === undefined) return undefined
+  if (queryCore.loaded !== undefined) return queryCore.loaded.bind(component, queries)
+  if (typeof queries === "object" && queries !== null && Object.keys(queries).length === 0) return undefined
+  throw new Error(`${component}: queries must be a record of { query, args } or { queryMany, args } entries.`)
+}
+
 const finish = (
   definition: Definition.Any,
   options: {
@@ -2665,7 +2676,7 @@ const finish = (
     readonly reduceHead?: ((model: any, below: any) => unknown) | undefined
   }
 ): Any => {
-  const bound = componentQueries.bind(definition.name, definition.queries)
+  const bound = bindQueries(definition.name, definition.queries)
   const open = (model: unknown, props: unknown, results: Results | undefined): any =>
     bound === undefined ? {} : bound.context(model, props, results).queries
   const update = options.update

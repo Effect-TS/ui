@@ -14,8 +14,13 @@ import * as Predicate from "effect/Predicate"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import * as Query from "../Query.ts"
+import type * as Query from "../Query.ts"
 import * as Subscription from "../Subscription.ts"
+import * as queryCore from "./queryCore.ts"
+
+// `Query` binds a component's queries through `queryCore.loaded`, so it's loaded whenever this runs.
+const queryModule = (): queryCore.Loaded => queryCore.loaded!
+const QueryTypeId: Query.TypeId = "~@effect/ui/Query"
 
 type QueryFn = (model: any, props: any, queries: any) => unknown
 
@@ -92,41 +97,35 @@ export type Results = Readonly<Record<string, unknown>>
  *
  * @internal
  */
-export const boundOf = (component: { readonly "~queries": unknown }): Bound | undefined =>
-  component["~queries"] as Bound | undefined
-
-const markerKey = "~@effect/ui/Component/watchMarker"
-const groupKey = "~@effect/ui/Component/watchGroup"
+export const boundOf: (component: { readonly "~queries": unknown }) => Bound | undefined = queryCore.boundOf
 
 /** @internal */
-export const markerOf = (subscription: object): Marker | undefined =>
-  (subscription as { readonly [markerKey]?: Marker })[markerKey]
+export const markerOf: (subscription: object) => Marker | undefined = queryCore.markerOf
 
 /** @internal */
-export const groupOf = (subscription: object): Group | undefined =>
-  (subscription as { readonly [groupKey]?: Group })[groupKey]
+export const groupOf: (subscription: object) => Group | undefined = queryCore.groupOf
 
 /** @internal */
-export const isWatchKey = (key: string): boolean => key.startsWith("~query/")
+export const isWatchKey: (key: string) => boolean = queryCore.isWatchKey
 
 /** Strict open: the stored result at the query's current args, else `Initial`, waiting when enabled. */
 const open = (snapshot: unknown, argsKey: string | undefined): AsyncResult.AsyncResult<any, any> => {
   if (argsKey === undefined) return AsyncResult.initial(false)
-  const data = Query.snapshotData(snapshot)
+  const data = queryModule().snapshotData(snapshot)
   if (data?.result === undefined || data.argsKey !== argsKey) return AsyncResult.initial(true)
   return data.result
 }
 
 /** Whether the opened value includes an unconfirmed patch. */
 const patched = (snapshot: unknown, argsKey: string | undefined): boolean => {
-  const data = Query.snapshotData(snapshot)
+  const data = queryModule().snapshotData(snapshot)
   return argsKey !== undefined && data?.argsKey === argsKey && data.patched
 }
 
 /** "Keep the previous page": a Success stored for other args, while the query is enabled. */
 const previous = (snapshot: unknown, argsKey: string | undefined): Option.Option<any> => {
   if (argsKey === undefined) return Option.none()
-  const data = Query.snapshotData(snapshot)
+  const data = queryModule().snapshotData(snapshot)
   if (data?.result === undefined || data.argsKey === argsKey || data.result._tag !== "Success") return Option.none()
   return Option.some(data.def.list === undefined ? data.result.value : listOf(data.def, data.result.value))
 }
@@ -136,7 +135,7 @@ const lists = new WeakMap<object, { readonly items: ReadonlyArray<unknown>; read
 const listOf = (def: QueryDef, pages: ReadonlyArray<unknown>) => {
   let out = lists.get(pages)
   if (out === undefined) {
-    out = { items: Query.infiniteItems(def, pages), pages }
+    out = { items: queryModule().infiniteItems(def, pages), pages }
     lists.set(pages, out)
   }
   return out
@@ -151,7 +150,7 @@ const openList = (
   result: AsyncResult.AsyncResult<any, any>
 ): AsyncResult.AsyncResult<any, any> => {
   if (result._tag === "Initial") return result
-  const data = Query.snapshotData(snapshot)!
+  const data = queryModule().snapshotData(snapshot)!
   const cached = data.result === result ? openedLists.get(snapshot as object) : undefined
   if (cached !== undefined) return cached
   const more = data.more ?? { _tag: "End" }
@@ -169,9 +168,9 @@ const openKeyed = (
   snapshots: unknown,
   entries: ReadonlyArray<Keyed>
 ): ReadonlyArray<{ readonly args: unknown; readonly result: AsyncResult.AsyncResult<any, any> }> => {
-  const stored = Query.snapshotMapData(snapshots)?.entries
+  const stored = queryModule().snapshotMapData(snapshots)?.entries
   const opened = entries.map((entry) => {
-    const data = Query.snapshotData(stored?.get(entry.argsKey))
+    const data = queryModule().snapshotData(stored?.get(entry.argsKey))
     return {
       args: entry.args,
       result: data?.result ?? AsyncResult.initial(true),
@@ -204,7 +203,7 @@ const uniqueArgs = (component: string, name: string, def: QueryDef, args: unknow
 
 type QueryDef = ReturnType<typeof Query.defOf>
 
-const isQuery = (u: unknown): u is Query.Query.Any => Predicate.hasProperty(u, Query.TypeId)
+const isQuery = (u: unknown): u is Query.Query.Any => Predicate.hasProperty(u, QueryTypeId)
 
 /**
  * Checks the entries of `queries`. Throws at module load on an entry that
@@ -224,7 +223,7 @@ const parse = (component: string, queries: unknown): ReadonlyArray<Entry> => {
     if (!isQuery(definition)) throw fail(`has a ${query === undefined ? "queryMany" : "query"} that isn't a Query.`)
     if (typeof args !== "function") throw fail("must have an args function.")
     if (onChange !== undefined && typeof onChange !== "function") throw fail("has an onChange that isn't a function.")
-    const list = Query.defOf(definition).list !== undefined
+    const list = queryModule().defOf(definition).list !== undefined
     if (queryMany !== undefined && list) {
       throw fail("has an infinite query under queryMany. An infinite query takes query.")
     }
@@ -323,16 +322,16 @@ export const bind = (component: string, queries: unknown): Bound | undefined => 
   const fields: Record<string, Schema.Top> = {}
   const logFields: Record<string, Schema.Top> = {}
   for (const entry of entries) {
-    const def = Query.defOf(entry.query)
+    const def = queryModule().defOf(entry.query)
     empty[entry.name] = entry.keyed
-      ? Query.makeSnapshotMap(def, entry.name, [])
-      : Query.makeSnapshot(def, entry.name, undefined, undefined)
+      ? queryModule().makeSnapshotMap(def, entry.name, [])
+      : queryModule().makeSnapshot(def, entry.name, undefined, undefined)
     fields[entry.name] = entry.keyed
-      ? Query.snapshotMapSchema(entry.query, entry.name)
-      : Query.snapshotSchema(entry.query, entry.name)
+      ? queryModule().snapshotMapSchema(entry.query, entry.name)
+      : queryModule().snapshotSchema(entry.query, entry.name)
     logFields[entry.name] = entry.keyed
-      ? Query.snapshotMapSchema(entry.query, entry.name, true)
-      : Query.snapshotSchema(entry.query, entry.name, true)
+      ? queryModule().snapshotMapSchema(entry.query, entry.name, true)
+      : queryModule().snapshotSchema(entry.query, entry.name, true)
   }
   Object.freeze(empty)
   const stateKey = Symbol()
@@ -353,7 +352,7 @@ export const bind = (component: string, queries: unknown): Bound | undefined => 
     } finally {
       state.running.pop()
     }
-    const def = Query.defOf(entry.query)
+    const def = queryModule().defOf(entry.query)
     if (entry.keyed) {
       const keyed = uniqueArgs(component, entry.name, def, args)
       current = { args: keyed.map((one) => one.args), argsKey: undefined, entries: keyed }
@@ -384,7 +383,7 @@ export const bind = (component: string, queries: unknown): Bound | undefined => 
   const openKeyedResult = (state: State, entry: Entry) => {
     let opened = state.opened.get(entry.name)
     if (opened === undefined) {
-      opened = openKeyed(Query.defOf(entry.query), state.results[entry.name], argsOf(state, entry).entries!)
+      opened = openKeyed(queryModule().defOf(entry.query), state.results[entry.name], argsOf(state, entry).entries!)
       state.opened.set(entry.name, opened)
     }
     return opened
@@ -413,7 +412,7 @@ export const bind = (component: string, queries: unknown): Bound | undefined => 
           name: watchName,
           deps: argsKey === undefined ? undefined : [argsKey],
           stream: Stream.never,
-          [markerKey]: marker
+          [queryCore.markerKey]: marker
         } as unknown as Subscription.Subscription<any, any>
       }
       if (current.entries === undefined) return [watchOf(current.args, current.argsKey, false)]
@@ -426,7 +425,7 @@ export const bind = (component: string, queries: unknown): Bound | undefined => 
           name: watchName,
           deps: undefined,
           stream: Stream.never,
-          [groupKey]: group
+          [queryCore.groupKey]: group
         } as unknown as Subscription.Subscription<any, any>,
         ...current.entries.map((one) => watchOf(one.args, one.argsKey, true))
       ]
@@ -467,7 +466,8 @@ export const bind = (component: string, queries: unknown): Bound | undefined => 
       return context
     },
     snapshot: (entry, at, result, patched, more) =>
-      Query.makeSnapshot(Query.defOf(entry.query), entry.name, at, result, patched, more),
-    snapshotMany: (entry, snapshots) => Query.makeSnapshotMap(Query.defOf(entry.query), entry.name, snapshots)
+      queryModule().makeSnapshot(queryModule().defOf(entry.query), entry.name, at, result, patched, more),
+    snapshotMany: (entry, snapshots) =>
+      queryModule().makeSnapshotMap(queryModule().defOf(entry.query), entry.name, snapshots)
   }
 }

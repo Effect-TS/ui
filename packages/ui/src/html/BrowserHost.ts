@@ -106,7 +106,7 @@ import * as Layer from "effect/Layer"
 import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import type * as Scope from "effect/Scope"
 import type * as Component from "../Component.ts"
-import * as Query from "../Query.ts"
+import * as queryCore from "../internal/queryCore.ts"
 import * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
 import * as Html from "./Html.ts"
@@ -1197,8 +1197,8 @@ export const htmlHost: Context.Service.Shape<typeof Html.Host> = {
 // Visibility follows `visibilitychange` only, never the window's `focus`. Connectivity
 // starts true and follows `online` and `offline` on the document's own window.
 const signals = (document: Document) => {
-  const visibility = Query.makeSignal(document.visibilityState !== "hidden")
-  const connectivity = Query.makeSignal(true)
+  const visibility = queryCore.makeSignal(document.visibilityState !== "hidden")
+  const connectivity = queryCore.makeSignal(true)
   const view = document.defaultView
   const onVisibility = () => visibility.set(document.visibilityState !== "hidden")
   const onOnline = () => connectivity.set(true)
@@ -1284,8 +1284,8 @@ export const layer = (options?: {
     yield* Effect.addFinalizer(() => Effect.sync(signal.dispose))
     return Context.make(Renderer.Renderer, { host }).pipe(
       Context.add(Html.Host, htmlHost),
-      Context.add(Query.Visibility, signal.visibility),
-      Context.add(Query.Connectivity, signal.connectivity),
+      Context.add(queryCore.Visibility, signal.visibility),
+      Context.add(queryCore.Connectivity, signal.connectivity),
       Context.add(Html.GlobalEvents, globalEventsOf(document)),
       Context.add(Html.Images, imagesOf(document))
     )

@@ -69,7 +69,8 @@ import * as Stream from "effect/Stream"
 import type * as Types from "effect/Types"
 import type * as Component from "./Component.ts"
 import * as internalNoop from "./internal/noop.ts"
-import * as Query from "./Query.ts"
+import { canonical } from "./internal/queryCore.ts"
+import type * as Query from "./Query.ts"
 import type * as Renderer from "./Renderer.ts"
 
 /**
@@ -844,7 +845,7 @@ const makeGroup = (
     const picked: Record<string, unknown> = {}
     const source = (args ?? {}) as Record<string, unknown>
     for (const field of group) if (Object.hasOwn(source, field)) picked[field] = source[field]
-    return { key: Query.canonical(encode(picked)), schema: pickSchema, picked }
+    return { key: canonical(encode(picked)), schema: pickSchema, picked }
   }
 }
 

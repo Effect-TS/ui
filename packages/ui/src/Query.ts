@@ -69,6 +69,9 @@ import * as SchemaTransformation from "effect/SchemaTransformation"
 import * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
 import type * as Types from "effect/Types"
+import * as componentQueries from "./internal/queries.ts"
+import * as queryCore from "./internal/queryCore.ts"
+import { addListener, NonJsonLeaf } from "./internal/queryCore.ts"
 import { holdsRedacted, redactAST } from "./internal/schemaRedact.ts"
 
 /**
@@ -1191,10 +1194,7 @@ export interface Signal {
  * @category references
  * @since 0.1.0
  */
-export const Visibility: Context.Reference<Signal> = Context.Reference<Signal>(
-  "@effect/ui/Query/Visibility",
-  { defaultValue: () => alwaysTrue }
-)
+export const Visibility: Context.Reference<Signal> = queryCore.Visibility
 
 /**
  * Whether the host is online. Defaults to always true, so servers and CLIs
@@ -1212,10 +1212,7 @@ export const Visibility: Context.Reference<Signal> = Context.Reference<Signal>(
  * @category references
  * @since 0.1.0
  */
-export const Connectivity: Context.Reference<Signal> = Context.Reference<Signal>(
-  "@effect/ui/Query/Connectivity",
-  { defaultValue: () => alwaysTrue }
-)
+export const Connectivity: Context.Reference<Signal> = queryCore.Connectivity
 
 /**
  * A second query was defined under a name already in the cache. The first
@@ -1492,12 +1489,7 @@ export declare namespace Problem {
  * @category references
  * @since 0.1.0
  */
-export const Problems: Context.Reference<(problem: Problem.Any) => void> = Context.Reference<
-  (problem: Problem.Any) => void
->("@effect/ui/Query/Problems", {
-  // oxlint-disable-next-line no-console
-  defaultValue: () => (problem) => console.warn(problem.message)
-})
+export const Problems: Context.Reference<(problem: Problem.Any) => void> = queryCore.Problems
 
 /**
  * The cache service used by queries.
@@ -1563,28 +1555,6 @@ const BuildTypeId = "~@effect/ui/Query/Build"
 // Keys
 // -----------------------------------------------------------------------------
 
-// A fixed name for the kind of a leaf. Never its value, nor anything the value can set, such as its string tag: a
-// key can hold a secret.
-const kindOf = (leaf: unknown): string => {
-  switch (typeof leaf) {
-    case "number":
-      return "a non-finite number"
-    case "undefined":
-      return "undefined"
-    case "object":
-      return "a class instance"
-    default:
-      return "a " + typeof leaf
-  }
-}
-
-class NonJsonLeaf {
-  readonly kind: string
-  constructor(leaf: unknown) {
-    this.kind = kindOf(leaf)
-  }
-}
-
 /**
  * Canonical JSON: sorted object keys, `undefined` properties dropped, no
  * whitespace, `-0` kept apart from `0`. It parses back with `JSON.parse`.
@@ -1592,31 +1562,7 @@ class NonJsonLeaf {
  *
  * @internal
  */
-export const canonical = (u: unknown): string => {
-  if (u === null || typeof u === "boolean") return String(u)
-  if (typeof u === "string") return JSON.stringify(u)
-  if (typeof u === "number") {
-    if (!Number.isFinite(u)) throw new NonJsonLeaf(u)
-    return Object.is(u, -0) ? "-0" : String(u)
-  }
-  if (Array.isArray(u)) {
-    const parts: Array<string> = []
-    // Not `map`: a hole must throw too.
-    for (let i = 0; i < u.length; i++) parts.push(canonical(u[i]))
-    return "[" + parts.join(",") + "]"
-  }
-  if (typeof u === "object") {
-    const proto = Object.getPrototypeOf(u)
-    if (proto !== Object.prototype && proto !== null) throw new NonJsonLeaf(u)
-    const o = u as Record<string, unknown>
-    const parts: Array<string> = []
-    for (const key of Object.keys(o).sort()) {
-      if (o[key] !== undefined) parts.push(JSON.stringify(key) + ":" + canonical(o[key]))
-    }
-    return "{" + parts.join(",") + "}"
-  }
-  throw new NonJsonLeaf(u)
-}
+export const canonical: (u: unknown) => string = queryCore.canonical
 
 /**
  * A snapshot of a value for the `PatchMutated` check, deep and following
@@ -1909,29 +1855,7 @@ interface SettableSignal extends Signal {
  *
  * @internal
  */
-export const makeSignal = (initial = true): SettableSignal => {
-  let current = initial
-  const listeners = new Set<(value: boolean) => void>()
-  return {
-    get: () => current,
-    subscribe: (listener) => addListener(listeners, listener),
-    set: (value) => {
-      if (value === current) return
-      current = value
-      for (const listener of Array.from(listeners)) listener(value)
-    }
-  }
-}
-
-const alwaysTrue: Signal = { get: () => true, subscribe: () => () => {} }
-
-/** Adds a listener to a set. Returns its removal. */
-const addListener = <A>(listeners: Set<A>, listener: A): () => void => {
-  listeners.add(listener)
-  return () => {
-    listeners.delete(listener)
-  }
-}
+export const makeSignal: (initial?: boolean) => SettableSignal = queryCore.makeSignal
 
 // -----------------------------------------------------------------------------
 // Problems
@@ -2141,11 +2065,7 @@ const makeListDef = (options: {
  *
  * @internal
  */
-export const cacheIdleMs = (input: Duration.Input | undefined): number => {
-  const duration = Duration.fromInputUnsafe(input ?? "5 minutes")
-  if (Duration.isNegative(duration)) throw new Error("[Query] idleTimeToLive can't be negative")
-  return Duration.toMillis(duration)
-}
+export const cacheIdleMs: (input: Duration.Input | undefined) => number = queryCore.cacheIdleMs
 
 /** @internal */
 export const defOf = (query: { readonly [TypeId]: unknown }): QueryDef => query[TypeId] as QueryDef
@@ -2519,7 +2439,14 @@ interface CacheInternals {
    * Opens the fetch-free window unless `static`, where every entry has an
    * unknown age instead.
    */
-  readonly hydrate: (raw: unknown, options?: { readonly static?: boolean | undefined } | undefined) => void
+  readonly hydrate: (
+    raw: unknown,
+    options?: {
+      readonly static?: boolean | undefined
+      /** When the entries arrived, if before this call: they age from then. */
+      readonly at?: number | undefined
+    } | undefined
+  ) => void
   /** Closes the fetch-free window: unwatched hydrated Failures go, raw ones included. */
   readonly closeWindow: () => void
   readonly isWindowOpen: () => boolean
@@ -2556,8 +2483,16 @@ interface PendingFetch {
   readonly trigger: Trigger
 }
 
-/** @internal */
-export const internals = (cache: { readonly [CacheTypeId]: unknown }): CacheInternals => cache as CacheInternals
+/**
+ * The cache behind the `Cache` service. A root that started before this module
+ * loaded provides a cell in its place, and makes its cache here.
+ *
+ * @internal
+ */
+export const internals = (cache: { readonly [CacheTypeId]: unknown }): CacheInternals => {
+  const make = (cache as Partial<queryCore.CacheCell>)[queryCore.CacheCellTypeId]
+  return make === undefined ? cache as CacheInternals : make()
+}
 
 /**
  * The run a Command body runs in. The @effect/ui runtime provides it, so a
@@ -4982,7 +4917,7 @@ const buildCache = (
       report(new HydrationMalformed({ message: "[Query] the ~query state isn't the tuple shape. It was ignored." }))
       return
     }
-    hydratedAt = now()
+    hydratedAt = hydrateOptions?.at ?? now()
     hydratedStatic = hydrateOptions?.static === true
     windowOpen = !hydratedStatic
     raw = parsed
@@ -5233,3 +5168,19 @@ const buildCache = (
 
   return { cache: self, dispose }
 }
+
+// The runtime and `Component` reach this module through `queryCore.loaded`, so an app without queries
+// doesn't bundle it.
+queryCore.load({
+  bind: componentQueries.bind,
+  buildCache,
+  defOf,
+  infiniteItems,
+  makeSnapshot,
+  makeSnapshotMap,
+  sameMore,
+  snapshotData,
+  snapshotMapData,
+  snapshotMapSchema,
+  snapshotSchema
+})

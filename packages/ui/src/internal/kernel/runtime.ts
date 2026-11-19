@@ -27,7 +27,7 @@ import * as Feature from "../../Feature.ts"
 import * as Head from "../../Head.ts"
 import * as MessageLog from "../../MessageLog.ts"
 import * as Mount from "../../Mount.ts"
-import * as Query from "../../Query.ts"
+import type * as Query from "../../Query.ts"
 import type * as Renderer from "../../Renderer.ts"
 import * as Router from "../../Router.ts"
 import * as Subscription from "../../Subscription.ts"
@@ -48,7 +48,8 @@ import {
   segment,
   slotSegment
 } from "../paths.ts"
-import * as componentQueries from "../queries.ts"
+import type * as componentQueries from "../queries.ts"
+import * as queryCore from "../queryCore.ts"
 import * as schedule from "../schedule.ts"
 import { holdsRedacted } from "../schemaRedact.ts"
 import { scopeAddFinalizerUnsafe, scopeRemoveFinalizerUnsafe } from "../scope.ts"
@@ -603,7 +604,7 @@ export interface Root {
   readonly send: (message: unknown) => void
   /** The Commands still running, queued, awaiting or stopping anywhere in the tree. */
   readonly pending: () => ReadonlyArray<Pending>
-  /** The query cache the runtime owns. */
+  /** The query cache the runtime owns, read where the `Query` module is loaded. */
   readonly cache: ReturnType<typeof Query.internals>
   /** Why the root failed, once it has. */
   readonly crashed: () => Cause.Cause<unknown> | undefined
@@ -700,7 +701,7 @@ export const stateCodecOf = (component: Component.Any): StateCodec => {
   let found = stateCodecs.get(component)
   if (found === undefined) {
     const schema = (component as Component.Component<any, any, any, any, any, any, any>).model
-    const bound = componentQueries.boundOf(component)
+    const bound = queryCore.boundOf(component)
     if (holdsRedacted(schema.ast) || (bound !== undefined && holdsRedacted(bound.schema.ast))) {
       found = redactedState
     } else if (bound === undefined) {
@@ -810,7 +811,7 @@ export const mount = (
       const startOptions = { ...options, server: undefined }
       return Effect.flatMap(
         makeQueryCache(ctx, startOptions),
-        (cache) => start(component, props, container, ctx, cache, startOptions)
+        (cell) => start(component, props, container, ctx, cell, startOptions)
       )
     }))
 
@@ -844,8 +845,8 @@ export const prerender = (
         const startOptions: Options = {
           server: { host, fetches: started, static: options.static === true, onFinish: options.onFinish }
         }
-        const cache = yield* makeQueryCache(ctx, startOptions)
-        const root = yield* start(component, props, host.createElement("#root"), ctx, cache, startOptions)
+        const cell = yield* makeQueryCache(ctx, startOptions)
+        const root = yield* start(component, props, host.createElement("#root"), ctx, cell, startOptions)
         if (started) {
           yield* Effect.raceFirst(
             Effect.callback<void>((resume) => {
@@ -860,25 +861,77 @@ export const prerender = (
       (scope, exit) => Scope.close(scope, exit)
     ))
 
+/** `Query`'s functions, where a query or a component's bound queries are at hand: the module is loaded. */
+const queryModule = (): queryCore.Loaded => queryCore.loaded!
+
+/**
+ * The root's place for its query cache. The cache is made once the app has loaded the `Query` module:
+ * at the mount when it has by then, so an app without queries never bundles or builds one. Until then
+ * the cell is the `Query.Cache` service, and `Query.internals` makes the cache from it.
+ */
+interface CacheCell extends queryCore.CacheCell {
+  /** The cache, once made. */
+  made: queryCore.Cache | undefined
+  /** Set by `setup`: called with a cache made after the mount. */
+  onMake: ((cache: queryCore.Cache) => void) | undefined
+  /** The cache, made now if the `Query` module is loaded. */
+  readonly get: () => queryCore.Cache | undefined
+}
+
 /**
  * The cache the root owns, disposed with the root's Scope. The runtime re-adds it wherever work runs,
- * so `Component.provide` can't shadow it.
+ * so `Component.provide` can't shadow it. Its disposal is registered here, whenever the cache is made,
+ * so it runs after the root's own close.
  */
-const makeQueryCache = (ctx: Context.Context<any>, options: Options | undefined) => {
+const makeQueryCache = (
+  ctx: Context.Context<any>,
+  options: Options | undefined
+): Effect.Effect<CacheCell> => {
   const server = options?.server
   const scheduler = Context.get(ctx, Executor.CurrentExecutor).scheduler
-  return Query.makeCache({
-    visibility: Context.get(ctx, Query.Visibility),
-    connectivity: Context.get(ctx, Query.Connectivity),
-    report: Context.get(ctx, Query.Problems),
-    idleMs: Query.cacheIdleMs(options?.query?.idleTimeToLive),
+  // Its fetches and timers run on the runtime's scheduler, so `TestHost.settle` drains them.
+  const context = scheduler === undefined ? ctx : Context.add(ctx, Scheduler.Scheduler, scheduler)
+  const cacheOptions: queryCore.CacheOptions = {
+    visibility: Context.get(ctx, queryCore.Visibility),
+    connectivity: Context.get(ctx, queryCore.Connectivity),
+    report: Context.get(ctx, queryCore.Problems),
+    idleMs: queryCore.cacheIdleMs(options?.query?.idleTimeToLive),
     // The server's per-request cache: one fetch per key per request, and none with a budget of 0.
     settleOnce: server !== undefined,
     fetches: server === undefined || server.fetches
-  }).pipe(
-    // Its fetches and timers run on the runtime's scheduler, so `TestHost.settle` drains them.
-    Effect.provideContext(scheduler === undefined ? ctx : Context.add(ctx, Scheduler.Scheduler, scheduler))
-  )
+  }
+  let dispose: Effect.Effect<void> | undefined
+  let closed = false
+  const get = (): queryCore.Cache | undefined => {
+    if (cell.made !== undefined) return cell.made
+    const query = queryCore.loaded
+    if (query === undefined) return undefined
+    const built = query.buildCache(context, cacheOptions)
+    cell.made = built.cache
+    dispose = built.dispose
+    // Made for a root that has closed: it is disposed at once, with nothing in it.
+    if (closed) Effect.runFork(built.dispose)
+    cell.onMake?.(built.cache)
+    return built.cache
+  }
+  const cell: CacheCell = {
+    [queryCore.CacheTypeId]: queryCore.CacheTypeId,
+    [queryCore.CacheCellTypeId]: () => get()!,
+    made: undefined,
+    onMake: undefined,
+    get
+  }
+  return Effect.acquireRelease(
+    Effect.sync(() => {
+      get()
+      return cell
+    }),
+    () =>
+      Effect.suspend(() => {
+        closed = true
+        return dispose ?? Effect.void
+      })
+  ).pipe(Effect.provideContext(context))
 }
 
 /**
@@ -893,7 +946,7 @@ const start = (
   rootProps: unknown,
   container: unknown,
   ctx: Context.Context<any>,
-  cache: ReturnType<typeof Query.internals>,
+  cell: CacheCell,
   options: Options | undefined
 ): Effect.Effect<Root & Renderer.Root<any, any>> =>
   Effect.suspend(() => {
@@ -904,7 +957,7 @@ const start = (
     scopeAddFinalizerUnsafe(owner, {}, (exit) => setUp.whenOpen(Scope.close(scope, exit)))
     let root: Root & Renderer.Root<any, any>
     try {
-      root = setup(component, rootProps, container, Context.add(ctx, Scope.Scope, scope), cache, options)
+      root = setup(component, rootProps, container, Context.add(ctx, Scope.Scope, scope), cell, options)
     } finally {
       setUp.openUnsafe()
     }
@@ -919,7 +972,7 @@ const setup = (
   rootProps: unknown,
   container: unknown,
   ctx: Context.Context<any>,
-  cache: ReturnType<typeof Query.internals>,
+  cell: CacheCell,
   options: Options | undefined
 ): Root & Renderer.Root<any, any> => {
   const server = options?.server
@@ -935,7 +988,7 @@ const setup = (
   const hooks = Option.getOrUndefined(Context.getOption(ctx, services.RootHooks))
 
   // The problems sink, read once. A throw from it is swallowed: a check only reports.
-  const problems = Context.get(ctx, Query.Problems)
+  const problems = Context.get(ctx, queryCore.Problems)
   const report = (problem: Query.Problem.Any) => {
     try {
       problems(problem)
@@ -1160,8 +1213,12 @@ const setup = (
     addFinalizer(scope, Fiber.interrupt(fiber))
 
   // -- query cache ---------------------------------------------------------
+  // Made at the mount when the app has loaded the `Query` module by then, and otherwise when it loads it.
+  let cache = cell.made
+  /** The cache, where a query is at hand: its module is loaded. */
+  const queryCache = (): queryCore.Cache => cache ?? cell.get()!
   const withCache = (context: Context.Context<any>): Context.Context<any> =>
-    Context.add(context, Query.Cache, cache as unknown as Query.Cache["Service"])
+    Context.add(context, queryCore.CacheKey, (cache ?? cell) as unknown as Query.Cache["Service"])
   /**
    * History restore: each query result restored seeds a cold entry, stale, so the first frame shows the data
    * with `waiting: true` while one refetch runs. A snapshot taken under a patch may hold a value that
@@ -1171,18 +1228,18 @@ const setup = (
     component: Component.Any,
     results: componentQueries.Results | undefined
   ): componentQueries.Results | undefined => {
-    const bound = componentQueries.boundOf(component)
+    const bound = queryCore.boundOf(component)
     if (bound === undefined || results === undefined) return results
     const out: Record<string, unknown> = {}
     for (const entry of bound.entries) {
       const snapshot = results[entry.name]
       if (entry.keyed) {
         // Per tuple: one taken under a patch is dropped.
-        const map = Query.snapshotMapData(snapshot)
+        const map = queryModule().snapshotMapData(snapshot)
         const kept: Array<unknown> = []
         for (const one of map?.entries.values() ?? []) {
-          if (Query.snapshotData(one)!.patched) continue
-          cache.seed(one)
+          if (queryModule().snapshotData(one)!.patched) continue
+          queryCache().seed(one)
           kept.push(one)
         }
         out[entry.name] = map !== undefined && kept.length === map.entries.size
@@ -1190,30 +1247,48 @@ const setup = (
           : bound.snapshotMany(entry, kept)
         continue
       }
-      const data = Query.snapshotData(snapshot)
+      const data = queryModule().snapshotData(snapshot)
       if (data !== undefined && !data.patched) {
-        cache.seed(snapshot)
+        queryCache().seed(snapshot)
         out[entry.name] = snapshot
       } else out[entry.name] = bound.empty[entry.name]
     }
     return out
   }
-  // Every fetch the cache starts is logged, as an entry about the tree. A watch's fetch starts when the
-  // render pass's hold is released, and follows from the step whose render registered the watcher.
-  const offFetch = cache.onFetch((event) => {
-    if (frozen || !log.enabled) return
-    recordTree(
-      { _tag: "FetchStarted", ...event },
-      event.trigger === "watch" ? watchCauses.get(entryKey(event.query, event.logKey)) : undefined
-    )
-  })
-  // On the server a fetch in flight holds the response, so one that ends may make the tree idle.
-  const offFetchEnd = server === undefined ? undefined : cache.onFetchEnd(() => checkIdle())
-  // Hydration: the server's entries, held raw until their queries register. This opens the fetch-free
-  // window, which closes at adoption or the first navigation.
-  if (hydrating !== undefined && hydrating.state["~query"] !== undefined) {
-    cache.hydrate(hydrating.state["~query"], { static: hydrating.state["~static"] === true })
+  // Hydration: the server's entries and when they arrived, for a cache made after the mount.
+  const hydratedQueries = hydrating?.state["~query"]
+  const hydratedStatic = hydrating?.state["~static"] === true
+  const hydratedAt = hydratedQueries === undefined ? 0 : clock.currentTimeMillisUnsafe()
+  // Adoption or a navigation has closed the fetch-free window.
+  let windowClosed = false
+  const closeWindow = () => {
+    windowClosed = true
+    cache?.closeWindow()
   }
+  let offFetch: (() => void) | undefined
+  let offFetchEnd: (() => void) | undefined
+  const attachCache = (made: queryCore.Cache) => {
+    cache = made
+    // Every fetch the cache starts is logged, as an entry about the tree. A watch's fetch starts when the
+    // render pass's hold is released, and follows from the step whose render registered the watcher.
+    offFetch = made.onFetch((event) => {
+      if (frozen || !log.enabled) return
+      recordTree(
+        { _tag: "FetchStarted", ...event },
+        event.trigger === "watch" ? watchCauses.get(entryKey(event.query, event.logKey)) : undefined
+      )
+    })
+    // On the server a fetch in flight holds the response, so one that ends may make the tree idle.
+    if (server !== undefined) offFetchEnd = made.onFetchEnd(() => checkIdle())
+    // Hydration: the server's entries, held raw until their queries register. This opens the fetch-free
+    // window, which closes at adoption or the first navigation.
+    if (hydratedQueries !== undefined) {
+      made.hydrate(hydratedQueries, { static: hydratedStatic, at: hydratedAt })
+      if (windowClosed) made.closeWindow()
+    }
+  }
+  cell.onMake = attachCache
+  if (cache !== undefined) attachCache(cache)
   // The root's close waits until every run fiber has exited, stopped ones included, and every Scope
   // close already started, such as an unmounted instance's, has finished.
   let rootClosed = false
@@ -1221,7 +1296,7 @@ const setup = (
     rootScope,
     Effect.suspend(() => {
       rootClosed = true
-      offFetch()
+      offFetch?.()
       offFetchEnd?.()
       releaseWatchHold()
       return awaitAllOwned
@@ -1269,7 +1344,7 @@ const setup = (
   let draining = false
   const holdWatches = () => {
     if (watchHold !== undefined) return
-    watchHold = cache.hold()
+    watchHold = queryCache().hold()
     if (!draining) wake()
   }
   const isHolding = () => watchHold !== undefined
@@ -1425,7 +1500,7 @@ const setup = (
       idleCheck = false
       if (scheduled || dirty.size > 0 || deferred.length > 0 || building.size > 0) return
       // Any fetch in flight holds the response: a watch's, a `get`'s, a prefetch nobody renders.
-      if (cache.pending().length > 0) return
+      if (cache !== undefined && cache.pending().length > 0) return
       for (const f of idleWaiters.splice(0)) f()
     })
   }
@@ -1587,7 +1662,7 @@ const setup = (
   const reportAdoption = () => {
     reportPending = false
     // The fetch-free window closes at adoption, unless a navigation closed it first.
-    cache.closeWindow()
+    closeWindow()
     for (const f of adoptedWaiters.splice(0)) f()
   }
 
@@ -2204,7 +2279,7 @@ const setup = (
       for (const cancel of inst.loadMores) cancel()
       inst.loadMores.clear()
     }
-    const bound = componentQueries.boundOf(inst.component)
+    const bound = queryCore.boundOf(inst.component)
     const results = inst.results
     inst.results = undefined
     if (bound === undefined || results === undefined) return
@@ -2243,7 +2318,7 @@ const setup = (
         busy--
       }
       if (next === undefined) return
-      const bound = componentQueries.boundOf(component)
+      const bound = queryCore.boundOf(component)
       const entrySeq = record(inst, {
         _tag: "Update",
         source,
@@ -2548,7 +2623,7 @@ const setup = (
   ): Instance => {
     // A child's Scope is made when it's needed: see `Inst.scope`.
     const ownScope = parent === undefined ? Scope.forkUnsafe(rootScope, "sequential") : undefined
-    const bound = componentQueries.boundOf(component)
+    const bound = queryCore.boundOf(component)
     const depth = parent === undefined ? 0 : parent.depth + 1
     const owner: View.Owner | undefined = content === undefined ? undefined : { path, depth }
     const inst: Instance = new Inst(
@@ -2930,7 +3005,7 @@ const setup = (
    */
   const issueList = (inst: Instance, list: Component.ListIssue) => {
     if (inst.closed) return
-    const bound = componentQueries.boundOf(inst.component)
+    const bound = queryCore.boundOf(inst.component)
     const field = bound?.byName.get(list.name)
     if (bound === undefined || field === undefined || !field.list) return
     const args = bound.context(inst.model, inst.props, inst.results).argsOf(field.name).args
@@ -2947,8 +3022,8 @@ const setup = (
       )
       return
     }
-    const def = Query.defOf(field.query)
-    if (list.op === "reset") return cache.reset(def, args)
+    const def = queryModule().defOf(field.query)
+    if (list.op === "reset") return queryCache().reset(def, args)
     const go = (envCtx: Context.Context<any>) => {
       if (inst.closed) return
       const fetcher = Context.getOption(envCtx, field.query as any)
@@ -2956,7 +3031,7 @@ const setup = (
       if (Option.isNone(fetcher)) return
       let cancel: (() => void) | undefined
       let done = false
-      cancel = cache.loadMore(def, args, fetcher.value as any, () => {
+      cancel = queryCache().loadMore(def, args, fetcher.value as any, () => {
         done = true
         if (cancel !== undefined) inst.loadMores?.delete(cancel)
       })
@@ -3307,9 +3382,11 @@ const setup = (
         // The cache begins the run at issue, so its patches are live before it starts, and before
         // `switch` stops the earlier runs: the new patch layers over the old until the old fiber exits.
         let handle: Query.RunHandle | undefined
-        if (command.service !== undefined) {
+        // Without the `Query` module there's no cache, and nothing a run could invalidate, patch or read.
+        const runs = command.service === undefined ? undefined : cache ?? cell.get()
+        if (runs !== undefined) {
           try {
-            handle = cache.beginRun({
+            handle = runs.beginRun({
               command: command.name,
               invalidates: command.invalidates as ReadonlyArray<Query.Target>,
               optimistic: command.optimistic as ReadonlyArray<Query.Patch>,
@@ -3695,7 +3772,7 @@ const setup = (
   /** `watchesOnly`: before the first render, when only the cache watchers register. */
   const syncSubscriptions = (inst: Instance, watchesOnly = false) => {
     const subscriptions = inst.component.subscriptions
-    const bound = componentQueries.boundOf(inst.component)
+    const bound = queryCore.boundOf(inst.component)
     // A waiting instance has no Model yet.
     if (inst.closed || inst.waiting || (subscriptions === undefined && bound === undefined)) return
     // A keyed provide's read is due: nothing starts against services that may be about to go. The read
@@ -3745,12 +3822,12 @@ const setup = (
         declaration = declared
         continue
       }
-      const marker = componentQueries.markerOf(subscription)
-      const group = marker === undefined ? componentQueries.groupOf(subscription) : undefined
+      const marker = queryCore.markerOf(subscription)
+      const group = marker === undefined ? queryCore.groupOf(subscription) : undefined
       if (marker !== undefined) {
         if (!markers.has(subscription.key)) markers.set(subscription.key, marker)
       } else if (group !== undefined) syncGroup(inst, group)
-      else if (componentQueries.isWatchKey(subscription.key)) {
+      else if (queryCore.isWatchKey(subscription.key)) {
         return failInstance(
           inst,
           Cause.die(new Error(`${inst.path}: the Subscription key ${subscription.key} is reserved for queries.`)),
@@ -3880,7 +3957,7 @@ const setup = (
         existing.marker = marker
         continue
       }
-      const def = Query.defOf(marker.query)
+      const def = queryModule().defOf(marker.query)
       const fetchKey = marker.argsKey === undefined ? undefined : def.logKey(marker.args, marker.argsKey)
       const logKey = fetchKey === undefined ? key : Subscription.keyOf(`~query/${marker.name}`, fetchKey)
       const running: WatchRun = { marker, logKey, handle: undefined, released: false, debounce: undefined }
@@ -3907,7 +3984,7 @@ const setup = (
         if (running.released || inst.closed) return
         // An emission equal to this watcher's last is skipped. A list's `more` changing is a message.
         if (
-          last !== undefined && last.patched === patched && Query.sameMore(last.more, more) &&
+          last !== undefined && last.patched === patched && queryModule().sameMore(last.more, more) &&
           Equal.equals(last.result, result)
         ) return
         last = { result, patched, more }
@@ -3918,7 +3995,7 @@ const setup = (
           run.changes.add(entry.argsKey)
           return requestKeyed(inst)
         }
-        const bound = componentQueries.boundOf(inst.component)!
+        const bound = queryCore.boundOf(inst.component)!
         const query = bound.byName.get(marker.name)!
         // It may run inside another instance's `update`: a patch registered at issue reaches every
         // watcher before that `update` returns.
@@ -3942,7 +4019,7 @@ const setup = (
         holdWatches()
         const from = asked ?? origin
         if (from !== undefined) watchCauses.set(entryKey(def.name, fetchKey!), from)
-        const handle = cache.watch(
+        const handle = queryCache().watch(
           def,
           marker.args,
           fetcher.value as (args: any) => Effect.Effect<any, any>,
@@ -3994,7 +4071,7 @@ const setup = (
   }
   /** Whether a watcher registering on the entry now starts a fetch: no watcher, nothing in flight, and stale or cold. */
   const wouldFetch = (def: ReturnType<typeof Query.defOf>, args: unknown): boolean => {
-    const info = cache.inspect(def, args)
+    const info = queryCache().inspect(def, args)
     return info === undefined || (info.watchers === 0 && info.fetch === "none" && info.stale)
   }
   /** A keyed query's keys follow the state. */
@@ -4055,7 +4132,7 @@ const setup = (
       const value = run.changes.has(entry.argsKey) ? run.values.get(entry.argsKey) : undefined
       return value === undefined ? [] : [{ args: value.args, result: value.result }]
     })
-    const held = Query.snapshotMapData(inst.results?.[group.name])
+    const held = queryModule().snapshotMapData(inst.results?.[group.name])
     let prune = false
     for (const key of held?.entries.keys() ?? []) {
       if (!declared.has(key)) {
@@ -4065,7 +4142,7 @@ const setup = (
     }
     run.changes.clear()
     if (!prune && changes.length === 0) return false
-    const bound = componentQueries.boundOf(inst.component)!
+    const bound = queryCore.boundOf(inst.component)!
     const query = bound.byName.get(group.name)!
     const snapshot = bound.snapshotMany(
       query,
@@ -4090,7 +4167,7 @@ const setup = (
     key: string
   ) => {
     if (inst.closed || inst.waiting || frozen) return
-    const bound = componentQueries.boundOf(inst.component)!
+    const bound = queryCore.boundOf(inst.component)!
     // The same snapshot, as when a watcher's first value is what the server or history already gave.
     if (Equal.equals((inst.results ?? bound.empty)[query.name], result)) return
     inst.results = { ...(inst.results ?? bound.empty), [query.name]: result }
@@ -4234,7 +4311,7 @@ const setup = (
       // Behind a `provide`, a query the declarer can't see may be given below it: the skip is silent.
       const behind = provided || component.layer !== undefined
       const model = component.init(props).model
-      const bound = componentQueries.boundOf(component)
+      const bound = queryCore.boundOf(component)
       if (bound !== undefined) {
         const context = bound.context(model, props, undefined)
         for (const field of bound.entries) {
@@ -4242,7 +4319,7 @@ const setup = (
           const entries: ReadonlyArray<componentQueries.Keyed> = current.entries ??
             (current.argsKey === undefined ? [] : [{ args: current.args, argsKey: current.argsKey }])
           if (entries.length === 0) continue
-          const def = Query.defOf(field.query)
+          const def = queryModule().defOf(field.query)
           const fetcher = Context.getOption(envCtx, field.query as any)
           if (Option.isNone(fetcher)) {
             if (!behind) {
@@ -4260,7 +4337,7 @@ const setup = (
             continue
           }
           for (const entry of entries) {
-            cache.prefetch(def, entry.args, fetcher.value as (args: any) => Effect.Effect<any, any>)
+            queryCache().prefetch(def, entry.args, fetcher.value as (args: any) => Effect.Effect<any, any>)
             walked.entries.set(entryKey(def.name, entry.argsKey), {
               query: def.name,
               logKey: def.logKey(entry.args, entry.argsKey)
@@ -6184,7 +6261,7 @@ const setup = (
       flushing: () => rendering,
       snapshot,
       // The first navigation closes the fetch-free window, if adoption hasn't yet.
-      navigated: () => cache.closeWindow(),
+      navigated: closeWindow,
       report
     }
     const detach = hooks.attach(handle)
@@ -6222,10 +6299,10 @@ const setup = (
   const finish = () => {
     if (scheduled || dirty.size > 0 || deferred.length > 0 || reportsDue.size > 0) flush()
     frozen = true
-    server?.onFinish?.(cache)
+    if (cache !== undefined) server?.onFinish?.(cache)
     // In the same synchronous step as the Models: fetches in flight are interrupted, and their entries
     // revert to cold and aren't shipped. Nothing is dispatched for them.
-    const query = cache.dehydrate()
+    const query = cache === undefined ? {} : cache.dehydrate()
     const state: Record<string, unknown> = {}
     const collected: Record<string, unknown> = {}
     const deferredPaths: Array<string> = []
@@ -6338,7 +6415,9 @@ const setup = (
     model: () => root.failure === undefined ? root.model : undefined,
     send: (message) => root.dispatch(message, { _tag: "Dispatch" }),
     pending: () => pendingOf(root),
-    cache,
+    get cache() {
+      return queryCache()
+    },
     crashed: () => root.failure,
     flush: () => flushes,
     buildsPendingSince,
