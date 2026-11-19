@@ -4899,10 +4899,19 @@ const setup = (
     const view = component.view
     // A view that `make` built reads the path only for `h.id`. Any other is given the path itself.
     const path = View.takesPathSource(view) ? inst : inst.path
-    // Called on its component, as a hand-written view method may read `this`.
+    // Called on its component, as a hand-written view method may read `this`. Not through its own `call`,
+    // which a decorated function can replace.
     return checked(
       inst,
-      view.call(component, inst.model, inst.props, runningOf(inst), inst.results, path as string, sharedOf(inst), inst)
+      Reflect.apply(view, component, [
+        inst.model,
+        inst.props,
+        runningOf(inst),
+        inst.results,
+        path,
+        sharedOf(inst),
+        inst
+      ])
     )
   }
 

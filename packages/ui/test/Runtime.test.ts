@@ -175,7 +175,7 @@ describe("Runtime", () => {
         assert.sameMembers(root.pending().map((p) => p.path), ["/List/Row[c]", "/List/Row[a]", "/List/Row[d]"])
       })))
 
-    it.effect("a view wrapped by hand is called on its component with each row's path as a string", () =>
+    it.effect("a view wrapped by hand is called on its component with each row's path as a string, whatever its own call is", () =>
       provideHost(Effect.gen(function*() {
         const state = { model: Schema.Null, message: Schema.Never }
         const Badge = Component.define({ ...state, name: "Badge" }).make({
@@ -185,14 +185,17 @@ describe("Runtime", () => {
         })
         const given: Array<unknown> = []
         // A method, as a hand-written view can be, with the fifth parameter typed as a string, as the
-        // public type has it.
-        const view = function(
-          this: typeof Badge,
-          ...[model, props, running, queries, path]: Parameters<Component.Any["view"]>
-        ) {
-          given.push([this.definition.name, path])
-          return Badge.view(model, props, running, queries, path?.toUpperCase())
-        }
+        // public type has it. It carries its own `call`, as a decorated function can.
+        const view = Object.assign(
+          function(
+            this: typeof Badge,
+            ...[model, props, running, queries, path]: Parameters<Component.Any["view"]>
+          ) {
+            given.push([this.definition.name, path])
+            return Badge.view(model, props, running, queries, path?.toUpperCase())
+          },
+          { call: "metadata" }
+        )
         const Wrapped = Object.assign(Object.create(Badge) as typeof Badge, { view })
         const Rows = Component.define({ ...state, name: "Rows" }).make({
           init: () => null,
