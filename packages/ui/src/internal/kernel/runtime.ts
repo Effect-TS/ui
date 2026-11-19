@@ -25,7 +25,6 @@ import type * as Component from "../../Component.ts"
 import * as Feature from "../../Feature.ts"
 import * as Head from "../../Head.ts"
 import type * as MessageLog from "../../MessageLog.ts"
-import * as Mount from "../../Mount.ts"
 import type * as Query from "../../Query.ts"
 import type * as Renderer from "../../Renderer.ts"
 import * as Subscription from "../../Subscription.ts"
@@ -36,7 +35,7 @@ import * as headFold from "../headFold.ts"
 import * as match from "../match.ts"
 import { isKeyed, keyOf } from "../match.ts"
 import * as messageLog from "../messageLog.ts"
-import * as mountArgs from "../mountArgs.ts"
+import type * as mountArgs from "../mountArgs.ts"
 import { isNoop } from "../noop.ts"
 import {
   checkAuthorPlacements,
@@ -4716,14 +4715,16 @@ const setup = (
     const mountScope = Scope.forkUnsafe(renderer.scope, "sequential")
     const causedBy = origin
     const running: RunningMount = { scope: mountScope, mount, args: undefined, cutBy: undefined }
-    // A mount that never reads its args' changes pays nothing for them.
+    // A mount that never reads its args' changes pays nothing for them. What keeps them is the mount's
+    // own, so an app that issues no mount ships none of it.
     const changes = Stream.suspend(() => {
+      const kept = running.mount["~args"]
       let args = running.args
       if (args === undefined) {
-        const made = args = running.args = mountArgs.make(running.mount.args)
-        addFinalizer(mountScope, Effect.sync(() => mountArgs.close(made)))
+        const made = args = running.args = kept.make(running.mount.args)
+        addFinalizer(mountScope, Effect.sync(() => kept.close(made)))
       }
-      return mountArgs.changes(args)
+      return kept.changes(args)
     })
     afterCommit(() =>
       whenReady(env, (envCtx) => {
@@ -4783,8 +4784,8 @@ const setup = (
     const previous = running.mount
     if (previous === mount) return
     running.mount = mount
-    if (running.args === undefined || Mount.sameArgs(previous, mount)) return
-    mountArgs.publish(running.args, mount.args)
+    if (running.args === undefined || previous["~sameArgs"](mount)) return
+    mount["~args"].publish(running.args, mount.args)
   }
 
   // -- owned layers ---------------------------------------------------------
