@@ -3,7 +3,6 @@
  * as escaped strings.
  */
 import type { ServerSink } from "../../internal/services.ts"
-import type * as Renderer from "../../Renderer.ts"
 import * as Head from "../HtmlHead.ts"
 import * as elements from "./elements.ts"
 import * as headAttributes from "./headAttributes.ts"
@@ -173,13 +172,11 @@ const Enter = 3
 const Leave = 4
 
 /**
- * Takes a server tree as it is walked, for a runtime that has no nodes to give `toHtml`, and writes it
- * as HTML when `html` is called.
+ * Takes a server tree as it is walked, and writes it as HTML when `html` is called.
  *
- * The walk only keeps what the nodes would hold: the texts, the tags and paths, and each element's
- * `attrs` and `props` as the objects they are. Nothing of those two is read before `html`, which is
- * called where `toHtml` is, once the render's Scope has closed, and reads of them what `toHtml` reads,
- * in the same order.
+ * The walk only keeps the texts, the tags and paths, and each element's `attrs` and `props` as the
+ * objects they are. Nothing of those two is read before `html`, which is called once the render's Scope
+ * has closed.
  *
  * @internal
  */
@@ -252,7 +249,7 @@ const write = (tape: ReadonlyArray<any>): string => {
         // Most elements: outside a select, and closed by their closing tag.
         if (selectValue === undefined && !framed.has(tag)) {
           out += `<${tag}${plain ?? written(elementAttributes(tag, attrs, props))}>`
-          // Read for nothing, as `toHtml` does: a getter is called as often either way.
+          // Read for nothing: every element's `value` is read once, whether or not its tag writes it.
           void props.value
           break
         }
@@ -313,65 +310,6 @@ const write = (tape: ReadonlyArray<any>): string => {
         if (open.gathers) text = open.text === undefined ? undefined : open.text + text
         selectValue = open.selectValue
         bare = false
-        break
-      }
-    }
-  }
-  return out
-}
-
-const textOf = (nodes: ReadonlyArray<Renderer.ServerNode>): string =>
-  nodes.map((node) => node._tag === "Text" ? node.text : textOf(node.children)).join("")
-
-/**
- * The HTML of a server tree: what a writer gives for the same tree, for a
- * caller that has the nodes.
- *
- * @internal
- */
-export const toHtml = (nodes: ReadonlyArray<Renderer.ServerNode>, selectValue?: string): string => {
-  let out = ""
-  for (const node of nodes) {
-    switch (node._tag) {
-      case "Text":
-        out += escapeText(node.text)
-        break
-      case "Range":
-        out += markers.open(node.path) + toHtml(node.children, selectValue) + markers.close(node.path)
-        break
-      case "Element": {
-        const tag = node.tag
-        out += `<${tag}`
-        const plain = plainAttributes(tag, node.attrs, node.props)
-        if (plain !== undefined) out += plain
-        else {
-          const attributes = elementAttributes(tag, node.attrs, node.props)
-          if (
-            tag === "option" && selectValue !== undefined && !Object.hasOwn(node.props, "selected") &&
-            (attributes.get("value") ?? textOf(node.children)) === selectValue
-          ) attributes.set("selected", "")
-          out += written(attributes)
-        }
-        out += ">"
-        if (voidTags.has(tag)) break
-        const value = node.props.value
-        let inner = textOnlyTags.has(tag)
-          ? textContent(
-            tag,
-            node.children.length === 0 && tag === "textarea" && value !== undefined
-              ? String(value)
-              : textOf(node.children)
-          )
-          : toHtml(
-            node.children,
-            tag === "select" && value !== undefined
-              ? String(value)
-              : tag === "option" || tag === "optgroup"
-              ? selectValue
-              : undefined
-          )
-        if (newlineTags.has(tag) && inner.startsWith("\n")) inner = `\n${inner}`
-        out += `${inner}</${tag}>`
         break
       }
     }

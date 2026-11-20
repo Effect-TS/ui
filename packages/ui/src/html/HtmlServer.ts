@@ -66,7 +66,6 @@ import type * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
 import type * as Component from "../Component.ts"
 import * as runtime from "../internal/runtime.ts"
-import type * as services from "../internal/services.ts"
 import type * as Renderer from "../Renderer.ts"
 import type * as View from "../View.ts"
 import type * as BrowserHost from "./BrowserHost.ts"
@@ -183,19 +182,18 @@ export const renderToHtml = <
   Effect.suspend(() => {
     const writer = server.makeWriter()
     // `Renderer.prerender`, with the writer as the tree's sink.
-    const rendering: Parameters<typeof runtime.prerender>[2] & { readonly sink: services.ServerSink } = {
+    return runtime.prerender(component, props, {
       budget: options?.budget ?? "500 millis",
       elements: [Html.name],
       static: options?.static,
       sink: writer
-    }
-    return runtime.prerender(component, props, rendering).pipe(
+    }).pipe(
       Effect.provideService(Html.Host, serverHtmlHost),
       Effect.map((rendered) => {
         const head = server.htmlHead(rendered.head)
         return {
-          // Written here, after the render's Scope has closed. A runtime that doesn't write to a sink gives the nodes.
-          html: writer.html() + server.toHtml(rendered.nodes),
+          // Written here, after the render's Scope has closed.
+          html: writer.html(),
           state: rendered.state,
           model: rendered.model,
           head: server.headTags(head),

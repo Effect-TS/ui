@@ -4490,4 +4490,30 @@ describe("Runtime", () => {
       assert.include(error.message, "/Loop Update")
       assert.include(error.message, "Again")
     }).pipe(Effect.provide(TestHost.layer({ budget: 200 }))))
+
+  it.effect("prerenders the tree as nodes: an instance's elements and text in a Range under its path", () =>
+    Effect.gen(function*() {
+      const state = { model: Schema.Null, message: Schema.Never }
+      const impl = { init: () => null, update: () => null }
+      const Leaf = Component.define({ name: "Leaf", ...state }).make({ ...impl, view: (_, h) => h.text("leaf") })
+      const Page = Component.define({ name: "Page", ...state }).make({
+        ...impl,
+        view: (_, h) => h.el("p").attr("class", "a").prop("hidden", true).children("x", Leaf(h, { key: "k" }))
+      })
+      const rendered = yield* Renderer.prerender(Page, {})
+      assert.deepStrictEqual(rendered.nodes, [{
+        _tag: "Range",
+        path: "/Page",
+        children: [{
+          _tag: "Element",
+          tag: "p",
+          attrs: { class: "a" },
+          props: { hidden: true },
+          children: [
+            { _tag: "Text", text: "x" },
+            { _tag: "Range", path: "/Page/Leaf[k]", children: [{ _tag: "Text", text: "leaf" }] }
+          ]
+        }]
+      }])
+    }))
 })

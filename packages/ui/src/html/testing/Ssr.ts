@@ -356,10 +356,12 @@ export const ssr = <
     const serverLog = MessageLog.makeMemory({ size: logSize })
     let serverCache: ReturnType<typeof Query.internals> | undefined
     let misses: ReadonlyArray<{ readonly query: string; readonly logKey: string }> = []
+    const writer = server.makeWriter()
     const serverFiber = yield* runtime.prerender(component, props, {
       budget,
       elements: [Html.name],
       static: isStatic,
+      sink: writer,
       onFinish: (cache) => {
         serverCache = cache
         misses = cache.misses()
@@ -389,7 +391,7 @@ export const ssr = <
     if (serverCache !== undefined) {
       for (const problem of serverCache.checkWire(state["~query"] ?? {})) problems.push(`~query: ${problem}`)
     }
-    const html = server.toHtml(rendered.nodes)
+    const html = writer.html()
     const page = `<!doctype html><html ${server.attributes(server.htmlOwned(serverHead))}><head>${
       server.headTags(serverHead)
     }</head><body ${server.attributes(server.bodyOwned(serverHead))}><div id="app">${html}</div></body></html>`
