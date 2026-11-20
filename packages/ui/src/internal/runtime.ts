@@ -1627,11 +1627,10 @@ const setup = (
   // Hydration: the root detached instance currently adopting its server range, so nested outlets in
   // the same off-screen container adopt their server ranges in place too.
   let adoptingRoot: Instance | undefined
-  // When adopting an instance's initial server view before patching to its live view, that instance
-  // and the child paths still declared in its live view, so removed children and features are not
-  // resurrected during the initial adoption pass.
-  let adoptingInst: Instance | undefined
-  let adoptingLivePaths: ReadonlySet<string> | undefined
+  // While adopting an author's initial server view before patching to its live view, the child paths
+  // still declared by that author's live view, carried through nested receivers and outlets so removed
+  // children and features are not resurrected during the initial adoption pass.
+  const adoptingLiveByAuthor = new Map<Instance, ReadonlySet<string>>()
   /**
    * Pending server DOM range for an already-live held instance whose own provided Layer is still
    * building: the instance itself stays live (accepting sends, `onFailure`, and moves) while rendering
@@ -2515,7 +2514,25 @@ const setup = (
     // The runs asked to stop whose fibers haven't exited, just now or in an earlier flush.
     for (const run of inst.runs) if (run.status === "stopping") waits.push(run.fiber!)
     stopSubscriptions(inst, waits)
-    clearRendered(inst)
+    const pending = pendingRange.get(inst)
+    if (pending !== undefined) {
+      // Key changed before the initial Layer adopted: drop the server range, close the off-screen
+      // tree, and put the placeholder in the document where the range was so this render populates it.
+      pendingRange.delete(inst)
+      unpark(inst, pending.container)
+      pending.range.claimed = false
+      inst.serverView = undefined
+      for (const old of pending.heldRendered) {
+        const nodes = nodesOf(old)
+        closeAll(inst, old)
+        for (const node of nodes) host.remove(node)
+      }
+      clearRendered(inst)
+      syncDetached(inst, isDetached(inst.parent))
+      settleWaiting()
+    } else {
+      clearRendered(inst)
+    }
     // What still closes may use the old services, removed in an earlier flush or just now.
     if (inst.closes !== undefined) waits.push(...inst.closes)
     if (previous.ctx !== undefined && selection.retired === undefined) {
@@ -3823,9 +3840,10 @@ const setup = (
     if (!countSends(inst, "its children")) return
     for (const { issued, send } of outbox) {
       if (inst.closed) return
+      const rendered = pendingRange.get(inst)?.heldRendered ?? inst.rendered
       // A headless instance wrote none of the tree it renders, so it has no children to send to.
       const child = inst.owner === undefined
-        ? findChild(inst.rendered, send.ref.key) ?? findHeld(inst, send.ref.key)
+        ? findChild(rendered, send.ref.key) ?? findHeld(inst, send.ref.key)
         : undefined
       const reason: MessageLog.SendDropped["reason"] | undefined = child === undefined
         ? "unrendered"
@@ -5509,7 +5527,7 @@ const setup = (
    */
   const syncDetached = (inst: Instance, parentDetached: boolean): void => {
     if (inst.closed) return
-    const detached = parentDetached || inst.detached
+    const detached = parentDetached || inst.detached || pendingRange.has(inst)
     setLoggedDetached(inst, detached)
     for (const child of inst.children) syncDetached(child, detached)
   }
@@ -5851,17 +5869,13 @@ const setup = (
     const parentNode = host.parentOf(range.open)
     const after = host.nextOf(range.close)
     const prevRoot = adoptingRoot
-    const prevInst = adoptingInst
-    const prevLivePaths = adoptingLivePaths
+    const hasPrevAuthor = adoptingLiveByAuthor.has(inst.author)
+    const prevAuthorPaths = adoptingLiveByAuthor.get(inst.author)
     if (prevRoot === undefined) adoptingRoot = inst
     if (needsPatch && initial !== undefined) {
-      adoptingInst = inst
       const livePaths = new Set<string>()
       if (current !== undefined) collectViewChildPaths(inst.author, current, livePaths)
-      adoptingLivePaths = livePaths
-    } else {
-      adoptingInst = undefined
-      adoptingLivePaths = undefined
+      adoptingLiveByAuthor.set(inst.author, livePaths)
     }
     let taken: Rendered | undefined
     try {
@@ -5872,8 +5886,8 @@ const setup = (
       return false
     } finally {
       adoptingRoot = prevRoot
-      adoptingInst = prevInst
-      adoptingLivePaths = prevLivePaths
+      if (hasPrevAuthor) adoptingLiveByAuthor.set(inst.author, prevAuthorPaths!)
+      else adoptingLiveByAuthor.delete(inst.author)
     }
     if (taken === undefined) return false
     claim(range)
@@ -5913,8 +5927,8 @@ const setup = (
   ): RChild => {
     const from = found.parent!
     const pending = pendingRange.get(found)
+    const wasDetached = isDetached(found)
     if (pending !== undefined) pending.cancel(true)
-    const wasDetached = isDetached(found) || pending !== undefined
     if (found.site === undefined) undrop(found)
     else from.children.delete(found)
     // Held by its author: the holder lets it go now, as the author may not render again this flush.
@@ -5956,7 +5970,7 @@ const setup = (
         found.awaitingAdopt = false
         found.serverView = undefined
       }
-      if (wasDetached !== nowDetached) {
+      if (wasDetached !== nowDetached || (range !== undefined && !adopted && !nowDetached)) {
         for (const item of found.rendered) toggleMounts(found, item, found.env, !nowDetached)
       }
       syncDetached(found, nowDetached)
@@ -5983,9 +5997,9 @@ const setup = (
     for (const child of inst.children) setDepth(child, depth + 1)
   }
 
-  /** Whether `inst` or any ancestor above it is out of the document (held or in a parked outlet). */
+  /** Whether `inst` or any ancestor above it is out of the document (held, in a parked outlet, or awaiting its Layer's DOM adoption). */
   const isDetached = (inst: Instance | undefined): boolean => {
-    for (let at = inst; at !== undefined; at = at.parent) if (at.detached) return true
+    for (let at = inst; at !== undefined; at = at.parent) if (at.detached || pendingRange.has(at)) return true
     return false
   }
 
@@ -6308,10 +6322,11 @@ const setup = (
         const next = host.nextOf(range.close)
         if (view._tag === "Child") {
           const found = live.get(path)
+          const livePaths = adoptingLiveByAuthor.get(inst.author)
           if (
             (found !== undefined && !found.closed && !found.left && !found.awaitingAdopt) ||
-            (found === undefined && inst === adoptingInst &&
-              (!(Feature.TypeId in view.component) || !adoptingLivePaths!.has(path)))
+            (found === undefined && livePaths !== undefined &&
+              (!(Feature.TypeId in view.component) || !livePaths.has(path)))
           ) {
             // Already live elsewhere, or removed before adoption: drop the obsolete server range.
             removeRange(range)
@@ -7123,7 +7138,7 @@ const setup = (
       case "Child":
       case "Outlet": {
         const child = rendered.inst
-        if (child.detached) return
+        if (child.detached || pendingRange.has(child)) return
         for (const item of itemsOf(rendered)) toggleMounts(child, item, child.env, start)
         return
       }
