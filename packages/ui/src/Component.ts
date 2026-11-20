@@ -942,8 +942,13 @@ const applyFields = (self: any, fields: Record<PropertyKey, unknown>) => {
  * needs no annotation. Where nothing gives it one, pass the type:
  * `Component.evolve<Coupon>({ status: "Idle" })`.
  *
- * The result is a shallow copy with the changed fields, or the same struct
- * when every field keeps its value.
+ * The result is a plain-object shallow copy with the changed fields, or
+ * the same struct when every field keeps its value. It is for plain
+ * structs, not `Schema.Class` or other class instances: evolving a
+ * changed field on a class instance compiles, but drops the prototype so
+ * class methods are missing at runtime. For a class Model, use `$.set`
+ * or `$.modify` with a constructor or method that returns a valid
+ * instance.
  *
  * **Example** (A row of a list and a nested struct)
  *

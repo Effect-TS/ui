@@ -195,6 +195,12 @@ A union Model has no `$.evolve`, so a handler that also runs a Command
 wraps the match in `$.set(...)`. Switching to another member is a `$.set`
 too.
 
+`evolve` is for plain structs, not `Schema.Class` or other class
+instances: evolving a changed field returns a plain-object shallow copy,
+dropping the prototype even though the static type still exposes class
+methods. For a class Model, use `$.set` or `$.modify` with a constructor
+or method that returns a valid instance.
+
 ### Stateless view wrappers
 
 Name view functions in CapitalCase, like components (for example, `Card` and `Field`).
