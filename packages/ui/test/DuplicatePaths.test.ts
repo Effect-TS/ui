@@ -278,6 +278,43 @@ describe("duplicate child paths", () => {
         assert.isFalse(root.log().some((entry) => entry._tag === "Failed" && entry.path === "/Parent"))
       })))
 
+    it.effect("fail the parent when a child that fails after it rendered shows a fallback at a sibling's path", () =>
+      provideHost(Effect.gen(function*() {
+        const Go = UiSchema.TaggedEnum({ Go: {} })
+        const Faulty = Component.define({ name: "Faulty", model: Schema.Null, message: Go }).make({
+          init: () => null,
+          update: () => {
+            throw new Error("faulty")
+          },
+          view: (_, h) => h.el("button").on("click", Go.Go()).children("faulty")
+        })
+        const Page = Component.define({ name: "Page", model: Schema.Null, message: Schema.Never }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) =>
+            h.el(
+              "div",
+              Row(h, { key: "a", props: { label: "a" } }),
+              Faulty(h, { key: "f", fallback: () => Row(h, { key: "a", props: { label: "a" } }) })
+            )
+        })
+        const Shell = Component.define({ name: "Shell", model: Schema.Null, message: Schema.Never }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => Page(h, { key: "p", fallback: () => h.text("page-failed") })
+        })
+        const root = yield* TestHost.mount(Shell, {})
+        yield* TestHost.settle
+        Locator.fire(root.get(Locator.text("faulty", { exact: true })), "click")
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "page-failed")
+        const failed = root.log().filter((entry): entry is MessageLog.Failed =>
+          entry._tag === "Failed" && entry.path === "/Shell/Page[p]"
+        )
+        assert.lengthOf(failed, 1)
+        assert.include(Cause.pretty(failed[0].cause), "renders two children at Row[a], in the fallback of Faulty[f]")
+      })))
+
     it("fail Scene.fallback the same way", () => {
       const view = Scene.start(Parent, { siblings: ["a"], first: ["a"], second: [] }).current.view()
       assert.throws(

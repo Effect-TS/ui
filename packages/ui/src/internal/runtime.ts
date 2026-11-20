@@ -46,6 +46,7 @@ import {
   type ChildPaths,
   segment,
   segmentOf,
+  settledPaths,
   slotSegment
 } from "./paths.ts"
 import type * as prefetch from "./prefetch.ts"
@@ -508,7 +509,10 @@ export interface Instance {
   onEmit: (events: unknown) => unknown
   onFailure: ((failure: AsyncResult.Failure<never, unknown>) => unknown) | undefined
   failure: Cause.Cause<unknown> | undefined
-  /** What the current or last render uses: each fallback it shows is checked against it, and adds to it. */
+  /**
+   * What the current render uses: each fallback it shows is checked against it, and adds to it. Once the
+   * render is over, only what `settledPaths` keeps.
+   */
   childPaths: ChildPaths | undefined
   /**
    * A fallback in this render that clashed with `childPaths`. It shows nothing, and the render
@@ -5436,8 +5440,9 @@ const setup = (
     failClash(out)
   }
 
-  /** A fallback in the content that clashed with its paths fails the content's author, as `throwClash` fails a view's. */
+  /** Ends a content's render: a fallback in it that clashed fails its author, as `throwClash` fails a view's. */
   const failClash = (out: Instance) => {
+    out.childPaths = settledPaths(out.childPaths)
     const clash = out.clash
     if (clash === undefined) return
     out.clash = undefined
@@ -5549,8 +5554,9 @@ const setup = (
     }
   }
 
-  /** Fails the render with the first fallback clash, once its nodes are in place. */
+  /** Ends a render: fails it with the first fallback clash, once its nodes are in place. */
   const throwClash = (inst: Instance) => {
+    inst.childPaths = settledPaths(inst.childPaths)
     const clash = inst.clash
     if (clash === undefined) return
     inst.clash = undefined
