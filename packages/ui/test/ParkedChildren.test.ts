@@ -1637,4 +1637,145 @@ describe("model children drawn across trees", () => {
       provideHost
       // Page lists Row outside Layout's closure, so its type can't see the Layout that Frame draws above it.
     ) as Effect.Effect<void, unknown>)
+
+  it.effect("sends to the owner above a row a parked Frame moved out of its parked Panel", () =>
+    Effect.gen(function*() {
+      const Row = Component.define({
+        name: "Row",
+        lifetime: "model",
+        model: Schema.Null,
+        message: TipMessage,
+        receives: ["Enter"],
+        shared: { tips: { owner: Tips, optional: true } }
+      }).make({
+        init: () => null,
+        update: (model, message, $) => $.set(model).send(Tips, message),
+        view: (_, h) => h.el("i", `${h.shared.tips?.open ?? "closed"} in ${h.shared.tips?.label}`)
+      })
+      const Panel = Component.define({
+        name: "Panel",
+        lifetime: "model",
+        model: Schema.Null,
+        message: Schema.Never,
+        slots: ["body"]
+      }).make({
+        init: () => null,
+        update: (m) => m,
+        view: (_, h) => Tips(h, { key: "t", props: { label: "panel" }, view: () => h.el("section", h.slots.body) })
+      })
+      const FrameMsg = UiSchema.TaggedEnum({ Move: {} })
+      // Draws its slot in Panel, which it lists, then parks Panel with the slot, then draws the slot in a
+      // Tips of its own.
+      const Frame = Component.define({
+        name: "Frame",
+        lifetime: "model",
+        model: Schema.Number,
+        message: FrameMsg,
+        receives: ["Move"],
+        slots: ["body"]
+      }).make({
+        children: { panel: Panel },
+        init: () => 0,
+        update: (step) => step + 1,
+        view: (step, h) =>
+          h.el(
+            "article",
+            step === 0
+              ? h.children.panel({ slots: { body: h.slots.body } })
+              : step === 1
+              ? null
+              : Tips(h, { key: "n", props: { label: "frame" }, view: () => h.el("p", h.slots.body) })
+          )
+      })
+      const Fold = Component.define({
+        name: "Fold",
+        lifetime: "view",
+        model: Schema.Boolean,
+        message: FrameMsg,
+        receives: ["Move"],
+        slots: ["body"]
+      }).make({ init: () => true, update: (open) => !open, view: (open, h) => h.el("div", open ? h.slots.body : null) })
+      const FoldRef = Fold.ref("fold")
+      const PageMsg = UiSchema.TaggedEnum({ Fold: {}, Move: {}, Enter: {} })
+      const Page = Component.define({ name: "Page", lifetime: "view", model: Schema.Null, message: PageMsg }).make({
+        children: { frame: Frame, row: Row },
+        init: () => null,
+        update: (m, message, $) =>
+          PageMsg.match(message, {
+            Fold: () => $.set(m).send(FoldRef, FrameMsg.Move()),
+            Move: () => $.set(m).send(Frame.ref("frame"), FrameMsg.Move()),
+            Enter: () => $.set(m).send(Row.ref("row"), TipMessage.Enter({ id: "open" }))
+          }),
+        view: (_, h) =>
+          h.el(
+            "main",
+            Fold(h, { ref: FoldRef, slots: { body: h.children.frame({ slots: { body: h.children.row() } }) } })
+          )
+      })
+      const root = yield* TestHost.mount(Page, {})
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "closed in panel")
+      for (const message of [PageMsg.Fold(), PageMsg.Move(), PageMsg.Move(), PageMsg.Enter(), PageMsg.Fold()]) {
+        root.send(message)
+        yield* TestHost.settle
+      }
+      assert.deepStrictEqual(root.log().filter((e) => e._tag === "Failed"), [])
+      assert.strictEqual(root.text(), "open in frame")
+    }).pipe(provideHost))
+
+  it("shows a scene's feature fallback that takes the feature's own ref", () => {
+    class Editor extends Feature.Service<Editor>()("ParkedChildren/OwnRefEditor", { props: Schema.Struct({}) }) {}
+    const Leaf = Component.define({ name: "Leaf", lifetime: "view", model: Schema.Null, message: Schema.Never })
+      .make({ init: () => null, update: (m) => m, view: (_, h) => h.el("b", "leaf") })
+    const Box = Component.define({ name: "Box", lifetime: "model", model: Schema.Null, message: Schema.Never })
+      .make({ init: () => null, update: (m) => m, view: (_, h) => h.el("i", "box") })
+    const Page = Component.define({ name: "Page", lifetime: "view", model: Schema.Null, message: Schema.Never })
+      .make({
+        children: { box: Box },
+        init: () => null,
+        update: (m) => m,
+        view: (_, h) =>
+          h.el(
+            "main",
+            Editor.render(h, {
+              ref: Editor.ref("editor"),
+              props: {},
+              fallback: () => Leaf(h, { ref: Leaf.ref("editor") })
+            })
+          )
+      })
+    assert.isDefined(Scene.start(Page, {}).childPending(Editor, Editor.ref("editor")).view)
+  })
+
+  it("checks a scene's feature fallback against the listed children of the scene that shows it", () => {
+    class Editor extends Feature.Service<Editor>()("ParkedChildren/CachedEditor", { props: Schema.Struct({}) }) {}
+    const Leaf = Component.define({ name: "Leaf", lifetime: "view", model: Schema.Null, message: Schema.Never })
+      .make({ init: () => null, update: (m) => m, view: (_, h) => h.el("b", "leaf") })
+    const Box = Component.define({ name: "Box", lifetime: "model", model: Schema.Null, message: Schema.Never })
+      .make({ init: () => null, update: (m) => m, view: (_, h) => h.el("i", "box") })
+    // Both pages' views are this one node.
+    let cached: any
+    const view = (h: any) =>
+      cached ??= Editor.render(h, { key: "e", props: {}, fallback: () => Leaf(h, { ref: Leaf.ref("box") }) })
+    const define = (name: string) =>
+      Component.define({ name, lifetime: "view", model: Schema.Null, message: Schema.Never })
+    const PageA = define("PageA").make({
+      children: { other: Box },
+      init: () => null,
+      update: (m) => m,
+      view: (_, h) => view(h)
+    })
+    const PageB = define("PageB").make({
+      children: { box: Box },
+      init: () => null,
+      update: (m) => m,
+      view: (_, h) => view(h)
+    })
+    const a = Scene.start(PageA, {}).view
+    assert.throws(
+      () => Scene.fallback(Scene.start(PageB, {}).view, Editor, "e", AsyncResult.initial()),
+      "names a listed child"
+    )
+    assert.isDefined(Scene.fallback(a, Editor, "e", AsyncResult.initial()))
+  })
 })

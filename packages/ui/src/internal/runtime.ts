@@ -1301,6 +1301,7 @@ const setup = (
     if (adoptedDone) return
     adoptedDone = true
     hydrating = undefined
+    marks.clear()
     rescued.clear()
     // `adopted` completes at the end of this flush.
     reportPending = true
@@ -3328,60 +3329,99 @@ const setup = (
    * Keeps the server's nodes of an instance whose Layer is still building, and adopts them once it's
    * ready. See `makeInstance`.
    */
-  /**
-   * Hydration: the instances waiting for their Layer, each with the opening marker of every path in its
-   * server nodes, found once. A `"model"` child a ready tree draws takes its nodes from there.
-   */
-  const waitingTrees = new Map<Instance, Map<string, unknown>>()
+  /** Hydration: the instances waiting for their Layer, each with the paths it indexed in `marks`. */
+  const waitingTrees = new Map<Instance, Array<string>>()
   /** A waiting instance adopts with the placement the server rendered: see `createPlaced`. */
   let resuming = false
-  /** Indexes the markers in `nodes`. */
-  const mark = (index: Map<string, unknown>, nodes: ReadonlyArray<unknown>) => {
+  /**
+   * Hydration: the opening marker of each path in a waiting instance's server nodes, found once. A
+   * `"model"` child a ready tree draws takes its nodes from there.
+   */
+  const marks = new Map<string, { readonly tree: Instance; readonly open: unknown }>()
+  /** Indexes the markers in `nodes` under `tree`. */
+  const mark = (tree: Instance, nodes: ReadonlyArray<unknown>) => {
+    const paths: Array<string> = []
     const visit = (node: unknown) => {
       const kind = hydration!.inspect(node)
-      if (kind._tag === "Open") index.set(kind.path, node)
-      else if (kind._tag === "Element") {
+      if (kind._tag === "Open") {
+        marks.set(kind.path, { tree, open: node })
+        paths.push(kind.path)
+      } else if (kind._tag === "Element") {
         for (let child = hydration!.firstChild(node); child !== undefined; child = host.nextOf(child)) visit(child)
       }
     }
     for (const node of nodes) visit(node)
+    waitingTrees.set(tree, paths)
+  }
+  /** Ends `tree`'s wait, and takes out the markers it still holds. */
+  const unmarkTree = (tree: Instance) => {
+    for (const path of waitingTrees.get(tree) ?? []) if (marks.get(path)?.tree === tree) marks.delete(path)
+    waitingTrees.delete(tree)
+  }
+  /** The marker of `path` in a waiting instance's nodes. */
+  const waitingMark = (path: string) => {
+    const found = marks.get(path)
+    return found !== undefined && waitingTrees.has(found.tree) ? found : undefined
+  }
+  /** The server's range of `path` in a waiting instance's nodes. */
+  const serverRange = (path: string): { readonly tree: Instance; readonly range: Range } | undefined => {
+    const found = waitingMark(path)
+    if (found === undefined) return undefined
+    const range = rangeFrom(found.open, path, undefined)
+    return range === undefined ? undefined : { tree: found.tree, range }
+  }
+  /** A listed child's server nodes, still waiting to be made, in a range another child took. */
+  interface Nested {
+    readonly lister: Instance
+    readonly path: string
+    readonly tree: Instance
+    readonly open: unknown
+    readonly nodes: Array<unknown>
   }
   /**
-   * Takes the markers of `range` out of `index`. A listed child still waiting to be made that the range's
-   * child drew in its slots keeps its nodes, moved to a container of their own, and its markers:
-   * whichever tree draws it now takes them.
+   * Takes the markers of `range` out of the index but those of the listed children waiting to be made
+   * that the range's child drew in its slots: their nodes stay where they are, for whichever tree draws
+   * them now. See `spare`.
    */
-  const unmark = (index: Map<string, unknown>, range: Range) => {
+  const unmark = (range: Range): Array<Nested> => {
+    const nested: Array<Nested> = []
     const visit = (first: unknown, stop: unknown) => {
       for (let node = first; node !== undefined && node !== stop;) {
         let next = host.nextOf(node)
         const kind = hydration!.inspect(node)
         if (kind._tag === "Element") visit(hydration!.firstChild(node), undefined)
         else if (kind._tag === "Open") {
-          const inner = node !== range.open && isPostponed(kind.path) ? rangeFrom(node, kind.path, stop) : undefined
-          if (inner === undefined) index.delete(kind.path)
+          const lister = node === range.open ? undefined : postponedBy(kind.path)
+          const found = marks.get(kind.path)
+          const inner = lister === undefined || found === undefined ? undefined : rangeFrom(node, kind.path, stop)
+          if (inner === undefined) marks.delete(kind.path)
           else {
             next = host.nextOf(inner.close)
-            const container = host.createContainer!()
-            for (const moved of rangeNodes(inner)) host.insertBefore(container, moved, undefined)
+            nested.push({ lister: lister!, path: kind.path, tree: found!.tree, open: node, nodes: rangeNodes(inner) })
           }
         }
         node = next
       }
     }
     visit(range.open, host.nextOf(range.close))
+    return nested
   }
-  const isPostponed = (path: string) => {
-    for (const paths of postponed.values()) if (paths.has(path)) return true
-    return false
+  const postponedBy = (path: string) => {
+    for (const [lister, paths] of postponed) if (paths.has(path)) return lister
   }
-  /** The server's range of `path` in a waiting instance's nodes, with that instance's index. */
-  const serverRange = (path: string) => {
-    for (const [tree, index] of waitingTrees) {
-      const open = index.get(path)
-      if (open === undefined) continue
-      const range = rangeFrom(open, path, undefined)
-      return range === undefined ? undefined : { tree, index, range }
+  /**
+   * Once the child that took them is made: the nested nodes it neither adopted nor kept waiting, as it
+   * no longer draws them, are kept for their lister, which makes their child now, with what was typed.
+   */
+  const spare = (nested: ReadonlyArray<Nested>) => {
+    for (const { lister, nodes, open, path, tree } of nested) {
+      const found = marks.get(path)
+      if (found?.tree !== tree || found.open !== open || lister.left) continue
+      marks.delete(path)
+      let byPath = rescued.get(lister)
+      if (byPath === undefined) rescued.set(lister, byPath = new Map())
+      byPath.set(path, nodes)
+      defer(() => holdListed(lister))
     }
   }
   /**
@@ -3398,21 +3438,24 @@ const setup = (
    * The server's nodes for `lister`'s child `path`: taken out of the waiting instance that holds them, or
    * kept from one that closed, with what was typed into them. One built fresh takes none.
    */
-  const serverNodes = (lister: Instance, path: string): Range | undefined => {
+  const serverNodes = (
+    lister: Instance,
+    path: string
+  ): { readonly range: Range; readonly nested: ReadonlyArray<Nested> } | undefined => {
     if (freshAt(path)) return undefined
     const kept = rescued.get(lister)?.get(path)
     if (kept !== undefined) {
       rescued.get(lister)!.delete(path)
       const container = host.createContainer!()
       for (const node of kept) host.insertBefore(container, node, undefined)
-      return { open: kept[0], close: kept[kept.length - 1], claimed: false }
+      return { range: { open: kept[0], close: kept[kept.length - 1], claimed: false }, nested: [] }
     }
     const found = serverRange(path)
     if (found === undefined) return undefined
-    unmark(found.index, found.range)
+    const nested = unmark(found.range)
     const taken = new Set(rangeNodes(found.range))
     found.tree.rendered = found.tree.rendered.filter((r) => !taken.has((r as RText).node))
-    return found.range
+    return { range: found.range, nested }
   }
   /** Hydration: the nodes of listed children a waiting instance held when it closed, by lister and path. */
   const rescued = new Map<Instance, Map<string, Array<unknown>>>()
@@ -3421,15 +3464,13 @@ const setup = (
    * stays, which makes them now.
    */
   const rescue = (tree: Instance) => {
-    const index = waitingTrees.get(tree)
-    if (index === undefined) return
-    waitingTrees.delete(tree)
+    if (!waitingTrees.has(tree)) return
     for (const [lister, paths] of postponed) {
       if (lister.left) continue
       let kept = false
       for (const path of paths) {
-        const open = index.get(path)
-        const range = open === undefined ? undefined : rangeFrom(open, path, undefined)
+        const found = marks.get(path)
+        const range = found?.tree === tree ? rangeFrom(found.open, path, undefined) : undefined
         if (range === undefined) continue
         let byPath = rescued.get(lister)
         if (byPath === undefined) rescued.set(lister, byPath = new Map())
@@ -3438,6 +3479,7 @@ const setup = (
       }
       if (kept) defer(() => holdListed(lister))
     }
+    unmarkTree(tree)
   }
   const awaitLayer = (
     inst: Instance,
@@ -3459,14 +3501,12 @@ const setup = (
     waiting++
     range.claimed = true
     const nodes = rangeNodes(range)
-    const index = new Map<string, unknown>()
-    mark(index, nodes)
-    waitingTrees.set(inst, index)
+    mark(inst, nodes)
     inst.rendered = nodes.map((node) => new TextRecord(emptyText, node))
     const resume = (adopt: boolean) => {
       if (inst.closed || !inst.waiting) return
       inst.waiting = false
-      waitingTrees.delete(inst)
+      unmarkTree(inst)
       const nodes = inst.rendered.flatMap(nodesOf)
       inst.rendered = []
       range.claimed = false
@@ -6621,10 +6661,17 @@ const setup = (
       // Hydration: drawn by a ready tree where the server drew it in a waiting one, it takes its server nodes
       // from there, with what was typed into them.
       let adopted = adoptedUpTo
-      if (range === undefined && hydrating !== undefined) range = serverNodes(lister, lister.path + "/" + segment(view))
-      else adopted = undefined
+      let taken: ReturnType<typeof serverNodes>
+      const path = lister.path + "/" + segment(view)
+      if (range === undefined && hydrating !== undefined) range = (taken = serverNodes(lister, path))?.range
+      else {
+        adopted = undefined
+        // Adopted where its waiting tree's nodes were taken, it no longer waits for one.
+        if (hydrating !== undefined) marks.delete(path)
+      }
       const inner = makeChild(lister, view, lister.env, range, inst)
       if (adopted !== undefined) adoptedUpTo = adopted
+      if (taken !== undefined) spare(taken.nested)
       ;(lister.listed ??= new Map()).set(key, hold = { lister, inner, site: undefined, container: undefined })
       return hold.site = { _tag: "Placed", v: view, hold, at: inst }
     }
@@ -6678,18 +6725,18 @@ const setup = (
   }
   const listings = new WeakMap<Instance, { readonly model: unknown; readonly map: Map<string, View.Child<any, any>> }>()
   /**
-   * The `"model"` child no tree draws now whose slot content `inst` shows: an older render's content,
-   * which the author's current placements outrank.
+   * Whether `inst` shows older content than `site`: slot content of a `"model"` child no tree draws now,
+   * from an older render the author's current placements outrank. It may move within that child.
    */
-  const undrawnAbove = (inst: Instance): Instance | undefined => {
-    for (let at: Instance | undefined = inst; at !== undefined && at !== inst.author; at = ownerUp(at)) {
-      if (at.component.definition.lifetime === "model" && at.drawnIn === undefined) return at
-    }
-  }
-  /** Whether `inst` shows older content than `site`: it may move within the child that holds both. */
   const staleAgainst = (inst: Instance, site: Instance): boolean => {
-    const undrawn = undrawnAbove(inst)
-    return undrawn !== undefined && undrawnAbove(site) !== undrawn
+    for (let at: Instance | undefined = inst; at !== undefined && at !== inst.author; at = ownerUp(at)) {
+      if (at.component.definition.lifetime === "model" && at.drawnIn === undefined && !isWithin(site, at)) return true
+    }
+    return false
+  }
+  const isWithin = (inst: Instance, above: Instance): boolean => {
+    for (let at: Instance | undefined = inst; at !== undefined; at = ownerUp(at)) if (at === above) return true
+    return false
   }
   /** Whether what `at` renders is out of the document, in a parked child: by its nodes, or its parent's. */
   const parkedAt = (at: Instance | undefined): boolean => {
@@ -6838,12 +6885,18 @@ const setup = (
         // Hydrating, it starts from the state the server sent for it, and adopts the nodes the server drew
         // it with if the waiting tree that held them closed.
         const adopted = adoptedUpTo
+        const taken = hydrating === undefined ? undefined : serverNodes(lister, path)
         try {
-          const range = hydrating === undefined ? undefined : serverNodes(lister, path)
-          hold = { lister, inner: makeChild(lister, view, lister.env, range), site: undefined, container: undefined }
+          hold = {
+            lister,
+            inner: makeChild(lister, view, lister.env, taken?.range),
+            site: undefined,
+            container: undefined
+          }
         } finally {
           adoptedUpTo = adopted
         }
+        if (taken !== undefined) spare(taken.nested)
         parkHeld(hold)
       }
       ;(after ??= new Map()).set(key, hold)
@@ -6856,18 +6909,18 @@ const setup = (
     else postponed.delete(lister)
   }
   /** Hydration: whether a tree waiting for its Layer holds the server's nodes for listed child `path`. */
-  const heldByWaiting = (path: string): boolean => {
-    if (freshAt(path)) return false
-    for (const index of waitingTrees.values()) if (index.has(path)) return true
-    return false
-  }
+  const heldByWaiting = (path: string): boolean => !freshAt(path) && waitingMark(path) !== undefined
   /** Closes a child its lister no longer lists, wherever it is. */
   const unlist = (hold: Hold) => {
     // Listed again before adoption, it starts fresh.
     hydrating?.deferred.add(hold.lister.path + "/" + segment(hold.inner.v))
     unplaced.delete(hold)
     if (hold.container !== undefined) unpark(hold.lister, hold.container)
-    if (hold.site !== undefined) leaveStub(hold, firstNodeOf(hold.inner))
+    if (hold.site !== undefined) {
+      leaveStub(hold, firstNodeOf(hold.inner))
+      // A parked tree keeps the record of where it was drawn, which shouldn't keep its last props.
+      hold.site.v = { ...hold.site.v, props: undefined, slots: undefined }
+    }
     destroy(hold.lister, hold.inner)
     hold.site = undefined
     // A parked tree's slot may keep its record, which shouldn't keep the closed tree.

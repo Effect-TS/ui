@@ -647,7 +647,10 @@ const expandRoot = <Msg>(
           // It renders against settled services, so the feature slots in it show.
           replaced.push(node)
           const shown = node.fallback === undefined ? emptyText : View.toNode(node.fallback(result))
-          if (own) written.push(checkChildPaths(childPath, shown))
+          // It stands in for the child, so its refs count with the component's apart from the child's.
+          if (own && listed !== undefined) {
+            listedChildren.checkRefs("/" + name, listed, [checkChildPaths(childPath, shown)])
+          }
           return expand(shown, path, depth, own, owners, scope, undefined)
         }
         if (node.slots !== undefined) {
@@ -699,15 +702,19 @@ const expandRoot = <Msg>(
       }
     }
   }
-  const expanded = expand(view, "/" + name, 0, true, root, (label) => checkChildPaths(label, view), slotStatus)
+  let expanded = expand(view, "/" + name, 0, true, root, (label) => checkChildPaths(label, view), slotStatus)
   checkAuthorRefs("/" + name, written)
   checkAuthorPlacements("/" + name, written)
   if (listed !== undefined) listedChildren.checkRefs("/" + name, listed, written)
   if (replaced.length > 0) expandedChildren.set(expanded, replaced)
-  // A root the expansion left as it was may be a node the component cached and another story shows,
-  // and its children are all declared by the view itself, so it keeps nothing.
+  // A root the expansion left as it was may be a node the component cached and another story shows, so
+  // this render's lister is kept on a copy. Otherwise its children are all declared by the view itself,
+  // so it keeps nothing.
+  if (listed !== undefined) {
+    if (expanded === view) expanded = { ...view } as View.Node<Msg, any>
+    listers.set(expanded, { at: "/" + name, listed })
+  }
   if (expanded !== view) occurrences.set(expanded, placed)
-  if (listed !== undefined) listers.set(expanded, { at: "/" + name, listed })
   return expanded
 }
 

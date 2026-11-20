@@ -1885,6 +1885,175 @@ describe("model children drawn while a Layer waits", () => {
       yield* Deferred.succeed(gate, undefined)
     }).pipe(Effect.scoped))
 
+  /**
+   * A Page whose Frame draws Field, and a plain input after it if `plain`, in a Card at first: `"aside"`
+   * moves Frame to an aside with the same slot, and `"hidden"` moves it there without Field.
+   */
+  const movingFrame = (card: Layer.Layer<never>, frame: Layer.Layer<never>, plain: boolean) => {
+    const Card = slowCard("Card", card)
+    const Field = Component.define({
+      name: "Field",
+      lifetime: "model",
+      model: Schema.Null,
+      message: Schema.Never,
+      elements: Html
+    })
+      .make({ init: () => null, update: (m) => m, view: (_, h) => h.input.attr("name", "field") })
+    const Frame = Component.define({
+      name: "Frame",
+      lifetime: "model",
+      model: Schema.Null,
+      message: Schema.Never,
+      elements: Html,
+      slots: ["body"]
+    }).make({ init: () => null, update: (m) => m, view: (_, h) => h.article(h.slots.body) })
+      .pipe(Component.provide(frame))
+    const State = Schema.Literals(["card", "aside", "hidden"])
+    return Component.define({ name: "Page", lifetime: "view", model: State, message: State, elements: Html })
+      .make({
+        children: { frame: Frame, field: Field },
+        init: () => "card" as const,
+        update: (_, state) => state,
+        view: (state, h) => {
+          const frame = h.children.frame({
+            slots: {
+              body: state === "hidden" ? null : [h.children.field(), plain ? h.input.attr("name", "plain") : null]
+            }
+          })
+          return h.main(
+            Card(h, { key: "c", slots: { body: state === "card" ? frame : null } }),
+            h.aside(state === "card" ? null : frame)
+          )
+        }
+      })
+  }
+
+  for (const first of ["card", "frame"] as const) {
+    it.live(`keeps a field's edit when its waiting Frame leaves a waiting Card, the ${first} settling first`, () =>
+      Effect.gen(function*() {
+        const card = yield* Deferred.make<void>()
+        const frame = yield* Deferred.make<void>()
+        const rendered = yield* HtmlServer.renderToHtml(movingFrame(Layer.empty, Layer.empty, false), {})
+        const app = yield* makeContainer(rendered.html)
+        const root = yield* BrowserHost.mountEffect(movingFrame(gated(card), gated(frame), false), {}, app, {
+          state: rendered.state
+        })
+        yield* tick
+        const input = app.querySelector("input")!
+        HtmlLocator.type(input, "typed")
+        root.send("aside")
+        yield* tick
+        assert.strictEqual(app.querySelector("aside input"), input)
+        for (const gate of first === "card" ? [card, frame] : [frame, card]) {
+          yield* Deferred.succeed(gate, undefined)
+          yield* tick
+        }
+        yield* root.adopted
+        assert.strictEqual(app.querySelector("aside input"), input)
+        assert.strictEqual(input.value, "typed")
+      }).pipe(Effect.scoped))
+  }
+
+  it.live("keeps a field's edit when its Frame leaves a waiting Card without it and shows it after adoption", () =>
+    Effect.gen(function*() {
+      const card = yield* Deferred.make<void>()
+      const rendered = yield* HtmlServer.renderToHtml(movingFrame(Layer.empty, Layer.empty, false), {})
+      const app = yield* makeContainer(rendered.html)
+      const root = yield* BrowserHost.mountEffect(movingFrame(gated(card), Layer.empty, false), {}, app, {
+        state: rendered.state
+      })
+      yield* tick
+      HtmlLocator.type(app.querySelector("input")!, "typed")
+      root.send("hidden")
+      yield* tick
+      yield* Deferred.succeed(card, undefined)
+      yield* root.adopted
+      yield* tick
+      root.send("aside")
+      yield* tick
+      assert.strictEqual((app.querySelector("aside input") as HTMLInputElement | null)?.value, "typed")
+    }).pipe(Effect.scoped))
+
+  it.live("keeps an input after a field in a Frame that leaves a waiting Card", () =>
+    Effect.gen(function*() {
+      const card = yield* Deferred.make<void>()
+      const rendered = yield* HtmlServer.renderToHtml(movingFrame(Layer.empty, Layer.empty, true), {})
+      const app = yield* makeContainer(rendered.html)
+      const root = yield* BrowserHost.mountEffect(movingFrame(gated(card), Layer.empty, true), {}, app, {
+        state: rendered.state
+      })
+      yield* tick
+      const plain = app.querySelector("input[name=plain]") as HTMLInputElement
+      HtmlLocator.type(plain, "typed")
+      root.send("aside")
+      yield* tick
+      assert.strictEqual(app.querySelector("aside input[name=plain]"), plain)
+      assert.strictEqual(plain.value, "typed")
+      yield* Deferred.succeed(card, undefined)
+    }).pipe(Effect.scoped))
+
+  it.live("looks up each listed row's server nodes once when each row waits in a Frame of its own", () =>
+    Effect.gen(function*() {
+      const Row = Component.define({
+        name: "Row",
+        lifetime: "model",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      })
+        .make({ init: () => null, update: (m) => m, view: (_, h) => h.i("row") })
+      const keys = Array.from({ length: 50 }, (_, i) => String(i))
+      const makePage = (layer: Layer.Layer<never>) => {
+        const Frame = slowCard("Frame", layer)
+        return Component.define({
+          name: "Page",
+          lifetime: "view",
+          model: Schema.Number,
+          message: Schema.Number,
+          elements: Html
+        })
+          .make({
+            children: { rows: Child.keyed(Row, { props: () => keys.map((key) => [key, {}] as const) }) },
+            init: () => 0,
+            update: (_, n) => n,
+            view: (n, h) =>
+              h.main(
+                keys.map((key) => Frame(h, { key, slots: { body: h.children.rows(key) } })),
+                h.output(String(n))
+              )
+          })
+      }
+      const release = yield* Deferred.make<void>()
+      const rendered = yield* HtmlServer.renderToHtml(makePage(Layer.empty), {})
+      const app = yield* makeContainer(rendered.html)
+      const root = yield* BrowserHost.mountEffect(makePage(gated(release)), {}, app, { state: rendered.state })
+      yield* tick
+      // Counts the lookups of a row's path in any map while Page renders again.
+      let lookups = 0
+      const { get, has } = Map.prototype
+      const counted = <A extends Array<unknown>, B>(f: (this: Map<unknown, unknown>, ...args: A) => B) =>
+        function(this: Map<unknown, unknown>, ...args: A): B {
+          if (typeof args[0] === "string" && args[0].startsWith("/Page/Row[")) lookups++
+          return f.apply(this, args)
+        }
+      // oxlint-disable-next-line no-extend-native
+      Map.prototype.get = counted(get)
+      // oxlint-disable-next-line no-extend-native
+      Map.prototype.has = counted(has)
+      try {
+        root.send(1)
+        yield* tick
+      } finally {
+        // oxlint-disable-next-line no-extend-native
+        Map.prototype.get = get
+        // oxlint-disable-next-line no-extend-native
+        Map.prototype.has = has
+      }
+      assert.strictEqual(app.querySelector("output")?.textContent, "1")
+      assert.isBelow(lookups, keys.length * 4)
+      yield* Deferred.succeed(release, undefined)
+    }).pipe(Effect.scoped))
+
   it.live("starts each field whose lister's view children remove their waiting Cards in turn", () =>
     Effect.gen(function*() {
       const started = { a: 0, b: 0 }
@@ -2194,7 +2363,7 @@ describe("unlisted model children on BrowserHost", () => {
 
   // collectGarbage uses Node's V8 flags, unavailable on Bun and Deno.
   it.live.skipIf(process.versions.bun !== undefined || process.versions.deno !== undefined)(
-    "lets go of the props a parked row got before it was unlisted",
+    "lets go of the props a parked row was drawn with and got after",
     () =>
       Effect.gen(function*() {
         const Item = Component.define({
@@ -2217,7 +2386,7 @@ describe("unlisted model children on BrowserHost", () => {
         const payloads: Array<WeakRef<object>> = []
         const payload = (version: number) => {
           const data = { version }
-          if (version === 1) payloads.push(new WeakRef(data))
+          payloads.push(new WeakRef(data))
           return data
         }
         const State = Schema.Struct({ shown: Schema.Boolean, rows: Schema.Boolean, version: Schema.Number })
@@ -2243,7 +2412,12 @@ describe("unlisted model children on BrowserHost", () => {
         yield* tick
         assert.isAbove(payloads.length, 0)
         yield* collectGarbage
-        assert.deepStrictEqual(payloads.filter((ref) => ref.deref() !== undefined), [])
+        // Parked Frame keeps the slot content it was last drawn with, which declares each row with its props
+        // then. Nothing else keeps them: not the records of where the rows were drawn, nor the rows.
+        assert.deepStrictEqual(
+          payloads.flatMap((ref) => ref.deref() ?? []),
+          keys.map(() => ({ version: 0 }))
+        )
       }).pipe(Effect.scoped)
   )
 })
