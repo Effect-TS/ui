@@ -10,8 +10,6 @@ export type Session = typeof Session.Type
 
 const SESSION_STORAGE_KEY = "auth_session"
 
-// The stored session: one key in the `KeyValueStore`, which is
-// localStorage in the browser.
 export const sessionStore = Effect.map(KeyValueStore.KeyValueStore, (keyValueStore) => {
   const store = KeyValueStore.toSchemaStore(keyValueStore, Session)
   return {

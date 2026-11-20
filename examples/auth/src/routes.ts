@@ -9,8 +9,7 @@ export const AppRoute = Route.union({
 })
 export type AppRoute = typeof AppRoute.Type
 
-// The routes each half of the app can show. `NotFound` is in both, so an
-// unknown path shows a 404 whether or not the user is signed in.
+// NotFound is in both subsets so an unknown path shows a 404 whether signed in or out.
 export const LoggedOutRoute = AppRoute.subset(["Home", "Login", "NotFound"])
 export type LoggedOutRoute = typeof LoggedOutRoute.Type
 

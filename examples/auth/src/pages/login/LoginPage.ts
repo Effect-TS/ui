@@ -5,23 +5,12 @@ import { Duration, Effect, Option, Schema } from "effect"
 import { Session } from "../../auth/domain/Session.ts"
 import { AppRoute, homeRoute } from "../../routes.ts"
 
-// ---------------------------------------------------------------------------
-// Validation
-// ---------------------------------------------------------------------------
-
 const Rule = Validation.Rule
 
-// Each field shows its result once it was edited. The form's values,
-// what was edited and the server's error are in the Model, and the
-// errors are derived from them.
 export const LoginValidation = Validation.make({
   email: { required: "Email is required", rules: [Rule.email("Please enter a valid email")] },
   password: { required: "Password is required" }
 }, { mode: "onChange" })
-
-// ---------------------------------------------------------------------------
-// Messages, events and the auth request
-// ---------------------------------------------------------------------------
 
 export const LoginMessage = UiSchema.TaggedEnum({
   ChangedEmail: { value: Schema.String },
@@ -37,7 +26,6 @@ export class InvalidCredentials extends Schema.TaggedError<InvalidCredentials>()
   message: Schema.String
 }) {}
 
-// Stands in for a server: any email signs in with the password "password".
 export class SimulateAuthRequest extends Command.Service<SimulateAuthRequest>()(
   "auth/SimulateAuthRequest",
   { args: { email: Schema.String, password: Schema.String } },
@@ -59,10 +47,6 @@ const simulateAuthRequest = (email: string, password: string) =>
     onSuccess: (session) => LoginMessage.SucceededSimulateAuthRequest({ session }),
     onFailure: (error) => LoginMessage.FailedSimulateAuthRequest({ error: error.message })
   }))
-
-// ---------------------------------------------------------------------------
-// View
-// ---------------------------------------------------------------------------
 
 type LoginField = Validation.Field<string>
 
@@ -97,7 +81,6 @@ const FormField = <M>(h: View.H<M>, options: {
         })
           .attr("type", options.type)
           .attr("placeholder", options.placeholder)
-          // Field sets `data-valid` and `data-invalid` on its control.
           .class(
             "w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500",
             "disabled:bg-gray-100 data-valid:border-green-500 data-invalid:border-red-500"
@@ -107,10 +90,6 @@ const FormField = <M>(h: View.H<M>, options: {
       )
   })
 }
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 
 export const LoginPageNoDeps = Component.define({
   name: "LoginPage",
@@ -129,8 +108,6 @@ export const LoginPageNoDeps = Component.define({
       ...model,
       form: LoginValidation.change(model.form, "password", value)
     }),
-    // A tried submit shows every field. `value` is `Some` only when both
-    // fields pass, so it gates the request.
     SubmittedForm: (model, _message, $) => {
       if (model.submitting) return model
       const form = LoginValidation.submit(model.form)
@@ -142,9 +119,6 @@ export const LoginPageNoDeps = Component.define({
     // The page stays in its submitting state: the app leaves it for the
     // dashboard.
     SucceededSimulateAuthRequest: (_model, { session }, $) => $.emit(LoginEvents.SignedIn({ session })),
-    // The error sits on the password until the password changes. The fields
-    // are disabled while submitting, so the form still holds the values the
-    // request was made with.
     FailedSimulateAuthRequest: (model, { error }) => ({
       submitting: false,
       form: LoginValidation.reject(model.form, { password: [error] })
