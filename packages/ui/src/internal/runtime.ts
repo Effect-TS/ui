@@ -1294,9 +1294,11 @@ const setup = (
   let hydrating: {
     readonly state: Renderer.State
     readonly deferred: ReadonlySet<string>
+    readonly claimed: Set<string>
   } | undefined = options?.state === undefined || server !== undefined ? undefined : {
     state: options.state,
-    deferred: new Set(options.state["~deferred"] ?? [])
+    deferred: new Set(options.state["~deferred"] ?? []),
+    claimed: new Set()
   }
   // Slots still waiting for their Layer before they adopt, and whether the first render is done.
   let waiting = 0
@@ -1622,14 +1624,27 @@ const setup = (
    * there. The rest close then.
    */
   const dropped = new Map<Instance, Set<Instance>>()
-  // Hydration: the root detached instance currently adopting its server range, so its descendants in
-  // the same off-screen container adopt their nested server ranges in place too.
+  // Hydration: the root detached instance currently adopting its server range, so nested outlets in
+  // the same off-screen container adopt their server ranges in place too.
   let adoptingRoot: Instance | undefined
-  // When adopting an instance's initial server view before patching to its live view, that instance itself,
-  // so children already removed from its live tree are not resurrected during the initial adoption pass.
+  // When adopting an instance's initial server view before patching to its live view, that instance
+  // and the child paths still declared in its live view, so removed children and features are not
+  // resurrected during the initial adoption pass.
   let adoptingInst: Instance | undefined
-  const canAdoptExisting = (found: Instance): boolean =>
-    found.awaitingAdopt || (adoptingRoot !== undefined && within(found, adoptingRoot))
+  let adoptingLivePaths: ReadonlySet<string> | undefined
+  /**
+   * Pending server DOM range for an already-live held instance whose own provided Layer is still
+   * building: the instance itself stays live (accepting sends, `onFailure`, and moves) while rendering
+   * off-screen into `container`, and its server DOM nodes stay in place until the Layer settles or it moves.
+   */
+  interface PendingRange {
+    readonly range: Range
+    readonly nodes: Array<unknown>
+    heldRendered: Array<Rendered>
+    readonly container: unknown
+    readonly cancel: (removeNodes: boolean) => void
+  }
+  const pendingRange = new Map<Instance, PendingRange>()
   // Whether the host can hold nodes out of the document: a patch then keeps the children and outlets it removes.
   const keepsRemoved = host.createContainer !== undefined
   // The checks after a navigation still outstanding, and the instances created meanwhile, whose
@@ -2746,6 +2761,8 @@ const setup = (
       inst.waiting = false
       settleWaiting()
     }
+    const pending = pendingRange.get(inst)
+    if (pending !== undefined) pending.cancel(false)
   }
 
   /** The fields of an instance that most instances never set. */
@@ -3067,13 +3084,17 @@ const setup = (
       recorded.add(inst)
     }
 
-    // Hydration: the Model and query results the server rendered this path with, unless it deferred the path.
-    const fromServer: Adopted = hydrating !== undefined &&
-        (parent === undefined || parent.adoptsChildren) &&
-        !hydrating.deferred.has(path!) &&
-        Object.hasOwn(hydrating.state, path!)
-      ? stateCodecOf(component).decode(hydrating.state[path!])
+    // Hydration: the Model and query results the server rendered this path with, unless it deferred
+    // the path or an earlier instance already claimed it during this hydration.
+    const canAdoptState = hydrating !== undefined &&
+      (parent === undefined || parent.adoptsChildren) &&
+      !hydrating.deferred.has(path!) &&
+      !hydrating.claimed.has(path!) &&
+      Object.hasOwn(hydrating.state, path!)
+    const fromServer: Adopted = canAdoptState
+      ? stateCodecOf(component).decode(hydrating!.state[path!])
       : Option.none()
+    if (canAdoptState) hydrating!.claimed.add(path!)
     // An owner adopting the server's Model starts from what its reports last sent there.
     const collectedOnServer = Option.isSome(fromServer) && component.definition.collects !== undefined
       ? Option.flatMap(
@@ -3358,7 +3379,10 @@ const setup = (
     if (inst.closed) return
     const tree = viewOf(inst)
     if (tree === undefined) return
-    if (range === undefined && Option.isSome(serverModel) && waiting > 0) inst.serverView = tree
+    if (range === undefined && Option.isSome(serverModel) && waiting > 0) {
+      inst.serverView = tree
+      inst.awaitingAdopt = true
+    }
     let taken: Rendered | undefined
     let rendered: Rendered
     try {
@@ -3736,7 +3760,7 @@ const setup = (
   const waitsBelow = (inst: Instance): boolean => {
     for (const child of inst.children) {
       if (child.closed || child.failure !== undefined) continue
-      if (child.waiting || waitsBelow(child)) return true
+      if (child.waiting || pendingRange.has(child) || waitsBelow(child)) return true
     }
     return false
   }
@@ -5264,8 +5288,11 @@ const setup = (
     if (inst.closed) return
     const tree = viewOf(inst)
     if (tree === undefined) return
+    const pending = pendingRange.get(inst)
+    const serverRendered = pending !== undefined ? inst.rendered : undefined
+    if (pending !== undefined) inst.rendered = pending.heldRendered
     guard(inst, "view", () => {
-      const parentNode = host.parentOf(firstNodeOfList(inst.rendered))!
+      const parentNode = host.parentOf(firstNodeOfList(inst.rendered)) ?? pending?.container
       const ref = host.nextOf(lastNodeOfList(inst.rendered))
       releaseRemoved(inst.rendered, [tree])
       const before = inst.rendered
@@ -5278,6 +5305,10 @@ const setup = (
       }
       throwClash(inst)
     })
+    if (pending !== undefined && !inst.closed) {
+      pending.heldRendered = inst.rendered
+      inst.rendered = serverRendered!
+    }
     // Its closures render with it, so all it wrote is current. A closure that rendered alone is checked
     // in the drain, after the render that holds it.
     if (inst.owner === undefined) checkRefs(inst)
@@ -5360,7 +5391,7 @@ const setup = (
     const kept = slottedBy.get(inst.author)?.placed.get(view.name)
     if (kept !== undefined && !kept.closed) {
       if (range !== undefined) {
-        if (canAdoptExisting(kept)) return replaceOutlet(inst, kept, view, range)
+        if (adoptingRoot !== undefined && within(kept, adoptingRoot)) return replaceOutlet(inst, kept, view, range)
         removeRange(range)
         created++
       }
@@ -5650,7 +5681,7 @@ const setup = (
     const found = live.get(path)
     if (found !== undefined && movable(inst, found, component, env)) {
       if (range !== undefined) {
-        if (canAdoptExisting(found)) return move(inst, found, view, env, holding, range)
+        if (found.awaitingAdopt) return move(inst, found, view, env, holding, range)
         removeRange(range)
         created++
       }
@@ -5699,6 +5730,32 @@ const setup = (
     return !within(inst, found)
   }
 
+  /** Collects every child path declared by `node` (and its slot contents) under `author`. */
+  const collectViewChildPaths = (author: Instance, node: View.Node<any, any>, out: Set<string>): void => {
+    switch (node._tag) {
+      case "Element":
+        for (const child of node.children) collectViewChildPaths(author, child, out)
+        return
+      case "Child": {
+        out.add(childPath(author, node))
+        if (node.slots !== undefined) {
+          for (const key in node.slots) {
+            const value = node.slots[key]
+            if (value !== undefined) {
+              for (const item of View.children([value as View.Input<any, any>])) {
+                collectViewChildPaths(author, item, out)
+              }
+            }
+          }
+        }
+        return
+      }
+      case "Outlet":
+      case "Text":
+        return
+    }
+  }
+
   /**
    * Whether an already-live held instance has its own provided Layer that is still pending here even
    * though the server rendered it ready, so its DOM range must wait for that Layer before adopting.
@@ -5712,31 +5769,51 @@ const setup = (
 
   /**
    * Keeps `range`'s server nodes in place for an already-live held instance whose own provided Layer
-   * is still building, adopting `range` once that Layer settles.
+   * is still building without setting `inst.waiting`, so the live model continues accepting sends,
+   * `onFailure`, and moves while rendering off-screen into `container` until the Layer settles.
    */
-  const awaitExistingLayer = (inst: Instance, range: Range): void => {
-    const heldRendered = inst.rendered
-    inst.waiting = true
+  const awaitExistingLayer = (inst: Instance, range: Range, existingContainer?: unknown): void => {
+    const container = existingContainer ?? host.createContainer!()
+    if (existingContainer === undefined) {
+      for (const item of inst.rendered) insertNodes(container, item, undefined)
+    }
+    park(inst, container)
+    const nodes = rangeNodes(range)
+    inst.awaitingAdopt = false
     waiting++
     range.claimed = true
-    inst.rendered = rangeNodes(range).map((node) => new TextRecord(emptyText, node))
+    const pending: PendingRange = {
+      range,
+      nodes,
+      heldRendered: inst.rendered,
+      container,
+      cancel: (removeNodes: boolean) => {
+        if (pendingRange.get(inst) !== pending) return
+        pendingRange.delete(inst)
+        unpark(inst, container)
+        range.claimed = false
+        if (removeNodes) {
+          for (const node of nodes) host.remove(node)
+        }
+        inst.rendered = pending.heldRendered
+        inst.serverView = undefined
+        settleWaiting()
+      }
+    }
+    pendingRange.set(inst, pending)
+    inst.rendered = nodes.map((node) => new TextRecord(emptyText, node))
     const resume = (adopt: boolean) => {
-      if (inst.closed || !inst.waiting) return
-      inst.waiting = false
-      const nodes = inst.rendered.flatMap(nodesOf)
-      inst.rendered = heldRendered
+      if (inst.closed || pendingRange.get(inst) !== pending) return
+      pendingRange.delete(inst)
+      unpark(inst, container)
+      inst.rendered = pending.heldRendered
       range.claimed = false
       const parentNode = host.parentOf(range.open)
       const after = host.nextOf(range.close)
-      const held = heldPlacement.get(inst)
-      heldPlacement.delete(inst)
-      if (held !== undefined && !adopt) {
-        inst.props = held.props
-        setPlacement(inst, held)
-      }
       const adopted = adopt && adoptExisting(inst, range)
       if (!range.claimed) { for (const node of nodes) host.remove(node) }
       if (!adopted && !inst.closed && inst.failure === undefined) {
+        inst.serverView = undefined
         if (!isDetached(inst.parent)) {
           for (const item of inst.rendered) toggleMounts(inst, item, inst.env, true)
         }
@@ -5747,7 +5824,6 @@ const setup = (
       }
       if (!inst.closed) syncDetached(inst, isDetached(inst.parent))
       if (adopt) recordAdopted(inst)
-      if (held !== undefined && adopt && !inst.closed && inst.failure === undefined) applyPlacement(inst, held)
       viewChanged = true
       settleWaiting()
     }
@@ -5776,8 +5852,17 @@ const setup = (
     const after = host.nextOf(range.close)
     const prevRoot = adoptingRoot
     const prevInst = adoptingInst
+    const prevLivePaths = adoptingLivePaths
     if (prevRoot === undefined) adoptingRoot = inst
-    adoptingInst = needsPatch && initial !== undefined ? inst : undefined
+    if (needsPatch && initial !== undefined) {
+      adoptingInst = inst
+      const livePaths = new Set<string>()
+      if (current !== undefined) collectViewChildPaths(inst.author, current, livePaths)
+      adoptingLivePaths = livePaths
+    } else {
+      adoptingInst = undefined
+      adoptingLivePaths = undefined
+    }
     let taken: Rendered | undefined
     try {
       taken = adoptNode(inst, adoptView, host.nextOf(range.open), range.close, inst.env)
@@ -5788,6 +5873,7 @@ const setup = (
     } finally {
       adoptingRoot = prevRoot
       adoptingInst = prevInst
+      adoptingLivePaths = prevLivePaths
     }
     if (taken === undefined) return false
     claim(range)
@@ -5826,15 +5912,18 @@ const setup = (
     range?: Range
   ): RChild => {
     const from = found.parent!
-    const wasDetached = isDetached(found)
+    const pending = pendingRange.get(found)
+    if (pending !== undefined) pending.cancel(true)
+    const wasDetached = isDetached(found) || pending !== undefined
     if (found.site === undefined) undrop(found)
     else from.children.delete(found)
     // Held by its author: the holder lets it go now, as the author may not render again this flush.
     const held = from.held?.get(found.path)
-    if (held !== undefined && held.inner === found.site) {
+    const heldContainer = held !== undefined && held.inner === found.site ? held.container : undefined
+    if (heldContainer !== undefined) {
       from.held!.delete(found.path)
       if (from.held!.size === 0) from.held = undefined
-      unpark(from, held.container)
+      unpark(from, heldContainer)
     }
     reparent(found, inst)
     const rendered: RChild = new ChildRecord(view, found)
@@ -5849,7 +5938,7 @@ const setup = (
       found.onFailure = view.onFailure
       if (found.owner !== undefined) found.content = view.view
       if (shouldAwaitLayer(found)) {
-        awaitExistingLayer(found, range)
+        awaitExistingLayer(found, range, heldContainer)
         adopted = true
         awaited = true
       } else {
@@ -5861,16 +5950,16 @@ const setup = (
       }
     }
     found.detached = false
-    if (!holding) {
-      found.awaitingAdopt = false
-      if (!awaited) {
+    if (!holding && !awaited) {
+      const nowDetached = isDetached(inst)
+      if (!nowDetached) {
+        found.awaitingAdopt = false
         found.serverView = undefined
-        const nowDetached = isDetached(inst)
-        if (wasDetached !== nowDetached) {
-          for (const item of found.rendered) toggleMounts(found, item, found.env, !nowDetached)
-        }
-        syncDetached(found, nowDetached)
       }
+      if (wasDetached !== nowDetached) {
+        for (const item of found.rendered) toggleMounts(found, item, found.env, !nowDetached)
+      }
+      syncDetached(found, nowDetached)
     }
     if (!adopted) patchChild(inst, rendered, view, env)
     else if (!awaited && slotted !== undefined && !found.closed) refreshOutlets(slotted)
@@ -5999,13 +6088,12 @@ const setup = (
       // with that subtree, so the child moves to the holder before it closes.
       if (found !== undefined && found.site !== undefined && found.site !== kept?.inner && !inDropped(found)) continue
       before?.delete(path)
-      const entry = kept === undefined
-        ? detach(author, makeChild(author, view, author.env, undefined, true))
-        : patchHeld(author, kept, view, author.env)
-      if (found === undefined && hydrating !== undefined && waiting > 0 && entry.inner._tag === "Child") {
-        entry.inner.inst.awaitingAdopt = true
-      }
-      after.set(path, entry)
+      after.set(
+        path,
+        kept === undefined
+          ? detach(author, makeChild(author, view, author.env, undefined, true))
+          : patchHeld(author, kept, view, author.env)
+      )
     }
     author.held = after.size === 0 ? undefined : after
     // Placed again, which leaves nothing to close, or no longer listed.
@@ -6221,8 +6309,9 @@ const setup = (
         if (view._tag === "Child") {
           const found = live.get(path)
           if (
-            (found !== undefined && !found.closed && !found.left && !canAdoptExisting(found)) ||
-            (found === undefined && inst === adoptingInst && !(Feature.TypeId in view.component))
+            (found !== undefined && !found.closed && !found.left && !found.awaitingAdopt) ||
+            (found === undefined && inst === adoptingInst &&
+              (!(Feature.TypeId in view.component) || !adoptingLivePaths!.has(path)))
           ) {
             // Already live elsewhere, or removed before adoption: drop the obsolete server range.
             removeRange(range)
@@ -7263,7 +7352,7 @@ const setup = (
     waiting: () => {
       const out: Array<string> = []
       const visit = (inst: Instance) => {
-        if (inst.waiting) out.push(inst.path)
+        if (inst.waiting || pendingRange.has(inst)) out.push(inst.path)
         for (const child of inst.children) visit(child)
       }
       visit(root)

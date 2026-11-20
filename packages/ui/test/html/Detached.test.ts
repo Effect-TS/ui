@@ -696,6 +696,383 @@ describe("model children on the server", () => {
       assert.notInclude(app.innerHTML, "<!--")
     }).pipe(Effect.scoped))
 
+  it.live("keeps a held child live for sends, moves, and Layer onFailure while its DOM range waits", () =>
+    Effect.gen(function*() {
+      class CardSlow extends Context.Service<CardSlow, string>()("test/CardSlowLive") {}
+      class ChildSlow extends Context.Service<ChildSlow, string>()("test/ChildSlowLive") {}
+      const CounterMsg = UiSchema.TaggedEnum({ Inc: {}, Failed: {} })
+      const PageMsg = UiSchema.TaggedEnum({
+        Inc: {},
+        Place: { place: Schema.Literals(["card", "held", "aside"]) }
+      })
+      const makePage = (
+        cardLayer: Layer.Layer<CardSlow>,
+        childLayer: Layer.Layer<ChildSlow, string>,
+        initial: number
+      ) => {
+        const Counter = Component.provide(
+          Component.define({
+            name: "Counter",
+            lifetime: "model",
+            model: Schema.Struct({ count: Schema.Number, failed: Schema.Boolean }),
+            message: CounterMsg,
+            receives: ["Inc"],
+            elements: Html
+          }).make({
+            init: () => ({ count: initial, failed: false }),
+            update: (model, message) =>
+              CounterMsg.match(message, {
+                Inc: () => ({ ...model, count: model.count + 1 }),
+                Failed: () => ({ ...model, failed: true })
+              }),
+            view: (model, h) => h.p(model.failed ? `failed:${model.count}` : String(model.count))
+          }),
+          childLayer,
+          { onFailure: () => CounterMsg.Failed() }
+        )
+        const CounterRef = Counter.ref("counter")
+        const Card = Component.define({
+          name: "Card",
+          lifetime: "view",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html,
+          slots: ["body"]
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => h.section(h.slots.body)
+        }).pipe(Component.provide(cardLayer))
+        return Component.define({
+          name: "Page",
+          lifetime: "view",
+          model: Schema.Literals(["card", "held", "aside"]),
+          message: PageMsg,
+          elements: Html
+        }).make({
+          children: { counter: Counter },
+          init: () => "card" as const,
+          update: (place, message, $) =>
+            PageMsg.match(message, {
+              Inc: () => $.set(place).send(CounterRef, CounterMsg.Inc()),
+              Place: ({ place: next }) => next
+            }),
+          view: (place, h) =>
+            h.main(
+              Card(h, { key: "c", slots: { body: place === "card" ? h.children.counter() : null } }),
+              place === "aside" ? h.aside(h.children.counter()) : null
+            )
+        })
+      }
+
+      const rendered = yield* HtmlServer.renderToHtml(
+        makePage(Layer.succeed(CardSlow, "ready"), Layer.succeed(ChildSlow, "ready"), 41),
+        {}
+      )
+
+      // 1. Sends still land after the receiver resolves while the child's Layer is pending.
+      const app1 = yield* makeContainer(rendered.html)
+      const releaseCard1 = yield* Deferred.make<void>()
+      const releaseChild1 = yield* Deferred.make<void>()
+      const log1 = MessageLog.makeMemory()
+      const root1 = yield* BrowserHost.mountEffect(
+        makePage(
+          Layer.effect(CardSlow, Effect.as(Deferred.await(releaseCard1), "ready")),
+          Layer.effect(ChildSlow, Effect.as(Deferred.await(releaseChild1), "ready")),
+          0
+        ),
+        {},
+        app1,
+        { state: rendered.state }
+      ).pipe(Effect.provideService(MessageLog.MessageLog, log1))
+      root1.send(PageMsg.Inc())
+      yield* tick
+      yield* Deferred.succeed(releaseCard1, undefined)
+      yield* tick
+      root1.send(PageMsg.Inc())
+      yield* tick
+      yield* Deferred.succeed(releaseChild1, undefined)
+      yield* root1.adopted
+      yield* tick
+      assert.strictEqual(app1.querySelector("section p")?.textContent, "43")
+      assert.deepStrictEqual(log1.entries().filter((entry) => entry._tag === "SendDropped"), [])
+
+      // 2. Hiding and moving to an aside while the DOM range waits preserves the live instance and increments.
+      const app2 = yield* makeContainer(rendered.html)
+      const releaseCard2 = yield* Deferred.make<void>()
+      const releaseChild2 = yield* Deferred.make<void>()
+      const root2 = yield* BrowserHost.mountEffect(
+        makePage(
+          Layer.effect(CardSlow, Effect.as(Deferred.await(releaseCard2), "ready")),
+          Layer.effect(ChildSlow, Effect.as(Deferred.await(releaseChild2), "ready")),
+          0
+        ),
+        {},
+        app2,
+        { state: rendered.state }
+      )
+      root2.send(PageMsg.Inc())
+      yield* tick
+      yield* Deferred.succeed(releaseCard2, undefined)
+      yield* tick
+      root2.send(PageMsg.Place({ place: "held" }))
+      yield* tick
+      root2.send(PageMsg.Place({ place: "aside" }))
+      yield* root2.adopted
+      yield* tick
+      assert.strictEqual(app2.querySelector("section")?.textContent, "")
+      assert.strictEqual(app2.querySelector("aside p")?.textContent, "42")
+
+      // 3. Inner Layer failure after the receiver resolves still delivers onFailure to the live model.
+      const app3 = yield* makeContainer(rendered.html)
+      const releaseCard3 = yield* Deferred.make<void>()
+      const releaseChild3 = yield* Deferred.make<void, string>()
+      const root3 = yield* BrowserHost.mountEffect(
+        makePage(
+          Layer.effect(CardSlow, Effect.as(Deferred.await(releaseCard3), "ready")),
+          Layer.effect(ChildSlow, Effect.as(Deferred.await(releaseChild3), "ready")),
+          0
+        ),
+        {},
+        app3,
+        { state: rendered.state }
+      )
+      yield* Deferred.succeed(releaseCard3, undefined)
+      yield* tick
+      yield* Deferred.fail(releaseChild3, "boom")
+      yield* root3.adopted
+      yield* tick
+      assert.strictEqual(app3.querySelector("section p")?.textContent, "failed:41")
+    }).pipe(Effect.scoped))
+
+  it.live("preserves serverView on detached moves and prevents recreated children from claiming old edits", () =>
+    Effect.gen(function*() {
+      class Slow extends Context.Service<Slow, string>()("test/SlowNestedForm") {}
+      const Key = Schema.Literals(["A", "B"])
+      const FormMsg = UiSchema.TaggedEnum({ Typed: { key: Key, value: Schema.String } })
+      const Form = Component.define({
+        name: "Form",
+        lifetime: "view",
+        props: Schema.Struct({ order: Schema.Array(Key) }),
+        model: Schema.Struct({ A: Schema.String, B: Schema.String }),
+        message: FormMsg,
+        elements: Html
+      }).make({
+        init: () => ({ A: "alpha", B: "bravo" }),
+        update: (model, { key, value }) => ({ ...model, [key]: value }),
+        view: (model, h) =>
+          h.form(
+            ...h.props.order.map((key) =>
+              h.input.key(key).attr("data-key", key).value(model[key]).onInput(({ value }) =>
+                FormMsg.Typed({ key, value })
+              )
+            ),
+            h.output(`A=${model.A}, B=${model.B}`)
+          )
+      })
+      const BoxState = Schema.Struct({
+        slot: Schema.Literals(["aside", "article", "none"]),
+        order: Schema.Array(Key)
+      })
+      const Box = Component.define({
+        name: "Box",
+        lifetime: "model",
+        props: BoxState,
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) =>
+          h.div(
+            h.props.slot === "aside" ? h.aside(Form(h, { key: "f", props: { order: h.props.order } })) : null,
+            h.props.slot === "article" ? h.article(Form(h, { key: "f", props: { order: h.props.order } })) : null
+          )
+      })
+      const makePage = (layer: Layer.Layer<Slow>) => {
+        const Card = Component.define({
+          name: "Card",
+          lifetime: "view",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html,
+          slots: ["body"]
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => h.section(h.slots.body)
+        }).pipe(Component.provide(layer))
+        return Component.define({
+          name: "Page",
+          lifetime: "view",
+          model: BoxState,
+          message: BoxState,
+          elements: Html
+        }).make({
+          children: { box: Child.one(Box, { props: (state) => state }) },
+          init: () => ({ slot: "aside" as const, order: ["A", "B"] as const }),
+          update: (_, next) => next,
+          view: (_, h) => Card(h, { key: "c", slots: { body: h.children.box() } })
+        })
+      }
+
+      const rendered = yield* HtmlServer.renderToHtml(makePage(Layer.succeed(Slow, "ready")), {})
+
+      // 1. Moving the same Form from aside to article inside detached Box while reversing keys keeps the edit on A.
+      const app1 = yield* makeContainer(rendered.html)
+      const release1 = yield* Deferred.make<void>()
+      const root1 = yield* BrowserHost.mountEffect(
+        makePage(Layer.effect(Slow, Effect.as(Deferred.await(release1), "ready"))),
+        {},
+        app1,
+        { state: rendered.state }
+      )
+      const serverA1 = app1.querySelector("input[data-key='A']") as HTMLInputElement
+      HtmlLocator.type(serverA1, "typed for A")
+      root1.send({ slot: "article", order: ["B", "A"] })
+      yield* tick
+      yield* Deferred.succeed(release1, undefined)
+      yield* root1.adopted
+      yield* tick
+      const inputs1 = Array.from(app1.querySelectorAll("article input")) as Array<HTMLInputElement>
+      assert.deepStrictEqual(inputs1.map((input) => input.getAttribute("data-key")), ["B", "A"])
+      assert.strictEqual(inputs1[1], serverA1)
+      assert.strictEqual(inputs1[0]!.value, "bravo")
+      assert.strictEqual(inputs1[1]!.value, "typed for A")
+      assert.strictEqual(app1.querySelector("article output")?.textContent, "A=typed for A, B=bravo")
+
+      // 2. Removing Form, flushing removal, and recreating it at the same key in reverse order does not claim A's old edit.
+      const app2 = yield* makeContainer(rendered.html)
+      const release2 = yield* Deferred.make<void>()
+      const root2 = yield* BrowserHost.mountEffect(
+        makePage(Layer.effect(Slow, Effect.as(Deferred.await(release2), "ready"))),
+        {},
+        app2,
+        { state: rendered.state }
+      )
+      const serverA2 = app2.querySelector("input[data-key='A']") as HTMLInputElement
+      HtmlLocator.type(serverA2, "typed for A")
+      root2.send({ slot: "none", order: ["A", "B"] })
+      yield* tick
+      root2.send({ slot: "aside", order: ["B", "A"] })
+      yield* tick
+      yield* Deferred.succeed(release2, undefined)
+      yield* root2.adopted
+      yield* tick
+      const inputs2 = Array.from(app2.querySelectorAll("aside input")) as Array<HTMLInputElement>
+      assert.deepStrictEqual(inputs2.map((input) => input.getAttribute("data-key")), ["B", "A"])
+      assert.strictEqual(inputs2[0]!.value, "bravo")
+      assert.strictEqual(inputs2[1]!.value, "alpha")
+      assert.strictEqual(app2.querySelector("aside output")?.textContent, "A=alpha, B=bravo")
+      assert.notInclude(app2.innerHTML, "<!--")
+    }).pipe(Effect.scoped))
+
+  it.live("does not restart a removed feature's Layer when adopting a held child's serverView", () =>
+    Effect.gen(function*() {
+      class CardSlow extends Context.Service<CardSlow, string>()("test/CardSlowRemovedFeature") {}
+      class Resource extends Context.Service<Resource, string>()("test/RemovedFeatureResource") {}
+      class PanelFeature extends Feature.Service<PanelFeature>()("test/RemovedFeaturePanel", {
+        props: Schema.Struct({})
+      }) {}
+      let acquires = 0
+      let releases = 0
+      const makePage = (cardLayer: Layer.Layer<CardSlow>, track: boolean) => {
+        const resourceLayer = Layer.effect(
+          Resource,
+          Effect.acquireRelease(
+            Effect.sync(() => {
+              if (track) acquires++
+              return "res"
+            }),
+            () =>
+              Effect.sync(() => {
+                if (track) releases++
+              })
+          )
+        )
+        const PanelImpl = Component.define({
+          name: "PanelImpl",
+          lifetime: "view",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => h.p("panel")
+        }).pipe(Component.provide(resourceLayer))
+        const Box = Component.define({
+          name: "Box",
+          lifetime: "model",
+          props: Schema.Struct({ show: Schema.Boolean }),
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) =>
+            h.div(
+              h.props.show
+                ? PanelFeature.render(h, { key: "p", props: {}, fallback: () => h.p("loading") })
+                : h.span("removed")
+            )
+        }).pipe(Component.provide(PanelFeature.toLayer(PanelImpl)))
+        const Card = Component.define({
+          name: "Card",
+          lifetime: "view",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html,
+          slots: ["body"]
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => h.section(h.slots.body)
+        }).pipe(Component.provide(cardLayer))
+        return Component.define({
+          name: "Page",
+          lifetime: "view",
+          model: Schema.Boolean,
+          message: Schema.Boolean,
+          elements: Html
+        }).make({
+          children: { box: Child.one(Box, { props: (show) => ({ show }) }) },
+          init: () => true,
+          update: (_, show) => show,
+          view: (_, h) => Card(h, { key: "c", slots: { body: h.children.box() } })
+        })
+      }
+
+      const rendered = yield* HtmlServer.renderToHtml(makePage(Layer.succeed(CardSlow, "ready"), false), {})
+      const app = yield* makeContainer(rendered.html)
+      const releaseCard = yield* Deferred.make<void>()
+      const root = yield* BrowserHost.mountEffect(
+        makePage(Layer.effect(CardSlow, Effect.as(Deferred.await(releaseCard), "ready")), true),
+        {},
+        app,
+        { state: rendered.state }
+      )
+      yield* tick
+      assert.strictEqual(acquires, 1)
+      assert.strictEqual(releases, 0)
+
+      root.send(false)
+      yield* tick
+      assert.strictEqual(acquires, 1)
+      assert.strictEqual(releases, 1)
+
+      yield* Deferred.succeed(releaseCard, undefined)
+      yield* root.adopted
+      yield* tick
+      assert.strictEqual(acquires, 1)
+      assert.strictEqual(releases, 1)
+      assert.strictEqual(app.querySelector("section span")?.textContent, "removed")
+      assert.isNull(app.querySelector("section p"))
+      assert.notInclude(app.innerHTML, "<!--")
+    }).pipe(Effect.scoped))
+
   it.effect("serializes a listed model child parked in a collapsed slot during SSR", () =>
     Effect.gen(function*() {
       const RowEvents = UiSchema.TaggedEnum({ Hide: {} })
