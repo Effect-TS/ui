@@ -124,6 +124,31 @@ importers:
         specifier: ^4.1.4
         version: 4.1.4
 
+  examples/auth:
+    dependencies:
+      '@effect/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      '@effect/ui-kit':
+        specifier: workspace:*
+        version: link:../../packages/ui-kit
+      effect:
+        specifier: ^4.1.4
+        version: 4.1.4
+    devDependencies:
+      '@effect/vitest':
+        specifier: ^4.1.4
+        version: 4.1.4(effect@4.1.4)(vitest@5.1.0)
+      '@tailwindcss/vite':
+        specifier: ^4.3.5
+        version: 4.3.5(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
+      tailwindcss:
+        specifier: ^4.3.5
+        version: 4.3.5
+      vite:
+        specifier: ^8.3.6
+        version: 8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)
+
   examples/interrupting-commands:
     dependencies:
       '@effect/ui':
