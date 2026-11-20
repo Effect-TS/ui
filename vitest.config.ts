@@ -82,7 +82,8 @@ export default defineConfig({
       ...project("@effect/ui", "packages/ui", true, { test: { isolate: !isNode } }),
       ...project("@effect/ui-kit", "packages/ui-kit"),
       ...example("auth"),
-      ...example("interrupting-commands")
+      ...example("interrupting-commands"),
+      ...example("snake")
     ]
   }
 })

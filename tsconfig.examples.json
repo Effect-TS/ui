@@ -4,6 +4,7 @@
   "include": [],
   "references": [
     { "path": "examples/auth" },
-    { "path": "examples/interrupting-commands" }
+    { "path": "examples/interrupting-commands" },
+    { "path": "examples/snake" }
   ]
 }
