@@ -876,8 +876,8 @@ type RawStepRequirements<U> = U extends InitStep<infer _Model, infer _Msg, infer
  *
  * It is an error message instead when `S` is a union, nullable structs and
  * overlapping members included (match the union first, then evolve the
- * member), an array, or unknown, as for a data-last `evolve` with nowhere
- * to take its type from.
+ * member), an array, a primitive or function, or unknown, as for a
+ * data-last `evolve` with nowhere to take its type from.
  *
  * @stability experimental
  * @category utility types
@@ -886,7 +886,9 @@ type RawStepRequirements<U> = U extends InitStep<infer _Model, infer _Msg, infer
 export type EvolveFields<S> = unknown extends S ? "evolve needs the struct's type: write evolve<Model>(...)"
   : Types.IsUnion<S> extends true ? "evolve takes one struct: match the union first"
   : S extends ReadonlyArray<unknown> ? "evolve takes a struct, not an array"
-  : { readonly [K in keyof S]?: EvolveField<S[K]> }
+  : S extends (...args: any) => any ? "evolve takes a struct"
+  : S extends object ? { readonly [K in keyof S]?: EvolveField<S[K]> }
+  : "evolve takes a struct"
 
 // A field that may hold a function, optional callbacks included, can't be
 // told from an updater.

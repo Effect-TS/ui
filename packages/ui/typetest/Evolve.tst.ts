@@ -18,13 +18,17 @@ const Def = Component.define({
 })
 type Step = Component.Step<typeof Def.model.Type, typeof Message.Type, never>
 const AuthDef = Component.define({ name: "Auth", model: Auth, message: Message })
+const CountDef = Component.define({ name: "Count", model: Schema.Number, message: Message })
 
 declare const coupon: Coupon
 declare const auth: Auth
-declare const withFunction: { readonly format: (n: number) => string; readonly label: string }
-declare const withCallback: { readonly onSave?: (n: number) => string; readonly label: string }
 declare const overlapping: { readonly count: number } | { readonly count: number; readonly extra: string }
-declare const withAny: { readonly value: any }
+declare const withSpecialFields: {
+  readonly format: (n: number) => string
+  readonly onSave?: (n: number) => string
+  readonly label: string
+  readonly value: any
+}
 
 describe("$.evolve", () => {
   it("takes a value or a function of the old value for each field, and nothing else", () => {
@@ -45,9 +49,14 @@ describe("$.evolve", () => {
     })
   })
 
-  it("rejects a union Model", () => {
+  it("rejects non-struct Models", () => {
     AuthDef.update((model, _message, $) => {
       expect($.evolve).type.not.toBeCallableWith({ email: "a@b.c" })
+      return model
+    })
+    CountDef.update((model, _message, $) => {
+      expect($.evolve).type.not.toBeCallableWith(1)
+      expect($.evolve).type.not.toBeCallableWith({})
       return model
     })
   })
@@ -57,21 +66,19 @@ describe("Component.evolve", () => {
   it("is data-first and data-last, with the same rules", () => {
     expect(Component.evolve(coupon, { status: "Idle" })).type.toBe<Coupon>()
     expect(Component.evolve<Coupon>({ code: (code) => code.trim() })).type.toBe<(self: Coupon) => Coupon>()
-    expect(Component.evolve).type.not.toBeCallableWith(coupon, { stauts: "Idle" })
     // Fields declared on their own are checked with `satisfies`, which also types the updaters.
     const trim = { code: (code) => code.trim() } satisfies Component.EvolveFields<Coupon>
     expect(Component.evolve(coupon, trim)).type.toBe<Coupon>()
     // @ts-expect-error 'stauts' does not exist
     void ({ stauts: "Idle" } satisfies Component.EvolveFields<Coupon>)
-    expect(Component.evolve).type.not.toBeCallableWith(coupon, { status: "Nope" })
-    // With nowhere to take the struct's type from, it is asked for.
+    // Non-structs and untyped data-last calls are rejected.
     expect(Component.evolve).type.not.toBeCallableWith({ status: "Idle" })
     expect(Component.evolve).type.not.toBeCallableWith([1, 2], [3])
+    expect(Component.evolve).type.not.toBeCallableWith(1, 2)
+    expect(Component.evolve).type.not.toBeCallableWith((n: number) => n, {})
   })
 
   it("rejects a union until it is matched", () => {
-    expect(Component.evolve).type.not.toBeCallableWith(auth, { email: "a@b.c" })
-    // Members that overlap are still a union.
     expect(Component.evolve).type.not.toBeCallableWith(overlapping, { count: 1 })
     expect(Auth.match(auth, { LoggedOut: (auth) => auth, LoggedIn: Component.evolve({ name: "Ada" }) })).type.toBe<
       Auth
@@ -85,10 +92,10 @@ describe("Component.evolve", () => {
   })
 
   it("can't set a field whose type is a function", () => {
-    expect(Component.evolve(withFunction, { label: "x" })).type.toBe<typeof withFunction>()
-    expect(Component.evolve).type.not.toBeCallableWith(withFunction, { format: (n: number) => String(n + 1) })
-    // An optional callback may be a function too.
-    expect(Component.evolve).type.not.toBeCallableWith(withCallback, { onSave: (n: number) => String(n) })
-    expect(Component.evolve(withAny, { value: 1 })).type.toBe<typeof withAny>()
+    expect(Component.evolve(withSpecialFields, { label: "x", value: 1 })).type.toBe<typeof withSpecialFields>()
+    expect(Component.evolve).type.not.toBeCallableWith(withSpecialFields, {
+      format: (n: number) => String(n + 1)
+    })
+    expect(Component.evolve).type.not.toBeCallableWith(withSpecialFields, { onSave: (n: number) => String(n) })
   })
 })

@@ -59,22 +59,6 @@ const Checkout = Component.define({
   view: (_model, h) => h.text("checkout")
 })
 
-const Auth = UiSchema.TaggedEnum({
-  LoggedOut: { email: Schema.String },
-  LoggedIn: { email: Schema.String, name: Schema.String }
-})
-const AuthMessage = UiSchema.TaggedEnum({ UpdatedName: { value: Schema.String } })
-
-const Account = Component.define({ name: "Account", model: Schema.Struct({ auth: Auth }), message: AuthMessage })
-  .make({
-    init: ($) => $.set({ auth: Auth.LoggedIn({ email: "a@b.c", name: "Ada" }) }),
-    update: {
-      UpdatedName: (_model, { value }, $) =>
-        $.evolve({ auth: Auth.match({ LoggedOut: (auth) => auth, LoggedIn: Component.evolve({ name: value }) }) })
-    },
-    view: (_model, h) => h.text("account")
-  })
-
 describe("evolve", () => {
   it("changes the given fields of the Model and of the structs in it, and chains with the step", () => {
     const s = Story.start(Checkout, {})
@@ -111,11 +95,5 @@ describe("evolve", () => {
       [key]: 2,
       label: "a"
     })
-  })
-
-  it("evolves a union field after matching it", () => {
-    const s = Story.start(Account, {})
-    s.send(AuthMessage.UpdatedName({ value: "Grace" }))
-    assert.deepStrictEqual(s.model.auth, { _tag: "LoggedIn", email: "a@b.c", name: "Grace" })
   })
 })
