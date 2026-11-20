@@ -67,6 +67,7 @@ const silent = () => Component.noop
  */
 export const Listbox = Component.define({
   name: "Listbox",
+  lifetime: "view",
   props: Schema.Struct({
     options: Schema.Array(ListboxOption),
     // The consumer owns the value. The Listbox reads it to start from it.

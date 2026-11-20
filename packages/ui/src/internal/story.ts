@@ -21,7 +21,9 @@ import type * as Subscription from "../Subscription.ts"
 import * as Locator from "../testing/Locator.ts"
 import type { AwaitedQuery, KeyedLoad, Pending, QueryInfo, StreamTarget, Target } from "../testing/Steps.ts"
 import * as View from "../View.ts"
-import { sharedEqual } from "./equal.ts"
+import { emitHandler } from "./child.ts"
+import * as listedChildren from "./children.ts"
+import { propsEqual, sharedEqual } from "./equal.ts"
 import { isNoop } from "./noop.ts"
 import {
   checkAuthorPlacements,
@@ -155,10 +157,137 @@ export type Fields<Props, Model, Msg, Events> =
     readonly running?: ((name: string, groupKey: string | undefined) => boolean) | undefined
     readonly shared?: ReadonlyMap<Component.Definition.Any, unknown> | undefined
     readonly collected?: Collected | undefined
+    readonly models?: ReadonlyMap<string, ModelChild> | undefined
   }
 
 // What a failed slot without a `fallback` shows.
 const emptyText: View.Node<never, never> = { _tag: "Text", text: "" }
+
+// -- "model" children --------------------------------------------------------
+// A story runs the `"model"` children of its component with it: each has its own record, made by its `init`
+// with the props `children` gives for the Model, kept while the Model lists it, shown or not.
+
+/**
+ * A `"model"` child a story runs: what the Model lists, and the child's own record.
+ *
+ * @internal
+ */
+export interface ModelChild {
+  readonly listed: listedChildren.Listed
+  readonly state: State<any, any, any, any>
+}
+
+/**
+ * The `"model"` children of a story's component, by ref key: `profile`, or `rows[a]` for a keyed row.
+ *
+ * @internal
+ */
+export const modelChildren = new WeakMap<object, ReadonlyMap<string, ModelChild>>()
+
+// The node the expansion shows a placed `"model"` child's view under, and the child's key.
+const shownModel = new WeakMap<object, string>()
+// An outlet of a shown `"model"` child's view, filled with what its parent placed it with: the parent's.
+const filledOutlets = new WeakSet<object>()
+// A node of a shown `"model"` child's view copied to hold a filled outlet, and the child's own node.
+const copiedFrom = new WeakMap<object, object>()
+
+/**
+ * Whether `node` shows a placed `"model"` child's view, whose elements are the child's, or is an outlet in
+ * it, whose content is the story's component's.
+ *
+ * @internal
+ */
+export const ownerOf = (node: object): "child" | "parent" | undefined =>
+  shownModel.has(node) ? "child" : filledOutlets.has(node) ? "parent" : undefined
+
+// `view` with each outlet holding `fill` of its slot.
+const fillOutlets = (
+  view: View.Node<any, any>,
+  fill: (slot: string) => ReadonlyArray<View.Node<any, any>>
+): View.Node<any, any> => {
+  if (view._tag === "Outlet") {
+    const out = { ...view, children: fill(view.name) }
+    filledOutlets.add(out)
+    return out as View.Node<any, any>
+  }
+  const children = (view as { readonly children?: ReadonlyArray<View.Node<any, any>> }).children
+  if (children === undefined) return view
+  let changed = false
+  const next = children.map((child) => {
+    const filled = fillOutlets(child, fill)
+    if (filled !== child) changed = true
+    return filled
+  })
+  if (!changed) return view
+  const out = { ...view, children: next } as View.Node<any, any>
+  copiedFrom.set(out, copiedFrom.get(view) ?? view)
+  return out
+}
+
+/** The children the Model lists, each kept from `before` when it is the same component. */
+const syncModels = (
+  fields: Fields<any, any, any, any>,
+  listed: listedChildren.Children,
+  before: ReadonlyMap<string, ModelChild> | undefined
+): ReadonlyMap<string, ModelChild> => {
+  const out = new Map<string, ModelChild>()
+  for (const found of listedChildren.list(fields.component.definition.name, listed, fields.model)) {
+    const kept = before?.get(found.ref.key)
+    if (kept === undefined || kept.listed.entry.component !== found.entry.component) {
+      out.set(found.ref.key, {
+        listed: found,
+        state: checkModelChild(initialRecord(found.entry.component, found.props))
+      })
+    } else {
+      out.set(found.ref.key, {
+        listed: found,
+        state: propsEqual(kept.state.props, found.props) ? kept.state : update(kept.state, { props: found.props })
+      })
+    }
+  }
+  return out
+}
+
+// What a story doesn't run for a `"model"` child yet.
+const checkModelChild = (child: State<any, any, any, any>): State<any, any, any, any> => {
+  const name = child.component.definition.name
+  if (child.pending.length > 0) {
+    throw new Error(
+      `${name} is a "model" child and runs ${describePending(child.pending)}: ` +
+        "a story runs a model child's init, update and view, not its Commands. Test them in the child's own story, or with TestHost"
+    )
+  }
+  if (child.sent.length > 0) {
+    throw new Error(
+      `${name} is a "model" child and sends to ${child.sent.map(describeSend).join(", ")}: ` +
+        "a story delivers a model child's sends only to its own model children"
+    )
+  }
+  return child
+}
+
+/**
+ * Runs `f` on the record of the `"model"` child at `key`, then sends the events it emitted to the story's
+ * `update` through the child's `onEmit`.
+ *
+ * @internal
+ */
+export const stepModelChild = <Props, Model, Msg, Events>(
+  story: State<Props, Model, Msg, Events>,
+  key: string,
+  f: (child: State<any, any, any, any>) => State<any, any, any, any>
+): State<Props, Model, Msg, Events> => {
+  const models = modelChildren.get(story)!
+  const before = models.get(key)!
+  let after = checkModelChild(f(before.state))
+  const events = after.emitted
+  if (events.length > 0) after = update(after, { emitted: [] })
+  let out = update(story, { models: new Map(models).set(key, { listed: before.listed, state: after }) })
+  const onEmit = emitHandler(before.listed.entry.onEmit)
+  // Each handler reads the Model as it is when the event arrives, as the runtime's does.
+  for (const event of events) out = dispatch(out, onEmit(event, out.model) as Msg | undefined)
+  return out
+}
 
 // -- headless children ------------------------------------------------------
 // A story shows a headless child expanded: the closure it was declared with, run against the parts of the
@@ -418,7 +547,8 @@ const expandRoot = <Msg>(
   shared: Owners | undefined,
   root: Owners,
   status: ReadonlyMap<string, SlotResult> | undefined,
-  slotStatus: SlotResult | undefined
+  slotStatus: SlotResult | undefined,
+  models: ReadonlyMap<string, ModelChild> | undefined
 ): View.Node<Msg, any> => {
   const replaced: Array<View.Child<any, any>> = []
   const placed: Array<Occurrence> = []
@@ -481,6 +611,17 @@ const expandRoot = <Msg>(
         const component = node.component as unknown as Component.Headless.Any
         const childPath = path + "/" + segment(node)
         placed.push({ child: node, path: childPath, scope })
+        const run = own && node.ref !== undefined ? models?.get(node.ref.key) : undefined
+        if (run !== undefined && run.listed.entry.component === node.component) {
+          const slots = node.slots
+          const shown = slots === undefined ? run.state.view() : fillOutlets(
+            run.state.view(),
+            (slot) => content(slots[slot], childPath + "/" + slotSegment(slot), depth + 1, own, owners, reads)
+          )
+          const out = { ...node, children: [shown] } as View.Node<any, any>
+          shownModel.set(out, node.ref!.key)
+          return out
+        }
         const result = status?.get(childPath) ??
           (reads !== undefined && Feature.isService(node.component) ? reads : undefined)
         if (result !== undefined) {
@@ -615,7 +756,33 @@ export const record = <Props, Model, Msg, Events>(
   if (fields.childStatus !== undefined) childStatuses.set(story, fields.childStatus)
   if (fields.shared !== undefined) sharedGiven.set(story, fields.shared)
   if (fields.collected !== undefined) collectedLast.set(story, fields.collected)
+  if (fields.models !== undefined) modelChildren.set(story, fields.models)
   return story
+}
+
+/**
+ * The record after `init` with `props`.
+ *
+ * @internal
+ */
+export const initialRecord = (component: Component.Any, props: unknown): State<any, any, any, any> => {
+  const first = component.init(props)
+  const fields: Fields<any, any, any, any> = {
+    // The record is stored with its types erased; each kind's cursor restores them.
+    component: component as Component.Component<any, any, any, any, any, any, any, any, never>,
+    props,
+    model: first.model,
+    results: undefined,
+    pending: [],
+    emitted: [],
+    sent: [],
+    interrupted: [],
+    loadingMore: [],
+    defaultPrevented: false,
+    ack: noAck
+  }
+  const empty = record(fields, () => expandedView(fields))
+  return apply(empty, first)
 }
 
 /** @internal */
@@ -640,7 +807,12 @@ export const update = <Props, Model, Msg, Events>(
     childStatus: childStatuses.get(story),
     shared: sharedGiven.get(story),
     collected: collectedLast.get(story),
+    models: modelChildren.get(story),
     ...patch
+  }
+  const listed = listedChildren.of(fields.component)
+  if (listed !== undefined && (fields.model !== story.model || fields.models === undefined)) {
+    ;(fields as { models?: ReadonlyMap<string, ModelChild> }).models = syncModels(fields, listed, fields.models)
   }
   // A defect in `view` fails the step that changed the Model, the query results, the props or what's pending.
   // An unchanged view is kept as expanded: expanding it again would rebuild slot content without the
@@ -648,7 +820,7 @@ export const update = <Props, Model, Msg, Events>(
   const view = fields.model === story.model && fields.results === story.results && fields.props === story.props &&
       fields.pending === story.pending && fields.loadingMore === story.loadingMore &&
       fields.childModels === childModels.get(story) && fields.childStatus === childStatuses.get(story) &&
-      fields.shared === sharedGiven.get(story)
+      fields.shared === sharedGiven.get(story) && fields.models === modelChildren.get(story)
     ? story.view
     : () => expandedView(fields)
   return record(fields, view)
@@ -668,7 +840,8 @@ export const expandedView = (fields: Fields<any, any, any, any>): View.Node<any,
     fields.shared,
     ownersBelow(noOwners, fields.component, fields.model, fields.props),
     fields.childStatus,
-    fields.slotStatus
+    fields.slotStatus,
+    fields.models
   )
 
 /** The story's component's own view, before its headless children are expanded. */
@@ -1135,9 +1308,35 @@ export const apply = <Props, Model, Msg, Events>(
     }
   }
   out = update(out, { emitted: [...out.emitted, ...next.events] })
-  const sends = next.sends?.filter((send) => delivered(out, send)) ?? []
+  const sends: Array<Component.Send> = []
+  const listed = listedChildren.of(out.component)
+  for (const send of next.sends ?? []) {
+    if (!delivered(out, send)) continue
+    // A send to a `"model"` child is delivered, as the runtime does, and dropped while the Model doesn't
+    // list the child.
+    const key = send.ref?.key
+    if (key !== undefined && listed !== undefined && listedChildren.lists(listed, key)) {
+      if (modelChildren.get(out)?.has(key)) out = stepModelChild(out, key, (child) => dispatch(child, send.message))
+    } else {
+      sends.push(send)
+    }
+  }
   if (sends.length > 0) out = update(out, { sent: [...out.sent, ...sends] })
   for (const list of next.lists ?? []) out = applyList(out, list)
+  return listed === undefined ? out : takeInitEvents(out)
+}
+
+// What the `"model"` children this step listed emitted from `init`, through their `onEmit`, as the runtime
+// delivers it once they mount.
+const takeInitEvents = <Props, Model, Msg, Events>(
+  story: State<Props, Model, Msg, Events>
+): State<Props, Model, Msg, Events> => {
+  let out = story
+  for (const [key, child] of modelChildren.get(story) ?? []) {
+    if (child.state.emitted.length > 0 && modelChildren.get(out)?.get(key) === child) {
+      out = stepModelChild(out, key, (state) => state)
+    }
+  }
   return out
 }
 
@@ -1481,7 +1680,22 @@ export const fireNode = <Props, Model, Msg, Events>(
   step: string,
   description: string
 ): Fired<Props, Model, Msg, Events> => {
-  const handler = handlerOn(ancestry(story, node), event)
+  const path = ancestry(story, node)
+  // An element of a `"model"` child's view is the child's: its record handles the event, unless it bubbles
+  // past the child's view. What the story's component placed in the child's slots is the component's.
+  const boundary = path.findIndex((ancestor) => shownModel.has(ancestor) || filledOutlets.has(ancestor))
+  const handler = handlerOn(path, event)
+  const handlerAt = handler === undefined ? -1 : path.indexOf(handler)
+  if (boundary !== -1 && shownModel.has(path[boundary]!) && (handlerAt === -1 || handlerAt < boundary)) {
+    let fired: Fired<any, any, any, any> | undefined
+    const own = (copiedFrom.get(node) ?? node) as Locator.Node
+    const out = stepModelChild(
+      story,
+      shownModel.get(path[boundary]!)!,
+      (child) => (fired = fireNode(child, own, event, payload, step, description)).story
+    )
+    return { story: out, prevented: fired!.prevented, handled: fired!.handled }
+  }
   if (handler === undefined) {
     throw new Error(`${step}: nothing handles "${event}" at ${description}`)
   }

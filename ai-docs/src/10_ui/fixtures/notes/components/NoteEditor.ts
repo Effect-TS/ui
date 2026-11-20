@@ -71,6 +71,7 @@ const saveNote = (note: Note) =>
 // fits in one piece chains the two calls, like `NotePage`.
 const NoteEditorDef = Component.define({
   name: "NoteEditor",
+  lifetime: "view",
   props: Schema.Struct({ note: Note }),
   model: Schema.Struct({
     draft: Schema.String,

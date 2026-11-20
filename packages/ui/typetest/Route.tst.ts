@@ -60,6 +60,7 @@ describe("Router", () => {
     const Message = UiSchema.TaggedEnum({ Go: {}, Done: {} })
     const Nav = Component.define({
       name: "Nav",
+      lifetime: "view",
       model: Schema.Struct({ n: Schema.Number }),
       message: Message
     }).make({
@@ -114,6 +115,7 @@ describe("Router", () => {
     expect(Router.blocked("form")).type.toBe<Subscription.Subscription<never, Router.Router>>()
     const Form = Component.define({
       name: "Form",
+      lifetime: "view",
       model: Schema.Struct({ dirty: Schema.Boolean }),
       message: Schema.Never
     }).make({
@@ -130,6 +132,7 @@ describe("Router", () => {
   it("gives head the props, as subscriptions get them", () => {
     const Page = Component.define({
       name: "Page",
+      lifetime: "view",
       props: Schema.Struct({ title: Schema.String }),
       model: Schema.Struct({}),
       message: Schema.Never
@@ -155,6 +158,7 @@ class GetPerson extends Query.Service<GetPerson>()(
 
 const PersonPage = Component.define({
   name: "PersonPage",
+  lifetime: "view",
   props: Schema.Struct({ id: Schema.Number }),
   model: Schema.Struct({}),
   message: Schema.Never,
@@ -167,6 +171,7 @@ const PersonPage = Component.define({
 
 const HomePage = Component.define({
   name: "HomePage",
+  lifetime: "view",
   model: Schema.Struct({}),
   message: Schema.Never
 }).make({
@@ -178,6 +183,7 @@ const HomePage = Component.define({
 /** Declares the person page, which provides its own read. */
 const Declarer = Component.define({
   name: "Declarer",
+  lifetime: "view",
   model: Schema.Struct({}),
   message: Schema.Never
 }).make({
@@ -221,6 +227,7 @@ describe("Router.prefetch", () => {
     // Declared, the union's reads join the declarer's requirements.
     const UnionDeclarer = Component.define({
       name: "UnionDeclarer",
+      lifetime: "view",
       model: Schema.Struct({}),
       message: Schema.Never
     }).make({

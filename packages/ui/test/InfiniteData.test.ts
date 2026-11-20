@@ -42,6 +42,7 @@ const makeApp = () => {
   const ChatMessage = UiSchema.TaggedEnum({ Changed: {}, More: {}, Refresh: {} })
   const Chat = Component.define({
     name: "Chat",
+    lifetime: "view",
     props: Schema.Struct({ room: Schema.String }),
     model: Schema.Struct({}),
     message: ChatMessage,
@@ -167,6 +168,7 @@ describe("Infinite queries", () => {
     const CodesMessage = UiSchema.TaggedEnum({ More: {}, Look: {} })
     const Codes = Component.define({
       name: "Codes",
+      lifetime: "view",
       model: Schema.String,
       message: CodesMessage,
       elements: Html,
@@ -418,6 +420,7 @@ describe("Infinite queries", () => {
     const ShellMessage = UiSchema.TaggedEnum({ ChangedRoute: { route: ShellRoute }, Go: {}, Navigated: {} })
     const Shell = Component.define({
       name: "Shell",
+      lifetime: "view",
       props: Schema.Struct({ route: ShellRoute }),
       model: ShellRoute,
       message: ShellMessage,

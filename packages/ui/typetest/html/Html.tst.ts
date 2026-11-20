@@ -29,6 +29,7 @@ const Measure = Mount.make("Measure", { args: {} }, (node: HTMLElement) => Effec
 
 const Ticker = Component.define({
   name: "Ticker",
+  lifetime: "view",
   model: Schema.Number,
   message: Schema.Number,
   elements: Html
@@ -58,6 +59,7 @@ describe("Html", () => {
     expect(Html).type.toBeAssignableTo<View.Vocabulary<Html.Elements>>()
     Component.define({
       name: "Tags",
+      lifetime: "view",
       model: Schema.String,
       message: Msg,
       elements: Html
@@ -79,6 +81,7 @@ describe("Html", () => {
   it("children returns the builder, so more children and attributes can follow", () => {
     Component.define({
       name: "Order",
+      lifetime: "view",
       model: Schema.String,
       message: Msg,
       elements: Html
@@ -121,6 +124,7 @@ describe("Html", () => {
   it("forward returns the builder's own class, with what it adds in the requirements", () => {
     Component.define({
       name: "Forward",
+      lifetime: "view",
       model: Schema.String,
       message: Msg,
       elements: Html
@@ -154,6 +158,7 @@ describe("Html", () => {
   it("errors point at the offending child", () => {
     Component.define({
       name: "Errors",
+      lifetime: "view",
       model: Schema.String,
       message: Msg,
       elements: Html
@@ -171,6 +176,7 @@ describe("Html", () => {
   it("events carry the tag's payloads", () => {
     Component.define({
       name: "Events",
+      lifetime: "view",
       model: Schema.String,
       message: Msg,
       elements: Html
@@ -202,6 +208,7 @@ describe("Html", () => {
   it("controlled properties exist on the elements that have them", () => {
     Component.define({
       name: "Controlled",
+      lifetime: "view",
       model: Schema.String,
       message: Msg,
       elements: Html
@@ -243,6 +250,7 @@ describe("Html", () => {
     })
     Component.define({
       name: "Refs",
+      lifetime: "view",
       model: Schema.String,
       message: Msg,
       elements: Html
@@ -265,6 +273,7 @@ describe("Html", () => {
   it("requirements from onMount and from children reach the component", () => {
     const Mounted = Component.define({
       name: "Mounted",
+      lifetime: "view",
       model: Schema.Null,
       message: Msg,
       elements: Html
@@ -276,9 +285,12 @@ describe("Html", () => {
           .class("box")
           .children(Ticker(h, { key: "ticker" }))
     })
-    expect(Mounted).type.toBe<Component.Component<"Mounted", {}, null, Msg, never, Logger | Clock, Html.Elements>>()
+    expect(Mounted).type.toBe<
+      Component.Component<"Mounted", {}, null, Msg, never, Logger | Clock, Html.Elements, {}, never, never, "view">
+    >()
     const Shorthand = Component.define({
       name: "Shorthand",
+      lifetime: "view",
       model: Schema.Null,
       message: Msg,
       elements: Html
@@ -287,9 +299,12 @@ describe("Html", () => {
       update: (model) => model,
       view: (_, h) => h.section(h.p("clock"), [Ticker(h, { key: "ticker" })])
     })
-    expect(Shorthand).type.toBe<Component.Component<"Shorthand", {}, null, Msg, never, Clock, Html.Elements>>()
+    expect(Shorthand).type.toBe<
+      Component.Component<"Shorthand", {}, null, Msg, never, Clock, Html.Elements, {}, never, never, "view">
+    >()
     const Bare = Component.define({
       name: "Bare",
+      lifetime: "view",
       model: Schema.Null,
       message: Msg,
       elements: Html
@@ -298,7 +313,9 @@ describe("Html", () => {
       update: (model) => model,
       view: (_, h) => h.input.onMount(LogUp())
     })
-    expect(Bare).type.toBe<Component.Component<"Bare", {}, null, Msg, never, Logger, Html.Elements>>()
+    expect(Bare).type.toBe<
+      Component.Component<"Bare", {}, null, Msg, never, Logger, Html.Elements, {}, never, never, "view">
+    >()
   })
 
   it("a mount may end with Component.noop, and its body gets its args and a typed Stream of them", () => {
@@ -319,6 +336,7 @@ describe("Html", () => {
     expect(DrawChart).type.not.toBeCallableWith({ points: "none" })
     const Chart = Component.define({
       name: "Chart",
+      lifetime: "view",
       model: Schema.Array(Schema.Number),
       message: Schema.Never,
       elements: Html
@@ -328,7 +346,19 @@ describe("Html", () => {
       view: (points, h) => h.div.onMount(Hello()).children(h.canvas.onMount(DrawChart({ points })))
     })
     expect(Chart).type.toBe<
-      Component.Component<"Chart", {}, ReadonlyArray<number>, never, never, Logger, Html.Elements>
+      Component.Component<
+        "Chart",
+        {},
+        ReadonlyArray<number>,
+        never,
+        never,
+        Logger,
+        Html.Elements,
+        {},
+        never,
+        never,
+        "view"
+      >
     >()
     const div = new Html.Element<Msg, never, Record<string, unknown>, HTMLDivElement>("div")
     // A result that isn't the component's message is mapped to one first.
@@ -382,7 +412,13 @@ describe("Html", () => {
   })
 
   it("View.Input keeps what a child requires", () => {
-    const PageDef = Component.define({ name: "Page", model: Schema.Null, message: Msg, elements: Html })
+    const PageDef = Component.define({
+      name: "Page",
+      lifetime: "view",
+      model: Schema.Null,
+      message: Msg,
+      elements: Html
+    })
     const ticker = {} as View.Node<Msg, Clock>
     const plain = (..._children: ReadonlyArray<View.Input<Msg>>) => {}
     expect(plain).type.toBeCallableWith("text", null)
@@ -396,7 +432,9 @@ describe("Html", () => {
       update: (model) => model,
       view: (_, h) => card(h, h.h1("Title"), ticker)
     })
-    expect(Page).type.toBe<Component.Component<"Page", {}, null, Msg, never, Clock, Html.Elements>>()
+    expect(Page).type.toBe<
+      Component.Component<"Page", {}, null, Msg, never, Clock, Html.Elements, {}, never, never, "view">
+    >()
     expect<View.Requirements<any>>().type.toBe<any>()
   })
 
@@ -434,6 +472,7 @@ describe("Html", () => {
   it("ref Commands add nothing to a component's requirements", () => {
     const Form = Component.define({
       name: "Form",
+      lifetime: "view",
       model: Schema.String,
       message: Msg,
       elements: Html
@@ -442,7 +481,9 @@ describe("Html", () => {
       update: (_model, _, $) => $.run(Html.focus(Field, ({ found }) => Msg.Focused({ found }))),
       view: (_, h) => h.input.ref(Field)
     })
-    expect(Form).type.toBe<Component.Component<"Form", {}, string, Msg, never, never, Html.Elements>>()
+    expect(Form).type.toBe<
+      Component.Component<"Form", {}, string, Msg, never, never, Html.Elements, {}, never, never, "view">
+    >()
   })
 })
 
@@ -472,6 +513,7 @@ describe("HtmlLocator", () => {
 describe("BrowserHost", () => {
   const Counter = Component.define({
     name: "Counter",
+    lifetime: "view",
     model: Schema.Number,
     message: Msg,
     elements: Html
@@ -495,6 +537,7 @@ describe("BrowserHost", () => {
     const AppRoute = Route.union({ Home: Route.make("/"), NotFound: Route.make("/*") })
     const App = Component.define({
       name: "App",
+      lifetime: "view",
       props: Schema.Struct({ route: AppRoute }),
       model: AppRoute,
       message: Schema.Never,
@@ -522,6 +565,7 @@ describe("BrowserHost", () => {
     const Native: View.Vocabulary<Native> = { name: "native", tags: {} }
     const App = Component.define({
       name: "App",
+      lifetime: "view",
       model: Schema.Number,
       message: Msg,
       elements: Native

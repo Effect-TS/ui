@@ -16,6 +16,7 @@ const SearchRoute = Route.union({
 /** A root that holds a route with an optional search. */
 const SearchApp = Component.define({
   name: "SearchApp",
+  lifetime: "view",
   props: Schema.Struct({ route: SearchRoute }),
   model: SearchRoute,
   message: SearchRoute,
@@ -44,6 +45,7 @@ const patched = Command.map(() => ListMessage.Patched())
 /** A page whose search text and page number live in the search only. */
 const ListPage = Component.define({
   name: "ListPage",
+  lifetime: "view",
   props: Schema.Struct({ route: ListOnly }),
   model: Schema.Struct({}),
   message: ListMessage,
@@ -78,6 +80,7 @@ const ListPage = Component.define({
 /** Holds the route, and keys the list page by its path. */
 const ListApp = Component.define({
   name: "ListApp",
+  lifetime: "view",
   props: Schema.Struct({ route: ListRoute }),
   model: ListRoute,
   message: ListRoute,
@@ -424,6 +427,7 @@ describe("BrowserRouter", { concurrent: false }, () => {
       yield* Layer.build(BrowserRouter.layer({ routes: AppRoute }))
       const Peek = Component.define({
         name: "Peek",
+        lifetime: "view",
         model: Schema.Number,
         message: Schema.Literal("Peek"),
         elements: Html

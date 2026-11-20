@@ -56,6 +56,7 @@ describe("Component", () => {
     it("covers every update branch", () => {
       const C = Component.define({
         name: "C",
+        lifetime: "view",
         model: Schema.Struct({}),
         message: Message
       }).make({
@@ -74,6 +75,7 @@ describe("Component", () => {
     it("covers every init branch", () => {
       const C = Component.define({
         name: "C",
+        lifetime: "view",
         props: Schema.Struct({ a: Schema.Boolean }),
         model: Schema.Struct({}),
         message: Message
@@ -88,6 +90,7 @@ describe("Component", () => {
     it("covers every view branch", () => {
       const ChildA = Component.define({
         name: "ChildA",
+        lifetime: "view",
         model: Schema.Struct({}),
         message: Message
       }).make({
@@ -97,6 +100,7 @@ describe("Component", () => {
       })
       const ChildB = Component.define({
         name: "ChildB",
+        lifetime: "view",
         model: Schema.Struct({}),
         message: Message
       }).make({
@@ -106,6 +110,7 @@ describe("Component", () => {
       })
       const Parent = Component.define({
         name: "Parent",
+        lifetime: "view",
         model: Schema.Struct({ a: Schema.Boolean }),
         message: Schema.Never
       }).make({
@@ -127,6 +132,7 @@ describe("Component", () => {
       expect(UsesScope()).type.toBe<Command.Issued<Done, never, Done, "Effect">>()
       const C = Component.define({
         name: "C",
+        lifetime: "view",
         model: Schema.Struct({}),
         message: Message
       }).make({
@@ -286,6 +292,7 @@ describe("Component", () => {
     it("surfaces only the feature service in the parent", () => {
       const Parent = Component.define({
         name: "Parent",
+        lifetime: "view",
         model: Schema.Struct({}),
         message: Schema.Never
       }).make({
@@ -309,7 +316,7 @@ describe("Component", () => {
   describe("calling a component", () => {
     const ParentMessage = UiSchema.TaggedEnum({ Toggled: { done: Schema.Boolean } })
     type ParentMessage = typeof ParentMessage.Type
-    const ParentDef = Component.define({ name: "Parent", model: Schema.Null, message: ParentMessage })
+    const ParentDef = Component.define({ name: "Parent", lifetime: "view", model: Schema.Null, message: ParentMessage })
     const todo = { id: "", title: "", done: false }
 
     it("builds a child typed by h's messages, requiring what the component does", () => {

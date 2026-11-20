@@ -33,6 +33,7 @@
  *
  * const TodoItem = Component.define({
  *   name: "TodoItem",
+ *   lifetime: "view",
  *   props: Schema.Struct({ id: Schema.String }),
  *   model: Schema.Struct({ saved: Schema.Boolean }),
  *   message: Message
@@ -138,6 +139,12 @@ export interface Story<Props, Model, Msg, Events, Queries = { readonly [name: st
   readonly results: Component.Results | undefined
   /** The queries' results, by name, as `h.queries` opens them for the current Model, props and results. */
   readonly queries: () => Queries
+  /**
+   * The Models of the component's `"model"` children, by key: the name in
+   * `children`, and a keyed row's key, as in `rows[a]`. A child the view
+   * doesn't show is here too.
+   */
+  readonly children: { readonly [key: string]: unknown }
 }
 
 // A component with no messages has `Msg = never`, and its `update` can't take `any`, so it needs its own member.
@@ -170,6 +177,7 @@ type AnyComponent =
  * const Message = UiSchema.TaggedEnum({ ClickedIncrement: {} })
  * const Counter = Component.define({
  *   name: "Counter",
+ *   lifetime: "view",
  *   model: Schema.Struct({ count: Schema.Number }),
  *   message: Message
  * }).make({
@@ -214,6 +222,20 @@ export interface Steps<C extends AnyComponent> extends Shared.Steps<C> {
   readonly results: Component.Results | undefined
   /** The queries' results, by name, as `h.queries` opens them for the current Model, props and results. */
   readonly queries: { readonly [K in keyof Component.Queries<C>]: Component.QueryResultOf<Component.Queries<C>[K]> }
+  /** The Models of the component's `"model"` children after the last step, by key. */
+  readonly children: { readonly [key: string]: unknown }
+
+  /**
+   * Sends a message to the `update` of the `"model"` child at `key`, shown
+   * or not. What it emits reaches `update` through its `onEmit`. A message
+   * step.
+   *
+   * **Details**
+   *
+   * A story runs a model child's `init`, `update` and view with its
+   * parent, and fails a step in which the child runs a Command.
+   */
+  sendChild(key: string, message: unknown): this
 }
 
 /**
@@ -239,7 +261,8 @@ class StepsImpl extends cursor.Cursor {
       ...cursor.baseRecord(state),
       model: state.model,
       results: state.results,
-      queries: state.queries
+      queries: state.queries,
+      children: childModels(state)
     }
   }
   send(message: unknown): this {
@@ -258,6 +281,28 @@ class StepsImpl extends cursor.Cursor {
   get queries(): unknown {
     return this.state.queries()
   }
+  get children(): { readonly [key: string]: unknown } {
+    return childModels(this.state)
+  }
+  sendChild(key: string, message: unknown): this {
+    return this.act("sendChild", "message", (state) => {
+      const models = engine.modelChildren.get(state)
+      if (models?.has(key) !== true) {
+        throw new Error(
+          `Story.sendChild: ${state.component.definition.name} has no "model" child ${key}; it has ${
+            models === undefined || models.size === 0 ? "none" : [...models.keys()].join(", ")
+          }`
+        )
+      }
+      return engine.stepModelChild(state, key, (child) => engine.dispatch(child, message))
+    })
+  }
+}
+
+const childModels = (state: engine.State<any, any, any, any>): { readonly [key: string]: unknown } => {
+  const out: Record<string, unknown> = {}
+  for (const [key, child] of engine.modelChildren.get(state) ?? []) out[key] = child.state.model
+  return out
 }
 
 /**
@@ -345,6 +390,7 @@ export const parts = <Props, Events, Parts, R, Rcv>(
  *
  * const Person = Component.define({
  *   name: "Person",
+ *   lifetime: "view",
  *   model: Schema.Struct({ name: Schema.String }),
  *   message: Schema.Never
  * }).make({

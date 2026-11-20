@@ -21,6 +21,7 @@ export const SearchPageMessage = UiSchema.TaggedEnum({
 
 export const SearchPageNoDeps = Component.define({
   name: "SearchPage",
+  lifetime: "view",
   // The page takes its whole route as props. The URL is the only copy of
   // the text, the order and the page number. The Model holds no draft of
   // them, so there is nothing to keep in sync with the URL. The results live

@@ -406,22 +406,5 @@ export const baseRecord = (state: engine.State<any, any, any, any>) => ({
  *
  * @internal
  */
-export const initial = (component: Component.Any, props: unknown): engine.State<any, any, any, any> => {
-  const first = component.init(props)
-  const fields: engine.Fields<any, any, any, any> = {
-    // The record is stored with its types erased; each kind's cursor restores them.
-    component: component as Component.Component<any, any, any, any, any, any, any, any, never>,
-    props,
-    model: first.model,
-    results: undefined,
-    pending: [],
-    emitted: [],
-    sent: [],
-    interrupted: [],
-    loadingMore: [],
-    defaultPrevented: false,
-    ack: engine.noAck
-  }
-  const empty = engine.record(fields, () => engine.expandedView(fields))
-  return engine.apply(empty, first)
-}
+export const initial = (component: Component.Any, props: unknown): engine.State<any, any, any, any> =>
+  engine.initialRecord(component, props)

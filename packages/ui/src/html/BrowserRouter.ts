@@ -44,6 +44,7 @@
  *
  * const App = Component.define({
  *   name: "App",
+ *   lifetime: "view",
  *   props: Schema.Struct({ route: AppRoute }),
  *   model: AppRoute,
  *   message: Message,

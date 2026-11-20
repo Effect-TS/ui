@@ -30,6 +30,7 @@ export class GetNote extends Query.Service<GetNote>()("GetNote", {
 const reader = <const Name extends string>(name: Name) =>
   Component.define({
     name,
+    lifetime: "view",
     props: Schema.Struct({ id: Schema.Number }),
     model: Schema.Struct({}),
     message: Schema.Never,
@@ -47,6 +48,7 @@ export const Card = reader("Card")
 /** Reads `GetNote`, which the declarer can't see. */
 export const Note = Component.define({
   name: "Note",
+  lifetime: "view",
   props: Schema.Struct({ id: Schema.Number }),
   model: Schema.Struct({}),
   message: Schema.Never,
@@ -58,7 +60,13 @@ export const Note = Component.define({
 })
 
 /** Places what its parent passes, so a walk reaches the parent's content through it. */
-export const Frame = Component.define({ name: "Frame", model: Schema.Null, message: Schema.Never, slots: ["body"] })
+export const Frame = Component.define({
+  name: "Frame",
+  lifetime: "view",
+  model: Schema.Null,
+  message: Schema.Never,
+  slots: ["body"]
+})
   .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("section", h.slots.body) })
 
 export class Badge extends Feature.Service<Badge>()("test/Badge", { props: Schema.Struct({}) }) {}
@@ -66,6 +74,7 @@ export class Badge extends Feature.Service<Badge>()("test/Badge", { props: Schem
 /** Reads person 1, and shows a card for person 2 in a frame's slot, a feature, and a note with and without a `provide`. */
 export const Walked = Component.define({
   name: "Walked",
+  lifetime: "view",
   model: Schema.Struct({}),
   message: Schema.Never,
   queries: { person: { query: GetPerson, args: () => ({ id: 1 }) } }
@@ -85,6 +94,7 @@ export const Walked = Component.define({
 /** Reads person 3, then its view throws. */
 export const Broken = Component.define({
   name: "Broken",
+  lifetime: "view",
   model: Schema.Struct({}),
   message: Schema.Never,
   queries: { person: { query: GetPerson, args: () => ({ id: 3 }) } }
@@ -101,6 +111,7 @@ class Nothing extends Context.Service<Nothing, string>()("test/Nothing") {}
 /** A page whose provided Layer fails. */
 export const Failing = Component.define({
   name: "Failing",
+  lifetime: "view",
   model: Schema.Struct({}),
   message: Schema.Never
 }).make({
@@ -116,6 +127,7 @@ const AppMessage = UiSchema.TaggedEnum({ ChangedRoute: { route: Routes } })
 
 export const App = Component.define({
   name: "App",
+  lifetime: "view",
   props: Schema.Struct({ route: Routes }),
   model: Schema.Struct({ route: Routes }),
   message: AppMessage

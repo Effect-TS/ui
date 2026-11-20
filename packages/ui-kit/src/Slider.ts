@@ -117,6 +117,7 @@
  *
  * const Player = Component.define({
  *   name: "Player",
+ *   lifetime: "view",
  *   model: Schema.Struct({ volume: Schema.Number }),
  *   message: PlayerMessage,
  *   elements: Html
@@ -724,6 +725,7 @@ const hidden =
  */
 export const Slider = Component.define({
   name: "Slider",
+  lifetime: "view",
   props: SliderProps,
   model: Model,
   message: Message,

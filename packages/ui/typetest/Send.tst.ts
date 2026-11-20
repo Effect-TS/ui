@@ -10,6 +10,7 @@ type Received = Extract<EditorMessage, { readonly _tag: "Clear" | "Focus" }>
 
 const Editor = Component.define({
   name: "Editor",
+  lifetime: "view",
   model: Schema.String,
   message: EditorMessage,
   receives: ["Clear", "Focus"]
@@ -22,6 +23,7 @@ const Editor = Component.define({
 // Receives Clear only.
 const Note = Component.define({
   name: "Note",
+  lifetime: "view",
   model: Schema.String,
   message: EditorMessage,
   receives: ["Clear"]
@@ -31,7 +33,7 @@ const Note = Component.define({
   view: (text, h) => h.el("p", text)
 })
 
-const Plain = Component.define({ name: "Plain", model: Schema.Null, message: EditorMessage }).make({
+const Plain = Component.define({ name: "Plain", lifetime: "view", model: Schema.Null, message: EditorMessage }).make({
   init: () => null,
   update: (model) => model,
   view: (_, h) => h.el("p")
@@ -75,7 +77,7 @@ declare const untrusted: unknown
 declare const arbitraryObject: object
 
 const ParentMessage = UiSchema.TaggedEnum({ Go: {} })
-const ParentDef = Component.define({ name: "Parent", model: Schema.Null, message: ParentMessage })
+const ParentDef = Component.define({ name: "Parent", lifetime: "view", model: Schema.Null, message: ParentMessage })
 
 describe("Component receives", () => {
   it("is the Schema of the listed cases, and a ref carries them", () => {
@@ -349,15 +351,29 @@ describe("a component child with a ref", () => {
     const make = () =>
       Component.define({
         name: "Inline",
+        lifetime: "view",
         props: Schema.Struct({ name: Schema.String }),
         model: Schema.Null,
         message: Schema.String
       })
         .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p", h.props.name) })
-    type Inline = Component.Component<"Inline", { readonly name: string }, null, string, never, never, never, {}, never>
+    type Inline = Component.Component<
+      "Inline",
+      { readonly name: string },
+      null,
+      string,
+      never,
+      never,
+      never,
+      {},
+      never,
+      never,
+      "view"
+    >
     expect(Component.provide(
       Component.define({
         name: "Inline",
+        lifetime: "view",
         props: Schema.Struct({ name: Schema.String }),
         model: Schema.Null,
         message: Schema.String
@@ -369,6 +385,7 @@ describe("a component child with a ref", () => {
     expect(Component.provide(
       Component.define({
         name: "Inline",
+        lifetime: "view",
         props: Schema.Struct({ name: Schema.String }),
         model: Schema.Null,
         message: Schema.String
@@ -473,7 +490,13 @@ describe("a component child with a ref", () => {
 describe("an erased component", () => {
   // Component.Any, and a component whose props are `Schema.Any`.
   const any: Component.Any = Plain
-  const AnyProps = Component.define({ name: "AnyProps", props: Schema.Any, model: Schema.Null, message: EditorMessage })
+  const AnyProps = Component.define({
+    name: "AnyProps",
+    lifetime: "view",
+    props: Schema.Any,
+    model: Schema.Null,
+    message: EditorMessage
+  })
     .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p") })
 
   it("takes props, and a key, a ref or neither", () => {

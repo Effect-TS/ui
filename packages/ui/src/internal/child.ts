@@ -14,13 +14,24 @@ export interface Options {
   // Every ref fits `Ref.Any`; the call's type has checked what it receives.
   readonly ref?: Component.Ref.Any | undefined
   readonly props?: unknown
-  readonly onEmit?: ((event: any) => unknown) | Readonly<Record<string, (event: any) => unknown>> | undefined
+  // A `"model"` child's handlers take the current Model of whoever declared it too.
+  readonly onEmit?:
+    | ((event: any, model?: any) => unknown)
+    | Readonly<Record<string, (event: any, model?: any) => unknown>>
+    | undefined
   readonly fallback?: ((result: any) => View.Content<any, any>) | undefined
   readonly onFailure?: ((failure: AsyncResult.Failure<never, unknown>) => unknown) | undefined
   readonly view?: ((parts: any) => View.Content<any, any>) | undefined
   readonly slots?: Readonly<Record<string, View.Input<any, any>>> | undefined
-  readonly detached?: boolean | undefined
 }
+
+/**
+ * A child's `onEmit` as one function: handlers by tag are called by the event's tag.
+ *
+ * @internal
+ */
+export const emitHandler = (onEmit: Options["onEmit"]): (event: any, model?: any) => unknown =>
+  typeof onEmit === "object" ? (event, model) => onEmit[event._tag](event, model) : onEmit ?? ignore
 
 /** @internal */
 export const make = (
@@ -31,7 +42,6 @@ export const make = (
   if (options.key !== undefined && options.ref !== undefined) {
     throw new Error("A child takes a key or a ref, not both")
   }
-  const { onEmit } = options
   return {
     _tag: "Child",
     component: component as Component.Any,
@@ -39,12 +49,11 @@ export const make = (
     key: options.ref !== undefined ? options.ref.key : options.key ?? "",
     ref: options.ref,
     props: options.props ?? {},
-    onEmit: typeof onEmit === "object" ? (event) => onEmit[event._tag](event) : onEmit ?? ignore,
+    onEmit: emitHandler(options.onEmit),
     fallback: options.fallback,
     onFailure: options.onFailure,
     view: options.view,
-    slots: options.slots,
-    detached: options.detached === true
+    slots: options.slots
   }
 }
 

@@ -20,9 +20,16 @@ const failures = (root: Root) =>
   root.log().flatMap((entry) => entry._tag === "Failed" ? [entry.path + " " + entry.in] : [])
 
 const define = <const Name extends string>(name: Name) =>
-  Component.define({ name, model: Schema.Null, message: Schema.Never, elements: Html })
+  Component.define({ name, lifetime: "view", model: Schema.Null, message: Schema.Never, elements: Html })
 const slotted = <const Name extends string>(name: Name) =>
-  Component.define({ name, model: Schema.Null, message: Schema.Never, elements: Html, slots: ["body"] })
+  Component.define({
+    name,
+    lifetime: "view",
+    model: Schema.Null,
+    message: Schema.Never,
+    elements: Html,
+    slots: ["body"]
+  })
 const Leaf = define("Leaf").make({ init: () => null, update: (m) => m, view: (_, h) => h.p("leaf") })
 
 // Places its slot until "toggle" hides it.
@@ -30,6 +37,7 @@ let frameViews = 0
 const Toggle = UiSchema.TaggedEnum({ Toggle: {} })
 const Frame = Component.define({
   name: "Frame",
+  lifetime: "view",
   model: Schema.Boolean,
   message: Toggle,
   elements: Html,
@@ -46,6 +54,7 @@ const Frame = Component.define({
 const EditorMsg = UiSchema.TaggedEnum({ Typed: {}, Clear: {}, Break: {} })
 const Editor = Component.define({
   name: "Editor",
+  lifetime: "view",
   model: Schema.Number,
   message: EditorMsg,
   events: Schema.Number,
@@ -66,7 +75,13 @@ const Editor = Component.define({
 const Draft = Editor.ref("Draft")
 
 const PageMsg = UiSchema.TaggedEnum({ Changed: { count: Schema.Number }, Clear: {}, Failed: {} })
-const Page = Component.define({ name: "Page", model: Schema.String, message: PageMsg, elements: Html }).make({
+const Page = Component.define({
+  name: "Page",
+  lifetime: "view",
+  model: Schema.String,
+  message: PageMsg,
+  elements: Html
+}).make({
   init: () => "",
   update: (log, msg, $) =>
     msg._tag === "Clear"
@@ -172,26 +187,27 @@ describe("slots", () => {
     provideHost(Effect.gen(function*() {
       const LateMsg = UiSchema.TaggedEnum({ Fill: {}, Hit: {} })
       const Late = Component.provide(
-        Component.define({ name: "Late", model: Schema.Boolean, message: LateMsg, elements: Html }).make({
-          init: () => false,
-          update: () => true,
-          view: (filled, h) =>
-            h.div(
-              h.button.onClick(LateMsg.Fill()).children("fill"),
-              // No slots at first: the content comes with a later render.
-              filled
-                ? Frame(h, {
-                  key: "f",
-                  slots: {
-                    body: [
-                      h.button.onClick(LateMsg.Hit()).children("hit"),
-                      Badge.render(h, { key: "b", fallback: () => h.span("no badge") })
-                    ]
-                  }
-                })
-                : Frame(h, { key: "f" })
-            )
-        }),
+        Component.define({ name: "Late", lifetime: "view", model: Schema.Boolean, message: LateMsg, elements: Html })
+          .make({
+            init: () => false,
+            update: () => true,
+            view: (filled, h) =>
+              h.div(
+                h.button.onClick(LateMsg.Fill()).children("fill"),
+                // No slots at first: the content comes with a later render.
+                filled
+                  ? Frame(h, {
+                    key: "f",
+                    slots: {
+                      body: [
+                        h.button.onClick(LateMsg.Hit()).children("hit"),
+                        Badge.render(h, { key: "b", fallback: () => h.span("no badge") })
+                      ]
+                    }
+                  })
+                  : Frame(h, { key: "f" })
+              )
+          }),
         badge("late's")
       )
       const root = yield* TestHost.mount(Late, {})
@@ -213,6 +229,7 @@ describe("slots", () => {
         }))
       const Form = Component.define({
         name: "Form",
+        lifetime: "view",
         model: Schema.optional(Schema.Boolean),
         message: Schema.Boolean,
         elements: Html
@@ -233,7 +250,13 @@ describe("slots", () => {
         update: (m) => m,
         view: (_, h) => Frame(h, { key: "f", slots: { body: h.slots.body } })
       })
-      const Top = Component.define({ name: "Top", model: Schema.Null, message: PageMsg, elements: Html }).make({
+      const Top = Component.define({
+        name: "Top",
+        lifetime: "view",
+        model: Schema.Null,
+        message: PageMsg,
+        elements: Html
+      }).make({
         init: () => null,
         update: (m) => m,
         view: (_, h) =>
@@ -364,7 +387,14 @@ describe("a mistake in content fails the parent that wrote it", () => {
   it.effect("text forwarded to a slot placed where the vocabulary allows none", () =>
     provideHost(Effect.gen(function*() {
       const tiny = <const Name extends string>(name: Name) =>
-        Component.define({ name, model: Schema.Null, message: Schema.Never, elements: Tiny, slots: ["body"] })
+        Component.define({
+          name,
+          lifetime: "view",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Tiny,
+          slots: ["body"]
+        })
       const Inner = tiny("Inner").make({
         init: () => null,
         update: (m) => m,
@@ -375,9 +405,21 @@ describe("a mistake in content fails the parent that wrote it", () => {
         update: (m) => m,
         view: (_, h) => Inner(h, { key: "i", slots: { body: h.slots.body } })
       })
-      const Writer = Component.define({ name: "Writer", model: Schema.Null, message: Schema.Never, elements: Tiny })
+      const Writer = Component.define({
+        name: "Writer",
+        lifetime: "view",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Tiny
+      })
         .make({ init: () => null, update: (m) => m, view: (_, h) => Outer(h, { key: "o", slots: { body: "loose" } }) })
-      const Top = Component.define({ name: "Top", model: Schema.Null, message: Schema.Never, elements: Tiny }).make({
+      const Top = Component.define({
+        name: "Top",
+        lifetime: "view",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Tiny
+      }).make({
         init: () => null,
         update: (m) => m,
         view: (_, h) => Writer(h, { key: "w", fallback: () => h.label("writer down") })

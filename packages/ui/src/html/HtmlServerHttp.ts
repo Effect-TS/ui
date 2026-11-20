@@ -77,6 +77,7 @@ import * as HtmlServer from "./HtmlServer.ts"
  *
  * const App = Component.define({
  *   name: "App",
+ *   lifetime: "view",
  *   props: Schema.Struct({ route: AppRoute }),
  *   model: Schema.Struct({ route: AppRoute }),
  *   message: Schema.Never

@@ -11,7 +11,13 @@ import { TestClock } from "effect/testing"
 // The first post is a loading toast; Complete turns it into a timed success.
 const PosterMessage = UiSchema.TaggedEnum({ ClickedPost: {}, ClickedDrop: {}, CompletedUpload: {} })
 
-const Poster = Component.define({ name: "Poster", model: Schema.Number, message: PosterMessage, elements: Html })
+const Poster = Component.define({
+  name: "Poster",
+  lifetime: "view",
+  model: Schema.Number,
+  message: PosterMessage,
+  elements: Html
+})
   .make({
     init: () => 0,
     update: {
@@ -41,6 +47,7 @@ const PageMessage = UiSchema.TaggedEnum({ Dismissed: { id: Schema.String } })
 
 const Page = Component.define({
   name: "Page",
+  lifetime: "view",
   props: Schema.Struct({ timeout: Schema.Number }),
   model: Schema.String,
   message: PageMessage,

@@ -96,9 +96,10 @@ export type Dispatch = (
  * `hydration` lets the renderer read nodes a server rendered, so `mount` with
  * a server `state` adopts them. A host without it builds every node fresh.
  *
- * `createContainer` makes a node that holds the nodes of a `detached` child
- * out of the document, such as a `DocumentFragment`. It is never inserted.
- * A host without it fails the parent of a child declared `detached`.
+ * `createContainer` makes a node that holds the nodes of a `lifetime: "model"`
+ * child its parent's view doesn't place, out of the document, such as a
+ * `DocumentFragment`. It is never inserted. A host without it fails the
+ * parent of such a child.
  *
  * `removeChildren`, if given, removes `nodes`, all children of `parent`, at
  * once, as `remove` on each would. The renderer may call it when a patch

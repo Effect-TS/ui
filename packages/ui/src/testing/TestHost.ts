@@ -23,6 +23,7 @@
  *
  * const Counter = Component.define({
  *   name: "Counter",
+ *   lifetime: "view",
  *   model: Schema.Number,
  *   message: Msg
  * }).make({
@@ -198,7 +199,7 @@ export const makeHost = (): Renderer.Host<TestNode> & {
       operations.push(`create ${JSON.stringify(text)}`)
       return { _tag: "Text", text, parent: undefined, fire: fireFrom }
     },
-    // A detached child's nodes go in an element that is never inserted, so no query reaches them.
+    // A parked `"model"` child's nodes go in an element that is never inserted, so no query reaches them.
     createContainer() {
       operations.push("create container")
       return makeElement("#container")
@@ -1054,6 +1055,7 @@ export const stub = <Self, Props, Events, Receives = never>(
   const Message = Schema.Union([Emit, feature.receives])
   const component = Component.define({
     name,
+    lifetime: "view",
     props: feature.props,
     model: Schema.Number,
     message: Message,

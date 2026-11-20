@@ -97,11 +97,6 @@ const continues = (old: View.Node<any, any>, node: View.Node<any, any>): boolean
 const childrenOf = (node: View.Node<any, any>): ReadonlyArray<View.Node<any, any>> =>
   (node as { readonly children?: ReadonlyArray<View.Node<any, any>> }).children ?? []
 
-/** Whether `node` is a detached child, or the expanded view of a headless child any of whose declarations is. */
-const isDetached = (node: View.Node<any, any>): boolean =>
-  (node._tag === "Child" && node.detached) ||
-  (engine.expansionOf.get(node)?.some((child) => child.detached) ?? false)
-
 /** A slotted child's `children` by slot, else the one list. */
 const groups = (node: View.Node<any, any>): Map<string, ReadonlyArray<View.Node<any, any>>> => {
   const children = childrenOf(node)
@@ -151,9 +146,6 @@ const followMounts = (
     )
   }
   const walk = (old: View.Node<any, any> | undefined, node: View.Node<any, any>, authored: boolean): void => {
-    // The runtime stops the mounts below a detached child, and starts them anew once it is attached.
-    if (isDetached(node)) return
-    if (old !== undefined && isDetached(old)) old = undefined
     if (node._tag === "Element") {
       const olds = old === undefined ? [] : before.get(old as View.Element<any, any>) ?? []
       if (authored && node.mount !== undefined) follow(node.mount, undefined, node, olds)
@@ -161,8 +153,10 @@ const followMounts = (
         if (layer.mount !== undefined && layer.owner.path === own) follow(layer.mount, own, node, olds)
       }
     }
-    // A slotted child and an outlet show their content under `children`: an outlet's is a parent's.
-    const below = authored && node._tag !== "Outlet"
+    // A slotted child and an outlet show their content under `children`: an outlet's is a parent's. A
+    // `"model"` child's view is the child's, and what the component placed in its slots is the component's.
+    const shownBy = engine.ownerOf(node)
+    const below = shownBy === "parent" || (shownBy === undefined && authored && node._tag !== "Outlet")
     if (old === undefined) {
       // Nothing to match against: every mount below is new.
       for (const child of childrenOf(node)) walk(undefined, child, below)

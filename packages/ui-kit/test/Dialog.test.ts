@@ -209,6 +209,7 @@ describe("Dialog", () => {
 const NestedMessage = UiSchema.TaggedEnum({ DismissedInner: {} })
 const Nested = Component.define({
   name: "Nested",
+  lifetime: "view",
   model: Schema.Struct({ inner: Schema.Boolean }),
   message: NestedMessage,
   elements: Html

@@ -1,0 +1,420 @@
+import { Child, Component, UiSchema, View } from "@effect/ui"
+import { Html } from "@effect/ui/html"
+import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
+import { assert, describe, it } from "@effect/vitest"
+import { Effect, Schema } from "effect"
+
+// The layout changes of EFF-4038's probes P1, P2 and P8, with the form a "model" child: each keeps its draft.
+
+const FormMsg = UiSchema.TaggedEnum({ Typed: {} })
+const Form = Component.define({
+  name: "Form",
+  lifetime: "model",
+  model: Schema.String,
+  message: FormMsg,
+  elements: Html
+}).make({
+  init: () => "",
+  update: (model) => model + "a",
+  view: (model, h) => h.button.onClick(FormMsg.Typed()).children("draft:" + model)
+})
+const Card = Component.define({
+  name: "Card",
+  lifetime: "view",
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html,
+  slots: ["body"]
+}).make({ init: () => null, update: (model) => model, view: (_, h) => h.section(h.slots.body) })
+const ToggleMsg = UiSchema.TaggedEnum({ ClickedToggle: {} })
+const Collapsible = Component.define({
+  name: "Collapsible",
+  lifetime: "view",
+  model: Schema.Boolean,
+  message: ToggleMsg,
+  elements: Html,
+  slots: ["body"]
+}).make({
+  init: () => true,
+  update: (open) => !open,
+  view: (open, h) => h.section(h.button.onClick(ToggleMsg.ClickedToggle()).children("toggle"), open && h.slots.body)
+})
+
+const PageMsg = UiSchema.TaggedEnum({ Toggled: {} })
+const page = (view: (toggled: boolean, form: () => View.Content<any, any>, h: any) => View.Content<any, any>) =>
+  Component.define({ name: "Page", lifetime: "view", model: Schema.Boolean, message: PageMsg, elements: Html }).make({
+    children: { form: Form },
+    init: () => false,
+    update: (toggled) => !toggled,
+    view: (toggled, h) => view(toggled, () => h.children.form(), h)
+  })
+
+type Root = TestHost.TestRoot<any, any, any>
+const settle = (f: () => void) => Effect.andThen(Effect.sync(f), TestHost.settle)
+const click = (root: Root, text: string) => settle(() => Locator.fire(root.get(Locator.text(text)), "click"))
+const toggle = (root: Root) => settle(() => root.send(PageMsg.Toggled()))
+
+describe("model children", () => {
+  it.effect.each([
+    {
+      name: "P1: wrapped in a slot component",
+      view: page((wide, form, h) => h.main(wide ? Card(h, { key: "card", slots: { body: form() } }) : form())),
+      relayout: toggle
+    },
+    {
+      name: "P9: left out of a component root, then placed again",
+      view: page((hidden, form, h) => Card(h, { key: "card", slots: { body: hidden ? null : form() } })),
+      relayout: (root: Root) => Effect.andThen(toggle(root), toggle(root))
+    },
+    {
+      name: "P8: in a slot its receiver stops placing, then places again",
+      view: page((_, form, h) => Collapsible(h, { key: "c", slots: { body: form() } })),
+      relayout: (root: Root) => Effect.andThen(click(root, "toggle"), click(root, "toggle"))
+    }
+  ])("keeps its draft $name", ({ relayout, view }) =>
+    Effect.gen(function*() {
+      const root = yield* TestHost.mount(view, {})
+      yield* TestHost.settle
+      yield* click(root, "draft:")
+      yield* relayout(root)
+      assert.include(root.text(), "draft:a")
+      assert.notInclude(root.log().map((entry) => entry._tag), "Unmounted")
+    }).pipe(Effect.provide(TestHost.layer())))
+
+  it.effect("P2: keeps a keyed card's draft when it moves between columns", () =>
+    Effect.gen(function*() {
+      const Board = Component.define({
+        name: "Board",
+        lifetime: "view",
+        model: Schema.Literals(["todo", "done"]),
+        message: PageMsg,
+        elements: Html
+      }).make({
+        children: { cards: Child.keyed(Form, { props: () => [["c1", {}]] }) },
+        init: () => "todo" as const,
+        update: (column) => column === "todo" ? "done" : "todo",
+        view: (column, h) =>
+          h.main(
+            Card(h, { key: "todo", slots: { body: column === "todo" ? h.children.cards("c1") : null } }),
+            h.p("done:"),
+            Card(h, { key: "done", slots: { body: column === "done" ? h.children.cards("c1") : null } })
+          )
+      })
+      const root = yield* TestHost.mount(Board, {})
+      yield* TestHost.settle
+      yield* click(root, "draft:")
+      assert.strictEqual(root.text(), "draft:adone:")
+      yield* toggle(root)
+      assert.strictEqual(root.text(), "done:draft:a")
+      assert.notInclude(root.log().map((entry) => entry._tag), "Unmounted")
+    }).pipe(Effect.provide(TestHost.layer())))
+
+  it.effect("lists a model page by its route's path, so it lives as long as the route", () =>
+    Effect.gen(function*() {
+      const Nav = UiSchema.TaggedEnum({ Went: { path: Schema.String } })
+      const App = Component.define({
+        name: "App",
+        lifetime: "view",
+        model: Schema.String,
+        message: Nav,
+        elements: Html
+      }).make({
+        children: { page: Child.keyed(Form, { props: (path) => [[path, {}]] }) },
+        init: () => "/a",
+        update: (_, message) => message.path,
+        view: (path, h) => h.main(h.children.page(path))
+      })
+      const root = yield* TestHost.mount(App, {})
+      yield* TestHost.settle
+      yield* click(root, "draft:")
+      assert.strictEqual(root.text(), "draft:a")
+      yield* settle(() => root.send(Nav.Went({ path: "/b" })))
+      yield* settle(() => root.send(Nav.Went({ path: "/a" })))
+      assert.strictEqual(root.text(), "draft:")
+      assert.deepStrictEqual(
+        root.log().flatMap((entry) => entry._tag === "Unmounted" ? [entry.path] : []),
+        ["/App/Form[page[/a]]", "/App/Form[page[/b]]"]
+      )
+    }).pipe(Effect.provide(TestHost.layer())))
+
+  it.effect("mounts a model component as the root", () =>
+    Effect.gen(function*() {
+      const root = yield* TestHost.mount(Form, {})
+      yield* TestHost.settle
+      yield* click(root, "draft:")
+      assert.strictEqual(root.text(), "draft:a")
+    }).pipe(Effect.provide(TestHost.layer())))
+
+  it("rejects what the types reject through an erased component", () => {
+    const erased: Component.Any = Form
+    assert.throws(() => (erased as any)(undefined, {}), /Form has lifetime "model": place it with h\.children/)
+    assert.throws(() => Child.one(Card as Component.Any), /Child\.one Card: its lifetime is "view"/)
+  })
+})
+
+// A slot receiver removed with the form in its slot: the form leaves it before it closes, unless unlisted.
+
+const Fold = Component.define({
+  name: "Fold",
+  lifetime: "view",
+  model: Schema.Boolean,
+  message: ToggleMsg,
+  elements: Html,
+  slots: ["body"]
+}).make({
+  init: () => true,
+  update: (open) => !open,
+  view: (open, h) =>
+    h.section(
+      h.button.onClick(ToggleMsg.ClickedToggle()).children("fold"),
+      open ? Card(h, { key: "card", slots: { body: h.slots.body } }) : null
+    )
+})
+const ShelfMsg = UiSchema.TaggedEnum({ Toggled: {}, Unlisted: {}, Listed: {} })
+const shelf = (view: (shown: boolean, form: () => View.Child<any, any> | null, h: any) => View.Content<any, any>) =>
+  Component.define({
+    name: "Page",
+    lifetime: "view",
+    model: Schema.Struct({ shown: Schema.Boolean, listed: Schema.Boolean }),
+    message: ShelfMsg,
+    elements: Html
+  }).make({
+    children: { form: Child.optional(Form, { props: (model) => model.listed ? {} : null }) },
+    init: () => ({ shown: true, listed: true }),
+    update: (model, message) =>
+      ShelfMsg.match(message, {
+        Toggled: () => ({ ...model, shown: !model.shown }),
+        Unlisted: () => ({ shown: false, listed: false }),
+        Listed: () => ({ shown: true, listed: true })
+      }),
+    view: (model, h) => view(model.shown, () => h.children.form?.() ?? null, h)
+  })
+const inCard = shelf((shown, form, h) => h.main(shown ? Card(h, { key: "card", slots: { body: form() } }) : null))
+const formLog = (root: Root) =>
+  root.log().flatMap((entry) =>
+    "path" in entry && entry.path === "/Page/Form[form]" && entry._tag !== "Update" ? [entry._tag] : []
+  )
+const send = (root: Root, message: typeof ShelfMsg.Type) => settle(() => root.send(message))
+
+describe("a model child in a slot whose receiver is removed", () => {
+  it.effect.each([
+    {
+      name: "by the child's author",
+      view: inCard,
+      relayout: (root: Root) => Effect.andThen(send(root, ShelfMsg.Toggled()), send(root, ShelfMsg.Toggled()))
+    },
+    {
+      name: "by another component, through a forwarded slot",
+      view: shelf((_, form, h) => h.main(Fold(h, { key: "fold", slots: { body: form() } }))),
+      relayout: (root: Root) => Effect.andThen(click(root, "fold"), click(root, "fold"))
+    }
+  ])("keeps its draft, detached and attached again, $name", ({ relayout, view }) =>
+    Effect.gen(function*() {
+      const root = yield* TestHost.mount(view, {})
+      yield* TestHost.settle
+      yield* click(root, "draft:")
+      yield* relayout(root)
+      assert.include(root.text(), "draft:a")
+      assert.deepStrictEqual(formLog(root), ["Mounted", "Detached", "Attached"])
+    }).pipe(Effect.provide(TestHost.layer())))
+
+  it.effect("releases it when the same update unlists it", () =>
+    Effect.gen(function*() {
+      const root = yield* TestHost.mount(inCard, {})
+      yield* TestHost.settle
+      yield* click(root, "draft:")
+      yield* send(root, ShelfMsg.Unlisted())
+      yield* send(root, ShelfMsg.Listed())
+      assert.strictEqual(root.text(), "draft:")
+      assert.deepStrictEqual(formLog(root), ["Mounted", "Unmounted", "Mounted"])
+    }).pipe(Effect.provide(TestHost.layer())))
+})
+
+// A child the view doesn't place, wherever the view leaves it out: it gets sends while hidden.
+
+const CounterMsg = UiSchema.TaggedEnum({ Ping: {} })
+const CounterEvents = UiSchema.TaggedEnum({ Pinged: {} })
+const Counter = Component.define({
+  name: "Counter",
+  lifetime: "model",
+  model: Schema.Number,
+  message: CounterMsg,
+  events: CounterEvents,
+  receives: ["Ping"],
+  elements: Html
+}).make({
+  init: () => 0,
+  update: (pings, _, $) => $.set(pings + 1).emit(CounterEvents.Pinged()),
+  view: (pings, h) => h.p("pings:" + pings)
+})
+const CounterRef = Counter.ref("counter")
+const Drawer = Component.define({
+  name: "Drawer",
+  lifetime: "view",
+  model: Schema.Boolean,
+  message: ToggleMsg,
+  elements: Html,
+  slots: ["body"]
+}).make({
+  init: () => false,
+  update: (open) => !open,
+  view: (open, h) => h.section(h.button.onClick(ToggleMsg.ClickedToggle()).children("open"), open && h.slots.body)
+})
+const HostMsg = UiSchema.TaggedEnum({ Ping: {}, Show: {} })
+const host = (view: (shown: boolean, counter: () => View.Child<any, any>, h: any) => View.Content<any, any>) =>
+  Component.define({ name: "Host", lifetime: "view", model: Schema.Boolean, message: HostMsg, elements: Html }).make({
+    children: { counter: Counter },
+    init: () => false,
+    update: (shown, message, $) => message._tag === "Ping" ? $.send(CounterRef, CounterMsg.Ping()) : !shown,
+    view: (shown, h) => view(shown, () => h.children.counter(), h)
+  })
+const show = (root: Root) => settle(() => root.send(HostMsg.Show()))
+
+describe("model children the view leaves out", () => {
+  it.effect.each([
+    {
+      name: "computed but left out of an element root",
+      view: host((shown, counter, h) => {
+        const node = counter()
+        return h.main(shown ? node : null)
+      }),
+      show
+    },
+    {
+      name: "left out of a component root",
+      view: host((shown, counter, h) => Card(h, { key: "card", slots: { body: shown ? counter() : null } })),
+      show
+    },
+    {
+      name: "the root once shown, text while hidden",
+      view: host((shown, counter) => shown ? counter() : View.text("hidden")),
+      show
+    },
+    {
+      name: "in a slot that never opened",
+      view: host((_, counter, h) => Drawer(h, { key: "drawer", slots: { body: counter() } })),
+      show: (root: Root) => click(root, "open")
+    }
+  ])("gets a send while hidden: $name", ({ show, view }) =>
+    Effect.gen(function*() {
+      const root = yield* TestHost.mount(view, {})
+      yield* TestHost.settle
+      yield* settle(() => root.send(HostMsg.Ping()))
+      yield* show(root)
+      assert.include(root.text(), "pings:1")
+      assert.notInclude(root.log().map((entry) => entry._tag), "Unmounted")
+    }).pipe(Effect.provide(TestHost.layer())))
+
+  it.effect("a scene delivers a send before the child is placed in a component root", () =>
+    Effect.gen(function*() {
+      const Host = host((shown, counter, h) =>
+        Card(h, {
+          key: "card",
+          slots: {
+            body: [
+              h.button.onClick(HostMsg.Ping()).children("ping"),
+              h.button.onClick(HostMsg.Show()).children("show"),
+              shown ? counter() : null
+            ]
+          }
+        })
+      )
+      const scene = yield* Scene.make(Host, {})
+      scene.click("ping").expect(Locator.text("pings:1")).toBeAbsent()
+        .click("show").expect(Locator.text("pings:1")).toExist()
+    }))
+})
+
+// A story runs a model child's pure transitions as the renderer does.
+
+const absent = Component.define({
+  name: "Host",
+  lifetime: "view",
+  model: Schema.Boolean,
+  message: HostMsg,
+  elements: Html
+}).make({
+  children: { counter: Child.optional(Counter, { props: (shown) => shown ? {} : null }) },
+  init: () => false,
+  update: (shown, message, $) => message._tag === "Ping" ? $.send(CounterRef, CounterMsg.Ping()) : !shown,
+  view: (shown, h) => h.div(shown ? h.children.counter?.() : null)
+})
+
+const Greeter = Component.define({
+  name: "Greeter",
+  lifetime: "model",
+  model: Schema.Null,
+  message: Schema.Never,
+  events: CounterEvents
+}).make({
+  init: ($) => $.set(null).emit(CounterEvents.Pinged()),
+  update: (model) => model,
+  view: () => View.text("hi")
+})
+const Greeted = Component.define({
+  name: "Greeted",
+  lifetime: "view",
+  model: Schema.Number,
+  message: Schema.Literal("Greeted")
+})
+  .make({
+    children: { greeter: Child.one(Greeter, { onEmit: () => "Greeted" as const }) },
+    init: () => 0,
+    update: (greeted) => greeted + 1,
+    view: () => View.text("page")
+  })
+
+const TabMsg = UiSchema.TaggedEnum({ Ping: {}, Show: { tab: Schema.String }, Heard: { tab: Schema.String } })
+const Tabs = Component.define({
+  name: "Tabs",
+  lifetime: "view",
+  model: Schema.Struct({ tab: Schema.String, heard: Schema.Array(Schema.String) }),
+  message: TabMsg,
+  elements: Html
+}).make({
+  children: { counter: Child.one(Counter, { onEmit: (_, model) => TabMsg.Heard({ tab: model.tab }) }) },
+  init: () => ({ tab: "counter", heard: [] }),
+  update: (model, message, $) =>
+    TabMsg.match(message, {
+      Ping: () => $.send(CounterRef, CounterMsg.Ping()),
+      Show: ({ tab }) => ({ ...model, tab }),
+      Heard: ({ tab }) => ({ ...model, heard: [...model.heard, tab] })
+    }),
+  view: (model, h) => h.div(model.tab === "counter" ? h.children.counter() : "other")
+})
+
+describe("a story matches the renderer", () => {
+  it.effect("drops a send to an optional child that isn't listed", () =>
+    Effect.gen(function*() {
+      const root = yield* TestHost.mount(absent, {})
+      yield* TestHost.settle
+      yield* settle(() => root.send(HostMsg.Ping()))
+      yield* show(root)
+      assert.strictEqual(root.text(), "pings:0")
+      const s = yield* Story.make(absent, {})
+      s.send(HostMsg.Ping()).send(HostMsg.Show())
+      assert.deepStrictEqual(s.children, { counter: 0 })
+    }).pipe(Effect.provide(TestHost.layer())))
+
+  it.effect("takes what a hidden child emits from init", () =>
+    Effect.gen(function*() {
+      const root = yield* TestHost.mount(Greeted, {})
+      yield* TestHost.settle
+      assert.strictEqual(root.model(), 1)
+      const s = yield* Story.make(Greeted, {})
+      assert.strictEqual(s.model, 1)
+    }).pipe(Effect.provide(TestHost.layer())))
+
+  it.effect("gives onEmit the parent's current Model while the child is hidden", () =>
+    Effect.gen(function*() {
+      const root = yield* TestHost.mount(Tabs, {})
+      yield* TestHost.settle
+      yield* settle(() => root.send(TabMsg.Ping()))
+      yield* settle(() => root.send(TabMsg.Show({ tab: "other" })))
+      yield* settle(() => root.send(TabMsg.Ping()))
+      assert.deepStrictEqual(root.model()?.heard, ["counter", "other"])
+      const s = yield* Story.make(Tabs, {})
+      s.send(TabMsg.Ping()).send(TabMsg.Show({ tab: "other" })).send(TabMsg.Ping())
+      assert.deepStrictEqual(s.model.heard, ["counter", "other"])
+    }).pipe(Effect.provide(TestHost.layer())))
+})

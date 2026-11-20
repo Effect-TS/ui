@@ -73,6 +73,7 @@ const ACTION_BUTTON_CLASS = "px-3 py-1 text-sm font-medium rounded-md border tra
 
 const UploadsDef = Component.define({
   name: "Uploads",
+  lifetime: "view",
   model: UploadsModel,
   message: UploadsMessage
 })

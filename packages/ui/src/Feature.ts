@@ -23,6 +23,7 @@
  *
  * const TodoList = Component.define({
  *   name: "TodoList",
+ *   lifetime: "view",
  *   props: TodosProps,
  *   model: Schema.Struct({}),
  *   message: Schema.Never,
@@ -207,6 +208,7 @@ export const isService = (u: unknown): u is Any => Predicate.hasProperty(u, Type
  *
  * const FakeTodos = Component.define({
  *   name: "FakeTodos",
+ *   lifetime: "view",
  *   props: Todos.props,
  *   model: Schema.Struct({}),
  *   message: Schema.Never

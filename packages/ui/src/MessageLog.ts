@@ -416,15 +416,15 @@ export interface Unmounted extends InstanceBase {
 }
 
 /**
- * A child declared `detached` took its nodes out of the document. It stays
- * mounted: it takes messages, props and query results, and its Commands and
- * Subscriptions go on.
+ * A `lifetime: "model"` child its parent's view stopped placing took its
+ * nodes out of the document. It stays mounted: it takes messages, props and
+ * query results, and its Commands and Subscriptions go on.
  *
  * **Details**
  *
- * A detached child shows nothing, contributes no head entries, and its
+ * A hidden child shows nothing, contributes no head entries, and its
  * element mounts are stopped. A ref lookup inside it finds no node, so it
- * gets no DOM events. A child declared `detached` from the start logs it
+ * gets no DOM events. A child the view doesn't place from the start logs it
  * right after `Mounted`. `Attached` ends the interval.
  *
  * @stability experimental
@@ -436,7 +436,7 @@ export interface Detached extends InstanceBase {
 }
 
 /**
- * A detached child put its nodes back in the document, and its element
+ * A hidden child put its nodes back in the document, and its element
  * mounts started again.
  *
  * @stability experimental

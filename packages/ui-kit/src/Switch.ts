@@ -60,6 +60,7 @@
  *
  * const Settings = Component.define({
  *   name: "Settings",
+ *   lifetime: "view",
  *   model: Schema.Struct({ notify: Schema.Boolean }),
  *   message: SettingsMessage,
  *   elements: Html

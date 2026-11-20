@@ -58,6 +58,7 @@
  *
  * const App = Component.define({
  *   name: "App",
+ *   lifetime: "view",
  *   props: Schema.Struct({ route: AppRoute }),
  *   model: Schema.Struct({ route: AppRoute }),
  *   message: Message
@@ -570,6 +571,7 @@ export const currentRoute = <U extends Routes>(routes: U): Effect.Effect<U["Type
  *
  * const App = Component.define({
  *   name: "App",
+ *   lifetime: "view",
  *   props: Schema.Struct({ route: AppRoute }),
  *   model: AppRoute,
  *   message: Schema.Never
@@ -878,6 +880,7 @@ type PageRequirement<P> = P extends Page<infer R> ? R : never
  *
  * const Person = Component.define({
  *   name: "Person",
+ *   lifetime: "view",
  *   props: Schema.Struct({ id: Schema.Number }),
  *   model: Schema.Struct({}),
  *   message: Schema.Never,

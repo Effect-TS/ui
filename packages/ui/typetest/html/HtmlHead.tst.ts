@@ -4,8 +4,14 @@ import * as HtmlHeadModule from "@effect/ui/html/HtmlHead"
 import { Schema } from "effect"
 import { describe, expect, it } from "tstyche"
 
-const Neutral = Component.define({ name: "Neutral", model: Schema.Null, message: Schema.Never })
-const Page = Component.define({ name: "Page", model: Schema.Null, message: Schema.Never, elements: Html })
+const Neutral = Component.define({ name: "Neutral", lifetime: "view", model: Schema.Null, message: Schema.Never })
+const Page = Component.define({
+  name: "Page",
+  lifetime: "view",
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+})
 
 declare const content: View.Content<never, any>
 

@@ -152,6 +152,7 @@ describe("BrowserHost", { concurrent: false }, () => {
     const Message = UiSchema.TaggedEnum({ Typed: { value: Schema.String }, Checked: { checked: Schema.Boolean } })
     const Form = Component.define({
       name: "Form",
+      lifetime: "view",
       model: Schema.Struct({ text: Schema.String, checked: Schema.Boolean, open: Schema.Boolean }),
       message: Message,
       elements: Html
@@ -207,6 +208,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         const Resettable = Component.define({
           name: "Resettable",
+          lifetime: "view",
           model: Schema.Null,
           message: Schema.Never,
           elements: Html
@@ -263,6 +265,7 @@ describe("BrowserHost", { concurrent: false }, () => {
     // The search is the only copy of the text: the page's Model holds none. Digits are rejected.
     const SearchPage = Component.define({
       name: "SearchPage",
+      lifetime: "view",
       props: Schema.Struct({ route: SearchRoute.subset(["Search"]) }),
       model: Schema.Struct({}),
       message: SearchMessage,
@@ -289,6 +292,7 @@ describe("BrowserHost", { concurrent: false }, () => {
     const AppMessage = UiSchema.TaggedEnum({ ChangedRoute: { route: SearchRoute } })
     const SearchApp = Component.define({
       name: "SearchApp",
+      lifetime: "view",
       props: Schema.Struct({ route: SearchRoute }),
       model: Schema.Struct({ route: SearchRoute }),
       message: AppMessage,
@@ -410,6 +414,7 @@ describe("BrowserHost", { concurrent: false }, () => {
     // A child's nodes are a list of their own, among the parent's other nodes.
     const Shown = Component.define({
       name: "Shown",
+      lifetime: "view",
       props: Schema.Struct({ rows: Schema.Array(Schema.String) }),
       model: Schema.Null,
       message: Schema.Never,
@@ -421,6 +426,7 @@ describe("BrowserHost", { concurrent: false }, () => {
     })
     const Lists = Component.define({
       name: "Lists",
+      lifetime: "view",
       model: Schema.Array(Schema.String),
       message: ListMessage,
       elements: Html
@@ -464,6 +470,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         // The rows are the child's tag, its key and its text.
         const Only = Component.define({
           name: "Only",
+          lifetime: "view",
           model: Schema.Array(Schema.String),
           message: ListMessage,
           elements: Html
@@ -503,6 +510,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         if (customElements.get("x-classed") === undefined) customElements.define("x-classed", Classed)
         const Page = Component.define({
           name: "Classed",
+          lifetime: "view",
           model: Schema.Array(Schema.String),
           message: ListMessage,
           elements: Html
@@ -531,6 +539,7 @@ describe("BrowserHost", { concurrent: false }, () => {
     })
     const ItemsDef = Component.define({
       name: "Items",
+      lifetime: "view",
       model: Schema.Struct({ items: Schema.Array(Item), selected: Schema.Number, ticks: Schema.Number }),
       message: LazyMessage,
       elements: Html
@@ -601,6 +610,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           class Leaf extends Feature.Service<Leaf>()("Leaf", { props: Schema.Struct({}) }) {}
           const LeafImpl = Component.define({
             name: "LeafImpl",
+            lifetime: "view",
             model: Schema.Null,
             message: Schema.Never,
             elements: Html
@@ -609,6 +619,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           const ready = yield* Deferred.make<void>()
           const FrameDef = Component.define({
             name: "Frame",
+            lifetime: "view",
             model: Schema.Null,
             message: Schema.Never,
             elements: Html
@@ -637,6 +648,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         const FieldsDef = Component.define({
           name: "Fields",
+          lifetime: "view",
           model: Schema.Number,
           message: LazyMessage,
           elements: Html
@@ -708,6 +720,7 @@ describe("BrowserHost", { concurrent: false }, () => {
     })
     const Events = Component.define({
       name: "Events",
+      lifetime: "view",
       model: Schema.Array(Schema.String),
       message: Message,
       elements: Html
@@ -787,6 +800,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         const Toggle = Component.define({
           name: "Toggle",
+          lifetime: "view",
           model: Schema.Array(Schema.String),
           message: Message,
           elements: Html
@@ -873,6 +887,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         yield* BrowserHost.mountEffect(Events, {}, app)
         const Bare = Component.define({
           name: "Bare",
+          lifetime: "view",
           model: Schema.Null,
           message: Schema.Never,
           elements: Html
@@ -891,7 +906,13 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(submitted(bare.querySelector("form")!)).toBe(true)
         expect(submitted(outside.querySelector("form")!)).toBe(false)
         // The tag as the author wrote it isn't what makes it a form.
-        const Upper = Component.define({ name: "Upper", model: Schema.Null, message: Schema.Never, elements: Html })
+        const Upper = Component.define({
+          name: "Upper",
+          lifetime: "view",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        })
           .make({
             init: () => null,
             update: (model) => model,
@@ -908,6 +929,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         const seen: Array<string> = []
         const Composer = Component.define({
           name: "Composer",
+          lifetime: "view",
           model: Schema.Number,
           message: Schema.Literals(["Send", "Menu"]),
           elements: Html
@@ -949,6 +971,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         const seen: Array<Html.SubmitPayload> = []
         const Prototype = Component.define({
           name: "Prototype",
+          lifetime: "view",
           model: Schema.Null,
           message: Schema.Never,
           elements: Html
@@ -1012,6 +1035,7 @@ describe("BrowserHost", { concurrent: false }, () => {
 
     const Board = Component.define({
       name: "Board",
+      lifetime: "view",
       model: Schema.Array(Schema.String),
       message: Schema.String,
       elements: Html
@@ -1097,6 +1121,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         const Message = UiSchema.TaggedEnum({ Dropped: { files: Schema.Array(Schema.instanceOf(File)) } })
         const Uploader = Component.define({
           name: "Uploader",
+          lifetime: "view",
           model: Schema.Array(Schema.String),
           message: Message,
           elements: Html
@@ -1467,6 +1492,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         const DrawerMessage = UiSchema.TaggedEnum({ Close: {} })
         const Drawer = Component.define({
           name: "Drawer",
+          lifetime: "view",
           model: Schema.Boolean,
           message: DrawerMessage,
           elements: Html
@@ -1489,6 +1515,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         calls.length = 0
         const Stack = Component.define({
           name: "Stack",
+          lifetime: "view",
           model: Schema.Number,
           message: Schema.Number,
           elements: Html
@@ -1690,6 +1717,7 @@ describe("BrowserHost", { concurrent: false }, () => {
     const refs = (elements: View.Vocabulary<Html.Elements>) =>
       Component.define({
         name: "Refs",
+        lifetime: "view",
         model: Schema.Array(Schema.String),
         message: Message,
         elements
@@ -1740,6 +1768,7 @@ describe("BrowserHost", { concurrent: false }, () => {
     }
     const NativeBox = Component.define({
       name: "NativeBox",
+      lifetime: "view",
       model: Schema.Null,
       message: Schema.Never,
       elements: Native
@@ -1750,6 +1779,7 @@ describe("BrowserHost", { concurrent: false }, () => {
     })
     const Page = Component.define({
       name: "Page",
+      lifetime: "view",
       model: Schema.Null,
       message: Schema.Never,
       elements: Html
@@ -1833,7 +1863,13 @@ describe("BrowserHost", { concurrent: false }, () => {
           if (Exit.isFailure(exit)) interruptors.push([...Cause.interruptors(exit.cause)])
         })
       const Held = Mount.make("Held", { args: {} }, () => Effect.onExit(Effect.never, record))
-      const Page = Component.define({ name: "Page", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+      const Page = Component.define({
+        name: "Page",
+        lifetime: "view",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
         init: () => null,
         update: (model) => model,
         subscriptions: () => [Subscription.make("held", Stream.onExit(Stream.never, record))],
@@ -1859,7 +1895,13 @@ describe("BrowserHost", { concurrent: false }, () => {
           Effect.succeed(() => Effect.succeed(Message.Loaded()))
         ) {}
         let renders = 0
-        const Page = Component.define({ name: "Page", model: Schema.Number, message: Message, elements: Html }).make({
+        const Page = Component.define({
+          name: "Page",
+          lifetime: "view",
+          model: Schema.Number,
+          message: Message,
+          elements: Html
+        }).make({
           init: ($) => $.set(0).run(Load.make({ id: 1 }), Load.make({ id: 2 }), Load.make({ id: 3 })),
           update: (loaded) => loaded + 1,
           view: (loaded, h) => {

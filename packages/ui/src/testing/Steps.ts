@@ -239,6 +239,7 @@ type AnyComponent =
  * const Message = UiSchema.TaggedEnum({ ClickedIncrement: {} })
  * const Counter = Component.define({
  *   name: "Counter",
+ *   lifetime: "view",
  *   model: Schema.Struct({ count: Schema.Number }),
  *   message: Message
  * }).make({

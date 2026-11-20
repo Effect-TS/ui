@@ -53,6 +53,7 @@
  *
  * const Storage = Component.define({
  *   name: "Storage",
+ *   lifetime: "view",
  *   model: Schema.Struct({ used: Schema.Number, quota: Schema.Number }),
  *   message: Schema.Never,
  *   elements: Html
@@ -155,6 +156,7 @@ export type MeterProps = typeof MeterProps.Type
  */
 export const Meter = Component.define({
   name: "Meter",
+  lifetime: "view",
   props: MeterProps,
   model: Schema.Struct({}),
   message: Schema.Never,

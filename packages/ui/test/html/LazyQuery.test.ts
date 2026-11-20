@@ -49,6 +49,7 @@ const lateSave = Effect.gen(function*() {
         ) {}
         const Note = Component.define({
           name: "Note",
+          lifetime: "view",
           model: Schema.Null,
           message: Schema.Never,
           elements: Html,
@@ -76,7 +77,13 @@ const lateSave = Effect.gen(function*() {
     Effect.succeed(() => Effect.succeed("new"))
   ) {}
   const Message = UiSchema.TaggedEnum({ Save: {}, Replace: {}, Show: {}, Saved: {} })
-  const App = Component.define({ name: "App", model: Schema.Boolean, message: Message, elements: Html }).make({
+  const App = Component.define({
+    name: "App",
+    lifetime: "view",
+    model: Schema.Boolean,
+    message: Message,
+    elements: Html
+  }).make({
     init: () => false,
     update: (shown, message, $) =>
       Message.match(message, {
@@ -128,7 +135,13 @@ const savedWith = Effect.fnUntraced(function*(writes: (saved: string) => Readonl
     Effect.succeed(() => Effect.succeed("saved"))
   ) {}
   const Message = UiSchema.TaggedEnum({ Clicked: {}, Saved: {} })
-  const Saver = Component.define({ name: "Saver", model: Schema.String, message: Message, elements: Html }).make({
+  const Saver = Component.define({
+    name: "Saver",
+    lifetime: "view",
+    model: Schema.String,
+    message: Message,
+    elements: Html
+  }).make({
     init: () => "idle",
     update: (_model, message, $) =>
       Message.match(message, {
@@ -137,7 +150,13 @@ const savedWith = Effect.fnUntraced(function*(writes: (saved: string) => Readonl
       }),
     view: (model, h) => h.button.onClick(Message.Clicked()).children(model)
   }).pipe(Component.provide(Save.layer))
-  const App = Component.define({ name: "App", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+  const App = Component.define({
+    name: "App",
+    lifetime: "view",
+    model: Schema.Null,
+    message: Schema.Never,
+    elements: Html
+  }).make({
     init: () => null,
     update: (model) => model,
     view: (_model, h) => h.div.children(Saver(h, {}), h.p.children(" in app"))
@@ -165,7 +184,13 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
       )
       let child: ((h: any) => any) | undefined
       const Message = UiSchema.TaggedEnum({ Opened: {} })
-      const App = Component.define({ name: "App", model: Schema.Boolean, message: Message, elements: Html }).make({
+      const App = Component.define({
+        name: "App",
+        lifetime: "view",
+        model: Schema.Boolean,
+        message: Message,
+        elements: Html
+      }).make({
         init: () => false,
         update: () => true,
         view: (open, h) =>
@@ -187,6 +212,7 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
       ) {}
       const Note = Component.define({
         name: "Note",
+        lifetime: "view",
         model: Schema.Null,
         message: Schema.Never,
         elements: Html,
@@ -248,6 +274,7 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
             ) {}
             const Note = Component.define({
               name: "Note",
+              lifetime: "view",
               model: Schema.Null,
               message: Schema.Never,
               elements: Html,
@@ -269,7 +296,13 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
         )
       ) {}
       const Message = UiSchema.TaggedEnum({ Clicked: {}, Saved: {} })
-      const App = Component.define({ name: "App", model: Schema.Boolean, message: Message, elements: Html }).make({
+      const App = Component.define({
+        name: "App",
+        lifetime: "view",
+        model: Schema.Boolean,
+        message: Message,
+        elements: Html
+      }).make({
         init: () => false,
         update: (_model, message, $) =>
           Message.match(message, {
