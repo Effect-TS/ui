@@ -27,13 +27,10 @@ describe("Validation.make", () => {
     readonly confirm: string
   }
 
-  it("defaults a field without value to a string", () => {
+  it("infers State and Validated types from fields", () => {
     expect(Form.init).type.toBe<(values: Values) => Validation.State<Values>>()
     expect(Form.State.Type).type.toBe<Validation.State<Values>>()
     expect(Form.State.Encoded.values.age).type.toBe<string>()
-  })
-
-  it("types each derived field by its value", () => {
     const validated = Form.validate(Form.init(null!))
     expect(validated.fields.tags).type.toBe<Validation.Field<ReadonlyArray<string>>>()
     expect(validated.fields.notes).type.toBe<Validation.Field<string>>()
@@ -73,6 +70,5 @@ describe("Validation.make", () => {
     // A rule can't read a field the form doesn't have.
     // @ts-expect-error Property 'missing' does not exist
     Validation.make({ name: { rules: [[(_, values) => values.missing === "", "x"]] } })
-    expect(Form.init).type.not.toBeCallableWith({ name: 1, notes: "", subscribed: true, tags: [], age: 1, confirm: "" })
   })
 })

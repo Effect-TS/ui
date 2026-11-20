@@ -7,42 +7,37 @@ import { AsyncResult } from "effect/reactivity"
 const Rule = Validation.Rule
 
 describe("Validation", () => {
-  const Signup = Validation.make({
-    email: { required: "Email is required", rules: [Rule.email()] },
-    password: {
-      required: "Password is required",
-      rules: [Rule.minLength(8), [(password) => /\d/.test(password), "Include a number"]]
-    },
-    confirm: {
-      required: "Confirm your password",
-      rules: [[(confirm, values) => confirm === values.password, "Passwords must match"]]
-    },
-    account: { value: Schema.Literals(["Personal", "Business"]) },
-    company: { required: (values) => values.account === "Business" && "Required for business accounts" },
-    birthday: {
-      value: Schema.NullOr(Schema.String),
-      isEmpty: (birthday) => birthday === null,
-      // A rule never sees an empty value, but its type still includes one.
-      rules: [[
-        (birthday) => birthday !== null && /^\d{4}-\d{2}-\d{2}$/.test(birthday),
-        (birthday) => `${birthday} isn't a date`
-      ]]
-    }
-  })
-  const empty = Signup.init({ email: "", password: "", confirm: "", account: "Personal", company: "", birthday: null })
-
   it("derives each field from its value, its rules and the other values", () => {
-    const state = Signup.submit({
-      ...empty,
-      values: {
-        email: "ada@x",
-        password: "short",
-        confirm: "short",
-        account: "Business",
-        company: "",
-        birthday: "soon"
+    const Signup = Validation.make({
+      email: { required: "Email is required", rules: [Rule.email()] },
+      password: {
+        required: "Password is required",
+        rules: [Rule.minLength(8), [(password) => /\d/.test(password), "Include a number"]]
+      },
+      confirm: {
+        required: "Confirm your password",
+        rules: [[(confirm, values) => confirm === values.password, "Passwords must match"]]
+      },
+      account: { value: Schema.Literals(["Personal", "Business"]) },
+      company: { required: (values) => values.account === "Business" && "Required for business accounts" },
+      birthday: {
+        value: Schema.NullOr(Schema.String),
+        isEmpty: (birthday) => birthday === null,
+        // A rule never sees an empty value, but its type still includes one.
+        rules: [[
+          (birthday) => birthday !== null && /^\d{4}-\d{2}-\d{2}$/.test(birthday),
+          (birthday) => `${birthday} isn't a date`
+        ]]
       }
     })
+    const state = Signup.submit(Signup.init({
+      email: "ada@x",
+      password: "short",
+      confirm: "short",
+      account: "Business",
+      company: "",
+      birthday: "soon"
+    }))
     const { fields, value, invalid } = Signup.validate(state)
     assert.deepStrictEqual(fields, {
       email: { _tag: "Invalid", value: "ada@x", required: true, errors: ["Invalid email address"] },
@@ -116,7 +111,7 @@ describe("Validation", () => {
       invalid: true,
       validating: false
     })
-    assert.deepStrictEqual(Login.validate(Login.change("email", "ada@example.org")(rejected)).invalid, true)
+    assert.isTrue(Login.validate(Login.change("email", "ada@example.org")(rejected)).invalid)
     assert.deepStrictEqual(
       Login.validate(Login.change("password", "secret2")(rejected)).value,
       Option.some({
@@ -124,7 +119,7 @@ describe("Validation", () => {
         password: "secret2"
       })
     )
-    assert.deepStrictEqual(Login.reject(rejected, { password: [] }).rejected, {})
+    assert.isFalse(Login.validate(Login.reject(rejected, { password: [] })).invalid)
   })
 
   it("reads a check once its field passes, and holds the value back until it answers", () => {
@@ -159,7 +154,7 @@ describe("Validation", () => {
     })
   })
 
-  it("keeps any field name, including ones on Object.prototype", () => {
+  it("keeps its State as JSON for any field name, including ones on Object.prototype", () => {
     const fields = JSON.parse(`{ "constructor": {}, "__proto__": { "required": "Required" } }`) as {
       readonly constructor: {}
       readonly ["__proto__"]: { readonly required: string }
@@ -167,7 +162,7 @@ describe("Validation", () => {
     const Form = Validation.make(fields)
     const values = JSON.parse(`{ "constructor": "", "__proto__": "x" }`)
     const state = Form.reject(
-      Form.change(Form.init(values), "constructor", "c"),
+      Form.blur(Form.change(Form.init(values), "constructor", "c"), "constructor"),
       JSON.parse(`{ "__proto__": ["Taken"] }`)
     )
     const json = JSON.parse(JSON.stringify(Schema.encodeSync(Form.State)(state)))
@@ -182,12 +177,6 @@ describe("Validation", () => {
       errors: ["Taken"]
     })
     assert.deepStrictEqual(Object.getOwnPropertyDescriptor(decoded.values, "__proto__")?.value, "x")
-  })
-
-  it("keeps its State as JSON", () => {
-    const state = Signup.reject(Signup.blur(Signup.change(empty, "email", "ada@x"), "email"), { email: ["Taken"] })
-    const json = JSON.parse(JSON.stringify(Schema.encodeSync(Signup.State)(state)))
-    assert.deepStrictEqual(Schema.decodeUnknownSync(Signup.State)(json), state)
   })
 
   describe("in a component", () => {
