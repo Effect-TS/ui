@@ -325,7 +325,9 @@ both call it, so write one function that calls it and share it.
 The `mode` decides when a field starts showing its result: once it was
 edited, once it was left, or, by default, once a submit was tried. A tried
 submit shows every field. An error from `reject` shows at once and stays
-until its field changes.
+until its field changes. By default each invalid field stops at its first
+failing rule (`errors: "first"`); pass `errors: "all"` to collect every
+failing rule and list `field.errors` below the field.
 
 An async check, such as "is this username taken", is a query whose args
 are `undefined` until `passes(state, "username")`. Pass its result to

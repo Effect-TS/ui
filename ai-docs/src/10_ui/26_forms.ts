@@ -45,7 +45,9 @@ export class Accounts extends Context.Service<Accounts, {
 // predicate and a message, and `Validation.Rule` has the common ones.
 //
 // The mode decides when a field starts showing its result: here once it was
-// edited. Every field shows once a submit was tried.
+// edited. Every field shows once a submit was tried. By default each field
+// stops at its first failing rule; pass `errors: "all"` to collect every
+// failing rule.
 const Rule = Validation.Rule
 
 export const SignupValidation = Validation.make({
@@ -190,7 +192,9 @@ export const SignupForm = Component.define({
             .onInput(({ value }) => SignupMessage.UpdatedField({ name, value }))
         ),
         field._tag === "Validating" ? h.span.children("Checking…") : null,
-        field._tag === "Invalid" ? h.p.attr("role", "alert").children(field.errors[0]) : null
+        field._tag === "Invalid"
+          ? h.ul.attr("role", "alert").children(...field.errors.map((error) => h.li.children(error)))
+          : null
       )
     }
 
