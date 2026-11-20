@@ -496,6 +496,82 @@ describe("detached children", () => {
       provideHost
     ))
 
+  it.effect("keeps Detached and Attached balanced across nested slot parking and holder moves", () =>
+    provideHost(Effect.gen(function*() {
+      const Row = Component.define({ name: "Row", lifetime: "model", model: Schema.Null, message: Schema.Never })
+        .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p", "row") })
+      const slotBox = (name: string) =>
+        Component.define({
+          name,
+          lifetime: "view",
+          props: Schema.Boolean,
+          model: Schema.Null,
+          message: Schema.Never,
+          slots: ["body"]
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => h.el("div", h.props ? h.slots.body : null)
+        })
+      const Outer = slotBox("Outer")
+      const Inner = slotBox("Inner")
+      const State = Schema.Struct({
+        outer: Schema.Boolean,
+        inner: Schema.Boolean,
+        place: Schema.Literals(["nested", "held", "sibling"])
+      })
+      const Page = Component.define({ name: "Page", lifetime: "view", model: State, message: State }).make({
+        children: { row: Row },
+        init: () => ({ outer: true, inner: true, place: "nested" as const }),
+        update: (_, next) => next,
+        view: (state, h) =>
+          h.el(
+            "main",
+            state.place === "nested"
+              ? Outer(h, {
+                key: "o",
+                props: state.outer,
+                slots: { body: Inner(h, { key: "i", props: state.inner, slots: { body: h.children.row() } }) }
+              })
+              : null,
+            state.place === "sibling" ? h.el("aside", h.children.row()) : null
+          )
+      })
+
+      // Close inner, close outer, reopen inner while hidden, then reopen outer.
+      const nested = yield* TestHost.mount(Page, {})
+      yield* TestHost.settle
+      for (
+        const next of [
+          { outer: true, inner: false, place: "nested" },
+          { outer: false, inner: false, place: "nested" },
+          { outer: false, inner: true, place: "nested" },
+          { outer: true, inner: true, place: "nested" }
+        ] as const
+      ) {
+        nested.send(next)
+        yield* TestHost.settle
+      }
+      assert.strictEqual(nested.text(), "row")
+      assert.deepStrictEqual(lifecycle(nested, "/Page/Row[row]"), ["Mounted", "Detached", "Attached"])
+
+      // Close outer, move the row into its author's holder, then place it in a visible sibling.
+      const held = yield* TestHost.mount(Page, {})
+      yield* TestHost.settle
+      for (
+        const next of [
+          { outer: false, inner: true, place: "nested" },
+          { outer: false, inner: true, place: "held" },
+          { outer: false, inner: true, place: "sibling" }
+        ] as const
+      ) {
+        held.send(next)
+        yield* TestHost.settle
+      }
+      assert.strictEqual(held.text(), "row")
+      assert.deepStrictEqual(lifecycle(held, "/Page/Row[row]"), ["Mounted", "Detached", "Attached"])
+    })))
+
   it.effect("starts a mount under a handle the host recycled from a removed parent's container", () =>
     Effect.gen(function*() {
       const { containers, host, recycle, root: container, text } = numbered()
