@@ -271,6 +271,180 @@ describe("model children on the server", () => {
       assert.notInclude(app.innerHTML, "<!--")
     }).pipe(Effect.scoped))
 
+  it.live("delivers sends to a listed child while its slotted receiver waits to adopt", () =>
+    Effect.gen(function*() {
+      class Slow extends Context.Service<Slow, string>()("test/SlowSend") {}
+      const CounterMsg = UiSchema.TaggedEnum({ Inc: {} })
+      const makeCounter = (initial: number) =>
+        Component.define({
+          name: "Counter",
+          lifetime: "model",
+          model: Schema.Number,
+          message: CounterMsg,
+          receives: ["Inc"],
+          elements: Html
+        }).make({
+          init: () => initial,
+          update: (n) => n + 1,
+          view: (n, h) => h.p(String(n))
+        })
+      const PageMsg = UiSchema.TaggedEnum({ Inc: {} })
+      const makePage = (layer: Layer.Layer<Slow>, initial: number) => {
+        const Counter = makeCounter(initial)
+        const CounterRef = Counter.ref("counter")
+        const Card = Component.define({
+          name: "Card",
+          lifetime: "view",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html,
+          slots: ["body"]
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => h.section(h.slots.body)
+        }).pipe(Component.provide(layer))
+        return Component.define({
+          name: "Page",
+          lifetime: "view",
+          model: Schema.Null,
+          message: PageMsg,
+          elements: Html
+        }).make({
+          children: { counter: Counter },
+          init: () => null,
+          update: (_, __, $) => $.send(CounterRef, CounterMsg.Inc()),
+          view: (_, h) => Card(h, { key: "c", slots: { body: h.children.counter() } })
+        })
+      }
+      const rendered = yield* HtmlServer.renderToHtml(makePage(Layer.succeed(Slow, "ready"), 41), {})
+      const app = yield* makeContainer(rendered.html)
+      const release = yield* Deferred.make<void>()
+      const log = MessageLog.makeMemory()
+      const root = yield* BrowserHost.mountEffect(
+        makePage(Layer.effect(Slow, Effect.as(Deferred.await(release), "ready")), 0),
+        {},
+        app,
+        { state: rendered.state }
+      ).pipe(Effect.provideService(MessageLog.MessageLog, log))
+      root.send(PageMsg.Inc())
+      yield* tick
+      yield* Deferred.succeed(release, undefined)
+      yield* root.adopted
+      yield* tick
+      assert.strictEqual(app.querySelector("section p")?.textContent, "42")
+      assert.isTrue(log.entries().some((entry) => entry._tag === "Update" && entry.path === "/Page/Counter[counter]"))
+      assert.deepStrictEqual(
+        log.entries().filter((entry) => entry._tag === "SendDropped"),
+        []
+      )
+      assert.notInclude(app.innerHTML, "<!--")
+    }).pipe(Effect.scoped))
+
+  it.live(
+    "preserves a listed child's shipped model when its waiting receiver is removed or it moves to a new receiver",
+    () =>
+      Effect.gen(function*() {
+        class Slow extends Context.Service<Slow, string>()("test/SlowRelocate") {}
+        const makeBox = (initial: string) =>
+          Component.define({
+            name: "Box",
+            lifetime: "model",
+            model: Schema.String,
+            message: Schema.Never,
+            elements: Html
+          }).make({
+            init: () => initial,
+            update: (model) => model,
+            view: (value, h) => h.p(value)
+          })
+        const Mode = Schema.Literals(["waiting", "held", "shown", "sibling"])
+        const makePage = (layer: Layer.Layer<Slow>, initial: string) => {
+          const Box = makeBox(initial)
+          const WaitingCard = Component.define({
+            name: "WaitingCard",
+            lifetime: "view",
+            model: Schema.Null,
+            message: Schema.Never,
+            elements: Html,
+            slots: ["body"]
+          }).make({
+            init: () => null,
+            update: (model) => model,
+            view: (_, h) => h.section(h.slots.body)
+          }).pipe(Component.provide(layer))
+          const SiblingCard = Component.define({
+            name: "SiblingCard",
+            lifetime: "view",
+            model: Schema.Null,
+            message: Schema.Never,
+            elements: Html,
+            slots: ["body"]
+          }).make({
+            init: () => null,
+            update: (model) => model,
+            view: (_, h) => h.article(h.slots.body)
+          })
+          return Component.define({
+            name: "Page",
+            lifetime: "view",
+            model: Mode,
+            message: Mode,
+            elements: Html
+          }).make({
+            children: { box: Box },
+            init: () => "waiting" as const,
+            update: (_, next) => next,
+            view: (mode, h) =>
+              h.main(
+                mode === "waiting" || mode === "sibling"
+                  ? WaitingCard(h, { key: "w", slots: { body: mode === "waiting" ? h.children.box() : null } })
+                  : null,
+                mode === "sibling" ? SiblingCard(h, { key: "s", slots: { body: h.children.box() } }) : null,
+                mode === "shown" ? h.aside(h.children.box()) : null
+              )
+          })
+        }
+
+        // Route 1: remove the last waiting receiver, keep the child listed unplaced, then show after adoption.
+        const rendered1 = yield* HtmlServer.renderToHtml(makePage(Layer.succeed(Slow, "ready"), "server"), {})
+        const app1 = yield* makeContainer(rendered1.html)
+        const release1 = yield* Deferred.make<void>()
+        const root1 = yield* BrowserHost.mountEffect(
+          makePage(Layer.effect(Slow, Effect.as(Deferred.await(release1), "ready")), "client"),
+          {},
+          app1,
+          { state: rendered1.state }
+        )
+        root1.send("held")
+        yield* root1.adopted
+        yield* tick
+        root1.send("shown")
+        yield* tick
+        assert.strictEqual(app1.querySelector("aside p")?.textContent, "server")
+
+        // Route 2: move the child into a newly mounted sibling receiver's slot while the original still waits.
+        const rendered2 = yield* HtmlServer.renderToHtml(makePage(Layer.succeed(Slow, "ready"), "server"), {})
+        const app2 = yield* makeContainer(rendered2.html)
+        const release2 = yield* Deferred.make<void>()
+        const root2 = yield* BrowserHost.mountEffect(
+          makePage(Layer.effect(Slow, Effect.as(Deferred.await(release2), "ready")), "client"),
+          {},
+          app2,
+          { state: rendered2.state }
+        )
+        root2.send("sibling")
+        yield* tick
+        assert.strictEqual(app2.querySelector("article p")?.textContent, "server")
+        yield* Deferred.succeed(release2, undefined)
+        yield* root2.adopted
+        yield* tick
+        assert.strictEqual(app2.querySelector("section")?.textContent, "")
+        assert.strictEqual(app2.querySelector("article p")?.textContent, "server")
+        assert.notInclude(app2.innerHTML, "<!--")
+      }).pipe(Effect.scoped)
+  )
+
   it.effect("serializes a listed model child parked in a collapsed slot during SSR", () =>
     Effect.gen(function*() {
       const RowEvents = UiSchema.TaggedEnum({ Hide: {} })

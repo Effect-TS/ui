@@ -572,6 +572,113 @@ describe("detached children", () => {
       assert.deepStrictEqual(lifecycle(held, "/Page/Row[row]"), ["Mounted", "Detached", "Attached"])
     })))
 
+  it.effect(
+    "keeps Detached and Attached balanced when moving a receiver or wrapping it in an ordinary component",
+    () =>
+      provideHost(Effect.gen(function*() {
+        const Row = Component.define({ name: "Row", lifetime: "model", model: Schema.Null, message: Schema.Never })
+          .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p", "row") })
+        const slotBox = (name: string) =>
+          Component.define({
+            name,
+            lifetime: "view",
+            props: Schema.Boolean,
+            model: Schema.Null,
+            message: Schema.Never,
+            slots: ["body"]
+          }).make({
+            init: () => null,
+            update: (model) => model,
+            view: (_, h) => h.el("div", h.props ? h.slots.body : null)
+          })
+        const Outer = slotBox("Outer")
+        const Inner = slotBox("Inner")
+
+        // Move the inner receiver (with its listed row) from a parked outer slot to a visible sibling, then close it.
+        const MoveState = Schema.Struct({ outer: Schema.Boolean, inner: Schema.Boolean, moved: Schema.Boolean })
+        const MovePage = Component.define({ name: "MovePage", lifetime: "view", model: MoveState, message: MoveState })
+          .make({
+            children: { row: Row },
+            init: () => ({ outer: true, inner: true, moved: false }),
+            update: (_, next) => next,
+            view: (state, h) => {
+              const inner = Inner(h, { key: "i", props: state.inner, slots: { body: h.children.row() } })
+              return h.el(
+                "main",
+                Outer(h, { key: "o", props: state.outer, slots: { body: state.moved ? null : inner } }),
+                state.moved ? h.el("aside", inner) : null
+              )
+            }
+          })
+        const moved = yield* TestHost.mount(MovePage, {})
+        yield* TestHost.settle
+        for (
+          const next of [
+            { outer: false, inner: true, moved: false },
+            { outer: false, inner: true, moved: true },
+            { outer: false, inner: false, moved: true }
+          ]
+        ) {
+          moved.send(next)
+          yield* TestHost.settle
+        }
+        assert.strictEqual(moved.text(), "")
+        assert.deepStrictEqual(lifecycle(moved, "/MovePage/Row[row]"), [
+          "Mounted",
+          "Detached",
+          "Attached",
+          "Detached"
+        ])
+
+        // Inner receiver rendered by an ordinary component inside the outer slot: close outer, close inner, reopen outer, reopen inner.
+        const WrapProps = Schema.Struct({ inner: Schema.Boolean })
+        const Wrap = Component.define({
+          name: "Wrap",
+          lifetime: "view",
+          props: WrapProps,
+          model: Schema.Null,
+          message: Schema.Never
+        }).make({
+          children: { row: Row },
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) =>
+            h.el("section", Inner(h, { key: "i", props: h.props.inner, slots: { body: h.children.row() } }))
+        })
+        const WrapState = Schema.Struct({ outer: Schema.Boolean, inner: Schema.Boolean })
+        const WrapPage = Component.define({ name: "WrapPage", lifetime: "view", model: WrapState, message: WrapState })
+          .make({
+            init: () => ({ outer: true, inner: true }),
+            update: (_, next) => next,
+            view: (state, h) =>
+              Outer(h, {
+                key: "o",
+                props: state.outer,
+                slots: { body: Wrap(h, { key: "w", props: { inner: state.inner } }) }
+              })
+          })
+        const wrapped = yield* TestHost.mount(WrapPage, {})
+        yield* TestHost.settle
+        for (
+          const next of [
+            { outer: false, inner: true },
+            { outer: false, inner: false },
+            { outer: true, inner: false },
+            { outer: true, inner: true }
+          ]
+        ) {
+          wrapped.send(next)
+          yield* TestHost.settle
+        }
+        assert.strictEqual(wrapped.text(), "row")
+        assert.deepStrictEqual(lifecycle(wrapped, "/WrapPage/Wrap[w]/Row[row]"), [
+          "Mounted",
+          "Detached",
+          "Attached"
+        ])
+      }))
+  )
+
   it.effect("starts a mount under a handle the host recycled from a removed parent's container", () =>
     Effect.gen(function*() {
       const { containers, host, recycle, root: container, text } = numbered()

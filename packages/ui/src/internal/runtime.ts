@@ -523,6 +523,8 @@ export interface Instance {
   detached: boolean
   /** Whether the last `Detached`/`Attached` log entry for this instance was `Detached`. */
   loggedDetached: boolean
+  /** Created detached in its author's holder while hydration waited on a Layer, and not yet placed live. */
+  awaitingAdopt: boolean
   /** The entry that started the step that last marked it dirty, until it renders. */
   cause: number | undefined
   /**
@@ -1618,40 +1620,11 @@ const setup = (
    * there. The rest close then.
    */
   const dropped = new Map<Instance, Set<Instance>>()
-  // Hydration: child paths whose server markers sit inside a waiting instance's range, until that
-  // instance adopts or closes. `holdListed` skips them so the server's fields stay intact to adopt.
-  const awaiting = new Map<string, { readonly waiter: Instance; authors: Set<Instance> | undefined }>()
-  const awaitedBy = new Map<Instance, ReadonlyArray<string>>()
-  const collectAwaited = (inst: Instance, nodes: ReadonlyArray<unknown>): void => {
-    if (hydration === undefined) return
-    const paths: Array<string> = []
-    const visit = (node: unknown): void => {
-      const kind = hydration.inspect(node)
-      if (kind._tag === "Open" && kind.path !== inst.path) {
-        paths.push(kind.path)
-        awaiting.set(kind.path, { waiter: inst, authors: undefined })
-      } else if (kind._tag === "Element") {
-        for (let child = hydration.firstChild(node); child !== undefined; child = host.nextOf(child)) visit(child)
-      }
-    }
-    for (const node of nodes) visit(node)
-    if (paths.length > 0) awaitedBy.set(inst, paths)
-  }
-  const releaseAwaited = (inst: Instance): void => {
-    const paths = awaitedBy.get(inst)
-    if (paths === undefined) return
-    awaitedBy.delete(inst)
-    for (const path of paths) {
-      const entry = awaiting.get(path)
-      if (entry === undefined || entry.waiter !== inst) continue
-      awaiting.delete(path)
-      if (entry.authors !== undefined) {
-        for (const author of entry.authors) {
-          if (!author.closed) refChecks.add(author)
-        }
-      }
-    }
-  }
+  // Hydration: the root detached instance currently adopting its server range, so its descendants in
+  // the same off-screen container adopt their nested server ranges in place too.
+  let adoptingRoot: Instance | undefined
+  const canAdoptExisting = (found: Instance): boolean =>
+    found.awaitingAdopt || (adoptingRoot !== undefined && within(found, adoptingRoot))
   // Whether the host can hold nodes out of the document: a patch then keeps the children and outlets it removes.
   const keepsRemoved = host.createContainer !== undefined
   // The checks after a navigation still outstanding, and the instances created meanwhile, whose
@@ -2766,8 +2739,6 @@ const setup = (
     // A child that closes while it waits no longer holds up adoption.
     if (inst.waiting) {
       inst.waiting = false
-      releaseAwaited(inst)
-      if (refChecks.size > 0) wake()
       settleWaiting()
     }
   }
@@ -2798,6 +2769,7 @@ const setup = (
     heads: Instance["heads"] = 0
     held: Instance["held"] = undefined
     loggedDetached: Instance["loggedDetached"] = false
+    awaitingAdopt: Instance["awaitingAdopt"] = false
   }
 
   /**
@@ -2911,6 +2883,7 @@ const setup = (
     declare heads: Instance["heads"]
     declare held: Instance["held"]
     declare loggedDetached: Instance["loggedDetached"]
+    declare awaitingAdopt: Instance["awaitingAdopt"]
     /**
      * From the moment its Scope or an ancestor's starts closing, not once it has: see `Instance.closed`.
      */
@@ -3355,6 +3328,7 @@ const setup = (
           adopted: Option.isSome(adopted)
         })
       }
+      if (isDetached(inst)) setLoggedDetached(inst, true)
     }
     layer?.logEarly()
     if (first === undefined) return
@@ -3432,13 +3406,10 @@ const setup = (
     inst.waiting = true
     waiting++
     range.claimed = true
-    const serverNodes = rangeNodes(range)
-    collectAwaited(inst, serverNodes)
-    inst.rendered = serverNodes.map((node) => new TextRecord(emptyText, node))
+    inst.rendered = rangeNodes(range).map((node) => new TextRecord(emptyText, node))
     const resume = (adopt: boolean) => {
       if (inst.closed || !inst.waiting) return
       inst.waiting = false
-      releaseAwaited(inst)
       const nodes = inst.rendered.flatMap(nodesOf)
       inst.rendered = []
       range.claimed = false
@@ -5381,6 +5352,7 @@ const setup = (
     const kept = slottedBy.get(inst.author)?.placed.get(view.name)
     if (kept !== undefined && !kept.closed) {
       if (range !== undefined) {
+        if (canAdoptExisting(kept)) return replaceOutlet(inst, kept, view, range)
         removeRange(range)
         created++
       }
@@ -5416,7 +5388,7 @@ const setup = (
    * The receiver places a slot whose outlet it already has: one it stopped placing, parked, or one it
    * still places elsewhere, that a patch is about to remove. The outlet moves here with its content.
    */
-  const replaceOutlet = (inst: Instance, out: Instance, view: View.Outlet): ROutlet => {
+  const replaceOutlet = (inst: Instance, out: Instance, view: View.Outlet, range?: Range): ROutlet => {
     const outlet = outletOf.get(out)!
     const from = out.parent!
     const wasDetached = isDetached(out)
@@ -5430,13 +5402,33 @@ const setup = (
       outlet.container = undefined
       out.detached = false
     }
+    rehome(out)
+    let adopted = false
+    if (range !== undefined) {
+      outlet.view = view
+      const views = checkedViews(out)
+      const oldRendered = out.rendered
+      try {
+        out.rendered = adoptList(out, views, host.nextOf(range.open), range.close, out.env)
+        host.remove(range.open)
+        host.remove(range.close)
+        for (const old of oldRendered) {
+          const nodes = nodesOf(old)
+          closeAll(out, old)
+          for (const node of nodes) host.remove(node)
+        }
+        adopted = true
+      } catch (error) {
+        contentFailed(out, error)
+      }
+      failClash(out)
+    }
     const nowDetached = isDetached(inst)
     if (wasDetached !== nowDetached) {
       for (const item of out.rendered) toggleMounts(out, item, out.env, !nowDetached)
-      logOutletDetached(out, nowDetached)
     }
-    rehome(out)
-    patchOutlet(out, view)
+    syncDetached(out, nowDetached)
+    if (!adopted) patchOutlet(out, view)
     viewChanged = true
     return rendered
   }
@@ -5460,8 +5452,8 @@ const setup = (
     parked.push(out)
     if (!wasDetached) {
       for (const item of out.rendered) toggleMounts(out, item, out.env, false)
-      logOutletDetached(out, true)
     }
+    syncDetached(out, true)
     return true
   }
 
@@ -5473,73 +5465,14 @@ const setup = (
   }
 
   /**
-   * Reconciles `Detached`/`Attached` log entries for the children under `out` whose visibility changes
-   * with `out`, including through forwarded or nested non-parked slots and headless closures. Stops at
-   * any nested outlet that is parked on its own. On attach, also ends any `Detached` interval on
-   * descendants placed back into the tree while `out` was parked.
+   * Reconciles `Detached`/`Attached` log entries for `inst` and its descendants against their
+   * effective detached state (`parentDetached || inst.detached`).
    */
-  const logOutletDetached = (out: Instance, detached: boolean): void => {
-    const attachBelow = (rendered: Rendered): void => {
-      switch (rendered._tag) {
-        case "Child": {
-          if (!holds(rendered) || rendered.inst.detached) return
-          setLoggedDetached(rendered.inst, false)
-          for (const item of rendered.inst.rendered) attachBelow(item)
-          return
-        }
-        case "Element":
-          for (const child of listOf(rendered.children)) attachBelow(child)
-          return
-        case "Outlet": {
-          if (!holds(rendered) || rendered.inst.detached) return
-          for (const item of rendered.inst.rendered) attachBelow(item)
-          return
-        }
-        case "Fallback":
-          return attachBelow(rendered.inner)
-        case "Text":
-          return
-      }
-    }
-    const visit = (rendered: Rendered): void => {
-      switch (rendered._tag) {
-        case "Child": {
-          if (!holds(rendered)) return
-          const child = rendered.inst
-          setLoggedDetached(child, detached)
-          if (!detached) {
-            for (const item of child.rendered) attachBelow(item)
-            return
-          }
-          if (child.owner !== undefined) {
-            for (const item of child.rendered) visit(item)
-          }
-          if (child.component.definition.slots.length > 0) {
-            const slotted = slottedBy.get(child)
-            if (slotted !== undefined) {
-              for (const nested of slotted.placed.values()) {
-                if (!nested.closed && !nested.detached) {
-                  for (const item of nested.rendered) visit(item)
-                }
-              }
-            }
-          }
-          return
-        }
-        case "Element":
-          for (const child of listOf(rendered.children)) visit(child)
-          return
-        case "Outlet": {
-          if (!holds(rendered) || rendered.inst.detached) return
-          for (const item of rendered.inst.rendered) visit(item)
-          return
-        }
-        case "Fallback":
-        case "Text":
-          return
-      }
-    }
-    for (const rendered of out.rendered) visit(rendered)
+  const syncDetached = (inst: Instance, parentDetached: boolean): void => {
+    if (inst.closed) return
+    const detached = parentDetached || inst.detached
+    setLoggedDetached(inst, detached)
+    for (const child of inst.children) syncDetached(child, detached)
   }
 
   const makeOutlet = (parent: Instance, view: View.Outlet): Instance => {
@@ -5709,6 +5642,7 @@ const setup = (
     const found = live.get(path)
     if (found !== undefined && movable(inst, found, component, env)) {
       if (range !== undefined) {
+        if (canAdoptExisting(found)) return move(inst, found, view, env, holding, range)
         removeRange(range)
         created++
       }
@@ -5758,6 +5692,40 @@ const setup = (
   }
 
   /**
+   * Adopts `range` onto an already-live detached instance (such as a listed `"model"` child held while
+   * its receiver waited for a Layer), preserving its live Model, runs and Subscriptions while adopting
+   * the server's DOM nodes and user edits. Returns whether `range` was claimed.
+   */
+  const adoptExisting = (inst: Instance, range: Range): boolean => {
+    if (hydration === undefined || inst.waiting || inst.failure !== undefined) return false
+    const tree = viewOf(inst)
+    if (tree === undefined) return false
+    const oldRendered = inst.rendered
+    const prevRoot = adoptingRoot
+    if (prevRoot === undefined) adoptingRoot = inst
+    let taken: Rendered | undefined
+    try {
+      taken = adoptNode(inst, tree, host.nextOf(range.open), range.close, inst.env)
+      throwClash(inst)
+    } catch (error) {
+      failInstance(inst, Cause.die(error), "view")
+      return false
+    } finally {
+      adoptingRoot = prevRoot
+    }
+    if (taken === undefined) return false
+    claim(range)
+    inst.rendered = [taken]
+    for (const old of oldRendered) {
+      const nodes = nodesOf(old)
+      closeAll(inst, old)
+      for (const node of nodes) host.remove(node)
+    }
+    viewChanged = true
+    return true
+  }
+
+  /**
    * Places `found` where `inst`'s tree declares it now, keeping its Model, runs, Subscriptions and
    * query results. It leaves the place it was in, if a patch hasn't taken it out yet, and that place's
    * record holds nothing of it from now on. Nothing is logged: the instance never left.
@@ -5767,7 +5735,8 @@ const setup = (
     found: Instance,
     view: View.Child<any, any>,
     env: Env,
-    holding = false
+    holding = false,
+    range?: Range
   ): RChild => {
     const from = found.parent!
     const wasDetached = isDetached(found)
@@ -5783,18 +5752,31 @@ const setup = (
     reparent(found, inst)
     const rendered: RChild = new ChildRecord(view, found)
     found.site = rendered
+    rehome(found)
+    const slotted = slottedBy.get(found)
+    if (slotted !== undefined) slotted.values = view.slots
+    let adopted = false
+    if (range !== undefined) {
+      found.onEmit = view.onEmit
+      found.onFailure = view.onFailure
+      if (found.owner !== undefined) found.content = view.view
+      adopted = adoptExisting(found, range)
+      if (!adopted) {
+        removeRange(range)
+        created++
+      }
+    }
     found.detached = false
     if (!holding) {
+      found.awaitingAdopt = false
       const nowDetached = isDetached(inst)
       if (wasDetached !== nowDetached) {
         for (const item of found.rendered) toggleMounts(found, item, found.env, !nowDetached)
       }
-      setLoggedDetached(found, nowDetached)
+      syncDetached(found, nowDetached)
     }
-    rehome(found)
-    const slotted = slottedBy.get(found)
-    if (slotted !== undefined) slotted.values = view.slots
-    patchChild(inst, rendered, view, env)
+    if (!adopted) patchChild(inst, rendered, view, env)
+    else if (slotted !== undefined && !found.closed) refreshOutlets(slotted)
     viewChanged = true
     return rendered
   }
@@ -5919,20 +5901,14 @@ const setup = (
       // Placed by one of its trees, in a part of it that stays: a site inside a subtree the flush drops goes
       // with that subtree, so the child moves to the holder before it closes.
       if (found !== undefined && found.site !== undefined && found.site !== kept?.inner && !inDropped(found)) continue
-      if (found === undefined) {
-        const wait = awaiting.get(path)
-        if (wait !== undefined) {
-          ;(wait.authors ??= new Set()).add(author)
-          continue
-        }
-      }
       before?.delete(path)
-      after.set(
-        path,
-        kept === undefined
-          ? detach(author, makeChild(author, view, author.env, undefined, true))
-          : patchHeld(author, kept, view, author.env)
-      )
+      const entry = kept === undefined
+        ? detach(author, makeChild(author, view, author.env, undefined, true))
+        : patchHeld(author, kept, view, author.env)
+      if (found === undefined && hydrating !== undefined && waiting > 0 && entry.inner._tag === "Child") {
+        entry.inner.inst.awaitingAdopt = true
+      }
+      after.set(path, entry)
     }
     author.held = after.size === 0 ? undefined : after
     // Placed again, which leaves nothing to close, or no longer listed.
@@ -6147,8 +6123,8 @@ const setup = (
         const next = host.nextOf(range.close)
         if (view._tag === "Child") {
           const found = live.get(path)
-          if (found !== undefined && !found.closed && !found.left) {
-            // Already live while this subtree waited: don't steal it for an obsolete server range.
+          if (found !== undefined && !found.closed && !found.left && !canAdoptExisting(found)) {
+            // Already live elsewhere while this subtree waited: don't steal it for an obsolete server range.
             removeRange(range)
             created++
             adoptedUpTo = next
@@ -6693,7 +6669,7 @@ const setup = (
       // A child that `patchChild` didn't keep is a new instance.
       if (next._tag === "Child") {
         next.inst.detached = true
-        setLoggedDetached(next.inst, true)
+        syncDetached(next.inst, true)
       }
       held.inner = next
     }
@@ -6925,7 +6901,7 @@ const setup = (
     toggleMounts(inst, rendered, inst.env, false)
     if (rendered._tag === "Child") {
       rendered.inst.detached = true
-      setLoggedDetached(rendered.inst, true)
+      syncDetached(rendered.inst, true)
     }
     viewChanged = true
     return { v: rendered.v, inner: rendered, container }
