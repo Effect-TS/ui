@@ -1,4 +1,15 @@
-import { Command, Component, Feature, MessageLog, Mount, Query, Renderer, Subscription, UiSchema } from "@effect/ui"
+import {
+  Command,
+  Component,
+  Feature,
+  MessageLog,
+  Mount,
+  Query,
+  Renderer,
+  Subscription,
+  UiSchema,
+  View
+} from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import * as runtime from "@effect/ui/internal/runtime"
 import { Locator, Story, TestHost } from "@effect/ui/testing"
@@ -14,6 +25,7 @@ import {
   LayerMap,
   Metric,
   Option,
+  Queue,
   Redacted,
   Scheduler,
   Schema,
@@ -162,6 +174,38 @@ describe("Runtime", () => {
         assert.deepStrictEqual(items().slice(0, 2), [c, a])
         assert.deepStrictEqual(tags(root, "/List/Row[b]").slice(-2), ["Unmounted", "CommandInterrupted"])
         assert.sameMembers(root.pending().map((p) => p.path), ["/List/Row[c]", "/List/Row[a]", "/List/Row[d]"])
+      })))
+
+    it.effect("a view wrapped by hand is called on its component with each row's path as a string, whatever its own call is", () =>
+      provideHost(Effect.gen(function*() {
+        const state = { model: Schema.Null, message: Schema.Never }
+        const Badge = Component.define({ ...state, name: "Badge" }).make({
+          init: () => null,
+          update: () => null,
+          view: (_, h) => h.el("li", h.id("label"))
+        })
+        const given: Array<unknown> = []
+        // A method, as a hand-written view can be, with the fifth parameter typed as a string, as the
+        // public type has it. It carries its own `call`, as a decorated function can.
+        const view = Object.assign(
+          function(
+            this: typeof Badge,
+            ...[model, props, running, queries, path]: Parameters<Component.Any["view"]>
+          ) {
+            given.push([this.definition.name, path])
+            return Badge.view(model, props, running, queries, path?.toUpperCase())
+          },
+          { call: "metadata" }
+        )
+        const Wrapped = Object.assign(Object.create(Badge) as typeof Badge, { view })
+        const Rows = Component.define({ ...state, name: "Rows" }).make({
+          init: () => null,
+          update: () => null,
+          view: (_, h) => h.el("ul", ["a", "b"].map((key) => ({ ...Badge(h, { key }), component: Wrapped })))
+        })
+        const root = yield* TestHost.mount(Rows, {})
+        assert.deepStrictEqual(given, [["Badge", "/Rows/Badge[a]"], ["Badge", "/Rows/Badge[b]"]])
+        assert.strictEqual(root.text(), View.idOf("/ROWS/BADGE[A]", "label") + View.idOf("/ROWS/BADGE[B]", "label"))
       })))
 
     it.effect("closing the mount's Scope unmounts every instance", () =>
@@ -835,6 +879,43 @@ describe("Runtime", () => {
         yield* TestHost.settle
         assert.deepStrictEqual(root.model(), { shown: true, found: true })
       })))
+
+    it.effect("what one bare-Model init returns can't give another instance a Command or an event", () =>
+      provideHost(Effect.gen(function*() {
+        let ran = 0
+        // Never returns, so a run sends `Quiet` nothing to update with.
+        const Count = Command.make("Count", { args: {} }, () => Effect.andThen(Effect.sync(() => ran++), Effect.never))
+        const Quiet = Component.define({
+          name: "Quiet",
+          model: Schema.Number,
+          message: Schema.Never,
+          events: Schema.String
+        })
+          .make({ init: () => 0, update: (n) => n, view: (_, h) => h.text("quiet") })
+        const next = Quiet.init({})
+        for (const effects of [next.commands, next.events] as Array<Array<unknown>>) {
+          try {
+            effects.push(Count())
+          } catch {
+            // Refused, as it should be.
+          }
+        }
+        const Parent = Component.define({
+          name: "Parent",
+          model: Schema.Array(Schema.Unknown),
+          message: Schema.Unknown
+        })
+          .make({
+            // Steps, so only `Quiet` starts from a bare Model.
+            init: ($) => $.set([]),
+            update: (heard, message, $) => $.set([...heard, message]),
+            view: (_, h) => Quiet(h, { onEmit: (event) => event })
+          })
+        const root = yield* TestHost.mount(Parent, {})
+        yield* TestHost.settle
+        assert.strictEqual(ran, 0)
+        assert.deepStrictEqual(root.model(), [])
+      })))
   })
 
   describe("run owners", () => {
@@ -1315,6 +1396,55 @@ describe("Runtime", () => {
         assert.strictEqual(root.pending().length, 3)
       })))
 
+    it.effect("siblings close newest first, even when an older one subscribes after it mounts", () =>
+      provideHost(Effect.gen(function*() {
+        const stopped: Array<string> = []
+        const Job = Command.make(
+          "test/Job",
+          { args: { name: Schema.String } },
+          ({ name }) => Effect.onInterrupt(Effect.never, () => Effect.sync(() => stopped.push(name)))
+        )
+        const Worker = Component.define({
+          name: "Worker",
+          props: Schema.Struct({ name: Schema.String, listen: Schema.Boolean }),
+          model: Schema.Null,
+          message: Schema.Null
+        }).make({
+          init: ($) => $.set(null).run(Job({ name: $.props.name })),
+          update: (model) => model,
+          view: (_, h) => h.text(h.props.name),
+          subscriptions: (_, props) => props.listen ? [Subscription.make("listen", Stream.never)] : []
+        })
+        const Step = Schema.Literals(["mounted", "listening", "dropped"])
+        const App = Component.define({ name: "App", model: Step, message: Step }).make({
+          init: () => "mounted" as const,
+          update: (_, step) => step,
+          view: (step, h) =>
+            h.el(
+              "div",
+              step === "dropped" ? null : Worker(h, { key: "a", props: { name: "A", listen: step === "listening" } }),
+              Worker(h, { key: "b", props: { name: "B", listen: false } })
+            )
+        })
+        const run = Effect.fnUntraced(function*(steps: ReadonlyArray<typeof Step.Type>) {
+          stopped.length = 0
+          const scope = yield* Scope.make()
+          const root = yield* TestHost.mount(App, {}).pipe(Scope.provide(scope))
+          yield* TestHost.settle
+          for (const step of steps) {
+            root.send(step)
+            yield* TestHost.settle
+          }
+          const before = [...stopped]
+          yield* Scope.close(scope, Exit.void)
+          return { before, after: [...stopped] }
+        })
+        // A subscribes after both have mounted.
+        assert.deepStrictEqual(yield* run(["listening"]), { before: [], after: ["B", "A"] })
+        // A goes after subscribing late: it closes then, and once.
+        assert.deepStrictEqual(yield* run(["listening", "dropped"]), { before: ["A"], after: ["A", "B"] })
+      })))
+
     it.effect("h.isRunning ends when an interrupted run's fiber exits, and the instance re-renders", () =>
       provideHost(Effect.gen(function*() {
         const server = makeServer()
@@ -1630,6 +1760,44 @@ describe("Runtime", () => {
         const failed = root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed
         assert.deepStrictEqual([failed.in, failed.name], ["subscription", "room:\"42\""])
         assert.include(Cause.pretty(failed.cause), "/Twice: two Subscriptions share the key room:\"42\"")
+      })))
+
+    it.effect("a Stream's message is dropped when rendering the ancestors first removes its key", () =>
+      provideHost(Effect.gen(function*() {
+        const feed = yield* Queue.unbounded<string>()
+        const Receiver = Component.define({
+          name: "Receiver",
+          model: Schema.Array(Schema.String),
+          message: Schema.String,
+          props: Schema.Struct({ listen: Schema.Boolean })
+        }).make({
+          init: () => [],
+          update: (model, message) => [...model, message],
+          view: (model, h) => h.text(model.join(",")),
+          subscriptions: (_, props) => props.listen ? [Subscription.make("feed", Stream.fromQueue(feed))] : []
+        })
+        const Parent = Component.define({ name: "Parent", model: Schema.Boolean, message: Schema.Boolean }).make({
+          init: () => true,
+          update: (_, listen) => listen,
+          view: (listen, h) => Receiver(h, { key: "r", props: { listen } })
+        })
+        const root = yield* TestHost.mount(Parent, {})
+        yield* TestHost.settle
+        // The Stream's fiber takes from the queue on the scheduler, which `settle` doesn't wait for.
+        const received = Effect.andThen(Effect.yieldNow, TestHost.settle)
+        Queue.offerUnsafe(feed, "a")
+        yield* received
+        assert.strictEqual(root.text(), "a")
+        // The message is on its way when the parent stops listening, before the parent renders.
+        Queue.offerUnsafe(feed, "b")
+        root.send(false)
+        yield* received
+        // The receiver kept its Model, so it stayed mounted, and never took "b".
+        assert.strictEqual(root.text(), "a")
+        assert.deepStrictEqual(tags(root, "/Parent/Receiver[r]").filter((tag) => tag.startsWith("Subscription")), [
+          "SubscriptionStarted",
+          "SubscriptionStopped"
+        ])
       })))
   })
 
@@ -3062,6 +3230,44 @@ describe("Runtime", () => {
         provideHost
       ))
 
+    it.effect("a reader of a mount's args that outlives the mount ends when the element is removed", () =>
+      Effect.gen(function*() {
+        const seen: Array<number> = []
+        let reader: Fiber.Fiber<void> | undefined
+        // The reader isn't the mount's fiber or in its Scope, so only the end of `changes` ends it.
+        const Draw = Mount.make(
+          "Draw",
+          { args: { n: Schema.Number } },
+          (_node, _args, changes) =>
+            Effect.gen(function*() {
+              reader = yield* Effect.forkDetach(
+                Stream.runForEach(changes, ({ n }) => Effect.sync(() => seen.push(n)))
+              )
+              return Component.noop
+            })
+        )
+        const Chart = Component.define({
+          name: "OutlivedReader",
+          model: Schema.Boolean,
+          message: Schema.Boolean,
+          elements: Tiny
+        }).make({
+          init: () => true,
+          update: (_, shown) => shown,
+          view: (shown, h) => h.box(shown ? h.field.onMount(Draw({ n: 0 })) : null)
+        })
+        const root = yield* TestHost.mount(Chart, {})
+        yield* TestHost.settle
+        assert.deepStrictEqual(seen, [0])
+        assert.isUndefined(reader?.pollUnsafe())
+        root.send(false)
+        yield* TestHost.settle
+        assert.strictEqual(reader?.pollUnsafe()?._tag, "Success")
+      }).pipe(
+        Effect.provide(Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })),
+        provideHost
+      ))
+
     it.effect("a mount returning during scope closure logs one closed end caused by removal", () =>
       Effect.gen(function*() {
         const finishBody = yield* Deferred.make<void>()
@@ -3155,6 +3361,80 @@ describe("Runtime", () => {
         yield* Deferred.succeed(gate, undefined)
         yield* TestHost.settle
         assert.deepStrictEqual(seen, [0, 2])
+      }).pipe(
+        Effect.provide(Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })),
+        provideHost
+      ))
+
+    it.effect("a mount that reads its args again starts from the latest ones", () =>
+      Effect.gen(function*() {
+        const gate = yield* Deferred.make<void>()
+        const seen: Array<number> = []
+        const read = (changes: Stream.Stream<{ readonly n: number }>, count: number) =>
+          Stream.runForEach(Stream.take(changes, count), ({ n }) => Effect.sync(() => seen.push(n)))
+        const Draw = Mount.make("Draw", { args: { n: Schema.Number } }, (_node, _args, changes) =>
+          Effect.gen(function*() {
+            yield* read(changes, 2)
+            yield* Deferred.await(gate)
+            yield* read(changes, 1)
+            return Component.noop
+          }))
+        const Chart = Component.define({ name: "Reread", model: Schema.Number, message: Schema.Number, elements: Tiny })
+          .make({
+            init: () =>
+              0,
+            update: (_, n) =>
+              n,
+            view: (n, h) =>
+              h.field.onMount(Draw({ n }))
+          })
+        const root = yield* TestHost.mount(Chart, {})
+        yield* TestHost.settle
+        root.send(1)
+        yield* TestHost.settle
+        // Nothing reads these args when they arrive.
+        root.send(2)
+        yield* TestHost.settle
+        yield* Deferred.succeed(gate, undefined)
+        yield* TestHost.settle
+        assert.deepStrictEqual(seen, [0, 1, 2])
+      }).pipe(
+        Effect.provide(Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })),
+        provideHost
+      ))
+
+    it.effect("a reader of a mount's args that starts while new ones arrive gets them once", () =>
+      Effect.gen(function*() {
+        const seen: Array<string> = []
+        const Draw = Mount.make(
+          "Draw",
+          { args: { n: Schema.Number } },
+          (_node, _args, changes) =>
+            Effect.gen(function*() {
+              const second = Stream.runForEach(changes, ({ n }) => Effect.sync(() => seen.push("second " + n)))
+              yield* Effect.forkScoped(Stream.runForEach(changes, ({ n }) => {
+                seen.push("first " + n)
+                return n === 1 ? Effect.forkScoped(second, { startImmediately: true }) : Effect.void
+              }))
+              return Component.noop
+            })
+        )
+        const Chart = Component.define({
+          name: "StartsReader",
+          model: Schema.Number,
+          message: Schema.Number,
+          elements: Tiny
+        })
+          .make({
+            init: () => 0,
+            update: (_, n) => n,
+            view: (n, h) => h.field.onMount(Draw({ n }))
+          })
+        const root = yield* TestHost.mount(Chart, {})
+        yield* TestHost.settle
+        root.send(1)
+        yield* TestHost.settle
+        assert.deepStrictEqual(seen, ["first 0", "first 1", "second 1"])
       }).pipe(
         Effect.provide(Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })),
         provideHost
@@ -4137,4 +4417,30 @@ describe("Runtime", () => {
       assert.include(error.message, "/Loop Update")
       assert.include(error.message, "Again")
     }).pipe(Effect.provide(TestHost.layer({ budget: 200 }))))
+
+  it.effect("prerenders the tree as nodes: an instance's elements and text in a Range under its path", () =>
+    Effect.gen(function*() {
+      const state = { model: Schema.Null, message: Schema.Never }
+      const impl = { init: () => null, update: () => null }
+      const Leaf = Component.define({ name: "Leaf", ...state }).make({ ...impl, view: (_, h) => h.text("leaf") })
+      const Page = Component.define({ name: "Page", ...state }).make({
+        ...impl,
+        view: (_, h) => h.el("p").attr("class", "a").prop("hidden", true).children("x", Leaf(h, { key: "k" }))
+      })
+      const rendered = yield* Renderer.prerender(Page, {})
+      assert.deepStrictEqual(rendered.nodes, [{
+        _tag: "Range",
+        path: "/Page",
+        children: [{
+          _tag: "Element",
+          tag: "p",
+          attrs: { class: "a" },
+          props: { hidden: true },
+          children: [
+            { _tag: "Text", text: "x" },
+            { _tag: "Range", path: "/Page/Leaf[k]", children: [{ _tag: "Text", text: "leaf" }] }
+          ]
+        }]
+      }])
+    }))
 })

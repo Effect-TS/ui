@@ -9,6 +9,7 @@ import type * as Effect from "effect/Effect"
 import type { Refs as RefsShape, Renderer as RendererShape } from "../Renderer.ts"
 import type * as Route from "../Route.ts"
 import type * as Subscription from "../Subscription.ts"
+import type * as prefetchWalk from "./prefetch.ts"
 
 /** @internal */
 export const Renderer = Context.Service<RendererShape, RendererShape>("@effect/ui/Renderer")
@@ -68,8 +69,16 @@ export interface RootHooks {
   readonly afterFlush: (root: RootHandle, info: FlushInfo) => void
   /** The encoded Model a new instance at `path` adopts, if the router is restoring one. */
   readonly restore: (path: string) => unknown
-  /** Registers an instance's `Router.prefetch` declaration. The returned function unregisters it. */
-  readonly declare: (declarer: Declarer) => () => void
+  /**
+   * Registers an instance's `Router.prefetch` declaration. The returned function unregisters it. The
+   * Router makes the declarer, with its own walk and check, from what the runtime gives. `declared`
+   * holds the latest `subscriptions` run's map.
+   */
+  readonly prefetch: (
+    runtime: prefetchWalk.Runtime,
+    inst: prefetchWalk.Instance,
+    declared: { readonly declaration: Prefetch }
+  ) => () => void
 }
 
 /**
@@ -127,6 +136,25 @@ export interface Page {
 
 /** @internal */
 export const RootHooks = Context.Service<RootHooks, RootHooks>("@effect/ui/internal/RootHooks")
+
+/**
+ * What a server render writes its frozen tree to, in document order: an
+ * element's content between its `open` and `close`, and an instance's, or a
+ * child's `fallback`, between `enter` and `leave` of its path.
+ *
+ * @internal
+ */
+export interface ServerSink {
+  readonly text: (text: string) => void
+  readonly open: (
+    tag: string,
+    attrs: Readonly<Record<string, string>>,
+    props: Readonly<Record<string, unknown>>
+  ) => void
+  readonly close: (tag: string) => void
+  readonly enter: (path: string) => void
+  readonly leave: (path: string) => void
+}
 
 /** @internal */
 export const CurrentRoot = Context.Reference<() => RootHandle | undefined>("@effect/ui/internal/CurrentRoot", {

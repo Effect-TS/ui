@@ -674,11 +674,12 @@ const combine = (node: Head.Tree<Entry, HtmlHead>, children: ReadonlyArray<HtmlH
  * @category combinators
  * @since 0.1.0
  */
-export const merge = (tree: Head.Tree<Entry, HtmlHead>, options?: Head.MergeOptions): HtmlHead => {
-  const onConflict = options?.onConflict
-  return headFold.fold(
-    tree,
-    { combine, slots: slotsOf },
-    onConflict === undefined ? undefined : (slot, earlier, later) => onConflict(Head.conflict(slot, earlier, later))
-  )
-}
+export const merge: (tree: Head.Tree<Entry, HtmlHead>, options?: Head.MergeOptions) => HtmlHead =
+  /* @__PURE__ */ headFold.plain((tree: Head.Tree<Entry, HtmlHead>, options?: Head.MergeOptions): HtmlHead => {
+    const onConflict = options?.onConflict
+    return headFold.fold(
+      tree,
+      { combine, slots: slotsOf },
+      onConflict === undefined ? undefined : (slot, earlier, later) => onConflict(Head.conflict(slot, earlier, later))
+    )
+  })

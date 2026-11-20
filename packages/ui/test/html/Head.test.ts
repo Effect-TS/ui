@@ -10,12 +10,13 @@ const head = (...entries: ReadonlyArray<HtmlHead.Entry>) => HtmlHead.merge({ ent
 const render = (entries: ReadonlyArray<HtmlHead.Entry>) =>
   Effect.runPromise(
     HtmlServer.renderToHtml(
-      Component.define({ name: "HeadNames", model: Schema.Null, message: Schema.Never, elements: Html }).make({
-        init: () => null,
-        update: (model) => model,
-        head: () => entries,
-        view: (_, h) => h.div
-      }),
+      Component.define({ name: "HeadNames", model: Schema.Null, message: Schema.Never, elements: Html.vocabulary })
+        .make({
+          init: () => null,
+          update: (model) => model,
+          head: () => entries,
+          view: (_, h) => h.div
+        }),
       {}
     )
   )

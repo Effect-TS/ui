@@ -100,6 +100,11 @@ export type Dispatch = (
  * out of the document, such as a `DocumentFragment`. It is never inserted.
  * A host without it fails the parent of a child declared `detached`.
  *
+ * `removeChildren`, if given, removes `nodes`, all children of `parent`, at
+ * once, as `remove` on each would. The renderer may call it when a patch
+ * removes every node of a list, so a host can clear a parent that holds
+ * nothing else in one step. A host without it gets `remove` for each node.
+ *
  * @stability experimental
  * @category models
  * @since 0.1.0
@@ -137,6 +142,7 @@ export interface Host<Node> {
   readonly head?: ((head: any) => void) | undefined
   readonly hydration?: Hydration<Node> | undefined
   readonly createContainer?: (() => Node) | undefined
+  readonly removeChildren?: ((parent: Node, nodes: ReadonlyArray<Node>) => void) | undefined
 }
 
 /**
@@ -447,9 +453,10 @@ export type HostOf<V> = [V] extends [never] ? never : V extends View.Elements ? 
  * With `state` from a server render, the tree hydrates: each instance adopts
  * its server Model instead of running `init` and, on a host with
  * `hydration`, adopts the server's nodes inside `container`. `init` is
- * replayed only for its Commands, and every one of them runs. An instance
- * whose view doesn't match its nodes is rebuilt on its own, and a deferred
- * one is built fresh. An instance whose provided Layer is still building
+ * replayed only for its Commands, and every one of them runs. Where an
+ * instance's view stops matching its nodes, the nodes before stay adopted and
+ * the rest is built fresh, and a deferred instance is built fresh. An
+ * instance whose provided Layer is still building
  * keeps the server's nodes, inert, until the Layer is ready; `adopted`
  * completes when none is left waiting.
  *

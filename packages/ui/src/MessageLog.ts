@@ -37,11 +37,12 @@ import type * as SchemaAST from "effect/SchemaAST"
 import * as Socket from "effect/socket/Socket"
 import type * as Command from "./Command.ts"
 import type * as Component from "./Component.ts"
+import * as messageLog from "./internal/messageLog.ts"
 import type * as componentQueries from "./internal/queries.ts"
+import { canonical } from "./internal/queryCore.ts"
 import { getIndexSignatureKeys } from "./internal/schemaAST.ts"
 import { holdsRedacted, redactAST } from "./internal/schemaRedact.ts"
 import type * as Query from "./Query.ts"
-import { canonical } from "./Query.ts"
 import type * as Subscription from "./Subscription.ts"
 
 /**
@@ -71,7 +72,7 @@ export interface MessageLog {
  * @category constructors
  * @since 0.1.0
  */
-export const noop: MessageLog = { enabled: false, record: () => {} }
+export const noop: MessageLog = messageLog.noop
 
 /**
  * The `MessageLog` service. It defaults to `noop`, so it never has to be
@@ -81,9 +82,7 @@ export const noop: MessageLog = { enabled: false, record: () => {} }
  * @category services
  * @since 0.1.0
  */
-export const MessageLog: Context.Reference<MessageLog> = Context.Reference<MessageLog>("@effect/ui/MessageLog", {
-  defaultValue: () => noop
-})
+export const MessageLog: Context.Reference<MessageLog> = messageLog.MessageLog
 
 /**
  * Where a failure happened: the code that threw or failed.

@@ -186,7 +186,7 @@ describe("shared state", () => {
           restored.push(path)
           return undefined
         },
-        declare: () => () => {}
+        prefetch: () => () => {}
       }
       yield* TestHost.mount(App, {}).pipe(Effect.provideService(services.RootHooks, hooks))
       yield* TestHost.settle

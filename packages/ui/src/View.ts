@@ -235,6 +235,8 @@ export const tokenListAttributes: ReadonlySet<string> = new Set([
 ])
 
 const noOwned: ReadonlyArray<Owned> = []
+// What an element built without children holds: one frozen array for all of them.
+const noChildren: ReadonlyArray<never> = Object.freeze([])
 
 /**
  * The attributes, properties, handlers and event options of a builder that
@@ -656,15 +658,15 @@ export const toNode = <Msg, R>(content: Content<Msg, R>): Node<Msg, R> =>
 export const build = <Msg, R, const C extends ReadonlyArray<Input<Msg, any>>>(
   builder: ElementBuilder<Msg, R, any, any>,
   inputs: C
-): Element<Msg, R | Requirements<C[number]>> => buildWith(builder, inputs.length === 0 ? [] : children(inputs))
+): Element<Msg, R | Requirements<C[number]>> => buildWith(builder, inputs.length === 0 ? noChildren : children(inputs))
 
 const buildWith = <Msg, R>(
   builder: ElementBuilder<Msg, any, any, any>,
-  given: Array<Node<Msg, any>>
+  given: ReadonlyArray<Node<Msg, any>>
 ): Element<Msg, R> => {
   // What the builder holds from `children` comes first, and what it is
   // given now comes after.
-  const content = builder.content as Array<Node<Msg, any>> | undefined
+  const content = builder.content
   const all = content === undefined ? given : given.length === 0 ? content : children([...content, ...given])
   const hooks = builder.hooks
   return hooks === undefined ? elementOf(builder, all) : forwardTo(builder, hooks, all)
@@ -672,7 +674,7 @@ const buildWith = <Msg, R>(
 
 const elementOf = <Msg, R>(
   builder: ElementBuilder<Msg, any, any, any>,
-  children: Array<Node<Msg, any>>
+  children: ReadonlyArray<Node<Msg, any>>
 ): Element<Msg, R> => ({
   _tag: "Element",
   tag: builder.tag,
@@ -705,7 +707,7 @@ export type Forward = (node: any) => Element<any, any> | ElementBuilder<any, any
 const forwardTo = <Msg, R>(
   builder: ElementBuilder<Msg, any, any, any>,
   hooks: ReadonlyArray<Forward>,
-  content: Array<Node<Msg, any>>
+  content: ReadonlyArray<Node<Msg, any>>
 ): Element<Msg, R> => {
   const finished = copyBuilder(builder) as Mutable<ElementBuilder<Msg, any, any, any>>
   finished.hooks = hooks.length === 1 ? undefined : hooks.slice(0, -1)
@@ -744,7 +746,7 @@ export const withContent = <B extends ElementBuilder<any, any, any, any>>(
   const out = copyBuilder(builder) as Mutable<B>
   const content = builder.content
   out.content = content === undefined
-    ? (inputs.length === 0 ? [] : childrenOf(inputs as Array<Input<any, any>>))
+    ? (inputs.length === 0 ? noChildren : childrenOf(inputs as Array<Input<any, any>>))
     : inputs.length === 0
     ? content
     : children([...content, ...inputs])
@@ -1082,7 +1084,29 @@ const withEntry = <A>(
  */
 const assoc = <A>(record: Readonly<Record<string, A>>, name: string, value: A): Readonly<Record<string, A>> => {
   // The first entry of most records: nothing to copy.
-  const out: Record<string, A> = record === noFields ? {} : { ...record }
+  if (record === noFields) return firstEntry(name, value)
+  const out: Record<string, A> = { ...record }
+  put(out, name, value)
+  return out
+}
+
+/**
+ * A record holding one entry. The names set most often are written as literals, which hold their
+ * one entry in place, where `{}` keeps room for four. A literal is also faster to build than a
+ * store under a name a view chose.
+ */
+const firstEntry = <A>(name: string, value: A): Record<string, A> => {
+  switch (name) {
+    case "class":
+      return { class: value }
+    case "id":
+      return { id: value }
+    case "click":
+      return { click: value }
+    case "input":
+      return { input: value }
+  }
+  const out: Record<string, A> = {}
   put(out, name, value)
   return out
 }
@@ -1768,6 +1792,107 @@ export interface Helper<Msg, Props> {
    * the same on the server and the client, and different for every instance.
    */
   id(name: string, key?: string | number | undefined): string
+  /**
+   * The node `fn` builds from `args`, built again only when an argument
+   * changes. `fn` gets this helper first, then `args`.
+   *
+   * **Details**
+   *
+   * The arguments are compared with `===` to the ones of the last render's
+   * call with the same `fn` and first argument. When they're the same, `fn`
+   * isn't called and the last node is used again. When that node holds only
+   * elements and text, the runtime skips its patch and only sets its
+   * controlled properties again, such as an input's `value`.
+   *
+   * `fn` must depend only on its arguments: what it reads from the helper,
+   * such as `h.isRunning`, may be out of date. Declare it outside the view,
+   * since a new function each render never matches. The first argument tells
+   * calls apart, so give each call its own, such as the row it shows. A call
+   * whose first argument an earlier call of the same render used is built
+   * every render.
+   *
+   * **Example** (Rows built again only when they change)
+   *
+   * ```ts
+   * import "@effect/ui/html/register"
+   * import type { View } from "@effect/ui"
+   *
+   * type Row = { readonly id: number; readonly label: string }
+   *
+   * const row = (h: View.H<never>, row: Row, selected: boolean) =>
+   *   h.tr.key(String(row.id)).class(selected && "danger").children(row.label)
+   *
+   * const rows = (h: View.H<never>, rows: ReadonlyArray<Row>, selected: number) =>
+   *   h.tbody.children(rows.map((item) => h.lazy(row, item, item.id === selected)))
+   * ```
+   */
+  lazy<H, A extends ReadonlyArray<unknown>, C extends Content<Msg, any>>(
+    this: H,
+    fn: (h: H, ...args: A) => C,
+    ...args: A
+  ): Node<Msg, Requirements<C>>
+}
+
+/**
+ * What `h.lazy` keeps between one instance's renders: for each first
+ * argument, the last call's function, arguments and node.
+ *
+ * @internal
+ */
+export class Lazies {
+  entries = new Map<unknown, LazyEntry>()
+  /** The render the entries were last used in, and how many were. */
+  round = 1
+  used = 0
+  begin(): void {
+    this.round++
+    this.used = 0
+  }
+  /** Drops the entries this render didn't use, such as a removed row's. */
+  end(): void {
+    const entries = this.entries
+    const round = this.round
+    if (this.used === entries.size) return
+    // When most go, the rest move to a new Map: a Map keeps its size after deletes.
+    if (this.used * 4 <= entries.size) {
+      const kept = new Map<unknown, LazyEntry>()
+      for (const [key, entry] of entries) {
+        if (entry.round === round) kept.set(key, entry)
+      }
+      this.entries = kept
+      return
+    }
+    for (const [key, entry] of entries) {
+      if (entry.round !== round) entries.delete(key)
+    }
+  }
+}
+
+interface LazyEntry {
+  fn: Function
+  args: ReadonlyArray<unknown>
+  node: Node<any, any>
+  round: number
+}
+
+/**
+ * Where a host keeps what `h.lazy` built between one instance's renders: an
+ * object it keeps for the instance, with `lazy` `undefined` at first.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface LazyStore {
+  lazy: unknown
+}
+
+const sameArgs = (a: ReadonlyArray<unknown>, b: ReadonlyArray<unknown>): boolean => {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false
+  }
+  return true
 }
 
 /**
@@ -1784,18 +1909,55 @@ class HelperImpl<Msg, Props> implements Helper<Msg, Props> {
   readonly props: Props
   readonly elements: Vocabulary<any> | undefined
   readonly runningFn: Running
-  readonly instancePath: string
-  constructor(props: Props, elements: Vocabulary<any> | undefined, running: Running | undefined, path: string) {
+  /** The instance's path, or the instance, whose path is read only when `id` is called. */
+  readonly at: string | PathSource
+  readonly store: LazyStore | undefined
+  constructor(
+    props: Props,
+    elements: Vocabulary<any> | undefined,
+    running: Running | undefined,
+    at: string | PathSource,
+    store: LazyStore | undefined
+  ) {
     this.props = props
     this.elements = elements
     this.runningFn = running ?? notRunning
-    this.instancePath = path
+    this.at = at
+    this.store = store
+  }
+  lazy(this: any, fn: (h: any, ...args: Array<any>) => Content<Msg, any>, ...args: Array<any>): any {
+    const store = this.store
+    if (store === undefined) return toNode(fn(this, ...args))
+    const lazies = (store.lazy ??= new Lazies()) as Lazies
+    const key = args.length === 0 ? fn : args[0]
+    const entry = lazies.entries.get(key)
+    const round = lazies.round
+    if (entry !== undefined && entry.fn === fn && sameArgs(entry.args, args)) {
+      if (entry.round !== round) {
+        entry.round = round
+        lazies.used++
+      }
+      return entry.node
+    }
+    const node = toNode(fn(this, ...args))
+    // A key an earlier call of this render took stays theirs.
+    if (entry !== undefined && entry.round === round) return node
+    if (entry === undefined) lazies.entries.set(key, { fn, args, node, round })
+    else {
+      entry.fn = fn
+      entry.args = args
+      entry.node = node
+      entry.round = round
+    }
+    lazies.used++
+    return node
   }
   isRunning(command: Command.Definition.Any, group?: unknown): boolean {
     return this.runningFn(Command.nameOf(command), Command.groupKeyOf(command, group))
   }
   id(name: string, key?: string | number | undefined): string {
-    return idOf(this.instancePath, name, key)
+    const at = this.at
+    return idOf(typeof at === "string" ? at : at.path, name, key)
   }
   el(tag: string, ...inputs: ReadonlyArray<Input<Msg, any>>): any {
     const textParents = this.elements?.textParents
@@ -1847,6 +2009,37 @@ class NoTextBuilder<Msg> extends ContainerBuilder<Msg> {
 const helperClasses = new WeakMap<Vocabulary<any>, typeof HelperImpl<any, any>>()
 
 /**
+ * What a runtime can give a view in place of its path: something whose
+ * `path` is read only when `h.id` is called.
+ *
+ * @internal
+ */
+export interface PathSource {
+  readonly path: string
+}
+
+const lazyPathViews = new WeakSet<object>()
+
+/**
+ * Marks `view` as taking a `PathSource` for its path. Only views that
+ * `make` builds are marked: a view written or wrapped by hand is given the
+ * path as a string, as its type says.
+ *
+ * @internal
+ */
+export const readsPathLazily = <F extends object>(view: F): F => {
+  lazyPathViews.add(view)
+  return view
+}
+
+/**
+ * Whether `view` takes a `PathSource` for its path.
+ *
+ * @internal
+ */
+export const takesPathSource = (view: object): boolean => lazyPathViews.has(view)
+
+/**
  * Builds the view helper for one render, with a vocabulary's element names
  * mixed in when one is given.
  *
@@ -1856,9 +2049,10 @@ export const makeHelper = <Msg, Props, V extends Elements = never>(
   props: Props,
   elements: Vocabulary<V> | undefined,
   running?: Running | undefined,
-  path?: string | undefined
+  path?: string | PathSource | undefined,
+  store?: LazyStore | undefined
 ): Helper<Msg, Props> & Tags<V, Msg> => {
-  if (elements === undefined) return new HelperImpl(props, undefined, running, path ?? "") as any
+  if (elements === undefined) return new HelperImpl(props, undefined, running, path ?? "", store) as any
   let Class = helperClasses.get(elements)
   if (Class === undefined) {
     const Made = class extends HelperImpl<any, any> {}
@@ -1866,7 +2060,7 @@ export const makeHelper = <Msg, Props, V extends Elements = never>(
     helperClasses.set(elements, Made)
     Class = Made
   }
-  return new Class(props, elements, running, path ?? "") as any
+  return new Class(props, elements, running, path ?? "", store) as any
 }
 
 /**

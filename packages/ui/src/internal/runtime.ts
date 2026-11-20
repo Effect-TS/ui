@@ -15,7 +15,6 @@ import * as Fiber from "effect/Fiber"
 import * as Latch from "effect/Latch"
 import * as Layer from "effect/Layer"
 import * as Option from "effect/Option"
-import * as PubSub from "effect/PubSub"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Scheduler from "effect/Scheduler"
 import * as Schema from "effect/Schema"
@@ -25,17 +24,18 @@ import * as Command from "../Command.ts"
 import type * as Component from "../Component.ts"
 import * as Feature from "../Feature.ts"
 import * as Head from "../Head.ts"
-import * as MessageLog from "../MessageLog.ts"
-import * as Mount from "../Mount.ts"
-import * as Query from "../Query.ts"
+import type * as MessageLog from "../MessageLog.ts"
+import type * as Query from "../Query.ts"
 import type * as Renderer from "../Renderer.ts"
-import * as Router from "../Router.ts"
 import * as Subscription from "../Subscription.ts"
 import * as View from "../View.ts"
 import { propsEqual, sharedEqual } from "./equal.ts"
 import * as Executor from "./executor.ts"
+import * as headFold from "./headFold.ts"
 import * as match from "./match.ts"
 import { isKeyed, keyOf } from "./match.ts"
+import * as messageLog from "./messageLog.ts"
+import type * as mountArgs from "./mountArgs.ts"
 import { isNoop } from "./noop.ts"
 import {
   checkAuthorPlacements,
@@ -45,12 +45,15 @@ import {
   checkFallbackPaths,
   type ChildPaths,
   segment,
+  segmentOf,
   slotSegment
 } from "./paths.ts"
-import * as componentQueries from "./queries.ts"
+import type * as prefetch from "./prefetch.ts"
+import type * as componentQueries from "./queries.ts"
+import * as queryCore from "./queryCore.ts"
 import * as schedule from "./schedule.ts"
 import { holdsRedacted } from "./schemaRedact.ts"
-import { scopeAddFinalizerUnsafe } from "./scope.ts"
+import { scopeAddFinalizerUnsafe, scopeRemoveFinalizerUnsafe } from "./scope.ts"
 import * as serverHost from "./serverHost.ts"
 import * as services from "./services.ts"
 import * as sharedReads from "./shared.ts"
@@ -183,21 +186,23 @@ interface RElement {
   readonly _tag: "Element"
   v: View.Element<any, any>
   readonly node: unknown
-  children: Array<Rendered>
-  mount: RunningMount | undefined
+  /** One child is held as it is, and none as `undefined`: only two or more take a list. */
+  children: Rendered | Array<Rendered> | undefined
+  // Set only on an element that has them, so most records hold four fields.
+  mount?: RunningMount | undefined
   /** The mounts of the element's owned layers, by owner and mount name. */
-  ownedMounts: ReadonlyArray<OwnedMount> | undefined
+  ownedMounts?: ReadonlyArray<OwnedMount> | undefined
 }
 
 /**
- * A started mount: its Scope, the mount the element last rendered with, and the cell its `changes`
- * Stream reads. The PubSub is built when `changes` is first read and keeps one value for each reader.
+ * A started mount: its Scope, the mount the element last rendered with, and the args its `changes`
+ * Stream reads, kept from when `changes` is first read.
  */
 interface RunningMount {
   readonly scope: Scope.Closeable
   cutBy: number | undefined
   mount: View.Mount<any>
-  pubsub: PubSub.PubSub<unknown> | undefined
+  args: mountArgs.MountArgs | undefined
 }
 
 interface OwnedMount {
@@ -220,6 +225,19 @@ class Layered {
 }
 
 const none: ReadonlyArray<never> = []
+
+/** A rendered element's children as a list, made for the one child that is held without one. */
+const listOf = (children: Rendered | Array<Rendered> | undefined): ReadonlyArray<Rendered> =>
+  children === undefined ? none : Array.isArray(children) ? children : [children]
+/** How a rendered element holds a list of children. */
+const packed = (children: Array<Rendered>): Rendered | Array<Rendered> | undefined =>
+  children.length > 1 ? children : children[0]
+
+/**
+ * The list an instance holds until it adds to it: frozen, so an append to it fails loudly. Compare
+ * with it before the first append.
+ */
+const emptyList: Array<never> = Object.freeze([]) as unknown as Array<never>
 
 /**
  * For each event a part handles, the paths of the instances that get it, deepest owner first and the
@@ -249,6 +267,43 @@ interface RChild {
   v: View.Child<any, any>
   readonly inst: Instance
 }
+
+// The records a page holds most of, one for each element, text and child, are made by classes with
+// their `_tag` on the prototype: a field less on each.
+class ElementRecord implements RElement {
+  declare readonly _tag: "Element"
+  declare mount?: RunningMount | undefined
+  declare ownedMounts?: ReadonlyArray<OwnedMount> | undefined
+  v: View.Element<any, any>
+  readonly node: unknown
+  children: Rendered | Array<Rendered> | undefined
+  constructor(v: View.Element<any, any>, node: unknown, children: Rendered | Array<Rendered> | undefined) {
+    this.v = v
+    this.node = node
+    this.children = children
+  }
+}
+class TextRecord implements RText {
+  declare readonly _tag: "Text"
+  v: View.Text
+  readonly node: unknown
+  constructor(v: View.Text, node: unknown) {
+    this.v = v
+    this.node = node
+  }
+}
+class ChildRecord implements RChild {
+  declare readonly _tag: "Child"
+  v: View.Child<any, any>
+  readonly inst: Instance
+  constructor(v: View.Child<any, any>, inst: Instance) {
+    this.v = v
+    this.inst = inst
+  }
+}
+Object.defineProperty(ElementRecord.prototype, "_tag", { value: "Element" })
+Object.defineProperty(TextRecord.prototype, "_tag", { value: "Text" })
+Object.defineProperty(ChildRecord.prototype, "_tag", { value: "Child" })
 
 /** A placed outlet: what the receiver's parent passed for one slot, rendered by an instance of its own. */
 interface ROutlet {
@@ -311,7 +366,7 @@ const findChild = (rendered: ReadonlyArray<Rendered>, key: string): RChild | RFa
   for (const r of rendered) {
     let found: RChild | RFallback | undefined
     if (r._tag === "Element") {
-      found = findChild(r.children, key)
+      found = findChild(listOf(r.children), key)
     } else if (r._tag === "Detached") {
       found = findChild([r.inner], key)
     } else if (r._tag === "Child" || r._tag === "Fallback") {
@@ -354,8 +409,11 @@ const firstInOutlets = <A>(receiver: Instance, f: (out: Instance) => A | undefin
 interface Run {
   readonly command: Command.Issued<any, any, never, "Effect"> | Command.Issued<any, any, never, "Stream">
   readonly issued: MessageLog.Issued
-  /** The run at the cache, begun at issue. `undefined` for a `Command.make` Command. */
-  readonly handle: Query.RunHandle | undefined
+  /**
+   * The run at the cache, begun at issue. `undefined` for a `Command.make` Command, and for a run issued
+   * before the app loaded `Query`: one with `writes` gets its run when the cache is made.
+   */
+  handle: Query.RunHandle | undefined
   status: schedule.Status
   fiber: Fiber.Fiber<unknown, unknown> | undefined
   done: boolean
@@ -419,6 +477,8 @@ type Settled = AsyncResult.Success<any, any> | AsyncResult.Failure<any, any>
 /** @internal */
 export interface Instance {
   readonly path: string
+  /** What `h.lazy` built in the last render. */
+  lazy: View.Lazies | undefined
   /** Counts the root's instances in creation order: the check after a push skips older ones. */
   readonly born: number
   readonly depth: number
@@ -468,11 +528,13 @@ export interface Instance {
   adoptsChildren: boolean
   /** On the server: the client builds this instance fresh, because its Layer wasn't built. */
   deferred: boolean
-  readonly runs: Array<Run>
+  runs: Array<Run>
   // The collections below are made on their first entry: most instances never hold one, and an
   // empty Map or Set costs about 150 bytes.
   /** `Unmounted` is logged: the instance left the tree, though its Scope may still be closing. */
   left: boolean
+  /** How many instances that declare a head are in the tree at or below it: see `declaresHead`. */
+  heads: number
   /** The containers of the detached children its view declares, unregistered when it leaves. */
   parked: Set<unknown> | undefined
   /**
@@ -491,7 +553,7 @@ export interface Instance {
    */
   watched: Set<string> | undefined
   /** The instance's `Router.prefetch` declaration, registered with the Router. */
-  prefetch: { declaration: services.Prefetch; readonly release: () => void } | undefined
+  prefetch: { declaration: services.Prefetch; release: (() => void) | undefined } | undefined
   keyed: Map<string, KeyedRun> | undefined
   /** A drain of the keyed queries is queued in the flush's deferred work. */
   keyedQueued: boolean
@@ -592,12 +654,11 @@ export interface Root {
   readonly session: string
   readonly instance: Instance
   readonly emitted: ReadonlyArray<unknown>
-  readonly find: (path: string) => Instance | undefined
   readonly model: () => unknown
   readonly send: (message: unknown) => void
   /** The Commands still running, queued, awaiting or stopping anywhere in the tree. */
   readonly pending: () => ReadonlyArray<Pending>
-  /** The query cache the runtime owns. */
+  /** The query cache the runtime owns, read where the `Query` module is loaded. */
   readonly cache: ReturnType<typeof Query.internals>
   /** Why the root failed, once it has. */
   readonly crashed: () => Cause.Cause<unknown> | undefined
@@ -623,11 +684,8 @@ export interface Root {
   readonly waiting: () => ReadonlyArray<string>
   /** On the server: calls `f` once nothing is in flight. */
   readonly whenIdle: (f: () => void) => void
-  /** On the server: settles what's left synchronously, stops the tree and serialises it once. */
-  readonly finish: () => {
-    readonly nodes: ReadonlyArray<Renderer.ServerNode>
-    readonly state: Renderer.State
-  }
+  /** On the server: settles what's left synchronously and stops the tree. Returns its cache, if it made one. */
+  readonly freeze: () => queryCore.Cache | undefined
 }
 
 /** The options `start` takes. */
@@ -651,10 +709,6 @@ interface ServerOptions {
   readonly host: Renderer.Host<any>
   /** False with a budget of 0: the per-request cache starts no fetch. */
   readonly fetches: boolean
-  /** Written into the state for the client: the HTML is built at deploy or held in a CDN. */
-  readonly static: boolean
-  /** Called at `finish`, before the cache is serialised and its fetches are interrupted. */
-  readonly onFinish?: ((cache: ReturnType<typeof Query.internals>) => void) | undefined
 }
 
 /** A Schema as JSON. */
@@ -694,7 +748,7 @@ export const stateCodecOf = (component: Component.Any): StateCodec => {
   let found = stateCodecs.get(component)
   if (found === undefined) {
     const schema = (component as Component.Component<any, any, any, any, any, any, any>).model
-    const bound = componentQueries.boundOf(component)
+    const bound = queryCore.boundOf(component)
     if (holdsRedacted(schema.ast) || (bound !== undefined && holdsRedacted(bound.schema.ast))) {
       found = redactedState
     } else if (bound === undefined) {
@@ -724,9 +778,6 @@ const warnedRedacted = new WeakSet<Component.Any>()
 /** An entry of the cache, by query name and args key: what a watch registered on, or a prefetch fetched. */
 const entryKey = (query: string, argsKey: string): string => `${query}\u0000${argsKey}`
 
-/** How long a declaration that ran for a route drops intents for it. Fixed. */
-const intentGuardMillis = 30_000
-
 const emptyText: View.Text = { _tag: "Text", text: "" }
 const ignoreEvents = () => undefined
 
@@ -735,6 +786,9 @@ const neutralFold: View.HeadFold<Head.Entry, Head.Head> = { merge: Head.merge, t
 
 /** The fold of a component's vocabulary, or the title-only one. */
 const foldOf = (component: Component.Any): View.HeadFold => component.elements()?.head ?? neutralFold
+/** Whether an instance of `component` can add to the head: it has entries of its own, or reduces the ones below it. */
+const declaresHead = (component: Component.Any): boolean =>
+  component.head !== undefined || component.reduceHead !== undefined
 
 /** One instance's part of the head, over its state when it was read: its entries, its reducer and the instances it placed. */
 interface HeadPart {
@@ -764,22 +818,9 @@ let buildInterrupters = 0
 interface Range {
   readonly open: unknown
   readonly close: unknown
-  readonly nodes: ReadonlyArray<unknown>
   /** Whether the instance took these nodes, so whoever declared the child leaves them in place. */
   claimed: boolean
 }
-
-/** How a view matches the server's nodes. */
-type Plan =
-  | {
-    readonly _tag: "Element"
-    readonly node: unknown
-    /** `undefined` when the element's server content is text only: its children are built fresh. */
-    readonly children: ReadonlyArray<Plan> | undefined
-  }
-  | { readonly _tag: "Text"; readonly node: unknown }
-  // A child's range, or an outlet's.
-  | { readonly _tag: "Child"; readonly range: Range }
 
 // ---------------------------------------------------------------------------
 // mount
@@ -800,11 +841,12 @@ export const mount = (
   options?: Options
 ): Effect.Effect<Root & Renderer.Root<any, any>, never, Scope.Scope | Renderer.Renderer> =>
   withProps(rootProps, (props) =>
-    Effect.contextWith((ctx: Context.Context<Scope.Scope | Renderer.Renderer>) => {
+    Effect.contextWith((caller: Context.Context<Scope.Scope | Renderer.Renderer>) => {
+      const ctx = onScheduler(caller)
       const startOptions = { ...options, server: undefined }
       return Effect.flatMap(
         makeQueryCache(ctx, startOptions),
-        (cache) => start(component, props, container, ctx, cache, startOptions)
+        (cell) => start(component, props, container, ctx, cell, startOptions)
       )
     }))
 
@@ -822,7 +864,10 @@ export const prerender = (
     readonly budget: Duration.Input
     readonly elements: ReadonlyArray<string> | "any"
     readonly static?: boolean | undefined
-    readonly onFinish?: ServerOptions["onFinish"]
+    /** Where the frozen tree is written, for a caller that writes it itself. The render then builds no `nodes`. */
+    readonly sink?: services.ServerSink | undefined
+    /** Called once the tree is frozen, before the cache is serialised and its fetches are interrupted. */
+    readonly onFinish?: ((cache: ReturnType<typeof Query.internals>) => void) | undefined
   }
 ): Effect.Effect<Renderer.Prerendered<any>> =>
   withProps(rootProps, (props) =>
@@ -833,12 +878,12 @@ export const prerender = (
         const budget = Duration.fromInputUnsafe(options.budget)
         const started = !Duration.isZero(budget)
         const host = serverHost.make(options.elements)
-        const ctx = Context.add(yield* Effect.context<never>(), Scope.Scope, scope)
+        const ctx = onScheduler(Context.add(yield* Effect.context<never>(), Scope.Scope, scope))
         const startOptions: Options = {
-          server: { host, fetches: started, static: options.static === true, onFinish: options.onFinish }
+          server: { host, fetches: started }
         }
-        const cache = yield* makeQueryCache(ctx, startOptions)
-        const root = yield* start(component, props, host.createElement("#root"), ctx, cache, startOptions)
+        const cell = yield* makeQueryCache(ctx, startOptions)
+        const root = yield* start(component, props, host.createElement("#root"), ctx, cell, startOptions)
         if (started) {
           yield* Effect.raceFirst(
             Effect.callback<void>((resume) => {
@@ -847,31 +892,269 @@ export const prerender = (
             Effect.sleep(budget)
           )
         }
-        const out = root.finish()
-        return { nodes: out.nodes, state: out.state, model: root.model(), head: root.head() }
+        const cache = root.freeze()
+        if (cache !== undefined) options.onFinish?.(cache)
+        // In the same synchronous step as the freeze: see `serializeTree`.
+        const nodes: Array<Renderer.ServerNode> = []
+        const state = serializeTree(root.instance, cache, ctx, options.static === true, options.sink ?? nodeSink(nodes))
+        return { nodes, state, model: root.model(), head: root.head() }
       }),
       (scope, exit) => Scope.close(scope, exit)
     ))
 
 /**
- * The cache the root owns, disposed with the root's Scope. The runtime re-adds it wherever work runs,
- * so `Component.provide` can't shadow it.
+ * `ctx` with the root's scheduler as its Scheduler, for everything the root forks: the executor's, so
+ * the work drains with the runtime's, or else the caller's with one dispatcher for every fiber. A
+ * fiber otherwise makes a dispatcher of its own, which queues a task of its own: the Commands one
+ * flush issued would each resume in their own task, with a render after each. On one dispatcher they
+ * resume in one task, and what they send is rendered once.
  */
-const makeQueryCache = (ctx: Context.Context<any>, options: Options | undefined) => {
+const onScheduler = (ctx: Context.Context<any>): Context.Context<any> => {
+  const callers = Context.get(ctx, Scheduler.Scheduler)
+  let dispatcher: Scheduler.SchedulerDispatcher | undefined
+  return Context.add(
+    ctx,
+    Scheduler.Scheduler,
+    Context.get(ctx, Executor.CurrentExecutor).scheduler ?? {
+      executionMode: callers.executionMode,
+      shouldYield: (fiber) => callers.shouldYield(fiber),
+      makeDispatcher: () => dispatcher ??= callers.makeDispatcher()
+    }
+  )
+}
+
+/** A `Redacted` in an instance's state defers it and its subtree, so the client builds them fresh. */
+const warnRedacted = (inst: Instance, ctx: Context.Context<any>) => {
+  if (warnedRedacted.has(inst.component)) return
+  warnedRedacted.add(inst.component)
+  Effect.runForkWith(ctx)(
+    Effect.logWarning(
+      `${inst.component.definition.name}: its state holds a Schema.Redacted, so the server sends no state for it and the ` +
+        "client builds it and everything under it fresh, without hydration. Keep the secret in a leaf component " +
+        "or in a service."
+    )
+  )
+}
+
+/** The sink that builds `Prerendered.nodes`, for a caller that gave none of its own. */
+const nodeSink = (nodes: Array<Renderer.ServerNode>): services.ServerSink => {
+  let children = nodes
+  const parents: Array<Array<Renderer.ServerNode>> = []
+  const into = (next: Array<Renderer.ServerNode>) => {
+    parents.push(children)
+    children = next
+  }
+  const out = () => {
+    children = parents.pop()!
+  }
+  return {
+    text: (text) => children.push({ _tag: "Text", text }),
+    open(tag, attrs, props) {
+      const inner: Array<Renderer.ServerNode> = []
+      children.push({ _tag: "Element", tag, attrs, props, children: inner })
+      into(inner)
+    },
+    close: out,
+    enter(path) {
+      const inner: Array<Renderer.ServerNode> = []
+      children.push({ _tag: "Range", path, children: inner })
+      into(inner)
+    },
+    leave: out
+  }
+}
+
+const noSink: services.ServerSink = { text() {}, open() {}, close() {}, enter() {}, leave() {} }
+
+/**
+ * Writes a frozen tree to `to` once, in document order, and returns the state the client adopts. It is
+ * outside `setup`, and only `prerender` calls it, so a bundle that never renders on a server leaves
+ * it out.
+ */
+const serializeTree = (
+  root: Instance,
+  cache: queryCore.Cache | undefined,
+  ctx: Context.Context<any>,
+  isStatic: boolean,
+  to: services.ServerSink
+): Renderer.State => {
+  let sink = to
+  // In the same synchronous step as the Models: fetches in flight are interrupted, and their entries
+  // revert to cold and aren't shipped. Nothing is dispatched for them.
+  const query = cache === undefined ? {} : cache.dehydrate()
+  const state: Record<string, unknown> = {}
+  const collected: Record<string, unknown> = {}
+  const deferredPaths: Array<string> = []
+  const statuses: Record<string, Shipped> = {}
+  /** Ships a status other than `Ready`: the client starts from it. */
+  const ship = (path: string, status: Status) => {
+    if (status._tag === "Pending" || status._tag === "Failed") statuses[path] = status._tag
+  }
+  // `under`: inside a deferred instance, whose subtree the client builds fresh.
+  const instance = (inst: Instance, under: boolean) => {
+    const path = inst.path
+    let inner = under
+    if (!under) {
+      const codec = stateCodecOf(inst.component)
+      // A failed instance, and one kept off the server, are built fresh. One whose Layer is pending
+      // or failed ships its status with its state.
+      let encoded = inst.failure !== undefined || inst.deferred
+        ? Option.none()
+        : codec.encode(inst.model, inst.results)
+      if (codec.redacted) warnRedacted(inst, ctx)
+      // What an owner's reports last sent: the client compares its reports with it. An owner whose
+      // message can't be shipped, a `Redacted` in its Schema included, is deferred with its subtree, as a
+      // Model adopted without it would get the same message again.
+      const last = inst.owning?.collected
+      let baseline: Option.Option<unknown> = Option.none()
+      if (Option.isSome(encoded) && last !== undefined) {
+        const message = inst.component.definition.message
+        baseline = holdsRedacted(message.ast) ? Option.none() : jsonCodecOf(message).encode(last.message)
+        if (Option.isNone(baseline)) encoded = Option.none()
+      }
+      if (Option.isNone(encoded)) {
+        deferredPaths.push(path)
+        inner = true
+      } else {
+        state[path] = encoded.value
+        if (Option.isSome(baseline)) collected[path] = baseline.value
+        if (inst.component.layer !== undefined) ship(path, inst.env.status)
+      }
+    }
+    sink.enter(path)
+    if (inst.failure === undefined) {
+      for (const rendered of inst.rendered) serialize(inst, rendered, inner)
+    }
+    sink.leave(path)
+  }
+  const serialize = (inst: Instance, rendered: Rendered, under: boolean): void => {
+    switch (rendered._tag) {
+      case "Text":
+        return sink.text(rendered.v.text)
+      case "Element": {
+        const view = rendered.v
+        sink.open(view.tag, view.attrs, view.props)
+        const children = rendered.children
+        if (Array.isArray(children)) {
+          for (const child of children) serialize(inst, child, under)
+        } else if (children !== undefined) serialize(inst, children, under)
+        return sink.close(view.tag)
+      }
+      case "Child":
+        return instance(rendered.inst, under)
+      case "Outlet": {
+        const outlet = rendered.inst
+        sink.enter(outlet.path)
+        for (const child of outlet.rendered) serialize(outlet, child, under)
+        return sink.leave(outlet.path)
+      }
+      case "Fallback": {
+        // A failed child: the client builds it fresh. A feature whose Layer isn't ready: the client
+        // adopts the fallback while its status is the one shipped.
+        const path = `${inst.path}/${segment(rendered.v)}`
+        if (!under) {
+          if (rendered.failedChild) deferredPaths.push(path)
+          else ship(path, rendered.status)
+        }
+        sink.enter(path)
+        serialize(inst, rendered.inner, true)
+        return sink.leave(path)
+      }
+      case "Detached": {
+        // Out of the document, so no nodes: the state of its subtree is still sent, and the client builds
+        // its nodes from that state, detached.
+        const path = `${inst.path}/${segment(rendered.v)}`
+        const shown = sink
+        sink = noSink
+        serialize(inst, rendered.inner, under)
+        sink = shown
+        sink.enter(path)
+        return sink.leave(path)
+      }
+    }
+  }
+  instance(root, false)
+  // Added to the record the paths are on, in the order a copy of it would have them: copying a record
+  // with a key for each instance costs more than everything else done with it. Defined as a copy would
+  // define them, so each is the record's own whatever `Object.prototype` has under its name.
+  const add = (key: string, value: unknown) =>
+    Object.defineProperty(state, key, { value, writable: true, enumerable: true, configurable: true })
+  add("~deferred", deferredPaths)
+  if (Object.keys(statuses).length > 0) add("~status", statuses)
+  add("~query", query)
+  if (Object.keys(collected).length > 0) add("~reported", collected)
+  if (isStatic) add("~static", true)
+  return state
+}
+
+/** `Query`'s functions, where a query or a component's bound queries are at hand: the module is loaded. */
+const queryModule = (): queryCore.Loaded => queryCore.loaded!
+
+/**
+ * The root's place for its query cache. The cache is made once the app has loaded the `Query` module:
+ * at the mount when it has by then, so an app without queries never bundles or builds one. Until then
+ * the cell is the `Query.Cache` service, and `Query.internals` makes the cache from it.
+ */
+interface CacheCell extends queryCore.CacheCell {
+  /** The cache, once made. */
+  made: queryCore.Cache | undefined
+  /** Set by `setup`: called with a cache made after the mount. */
+  onMake: ((cache: queryCore.Cache) => void) | undefined
+  /** The cache, made now if the `Query` module is loaded. */
+  readonly get: () => queryCore.Cache | undefined
+}
+
+/**
+ * The cache the root owns, disposed with the root's Scope. The runtime re-adds it wherever work runs,
+ * so `Component.provide` can't shadow it. Its disposal is registered here, whenever the cache is made,
+ * so it runs after the root's own close.
+ */
+const makeQueryCache = (
+  ctx: Context.Context<any>,
+  options: Options | undefined
+): Effect.Effect<CacheCell> => {
   const server = options?.server
-  const scheduler = Context.get(ctx, Executor.CurrentExecutor).scheduler
-  return Query.makeCache({
-    visibility: Context.get(ctx, Query.Visibility),
-    connectivity: Context.get(ctx, Query.Connectivity),
-    report: Context.get(ctx, Query.Problems),
-    idleMs: Query.cacheIdleMs(options?.query?.idleTimeToLive),
+  const cacheOptions: queryCore.CacheOptions = {
+    visibility: Context.get(ctx, queryCore.Visibility),
+    connectivity: Context.get(ctx, queryCore.Connectivity),
+    report: Context.get(ctx, queryCore.Problems),
+    idleMs: queryCore.cacheIdleMs(options?.query?.idleTimeToLive),
     // The server's per-request cache: one fetch per key per request, and none with a budget of 0.
     settleOnce: server !== undefined,
     fetches: server === undefined || server.fetches
-  }).pipe(
-    // Its fetches and timers run on the runtime's scheduler, so `TestHost.settle` drains them.
-    Effect.provideContext(scheduler === undefined ? ctx : Context.add(ctx, Scheduler.Scheduler, scheduler))
-  )
+  }
+  let dispose: Effect.Effect<void> | undefined
+  let closed = false
+  const get = (): queryCore.Cache | undefined => {
+    if (cell.made !== undefined) return cell.made
+    const query = queryCore.loaded
+    if (query === undefined) return undefined
+    const built = query.buildCache(ctx, cacheOptions)
+    cell.made = built.cache
+    dispose = built.dispose
+    // Made for a root that has closed: it is disposed at once, with nothing in it.
+    if (closed) Effect.runFork(built.dispose)
+    cell.onMake?.(built.cache)
+    return built.cache
+  }
+  const cell: CacheCell = {
+    [queryCore.CacheTypeId]: queryCore.CacheTypeId,
+    [queryCore.CacheCellTypeId]: () => get()!,
+    made: undefined,
+    onMake: undefined,
+    get
+  }
+  return Effect.acquireRelease(
+    Effect.sync(() => {
+      get()
+      return cell
+    }),
+    () =>
+      Effect.suspend(() => {
+        closed = true
+        return dispose ?? Effect.void
+      })
+  ).pipe(Effect.provideContext(ctx))
 }
 
 /**
@@ -886,7 +1169,7 @@ const start = (
   rootProps: unknown,
   container: unknown,
   ctx: Context.Context<any>,
-  cache: ReturnType<typeof Query.internals>,
+  cell: CacheCell,
   options: Options | undefined
 ): Effect.Effect<Root & Renderer.Root<any, any>> =>
   Effect.suspend(() => {
@@ -897,7 +1180,7 @@ const start = (
     scopeAddFinalizerUnsafe(owner, {}, (exit) => setUp.whenOpen(Scope.close(scope, exit)))
     let root: Root & Renderer.Root<any, any>
     try {
-      root = setup(component, rootProps, container, Context.add(ctx, Scope.Scope, scope), cache, options)
+      root = setup(component, rootProps, container, Context.add(ctx, Scope.Scope, scope), cell, options)
     } finally {
       setUp.openUnsafe()
     }
@@ -907,17 +1190,20 @@ const start = (
 
 const isClosed = (scope: Scope.Scope): boolean => scope.state._tag === "Closed"
 
+/** For a fiber that runs a cleanup, which nothing interrupts. */
+const uninterruptibly: Effect.RunOptions = { uninterruptible: true }
+
 const setup = (
   component: Component.Any,
   rootProps: unknown,
   container: unknown,
   ctx: Context.Context<any>,
-  cache: ReturnType<typeof Query.internals>,
+  cell: CacheCell,
   options: Options | undefined
 ): Root & Renderer.Root<any, any> => {
   const server = options?.server
   const host: Renderer.Host<any> = server !== undefined ? server.host : Context.get(ctx, services.Renderer).host
-  const log = Context.get(ctx, MessageLog.MessageLog)
+  const log = Context.get(ctx, messageLog.MessageLog)
   const executor = Context.get(ctx, Executor.CurrentExecutor)
   const clock = Context.get(ctx, Clock.Clock)
   const rootScope = Context.get(ctx, Scope.Scope)
@@ -928,7 +1214,7 @@ const setup = (
   const hooks = Option.getOrUndefined(Context.getOption(ctx, services.RootHooks))
 
   // The problems sink, read once. A throw from it is swallowed: a check only reports.
-  const problems = Context.get(ctx, Query.Problems)
+  const problems = Context.get(ctx, queryCore.Problems)
   const report = (problem: Query.Problem.Any) => {
     try {
       problems(problem)
@@ -1082,8 +1368,11 @@ const setup = (
   const withScheduler = (context: Context.Context<any>): Context.Context<any> =>
     executor.scheduler === undefined ? context : Context.add(context, Scheduler.Scheduler, executor.scheduler)
   /** Starts at once, so a Layer that builds synchronously is ready for the first frame. */
-  const forkNow = <A, E>(context: Context.Context<any>, effect: Effect.Effect<A, E, any>): Fiber.Fiber<A, E> =>
-    Effect.runForkWith(withScheduler(context))(effect)
+  const forkNow = <A, E>(
+    context: Context.Context<any>,
+    effect: Effect.Effect<A, E, any>,
+    options?: Effect.RunOptions
+  ): Fiber.Fiber<A, E> => Effect.runForkWith(withScheduler(context))(effect, options)
   /**
    * Starts on the scheduler, never inside the `update` that issued it. A navigation Command starts
    * sooner, in the deferred work of the flush its `update` caused: see `startRun`.
@@ -1110,10 +1399,12 @@ const setup = (
    * finalizers start at once, as in a fiber started now: only a close left with something to wait
    * for takes a fiber, which is returned.
    */
-  const closeScope = (scope: Scope.Closeable): Fiber.Fiber<void> | undefined => {
-    const rest = Scope.closeUnsafe(scope, Exit.void)
+  const closeScope = (scope: Scope.Closeable): Fiber.Fiber<void> | undefined =>
+    settleClose(Scope.closeUnsafe(scope, Exit.void))
+  /** What a close returned: nothing left, or an Effect, run now, that a fiber is returned for if it waits. */
+  const settleClose = (rest: Effect.Effect<void> | undefined): Fiber.Fiber<void> | undefined => {
     if (rest === undefined || (Exit.isExit(rest) && Exit.isSuccess(rest))) return undefined
-    const fiber = forkNow(ctx, Effect.uninterruptible(rest))
+    const fiber = forkNow(ctx, rest, uninterruptibly)
     // Ended in the fork: nothing is left to wait for.
     if (fiber.pollUnsafe() !== undefined) return undefined
     track(closing, fiber)
@@ -1124,7 +1415,13 @@ const setup = (
    * `owner`'s own close waits for it before its services go, and so does a key change.
    */
   const closeUnder = (owner: Instance | undefined, scope: Scope.Closeable) => {
-    const fiber = closeScope(scope)
+    closedUnder(owner, closeScope(scope))
+  }
+  /** Closes an instance, as `closeUnder` closes its Scope, without making a Scope it never needed. */
+  const closeInstance = (owner: Instance | undefined, inst: Instance) => {
+    closedUnder(owner, settleClose((inst as Inst).close()))
+  }
+  const closedUnder = (owner: Instance | undefined, fiber: Fiber.Fiber<void> | undefined) => {
     if (fiber === undefined || owner === undefined || isClosed(owner.scope)) return
     if (owner.closes === undefined) {
       // Added after the instance's Layer and selection, so it runs before they close.
@@ -1145,8 +1442,14 @@ const setup = (
     addFinalizer(scope, Fiber.interrupt(fiber))
 
   // -- query cache ---------------------------------------------------------
+  // Made at the mount when the app has loaded the `Query` module by then, and otherwise when it loads it.
+  let cache = cell.made
+  /** The runs with `writes` issued before the cache was made, in the order they were issued, until they end. */
+  let early: Set<Run> | undefined
+  /** The cache, where a query is at hand: its module is loaded. */
+  const queryCache = (): queryCore.Cache => cache ?? cell.get()!
   const withCache = (context: Context.Context<any>): Context.Context<any> =>
-    Context.add(context, Query.Cache, cache as unknown as Query.Cache["Service"])
+    Context.add(context, queryCore.CacheKey, (cache ?? cell) as unknown as Query.Cache["Service"])
   /**
    * History restore: each query result restored seeds a cold entry, stale, so the first frame shows the data
    * with `waiting: true` while one refetch runs. A snapshot taken under a patch may hold a value that
@@ -1156,18 +1459,18 @@ const setup = (
     component: Component.Any,
     results: componentQueries.Results | undefined
   ): componentQueries.Results | undefined => {
-    const bound = componentQueries.boundOf(component)
+    const bound = queryCore.boundOf(component)
     if (bound === undefined || results === undefined) return results
     const out: Record<string, unknown> = {}
     for (const entry of bound.entries) {
       const snapshot = results[entry.name]
       if (entry.keyed) {
         // Per tuple: one taken under a patch is dropped.
-        const map = Query.snapshotMapData(snapshot)
+        const map = queryModule().snapshotMapData(snapshot)
         const kept: Array<unknown> = []
         for (const one of map?.entries.values() ?? []) {
-          if (Query.snapshotData(one)!.patched) continue
-          cache.seed(one)
+          if (queryModule().snapshotData(one)!.patched) continue
+          queryCache().seed(one)
           kept.push(one)
         }
         out[entry.name] = map !== undefined && kept.length === map.entries.size
@@ -1175,30 +1478,56 @@ const setup = (
           : bound.snapshotMany(entry, kept)
         continue
       }
-      const data = Query.snapshotData(snapshot)
+      const data = queryModule().snapshotData(snapshot)
       if (data !== undefined && !data.patched) {
-        cache.seed(snapshot)
+        queryCache().seed(snapshot)
         out[entry.name] = snapshot
       } else out[entry.name] = bound.empty[entry.name]
     }
     return out
   }
-  // Every fetch the cache starts is logged, as an entry about the tree. A watch's fetch starts when the
-  // render pass's hold is released, and follows from the step whose render registered the watcher.
-  const offFetch = cache.onFetch((event) => {
-    if (frozen || !log.enabled) return
-    recordTree(
-      { _tag: "FetchStarted", ...event },
-      event.trigger === "watch" ? watchCauses.get(entryKey(event.query, event.logKey)) : undefined
-    )
-  })
-  // On the server a fetch in flight holds the response, so one that ends may make the tree idle.
-  const offFetchEnd = server === undefined ? undefined : cache.onFetchEnd(() => checkIdle())
-  // Hydration: the server's entries, held raw until their queries register. This opens the fetch-free
-  // window, which closes at adoption or the first navigation.
-  if (hydrating !== undefined && hydrating.state["~query"] !== undefined) {
-    cache.hydrate(hydrating.state["~query"], { static: hydrating.state["~static"] === true })
+  // Hydration: the server's entries and when they arrived, for a cache made after the mount.
+  const hydratedQueries = hydrating?.state["~query"]
+  const hydratedAt = hydratedQueries === undefined ? 0 : clock.currentTimeMillisUnsafe()
+  // Adoption or a navigation has closed the fetch-free window.
+  let windowClosed = false
+  const closeWindow = () => {
+    windowClosed = true
+    cache?.closeWindow()
   }
+  let offFetch: (() => void) | undefined
+  let offFetchEnd: (() => void) | undefined
+  const attachCache = (made: queryCore.Cache) => {
+    cache = made
+    // Every fetch the cache starts is logged, as an entry about the tree. A watch's fetch starts when the
+    // render pass's hold is released, and follows from the step whose render registered the watcher.
+    offFetch = made.onFetch((event) => {
+      if (frozen || !log.enabled) return
+      recordTree(
+        { _tag: "FetchStarted", ...event },
+        event.trigger === "watch" ? watchCauses.get(entryKey(event.query, event.logKey)) : undefined
+      )
+    })
+    // On the server a fetch in flight holds the response, so one that ends may make the tree idle.
+    if (server !== undefined) offFetchEnd = made.onFetchEnd(() => checkIdle())
+    // Hydration: the server's entries, held raw until their queries register. This opens the fetch-free
+    // window, which closes at adoption or the first navigation.
+    if (hydratedQueries !== undefined) {
+      made.hydrate(hydratedQueries, { static: fromStatic, at: hydratedAt })
+      if (windowClosed) made.closeWindow()
+    }
+    // The runs issued before the cache was made begin now, in the order they were issued and ahead of
+    // every run issued since. One whose work has begun starts before any entry exists, as it did.
+    if (early !== undefined) {
+      for (const run of early) {
+        run.handle = beginRun(made, run.command)
+        if (run.spanId !== undefined) run.handle.start()
+      }
+      early = undefined
+    }
+  }
+  cell.onMake = attachCache
+  if (cache !== undefined) attachCache(cache)
   // The root's close waits until every run fiber has exited, stopped ones included, and every Scope
   // close already started, such as an unmounted instance's, has finished.
   let rootClosed = false
@@ -1206,7 +1535,7 @@ const setup = (
     rootScope,
     Effect.suspend(() => {
       rootClosed = true
-      offFetch()
+      offFetch?.()
       offFetchEnd?.()
       releaseWatchHold()
       return awaitAllOwned
@@ -1254,7 +1583,7 @@ const setup = (
   let draining = false
   const holdWatches = () => {
     if (watchHold !== undefined) return
-    watchHold = cache.hold()
+    watchHold = queryCache().hold()
     if (!draining) wake()
   }
   const isHolding = () => watchHold !== undefined
@@ -1410,7 +1739,7 @@ const setup = (
       idleCheck = false
       if (scheduled || dirty.size > 0 || deferred.length > 0 || building.size > 0) return
       // Any fetch in flight holds the response: a watch's, a `get`'s, a prefetch nobody renders.
-      if (cache.pending().length > 0) return
+      if (cache !== undefined && cache.pending().length > 0) return
       for (const f of idleWaiters.splice(0)) f()
     })
   }
@@ -1425,6 +1754,10 @@ const setup = (
   let viewChanged = false
   // The root vocabulary's fold, or the title-only one.
   const rootFold = foldOf(component)
+  // Under a root fold that folds a subtree with no entries and no `reduce` to nothing, such subtrees
+  // are left out of the tree: most instances, such as a list's rows, have no head. A host-neutral root
+  // may hand the fold to a vocabulary that sees every node, so its tree is built whole.
+  const skipsEmpty = rootFold !== neutralFold && headFold.skipsEmpty(rootFold.merge)
   const emptyHead: unknown = rootFold.merge(emptyTree)
   let merged: unknown = emptyHead
   // The title of `merged`, for the router's hook.
@@ -1447,9 +1780,14 @@ const setup = (
   /**
    * One instance's part of the head, read now: its entries, its `reduceHead` over its Model and the
    * instances its view placed. A closed or failed instance has none, and nor does one still waiting to
-   * adopt, whose Model isn't there yet, or one whose `head` throws, which `onError` is told.
+   * adopt, whose Model isn't there yet, or one whose `head` throws, which `onError` is told. With
+   * `below` false the instances it placed aren't looked for: none of them has a part the fold keeps.
    */
-  const headPart = (inst: Instance, onError: (inst: Instance, error: unknown) => void): HeadPart | undefined => {
+  const headPart = (
+    inst: Instance,
+    onError: (inst: Instance, error: unknown) => void,
+    below = true
+  ): HeadPart | undefined => {
     if (inst.closed || inst.failure !== undefined || inst.waiting) return undefined
     const head = inst.component.head
     let entries: ReadonlyArray<unknown> = none
@@ -1463,8 +1801,11 @@ const setup = (
     }
     const reduce = inst.component.reduceHead
     const model = inst.model
-    const children: Array<Instance> = []
-    for (const rendered of inst.rendered) placed(rendered, children)
+    let children: Array<Instance> = emptyList
+    if (below) {
+      children = []
+      for (const rendered of inst.rendered) placed(rendered, children)
+    }
     return { inst, entries, reduce: reduce === undefined ? undefined : (below) => reduce(model, below), children }
   }
   /** Adds the instances a rendered node places to `out`, in document order: a fallback's content included. */
@@ -1474,9 +1815,13 @@ const setup = (
       case "Outlet":
         out.push(rendered.inst)
         return
-      case "Element":
-        for (const child of rendered.children) placed(child, out)
+      case "Element": {
+        const children = rendered.children
+        if (children === undefined) return
+        if (!Array.isArray(children)) return placed(children, out)
+        for (const child of children) placed(child, out)
         return
+      }
       case "Fallback":
         return placed(rendered.inner, out)
       // A detached child's view is out of the document, and its head with it.
@@ -1501,16 +1846,24 @@ const setup = (
     options?: Head.MergeOptions
   ): { readonly head: unknown; readonly title: string | undefined } => {
     let fold = rootFold
-    const node = (inst: Instance): Head.Tree<unknown, unknown> => {
+    const skip = skipsEmpty
+    const node = (inst: Instance): Head.Tree<unknown, unknown> | undefined => {
       const part = partOf(inst)
-      if (part === undefined) return { path: inst.path, ...emptyTree }
+      if (part === undefined) return skip ? undefined : { path: inst.path, ...emptyTree }
       const own = foldOf(inst.component)
       if (fold === neutralFold) fold = own
       const reduce = part.reduce
+      const below = part.children
+      const children: Array<Head.Tree<unknown, unknown>> = []
+      for (let index = 0; index < below.length; index++) {
+        const child = node(below[index]!)
+        if (child !== undefined) children.push(child)
+      }
+      if (skip && reduce === undefined && part.entries.length === 0 && children.length === 0) return undefined
       return {
         path: inst.path,
         entries: part.entries,
-        children: part.children.map(node),
+        children,
         reduce: reduce === undefined ? undefined : (below) => {
           const value = reduce(below)
           return own === fold ? value : { ...(below as object), ...(value as object) }
@@ -1518,7 +1871,7 @@ const setup = (
         onError: (error) => onError(inst, error)
       }
     }
-    const tree = node(root)
+    const tree = node(root) ?? emptyTree
     const head = fold.merge(tree, options)
     return { head, title: fold.title(head) }
   }
@@ -1561,7 +1914,7 @@ const setup = (
   const reportAdoption = () => {
     reportPending = false
     // The fetch-free window closes at adoption, unless a navigation closed it first.
-    cache.closeWindow()
+    closeWindow()
     for (const f of adoptedWaiters.splice(0)) f()
   }
 
@@ -1585,10 +1938,20 @@ const setup = (
       viewChanged = false
       const conflicts: Array<Head.Conflict> = []
       const parts: Array<HeadPart> = []
+      // A subtree where nothing declares a head folds to nothing, and this fold leaves such subtrees out,
+      // so it's passed by without a walk of what it rendered. While hydration records each instance's part
+      // every instance is read, as the record is of the tree as it was adopted.
+      const prune = skipsEmpty && adoption === undefined
       const next = foldTree(
         root,
         (inst) => {
-          const part = headPart(inst, failHead)
+          let below = true
+          if (prune) {
+            const heads = inst.heads
+            if (heads === 0) return undefined
+            below = heads > (declaresHead(inst.component) ? 1 : 0)
+          }
+          const part = headPart(inst, failHead, below)
           if (part !== undefined && adoption !== undefined) parts.push(part)
           return part
         },
@@ -1622,14 +1985,15 @@ const setup = (
   }
 
   // -- failure --------------------------------------------------------------
+  /** `f` is passed `inst`, so a call on a hot path needs no closure. */
   const guard = <A>(
     inst: Instance,
     where: MessageLog.FailedIn,
-    f: () => A,
+    f: (inst: Instance) => A,
     name?: string
   ): A | undefined => {
     try {
-      return f()
+      return f(inst)
     } catch (error) {
       failInstance(inst, Cause.die(error), where, name)
       return undefined
@@ -1644,6 +2008,10 @@ const setup = (
   const leave = (inst: Instance) => {
     if (inst.left) return
     inst.left = true
+    inst.lazy = undefined
+    if (declaresHead(inst.component)) {
+      for (let at: Instance | undefined = inst; at !== undefined; at = at.parent) at.heads--
+    }
     // At once, not when the Scope closes: the host may hand out a container's handle again.
     if (inst.parked !== undefined) {
       for (const container of inst.parked) unpark(inst, container)
@@ -1668,7 +2036,7 @@ const setup = (
     else if (inst.parent === undefined) host.insertBefore(container, placeholder, undefined)
     release()
     for (const node of nodes) host.remove(node)
-    inst.rendered = [{ _tag: "Text", v: emptyText, node: placeholder }]
+    inst.rendered = [new TextRecord(emptyText, placeholder)]
   }
 
   /** Swaps the instance's nodes for an empty text node, closing its Scope. */
@@ -1678,7 +2046,7 @@ const setup = (
       // replacement created meanwhile must see the count without this instance's watchers.
       releaseWatches(inst)
       leave(inst)
-      closeUnder(inst.parent, inst.scope)
+      closeInstance(inst.parent, inst)
     })
     inst.parent?.children.delete(inst)
   }
@@ -1704,6 +2072,8 @@ const setup = (
       Effect.logError(`${inst.path} failed in ${where}${name === undefined ? "" : ` (${name})`}`, cause)
     )
     inst.failure = cause
+    // Nodes from the render that failed aren't given again.
+    inst.lazy = undefined
     viewChanged = true
     close(inst)
     const parent = inst.parent
@@ -2118,10 +2488,8 @@ const setup = (
    * included, the release stays the instance's: the instance's close waits for it.
    */
   const releaseSelection = (selection: Selection, retired: Retired) => {
-    const fiber = forkNow(ctx, Effect.uninterruptible(releaseOf(retired)))
-    if (fiber.pollUnsafe() !== undefined) return
-    track(closing, fiber)
-    track(selection.releasing, fiber)
+    const fiber = settleClose(releaseOf(retired))
+    if (fiber !== undefined) track(selection.releasing, fiber)
   }
 
   /**
@@ -2178,7 +2546,7 @@ const setup = (
       for (const cancel of inst.loadMores) cancel()
       inst.loadMores.clear()
     }
-    const bound = componentQueries.boundOf(inst.component)
+    const bound = queryCore.boundOf(inst.component)
     const results = inst.results
     inst.results = undefined
     if (bound === undefined || results === undefined) return
@@ -2200,72 +2568,82 @@ const setup = (
   }
 
   // -- instances ------------------------------------------------------------
-  /**
-   * Sets the instance's `dispatch` and `fire`, and adds its finalizers to its Scope: the closures
-   * that live as long as it does. They are made here, so their context holds the instance and
-   * `bound`, and not every local of `makeInstance`.
-   */
-  const instanceHandlers = (inst: Instance, bound: componentQueries.Bound | undefined) => {
-    const handlers = inst as { -readonly [K in "dispatch" | "fire"]: Instance[K] }
-    handlers.dispatch = (message, source) =>
-      step(() => {
-        renderAbove(inst)
-        if (inst.closed || inst.waiting || frozen) return
-        const component = inst.component
-        let next: ReturnType<typeof component.update>
-        busy++
-        try {
-          next = component.update(inst.model, message as never, inst.props, inst.results)
-        } catch (error) {
-          // No `Update` is logged for it, so the failure carries the message.
-          return failInstance(inst, Cause.die(error), "update", undefined, { message, source })
-        } finally {
-          busy--
-        }
-        if (next === undefined) return
-        const entrySeq = record(inst, {
-          _tag: "Update",
-          source,
-          message,
-          props: inst.props,
-          model: next.model,
-          commands: next.commands,
-          events: next.events,
-          lists: next.lists ?? [],
-          sends: next.sends ?? [],
-          // What `update` saw in `$.queries`, so a replay from any surviving entry sees it too.
-          ...(bound === undefined ? undefined : { queries: inst.results ?? bound.empty })
-        })
-        apply(inst, next, entrySeq, false)
-      })
-    handlers.fire = (event, handler, payload, onMessage) => {
-      if (inst.closed || inst.waiting) return
-      const message = typeof handler === "function"
-        ? guard(inst, "domEvent", () => (handler as (payload: unknown) => unknown)(payload), event)
-        : handler
-      if (message === undefined) return
-      // Before the message is sent, so the host can still act on its event.
-      onMessage?.()
-      inst.dispatch(message, { _tag: "DomEvent", name: event })
-    }
-
-    // Descendants, Subscriptions and mounts use child Scopes forked later, so they close first. Then
-    // Commands stop, and the close waits for them to exit. One finalizer, run as the Scope
-    // closes: a Scope that holds nothing else needs no Map, and a close with no run to wait for
-    // ends without a fiber.
-    const finalizer = () => {
-      // However the instance goes, a removed ancestor and failure included, its owners forget it.
-      if (inst.owners !== undefined) { for (const owner of inst.owners.values()) owner.readers?.delete(inst) }
-      const waits = stopRuns(inst)
-      if (waits.length === 0) {
-        unmounted(inst)
-        return Effect.void
+  /** Runs `update` for a message to `inst`, in a step of its own. */
+  const dispatchTo = (inst: Instance, message: unknown, source: MessageLog.Source) =>
+    step(() => {
+      renderAbove(inst)
+      if (inst.closed || inst.waiting || frozen) return
+      const component = inst.component
+      let next: ReturnType<typeof component.update>
+      busy++
+      try {
+        next = component.update(inst.model, message as never, inst.props, inst.results)
+      } catch (error) {
+        // No `Update` is logged for it, so the failure carries the message.
+        return failInstance(inst, Cause.die(error), "update", undefined, { message, source })
+      } finally {
+        busy--
       }
-      return Effect.andThen(awaitRuns(waits), Effect.sync(() => unmounted(inst)))
-    }
-    if (inst.scope.state._tag === "Closed") track(closing, forkNow(ctx, Effect.suspend(finalizer)))
-    else scopeAddFinalizerUnsafe(inst.scope, inst, finalizer)
+      if (next === undefined) return
+      const bound = queryCore.boundOf(component)
+      const entrySeq = record(inst, {
+        _tag: "Update",
+        source,
+        message,
+        props: inst.props,
+        model: next.model,
+        commands: next.commands,
+        events: next.events,
+        lists: next.lists ?? [],
+        sends: next.sends ?? [],
+        // What `update` saw in `$.queries`, so a replay from any surviving entry sees it too.
+        ...(bound === undefined ? undefined : { queries: inst.results ?? bound.empty })
+      })
+      apply(inst, next, entrySeq, false)
+    })
+
+  /**
+   * An instance's one bound function, which serves twice: the host calls it for an event on an element
+   * the instance rendered, with the event's name, and the Scope that holds the instance's finalizer
+   * calls it with an `Exit` as the instance closes. Bound, not a closure: one object for each instance.
+   */
+  function fireOn(
+    this: Inst,
+    event: string | Exit.Exit<unknown, unknown>,
+    handler?: unknown,
+    payload?: unknown,
+    onMessage?: (() => void) | undefined
+  ): Effect.Effect<void> | undefined {
+    if (typeof event !== "string") return this.finalize()
+    if (this.closed || this.waiting) return
+    const message = typeof handler === "function"
+      ? guard(this, "domEvent", () => (handler as (payload: unknown) => unknown)(payload), event)
+      : handler
+    if (message === undefined) return
+    // Before the message is sent, so the host can still act on its event.
+    onMessage?.()
+    this.dispatch(message, { _tag: "DomEvent", name: event })
   }
+
+  /**
+   * The instance's finalizer. Descendants, Subscriptions and mounts use child Scopes forked later, so
+   * they close first. Then Commands stop, and the close waits for them to exit. One finalizer, run as
+   * the Scope closes: a Scope that holds nothing else needs no Map, and a close with no run to wait
+   * for ends without a fiber.
+   */
+  const finishInstance = (inst: Instance): Effect.Effect<void> => {
+    // However the instance goes, a removed ancestor and failure included, its owners forget it.
+    if (inst.owners !== undefined) { for (const owner of inst.owners.values()) owner.readers?.delete(inst) }
+    const waits = stopRuns(inst)
+    if (waits.length === 0) {
+      unmounted(inst)
+      return Effect.void
+    }
+    return Effect.andThen(awaitRuns(waits), Effect.sync(() => unmounted(inst)))
+  }
+
+  /** Adds the instance's finalizer to its Scope. */
+  const addInstanceFinalizer = (inst: Instance) => (inst as Inst).hold()
 
   /**
    * Stops an instance's runs as it closes, and returns what the close waits for: every run fiber,
@@ -2288,10 +2666,245 @@ const setup = (
     }
   }
 
+  /** The fields of an instance that most instances never set. */
+  class Rare {
+    owning: Owning | undefined = undefined
+    selection: Instance["selection"] = undefined
+    parked: Instance["parked"] = undefined
+    closes: Instance["closes"] = undefined
+    subscriptions: Instance["subscriptions"] = undefined
+    watches: Instance["watches"] = undefined
+    watchesSynced: Instance["watchesSynced"] = false
+    watched: Instance["watched"] = undefined
+    prefetch: Instance["prefetch"] = undefined
+    keyed: Instance["keyed"] = undefined
+    keyedQueued: Instance["keyedQueued"] = false
+    loadMores: Instance["loadMores"] = undefined
+    mounting: Instance["mounting"] = undefined
+    outbox: Instance["outbox"] = emptyList
+    shares: Instance["shares"] = undefined
+    readers: Instance["readers"] = undefined
+    owners: Instance["owners"] = undefined
+    seen: Instance["seen"] = undefined
+    clash: Instance["clash"] = undefined
+    deferred: Instance["deferred"] = false
+    lazy: Instance["lazy"] = undefined
+    heads: Instance["heads"] = 0
+  }
+
+  /**
+   * An instance: one shape for every instance, so V8 keeps it in fast mode. The fields a feature
+   * needs are `undefined` until the feature first does, and collections start out shared and empty.
+   */
+  class Inst implements Instance {
+    /** The fields most instances never set, made when one is first set. */
+    rare: Rare | undefined = undefined
+    readonly born = ++instancesMade
+    author: Instance
+    content: ((parts: any) => View.Content<any, any>) | undefined
+    env: Env
+    children: Set<Instance> = noChildren
+    props: unknown
+    model: unknown = undefined
+    results: componentQueries.Results | undefined = undefined
+    onEmit: (events: unknown) => unknown
+    onFailure: ((failure: AsyncResult.Failure<never, unknown>) => unknown) | undefined
+    failure: Cause.Cause<unknown> | undefined = undefined
+    childPaths: ChildPaths | undefined = undefined
+    rendered: Array<Rendered> = emptyList
+    waiting = false
+    adoptsChildren = false
+    runs: Array<Run> = emptyList
+    left = false
+    cause: number | undefined = undefined
+    /** The instance's event dispatch and finalizer: see `fireOn`. */
+    private fired: OmitThisParameter<typeof fireOn> | undefined = undefined
+    /**
+     * The instance's Scope, made when it's first asked for. Until then the instance's finalizer, `held`,
+     * is registered in its parent's Scope: most instances fork nothing and start no work.
+     */
+    private own: Scope.Closeable | undefined
+    /** Whether its finalizer waits in its parent's Scope. */
+    private held = false
+    /** Closed before it had a Scope of its own. */
+    private dead = false
+    /** Its path once made: a root's, a feature's or a headless instance's at once, others' when asked for. */
+    private named: string | undefined
+    /** The key of the child it was declared as, which its path ends with. */
+    readonly key: string
+    readonly depth: number
+    readonly component: Component.Any
+    readonly parent: Instance | undefined
+    readonly owner: View.Owner | undefined
+    constructor(
+      named: string | undefined,
+      key: string,
+      depth: number,
+      component: Component.Any,
+      parent: Instance | undefined,
+      owner: View.Owner | undefined,
+      scope: Scope.Closeable | undefined,
+      env: Env,
+      props: unknown,
+      onEmit: (events: unknown) => unknown,
+      onFailure: ((failure: AsyncResult.Failure<never, unknown>) => unknown) | undefined,
+      content: ((parts: any) => View.Content<any, any>) | undefined,
+      author: Instance | undefined
+    ) {
+      this.named = named
+      this.key = key
+      this.depth = depth
+      this.component = component
+      this.parent = parent
+      this.owner = owner
+      this.own = scope
+      this.author = author ?? this
+      this.content = content
+      this.env = env
+      this.props = props
+      this.onEmit = onEmit
+      this.onFailure = onFailure
+      if (component.definition.shares !== undefined) {
+        ;(this.rare = new Rare()).owning = { seq: -1, round: false, collected: undefined, restored: false }
+      }
+    }
+    /**
+     * Made the first time it's asked for, from its parent's path and its own segment: most instances
+     * are never asked, and a string for each row would outweigh the row's other fields.
+     */
+    get path(): string {
+      return this.named ??= this.parent!.path + "/" + segmentOf(this.component, this.key)
+    }
+    // The rare fields, read from and written to `rare` by the accessors defined below the class.
+    declare readonly owning: Owning | undefined
+    declare selection: Instance["selection"]
+    declare parked: Instance["parked"]
+    declare closes: Instance["closes"]
+    declare subscriptions: Instance["subscriptions"]
+    declare watches: Instance["watches"]
+    declare watchesSynced: Instance["watchesSynced"]
+    declare watched: Instance["watched"]
+    declare prefetch: Instance["prefetch"]
+    declare keyed: Instance["keyed"]
+    declare keyedQueued: Instance["keyedQueued"]
+    declare loadMores: Instance["loadMores"]
+    declare mounting: Instance["mounting"]
+    declare outbox: Instance["outbox"]
+    declare shares: Instance["shares"]
+    declare readers: Instance["readers"]
+    declare owners: Instance["owners"]
+    declare seen: Instance["seen"]
+    declare clash: Instance["clash"]
+    declare deferred: Instance["deferred"]
+    declare lazy: Instance["lazy"]
+    declare heads: Instance["heads"]
+    /**
+     * From the moment its Scope or an ancestor's starts closing, not once it has: see `Instance.closed`.
+     */
+    get closed(): boolean {
+      const own = this.own
+      return (own === undefined ? this.dead : isClosed(own)) || this.parent?.closed === true
+    }
+    get scope(): Scope.Closeable {
+      let own = this.own
+      if (own !== undefined) return own
+      if (this.dead) {
+        own = Scope.makeUnsafe("sequential")
+        Scope.closeUnsafe(own, Exit.void)
+      } else {
+        const under = this.parent!.scope
+        if (this.held && under.state._tag === "Open") {
+          // It takes the slot its finalizer held in the parent, so it closes among its siblings where
+          // one forked when the instance was made would: a late Scope doesn't make it close first. Its
+          // finalizer moves into it. `close` frees the slot.
+          this.held = false
+          own = Scope.makeUnsafe("sequential")
+          scopeAddFinalizerUnsafe(own, this, this.bound())
+          const scope = own
+          scopeAddFinalizerUnsafe(under, this, (exit) => Scope.close(scope, exit))
+        } else {
+          own = Scope.forkUnsafe(under, "sequential")
+        }
+      }
+      return this.own = own
+    }
+    /** Adds the instance's finalizer: to its Scope, or to its parent's until it has one. */
+    hold(): void {
+      const own = this.own
+      const under = own ?? this.parent!.scope
+      if (under.state._tag === "Closed") {
+        if (own === undefined) this.dead = true
+        track(closing, forkNow(ctx, Effect.suspend(() => finishInstance(this))))
+        return
+      }
+      if (own === undefined) this.held = true
+      scopeAddFinalizerUnsafe(under, this, this.bound())
+    }
+    /** Run by the Scope that holds the instance's finalizer. */
+    finalize(): Effect.Effect<void> {
+      if (this.held) {
+        this.held = false
+        this.dead = true
+      }
+      return finishInstance(this)
+    }
+    /** Closes the instance's Scope, or runs its finalizer when it has none. What's left of the close. */
+    close(): Effect.Effect<void> | undefined {
+      const own = this.own
+      if (own !== undefined) {
+        // A Scope made late sits in its finalizer's slot in the parent's, which closing it doesn't free.
+        const under = (this.parent as Inst | undefined)?.own
+        if (under !== undefined) scopeRemoveFinalizerUnsafe(under, this)
+        return Scope.closeUnsafe(own, Exit.void) as Effect.Effect<void> | undefined
+      }
+      if (this.dead) return undefined
+      this.dead = true
+      if (!this.held) return undefined
+      this.held = false
+      scopeRemoveFinalizerUnsafe(this.parent!.scope, this)
+      try {
+        return finishInstance(this)
+      } catch (defect) {
+        return Effect.die(defect)
+      }
+    }
+    /** An outlet's messages go to the author of its content. */
+    dispatch(message: unknown, source: MessageLog.Source): void {
+      if (this.component === outletComponent) this.author.dispatch(message, source)
+      else dispatchTo(this, message, source)
+    }
+    get fire(): Renderer.Dispatch {
+      return this.component === outletComponent ? this.author.fire : (this.fired ??= fireOn.bind(this))
+    }
+    /** What the Scope that holds the instance's finalizer calls. */
+    private bound(): (exit: Exit.Exit<unknown, unknown>) => Effect.Effect<void> {
+      return (this.fired ??= fireOn.bind(this)) as (exit: Exit.Exit<unknown, unknown>) => Effect.Effect<void>
+    }
+  }
+
+  const blank = new Rare()
+  for (const name of Object.keys(blank) as Array<keyof Rare>) {
+    const empty = blank[name]
+    Object.defineProperty(Inst.prototype, name, {
+      get(this: { rare: Rare | undefined }) {
+        const rare = this.rare
+        return rare === undefined ? empty : rare[name]
+      },
+      set(this: { rare: Rare | undefined }, value: unknown) {
+        if (this.rare === undefined) {
+          if (value === empty) return
+          this.rare = new Rare()
+        }
+        ;(this.rare as any)[name] = value
+      }
+    })
+  }
+
   const makeInstance = (
     component: Component.Any,
     props: unknown,
-    path: string,
+    named: string | undefined,
+    key: string,
     parent: Instance | undefined,
     parentEnv: Env,
     onEmit: (events: unknown) => unknown,
@@ -2300,148 +2913,61 @@ const setup = (
     content?: ((parts: any) => View.Content<any, any>) | undefined,
     slots?: Slotted["values"]
   ): Instance => {
-    const scope = Scope.forkUnsafe(parent?.scope ?? rootScope, "sequential")
-    const bound = componentQueries.boundOf(component)
+    // A child's Scope is made when it's needed: see `Inst.scope`.
+    const ownScope = parent === undefined ? Scope.forkUnsafe(rootScope, "sequential") : undefined
     const depth = parent === undefined ? 0 : parent.depth + 1
-    const owner: View.Owner | undefined = content === undefined ? undefined : { path, depth }
-    const inst: Instance = {
-      path,
-      born: ++instancesMade,
+    // Hydration reads state by path, and a headless instance's parts derive ids from it: made here then.
+    const path = named === undefined && (hydrating !== undefined || content !== undefined)
+      ? parent!.path + "/" + segmentOf(component, key)
+      : named
+    const owner: View.Owner | undefined = content === undefined ? undefined : { path: path!, depth }
+    const inst: Instance = new Inst(
+      content === undefined ? named : path,
+      key,
       depth,
       component,
       parent,
-      author: undefined as any,
       owner,
-      content,
-      scope,
-      env: parentEnv,
-      selection: undefined,
-      children: noChildren,
+      ownScope,
+      parentEnv,
       props,
-      model: undefined,
-      results: undefined,
       onEmit,
       onFailure,
-      failure: undefined,
-      childPaths: undefined,
-      clash: undefined,
-      rendered: [],
-      get closed() {
-        return isClosed(this.scope) || this.parent?.closed === true
-      },
-      waiting: false,
-      adoptsChildren: false,
-      deferred: false,
-      runs: [],
-      left: false,
-      parked: undefined,
-      closes: undefined,
-      subscriptions: undefined,
-      watches: undefined,
-      watchesSynced: false,
-      watched: undefined,
-      prefetch: undefined,
-      keyed: undefined,
-      keyedQueued: false,
-      cause: undefined,
-      loadMores: undefined,
-      mounting: undefined,
-      outbox: [],
-      shares: undefined,
-      readers: undefined,
-      owning: component.definition.shares === undefined
-        ? undefined
-        : { seq: -1, round: false, collected: undefined, restored: false },
-      owners: undefined,
-      seen: undefined,
-      dispatch: undefined as any,
-      fire: undefined as any
+      content,
+      owner === undefined || parent === undefined ? undefined : parent.author
+    )
+    addInstanceFinalizer(inst)
+    if (declaresHead(component)) {
+      for (let at: Instance | undefined = inst; at !== undefined; at = at.parent) {
+        at.heads++
+      }
     }
-    // Made outside this function, the closures the instance keeps hold it alone, and not the
-    // locals of its mount: see `instanceHandlers`.
-    instanceHandlers(inst, bound)
     // `parentEnv` is the Env at the child node, but for a feature's implementation, which is passed no slots.
     if (component.definition.slots.length > 0) slottedBy.set(inst, { values: slots, env: parentEnv, placed: new Map() })
-    inst.author = owner === undefined || parent === undefined ? inst : parent.author
     if (owner !== undefined) owners.set(owner, inst)
     if (recording > 0) {
       inst.watched = new Set()
       recorded.add(inst)
     }
 
-    // Entries about the Layer wait until the instance's first entry, `Mounted` or `Waiting`, is logged.
-    let buffering = true
-    const early: Array<() => void> = []
-    const lifecycle = (draft: Draft) => {
-      if (buffering) early.push(() => record(inst, draft))
-      else record(inst, draft)
-    }
-    const logEarly = () => {
-      buffering = false
-      for (const f of early.splice(0)) f()
-    }
-    let constructing = true
-    let failedEarly: Cause.Cause<unknown> | undefined
-    let pending = false
-
     // Hydration: the Model and query results the server rendered this path with, unless it deferred the path.
     const fromServer: Adopted = hydrating !== undefined &&
         (parent === undefined || parent.adoptsChildren) &&
-        !hydrating.deferred.has(path) &&
-        Object.hasOwn(hydrating.state, path)
-      ? stateCodecOf(component).decode(hydrating.state[path])
+        !hydrating.deferred.has(path!) &&
+        Object.hasOwn(hydrating.state, path!)
+      ? stateCodecOf(component).decode(hydrating.state[path!])
       : Option.none()
-    // The status the server recorded for the instance's provide, when it wasn't ready there.
-    const shipped = Option.isSome(fromServer) ? shippedStatus(path) : undefined
-    // The server rendered the instance with its services: if its Layer is still building here, it waits.
-    const awaits = range !== undefined && Option.isSome(fromServer) && shipped === undefined
     // An owner adopting the server's Model starts from what its reports last sent there.
     const collectedOnServer = Option.isSome(fromServer) && component.definition.collects !== undefined
       ? Option.flatMap(
-        Option.fromUndefinedOr(hydrating!.state["~reported"]?.[path]),
+        Option.fromUndefinedOr(hydrating!.state["~reported"]?.[path!]),
         jsonCodecOf(component.definition.message).decode
       )
       : Option.none()
 
-    /**
-     * What the instance starts from: `init`'s result, and the Model it adopts from the server or from
-     * history restore instead of `init`'s.
-     */
-    const startFrom = (serverModel: Adopted) => {
-      const first = guard(inst, "init", () => {
-        const elements = component.elements()
-        if (elements !== undefined && host.elements !== "any" && !host.elements.includes(elements.name)) {
-          throw new Error(
-            `${component.definition.name} renders ${elements.name} elements, and this host shows ${
-              host.elements.join(", ")
-            }`
-          )
-        }
-        findOwners(inst)
-        return component.init(inst.props)
-      })
-      let adopted = serverModel
-      // An owner of shared state isn't restored from history: a reload would reopen what nobody hovers.
-      if (
-        first !== undefined && Option.isNone(adopted) && hooks !== undefined &&
-        component.definition.shares === undefined
-      ) {
-        const restored = hooks.restore(path)
-        if (restored !== undefined) {
-          adopted = Option.map(
-            stateCodecOf(component).decode(restored),
-            (state) => ({ model: state.model, results: restoreQueries(component, state.results) })
-          )
-        }
-      }
-      return { first, adopted }
-    }
-    /**
-     * Read before the Layer builds, when a keyed provide selects the Layer from the starting Model.
-     * `begin` takes it, so `init` runs once.
-     */
-    let selectedFrom: ReturnType<typeof startFrom> | undefined
-
+    // No closure is made here: an instance without a Layer, most of them, starts without one.
+    let layer: LayerStart | undefined
+    let selected: Start | undefined
     // A provided Layer builds in the background. The instance renders at once; its Commands,
     // Subscriptions and mounts, and its descendants', wait for it.
     if (component.layer !== undefined) {
@@ -2450,114 +2976,237 @@ const setup = (
         inst.env = buildingEnv(parentEnv, true)
         inst.deferred = true
       } else {
-        // A keyed provide selects from the Model the instance starts with: the server's when it
-        // hydrates, else history's or `init`'s. Each selection builds in a Scope of its own.
-        let keys: Keys = none
-        let buildScope: Scope.Closeable | undefined
-        if (component.layerKeys !== undefined) {
-          let model: unknown
-          if (Option.isSome(fromServer)) model = fromServer.value.model
-          else {
-            const { adopted, first } = selectedFrom = startFrom(fromServer)
-            model = Option.isSome(adopted) ? adopted.value.model : first?.model
-          }
-          keys = readKeys(component, props, model)
-          if (server !== undefined) {
-            // The server builds once, from the Model it starts with.
-            buildScope = Scope.forkUnsafe(scope, "sequential")
-          } else {
-            buildScope = Scope.makeUnsafe("sequential")
-            const selection: Selection = {
-              parentEnv,
-              keys,
-              model,
-              props,
-              due: false,
-              scope: buildScope,
-              retired: undefined,
-              releasing: new Set(),
-              issued: new Set(),
-              held: [],
-              skipped: false
-            }
-            inst.selection = selection
-            // Added before the instance's runs and Subscriptions start, so it closes after them.
-            addFinalizer(scope, closeSelection(selection))
-          }
-        }
-        // Forked now, before the run-stop finalizer below, so a build that waits for its parent's Env
-        // still closes after the instance's runs.
-        buildScope ??= Scope.forkUnsafe(scope, "sequential")
-        const sharedLayer = component.sharedLayer
-        // Failed on the server: the client adopts the failure, which the Model already handled, and builds nothing.
-        const adoptsFailure = shipped === "Failed"
-        const shared = sharedLayer !== undefined && !adoptsFailure ? acquireShared(parentEnv, sharedLayer) : undefined
-        const own = shared !== undefined ? shared.env : buildingEnv(parentEnv)
-        inst.env = own
-        if (shared !== undefined) {
-          addFinalizer(scope, Effect.suspend(() => releaseShared(parentEnv, sharedLayer!, shared)))
-        }
-        let settleBuild: (() => void) | undefined
-        const buildStamp = shared !== undefined ? shared.stamp : ++builds
-        const fail = (cause: Cause.Cause<unknown>) => {
-          settleBuild?.()
-          lastFailedBuild = Math.max(lastFailedBuild, buildStamp)
-          // `init` failed, or a keyed provide has selected again since.
-          if (inst.closed || inst.env !== own) return
-          // A handled failure on the server: its slots get `serverFailure`, not `cause`. See `ownFailed`.
-          const redacted = server !== undefined && component.layerFailure !== undefined
-          lifecycle({ _tag: "LayerFailed", cause, ...(redacted ? { redacted } : undefined) })
-          if (component.layerFailure === undefined && constructing) failedEarly = cause
-          else ownFailed(inst, own, cause, logEarly)
-        }
-        const ready = () => {
-          if (!inst.closed && pending) lifecycle({ _tag: "LayerReady" })
-        }
-        if (inst.closed) {
-          // `init` failed before a keyed provide could select: nothing is built.
-        } else if (adoptsFailure) {
-          // The slots get the substitute the server's did: a replay of this log renders it, not its JSON form.
-          const cause = serverFailure()
-          lifecycle({ _tag: "LayerFailed", cause, redacted: true })
-          failEnv(own, cause)
-        } else if (shared !== undefined) {
-          whenReady(own, ready, fail)
-        } else {
-          buildOwn(inst, parentEnv, own, buildScope, () => component.layer!(props, keysOrThrow(keys)), ready, fail)
-        }
-        if (!inst.closed && own.ctx === undefined && own.failure === undefined && failedEarly === undefined) {
-          pending = true
-          if (awaits) own.status = awaitingStatus
-          lifecycle({ _tag: "LayerPending", status: awaits ? "Awaiting" : "Pending" })
-          settleBuild = countBuilding(own, buildScope)
-        }
-        // Added after the Layer's Scopes, which all exist by now, so the close stops the instance's runs
-        // and waits for their cleanup before the services they use are released.
-        addFinalizer(scope, Effect.suspend(() => awaitRuns(stopRuns(inst))))
+        layer = new LayerStart(inst, range, fromServer)
+        selected = startLayer(inst, layer, parentEnv, fromServer)
       }
     }
+    if (layer === undefined) {
+      begin(inst, range, fromServer, undefined, collectedOnServer, undefined)
+      return inst
+    }
 
-    /**
-     * Runs `init` and renders. An instance adopting a Model (from the server, or from
-     * history restore) replays `init` only for its Commands, every one of them: the adopted
-     * Model wins and events are dropped. Given the server's nodes, it adopts them when its
-     * view matches, and otherwise builds fresh.
-     */
-    const begin = (range: Range | undefined, serverModel: Adopted) => {
-      const { adopted, first } = selectedFrom ?? startFrom(serverModel)
-      selectedFrom = undefined
-      let mountedSeq = -1
-      if (first !== undefined) {
-        inst.model = Option.isSome(adopted) ? adopted.value.model : first.model
-        inst.results = Option.isSome(adopted) ? adopted.value.results : undefined
-        inst.adoptsChildren = Option.isSome(serverModel)
-        if (Option.isSome(serverModel) && Option.isSome(collectedOnServer)) {
-          inst.owning!.collected = { message: collectedOnServer.value }
-          inst.owning!.restored = true
-          // Compared once the pass settles and nothing below waits to adopt, readers or none: one that reported
-          // on the server may not mount here.
-          dueReports(inst)
+    if (layer.failedEarly !== undefined) {
+      layer.constructing = false
+      layer.logEarly()
+      failInstance(inst, layer.failedEarly, "layer")
+      return inst
+    }
+
+    // Hydration: an instance the server rendered with its services, whose provided Layer is still
+    // building here, keeps the server's nodes, inert, and adopts them once the Layer is ready: its status
+    // is `Awaiting`. If the Layer fails and the component handles it, the instance is built fresh and gets
+    // its failure message. One the server rendered while its Layer was pending adopts at once, as its
+    // feature slots showed their fallbacks there too.
+    if (layer.awaits && layer.pending && Option.isSome(fromServer)) {
+      awaitLayer(inst, layer, range!, fromServer, collectedOnServer)
+    } else begin(inst, range, fromServer, selected, collectedOnServer, layer)
+    layer.constructing = false
+    return inst
+  }
+
+  /**
+   * A provided Layer's part in an instance's start. Its entries wait until the instance's first entry,
+   * `Mounted` or `Waiting`, is logged. A failure while the instance is still being made fails it once
+   * it's made.
+   */
+  class LayerStart {
+    readonly inst: Instance
+    /** The server rendered the instance with its services: if its Layer is still building here, it waits. */
+    readonly awaits: boolean
+    /** The status the server recorded for the instance's provide, when it wasn't ready there. */
+    readonly shipped: Shipped | undefined
+    buffering = true
+    readonly early: Array<Draft> = []
+    constructing = true
+    failedEarly: Cause.Cause<unknown> | undefined = undefined
+    pending = false
+    constructor(inst: Instance, range: Range | undefined, fromServer: Adopted) {
+      this.inst = inst
+      this.shipped = Option.isSome(fromServer) ? shippedStatus(inst.path) : undefined
+      this.awaits = range !== undefined && Option.isSome(fromServer) && this.shipped === undefined
+    }
+    lifecycle(draft: Draft) {
+      if (this.buffering) this.early.push(draft)
+      else record(this.inst, draft)
+    }
+    readonly logEarly = () => {
+      this.buffering = false
+      for (const draft of this.early.splice(0)) record(this.inst, draft)
+    }
+  }
+
+  /**
+   * Starts building an instance's provided Layer. Returns what a keyed provide selected from, which
+   * `begin` takes, so `init` runs once.
+   */
+  const startLayer = (
+    inst: Instance,
+    layer: LayerStart,
+    parentEnv: Env,
+    fromServer: Adopted
+  ): Start | undefined => {
+    const component = inst.component
+    const props = inst.props
+    let selected: Start | undefined
+    // A keyed provide selects from the Model the instance starts with: the server's when it
+    // hydrates, else history's or `init`'s. Each selection builds in a Scope of its own.
+    let keys: Keys = none
+    let buildScope: Scope.Closeable | undefined
+    if (component.layerKeys !== undefined) {
+      let model: unknown
+      if (Option.isSome(fromServer)) model = fromServer.value.model
+      else {
+        const { adopted, first } = selected = startFrom(inst, fromServer)
+        model = Option.isSome(adopted) ? adopted.value.model : first?.model
+      }
+      keys = readKeys(component, props, model)
+      if (server !== undefined) {
+        // The server builds once, from the Model it starts with.
+        buildScope = Scope.forkUnsafe(inst.scope, "sequential")
+      } else {
+        buildScope = Scope.makeUnsafe("sequential")
+        const selection: Selection = {
+          parentEnv,
+          keys,
+          model,
+          props,
+          due: false,
+          scope: buildScope,
+          retired: undefined,
+          releasing: new Set(),
+          issued: new Set(),
+          held: [],
+          skipped: false
         }
+        inst.selection = selection
+        // Added before the instance's runs and Subscriptions start, so it closes after them.
+        addFinalizer(inst.scope, closeSelection(selection))
+      }
+    }
+    // Forked now, before the run-stop finalizer below, so a build that waits for its parent's Env
+    // still closes after the instance's runs.
+    buildScope ??= Scope.forkUnsafe(inst.scope, "sequential")
+    const sharedLayer = component.sharedLayer
+    // Failed on the server: the client adopts the failure, which the Model already handled, and builds nothing.
+    const adoptsFailure = layer.shipped === "Failed"
+    const shared = sharedLayer !== undefined && !adoptsFailure ? acquireShared(parentEnv, sharedLayer) : undefined
+    const own = shared !== undefined ? shared.env : buildingEnv(parentEnv)
+    inst.env = own
+    if (shared !== undefined) {
+      addFinalizer(inst.scope, Effect.suspend(() => releaseShared(parentEnv, sharedLayer!, shared)))
+    }
+    let settleBuild: (() => void) | undefined
+    const buildStamp = shared !== undefined ? shared.stamp : ++builds
+    const fail = (cause: Cause.Cause<unknown>) => {
+      settleBuild?.()
+      lastFailedBuild = Math.max(lastFailedBuild, buildStamp)
+      // `init` failed, or a keyed provide has selected again since.
+      if (inst.closed || inst.env !== own) return
+      // A handled failure on the server: its slots get `serverFailure`, not `cause`. See `ownFailed`.
+      const redacted = server !== undefined && component.layerFailure !== undefined
+      layer.lifecycle({ _tag: "LayerFailed", cause, ...(redacted ? { redacted } : undefined) })
+      if (component.layerFailure === undefined && layer.constructing) layer.failedEarly = cause
+      else ownFailed(inst, own, cause, layer.logEarly)
+    }
+    const ready = () => {
+      if (!inst.closed && layer.pending) layer.lifecycle({ _tag: "LayerReady" })
+    }
+    if (inst.closed) {
+      // `init` failed before a keyed provide could select: nothing is built.
+    } else if (adoptsFailure) {
+      // The slots get the substitute the server's did: a replay of this log renders it, not its JSON form.
+      const cause = serverFailure()
+      layer.lifecycle({ _tag: "LayerFailed", cause, redacted: true })
+      failEnv(own, cause)
+    } else if (shared !== undefined) {
+      whenReady(own, ready, fail)
+    } else {
+      buildOwn(inst, parentEnv, own, buildScope, () => component.layer!(props, keysOrThrow(keys)), ready, fail)
+    }
+    if (!inst.closed && own.ctx === undefined && own.failure === undefined && layer.failedEarly === undefined) {
+      layer.pending = true
+      if (layer.awaits) own.status = awaitingStatus
+      layer.lifecycle({ _tag: "LayerPending", status: layer.awaits ? "Awaiting" : "Pending" })
+      settleBuild = countBuilding(own, buildScope)
+    }
+    // Added after the Layer's Scopes, which all exist by now, so the close stops the instance's runs
+    // and waits for their cleanup before the services they use are released.
+    addFinalizer(inst.scope, Effect.suspend(() => awaitRuns(stopRuns(inst))))
+    return selected
+  }
+
+  /** What an instance starts from: `init`'s result, and the Model it adopts instead of `init`'s. */
+  interface Start {
+    readonly first: Component.Next<any, any, any, any> | undefined
+    readonly adopted: Adopted
+  }
+  /** Runs `init`, once the host is known to show the component's elements. */
+  const initOf = (inst: Instance): Component.Next<any, any, any, any> => {
+    const component = inst.component
+    const elements = component.elements()
+    if (elements !== undefined && host.elements !== "any" && !host.elements.includes(elements.name)) {
+      throw new Error(
+        `${component.definition.name} renders ${elements.name} elements, and this host shows ${
+          host.elements.join(", ")
+        }`
+      )
+    }
+    findOwners(inst)
+    return component.init(inst.props)
+  }
+  /**
+   * What the instance starts from: `init`'s result, and the Model it adopts from the server or from
+   * history restore instead of `init`'s.
+   */
+  const startFrom = (inst: Instance, serverModel: Adopted): Start => {
+    const first = guard(inst, "init", initOf)
+    const component = inst.component
+    let adopted = serverModel
+    // An owner of shared state isn't restored from history: a reload would reopen what nobody hovers.
+    if (
+      first !== undefined && Option.isNone(adopted) && hooks !== undefined &&
+      component.definition.shares === undefined
+    ) {
+      const restored = hooks.restore(inst.path)
+      if (restored !== undefined) {
+        adopted = Option.map(
+          stateCodecOf(component).decode(restored),
+          (state) => ({ model: state.model, results: restoreQueries(component, state.results) })
+        )
+      }
+    }
+    return { first, adopted }
+  }
+
+  /**
+   * Runs `init` and renders. An instance adopting a Model (from the server, or from
+   * history restore) replays `init` only for its Commands, every one of them: the adopted
+   * Model wins and events are dropped. Given the server's nodes, it adopts them when its
+   * view matches, and otherwise builds fresh. `selected` is what a keyed provide already read.
+   */
+  const begin = (
+    inst: Instance,
+    range: Range | undefined,
+    serverModel: Adopted,
+    selected: Start | undefined,
+    collectedOnServer: Option.Option<unknown>,
+    layer: LayerStart | undefined
+  ) => {
+    const { adopted, first } = selected ?? startFrom(inst, serverModel)
+    const bound = queryCore.boundOf(inst.component)
+    let mountedSeq = -1
+    if (first !== undefined) {
+      inst.model = Option.isSome(adopted) ? adopted.value.model : first.model
+      inst.results = Option.isSome(adopted) ? adopted.value.results : undefined
+      inst.adoptsChildren = Option.isSome(serverModel)
+      if (Option.isSome(serverModel) && Option.isSome(collectedOnServer)) {
+        inst.owning!.collected = { message: collectedOnServer.value }
+        inst.owning!.restored = true
+        // Compared once the pass settles and nothing below waits to adopt, readers or none: one that reported
+        // on the server may not mount here.
+        dueReports(inst)
+      }
+      if (log.enabled) {
         mountedSeq = record(inst, {
           _tag: "Mounted",
           props: inst.props,
@@ -2569,120 +3218,112 @@ const setup = (
           adopted: Option.isSome(adopted)
         })
       }
-      logEarly()
-      if (first === undefined) return
-      // Before any child mounts: the readers below read it as they render.
-      if (!refreshShares(inst, mountedSeq)) return
-      // The first emission of each watch is written as its result before the first render, parent before
-      // child, so a new instance over a warm entry never commits "Loading". An instance adopting the
-      // server's state renders it first, to match the server's nodes, and gets the emissions after.
-      const early: NonNullable<Instance["mounting"]> = []
-      if (Option.isNone(serverModel) && bound !== undefined) {
-        inst.mounting = early
-        syncSubscriptions(inst, true)
-        // The keyed queries' first values, and whatever their `onChange` causes, before the first view.
-        drainKeyed(inst)
-        inst.mounting = undefined
-        if (inst.closed || inst.failure !== undefined) return
+    }
+    layer?.logEarly()
+    if (first === undefined) return
+    // Before any child mounts: the readers below read it as they render.
+    if (!refreshShares(inst, mountedSeq)) return
+    // The first emission of each watch is written as its result before the first render, parent before
+    // child, so a new instance over a warm entry never commits "Loading". An instance adopting the
+    // server's state renders it first, to match the server's nodes, and gets the emissions after.
+    let early: Instance["mounting"]
+    if (Option.isNone(serverModel) && bound !== undefined) {
+      inst.mounting = early = []
+      syncSubscriptions(inst, true)
+      // The keyed queries' first values, and whatever their `onChange` causes, before the first view.
+      drainKeyed(inst)
+      inst.mounting = undefined
+      if (inst.closed || inst.failure !== undefined) return
+    }
+    // The updates folded before the first view may have changed a keyed provide's key.
+    reselect(inst)
+    if (inst.closed) return
+    const tree = viewOf(inst)
+    if (tree === undefined) return
+    let taken: Rendered | undefined
+    let rendered: Rendered
+    try {
+      if (range !== undefined && Option.isSome(serverModel)) {
+        taken = adoptNode(inst, tree, host.nextOf(range.open), range.close, inst.env)
       }
-      // The updates folded before the first view may have changed a keyed provide's key.
-      reselect(inst)
-      if (inst.closed) return
-      const tree = viewOf(inst)
-      if (tree === undefined) return
-      const plan = range !== undefined && Option.isSome(serverModel) ? matchList(inst, [tree], range.nodes) : undefined
-      const rendered = guard(
-        inst,
-        "view",
-        () => {
-          const rendered = plan !== undefined ? adoptNode(inst, tree, plan[0]!, inst.env) : create(inst, tree, inst.env)
-          throwClash(inst)
-          return rendered
-        }
-      )
-      if (rendered === undefined) return
-      if (plan !== undefined) {
-        // Adopted: the markers go, and the server's nodes are the instance's.
-        range!.claimed = true
-        host.remove(range!.open)
-        host.remove(range!.close)
+      rendered = taken ?? create(inst, tree, inst.env)
+      throwClash(inst)
+    } catch (error) {
+      failInstance(inst, Cause.die(error), "view")
+      return
+    }
+    if (taken !== undefined) claim(range!)
+    inst.rendered = [rendered]
+    viewChanged = true
+    if (inst.failure !== undefined) return
+    if (Option.isSome(adopted)) {
+      apply(inst, { model: inst.model, commands: none, events: none }, mountedSeq, true)
+      const commands = first.commands
+      for (let index = 0; index < commands.length; index++) {
+        issue(inst, commands[index], { seq: mountedSeq, index }, index)
       }
-      inst.rendered = [rendered]
-      viewChanged = true
-      if (inst.failure !== undefined) return
-      if (Option.isSome(adopted)) {
-        apply(inst, { model: inst.model, commands: [], events: [] }, mountedSeq, true)
-        first.commands.forEach((command, index) => issue(inst, command, { seq: mountedSeq, index }, index))
-      } else apply(inst, { ...first, model: inst.model }, mountedSeq, true)
-      // The Commands of the updates folded before the render: issued where `init`'s are, after them.
+    } else apply(inst, inst.model === first.model ? first : { ...first, model: inst.model }, mountedSeq, true)
+    // The Commands of the updates folded before the render: issued where `init`'s are, after them.
+    if (early !== undefined) {
       for (const entry of early) issue(inst, entry.command, entry.issued, undefined)
     }
+  }
 
-    if (failedEarly !== undefined) {
-      constructing = false
-      logEarly()
-      failInstance(inst, failedEarly, "layer")
-      return inst
-    }
-
-    // Hydration: an instance the server rendered with its services, whose provided Layer is still
-    // building here, keeps the server's nodes, inert, and adopts them once the Layer is ready: its status
-    // is `Awaiting`. If the Layer fails and the component handles it, the instance is built fresh and gets
-    // its failure message. One the server rendered while its Layer was pending adopts at once, as its
-    // feature slots showed their fallbacks there too.
-    if (awaits && pending) {
-      const raw: Rendered = { _tag: "Text", v: emptyText, node: undefined }
-      // Its first entry: `Mounted` comes when the Layer is ready, and the Layer's entries come as they happen.
-      record(inst, {
-        _tag: "Waiting",
-        props: inst.props,
-        model: fromServer.value.model,
-        ...(bound === undefined ? undefined : { queries: fromServer.value.results ?? bound.empty })
-      })
-      logEarly()
-      inst.waiting = true
-      waiting++
-      range.claimed = true
-      inst.rendered = [range.open, ...range.nodes, range.close].map((node) => ({ ...raw, node }))
-      const resume = (adopt: boolean) => {
-        if (inst.closed || !inst.waiting) return
-        inst.waiting = false
-        const nodes = inst.rendered.flatMap(nodesOf)
-        inst.rendered = []
-        range.claimed = false
-        // The placement its parent rendered while it waited: it adopts with the one it was placed with, the
-        // server's, and its subtree's head is recorded from that. The latest comes after. Built fresh, it
-        // starts from the latest.
-        const held = heldPlacement.get(inst)
-        heldPlacement.delete(inst)
-        if (held !== undefined && !adopt) {
-          inst.props = held.props
-          setPlacement(inst, held)
-        }
-        begin(range, adopt ? fromServer : Option.none())
-        if (adopt) recordAdopted(inst)
-        if (held !== undefined && adopt && !inst.closed && inst.failure === undefined) applyPlacement(inst, held)
-        if (!range.claimed) {
-          // Rebuilt: the new nodes take the server's place.
-          const parentNode = host.parentOf(range.open)
-          if (inst.failure === undefined && parentNode !== undefined) {
-            for (const node of inst.rendered.flatMap(nodesOf)) host.insertBefore(parentNode, node, range.open)
-          }
-          for (const node of nodes) host.remove(node)
-        }
-        viewChanged = true
-        settleWaiting()
+  /**
+   * Keeps the server's nodes of an instance whose Layer is still building, and adopts them once it's
+   * ready. See `makeInstance`.
+   */
+  const awaitLayer = (
+    inst: Instance,
+    layer: LayerStart,
+    range: Range,
+    fromServer: Option.Some<{ readonly model: unknown; readonly results: componentQueries.Results | undefined }>,
+    collectedOnServer: Option.Option<unknown>
+  ) => {
+    const bound = queryCore.boundOf(inst.component)
+    // Its first entry: `Mounted` comes when the Layer is ready, and the Layer's entries come as they happen.
+    record(inst, {
+      _tag: "Waiting",
+      props: inst.props,
+      model: fromServer.value.model,
+      ...(bound === undefined ? undefined : { queries: fromServer.value.results ?? bound.empty })
+    })
+    layer.logEarly()
+    inst.waiting = true
+    waiting++
+    range.claimed = true
+    inst.rendered = rangeNodes(range).map((node) => new TextRecord(emptyText, node))
+    const resume = (adopt: boolean) => {
+      if (inst.closed || !inst.waiting) return
+      inst.waiting = false
+      const nodes = inst.rendered.flatMap(nodesOf)
+      inst.rendered = []
+      range.claimed = false
+      // Where its nodes go. Read before it renders: adopting removes the markers.
+      const parentNode = host.parentOf(range.open)
+      const after = host.nextOf(range.close)
+      // The placement its parent rendered while it waited: it adopts with the one it was placed with, the
+      // server's, and its subtree's head is recorded from that. The latest comes after. Built fresh, it
+      // starts from the latest.
+      const held = heldPlacement.get(inst)
+      heldPlacement.delete(inst)
+      if (held !== undefined && !adopt) {
+        inst.props = held.props
+        setPlacement(inst, held)
       }
-      whenReady(inst.env, () => defer(() => resume(true)), () => {
-        if (component.layerFailure !== undefined) defer(() => resume(false))
-      })
-      constructing = false
-      return inst
+      begin(inst, range, adopt ? fromServer : Option.none(), undefined, collectedOnServer, layer)
+      // Rebuilt: the server's nodes go. Adopted, the ones it kept are in place, and what it built fresh for
+      // the rest isn't in the document yet. Nothing above it renders now, so it places its own nodes.
+      if (!range.claimed) { for (const node of nodes) host.remove(node) }
+      if (inst.failure === undefined && parentNode !== undefined) placeEach(parentNode, inst.rendered, after)
+      if (adopt) recordAdopted(inst)
+      if (held !== undefined && adopt && !inst.closed && inst.failure === undefined) applyPlacement(inst, held)
+      viewChanged = true
+      settleWaiting()
     }
-
-    begin(range, fromServer)
-    constructing = false
-    return inst
+    whenReady(inst.env, () => defer(() => resume(true)), () => {
+      if (inst.component.layerFailure !== undefined) defer(() => resume(false))
+    })
   }
 
   const apply = (inst: Instance, next: Component.Next<any, any, any, any>, entrySeq: number, initial: boolean) => {
@@ -2693,7 +3334,10 @@ const setup = (
     const mounting = inst.mounting
     if (mounting !== undefined) {
       // Before the first render: nothing is issued or marked dirty, and only the watches follow the Model.
-      next.commands.forEach((command, index) => mounting.push({ command, issued: { seq: entrySeq, index } }))
+      const commands = next.commands
+      for (let index = 0; index < commands.length; index++) {
+        mounting.push({ command: commands[index], issued: { seq: entrySeq, index } })
+      }
       // The first render, which makes the children, comes first.
       if (queueSends(inst, next, entrySeq)) defer(() => deliverSends(inst))
       syncSubscriptions(inst, true)
@@ -2701,9 +3345,10 @@ const setup = (
       if (next.events.length > 0) defer(() => deliverEvents(inst, next.events, entrySeq))
       return
     }
-    next.commands.forEach((command, index) =>
-      issue(inst, command, { seq: entrySeq, index }, initial ? index : undefined)
-    )
+    const commands = next.commands
+    for (let index = 0; index < commands.length; index++) {
+      issue(inst, commands[index], { seq: entrySeq, index }, initial ? index : undefined)
+    }
     if (!initial) markDirty(inst)
     // Delivered at the end of the render just marked, so a child it mounts can receive them.
     queueSends(inst, next, entrySeq)
@@ -2725,7 +3370,7 @@ const setup = (
    */
   const issueList = (inst: Instance, list: Component.ListIssue) => {
     if (inst.closed) return
-    const bound = componentQueries.boundOf(inst.component)
+    const bound = queryCore.boundOf(inst.component)
     const field = bound?.byName.get(list.name)
     if (bound === undefined || field === undefined || !field.list) return
     const args = bound.context(inst.model, inst.props, inst.results).argsOf(field.name).args
@@ -2742,8 +3387,8 @@ const setup = (
       )
       return
     }
-    const def = Query.defOf(field.query)
-    if (list.op === "reset") return cache.reset(def, args)
+    const def = queryModule().defOf(field.query)
+    if (list.op === "reset") return queryCache().reset(def, args)
     const go = (envCtx: Context.Context<any>) => {
       if (inst.closed) return
       const fetcher = Context.getOption(envCtx, field.query as any)
@@ -2751,7 +3396,7 @@ const setup = (
       if (Option.isNone(fetcher)) return
       let cancel: (() => void) | undefined
       let done = false
-      cancel = cache.loadMore(def, args, fetcher.value as any, () => {
+      cancel = queryCache().loadMore(def, args, fetcher.value as any, () => {
         done = true
         if (cancel !== undefined) inst.loadMores?.delete(cancel)
       })
@@ -2767,6 +3412,7 @@ const setup = (
     let queued = false
     next.sends.forEach((send, index) => {
       if (send.ref === undefined) return
+      if (inst.outbox === emptyList) inst.outbox = []
       inst.outbox.push({ send, issued: { seq: entrySeq, index } })
       queued = true
     })
@@ -3018,7 +3664,7 @@ const setup = (
   const deliverSends = (inst: Instance) => {
     if (inst.outbox.length === 0 || inst.closed) return
     const outbox = inst.outbox
-    inst.outbox = []
+    inst.outbox = emptyList
     if (!countSends(inst, "its children")) return
     for (const { issued, send } of outbox) {
       if (inst.closed) return
@@ -3101,14 +3747,11 @@ const setup = (
         // The cache begins the run at issue, so its patches are live before it starts, and before
         // `switch` stops the earlier runs: the new patch layers over the old until the old fiber exits.
         let handle: Query.RunHandle | undefined
-        if (command.service !== undefined) {
+        // Without the `Query` module there's no cache, and nothing a run could invalidate, patch or read.
+        const runs = command.service === undefined ? undefined : cache ?? cell.get()
+        if (runs !== undefined) {
           try {
-            handle = cache.beginRun({
-              command: command.name,
-              invalidates: command.invalidates as ReadonlyArray<Query.Target>,
-              optimistic: command.optimistic as ReadonlyArray<Query.Patch>,
-              afterRefetch: command._tag === "Effect" && command.afterRefetch !== undefined
-            })
+            handle = beginRun(runs, command)
           } catch (error) {
             // Like a throw in `update`: the run doesn't start and the issuing instance fails.
             failInstance(inst, Cause.die(error), initIndex === undefined ? "update" : "init", command.name)
@@ -3133,7 +3776,11 @@ const setup = (
           cancelWait: undefined,
           cutBy: undefined
         }
+        if (inst.runs === emptyList) inst.runs = []
         inst.runs.push(run)
+        if (runs === undefined && command.service !== undefined && command.writes !== undefined) {
+          ;(early ??= new Set()).add(run)
+        }
         // Issued before a keyed provide's due read: a change of key keeps it.
         dueSelection(inst)?.issued.add(run)
         if (run.status === "running") startRun(inst, run)
@@ -3146,6 +3793,7 @@ const setup = (
 
   const removeRun = (inst: Instance, run: Run) => {
     run.done = true
+    early?.delete(run)
     const index = inst.runs.indexOf(run)
     if (index >= 0) inst.runs.splice(index, 1)
   }
@@ -3278,12 +3926,33 @@ const setup = (
           const work: Effect.Effect<unknown, unknown, any> = command._tag === "Effect"
             ? command.work
             : Stream.runForEach(command.work, (element) => Effect.sync(() => send(command.resolve(element as never))))
-          return run.handle === undefined
-            ? work
-            : run.handle.run(
-              work,
-              command.writes as ((success: unknown) => ReadonlyArray<Query.Write>) | undefined
-            )
+          const writes = command.writes as ((success: unknown) => ReadonlyArray<Query.Write>) | undefined
+          if (run.handle !== undefined) return run.handle.run(work, writes)
+          if (writes === undefined) return work
+          // Issued before the app loaded `Query`, so with nothing to invalidate or patch: both are made
+          // by `Query`. Its run begins when the cache is made, which can be while this work goes on.
+          return Effect.uninterruptibleMask((restore) =>
+            Effect.flatMap(Effect.exit(restore(work)), (exit) => {
+              let sets: ReadonlyArray<Query.Write> | undefined
+              if (run.handle === undefined && exit._tag === "Success") {
+                // No cache has been made, so `writes` is called here. A throw fails the run, as at the cache.
+                try {
+                  sets = writes(exit.value)
+                } catch (error) {
+                  early?.delete(run)
+                  return Effect.die(error)
+                }
+                // Only `Query` makes a write, so it is loaded: the cache is made now, and begins this run.
+                if (sets.length > 0) cell.get()
+              }
+              const handle = run.handle
+              const made = sets
+              if (handle !== undefined) return handle.run(exit, made === undefined ? writes : () => made)
+              // Its work is over: a cache made from here on has no run to begin for it.
+              early?.delete(run)
+              return exit
+            })
+          )
         }
       )
       const fiber = fork(context, Effect.onExit(program, (exit) => Scope.close(scope, exit)))
@@ -3295,6 +3964,14 @@ const setup = (
     // keyed provide's due read starts against the selection the read leaves.
     onceSelected(inst, go, () => stopRun(inst, run))
   }
+
+  const beginRun = (made: queryCore.Cache, command: Run["command"]): Query.RunHandle =>
+    made.beginRun({
+      command: command.name,
+      invalidates: command.invalidates as ReadonlyArray<Query.Target>,
+      optimistic: command.optimistic as ReadonlyArray<Query.Patch>,
+      afterRefetch: command._tag === "Effect" && command.afterRefetch !== undefined
+    })
 
   /**
    * A run's fiber exited. The cache has already had its patch removal, `writes` and invalidation, from
@@ -3488,7 +4165,7 @@ const setup = (
   /** `watchesOnly`: before the first render, when only the cache watchers register. */
   const syncSubscriptions = (inst: Instance, watchesOnly = false) => {
     const subscriptions = inst.component.subscriptions
-    const bound = componentQueries.boundOf(inst.component)
+    const bound = queryCore.boundOf(inst.component)
     // A waiting instance has no Model yet.
     if (inst.closed || inst.waiting || (subscriptions === undefined && bound === undefined)) return
     // A keyed provide's read is due: nothing starts against services that may be about to go. The read
@@ -3538,12 +4215,12 @@ const setup = (
         declaration = declared
         continue
       }
-      const marker = componentQueries.markerOf(subscription)
-      const group = marker === undefined ? componentQueries.groupOf(subscription) : undefined
+      const marker = queryCore.markerOf(subscription)
+      const group = marker === undefined ? queryCore.groupOf(subscription) : undefined
       if (marker !== undefined) {
         if (!markers.has(subscription.key)) markers.set(subscription.key, marker)
       } else if (group !== undefined) syncGroup(inst, group)
-      else if (componentQueries.isWatchKey(subscription.key)) {
+      else if (queryCore.isWatchKey(subscription.key)) {
         return failInstance(
           inst,
           Cause.die(new Error(`${inst.path}: the Subscription key ${subscription.key} is reserved for queries.`)),
@@ -3688,7 +4365,7 @@ const setup = (
         existing.marker = marker
         continue
       }
-      const def = Query.defOf(marker.query)
+      const def = queryModule().defOf(marker.query)
       const fetchKey = marker.argsKey === undefined ? undefined : def.logKey(marker.args, marker.argsKey)
       const logKey = fetchKey === undefined ? key : Subscription.keyOf(`~query/${marker.name}`, fetchKey)
       const running: WatchRun = { marker, logKey, handle: undefined, released: false, debounce: undefined }
@@ -3715,7 +4392,7 @@ const setup = (
         if (running.released || inst.closed) return
         // An emission equal to this watcher's last is skipped. A list's `more` changing is a message.
         if (
-          last !== undefined && last.patched === patched && Query.sameMore(last.more, more) &&
+          last !== undefined && last.patched === patched && queryModule().sameMore(last.more, more) &&
           Equal.equals(last.result, result)
         ) return
         last = { result, patched, more }
@@ -3726,7 +4403,7 @@ const setup = (
           run.changes.add(entry.argsKey)
           return requestKeyed(inst)
         }
-        const bound = componentQueries.boundOf(inst.component)!
+        const bound = queryCore.boundOf(inst.component)!
         const query = bound.byName.get(marker.name)!
         // It may run inside another instance's `update`: a patch registered at issue reaches every
         // watcher before that `update` returns.
@@ -3750,7 +4427,7 @@ const setup = (
         holdWatches()
         const from = asked ?? origin
         if (from !== undefined) watchCauses.set(entryKey(def.name, fetchKey!), from)
-        const handle = cache.watch(
+        const handle = queryCache().watch(
           def,
           marker.args,
           fetcher.value as (args: any) => Effect.Effect<any, any>,
@@ -3802,7 +4479,7 @@ const setup = (
   }
   /** Whether a watcher registering on the entry now starts a fetch: no watcher, nothing in flight, and stale or cold. */
   const wouldFetch = (def: ReturnType<typeof Query.defOf>, args: unknown): boolean => {
-    const info = cache.inspect(def, args)
+    const info = queryCache().inspect(def, args)
     return info === undefined || (info.watchers === 0 && info.fetch === "none" && info.stale)
   }
   /** A keyed query's keys follow the state. */
@@ -3863,7 +4540,7 @@ const setup = (
       const value = run.changes.has(entry.argsKey) ? run.values.get(entry.argsKey) : undefined
       return value === undefined ? [] : [{ args: value.args, result: value.result }]
     })
-    const held = Query.snapshotMapData(inst.results?.[group.name])
+    const held = queryModule().snapshotMapData(inst.results?.[group.name])
     let prune = false
     for (const key of held?.entries.keys() ?? []) {
       if (!declared.has(key)) {
@@ -3873,7 +4550,7 @@ const setup = (
     }
     run.changes.clear()
     if (!prune && changes.length === 0) return false
-    const bound = componentQueries.boundOf(inst.component)!
+    const bound = queryCore.boundOf(inst.component)!
     const query = bound.byName.get(group.name)!
     const snapshot = bound.snapshotMany(
       query,
@@ -3898,7 +4575,7 @@ const setup = (
     key: string
   ) => {
     if (inst.closed || inst.waiting || frozen) return
-    const bound = componentQueries.boundOf(inst.component)!
+    const bound = queryCore.boundOf(inst.component)!
     // The same snapshot, as when a watcher's first value is what the server or history already gave.
     if (Equal.equals((inst.results ?? bound.empty)[query.name], result)) return
     inst.results = { ...(inst.results ?? bound.empty), [query.name]: result }
@@ -3932,6 +4609,31 @@ const setup = (
     for (const child of inst.children) releaseWatches(child)
   }
   // -- Router.prefetch --------------------------------------------------------
+  // The declaration's walk and its check are the Router's, reached through its hooks: an app without a
+  // Router ships neither. This is what they read of the runtime, made when the first declaration arrives.
+  let prefetching: prefetch.Runtime | undefined
+  const prefetchRuntime = (): prefetch.Runtime =>
+    prefetching ??= {
+      now: () => clock.currentTimeMillisUnsafe(),
+      report,
+      cache: queryCache,
+      entryKey,
+      root: () => root,
+      since: () => ({ born: instancesMade, build: builds }),
+      lastFailedBuild: () => lastFailedBuild,
+      record: () => {
+        recording++
+        let open = true
+        return () => {
+          if (!open) return
+          open = false
+          if (--recording > 0) return
+          for (const at of recorded) at.watched = undefined
+          recorded.clear()
+        }
+      },
+      recorded
+    }
   /** Registers, updates or drops the instance's declaration. The latest `subscriptions` run's map wins. */
   const syncPrefetch = (inst: Instance, declaration: services.Prefetch | undefined) => {
     if (declaration === undefined || hooks === undefined) return releasePrefetch(inst)
@@ -3939,23 +4641,8 @@ const setup = (
       inst.prefetch.declaration = declaration
       return
     }
-    // The printed routes the declaration ran for, and when: an intent within 30 seconds of a run is dropped.
-    const ran = new Map<string, number>()
-    const state: NonNullable<Instance["prefetch"]> = {
-      declaration,
-      release: hooks.declare({
-        routes: () => state.declaration.routes,
-        run: (route, intent) => {
-          if (inst.closed || inst.failure !== undefined) return undefined
-          const now = clock.currentTimeMillisUnsafe()
-          for (const [key, at] of ran) if (now - at >= intentGuardMillis) ran.delete(key)
-          const printed = state.declaration.routes.print(route)
-          if (intent && ran.has(printed)) return undefined
-          ran.set(printed, now)
-          return runDeclaration(inst, state.declaration, route, intent)
-        }
-      })
-    }
+    const state: NonNullable<Instance["prefetch"]> = { declaration, release: undefined }
+    state.release = hooks.prefetch(prefetchRuntime(), inst, state)
     holdsWatchers = true
     inst.prefetch = state
   }
@@ -3963,221 +4650,7 @@ const setup = (
     const prefetch = inst.prefetch
     if (prefetch === undefined) return
     inst.prefetch = undefined
-    prefetch.release()
-  }
-
-  interface WalkedPage {
-    readonly name: string
-    /** The entries the walk prefetched, by entry key. */
-    readonly entries: Map<string, { readonly query: string; readonly logKey: string }>
-  }
-
-  /**
-   * Runs a declaration for a route in the declarer's context: every page is walked and its queries
-   * prefetched. A navigation gets the check to run once it settles.
-   */
-  const runDeclaration = (
-    inst: Instance,
-    declaration: services.Prefetch,
-    route: { readonly _tag: string },
-    intent: boolean
-  ): services.PrefetchCheck | undefined => {
-    // A declarer whose own Layer is still building, or failed, sees none of its queries yet.
-    const envCtx = inst.env.ctx
-    if (envCtx === undefined) return undefined
-    const handler = declaration.map[route._tag]
-    if (handler === undefined) return undefined
-    let pages: ReadonlyArray<services.Page>
-    try {
-      pages = handler(route)
-    } catch (error) {
-      report(prefetchThrew(inst, `Router.prefetch ${route._tag}`, error))
-      return undefined
-    }
-    if (intent) {
-      for (const page of pages) walkPage(inst, envCtx, page)
-      return undefined
-    }
-    const since = { born: instancesMade, build: builds }
-    const walked = pages.map((page) => walkPage(inst, envCtx, page))
-    // Records the watches of the instances created from here until the check ends.
-    recording++
-    let open = true
-    const end = () => {
-      if (!open) return
-      open = false
-      if (--recording > 0) return
-      for (const at of recorded) at.watched = undefined
-      recorded.clear()
-    }
-    return {
-      settled: () => {
-        try {
-          checkPrefetch(inst, walked, since)
-        } finally {
-          end()
-        }
-      },
-      dropped: end
-    }
-  }
-
-  const prefetchThrew = (inst: Instance, page: string, error: unknown) =>
-    new Router.PrefetchThrew({
-      message: `${inst.path}: ${page} threw while Router.prefetch walked it, so the rest of its walk was skipped`,
-      path: inst.path,
-      page,
-      error
-    })
-
-  /**
-   * Walks one page with no instance: `init` with its props, its Commands discarded, then what its
-   * queries would watch first, then its initial view, recursing into component children. A throw stops
-   * the page's walk. The declarer is unaffected.
-   */
-  const walkPage = (inst: Instance, envCtx: Context.Context<any>, page: services.Page): WalkedPage => {
-    const component = page.component as Component.Any
-    const walked: WalkedPage = { name: component.definition.name, entries: new Map() }
-    const visit = (component: Component.Any, props: unknown, provided: boolean) => {
-      // Behind a `provide`, a query the declarer can't see may be given below it: the skip is silent.
-      const behind = provided || component.layer !== undefined
-      const model = component.init(props).model
-      const bound = componentQueries.boundOf(component)
-      if (bound !== undefined) {
-        const context = bound.context(model, props, undefined)
-        for (const field of bound.entries) {
-          const current = context.argsOf(field.name)
-          const entries: ReadonlyArray<componentQueries.Keyed> = current.entries ??
-            (current.argsKey === undefined ? [] : [{ args: current.args, argsKey: current.argsKey }])
-          if (entries.length === 0) continue
-          const def = Query.defOf(field.query)
-          const fetcher = Context.getOption(envCtx, field.query as any)
-          if (Option.isNone(fetcher)) {
-            if (!behind) {
-              report(
-                new Router.PrefetchQueryNotProvided({
-                  message: `${inst.path}: Router.prefetch skipped the query ${
-                    JSON.stringify(def.name)
-                  } of ${component.definition.name}, because the declaring component can't see it. Provide it at the declarer.`,
-                  path: inst.path,
-                  page: walked.name,
-                  query: def.name
-                })
-              )
-            }
-            continue
-          }
-          for (const entry of entries) {
-            cache.prefetch(def, entry.args, fetcher.value as (args: any) => Effect.Effect<any, any>)
-            walked.entries.set(entryKey(def.name, entry.argsKey), {
-              query: def.name,
-              logKey: def.logKey(entry.args, entry.argsKey)
-            })
-          }
-        }
-      }
-      const visitNode = (node: View.Node<any, any>): void => {
-        switch (node._tag) {
-          case "Text":
-          case "Outlet":
-            return
-          case "Element":
-            for (const child of node.children) visitNode(child)
-            return
-          case "Child":
-            // What the parent passed for the child's slots is the parent's, whether the child places it.
-            for (const child of View.slotNodes(node)) visitNode(child)
-            // A feature has no implementation until its Layer is built.
-            if (Feature.isService(node.component)) return
-            // A headless child's view is a closure over its parts, which this walk doesn't run.
-            if (node.view !== undefined) return
-            return visit(node.component, node.props, behind)
-        }
-      }
-      visitNode(component.view(model, props, undefined, undefined, undefined, shared))
-    }
-    // A page that reads shared state reads the owners above the declarer: the walk doesn't run the
-    // closures of the headless components in the page, owners among them.
-    const shared: Component.SharedLookup = (owner) => {
-      const at = nearestOwner(inst, owner.definition)
-      if (at !== undefined) return at.shares
-      throw new Error(`${owner.definition.name} isn't above ${inst.path}, so its shared state can't be read`)
-    }
-    try {
-      visit(component, page.props, false)
-    } catch (error) {
-      report(prefetchThrew(inst, component.definition.name, error))
-    }
-    return walked
-  }
-
-  /**
-   * Checks prefetch declarations after navigation settles, matching pages by component name.
-   * Reports unmounted pages and checks new instances against their recorded watches; older
-   * instances are skipped. Skips the entire check if a Layer build begun since navigation failed.
-   *
-   * Walks the tree only for pages with no new instance, at most once per check.
-   */
-  const checkPrefetch = (
-    inst: Instance,
-    pages: ReadonlyArray<WalkedPage>,
-    since: { readonly born: number; readonly build: number }
-  ) => {
-    if (lastFailedBuild > since.build) return
-    const fresh = new Map<string, Array<Instance>>()
-    for (const at of recorded) {
-      if (at.closed || at.born <= since.born) continue
-      const found = fresh.get(at.component.definition.name)
-      if (found === undefined) fresh.set(at.component.definition.name, [at])
-      else found.push(at)
-    }
-    let mounted: Set<string> | undefined
-    const mountedNames = () => {
-      if (mounted !== undefined) return mounted
-      const names = new Set<string>()
-      const collect = (at: Instance) => {
-        if (at.closed) return
-        names.add(at.component.definition.name)
-        for (const child of at.children) collect(child)
-      }
-      collect(root)
-      return mounted = names
-    }
-    for (const page of pages) {
-      const found = fresh.get(page.name)
-      if (found === undefined) {
-        // Older than the navigation, it is skipped. None at all is reported.
-        if (mountedNames().has(page.name)) continue
-        report(
-          new Router.PrefetchPageNotMounted({
-            message: `${inst.path}: Router.prefetch declared the page ${page.name}, and none was mounted`,
-            path: inst.path,
-            page: page.name
-          })
-        )
-        continue
-      }
-      // Every instance below a fresh one is fresh too, so its watches were recorded.
-      const watched = new Set<string>()
-      const gather = (at: Instance) => {
-        if (at.watched !== undefined) { for (const key of at.watched) watched.add(key) }
-        for (const child of at.children) gather(child)
-      }
-      for (const at of found) gather(at)
-      for (const [key, entry] of page.entries) {
-        if (watched.has(key)) continue
-        report(
-          new Router.PrefetchEntryNotWatched({
-            message:
-              `${inst.path}: Router.prefetch fetched ${entry.logKey} for ${page.name}, and the page never watched it`,
-            path: inst.path,
-            page: page.name,
-            query: entry.query,
-            logKey: entry.logKey
-          })
-        )
-      }
-    }
+    prefetch.release?.()
   }
 
   /**
@@ -4196,7 +4669,7 @@ const setup = (
       case "Detached":
         return releaseRendered(rendered.inner)
       case "Element": {
-        for (const child of rendered.children) releaseRendered(child)
+        for (const child of listOf(rendered.children)) releaseRendered(child)
         return
       }
       case "Text":
@@ -4220,7 +4693,7 @@ const setup = (
             if (layer.owner === who.owner && layer.refKey === key) return rendered.node
           }
         }
-        return firstDefined(rendered.children, (child) => findRef(child, key, who, author))
+        return firstDefined(listOf(rendered.children), (child) => findRef(child, key, who, author))
       }
       case "Fallback":
         return findRef(rendered.inner, key, who, author)
@@ -4298,16 +4771,17 @@ const setup = (
     if (!host.runsMounts) return undefined
     const mountScope = Scope.forkUnsafe(renderer.scope, "sequential")
     const causedBy = origin
-    const running: RunningMount = { scope: mountScope, mount, pubsub: undefined, cutBy: undefined }
-    // A mount that never reads its args' changes pays nothing for them.
+    const running: RunningMount = { scope: mountScope, mount, args: undefined, cutBy: undefined }
+    // A mount that never reads its args' changes pays nothing for them. What keeps them is the mount's
+    // own, so an app that issues no mount ships none of it.
     const changes = Stream.suspend(() => {
-      let pubsub = running.pubsub
-      if (pubsub === undefined) {
-        pubsub = running.pubsub = Effect.runSync(PubSub.sliding<unknown>({ capacity: 1, replay: 1 }))
-        PubSub.publishUnsafe(pubsub, running.mount.args)
-        addFinalizer(mountScope, PubSub.shutdown(pubsub))
+      const kept = running.mount["~args"]
+      let args = running.args
+      if (args === undefined) {
+        const made = args = running.args = kept.make(running.mount.args)
+        addFinalizer(mountScope, Effect.sync(() => kept.close(made)))
       }
-      return Stream.fromPubSub(pubsub)
+      return kept.changes(args)
     })
     afterCommit(() =>
       whenReady(env, (envCtx) => {
@@ -4367,9 +4841,8 @@ const setup = (
     const previous = running.mount
     if (previous === mount) return
     running.mount = mount
-    if (running.pubsub === undefined || Mount.sameArgs(previous, mount)) return
-    // `publishUnsafe` drops a value when the buffer is full. `publish` slides it out, and never suspends.
-    Effect.runSync(PubSub.publish(running.pubsub, mount.args))
+    if (running.args === undefined || previous["~sameArgs"](mount)) return
+    mount["~args"].publish(running.args, mount.args)
   }
 
   // -- owned layers ---------------------------------------------------------
@@ -4519,17 +4992,7 @@ const setup = (
   /** The instance's view. A headless instance's is the closure it was declared with, run against its parts. */
   const viewOf = (inst: Instance): View.Node<any, any> | undefined => {
     const owner = inst.owner
-    if (owner === undefined) {
-      return guard(
-        inst,
-        "view",
-        () =>
-          checked(
-            inst,
-            inst.component.view(inst.model, inst.props, runningOf(inst), inst.results, inst.path, sharedOf(inst))
-          )
-      )
-    }
+    if (owner === undefined) return guard(inst, "view", ownView)
     const parts = guard(inst, "view", () => ({
       value: (inst.component as unknown as Component.Headless.Any).parts(inst.model, inst.props, {
         owner,
@@ -4543,9 +5006,40 @@ const setup = (
     return guard(inst, "content", () => checked(inst, View.toNode(inst.content!(parts.value))))
   }
 
+  const ownView = (inst: Instance): View.Node<any, any> => {
+    const component = inst.component
+    // Read once: the view the path is chosen for is the one called.
+    const view = component.view
+    // A view that `make` built reads the path only for `h.id`. Any other is given the path itself.
+    const path = View.takesPathSource(view) ? inst : inst.path
+    // Called on its component, as a hand-written view method may read `this`. Not through its own `call`,
+    // which a decorated function can replace.
+    return checked(
+      inst,
+      Reflect.apply(view, component, [
+        inst.model,
+        inst.props,
+        runningOf(inst),
+        inst.results,
+        path,
+        sharedOf(inst),
+        inst
+      ])
+    )
+  }
+
   /** Checks a fresh view's child paths, which its fallbacks are checked against as they're shown. */
   const checked = (inst: Instance, tree: View.Node<any, any>): View.Node<any, any> => {
-    inst.childPaths = checkChildPaths(inst.path, tree)
+    // The tree it rendered last, when that held no child, as `inst.childPaths` found: only a view that
+    // used `h.lazy` gives its nodes again, so only its tree is worth comparing.
+    const last = inst.lazy !== undefined && inst.childPaths === undefined && inst.rendered.length === 1
+      ? inst.rendered[0]!
+      : undefined
+    const paths = checkChildPaths(inst, tree, last?._tag === "Element" ? last.v : undefined)
+    // A view with no child, ref or outlet has nothing to check its fallbacks or refs against.
+    inst.childPaths = paths.paths === undefined && paths.refs === undefined && paths.placed === undefined
+      ? undefined
+      : paths
     inst.clash = undefined
     // Its author's refs are checked once the author's other trees are current too.
     if (inst.owner !== undefined) refChecks.add(inst.author)
@@ -4567,8 +5061,8 @@ const setup = (
     const written: Array<ChildPaths> = author.childPaths === undefined ? [] : [author.childPaths]
     closurePaths(author, written)
     try {
-      checkAuthorRefs(author.path, written)
-      checkAuthorPlacements(author.path, written)
+      checkAuthorRefs(author, written)
+      checkAuthorPlacements(author, written)
     } catch (error) {
       failInstance(author, Cause.die(error), "view")
     }
@@ -4658,33 +5152,53 @@ const setup = (
     deliverSends(inst)
   }
 
+  /** The record of an element whose node and children are made: its mounts start now. */
+  const renderedElement = (
+    inst: Instance,
+    view: View.Element<any, any>,
+    node: unknown,
+    children: Rendered | Array<Rendered> | undefined,
+    env: Env
+  ): RElement => {
+    const rendered: RElement = new ElementRecord(view, node, children)
+    if (view.mount !== undefined) rendered.mount = startMount(inst.author, view.mount, node, env, inst)
+    if (view.owned !== undefined && view.owned.length > 0) {
+      const owned = startOwnedMounts(inst, view, node, env)
+      if (owned !== undefined) rendered.ownedMounts = owned
+    }
+    return rendered
+  }
+
+  // How many views were built, not adopted. Hydration places an element's children only when this moved
+  // while it adopted them: the server's nodes it kept are already where they go.
+  let created = 0
+
   const create = (inst: Instance, view: View.Node<any, any>, env: Env): Rendered => {
+    created++
     switch (view._tag) {
       case "Text":
-        return { _tag: "Text", v: view, node: host.createText(view.text) }
+        return new TextRecord(view, host.createText(view.text))
       case "Element": {
         const node = host.createElement(view.tag)
         const attrs = view.attrs
         if (attrs !== View.noFields) { for (const name in attrs) host.setAttr(node, name, attrs[name]) }
         setEvents(inst, node, view)
         const views = view.children
-        checkKeys(inst, views)
-        const children: Array<Rendered> = new Array(views.length)
+        let children: Rendered | Array<Rendered> | undefined
         // The element is new and empty, so its children go in as they are made, without reading the host.
-        for (let index = 0; index < views.length; index++) {
-          insertNodes(node, children[index] = create(inst, views[index]!, env), undefined)
+        if (views.length === 1) {
+          insertNodes(node, children = create(inst, views[0]!, env), undefined)
+        } else if (views.length > 0) {
+          checkKeys(inst, views)
+          children = new Array(views.length)
+          for (let index = 0; index < views.length; index++) {
+            insertNodes(node, children[index] = create(inst, views[index]!, env), undefined)
+          }
         }
         // Properties go after the children, so a `select`'s `value` has its options to match.
         const props = view.props
         if (props !== View.noFields) { for (const name in props) host.setProp(node, name, props[name]) }
-        return {
-          _tag: "Element",
-          v: view,
-          node,
-          children,
-          mount: view.mount !== undefined ? startMount(inst.author, view.mount, node, env, inst) : undefined,
-          ownedMounts: startOwnedMounts(inst, view, node, env)
-        }
+        return renderedElement(inst, view, node, children, env)
       }
       case "Child":
         return createChild(inst, view, env)
@@ -4713,24 +5227,20 @@ const setup = (
     const out = makeOutlet(inst, view)
     const views = checkedViews(out)
     try {
-      const plan = range === undefined ? undefined : matchList(out, views, range.nodes)
-      const rendered: Array<Rendered> = new Array(views.length)
-      if (plan !== undefined) {
-        // Adopted: the markers go, and the server's nodes are the content's.
-        for (let index = 0; index < views.length; index++) {
-          rendered[index] = adoptNode(out, views[index]!, plan[index]!, out.env)
-        }
-        host.remove(range!.open)
-        host.remove(range!.close)
+      if (range !== undefined) {
+        // The markers go, and the server's nodes that match are the content's.
+        out.rendered = adoptList(out, views, host.nextOf(range.open), range.close, out.env)
+        host.remove(range.open)
+        host.remove(range.close)
       } else {
-        // Built fresh: the server's nodes go, and the parent places the new ones.
-        if (range !== undefined) removeRange(range)
+        const rendered: Array<Rendered> = new Array(views.length)
         for (let index = 0; index < views.length; index++) rendered[index] = create(out, views[index]!, out.env)
+        out.rendered = rendered
       }
-      out.rendered = rendered
     } catch (error) {
       contentFailed(out, error)
-      out.rendered = [{ _tag: "Text", v: emptyText, node: host.createText("") }]
+      created++
+      out.rendered = [new TextRecord(emptyText, host.createText(""))]
     }
     failClash(out)
     if (inst.children === noChildren) inst.children = new Set()
@@ -4745,59 +5255,24 @@ const setup = (
     // Who wrote the content: the author of the tree the receiver's child node sits in.
     const author = receiver.parent === undefined ? receiver : receiver.parent.author
     const name = view.name
-    const out: Instance = {
-      path: outletPath(receiver, name),
-      born: ++instancesMade,
-      depth: parent.depth + 1,
-      component: outletComponent,
+    const out: Instance = new Inst(
+      outletPath(receiver, name),
+      "",
+      parent.depth + 1,
+      outletComponent,
       parent,
-      author,
-      owner: undefined,
-      content: undefined,
-      scope: Scope.forkUnsafe(parent.scope, "sequential"),
-      env: slotted.env,
-      selection: undefined,
-      children: noChildren,
-      props: undefined,
-      model: undefined,
-      results: undefined,
-      shares: undefined,
-      readers: undefined,
-      owning: undefined,
-      owners: undefined,
-      seen: undefined,
-      onEmit: ignoreEvents,
-      onFailure: undefined,
-      failure: undefined,
-      childPaths: undefined,
-      clash: undefined,
-      rendered: [],
-      get closed() {
-        return isClosed(this.scope) || this.parent?.closed === true
-      },
-      waiting: false,
-      // The content's children adopt the server's state when the instance placing it and the one that
-      // wrote it both did.
-      adoptsChildren: parent.adoptsChildren && author.adoptsChildren,
-      deferred: false,
-      runs: [],
-      left: false,
-      parked: undefined,
-      closes: undefined,
-      subscriptions: undefined,
-      watches: undefined,
-      watchesSynced: false,
-      watched: undefined,
-      prefetch: undefined,
-      keyed: undefined,
-      keyedQueued: false,
-      cause: undefined,
-      loadMores: undefined,
-      mounting: undefined,
-      outbox: [],
-      dispatch: author.dispatch,
-      fire: author.fire
-    }
+      undefined,
+      Scope.forkUnsafe(parent.scope, "sequential"),
+      slotted.env,
+      undefined,
+      ignoreEvents,
+      undefined,
+      undefined,
+      author
+    )
+    // The content's children adopt the server's state when the instance placing it and the one that
+    // wrote it both did.
+    out.adoptsChildren = parent.adoptsChildren && author.adoptsChildren
     outletOf.set(out, { slotted, view, content: undefined })
     slotted.placed.set(name, out)
     scopeAddFinalizerUnsafe(out.scope, out, () => {
@@ -4834,7 +5309,7 @@ const setup = (
           node._tag === "Outlet" && node.noText !== noText ? { _tag: "Outlet", name: node.name, noText } : node
         )
       }
-      out.childPaths = checkContentPaths(out.path, views)
+      out.childPaths = checkContentPaths(out, views)
       out.clash = undefined
       checkKeys(out, views)
       // The author's refs are checked once its other trees are current too.
@@ -4899,7 +5374,9 @@ const setup = (
   ): RChild | RFallback => {
     const target = view.component
     const status = env.status
-    if (Feature.isService(target) && status._tag !== "Ready") {
+    // Read once, with `in` here rather than `Predicate.hasProperty`, whose shared check every child would pay for.
+    const feature = Feature.TypeId in target
+    if (feature && status._tag !== "Ready") {
       // The feature's service comes from a Layer that is still building, or failed. The child shows
       // `fallback`, rendered against the nearest settled Env, and re-renders when the Layer settles.
       if (view.fallback === undefined) {
@@ -4917,7 +5394,7 @@ const setup = (
     }
     let component: Component.Any
     let childEnv = env
-    if (Feature.isService(target)) {
+    if (feature) {
       const found = Context.getOption(env.ctx!, target)
       if (Option.isNone(found)) throw new Error(`${inst.path}: nothing provides ${target.key}`)
       component = found.value.component
@@ -4934,11 +5411,12 @@ const setup = (
           : inst.path + ": " + component.definition.name + " has its own view, so declaring it as a child takes none"
       )
     }
-    const path = `${inst.path}/${segment(view)}`
     const child = makeInstance(
       component,
       view.props,
-      path,
+      // A feature's segment names the feature, not the component that implements it.
+      component === target ? undefined : `${inst.path}/${segment(view)}`,
+      view.key,
       inst,
       childEnv,
       view.onEmit,
@@ -4959,7 +5437,7 @@ const setup = (
     // it would cost more than anything else here.
     if (inst.children === noChildren) inst.children = new Set()
     inst.children.add(child)
-    return { _tag: "Child", v: view, inst: child }
+    return new ChildRecord(view, child)
   }
 
   /**
@@ -5030,133 +5508,147 @@ const setup = (
     const shown = fallbackOf(inst, view, status, failedChild)
     let inner: Rendered | undefined
     if (range !== undefined) {
-      const plan = shippedStatus(`${inst.path}/${segment(view)}`) === status._tag
-        ? matchList(inst, [shown], range.nodes)
-        : undefined
-      if (plan !== undefined) {
-        inner = adoptNode(inst, shown, plan[0]!, settled(env))
-        range.claimed = true
-        host.remove(range.open)
-        host.remove(range.close)
-      } else {
-        removeRange(range)
+      if (shippedStatus(`${inst.path}/${segment(view)}`) === status._tag) {
+        inner = adoptNode(inst, shown, host.nextOf(range.open), range.close, settled(env))
       }
+      if (inner !== undefined) claim(range)
+      else removeRange(range)
     }
     return { _tag: "Fallback", v: view, inner: inner ?? create(inst, shown, settled(env)), status, failedChild }
   }
 
   // -- hydration ------------------------------------------------------------
-  /** The range that starts at `open`, the marker for `path`, up to its closing marker. */
-  const rangeFrom = (open: unknown, path: string): Range | undefined => {
-    const nodes: Array<unknown> = []
-    for (let node = host.nextOf(open); node !== undefined; node = host.nextOf(node)) {
+  /** The range that starts at `open`, the marker for `path`, up to its closing marker, looked for before `stop`. */
+  const rangeFrom = (open: unknown, path: string, stop: unknown): Range | undefined => {
+    for (let node = host.nextOf(open); node !== undefined && node !== stop; node = host.nextOf(node)) {
       const kind = hydration!.inspect(node)
-      if (kind._tag === "Close" && kind.path === path) return { open, close: node, nodes, claimed: false }
-      nodes.push(node)
+      if (kind._tag === "Close" && kind.path === path) return { open, close: node, claimed: false }
     }
     return undefined
   }
 
-  const removeRange = (range: Range) => {
-    host.remove(range.open)
-    for (const node of range.nodes) host.remove(node)
-    host.remove(range.close)
-  }
-
-  const childNodes = (node: unknown): Array<unknown> => {
+  /** A range's nodes, its markers included. */
+  const rangeNodes = (range: Range): Array<unknown> => {
     const out: Array<unknown> = []
-    for (let child = hydration!.firstChild(node); child !== undefined; child = host.nextOf(child)) out.push(child)
+    for (let node = range.open; node !== range.close; node = host.nextOf(node)) out.push(node)
+    out.push(range.close)
     return out
   }
 
-  /**
-   * Matches a view against the server's nodes: the instance's own nodes one by
-   * one, and each child by its marker range, which the child matches
-   * itself. A server never writes an empty text node, so an empty text matches
-   * nothing and is created.
-   */
-  const matchList = (
-    inst: Instance,
-    views: ReadonlyArray<View.Node<any, any>>,
-    nodes: ReadonlyArray<unknown>
-  ): Array<Plan> | undefined => {
-    const out: Array<Plan> = []
-    let index = 0
-    for (const view of views) {
-      const node = nodes[index]
-      const kind = node === undefined ? undefined : hydration!.inspect(node)
-      switch (view._tag) {
-        case "Text": {
-          if (kind?._tag === "Text") {
-            if (kind.text !== view.text) return undefined
-            out.push({ _tag: "Text", node })
-            index++
-          } else if (view.text === "") {
-            out.push({ _tag: "Text", node: undefined })
-          } else {
-            return undefined
-          }
-          break
-        }
-        case "Element": {
-          if (kind?._tag !== "Element" || kind.tag !== view.tag) return undefined
-          // Content the host parses as text has no nodes or markers to adopt, so its children are built fresh.
-          const children = kind.textOnly === true ? undefined : matchList(inst, view.children, childNodes(node))
-          if (children === undefined && kind.textOnly !== true) return undefined
-          out.push({ _tag: "Element", node, children })
-          index++
-          break
-        }
-        case "Child":
-        case "Outlet": {
-          // An outlet's content matches itself against the range, as a child does, and builds fresh if it can't.
-          const path = view._tag === "Child" ? `${inst.path}/${segment(view)}` : outletPath(inst.author, view.name)
-          if (kind?._tag !== "Open" || kind.path !== path) return undefined
-          const range = rangeFrom(node, path)
-          if (range === undefined) return undefined
-          out.push({ _tag: "Child", range })
-          index += range.nodes.length + 2
-          break
-        }
-      }
-    }
-    return index === nodes.length ? out : undefined
+  const removeRange = (range: Range) => {
+    removeUpTo(range.open, range.close)
+    host.remove(range.close)
   }
 
-  /** Like `create`, but takes the server's nodes a matched view points at. */
-  const adoptNode = (inst: Instance, view: View.Node<any, any>, plan: Plan, env: Env): Rendered => {
+  /** Removes `node` and the siblings after it, up to `stop`. */
+  const removeUpTo = (node: unknown, stop: unknown) => {
+    while (node !== undefined && node !== stop) {
+      const next = host.nextOf(node)
+      host.remove(node)
+      node = next
+    }
+  }
+
+  // The server's node after what `adoptNode` last adopted.
+  let adoptedUpTo: unknown
+
+  /** Adopted: what's left of the server's nodes in the range goes, with its markers. */
+  const claim = (range: Range) => {
+    range.claimed = true
+    removeUpTo(adoptedUpTo, range.close)
+    host.remove(range.open)
+    host.remove(range.close)
+  }
+
+  /**
+   * Adopts the server's node `node` for `view`, with everything under it, in one pass: nothing is
+   * matched ahead. `undefined` when `node`, which is `stop` or missing once the server's nodes run out,
+   * isn't what the view renders: nothing was adopted then. A child matches by its marker range, which it
+   * adopts itself. A server never writes an empty text node, so an empty text takes no node and is created.
+   */
+  const adoptNode = (
+    inst: Instance,
+    view: View.Node<any, any>,
+    node: unknown,
+    stop: unknown,
+    env: Env
+  ): Rendered | undefined => {
+    const kind = node === undefined || node === stop ? undefined : hydration!.inspect(node)
     switch (view._tag) {
       case "Text": {
-        const node = (plan as Extract<Plan, { _tag: "Text" }>).node
-        return { _tag: "Text", v: view, node: node ?? host.createText(view.text) }
+        if (kind?._tag === "Text") {
+          if (kind.text !== view.text) return undefined
+          adoptedUpTo = host.nextOf(node)
+          return new TextRecord(view, node)
+        }
+        if (view.text !== "") return undefined
+        adoptedUpTo = node
+        created++
+        return new TextRecord(view, host.createText(""))
       }
       case "Element": {
-        const { children: plans, node } = plan as Extract<Plan, { _tag: "Element" }>
+        if (kind?._tag !== "Element" || kind.tag !== view.tag) return undefined
+        const next = host.nextOf(node)
         for (const name in view.attrs) {
           if (hydration!.getAttr(node, name) !== view.attrs[name]) host.setAttr(node, name, view.attrs[name])
         }
         setEvents(inst, node, view)
-        if (plans === undefined) { for (const child of childNodes(node)) host.remove(child) }
         checkKeys(inst, view.children)
-        const children = plans === undefined
-          ? view.children.map((child) => create(inst, child, env))
-          : view.children.map((child, index) => adoptNode(inst, child, plans[index]!, env))
-        place(node, children, undefined)
+        const before = created
+        // Content the host parses as text has no nodes or markers to adopt, so its children are built fresh.
+        const children = adoptList(
+          inst,
+          view.children,
+          kind.textOnly === true ? undefined : hydration!.firstChild(node),
+          undefined,
+          env
+        )
+        if (kind.textOnly === true) removeUpTo(hydration!.firstChild(node), undefined)
+        // Whatever was built under here isn't in the document yet, and goes among the nodes that were kept.
+        if (created !== before) placeEach(node, children, undefined)
         for (const name in view.props) adoptProp(node, name, view.props[name])
-        return {
-          _tag: "Element",
-          v: view,
-          node,
-          children,
-          mount: view.mount !== undefined ? startMount(inst.author, view.mount, node, env, inst) : undefined,
-          ownedMounts: startOwnedMounts(inst, view, node, env)
-        }
+        adoptedUpTo = next
+        return renderedElement(inst, view, node, packed(children), env)
       }
       case "Child":
-        return createChild(inst, view, env, (plan as Extract<Plan, { _tag: "Child" }>).range)
-      case "Outlet":
-        return createOutlet(inst, view, (plan as Extract<Plan, { _tag: "Child" }>).range)
+      case "Outlet": {
+        const path = view._tag === "Child" ? `${inst.path}/${segment(view)}` : outletPath(inst.author, view.name)
+        if (kind?._tag !== "Open" || kind.path !== path) return undefined
+        const range = rangeFrom(node, path, stop)
+        if (range === undefined) return undefined
+        const next = host.nextOf(range.close)
+        // A child's content matches itself against the range, as an outlet's does, and builds fresh what doesn't.
+        const made = view._tag === "Child" ? createChild(inst, view, env, range) : createOutlet(inst, view, range)
+        adoptedUpTo = next
+        return made
+      }
     }
+  }
+
+  /**
+   * Adopts the server's nodes from `first` up to `stop` for `views`, one by one. From the first that doesn't
+   * match, the server's nodes go and the views left are built fresh: what was adopted before it stays.
+   * A matching element therefore survives a mismatch among its children.
+   */
+  const adoptList = (
+    inst: Instance,
+    views: ReadonlyArray<View.Node<any, any>>,
+    first: unknown,
+    stop: unknown,
+    env: Env
+  ): Array<Rendered> => {
+    const out: Array<Rendered> = new Array(views.length)
+    let node = first
+    let index = 0
+    for (; index < views.length; index++) {
+      const made = adoptNode(inst, views[index]!, node, stop, env)
+      if (made === undefined) break
+      out[index] = made
+      node = adoptedUpTo
+    }
+    removeUpTo(node, stop)
+    for (; index < views.length; index++) out[index] = create(inst, views[index]!, env)
+    return out
   }
 
   // -- diff -----------------------------------------------------------------
@@ -5281,6 +5773,10 @@ const setup = (
     if (replaced === undefined && start === newLength) {
       if (start === oldLength) return olds
       // The list only got shorter: the olds left over go, and the rest stay in place.
+      if (start === 0) {
+        destroyAll(inst, parentNode, olds)
+        return []
+      }
       for (let index = start; index < oldLength; index++) destroy(inst, olds[index]!)
       return olds.slice(0, start)
     }
@@ -5378,7 +5874,10 @@ const setup = (
       previous = at
       result[index] = next
     }
-    if (matched < oldLength) {
+    if (matched === 0) {
+      // Every old goes, before any new node is placed.
+      destroyAll(inst, parentNode, olds)
+    } else if (matched < oldLength) {
       // What wasn't matched: the keyed olds left in the map, and the olds at a position no node took.
       // A marked old isn't among them: `taken` is no index.
       const goneKeyed = byKey === undefined ? undefined : new Set(byKey.values())
@@ -5475,7 +5974,7 @@ const setup = (
       const old = at === undefined ? undefined : olds[at]!
       if (old === undefined || !same(old, view) || kept.has(old)) continue
       kept.add(old)
-      if (old._tag === "Element") releaseRemoved(old.children, (view as View.Element<any, any>).children)
+      if (old._tag === "Element") releaseRemoved(listOf(old.children), (view as View.Element<any, any>).children)
     }
     for (const old of olds) if (!kept.has(old)) releaseRendered(old)
   }
@@ -5519,6 +6018,38 @@ const setup = (
     }
   }
 
+  /**
+   * When a rendered element holds only elements and text, how many of them set a property: -1 when it
+   * holds anything else.
+   */
+  const plainTree = (rendered: RElement): number => {
+    let props = rendered.v.props === View.noFields ? 0 : 1
+    const children = rendered.children
+    if (children === undefined) return props
+    const one = !Array.isArray(children)
+    for (let i = 0, length = one ? 1 : children.length; i < length; i++) {
+      const child = one ? children : children[i]!
+      if (child._tag === "Text") continue
+      const below = child._tag === "Element" ? plainTree(child) : -1
+      if (below < 0) return -1
+      props += below
+    }
+    return props
+  }
+  /**
+   * Re-applies the controlled properties under a rendered element, as a patch to the same view does:
+   * children first, so a select's value wins over its options' `selected`.
+   */
+  const restoreControlled = (rendered: RElement): void => {
+    const children = listOf(rendered.children)
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i]!
+      if (child._tag === "Element") restoreControlled(child)
+    }
+    const props = rendered.v.props
+    if (props !== View.noFields) patchProps(rendered.node, props, props)
+  }
+
   const patchElement = (
     inst: Instance,
     rendered: Extract<Rendered, { readonly _tag: "Element" }>,
@@ -5526,6 +6057,14 @@ const setup = (
     env: Env
   ): void => {
     const prev = rendered.v
+    // The view it was patched to last time, such as what `h.lazy` gave again: with only elements and
+    // text below, only a controlled property can have changed. A child below may still have to change,
+    // such as a fallback.
+    if (element === prev) {
+      const props = plainTree(rendered)
+      if (props > 0) restoreControlled(rendered)
+      if (props >= 0) return
+    }
     const node = rendered.node
     // One record, as when no attribute is set or a builder is reused: nothing changed.
     if (prev.attrs !== element.attrs) patchAttrs(node, prev.attrs, element.attrs)
@@ -5536,8 +6075,25 @@ const setup = (
       setEvents(inst, node, element)
     }
     const children = rendered.children
-    if (children.length > 0 || element.children.length > 0) {
-      rendered.children = patchList(inst, node, children, element.children, undefined, env)
+    const views = element.children
+    if (children === undefined) {
+      if (views.length > 0) rendered.children = packed(createList(inst, node, views, undefined, env))
+    } else if (Array.isArray(children)) {
+      rendered.children = packed(patchList(inst, node, children, views, undefined, env))
+    } else {
+      // One child, patched as `patchList` patches the two kinds most nodes are, without a list for it.
+      const view = views.length === 1 ? views[0]! : undefined
+      if (
+        view !== undefined && view._tag === "Element" && children._tag === "Element" &&
+        children.v.tag === view.tag && children.v.elementKey === view.elementKey
+      ) {
+        patchElement(inst, children, view, env)
+      } else if (view !== undefined && view._tag === "Text" && children._tag === "Text") {
+        if (view.text !== children.v.text) host.setText(children.node, view.text)
+        children.v = view
+      } else {
+        rendered.children = packed(patchList(inst, node, [children], views, undefined, env))
+      }
     }
     patchProps(node, prev.props, element.props)
     // A mount belongs to the element, not to one view run: it keeps running across patches, and
@@ -5764,6 +6320,26 @@ const setup = (
     }
   }
 
+  /**
+   * As `place`, for what hydration adopted. An item there can hold nodes built fresh among the server's,
+   * so every node is checked, not each item's last. Returns the first node, or `ref` when there is none.
+   */
+  const placeEach = (parentNode: unknown, items: ReadonlyArray<Rendered>, ref: unknown): unknown => {
+    let next = ref
+    for (let index = items.length - 1; index >= 0; index--) {
+      let item = items[index]!
+      while (item._tag === "Fallback") item = item.inner
+      if (item._tag === "Child" || item._tag === "Outlet") {
+        next = placeEach(parentNode, item.inst.rendered, next)
+        continue
+      }
+      const node = item.node
+      if (host.parentOf(node) !== parentNode || host.nextOf(node) !== next) host.insertBefore(parentNode, node, next)
+      next = node
+    }
+    return next
+  }
+
   /** Puts an item's nodes before `ref`, in their order, without collecting them. */
   const insertNodes = (parentNode: unknown, rendered: Rendered, ref: unknown): void => {
     switch (rendered._tag) {
@@ -5844,7 +6420,7 @@ const setup = (
             : undefined
           rendered.ownedMounts = startOwnedMounts(inst, view, rendered.node, env)
         }
-        for (const child of rendered.children) toggleMounts(inst, child, env, start)
+        for (const child of listOf(rendered.children)) toggleMounts(inst, child, env, start)
         return
       }
       case "Fallback":
@@ -5869,7 +6445,7 @@ const setup = (
         viewChanged = true
         releaseWatches(rendered.inst)
         leave(rendered.inst)
-        closeUnder(inst, rendered.inst.scope)
+        closeInstance(inst, rendered.inst)
         return
       }
       case "Fallback":
@@ -5881,7 +6457,10 @@ const setup = (
       case "Element": {
         // The element's `onMount` work ends with it.
         stopMounts(inst, rendered)
-        for (const child of rendered.children) closeAll(inst, child)
+        const children = rendered.children
+        if (children === undefined) return
+        if (!Array.isArray(children)) return closeAll(inst, children)
+        for (const child of children) closeAll(inst, child)
         return
       }
       case "Text":
@@ -5901,6 +6480,19 @@ const setup = (
     const nodes = nodesOf(rendered)
     closeAll(inst, rendered)
     for (let index = 0; index < nodes.length; index++) host.remove(nodes[index])
+  }
+
+  /** Destroys every node of a list, in one step when the host can clear their parent. */
+  const destroyAll = (inst: Instance, parentNode: unknown, olds: ReadonlyArray<Rendered>) => {
+    if (host.removeChildren === undefined) {
+      for (let index = 0; index < olds.length; index++) destroy(inst, olds[index]!)
+      return
+    }
+    // Collected first, as `destroy` does: closing a child empties what it rendered.
+    const nodes: Array<unknown> = []
+    for (let index = 0; index < olds.length; index++) collectNodes(olds[index]!, nodes)
+    for (let index = 0; index < olds.length; index++) closeAll(inst, olds[index]!)
+    host.removeChildren(parentNode, nodes)
   }
 
   // -- root -----------------------------------------------------------------
@@ -5934,7 +6526,7 @@ const setup = (
     for (let node = hydration.firstChild(container); node !== undefined; node = host.nextOf(node)) {
       const kind = hydration.inspect(node)
       if (kind._tag === "Open" && kind.path === rootPath) {
-        rootRange = rangeFrom(node, rootPath)
+        rootRange = rangeFrom(node, rootPath, undefined)
         break
       }
     }
@@ -5944,6 +6536,7 @@ const setup = (
     component,
     rootProps,
     rootPath,
+    "",
     undefined,
     readyEnv(withCache(ctx)),
     () => undefined,
@@ -5955,7 +6548,7 @@ const setup = (
   rootInstance = root
   // Added after the root forked its Scope, so it runs before that Scope closes.
   addFinalizer(rootScope, Effect.sync(() => leave(root)))
-  if (root.failure === undefined) place(container, root.rendered, rootRef)
+  if (root.failure === undefined) placeEach(container, root.rendered, rootRef)
   started = true
   if (waiting === 0 && !adoptedDone) {
     adoptedDone = true
@@ -6000,7 +6593,7 @@ const setup = (
       flushing: () => rendering,
       snapshot,
       // The first navigation closes the fetch-free window, if adoption hasn't yet.
-      navigated: () => cache.closeWindow(),
+      navigated: closeWindow,
       report
     }
     const detach = hooks.attach(handle)
@@ -6010,133 +6603,6 @@ const setup = (
   afterCommitHooks()
   rendering = false
   runCommitted()
-
-  const find = (path: string, from: Instance = root): Instance | undefined => {
-    if (from.path === path) return from
-    for (const child of from.children) {
-      const hit = find(path, child)
-      if (hit !== undefined) return hit
-    }
-    return undefined
-  }
-
-  /** A `Redacted` in an instance's state defers it and its subtree, so the client builds them fresh. */
-  const warnRedacted = (inst: Instance) => {
-    if (warnedRedacted.has(inst.component)) return
-    warnedRedacted.add(inst.component)
-    forkNow(
-      ctx,
-      Effect.logWarning(
-        `${inst.component.definition.name}: its state holds a Schema.Redacted, so the server sends no state for it and the ` +
-          "client builds it and everything under it fresh, without hydration. Keep the secret in a leaf component " +
-          "or in a service."
-      )
-    )
-  }
-
-  /** Serialises the tree once, in document order, with the state the client adopts. */
-  const finish = () => {
-    if (scheduled || dirty.size > 0 || deferred.length > 0 || reportsDue.size > 0) flush()
-    frozen = true
-    server?.onFinish?.(cache)
-    // In the same synchronous step as the Models: fetches in flight are interrupted, and their entries
-    // revert to cold and aren't shipped. Nothing is dispatched for them.
-    const query = cache.dehydrate()
-    const state: Record<string, unknown> = {}
-    const collected: Record<string, unknown> = {}
-    const deferredPaths: Array<string> = []
-    const statuses: Record<string, Shipped> = {}
-    /** Ships a status other than `Ready`: the client starts from it. */
-    const ship = (path: string, status: Status) => {
-      if (status._tag === "Pending" || status._tag === "Failed") statuses[path] = status._tag
-    }
-    // `under`: inside a deferred instance, whose subtree the client builds fresh.
-    const instance = (inst: Instance, under: boolean): Renderer.ServerNode => {
-      let inner = under
-      if (!under) {
-        const codec = stateCodecOf(inst.component)
-        // A failed instance, and one kept off the server, are built fresh. One whose Layer is pending
-        // or failed ships its status with its state.
-        let encoded = inst.failure !== undefined || inst.deferred
-          ? Option.none()
-          : codec.encode(inst.model, inst.results)
-        if (codec.redacted) warnRedacted(inst)
-        // What an owner's reports last sent: the client compares its reports with it. An owner whose
-        // message can't be shipped, a `Redacted` in its Schema included, is deferred with its subtree, as a
-        // Model adopted without it would get the same message again.
-        const last = inst.owning?.collected
-        let baseline: Option.Option<unknown> = Option.none()
-        if (Option.isSome(encoded) && last !== undefined) {
-          const message = inst.component.definition.message
-          baseline = holdsRedacted(message.ast) ? Option.none() : jsonCodecOf(message).encode(last.message)
-          if (Option.isNone(baseline)) encoded = Option.none()
-        }
-        if (Option.isNone(encoded)) {
-          deferredPaths.push(inst.path)
-          inner = true
-        } else {
-          state[inst.path] = encoded.value
-          if (Option.isSome(baseline)) collected[inst.path] = baseline.value
-          if (inst.component.layer !== undefined) ship(inst.path, inst.env.status)
-        }
-      }
-      return {
-        _tag: "Range",
-        path: inst.path,
-        children: inst.failure !== undefined ? [] : inst.rendered.map((rendered) => serialize(inst, rendered, inner))
-      }
-    }
-    const serialize = (inst: Instance, rendered: Rendered, under: boolean): Renderer.ServerNode => {
-      switch (rendered._tag) {
-        case "Text":
-          return { _tag: "Text", text: rendered.v.text }
-        case "Element":
-          return {
-            _tag: "Element",
-            tag: rendered.v.tag,
-            attrs: rendered.v.attrs,
-            props: rendered.v.props,
-            children: rendered.children.map((child) => serialize(inst, child, under))
-          }
-        case "Child":
-          return instance(rendered.inst, under)
-        case "Outlet":
-          return {
-            _tag: "Range",
-            path: rendered.inst.path,
-            children: rendered.inst.rendered.map((child) => serialize(rendered.inst, child, under))
-          }
-        case "Fallback": {
-          // A failed child: the client builds it fresh. A feature whose Layer isn't ready: the client
-          // adopts the fallback while its status is the one shipped.
-          const path = `${inst.path}/${segment(rendered.v)}`
-          if (!under) {
-            if (rendered.failedChild) deferredPaths.push(path)
-            else ship(path, rendered.status)
-          }
-          return { _tag: "Range", path, children: [serialize(inst, rendered.inner, true)] }
-        }
-        case "Detached": {
-          // Out of the document, so no nodes: the state of its subtree is still sent, and the client builds
-          // its nodes from that state, detached.
-          serialize(inst, rendered.inner, under)
-          return { _tag: "Range", path: `${inst.path}/${segment(rendered.v)}`, children: [] }
-        }
-      }
-    }
-    const nodes = [instance(root, false)]
-    return {
-      nodes,
-      state: {
-        ...state,
-        "~deferred": deferredPaths,
-        ...(Object.keys(statuses).length > 0 ? { "~status": statuses } : {}),
-        "~query": query,
-        ...(Object.keys(collected).length > 0 ? { "~reported": collected } : {}),
-        ...(server?.static === true ? { "~static": true } : {})
-      }
-    }
-  }
 
   const runsOf = (inst: Instance): Array<Pending> =>
     inst.runs.map((run) => ({ path: inst.path, name: run.command.name, status: run.status }))
@@ -6150,11 +6616,12 @@ const setup = (
     session,
     instance: root,
     emitted: rootEmitted,
-    find,
     model: () => root.failure === undefined ? root.model : undefined,
     send: (message) => root.dispatch(message, { _tag: "Dispatch" }),
     pending: () => pendingOf(root),
-    cache,
+    get cache() {
+      return queryCache()
+    },
     crashed: () => root.failure,
     flush: () => flushes,
     buildsPendingSince,
@@ -6181,6 +6648,10 @@ const setup = (
       idleWaiters.push(f)
       checkIdle()
     },
-    finish
+    freeze: () => {
+      if (scheduled || dirty.size > 0 || deferred.length > 0 || reportsDue.size > 0) flush()
+      frozen = true
+      return cache
+    }
   }
 }

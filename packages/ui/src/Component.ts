@@ -70,7 +70,7 @@ import type * as Types from "effect/Types"
 import * as Command from "./Command.ts"
 import * as child from "./internal/child.ts"
 import * as internalNoop from "./internal/noop.ts"
-import * as componentQueries from "./internal/queries.ts"
+import * as queryCore from "./internal/queryCore.ts"
 import * as childRef from "./internal/ref.ts"
 import * as sharedReads from "./internal/shared.ts"
 import type * as Query from "./Query.ts"
@@ -926,10 +926,12 @@ const makeUpdate = (model: unknown, props: unknown, queries: unknown, message: u
     "~message": message
   })
 
-const makeInit = (props: unknown): Init<any, any, any, any> => ({
-  props,
-  set: (model) => makeStep(model, [], [], [], []) as Step<any, any, any, never>
-})
+const initSet = (model: unknown) => makeStep(model, [], [], [], []) as Step<any, any, any, never>
+const makeInit = (props: unknown): Init<any, any, any, any> => ({ props, set: initSet })
+
+// The effects of an `init` or `update` that returned a bare Model: shared, and frozen, since `init` hands
+// them to its caller.
+const noEffects: ReadonlyArray<never> = Object.freeze([])
 
 /**
  * Returns `true` if `u` is a step.
@@ -950,7 +952,7 @@ const toNext = (result: unknown): Next<any, any, any, any> =>
       lists: (result as Step<any, any, any>).lists,
       sends: (result as Step<any, any, any>).sends
     }
-    : { model: result, commands: [], events: [] }
+    : { model: result, commands: noEffects, events: noEffects }
 
 /**
  * What a parent needs from a child: its props and events contract and its
@@ -1021,7 +1023,9 @@ export interface Mountable<in out Props, out Events, out R = never, in Rcv = nev
     /** The instance's path, which `h.id` derives ids from. Without it, the root path `/<name>`. */
     path?: string | undefined,
     /** Answers `h.shared`: an owner's current value. Without it, a component that reads shared state throws. */
-    shared?: SharedLookup | undefined
+    shared?: SharedLookup | undefined,
+    /** Where `h.lazy` keeps its nodes between renders. Without it, `h.lazy` builds every time. */
+    lazy?: View.LazyStore | undefined
   ) => View.Node<any, R>
   readonly subscriptions:
     | ((model: any, props: Props, queries?: Results | undefined) => ReadonlyArray<Subscription.Subscription<any, R>>)
@@ -1120,7 +1124,8 @@ export interface Component<
     running?: ((name: string, groupKey: string | undefined) => boolean) | undefined,
     queries?: Results | undefined,
     path?: string | undefined,
-    shared?: SharedLookup | undefined
+    shared?: SharedLookup | undefined,
+    lazy?: View.LazyStore | undefined
   ) => View.Node<Msg, R>
   readonly subscriptions:
     | ((
@@ -2647,6 +2652,17 @@ const receivesOf = (message: Schema.Codec<any, any>, tags: ReadonlyArray<string>
     })
   )
 
+/**
+ * Binds `queries` through `Query`, which an app with a query has loaded. Without it nothing in the
+ * record can be a query: an empty record binds nothing, and any other fails `Query`'s first check.
+ */
+const bindQueries = (component: string, queries: unknown): ReturnType<queryCore.Loaded["bind"]> => {
+  if (queries === undefined) return undefined
+  if (queryCore.loaded !== undefined) return queryCore.loaded.bind(component, queries)
+  if (typeof queries === "object" && queries !== null && Object.keys(queries).length === 0) return undefined
+  throw new Error(`${component}: queries must be a record of { query, args } or { queryMany, args } entries.`)
+}
+
 const finish = (
   definition: Definition.Any,
   options: {
@@ -2665,7 +2681,7 @@ const finish = (
     readonly reduceHead?: ((model: any, below: any) => unknown) | undefined
   }
 ): Any => {
-  const bound = componentQueries.bind(definition.name, definition.queries)
+  const bound = bindQueries(definition.name, definition.queries)
   const open = (model: unknown, props: unknown, results: Results | undefined): any =>
     bound === undefined ? {} : bound.context(model, props, results).queries
   const update = options.update
@@ -2703,19 +2719,21 @@ const finish = (
       toNext(updateFn(model, msg, makeUpdate(model, props, open(model, props, results), msg))),
     view: view === undefined
       ? undefined
-      : (
+      : View.readsPathLazily((
         model: unknown,
         props: unknown,
         running?: View.Running,
         results?: Results,
-        path?: string,
-        shared?: SharedLookup
+        path?: string | View.PathSource,
+        shared?: SharedLookup,
+        lazy?: View.LazyStore
       ) => {
         const h: any = View.makeHelper(
           props,
           elements ?? View.registeredElements(),
           running,
-          path ?? ("/" + definition.name)
+          path ?? ("/" + definition.name),
+          lazy
         )
         if (definition.slots.length > 0) h.slots = outlets
         if (bound !== undefined) {
@@ -2725,8 +2743,18 @@ const finish = (
           h.patched = context.patched
         }
         if (reads.length > 0) h.shared = readShared(definition.name, reads, shared)
-        return View.toNode(view(model, h))
-      },
+        const lazies = lazy?.lazy as View.Lazies | undefined
+        lazies?.begin()
+        try {
+          const node = View.toNode(view(model, h))
+          lazies?.end()
+          return node
+        } catch (error) {
+          // What a render that threw built isn't given again.
+          if (lazy !== undefined) lazy.lazy = undefined
+          throw error
+        }
+      }),
     parts: parts === undefined
       ? undefined
       : (model: unknown, props: unknown, context: PartsContext) => {

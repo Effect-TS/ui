@@ -4,17 +4,18 @@
 // Run from the repository root:
 //
 //   node packages/ui/benchmark/rows/run.mjs [--rounds 5] [--ops create1k,swap] [--variants plain]
-//     [--memory-only | --time-only] [--profile plain:replace1k] [--chromium <path>]
+//     [--memory-only | --time-only | --ssr-only] [--profile plain:replace1k] [--chromium <path>]
 //
 // The browser is --chromium, else $CHROMIUM, else `chromium` on PATH, else the Chromium that the
 // `playwright` dev dependency installed. entry.ts is bundled with esbuild (minified IIFE, es2023,
 // production) straight from packages/ui/src, so it measures the working tree. The bundle goes to
 // scratchpad/rows.bundle.js; delete it when done.
 //
-// Variants, rendering the same table (see harness.ts): @effect/ui's `plain` (one component) and
-// `component` (a child component per row), and React's `react-plain`, `react-component` (a row
+// Variants, rendering the same table (see harness.ts): @effect/ui's `plain` (one component), `lazy`
+// (`plain` with each row behind `h.lazy`), `component` (a child component per row) and `titled` (`component` with a title in the
+// table's head), and React's `react-plain`, `react-component` (a row
 // component, unmemoized) and `react-memo` (a row component under React.memo); see react.mjs. The
-// default is @effect/ui's two. React variants run from scratchpad/rows-react.bundle.js, built the same
+// default is @effect/ui's `plain` and `component`. React variants run from scratchpad/rows-react.bundle.js, built the same
 // way from react.mjs with the React in @effect/ui's dev dependencies (the run
 // prints its version), so a page loads one framework only.
 //
@@ -36,9 +37,17 @@
 // 5 times, `cycle` after 5 create-then-clear cycles of 1,000 rows (back to an empty table, so
 // it tracks `ready` unless something is retained) and `10k` after 10,000 rows.
 //
+// Server rendering and hydration, in milliseconds, of the same table holding 1,000 rows, on a fresh page
+// per variant and round, with 2 unmeasured and 9 measured runs (the round's figure is their median):
+// `render` is HtmlServer.renderToHtml plus serializeState, `hydrate` is BrowserHost.mountEffect over
+// that HTML with its state until `adopted`. Both run in the page, so they use the browser's engine, not
+// Node's. Separately, first-hydrate measures one mount-to-adopted sample per fresh client page,
+// using HTML and state rendered on another page. Neither DOM parsing nor bundle load is timed.
+//
 // --profile variant:op profiles 20 steps of one operation, from an unminified bundle, and prints
 // the functions with the most self time across them (line numbers are the bundle's). The last
-// step's profile goes to scratchpad/rows-<variant>-<op>.cpuprofile.
+// step's profile goes to scratchpad/rows-<variant>-<op>.cpuprofile. The ops `render` and
+// `hydrate` profile that phase of 20 server renders of 1k rows.
 //
 // Treat results as exploratory: compare paired runs of the same command across revisions on one
 // machine; absolute figures depend on the machine and the browser.
@@ -56,6 +65,7 @@ const { values: args } = parseArgs({
     variants: { type: "string", default: "plain,component" },
     "memory-only": { type: "boolean", default: false },
     "time-only": { type: "boolean", default: false },
+    "ssr-only": { type: "boolean", default: false },
     profile: { type: "string" },
     chromium: { type: "string" }
   }
@@ -110,6 +120,7 @@ const open = async (variant) => {
 }
 
 const rounds = Number(args.rounds)
+const median = (values) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)]
 const stat = (values) => {
   const sorted = [...values].sort((a, b) => a - b)
   return sorted[Math.floor(sorted.length / 2)].toFixed(2) + " (" + sorted[0].toFixed(2) + "-" +
@@ -120,12 +131,18 @@ if (args.profile !== undefined) {
   const [variant, op] = args.profile.split(":")
   const page = await open(variant)
   const cdp = await page.context().newCDPSession(page)
-  await page.evaluate(([v, o]) => window.bench(v, o, 2, 2), [variant, op])
+  // The ops `render` and `hydrate` profile one phase of `ssr`.
+  const ssr = op === "render" || op === "hydrate"
+  if (ssr) { for (let i = 0; i < 3; i++) await page.evaluate((v) => window.ssr(v), variant) }
+  else await page.evaluate(([v, o]) => window.bench(v, o, 2, 2), [variant, op])
   await cdp.send("Profiler.enable")
   await cdp.send("Profiler.setSamplingInterval", { interval: 50 })
   const profiles = []
-  cdp.on("Profiler.consoleProfileFinished", ({ profile }) => profiles.push(profile))
-  await page.evaluate(([v, o]) => window.bench(v, o, 0, 20, true), [variant, op])
+  cdp.on("Profiler.consoleProfileFinished", ({ profile, title }) => {
+    if (!ssr || title === op) profiles.push(profile)
+  })
+  if (ssr) { for (let i = 0; i < 20; i++) await page.evaluate((v) => window.ssr(v, true), variant) }
+  else await page.evaluate(([v, o]) => window.bench(v, o, 0, 20, true), [variant, op])
   const file = path.join(process.cwd(), "scratchpad/rows-" + variant + "-" + op + ".cpuprofile")
   fs.writeFileSync(file, JSON.stringify(profiles.at(-1)))
   const self = new Map()
@@ -151,7 +168,9 @@ if (args.profile !== undefined) {
   process.exit(0)
 }
 
-if (!args["memory-only"]) {
+const only = args["memory-only"] ? "memory" : args["time-only"] ? "time" : args["ssr-only"] ? "ssr" : undefined
+
+if (only === undefined || only === "time") {
   const page = await open(variants[0])
   const ops = args.ops?.split(",") ?? await page.evaluate(() => window.opNames)
   await page.close()
@@ -175,7 +194,7 @@ if (!args["memory-only"]) {
   }
 }
 
-if (!args["time-only"]) {
+if (only === undefined || only === "memory") {
   const keys = ["ready", "1k", "replace", "cycle", "10k"]
   const results = Object.fromEntries(variants.map((v) => [v, Object.fromEntries(keys.map((k) => [k, []]))]))
   for (let round = 0; round < rounds; round++) {
@@ -205,6 +224,37 @@ if (!args["time-only"]) {
   console.log("memory: " + rounds + " rounds, median (min-max) MiB")
   for (const key of keys) {
     console.log(key.padEnd(11), variants.map((v) => v + " " + stat(results[v][key])).join(" | "))
+  }
+  if (results.plain !== undefined && results.component !== undefined) {
+    // What a row component costs over the same row as plain elements.
+    const bytes = (median(results.component["10k"]) - median(results.plain["10k"])) * 1024 * 1024 / 10000
+    console.log("per row component, over a plain row at 10k: " + Math.round(bytes) + " bytes")
+  }
+}
+
+const ssrVariants = variants.filter((v) => !isReact(v))
+if ((only === undefined || only === "ssr") && ssrVariants.length > 0) {
+  const keys = ["render", "hydrate"]
+  const first = Object.fromEntries(ssrVariants.map((v) => [v, []]))
+  const results = Object.fromEntries(ssrVariants.map((v) => [v, Object.fromEntries(keys.map((k) => [k, []]))]))
+  for (let round = 0; round < rounds; round++) {
+    for (let i = 0; i < ssrVariants.length; i++) {
+      const variant = ssrVariants[(i + round) % ssrVariants.length]
+      const page = await open(variant)
+      const fixture = await page.evaluate((v) => window.renderTable(v), variant)
+      const client = await open(variant)
+      first[variant].push(await client.evaluate(([v, f]) => window.hydrateTable(v, f), [variant, fixture]))
+      await client.close()
+      const runs = []
+      for (let j = 0; j < 11; j++) runs.push(await page.evaluate((v) => window.ssr(v), variant))
+      for (const key of keys) results[variant][key].push(median(runs.slice(2).map((run) => run[key])))
+      await page.close()
+    }
+  }
+  console.log("first-hydrate, 1k rows (fresh client page):", ssrVariants.map((v) => v + " " + stat(first[v])).join(" | "), "ms")
+  console.log("warm server rendering, 1k rows: " + rounds + " rounds, median (min-max) ms")
+  for (const key of keys) {
+    console.log(key.padEnd(11), ssrVariants.map((v) => v + " " + stat(results[v][key])).join(" | "))
   }
 }
 await browser.close()

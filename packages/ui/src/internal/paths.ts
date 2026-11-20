@@ -24,8 +24,24 @@ export const childName = (component: Component.Any | Feature.Any): string =>
  *
  * @internal
  */
-export const segment = (view: View.Child<any, any>): string =>
-  escapeName(childName(view.component)) + "[" + escapeKey(view.key) + "]"
+export const segment = (view: View.Child<any, any>): string => segmentOf(view.component, view.key)
+
+/**
+ * `segment` of a child of `component` with `key`.
+ *
+ * @internal
+ */
+export const segmentOf = (component: Component.Any | Feature.Any, key: string): string =>
+  escapeName(childName(component)) + "[" + escapeKey(key) + "]"
+
+/**
+ * Where paths are checked: a path, or an instance, whose path is read only for an error.
+ *
+ * @internal
+ */
+export type At = string | { readonly path: string }
+
+const pathAt = (at: At): string => typeof at === "string" ? at : at.path
 
 /**
  * The path segment of a placed slot: its name in brackets, escaped as a key is. No child's segment
@@ -51,7 +67,7 @@ const escapeChar = (char: string): string => "%" + char.charCodeAt(0).toString(1
  * @internal
  */
 export interface ChildPaths {
-  readonly path: string
+  readonly at: At
   // Each Map is made for its first entry: most views render no child, and none with a ref.
   /**
    * The children by their component's name, then by their key. A name and a key make one segment, and
@@ -63,8 +79,8 @@ export interface ChildPaths {
   placed: Set<string> | undefined
 }
 
-const failure = (path: string, what: string): never => {
-  throw new Error(`${path} renders two children ${what}`)
+const failure = (at: At, what: string): never => {
+  throw new Error(`${pathAt(at)} renders two children ${what}`)
 }
 
 /**
@@ -74,11 +90,20 @@ const failure = (path: string, what: string): never => {
  * hydration marker, and a send matches a child by its ref's key alone, so the
  * parent fails instead. Returns what the view uses, for its fallbacks.
  *
+ * `last` is the tree the view rendered last time, when it held no child, ref
+ * or outlet: a node the new tree holds again at the same place, as `h.lazy`
+ * gives it, holds none either, and is passed over. Places are compared below
+ * elements a patch would pair, of one tag and key, as a list's rows are.
+ *
  * @internal
  */
-export const checkChildPaths = (path: string, tree: View.Node<any, any>): ChildPaths => {
-  const paths: ChildPaths = { path, paths: undefined, refs: undefined, placed: undefined }
-  visit(paths, tree, undefined, "")
+export const checkChildPaths = (
+  at: At,
+  tree: View.Node<any, any>,
+  last?: View.Element<any, any> | undefined
+): ChildPaths => {
+  const paths: ChildPaths = { at, paths: undefined, refs: undefined, placed: undefined }
+  if (tree !== last) visit(paths, tree, undefined, "", last)
   return paths
 }
 
@@ -89,8 +114,8 @@ export const checkChildPaths = (path: string, tree: View.Node<any, any>): ChildP
  *
  * @internal
  */
-export const checkContentPaths = (path: string, nodes: ReadonlyArray<View.Node<any, any>>): ChildPaths => {
-  const paths: ChildPaths = { path, paths: undefined, refs: undefined, placed: undefined }
+export const checkContentPaths = (at: At, nodes: ReadonlyArray<View.Node<any, any>>): ChildPaths => {
+  const paths: ChildPaths = { at, paths: undefined, refs: undefined, placed: undefined }
   for (const node of nodes) visit(paths, node, undefined, "")
   paths.placed = undefined
   return paths
@@ -107,17 +132,21 @@ const visit = (
   paths: ChildPaths,
   node: View.Node<any, any>,
   replaced: View.Child<any, any> | undefined,
-  where: string
+  where: string,
+  last?: View.Element<any, any> | undefined
 ): void => {
   if (node._tag === "Element") {
     const children = node.children
+    const before = last?.children
     for (let index = 0; index < children.length; index++) {
       const child = children[index]!
+      const was = before?.[index]
       // Text and an element with no children hold no child: most of a view, passed over without a call.
       if (
-        child._tag === "Child" || child._tag === "Outlet" || (child._tag === "Element" && child.children.length > 0)
+        child !== was &&
+        (child._tag === "Child" || child._tag === "Outlet" || (child._tag === "Element" && child.children.length > 0))
       ) {
-        visit(paths, child, replaced, where)
+        visit(paths, child, replaced, where, pairs(child, was) ? was : undefined)
       }
     }
   } else if (node._tag === "Child") {
@@ -127,14 +156,14 @@ const visit = (
     if (taken === undefined) byName.set(name, taken = new Map())
     const holder = taken.get(node.key)
     if (holder !== undefined && holder !== replaced) {
-      failure(paths.path, `at ${segment(node)}${where}${keyHint(name, node)}`)
+      failure(paths.at, `at ${segment(node)}${where}${keyHint(name, node)}`)
     }
     taken.set(node.key, node)
     const ref = node.ref
     if (ref !== undefined) {
       const refs = paths.refs ??= new Map()
       const refHolder = refs.get(ref.key)
-      if (refHolder !== undefined && refHolder !== replaced) failure(paths.path, `with the ref ${ref.key}${where}`)
+      if (refHolder !== undefined && refHolder !== replaced) failure(paths.at, `with the ref ${ref.key}${where}`)
       refs.set(ref.key, node)
     }
     if (node.slots !== undefined) { for (const name in node.slots) visitPlaced(paths, node.slots[name]) }
@@ -142,6 +171,11 @@ const visit = (
     place(paths, node.name)
   }
 }
+
+/** Whether a patch would pair two elements: a row a list replaced isn't compared below. */
+const pairs = (node: View.Node<any, any>, was: View.Node<any, any> | undefined): was is View.Element<any, any> =>
+  was !== undefined && was._tag === "Element" && node._tag === "Element" && was.tag === node.tag &&
+  was.elementKey === node.elementKey
 
 // A missing key is a runtime error, not a type error, so the message names the fix.
 const keyHint = (name: string, node: View.Child<any, any>): string =>
@@ -153,7 +187,7 @@ const keyHint = (name: string, node: View.Child<any, any>): string =>
 
 const place = (paths: ChildPaths, name: string): void => {
   const placed = paths.placed ??= new Set()
-  if (placed.has(name)) throw new Error(`${paths.path} places its slot ${name} twice`)
+  if (placed.has(name)) throw new Error(`${pathAt(paths.at)} places its slot ${name} twice`)
   placed.add(name)
 }
 
@@ -198,12 +232,12 @@ export const checkFallbackPaths = (
  *
  * @internal
  */
-export const checkAuthorRefs = (path: string, written: ReadonlyArray<ChildPaths>): void => {
+export const checkAuthorRefs = (at: At, written: ReadonlyArray<ChildPaths>): void => {
   const taken = new Set<string>()
   for (const paths of written) {
     if (paths.refs === undefined) continue
     for (const key of paths.refs.keys()) {
-      if (taken.has(key)) failure(path, `with the ref ${key}, in the view it gives ${paths.path}`)
+      if (taken.has(key)) failure(at, `with the ref ${key}, in the view it gives ${pathAt(paths.at)}`)
       taken.add(key)
     }
   }
@@ -215,13 +249,15 @@ export const checkAuthorRefs = (path: string, written: ReadonlyArray<ChildPaths>
  *
  * @internal
  */
-export const checkAuthorPlacements = (path: string, written: ReadonlyArray<ChildPaths>): void => {
+export const checkAuthorPlacements = (at: At, written: ReadonlyArray<ChildPaths>): void => {
   if (written.length < 2) return
   const taken = new Set<string>()
   for (const paths of written) {
     if (paths.placed === undefined) continue
     for (const name of paths.placed) {
-      if (taken.has(name)) throw new Error(`${path} places its slot ${name} twice, in the view it gives ${paths.path}`)
+      if (taken.has(name)) {
+        throw new Error(`${pathAt(at)} places its slot ${name} twice, in the view it gives ${pathAt(paths.at)}`)
+      }
       taken.add(name)
     }
   }

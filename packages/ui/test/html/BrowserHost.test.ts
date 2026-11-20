@@ -1,9 +1,22 @@
 // @vitest-environment happy-dom
-import { Command, Component, MessageLog, Mount, Query, type Renderer, Route, Router, UiSchema, View } from "@effect/ui"
+import {
+  Command,
+  Component,
+  Feature,
+  MessageLog,
+  Mount,
+  Query,
+  type Renderer,
+  Route,
+  Router,
+  Subscription,
+  UiSchema,
+  View
+} from "@effect/ui"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, expect, it } from "@effect/vitest"
-import { Context, Effect, Exit, Layer, Option, Schema, Scope } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, Layer, Option, Schema, Scope, Stream } from "effect"
 import { describe, vi } from "vitest"
 import { collectGarbage } from "../utils/gc.ts"
 import { Confirm, ConfirmMessage, Nested } from "./fixtures/confirm.ts"
@@ -390,6 +403,298 @@ describe("BrowserHost", { concurrent: false }, () => {
           expect(history.entries()).toEqual(["/search?q=ab"])
         })
       ))
+  })
+
+  describe("lists", () => {
+    const ListMessage = UiSchema.TaggedEnum({ Set: { rows: Schema.Array(Schema.String) } })
+    // A child's nodes are a list of their own, among the parent's other nodes.
+    const Shown = Component.define({
+      name: "Shown",
+      props: Schema.Struct({ rows: Schema.Array(Schema.String) }),
+      model: Schema.Null,
+      message: Schema.Never,
+      elements: Html
+    }).make({
+      init: () => null,
+      update: (model) => model,
+      view: (_, h) => h.props.rows.length === 0 ? h.span("none") : h.em(h.props.rows.join(""))
+    })
+    const Lists = Component.define({
+      name: "Lists",
+      model: Schema.Array(Schema.String),
+      message: ListMessage,
+      elements: Html
+    }).make({
+      init: (): ReadonlyArray<string> => ["a", "b", "c"],
+      update: (_, message) => message.rows,
+      view: (rows, h) =>
+        h.div(
+          h.ul(rows.map((row) => h.li.key(row).children(row))),
+          h.ol(h.li("first"), rows.map((row) => h.li.key(row).children(row)), "last"),
+          h.p("before", Shown(h, { key: "shown", props: { rows } }), "after")
+        )
+    })
+
+    it.effect("a list that loses every row keeps the nodes beside it, whether it's emptied or replaced", () =>
+      Effect.gen(function*() {
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Lists, {}, app)
+        const html = (rows: ReadonlyArray<string>) => {
+          const items = rows.map((row) => `<li>${row}</li>`).join("")
+          const shown = rows.length === 0 ? "<span>none</span>" : `<em>${rows.join("")}</em>`
+          return `<div><ul>${items}</ul><ol><li>first</li>${items}last</ol><p>before${shown}after</p></div>`
+        }
+        expect(app.innerHTML).toBe(html(["a", "b", "c"]))
+        root.send(ListMessage.Set({ rows: [] }))
+        yield* tick
+        expect(app.innerHTML).toBe(html([]))
+        root.send(ListMessage.Set({ rows: ["d", "e"] }))
+        yield* tick
+        expect(app.innerHTML).toBe(html(["d", "e"]))
+        const kept = app.querySelector("ul li")
+        // Every row is new: the old ones go before the new ones are placed.
+        root.send(ListMessage.Set({ rows: ["f", "g", "h"] }))
+        yield* tick
+        expect(app.innerHTML).toBe(html(["f", "g", "h"]))
+        expect(kept?.isConnected).toBe(false)
+      }).pipe(Effect.scoped))
+
+    it.effect("an element's only child keeps its node until its key or its tag changes", () =>
+      Effect.gen(function*() {
+        // The rows are the child's tag, its key and its text.
+        const Only = Component.define({
+          name: "Only",
+          model: Schema.Array(Schema.String),
+          message: ListMessage,
+          elements: Html
+        }).make({
+          init: (): ReadonlyArray<string> => ["p", "a", "one"],
+          update: (_, message) => message.rows,
+          view: ([tag, key, text], h) =>
+            h.div(tag === "p" ? h.p.key(key!).children(text!) : h.span.key(key!).children(text!))
+        })
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Only, {}, app)
+        const first = app.querySelector("p")
+        root.send(ListMessage.Set({ rows: ["p", "a", "two"] }))
+        yield* tick
+        expect(app.innerHTML).toBe("<div><p>two</p></div>")
+        expect(app.querySelector("p")).toBe(first)
+        root.send(ListMessage.Set({ rows: ["p", "b", "two"] }))
+        yield* tick
+        expect(app.innerHTML).toBe("<div><p>two</p></div>")
+        expect(app.querySelector("p")).not.toBe(first)
+        root.send(ListMessage.Set({ rows: ["span", "b", "two"] }))
+        yield* tick
+        expect(app.innerHTML).toBe("<div><span>two</span></div>")
+      }).pipe(Effect.scoped))
+
+    it.effect("a custom element's class is set as an attribute, whatever its className does", () =>
+      Effect.gen(function*() {
+        const seen: Array<string | null> = []
+        // Its className doesn't reflect, so only setting the attribute gives it a class.
+        class Classed extends HTMLElement {
+          static observedAttributes = ["class"]
+          override set className(_: string) {}
+          attributeChangedCallback(_: string, __: string | null, value: string | null) {
+            seen.push(value)
+          }
+        }
+        if (customElements.get("x-classed") === undefined) customElements.define("x-classed", Classed)
+        const Page = Component.define({
+          name: "Classed",
+          model: Schema.Array(Schema.String),
+          message: ListMessage,
+          elements: Html
+        }).make({
+          init: (): ReadonlyArray<string> => ["a"],
+          update: (_, message) => message.rows,
+          view: ([name], h) => h.div(h.el("x-classed").attr("class", name))
+        })
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Page, {}, app)
+        expect(app.innerHTML).toBe("<div><x-classed class=\"a\"></x-classed></div>")
+        root.send(ListMessage.Set({ rows: ["b"] }))
+        yield* tick
+        expect(app.innerHTML).toBe("<div><x-classed class=\"b\"></x-classed></div>")
+        expect(seen).toEqual(["a", "b"])
+      }).pipe(Effect.scoped))
+  })
+
+  describe("lazy", () => {
+    const Item = Schema.Struct({ id: Schema.Number, label: Schema.String })
+    const LazyMessage = UiSchema.TaggedEnum({
+      Select: { id: Schema.Number },
+      Rename: { id: Schema.Number, label: Schema.String },
+      Remove: { id: Schema.Number },
+      Tick: {}
+    })
+    const ItemsDef = Component.define({
+      name: "Items",
+      model: Schema.Struct({ items: Schema.Array(Item), selected: Schema.Number, ticks: Schema.Number }),
+      message: LazyMessage,
+      elements: Html
+    })
+    const built: Array<string> = []
+    const row = (h: Component.Helper<typeof ItemsDef>, item: typeof Item.Type, selected: boolean) => {
+      built.push(item.label)
+      return h.li.key(String(item.id)).class(selected && "on").children(item.label)
+    }
+    const Items = ItemsDef.make({
+      init: () => ({
+        items: [{ id: 1, label: "a" }, { id: 2, label: "b" }, { id: 3, label: "c" }],
+        selected: 0,
+        ticks: 0
+      }),
+      update: (model, message) =>
+        LazyMessage.match(message, {
+          Select: ({ id }) => ({ ...model, selected: id }),
+          Rename: ({ id, label }) => ({
+            ...model,
+            items: model.items.map((item) => item.id === id ? { id, label } : item)
+          }),
+          Remove: ({ id }) => ({ ...model, items: model.items.filter((item) => item.id !== id) }),
+          Tick: () => ({ ...model, ticks: model.ticks + 1 })
+        }),
+      view: (model, h) =>
+        h.div(
+          h.p(String(model.ticks)),
+          h.ul(model.items.map((item) => h.lazy(row, item, item.id === model.selected)))
+        )
+    })
+
+    it.effect("builds a row again only when one of its arguments changes, and keeps every row's nodes", () =>
+      Effect.gen(function*() {
+        built.length = 0
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Items, {}, app)
+        const step = Effect.fnUntraced(function*(message: typeof LazyMessage.Type) {
+          built.length = 0
+          root.send(message)
+          yield* tick
+          return [...built]
+        })
+        assert.deepStrictEqual(built, ["a", "b", "c"])
+        const items = () => [...app.querySelectorAll("li")]
+        const [a, b, c] = items()
+        assert.deepStrictEqual(yield* step(LazyMessage.Tick()), [])
+        assert.strictEqual(app.innerHTML, "<div><p>1</p><ul><li>a</li><li>b</li><li>c</li></ul></div>")
+        assert.deepStrictEqual(yield* step(LazyMessage.Select({ id: 2 })), ["b"])
+        assert.deepStrictEqual(yield* step(LazyMessage.Select({ id: 3 })), ["b", "c"])
+        assert.deepStrictEqual(yield* step(LazyMessage.Rename({ id: 1, label: "A" })), ["A"])
+        assert.strictEqual(
+          app.innerHTML,
+          "<div><p>1</p><ul><li>A</li><li>b</li><li class=\"on\">c</li></ul></div>"
+        )
+        assert.deepStrictEqual(yield* step(LazyMessage.Remove({ id: 2 })), [])
+        assert.deepStrictEqual(items(), [a, c])
+        assert.strictEqual(b!.isConnected, false)
+        assert.deepStrictEqual(yield* step(LazyMessage.Tick()), [])
+        assert.strictEqual(app.innerHTML, "<div><p>2</p><ul><li>A</li><li class=\"on\">c</li></ul></div>")
+      }).pipe(Effect.scoped))
+
+    it.effect.each([false, true])(
+      "patches a node it gives again when the node holds a child, alone: %s",
+      (alone) =>
+        Effect.gen(function*() {
+          // The frame's argument never changes, but its feature child shows a fallback until the Layer is ready.
+          class Leaf extends Feature.Service<Leaf>()("Leaf", { props: Schema.Struct({}) }) {}
+          const LeafImpl = Component.define({
+            name: "LeafImpl",
+            model: Schema.Null,
+            message: Schema.Never,
+            elements: Html
+          })
+            .make({ init: () => null, update: (m) => m, view: (_, h) => h.p("ready") })
+          const ready = yield* Deferred.make<void>()
+          const FrameDef = Component.define({
+            name: "Frame",
+            model: Schema.Null,
+            message: Schema.Never,
+            elements: Html
+          })
+          const frame = (h: Component.Helper<typeof FrameDef>, title: string) =>
+            h.section(
+              alone ? undefined : h.h2(title),
+              Leaf.render(h, { key: "leaf", props: {}, fallback: () => h.p("loading") })
+            )
+          const Frame = Component.provide(
+            FrameDef.make({ init: () => null, update: (m) => m, view: (_, h) => h.lazy(frame, "Title") }),
+            Layer.merge(Leaf.toLayer(LeafImpl), Layer.effectDiscard(Deferred.await(ready)))
+          )
+          const app = yield* container
+          yield* BrowserHost.mountEffect(Frame, {}, app)
+          yield* tick
+          const heading = alone ? "" : "<h2>Title</h2>"
+          assert.strictEqual(app.innerHTML, `<section>${heading}<p>loading</p></section>`)
+          yield* Deferred.succeed(ready, undefined)
+          yield* tick
+          assert.strictEqual(app.innerHTML, `<section>${heading}<p>ready</p></section>`)
+        }).pipe(Effect.scoped)
+    )
+
+    it.effect("puts controlled properties back under a node it gives again, as under one the view keeps or builds", () =>
+      Effect.gen(function*() {
+        const FieldsDef = Component.define({
+          name: "Fields",
+          model: Schema.Number,
+          message: LazyMessage,
+          elements: Html
+        })
+        // The option asks for `a` and the select for `b`: the select is set after its options, so `b` wins.
+        const field = (h: Component.Helper<typeof FieldsDef>, label: string) =>
+          h.div(
+            h.input.attr("aria-label", label).value("fixed"),
+            h.select.value("b").children(
+              h.option.attr("value", "a").selected(true).children("A"),
+              h.option.attr("value", "b").children("B")
+            )
+          )
+        let kept: View.Node<typeof LazyMessage.Type> | undefined
+        const Fields = FieldsDef.make({
+          init: () => 0,
+          update: (ticks) => ticks + 1,
+          view: (ticks, h) =>
+            h.div(
+              h.p(String(ticks)),
+              field(h, "built"),
+              h.lazy(field, "lazy"),
+              kept ??= View.toNode(field(h, "kept"))
+            )
+        })
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Fields, {}, app)
+        const inputs = [...app.querySelectorAll("input")]
+        const selects = [...app.querySelectorAll("select")]
+        assert.deepStrictEqual(selects.map((select) => select.value), ["b", "b", "b"])
+        // Changed by a script, with no event for the host to restore after.
+        for (const input of inputs) input.value = "edited"
+        root.send(LazyMessage.Tick())
+        yield* tick
+        assert.strictEqual(app.querySelector("p")!.textContent, "1")
+        assert.deepStrictEqual(inputs.map((input) => input.value), ["fixed", "fixed", "fixed"])
+        assert.deepStrictEqual(selects.map((select) => select.value), ["b", "b", "b"])
+      }).pipe(Effect.scoped))
+
+    it("builds again what a render that threw built", () => {
+      let fails = true
+      const Failing = ItemsDef.make({
+        init: () => ({ items: [], selected: 0, ticks: 0 }),
+        update: (model) => model,
+        view: (model, h) => {
+          const node = h.lazy(row, model.items[0]!, false)
+          if (fails) throw new Error("boom")
+          return node
+        }
+      })
+      const store: View.LazyStore = { lazy: undefined }
+      const model = { items: [{ id: 1, label: "a" }], selected: 0, ticks: 0 }
+      built.length = 0
+      assert.throws(() => Failing.view(model, {}, undefined, undefined, undefined, undefined, store), /boom/)
+      fails = false
+      Failing.view(model, {}, undefined, undefined, undefined, undefined, store)
+      assert.deepStrictEqual(built, ["a", "a"])
+    })
   })
 
   describe("events", () => {
@@ -1382,41 +1687,50 @@ describe("BrowserHost", { concurrent: false }, () => {
       Mounted: { tag: Schema.String }
     })
     const ReadTag = Mount.make("ReadTag", { args: {} }, (element: HTMLElement) => Effect.succeed(element.localName))
-    const Refs = Component.define({
-      name: "Refs",
-      model: Schema.Array(Schema.String),
-      message: Message,
-      elements: Html
-    }).make({
-      init: (): ReadonlyArray<string> => [],
-      update: (log, message, $) =>
-        Message.match(message, {
-          Focus: () => $.run(Html.focus(Field, ({ found }) => Message.Found({ found }))),
-          FocusMissing: () => $.run(Html.focus(Missing, ({ found }) => Message.Found({ found }))),
-          Measure: () => $.run(Html.measure(Field, (rect) => Message.Measured({ some: Option.isSome(rect) }))),
-          Found: ({ found }) => [...log, `found ${found}`],
-          Measured: ({ some }) => [...log, `measured ${some}`],
-          Mounted: ({ tag }) => [...log, `mounted ${tag}`]
-        }),
-      view: (_, h) =>
-        h.div(
-          h.input.attr("aria-label", "Field").ref(Field)
-            .onMount(ReadTag().pipe(Mount.map((tag) => Message.Mounted({ tag }))))
-        )
-    })
+    const refs = (elements: View.Vocabulary<Html.Elements>) =>
+      Component.define({
+        name: "Refs",
+        model: Schema.Array(Schema.String),
+        message: Message,
+        elements
+      }).make({
+        init: (): ReadonlyArray<string> => [],
+        update: (log, message, $) =>
+          Message.match(message, {
+            Focus: () => $.run(Html.focus(Field, ({ found }) => Message.Found({ found }))),
+            FocusMissing: () => $.run(Html.focus(Missing, ({ found }) => Message.Found({ found }))),
+            Measure: () => $.run(Html.measure(Field, (rect) => Message.Measured({ some: Option.isSome(rect) }))),
+            Found: ({ found }) => [...log, `found ${found}`],
+            Measured: ({ some }) => [...log, `measured ${some}`],
+            Mounted: ({ tag }) => [...log, `mounted ${tag}`]
+          }),
+        view: (_, h) =>
+          h.div(
+            h.input.attr("aria-label", "Field").ref(Field)
+              .onMount(ReadTag().pipe(Mount.map((tag) => Message.Mounted({ tag }))))
+          )
+      })
 
-    it.effect("ref Commands reach the element; onMount gets it", () =>
-      Effect.gen(function*() {
-        const app = yield* container
-        const root = yield* BrowserHost.mountEffect(Refs, {}, app)
-        yield* tick
-        root.send(Message.Focus())
-        root.send(Message.FocusMissing())
-        root.send(Message.Measure())
-        yield* tick
-        expect(document.activeElement).toBe(HtmlLocator.getByRole(app, "textbox", { name: "Field" }))
-        expect(root.model()).toEqual(["mounted input", "found true", "found false", "measured true"])
-      }).pipe(Effect.scoped))
+    const vocabularies: ReadonlyArray<readonly [string, View.Vocabulary<Html.Elements>]> = [
+      ["the Html module", Html],
+      ["Html.vocabulary", Html.vocabulary]
+    ]
+
+    it.effect.each(vocabularies)(
+      "ref Commands reach the element; onMount gets it, with %s as elements",
+      ([, elements]) =>
+        Effect.gen(function*() {
+          const app = yield* container
+          const root = yield* BrowserHost.mountEffect(refs(elements), {}, app)
+          yield* tick
+          root.send(Message.Focus())
+          root.send(Message.FocusMissing())
+          root.send(Message.Measure())
+          yield* tick
+          expect(document.activeElement).toBe(HtmlLocator.getByRole(app, "textbox", { name: "Field" }))
+          expect(root.model()).toEqual(["mounted input", "found true", "found false", "measured true"])
+        }).pipe(Effect.scoped)
+    )
   })
 
   describe("hosts", () => {
@@ -1510,4 +1824,54 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(app.childNodes.length).toBe(0)
       }).pipe(Effect.scoped))
   })
+
+  it.effect("a mount and a Subscription stopped by a close are interrupted by the fiber that closes", () =>
+    Effect.gen(function*() {
+      const interruptors: Array<ReadonlyArray<number>> = []
+      const record = <A, E>(exit: Exit.Exit<A, E>) =>
+        Effect.sync(() => {
+          if (Exit.isFailure(exit)) interruptors.push([...Cause.interruptors(exit.cause)])
+        })
+      const Held = Mount.make("Held", { args: {} }, () => Effect.onExit(Effect.never, record))
+      const Page = Component.define({ name: "Page", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+        init: () => null,
+        update: (model) => model,
+        subscriptions: () => [Subscription.make("held", Stream.onExit(Stream.never, record))],
+        view: (_, h) => h.p.onMount(Held()).children("held")
+      })
+      const app = yield* container
+      const scope = yield* Scope.make()
+      yield* BrowserHost.mountEffect(Page, {}, app).pipe(Scope.provide(scope))
+      yield* tick
+      yield* Scope.close(scope, Exit.void)
+      const closer = yield* Effect.fiberId
+      expect(interruptors).toEqual([[closer], [closer]])
+    }).pipe(Effect.scoped))
+
+  it.effect(
+    "renders once for the Commands of one flush that end together",
+    () =>
+      Effect.gen(function*() {
+        const Message = UiSchema.TaggedEnum({ Loaded: {} })
+        class Load extends Command.Service<Load>()(
+          "Load",
+          { args: { id: Schema.Number } },
+          Effect.succeed(() => Effect.succeed(Message.Loaded()))
+        ) {}
+        let renders = 0
+        const Page = Component.define({ name: "Page", model: Schema.Number, message: Message, elements: Html }).make({
+          init: ($) => $.set(0).run(Load.make({ id: 1 }), Load.make({ id: 2 }), Load.make({ id: 3 })),
+          update: (loaded) => loaded + 1,
+          view: (loaded, h) => {
+            renders++
+            return h.p(`${loaded} loaded`)
+          }
+        }).pipe(Component.provide(Load.layer))
+        const app = yield* container
+        yield* BrowserHost.mountEffect(Page, {}, app)
+        yield* tick
+        expect(app.textContent).toBe("3 loaded")
+        expect(renders).toBe(2)
+      }).pipe(Effect.scoped)
+  )
 })

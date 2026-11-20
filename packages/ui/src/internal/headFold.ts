@@ -19,6 +19,29 @@ interface Folded<H> {
   readonly from: Map<string, string>
 }
 
+// The merges that are this fold and nothing more: see `skipsEmpty`.
+const plainMerges = new WeakSet<Function>()
+
+/**
+ * Marks `merge` as a merge that calls `fold` with the tree it was given, and does nothing else with
+ * that tree.
+ *
+ * @internal
+ */
+export const plain = <F extends Function>(merge: F): F => {
+  plainMerges.add(merge)
+  return merge
+}
+
+/**
+ * Whether a merge gives the same value and conflicts for a tree without its subtrees that have no
+ * entries and no `reduce` anywhere. `fold` folds each of them to nothing and leaves it out, so such a
+ * merge can be given a tree without them. Any other merge sees the tree as the runtime built it.
+ *
+ * @internal
+ */
+export const skipsEmpty = (merge: Function): boolean => plainMerges.has(merge)
+
 /** @internal */
 export const fold = <E, H>(
   tree: Head.Tree<E, H>,

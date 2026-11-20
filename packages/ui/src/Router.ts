@@ -98,9 +98,11 @@ import * as SubscriptionRef from "effect/SubscriptionRef"
 import type * as Types from "effect/Types"
 import * as Command from "./Command.ts"
 import type * as Component from "./Component.ts"
+import * as prefetchWalk from "./internal/prefetch.ts"
+import * as queryCore from "./internal/queryCore.ts"
 import * as services from "./internal/services.ts"
 import { canonical, pairsWithout, withPairs } from "./internal/url.ts"
-import * as Query from "./Query.ts"
+import type * as Query from "./Query.ts"
 import type * as Route from "./Route.ts"
 import * as Subscription from "./Subscription.ts"
 
@@ -666,7 +668,7 @@ export const subscription = <U extends Routes, Msg>(
   }
   const stream = Stream.unwrap(Effect.gen(function*() {
     const router = yield* Router
-    const report = yield* Query.Problems
+    const report = yield* queryCore.Problems
     const root = (yield* services.CurrentRoot)()
     let first = true
     return router.changes.pipe(
@@ -685,7 +687,7 @@ export const subscription = <U extends Routes, Msg>(
     const router = Context.get(context as Context.Context<Router>, Router)
     const engine = engines.get(router)
     if (engine === undefined) return undefined
-    const report = Context.get(context as Context.Context<any>, Query.Problems)
+    const report = Context.get(context as Context.Context<any>, queryCore.Problems)
     // Read at delivery: the root attaches to the Router after its first render.
     const root = Context.get(context, services.CurrentRoot)
     let first = true
@@ -1183,6 +1185,14 @@ interface UnionInternals {
   readonly make: (input: unknown) => { readonly _tag: string }
 }
 
+/** What the runtime's prefetch walk reports with. */
+const prefetchProblems: prefetchWalk.Problems = {
+  PrefetchThrew,
+  PrefetchQueryNotProvided,
+  PrefetchPageNotMounted,
+  PrefetchEntryNotWatched
+}
+
 const commandLayers = Layer.mergeAll(
   Push.layer,
   Replace.layer,
@@ -1261,7 +1271,7 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       return yield* Effect.die(new Error(`The Router's routes don't parse the initial URL "${start.url}"`))
     }
     // The problems sink of the first mounted root, or the one where the Router is built.
-    const fallbackReport = yield* Query.Problems
+    const fallbackReport = yield* queryCore.Problems
     let index = readState(start.state)?.index ?? 0
     const initialUrl = canonical(routes, resolved.value, startUrl)
     if (resolved.value.redirected || readState(start.state) === undefined || initialUrl !== startUrl) {
@@ -1603,6 +1613,12 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       })
     )
 
+    const declare = (declarer: services.Declarer) => {
+      declarers.add(declarer)
+      return () => {
+        declarers.delete(declarer)
+      }
+    }
     const hooks: services.RootHooks = {
       attach: (root) => {
         roots.add(root)
@@ -1616,12 +1632,7 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
         restoring.delete(path)
         return found
       },
-      declare: (declarer) => {
-        declarers.add(declarer)
-        return () => {
-          declarers.delete(declarer)
-        }
-      },
+      prefetch: (runtime, inst, declared) => prefetchWalk.declare(declare, prefetchProblems, runtime, inst, declared),
       afterFlush: (root, info) => {
         if (pending === undefined || pending.since === undefined || root !== primary()) return
         if (info.flush < pending.since || info.buildsPendingSince(pending.since) > 0) return

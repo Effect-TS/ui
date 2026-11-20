@@ -231,10 +231,10 @@ export const resolveTitle = (
  * @category combinators
  * @since 0.1.0
  */
-export const merge = <E extends { readonly _tag: string } = Entry>(
+export const merge: <E extends { readonly _tag: string } = Entry>(
   tree: Tree<E, Head>,
   options?: MergeOptions
-): Head =>
+) => Head = /* @__PURE__ */ headFold.plain((tree, options) =>
   headFold.fold(tree, {
     combine: (node, children) => {
       let below: string | undefined
@@ -243,6 +243,7 @@ export const merge = <E extends { readonly _tag: string } = Entry>(
     },
     slots: (head) => new Map(head.title === undefined ? [] : [["title", head.title]])
   }, options?.onConflict === undefined ? undefined : reportTo(options.onConflict))
+)
 
 const reportTo = (onConflict: (conflict: Conflict) => void) => (slot: string, earlier: string, later: string) =>
   onConflict(conflict(slot, earlier, later))

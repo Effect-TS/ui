@@ -65,7 +65,8 @@ import type * as Context from "effect/Context"
 import type * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
 import type * as Component from "../Component.ts"
-import * as Renderer from "../Renderer.ts"
+import * as runtime from "../internal/runtime.ts"
+import type * as Renderer from "../Renderer.ts"
 import type * as View from "../View.ts"
 import type * as BrowserHost from "./BrowserHost.ts"
 import * as Html from "./Html.ts"
@@ -178,13 +179,21 @@ export const renderToHtml = <
     readonly static?: boolean | undefined
   }
 ): Effect.Effect<Rendered<Model>, never, Exclude<R | RP, Html.Host>> =>
-  Renderer.prerender(component, props, { budget: options?.budget, elements: [Html.name], static: options?.static })
-    .pipe(
+  Effect.suspend(() => {
+    const writer = server.makeWriter()
+    // `Renderer.prerender`, with the writer as the tree's sink.
+    return runtime.prerender(component, props, {
+      budget: options?.budget ?? "500 millis",
+      elements: [Html.name],
+      static: options?.static,
+      sink: writer
+    }).pipe(
       Effect.provideService(Html.Host, serverHtmlHost),
       Effect.map((rendered) => {
         const head = server.htmlHead(rendered.head)
         return {
-          html: server.toHtml(rendered.nodes),
+          // Written here, after the render's Scope has closed.
+          html: writer.html(),
           state: rendered.state,
           model: rendered.model,
           head: server.headTags(head),
@@ -192,7 +201,8 @@ export const renderToHtml = <
           bodyAttributes: server.attributes(server.bodyOwned(head))
         }
       })
-    ) as any
+    )
+  }) as any
 
 /**
  * The state as JSON that is safe inside `<script type="application/json">`:

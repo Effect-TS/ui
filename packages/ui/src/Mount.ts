@@ -46,6 +46,7 @@ import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import type * as Types from "effect/Types"
 import type * as Command from "./Command.ts"
+import * as mountArgs from "./internal/mountArgs.ts"
 
 /**
  * Identifies an issued mount.
@@ -214,6 +215,20 @@ export interface Issued<out Msg, out R = never, in Node = unknown, in Source = M
    * @internal
    */
   readonly resolve: (result: Source) => Msg
+  /**
+   * What keeps a running mount's args and gives their changes. A runtime
+   * reaches it through the mount, so an app that issues none ships none of
+   * it.
+   *
+   * @internal
+   */
+  readonly "~args": typeof mountArgs
+  /**
+   * `sameArgs` with `that`, reached through the mount for the same reason.
+   *
+   * @internal
+   */
+  readonly "~sameArgs": (that: Any) => boolean
 }
 
 /**
@@ -264,6 +279,15 @@ const identity = (result: any) => result
 
 const Proto = {
   [TypeId]: { _Msg: identity, _R: identity, _Node: identity, _Source: identity },
+  "~args": {
+    make: mountArgs.make,
+    publish: mountArgs.publish,
+    close: mountArgs.close,
+    changes: mountArgs.changes
+  },
+  "~sameArgs"(this: Any, that: Any) {
+    return sameArgs(this, that)
+  },
   pipe() {
     return Pipeable.pipeArguments(this, arguments)
   }

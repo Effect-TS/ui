@@ -1,0 +1,266 @@
+/**
+ * The part of `Query` every app carries: its host signals, its problems sink,
+ * its key format and the cache's service key. The rest of the module is
+ * reached through `loaded`, which `Query` sets when an app imports it, so an
+ * app without queries doesn't bundle the cache.
+ *
+ * @internal
+ */
+import * as Context from "effect/Context"
+import * as Duration from "effect/Duration"
+import type * as Effect from "effect/Effect"
+import type * as Query from "../Query.ts"
+import type * as componentQueries from "./queries.ts"
+
+// -----------------------------------------------------------------------------
+// The loaded module
+// -----------------------------------------------------------------------------
+
+/** @internal */
+export type Cache = ReturnType<typeof Query.internals>
+
+/** @internal */
+export interface CacheOptions {
+  readonly visibility: Query.Signal
+  readonly connectivity: Query.Signal
+  /** The problems sink. A throw from it is swallowed. */
+  readonly report: (problem: Query.Problem.Any) => void
+  /** In milliseconds, from `cacheIdleMs`. */
+  readonly idleMs: number
+  /**
+   * The server's per-request mode: an entry settles at most once and is never
+   * stale after, every settle is stored, a query's own `invalidate` is ignored
+   * and reported, and no idle timer, interval or host edge runs.
+   */
+  readonly settleOnce?: boolean | undefined
+  /** `false`: no fetch ever starts, as on a server render with a budget of 0. */
+  readonly fetches?: boolean | undefined
+}
+
+/**
+ * What the runtime and `Component` call in `Query`, without importing it.
+ *
+ * @internal
+ */
+export interface Loaded extends
+  Pick<
+    typeof Query,
+    | "defOf"
+    | "infiniteItems"
+    | "makeSnapshot"
+    | "makeSnapshotMap"
+    | "sameMore"
+    | "snapshotData"
+    | "snapshotMapData"
+    | "snapshotMapSchema"
+    | "snapshotSchema"
+  >
+{
+  /** Builds a cache, with its disposal. The context supplies the `Clock` and the scheduler. */
+  readonly buildCache: (
+    context: Context.Context<never>,
+    options: CacheOptions
+  ) => { readonly cache: Cache; readonly dispose: Effect.Effect<void> }
+  readonly bind: typeof componentQueries.bind
+}
+
+/**
+ * `Query`'s functions, once an app has imported it. A query, a bound
+ * `queries` record and a snapshot can only exist after that.
+ *
+ * @internal
+ */
+export let loaded: Loaded | undefined
+
+/** @internal */
+export const load = (module: Loaded | undefined): void => {
+  loaded = module
+}
+
+// -----------------------------------------------------------------------------
+// What a component and a watch carry
+// -----------------------------------------------------------------------------
+
+/**
+ * A component's bound `queries`. `undefined` without any.
+ *
+ * @internal
+ */
+export const boundOf = (component: { readonly "~queries": unknown }): componentQueries.Bound | undefined =>
+  component["~queries"] as componentQueries.Bound | undefined
+
+/** @internal */
+export const markerKey = "~@effect/ui/Component/watchMarker"
+
+/** @internal */
+export const groupKey = "~@effect/ui/Component/watchGroup"
+
+/** @internal */
+export const markerOf = (subscription: object): componentQueries.Marker | undefined =>
+  (subscription as { readonly [markerKey]?: componentQueries.Marker })[markerKey]
+
+/** @internal */
+export const groupOf = (subscription: object): componentQueries.Group | undefined =>
+  (subscription as { readonly [groupKey]?: componentQueries.Group })[groupKey]
+
+/** @internal */
+export const isWatchKey = (key: string): boolean => key.startsWith("~query/")
+
+// -----------------------------------------------------------------------------
+// The cache
+// -----------------------------------------------------------------------------
+
+/** @internal */
+export const CacheTypeId = "~@effect/ui/Query/Cache"
+
+/** @internal */
+export const CacheCellTypeId = "~@effect/ui/Query/CacheCell"
+
+/**
+ * Stands in for a root's cache as the `Cache` service while `Query` isn't
+ * loaded: `Query.internals` makes the cache from it.
+ *
+ * @internal
+ */
+export interface CacheCell {
+  readonly [CacheTypeId]: typeof CacheTypeId
+  readonly [CacheCellTypeId]: () => Cache
+}
+
+/**
+ * The key of `Query.Cache`, to provide the service without importing `Query`.
+ *
+ * @internal
+ */
+export const CacheKey: Context.Key<Query.Cache, Query.Cache["Service"]> = Context.Service<
+  Query.Cache,
+  Query.Cache["Service"]
+>("@effect/ui/Query/Cache")
+
+/**
+ * The cache-wide idle time in milliseconds. Throws on a negative one.
+ *
+ * @internal
+ */
+export const cacheIdleMs = (input: Duration.Input | undefined): number => {
+  const duration = Duration.fromInputUnsafe(input ?? "5 minutes")
+  if (Duration.isNegative(duration)) throw new Error("[Query] idleTimeToLive can't be negative")
+  return Duration.toMillis(duration)
+}
+
+// -----------------------------------------------------------------------------
+// Host signals
+// -----------------------------------------------------------------------------
+
+interface SettableSignal extends Query.Signal {
+  readonly set: (value: boolean) => void
+}
+
+/** Adds a listener to a set. Returns its removal. */
+export const addListener = <A>(listeners: Set<A>, listener: A): () => void => {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
+  }
+}
+
+/**
+ * A settable signal, for tests and for host Layers.
+ *
+ * @internal
+ */
+export const makeSignal = (initial = true): SettableSignal => {
+  let current = initial
+  const listeners = new Set<(value: boolean) => void>()
+  return {
+    get: () => current,
+    subscribe: (listener) => addListener(listeners, listener),
+    set: (value) => {
+      if (value === current) return
+      current = value
+      for (const listener of Array.from(listeners)) listener(value)
+    }
+  }
+}
+
+const alwaysTrue: Query.Signal = { get: () => true, subscribe: () => () => {} }
+
+/** @internal */
+export const Visibility: Context.Reference<Query.Signal> = Context.Reference<Query.Signal>(
+  "@effect/ui/Query/Visibility",
+  { defaultValue: () => alwaysTrue }
+)
+
+/** @internal */
+export const Connectivity: Context.Reference<Query.Signal> = Context.Reference<Query.Signal>(
+  "@effect/ui/Query/Connectivity",
+  { defaultValue: () => alwaysTrue }
+)
+
+/** @internal */
+export const Problems: Context.Reference<(problem: Query.Problem.Any) => void> = Context.Reference<
+  (problem: Query.Problem.Any) => void
+>("@effect/ui/Query/Problems", {
+  // oxlint-disable-next-line no-console
+  defaultValue: () => (problem) => console.warn(problem.message)
+})
+
+// -----------------------------------------------------------------------------
+// Keys
+// -----------------------------------------------------------------------------
+
+// A fixed name for the kind of a leaf. Never its value, nor anything the value can set, such as its string tag: a
+// key can hold a secret.
+const kindOf = (leaf: unknown): string => {
+  switch (typeof leaf) {
+    case "number":
+      return "a non-finite number"
+    case "undefined":
+      return "undefined"
+    case "object":
+      return "a class instance"
+    default:
+      return "a " + typeof leaf
+  }
+}
+
+/** @internal */
+export class NonJsonLeaf {
+  readonly kind: string
+  constructor(leaf: unknown) {
+    this.kind = kindOf(leaf)
+  }
+}
+
+/**
+ * Canonical JSON: sorted object keys, `undefined` properties dropped, no
+ * whitespace, `-0` kept apart from `0`. It parses back with `JSON.parse`.
+ * Throws a `NonJsonLeaf` on a leaf JSON can't carry.
+ *
+ * @internal
+ */
+export const canonical = (u: unknown): string => {
+  if (u === null || typeof u === "boolean") return String(u)
+  if (typeof u === "string") return JSON.stringify(u)
+  if (typeof u === "number") {
+    if (!Number.isFinite(u)) throw new NonJsonLeaf(u)
+    return Object.is(u, -0) ? "-0" : String(u)
+  }
+  if (Array.isArray(u)) {
+    const parts: Array<string> = []
+    // Not `map`: a hole must throw too.
+    for (let i = 0; i < u.length; i++) parts.push(canonical(u[i]))
+    return "[" + parts.join(",") + "]"
+  }
+  if (typeof u === "object") {
+    const proto = Object.getPrototypeOf(u)
+    if (proto !== Object.prototype && proto !== null) throw new NonJsonLeaf(u)
+    const o = u as Record<string, unknown>
+    const parts: Array<string> = []
+    for (const key of Object.keys(o).sort()) {
+      if (o[key] !== undefined) parts.push(JSON.stringify(key) + ":" + canonical(o[key]))
+    }
+    return "{" + parts.join(",") + "}"
+  }
+  throw new NonJsonLeaf(u)
+}

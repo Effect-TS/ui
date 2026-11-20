@@ -1693,6 +1693,41 @@ const makeTags = (): Readonly<Record<string, VoidElement<any, any, any, any>>> =
  */
 export const tags: Readonly<Record<string, VoidElement<any, any, any, any>>> = makeTags()
 
+/**
+ * The vocabulary alone: its name, its tags and its head fold.
+ *
+ * **When to use**
+ *
+ * Use as a component's `elements` in place of the module, when the size of
+ * the bundle matters. A bundler keeps every export of a module that is passed
+ * as a value, and this module also exports Commands and what they need. With
+ * `Html.vocabulary` a bundle holds only the exports the app names.
+ *
+ * **Example** (Naming the vocabulary)
+ *
+ * ```ts import.meta.vitest
+ * import { Component } from "@effect/ui"
+ * import { Html } from "@effect/ui/html"
+ * import { Schema } from "effect"
+ *
+ * const Label = Component.define({
+ *   name: "Label",
+ *   model: Schema.Void,
+ *   message: Schema.Never,
+ *   elements: Html.vocabulary
+ * }).make({
+ *   init: () => undefined,
+ *   update: () => undefined,
+ *   view: (_, h) => h.span.children("Ready")
+ * })
+ * ```
+ *
+ * @stability experimental
+ * @category vocabulary
+ * @since 0.1.0
+ */
+export const vocabulary: View.Vocabulary<Elements> = { name, tags, head }
+
 // ---------------------------------------------------------------------------
 // refs
 // ---------------------------------------------------------------------------

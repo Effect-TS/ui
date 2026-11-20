@@ -106,7 +106,7 @@ import * as Layer from "effect/Layer"
 import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import type * as Scope from "effect/Scope"
 import type * as Component from "../Component.ts"
-import * as Query from "../Query.ts"
+import * as queryCore from "../internal/queryCore.ts"
 import * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
 import * as Html from "./Html.ts"
@@ -1078,6 +1078,16 @@ export const makeHost = (
       if (shown.size > 0) closeShownIn(node)
       node.parentNode?.removeChild(node)
     },
+    removeChildren: (parent, nodes) => {
+      if (shown.size > 0) { for (const node of nodes) closeShownIn(node) }
+      // A parent that holds these nodes and nothing else, as a list's element usually does, is cleared
+      // in one step.
+      if ((parent.nodeType === 1 || parent.nodeType === 11) && parent.childNodes.length === nodes.length) {
+        parent.textContent = ""
+        return
+      }
+      for (const node of nodes) node.parentNode?.removeChild(node)
+    },
     parentOf: (node) => node.parentNode ?? undefined,
     nextOf: (node) => node.nextSibling ?? undefined,
     setEvents(node, handlers, dispatch, options) {
@@ -1187,8 +1197,8 @@ export const htmlHost: Context.Service.Shape<typeof Html.Host> = {
 // Visibility follows `visibilitychange` only, never the window's `focus`. Connectivity
 // starts true and follows `online` and `offline` on the document's own window.
 const signals = (document: Document) => {
-  const visibility = Query.makeSignal(document.visibilityState !== "hidden")
-  const connectivity = Query.makeSignal(true)
+  const visibility = queryCore.makeSignal(document.visibilityState !== "hidden")
+  const connectivity = queryCore.makeSignal(true)
   const view = document.defaultView
   const onVisibility = () => visibility.set(document.visibilityState !== "hidden")
   const onOnline = () => connectivity.set(true)
@@ -1274,8 +1284,8 @@ export const layer = (options?: {
     yield* Effect.addFinalizer(() => Effect.sync(signal.dispose))
     return Context.make(Renderer.Renderer, { host }).pipe(
       Context.add(Html.Host, htmlHost),
-      Context.add(Query.Visibility, signal.visibility),
-      Context.add(Query.Connectivity, signal.connectivity),
+      Context.add(queryCore.Visibility, signal.visibility),
+      Context.add(queryCore.Connectivity, signal.connectivity),
       Context.add(Html.GlobalEvents, globalEventsOf(document)),
       Context.add(Html.Images, imagesOf(document))
     )
@@ -1352,9 +1362,9 @@ export interface MountOptions<V extends View.Elements, RF = never> {
  * props on both sides when both Routers are at the same URL. Each instance adopts its server
  * Model and replays `init` only to recover its Commands; server Commands the
  * Model already has the result of are skipped, and those that missed the
- * budget run now. `onMount` fires on adoption. An instance whose view doesn't
- * match the server's nodes is rebuilt on its own, and one the server deferred
- * is built fresh.
+ * budget run now. `onMount` fires on adoption. Where an instance's view stops
+ * matching the server's nodes, the nodes before stay adopted and the rest is
+ * built fresh, and an instance the server deferred is built fresh.
  *
  * An instance the server rendered with its provided Layer ready, whose
  * Layer is still building here, keeps the server's nodes until the Layer is

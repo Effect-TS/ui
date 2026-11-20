@@ -7,10 +7,11 @@ import {
   MessageLog,
   Mount,
   Query,
-  type Renderer,
+  Renderer,
   Router,
   Subscription,
-  UiSchema
+  UiSchema,
+  View
 } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
@@ -56,6 +57,72 @@ const container = (html: string) =>
     }),
     (element) => Effect.sync(() => element.remove())
   )
+
+/**
+ * Three rows under a list, rendered on the server and hydrated from `tamper`'s copy of the HTML. Each row
+ * has a button with a handler and a mount, and a Subscription.
+ */
+const hydrateRows = Effect.fnUntraced(function*(tamper: (html: string) => string) {
+  const mounted: Array<Element> = []
+  let streams = 0
+  const Seen = Mount.make("Seen", { args: {} }, (element: Element) =>
+    Effect.sync(() => {
+      mounted.push(element)
+      return RowMessage.Seen()
+    }))
+  const RowMessage = UiSchema.TaggedEnum({ Clicked: {}, Seen: {} })
+  const Row = Component.define({
+    name: "Row",
+    props: Schema.Struct({ label: Schema.String }),
+    model: Schema.Number,
+    message: RowMessage,
+    elements: Html
+  }).make({
+    init: () => 0,
+    update: (clicks, message) => message._tag === "Clicked" ? clicks + 1 : clicks,
+    subscriptions: () => [
+      Subscription.make("stream", 0, (): Stream.Stream<never> => {
+        streams++
+        return Stream.never
+      })
+    ],
+    view: (clicks, h) =>
+      h.li(
+        h.button.onClick(RowMessage.Clicked()).onMount(Seen()).children(h.props.label),
+        h.span(`${clicks} clicked`),
+        h.em(`row ${h.props.label}`)
+      )
+  })
+  const Rows = Component.define({ name: "Rows", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+    init: () => null,
+    update: (model) => model,
+    view: (_, h) => h.ul(...["A", "B", "C"].map((label) => Row(h, { key: label, props: { label } })))
+  })
+  const rendered = yield* HtmlServer.renderToHtml(Rows, {})
+  const html = tamper(rendered.html)
+  assert.notStrictEqual(html, rendered.html)
+  const app = yield* container(html)
+  const server = { items: [...app.querySelectorAll("li")], buttons: [...app.querySelectorAll("button")] }
+  const root = yield* BrowserHost.mountEffect(Rows, {}, app, { state: rendered.state })
+  yield* root.adopted
+  yield* tick
+  /** Fails if a handler, a mount or a Subscription started twice, on a node that stayed or one that went. */
+  const startedOnce = Effect.gen(function*() {
+    const buttons = [...app.querySelectorAll("button")]
+    assert.deepStrictEqual(buttons.map((button) => button.textContent), ["A", "B", "C"])
+    assert.deepStrictEqual([...app.querySelectorAll("em")].map((em) => em.textContent), ["row A", "row B", "row C"])
+    assert.strictEqual(app.querySelector("ul")!.childNodes.length, 3)
+    assert.sameMembers(mounted, buttons)
+    assert.strictEqual(streams, 3)
+    for (const button of buttons) button.click()
+    yield* tick
+    assert.deepStrictEqual(
+      [...app.querySelectorAll("span")].map((span) => span.textContent),
+      ["1 clicked", "1 clicked", "1 clicked"]
+    )
+  })
+  return { app, server, startedOnce }
+})
 
 describe("HtmlServer", { concurrent: false }, () => {
   it.effect("drops unsafe attribute names on the server, fresh client and hydrated client", () =>
@@ -277,6 +344,103 @@ describe("HtmlServer", { concurrent: false }, () => {
         expect(div.querySelector("linearGradient")!.getAttributeNames()).toEqual(["gradientUnits"])
       }
     }).pipe(Effect.scoped))
+
+  it.effect("escapes text, keeps a leading newline, and selects the option whose text is the select's value", () =>
+    Effect.gen(function*() {
+      const Page = Component.define({
+        name: "Text",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) =>
+          h.div.children(
+            h.p.children("a<b>&c"),
+            h.pre.children("\nx"),
+            h.select.value("b").children(h.option.children("a"), h.option.children("b"))
+          )
+      })
+      const rendered = yield* HtmlServer.renderToHtml(Page, {})
+      expect(rendered.html).toBe(
+        "<!--[/Text--><div><p>a&lt;b&gt;&amp;c</p><pre>\n\nx</pre><select><option>a</option><option selected>b</option></select></div><!--]/Text-->"
+      )
+    }))
+
+  it.effect("never reads the properties of markup it leaves out", () =>
+    Effect.gen(function*() {
+      // `String` of it throws.
+      const unreadable: unknown = Object.create(null)
+      const Page = Component.define({
+        name: "LeftOut",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) =>
+          h.div.children(
+            h.textarea.children(h.el("span").prop("value", unreadable).children("only text")),
+            h.el("br").children(h.el("span").prop("value", unreadable).children("none"))
+          )
+      })
+      const rendered = yield* HtmlServer.renderToHtml(Page, {})
+      expect(rendered.html).toBe("<!--[/LeftOut--><div><textarea>only text</textarea><br></div><!--]/LeftOut-->")
+    }))
+
+  it.effect("reads a non-void element's value property on both writer paths before later siblings", () =>
+    Effect.gen(function*() {
+      const steps = ["first", "second", "third"]
+      let index = 0
+      const next = () => steps[index++]!
+      const withHiddenValue = (node: View.Content<never, never>): View.Node<never> => ({
+        ...(View.toNode(node) as View.Element<never>),
+        props: Object.freeze(Object.defineProperty({}, "value", { get: next }))
+      })
+      const Page = Component.define({
+        name: "ValueReads",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) =>
+          h.div.children(
+            withHiddenValue(h.button),
+            h.select.value("a").children(withHiddenValue(h.option.attr("value", "a").children("A"))),
+            h.input.prop("value", Object.freeze({ toString: next }))
+          )
+      })
+      const rendered = yield* HtmlServer.renderToHtml(Page, {})
+      expect(rendered.html).toBe(
+        "<!--[/ValueReads--><div><button></button><select><option value=\"a\" selected>A</option></select><input value=\"third\"></div><!--]/ValueReads-->"
+      )
+    }))
+
+  it.effect("writes element values after the render's Layers are released", () =>
+    Effect.gen(function*() {
+      let closed = false
+      const value = Object.freeze({ toString: () => closed ? "closed" : "open" })
+      const Page = Component.define({
+        name: "AfterRelease",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => h.div.children(h.input.prop("value", value))
+      }).pipe(Component.provide(Layer.effectDiscard(Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          closed = true
+        })
+      ))))
+      const rendered = yield* HtmlServer.renderToHtml(Page, {})
+      expect(rendered.html).toBe("<!--[/AfterRelease--><div><input value=\"closed\"></div><!--]/AfterRelease-->")
+    }))
 
   it.effect("keeps winning HTML aliases through updates and removals without folding SVG attributes", () =>
     Effect.gen(function*() {
@@ -950,7 +1114,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       expect(app.querySelector("p")!.textContent).toBe("server:server")
     }).pipe(Effect.scoped))
 
-  it.effect("rebuilds only the instance whose nodes don't match", () =>
+  it.effect("rebuilds nothing outside the instance whose nodes don't match", () =>
     Effect.gen(function*() {
       const Item = Component.define({
         name: "Item",
@@ -979,14 +1143,158 @@ describe("HtmlServer", { concurrent: false }, () => {
       })
       const rendered = yield* HtmlServer.renderToHtml(List, {})
       const app = yield* container(rendered.html.replace("<li>A</li>", "<li>changed</li>"))
-      const [first, second] = app.querySelectorAll("li")
+      const second = app.querySelectorAll("li")[1]
       yield* BrowserHost.mountEffect(List, {}, app, { state: rendered.state })
       const [a, b] = app.querySelectorAll("li")
       expect(a.textContent).toBe("A")
-      expect(a).not.toBe(first)
       expect(b).toBe(second)
       expect(app.querySelector("ul")!.childNodes.length).toBe(2)
     }).pipe(Effect.scoped))
+
+  it.effect("a mismatch after a row's own nodes keeps the rows beside it, and starts nothing twice", () =>
+    Effect.gen(function*() {
+      const { app, server, startedOnce } = yield* hydrateRows((html) => html.replace("<!--]/Rows/Row[C]-->", "<hr>$&"))
+      const items = [...app.querySelectorAll("li")]
+      assert.strictEqual(items[0], server.items[0])
+      assert.strictEqual(items[1], server.items[1])
+      yield* startedOnce
+    }).pipe(Effect.scoped))
+
+  // A child whose slot holds another child, with two buttons in a slot of its own, and a node after it.
+  // `partly` puts a stray element before the second button, and one after the outer slot.
+  const partly = (html: string) =>
+    html.replace("<button>go</button>", "<hr>$&").replace("<!--]/Page/Card[c]-->", "<hr>$&")
+  for (
+    const [name, at, tamper, order] of [
+      ["a child builds fresh among the server's nodes", "child", partly, [
+        "before",
+        "first",
+        "go",
+        "tail",
+        "mid",
+        "after"
+      ]],
+      ["the root's child builds fresh among the server's nodes", "root", partly, ["first", "go", "tail"]],
+      ["a child that waited for its Layer builds fresh among the server's nodes", "waiting", partly, [
+        "before",
+        "mid",
+        "first",
+        "go",
+        "tail",
+        "after"
+      ]],
+      // A stray element where the child's view starts.
+      [
+        "a child that waited for its Layer builds fresh in place of the server's nodes",
+        "waiting",
+        (html: string) => html.replace("<!--[/Page/Card[c]/[body]-->", "<hr>$&"),
+        ["before", "mid", "first", "go", "tail", "after"]
+      ]
+    ] as const
+  ) {
+    it.effect(`places what ${name}`, () =>
+      Effect.gen(function*() {
+        class Store extends Context.Service<Store, string>()("test/Store") {}
+        const Go = Html.ref("Go", "button")
+        const mounted: Array<Element> = []
+        const looked: Array<Option.Option<Element>> = []
+        const Message = UiSchema.TaggedEnum({ Look: {}, Move: {}, Done: {} })
+        const Seen = Mount.make("Seen", { args: {} }, (element: Element) =>
+          Effect.sync(() => {
+            mounted.push(element)
+            return Message.Done()
+          }))
+        const Look = Command.make("Look", { args: {} }, () =>
+          Effect.gen(function*() {
+            const refs = yield* Renderer.Refs
+            looked.push(yield* refs.lookup(Go))
+            return Message.Done()
+          }))
+        const slotted = (name: string) =>
+          Component.define({ name, model: Schema.Null, message: Schema.Never, elements: Html, slots: ["body"] }).make({
+            init: () => null,
+            update: (model) => model,
+            view: (_, h) => h.slots.body
+          })
+        const Inner = slotted("Inner")
+        const Ready = slotted("Card")
+        const Card = at === "waiting"
+          ? Ready.pipe(Component.provide(Layer.effect(Store, Effect.as(Effect.sleep("50 millis"), "ready"))))
+          : Ready
+        const Page = Component.define({ name: "Page", model: Schema.Boolean, message: Message, elements: Html }).make({
+          init: () => false,
+          update: (moved, message, $) =>
+            message._tag === "Look" ? $.set(moved).run(Look()) : message._tag === "Move" ? true : moved,
+          view: (moved, h) => {
+            const card = Card(h, {
+              key: "c",
+              slots: {
+                body: [
+                  Inner(h, {
+                    key: "i",
+                    slots: { body: [h.button("first"), h.button.ref(Go).onMount(Seen()).children("go")] }
+                  }),
+                  h.u("tail")
+                ]
+              }
+            })
+            const mid = h.s.key("m").children("mid")
+            return at === "root" ? card : h.main(h.i("before"), moved ? [mid, card] : [card, mid], h.b("after"))
+          }
+        })
+        const fiber = yield* Effect.forkChild(HtmlServer.renderToHtml(Page, {}))
+        yield* TestClock.adjust("50 millis")
+        const rendered = yield* Fiber.join(fiber)
+        const html = tamper(rendered.html)
+        assert.include(html, "<hr>")
+        const app = yield* container(html)
+        const server: Array<Node> = [...app.querySelectorAll("*")]
+        const root = yield* BrowserHost.mountEffect(Page, {}, app, { state: rendered.state })
+        if (at === "waiting") {
+          // Moved while it waits. Once it has adopted, a move would place all its nodes, one left out too.
+          root.send(Message.Move())
+          yield* tick
+          yield* TestClock.adjust("50 millis")
+        }
+        yield* root.adopted
+        yield* tick
+        root.send(Message.Look())
+        yield* tick
+        const nodes = [...(app.querySelector("main") ?? app).childNodes]
+        assert.deepStrictEqual(nodes.map((node) => node.textContent), [...order])
+        // Hydration keeps the nodes that match.
+        assert.deepStrictEqual(
+          nodes.filter((node) => !server.includes(node)).map((node) => node.textContent),
+          tamper === partly ? ["go"] : ["first", "go", "tail"]
+        )
+        const go = nodes[order.indexOf("go")]
+        assert.deepStrictEqual(mounted, [go])
+        assert.deepStrictEqual(looked, [Option.some(go)])
+      }).pipe(Effect.scoped))
+  }
+
+  it.effect("keeps the nodes before a mismatch in the view it's in", () =>
+    Effect.gen(function*() {
+      const { app, server, startedOnce } = yield* hydrateRows((html) => html.replace("row C", "stale"))
+      assert.deepStrictEqual([...app.querySelectorAll("li")], server.items)
+      assert.deepStrictEqual([...app.querySelectorAll("button")], server.buttons)
+      yield* startedOnce
+    }).pipe(Effect.scoped))
+
+  it.effect(
+    "keeps the rows before a node the view doesn't render, and builds the rest once",
+    () =>
+      Effect.gen(function*() {
+        // A stray element between the second row and the third, where the list's view has the third.
+        const { app, server, startedOnce } = yield* hydrateRows((html) =>
+          html.replace("<!--[/Rows/Row[C]-->", "<hr>$&")
+        )
+        const items = [...app.querySelectorAll("li")]
+        assert.strictEqual(items[0], server.items[0])
+        assert.strictEqual(items[1], server.items[1])
+        yield* startedOnce
+      }).pipe(Effect.scoped)
+  )
   it.effect("fails the parent whose view has two children at one path when it adopts", () =>
     Effect.gen(function*() {
       // The server renders two keys; the client's view at adoption renders one of them twice.
@@ -1123,6 +1431,107 @@ describe("HtmlServer", { concurrent: false }, () => {
       expect(rendered.state["~deferred"]).toEqual(["/Page/Doomed[d]"])
       expect(rendered.state["~query"]).toEqual({})
     }))
+
+  /** What `Object.prototype` has under each reserved key as a render runs: setting one of them wouldn't add it. */
+  const inherited: ReadonlyArray<readonly [string, PropertyDescriptor | undefined]> = [
+    ["nothing", undefined],
+    ["a value that can't be written", { value: undefined, writable: false }],
+    ["a setter", { get: () => undefined, set: () => undefined }]
+  ]
+  it.effect.each(inherited)(
+    "returns the state as a plain record: each path in document order, then the reserved keys, over %s inherited",
+    ([, descriptor]) =>
+      Effect.gen(function*() {
+        class GetText extends Query.Service<GetText>()("GetText", {
+          args: {},
+          success: Schema.String,
+          error: Schema.Never,
+          staleTime: "30 seconds"
+        }, Effect.succeed(() => Effect.succeed("data"))) {}
+        const Changed = UiSchema.TaggedEnum({ ChangedOn: { on: Schema.Boolean } })
+        const Group = Component.define({
+          name: "Group",
+          model: Schema.Number,
+          message: Changed,
+          shares: {
+            value: (count) => count,
+            collects: {
+              schema: Schema.Boolean,
+              onChange: (collected) => Changed.ChangedOn({ on: collected.includes(true) })
+            }
+          }
+        }).make({ init: () => 0, update: (count) => count + 1, parts: (count) => ({ count }) })
+        const leaf = { model: Schema.Null, message: Schema.Never, elements: Html } as const
+        const made = { init: () => null, update: (model: null) => model } as const
+        const Item = Component.define({
+          ...leaf,
+          name: "Item",
+          shared: { group: { owner: Group, report: () => true } }
+        })
+          .make({ ...made, view: (_, h) => h.span("item") })
+        const Asks = Component.define({
+          ...leaf,
+          name: "Asks",
+          queries: { text: { query: GetText, args: () => ({}) } }
+        })
+          .make({ ...made, view: (_, h) => h.p("asks") }).pipe(Component.provide(GetText.layer))
+        const Off = Component.define({ ...leaf, name: "Off" }).make({ ...made, view: (_, h) => h.p("off") }).pipe(
+          Component.provide(Layer.empty, { server: false })
+        )
+        const Slow = Component.define({ ...leaf, name: "Slow" }).make({ ...made, view: (_, h) => h.p("slow") }).pipe(
+          Component.provide(Layer.effectDiscard(Effect.sleep("1 second")))
+        )
+        const Page = Component.define({ ...leaf, name: "Page" }).make({
+          ...made,
+          view: (_, h) =>
+            h.div(
+              Slow(h, { key: "s", props: {} }),
+              Group(h, { key: "g", view: () => Item(h, { key: "i", props: {} }) }),
+              Off(h, { key: "o", props: {} }),
+              Asks(h, { key: "a", props: {} })
+            )
+        })
+
+        const reserved = ["~deferred", "~status", "~query", "~reported", "~static"]
+        if (descriptor !== undefined) {
+          for (const key of reserved) {
+            // Only while the render below runs: it's what the render is held to.
+            // oxlint-disable-next-line no-extend-native
+            Object.defineProperty(Object.prototype, key, { ...descriptor, configurable: true })
+          }
+        }
+        const { state } = yield* Effect.gen(function*() {
+          const fiber = yield* Effect.forkChild(
+            HtmlServer.renderToHtml(Page, {}, { budget: "50 millis", static: true })
+          )
+          yield* TestClock.adjust("50 millis")
+          return yield* Fiber.join(fiber)
+        }).pipe(Effect.ensuring(Effect.sync(() => {
+          for (const key of reserved) delete (Object.prototype as any)[key]
+        })))
+        // A copy made from it, or its JSON, would be the same for any prototype, and for any order.
+        assert.strictEqual(Object.getPrototypeOf(state), Object.prototype)
+        const entries: ReadonlyArray<readonly [string, unknown]> = [
+          ["/Page", null],
+          ["/Page/Slow[s]", null],
+          ["/Page/Group[g]", 1],
+          ["/Page/Group[g]/Item[i]", null],
+          ["/Page/Asks[a]", { model: null, queries: { text: ["{}", 0, "data", 0, false] } }],
+          ["~deferred", ["/Page/Off[o]"]],
+          ["~status", { "/Page/Slow[s]": "Pending" }],
+          ["~query", { GetText: [["{}", 0, "data", 0]] }],
+          ["~reported", { "/Page/Group[g]": { _tag: "ChangedOn", on: true } }],
+          ["~static", true]
+        ]
+        assert.deepStrictEqual(Reflect.ownKeys(state), entries.map(([key]) => key))
+        assert.deepStrictEqual(
+          Object.getOwnPropertyDescriptors(state),
+          Object.fromEntries(
+            entries.map(([key, value]) => [key, { value, writable: true, enumerable: true, configurable: true }])
+          )
+        )
+      })
+  )
 
   it.effect("closes everything it started when the render is interrupted", () =>
     Effect.gen(function*() {
@@ -1267,6 +1676,46 @@ describe("HtmlServer", { concurrent: false }, () => {
       })
       const result = yield* ssr(Titled, {})
       expect(result.adopted).toEqual(["/Titled", "/Titled/Waiting[w]"])
+      yield* TestHost.settle
+      expect(result.document.title).toBe("mounted")
+    })))
+  it.effect("compares the client's first fold, so a head that mounts while an instance waits isn't a mismatch", () =>
+    hosted(Effect.gen(function*() {
+      class Slow extends Context.Service<Slow, string>()("test/Slow") {}
+      const Waiting = Component.define({
+        name: "Waiting",
+        model: Schema.Struct({}),
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => ({}),
+        update: (model) => model,
+        view: (_, h) => h.p("waiting")
+      }).pipe(Component.provide(Layer.effect(Slow, Effect.as(Effect.sleep("30 millis"), "ready"))))
+      const Titled = Component.define({
+        name: "Titled",
+        model: Schema.Struct({}),
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => ({}),
+        update: (model) => model,
+        head: () => [Head.title("mounted")],
+        view: (_, h) => h.p("titled")
+      })
+      const Message = UiSchema.TaggedEnum({ Mounted: {} })
+      // Nothing has a head until the mount's message places the child that does.
+      const Page = Component.define({ name: "Page", model: Schema.Boolean, message: Message, elements: Html }).make({
+        init: () => false,
+        update: () => true,
+        view: (titled, h) =>
+          h.div.onMount(mountSending("Title", Message.Mounted())).children(
+            Waiting(h, { key: "w", props: {} }),
+            titled && Titled(h, { key: "t", props: {} })
+          )
+      })
+      const result = yield* ssr(Page, {})
+      expect(result.adopted).toEqual(["/Page", "/Page/Waiting[w]"])
       yield* TestHost.settle
       expect(result.document.title).toBe("mounted")
     })))
@@ -2231,4 +2680,40 @@ describe("HtmlServer queries", { concurrent: false }, () => {
         "/Page/Panel[p]: still waiting for its Layer to adopt when the budget was spent"
       ])
     })))
+
+  it.effect(
+    "renders once for the fetches of one flush that end together",
+    () =>
+      Effect.gen(function*() {
+        class GetText extends Query.Service<GetText>()("GetText", {
+          args: { id: Schema.Number },
+          success: Schema.String,
+          error: Schema.Never,
+          staleTime: "30 seconds"
+        }, Effect.succeed(({ id }) => Effect.as(Effect.yieldNow, `text ${id}`))) {}
+        let renders = 0
+        const Page = Component.define({
+          name: "Page",
+          model: Schema.Struct({}),
+          message: Schema.Never,
+          elements: Html,
+          queries: {
+            first: { query: GetText, args: () => ({ id: 1 }) },
+            second: { query: GetText, args: () => ({ id: 2 }) },
+            third: { query: GetText, args: () => ({ id: 3 }) }
+          }
+        }).make({
+          init: () => ({}),
+          update: (model) => model,
+          view: (_, h) => {
+            renders++
+            const text = (result: AsyncResult.AsyncResult<string>) => AsyncResult.isSuccess(result) ? result.value : "…"
+            return h.p(`${text(h.queries.first)}, ${text(h.queries.second)}, ${text(h.queries.third)}`)
+          }
+        }).pipe(Component.provide(GetText.layer))
+        const rendered = yield* HtmlServer.renderToHtml(Page, {})
+        expect(rendered.html).toContain("<p>text 1, text 2, text 3</p>")
+        expect(renders).toBe(2)
+      })
+  )
 })
