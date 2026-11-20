@@ -2067,6 +2067,8 @@ const setup = (
       closeInstance(inst.parent, inst)
     })
     inst.parent?.children.delete(inst)
+    // A render that threw kept the paths it checked, and nothing reads them once the instance is closed.
+    inst.childPaths = undefined
   }
 
   const failInstance = (

@@ -1886,6 +1886,37 @@ describe("BrowserHost", { concurrent: false }, () => {
         }).pipe(Effect.scoped)
     )
 
+    it.effect.skipIf(process.versions.bun !== undefined || process.versions.deno !== undefined)(
+      "a root whose view fails keeps nothing of that view while it shows its fallback",
+      () =>
+        Effect.gen(function*() {
+          let props: WeakRef<object> | undefined
+          const Item = Component.define({
+            name: "Item",
+            props: Schema.Struct({}),
+            model: Schema.Null,
+            message: Schema.Never
+          })
+            .make({ init: () => null, update: (model) => model, view: (_, h) => h.text("item") })
+          const Broken = Component.define({ name: "Broken", model: Schema.Null, message: Schema.Never }).make({
+            init: () => null,
+            update: (model) => model,
+            view: (_, h) => {
+              const value = {}
+              props = new WeakRef(value)
+              // Two elements with one key: the render fails once its child paths are checked.
+              return h.el("div", Item(h, { key: "i", props: value }), h.el("p").key("k"), h.el("p").key("k"))
+            }
+          })
+          const app = yield* container
+          yield* BrowserHost.mountEffect(Broken, {}, app, { fallback: (_, h) => h.text("failed") })
+          yield* tick
+          expect(app.textContent).toBe("failed")
+          yield* collectGarbage
+          expect(props!.deref()).toBeUndefined()
+        }).pipe(Effect.scoped)
+    )
+
     it.effect("mount is a Layer: the tree is live while it is built, and closing it removes the nodes", () =>
       Effect.gen(function*() {
         const app = yield* container
