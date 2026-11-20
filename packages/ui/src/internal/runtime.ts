@@ -4951,6 +4951,10 @@ const setup = (
    * is. They are found by walking the rendered tree down along the path, from the mount's container or
    * from the container of the detached child the path starts in. A node of the path that isn't the tree's,
    * such as one in a shadow tree between an element and its slotted child, is passed over.
+   *
+   * A detached child's container is out of the document, so a host whose listeners are on the document,
+   * as `BrowserHost`'s are, gets no event from it: only a host that dispatches events on the container's
+   * nodes itself, as `TestHost` does, reaches that walk.
    */
   const eventsAlong = (path: ReadonlyArray<unknown>): ReadonlyArray<Renderer.Events | undefined> => {
     const out: Array<Renderer.Events | undefined> = new Array(path.length)
@@ -4976,15 +4980,55 @@ const setup = (
     out: Array<Renderer.Events | undefined>
   ) => {
     for (let at = from; at >= 0; at--) {
-      const found = findElement(inst, items, path[at])
+      let found = findElement(inst, items, path[at])
+      if (found === undefined && inserting !== undefined) found = findElement(insertingIn!, inserting, path[at])
       if (found === undefined) continue
       inst = foundIn!
+      // Cleared at once, so the lookup holds no instance after the event.
+      foundIn = undefined
       out[at] = eventsOf(inst, found.v)
       items = found.children
     }
   }
   // The instance whose tree held the element `findElement` found last.
   let foundIn: Instance | undefined
+  // What a patch is putting in the host, and whose tree it is: records not yet in the tree the lookup
+  // walks. An element among them can get an event as it goes in, such as one a custom element's
+  // `connectedCallback` fires.
+  let inserting: ReadonlyArray<Rendered> | undefined
+  let insertingIn: Instance | undefined
+  /** As `place`, for new records of `inst`'s tree, which the lookup finds while they go in. */
+  const placeNew = (
+    inst: Instance,
+    parentNode: unknown,
+    items: ReadonlyArray<Rendered>,
+    ref: unknown,
+    stays?: Uint8Array
+  ) => {
+    inserting = items
+    insertingIn = inst
+    try {
+      place(parentNode, items, ref, stays)
+    } finally {
+      inserting = insertingIn = undefined
+    }
+  }
+  /** Puts the nodes of `items` from `from` on before `ref`, as `placeNew` does. */
+  const insertNew = (
+    inst: Instance,
+    parentNode: unknown,
+    items: ReadonlyArray<Rendered>,
+    from: number,
+    ref: unknown
+  ) => {
+    inserting = items
+    insertingIn = inst
+    try {
+      for (let index = from; index < items.length; index++) insertNodes(parentNode, items[index]!, ref)
+    } finally {
+      inserting = insertingIn = undefined
+    }
+  }
   /** The element of `items` whose node is `node`, looked for through the children and fallbacks they place. */
   const findElement = (
     inst: Instance,
@@ -5904,7 +5948,7 @@ const setup = (
         }
         result[index] = create(inst, view, env)
       }
-      for (let index = start; index < newLength; index++) insertNodes(parentNode, result[index]!, ref)
+      insertNew(inst, parentNode, result, start, ref)
       return result
     }
     // Where matching goes on from: after the nodes that stayed, and after a child that was replaced.
@@ -5999,7 +6043,7 @@ const setup = (
         if (gone) destroy(inst, old)
       }
     }
-    if (!inPlace) place(parentNode, result, ref, from === undefined ? undefined : inOrder(from))
+    if (!inPlace) placeNew(inst, parentNode, result, ref, from === undefined ? undefined : inOrder(from))
     return result
   }
 
@@ -6015,7 +6059,7 @@ const setup = (
     const result: Array<Rendered> = new Array(news.length)
     for (let index = 0; index < news.length; index++) result[index] = create(inst, news[index]!, env)
     // After all of them are made, so a list that throws part way puts nothing in the host.
-    for (let index = 0; index < result.length; index++) insertNodes(parentNode, result[index]!, ref)
+    insertNew(inst, parentNode, result, 0, ref)
     return result
   }
 
@@ -6259,7 +6303,7 @@ const setup = (
     rendered.v = child
     if (next !== rendered.inner) {
       // It shows something else now, such as a feature once its Layer is ready: that goes in the container.
-      place(rendered.container, [next], undefined)
+      placeNew(inst, rendered.container, [next], undefined)
       // A child that `patchChild` didn't keep is a new instance.
       if (next._tag === "Child") record(next.inst, { _tag: "Detached" })
       rendered.inner = next
@@ -6341,7 +6385,7 @@ const setup = (
     const next = create(inst, view, env)
     const nodes = nodesOf(rendered)
     const parentNode = nodes.length > 0 ? host.parentOf(nodes[0]) : undefined
-    if (parentNode !== undefined) place(parentNode, [next], nodes[0])
+    if (parentNode !== undefined) placeNew(inst, parentNode, [next], nodes[0])
     destroy(inst, rendered)
     return next
   }

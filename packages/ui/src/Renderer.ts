@@ -83,8 +83,10 @@ export interface Events {
  * it asks each mount's lookup. `lookup` takes an event's path, innermost node
  * first, as `composedPath()` gives it, and returns, at each index, the events
  * of that node if it is an element of the mount's tree. The renderer reads
- * them from the tree it rendered last, so a node that is no longer in the
- * tree gets no events.
+ * them from the tree it rendered last, and from what a patch is inserting,
+ * so a node that is no longer in the tree gets no events. The nodes of a
+ * detached child are found from its container, for a host that dispatches
+ * events there: a host listening on the document gets none from them.
  *
  * `listen` is called where `setEvents` would be, with the handlers and
  * options of an element that has some, so the host can start listening for

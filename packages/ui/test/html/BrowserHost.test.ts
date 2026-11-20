@@ -779,6 +779,36 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect([a.model(), b.model()]).toEqual([["click inner"], ["click outer", "click inner"]])
       }).pipe(Effect.scoped))
 
+    it.effect("an element a patch inserts gets the events it fires as it is inserted", () =>
+      Effect.gen(function*() {
+        // A custom element that clicks its button once it is in the document, while the patch inserts it.
+        customElements.define(
+          "x-clicks-on-insert",
+          class extends HTMLElement {
+            connectedCallback() {
+              this.querySelector("button")?.click()
+            }
+          }
+        )
+        const Page = Component.define({ name: "Page", model: Schema.Array(Schema.String), message: Schema.String })
+          .make({
+            init: (): ReadonlyArray<string> => [],
+            update: (log, message) => [...log, message],
+            view: (log, h) =>
+              h.el(
+                "div",
+                log.length === 0
+                  ? h.el("span", h.el("button").on("click", "show").children("Show"))
+                  : h.el("x-clicks-on-insert", h.el("button").on("click", "inserted").children("Inserted"))
+              )
+          })
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Page, {}, app)
+        HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name: "Show" }))
+        yield* tick
+        expect(root.model()).toEqual(["show", "inserted"])
+      }).pipe(Effect.scoped))
+
     it.effect("a click reports the pointer of the pointerdown before it, and none for a click from the keyboard", () =>
       Effect.gen(function*() {
         const app = yield* container
@@ -1821,6 +1851,38 @@ describe("BrowserHost", { concurrent: false }, () => {
           yield* collectGarbage
           expect(model.deref()).toBeUndefined()
           expect(field.isConnected).toBe(false)
+        }).pipe(Effect.scoped)
+    )
+
+    it.effect.skipIf(process.versions.bun !== undefined || process.versions.deno !== undefined)(
+      "a child the last event reached doesn't stay alive once it is removed",
+      () =>
+        Effect.gen(function*() {
+          let model: WeakRef<object> | undefined
+          const Item = Component.define({ name: "Item", model: Schema.Struct({}), message: Schema.Null }).make({
+            init: () => {
+              const value = {}
+              model = new WeakRef(value)
+              return value
+            },
+            update: (value) => value,
+            view: (_, h) => h.el("button").on("click", null).children("Item")
+          })
+          const Page = Component.define({ name: "Page", model: Schema.Boolean, message: Schema.Null }).make({
+            init: () => true,
+            update: () => false,
+            view: (shown, h) => h.el("div", h.text("Remove"), shown ? Item(h, { key: "i" }) : null)
+          })
+          const app = yield* container
+          const root = yield* BrowserHost.mountEffect(Page, {}, app)
+          HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name: "Item" }))
+          yield* tick
+          // Removed by a message, with no event after the one inside it.
+          root.send(null)
+          yield* tick
+          expect(app.textContent).toBe("Remove")
+          yield* collectGarbage
+          expect(model!.deref()).toBeUndefined()
         }).pipe(Effect.scoped)
     )
 
