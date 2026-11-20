@@ -525,6 +525,8 @@ export interface Instance {
   loggedDetached: boolean
   /** Created detached in its author's holder while hydration waited on a Layer, and not yet placed live. */
   awaitingAdopt: boolean
+  /** Initial view from the server's Model while detached during hydration, adopted before patching to live. */
+  serverView: View.Node<any, any> | undefined
   /** The entry that started the step that last marked it dirty, until it renders. */
   cause: number | undefined
   /**
@@ -1623,6 +1625,9 @@ const setup = (
   // Hydration: the root detached instance currently adopting its server range, so its descendants in
   // the same off-screen container adopt their nested server ranges in place too.
   let adoptingRoot: Instance | undefined
+  // When adopting an instance's initial server view before patching to its live view, that instance itself,
+  // so children already removed from its live tree are not resurrected during the initial adoption pass.
+  let adoptingInst: Instance | undefined
   const canAdoptExisting = (found: Instance): boolean =>
     found.awaitingAdopt || (adoptingRoot !== undefined && within(found, adoptingRoot))
   // Whether the host can hold nodes out of the document: a patch then keeps the children and outlets it removes.
@@ -2770,6 +2775,7 @@ const setup = (
     held: Instance["held"] = undefined
     loggedDetached: Instance["loggedDetached"] = false
     awaitingAdopt: Instance["awaitingAdopt"] = false
+    serverView: Instance["serverView"] = undefined
   }
 
   /**
@@ -2884,6 +2890,7 @@ const setup = (
     declare held: Instance["held"]
     declare loggedDetached: Instance["loggedDetached"]
     declare awaitingAdopt: Instance["awaitingAdopt"]
+    declare serverView: Instance["serverView"]
     /**
      * From the moment its Scope or an ancestor's starts closing, not once it has: see `Instance.closed`.
      */
@@ -3351,6 +3358,7 @@ const setup = (
     if (inst.closed) return
     const tree = viewOf(inst)
     if (tree === undefined) return
+    if (range === undefined && Option.isSome(serverModel) && waiting > 0) inst.serverView = tree
     let taken: Rendered | undefined
     let rendered: Rendered
     try {
@@ -5692,30 +5700,109 @@ const setup = (
   }
 
   /**
+   * Whether an already-live held instance has its own provided Layer that is still pending here even
+   * though the server rendered it ready, so its DOM range must wait for that Layer before adopting.
+   */
+  const shouldAwaitLayer = (inst: Instance): boolean =>
+    inst.component.layer !== undefined &&
+    inst.env.ctx === undefined &&
+    inst.env.failure === undefined &&
+    inst.adoptsChildren &&
+    shippedStatus(inst.path) === undefined
+
+  /**
+   * Keeps `range`'s server nodes in place for an already-live held instance whose own provided Layer
+   * is still building, adopting `range` once that Layer settles.
+   */
+  const awaitExistingLayer = (inst: Instance, range: Range): void => {
+    const heldRendered = inst.rendered
+    inst.waiting = true
+    waiting++
+    range.claimed = true
+    inst.rendered = rangeNodes(range).map((node) => new TextRecord(emptyText, node))
+    const resume = (adopt: boolean) => {
+      if (inst.closed || !inst.waiting) return
+      inst.waiting = false
+      const nodes = inst.rendered.flatMap(nodesOf)
+      inst.rendered = heldRendered
+      range.claimed = false
+      const parentNode = host.parentOf(range.open)
+      const after = host.nextOf(range.close)
+      const held = heldPlacement.get(inst)
+      heldPlacement.delete(inst)
+      if (held !== undefined && !adopt) {
+        inst.props = held.props
+        setPlacement(inst, held)
+      }
+      const adopted = adopt && adoptExisting(inst, range)
+      if (!range.claimed) { for (const node of nodes) host.remove(node) }
+      if (!adopted && !inst.closed && inst.failure === undefined) {
+        if (!isDetached(inst.parent)) {
+          for (const item of inst.rendered) toggleMounts(inst, item, inst.env, true)
+        }
+        if (parentNode !== undefined) placeEach(parentNode, inst.rendered, after)
+        markDirty(inst)
+      } else if (inst.failure === undefined && parentNode !== undefined) {
+        placeEach(parentNode, inst.rendered, after)
+      }
+      if (!inst.closed) syncDetached(inst, isDetached(inst.parent))
+      if (adopt) recordAdopted(inst)
+      if (held !== undefined && adopt && !inst.closed && inst.failure === undefined) applyPlacement(inst, held)
+      viewChanged = true
+      settleWaiting()
+    }
+    whenReady(inst.env, () => defer(() => resume(true)), () => {
+      if (inst.component.layerFailure !== undefined) defer(() => resume(false))
+    })
+  }
+
+  /**
    * Adopts `range` onto an already-live detached instance (such as a listed `"model"` child held while
-   * its receiver waited for a Layer), preserving its live Model, runs and Subscriptions while adopting
-   * the server's DOM nodes and user edits. Returns whether `range` was claimed.
+   * its receiver waited for a Layer). Adopts against the initial server-matching view first so user
+   * edits bind to the server's keyed nodes and attributes match the server DOM, then patches to the
+   * current live view so reorders, removed attributes and model updates reconcile normally.
    */
   const adoptExisting = (inst: Instance, range: Range): boolean => {
     if (hydration === undefined || inst.waiting || inst.failure !== undefined) return false
-    const tree = viewOf(inst)
-    if (tree === undefined) return false
     const oldRendered = inst.rendered
+    const initial = inst.serverView
+    inst.serverView = undefined
+    const needsPatch = initial === undefined || dirty.has(inst) || inst.owner !== undefined ||
+      oldRendered.length !== 1 || oldRendered[0]!.v !== initial
+    const current = needsPatch ? viewOf(inst) : initial
+    const adoptView = initial ?? current
+    if (adoptView === undefined) return false
+    const parentNode = host.parentOf(range.open)
+    const after = host.nextOf(range.close)
     const prevRoot = adoptingRoot
+    const prevInst = adoptingInst
     if (prevRoot === undefined) adoptingRoot = inst
+    adoptingInst = needsPatch && initial !== undefined ? inst : undefined
     let taken: Rendered | undefined
     try {
-      taken = adoptNode(inst, tree, host.nextOf(range.open), range.close, inst.env)
+      taken = adoptNode(inst, adoptView, host.nextOf(range.open), range.close, inst.env)
       throwClash(inst)
     } catch (error) {
       failInstance(inst, Cause.die(error), "view")
       return false
     } finally {
       adoptingRoot = prevRoot
+      adoptingInst = prevInst
     }
     if (taken === undefined) return false
     claim(range)
     inst.rendered = [taken]
+    if (needsPatch && current !== undefined && current !== adoptView && !inst.closed && inst.failure === undefined) {
+      dirty.delete(inst)
+      guard(inst, "view", () => {
+        releaseRemoved(inst.rendered, [current])
+        const before = inst.rendered
+        const next = patchList(inst, parentNode, before, [current], after, inst.env)
+        if (inst.rendered === before) inst.rendered = next
+        else for (const node of next.flatMap(nodesOf)) host.remove(node)
+        throwClash(inst)
+      })
+    }
     for (const old of oldRendered) {
       const nodes = nodesOf(old)
       closeAll(inst, old)
@@ -5756,27 +5843,37 @@ const setup = (
     const slotted = slottedBy.get(found)
     if (slotted !== undefined) slotted.values = view.slots
     let adopted = false
+    let awaited = false
     if (range !== undefined) {
       found.onEmit = view.onEmit
       found.onFailure = view.onFailure
       if (found.owner !== undefined) found.content = view.view
-      adopted = adoptExisting(found, range)
-      if (!adopted) {
-        removeRange(range)
-        created++
+      if (shouldAwaitLayer(found)) {
+        awaitExistingLayer(found, range)
+        adopted = true
+        awaited = true
+      } else {
+        adopted = adoptExisting(found, range)
+        if (!adopted) {
+          removeRange(range)
+          created++
+        }
       }
     }
     found.detached = false
     if (!holding) {
       found.awaitingAdopt = false
-      const nowDetached = isDetached(inst)
-      if (wasDetached !== nowDetached) {
-        for (const item of found.rendered) toggleMounts(found, item, found.env, !nowDetached)
+      if (!awaited) {
+        found.serverView = undefined
+        const nowDetached = isDetached(inst)
+        if (wasDetached !== nowDetached) {
+          for (const item of found.rendered) toggleMounts(found, item, found.env, !nowDetached)
+        }
+        syncDetached(found, nowDetached)
       }
-      syncDetached(found, nowDetached)
     }
     if (!adopted) patchChild(inst, rendered, view, env)
-    else if (slotted !== undefined && !found.closed) refreshOutlets(slotted)
+    else if (!awaited && slotted !== undefined && !found.closed) refreshOutlets(slotted)
     viewChanged = true
     return rendered
   }
@@ -6123,8 +6220,11 @@ const setup = (
         const next = host.nextOf(range.close)
         if (view._tag === "Child") {
           const found = live.get(path)
-          if (found !== undefined && !found.closed && !found.left && !canAdoptExisting(found)) {
-            // Already live elsewhere while this subtree waited: don't steal it for an obsolete server range.
+          if (
+            (found !== undefined && !found.closed && !found.left && !canAdoptExisting(found)) ||
+            (found === undefined && inst === adoptingInst && !(Feature.TypeId in view.component))
+          ) {
+            // Already live elsewhere, or removed before adoption: drop the obsolete server range.
             removeRange(range)
             created++
             adoptedUpTo = next

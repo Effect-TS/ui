@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Child, Component, MessageLog, UiSchema } from "@effect/ui"
+import { Child, Component, Feature, MessageLog, UiSchema } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { HtmlLocator, ssr } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
@@ -444,6 +444,257 @@ describe("model children on the server", () => {
         assert.notInclude(app2.innerHTML, "<!--")
       }).pipe(Effect.scoped)
   )
+
+  it.live("delivers a pending edit to the server-rendered keyed field when keys reverse while waiting", () =>
+    Effect.gen(function*() {
+      class Slow extends Context.Service<Slow, string>()("test/SlowKeyedReorder") {}
+      const Key = Schema.Literals(["A", "B"])
+      const FormMsg = UiSchema.TaggedEnum({ Typed: { key: Key, value: Schema.String } })
+      const Form = Component.define({
+        name: "Form",
+        lifetime: "model",
+        props: Schema.Struct({ order: Schema.Array(Key) }),
+        model: Schema.Struct({ A: Schema.String, B: Schema.String }),
+        message: FormMsg,
+        elements: Html
+      }).make({
+        init: () => ({ A: "alpha", B: "bravo" }),
+        update: (model, { key, value }) => ({ ...model, [key]: value }),
+        view: (model, h) =>
+          h.form(
+            ...h.props.order.map((key) =>
+              h.input.key(key).attr("data-key", key).value(model[key]).onInput(({ value }) =>
+                FormMsg.Typed({ key, value })
+              )
+            ),
+            h.output(`A=${model.A}, B=${model.B}`)
+          )
+      })
+      const PageMsg = UiSchema.TaggedEnum({ Reverse: {} })
+      const makePage = (layer: Layer.Layer<Slow>) => {
+        const Card = Component.define({
+          name: "Card",
+          lifetime: "view",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html,
+          slots: ["body"]
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => h.section(h.slots.body)
+        }).pipe(Component.provide(layer))
+        return Component.define({
+          name: "Page",
+          lifetime: "view",
+          model: Schema.Array(Key),
+          message: PageMsg,
+          elements: Html
+        }).make({
+          children: { form: Child.one(Form, { props: (order) => ({ order }) }) },
+          init: () => ["A", "B"] as const,
+          update: (order) => [...order].reverse(),
+          view: (_, h) => Card(h, { key: "c", slots: { body: h.children.form() } })
+        })
+      }
+      const rendered = yield* HtmlServer.renderToHtml(makePage(Layer.succeed(Slow, "ready")), {})
+      const app = yield* makeContainer(rendered.html)
+      const release = yield* Deferred.make<void>()
+      const root = yield* BrowserHost.mountEffect(
+        makePage(Layer.effect(Slow, Effect.as(Deferred.await(release), "ready"))),
+        {},
+        app,
+        { state: rendered.state }
+      )
+      const serverA = app.querySelector("input[data-key='A']") as HTMLInputElement
+      HtmlLocator.type(serverA, "typed for A")
+      root.send(PageMsg.Reverse())
+      yield* tick
+      yield* Deferred.succeed(release, undefined)
+      yield* root.adopted
+      yield* tick
+      const inputs = Array.from(app.querySelectorAll("input")) as Array<HTMLInputElement>
+      assert.deepStrictEqual(inputs.map((input) => input.getAttribute("data-key")), ["B", "A"])
+      assert.strictEqual(inputs[1], serverA)
+      assert.strictEqual(inputs[0]!.value, "bravo")
+      assert.strictEqual(inputs[1]!.value, "typed for A")
+      assert.strictEqual(app.querySelector("output")?.textContent, "A=typed for A, B=bravo")
+      assert.notInclude(app.innerHTML, "<!--")
+    }).pipe(Effect.scoped))
+
+  it.live("reconciles removed attributes when a held child updates while its receiver waits", () =>
+    Effect.gen(function*() {
+      class Slow extends Context.Service<Slow, string>()("test/SlowDisabled") {}
+      const CounterMsg = UiSchema.TaggedEnum({ Inc: {} })
+      const Counter = Component.define({
+        name: "Counter",
+        lifetime: "model",
+        model: Schema.Number,
+        message: CounterMsg,
+        receives: ["Inc"],
+        elements: Html
+      }).make({
+        init: () => 41,
+        update: (n) => n + 1,
+        view: (n, h) => h.button.disabled(n < 42).onClick(CounterMsg.Inc()).children(String(n))
+      })
+      const CounterRef = Counter.ref("counter")
+      const PageMsg = UiSchema.TaggedEnum({ Inc: {} })
+      const makePage = (layer: Layer.Layer<Slow>) => {
+        const Card = Component.define({
+          name: "Card",
+          lifetime: "view",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html,
+          slots: ["body"]
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => h.section(h.slots.body)
+        }).pipe(Component.provide(layer))
+        return Component.define({
+          name: "Page",
+          lifetime: "view",
+          model: Schema.Null,
+          message: PageMsg,
+          elements: Html
+        }).make({
+          children: { counter: Counter },
+          init: () => null,
+          update: (_, __, $) => $.send(CounterRef, CounterMsg.Inc()),
+          view: (_, h) => Card(h, { key: "c", slots: { body: h.children.counter() } })
+        })
+      }
+      const rendered = yield* HtmlServer.renderToHtml(makePage(Layer.succeed(Slow, "ready")), {})
+      const app = yield* makeContainer(rendered.html)
+      const release = yield* Deferred.make<void>()
+      const root = yield* BrowserHost.mountEffect(
+        makePage(Layer.effect(Slow, Effect.as(Deferred.await(release), "ready"))),
+        {},
+        app,
+        { state: rendered.state }
+      )
+      root.send(PageMsg.Inc())
+      yield* tick
+      yield* Deferred.succeed(release, undefined)
+      yield* root.adopted
+      yield* tick
+      const button = app.querySelector("section button") as HTMLButtonElement
+      assert.strictEqual(button.textContent, "42")
+      assert.isFalse(button.hasAttribute("disabled"))
+      assert.isFalse(button.disabled)
+      button.click()
+      yield* tick
+      assert.strictEqual(button.textContent, "43")
+      assert.notInclude(app.innerHTML, "<!--")
+    }).pipe(Effect.scoped))
+
+  it.live("waits for a listed child's own pending Layer before adopting its server feature field", () =>
+    Effect.gen(function*() {
+      class CardSlow extends Context.Service<CardSlow, string>()("test/CardSlow") {}
+      class ChildSlow extends Context.Service<ChildSlow, string>()("test/ChildSlow") {}
+      class FieldFeature extends Feature.Service<FieldFeature>()("test/WaitingFeatureField", {
+        props: Schema.Struct({})
+      }) {}
+      const FieldMsg = UiSchema.TaggedEnum({ Typed: { value: Schema.String } })
+      const FieldImpl = Component.define({
+        name: "FieldImpl",
+        lifetime: "view",
+        model: Schema.String,
+        message: FieldMsg,
+        elements: Html
+      }).make({
+        init: () => "server",
+        update: (_, { value }) => value,
+        view: (value, h) =>
+          h.div(
+            h.input.value(value).onInput(({ value }) => FieldMsg.Typed({ value })),
+            h.output(value)
+          )
+      })
+      const makePage = (cardLayer: Layer.Layer<CardSlow>, childLayer: Layer.Layer<ChildSlow>) => {
+        const featureLayer = FieldFeature.toLayer(FieldImpl).pipe(Layer.provide(childLayer))
+        const Editor = Component.define({
+          name: "Editor",
+          lifetime: "model",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) =>
+            FieldFeature.render(h, {
+              key: "f",
+              props: {},
+              fallback: () => h.p("loading")
+            })
+        }).pipe(Component.provide(featureLayer))
+        const Card = Component.define({
+          name: "Card",
+          lifetime: "view",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html,
+          slots: ["body"]
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => h.section(h.slots.body)
+        }).pipe(Component.provide(cardLayer))
+        return Component.define({
+          name: "Page",
+          lifetime: "view",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        }).make({
+          children: { editor: Editor },
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => Card(h, { key: "c", slots: { body: h.children.editor() } })
+        })
+      }
+      const rendered = yield* HtmlServer.renderToHtml(
+        makePage(Layer.succeed(CardSlow, "ready"), Layer.succeed(ChildSlow, "ready")),
+        {}
+      )
+      const app = yield* makeContainer(rendered.html)
+      const releaseCard = yield* Deferred.make<void>()
+      const releaseChild = yield* Deferred.make<void>()
+      const root = yield* BrowserHost.mountEffect(
+        makePage(
+          Layer.effect(CardSlow, Effect.as(Deferred.await(releaseCard), "ready")),
+          Layer.effect(ChildSlow, Effect.as(Deferred.await(releaseChild), "ready"))
+        ),
+        {},
+        app,
+        { state: rendered.state }
+      )
+      let adopted = false
+      yield* Effect.forkScoped(root.adopted.pipe(Effect.tap(() => Effect.sync(() => void (adopted = true)))))
+      const serverInput = app.querySelector("section input") as HTMLInputElement
+      HtmlLocator.type(serverInput, "typed")
+
+      // Release only the receiver's Layer: adoption must still wait for the child's Layer.
+      yield* Deferred.succeed(releaseCard, undefined)
+      yield* tick
+      assert.isFalse(adopted)
+      assert.strictEqual(app.querySelector("section input"), serverInput)
+      assert.strictEqual(serverInput.value, "typed")
+      assert.isNull(app.querySelector("section p"))
+
+      // Release the child's Layer: the server input is adopted with the typed value intact.
+      yield* Deferred.succeed(releaseChild, undefined)
+      yield* root.adopted
+      yield* tick
+      assert.isTrue(adopted)
+      assert.strictEqual(app.querySelector("section input"), serverInput)
+      assert.strictEqual(serverInput.value, "typed")
+      assert.strictEqual(app.querySelector("section output")?.textContent, "typed")
+      assert.notInclude(app.innerHTML, "<!--")
+    }).pipe(Effect.scoped))
 
   it.effect("serializes a listed model child parked in a collapsed slot during SSR", () =>
     Effect.gen(function*() {
