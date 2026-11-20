@@ -1001,10 +1001,13 @@ export const makeHost = (
     },
     setAttr(node, name, value) {
       const element = node as globalThis.Element
-      const normalized = elements.attributeName(name, element.namespaceURI === SVG)
+      const svg = element.namespaceURI === SVG
+      const normalized = elements.attributeName(name, svg)
       if (normalized === undefined) return
       name = normalized
       if (value === undefined) element.removeAttribute(name)
+      // `className` sets the class faster than `setAttribute`. An SVG element's is read-only.
+      else if (name === "class" && !svg) element.className = value
       else element.setAttribute(name, value)
     },
     setProp(node, name, value) {
