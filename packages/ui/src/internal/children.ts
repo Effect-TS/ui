@@ -74,13 +74,15 @@ export const of = (component: object): Children | undefined =>
   (component as { readonly "~children"?: Children | undefined })["~children"]
 
 /**
- * Checks `children` once, at `make`: every child has lifetime `"model"`. A component listed bare is an
- * entry that always exists, with no props.
+ * Checks `children` once, at `make`: every child has lifetime `"model"`, and no name has a `[`, which
+ * would make its ref key one a keyed child's row can have. A component listed bare is an entry that
+ * always exists, with no props.
  *
  * @internal
  */
 export const make = (owner: string, children: { readonly [name: string]: unknown }): Children =>
   Object.keys(children).map((name) => {
+    if (name.includes("[")) throw new Error(`${owner}: the child name ${name} has a "["`)
     const value = children[name]
     return [name, isEntry(value) ? value : entry("one", value as Component.Any, undefined, owner, name)] as const
   })
@@ -159,7 +161,9 @@ export const held = (owner: string, children: Children, model: unknown): Array<V
  * @internal
  */
 export const lists = (children: Children, key: string): boolean =>
-  children.some(([name, entry]) => entry[TypeId] === "keyed" ? key.startsWith(name + "[") : key === name)
+  children.some(([name, entry]) =>
+    entry[TypeId] === "keyed" ? key.startsWith(name + "[") && key.endsWith("]") : key === name
+  )
 
 /**
  * Throws when a child other than a listed one has a ref key `children` can list: a send by that ref goes to

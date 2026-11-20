@@ -2,6 +2,7 @@ import { Child, Command, Component, Feature, Head, type MessageLog, Mount, Rende
 import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Context, Deferred, Effect, Layer, Option, Schema } from "effect"
+import { AsyncResult } from "effect/reactivity"
 
 const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(TestHost.layer()))
 const click = (root: TestHost.TestRoot<any, any, any>, text: string) =>
@@ -1493,4 +1494,147 @@ describe("model children drawn across trees", () => {
       )
       assert.include(String(crashed), "/Page: ref box names a listed child")
     }).pipe(Effect.scoped))
+
+  it("fails a scene whose feature fallback gives a child a listed child's ref", () => {
+    class Editor extends Feature.Service<Editor>()("ParkedChildren/SceneEditor", { props: Schema.Struct({}) }) {}
+    const Leaf = Component.define({ name: "Leaf", lifetime: "view", model: Schema.Null, message: Schema.Never })
+      .make({ init: () => null, update: (m) => m, view: (_, h) => h.el("b", "leaf") })
+    const Box = Component.define({ name: "Box", lifetime: "model", model: Schema.Null, message: Schema.Never })
+      .make({ init: () => null, update: (m) => m, view: (_, h) => h.el("i", "box") })
+    const Page = Component.define({ name: "Page", lifetime: "view", model: Schema.Null, message: Schema.Never })
+      .make({
+        children: { box: Box },
+        init: () => null,
+        update: (m) => m,
+        view: (_, h) =>
+          h.el("main", Editor.render(h, { key: "e", props: {}, fallback: () => Leaf(h, { ref: Leaf.ref("box") }) }))
+      })
+    assert.throws(() => Scene.start(Page, {}).childPending(Editor, "e").view, "/Page: ref box names a listed child")
+    assert.throws(
+      () => Scene.fallback(Scene.start(Page, {}).view, Editor, "e", AsyncResult.initial()),
+      "/Page: ref box names a listed child"
+    )
+  })
+
+  it("fails a component with a child whose name a keyed child's refs can take", () => {
+    const Row = Component.define({ name: "Row", lifetime: "model", model: Schema.Null, message: Schema.Never })
+      .make({ init: () => null, update: (m) => m, view: (_, h) => h.el("i", "row") })
+    assert.throws(
+      () =>
+        Component.define({ name: "Page", lifetime: "view", model: Schema.Null, message: Schema.Never }).make({
+          children: { rows: Child.keyed(Row, { props: () => [["summary", {}]] }), "rows[summary]": Row },
+          init: () => null,
+          update: (m) => m,
+          view: (_, h) => h.el("main", h.children.rows("summary"))
+        }),
+      "Page: the child name rows[summary] has a \"[\""
+    )
+  })
+
+  it.effect("accepts a ref that only starts like a keyed child's", () =>
+    Effect.gen(function*() {
+      const Row = Component.define({ name: "Row", lifetime: "model", model: Schema.Null, message: Schema.Never })
+        .make({ init: () => null, update: (m) => m, view: (_, h) => h.el("i", "row") })
+      const Leaf = Component.define({ name: "Leaf", lifetime: "view", model: Schema.Null, message: Schema.Never })
+        .make({ init: () => null, update: (m) => m, view: (_, h) => h.el("b", "leaf") })
+      const Page = Component.define({ name: "Page", lifetime: "view", model: Schema.Null, message: Schema.Never })
+        .make({
+          children: { rows: Child.keyed(Row, { props: () => [["alice", {}]] }) },
+          init: () => null,
+          update: (m) => m,
+          view: (_, h) => h.el("main", h.children.rows("alice"), Leaf(h, { ref: Leaf.ref("rows[alice].badge") }))
+        })
+      const root = yield* TestHost.mount(Page, {})
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "rowleaf")
+    }).pipe(provideHost))
+
+  it.effect("keeps a row drawn when a parked Frame moves its outlet under the same Layout", () =>
+    Effect.gen(function*() {
+      const mounts: Array<string> = []
+      const Track = Mount.make("Track", { args: {} }, () =>
+        Effect.acquireRelease(
+          Effect.sync(() => mounts.push("start")),
+          () => Effect.sync(() => mounts.push("stop"))
+        )
+          .pipe(Effect.andThen(Effect.never)))
+      const Layout = Component.define({
+        name: "Layout",
+        lifetime: "view",
+        model: Schema.Null,
+        message: Schema.Never,
+        shares: () => ({ label: "row" })
+      }).make({ init: () => null, update: (m) => m, parts: () => ({}) })
+      const Row = Component.define({
+        name: "Row",
+        lifetime: "model",
+        model: Schema.Null,
+        message: Schema.Never,
+        shared: { layout: Layout }
+      }).make({
+        init: () => null,
+        update: (m) => m,
+        view: (_, h) => h.el("i").onMount(Track()).children(h.shared.layout.label)
+      })
+      const FrameMsg = UiSchema.TaggedEnum({ Move: {} })
+      const Frame = Component.define({
+        name: "Frame",
+        lifetime: "model",
+        model: Schema.Boolean,
+        message: FrameMsg,
+        receives: ["Move"],
+        slots: ["body"]
+      }).make({
+        init: () => false,
+        update: () => true,
+        view: (left, h) =>
+          h.el(
+            "article",
+            Layout(h, {
+              key: "l",
+              view: () => h.el("div", h.el("p", left ? h.slots.body : null), h.el("q", left ? null : h.slots.body))
+            })
+          )
+      })
+      const Fold = Component.define({
+        name: "Fold",
+        lifetime: "view",
+        model: Schema.Boolean,
+        message: FrameMsg,
+        receives: ["Move"],
+        slots: ["body"]
+      }).make({ init: () => true, update: (open) => !open, view: (open, h) => h.el("div", open ? h.slots.body : null) })
+      const FoldRef = Fold.ref("fold")
+      const PageMsg = UiSchema.TaggedEnum({ Fold: {}, Move: {} })
+      const Page = Component.define({ name: "Page", lifetime: "view", model: Schema.Null, message: PageMsg }).make({
+        children: { frame: Frame, row: Row },
+        init: () => null,
+        update: (m, message, $) =>
+          PageMsg.match(message, {
+            Fold: () => $.set(m).send(FoldRef, FrameMsg.Move()),
+            Move: () => $.set(m).send(Frame.ref("frame"), FrameMsg.Move())
+          }),
+        view: (_, h) =>
+          h.el(
+            "main",
+            Fold(h, { ref: FoldRef, slots: { body: h.children.frame({ slots: { body: h.children.row() } }) } })
+          )
+      })
+      const root = yield* TestHost.mount(Page, {})
+      yield* TestHost.settle
+      // Fold closes, which parks Frame; Frame moves its outlet; Fold opens.
+      root.send(PageMsg.Fold())
+      yield* TestHost.settle
+      root.send(PageMsg.Move())
+      yield* TestHost.settle
+      root.send(PageMsg.Fold())
+      yield* TestHost.settle
+      assert.deepStrictEqual(root.log().filter((e) => e._tag === "Failed"), [])
+      assert.strictEqual(root.text(), "row")
+      assert.deepStrictEqual(mounts, ["start", "stop", "start"])
+    }).pipe(
+      Effect.provide(Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })),
+      provideHost
+      // Page lists Row outside Layout's closure, so its type can't see the Layout that Frame draws above it.
+    ) as Effect.Effect<void, unknown>)
 })

@@ -1816,6 +1816,263 @@ describe("model children drawn while a Layer waits", () => {
       assert.isBelow(reads, keys.length)
       yield* Deferred.succeed(release, undefined)
     }).pipe(Effect.scoped))
+
+  /** A view component with one slot whose Layer is `layer`. */
+  const slowCard = (name: string, layer: Layer.Layer<never>) =>
+    Component.define({
+      name,
+      lifetime: "view",
+      model: Schema.Null,
+      message: Schema.Never,
+      elements: Html,
+      slots: ["body"]
+    })
+      .make({ init: () => null, update: (m) => m, view: (_, h) => h.section(h.slots.body) })
+      .pipe(Component.provide(layer))
+  const gated = (gate: Deferred.Deferred<void>) => Layer.effectDiscard(Deferred.await(gate))
+
+  it.live("keeps a field's edit when its Frame and the field leave a waiting Card in one update", () =>
+    Effect.gen(function*() {
+      const Field = Component.define({
+        name: "Field",
+        lifetime: "model",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      })
+        .make({ init: () => null, update: (m) => m, view: (_, h) => h.input })
+      const Frame = Component.define({
+        name: "Frame",
+        lifetime: "model",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html,
+        slots: ["body"]
+      }).make({ init: () => null, update: (m) => m, view: (_, h) => h.article(h.slots.body) })
+      const makePage = (layer: Layer.Layer<never>) => {
+        const Card = slowCard("Card", layer)
+        return Component.define({
+          name: "Page",
+          lifetime: "view",
+          model: Schema.Boolean,
+          message: Schema.Boolean,
+          elements: Html
+        })
+          .make({
+            children: { frame: Frame, field: Field },
+            init: () => false,
+            update: (_, moved) => moved,
+            // The aside comes first: Frame takes its server nodes before the footer draws the field.
+            view: (moved, h) =>
+              h.main(
+                Card(h, {
+                  key: "c",
+                  slots: { body: moved ? null : h.children.frame({ slots: { body: h.children.field() } }) }
+                }),
+                h.aside(moved ? h.children.frame() : null),
+                h.footer(moved ? h.children.field() : null)
+              )
+          })
+      }
+      const gate = yield* Deferred.make<void>()
+      const rendered = yield* HtmlServer.renderToHtml(makePage(Layer.empty), {})
+      const app = yield* makeContainer(rendered.html)
+      const root = yield* BrowserHost.mountEffect(makePage(gated(gate)), {}, app, { state: rendered.state })
+      HtmlLocator.type(app.querySelector("section input") as HTMLInputElement, "typed")
+      root.send(true)
+      yield* tick
+      assert.strictEqual((app.querySelector("footer input") as HTMLInputElement).value, "typed")
+      yield* Deferred.succeed(gate, undefined)
+    }).pipe(Effect.scoped))
+
+  it.live("starts each field whose lister's view children remove their waiting Cards in turn", () =>
+    Effect.gen(function*() {
+      const started = { a: 0, b: 0 }
+      const ShellMsg = UiSchema.TaggedEnum({ Drop: {} })
+      // Each with a Layer of its own, so that each start builds one.
+      const field = (key: "a" | "b") =>
+        Component.define({
+          name: "Field",
+          lifetime: "model",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        })
+          .make({ init: () => null, update: (m) => m, view: (_, h) => h.input })
+          .pipe(Component.provide(Layer.effectDiscard(Effect.sync(() => started[key]++))))
+      const FieldA = field("a")
+      const FieldB = field("b")
+      const makePage = (card: Layer.Layer<never>, side: Layer.Layer<never>) => {
+        const Card = slowCard("Card", card)
+        const Sidebar = slowCard("Sidebar", side)
+        // Drops its Card, and the field in it, on its own update: Page, which lists the fields, doesn't
+        // render again.
+        const Shell = Component.define({
+          name: "Shell",
+          lifetime: "view",
+          model: Schema.Boolean,
+          message: ShellMsg,
+          elements: Html,
+          slots: ["body"]
+        }).make({
+          init: () => true,
+          update: () => false,
+          view: (card, h) =>
+            h.div(
+              h.button.onClick(ShellMsg.Drop()).children("drop"),
+              card ? Card(h, { key: "c", slots: { body: h.slots.body } }) : null
+            )
+        })
+        return Component.define({
+          name: "Page",
+          lifetime: "view",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        })
+          .make({
+            children: { a: FieldA, b: FieldB },
+            init: () => null,
+            update: (m) => m,
+            view: (_, h) =>
+              h.main(
+                Shell(h, { key: "a", slots: { body: h.children.a() } }),
+                Shell(h, { key: "b", slots: { body: h.children.b() } }),
+                Sidebar(h, { key: "n", slots: { body: null } })
+              )
+          })
+      }
+      const card = yield* Deferred.make<void>()
+      const side = yield* Deferred.make<void>()
+      const rendered = yield* HtmlServer.renderToHtml(makePage(Layer.empty, Layer.empty), {})
+      const app = yield* makeContainer(rendered.html)
+      yield* BrowserHost.mountEffect(makePage(gated(card), gated(side)), {}, app, { state: rendered.state })
+      yield* tick
+      const [first, second] = Array.from(app.querySelectorAll("button"))
+      first.click()
+      yield* tick
+      second.click()
+      yield* tick
+      // The server's builds count too.
+      assert.deepStrictEqual(started, { a: 2, b: 2 })
+      yield* Deferred.succeed(side, undefined)
+      yield* Deferred.succeed(card, undefined)
+    }).pipe(Effect.scoped))
+
+  it.live("starts the children of a lister unlisted while its receiver waits and listed again elsewhere", () =>
+    Effect.gen(function*() {
+      const CounterMsg = UiSchema.TaggedEnum({ Inc: {} })
+      const Counter = Component.define({
+        name: "Counter",
+        lifetime: "model",
+        model: Schema.Number,
+        message: CounterMsg,
+        receives: ["Inc"],
+        elements: Html
+      }).make({ init: () => 0, update: (n) => n + 1, view: (n, h) => h.b(String(n)) })
+      const Deck = Component.define({
+        name: "Deck",
+        lifetime: "model",
+        props: Schema.Struct({ shown: Schema.Boolean }),
+        model: Schema.Null,
+        message: CounterMsg,
+        receives: ["Inc"],
+        elements: Html
+      }).make({
+        children: { counter: Counter },
+        init: () => null,
+        update: (m, _, $) => $.set(m).send(Counter.ref("counter"), CounterMsg.Inc()),
+        view: (_, h) => h.div(h.props.shown ? h.children.counter() : null)
+      })
+      const State = Schema.Literals(["card", "none", "off", "shown"])
+      const PageMsg = UiSchema.TaggedEnum({ Go: { to: State }, Inc: {} })
+      const makePage = (layer: Layer.Layer<never>) => {
+        const Card = slowCard("Card", layer)
+        return Component.define({ name: "Page", lifetime: "view", model: State, message: PageMsg, elements: Html })
+          .make({
+            children: {
+              deck: Child.optional(Deck, { props: (state) => state === "none" ? null : { shown: state !== "off" } })
+            },
+            init: () => "card" as const,
+            update: (state, message, $) =>
+              PageMsg.match(message, {
+                Go: ({ to }) => to,
+                Inc: () => $.set(state).send(Deck.ref("deck"), CounterMsg.Inc())
+              }),
+            view: (state, h) =>
+              h.main(
+                Card(h, { key: "c", slots: { body: state === "card" ? h.children.deck?.() ?? null : null } }),
+                h.aside(state === "off" || state === "shown" ? h.children.deck?.() ?? null : null)
+              )
+          })
+      }
+      const gate = yield* Deferred.make<void>()
+      const rendered = yield* HtmlServer.renderToHtml(makePage(Layer.empty), {})
+      const app = yield* makeContainer(rendered.html)
+      const root = yield* BrowserHost.mountEffect(makePage(gated(gate)), {}, app, { state: rendered.state })
+      yield* tick
+      root.send(PageMsg.Go({ to: "none" }))
+      yield* tick
+      root.send(PageMsg.Go({ to: "off" }))
+      yield* tick
+      root.send(PageMsg.Inc())
+      yield* tick
+      root.send(PageMsg.Go({ to: "shown" }))
+      yield* tick
+      assert.strictEqual(app.querySelector("aside b")?.textContent, "1")
+      yield* Deferred.succeed(gate, undefined)
+    }).pipe(Effect.scoped))
+
+  // collectGarbage uses Node's V8 flags, unavailable on Bun and Deno.
+  it.live.skipIf(process.versions.bun !== undefined || process.versions.deno !== undefined)(
+    "lets go of a removed waiting Card's nodes while another Layer waits",
+    () =>
+      Effect.gen(function*() {
+        const Leaf = Component.define({
+          name: "Leaf",
+          lifetime: "view",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        })
+          .make({ init: () => null, update: (m) => m, view: (_, h) => h.button("leaf") })
+        const makePage = (card: Layer.Layer<never>, side: Layer.Layer<never>) => {
+          const Card = slowCard("Card", card)
+          const Sidebar = slowCard("Sidebar", side)
+          return Component.define({
+            name: "Page",
+            lifetime: "view",
+            model: Schema.Boolean,
+            message: Schema.Boolean,
+            elements: Html
+          })
+            .make({
+              init: () => true,
+              update: (_, card) => card,
+              view: (card, h) =>
+                h.main(
+                  card ? Card(h, { key: "c", slots: { body: Leaf(h, { key: "l" }) } }) : null,
+                  Sidebar(h, { key: "s", slots: { body: null } })
+                )
+            })
+        }
+        const card = yield* Deferred.make<void>()
+        const side = yield* Deferred.make<void>()
+        const rendered = yield* HtmlServer.renderToHtml(makePage(Layer.empty, Layer.empty), {})
+        const app = yield* makeContainer(rendered.html)
+        const root = yield* BrowserHost.mountEffect(makePage(gated(card), gated(side)), {}, app, {
+          state: rendered.state
+        })
+        yield* tick
+        const button = new WeakRef(app.querySelector("section button")!)
+        root.send(false)
+        yield* tick
+        yield* collectGarbage
+        assert.isUndefined(button.deref())
+        yield* Deferred.succeed(side, undefined)
+        yield* Deferred.succeed(card, undefined)
+      }).pipe(Effect.scoped)
+  )
 })
 
 describe("unlisted model children on BrowserHost", () => {
@@ -1932,6 +2189,61 @@ describe("unlisted model children on BrowserHost", () => {
         yield* tick
         yield* collectGarbage
         assert.deepStrictEqual(buttons.map((button) => button.deref() === undefined), [true, true, true])
+      }).pipe(Effect.scoped)
+  )
+
+  // collectGarbage uses Node's V8 flags, unavailable on Bun and Deno.
+  it.live.skipIf(process.versions.bun !== undefined || process.versions.deno !== undefined)(
+    "lets go of the props a parked row got before it was unlisted",
+    () =>
+      Effect.gen(function*() {
+        const Item = Component.define({
+          name: "Item",
+          lifetime: "model",
+          props: Schema.Struct({ data: Schema.Unknown }),
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        }).make({ init: () => null, update: (m) => m, view: (_, h) => h.button("row") })
+        const Frame = Component.define({
+          name: "Frame",
+          lifetime: "model",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html,
+          slots: ["body"]
+        }).make({ init: () => null, update: (m) => m, view: (_, h) => h.article(h.slots.body) })
+        const keys = ["a", "b", "c"]
+        const payloads: Array<WeakRef<object>> = []
+        const payload = (version: number) => {
+          const data = { version }
+          if (version === 1) payloads.push(new WeakRef(data))
+          return data
+        }
+        const State = Schema.Struct({ shown: Schema.Boolean, rows: Schema.Boolean, version: Schema.Number })
+        const Page = Component.define({ name: "Page", lifetime: "view", model: State, message: State, elements: Html })
+          .make({
+            children: {
+              frame: Frame,
+              rows: Child.keyed(Item, {
+                props: (s) => s.rows ? keys.map((key) => [key, { data: payload(s.version) }] as const) : []
+              })
+            },
+            init: () => ({ shown: true, rows: true, version: 0 }),
+            update: (_, next) => next,
+            view: (s, h) =>
+              h.main(s.shown ? h.children.frame({ slots: { body: keys.map((key) => h.children.rows(key)) } }) : null)
+          })
+        const app = yield* makeContainer()
+        const root = yield* BrowserHost.mountEffect(Page, {}, app)
+        yield* tick
+        root.send({ shown: false, rows: true, version: 1 })
+        yield* tick
+        root.send({ shown: false, rows: false, version: 1 })
+        yield* tick
+        assert.isAbove(payloads.length, 0)
+        yield* collectGarbage
+        assert.deepStrictEqual(payloads.filter((ref) => ref.deref() !== undefined), [])
       }).pipe(Effect.scoped)
   )
 })

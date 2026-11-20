@@ -328,9 +328,26 @@ export interface Occurrence {
   readonly child: View.Child<any, any>
   readonly path: string | undefined
   readonly scope: ((label: string) => ChildPaths) | undefined
+  /** Whether the expanded component wrote it, so that its refs count with the component's. */
+  readonly own?: boolean | undefined
 }
 // Every child an expansion placed, by the expanded root, in the order it placed them.
 const occurrences = new WeakMap<object, ReadonlyArray<Occurrence>>()
+// The component that wrote an expanded root, by the root, when it lists children: a fallback `Scene.fallback`
+// shows can't give a child one of their refs.
+const listers = new WeakMap<object, { readonly at: string; readonly listed: listedChildren.Children }>()
+/**
+ * Throws when `fallback`, shown for `found` in `view`, gives a child a ref of a child the component that
+ * wrote it lists.
+ *
+ * @internal
+ */
+export const checkFallbackRefs = (view: object, found: Occurrence, fallback: View.Node<any, any>): void => {
+  const lister = found.own === false ? undefined : listers.get(view)
+  if (lister !== undefined) {
+    listedChildren.checkRefs(lister.at, lister.listed, [checkChildPaths(lister.at, fallback)])
+  }
+}
 // The children an expansion replaced, by the expanded root: `childEmit` and `childFailure` still find them.
 const expandedChildren = new WeakMap<object, ReadonlyArray<View.Child<any, any>>>()
 
@@ -611,7 +628,7 @@ const expandRoot = <Msg>(
       case "Child": {
         const component = node.component as unknown as Component.Headless.Any
         const childPath = path + "/" + segment(node)
-        placed.push({ child: node, path: childPath, scope })
+        placed.push({ child: node, path: childPath, scope, own })
         const run = own && node.ref !== undefined ? models?.get(node.ref.key) : undefined
         if (run !== undefined && run.listed.entry.component === node.component) {
           const slots = node.slots
@@ -630,6 +647,7 @@ const expandRoot = <Msg>(
           // It renders against settled services, so the feature slots in it show.
           replaced.push(node)
           const shown = node.fallback === undefined ? emptyText : View.toNode(node.fallback(result))
+          if (own) written.push(checkChildPaths(childPath, shown))
           return expand(shown, path, depth, own, owners, scope, undefined)
         }
         if (node.slots !== undefined) {
@@ -689,6 +707,7 @@ const expandRoot = <Msg>(
   // A root the expansion left as it was may be a node the component cached and another story shows,
   // and its children are all declared by the view itself, so it keeps nothing.
   if (expanded !== view) occurrences.set(expanded, placed)
+  if (listed !== undefined) listers.set(expanded, { at: "/" + name, listed })
   return expanded
 }
 
