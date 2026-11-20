@@ -913,3 +913,384 @@ describe("parked model children", () => {
       }))
   )
 })
+
+// ---------------------------------------------------------------------------
+// Children drawn in one tree and moved to another
+// ---------------------------------------------------------------------------
+const Pane = Component.define({
+  name: "Pane",
+  lifetime: "view",
+  model: Schema.Null,
+  message: Schema.Never,
+  slots: ["body"]
+}).make({ init: () => null, update: (m) => m, view: (_, h) => h.el("section", h.slots.body) })
+
+const TipMessage = UiSchema.TaggedEnum({ Enter: { id: Schema.String } })
+const Tips = Component.define({
+  name: "Tips",
+  lifetime: "view",
+  props: Schema.Struct({ label: Schema.String }),
+  model: Schema.NullOr(Schema.String),
+  message: TipMessage,
+  receives: ["Enter"],
+  shares: (open, props) => ({ open, label: props.label })
+}).make({ init: () => null, update: (_, message) => message.id, parts: () => ({}) })
+const Tip = Component.define({
+  name: "Tip",
+  lifetime: "model",
+  model: Schema.Null,
+  message: TipMessage,
+  shared: { tips: { owner: Tips, optional: true } }
+}).make({
+  init: () => null,
+  update: (model, message, $) => $.set(model).send(Tips, message),
+  view: (_, h) =>
+    h.el("button").on("click", TipMessage.Enter({ id: "a" })).children(
+      `${h.shared.tips?.open === "a" ? "open" : "closed"}${h.shared.tips?.label}`
+    )
+})
+describe("model children drawn across trees", () => {
+  it.effect("draws a row that was the only content of one outlet in another", () =>
+    Effect.gen(function*() {
+      const Row = Component.define({ name: "Row", lifetime: "model", model: Schema.Null, message: Schema.Never })
+        .make({ init: () => null, update: (m) => m, view: (_, h) => h.el("i", "row") })
+      const Page = Component.define({ name: "Page", lifetime: "view", model: Schema.Boolean, message: Schema.Boolean })
+        .make({
+          children: { row: Row },
+          init: () => false,
+          update: (_, left) => left,
+          view: (left, h) =>
+            h.el(
+              "main",
+              Pane(h, { key: "l", slots: { body: left ? h.children.row() : "l" } }),
+              Pane(h, { key: "r", slots: { body: left ? null : h.children.row() } })
+            )
+        })
+      const root = yield* TestHost.mount(Page, {})
+      yield* TestHost.settle
+      root.send(true)
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "row")
+      assert.deepStrictEqual(root.log().filter((e) => e._tag === "Failed"), [])
+    }).pipe(provideHost))
+
+  it.effect("draws a row in a parked Frame's slot with what its lister lists now", () =>
+    Effect.gen(function*() {
+      let inits = 0
+      const Row = Component.define({
+        name: "Row",
+        lifetime: "model",
+        props: Schema.Struct({ label: Schema.String }),
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => {
+          inits++
+          return null
+        },
+        update: (m) => m,
+        view: (_, h) => h.el("i", h.props.label)
+      })
+      const Frame = Component.define({
+        name: "Frame",
+        lifetime: "model",
+        props: Schema.Struct({ open: Schema.Boolean }),
+        model: Schema.Null,
+        message: Schema.Never,
+        slots: ["body"]
+      }).make({
+        init: () => null,
+        update: (m) => m,
+        view: (_, h) => h.el("article", h.props.open ? h.slots.body : null)
+      })
+      const State = Schema.Struct({ shown: Schema.Boolean, open: Schema.Boolean, row: Schema.NullOr(Schema.String) })
+      const Page = Component.define({ name: "Page", lifetime: "view", model: State, message: State }).make({
+        children: {
+          frame: Child.one(Frame, { props: (s) => ({ open: s.open }) }),
+          row: Child.optional(Row, { props: (s) => s.row === null ? null : { label: s.row } })
+        },
+        init: () => ({ shown: true, open: true, row: "a" }),
+        update: (_, next) => next,
+        view: (s, h) => h.el("main", s.shown ? h.children.frame({ slots: { body: h.children.row?.() ?? null } }) : null)
+      })
+      const root = yield* TestHost.mount(Page, {})
+      yield* TestHost.settle
+      assert.strictEqual(inits, 1)
+      // Parked with the row in its slot, then the row's props change.
+      root.send({ shown: false, open: true, row: "a" })
+      yield* TestHost.settle
+      root.send({ shown: false, open: true, row: "b" })
+      yield* TestHost.settle
+      root.send({ shown: false, open: false, row: "b" })
+      yield* TestHost.settle
+      root.send({ shown: false, open: true, row: "b" })
+      yield* TestHost.settle
+      root.send({ shown: true, open: true, row: "b" })
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "b")
+      assert.strictEqual(inits, 1)
+      // Unlisted while the Frame is parked: closing and opening its slot doesn't make it again.
+      root.send({ shown: false, open: true, row: "b" })
+      yield* TestHost.settle
+      root.send({ shown: false, open: true, row: null })
+      yield* TestHost.settle
+      root.send({ shown: false, open: false, row: null })
+      yield* TestHost.settle
+      root.send({ shown: false, open: true, row: null })
+      yield* TestHost.settle
+      assert.strictEqual(inits, 1)
+      assert.deepStrictEqual(root.log().filter((e) => e._tag === "Failed"), [])
+    }).pipe(provideHost))
+
+  it.effect("moves a row out of a listed, parked Frame's slot into a visible sibling", () =>
+    Effect.gen(function*() {
+      const mounts: Array<string> = []
+      const Track = Mount.make("Track", { args: {} }, () =>
+        Effect.acquireRelease(
+          Effect.sync(() => mounts.push("start")),
+          () => Effect.sync(() => mounts.push("stop"))
+        )
+          .pipe(Effect.andThen(Effect.never)))
+      const Row = Component.define({ name: "Row", lifetime: "model", model: Schema.Null, message: Schema.Never })
+        .make({ init: () => null, update: (m) => m, view: (_, h) => h.el("i").onMount(Track()).children("row") })
+      const Frame = Component.define({
+        name: "Frame",
+        lifetime: "model",
+        model: Schema.Null,
+        message: Schema.Never,
+        slots: ["body"]
+      }).make({ init: () => null, update: (m) => m, view: (_, h) => h.el("article", h.slots.body) })
+      const State = Schema.Literals(["framed", "parked", "aside", "unlisted"])
+      const Page = Component.define({ name: "Page", lifetime: "view", model: State, message: State }).make({
+        children: { frame: Child.optional(Frame, { props: (s) => s === "unlisted" ? null : {} }), row: Row },
+        init: () => "framed" as const,
+        update: (_, next) => next,
+        view: (s, h) =>
+          h.el(
+            "main",
+            s === "framed" ? h.children.frame?.({ slots: { body: h.children.row() } }) ?? null : null,
+            s === "aside" || s === "unlisted" ? h.el("aside", h.children.row()) : null
+          )
+      })
+      const root = yield* TestHost.mount(Page, {})
+      yield* TestHost.settle
+      root.send("parked")
+      yield* TestHost.settle
+      assert.deepStrictEqual(mounts, ["start", "stop"])
+      root.send("aside")
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "row")
+      assert.deepStrictEqual(root.log().filter((e) => e._tag === "Failed"), [])
+      assert.deepStrictEqual(mounts, ["start", "stop", "start"])
+      root.send("unlisted")
+      yield* TestHost.settle
+      assert.deepStrictEqual(mounts, ["start", "stop", "start"])
+      assert.strictEqual(root.text(), "row")
+    }).pipe(
+      Effect.provide(Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })),
+      provideHost
+    ))
+
+  it.effect("moves a row out of a parked Frame's slot as the Frame is unlisted, and restarts its mounts", () =>
+    Effect.gen(function*() {
+      const mounts: Array<string> = []
+      const Track = Mount.make(
+        "Track",
+        { args: {} },
+        () =>
+          Effect.acquireRelease(Effect.sync(() => mounts.push("start")), () => Effect.sync(() => mounts.push("stop")))
+            .pipe(Effect.andThen(Effect.never))
+      )
+      const Row = Component.define({ name: "Row", lifetime: "model", model: Schema.Null, message: Schema.Never })
+        .make({ init: () => null, update: (m) => m, view: (_, h) => h.el("i").onMount(Track()).children("row") })
+      const Frame = Component.define({
+        name: "Frame",
+        lifetime: "model",
+        model: Schema.Null,
+        message: Schema.Never,
+        slots: ["body"]
+      }).make({ init: () => null, update: (m) => m, view: (_, h) => h.el("article", h.slots.body) })
+      const State = Schema.Literals(["framed", "parked", "aside", "unlisted"])
+      const Page = Component.define({ name: "Page", lifetime: "view", model: State, message: State }).make({
+        children: { frame: Child.optional(Frame, { props: (s) => s === "unlisted" ? null : {} }), row: Row },
+        init: () => "framed" as const,
+        update: (_, next) => next,
+        view: (s, h) =>
+          h.el(
+            "main",
+            s === "framed" ? h.children.frame?.({ slots: { body: h.children.row() } }) ?? null : null,
+            s === "aside" || s === "unlisted" ? h.el("aside", h.children.row()) : null
+          )
+      })
+      const root = yield* TestHost.mount(Page, {})
+      yield* TestHost.settle
+      root.send("parked")
+      yield* TestHost.settle
+      assert.deepStrictEqual(mounts, ["start", "stop"])
+      root.send("unlisted")
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "row")
+      assert.deepStrictEqual(root.log().filter((e) => e._tag === "Failed"), [])
+      assert.deepStrictEqual(mounts, ["start", "stop", "start"])
+    }).pipe(
+      Effect.provide(Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })),
+      provideHost
+    ))
+
+  it.effect("resolves the author's refs in a drawn model child's slot", () =>
+    Effect.gen(function*() {
+      const Field = Renderer.ref("Field")
+      const LeafMsg = UiSchema.TaggedEnum({ Inc: {} })
+      const Leaf = Component.define({
+        name: "Leaf",
+        lifetime: "view",
+        model: Schema.Number,
+        message: LeafMsg,
+        receives: ["Inc"]
+      })
+        .make({ init: () => 0, update: (n) => n + 1, view: (n, h) => h.el("b", "leaf " + n) })
+      const LeafRef = Leaf.ref("leaf")
+      const Frame = Component.define({
+        name: "Frame",
+        lifetime: "model",
+        model: Schema.Null,
+        message: Schema.Never,
+        slots: ["body"]
+      }).make({ init: () => null, update: (m) => m, view: (_, h) => h.el("article", h.slots.body) })
+      const Look = Command.make("Look", { args: {} }, () =>
+        Effect.gen(function*() {
+          const refs = yield* Renderer.Refs
+          return Option.isSome(yield* refs.lookup(Field))
+        }))
+      const PageMsg = UiSchema.TaggedEnum({ Found: { found: Schema.Boolean }, Inc: {} })
+      const Page = Component.define({
+        name: "Page",
+        lifetime: "view",
+        model: Schema.optional(Schema.Boolean),
+        message: PageMsg
+      }).make({
+        children: { frame: Frame },
+        init: ($) => $.set(undefined).run(Look().pipe(Command.map((found) => PageMsg.Found({ found })))),
+        update: (model, message, $) =>
+          PageMsg.match(message, { Found: ({ found }) => found, Inc: () => $.set(model).send(LeafRef, LeafMsg.Inc()) }),
+        view: (_, h) =>
+          h.el("main", h.children.frame({ slots: { body: [h.el("input").ref(Field), Leaf(h, { ref: LeafRef })] } }))
+      })
+      const root = yield* TestHost.mount(Page, {})
+      yield* TestHost.settle
+      assert.strictEqual(root.model(), true)
+      root.send(PageMsg.Inc())
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "leaf 1")
+    }).pipe(provideHost))
+
+  it.effect("fails the author of a child whose ref names a listed child", () =>
+    Effect.gen(function*() {
+      const Leaf = Component.define({ name: "Leaf", lifetime: "view", model: Schema.Null, message: Schema.Never })
+        .make({ init: () => null, update: (m) => m, view: (_, h) => h.el("b", "leaf") })
+      const Box = Component.define({ name: "Box", lifetime: "model", model: Schema.Null, message: Schema.Never })
+        .make({ init: () => null, update: (m) => m, view: (_, h) => h.el("i", "box") })
+      const Page = Component.define({ name: "Page", lifetime: "view", model: Schema.Null, message: Schema.Never })
+        .make({
+          children: { box: Box },
+          init: () => null,
+          update: (m) => m,
+          view: (_, h) => h.el("main", Leaf(h, { ref: Leaf.ref("box") }))
+        })
+      yield* TestHost.mount(Page, {})
+      const crashed = yield* Effect.flip(TestHost.settle)
+      assert.include(String(crashed), "/Page: ref box names a listed child")
+    }).pipe(provideHost))
+
+  it.effect("sends from a drawn reader to the owner it reads", () =>
+    Effect.gen(function*() {
+      const Page = Component.define({ name: "Page", lifetime: "view", model: Schema.Null, message: Schema.Never })
+        .make({
+          children: { tip: Tip },
+          init: () => null,
+          update: (m) => m,
+          view: (_, h) =>
+            Tips(h, {
+              key: "outer",
+              props: { label: "O" },
+              view: () => h.el("main", Tips(h, { key: "inner", props: { label: "I" }, view: () => h.children.tip() }))
+            })
+        })
+      const root = yield* TestHost.mount(Page, {})
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "closedI")
+      Locator.fire(root.get(Locator.text("closedI")), "click")
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "openI")
+    }).pipe(provideHost))
+
+  it.effect("rehomes a reader drawn in a moved model child's slot", () =>
+    Effect.gen(function*() {
+      const Frame = Component.define({
+        name: "Frame",
+        lifetime: "model",
+        model: Schema.Null,
+        message: Schema.Never,
+        slots: ["body"]
+      }).make({ init: () => null, update: (m) => m, view: (_, h) => h.el("article", h.slots.body) })
+      const Side = Schema.Literals(["a", "b"])
+      const Page = Component.define({ name: "Page", lifetime: "view", model: Side, message: Side }).make({
+        children: { frame: Frame, tip: Tip },
+        init: () => "a" as const,
+        update: (_, side) => side,
+        view: (side, h) => {
+          const frame = h.children.frame({ slots: { body: h.children.tip() } })
+          return h.el(
+            "main",
+            Tips(h, { key: "a", props: { label: "A" }, view: () => side === "a" ? frame : h.el("i") }),
+            Tips(h, { key: "b", props: { label: "B" }, view: () => side === "b" ? frame : h.el("i") })
+          )
+        }
+      })
+      const root = yield* TestHost.mount(Page, {})
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "closedA")
+      root.send("b")
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "closedB")
+    }).pipe(provideHost))
+
+  it.effect("draws a parked optional reader under its owner, which it reads and reports to", () =>
+    Effect.gen(function*() {
+      const Group = Component.define({
+        name: "Group",
+        lifetime: "view",
+        model: Schema.Boolean,
+        message: Schema.Boolean,
+        shares: { value: (on) => on, collects: { schema: Schema.Boolean, onChange: (all) => all.includes(true) } }
+      }).make({ init: () => false, update: (_, on) => on, parts: (on) => ({ on }) })
+      const Reader = Component.define({
+        name: "Reader",
+        lifetime: "model",
+        model: Schema.Null,
+        message: Schema.Never,
+        shared: { group: { owner: Group, optional: true, report: () => true } }
+      }).make({
+        init: () => null,
+        update: (m) => m,
+        view: (_, h) => h.el("b", h.shared.group === undefined ? "none" : "in")
+      })
+      const Page = Component.define({ name: "Page", lifetime: "view", model: Schema.Boolean, message: Schema.Boolean })
+        .make({
+          children: { reader: Reader },
+          init: () => false,
+          update: (_, show) => show,
+          view: (show, h) =>
+            Group(h, {
+              key: "g",
+              view: (parts) => h.el("main", parts.on ? "on " : "off ", show ? h.children.reader() : null)
+            })
+        })
+      const root = yield* TestHost.mount(Page, {})
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "off ")
+      root.send(true)
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "on in")
+    }).pipe(provideHost))
+})

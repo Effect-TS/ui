@@ -1,4 +1,4 @@
-import { Child, Component, Router, UiSchema, type View } from "@effect/ui"
+import { Child, Component, Feature, Router, UiSchema, type View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Scene } from "@effect/ui/testing"
 import { Context, Schema } from "effect"
@@ -84,6 +84,14 @@ describe("lifetime", () => {
     expect(Router.page(ProfileForm, { id: "a" })).type.not.toRaiseError()
     expect(Scene.make(ProfileForm, { id: "a" })).type.not.toRaiseError()
     expect<Component.LifetimeOf<typeof ProfileForm>>().type.toBe<"model">()
+  })
+
+  it("rejects a model component as a feature's implementation", () => {
+    class Profile extends Feature.Service<Profile>()("Profile", {
+      props: Schema.Struct({ id: Schema.String }),
+      events: FormEvents
+    }) {}
+    expect(Profile.toLayer).type.not.toBeCallableWith(ProfileForm)
   })
 
   it("rejects a model headless component", () => {

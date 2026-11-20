@@ -709,7 +709,9 @@ export const makeHost = (
     edited.clear()
     for (const node of controls) {
       const control = node as HTMLInputElement
-      if (!control.isConnected || (isRadio(control) && !control.checked)) continue
+      // A parked child's control is in a fragment: its edit goes to its Model too.
+      const parked = control.getRootNode().nodeType === 11
+      if ((!control.isConnected && !parked) || (isRadio(control) && !control.checked)) continue
       report(control, "input")
       const typing = control.localName === "textarea" ||
         (control.localName === "input" && changeOnBlur.has(control.type))

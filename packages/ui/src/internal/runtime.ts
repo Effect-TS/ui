@@ -342,13 +342,14 @@ interface RFallback {
 
 /**
  * Where a tree draws a `"model"` child: its nodes are here while `hold.site` is this record. `at` is the
- * instance whose tree it is in.
+ * instance whose tree it is in. Once another tree takes the child, `stub`, an empty text, keeps this place.
  */
 interface RPlaced {
   readonly _tag: "Placed"
   v: View.Child<any, any>
   readonly hold: Hold
   readonly at: Instance
+  stub?: unknown
 }
 
 /**
@@ -383,6 +384,9 @@ const findChild = (rendered: ReadonlyArray<Rendered>, key: string): RChild | RFa
       if (r._tag === "Fallback") found = findChild([r.inner], key)
       else if (r.inst.owner !== undefined) found = findChild(r.inst.rendered, key)
       else found = firstInOutlets(r.inst, (out) => findChild(out.rendered, key))
+    } else if (r._tag === "Placed" && r.hold.site === r) {
+      // A `"model"` child drawn here places what this author wrote in its slots.
+      found = findChild([r.hold.inner], key)
     }
     // An outlet in the tree shows what another author wrote, so the search passes it by.
     if (found !== undefined) return found
@@ -998,6 +1002,7 @@ const serializeTree = (
   const state: Record<string, unknown> = {}
   const collected: Record<string, unknown> = {}
   const deferredPaths: Array<string> = []
+  const parkedPaths: Array<string> = []
   const statuses: Record<string, Shipped> = {}
   /** Ships a status other than `Ready`: the client starts from it. */
   const ship = (path: string, status: Status) => {
@@ -1044,7 +1049,11 @@ const serializeTree = (
     if (inst.listed !== undefined) {
       const shown = sink
       sink = noSink
-      for (const hold of inst.listed.values()) if (hold.site === undefined) serialize(inst, hold.inner, inner)
+      for (const hold of inst.listed.values()) {
+        if (hold.site !== undefined) continue
+        parkedPaths.push(path + "/" + segment(hold.inner.v))
+        serialize(inst, hold.inner, inner)
+      }
       sink = shown
     }
   }
@@ -1093,6 +1102,7 @@ const serializeTree = (
   const add = (key: string, value: unknown) =>
     Object.defineProperty(state, key, { value, writable: true, enumerable: true, configurable: true })
   add("~deferred", deferredPaths)
+  if (parkedPaths.length > 0) add("~parked", parkedPaths)
   if (Object.keys(statuses).length > 0) add("~status", statuses)
   add("~query", query)
   if (Object.keys(collected).length > 0) add("~reported", collected)
@@ -1249,10 +1259,14 @@ const setup = (
   // The server's state, until every instance has adopted.
   let hydrating: {
     readonly state: Renderer.State
-    readonly deferred: ReadonlySet<string>
+    /** Paths built fresh: those the server deferred, and `"model"` children unlisted before adoption. */
+    readonly deferred: Set<string>
+    /** The `"model"` children no tree drew on the server. */
+    readonly parked: ReadonlySet<string>
   } | undefined = options?.state === undefined || server !== undefined ? undefined : {
     state: options.state,
-    deferred: new Set(options.state["~deferred"] ?? [])
+    deferred: new Set(options.state["~deferred"] ?? []),
+    parked: new Set(options.state["~parked"] as Array<string> | undefined)
   }
   // Slots still waiting for their Layer before they adopt, and whether the first render is done.
   let waiting = 0
@@ -1282,7 +1296,7 @@ const setup = (
     late = hydrating
     hydrating = undefined
     defer(() => {
-      for (const lister of postponed) holdListed(lister)
+      for (const lister of postponed.keys()) holdListed(lister)
       postponed.clear()
       late = undefined
     })
@@ -2974,6 +2988,7 @@ const setup = (
     )
     addInstanceFinalizer(inst)
     inst.drawnIn = drawnIn
+    if (drawnIn !== undefined) drawn.add(inst)
     if (declaresHead(component)) {
       for (let at: Instance | undefined = inst; at !== undefined; at = headsUp(at)) at.heads++
     }
@@ -3309,6 +3324,31 @@ const setup = (
    * Keeps the server's nodes of an instance whose Layer is still building, and adopts them once it's
    * ready. See `makeInstance`.
    */
+  /** Hydration: the instances waiting for their Layer, whose server nodes hold a `"model"` child a ready tree may draw. */
+  const waitingTrees = new Set<Instance>()
+  /** A waiting instance adopts with the placement the server rendered: see `createPlaced`. */
+  let resuming = false
+  /** The server's range of `path` in a waiting instance's nodes, which it no longer holds. */
+  const waitingRange = (path: string): Range | undefined => {
+    const search = (node: unknown): Range | undefined => {
+      const kind = hydration!.inspect(node)
+      if (kind._tag === "Open" && kind.path === path) return rangeFrom(node, path, undefined)
+      if (kind._tag !== "Element") return undefined
+      for (let child = hydration!.firstChild(node); child !== undefined; child = host.nextOf(child)) {
+        const found = search(child)
+        if (found !== undefined) return found
+      }
+    }
+    for (const tree of waitingTrees) {
+      for (const record of tree.rendered) {
+        const found = search((record as RText).node)
+        if (found === undefined) continue
+        const nodes = new Set(rangeNodes(found))
+        tree.rendered = tree.rendered.filter((r) => !nodes.has((r as RText).node))
+        return found
+      }
+    }
+  }
   const awaitLayer = (
     inst: Instance,
     layer: LayerStart,
@@ -3327,11 +3367,13 @@ const setup = (
     layer.logEarly()
     inst.waiting = true
     waiting++
+    waitingTrees.add(inst)
     range.claimed = true
     inst.rendered = rangeNodes(range).map((node) => new TextRecord(emptyText, node))
     const resume = (adopt: boolean) => {
       if (inst.closed || !inst.waiting) return
       inst.waiting = false
+      waitingTrees.delete(inst)
       const nodes = inst.rendered.flatMap(nodesOf)
       inst.rendered = []
       range.claimed = false
@@ -3347,7 +3389,9 @@ const setup = (
         inst.props = held.props
         setPlacement(inst, held)
       }
+      resuming = adopt
       begin(inst, range, adopt ? fromServer : Option.none(), undefined, collectedOnServer, layer)
+      resuming = false
       // Rebuilt: the server's nodes go. Adopted, the ones it kept are in place, and what it built fresh for
       // the rest isn't in the document yet. Nothing above it renders now, so it places its own nodes.
       if (!range.claimed) { for (const node of nodes) host.remove(node) }
@@ -3495,7 +3539,7 @@ const setup = (
    * with it. An optional owner that isn't above is left out. A required owner must match by definition,
    * not just by name. An `onChange` starts from the value the reader mounts with.
    */
-  const findOwners = (inst: Instance) => {
+  const findOwners = (inst: Instance, again = false) => {
     const from = ownerUp(inst)
     for (const read of sharedReads.readsOf(inst.component.definition)) {
       const definition = read.owner.definition
@@ -3504,20 +3548,25 @@ const setup = (
       if (owner === undefined && !read.optional) {
         throw new Error(`${inst.path} reads the shared state of ${definition.name}, ${ownerAbsent(from, definition)}`)
       }
-      if (owner === before) continue
-      // Found again, after a `"model"` child above it was drawn elsewhere: it renders with the new owner's value.
-      if (before !== undefined) {
-        before.readers!.delete(inst)
-        inst.seen?.delete(before)
-        inst.owners!.delete(definition)
-        dueReports(before)
-        markDirty(inst)
+      if (owner !== before) {
+        // Found again, after a `"model"` child above it was drawn elsewhere: it renders with the new owner's value.
+        if (before !== undefined) {
+          before.readers!.delete(inst)
+          inst.seen?.delete(before)
+          inst.owners!.delete(definition)
+          dueReports(before)
+        }
+        if (owner !== undefined) {
+          ;(inst.owners ??= new Map()).set(definition, owner)
+          ;(owner.readers ??= new Set()).add(inst)
+          if (again) dueReports(owner)
+        }
+        if (again) markDirty(inst)
       }
-      if (owner === undefined) continue
-      ;(inst.owners ??= new Map()).set(definition, owner)
-      ;(owner.readers ??= new Set()).add(inst)
-      if (read.onChange !== undefined) (inst.seen ??= new Map()).set(owner, owner.shares)
-      if (before !== undefined) dueReports(owner)
+      // Each alias of one owner reads it: the one with `onChange` may come second.
+      if (owner !== undefined && read.onChange !== undefined && !inst.seen?.has(owner)) {
+        ;(inst.seen ??= new Map()).set(owner, owner.shares)
+      }
     }
   }
   /**
@@ -3527,7 +3576,7 @@ const setup = (
   const rehome = (inst: Instance) => {
     if (inst.closed) return
     try {
-      findOwners(inst)
+      findOwners(inst, true)
     } catch (error) {
       return defer(() => failInstance(inst, Cause.die(error), "view"))
     }
@@ -3698,7 +3747,8 @@ const setup = (
         counted = true
         if (!countSends(inst, definition.name)) return
       }
-      const owner = nearestOwner(inst.parent, definition)
+      // The owner it reads: a drawn `"model"` child's are above where it's drawn.
+      const owner = nearestOwner(ownerUp(inst), definition)
       if (
         owner === undefined &&
         sharedReads.readsOf(inst.component.definition).some((read) =>
@@ -3709,7 +3759,7 @@ const setup = (
         continue
       }
       if (owner === undefined) {
-        const error = new Error(`${inst.path} sent to ${definition.name}, ${ownerAbsent(inst.parent, definition)}`)
+        const error = new Error(`${inst.path} sent to ${definition.name}, ${ownerAbsent(ownerUp(inst), definition)}`)
         failInstance(inst, Cause.die(error), "send")
         return
       }
@@ -4767,9 +4817,10 @@ const setup = (
             (out) => firstDefined(out.rendered, (child) => findRef(child, key, who, author))
           )
           : firstDefined(rendered.inst.rendered, (child) => findRef(child, key, who, author))
+      case "Placed":
+        return rendered.hold.site === rendered ? findRef(rendered.hold.inner, key, who, author) : undefined
       case "Text":
       case "Outlet":
-      case "Placed":
         return undefined
     }
   }
@@ -5135,7 +5186,8 @@ const setup = (
    */
   const closurePaths = (inst: Instance, out: Array<ChildPaths>) => {
     for (const child of inst.children) {
-      if (child.closed) continue
+      // A parked `"model"` child's slots hold an older render's content, which places nothing now.
+      if (child.closed || (child.component.definition.lifetime === "model" && parkedAt(child))) continue
       if (child.owner === undefined) {
         firstInOutlets(child, (placed) => {
           if (placed.childPaths !== undefined) out.push(placed.childPaths)
@@ -5425,8 +5477,15 @@ const setup = (
   }
 
   /** A declared child. A `"model"` one is its lister's, drawn here. */
-  const createChild = (inst: Instance, view: View.Child<any, any>, env: Env, range?: Range): Rendered =>
-    isListed(view) ? createPlaced(inst, view, range) : makeChild(inst, view, env, range)
+  const createChild = (inst: Instance, view: View.Child<any, any>, env: Env, range?: Range): Rendered => {
+    if (isListed(view)) return createPlaced(inst, view, range)
+    // A send by ref finds a listed child first, so another child can't have its key.
+    const children = view.ref && listedChildren.of(inst.author.component)
+    if (children && listedChildren.lists(children, view.ref!.key)) {
+      throw new Error(`${inst.author.path}: ref ${view.ref!.key} names a listed child`)
+    }
+    return makeChild(inst, view, env, range)
+  }
 
   const makeChild = (
     inst: Instance,
@@ -6300,6 +6359,7 @@ const setup = (
       // A `"model"` child's nodes are its lister's: they stay where they are when the tree that draws it
       // goes, until a tree draws it again or the flush parks them.
       case "Placed":
+        if (rendered.stub !== undefined) out.push(rendered.stub)
         return
       case "Outlet":
       case "Child": {
@@ -6317,19 +6377,19 @@ const setup = (
     rendered._tag === "Child" || rendered._tag === "Outlet"
       ? firstNodeOfList(rendered.inst.rendered)
       : rendered._tag === "Fallback" || rendered._tag === "Placed"
-      ? firstNodeOf(innerOf(rendered)!)
+      ? (innerOf(rendered) === undefined ? (rendered as RPlaced).stub : firstNodeOf(innerOf(rendered)!))
       : rendered.node
   const lastNodeOf = (rendered: Rendered): unknown =>
     rendered._tag === "Child" || rendered._tag === "Outlet"
       ? lastNodeOfList(rendered.inst.rendered)
       : rendered._tag === "Fallback" || rendered._tag === "Placed"
-      ? lastNodeOf(innerOf(rendered)!)
+      ? (innerOf(rendered) === undefined ? (rendered as RPlaced).stub : lastNodeOf(innerOf(rendered)!))
       : rendered.node
   const hasNodes = (rendered: Rendered): boolean => {
     if (rendered._tag === "Child" || rendered._tag === "Outlet") return rendered.inst.rendered.some(hasNodes)
     if (rendered._tag !== "Fallback" && rendered._tag !== "Placed") return true
     const inner = innerOf(rendered)
-    return inner !== undefined && hasNodes(inner)
+    return inner === undefined ? (rendered as RPlaced).stub !== undefined : hasNodes(inner)
   }
   const firstNodeOfList = (items: ReadonlyArray<Rendered>): unknown => {
     for (let index = 0; index < items.length; index++) {
@@ -6379,7 +6439,12 @@ const setup = (
     let next = ref
     for (let index = items.length - 1; index >= 0; index--) {
       let item: Rendered | undefined = items[index]!
-      while (item?._tag === "Fallback" || item?._tag === "Placed") item = innerOf(item)
+      while (item?._tag === "Fallback" || item?._tag === "Placed") {
+        const inner: Rendered | undefined = innerOf(item)
+        if (inner === undefined && item._tag === "Placed" && item.stub !== undefined) {
+          item = new TextRecord(emptyText, item.stub)
+        } else item = inner
+      }
       if (item === undefined) continue
       if (item._tag === "Child" || item._tag === "Outlet") {
         next = placeEach(parentNode, item.inst.rendered, next)
@@ -6401,7 +6466,9 @@ const setup = (
       case "Fallback":
       case "Placed": {
         const inner = innerOf(rendered)
-        return inner === undefined ? undefined : insertNodes(parentNode, inner, ref)
+        if (inner !== undefined) return insertNodes(parentNode, inner, ref)
+        if (rendered._tag === "Placed" && rendered.stub !== undefined) host.insertBefore(parentNode, rendered.stub, ref)
+        return
       }
       case "Outlet":
       case "Child": {
@@ -6432,7 +6499,7 @@ const setup = (
   /** The children the flush took out of a tree, parked once nothing is left to render unless drawn again. */
   const unplaced = new Set<Hold>()
   /** Hydration: listers whose undrawn children are made once every instance has adopted. */
-  const postponed = new Set<Instance>()
+  const postponed = new Map<Instance, Set<string>>()
   /** The server's state, kept from adoption until the postponed children are made from it. */
   let late: typeof hydrating
 
@@ -6443,9 +6510,27 @@ const setup = (
   const createPlaced = (inst: Instance, view: View.Child<any, any>, range: Range | undefined): Rendered => {
     const lister = inst.author
     const key = view.ref!.key
+    // Drawn with what the lister's Model lists now: a declaration kept in a parked child's slot may be older.
+    const listed = listingOf(lister).get(key)
     let hold = lister.listed?.get(key)
+    // Not listed now, or drawn by a fresh tree while this one is parked: an empty text stands in.
+    if (listed === undefined || (hold?.site !== undefined && parkedAt(inst))) {
+      if (range !== undefined) removeRange(range)
+      return new TextRecord(emptyText, host.createText(""))
+    }
+    // Adopting, it's drawn with the placement the server rendered, as its nodes are. The latest one follows.
+    // One built fresh, unlisted since the server rendered it, starts from what's listed now.
+    if (range === undefined || hydrating?.deferred.has(lister.path + "/" + segment(view))) {
+      view = { ...listed, slots: view.slots }
+    }
     if (hold === undefined) {
+      // Hydration: drawn by a ready tree where the server drew it in a waiting one, it takes its server nodes
+      // from there, with what was typed into them.
+      let adopted = adoptedUpTo
+      if (range === undefined && waitingTrees.size > 0) range = waitingRange(lister.path + "/" + segment(view))
+      else adopted = undefined
       const inner = makeChild(lister, view, lister.env, range, inst)
+      if (adopted !== undefined) adoptedUpTo = adopted
       ;(lister.listed ??= new Map()).set(key, hold = { lister, inner, site: undefined, container: undefined })
       return hold.site = { _tag: "Placed", v: view, hold, at: inst }
     }
@@ -6454,38 +6539,99 @@ const setup = (
     created++
     // Adopting, the placement the server rendered doesn't take a child the latest view drew elsewhere: an
     // empty text stands in until the latest placement patches it.
-    if (range !== undefined && hold.site !== undefined) return new TextRecord(emptyText, host.createText(""))
+    if ((range !== undefined || resuming) && hold.site !== undefined) {
+      return new TextRecord(emptyText, host.createText(""))
+    }
     return drawAt(hold, { _tag: "Placed", v: view, hold, at: inst }, view)
   }
-  /** Unlisted and listed again since it was drawn here, the record draws a new child. */
-  const patchPlaced = (inst: Instance, rendered: RPlaced, view: View.Child<any, any>): Rendered =>
-    rendered.hold.lister.listed?.get(view.ref!.key) === rendered.hold
-      ? drawAt(rendered.hold, rendered, view)
-      : createPlaced(inst, view, undefined)
+  /** Drawn here still, it's patched in place. Otherwise the place draws it anew, if it's still listed. */
+  const patchPlaced = (inst: Instance, rendered: RPlaced, view: View.Child<any, any>): Rendered => {
+    const hold = rendered.hold
+    const listed = listingOf(hold.lister).get(view.ref!.key)
+    if (hold.site === rendered && listed !== undefined && hold.lister.listed?.get(view.ref!.key) === hold) {
+      return drawAt(hold, rendered, { ...listed, slots: view.slots })
+    }
+    if (rendered.stub !== undefined) host.remove(rendered.stub)
+    if (hold.site === rendered) undraw(hold)
+    return createPlaced(inst, view, undefined)
+  }
+  /** A child that showed something else, failing or recovering, gets a new record, so its tree places it. */
   const drawAt = (hold: Hold, site: RPlaced, view: View.Child<any, any>): RPlaced => {
     take(hold, site)
     site.v = view
-    hold.inner = patchChild(hold.lister, hold.inner, view, hold.lister.env)
-    return site
+    const inner = hold.inner
+    hold.inner = patchChild(hold.lister, inner, view, hold.lister.env)
+    return hold.inner === inner ? site : (hold.site = { _tag: "Placed", v: view, hold, at: site.at })
+  }
+  /** The children `lister`'s Model lists now, by ref key, made once per Model. */
+  const listingOf = (lister: Instance): Map<string, View.Child<any, any>> => {
+    let listing = listings.get(lister)
+    if (listing === undefined || listing.model !== lister.model) {
+      const map = new Map<string, View.Child<any, any>>()
+      const children = listedChildren.of(lister.component)
+      if (children !== undefined) {
+        for (const view of listedChildren.held(lister.component.definition.name, children, lister.model)) {
+          map.set(view.ref!.key, view)
+        }
+      }
+      listings.set(lister, listing = { model: lister.model, map })
+    }
+    return listing.map
+  }
+  const listings = new WeakMap<Instance, { readonly model: unknown; readonly map: Map<string, View.Child<any, any>> }>()
+  /** Whether what `at` renders is out of the document, in a parked child: by its nodes, or its parent's. */
+  const parkedAt = (at: Instance | undefined): boolean => {
+    for (; at !== undefined; at = at.parent) {
+      const first = firstNodeOfList(at.rendered)
+      if (first !== undefined) return isParked(first)
+    }
+    return false
   }
 
-  /** Draws a held child at `site`: out of its container, or from the tree that drew it until now. */
+  /**
+   * Draws a held child at `site`: out of its container, or from the tree that drew it until now. Its
+   * element mounts stop when it goes into a parked tree, and start when it comes out of one.
+   */
   const take = (hold: Hold, site: RPlaced) => {
     if (hold.site === site) return
-    if (hold.site !== undefined) undraw(hold)
+    const first = firstNodeOf(hold.inner)
+    const wasParked = first !== undefined && isParked(first)
+    const from = hold.site
+    if (from !== undefined) {
+      // Its place keeps an empty text, so the tree it leaves still has a node to patch around.
+      const parentNode = first === undefined ? undefined : host.parentOf(first)
+      if (parentNode !== undefined) host.insertBefore(parentNode, from.stub = host.createText(""), first)
+      undraw(hold)
+    }
     unplaced.delete(hold)
     hold.site = site
     const inst = heldInst(hold)
     if (hold.container !== undefined) {
       unpark(hold.lister, hold.container)
       hold.container = undefined
-      toggleMounts(hold.lister, hold.inner, hold.lister.env, true)
       if (inst !== undefined) record(inst, { _tag: "Attached" })
     }
+    const nowParked = parkedAt(site.at)
+    if (wasParked !== nowParked) toggleMounts(hold.lister, hold.inner, hold.lister.env, !nowParked)
     if (inst === undefined) return
     inst.drawnIn = site.at
+    drawn.add(inst)
     shiftHeads(inst, 1)
+    rehomeDrawn(inst)
+  }
+  /** The `"model"` children drawn in a tree, which find their owners through where they're drawn. */
+  const drawn = new Set<Instance>()
+  /** Rehomes `inst`, and the children drawn in its slots, at any depth, whose owners are above it now. */
+  const rehomeDrawn = (inst: Instance) => {
     rehome(inst)
+    for (const other of drawn) {
+      if (other.closed || other.drawnIn === undefined) drawn.delete(other)
+      else if (other !== inst && isBelow(other, inst)) rehome(other)
+    }
+  }
+  const isBelow = (inst: Instance, above: Instance): boolean => {
+    for (let at = ownerUp(inst); at !== undefined; at = ownerUp(at)) if (at === above) return true
+    return false
   }
   /** Takes a held child out of the tree that drew it. Its nodes are out of the document already. */
   const undraw = (hold: Hold) => {
@@ -6535,7 +6681,7 @@ const setup = (
     const inst = heldInst(hold)
     if (inst === undefined) return
     record(inst, { _tag: "Detached" })
-    rehome(inst)
+    rehomeDrawn(inst)
   }
 
   /**
@@ -6546,30 +6692,39 @@ const setup = (
     const children = listedChildren.of(lister.component)
     if (children === undefined || lister.closed || lister.failure !== undefined) return
     try {
-      listChildren(lister, children)
+      listChildren(lister)
     } catch (error) {
       defer(() => failInstance(lister, Cause.die(error), "view"))
     }
   }
-  const listChildren = (lister: Instance, children: listedChildren.Children) => {
+  const listChildren = (lister: Instance) => {
     const before = lister.listed
+    const server = hydrating ?? late
+    const waited = postponed.get(lister)
+    let waits: Set<string> | undefined
     let after: Map<string, Hold> | undefined
-    for (const view of listedChildren.held(lister.component.definition.name, children, lister.model)) {
+    for (const view of listingOf(lister).values()) {
       const key = view.ref!.key
+      const path = lister.path + "/" + segment(view)
+      const wasPostponed = waited?.delete(path) === true
       let hold = before?.get(key)
       if (hold !== undefined) {
         before!.delete(key)
-        // A drawn one got its props where it's drawn. An undrawn one keeps the slots it was last drawn with.
-        if (hold.site === undefined) {
+        // A drawn one got its props where it's drawn, unless that's a parked tree's older declaration. An
+        // undrawn one keeps the slots it was last drawn with.
+        if (
+          hold.site === undefined || (hold.inner._tag === "Child" && !propsEqual(view.props, hold.inner.inst.props))
+        ) {
           hold.inner = patchChild(lister, hold.inner, { ...view, slots: hold.inner.v.slots }, lister.env)
         }
-      } else if (hydrating !== undefined && waiting > 0) {
-        // Hydration: a tree still waiting for its Layer may draw it, and it adopts the server's nodes there.
-        postponed.add(lister)
+      } else if (hydrating !== undefined && waiting > 0 && !hydrating.parked.has(path)) {
+        // Hydration: drawn on the server, by a tree still waiting for its Layer, where it adopts the server's
+        // nodes.
+        ;(waits ??= new Set()).add(path)
         continue
       } else {
         // One postponed while a Layer waited starts from the state the server sent for it.
-        const restore = late !== undefined && postponed.has(lister)
+        const restore = late !== undefined && wasPostponed
         if (restore) hydrating = late
         try {
           hold = { lister, inner: makeChild(lister, view, lister.env), site: undefined, container: undefined }
@@ -6582,9 +6737,15 @@ const setup = (
     }
     lister.listed = after
     if (before !== undefined) { for (const hold of before.values()) unlist(hold) }
+    // Postponed and unlisted since: listed again, it starts fresh, not from the server's state.
+    if (waited !== undefined && server !== undefined) { for (const path of waited) server.deferred.add(path) }
+    if (waits !== undefined) postponed.set(lister, waits)
+    else postponed.delete(lister)
   }
   /** Closes a child its lister no longer lists, wherever it is. */
   const unlist = (hold: Hold) => {
+    // Listed again before adoption, it starts fresh.
+    ;(hydrating ?? late)?.deferred.add(hold.lister.path + "/" + segment(hold.inner.v))
     unplaced.delete(hold)
     if (hold.container !== undefined) unpark(hold.lister, hold.container)
     destroy(hold.lister, hold.inner)

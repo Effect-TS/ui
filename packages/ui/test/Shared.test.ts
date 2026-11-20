@@ -523,6 +523,33 @@ describe("onChange rounds and declarations", () => {
       shared: { a: { owner: Group, onChange }, b: Group, c: { owner: Group, report: () => true } }
     })
   })
+
+  it.effect("delivers an onChange declared on the second alias of an owner", () =>
+    provideHost(Effect.gen(function*() {
+      const CountMessage = UiSchema.TaggedEnum({ Changed: {} })
+      const Counted = Component.define({
+        name: "Counted",
+        lifetime: "view",
+        model: Schema.Number,
+        message: CountMessage,
+        shared: { a: TipsProvider, b: { owner: TipsProvider, onChange: () => CountMessage.Changed() } }
+      }).make({ init: () => 0, update: (count) => count + 1, view: (count, h) => h.el("b", "changes " + count) })
+      const Labelled = Component.define({
+        name: "Labelled",
+        lifetime: "view",
+        model: Schema.String,
+        message: Schema.String
+      }).make({
+        init: () => "x",
+        update: (_, label) => label,
+        view: (label, h) => TipsProvider(h, { key: "tips", props: { label }, view: () => Counted(h, { key: "c" }) })
+      })
+      const root = yield* TestHost.mount(Labelled, {})
+      yield* TestHost.settle
+      root.send("y")
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "changes 1")
+    })))
 })
 
 describe("optional owners, reports and onChange in a Story", () => {

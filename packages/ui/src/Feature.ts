@@ -129,15 +129,28 @@ export interface Service<in out Self, in out Props, in out Events, in out Receiv
    * Provides this feature with `component`. The Layer requires whatever the
    * component requires, and closes it where the Layer is built. The
    * component receives every message the feature receives, and may receive
-   * more.
+   * more. A component with `lifetime: "model"` is placed with
+   * `h.children`, so it can't implement a feature.
    */
   // A method, so `Feature.Any` takes every feature, including one without
   // events, whose `Events` is `never`: `any` doesn't stand in for `never`
   // in a strictly checked parameter.
-  toLayer<R, Rcv = never>(
-    component: Component.Mountable<Props, Events, R, Rcv> & ReceivesAll<Receives, Rcv>
+  toLayer<R, Rcv = never, Lt extends Component.Lifetime = Component.Lifetime>(
+    component: Component.Mountable<Props, Events, R, Rcv, never, Lt> & ReceivesAll<Receives, Rcv> & ViewImpl<Lt>
   ): Layer.Layer<Self, never, R>
 }
+
+/**
+ * Passes unless an implementation has `lifetime: "model"`, and otherwise
+ * says so in the compiler error. An erased lifetime passes.
+ *
+ * @stability experimental
+ * @category utility types
+ * @since 0.1.0
+ */
+export type ViewImpl<Lt> = [Lt] extends ["model"]
+  ? "A component with lifetime 'model' is listed in `children`, not a feature's implementation"
+  : unknown
 
 /**
  * Passes when an implementation receives every message its feature does, and
@@ -268,6 +281,8 @@ export const Service: <Self>() => <
         return child.make(isService(this) ? this : (FeatureService as any), options)
       }
       static toLayer<R>(component: Component.Mountable<any, any, R, never>): Layer.Layer<any, never, R> {
+        const { lifetime, name } = (component as Component.Any).definition
+        if (lifetime === "model") throw new Error(`${name} has lifetime "model": place it with h.children`)
         return Layer.effect(
           Base,
           Effect.map(Effect.context<R>(), (context) => ({
