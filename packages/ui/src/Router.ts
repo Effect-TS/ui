@@ -173,10 +173,12 @@ export type SearchPatch<R> = [R] extends [{ readonly search: infer Q }] ? { read
  * `changes` starts with the current location, then emits each route change.
  * A change to the `#hash` alone within the same route isn't a route change.
  * `navigate` takes an href: one the routes parse is pushed (or replaced), and
- * anything else is a full page load. A navigation to the current route, with
- * the same tag and printed route, keeps the URL with its undeclared params,
- * so it bumps no sequence and delivers no route; only a new `#hash` is
- * written.
+ * anything else is a full page load. An href to the current route, with the
+ * same tag and printed route, isn't a navigation: the URL keeps its
+ * undeclared params, only a new `#hash` is written and no sequence is bumped.
+ * `changes` emits the current location again, so the root hears that a link
+ * to its own page was followed. `push` and `replace` of the current route
+ * emit nothing.
  *
  * @stability experimental
  * @category models
@@ -284,11 +286,11 @@ export class Replace extends Command.Service<Replace>()(
  *
  * The route must be a complete value of `routes`, such as one built with
  * `routes.make`; pass the union given to the Router Layer or one of its
- * subsets. A route equal to the current one does nothing. It returns
- * `"blocked"` without navigating while a `Router.blocked` Subscription holds
- * a block. Map the outcome to a message with `Command.map`, or end it with
- * no message with `Command.asNoop`, which also hides a `"blocked"`
- * outcome. The component requires `Push`.
+ * subsets. A route equal to the current one does nothing: unlike a link to
+ * it, it sends no message. It returns `"blocked"` without navigating while a
+ * `Router.blocked` Subscription holds a block. Map the outcome to a message
+ * with `Command.map`, or end it with no message with `Command.asNoop`, which
+ * also hides a `"blocked"` outcome. The component requires `Push`.
  *
  * @stability experimental
  * @category commands
@@ -304,10 +306,11 @@ export const push = <U extends Routes>(
  *
  * **Details**
  *
- * Typed like `push`. A replace that stays on the page, with the same tag and
- * pathname, settles quietly: it isn't announced and leaves focus and scroll
- * alone. A search that a page writes as the user types is better written with
- * `patchSearch`. The component requires `Replace`.
+ * Typed like `push`, and like it does nothing for the current route. A
+ * replace that stays on the page, with the same tag and pathname, settles
+ * quietly: it isn't announced and leaves focus and scroll alone. A search
+ * that a page writes as the user types is better written with `patchSearch`.
+ * The component requires `Replace`.
  *
  * @stability experimental
  * @category commands
@@ -600,7 +603,8 @@ export const props = <U extends Routes>(routes: U): Effect.Effect<{ readonly rou
  * Hydrated hash roots skip that report, and so do roots hydrated from a
  * `static: true` render whose route differs from the Router's in its search
  * only, as a page prerendered at `/search` and opened at `/search?q=x`.
- * Later locations are always delivered.
+ * Later locations are always delivered, and the held route is delivered
+ * again when a link to it is followed.
  * The key stays stable as the held route changes. A subset only sees its own
  * routes. On the server the root is checked once without running its Streams,
  * regardless of the navigation sequence.
@@ -1419,6 +1423,11 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       for (const check of pending.checks) check.dropped()
     }
     const listeners = new Set<(location: Location) => void>()
+    /** Delivers `next` to `changes` and to the attached Subscriptions. */
+    const publish = (next: Location) => {
+      Effect.runSync(SubscriptionRef.set(ref, next))
+      for (const listener of Array.from(listeners)) listener(next)
+    }
     /** Whether a route at `url` is on the current page: the same tag and pathname. */
     const samePage = (route: { readonly _tag: string }, url: string) =>
       route._tag === current.route._tag && pathnameOf(url) === pathnameOf(current.url)
@@ -1464,8 +1473,7 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
           blocks: blocked
         }
       }
-      Effect.runSync(SubscriptionRef.set(ref, next))
-      for (const listener of Array.from(listeners)) listener(next)
+      publish(next)
     }
 
     /** Writes `url` as a new or the current entry, and moves to it. */
@@ -1481,7 +1489,6 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
         // A quiet replace stays on the page, so its path is the current one.
         if (mode.quiet) replaceQuiet(href, writeState({ index }))
         else replaceNow(href, writeState({ index }))
-        set({ ...location, action: "replace", seq }, mode)
       } else {
         leave()
         // The Model snapshot also goes into the entry itself, so it survives a reload.
@@ -1489,11 +1496,11 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
         index++
         for (const key of snapshots.keys()) if (key >= index) snapshots.delete(key)
         history.push(href, writeState({ index }))
-        set({ ...location, action: "push", seq }, mode)
       }
+      set({ ...location, action: replace ? "replace" : "push", seq }, mode)
     }
 
-    const navigate = (href: string, replace: boolean): Outcome => {
+    const navigate = (href: string, replace: boolean, source: "href" | "route"): Outcome => {
       if (blocks.size > 0) return "blocked"
       const [url, hash] = split(href)
       const found = routes.resolve(url)
@@ -1510,17 +1517,21 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
         printed === current.url ||
         (route._tag === current.route._tag && routes.print(route) === routes.print(current.route))
       ) {
-        if (hash === current.hash) return "navigated"
-        // A change to the hash alone: a new entry, and no route change.
-        if (replace) replaceNow(current.url + hash, writeState({ index }))
-        else {
-          flush()
-          leave()
-          index++
-          history.push(current.url + hash, writeState({ index }))
+        if (hash !== current.hash) {
+          // A change to the hash alone: a new entry, and no route change.
+          if (replace) replaceNow(current.url + hash, writeState({ index }))
+          else {
+            flush()
+            leave()
+            index++
+            history.push(current.url + hash, writeState({ index }))
+          }
+          current = { ...current, hash }
+          options.onHash?.(hash, "push", index)
         }
-        current = { ...current, hash }
-        options.onHash?.(hash, "push", index)
+        // A followed href delivers the location again, with the same sequence: a navigation that is
+        // still settling is left as it is.
+        if (source === "href") publish(current)
         return "navigated"
       }
       // A replace that stays on the page is quiet; a push, such as a `?page=2` link, is loud.
@@ -1667,9 +1678,9 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       routes,
       location: () => current,
       changes: SubscriptionRef.changes(ref),
-      navigate: (href, navigateOptions) => Effect.sync(() => navigate(href, navigateOptions?.replace === true)),
-      push: (route) => Effect.sync(() => navigate(routes.print(route) as string, false)),
-      replace: (route) => Effect.sync(() => navigate(routes.print(route) as string, true)),
+      navigate: (href, navigateOptions) => Effect.sync(() => navigate(href, navigateOptions?.replace === true, "href")),
+      push: (route) => Effect.sync(() => navigate(routes.print(route) as string, false, "route")),
+      replace: (route) => Effect.sync(() => navigate(routes.print(route) as string, true, "route")),
       patchSearch: (route, search, patchOptions) =>
         Effect.sync(() => patch(route, search, patchOptions?.history !== "push", patchOptions?.scroll === true)),
       back: Effect.sync(() => {

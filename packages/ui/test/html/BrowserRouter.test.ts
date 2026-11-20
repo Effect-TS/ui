@@ -1,12 +1,12 @@
 // @vitest-environment happy-dom
-import { Command, Component, Query, Route, Router, UiSchema } from "@effect/ui"
+import { Command, Component, MessageLog, Query, Route, Router, UiSchema } from "@effect/ui"
 import { BrowserHost, BrowserRouter, Html, HtmlServer } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, expect, it } from "@effect/vitest"
 import { Context, Effect, Exit, Layer, Option, Schema, Scope } from "effect"
 import { TestClock } from "effect/testing"
 import { describe } from "vitest"
-import { App, AppRoute, People } from "./fixtures/routed.ts"
+import { App, AppRoute, Message, People } from "./fixtures/routed.ts"
 
 const SearchRoute = Route.union({
   Search: Route.make("/search", { search: { q: Schema.optional(Schema.String) } }),
@@ -335,6 +335,72 @@ describe("BrowserRouter", { concurrent: false }, () => {
       expect(document.title).toBe("Person 1 · App")
     }).pipe(Effect.scoped))
 
+  it.effect("clicking the current route notifies subscribers without scrolling, announcing or adding history", () =>
+    Effect.gen(function*() {
+      const log = MessageLog.makeMemory()
+      const { app } = yield* start("/?utm_source=news").pipe(Effect.provideService(MessageLog.MessageLog, log))
+      const entries = window.history.length
+      window.scrollTo(0, 80)
+      expect(clickReporting(link(app, "Home"))).toBe(true)
+      yield* tick
+      expect(window.location.pathname + window.location.search).toBe("/?utm_source=news")
+      expect(window.history.length).toBe(entries)
+      expect(window.scrollY).toBe(80)
+      expect(region()?.textContent).toBe("")
+      expect(log.entries().flatMap((entry) => entry._tag === "Update" ? [entry.message] : []))
+        .toEqual([Message.ChangedRoute({ route: homeRoute })])
+    }).pipe(Effect.scoped))
+
+  it.effect("repeating Slow after Back preserves the entry's pending scroll restoration", () =>
+    Effect.gen(function*() {
+      const { app } = yield* start("/slow")
+      yield* TestClock.adjust("1 second")
+      yield* tick
+      window.scrollTo(0, 90)
+      clickReporting(link(app, "Home"))
+      yield* tick
+      expect(window.scrollY).toBe(0)
+      window.history.back()
+      yield* tick
+      expect(window.location.pathname).toBe("/slow")
+      window.scrollTo(0, 40)
+      clickReporting(link(app, "Slow"))
+      yield* tick
+      expect(window.scrollY).toBe(40)
+      yield* TestClock.adjust("1 second")
+      yield* tick
+      expect(window.scrollY).toBe(90)
+    }).pipe(Effect.scoped))
+
+  it.effect("a redirect reusing its route object announces only after the new visit settles", () =>
+    Effect.gen(function*() {
+      const frames = manualFrames()
+      const slow = AppRoute.make({ _tag: "Slow" })
+      const routes = Route.union(AppRoute.routes, Route.redirect("/old-slow", () => slow))
+      const { app, router } = yield* start("/", { routes, window: frames.window })
+
+      yield* router.navigate("/old-slow")
+      yield* tick
+      yield* TestClock.adjust("1 second")
+      yield* tick
+      expect(document.title).toBe("Slow · App")
+
+      // Keep the first visit's announcement frame queued across both navigations.
+      yield* router.navigate("/")
+      yield* router.navigate("/old-slow")
+      frames.run()
+      expect(region()?.textContent).toBe("")
+
+      yield* tick
+      yield* TestClock.adjust("1 second")
+      yield* tick
+      // A click on this visit, unlike a new visit, preserves its queued announcement.
+      clickReporting(link(app, "Slow"))
+      yield* tick
+      frames.run()
+      expect(region()?.textContent).toBe("Slow · App")
+    }).pipe(Effect.scoped))
+
   it.effect("leaves modified clicks, targets, downloads and other origins to the browser", () =>
     Effect.gen(function*() {
       const { app } = yield* start("/")
@@ -435,30 +501,17 @@ describe("BrowserRouter", { concurrent: false }, () => {
       expect(HtmlLocator.getByRole(app, "heading").textContent).toBe("Search ada")
     }).pipe(Effect.scoped))
 
-  it.effect("doesn't announce a navigation a newer one replaced before its frame", () =>
-    Effect.gen(function*() {
-      const frames = manualFrames()
-      const { app } = yield* start("/", { window: frames.window })
-      clickReporting(link(app, "Person 1"))
-      yield* tick
-      // Person 1 settled and cleared the region; its text waits for the next frame.
-      expect(region()?.textContent).toBe("")
-      clickReporting(link(app, "Slow"))
-      yield* tick
-      frames.run()
-      expect(region()?.textContent).toBe("")
-      yield* TestClock.adjust("1 second")
-      yield* tick
-      frames.run()
-      expect(region()?.textContent).toBe("Slow · App")
-    }).pipe(Effect.scoped))
-
   it.effect("restores the scroll position on back and forward between #hash entries", () =>
     Effect.gen(function*() {
       const { app, router } = yield* start("/")
       clickReporting(link(app, "Person 2 bio"))
       yield* tick
+      // Happy DOM has no layout; make a scroll back to the anchor observable.
+      app.querySelector<HTMLElement>("#bio")!.scrollIntoView = () => window.scrollTo(0, 300)
       window.scrollTo(0, 100)
+      clickReporting(link(app, "Person 2 bio"))
+      yield* tick
+      expect(window.scrollY).toBe(100)
       yield* router.navigate("/people/2#top")
       yield* tick
       window.scrollTo(0, 40)
@@ -472,7 +525,7 @@ describe("BrowserRouter", { concurrent: false }, () => {
       yield* tick
       expect(window.location.hash).toBe("#top")
       expect(window.scrollY).toBe(40)
-      // A #hash change sends no route change and announces nothing.
+      // Traversing entries that differ only by hash announces nothing.
       expect(region()?.textContent).toBe(announced)
     }).pipe(Effect.scoped))
 

@@ -230,7 +230,7 @@ describe("Router", { concurrent: false }, () => {
     }).pipe(Effect.provide(Router.memory({ routes, history })))
   })
 
-  it.effect("does nothing for a navigation to a route that prints the same as the current one", () => {
+  it.effect("delivers hrefs to the current route again, but not typed calls that leave it unchanged", () => {
     const routes = Route.union({
       Home: Route.make("/"),
       Search: Route.make("/search", { search: { q: Schema.optional(Schema.String) } })
@@ -247,24 +247,18 @@ describe("Router", { concurrent: false }, () => {
       yield* Effect.yieldNow
       assert.strictEqual(yield* router.replace(x), "navigated")
       assert.strictEqual(yield* router.push(x), "navigated")
-      assert.strictEqual(yield* router.navigate("/search?utm=2&q=x"), "navigated")
-      assert.strictEqual(yield* router.navigate("/search?q=x", { replace: true }), "navigated")
-      yield* Effect.yieldNow
-      assert.deepStrictEqual(history.entries(), ["/search?q=x&utm=1"])
-      assert.strictEqual(router.location().seq, 0)
-      assert.strictEqual(router.location().url, "/search?q=x&utm=1")
-      // A new hash alone is a hash change on the current URL.
-      yield* router.navigate("/search?q=x#top")
-      assert.deepStrictEqual(history.entries(), ["/search?q=x&utm=1", "/search?q=x&utm=1#top"])
-      assert.strictEqual(router.location().seq, 0)
+      assert.strictEqual(yield* router.patchSearch(x, { q: "x" }), "navigated")
       yield* Effect.yieldNow
       assert.deepStrictEqual(messages, [])
-      const y = routes.make({ _tag: "Search", search: { q: "y" } })
-      yield* router.replace(y)
+
+      assert.deepStrictEqual(history.entries(), ["/search?q=x&utm=1"])
+
+      // A new hash gets one history entry, even when followed twice.
+      yield* router.navigate("/search?q=x#top")
+      yield* router.navigate("/search?q=x#top")
       yield* Effect.yieldNow
-      assert.deepStrictEqual(history.entries(), ["/search?q=x&utm=1", "/search?q=y"])
-      assert.strictEqual(router.location().seq, 1)
-      assert.deepStrictEqual(messages, [y])
+      assert.deepStrictEqual(messages, [x, x])
+      assert.deepStrictEqual(history.entries(), ["/search?q=x&utm=1", "/search?q=x&utm=1#top"])
     }).pipe(Effect.provide(Router.memory({ routes, history })))
   })
 
@@ -612,7 +606,7 @@ describe("Router", { concurrent: false }, () => {
         assert.deepStrictEqual(history.entries(), ["/people/2", "/people/1"])
         assert.strictEqual(settled.length, 1)
 
-        // The current URL, and a hash within it, aren't route changes.
+        // The current URL, and a hash within it, aren't navigations: nothing settles.
         yield* router.navigate("/people/1")
         yield* router.navigate("/people/1#bio")
         yield* TestHost.settle

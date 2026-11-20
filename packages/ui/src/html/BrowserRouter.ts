@@ -12,7 +12,9 @@
  * Links are plain anchors with a printed route. A click is intercepted only
  * when the routes parse its href and it has no modifier key, `target` or
  * `download`. Anything else is a full page load. `<form method="get">` is
- * intercepted by the same test.
+ * intercepted by the same test. Following either to the current route sends a
+ * message without scrolling to the top, announcing or moving focus. A change
+ * to the hash still scrolls as usual.
  *
  * Once a navigation settles (the first flush after the root received it in
  * which no Layer build begun since is still pending), the router scrolls,
