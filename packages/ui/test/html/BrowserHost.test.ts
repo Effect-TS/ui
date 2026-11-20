@@ -885,6 +885,43 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(root.model()).toEqual(["start", "new"])
       }).pipe(Effect.scoped))
 
+    // A custom element that submits its form once it is in the document, and keeps whether the app took it.
+    const prevented: Array<boolean> = []
+    customElements.define(
+      "x-submits-on-insert",
+      class extends HTMLElement {
+        connectedCallback() {
+          const event = new Event("submit", { bubbles: true, cancelable: true })
+          this.closest("form")!.dispatchEvent(event)
+          prevented.push(event.defaultPrevented)
+        }
+      }
+    )
+    for (
+      const [name, form] of [
+        ["a form the patch inserts", (h: any, after: boolean) => after ? h.el("form") : h.el("div")],
+        [
+          "a form whose submit handler the patch takes away",
+          (h: any, after: boolean) => after ? h.el("form") : h.el("form").on("submit", "sent")
+        ]
+      ] as const
+    ) {
+      it.effect(`a submission during a patch is the app's: ${name}`, () =>
+        Effect.gen(function*() {
+          prevented.length = 0
+          const Page = Component.define({ name: "Page", model: Schema.Boolean, message: Schema.String }).make({
+            init: () => false,
+            update: () => true,
+            view: (after, h) => form(h, after).children(after ? h.el("x-submits-on-insert") : h.el("span"))
+          })
+          const app = yield* container
+          const root = yield* BrowserHost.mountEffect(Page, {}, app)
+          root.send("insert")
+          yield* tick
+          expect(prevented).toEqual([true])
+        }).pipe(Effect.scoped))
+    }
+
     it.effect("an element a patch inserts gets its events after a patch inside its insertion", () =>
       Effect.gen(function*() {
         const testHost = yield* TestHost.TestHost

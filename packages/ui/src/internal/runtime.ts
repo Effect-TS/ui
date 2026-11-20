@@ -1715,7 +1715,7 @@ const setup = (
     } finally {
       draining = false
       // What the mount, or a child that adopted once its Layer was ready, published outside a render.
-      if (patching === 0) published.length = 0
+      if (patching === 0) published.length = made.length = 0
     }
   }
   function drainLoop() {
@@ -4911,11 +4911,11 @@ const setup = (
   const setEvents = (inst: Instance, node: unknown, view: View.Element<any, any>, patched = false) => {
     if (view.owned === undefined || view.owned.length === 0) {
       if (hostEvents === undefined) host.setEvents(node, view.handlers, inst.author.fire, view.eventOptions)
-      else if (view.handlers !== View.noFields || view.eventOptions !== View.noFields) {
+      else if (view.handlers !== View.noFields || view.eventOptions !== View.noFields || patched) {
         hostEvents.listen(view.handlers, view.eventOptions)
         published.push(node, inst, view)
-        // A patch took its events away: the tree still has them until the patch is done.
-      } else if (patched) published.push(node, inst, view)
+        // A new element with no events is still the app's, as a form whose submission nothing handles is.
+      } else made.push(node)
       return
     }
     const events = layeredEvents(inst, view, view.owned)
@@ -4927,13 +4927,15 @@ const setup = (
   }
 
   /**
-   * The elements whose events changed in the patch running, as `node, instance, view`: the lookup reads
+   * The elements the running patch made with events or whose events it changed, as `node, instance, view`: the lookup reads
    * them over the tree, which holds a record only once the patch that made or changed it is done. An event
    * the patch causes, such as one a custom element's `connectedCallback` fires as it is inserted, gets
    * the events the patch gave. Emptied once the outermost patch is done, and once a drain is done for what
    * the mount, or a child that adopted later, published outside a render, so it holds nothing between events.
    */
   const published: Array<any> = []
+  // The elements it made with no events: the app's, though nothing handles their events.
+  const made: Array<unknown> = []
   let patching = 0
   /** Runs `f`, which may patch the tree, and forgets the published events once no patch is running. */
   const patchRun = <A>(f: () => A): A => {
@@ -4941,7 +4943,7 @@ const setup = (
     try {
       return f()
     } finally {
-      if (--patching === 0) published.length = 0
+      if (--patching === 0) published.length = made.length = 0
     }
   }
 
@@ -4998,23 +5000,23 @@ const setup = (
         break
       }
     }
-    if (published.length > 0) publishedAlong(path, out)
+    if (published.length > 0 || made.length > 0) publishedAlong(path, out)
     return out
   }
   /** Reads over `out` the events a running patch gave the nodes of `path`, the latest of each. */
   const publishedAlong = (path: ReadonlyArray<unknown>, out: Array<Renderer.Events | undefined>) => {
     for (let at = 0; at < path.length; at++) {
+      let found = false
       for (let index = published.length - 3; index >= 0; index -= 3) {
         if (published[index] !== path[at]) continue
-        const view: View.Element<any, any> = published[index + 2]
-        out[at] = view.handlers === View.noFields && view.eventOptions === View.noFields &&
-            (view.owned === undefined || view.owned.length === 0)
-          ? undefined
-          : eventsOf(published[index + 1], view)
+        out[at] = eventsOf(published[index + 1], published[index + 2])
+        found = true
         break
       }
+      if (!found && out[at] === undefined && made.includes(path[at])) out[at] = noEvents
     }
   }
+  const noEvents: Renderer.Events = { handlers: View.noFields, dispatch: () => {}, options: View.noFields }
   const walkEvents = (
     inst: Instance,
     items: Rendered | ReadonlyArray<Rendered> | undefined,
