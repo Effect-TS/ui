@@ -491,6 +491,37 @@ describe("BrowserHost", { concurrent: false }, () => {
         yield* tick
         expect(app.innerHTML).toBe("<div><span>two</span></div>")
       }).pipe(Effect.scoped))
+
+    it.effect("a custom element's class is set as an attribute, whatever its className does", () =>
+      Effect.gen(function*() {
+        const seen: Array<string | null> = []
+        // Its className doesn't reflect, so only setting the attribute gives it a class.
+        class Classed extends HTMLElement {
+          static observedAttributes = ["class"]
+          override set className(_: string) {}
+          attributeChangedCallback(_: string, __: string | null, value: string | null) {
+            seen.push(value)
+          }
+        }
+        if (customElements.get("x-classed") === undefined) customElements.define("x-classed", Classed)
+        const Page = Component.define({
+          name: "Classed",
+          model: Schema.Array(Schema.String),
+          message: ListMessage,
+          elements: Html
+        }).make({
+          init: (): ReadonlyArray<string> => ["a"],
+          update: (_, message) => message.rows,
+          view: ([name], h) => h.div(h.el("x-classed").attr("class", name))
+        })
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Page, {}, app)
+        expect(app.innerHTML).toBe("<div><x-classed class=\"a\"></x-classed></div>")
+        root.send(ListMessage.Set({ rows: ["b"] }))
+        yield* tick
+        expect(app.innerHTML).toBe("<div><x-classed class=\"b\"></x-classed></div>")
+        expect(seen).toEqual(["a", "b"])
+      }).pipe(Effect.scoped))
   })
 
   describe("lazy", () => {
