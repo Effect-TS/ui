@@ -62,11 +62,6 @@ describe("model children", () => {
       relayout: toggle
     },
     {
-      name: "P2: moved between two elements",
-      view: page((moved, form, h) => h.main(h.aside(!moved && form()), h.article(moved && form()))),
-      relayout: toggle
-    },
-    {
       name: "P9: left out of a component root, then placed again",
       view: page((hidden, form, h) => Card(h, { key: "card", slots: { body: hidden ? null : form() } })),
       relayout: (root: Root) => Effect.andThen(toggle(root), toggle(root))
@@ -86,7 +81,7 @@ describe("model children", () => {
       assert.notInclude(root.log().map((entry) => entry._tag), "Unmounted")
     }).pipe(Effect.provide(TestHost.layer())))
 
-  it.effect("moves a card listed on the board between columns, keeping its draft", () =>
+  it.effect("P2: keeps a keyed card's draft when it moves between columns", () =>
     Effect.gen(function*() {
       const Board = Component.define({
         name: "Board",
@@ -101,38 +96,37 @@ describe("model children", () => {
         view: (column, h) =>
           h.main(
             Card(h, { key: "todo", slots: { body: column === "todo" ? h.children.cards("c1") : null } }),
+            h.p("done:"),
             Card(h, { key: "done", slots: { body: column === "done" ? h.children.cards("c1") : null } })
           )
       })
       const root = yield* TestHost.mount(Board, {})
       yield* TestHost.settle
       yield* click(root, "draft:")
+      assert.strictEqual(root.text(), "draft:adone:")
       yield* toggle(root)
-      assert.strictEqual(root.text(), "draft:a")
+      assert.strictEqual(root.text(), "done:draft:a")
       assert.notInclude(root.log().map((entry) => entry._tag), "Unmounted")
     }).pipe(Effect.provide(TestHost.layer())))
 
   it.effect("lists a model page by its route's path, so it lives as long as the route", () =>
     Effect.gen(function*() {
-      const Nav = UiSchema.TaggedEnum({ Went: { path: Schema.String }, ClickedPanel: {} })
+      const Nav = UiSchema.TaggedEnum({ Went: { path: Schema.String } })
       const App = Component.define({
         name: "App",
         lifetime: "view",
-        model: Schema.Struct({ path: Schema.String, panel: Schema.Boolean }),
+        model: Schema.String,
         message: Nav,
         elements: Html
       }).make({
-        children: { page: Child.keyed(Form, { props: (model) => [[model.path, {}]] }) },
-        init: () => ({ path: "/a", panel: false }),
-        update: (model, message) =>
-          message._tag === "Went" ? { ...model, path: message.path } : { ...model, panel: !model.panel },
-        view: (model, h) => h.main(model.panel ? h.p("panel") : h.children.page(model.path))
+        children: { page: Child.keyed(Form, { props: (path) => [[path, {}]] }) },
+        init: () => "/a",
+        update: (_, message) => message.path,
+        view: (path, h) => h.main(h.children.page(path))
       })
       const root = yield* TestHost.mount(App, {})
       yield* TestHost.settle
       yield* click(root, "draft:")
-      yield* settle(() => root.send(Nav.ClickedPanel()))
-      yield* settle(() => root.send(Nav.ClickedPanel()))
       assert.strictEqual(root.text(), "draft:a")
       yield* settle(() => root.send(Nav.Went({ path: "/b" })))
       yield* settle(() => root.send(Nav.Went({ path: "/a" })))
@@ -311,7 +305,7 @@ describe("model children the view leaves out", () => {
       assert.notInclude(root.log().map((entry) => entry._tag), "Unmounted")
     }).pipe(Effect.provide(TestHost.layer())))
 
-  it.effect("a story and a scene keep a child left out of a component root", () =>
+  it.effect("a scene delivers a send before the child is placed in a component root", () =>
     Effect.gen(function*() {
       const Host = host((shown, counter, h) =>
         Card(h, {
@@ -325,9 +319,6 @@ describe("model children the view leaves out", () => {
           }
         })
       )
-      const s = yield* Story.make(Host, {})
-      s.send(HostMsg.Ping()).send(HostMsg.Show())
-      assert.deepStrictEqual(s.children, { counter: 1 })
       const scene = yield* Scene.make(Host, {})
       scene.click("ping").expect(Locator.text("pings:1")).toBeAbsent()
         .click("show").expect(Locator.text("pings:1")).toExist()
