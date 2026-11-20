@@ -26,20 +26,22 @@ export interface Options {
 }
 
 /**
- * `detached` declares a `"model"` child no tree of its parent places: only the runtime's holder passes it.
+ * A child's `onEmit` as one function: handlers by tag are called by the event's tag.
  *
  * @internal
  */
+export const emitHandler = (onEmit: Options["onEmit"]): (event: any, model?: any) => unknown =>
+  typeof onEmit === "object" ? (event, model) => onEmit[event._tag](event, model) : onEmit ?? ignore
+
+/** @internal */
 export const make = (
   component: Component.Any | Component.Headless.Any | Feature.Any,
-  options: Options,
-  detached = false
+  options: Options
 ): View.Child<any, any> => {
   // A child with a key and a ref would have two identities that can disagree.
   if (options.key !== undefined && options.ref !== undefined) {
     throw new Error("A child takes a key or a ref, not both")
   }
-  const { onEmit } = options
   return {
     _tag: "Child",
     component: component as Component.Any,
@@ -47,14 +49,11 @@ export const make = (
     key: options.ref !== undefined ? options.ref.key : options.key ?? "",
     ref: options.ref,
     props: options.props ?? {},
-    onEmit: typeof onEmit === "object"
-      ? (event, model?: unknown) => onEmit[event._tag](event, model)
-      : onEmit ?? ignore,
+    onEmit: emitHandler(options.onEmit),
     fallback: options.fallback,
     onFailure: options.onFailure,
     view: options.view,
-    slots: options.slots,
-    detached
+    slots: options.slots
   }
 }
 

@@ -381,8 +381,6 @@ export interface Child<out Msg, out R = never> {
   readonly view: ((parts: any) => Content<Msg, any>) | undefined
   /** What the parent passed for each of the child's slots. */
   readonly slots: Readonly<Record<string, Input<any, any>>> | undefined
-  /** A `"model"` child its parent's view doesn't place: its nodes are out of the document, and its instance goes on. */
-  readonly detached?: boolean | undefined
   /** Phantom: the child's requirements surface in its parent's. */
   readonly "~R"?: (_: never) => R
 }

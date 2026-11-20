@@ -177,7 +177,7 @@ const sameKeys = (a: Keys, b: Keys): boolean =>
 // Rendered tree
 // ---------------------------------------------------------------------------
 
-type Rendered = RElement | RText | RChild | RFallback | ROutlet | RDetached
+type Rendered = RElement | RText | RChild | RFallback | ROutlet
 
 /**
  * A rendered element. A patch updates it in place, so a node that stays keeps
@@ -350,14 +350,12 @@ interface RFallback {
 }
 
 /**
- * A child declared `detached`: what it shows is patched as usual, in `container`, and `node`, an empty
- * text node, stands in the parent's tree for it.
+ * A `"model"` child its author holds while none of its trees places it. It is in no tree: what it shows
+ * is patched as usual, in `container`, out of the document.
  */
-interface RDetached {
-  readonly _tag: "Detached"
+interface Held {
   v: View.Child<any, any>
   inner: RChild | RFallback
-  readonly node: unknown
   readonly container: unknown
 }
 
@@ -377,8 +375,6 @@ const findChild = (rendered: ReadonlyArray<Rendered>, key: string): RChild | RFa
     let found: RChild | RFallback | undefined
     if (r._tag === "Element") {
       found = findChild(listOf(r.children), key)
-    } else if (r._tag === "Detached") {
-      found = findChild([r.inner], key)
     } else if (r._tag === "Child" && !holds(r)) {
       // Left behind by a move: the child is found where it is now.
     } else if (r._tag === "Child" || r._tag === "Fallback") {
@@ -401,10 +397,6 @@ const findHeld = (inst: Instance, key: string): RChild | RFallback | undefined =
   }
   return undefined
 }
-
-/** A component's `children`, when it has some. */
-const listedOf = (component: Component.Any): listedChildren.Children | undefined =>
-  (component as { readonly "~children"?: listedChildren.Children | undefined })["~children"]
 
 // Kept beside the instances, so a component without slots carries no field for them.
 const slottedBy = new WeakMap<Instance, Slotted>()
@@ -527,7 +519,7 @@ export interface Instance {
    * instance no child node declared, a root or an outlet, which never moves this way.
    */
   placedIn: Env | undefined
-  /** Declared `detached`, or an outlet its receiver stopped placing: its element mounts, and its subtree's, are stopped. */
+  /** Held by its author, or an outlet its receiver stopped placing: its element mounts, and its subtree's, are stopped. */
   detached: boolean
   /** The entry that started the step that last marked it dirty, until it renders. */
   cause: number | undefined
@@ -544,7 +536,7 @@ export interface Instance {
   env: Env
   /** A keyed provide's selection, on the client. `undefined` without one. */
   selection: Selection | undefined
-  /** `noChildren`, shared, until the first child is added: only `createChild` adds one. */
+  /** `noChildren`, shared, until the first child is added: only `makeChild` adds one. */
   children: Set<Instance>
   props: unknown
   model: unknown
@@ -581,13 +573,13 @@ export interface Instance {
   left: boolean
   /** How many instances that declare a head are in the tree at or below it: see `declaresHead`. */
   heads: number
-  /** The containers of the detached children its view declares, unregistered when it leaves. */
+  /** The containers of the children it holds and the outlets it parked, unregistered when it leaves. */
   parked: Set<unknown> | undefined
   /**
    * The `"model"` children its Model lists and none of the trees it wrote places, by path: each detached,
    * in a container of its own. `undefined` while it holds none.
    */
-  held: Map<string, RDetached> | undefined
+  held: Map<string, Held> | undefined
   /**
    * The closes still running of Scopes forked from this instance's and closed early: removed
    * descendants, stopped Subscriptions and mounts. Their cleanup can use this instance's services,
@@ -1079,7 +1071,7 @@ const serializeTree = (
       if (inst.held !== undefined) {
         const shown = sink
         sink = noSink
-        for (const held of inst.held.values()) serialize(inst, held, inner)
+        for (const held of inst.held.values()) serialize(inst, held.inner, inner)
         sink = shown
       }
     }
@@ -1118,17 +1110,6 @@ const serializeTree = (
         }
         sink.enter(path)
         serialize(inst, rendered.inner, true)
-        return sink.leave(path)
-      }
-      case "Detached": {
-        // Out of the document, so no nodes: the state of its subtree is still sent, and the client builds
-        // its nodes from that state, detached.
-        const path = childPath(inst.author, rendered.v)
-        const shown = sink
-        sink = noSink
-        serialize(inst, rendered.inner, under)
-        sink = shown
-        sink.enter(path)
         return sink.leave(path)
       }
     }
@@ -1897,8 +1878,6 @@ const setup = (
       }
       case "Fallback":
         return placed(rendered.inner, out)
-      // A detached child's view is out of the document, and its head with it.
-      case "Detached":
       case "Text":
         return
     }
@@ -4788,7 +4767,6 @@ const setup = (
       case "Outlet":
         return releaseWatches(rendered.inst)
       case "Fallback":
-      case "Detached":
         return releaseRendered(rendered.inner)
       case "Element": {
         for (const child of listOf(rendered.children)) releaseRendered(child)
@@ -4819,9 +4797,6 @@ const setup = (
       }
       case "Fallback":
         return findRef(rendered.inner, key, who, author)
-      case "Detached":
-        // A detached child's nodes are out of the document: a ref in it finds none.
-        return undefined
       case "Child":
         return rendered.inst.owner === undefined
           ? firstInOutlets(
@@ -4857,10 +4832,11 @@ const setup = (
   })
 
   /**
-   * The containers that hold detached children's nodes. A host's handles may be numbers or strings, which a
-   * host may hand out again. Each container belongs to the instance whose view declared the child, so it is
-   * unregistered when the child is attached or removed, or when that instance leaves, whichever comes first.
-   * The parked child failing doesn't end it: its fallback stays.
+   * The containers that hold nodes out of the document: a held child's, or a parked outlet's. A host's
+   * handles may be numbers or strings, which a host may hand out again. Each container belongs to the
+   * instance that holds the child or parked the outlet, so it is unregistered when the content is placed
+   * again or removed, or when that instance leaves, whichever comes first. A held child failing doesn't
+   * end it: its fallback stays.
    */
   const parked = new Set<unknown>()
   const park = (owner: Instance, container: unknown) => {
@@ -4871,7 +4847,7 @@ const setup = (
     parked.delete(container)
     owner.parked?.delete(container)
   }
-  /** Whether `node` is in a detached child: its topmost ancestor is a container. */
+  /** Whether `node` is out of the document, in a container: its topmost ancestor is one. */
   const isParked = (node: unknown): boolean => {
     if (parked.size === 0) return false
     let top = node
@@ -4907,7 +4883,7 @@ const setup = (
     })
     afterCommit(() =>
       whenReady(env, (envCtx) => {
-        // A detached child's element starts its mount when the child is attached.
+        // An element in a container starts its mount when its child is placed.
         if (inst.closed || isClosed(mountScope) || isParked(node)) return
         const { args, argsSchema, name } = running.mount
         const started = record(inst, { _tag: "MountStarted", name, args, argsSchema }, causedBy)
@@ -5181,7 +5157,6 @@ const setup = (
     refChecks.delete(author)
     // Every tree it wrote is current: the children its Model lists that none places are held, and what
     // they dropped and didn't declare again closes.
-    holdOrFail(author)
     releaseDropped(author)
     if (author.closed) return
     const written: Array<ChildPaths> = author.childPaths === undefined ? [] : [author.childPaths]
@@ -5327,7 +5302,7 @@ const setup = (
         return renderedElement(inst, view, node, children, env)
       }
       case "Child":
-        return createChild(inst, view, env)
+        return makeChild(inst, view, env)
       case "Outlet":
         return createOutlet(inst, view)
     }
@@ -5439,7 +5414,6 @@ const setup = (
           // Forwarded: the content another receiver passed on is in it.
           for (const item of itemsOf(rendered)) visit(item)
           return
-        case "Detached":
         case "Fallback":
         case "Text":
           return
@@ -5561,12 +5535,6 @@ const setup = (
     }
   }
 
-  /** A declared child, detached if its view says so. */
-  const createChild = (inst: Instance, view: View.Child<any, any>, env: Env, range?: Range): Rendered => {
-    const made = makeChild(inst, view, env, range)
-    return view.detached ? detach(inst, made) : made
-  }
-
   const makeChild = (
     inst: Instance,
     view: View.Child<any, any>,
@@ -5657,10 +5625,7 @@ const setup = (
     if (found.component !== component || found.placedIn !== env) return false
     if (found.closed || found.left || found.failure !== undefined || found.waiting) return false
     // Declared again in its own tree: two children at one path, which its author's check fails it for.
-    for (let at: Instance | undefined = inst; at !== undefined; at = at.parent) {
-      if (at === found) return false
-    }
-    return true
+    return !within(inst, found)
   }
 
   /**
@@ -5764,32 +5729,32 @@ const setup = (
   }
   const undrop = (inst: Instance) => dropped.get(inst.parent!.author)?.delete(inst)
   /**
-   * Closes what `author`'s trees dropped and didn't declare again. A `"model"` child placed inside one,
-   * through a slot, by an author outside it, is still listed: that author holds it first, so it leaves
-   * the subtree rather than closing with it.
+   * Holds the children `author`'s Model lists that none of its trees places, then closes what its trees
+   * dropped and didn't declare again. A `"model"` child placed inside a dropped one, through a slot, by an
+   * author outside it, is still listed: that author holds it first, so it leaves the subtree rather than
+   * closing with it.
    */
   const releaseDropped = (author: Instance) => {
+    holdOrFail(author)
     const list = dropped.get(author)
     if (list === undefined) return
-    for (const inst of list) {
-      for (const listing of listingAuthors(inst)) holdOrFail(listing)
-    }
+    const listing = new Set<Instance>()
+    for (const inst of list) listingAuthors(inst, inst, listing)
+    // `author` holds its own above.
+    for (const other of listing) if (other !== author) holdOrFail(other)
     dropped.delete(author)
     for (const inst of list) endInstance(inst)
   }
-  /** The authors outside `inst`'s subtree that list children placed in it. */
-  const listingAuthors = (inst: Instance): Set<Instance> => {
-    const authors = new Set<Instance>()
-    const visit = (at: Instance) => {
-      for (const child of at.children) {
-        const author = child.parent!.author
-        if (listedOf(author.component) !== undefined && !within(author, inst)) authors.add(author)
-        visit(child)
+  /** Adds to `out` the authors outside `root`'s subtree whose `"model"` children are placed under `at`. */
+  const listingAuthors = (at: Instance, root: Instance, out: Set<Instance>): void => {
+    for (const child of at.children) {
+      if (child.component.definition.lifetime === "model" && !out.has(at.author) && !within(at.author, root)) {
+        out.add(at.author)
       }
+      listingAuthors(child, root, out)
     }
-    visit(inst)
-    return authors
   }
+  /** Whether `inst` is `root` or in its tree. */
   const within = (inst: Instance, root: Instance): boolean => {
     for (let at: Instance | undefined = inst; at !== undefined; at = at.parent) {
       if (at === root) return true
@@ -5798,10 +5763,7 @@ const setup = (
   }
   const releaseAllDropped = () => {
     if (dropped.size === 0) return
-    for (const author of Array.from(dropped.keys())) {
-      holdOrFail(author)
-      releaseDropped(author)
-    }
+    for (const author of Array.from(dropped.keys())) releaseDropped(author)
   }
 
   /**
@@ -5812,10 +5774,10 @@ const setup = (
    * lists closes. Run once `author`'s trees are current, before what they dropped closes.
    */
   const holdListed = (author: Instance) => {
-    const listed = listedOf(author.component)
+    const listed = listedChildren.of(author.component)
     if (listed === undefined || author.closed || author.waiting || author.failure !== undefined) return
     const before = author.held
-    const after = new Map<string, RDetached>()
+    const after = new Map<string, Held>()
     for (const view of listedChildren.held(author.component.definition.name, listed, author.model)) {
       const path = childPath(author, view)
       const found = live.get(path)
@@ -5826,17 +5788,23 @@ const setup = (
       before?.delete(path)
       after.set(
         path,
-        (kept === undefined
-          ? createChild(author, view, author.env)
-          : patchDetached(author, kept, view, author.env)) as RDetached
+        kept === undefined
+          ? detach(author, makeChild(author, view, author.env))
+          : patchHeld(author, kept, view, author.env)
       )
     }
     author.held = after.size === 0 ? undefined : after
     // Placed again, which leaves nothing to close, or no longer listed.
-    if (before !== undefined) { for (const kept of before.values()) closeAll(author, kept) }
+    if (before !== undefined) {
+      for (const kept of before.values()) {
+        unpark(author, kept.container)
+        closeAll(author, kept.inner)
+      }
+    }
   }
   /** Whether one of `inst`'s ancestors was dropped this flush, so it closes with it unless it moves. */
   const inDropped = (inst: Instance): boolean => {
+    if (dropped.size === 0) return false
     for (let at = inst.parent; at?.parent !== undefined; at = at.parent) {
       if (dropped.get(at.parent.author)?.has(at)) return true
     }
@@ -6037,7 +6005,7 @@ const setup = (
         if (range === undefined) return undefined
         const next = host.nextOf(range.close)
         // A child's content matches itself against the range, as an outlet's does, and builds fresh what doesn't.
-        const made = view._tag === "Child" ? createChild(inst, view, env, range) : createOutlet(inst, view, range)
+        const made = view._tag === "Child" ? makeChild(inst, view, env, range) : createOutlet(inst, view, range)
         adoptedUpTo = next
         return made
       }
@@ -6118,7 +6086,7 @@ const setup = (
       case "Element":
         return rendered._tag === "Element" && rendered.v.tag === view.tag && rendered.v.elementKey === view.elementKey
       case "Child":
-        return (rendered._tag === "Child" || rendered._tag === "Fallback" || rendered._tag === "Detached") &&
+        return (rendered._tag === "Child" || rendered._tag === "Fallback") &&
           rendered.v.component === view.component && rendered.v.key === view.key
       case "Outlet":
         return rendered._tag === "Outlet" && rendered.v.name === view.name
@@ -6539,13 +6507,8 @@ const setup = (
         return rendered
       }
       case "Fallback":
-      case "Child": {
-        const child = view as View.Child<any, any>
-        const next = patchChild(inst, rendered, child, env)
-        return child.detached ? detach(inst, next) : next
-      }
-      case "Detached":
-        return patchDetached(inst, rendered, view as View.Child<any, any>, env)
+      case "Child":
+        return patchChild(inst, rendered, view as View.Child<any, any>, env)
       case "Outlet": {
         rendered.v = view as View.Outlet
         patchOutlet(rendered.inst, rendered.v)
@@ -6563,23 +6526,18 @@ const setup = (
     if (moved || isStale(out, outlet)) renderOutlet(out)
   }
 
-  /** A detached child after a patch: patched in its container, then attached if its view says so. */
-  const patchDetached = (
-    inst: Instance,
-    rendered: RDetached,
-    child: View.Child<any, any>,
-    env: Env
-  ): Rendered => {
-    const next = patchChild(inst, rendered.inner, child, env)
-    rendered.v = child
-    if (next !== rendered.inner) {
+  /** A held child after its author rendered: patched in its container. */
+  const patchHeld = (inst: Instance, held: Held, child: View.Child<any, any>, env: Env): Held => {
+    const next = patchChild(inst, held.inner, child, env)
+    held.v = child
+    if (next !== held.inner) {
       // It shows something else now, such as a feature once its Layer is ready: that goes in the container.
-      place(rendered.container, [next], undefined)
+      place(held.container, [next], undefined)
       // A child that `patchChild` didn't keep is a new instance.
       if (next._tag === "Child") record(next.inst, { _tag: "Detached" })
-      rendered.inner = next
+      held.inner = next
     }
-    return child.detached ? rendered : attach(inst, rendered, env)
+    return held
   }
 
   const patchChild = (
@@ -6674,8 +6632,7 @@ const setup = (
   const collectNodes = (rendered: Rendered, out: Array<unknown>): void => {
     switch (rendered._tag) {
       case "Element":
-      case "Text":
-      case "Detached": {
+      case "Text": {
         out.push(rendered.node)
         return
       }
@@ -6730,7 +6687,7 @@ const setup = (
     for (let index = items.length - 1; index >= 0; index--) {
       const item = items[index]!
       const moves = stays === undefined || stays[index] !== 1
-      if (item._tag === "Element" || item._tag === "Text" || item._tag === "Detached") {
+      if (item._tag === "Element" || item._tag === "Text") {
         // One node: the common case, with no range to find.
         const node = item.node
         if (moves && (host.parentOf(node) !== parentNode || host.nextOf(node) !== next)) {
@@ -6773,7 +6730,6 @@ const setup = (
     switch (rendered._tag) {
       case "Element":
       case "Text":
-      case "Detached":
         return host.insertBefore(parentNode, rendered.node, ref)
       case "Fallback":
         return insertNodes(parentNode, rendered.inner, ref)
@@ -6785,12 +6741,12 @@ const setup = (
     }
   }
 
-  // -- detached children ------------------------------------------------------
+  // -- held children ----------------------------------------------------------
   /**
-   * Moves a child's nodes out of the document, into a container of their own, and puts an empty text node
-   * in their place. The child goes on rendering into them. Its element mounts stop until it's attached.
+   * Moves a child's nodes out of the document, into a container of their own. The child goes on rendering
+   * into them. Its element mounts stop until a tree places it again, which moves it there.
    */
-  const detach = (inst: Instance, rendered: RChild | RFallback): RDetached => {
+  const detach = (inst: Instance, rendered: RChild | RFallback): Held => {
     if (host.createContainer === undefined) {
       throw new Error(
         `${
@@ -6800,12 +6756,9 @@ const setup = (
     }
     const container = host.createContainer()
     park(inst, container)
-    const placeholder = host.createText("")
     const nodes = nodesOf(rendered)
-    const parentNode = nodes.length === 0 ? undefined : host.parentOf(nodes[0])
-    if (parentNode !== undefined) {
-      host.insertBefore(parentNode, placeholder, nodes[0])
-      // Removed first, so the host lets go of what it showed in them, such as an open dialog.
+    // Removed first, so the host lets go of what it showed in them, such as an open dialog.
+    if (nodes.length > 0 && host.parentOf(nodes[0]) !== undefined) {
       for (const node of nodes) host.remove(node)
     }
     for (const node of nodes) host.insertBefore(container, node, undefined)
@@ -6815,30 +6768,13 @@ const setup = (
       record(rendered.inst, { _tag: "Detached" })
     }
     viewChanged = true
-    return { _tag: "Detached", v: rendered.v, inner: rendered, node: placeholder, container }
-  }
-
-  /** Puts a detached child's nodes back where its placeholder is, and starts its element mounts again. */
-  const attach = (inst: Instance, detached: RDetached, env: Env): RChild | RFallback => {
-    const inner = detached.inner
-    const parentNode = host.parentOf(detached.node)
-    // Not in the host yet, as when its parent is new too: whoever places the parent's nodes places these.
-    if (parentNode !== undefined) insertNodes(parentNode, inner, detached.node)
-    host.remove(detached.node)
-    unpark(inst, detached.container)
-    toggleMounts(inst, inner, env, true)
-    if (inner._tag === "Child") {
-      inner.inst.detached = false
-      record(inner.inst, { _tag: "Attached" })
-    }
-    viewChanged = true
-    return inner
+    return { v: rendered.v, inner: rendered, container }
   }
 
   /**
-   * Stops the mounts of the elements `rendered` shows, or starts them anew, at any depth below it but
-   * for what a child detached on its own shows. A stopped mount's record stays on its element, so a patch
-   * while detached updates it as usual, and `startMount` doesn't start one in a container.
+   * Stops the mounts of the elements `rendered` shows, or starts them anew, at any depth below it. A
+   * stopped mount's record stays on its element, so a patch while it is out of the document updates it as
+   * usual, and `startMount` doesn't start one in a container.
    */
   const toggleMounts = (inst: Instance, rendered: Rendered, env: Env, start: boolean): void => {
     // No mount ever started.
@@ -6865,7 +6801,6 @@ const setup = (
         for (const item of itemsOf(rendered)) toggleMounts(child, item, child.env, start)
         return
       }
-      case "Detached":
       case "Text":
         return
     }
@@ -6894,10 +6829,6 @@ const setup = (
       }
       case "Fallback":
         return closeAll(inst, rendered.inner, parked)
-      case "Detached": {
-        unpark(inst, rendered.container)
-        return closeAll(inst, rendered.inner, parked)
-      }
       case "Element": {
         // The element's `onMount` work ends with it.
         stopMounts(inst, rendered)

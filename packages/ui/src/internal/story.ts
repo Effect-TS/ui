@@ -21,8 +21,9 @@ import type * as Subscription from "../Subscription.ts"
 import * as Locator from "../testing/Locator.ts"
 import type { AwaitedQuery, KeyedLoad, Pending, QueryInfo, StreamTarget, Target } from "../testing/Steps.ts"
 import * as View from "../View.ts"
+import { emitHandler } from "./child.ts"
 import * as listedChildren from "./children.ts"
-import { sharedEqual } from "./equal.ts"
+import { propsEqual, sharedEqual } from "./equal.ts"
 import { isNoop } from "./noop.ts"
 import {
   checkAuthorPaths,
@@ -223,9 +224,6 @@ const fillOutlets = (
   return out
 }
 
-const listedOf = (component: object): listedChildren.Children | undefined =>
-  (component as { readonly "~children"?: listedChildren.Children | undefined })["~children"]
-
 /** The children the Model lists, each kept from `before` when it is the same component. */
 const syncModels = (
   fields: Fields<any, any, any, any>,
@@ -243,7 +241,7 @@ const syncModels = (
     } else {
       out.set(found.ref.key, {
         listed: found,
-        state: kept.state.props === found.props ? kept.state : update(kept.state, { props: found.props })
+        state: propsEqual(kept.state.props, found.props) ? kept.state : update(kept.state, { props: found.props })
       })
     }
   }
@@ -285,16 +283,9 @@ export const stepModelChild = <Props, Model, Msg, Events>(
   const events = after.emitted
   if (events.length > 0) after = update(after, { emitted: [] })
   let out = update(story, { models: new Map(models).set(key, { listed: before.listed, state: after }) })
-  const onEmit = before.listed.entry.onEmit
+  const onEmit = emitHandler(before.listed.entry.onEmit)
   // Each handler reads the Model as it is when the event arrives, as the runtime's does.
-  for (const event of events) {
-    const message = onEmit === undefined
-      ? undefined
-      : typeof onEmit === "function"
-      ? onEmit(event, out.model)
-      : onEmit[(event as { readonly _tag: string })._tag]?.(event, out.model)
-    out = dispatch(out, message as Msg | undefined)
-  }
+  for (const event of events) out = dispatch(out, onEmit(event, out.model) as Msg | undefined)
   return out
 }
 
@@ -818,7 +809,7 @@ export const update = <Props, Model, Msg, Events>(
     models: modelChildren.get(story),
     ...patch
   }
-  const listed = listedOf(fields.component)
+  const listed = listedChildren.of(fields.component)
   if (listed !== undefined && (fields.model !== story.model || fields.models === undefined)) {
     ;(fields as { models?: ReadonlyMap<string, ModelChild> }).models = syncModels(fields, listed, fields.models)
   }
@@ -1317,7 +1308,7 @@ export const apply = <Props, Model, Msg, Events>(
   }
   out = update(out, { emitted: [...out.emitted, ...next.events] })
   const sends: Array<Component.Send> = []
-  const listed = listedOf(out.component)
+  const listed = listedChildren.of(out.component)
   for (const send of next.sends ?? []) {
     if (!delivered(out, send)) continue
     // A send to a `"model"` child is delivered, as the runtime does, and dropped while the Model doesn't
@@ -1692,7 +1683,8 @@ export const fireNode = <Props, Model, Msg, Events>(
   // An element of a `"model"` child's view is the child's: its record handles the event, unless it bubbles
   // past the child's view. What the story's component placed in the child's slots is the component's.
   const boundary = path.findIndex((ancestor) => shownModel.has(ancestor) || filledOutlets.has(ancestor))
-  const handlerAt = path.findIndex((ancestor) => ancestor === handlerOn(path, event))
+  const handler = handlerOn(path, event)
+  const handlerAt = handler === undefined ? -1 : path.indexOf(handler)
   if (boundary !== -1 && shownModel.has(path[boundary]!) && (handlerAt === -1 || handlerAt < boundary)) {
     let fired: Fired<any, any, any, any> | undefined
     const own = (copiedFrom.get(node) ?? node) as Locator.Node
@@ -1703,7 +1695,6 @@ export const fireNode = <Props, Model, Msg, Events>(
     )
     return { story: out, prevented: fired!.prevented, handled: fired!.handled }
   }
-  const handler = handlerOn(path, event)
   if (handler === undefined) {
     throw new Error(`${step}: nothing handles "${event}" at ${description}`)
   }

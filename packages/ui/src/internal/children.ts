@@ -5,6 +5,7 @@
  *
  * @internal
  */
+import * as Predicate from "effect/Predicate"
 import type * as Component from "../Component.ts"
 import type * as View from "../View.ts"
 import * as child from "./child.ts"
@@ -22,8 +23,7 @@ export interface Entry {
 }
 
 /** @internal */
-export const isEntry = (value: unknown): value is Entry =>
-  typeof value === "object" && value !== null && TypeId in value
+export const isEntry = (value: unknown): value is Entry => Predicate.hasProperty(value, TypeId)
 
 /**
  * An entry, once its component is checked: a `"view"` component is called in a view, not listed.
@@ -67,6 +67,10 @@ export interface Listed {
 
 /** A component's `children`, checked, by name. @internal */
 export type Children = ReadonlyArray<readonly [name: string, entry: Entry]>
+
+/** A component's `children`, when it has some: `Component.make` writes them. @internal */
+export const of = (component: object): Children | undefined =>
+  (component as { readonly "~children"?: Children | undefined })["~children"]
 
 /**
  * Checks `children` once, at `make`: every child has lifetime `"model"`. A component listed bare is an
@@ -124,7 +128,7 @@ export const helpers = (owner: string, children: Children, model: unknown): Reco
       throw new Error(`${owner} places ${found.ref.key} twice: a child of children is placed once`)
     }
     placed.add(found)
-    return declaration(found, options?.slots, false)
+    return declaration(found, options?.slots)
   }
   const rows = new Map<string, Map<string, Listed>>()
   for (const found of listed) {
@@ -150,12 +154,12 @@ export const helpers = (owner: string, children: Children, model: unknown): Reco
 }
 
 /**
- * The declarations of the children a Model lists, detached: how the runtime holds one no tree places.
+ * The declarations of the children a Model lists: how the runtime holds one no tree places.
  *
  * @internal
  */
 export const held = (owner: string, children: Children, model: unknown): Array<View.Child<any, any>> =>
-  list(owner, children, model).map((found) => declaration(found, undefined, true))
+  list(owner, children, model).map((found) => declaration(found, undefined))
 
 /**
  * Whether `key` is a ref key `children` can list, such as `profile` or `rows[a]`, listed now or not.
@@ -165,13 +169,5 @@ export const held = (owner: string, children: Children, model: unknown): Array<V
 export const lists = (children: Children, key: string): boolean =>
   children.some(([name, entry]) => entry[TypeId] === "keyed" ? key.startsWith(name + "[") : key === name)
 
-const declaration = (
-  listed: Listed,
-  slots: View.Child<any, any>["slots"],
-  detached: boolean
-): View.Child<any, any> =>
-  child.make(
-    listed.entry.component,
-    { ref: listed.ref, props: listed.props, onEmit: listed.entry.onEmit, slots },
-    detached
-  )
+const declaration = (listed: Listed, slots: View.Child<any, any>["slots"]): View.Child<any, any> =>
+  child.make(listed.entry.component, { ref: listed.ref, props: listed.props, onEmit: listed.entry.onEmit, slots })

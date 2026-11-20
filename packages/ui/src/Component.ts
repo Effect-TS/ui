@@ -1892,16 +1892,15 @@ const makeComponent = (
   proto: object,
   fields: { readonly [key: string]: unknown }
 ): any => {
-  const component = (_h: unknown, options: child.Options) => {
+  const { lifetime, name } = fields.definition as Definition.Any
+  const component: (h: unknown, options: child.Options) => View.Child<any, any> = lifetime === "model"
     // The types reject this call. A call through `Component.Any` gets here.
-    if ((fields.definition as Definition.Any).lifetime === "model") {
-      const name = (fields.definition as Definition.Any).name
+    ? () => {
       throw new Error(
         `${name} has lifetime "model", so it isn't called in a view: list it in its parent's children and place it with h.children`
       )
     }
-    return child.make(component as any, options)
-  }
+    : (_h, options) => child.make(component as any, options)
   Object.setPrototypeOf(component, proto)
   for (const key of Object.keys(fields)) {
     Object.defineProperty(component, key, { value: fields[key], enumerable: true, writable: true, configurable: true })
