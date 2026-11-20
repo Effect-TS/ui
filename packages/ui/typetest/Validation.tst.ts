@@ -45,6 +45,8 @@ describe("Validation.make", () => {
     expect(Form.change).type.not.toBeCallableWith(state, "missing", "")
     expect(Form.blur).type.not.toBeCallableWith(state, "missing")
     expect(Form.reject).type.not.toBeCallableWith(state, { missing: ["x"] })
+    expect(Form.checklist(state, "name")).type.toBe<ReadonlyArray<Validation.ChecklistItem>>()
+    expect(Form.checklist).type.not.toBeCallableWith(state, "missing")
     expect(Form.validate).type.toBeCallableWith(state, { name: AsyncResult.success(["Taken"]) })
     expect(Form.validate).type.not.toBeCallableWith(state, { name: AsyncResult.success(true) })
   })

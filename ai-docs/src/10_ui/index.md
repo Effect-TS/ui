@@ -329,6 +329,11 @@ until its field changes. By default each invalid field stops at its first
 failing rule (`errors: "first"`); pass `errors: "all"` to collect every
 failing rule and list `field.errors` below the field.
 
+For a list of requirements under a field, such as a password's, call
+`checklist(state, "password")`. It gives every rule of the field as
+`{ message, met }`, met or not. It ignores the mode, so the list can show
+from the first render, and an empty value meets no rule.
+
 An async check, such as "is this username taken", is a query whose args
 are `undefined` until `passes(state, "username")`. Pass its result to
 `validate`, mapped to a list of errors. The field is `Validating` while

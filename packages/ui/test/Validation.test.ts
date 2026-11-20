@@ -83,6 +83,28 @@ describe("Validation", () => {
     })
   })
 
+  it("lists every rule of a field as met or unmet, before the field shows", () => {
+    const Form = Validation.make({
+      password: {
+        rules: [
+          Rule.minLength(8, "At least 8 characters"),
+          [(password) => !password.includes(" "), (password) => `No spaces in "${password}"`]
+        ]
+      }
+    })
+    const at = (password: string) => Form.checklist(Form.init({ password }), "password")
+    assert.deepStrictEqual(at("hunter 2"), [
+      { message: "At least 8 characters", met: true },
+      { message: `No spaces in "hunter 2"`, met: false }
+    ])
+    // An empty value meets no rule, even one its predicate would pass.
+    assert.deepStrictEqual(at(""), [
+      { message: "At least 8 characters", met: false },
+      { message: `No spaces in ""`, met: false }
+    ])
+    assert.strictEqual(Form.validate(Form.init({ password: "hunter 2" })).fields.password._tag, "NotValidated")
+  })
+
   it("shows a field by its mode, and every field after a submit", () => {
     const shown = (mode: Validation.Mode) => {
       const Form = Validation.make({ a: { required: "A" }, b: { required: "B" }, c: { required: "C" } }, { mode })

@@ -114,10 +114,10 @@ const createAccount = (account: NewAccount) =>
 // args, so an answer about an earlier username is never shown for this one.
 export const validateSignup = (
   form: typeof SignupValidation.State.Type,
-  taken: AsyncResult.AsyncResult<boolean>
+  usernameTaken: AsyncResult.AsyncResult<boolean>
 ) =>
   SignupValidation.validate(form, {
-    username: AsyncResult.map(taken, (taken) => taken ? ["That username is taken"] : [])
+    username: AsyncResult.map(usernameTaken, (isTaken) => isTaken ? ["That username is taken"] : [])
   })
 
 // ---------------------------------------------------------------------------
@@ -134,7 +134,7 @@ export const SignupForm = Component.define({
   events: SignupEvents,
   elements: Html,
   queries: {
-    taken: {
+    usernameTaken: {
       query: IsUsernameTaken,
       debounce: "300 millis",
       // Ask only about a username that passes its own rules. `undefined`
@@ -160,7 +160,7 @@ export const SignupForm = Component.define({
     // field passes, so it gates the Command.
     SubmittedForm: (model, _message, $) => {
       const form = SignupValidation.submit(model.form)
-      return Option.match(validateSignup(form, $.queries.taken).value, {
+      return Option.match(validateSignup(form, $.queries.usernameTaken).value, {
         onNone: () => ({ ...model, form }),
         onSome: ({ confirm: _, ...account }) =>
           model.submitting ? model : $.set({ form, submitting: true }).run(createAccount(account))
@@ -175,7 +175,7 @@ export const SignupForm = Component.define({
     })
   },
   view: (model, h) => {
-    const { fields } = validateSignup(model.form, h.queries.taken)
+    const { fields } = validateSignup(model.form, h.queries.usernameTaken)
 
     // One field's markup, by its derived state. A ui-kit `Field` takes the
     // same facts: pass `invalid: true` for `Invalid`, `false` for `Valid`,
@@ -219,17 +219,17 @@ export const SignupForm = Component.define({
 // `validateSignup`, with the query's result from `s.queries`.
 export const checkedUsername = Effect.gen(function*() {
   const s = yield* Story.make(SignupForm, {})
-  const username = () => validateSignup(s.model.form, s.queries.taken).fields.username
+  const username = () => validateSignup(s.model.form, s.queries.usernameTaken).fields.username
 
   s.send(SignupMessage.UpdatedField({ name: "username", value: "ad" }))
   // { _tag: "Invalid", errors: ["Must be at least 3 characters"], ... }, and the query is disabled.
   s.send(SignupMessage.UpdatedField({ name: "username", value: "ada" }))
   // "Validating" until the query answers.
-  s.loaded("taken", true)
+  s.loaded("usernameTaken", true)
   // { _tag: "Invalid", errors: ["That username is taken"], ... }
   s.send(SignupMessage.UpdatedField({ name: "username", value: "ada_l" }))
   // "Validating" again: the answer for "ada" isn't shown for "ada_l".
-  s.loaded("taken", false)
+  s.loaded("usernameTaken", false)
   return username()._tag // "Valid"
 })
 
@@ -238,7 +238,7 @@ export const rejectedEmail = Effect.gen(function*() {
   const s = yield* Story.make(SignupForm, {})
   const account = { username: "ada_l", email: "ada@example.com", password: "correct horse" }
   s.send(SignupMessage.UpdatedField({ name: "username", value: account.username }))
-    .loaded("taken", false)
+    .loaded("usernameTaken", false)
     .send(SignupMessage.UpdatedField({ name: "email", value: account.email }))
     .send(SignupMessage.UpdatedField({ name: "password", value: account.password }))
     .send(SignupMessage.UpdatedField({ name: "confirm", value: account.password }))
@@ -248,9 +248,9 @@ export const rejectedEmail = Effect.gen(function*() {
     .keepPending(CreateAccount)
     .send(SignupMessage.UpdatedField({ name: "email", value: "grace@example.com" }))
     .fail(CreateAccount, new SignupRejected({ field: "email", message: "That email already has an account" }))
-  const before = validateSignup(s.model.form, s.queries.taken).fields.email
+  const before = validateSignup(s.model.form, s.queries.usernameTaken).fields.email
   s.send(SignupMessage.UpdatedField({ name: "email", value: "ada@example.org" }))
-  const after = validateSignup(s.model.form, s.queries.taken).fields.email
+  const after = validateSignup(s.model.form, s.queries.usernameTaken).fields.email
   return [before._tag, after._tag] // ["Invalid", "Valid"]
 })
 

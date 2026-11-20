@@ -45,7 +45,7 @@ import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Schema from "effect/Schema"
 
 /**
- * A rule's error message: a string, or a function of the value that failed.
+ * A rule's message: a string, or a function of the field's value.
  *
  * @stability experimental
  * @category models
@@ -339,6 +339,38 @@ export interface Invalid<A> {
 export type Field<A> = NotValidated<A> | Validating<A> | Valid<A> | Invalid<A>
 
 /**
+ * One rule of a field, as {@link Validation.checklist} reports it: its message
+ * and whether the field's value meets it.
+ *
+ * **Example** (A password's requirements)
+ *
+ * ```ts import.meta.vitest
+ * import { Validation } from "@effect/ui"
+ *
+ * const Rule = Validation.Rule
+ *
+ * const Signup = Validation.make({
+ *   password: {
+ *     required: "Password is required",
+ *     rules: [Rule.minLength(8, "At least 8 characters"), Rule.pattern(/\d/, "At least one number")]
+ *   }
+ * })
+ *
+ * // Nothing was submitted, so the field shows no error yet. The list is there anyway.
+ * const state = Signup.change(Signup.init({ password: "" }), "password", "hunter2")
+ * Signup.checklist(state, "password") // => [{ message: "At least 8 characters", met: false }, { message: "At least one number", met: true }]
+ * ```
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface ChecklistItem {
+  readonly message: string
+  readonly met: boolean
+}
+
+/**
  * The errors from async checks, by field: usually a query's result, mapped to
  * a list of errors.
  *
@@ -398,6 +430,10 @@ export interface Validated<Values> {
  * - `passes(state, name)`: whether the field is filled in and passes its own
  *   rules, ignoring checks and server errors. Use it to enable the query
  *   behind a check.
+ * - `checklist(state, name)`: every rule of the field with its message and
+ *   whether the value meets it, in the order written. It ignores the mode,
+ *   `errors`, checks and server errors, so a list of requirements can show
+ *   from the first render. An empty value meets no rule.
  * - `validate(state, checks?)`: derives a {@link Validated}. It is pure, so
  *   call it from `view`, `update` and tests.
  *
@@ -439,6 +475,10 @@ export interface Validation<Fields extends Validation.Fields> {
     ): State<Validation.Values<Fields>>
   }
   readonly passes: (self: State<Validation.Values<Fields>>, name: Validation.Name<Fields>) => boolean
+  readonly checklist: (
+    self: State<Validation.Values<Fields>>,
+    name: Validation.Name<Fields>
+  ) => ReadonlyArray<ChecklistItem>
   readonly validate: (
     self: State<Validation.Values<Fields>>,
     checks?: Checks<Validation.Values<Fields>>
@@ -656,6 +696,16 @@ export const make = <S, K extends string>(
     return !spec.isEmpty(value) && spec.rules.every(([predicate]) => predicate(value, state.values))
   }
 
+  const checklist = (state: AnyState, name: string): ReadonlyArray<ChecklistItem> => {
+    const spec = specs.get(name)!
+    const value = state.values[name]
+    const empty = spec.isEmpty(value)
+    return spec.rules.map(([predicate, message]) => ({
+      message: resolveMessage(message, value),
+      met: !empty && predicate(value, state.values)
+    }))
+  }
+
   const validate = (
     state: AnyState,
     checks: Record<string, AsyncResult.AsyncResult<ReadonlyArray<string>, never> | undefined> = {}
@@ -736,6 +786,7 @@ export const make = <S, K extends string>(
       return { ...self, rejected: Object.fromEntries(kept) }
     }),
     passes,
+    checklist,
     validate
   } as any
 }
