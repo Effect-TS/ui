@@ -6,7 +6,7 @@ import {
   MessageLog,
   Mount,
   Query,
-  type Renderer,
+  Renderer,
   Route,
   Router,
   Subscription,
@@ -762,6 +762,21 @@ describe("BrowserHost", { concurrent: false }, () => {
         HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name: "Plain" }))
         yield* tick
         expect(root.model()).toEqual(["click inner", "click outer"])
+      }).pipe(Effect.scoped))
+
+    it.effect("two mounts on one host each get their own events, and one that ends leaves the other's", () =>
+      Effect.gen(function*() {
+        const context = yield* Layer.build(BrowserHost.layer())
+        const [first, second] = [yield* container, yield* container]
+        const scope = yield* Scope.make()
+        const a = yield* Renderer.mount(Events, {}, first).pipe(Scope.provide(scope), Effect.provideContext(context))
+        const b = yield* Renderer.mount(Events, {}, second, { head: false }).pipe(Effect.provideContext(context))
+        HtmlLocator.click(HtmlLocator.getByRole(first, "button", { name: "Inner" }))
+        HtmlLocator.click(HtmlLocator.getByRole(second, "button", { name: "Plain" }))
+        yield* Scope.close(scope, Exit.void)
+        HtmlLocator.click(HtmlLocator.getByRole(second, "button", { name: "Inner" }))
+        yield* tick
+        expect([a.model(), b.model()]).toEqual([["click inner"], ["click outer", "click inner"]])
       }).pipe(Effect.scoped))
 
     it.effect("a click reports the pointer of the pointerdown before it, and none for a click from the keyboard", () =>

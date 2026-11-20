@@ -1228,6 +1228,9 @@ const setup = (
   let frozen = false
   const idleWaiters: Array<() => void> = []
 
+  // A host that reads its elements' events from the tree, through `eventsAlong`, instead of storing them.
+  const hostEvents = host.events
+
   // -- hydration ------------------------------------------------------------
   const hydration = host.hydration
   // Sets a property of an adopted element: the host's own way, or as on any other element.
@@ -4740,10 +4743,10 @@ const setup = (
    * unregistered when the child is attached or removed, or when that instance leaves, whichever comes first.
    * The parked child failing doesn't end it: its fallback stays.
    */
-  const parked = new Set<unknown>()
-  const park = (owner: Instance, container: unknown) => {
-    parked.add(container)
-    ;(owner.parked ??= new Set()).add(container)
+  const parked = new Map<unknown, { readonly owner: Instance; readonly detached: RDetached }>()
+  const park = (owner: Instance, detached: RDetached) => {
+    parked.set(detached.container, { owner, detached })
+    ;(owner.parked ??= new Set()).add(detached.container)
   }
   const unpark = (owner: Instance, container: unknown) => {
     parked.delete(container)
@@ -4883,18 +4886,36 @@ const setup = (
   }
 
   /**
-   * Gives the host an element's events. With only the author's layer the handlers go as they are.
-   * With owned layers, each event gets one `Layered` value, which the host hands back to `fireLayered`.
+   * Gives the host an element's events, or with a host that reads them from the tree, the names to listen
+   * for. Owned layers are merged here too, so two owners' clashing options fail the render.
    */
   const setEvents = (inst: Instance, node: unknown, view: View.Element<any, any>) => {
-    const author = inst.author
     if (view.owned === undefined || view.owned.length === 0) {
-      return host.setEvents(node, view.handlers, author.fire, view.eventOptions)
+      if (hostEvents === undefined) host.setEvents(node, view.handlers, inst.author.fire, view.eventOptions)
+      else if (view.handlers !== View.noFields || view.eventOptions !== View.noFields) {
+        hostEvents.listen(view.handlers, view.eventOptions)
+      }
+      return
     }
+    const events = layeredEvents(inst, view, view.owned)
+    if (hostEvents === undefined) host.setEvents(node, events.handlers, events.dispatch, events.options)
+    else hostEvents.listen(events.handlers, events.options)
+  }
+
+  /** An element's events: with only the author's layer, its handlers as they are. */
+  const eventsOf = (inst: Instance, view: View.Element<any, any>): Renderer.Events =>
+    view.owned === undefined || view.owned.length === 0
+      ? { handlers: view.handlers, dispatch: inst.author.fire, options: view.eventOptions }
+      : layeredEvents(inst, view, view.owned)
+
+  /** With owned layers, each event gets one `Layered` value, which the host hands back to `fireLayered`. */
+  const layeredEvents = (
+    inst: Instance,
+    view: View.Element<any, any>,
+    layers: ReadonlyArray<View.Owned>
+  ): Renderer.Events => {
     // Deepest owner first, and the author last.
-    const owned = view.owned.length === 1
-      ? view.owned
-      : view.owned.slice().sort((a, b) => b.owner.depth - a.owner.depth)
+    const owned = layers.length === 1 ? layers : layers.slice().sort((a, b) => b.owner.depth - a.owner.depth)
     const handlers: Record<string, Layered> = {}
     const add = (target: Instance, layer: Pick<View.Owned, "handlers" | "eventOptions">) => {
       for (const event in layer.handlers) {
@@ -4906,8 +4927,78 @@ const setup = (
       }
     }
     for (const layer of owned) add(ownerInstance(inst, layer.owner), layer)
-    add(author, view)
-    host.setEvents(node, handlers as any, fireLayered, mergeOptions(inst, [...owned, view]))
+    add(inst.author, view)
+    return { handlers: handlers as any, dispatch: fireLayered, options: mergeOptions(inst, [...owned, view]) }
+  }
+
+  /**
+   * The events of each node of `path` that is an element of this tree, innermost first as an event's path
+   * is. They are found by walking the rendered tree down along the path, from the mount's container or
+   * from the container of the detached child the path starts in. A node of the path that isn't the tree's,
+   * such as one in a shadow tree between an element and its slotted child, is passed over.
+   */
+  const eventsAlong = (path: ReadonlyArray<unknown>): ReadonlyArray<Renderer.Events | undefined> => {
+    const out: Array<Renderer.Events | undefined> = new Array(path.length)
+    for (let at = path.length - 1; at >= 0; at--) {
+      const node = path[at]
+      if (node === container) {
+        if (rootInstance !== undefined) walkEvents(rootInstance, rootInstance.rendered, path, at - 1, out)
+        break
+      }
+      const held = parked.size === 0 ? undefined : parked.get(node)
+      if (held !== undefined) {
+        walkEvents(held.owner, held.detached.inner, path, at - 1, out)
+        break
+      }
+    }
+    return out
+  }
+  const walkEvents = (
+    inst: Instance,
+    items: Rendered | ReadonlyArray<Rendered> | undefined,
+    path: ReadonlyArray<unknown>,
+    from: number,
+    out: Array<Renderer.Events | undefined>
+  ) => {
+    for (let at = from; at >= 0; at--) {
+      const found = findElement(inst, items, path[at])
+      if (found === undefined) continue
+      inst = foundIn!
+      out[at] = eventsOf(inst, found.v)
+      items = found.children
+    }
+  }
+  // The instance whose tree held the element `findElement` found last.
+  let foundIn: Instance | undefined
+  /** The element of `items` whose node is `node`, looked for through the children and fallbacks they place. */
+  const findElement = (
+    inst: Instance,
+    items: Rendered | ReadonlyArray<Rendered> | undefined,
+    node: unknown
+  ): RElement | undefined => {
+    if (items === undefined) return undefined
+    if (!Array.isArray(items)) return findIn(inst, items as Rendered, node)
+    for (let index = 0; index < items.length; index++) {
+      const found = findIn(inst, items[index]!, node)
+      if (found !== undefined) return found
+    }
+    return undefined
+  }
+  const findIn = (inst: Instance, item: Rendered, node: unknown): RElement | undefined => {
+    switch (item._tag) {
+      case "Element":
+        if (item.node !== node) return undefined
+        foundIn = inst
+        return item
+      case "Child":
+      case "Outlet":
+        return findElement(item.inst, item.inst.rendered, node)
+      case "Fallback":
+        return findIn(inst, item.inner, node)
+      // A detached child's nodes are in its container, and text holds no events.
+      default:
+        return undefined
+    }
   }
 
   const fireLayered: Renderer.Dispatch = (event, handler, payload, onMessage) => {
@@ -6371,7 +6462,6 @@ const setup = (
       )
     }
     const container = host.createContainer()
-    park(inst, container)
     const placeholder = host.createText("")
     const nodes = nodesOf(rendered)
     const parentNode = nodes.length === 0 ? undefined : host.parentOf(nodes[0])
@@ -6384,7 +6474,9 @@ const setup = (
     toggleMounts(inst, rendered, inst.env, false)
     if (rendered._tag === "Child") record(rendered.inst, { _tag: "Detached" })
     viewChanged = true
-    return { _tag: "Detached", v: rendered.v, inner: rendered, node: placeholder, container }
+    const detached: RDetached = { _tag: "Detached", v: rendered.v, inner: rendered, node: placeholder, container }
+    park(inst, detached)
+    return detached
   }
 
   /** Puts a detached child's nodes back where its placeholder is, and starts its element mounts again. */
@@ -6518,6 +6610,7 @@ const setup = (
       }
     })
   )
+  if (hostEvents !== undefined) addFinalizer(rootScope, Effect.sync(hostEvents.connect(eventsAlong)))
   // Hydration: the root's range among the container's nodes, which may hold more than the app.
   const rootPath = `/${component.definition.name}`
   let rootRange: Range | undefined

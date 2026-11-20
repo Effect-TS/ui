@@ -154,6 +154,12 @@ const withoutContainer = () => {
   return host
 }
 
+/** A test host that stores each element's events, as a host without `events` does. */
+const withoutEvents = () => {
+  const { events: _, ...host } = TestHost.makeHost()
+  return host
+}
+
 describe("detached children", () => {
   it.effect("a hidden tab keeps its draft and its save, gets messages, and emits through the latest onEmit", () =>
     provideHost(Effect.gen(function*() {
@@ -183,6 +189,25 @@ describe("detached children", () => {
       assert.strictEqual(root.head().title, "Profile")
       assert.strictEqual(root.text(), "draft:savesaved:a")
       assert.deepStrictEqual(lifecycle(root, "/Settings/Profile[Form]"), ["Mounted", "Detached", "Attached"])
+    })))
+
+  it.effect("an event on a node of a detached child reaches the child", () =>
+    provideHost(Effect.gen(function*() {
+      const typeWhileDetached = Effect.gen(function*() {
+        const root = yield* TestHost.mount(makeSettings(makeForm(yield* Deferred.make<void>())), {})
+        const typed = root.get(Locator.text("draft:", { exact: true }))
+        root.send(SettingsMsg.Show({ tab: "billing" }))
+        yield* TestHost.settle
+        Locator.fire(typed, "click")
+        root.send(SettingsMsg.Show({ tab: "profile" }))
+        yield* TestHost.settle
+        return root.text()
+      })
+      assert.strictEqual(yield* typeWhileDetached, "draft:asavesaved:")
+      assert.strictEqual(
+        yield* typeWhileDetached.pipe(Effect.provide(Renderer.layer(withoutEvents()))),
+        "draft:asavesaved:"
+      )
     })))
 
   it.effect("keeps a nested detached child detached when its parent is attached, and detaches a new key", () =>

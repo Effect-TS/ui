@@ -59,6 +59,50 @@ export type Dispatch = (
 ) => void
 
 /**
+ * An element's events as a host reads them: its handlers, the dispatch that
+ * runs them and their options.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Events {
+  readonly handlers: Readonly<Record<string, View.Handler<unknown, any>>>
+  readonly dispatch: Dispatch
+  readonly options: Readonly<Record<string, View.EventOptions>>
+}
+
+/**
+ * How a host reads its elements' events from the renderer when an event
+ * fires, instead of storing them per element with `setEvents`.
+ *
+ * **Details**
+ *
+ * Each mount calls `connect` once with its `lookup`, and calls the function
+ * it returns when the mount ends. A host may serve several mounts at once, so
+ * it asks each mount's lookup. `lookup` takes an event's path, innermost node
+ * first, as `composedPath()` gives it, and returns, at each index, the events
+ * of that node if it is an element of the mount's tree. The renderer reads
+ * them from the tree it rendered last, so a node that is no longer in the
+ * tree gets no events.
+ *
+ * `listen` is called where `setEvents` would be, with the handlers and
+ * options of an element that has some, so the host can start listening for
+ * the events they name. It may be called again with the same names.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface HostEvents<Node> {
+  connect(lookup: (path: ReadonlyArray<Node>) => ReadonlyArray<Events | undefined>): () => void
+  listen(
+    handlers: Readonly<Record<string, View.Handler<unknown, any>>>,
+    options: Readonly<Record<string, View.EventOptions>>
+  ): void
+}
+
+/**
  * What a target must provide to show views: node operations plus a few
  * capabilities.
  *
@@ -99,6 +143,10 @@ export type Dispatch = (
  * `createContainer` makes a node that holds the nodes of a `detached` child
  * out of the document, such as a `DocumentFragment`. It is never inserted.
  * A host without it fails the parent of a child declared `detached`.
+ *
+ * `events`, if given, has the host read an element's events from the
+ * renderer when an event fires, so the host stores nothing per element and
+ * `setEvents` is never called. A host without it gets `setEvents`.
  *
  * `removeChildren`, if given, removes `nodes`, all children of `parent`, at
  * once, as `remove` on each would. The renderer may call it when a patch
@@ -143,6 +191,7 @@ export interface Host<Node> {
   readonly hydration?: Hydration<Node> | undefined
   readonly createContainer?: (() => Node) | undefined
   readonly removeChildren?: ((parent: Node, nodes: ReadonlyArray<Node>) => void) | undefined
+  readonly events?: HostEvents<Node> | undefined
 }
 
 /**

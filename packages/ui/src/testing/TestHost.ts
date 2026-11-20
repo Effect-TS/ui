@@ -77,6 +77,8 @@ import * as TestQuery from "./TestQuery.ts"
  *
  * `attrs` and `props` hold what the renderer set. To act as the user editing
  * a controlled property, set `props` directly, then fire the event.
+ * `handlers`, `eventOptions`, `owners` and `dispatch` are read from the
+ * tree the renderer rendered last, so an element that left it has none.
  * `eventOptions` holds the options set with the handlers. The test host has
  * no default actions, so it applies none of them; a `Story` reports
  * `defaultPrevented`.
@@ -92,16 +94,16 @@ export interface TestElement extends Locator.Firable {
   readonly props: Record<string, unknown>
   readonly children: Array<TestNode>
   parent: TestElement | undefined
-  handlers: Readonly<Record<string, View.Handler<unknown, any>>>
-  eventOptions: Readonly<Record<string, View.EventOptions>>
+  readonly handlers: Readonly<Record<string, View.Handler<unknown, any>>>
+  readonly eventOptions: Readonly<Record<string, View.EventOptions>>
   /**
    * For each event a part of a headless component handles here, the paths
    * of the instances that get it: the deepest owner first, and the
    * component that wrote the element last. An event only that component
    * handles isn't listed.
    */
-  owners: Readonly<Record<string, ReadonlyArray<string>>>
-  dispatch: Renderer.Dispatch | undefined
+  readonly owners: Readonly<Record<string, ReadonlyArray<string>>>
+  readonly dispatch: Renderer.Dispatch | undefined
 }
 
 /**
@@ -127,29 +129,63 @@ export interface TestText extends Locator.Firable {
  */
 export type TestNode = TestElement | TestText
 
-function fireFrom(this: TestNode, event: string, payload: unknown): void {
-  let node: TestElement | undefined = this._tag === "Element" ? this : this.parent
-  while (node !== undefined) {
-    const handler = node.handlers[event]
-    if (handler !== undefined && node.dispatch !== undefined) return node.dispatch(event, handler, payload)
-    node = node.parent
+/** The events of each node of a path, innermost first: what a host's lookups find. */
+type EventsAlong = (path: ReadonlyArray<TestNode>) => ReadonlyArray<Renderer.Events | undefined>
+
+const noEvents: EventsAlong = () => []
+const noFields: Readonly<Record<string, never>> = {}
+
+/** `node` and its ancestors. */
+const pathFrom = (node: TestNode): Array<TestNode> => {
+  const path: Array<TestNode> = []
+  for (let at: TestNode | undefined = node; at !== undefined; at = at.parent) path.push(at)
+  return path
+}
+
+const fireFrom = (along: EventsAlong, node: TestNode, event: string, payload: unknown): void => {
+  for (const entry of along(pathFrom(node))) {
+    const handler = entry?.handlers[event]
+    if (entry !== undefined && handler !== undefined) return entry.dispatch(event, handler, payload)
   }
   throw new Error(`TestHost: nothing handles "${event}" here or above`)
 }
 
-const makeElement = (tag: string): TestElement => ({
-  _tag: "Element",
-  tag,
-  attrs: {},
-  props: {},
-  children: [],
-  parent: undefined,
-  handlers: {},
-  eventOptions: {},
-  owners: {},
-  dispatch: undefined,
-  fire: fireFrom
-})
+const makeElement = (tag: string, along: EventsAlong = noEvents): TestElement => {
+  const events = () => along(pathFrom(element))[0]
+  const element: TestElement = {
+    _tag: "Element",
+    tag,
+    attrs: {},
+    props: {},
+    children: [],
+    parent: undefined,
+    get handlers() {
+      return events()?.handlers ?? noFields
+    },
+    get eventOptions() {
+      return events()?.options ?? noFields
+    },
+    get owners() {
+      const found = events()
+      return found === undefined ? noFields : runtime.eventOwners(found.handlers)
+    },
+    get dispatch() {
+      return events()?.dispatch
+    },
+    fire: (event, payload) => fireFrom(along, element, event, payload)
+  }
+  return element
+}
+
+const makeText = (text: string, along: EventsAlong): TestText => {
+  const node: TestText = {
+    _tag: "Text",
+    text,
+    parent: undefined,
+    fire: (event, payload) => fireFrom(along, node, event, payload)
+  }
+  return node
+}
 
 const describe = (node: TestNode): string => node._tag === "Text" ? JSON.stringify(node.text) : `<${node.tag}>`
 
@@ -178,6 +214,18 @@ export const makeHost = (): Renderer.Host<TestNode> & {
   let operations: Array<string> = []
   let commits = 0
   const listeners = new Set<() => void>()
+  // Each mount's lookup, and the events `setEvents` was given by a renderer that doesn't connect one.
+  const lookups: Array<EventsAlong> = []
+  const bound = new WeakMap<TestNode, Renderer.Events>()
+  const along: EventsAlong = (path) => {
+    const out: Array<Renderer.Events | undefined> = new Array(path.length)
+    for (const lookup of lookups) {
+      const found = lookup(path)
+      for (let i = 0; i < path.length; i++) out[i] ??= found[i]
+    }
+    for (let i = 0; i < path.length; i++) out[i] ??= bound.get(path[i]!)
+    return out
+  }
   return {
     operations: () => operations,
     clearOperations: () => {
@@ -192,16 +240,16 @@ export const makeHost = (): Renderer.Host<TestNode> & {
     },
     createElement(tag) {
       operations.push(`create <${tag}>`)
-      return makeElement(tag)
+      return makeElement(tag, along)
     },
     createText(text) {
       operations.push(`create ${JSON.stringify(text)}`)
-      return { _tag: "Text", text, parent: undefined, fire: fireFrom }
+      return makeText(text, along)
     },
     // A detached child's nodes go in an element that is never inserted, so no query reaches them.
     createContainer() {
       operations.push("create container")
-      return makeElement("#container")
+      return makeElement("#container", along)
     },
     setText(node, text) {
       operations.push(`text ${describe(node)} -> ${JSON.stringify(text)}`)
@@ -239,11 +287,16 @@ export const makeHost = (): Renderer.Host<TestNode> & {
       return parent === undefined ? undefined : parent.children[parent.children.indexOf(node) + 1]
     },
     setEvents(node, handlers, dispatch, options) {
-      const element = node as TestElement
-      element.handlers = handlers
-      element.eventOptions = options
-      element.owners = runtime.eventOwners(handlers)
-      element.dispatch = dispatch
+      bound.set(node, { handlers, dispatch, options })
+    },
+    events: {
+      connect(lookup) {
+        lookups.push(lookup)
+        return () => {
+          lookups.splice(lookups.indexOf(lookup), 1)
+        }
+      },
+      listen() {}
     },
     elements: "any",
     controlled: new Set(["value", "checked", "selected", "open"]),
