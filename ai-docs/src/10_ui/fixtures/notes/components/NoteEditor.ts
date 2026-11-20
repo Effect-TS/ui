@@ -112,7 +112,7 @@ const save = NoteEditorDef.update("RequestedSave", (model, _message, $) =>
 // the Model, like any other.
 const clickedDiscard = NoteEditorDef.update(
   "ClickedDiscard",
-  (_model, _message, $) => $.combine(closeActions, (_model, _message, $) => $.evolve({ confirming: true }))
+  (_model, _message, $) => $.combine(closeActions, (model) => Component.evolve(model, { confirming: true }))
 )
 
 // A fragment takes `h` first and any other arguments after it, and is
@@ -211,10 +211,11 @@ export const NoteEditorNoDeps = NoteEditorDef.make({
   update: {
     // `$.evolve` changes the fields it's given and keeps the rest. A field
     // takes its new value, or a function of its old value. It returns a step,
-    // so `.run`, `.emit` and another `.evolve` chain after it.
+    // so `.run`, `.emit` and another `.evolve` chain after it. `$.set`
+    // replaces the whole Model instead.
     UpdatedBody: (_model, { body }, $) => $.evolve({ draft: body, edits: (edits) => edits + 1 }),
     RequestedSave: save,
-    // `$.emit` reports to the parent. `$.set` replaces the whole Model.
+    // `$.emit` reports to the parent.
     SucceededSaveNote: (_model, { note }, $) => $.evolve({ saved: note.body }).emit(NoteEditorEvents.Saved({ note })),
     // A handler that returns a bare Model can use `Component.evolve`, which
     // takes the same fields.

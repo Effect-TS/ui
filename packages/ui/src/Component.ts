@@ -884,12 +884,9 @@ type RawStepRequirements<U> = U extends InitStep<infer _Model, infer _Msg, infer
  * @since 0.1.0
  */
 export type EvolveFields<S> = unknown extends S ? "evolve needs the struct's type: write evolve<Model>(...)"
-  : true extends IsUnion<S> ? "evolve takes one struct: match the union first"
+  : Types.IsUnion<S> extends true ? "evolve takes one struct: match the union first"
   : S extends ReadonlyArray<unknown> ? "evolve takes a struct, not an array"
   : { readonly [K in keyof S]?: EvolveField<S[K]> }
-
-// `true` in some branch when `T` is a union, even one whose members overlap.
-type IsUnion<T, U = T> = T extends unknown ? ([U] extends [T] ? false : true) : never
 
 // A field that may hold a function, optional callbacks included, can't be
 // told from an updater.
@@ -897,12 +894,13 @@ type EvolveField<A> = 0 extends 1 & A ? any
   : [Extract<A, (...args: any) => any>] extends [never] ? A | ((value: A) => A)
   : never
 
-const applyFields = (self: any, fields: Record<string, unknown>) => {
+const applyFields = (self: any, fields: Record<PropertyKey, unknown>) => {
   let out = self
-  for (const key of Reflect.ownKeys(fields) as Array<string>) {
+  for (const key of Reflect.ownKeys(fields)) {
     const field = fields[key]
-    const value = typeof field === "function" ? field(self[key]) : field
-    if (!Object.is(value, self[key])) {
+    const previous = self[key]
+    const value = typeof field === "function" ? field(previous) : field
+    if (!Object.is(value, previous)) {
       if (out === self) out = { ...self }
       out[key] = value
     }
@@ -995,7 +993,7 @@ const StepProto = {
   modify(this: Step<any, any, any, any>, f: (model: any) => any) {
     return makeStep(f(this.model), this.commands, this.emitted, this.lists, this.sends)
   },
-  evolve(this: Step<any, any, any, any>, fields: Record<string, unknown>) {
+  evolve(this: Step<any, any, any, any>, fields: Record<PropertyKey, unknown>) {
     return makeStep(applyFields(this.model, fields), this.commands, this.emitted, this.lists, this.sends)
   },
   run(this: Step<any, any, any, any>, ...commands: ReadonlyArray<Command.Command<any, any>>) {
@@ -2555,7 +2553,7 @@ import { Query } from "@effect/ui"
  *
  * // `msg` is the UpdatedBody message.
  * const handleUpdatedBody = NotePageDef.update("UpdatedBody", (_model, msg, $) =>
- *   $.combine((_model, _msg, $) => $.evolve({ body: msg.body }), touch))
+ *   $.combine((model) => Component.evolve(model, { body: msg.body }), touch))
  *
  * // `h` first, then any other arguments.
  * const counter = NotePageDef.fragment((h, edits: number) => h.el("small", `${edits} edits`))

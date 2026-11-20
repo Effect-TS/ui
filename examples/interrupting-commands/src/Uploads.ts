@@ -122,7 +122,7 @@ export const UploadsNoDeps = UploadsDef.make({
         sizeMegabytes: file.sizeMegabytes,
         status: "Uploading"
       }
-      return $.evolve({ uploadId: (id) => id + 1, uploads: (uploads) => [...uploads, upload] }).run(
+      return $.set({ uploadId: model.uploadId + 1, uploads: [...model.uploads, upload] }).run(
         UploadFile.make({ uploadId: upload.id, sizeMegabytes: upload.sizeMegabytes })
       )
     },
