@@ -6,15 +6,16 @@ import {
   MessageLog,
   Mount,
   Query,
-  type Renderer,
+  Renderer,
   Route,
   Router,
   Subscription,
   UiSchema,
   View
 } from "@effect/ui"
-import { BrowserHost, Html } from "@effect/ui/html"
+import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
+import { TestHost } from "@effect/ui/testing"
 import { assert, expect, it } from "@effect/vitest"
 import { Cause, Context, Deferred, Effect, Exit, Layer, Option, Schema, Scope, Stream } from "effect"
 import { describe, vi } from "vitest"
@@ -25,6 +26,18 @@ import { maxTitle, TodoApp } from "./fixtures/todos.ts"
 
 /** Lets the render flush, Commands and the controlled-property restore run. */
 const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))
+
+/** Defines a custom element that clicks its buttons once it is in the document, after `before` runs. */
+const clicksWhenConnected = (name: string, before?: () => void) =>
+  customElements.define(
+    name,
+    class extends HTMLElement {
+      connectedCallback() {
+        before?.()
+        for (const button of this.querySelectorAll("button")) button.click()
+      }
+    }
+  )
 
 const container = Effect.acquireRelease(
   Effect.sync(() => document.body.appendChild(document.createElement("div"))),
@@ -763,6 +776,161 @@ describe("BrowserHost", { concurrent: false }, () => {
         yield* tick
         expect(root.model()).toEqual(["click inner", "click outer"])
       }).pipe(Effect.scoped))
+
+    it.effect("two mounts on one host each get their own events, and one that ends leaves the other's", () =>
+      Effect.gen(function*() {
+        const context = yield* Layer.build(BrowserHost.layer())
+        const [first, second] = [yield* container, yield* container]
+        const scope = yield* Scope.make()
+        const a = yield* Renderer.mount(Events, {}, first).pipe(Scope.provide(scope), Effect.provideContext(context))
+        const b = yield* Renderer.mount(Events, {}, second, { head: false }).pipe(Effect.provideContext(context))
+        HtmlLocator.click(HtmlLocator.getByRole(first, "button", { name: "Inner" }))
+        HtmlLocator.click(HtmlLocator.getByRole(second, "button", { name: "Plain" }))
+        yield* Scope.close(scope, Exit.void)
+        HtmlLocator.click(HtmlLocator.getByRole(second, "button", { name: "Inner" }))
+        yield* tick
+        expect([a.model(), b.model()]).toEqual([["click inner"], ["click outer", "click inner"]])
+      }).pipe(Effect.scoped))
+
+    clicksWhenConnected("x-clicks-on-connect")
+    const LogPage = Component.define({ name: "Page", model: Schema.Array(Schema.String), message: Schema.String })
+    const logPage = (view: Parameters<typeof LogPage.make>[0]["view"]) =>
+      LogPage.make({
+        init: (): ReadonlyArray<string> => [],
+        update: (log, message) => [...log, message],
+        view
+      })
+
+    it.effect("an event an insertion fires reaches the inserted element and its ancestors' post-patch handlers", () =>
+      Effect.gen(function*() {
+        const Page = logPage((log, h) => {
+          // The patch changes the outer handler and takes the inner one away, as it inserts the element.
+          const inner = log.length === 0 ? h.el("section").on("click", "inner") : h.el("section")
+          return h.el("div").on("click", log.length === 0 ? "old" : "new").children(
+            inner.children(
+              log.length === 0
+                ? h.el("span")
+                : h.el(
+                  "x-clicks-on-connect",
+                  h.el("button").on("click", "inserted").children("Inserted"),
+                  h.el("button").children("Go")
+                )
+            )
+          )
+        })
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Page, {}, app)
+        root.send("start")
+        yield* tick
+        expect(root.model()).toEqual(["start", "inserted", "new"])
+      }).pipe(Effect.scoped))
+
+    it.effect("a detached child gets the events it fires as it is attached", () =>
+      Effect.gen(function*() {
+        const Counter = Component.define({ name: "Counter", model: Schema.Number, message: Schema.String }).make({
+          init: () => 0,
+          update: (count) => count + 1,
+          view: (count, h) => h.el("x-clicks-on-connect", h.el("button").on("click", "hit").children(`Hit ${count}`))
+        })
+        const Shell = Component.define({ name: "Shell", model: Schema.Boolean, message: Schema.String }).make({
+          init: () => true,
+          update: () => false,
+          view: (detached, h) => h.el("div", Counter(h, { key: "c", detached }))
+        })
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Shell, {}, app)
+        root.send("attach")
+        yield* tick
+        assert.strictEqual(HtmlLocator.getByRole(app, "button").textContent, "Hit 1")
+      }).pipe(Effect.scoped))
+
+    it.effect("an element hydration rebuilds gets the events it fires as it goes in", () =>
+      Effect.gen(function*() {
+        const Page = logPage((_, h) =>
+          h.el("main", h.el("x-clicks-on-connect", h.el("button").on("click", "hit").children("Hit")))
+        )
+        const rendered = yield* HtmlServer.renderToHtml(Page, {})
+        const app = yield* container
+        app.innerHTML = rendered.html
+        // The client finds a span where the server wrote the custom element, and builds that one anew.
+        app.querySelector("x-clicks-on-connect")!.replaceWith(document.createElement("span"))
+        const root = yield* BrowserHost.mountEffect(Page, {}, app, { state: rendered.state })
+        yield* tick
+        expect(root.model()).toEqual(["hit"])
+      }).pipe(Effect.scoped))
+
+    // A custom element that submits its form once it is in the document, and keeps whether the app took it.
+    const prevented: Array<boolean> = []
+    customElements.define(
+      "x-submits-on-insert",
+      class extends HTMLElement {
+        connectedCallback() {
+          const event = new Event("submit", { bubbles: true, cancelable: true })
+          this.closest("form")!.dispatchEvent(event)
+          prevented.push(event.defaultPrevented)
+        }
+      }
+    )
+    for (
+      const [name, form] of [
+        ["a form the patch inserts", (h: any, after: boolean) => after ? h.el("form") : h.el("div")],
+        [
+          "a form whose submit handler the patch takes away",
+          (h: any, after: boolean) => after ? h.el("form") : h.el("form").on("submit", "sent")
+        ]
+      ] as const
+    ) {
+      it.effect(`a submission during a patch is the app's: ${name}`, () =>
+        Effect.gen(function*() {
+          prevented.length = 0
+          const Page = logPage((log, h) =>
+            form(h, log.length > 0).children(log.length > 0 ? h.el("x-submits-on-insert") : h.el("span"))
+          )
+          const app = yield* container
+          const root = yield* BrowserHost.mountEffect(Page, {}, app)
+          root.send("insert")
+          yield* tick
+          expect(prevented).toEqual([true])
+        }).pipe(Effect.scoped))
+    }
+
+    it.effect("an element a patch inserts gets its events after a patch inside its insertion", () =>
+      Effect.gen(function*() {
+        const testHost = yield* TestHost.TestHost
+        // Renders what the scheduler holds, here a child's patch, before it clicks.
+        clicksWhenConnected("x-flushes-then-clicks", () => testHost.drain(testHost.budget))
+        const Rows = Component.define({ name: "Rows", model: Schema.Number, message: Schema.String }).make({
+          init: () => 0,
+          update: (count) => count + 1,
+          view: (count, h) =>
+            h.el(
+              "div",
+              h.el("button").on("click", "more").children("More"),
+              ...Array.from({ length: count }, (_, index) => h.el("p", `${index}`))
+            )
+        })
+        const Page = logPage((log, h) =>
+          h.el(
+            "div",
+            Rows(h, { key: "r" }),
+            ...(log.length === 0
+              ? []
+              : [h.el("x-flushes-then-clicks", h.el("button").on("click", "appended").children("Appended"))])
+          )
+        )
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Page, {}, app)
+        testHost.drain(testHost.budget)
+        const more = HtmlLocator.getByRole(app, "button", { name: "More" })
+        // Rows waits for the flush, and then Page does too.
+        HtmlLocator.click(more)
+        root.send("append")
+        // Page renders now, ahead of the message to Rows, and inserts the custom element.
+        HtmlLocator.click(more)
+        testHost.drain(testHost.budget)
+        expect(root.model()).toEqual(["append", "appended"])
+        assert.strictEqual(app.querySelectorAll("p").length, 2)
+      }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
 
     it.effect("a click reports the pointer of the pointerdown before it, and none for a click from the keyboard", () =>
       Effect.gen(function*() {
@@ -1806,6 +1974,69 @@ describe("BrowserHost", { concurrent: false }, () => {
           yield* collectGarbage
           expect(model.deref()).toBeUndefined()
           expect(field.isConnected).toBe(false)
+        }).pipe(Effect.scoped)
+    )
+
+    it.effect.skipIf(process.versions.bun !== undefined || process.versions.deno !== undefined)(
+      "a child the last event reached doesn't stay alive once it is removed",
+      () =>
+        Effect.gen(function*() {
+          let model: WeakRef<object> | undefined
+          const Item = Component.define({ name: "Item", model: Schema.Struct({}), message: Schema.Null }).make({
+            init: () => {
+              const value = {}
+              model = new WeakRef(value)
+              return value
+            },
+            update: (value) => value,
+            view: (_, h) => h.el("button").on("click", null).children("Item")
+          })
+          const Page = Component.define({ name: "Page", model: Schema.Boolean, message: Schema.Null }).make({
+            init: () => true,
+            update: () => false,
+            view: (shown, h) => h.el("div", h.text("Remove"), shown ? Item(h, { key: "i" }) : null)
+          })
+          const app = yield* container
+          const root = yield* BrowserHost.mountEffect(Page, {}, app)
+          HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name: "Item" }))
+          yield* tick
+          // Removed by a message, with no event after the one inside it.
+          root.send(null)
+          yield* tick
+          expect(app.textContent).toBe("Remove")
+          yield* collectGarbage
+          expect(model!.deref()).toBeUndefined()
+        }).pipe(Effect.scoped)
+    )
+
+    it.effect.skipIf(process.versions.bun !== undefined || process.versions.deno !== undefined)(
+      "a root whose view fails keeps nothing of that view while it shows its fallback",
+      () =>
+        Effect.gen(function*() {
+          let props: WeakRef<object> | undefined
+          const Item = Component.define({
+            name: "Item",
+            props: Schema.Struct({}),
+            model: Schema.Null,
+            message: Schema.Never
+          })
+            .make({ init: () => null, update: (model) => model, view: (_, h) => h.text("item") })
+          const Broken = Component.define({ name: "Broken", model: Schema.Null, message: Schema.Never }).make({
+            init: () => null,
+            update: (model) => model,
+            view: (_, h) => {
+              const value = {}
+              props = new WeakRef(value)
+              // Two elements with one key: the render fails once its child paths are checked.
+              return h.el("div", Item(h, { key: "i", props: value }), h.el("p").key("k"), h.el("p").key("k"))
+            }
+          })
+          const app = yield* container
+          yield* BrowserHost.mountEffect(Broken, {}, app, { fallback: (_, h) => h.text("failed") })
+          yield* tick
+          expect(app.textContent).toBe("failed")
+          yield* collectGarbage
+          expect(props!.deref()).toBeUndefined()
         }).pipe(Effect.scoped)
     )
 

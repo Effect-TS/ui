@@ -106,6 +106,7 @@ import * as Layer from "effect/Layer"
 import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import type * as Scope from "effect/Scope"
 import type * as Component from "../Component.ts"
+import * as hostEvents from "../internal/hostEvents.ts"
 import * as queryCore from "../internal/queryCore.ts"
 import * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
@@ -225,10 +226,15 @@ const controlOf = (node: globalThis.Node): globalThis.Element => {
   return element.localName === "option" ? element.closest("select") ?? element : element
 }
 
-interface Bound {
-  readonly handlers: Readonly<Record<string, View.Handler<unknown, any>>>
-  readonly dispatch: Renderer.Dispatch
-  readonly options: Readonly<Record<string, View.EventOptions>>
+/** The node above `node` on an event's path: its parent, or a shadow root's host. */
+const upFrom = (node: globalThis.Node): globalThis.Node | null =>
+  node.parentNode ?? (node.nodeType === 11 ? (node as ShadowRoot).host ?? null : null)
+
+/** `node` and the nodes above it, as an event at `node` would go. */
+const pathFrom = (node: globalThis.Node): Array<globalThis.Node> => {
+  const path: Array<globalThis.Node> = []
+  for (let at: globalThis.Node | null = node; at !== null; at = upFrom(at)) path.push(at)
+  return path
 }
 
 const isEmpty = (record: object): boolean => {
@@ -424,8 +430,11 @@ export const makeHost = (
     // oxlint-disable-next-line no-console
     options?.warn ?? ((message) => console.warn(message))
   )
-  // Weak, so a node the page keeps after the app is gone doesn't keep the app's dispatch alive.
-  const bound = new WeakMap<globalThis.Node, Bound>()
+  // An element's events are read from its mount's tree when an event fires.
+  const stored = hostEvents.make<globalThis.Node>()
+  const eventsAlong = stored.along
+  /** The events of `node` itself. */
+  const eventsOf = (node: globalThis.Node): Renderer.Events | undefined => eventsAlong(pathFrom(node))[0]
   // The last value the renderer set for each controlled property: what the element must show.
   const wanted = new WeakMap<globalThis.Node, Map<string, unknown>>()
   const listening = new Map<string, (event: Event) => void>()
@@ -692,8 +701,7 @@ export const makeHost = (
 
   /** Sends `name` for `control` to the innermost handler for it, from `control` up, as the event would go. */
   const report = (control: globalThis.Element, name: string) => {
-    for (let node: globalThis.Node | null = control; node !== null; node = node.parentNode) {
-      const entry = bound.get(node)
+    for (const entry of eventsAlong(pathFrom(control))) {
       const handler = entry?.handlers[name]
       if (entry !== undefined && handler !== undefined) return entry.dispatch(name, handler, controlPayload(control))
     }
@@ -744,19 +752,23 @@ export const makeHost = (
   const typesOf = (event: Event): ReadonlyArray<string> =>
     Array.from((event as DragEvent).dataTransfer?.types ?? [], (type) => type.toLowerCase())
 
-  /** Whether `node` is, as bound now, a drop target that accepts a drag of `types`. */
-  const accepts = (node: globalThis.Node, types: ReadonlyArray<string>): boolean => {
-    const entry = bound.get(node)
+  /** Whether an element with the events `entry` is a drop target that accepts a drag of `types`. */
+  const accepts = (entry: Renderer.Events | undefined, types: ReadonlyArray<string>): boolean => {
     if (entry === undefined || entry.handlers.drop === undefined) return false
     const accepted = (entry.options.drop as Html.DropTargetOptions | undefined)?.accepts
     return accepted?.some((type) => types.includes(type.toLowerCase())) === true
   }
 
-  const dropTargetOf = (event: Event): globalThis.Element | undefined => {
+  /** The innermost element on the event's path that accepts its drag, with its events. */
+  const dropTargetOf = (
+    event: Event
+  ): { readonly element: globalThis.Element; readonly events: Renderer.Events } | undefined => {
     const types = typesOf(event)
     if (types.length === 0) return undefined
-    for (const node of event.composedPath()) {
-      if (accepts(node as globalThis.Node, types)) return node as globalThis.Element
+    const path = event.composedPath() as Array<globalThis.Node>
+    const entries = eventsAlong(path)
+    for (let i = 0; i < path.length; i++) {
+      if (accepts(entries[i], types)) return { element: path[i] as globalThis.Element, events: entries[i]! }
     }
     return undefined
   }
@@ -769,7 +781,7 @@ export const makeHost = (
 
   /** Sends `name` to `element`'s own handler, if it has one. */
   const sendTo = (element: globalThis.Element, name: string, payload: unknown) => {
-    const entry = bound.get(element)
+    const entry = eventsOf(element)
     const handler = entry?.handlers[name]
     if (entry !== undefined && handler !== undefined) entry.dispatch(name, handler, payload)
   }
@@ -806,7 +818,7 @@ export const makeHost = (
 
   /** Queues the active target's `dragover` for the next frame, unless its position is what it last got. */
   const queueOver = (element: globalThis.Element, payload: Html.DragOverPayload, types: ReadonlyArray<string>) => {
-    if (bound.get(element)?.handlers.dragover === undefined) return
+    if (eventsOf(element)?.handlers.dragover === undefined) return
     overQueued = payload
     if (overFrame !== undefined) return
     overFrame = frame(() => {
@@ -814,7 +826,7 @@ export const makeHost = (
       const next = overQueued
       overQueued = undefined
       // A render since the event may have taken the element's `onDrop` away or changed what it accepts.
-      if (next === undefined || active !== element || !element.isConnected || !accepts(element, types)) return
+      if (next === undefined || active !== element || !element.isConnected || !accepts(eventsOf(element), types)) return
       if (
         overSent !== undefined && overSent.x === next.x && overSent.y === next.y && overSent.width === next.width &&
         overSent.height === next.height
@@ -831,10 +843,11 @@ export const makeHost = (
         // Any enter or over means the pointer is still in the document.
         cancelExitCheck()
         if (name === "dragenter") entered = event.target
-        const target = dropTargetOf(event)
-        if (target !== undefined) {
+        const found = dropTargetOf(event)
+        const target = found?.element
+        if (found !== undefined) {
           event.preventDefault()
-          const dropEffect = (bound.get(target)!.options.drop as Html.DropTargetOptions).dropEffect
+          const dropEffect = (found.events.options.drop as Html.DropTargetOptions).dropEffect
           if (dropEffect !== undefined && event.dataTransfer !== null) event.dataTransfer.dropEffect = dropEffect
         }
         activate(target)
@@ -854,7 +867,7 @@ export const makeHost = (
         return
       }
       case "drop": {
-        const target = dropTargetOf(event)
+        const target = dropTargetOf(event)?.element
         if (target === undefined) {
           endTargets()
           return
@@ -876,13 +889,13 @@ export const makeHost = (
     }
   }
 
-  /** Puts the innermost drag source's data on the drag. */
-  const startDrag = (event: DragEvent) => {
+  /** Puts the innermost drag source's data on the drag: `entries` are the events along its path. */
+  const startDrag = (event: DragEvent, entries: ReadonlyArray<Renderer.Events | undefined>) => {
     droppedHere = false
     const transfer = event.dataTransfer
     if (transfer === null) return
-    for (const node of event.composedPath()) {
-      const source = bound.get(node as globalThis.Node)?.options.dragstart as Html.DragSourceOptions | undefined
+    for (const entry of entries) {
+      const source = entry?.options.dragstart as Html.DragSourceOptions | undefined
       if (source?.data === undefined) continue
       for (const type in source.data) transfer.setData(type, source.data[type]!)
       if (source.effectAllowed !== undefined) transfer.effectAllowed = source.effectAllowed
@@ -907,18 +920,21 @@ export const makeHost = (
         if (!dialog.open) modals.delete(dialog)
       }
     }
-    if (name === "dragstart") startDrag(event as DragEvent)
+    const path = event.composedPath() as Array<globalThis.Node>
+    const entries = eventsAlong(path)
+    if (name === "dragstart") startDrag(event as DragEvent, entries)
     // The app owns its forms' submissions, handled or not. Other forms in the document are left alone.
     // An unhandled one is marked, so the browser Router can still route a GET form.
-    if (name === "submit" && event.target !== null && bound.has(event.target as globalThis.Node)) {
+    if (
+      name === "submit" && event.target !== null && entries[path.indexOf(event.target as globalThis.Node)] !== undefined
+    ) {
       event.preventDefault()
       submit.ownedUnhandled.add(event)
     }
-    const path = event.composedPath()
     const own = ownEvents.has(name)
     for (let i = 0; i < path.length; i++) {
-      const node = path[i] as globalThis.Node
-      const entry = bound.get(node)
+      const node = path[i]!
+      const entry = entries[i]
       const handler = entry?.handlers[name]
       if (entry !== undefined && handler !== undefined) {
         if (name === "submit") {
@@ -956,6 +972,16 @@ export const makeHost = (
     document.addEventListener(name, f, { capture: true })
   }
   for (const name of alwaysEvents) listen(name)
+  /** Listens for what an element's handlers and options need. */
+  const listenFor = (handlers: Renderer.Events["handlers"], options: Renderer.Events["options"]) => {
+    for (const name in handlers) listen(name)
+    // A drag source needs its `dragstart` without a handler, and a drop target all of its events.
+    if (options.dragstart !== undefined) { for (const name of dragSourceEvents) listen(name) }
+    // `dragend` ends an in-app drag for the targets too. Whoever reads `dropped` needs `dragstart`, which
+    // resets it, even for a native drag source such as a link with only `onDragEnd`.
+    if (handlers.drop !== undefined) { for (const name of [...dropTargetEvents, ...dragSourceEvents]) listen(name) }
+    if (handlers.dragend !== undefined) { for (const name of dragSourceEvents) listen(name) }
+  }
 
   /**
    * Sets a property of an adopted element. A control the user changed from the server's default, to
@@ -972,17 +998,9 @@ export const makeHost = (
     host.setProp(node, name, value)
   }
 
-  // The element `createElement` made last, until its events are set: it has no entry yet, and its
-  // tag is known without asking the node.
-  let fresh: globalThis.Node | undefined
-  // Whether its tag is `form` in any case, so only such an element is asked what it is.
-  let freshMayBeForm = false
-
   const host: Renderer.Host<globalThis.Node> & { readonly dispose: () => void } = {
-    createElement(tag) {
-      freshMayBeForm = tag.length === 4 && (tag === "form" || tag.toLowerCase() === "form")
-      return fresh = elements.svgTags.has(tag) ? document.createElementNS(SVG, tag) : document.createElement(tag)
-    },
+    createElement: (tag) =>
+      elements.svgTags.has(tag) ? document.createElementNS(SVG, tag) : document.createElement(tag),
     createText: (text) => document.createTextNode(text),
     createContainer: () => document.createDocumentFragment(),
     setText(node, text) {
@@ -1092,26 +1110,11 @@ export const makeHost = (
     nextOf: (node) => node.nextSibling ?? undefined,
     setEvents(node, handlers, dispatch, options) {
       // An element with no events needs no entry, except a form: an entry marks it as the app's.
-      if (isEmpty(handlers) && isEmpty(options)) {
-        if (node === fresh) {
-          // New, as most elements given no events are: there is no entry to remove.
-          fresh = undefined
-          if (!freshMayBeForm || node.nodeName !== "FORM") return
-        } else if (node.nodeName !== "FORM") {
-          bound.delete(node)
-          return
-        }
-      }
-      fresh = undefined
-      bound.set(node, { handlers, dispatch, options })
-      for (const name in handlers) listen(name)
-      // A drag source needs its `dragstart` without a handler, and a drop target all of its events.
-      if (options.dragstart !== undefined) { for (const name of dragSourceEvents) listen(name) }
-      // `dragend` ends an in-app drag for the targets too. Whoever reads `dropped` needs `dragstart`, which
-      // resets it, even for a native drag source such as a link with only `onDragEnd`.
-      if (handlers.drop !== undefined) { for (const name of [...dropTargetEvents, ...dragSourceEvents]) listen(name) }
-      if (handlers.dragend !== undefined) { for (const name of dragSourceEvents) listen(name) }
+      if (isEmpty(handlers) && isEmpty(options) && node.nodeName !== "FORM") return stored.set(node, undefined)
+      stored.set(node, { handlers, dispatch, options })
+      listenFor(handlers, options)
     },
+    events: { connect: stored.connect, listen: listenFor },
     elements: [Html.name],
     controlled,
     runsMounts: true,

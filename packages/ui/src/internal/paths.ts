@@ -79,6 +79,24 @@ export interface ChildPaths {
   placed: Set<string> | undefined
 }
 
+/** The paths of a tree that held a child and no ref or outlet, once its render is over. */
+const heldChildren: ChildPaths = Object.freeze({ at: "", paths: undefined, refs: undefined, placed: undefined }) as any
+
+/**
+ * What an instance keeps of `paths` once its render is over. Fallbacks are only shown while their
+ * instance renders, so the map of children by name and key goes. The refs and placed slots, which its
+ * author's checks read later, stay, and a tree that held a child keeps a value, so `h.lazy` can tell it
+ * from one that held none.
+ *
+ * @internal
+ */
+export const settledPaths = (paths: ChildPaths | undefined): ChildPaths | undefined => {
+  if (paths === undefined || paths.paths === undefined) return paths
+  if (paths.refs === undefined && paths.placed === undefined) return heldChildren
+  paths.paths = undefined
+  return paths
+}
+
 const failure = (at: At, what: string): never => {
   throw new Error(`${pathAt(at)} renders two children ${what}`)
 }
