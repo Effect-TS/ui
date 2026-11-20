@@ -5,11 +5,7 @@ import { Effect } from "effect"
 import { InvalidCredentials, LoginPage, LoginValidation, SimulateAuthRequest } from "./LoginPage.ts"
 
 const validModel = {
-  form: LoginValidation.change(
-    LoginValidation.change(LoginValidation.init({ email: "", password: "" }), "email", "alice@example.com"),
-    "password",
-    "password"
-  ),
+  form: LoginValidation.init({ email: "alice@example.com", password: "password" }),
   submitting: false
 }
 

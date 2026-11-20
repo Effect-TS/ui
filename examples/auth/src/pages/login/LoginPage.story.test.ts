@@ -7,22 +7,17 @@ import {
   LoginMessage,
   LoginPage,
   LoginValidation,
-  SimulateAuthRequest,
-  validateLogin
+  SimulateAuthRequest
 } from "./LoginPage.ts"
 
 const alice = { userId: "1", email: "alice@example.com", name: "alice" }
 
 const validModel = {
-  form: LoginValidation.change(
-    LoginValidation.change(LoginValidation.init({ email: "", password: "" }), "email", alice.email),
-    "password",
-    "password"
-  ),
+  form: LoginValidation.init({ email: alice.email, password: "password" }),
   submitting: false
 }
 
-const fieldsOf = (s: { readonly model: typeof validModel }) => validateLogin(s.model.form).fields
+const fieldsOf = (s: { readonly model: typeof validModel }) => LoginValidation.validate(s.model.form).fields
 
 describe("LoginPage", () => {
   it.effect("typing an email validates the field", () =>

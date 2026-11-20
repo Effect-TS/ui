@@ -19,11 +19,6 @@ export const LoginValidation = Validation.make({
   password: { required: "Password is required" }
 }, { mode: "onChange" })
 
-export type LoginForm = typeof LoginValidation.State.Type
-
-// The view, `update` and the tests all read the fields through this.
-export const validateLogin = (form: LoginForm) => LoginValidation.validate(form)
-
 // ---------------------------------------------------------------------------
 // Messages, events and the auth request
 // ---------------------------------------------------------------------------
@@ -71,19 +66,6 @@ const simulateAuthRequest = (email: string, password: string) =>
 
 type LoginField = Validation.Field<string>
 
-const borderClass = (field: LoginField): string => {
-  switch (field._tag) {
-    case "NotValidated":
-      return "border-gray-300"
-    case "Validating":
-      return "border-blue-300"
-    case "Valid":
-      return "border-green-500"
-    case "Invalid":
-      return "border-red-500"
-  }
-}
-
 // ui-kit's Field takes `invalid: true` for an invalid field and `false` for
 // a valid one. Before the field shows a result it is neither.
 const invalidOf = (field: LoginField): boolean | undefined =>
@@ -106,7 +88,6 @@ const FormField = <M>(h: View.H<M>, options: {
       f.root(h.div).children(
         h.div.class("flex items-center gap-2 mb-1").children(
           f.label(h.label).class("block text-sm font-medium text-gray-700").children(options.label),
-          field._tag === "Validating" && h.span.class("text-blue-600 text-sm").children("..."),
           field._tag === "Valid" && h.span.class("text-green-600 text-sm").children("✓")
         ),
         Input(h, {
@@ -116,9 +97,10 @@ const FormField = <M>(h: View.H<M>, options: {
         })
           .attr("type", options.type)
           .attr("placeholder", options.placeholder)
+          // Field sets `data-valid` and `data-invalid` on its control.
           .class(
-            "w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100",
-            borderClass(field)
+            "w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500",
+            "disabled:bg-gray-100 data-valid:border-green-500 data-invalid:border-red-500"
           ),
         field._tag === "Invalid" &&
           f.error(h.div)?.class("text-red-600 text-sm mt-1").children(field.errors[0])
@@ -152,14 +134,14 @@ export const LoginPageNoDeps = Component.define({
     SubmittedForm: (model, _message, $) => {
       if (model.submitting) return model
       const form = LoginValidation.submit(model.form)
-      return Option.match(validateLogin(form).value, {
+      return Option.match(LoginValidation.validate(form).value, {
         onNone: () => ({ ...model, form }),
         onSome: ({ email, password }) => $.set({ form, submitting: true }).run(simulateAuthRequest(email, password))
       })
     },
     // The page stays in its submitting state: the app leaves it for the
     // dashboard.
-    SucceededSimulateAuthRequest: (model, { session }, $) => $.set(model).emit(LoginEvents.SignedIn({ session })),
+    SucceededSimulateAuthRequest: (_model, { session }, $) => $.emit(LoginEvents.SignedIn({ session })),
     // The error sits on the password until the password changes. The fields
     // are disabled while submitting, so the form still holds the values the
     // request was made with.
@@ -169,7 +151,7 @@ export const LoginPageNoDeps = Component.define({
     })
   },
   view: (model, h) => {
-    const validated = validateLogin(model.form)
+    const validated = LoginValidation.validate(model.form)
     const canSubmit = Option.isSome(validated.value) && !model.submitting
     return h.div.class("max-w-md mx-auto px-4").children(
       h.div.class("bg-white rounded-xl shadow-lg p-8").children(
@@ -201,10 +183,8 @@ export const LoginPageNoDeps = Component.define({
             }),
             Button(h, { props: { type: "submit", disabled: !canSubmit } })
               .class(
-                "w-full py-3 font-medium rounded-lg transition",
-                canSubmit
-                  ? "bg-blue-500 text-white hover:bg-blue-600 cursor-pointer"
-                  : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                "w-full py-3 font-medium rounded-lg transition bg-blue-500 text-white cursor-pointer",
+                "enabled:hover:bg-blue-600 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed"
               )
               .children(model.submitting ? "Signing in..." : "Sign In")
           ),

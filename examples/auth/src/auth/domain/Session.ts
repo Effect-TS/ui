@@ -1,4 +1,5 @@
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
+import { KeyValueStore } from "effect/persistence"
 
 export const Session = Schema.Struct({
   userId: Schema.String,
@@ -7,5 +8,15 @@ export const Session = Schema.Struct({
 })
 export type Session = typeof Session.Type
 
-// The localStorage key the session is kept under.
-export const SESSION_STORAGE_KEY = "auth_session"
+const SESSION_STORAGE_KEY = "auth_session"
+
+// The stored session: one key in the `KeyValueStore`, which is
+// localStorage in the browser.
+export const sessionStore = Effect.map(KeyValueStore.KeyValueStore, (keyValueStore) => {
+  const store = KeyValueStore.toSchemaStore(keyValueStore, Session)
+  return {
+    get: store.get(SESSION_STORAGE_KEY),
+    set: (session: Session) => store.set(SESSION_STORAGE_KEY, session),
+    remove: store.remove(SESSION_STORAGE_KEY)
+  }
+})

@@ -1,7 +1,6 @@
 import { Command, Component, Head, Router, UiSchema } from "@effect/ui"
 import { Console, Effect, Option, Schema } from "effect"
-import { KeyValueStore } from "effect/persistence"
-import { Session, SESSION_STORAGE_KEY } from "./auth/domain/Session.ts"
+import { Session, sessionStore } from "./auth/domain/Session.ts"
 import { DashboardPage } from "./pages/dashboard/DashboardPage.ts"
 import { HomePage } from "./pages/HomePage.ts"
 import { LoginPage } from "./pages/login/LoginPage.ts"
@@ -32,35 +31,29 @@ const isLoggedOutRoute = Schema.is(LoggedOutRoute)
 const isLoggedInRoute = Schema.is(LoggedInRoute)
 
 // The route guard. A route the state can't show becomes the state's
-// landing page, and `redirect` says the URL has to follow.
-export const guard = (
-  route: AppRoute,
-  session: Option.Option<Session>
-): { readonly model: AppModel; readonly redirect: AppRoute | undefined } =>
+// landing page.
+const guard = (route: AppRoute, session: Option.Option<Session>): AppModel =>
   Option.match(session, {
-    onNone: () =>
-      isLoggedOutRoute(route)
-        ? { model: LoggedOut.make({ route }), redirect: undefined }
-        : { model: LoggedOut.make({ route: loginRoute }), redirect: loginRoute },
-    onSome: (session) =>
-      isLoggedInRoute(route)
-        ? { model: LoggedIn.make({ route, session }), redirect: undefined }
-        : { model: LoggedIn.make({ route: dashboardRoute, session }), redirect: dashboardRoute }
+    onNone: () => LoggedOut.make({ route: isLoggedOutRoute(route) ? route : loginRoute }),
+    onSome: (session) => LoggedIn.make({ route: isLoggedInRoute(route) ? route : dashboardRoute, session })
   })
+
+// The guard changed the route, so the URL has to follow.
+const redirected = (model: AppModel, route: AppRoute) => model.route._tag !== route._tag
 
 // ---------------------------------------------------------------------------
 // Props: the route and the stored session, read before the app mounts
 // ---------------------------------------------------------------------------
 
-export const AppProps = Schema.Struct({ route: AppRoute, session: Schema.Option(Session) })
+const AppProps = Schema.Struct({ route: AppRoute, session: Schema.Option(Session) })
 
 // What Foldkit calls flags. The entry module and the app test mount the
 // root with this Effect, so `init` stays pure. A missing or unreadable
 // session counts as signed out.
 export const appProps = Effect.gen(function*() {
   const route = yield* Router.currentRoute(AppRoute)
-  const store = KeyValueStore.toSchemaStore(yield* KeyValueStore.KeyValueStore, Session)
-  const session = yield* store.get(SESSION_STORAGE_KEY).pipe(Effect.orElseSucceed(() => Option.none()))
+  const store = yield* sessionStore
+  const session = yield* store.get.pipe(Effect.orElseSucceed(() => Option.none()))
   return { route, session }
 })
 
@@ -79,19 +72,13 @@ export const AppMessage = UiSchema.TaggedEnum({
 export class SaveSession extends Command.Service<SaveSession>()(
   "auth/SaveSession",
   { args: { session: Session } },
-  Effect.gen(function*() {
-    const store = KeyValueStore.toSchemaStore(yield* KeyValueStore.KeyValueStore, Session)
-    return ({ session }) => store.set(SESSION_STORAGE_KEY, session)
-  })
+  Effect.map(sessionStore, (store) => ({ session }) => store.set(session))
 ) {}
 
 export class ClearSession extends Command.Service<ClearSession>()(
   "auth/ClearSession",
   { args: {} },
-  Effect.gen(function*() {
-    const store = yield* KeyValueStore.KeyValueStore
-    return () => store.remove(SESSION_STORAGE_KEY)
-  })
+  Effect.map(sessionStore, (store) => () => store.remove)
 ) {}
 
 export const LogError = Command.make(
@@ -188,13 +175,13 @@ const LoggedInView = AppDef.fragment((h, model: typeof LoggedIn.Type) =>
 export const AppNoDeps = AppDef.make({
   // A URL the state can't show is redirected from the first render.
   init: ($) => {
-    const { model, redirect } = guard($.props.route, $.props.session)
-    return redirect === undefined ? model : $.set(model).run(redirectTo(redirect))
+    const model = guard($.props.route, $.props.session)
+    return redirected(model, $.props.route) ? $.set(model).run(redirectTo(model.route)) : model
   },
   update: {
     ChangedRoute: (model, { route }, $) => {
       const next = guard(route, model._tag === "LoggedIn" ? Option.some(model.session) : Option.none())
-      return next.redirect === undefined ? next.model : $.set(next.model).run(redirectTo(next.redirect))
+      return redirected(next, route) ? $.set(next).run(redirectTo(next.route)) : next
     },
     SignedInLogin: (_model, { session }, $) =>
       $.set(LoggedIn.make({ route: dashboardRoute, session })).run(saveSession(session), redirectTo(dashboardRoute)),
