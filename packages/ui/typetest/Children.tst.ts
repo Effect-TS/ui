@@ -92,6 +92,7 @@ describe("lifetime", () => {
       events: FormEvents
     }) {}
     expect(Profile.toLayer).type.not.toBeCallableWith(ProfileForm)
+    expect(Profile.toLayer<never>).type.not.toBeCallableWith(ProfileForm)
   })
 
   it("rejects a model headless component", () => {

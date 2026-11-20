@@ -135,7 +135,8 @@ export interface Service<in out Self, in out Props, in out Events, in out Receiv
   // A method, so `Feature.Any` takes every feature, including one without
   // events, whose `Events` is `never`: `any` doesn't stand in for `never`
   // in a strictly checked parameter.
-  toLayer<R, Rcv = never, Lt extends Component.Lifetime = Component.Lifetime>(
+  // `Lt` defaults to `"view"`: a call that gives `R` claims a view implementation, so a `"model"` one fails.
+  toLayer<R, Rcv = never, Lt extends Component.Lifetime = "view">(
     component: Component.Mountable<Props, Events, R, Rcv, never, Lt> & ReceivesAll<Receives, Rcv> & ViewImpl<Lt>
   ): Layer.Layer<Self, never, R>
 }

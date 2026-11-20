@@ -1293,4 +1293,79 @@ describe("model children drawn across trees", () => {
       yield* TestHost.settle
       assert.strictEqual(root.text(), "on in")
     }).pipe(provideHost))
+  it.effect("moves its own listed field between sections while parked", () =>
+    Effect.gen(function*() {
+      const Field = Component.define({ name: "Field", lifetime: "model", model: Schema.Null, message: Schema.Never })
+        .make({ init: () => null, update: (m) => m, view: (_, h) => h.el("i", "field") })
+      const FrameMsg = UiSchema.TaggedEnum({ Move: {} })
+      const Frame = Component.define({
+        name: "Frame",
+        lifetime: "model",
+        model: Schema.Boolean,
+        message: FrameMsg,
+        receives: ["Move"]
+      }).make({
+        children: { field: Field },
+        init: () => false,
+        update: () => true,
+        view: (left, h) =>
+          h.el("article", h.el("p", left ? h.children.field() : null), h.el("q", left ? null : h.children.field()))
+      })
+      const PageMsg = UiSchema.TaggedEnum({ Hide: {}, Move: {}, Show: {} })
+      const Page = Component.define({ name: "Page", lifetime: "view", model: Schema.Boolean, message: PageMsg })
+        .make({
+          children: { frame: Frame },
+          init: () => true,
+          update: (shown, message, $) =>
+            PageMsg.match(message, {
+              Hide: () => false,
+              Move: () => $.set(shown).send(Frame.ref("frame"), FrameMsg.Move()),
+              Show: () => true
+            }),
+          view: (shown, h) => h.el("main", shown ? h.children.frame() : null)
+        })
+      const root = yield* TestHost.mount(Page, {})
+      yield* TestHost.settle
+      root.send(PageMsg.Hide())
+      yield* TestHost.settle
+      root.send(PageMsg.Move())
+      yield* TestHost.settle
+      root.send(PageMsg.Show())
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "field")
+      assert.deepStrictEqual(root.log().filter((e) => e._tag === "Failed"), [])
+    }).pipe(provideHost))
+
+  const refPage = (start: "key" | "ref" | "closure") => {
+    const Leaf = Component.define({ name: "Leaf", lifetime: "view", model: Schema.Null, message: Schema.Never })
+      .make({ init: () => null, update: (m) => m, view: (_, h) => h.el("b", "leaf") })
+    const Box = Component.define({ name: "Box", lifetime: "model", model: Schema.Null, message: Schema.Never })
+      .make({ init: () => null, update: (m) => m, view: (_, h) => h.el("i", "box") })
+    const How = Schema.Literals(["key", "ref", "closure"])
+    return Component.define({ name: "Page", lifetime: "view", model: How, message: How }).make({
+      children: { box: Box },
+      init: () => start,
+      update: (_, how) => how,
+      view: (how, h) =>
+        how === "closure"
+          ? Tips(h, { key: "t", props: { label: "T" }, view: () => Leaf(h, { ref: Leaf.ref("box") }) })
+          : h.el("main", how === "key" ? Leaf(h, { key: "box" }) : Leaf(h, { ref: Leaf.ref("box") }))
+    })
+  }
+
+  it.effect("fails the author when a patch gives a child a listed child's ref", () =>
+    Effect.gen(function*() {
+      const root = yield* TestHost.mount(refPage("key"), {})
+      yield* TestHost.settle
+      root.send("ref")
+      const crashed = yield* Effect.flip(TestHost.settle)
+      assert.include(String(crashed), "/Page: ref box names a listed child")
+    }).pipe(provideHost))
+
+  it.effect("fails the author of a closure that gives a child a listed child's ref", () =>
+    Effect.gen(function*() {
+      yield* TestHost.mount(refPage("closure"), {})
+      const crashed = yield* Effect.flip(TestHost.settle)
+      assert.include(String(crashed), "/Page: ref box names a listed child")
+    }).pipe(provideHost))
 })
