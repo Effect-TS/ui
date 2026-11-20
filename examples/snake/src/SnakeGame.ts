@@ -35,8 +35,6 @@ const generateApplePosition = (snake: Snake.Snake) =>
     Command.map((position) => SnakeGameMessage.CompletedGenerateApplePosition({ position }))
   )
 
-// What a new game starts from. A restart resets these and keeps the apple and
-// the high score.
 const NEW_GAME = {
   snake: Snake.create(GAME.INITIAL_POSITION),
   direction: GAME.INITIAL_DIRECTION,
@@ -45,7 +43,6 @@ const NEW_GAME = {
   points: 0
 } satisfies Partial<SnakeGameModel>
 
-// The keys `update` matches, in lower case only, as Foldkit's does.
 const MOVE_DIRECTIONS: ReadonlyMap<string, Direction.Direction> = new Map([
   ["ArrowUp", "Up"],
   ["ArrowDown", "Down"],
@@ -83,22 +80,11 @@ const GAME_STATE_TEXT: Record<GameState, string> = {
   GameOver: "Game Over - Press R to restart"
 }
 
-const SnakeGameDef = Component.define({
+export const SnakeGame = Component.define({
   name: "SnakeGame",
   model: SnakeGameModel,
   message: SnakeGameMessage
-})
-
-const Grid = SnakeGameDef.fragment((h, model: SnakeGameModel) =>
-  h.div.class("inline-block border-2 border-gray-600").children(
-    Array.makeBy(GAME.GRID_SIZE, (y) =>
-      h.div.class("flex").children(
-        Array.makeBy(GAME.GRID_SIZE, (x) => h.div.class("w-6 h-6", cellClass(x, y, model)))
-      ))
-  )
-)
-
-export const SnakeGame = SnakeGameDef.make({
+}).make({
   init: ($) =>
     $.set({ ...NEW_GAME, apple: { x: 15, y: 15 }, highScore: 0 })
       .run(generateApplePosition(NEW_GAME.snake)),
@@ -152,9 +138,6 @@ export const SnakeGame = SnakeGameDef.make({
           Stream.as(SnakeGameMessage.TickedClock())
         )
     ),
-    // Listens in every state, since R restarts after game over. A message
-    // comes back only for a key the game handles, so only those keys lose
-    // their default and browser shortcuts keep working.
     Html.onDocument(
       "keydown",
       ({ key, ctrl, alt, meta, defaultPrevented }) =>
@@ -173,7 +156,12 @@ export const SnakeGame = SnakeGameDef.make({
         h.p.class("text-xl").children(`High Score: ${model.highScore}`)
       ),
       h.p.class("text-lg mb-4").children(GAME_STATE_TEXT[model.gameState]),
-      Grid(h, model),
+      h.div.class("inline-block border-2 border-gray-600").children(
+        Array.makeBy(GAME.GRID_SIZE, (y) =>
+          h.div.class("flex").children(
+            Array.makeBy(GAME.GRID_SIZE, (x) => h.div.class("w-6 h-6", cellClass(x, y, model)))
+          ))
+      ),
       h.div.class("mt-4 text-sm text-gray-400").children(
         h.p("Use ARROW KEYS or WASD to move"),
         h.p("SPACE to pause/start"),

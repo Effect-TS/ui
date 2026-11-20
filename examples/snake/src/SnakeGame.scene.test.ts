@@ -69,7 +69,6 @@ describe("SnakeGame", () => {
   it.effect("an arrow key on the document steers and cancels its default", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(SnakeGame, {})
-      // The apple is one cell above the head, so only a snake that turned up eats it.
       s.given({ ...baseModel, gameState: "Playing", apple: { x: 10, y: 9 } })
         .fireDocument("keydown", { key: "ArrowUp" }).expectDefaultPrevented()
         .subscription("gameClock:150", SnakeGameMessage.TickedClock())
