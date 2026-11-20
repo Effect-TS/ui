@@ -69,11 +69,10 @@ export interface RootHooks {
   readonly afterFlush: (root: RootHandle, info: FlushInfo) => void
   /** The encoded Model a new instance at `path` adopts, if the router is restoring one. */
   readonly restore: (path: string) => unknown
-  /** Registers an instance's `Router.prefetch` declaration. The returned function unregisters it. */
-  readonly declare: (declarer: Declarer) => () => void
   /**
-   * The kernel runtime's `declare`: the Router makes the declarer, with its own walk and check, from what
-   * the runtime gives. `declared` holds the latest `subscriptions` run's map.
+   * Registers an instance's `Router.prefetch` declaration. The returned function unregisters it. The
+   * Router makes the declarer, with its own walk and check, from what the runtime gives. `declared`
+   * holds the latest `subscriptions` run's map.
    */
   readonly prefetch: (
     runtime: prefetchWalk.Runtime,

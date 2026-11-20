@@ -1185,7 +1185,7 @@ interface UnionInternals {
   readonly make: (input: unknown) => { readonly _tag: string }
 }
 
-/** What the kernel runtime's prefetch walk reports with. */
+/** What the runtime's prefetch walk reports with. */
 const prefetchProblems: prefetchWalk.Problems = {
   PrefetchThrew,
   PrefetchQueryNotProvided,
@@ -1613,7 +1613,7 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       })
     )
 
-    const declare: services.RootHooks["declare"] = (declarer) => {
+    const declare = (declarer: services.Declarer) => {
       declarers.add(declarer)
       return () => {
         declarers.delete(declarer)
@@ -1632,7 +1632,6 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
         restoring.delete(path)
         return found
       },
-      declare,
       prefetch: (runtime, inst, declared) => prefetchWalk.declare(declare, prefetchProblems, runtime, inst, declared),
       afterFlush: (root, info) => {
         if (pending === undefined || pending.since === undefined || root !== primary()) return

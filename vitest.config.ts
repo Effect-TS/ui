@@ -73,24 +73,6 @@ const shared: ViteUserConfig = {
   }
 }
 
-// Resolves every import of the runtime to the kernel beside it, so the suite runs against both until
-// the kernel replaces the runtime.
-const kernelRuntime = path.join(import.meta.dirname, "packages/ui/src/internal/kernel/runtime.ts")
-const runtimeFile = path.join(import.meta.dirname, "packages/ui/src/internal/runtime.ts")
-const onKernel: ViteUserConfig = {
-  // For the tests of what only the kernel does.
-  test: { env: { UI_RUNTIME: "kernel" } },
-  plugins: [{
-    name: "kernel-runtime",
-    enforce: "pre",
-    async resolveId(source, importer, options) {
-      if (!/internal\/runtime(\.ts)?$/.test(source)) return null
-      const resolved = await this.resolve(source, importer, { ...options, skipSelf: true })
-      return resolved !== null && resolved.id === runtimeFile ? kernelRuntime : resolved
-    }
-  }]
-}
-
 export default defineConfig({
   test: {
     passWithNoTests: true,
@@ -99,8 +81,6 @@ export default defineConfig({
       // Node reuses workers across test files, which skips re-importing the effect module graph for every file.
       ...project("@effect/ui", "packages/ui", true, { test: { isolate: !isNode } }),
       ...project("@effect/ui-kit", "packages/ui-kit"),
-      ...project("@effect/ui (kernel)", "packages/ui", true, mergeConfig({ test: { isolate: !isNode } }, onKernel)),
-      ...project("@effect/ui-kit (kernel)", "packages/ui-kit", true, onKernel),
       ...example("interrupting-commands")
     ]
   }

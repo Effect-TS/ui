@@ -58,9 +58,6 @@ const container = (html: string) =>
     (element) => Effect.sync(() => element.remove())
   )
 
-/** Whether the suite runs on the kernel, which adopts node by node. The runtime it replaces adopts an instance whole. */
-const kernel = process.env.UI_RUNTIME === "kernel"
-
 /**
  * Three rows under a list, rendered on the server and hydrated from `tamper`'s copy of the HTML. Each row
  * has a button with a handler and a mount, and a Subscription.
@@ -1439,10 +1436,10 @@ describe("HtmlServer", { concurrent: false }, () => {
         yield* tick
         const nodes = [...(app.querySelector("main") ?? app).childNodes]
         assert.deepStrictEqual(nodes.map((node) => node.textContent), [...order])
-        // The kernel keeps the nodes that match. The runtime it replaces builds the child again.
+        // Hydration keeps the nodes that match.
         assert.deepStrictEqual(
           nodes.filter((node) => !server.includes(node)).map((node) => node.textContent),
-          kernel && tamper === partly ? ["go"] : ["first", "go", "tail"]
+          tamper === partly ? ["go"] : ["first", "go", "tail"]
         )
         const go = nodes[order.indexOf("go")]
         assert.deepStrictEqual(mounted, [go])
@@ -1450,7 +1447,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       }).pipe(Effect.scoped))
   }
 
-  it.effect.skipIf(!kernel)("keeps the nodes before a mismatch in the view it's in", () =>
+  it.effect("keeps the nodes before a mismatch in the view it's in", () =>
     Effect.gen(function*() {
       const { app, server, startedOnce } = yield* hydrateRows((html) => html.replace("row C", "stale"))
       assert.deepStrictEqual([...app.querySelectorAll("li")], server.items)
@@ -1458,7 +1455,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       yield* startedOnce
     }).pipe(Effect.scoped))
 
-  it.effect.skipIf(!kernel)(
+  it.effect(
     "keeps the rows before a node the view doesn't render, and builds the rest once",
     () =>
       Effect.gen(function*() {
@@ -2858,8 +2855,7 @@ describe("HtmlServer queries", { concurrent: false }, () => {
       ])
     })))
 
-  // The runtime it replaces resumes each fetch in a task of its own, and renders after each.
-  it.effect.skipIf(!kernel)(
+  it.effect(
     "renders once for the fetches of one flush that end together",
     () =>
       Effect.gen(function*() {

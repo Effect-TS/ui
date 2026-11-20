@@ -2,13 +2,12 @@
 //
 // Run from the repository root, after `pnpm build`:
 //
-//   pnpm bundle-size [--json <file>] [--base <file>] [--runtime kernel] [--vocabulary]
+//   pnpm bundle-size [--json <file>] [--base <file>] [--vocabulary]
 //
 // Added gzip bytes are the counter total minus a separately bundled effect-only client.
 // Pass --vocabulary to measure the opt-in counter with the same click assertion.
 //
-// --json writes the result and --base adds deltas against an earlier --json file. --runtime kernel
-// bundles the runtime in internal/kernel in place of the default one. The table is also
+// --json writes the result and --base adds deltas against an earlier --json file. The table is also
 // appended to $GITHUB_STEP_SUMMARY when that is set.
 import assert from "node:assert/strict"
 import { execFileSync } from "node:child_process"
@@ -20,10 +19,9 @@ import { gzipSync } from "node:zlib"
 import { Window } from "happy-dom"
 import { build, version as vite } from "vite"
 
-const { values: { base, json, runtime, vocabulary } } = parseArgs({
-  options: { vocabulary: { type: "boolean", default: false }, base: { type: "string" }, json: { type: "string" }, runtime: { type: "string", default: "default" } }
+const { values: { base, json, vocabulary } } = parseArgs({
+  options: { vocabulary: { type: "boolean", default: false }, base: { type: "string" }, json: { type: "string" } }
 })
-assert.ok(runtime === "default" || runtime === "kernel", "--runtime is default or kernel")
 const ui = path.resolve(import.meta.dirname, "../..")
 const effectDir = path.join(ui, "node_modules/effect")
 const effect = JSON.parse(fs.readFileSync(path.join(effectDir, "package.json"), "utf8")).version
@@ -57,23 +55,13 @@ async function checkClient(code, baseline) {
   }
 }
 
-// Points the package's import of its runtime at the kernel's.
-const kernelPlugin = (installed) => ({
-  name: "kernel-runtime",
-  enforce: "pre",
-  resolveId(source) {
-    if (/(^|\/)internal\/runtime\.js$/.test(source)) return path.join(installed, "dist/internal/kernel/runtime.js")
-  }
-})
-
-async function bundle(root, installed, input, baseline) {
+async function bundle(root, input, baseline) {
   // `mode` and `format` are Vite's defaults, pinned because the report states them.
   const { output } = await build({
     configFile: false,
     root,
     mode: "production",
     logLevel: "warn",
-    plugins: runtime === "kernel" ? [kernelPlugin(installed)] : [],
     build: { target, write: false, rolldownOptions: { input, output: { format: "es" } } }
   })
   assert.ok(output.length === 1 && output[0].type === "chunk", "expected one JavaScript chunk")
@@ -101,8 +89,8 @@ async function measure() {
     fs.writeFileSync(input, vocabulary ? source.replace(binding, "elements: Html.vocabulary") : source)
     const baselineInput = path.join(root, "effect-only.ts")
     fs.copyFileSync(path.join(import.meta.dirname, "effect-only.ts"), baselineInput)
-    const counter = await bundle(root, installed, input, false)
-    const baseline = await bundle(root, installed, baselineInput, true)
+    const counter = await bundle(root, input, false)
+    const baseline = await bundle(root, baselineInput, true)
     return { ...counter, baselineGzip: baseline.gzip, addedGzip: counter.gzip - baseline.gzip, vite, effect, node: process.version }
   } finally {
     fs.rmSync(root, { recursive: true, force: true })
@@ -111,8 +99,8 @@ async function measure() {
 
 const elements = vocabulary ? "Html.vocabulary" : "Html"
 const result = { ...await measure(), elements }
-const headers = ["Runtime", "Elements", "Vite", "effect", "Node", "Raw bytes", "Gzip bytes", "Effect-only gzip B", "Added gzip B"]
-const row = [runtime, elements, result.vite, result.effect, result.node, result.raw, result.gzip, result.baselineGzip, result.addedGzip]
+const headers = ["Elements", "Vite", "effect", "Node", "Raw bytes", "Gzip bytes", "Effect-only gzip B", "Added gzip B"]
+const row = [elements, result.vite, result.effect, result.node, result.raw, result.gzip, result.baselineGzip, result.addedGzip]
 if (base) {
   const previous = JSON.parse(fs.readFileSync(base, "utf8"))
   assert.equal(previous.elements ?? "Html", elements, "baseline uses a different vocabulary")

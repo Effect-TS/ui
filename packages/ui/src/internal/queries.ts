@@ -100,12 +100,6 @@ export type Results = Readonly<Record<string, unknown>>
 export const boundOf: (component: { readonly "~queries": unknown }) => Bound | undefined = queryCore.boundOf
 
 /** @internal */
-export const markerOf: (subscription: object) => Marker | undefined = queryCore.markerOf
-
-/** @internal */
-export const groupOf: (subscription: object) => Group | undefined = queryCore.groupOf
-
-/** @internal */
 export const isWatchKey: (key: string) => boolean = queryCore.isWatchKey
 
 /** Strict open: the stored result at the query's current args, else `Initial`, waiting when enabled. */

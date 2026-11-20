@@ -26,9 +26,6 @@ import { maxTitle, TodoApp } from "./fixtures/todos.ts"
 /** Lets the render flush, Commands and the controlled-property restore run. */
 const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))
 
-/** Whether the suite runs on the kernel. */
-const kernel = process.env.UI_RUNTIME === "kernel"
-
 const container = Effect.acquireRelease(
   Effect.sync(() => document.body.appendChild(document.createElement("div"))),
   (element) => Effect.sync(() => element.remove())
@@ -1851,8 +1848,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       expect(interruptors).toEqual([[closer], [closer]])
     }).pipe(Effect.scoped))
 
-  // The runtime it replaces resumes each Command in a task of its own, and renders after each.
-  it.effect.skipIf(!kernel)(
+  it.effect(
     "renders once for the Commands of one flush that end together",
     () =>
       Effect.gen(function*() {

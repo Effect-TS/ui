@@ -5,7 +5,6 @@
 //
 //   node packages/ui/benchmark/rows/run.mjs [--rounds 5] [--ops create1k,swap] [--variants plain]
 //     [--memory-only | --time-only | --ssr-only] [--profile plain:replace1k] [--chromium <path>]
-//     [--runtime kernel]
 //
 // The browser is --chromium, else $CHROMIUM, else `chromium` on PATH, else the Chromium that the
 // `playwright` dev dependency installed. entry.ts is bundled with esbuild (minified IIFE, es2023,
@@ -45,9 +44,6 @@
 // Node's. Separately, first-hydrate measures one mount-to-adopted sample per fresh client page,
 // using HTML and state rendered on another page. Neither DOM parsing nor bundle load is timed.
 //
-// --runtime kernel bundles @effect/ui with the runtime in src/internal/kernel in place of
-// src/internal/runtime.ts, so the two can be compared on one machine. React variants ignore it.
-//
 // --profile variant:op profiles 20 steps of one operation, from an unminified bundle, and prints
 // the functions with the most self time across them (line numbers are the bundle's). The last
 // step's profile goes to scratchpad/rows-<variant>-<op>.cpuprofile. The ops `render` and
@@ -70,7 +66,6 @@ const { values: args } = parseArgs({
     "memory-only": { type: "boolean", default: false },
     "time-only": { type: "boolean", default: false },
     "ssr-only": { type: "boolean", default: false },
-    runtime: { type: "string", default: "default" },
     profile: { type: "string" },
     chromium: { type: "string" }
   }
@@ -86,18 +81,8 @@ const bundles = {
   react: { entry: "react.mjs", out: path.join(process.cwd(), "scratchpad/rows-react.bundle.js") }
 }
 const bundleOf = (variant) => isReact(variant) ? bundles.react : bundles.effect
-// Points every import of the runtime at the kernel, for --runtime kernel.
-const runtimePlugin = {
-  name: "runtime",
-  setup(build) {
-    const kernel = path.join(import.meta.dirname, "../../src/internal/kernel/runtime.ts")
-    build.onResolve({ filter: /internal\/runtime(\.ts)?$/ }, () => ({ path: kernel }))
-  }
-}
-if (args.runtime !== "default" && args.runtime !== "kernel") throw new Error("--runtime is default or kernel")
 for (const bundle of new Set(variants.map(bundleOf))) {
   await build({
-    plugins: bundle === bundles.effect && args.runtime === "kernel" ? [runtimePlugin] : [],
     entryPoints: [path.join(import.meta.dirname, bundle.entry)],
     bundle: true,
     minify: args.profile === undefined,
@@ -183,7 +168,6 @@ if (args.profile !== undefined) {
 }
 
 const only = args["memory-only"] ? "memory" : args["time-only"] ? "time" : args["ssr-only"] ? "ssr" : undefined
-console.log("runtime: " + args.runtime)
 
 if (only === undefined || only === "time") {
   const page = await open(variants[0])

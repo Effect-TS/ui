@@ -1,5 +1,5 @@
 /**
- * `Router.prefetch` on the kernel runtime: an instance's declaration, the walk of the pages it names and
+ * `Router.prefetch` on the runtime: an instance's declaration, the walk of the pages it names and
  * the check after the navigation settles. Only the Router imports it, and gives it to the runtime through
  * its hooks, so an app without a Router doesn't ship it.
  *
@@ -86,7 +86,7 @@ const intentGuardMillis = 30_000
  * @internal
  */
 export const declare = (
-  register: services.RootHooks["declare"],
+  register: (declarer: services.Declarer) => () => void,
   problems: Problems,
   runtime: Runtime,
   inst: Instance,
