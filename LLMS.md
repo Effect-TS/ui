@@ -345,7 +345,9 @@ failing rule and list `field.errors` below the field.
 For a list of requirements under a field, such as a password's, call
 `checklist(state, "password")`. It gives every rule of the field as
 `{ message, met }`, met or not. It ignores the mode, so the list can show
-from the first render, and an empty value meets no rule.
+from the first render, and an empty value meets no rule. Write each message
+as a requirement that reads right met or unmet. A message that is a function
+of the value is called for every rule, with an empty value too.
 
 An async check, such as "is this username taken", is a query whose args
 are `undefined` until `passes(state, "username")`. Pass its result to

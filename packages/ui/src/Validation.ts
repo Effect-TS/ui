@@ -47,6 +47,14 @@ import * as Schema from "effect/Schema"
 /**
  * A rule's message: a string, or a function of the field's value.
  *
+ * **Gotchas**
+ *
+ * `validate` calls a message function only with a value that fails the rule.
+ * `checklist` calls it for every rule, so it also gets a value that meets
+ * the rule, and an empty value, which the predicate never sees. A function
+ * used with `checklist` must handle an empty value, and return a label that
+ * reads right whether or not the rule is met.
+ *
  * @stability experimental
  * @category models
  * @since 0.1.0
@@ -61,6 +69,9 @@ export type RuleMessage<A> = string | ((value: A) => string)
  * The predicate gets the field's value and every value of the form, so a rule
  * can compare two fields. The rules in {@link Rule} ignore the second
  * argument, so they fit any form.
+ *
+ * `checklist` shows the message for every rule, met or not. See
+ * {@link RuleMessage} for what that asks of a message function.
  *
  * @stability experimental
  * @category models
@@ -95,8 +106,10 @@ const PERMISSIVE_URL = /^(https?:\/\/)?\S+\.\S+$/
  * **Details**
  *
  * Each rule takes an optional message, a string or a function of the value,
- * that replaces the default. A rule never sees an empty value: an empty field
- * is checked against `required` instead.
+ * that replaces the default. A rule's predicate never sees an empty value: an
+ * empty field is checked against `required` instead. A message function can
+ * see one, because `checklist` calls it for every rule. See
+ * {@link RuleMessage}.
  *
  * - `minLength(min)`, `maxLength(max)`: the string's length.
  * - `pattern(regex)`: the string matches `regex`.
@@ -342,6 +355,12 @@ export type Field<A> = NotValidated<A> | Validating<A> | Valid<A> | Invalid<A>
  * One rule of a field, as {@link Validation.checklist} reports it: its message
  * and whether the field's value meets it.
  *
+ * **Gotchas**
+ *
+ * The message is there for every rule, met or not, so write it as a
+ * requirement, such as "At least 8 characters". A message function is called
+ * with whatever the field holds, an empty value included.
+ *
  * **Example** (A password's requirements)
  *
  * ```ts import.meta.vitest
@@ -433,7 +452,8 @@ export interface Validated<Values> {
  * - `checklist(state, name)`: every rule of the field with its message and
  *   whether the value meets it, in the order written. It ignores the mode,
  *   `errors`, checks and server errors, so a list of requirements can show
- *   from the first render. An empty value meets no rule.
+ *   from the first render. An empty value meets no rule. Each rule's message
+ *   function is called every time, with an empty value too.
  * - `validate(state, checks?)`: derives a {@link Validated}. It is pure, so
  *   call it from `view`, `update` and tests.
  *
