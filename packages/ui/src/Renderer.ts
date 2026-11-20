@@ -83,8 +83,10 @@ export interface Events {
  * it asks each mount's lookup. `lookup` takes an event's path, innermost node
  * first, as `composedPath()` gives it, and returns, at each index, the events
  * of that node if it is an element of the mount's tree. The renderer reads
- * them from the tree it rendered last, and from what a patch is inserting,
- * so a node that is no longer in the tree gets no events. The nodes of a
+ * them from the tree it rendered last, so a node that is no longer in the
+ * tree gets no events. While a patch runs, the events it gave an element come
+ * first: an event the patch causes, such as one a custom element's
+ * `connectedCallback` fires, gets what `setEvents` would have given. The nodes of a
  * detached child are found from its container, for a host that dispatches
  * events there: a host listening on the document gets none from them.
  *

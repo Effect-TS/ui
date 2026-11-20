@@ -1673,7 +1673,7 @@ const setup = (
     inst.cause = undefined
     busy++
     try {
-      under(from, () => render(inst))
+      under(from, () => patchRun(() => render(inst)))
     } finally {
       busy--
     }
@@ -1714,6 +1714,8 @@ const setup = (
       drainLoop()
     } finally {
       draining = false
+      // What the mount, or a child that adopted once its Layer was ready, published outside a render.
+      if (patching === 0) published.length = 0
     }
   }
   function drainLoop() {
@@ -4906,17 +4908,41 @@ const setup = (
    * Gives the host an element's events, or with a host that reads them from the tree, the names to listen
    * for. Owned layers are merged here too, so two owners' clashing options fail the render.
    */
-  const setEvents = (inst: Instance, node: unknown, view: View.Element<any, any>) => {
+  const setEvents = (inst: Instance, node: unknown, view: View.Element<any, any>, patched = false) => {
     if (view.owned === undefined || view.owned.length === 0) {
       if (hostEvents === undefined) host.setEvents(node, view.handlers, inst.author.fire, view.eventOptions)
       else if (view.handlers !== View.noFields || view.eventOptions !== View.noFields) {
         hostEvents.listen(view.handlers, view.eventOptions)
-      }
+        published.push(node, inst, view)
+        // A patch took its events away: the tree still has them until the patch is done.
+      } else if (patched) published.push(node, inst, view)
       return
     }
     const events = layeredEvents(inst, view, view.owned)
     if (hostEvents === undefined) host.setEvents(node, events.handlers, events.dispatch, events.options)
-    else hostEvents.listen(events.handlers, events.options)
+    else {
+      hostEvents.listen(events.handlers, events.options)
+      published.push(node, inst, view)
+    }
+  }
+
+  /**
+   * The elements whose events changed in the patch running, as `node, instance, view`: the lookup reads
+   * them over the tree, which holds a record only once the patch that made or changed it is done. An event
+   * the patch causes, such as one a custom element's `connectedCallback` fires as it is inserted, gets
+   * the events the patch gave. Emptied once the outermost patch is done, and once a drain is done for what
+   * the mount, or a child that adopted later, published outside a render, so it holds nothing between events.
+   */
+  const published: Array<any> = []
+  let patching = 0
+  /** Runs `f`, which may patch the tree, and forgets the published events once no patch is running. */
+  const patchRun = <A>(f: () => A): A => {
+    patching++
+    try {
+      return f()
+    } finally {
+      if (--patching === 0) published.length = 0
+    }
   }
 
   /** An element's events: with only the author's layer, its handlers as they are. */
@@ -4972,7 +4998,22 @@ const setup = (
         break
       }
     }
+    if (published.length > 0) publishedAlong(path, out)
     return out
+  }
+  /** Reads over `out` the events a running patch gave the nodes of `path`, the latest of each. */
+  const publishedAlong = (path: ReadonlyArray<unknown>, out: Array<Renderer.Events | undefined>) => {
+    for (let at = 0; at < path.length; at++) {
+      for (let index = published.length - 3; index >= 0; index -= 3) {
+        if (published[index] !== path[at]) continue
+        const view: View.Element<any, any> = published[index + 2]
+        out[at] = view.handlers === View.noFields && view.eventOptions === View.noFields &&
+            (view.owned === undefined || view.owned.length === 0)
+          ? undefined
+          : eventsOf(published[index + 1], view)
+        break
+      }
+    }
   }
   const walkEvents = (
     inst: Instance,
@@ -4982,8 +5023,7 @@ const setup = (
     out: Array<Renderer.Events | undefined>
   ) => {
     for (let at = from; at >= 0; at--) {
-      let found = findElement(inst, items, path[at])
-      if (found === undefined && inserting !== undefined) found = findElement(insertingIn!, inserting, path[at])
+      const found = findElement(inst, items, path[at])
       if (found === undefined) continue
       inst = foundIn!
       // Cleared at once, so the lookup holds no instance after the event.
@@ -4994,43 +5034,6 @@ const setup = (
   }
   // The instance whose tree held the element `findElement` found last.
   let foundIn: Instance | undefined
-  // What a patch is putting in the host, and whose tree it is: records not yet in the tree the lookup
-  // walks. An element among them can get an event as it goes in, such as one a custom element's
-  // `connectedCallback` fires.
-  let inserting: ReadonlyArray<Rendered> | undefined
-  let insertingIn: Instance | undefined
-  /** As `place`, for new records of `inst`'s tree, which the lookup finds while they go in. */
-  const placeNew = (
-    inst: Instance,
-    parentNode: unknown,
-    items: ReadonlyArray<Rendered>,
-    ref: unknown,
-    stays?: Uint8Array
-  ) => {
-    inserting = items
-    insertingIn = inst
-    try {
-      place(parentNode, items, ref, stays)
-    } finally {
-      inserting = insertingIn = undefined
-    }
-  }
-  /** Puts the nodes of `items` from `from` on before `ref`, as `placeNew` does. */
-  const insertNew = (
-    inst: Instance,
-    parentNode: unknown,
-    items: ReadonlyArray<Rendered>,
-    from: number,
-    ref: unknown
-  ) => {
-    inserting = items
-    insertingIn = inst
-    try {
-      for (let index = from; index < items.length; index++) insertNodes(parentNode, items[index]!, ref)
-    } finally {
-      inserting = insertingIn = undefined
-    }
-  }
   /** The element of `items` whose node is `node`, looked for through the children and fallbacks they place. */
   const findElement = (
     inst: Instance,
@@ -5055,8 +5058,11 @@ const setup = (
       case "Outlet":
         return findElement(item.inst, item.inst.rendered, node)
       case "Fallback":
+      // A detached child's nodes are in its container, where no path from the document leads, but while
+      // it is attached they are in the document before the tree holds them.
+      case "Detached":
         return findIn(inst, item.inner, node)
-      // A detached child's nodes are in its container, and text holds no events.
+      // Text holds no events.
       default:
         return undefined
     }
@@ -5950,7 +5956,7 @@ const setup = (
         }
         result[index] = create(inst, view, env)
       }
-      insertNew(inst, parentNode, result, start, ref)
+      for (let index = start; index < newLength; index++) insertNodes(parentNode, result[index]!, ref)
       return result
     }
     // Where matching goes on from: after the nodes that stayed, and after a child that was replaced.
@@ -6045,7 +6051,7 @@ const setup = (
         if (gone) destroy(inst, old)
       }
     }
-    if (!inPlace) placeNew(inst, parentNode, result, ref, from === undefined ? undefined : inOrder(from))
+    if (!inPlace) place(parentNode, result, ref, from === undefined ? undefined : inOrder(from))
     return result
   }
 
@@ -6061,7 +6067,7 @@ const setup = (
     const result: Array<Rendered> = new Array(news.length)
     for (let index = 0; index < news.length; index++) result[index] = create(inst, news[index]!, env)
     // After all of them are made, so a list that throws part way puts nothing in the host.
-    insertNew(inst, parentNode, result, 0, ref)
+    for (let index = 0; index < result.length; index++) insertNodes(parentNode, result[index]!, ref)
     return result
   }
 
@@ -6228,7 +6234,7 @@ const setup = (
       element.handlers !== prev.handlers || element.eventOptions !== prev.eventOptions ||
       element.owned !== prev.owned
     ) {
-      setEvents(inst, node, element)
+      setEvents(inst, node, element, true)
     }
     const children = rendered.children
     const views = element.children
@@ -6305,7 +6311,7 @@ const setup = (
     rendered.v = child
     if (next !== rendered.inner) {
       // It shows something else now, such as a feature once its Layer is ready: that goes in the container.
-      placeNew(inst, rendered.container, [next], undefined)
+      place(rendered.container, [next], undefined)
       // A child that `patchChild` didn't keep is a new instance.
       if (next._tag === "Child") record(next.inst, { _tag: "Detached" })
       rendered.inner = next
@@ -6387,7 +6393,7 @@ const setup = (
     const next = create(inst, view, env)
     const nodes = nodesOf(rendered)
     const parentNode = nodes.length > 0 ? host.parentOf(nodes[0]) : undefined
-    if (parentNode !== undefined) placeNew(inst, parentNode, [next], nodes[0])
+    if (parentNode !== undefined) place(parentNode, [next], nodes[0])
     destroy(inst, rendered)
     return next
   }
