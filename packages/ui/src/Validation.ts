@@ -501,9 +501,7 @@ export declare namespace Validation {
    * @category models
    * @since 0.1.0
    */
-  export type InferValues<S, K extends string> = {
-    readonly [P in K]: P extends keyof S ? FieldType<S[P]> : string
-  }
+  export type InferValues<S, K extends string> = Values<InferFields<S, K>>
 
   /**
    * The value Schemas {@link make} infers from its fields: each field's
@@ -519,7 +517,6 @@ export declare namespace Validation {
 }
 
 interface Spec {
-  readonly name: string
   readonly required: string | ((values: unknown) => string | false) | undefined
   readonly rules: ReadonlyArray<Rule<unknown, unknown>>
   readonly isEmpty: (value: unknown) => boolean
@@ -630,12 +627,11 @@ export const make = <S, K extends string>(
   const all = options.errors === "all"
   const input = fields as Record<string, FieldOptions<Schema.Top, unknown>>
   const names = Object.keys(input)
-  const specs: ReadonlyArray<Spec> = names.map((name) => ({
-    name,
+  const specs = new Map<string, Spec>(names.map((name) => [name, {
     required: input[name].required,
-    rules: (input[name].rules ?? []) as ReadonlyArray<Rule<unknown, unknown>>,
+    rules: input[name].rules ?? [],
     isEmpty: input[name].isEmpty ?? isEmptyValue
-  }))
+  }]))
   const Name = Schema.Literals(names)
   // Records keyed by field name are built with `fromEntries`, so a name
   // such as `__proto__` stays an own key.
@@ -655,9 +651,9 @@ export const make = <S, K extends string>(
     (mode === "onBlur" && state.touched.includes(name))
 
   const passes = (state: AnyState, name: string): boolean => {
-    const spec = specs.find((spec) => spec.name === name)!
+    const spec = specs.get(name)!
     const value = state.values[name]
-    return !spec.isEmpty(value) && ruleErrors(spec, value, state.values, false).length === 0
+    return !spec.isEmpty(value) && spec.rules.every(([predicate]) => predicate(value, state.values))
   }
 
   const validate = (
@@ -668,11 +664,11 @@ export const make = <S, K extends string>(
     let acceptable = true
     let invalid = false
     let validating = false
-    for (const spec of specs) {
-      const value = state.values[spec.name]
+    for (const [name, spec] of specs) {
+      const value = state.values[name]
       const message = requiredMessage(spec, state.values)
       const required = message !== undefined
-      const rejected = Object.hasOwn(state.rejected, spec.name) ? state.rejected[spec.name] : undefined
+      const rejected = Object.hasOwn(state.rejected, name) ? state.rejected[name] : undefined
       // The field's result before it shows. An optional empty field is
       // acceptable and has no result to show.
       let result: Field<unknown>
@@ -684,7 +680,7 @@ export const make = <S, K extends string>(
           : { _tag: "Invalid", value, required, errors: [message] }
       } else {
         const errors = ruleErrors(spec, value, state.values, all)
-        const check = Object.hasOwn(checks, spec.name) ? checks[spec.name] : undefined
+        const check = Object.hasOwn(checks, name) ? checks[name] : undefined
         if (isNonEmpty(errors)) {
           result = { _tag: "Invalid", value, required, errors }
         } else if (check === undefined) {
@@ -698,10 +694,10 @@ export const make = <S, K extends string>(
         }
       }
       acceptable &&= result._tag === "Valid" || result._tag === "NotValidated"
-      if (rejected === undefined && !shows(state, spec.name)) {
+      if (rejected === undefined && !shows(state, name)) {
         result = { _tag: "NotValidated", value, required }
       }
-      fields.push([spec.name, result])
+      fields.push([name, result])
       invalid ||= result._tag === "Invalid"
       validating ||= result._tag === "Validating"
     }
