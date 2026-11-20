@@ -887,7 +887,8 @@ export type EvolveFields<S> = unknown extends S ? "evolve needs the struct's typ
   : Types.IsUnion<S> extends true ? "evolve takes one struct: match the union first"
   : S extends ReadonlyArray<unknown> ? "evolve takes a struct, not an array"
   : S extends (...args: any) => any ? "evolve takes a struct"
-  : S extends object ? { readonly [K in keyof S]?: EvolveField<S[K]> }
+  : S extends object ? [keyof S] extends [never] ? "evolve takes a struct with fields"
+    : { readonly [K in keyof S]?: EvolveField<S[K]> }
   : "evolve takes a struct"
 
 // A field that may hold a function, optional callbacks included, can't be

@@ -76,6 +76,8 @@ describe("Component.evolve", () => {
     expect(Component.evolve).type.not.toBeCallableWith([1, 2], [3])
     expect(Component.evolve).type.not.toBeCallableWith(1, 2)
     expect(Component.evolve).type.not.toBeCallableWith((n: number) => n, {})
+    expect(Component.evolve).type.not.toBeCallableWith({}, 1)
+    expect(Component.evolve).type.not.toBeCallableWith({}, { typo: 1 })
   })
 
   it("rejects a union until it is matched", () => {
