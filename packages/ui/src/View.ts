@@ -235,6 +235,8 @@ export const tokenListAttributes: ReadonlySet<string> = new Set([
 ])
 
 const noOwned: ReadonlyArray<Owned> = []
+// What an element built without children holds: one frozen array for all of them.
+const noChildren: ReadonlyArray<never> = Object.freeze([])
 
 /**
  * The attributes, properties, handlers and event options of a builder that
@@ -656,15 +658,15 @@ export const toNode = <Msg, R>(content: Content<Msg, R>): Node<Msg, R> =>
 export const build = <Msg, R, const C extends ReadonlyArray<Input<Msg, any>>>(
   builder: ElementBuilder<Msg, R, any, any>,
   inputs: C
-): Element<Msg, R | Requirements<C[number]>> => buildWith(builder, inputs.length === 0 ? [] : children(inputs))
+): Element<Msg, R | Requirements<C[number]>> => buildWith(builder, inputs.length === 0 ? noChildren : children(inputs))
 
 const buildWith = <Msg, R>(
   builder: ElementBuilder<Msg, any, any, any>,
-  given: Array<Node<Msg, any>>
+  given: ReadonlyArray<Node<Msg, any>>
 ): Element<Msg, R> => {
   // What the builder holds from `children` comes first, and what it is
   // given now comes after.
-  const content = builder.content as Array<Node<Msg, any>> | undefined
+  const content = builder.content
   const all = content === undefined ? given : given.length === 0 ? content : children([...content, ...given])
   const hooks = builder.hooks
   return hooks === undefined ? elementOf(builder, all) : forwardTo(builder, hooks, all)
@@ -672,7 +674,7 @@ const buildWith = <Msg, R>(
 
 const elementOf = <Msg, R>(
   builder: ElementBuilder<Msg, any, any, any>,
-  children: Array<Node<Msg, any>>
+  children: ReadonlyArray<Node<Msg, any>>
 ): Element<Msg, R> => ({
   _tag: "Element",
   tag: builder.tag,
@@ -705,7 +707,7 @@ export type Forward = (node: any) => Element<any, any> | ElementBuilder<any, any
 const forwardTo = <Msg, R>(
   builder: ElementBuilder<Msg, any, any, any>,
   hooks: ReadonlyArray<Forward>,
-  content: Array<Node<Msg, any>>
+  content: ReadonlyArray<Node<Msg, any>>
 ): Element<Msg, R> => {
   const finished = copyBuilder(builder) as Mutable<ElementBuilder<Msg, any, any, any>>
   finished.hooks = hooks.length === 1 ? undefined : hooks.slice(0, -1)
@@ -744,7 +746,7 @@ export const withContent = <B extends ElementBuilder<any, any, any, any>>(
   const out = copyBuilder(builder) as Mutable<B>
   const content = builder.content
   out.content = content === undefined
-    ? (inputs.length === 0 ? [] : childrenOf(inputs as Array<Input<any, any>>))
+    ? (inputs.length === 0 ? noChildren : childrenOf(inputs as Array<Input<any, any>>))
     : inputs.length === 0
     ? content
     : children([...content, ...inputs])
