@@ -5378,7 +5378,9 @@ const setup = (
   ): RChild | RFallback => {
     const target = view.component
     const status = env.status
-    if (Feature.isService(target) && status._tag !== "Ready") {
+    // Read once, with `in` here rather than `Predicate.hasProperty`, whose shared check every child would pay for.
+    const feature = Feature.TypeId in target
+    if (feature && status._tag !== "Ready") {
       // The feature's service comes from a Layer that is still building, or failed. The child shows
       // `fallback`, rendered against the nearest settled Env, and re-renders when the Layer settles.
       if (view.fallback === undefined) {
@@ -5396,7 +5398,7 @@ const setup = (
     }
     let component: Component.Any
     let childEnv = env
-    if (Feature.isService(target)) {
+    if (feature) {
       const found = Context.getOption(env.ctx!, target)
       if (Option.isNone(found)) throw new Error(`${inst.path}: nothing provides ${target.key}`)
       component = found.value.component
