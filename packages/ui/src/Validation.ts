@@ -75,10 +75,14 @@ const resolveMessage = <A>(message: RuleMessage<A>, value: A): string =>
   typeof message === "string" ? message : message(value)
 
 const pattern = (regex: RegExp, message: RuleMessage<string> = "Invalid format"): Rule<string> => {
-  // A global or sticky RegExp keeps `lastIndex` between calls, so a copy
-  // without those flags gives the same answer each time.
-  const copy = new RegExp(regex.source, regex.flags.replace(/[gy]/g, ""))
-  return [(value) => copy.test(value), message]
+  // A global or sticky RegExp keeps `lastIndex` between calls. A private
+  // copy that starts at zero each time gives the same answer, keeps the
+  // flags and leaves the caller's RegExp alone.
+  const copy = new RegExp(regex)
+  return [(value) => {
+    copy.lastIndex = 0
+    return copy.test(value)
+  }, message]
 }
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -633,18 +637,16 @@ export const make = <S, K extends string>(
     isEmpty: input[name].isEmpty ?? isEmptyValue
   }))
   const Name = Schema.Literals(names)
-  const valueSchemas: Record<string, Schema.Top> = {}
-  const rejectedSchemas: Record<string, Schema.Top> = {}
-  for (const name of names) {
-    valueSchemas[name] = input[name].value ?? Schema.String
-    rejectedSchemas[name] = Schema.optionalKey(Schema.NonEmptyArray(Schema.String))
-  }
+  // Records keyed by field name are built with `fromEntries`, so a name
+  // such as `__proto__` stays an own key.
+  const byName = <A>(f: (name: string) => A): Record<string, A> =>
+    Object.fromEntries(names.map((name) => [name, f(name)]))
   const State = Schema.Struct({
-    values: Schema.Struct(valueSchemas),
+    values: Schema.Struct(byName((name) => input[name].value ?? Schema.String)),
     edited: Schema.Array(Name),
     touched: Schema.Array(Name),
     submitted: Schema.Boolean,
-    rejected: Schema.Struct(rejectedSchemas)
+    rejected: Schema.Struct(byName(() => Schema.optionalKey(Schema.NonEmptyArray(Schema.String))))
   })
 
   const shows = (state: AnyState, name: string): boolean =>
@@ -662,7 +664,7 @@ export const make = <S, K extends string>(
     state: AnyState,
     checks: Record<string, AsyncResult.AsyncResult<ReadonlyArray<string>, never> | undefined> = {}
   ) => {
-    const fields: Record<string, Field<unknown>> = {}
+    const fields: Array<[string, Field<unknown>]> = []
     let acceptable = true
     let invalid = false
     let validating = false
@@ -699,11 +701,16 @@ export const make = <S, K extends string>(
       if (rejected === undefined && !shows(state, spec.name)) {
         result = { _tag: "NotValidated", value, required }
       }
-      fields[spec.name] = result
+      fields.push([spec.name, result])
       invalid ||= result._tag === "Invalid"
       validating ||= result._tag === "Validating"
     }
-    return { fields, value: acceptable ? Option.some(state.values) : Option.none(), invalid, validating }
+    return {
+      fields: Object.fromEntries(fields),
+      value: acceptable ? Option.some(state.values) : Option.none(),
+      invalid,
+      validating
+    }
   }
 
   return {

@@ -147,17 +147,41 @@ describe("Validation", () => {
     assert.deepStrictEqual(derive("ada", AsyncResult.success([])), ["Valid", true, false])
   })
 
-  it("gives the same answer each time, for any field name", () => {
-    const Form = Validation.make({ code: { rules: [Rule.pattern(/^a$/g)] }, constructor: {} })
-    const state = Form.submit(Form.init({ code: "a", constructor: "" }))
+  it("gives the same answer each time, and keeps a regex's flags", () => {
+    const Form = Validation.make({ code: { rules: [Rule.pattern(/^a$/g)] }, sticky: { rules: [Rule.pattern(/a/y)] } })
+    const state = Form.submit(Form.init({ code: "a", sticky: "ba" }))
     const first = Form.validate(state)
     assert.deepStrictEqual(Form.validate(state), first)
     assert.deepStrictEqual(first.fields, {
       code: { _tag: "Valid", value: "a", required: false },
-      constructor: { _tag: "NotValidated", value: "", required: false }
+      // A sticky pattern matches from the start only.
+      sticky: { _tag: "Invalid", value: "ba", required: false, errors: ["Invalid format"] }
     })
+  })
+
+  it("keeps any field name, including ones on Object.prototype", () => {
+    const fields = JSON.parse(`{ "constructor": {}, "__proto__": { "required": "Required" } }`) as {
+      readonly constructor: {}
+      readonly ["__proto__"]: { readonly required: string }
+    }
+    const Form = Validation.make(fields)
+    const values = JSON.parse(`{ "constructor": "", "__proto__": "x" }`)
+    const state = Form.reject(
+      Form.change(Form.init(values), "constructor", "c"),
+      JSON.parse(`{ "__proto__": ["Taken"] }`)
+    )
     const json = JSON.parse(JSON.stringify(Schema.encodeSync(Form.State)(state)))
-    assert.isTrue(Option.isSome(Form.validate(Schema.decodeUnknownSync(Form.State)(json)).value))
+    const decoded = Schema.decodeUnknownSync(Form.State)(json)
+    assert.deepStrictEqual(decoded, state)
+    const { fields: derived } = Form.validate(decoded)
+    assert.deepStrictEqual(Object.keys(derived), ["constructor", "__proto__"])
+    assert.deepStrictEqual(Object.getOwnPropertyDescriptor(derived, "__proto__")?.value, {
+      _tag: "Invalid",
+      value: "x",
+      required: true,
+      errors: ["Taken"]
+    })
+    assert.deepStrictEqual(Object.getOwnPropertyDescriptor(decoded.values, "__proto__")?.value, "x")
   })
 
   it("keeps its State as JSON", () => {
