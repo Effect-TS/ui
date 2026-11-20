@@ -93,6 +93,8 @@ describe("Validation", () => {
       const Form = Validation.make({ a: { required: "A" }, b: { required: "B" }, c: { required: "C" } }, { mode })
       const state = Form.blur(Form.change(Form.init({ a: "", b: "", c: "" }), "a", ""), "b")
       const tags = (s: typeof state) => Object.values(Form.validate(s).fields).map((field) => field._tag)
+      // The value is held back by fields that aren't showing yet.
+      assert.isTrue(Option.isNone(Form.validate(state).value))
       return [tags(state), tags(Form.submit(state))]
     }
     const all = ["Invalid", "Invalid", "Invalid"]
@@ -143,6 +145,19 @@ describe("Validation", () => {
     assert.deepStrictEqual(derive("ada", AsyncResult.failure(Cause.die("down"))), ["Validating", false, true])
     assert.deepStrictEqual(derive("ada", AsyncResult.success(["Taken"])), ["Invalid", false, false])
     assert.deepStrictEqual(derive("ada", AsyncResult.success([])), ["Valid", true, false])
+  })
+
+  it("gives the same answer each time, for any field name", () => {
+    const Form = Validation.make({ code: { rules: [Rule.pattern(/^a$/g)] }, constructor: {} })
+    const state = Form.submit(Form.init({ code: "a", constructor: "" }))
+    const first = Form.validate(state)
+    assert.deepStrictEqual(Form.validate(state), first)
+    assert.deepStrictEqual(first.fields, {
+      code: { _tag: "Valid", value: "a", required: false },
+      constructor: { _tag: "NotValidated", value: "", required: false }
+    })
+    const json = JSON.parse(JSON.stringify(Schema.encodeSync(Form.State)(state)))
+    assert.isTrue(Option.isSome(Form.validate(Schema.decodeUnknownSync(Form.State)(json)).value))
   })
 
   it("keeps its State as JSON", () => {

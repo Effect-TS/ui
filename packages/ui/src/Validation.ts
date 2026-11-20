@@ -74,10 +74,12 @@ export type Rule<A, Values = unknown> = readonly [
 const resolveMessage = <A>(message: RuleMessage<A>, value: A): string =>
   typeof message === "string" ? message : message(value)
 
-const pattern = (regex: RegExp, message: RuleMessage<string> = "Invalid format"): Rule<string> => [
-  (value) => regex.test(value),
-  message
-]
+const pattern = (regex: RegExp, message: RuleMessage<string> = "Invalid format"): Rule<string> => {
+  // A global or sticky RegExp keeps `lastIndex` between calls, so a copy
+  // without those flags gives the same answer each time.
+  const copy = new RegExp(regex.source, regex.flags.replace(/[gy]/g, ""))
+  return [(value) => copy.test(value), message]
+}
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const STRICT_URL = /^https?:\/\/.+/
@@ -668,7 +670,7 @@ export const make = <S, K extends string>(
       const value = state.values[spec.name]
       const message = requiredMessage(spec, state.values)
       const required = message !== undefined
-      const rejected = state.rejected[spec.name]
+      const rejected = Object.hasOwn(state.rejected, spec.name) ? state.rejected[spec.name] : undefined
       // The field's result before it shows. An optional empty field is
       // acceptable and has no result to show.
       let result: Field<unknown>
@@ -680,7 +682,7 @@ export const make = <S, K extends string>(
           : { _tag: "Invalid", value, required, errors: [message] }
       } else {
         const errors = ruleErrors(spec, value, state.values, all)
-        const check = checks[spec.name]
+        const check = Object.hasOwn(checks, spec.name) ? checks[spec.name] : undefined
         if (isNonEmpty(errors)) {
           result = { _tag: "Invalid", value, required, errors }
         } else if (check === undefined) {
@@ -720,14 +722,15 @@ export const make = <S, K extends string>(
     blur: dual(2, (self: AnyState, name: string): AnyState => ({ ...self, touched: add(self.touched, name) })),
     submit: (self: AnyState): AnyState => self.submitted ? self : { ...self, submitted: true },
     reject: dual(2, (self: AnyState, errors: Record<string, ReadonlyArray<string> | undefined>): AnyState => {
-      const rejected: Record<string, Arr.NonEmptyReadonlyArray<string> | undefined> = { ...self.rejected }
-      for (const name of Object.keys(errors)) {
-        const list = errors[name]
-        if (list === undefined) continue
-        if (isNonEmpty(list)) rejected[name] = list
-        else delete rejected[name]
+      const merged = new Map<string, ReadonlyArray<string> | undefined>(Object.entries(self.rejected))
+      for (const [name, list] of Object.entries(errors)) {
+        if (list !== undefined) merged.set(name, list)
       }
-      return { ...self, rejected }
+      // `fromEntries` keeps any field name, `__proto__` included, as an own key.
+      const kept = [...merged].filter((entry): entry is [string, Arr.NonEmptyReadonlyArray<string>] =>
+        entry[1] !== undefined && isNonEmpty(entry[1])
+      )
+      return { ...self, rejected: Object.fromEntries(kept) }
     }),
     passes,
     validate

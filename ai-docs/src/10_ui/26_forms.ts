@@ -149,7 +149,11 @@ export const SignupForm = Component.define({
   update: {
     // `change` sets the value, marks the field edited and drops the
     // server's error for it.
-    UpdatedField: (model, { name, value }) => ({ ...model, form: SignupValidation.change(model.form, name, value) }),
+    // While the account is being created the inputs are disabled, and an
+    // edit that still arrives is dropped, so the result always belongs to
+    // the values that were sent.
+    UpdatedField: (model, { name, value }) =>
+      model.submitting ? model : { ...model, form: SignupValidation.change(model.form, name, value) },
     // A tried submit shows every field. `value` is `Some` only when every
     // field passes, so it gates the Command.
     SubmittedForm: (model, _message, $) => {
@@ -172,7 +176,8 @@ export const SignupForm = Component.define({
     const { fields } = validateSignup(model.form, h.queries.taken)
 
     // One field's markup, by its derived state. A ui-kit `Field` takes the
-    // same facts: `invalid` is `field._tag === "Invalid"`.
+    // same facts: pass `invalid: true` for `Invalid`, `false` for `Valid`,
+    // and leave it out otherwise, so a pending check doesn't show as valid.
     const input = (name: typeof FieldName.Type, label: string, type: string) => {
       const field = fields[name]
       return h.div.children(
@@ -181,6 +186,7 @@ export const SignupForm = Component.define({
           h.input.attr("type", type).attr("aria-invalid", field._tag === "Invalid" ? "true" : undefined)
             .attr("aria-required", field.required ? "true" : undefined)
             .value(field.value)
+            .disabled(model.submitting)
             .onInput(({ value }) => SignupMessage.UpdatedField({ name, value }))
         ),
         field._tag === "Validating" ? h.span.children("Checking…") : null,
@@ -234,6 +240,9 @@ export const rejectedEmail = Effect.gen(function*() {
     .send(SignupMessage.UpdatedField({ name: "confirm", value: account.password }))
     .send(SignupMessage.SubmittedForm())
     .expectExact(CreateAccount)
+    // An edit that arrives while the account is being created is dropped.
+    .keepPending(CreateAccount)
+    .send(SignupMessage.UpdatedField({ name: "email", value: "grace@example.com" }))
     .fail(CreateAccount, new SignupRejected({ field: "email", message: "That email already has an account" }))
   const before = validateSignup(s.model.form, s.queries.taken).fields.email
   s.send(SignupMessage.UpdatedField({ name: "email", value: "ada@example.org" }))
