@@ -1,10 +1,21 @@
 // @vitest-environment happy-dom
-import { Component, UiSchema } from "@effect/ui"
-import { Html } from "@effect/ui/html"
+import { Child, Component, MessageLog, UiSchema } from "@effect/ui"
+import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Schema } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
+
+const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))
+const makeContainer = (html = "") =>
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      const element = document.body.appendChild(document.createElement("div"))
+      element.innerHTML = html
+      return element
+    }),
+    (element) => Effect.sync(() => element.remove())
+  )
 
 // The first init of each runs on the server: a Model the client built with its own init would say so.
 let inits = { avatar: 0, profile: 0 }
@@ -64,4 +75,169 @@ describe("model children on the server", () => {
       assert.strictEqual(result.container.querySelector("p")!.textContent, "draft from the server")
       assert.strictEqual(result.container.querySelector("i")!.textContent, "avatar from the server")
     }).pipe(Effect.provide(TestHost.layer())))
+
+  it.effect("keeps a moved model child whose root tag changes on BrowserHost", () =>
+    Effect.gen(function*() {
+      const RowMsg = UiSchema.TaggedEnum({ Inc: {} })
+      const Row = Component.define({
+        name: "Row",
+        lifetime: "model",
+        props: Schema.Struct({ asParagraph: Schema.Boolean }),
+        model: Schema.Number,
+        message: RowMsg,
+        elements: Html
+      }).make({
+        init: () => 0,
+        update: (count) => count + 1,
+        view: (count, h) =>
+          h.props.asParagraph
+            ? h.p(`row:${count}`)
+            : h.button.onClick(RowMsg.Inc()).children(`row:${count}`)
+      })
+      const BoardMsg = UiSchema.TaggedEnum({ Flip: {} })
+      const Board = Component.define({
+        name: "Board",
+        lifetime: "view",
+        model: Schema.Boolean,
+        message: BoardMsg,
+        elements: Html
+      }).make({
+        children: { row: Child.one(Row, { props: (right) => ({ asParagraph: right }) }) },
+        init: () => false,
+        update: (right) => !right,
+        view: (right, h) =>
+          h.div(
+            h.aside(right ? null : h.children.row()),
+            h.article(right ? h.children.row() : null)
+          )
+      })
+      const log = MessageLog.makeMemory()
+      const app = yield* makeContainer()
+      const root = yield* BrowserHost.mountEffect(Board, {}, app).pipe(
+        Effect.provideService(MessageLog.MessageLog, log)
+      )
+      ;(app.querySelector("aside button") as HTMLButtonElement).click()
+      yield* tick
+      assert.strictEqual(app.querySelector("aside button")!.textContent, "row:1")
+
+      root.send(BoardMsg.Flip())
+      yield* tick
+      assert.strictEqual(app.querySelector("aside")!.textContent, "")
+      assert.strictEqual(app.querySelector("article p")?.textContent, "row:1")
+      assert.deepStrictEqual(log.entries().filter((entry) => entry._tag === "Failed"), [])
+    }).pipe(Effect.scoped))
+
+  it.live("hydrates a listed model child inside a slotted receiver whose Layer waits", () =>
+    Effect.gen(function*() {
+      class Slow extends Context.Service<Slow, string>()("test/SlowReceiver") {}
+      const CounterMsg = UiSchema.TaggedEnum({ Inc: {} })
+      const Counter = Component.define({
+        name: "Counter",
+        lifetime: "model",
+        model: Schema.Number,
+        message: CounterMsg,
+        elements: Html
+      }).make({
+        init: () => 0,
+        update: (count) => count + 1,
+        view: (count, h) => h.button.onClick(CounterMsg.Inc()).children(String(count))
+      })
+      const Card = Component.define({
+        name: "Card",
+        lifetime: "view",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html,
+        slots: ["body"]
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => h.section(h.slots.body)
+      }).pipe(Component.provide(Layer.effect(Slow, Effect.as(Effect.sleep("50 millis"), "ready"))))
+      const Page = Component.define({
+        name: "Page",
+        lifetime: "view",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        children: { counter: Counter },
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => Card(h, { key: "c", slots: { body: h.children.counter() } })
+      })
+      const rendered = yield* HtmlServer.renderToHtml(Page, {})
+      const app = yield* makeContainer(rendered.html)
+      const root = yield* BrowserHost.mountEffect(Page, {}, app, { state: rendered.state })
+      yield* root.adopted
+      yield* tick
+      const buttons = [...app.querySelectorAll("button")]
+      assert.strictEqual(buttons.length, 1)
+      assert.notInclude(app.innerHTML, "<!--")
+      buttons[0]!.click()
+      yield* tick
+      assert.strictEqual(buttons[0]!.textContent, "1")
+    }).pipe(Effect.scoped))
+
+  it.effect("serializes a listed model child parked in a collapsed slot during SSR", () =>
+    Effect.gen(function*() {
+      const RowEvents = UiSchema.TaggedEnum({ Hide: {} })
+      const Row = Component.define({
+        name: "Row",
+        lifetime: "model",
+        props: Schema.Struct({ label: Schema.String }),
+        model: Schema.String,
+        message: Schema.Never,
+        events: RowEvents,
+        elements: Html
+      }).make({
+        init: ($) => $.set($.props.label).emit(RowEvents.Hide()),
+        update: (model) => model,
+        view: (label, h) => h.button(label)
+      })
+      const Card = Component.define({
+        name: "Card",
+        lifetime: "view",
+        props: Schema.Struct({ open: Schema.Boolean }),
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html,
+        slots: ["body"]
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => h.section(h.props.open ? h.slots.body : null)
+      })
+      const PageMsg = UiSchema.TaggedEnum({ Hide: {}, Show: {} })
+      const Page = Component.define({
+        name: "Page",
+        lifetime: "view",
+        model: Schema.Struct({ open: Schema.Boolean, label: Schema.String }),
+        message: PageMsg,
+        elements: Html
+      }).make({
+        children: {
+          row: Child.one(Row, {
+            props: (model) => ({ label: model.label }),
+            onEmit: () => PageMsg.Hide()
+          })
+        },
+        init: () => ({ open: true, label: "initial" }),
+        update: (model, message) =>
+          PageMsg.match(message, {
+            Hide: () => ({ open: false, label: "hidden" }),
+            Show: () => ({ ...model, open: true })
+          }),
+        view: (model, h) => Card(h, { key: "c", props: { open: model.open }, slots: { body: h.children.row() } })
+      })
+      const rendered = yield* HtmlServer.renderToHtml(Page, {})
+      assert.notInclude(rendered.html, "<button")
+      assert.strictEqual(rendered.state["/Page/Row[row]"], "initial")
+      const app = yield* makeContainer(rendered.html)
+      const root = yield* BrowserHost.mountEffect(Page, {}, app, { state: rendered.state })
+      yield* root.adopted
+      root.send(PageMsg.Show())
+      yield* tick
+      assert.strictEqual(app.querySelector("button")?.textContent, "initial")
+    }).pipe(Effect.scoped))
 })

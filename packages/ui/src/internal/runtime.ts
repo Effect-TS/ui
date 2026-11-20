@@ -1067,11 +1067,21 @@ const serializeTree = (
     sink.enter(path)
     if (inst.failure === undefined) {
       for (const rendered of inst.rendered) serialize(inst, rendered, inner)
-      // A held child has no place in the document: only its subtree's state is sent.
-      if (inst.held !== undefined) {
+      // A held child or a parked outlet has no place in the document: only its subtree's state is sent.
+      const slotted = inst.component.definition.slots.length > 0 ? slottedBy.get(inst) : undefined
+      if (inst.held !== undefined || slotted !== undefined) {
         const shown = sink
         sink = noSink
-        for (const held of inst.held.values()) serialize(inst, held.inner, inner)
+        if (inst.held !== undefined) {
+          for (const held of inst.held.values()) serialize(inst, held.inner, inner)
+        }
+        if (slotted !== undefined) {
+          for (const out of slotted.placed.values()) {
+            if (!out.closed && outletOf.get(out)?.container !== undefined) {
+              for (const child of out.rendered) serialize(out, child, inner)
+            }
+          }
+        }
         sink = shown
       }
     }
@@ -5326,7 +5336,13 @@ const setup = (
    */
   const createOutlet = (inst: Instance, view: View.Outlet, range?: Range): ROutlet => {
     const kept = slottedBy.get(inst.author)?.placed.get(view.name)
-    if (kept !== undefined && !kept.closed) return replaceOutlet(inst, kept, view)
+    if (kept !== undefined && !kept.closed) {
+      if (range !== undefined) {
+        removeRange(range)
+        created++
+      }
+      return replaceOutlet(inst, kept, view)
+    }
     const out = makeOutlet(inst, view)
     const views = checkedViews(out)
     try {
@@ -5360,6 +5376,7 @@ const setup = (
   const replaceOutlet = (inst: Instance, out: Instance, view: View.Outlet): ROutlet => {
     const outlet = outletOf.get(out)!
     const from = out.parent!
+    const wasDetached = isDetached(out)
     from.children.delete(out)
     reparent(out, inst)
     const rendered: ROutlet = { _tag: "Outlet", v: view, inst: out }
@@ -5369,9 +5386,12 @@ const setup = (
       unpark(from, outlet.container)
       outlet.container = undefined
       out.detached = false
-      for (const item of out.rendered) toggleMounts(out, item, out.env, true)
-      for (const child of contentChildren(out)) record(child, { _tag: "Attached" })
-    } else resumeMounts(out)
+    }
+    const nowDetached = isDetached(inst)
+    if (wasDetached !== nowDetached) {
+      for (const item of out.rendered) toggleMounts(out, item, out.env, !nowDetached)
+      for (const child of contentChildren(out)) record(child, { _tag: nowDetached ? "Detached" : "Attached" })
+    }
     rehome(out)
     patchOutlet(out, view)
     viewChanged = true
@@ -5539,7 +5559,8 @@ const setup = (
     inst: Instance,
     view: View.Child<any, any>,
     env: Env,
-    range?: Range
+    range?: Range,
+    holding = false
   ): RChild | RFallback => {
     const target = view.component
     const status = env.status
@@ -5582,9 +5603,18 @@ const setup = (
     }
     const path = childPath(inst.author, view)
     const failure = heldFailure(inst.author, path)
-    if (failure !== undefined) return failedChild(inst, view, failure, env)
+    if (failure !== undefined) {
+      if (range !== undefined) removeRange(range)
+      return failedChild(inst, view, failure, env)
+    }
     const found = live.get(path)
-    if (found !== undefined && movable(inst, found, component, env)) return move(inst, found, view, env)
+    if (found !== undefined && movable(inst, found, component, env)) {
+      if (range !== undefined) {
+        removeRange(range)
+        created++
+      }
+      return move(inst, found, view, env, holding)
+    }
     const child = makeInstance(
       component,
       view.props,
@@ -5633,8 +5663,15 @@ const setup = (
    * query results. It leaves the place it was in, if a patch hasn't taken it out yet, and that place's
    * record holds nothing of it from now on. Nothing is logged: the instance never left.
    */
-  const move = (inst: Instance, found: Instance, view: View.Child<any, any>, env: Env): RChild => {
+  const move = (
+    inst: Instance,
+    found: Instance,
+    view: View.Child<any, any>,
+    env: Env,
+    holding = false
+  ): RChild => {
     const from = found.parent!
+    const wasDetached = isDetached(found)
     if (found.site === undefined) undrop(found)
     else from.children.delete(found)
     // Held by its author: the holder lets it go now, as the author may not render again this flush.
@@ -5647,7 +5684,17 @@ const setup = (
     reparent(found, inst)
     const rendered: RChild = new ChildRecord(view, found)
     found.site = rendered
-    resumeMounts(found)
+    if (holding) {
+      // `detach` runs immediately after and checks `found.detached` to avoid logging a duplicate `Detached`.
+      found.detached = wasDetached
+    } else {
+      found.detached = false
+      const nowDetached = isDetached(inst)
+      if (wasDetached !== nowDetached) {
+        record(found, { _tag: nowDetached ? "Detached" : "Attached" })
+        for (const item of found.rendered) toggleMounts(found, item, found.env, !nowDetached)
+      }
+    }
     rehome(found)
     const slotted = slottedBy.get(found)
     if (slotted !== undefined) slotted.values = view.slots
@@ -5672,19 +5719,10 @@ const setup = (
     for (const child of inst.children) setDepth(child, depth + 1)
   }
 
-  /**
-   * A moved instance's element mounts run, as a placed child's do: those that a detached place stopped
-   * start again. A place it moves to that is detached stops them as it detaches it.
-   */
-  const resumeMounts = (moved: Instance) => {
-    let stopped = false
-    for (let at: Instance | undefined = moved; at !== undefined && !stopped; at = at.parent) stopped = at.detached
-    if (!stopped) return
-    if (moved.detached) {
-      moved.detached = false
-      record(moved, { _tag: "Attached" })
-    }
-    for (const item of moved.rendered) toggleMounts(moved, item, moved.env, true)
+  /** Whether `inst` or any ancestor above it is out of the document (held or in a parked outlet). */
+  const isDetached = (inst: Instance | undefined): boolean => {
+    for (let at = inst; at !== undefined; at = at.parent) if (at.detached) return true
+    return false
   }
 
   /**
@@ -5789,7 +5827,7 @@ const setup = (
       after.set(
         path,
         kept === undefined
-          ? detach(author, makeChild(author, view, author.env))
+          ? detach(author, makeChild(author, view, author.env, undefined, true))
           : patchHeld(author, kept, view, author.env)
       )
     }
@@ -6181,7 +6219,9 @@ const setup = (
         }
         result[index] = create(inst, view, env)
       }
-      for (let index = start; index < newLength; index++) insertNodes(parentNode, result[index]!, ref)
+      if (parentNode !== undefined) {
+        for (let index = start; index < newLength; index++) insertNodes(parentNode, result[index]!, ref)
+      }
       return result
     }
     // Where matching goes on from: after the nodes that stayed, and after a child that was replaced.
@@ -6276,7 +6316,9 @@ const setup = (
         if (gone) destroy(inst, old)
       }
     }
-    if (!inPlace) place(parentNode, result, ref, from === undefined ? undefined : inOrder(from))
+    if (!inPlace && parentNode !== undefined) {
+      place(parentNode, result, ref, from === undefined ? undefined : inOrder(from))
+    }
     return result
   }
 
@@ -6292,7 +6334,9 @@ const setup = (
     const result: Array<Rendered> = new Array(news.length)
     for (let index = 0; index < news.length; index++) result[index] = create(inst, news[index]!, env)
     // After all of them are made, so a list that throws part way puts nothing in the host.
-    for (let index = 0; index < result.length; index++) insertNodes(parentNode, result[index]!, ref)
+    if (parentNode !== undefined) {
+      for (let index = 0; index < result.length; index++) insertNodes(parentNode, result[index]!, ref)
+    }
     return result
   }
 
@@ -6764,8 +6808,9 @@ const setup = (
     for (const node of nodes) host.insertBefore(container, node, undefined)
     toggleMounts(inst, rendered, inst.env, false)
     if (rendered._tag === "Child") {
+      const already = rendered.inst.detached
       rendered.inst.detached = true
-      record(rendered.inst, { _tag: "Detached" })
+      if (!already) record(rendered.inst, { _tag: "Detached" })
     }
     viewChanged = true
     return { v: rendered.v, inner: rendered, container }
@@ -6866,7 +6911,7 @@ const setup = (
 
   /** Destroys every node of a list, in one step when the host can clear their parent. */
   const destroyAll = (inst: Instance, parentNode: unknown, olds: ReadonlyArray<Rendered>) => {
-    if (host.removeChildren === undefined) {
+    if (parentNode === undefined || host.removeChildren === undefined) {
       for (let index = 0; index < olds.length; index++) destroy(inst, olds[index]!)
       return
     }

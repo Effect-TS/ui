@@ -427,6 +427,75 @@ describe("detached children", () => {
       provideHost
     ))
 
+  it.effect("restarts a model child's mounts when it moves from a parked slot into a visible sibling", () =>
+    Effect.gen(function*() {
+      let started = 0
+      let stopped = 0
+      const mountedNodes: Array<unknown> = []
+      const Track = Mount.make(
+        "Track",
+        { args: {} },
+        (node) =>
+          Effect.acquireRelease(
+            Effect.sync(() => {
+              started++
+              mountedNodes.push(node)
+            }),
+            () => Effect.sync(() => void stopped++)
+          ).pipe(Effect.andThen(Effect.never))
+      )
+      const Row = Component.define({
+        name: "Row",
+        lifetime: "model",
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => h.el("p").onMount(Track()).children("row")
+      })
+      const Card = Component.define({
+        name: "Card",
+        lifetime: "view",
+        props: Schema.Boolean,
+        model: Schema.Null,
+        message: Schema.Never,
+        slots: ["body"]
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => h.el("section", h.props ? h.slots.body : null)
+      })
+      const Mode = Schema.Literals(["open", "parked", "moved"])
+      const Page = Component.define({ name: "Page", lifetime: "view", model: Mode, message: Mode }).make({
+        children: { row: Row },
+        init: () => "open" as const,
+        update: (_, next) => next,
+        view: (mode, h) =>
+          h.el(
+            "main",
+            mode === "moved" ? null : Card(h, { key: "c", props: mode === "open", slots: { body: h.children.row() } }),
+            h.el("aside", mode === "moved" ? h.children.row() : null)
+          )
+      })
+      const root = yield* TestHost.mount(Page, {})
+      yield* TestHost.settle
+      assert.deepStrictEqual([started, stopped], [1, 0])
+
+      root.send("parked")
+      yield* TestHost.settle
+      assert.deepStrictEqual([started, stopped], [1, 1])
+
+      root.send("moved")
+      yield* TestHost.settle
+      assert.deepStrictEqual([started, stopped], [2, 1])
+      assert.strictEqual(mountedNodes[1], mountedNodes[0])
+      assert.strictEqual(root.text(), "row")
+    }).pipe(
+      Effect.provide(Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })),
+      provideHost
+    ))
+
   it.effect("starts a mount under a handle the host recycled from a removed parent's container", () =>
     Effect.gen(function*() {
       const { containers, host, recycle, root: container, text } = numbered()
