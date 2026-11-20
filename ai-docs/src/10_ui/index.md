@@ -108,6 +108,71 @@ Effect UI differs from Foldkit in three places:
   any other message, for the fact it reports.
 - A Command or mount with nothing to report needs no `Completed*` message. `Component.noop` is enough.
 
+### Changing the Model
+
+`$.evolve` changes some fields of the Model and keeps the rest, so a
+handler doesn't spread `...model`. Each field takes its new value, or a
+function from its old value to the new one. It returns a step, so `.run`,
+`.emit` and another `.evolve` chain after it:
+
+```ts
+const submittedOrder = CheckoutDef.update("SubmittedOrder", (model, _message, $) =>
+  model.submitting
+    ? model
+    : $.evolve({ form: submit, submitting: true, attempts: (n) => n + 1, notice: null })
+      .run(placeOrder(model.form.values)))
+```
+
+`Component.evolve` takes the same fields for a struct inside the Model:
+data-first for a row of a list, and data-last for a struct field, where it
+takes the struct's type from the field. It also changes the Model in a
+handler that returns a bare Model, with no `$`:
+
+```ts
+const clickedIncrement = CheckoutDef.update("ClickedIncrement", (_model, { id }, $) =>
+  $.evolve({
+    lines: Arr.map((line) => line.id === id ? Component.evolve(line, { quantity: (n) => n + 1 }) : line),
+    coupon: Component.evolve({ status: "Idle" })
+  }))
+
+const failedSaveNote = NoteEditorDef.update(
+  "FailedSaveNote",
+  (model, { reason }) => Component.evolve(model, { error: reason })
+)
+```
+
+A misspelt key, a value of the wrong type and a function that returns the
+wrong type are errors on that field. Unlike with `Struct.evolve` from
+`effect`, a field can't change type. A field takes a whole value, so
+`coupon: { status: "Idle" }` is an error: write
+`coupon: Component.evolve({ status: "Idle" })`. A function is always the
+updater, so a field whose type is a function can't be set through
+`evolve`. A Model shouldn't hold a function anyway, since it can't be
+encoded for hydration or history.
+
+A function sees only its own field. One that depends on another field
+reads the handler's `model`, which is the Model before this step.
+
+`evolve` doesn't take a union, and a nullable struct counts as one. Match
+the union first and evolve the member:
+
+```ts
+const updatedName = AuthDef.update(
+  "UpdatedName",
+  (model, { value }) => Auth.match(model, { LoggedOut: (auth) => auth, LoggedIn: Component.evolve({ name: value }) })
+)
+
+// A union field in a struct Model, with `match` data-last.
+$.evolve({ auth: Auth.match({ LoggedOut: (auth) => auth, LoggedIn: Component.evolve({ name: value }) }) })
+
+// A nullable struct.
+$.evolve({ coupon: (coupon) => coupon === null ? null : Component.evolve(coupon, { status: "Idle" }) })
+```
+
+A union Model has no `$.evolve`, so a handler that also runs a Command
+wraps the match in `$.set(...)`. Switching to another member is a `$.set`
+too.
+
 ### Stateless view wrappers
 
 Name view functions in CapitalCase, like components (for example, `Card` and `Field`).

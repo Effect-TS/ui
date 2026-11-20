@@ -60,6 +60,7 @@
  * @since 0.1.0
  */
 import type * as Duration from "effect/Duration"
+import { dual } from "effect/Function"
 import * as Layer from "effect/Layer"
 import type * as Option from "effect/Option"
 import * as Pipeable from "effect/Pipeable"
@@ -681,6 +682,8 @@ export interface InitStep<in out Model, in out Msg, in out Events, out R = never
   set(model: Model): InitStep<Model, Msg, Events, R>
   /** Changes the Model with a function of the current one. */
   modify(f: (model: Model) => Model): InitStep<Model, Msg, Events, R>
+  /** Changes some fields of the Model, as `Step.evolve` does. */
+  evolve(fields: EvolveFields<Model>): InitStep<Model, Msg, Events, R>
   /** Runs Commands owned by this instance, as `Step.run` does. */
   run<const C extends ReadonlyArray<Command.Command<Msg | Noop, any>>>(
     ...commands: C
@@ -715,6 +718,13 @@ export interface Step<in out Model, in out Msg, in out Events, out R = never, L 
   set(model: Model): Step<Model, Msg, Events, R, L>
   /** Changes the Model with a function of the current one. */
   modify(f: (model: Model) => Model): Step<Model, Msg, Events, R, L>
+  /**
+   * Changes some fields of the Model and keeps the rest. Each field takes
+   * its new value, or a function from its old value to the new one, with the
+   * rules of `Component.evolve`: `$.evolve({ submitting: true, attempts: (n) => n + 1 })`.
+   * On a union Model it's a compile error: match the union first.
+   */
+  evolve(fields: EvolveFields<Model>): Step<Model, Msg, Events, R, L>
   /**
    * Runs Commands owned by this instance: each ends when the instance does,
    * and gets a Scope of its own that closes with it. Their results come back as
@@ -853,6 +863,109 @@ export type StepRequirements<U> = NamedRequirement<RawStepRequirements<U>>
 
 type RawStepRequirements<U> = U extends InitStep<infer _Model, infer _Msg, infer _Events, infer R> ? R : never
 
+/**
+ * The fields `evolve` takes for a struct `S`: each one optional, as its new
+ * value or a function from its old value to the new one.
+ *
+ * **Details**
+ *
+ * A function is always the updater, so a field whose own type is a function
+ * is `never` here and can't be set through `evolve`. A function doesn't
+ * belong in a Model anyway, since it can't be encoded for hydration or
+ * history. When `S` is a union, nullable structs included, this is an error
+ * message instead: match the union first, then evolve the member.
+ *
+ * @stability experimental
+ * @category utility types
+ * @since 0.1.0
+ */
+export type EvolveFields<S> = IsUnion<S> extends true ? "evolve takes one struct: match the union first"
+  : { readonly [K in keyof S]?: EvolveField<S[K]> }
+
+type IsUnion<T, U = T> = T extends unknown ? ([U] extends [T] ? false : true) : never
+
+type EvolveField<A> = [A] extends [(...args: any) => any] ? never : A | ((value: A) => A)
+
+const applyFields = (self: any, fields: Record<string, unknown>) => {
+  let out = self
+  for (const key of Object.keys(fields)) {
+    const field = fields[key]
+    const value = typeof field === "function" ? field(self[key]) : field
+    if (!Object.is(value, self[key])) {
+      if (out === self) out = { ...self }
+      out[key] = value
+    }
+  }
+  return out
+}
+
+/**
+ * Changes some fields of a struct and keeps the rest. Each field takes its
+ * new value, or a function from its old value to the new one.
+ *
+ * **When to use**
+ *
+ * Use to change a struct inside the Model, such as a row of a list or a
+ * nested struct field, or the Model in a handler that returns a bare Model.
+ * For the Model itself in a step, `$.evolve` has the same rules.
+ *
+ * **Details**
+ *
+ * Unlike `Struct.evolve` from `effect`, a field can't change type: a value
+ * or a function's result of the wrong type, and an unknown key, are errors
+ * on that field. A field takes a whole value, so a partial struct isn't
+ * merged: write `coupon: Component.evolve({ status: "Idle" })` and not
+ * `coupon: { status: "Idle" }`.
+ *
+ * A function is always the updater. A union is an error, nullable structs
+ * included: match it first, with `match` on a `UiSchema.TaggedEnum`, then
+ * evolve the member. The data-last form takes the struct's type from where
+ * it's written, so `Auth.match(model, { LoggedIn: Component.evolve({ name }) })`
+ * needs no annotation.
+ *
+ * The result is a shallow copy with the changed fields, or the same struct
+ * when every field keeps its value.
+ *
+ * **Example** (A row of a list and a nested struct)
+ *
+ * ```ts import.meta.vitest
+ * import { Component, UiSchema } from "@effect/ui"
+ * import { Array as Arr, Schema } from "effect"
+ *
+ * const Line = Schema.Struct({ id: Schema.String, quantity: Schema.Number })
+ * const Coupon = Schema.Struct({ code: Schema.String, status: Schema.Literals(["Idle", "Applied"]) })
+ * const Message = UiSchema.TaggedEnum({ ClickedIncrement: { id: Schema.String } })
+ *
+ * const Basket = Component.define({
+ *   name: "Basket",
+ *   model: Schema.Struct({ lines: Schema.Array(Line), coupon: Coupon, notice: Schema.NullOr(Schema.String) }),
+ *   message: Message
+ * }).make({
+ *   init: ($) => $.set({ lines: [{ id: "a", quantity: 1 }], coupon: { code: "TEN", status: "Applied" }, notice: null }),
+ *   update: {
+ *     ClickedIncrement: (_model, { id }, $) =>
+ *       $.evolve({
+ *         // A function of the old value, data-first for one row.
+ *         lines: Arr.map((line) => line.id === id ? Component.evolve(line, { quantity: (n) => n + 1 }) : line),
+ *         // Data-last: the coupon's type comes from the field.
+ *         coupon: Component.evolve({ status: "Idle" }),
+ *         // A plain value.
+ *         notice: null
+ *       })
+ *   },
+ *   view: (model, h) => h.el("p", `${model.lines.length} lines`)
+ * })
+ * ```
+ *
+ * @stability experimental
+ * @category combinators
+ * @since 0.1.0
+ */
+export const evolve: {
+  <S>(fields: NoInfer<EvolveFields<S>>): (self: S) => S
+  <S>(self: S, fields: NoInfer<EvolveFields<S>>): S
+} = dual(2, applyFields)
+
 const StepProto = {
   [StepTypeId]: StepTypeId,
   pipe() {
@@ -863,6 +976,9 @@ const StepProto = {
   },
   modify(this: Step<any, any, any, any>, f: (model: any) => any) {
     return makeStep(f(this.model), this.commands, this.emitted, this.lists, this.sends)
+  },
+  evolve(this: Step<any, any, any, any>, fields: Record<string, unknown>) {
+    return makeStep(applyFields(this.model, fields), this.commands, this.emitted, this.lists, this.sends)
   },
   run(this: Step<any, any, any, any>, ...commands: ReadonlyArray<Command.Command<any, any>>) {
     return makeStep(this.model, [...this.commands, ...commands], this.emitted, this.lists, this.sends)
@@ -2416,12 +2532,12 @@ import { Query } from "@effect/ui"
  * })
  *
  * // Over the whole message type, so `$.combine` takes them.
- * const touch = NotePageDef.update((model) => ({ ...model, edits: model.edits + 1 }))
- * const validate = NotePageDef.update((model) => ({ ...model, error: model.body === "" ? "Empty" : null }))
+ * const touch = NotePageDef.update((_model, _msg, $) => $.evolve({ edits: (edits) => edits + 1 }))
+ * const validate = NotePageDef.update((model, _msg, $) => $.evolve({ error: model.body === "" ? "Empty" : null }))
  *
  * // `msg` is the UpdatedBody message.
- * const handleUpdatedBody = NotePageDef.update("UpdatedBody", (model, msg, $) =>
- *   $.combine(() => ({ ...model, body: msg.body }), touch))
+ * const handleUpdatedBody = NotePageDef.update("UpdatedBody", (_model, msg, $) =>
+ *   $.combine((_model, _msg, $) => $.evolve({ body: msg.body }), touch))
  *
  * // `h` first, then any other arguments.
  * const counter = NotePageDef.fragment((h, edits: number) => h.el("small", `${edits} edits`))
@@ -3223,11 +3339,11 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F } ? "onFailure" ext
  *   message: RoomMessage
  * }).make({
  *   init: ($) => $.set({ room: "lobby", joined: "" }).run(JoinRoom.make()),
- *   update: (model, message, $) =>
+ *   update: (_model, message, $) =>
  *     RoomMessage.match(message, {
  *       // Selects the new room's Layer: JoinRoom runs against it.
- *       SelectedRoom: ({ room }) => $.set({ ...model, room }).run(JoinRoom.make()),
- *       CompletedJoinRoom: ({ room }) => ({ ...model, joined: room })
+ *       SelectedRoom: ({ room }) => $.evolve({ room }).run(JoinRoom.make()),
+ *       CompletedJoinRoom: ({ room }) => $.evolve({ joined: room })
  *     }),
  *   view: (model, h) => h.el("p", model.joined)
  * })

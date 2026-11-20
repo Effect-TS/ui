@@ -80,10 +80,10 @@ export const Snippet = Component.define({
   elements: Html
 }).make({
   init: () => ({ text: "", width: 0 }),
-  update: (model, message) =>
+  update: (_model, message, $) =>
     SnippetMessage.match(message, {
-      CompletedMeasure: ({ width }) => ({ ...model, width }),
-      UpdatedCode: ({ text }) => ({ ...model, text })
+      CompletedMeasure: ({ width }) => $.evolve({ width }),
+      UpdatedCode: ({ text }) => $.evolve({ text })
     }),
   view: (model, h) =>
     h.section.onMount(Measure().pipe(Mount.map((width) => SnippetMessage.CompletedMeasure({ width }))))

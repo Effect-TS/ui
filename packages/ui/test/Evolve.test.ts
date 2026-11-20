@@ -1,0 +1,113 @@
+import { Command, Component, UiSchema } from "@effect/ui"
+import { Story } from "@effect/ui/testing"
+import { assert, describe, it } from "@effect/vitest"
+import { Array as Arr, Effect, Schema } from "effect"
+
+const Line = Schema.Struct({ id: Schema.String, quantity: Schema.Number })
+const Coupon = Schema.Struct({ code: Schema.String, status: Schema.Literals(["Idle", "Applied"]) })
+const Message = UiSchema.TaggedEnum({
+  ClickedIncrement: { id: Schema.String },
+  ClickedRemove: { id: Schema.String },
+  SubmittedOrder: {},
+  FailedPlaceOrder: {}
+})
+const Events = UiSchema.TaggedEnum({ Emptied: {} })
+
+const PlaceOrder = Command.make(
+  "PlaceOrder",
+  { args: { lines: Schema.Number } },
+  () => Effect.succeed(Message.FailedPlaceOrder())
+)
+
+const Checkout = Component.define({
+  name: "Checkout",
+  model: Schema.Struct({
+    lines: Schema.Array(Line),
+    coupon: Coupon,
+    submitting: Schema.Boolean,
+    attempts: Schema.Number,
+    notice: Schema.NullOr(Schema.String)
+  }),
+  message: Message,
+  events: Events
+}).make({
+  init: ($) =>
+    $.set({
+      lines: [{ id: "a", quantity: 1 }, { id: "b", quantity: 2 }],
+      coupon: { code: "TEN", status: "Applied" },
+      submitting: false,
+      attempts: 0,
+      notice: "Welcome"
+    }),
+  update: {
+    ClickedIncrement: (_model, { id }, $) =>
+      $.evolve({
+        lines: Arr.map((line) => line.id === id ? Component.evolve(line, { quantity: (n) => n + 1 }) : line),
+        coupon: Component.evolve({ status: "Idle" }),
+        notice: null
+      }),
+    ClickedRemove: (model, { id }, $) => {
+      const lines = model.lines.filter((line) => line.id !== id)
+      const step = $.evolve({ lines })
+      return lines.length === 0 ? step.evolve({ notice: "Your basket is empty" }).emit(Events.Emptied()) : step
+    },
+    SubmittedOrder: (model, _message, $) =>
+      $.evolve({ submitting: true, attempts: (n) => n + 1 }).run(PlaceOrder({ lines: model.lines.length })),
+    // Keeps every field, so the Model stays the same object.
+    FailedPlaceOrder: (model) => Component.evolve(model, { submitting: false })
+  },
+  view: (_model, h) => h.text("checkout")
+})
+
+const Auth = UiSchema.TaggedEnum({
+  LoggedOut: { email: Schema.String },
+  LoggedIn: { email: Schema.String, name: Schema.String }
+})
+const AuthMessage = UiSchema.TaggedEnum({ UpdatedName: { value: Schema.String } })
+
+const Account = Component.define({ name: "Account", model: Schema.Struct({ auth: Auth }), message: AuthMessage })
+  .make({
+    init: ($) => $.set({ auth: Auth.LoggedIn({ email: "a@b.c", name: "Ada" }) }),
+    update: {
+      UpdatedName: (_model, { value }, $) =>
+        $.evolve({ auth: Auth.match({ LoggedOut: (auth) => auth, LoggedIn: Component.evolve({ name: value }) }) })
+    },
+    view: (_model, h) => h.text("account")
+  })
+
+describe("evolve", () => {
+  it("changes the given fields of the Model and of the structs in it, and chains with the step", () => {
+    const s = Story.start(Checkout, {})
+    s.send(Message.ClickedIncrement({ id: "a" }))
+    assert.deepStrictEqual(s.model, {
+      lines: [{ id: "a", quantity: 2 }, { id: "b", quantity: 2 }],
+      coupon: { code: "TEN", status: "Idle" },
+      submitting: false,
+      attempts: 0,
+      notice: null
+    })
+
+    s.send(Message.SubmittedOrder())
+    assert.strictEqual(s.model.submitting, true)
+    assert.strictEqual(s.model.attempts, 1)
+    assert.deepStrictEqual(s.pending.map((entry) => [entry.command.name, entry.command.args]), [
+      ["PlaceOrder", { lines: 2 }]
+    ])
+
+    s.resolve(PlaceOrder, Message.FailedPlaceOrder())
+    assert.strictEqual(s.model.submitting, false)
+    const after = s.model
+    s.send(Message.FailedPlaceOrder())
+    assert.strictEqual(s.model, after)
+
+    s.send(Message.ClickedRemove({ id: "a" })).send(Message.ClickedRemove({ id: "b" })).emitted(Events.Emptied())
+    assert.deepStrictEqual(s.model.lines, [])
+    assert.strictEqual(s.model.notice, "Your basket is empty")
+  })
+
+  it("evolves a union field after matching it", () => {
+    const s = Story.start(Account, {})
+    s.send(AuthMessage.UpdatedName({ value: "Grace" }))
+    assert.deepStrictEqual(s.model.auth, { _tag: "LoggedIn", email: "a@b.c", name: "Grace" })
+  })
+})
