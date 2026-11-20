@@ -1,0 +1,792 @@
+/**
+ * Field validation for forms: Foldkit's rules, with each field's state derived
+ * from what the user did instead of stored.
+ *
+ * `make` takes the form's fields, each with the Schema of what its control
+ * holds (a string by default), a `required` message and a list of rules. It
+ * returns a {@link Validation}: a `State` Schema for the Model, functions
+ * that record what the user did, and `validate`, which derives each field as
+ * `NotValidated`, `Validating`, `Valid` or `Invalid`.
+ *
+ * The Model holds the values as typed, which fields were edited or left, whether
+ * a submit was tried, and the server's errors. Errors are never stored, so a
+ * rule that reads another field always sees its current value.
+ *
+ * **Example** (A sign-up form)
+ *
+ * ```ts import.meta.vitest
+ * import { Validation } from "@effect/ui"
+ *
+ * const Signup = Validation.make({
+ *   email: { required: "Email is required", rules: [Validation.Rule.email()] },
+ *   password: { required: "Password is required", rules: [Validation.Rule.minLength(8)] },
+ *   confirm: {
+ *     required: "Confirm your password",
+ *     rules: [[(confirm, values) => confirm === values.password, "Passwords must match"]]
+ *   }
+ * }, { mode: "onChange" })
+ *
+ * let state = Signup.init({ email: "", password: "", confirm: "" })
+ * state = Signup.change(state, "password", "hunter22")
+ * state = Signup.change(state, "confirm", "hunter2")
+ *
+ * const { email, confirm } = Signup.validate(state).fields
+ * email._tag // => "NotValidated"
+ * confirm // => { _tag: "Invalid", value: "hunter2", required: true, errors: ["Passwords must match"] }
+ * ```
+ *
+ * @stability experimental
+ * @since 0.1.0
+ */
+import type * as Arr from "effect/Array"
+import { dual } from "effect/Function"
+import * as Option from "effect/Option"
+import type * as AsyncResult from "effect/reactivity/AsyncResult"
+import * as Schema from "effect/Schema"
+
+/**
+ * A rule's message: a string, or a function of the field's value.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type RuleMessage<A> = string | ((value: A) => string)
+
+/**
+ * A rule: a predicate and the message shown when it returns `false`.
+ *
+ * **Details**
+ *
+ * The predicate gets the field's value and every value of the form, so a rule
+ * can compare two fields. The rules in {@link Rule} ignore the second
+ * argument, so they fit any form.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type Rule<A, Values = unknown> = readonly [
+  predicate: (value: A, values: Values) => boolean,
+  message: RuleMessage<A>
+]
+
+const resolveMessage = <A>(message: RuleMessage<A>, value: A): string =>
+  typeof message === "string" ? message : message(value)
+
+const pattern = (regex: RegExp, message: RuleMessage<string> = "Invalid format"): Rule<string> => {
+  // A global or sticky RegExp keeps `lastIndex` between calls. A private
+  // copy that starts at zero each time gives the same answer, keeps the
+  // flags and leaves the caller's RegExp alone.
+  const copy = new RegExp(regex)
+  return [(value) => {
+    copy.lastIndex = 0
+    return copy.test(value)
+  }, message]
+}
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const STRICT_URL = /^https?:\/\/.+/
+const PERMISSIVE_URL = /^(https?:\/\/)?\S+\.\S+$/
+
+/**
+ * Foldkit's rules, with its patterns and default messages.
+ *
+ * **Details**
+ *
+ * Each rule takes an optional message, a string or a function of the value,
+ * that replaces the default. A rule never sees an empty value: an empty field
+ * is checked against `required` instead.
+ *
+ * - `minLength(min)`, `maxLength(max)`: the string's length.
+ * - `pattern(regex)`: the string matches `regex`.
+ * - `email()`: something, `@`, something, `.`, something, with no spaces.
+ * - `url({ requireProtocol })`: starts with `http://` or `https://`, or with
+ *   `requireProtocol: false` a bare domain such as `example.com`.
+ * - `startsWith(prefix)`, `endsWith(suffix)`, `includes(substring)`.
+ * - `equals(expected)`, `oneOf(values)`: the string is one of these.
+ * - `minItems(min)`, `maxItems(max)`: the array's length.
+ * - `fromSchema(schema, message)`: the value decodes through `schema`. Use it
+ *   to keep a rule and the parser you run at submit the same Schema.
+ *
+ * **Example** (Rules with default and custom messages)
+ *
+ * ```ts import.meta.vitest
+ * import { Validation } from "@effect/ui"
+ * import { Schema } from "effect"
+ *
+ * const Rule = Validation.Rule
+ *
+ * const Profile = Validation.make({
+ *   name: { required: "Name is required", rules: [Rule.minLength(2)] },
+ *   website: { rules: [Rule.url({ requireProtocol: false })] },
+ *   age: { rules: [Rule.fromSchema(Schema.FiniteFromString, (age) => age + " is not a number")] }
+ * }, { mode: "onChange", errors: "all" })
+ *
+ * const state = Profile.change(Profile.init({ name: "", website: "", age: "" }), "age", "ten")
+ * Profile.validate(state).fields.age // => { _tag: "Invalid", value: "ten", required: false, errors: ["ten is not a number"] }
+ * ```
+ *
+ * @stability experimental
+ * @category rules
+ * @since 0.1.0
+ */
+export const Rule = {
+  minLength: (min: number, message?: RuleMessage<string>): Rule<string> => [
+    (value) => value.length >= min,
+    message ?? `Must be at least ${min} characters`
+  ],
+  maxLength: (max: number, message?: RuleMessage<string>): Rule<string> => [
+    (value) => value.length <= max,
+    message ?? `Must be at most ${max} characters`
+  ],
+  pattern,
+  email: (message: RuleMessage<string> = "Invalid email address"): Rule<string> => pattern(EMAIL, message),
+  url: (
+    options: { readonly message?: RuleMessage<string> | undefined; readonly requireProtocol?: boolean | undefined } = {}
+  ): Rule<string> =>
+    pattern(options.requireProtocol === false ? PERMISSIVE_URL : STRICT_URL, options.message ?? "Invalid URL"),
+  startsWith: (prefix: string, message?: RuleMessage<string>): Rule<string> => [
+    (value) => value.startsWith(prefix),
+    message ?? `Must start with ${prefix}`
+  ],
+  endsWith: (suffix: string, message?: RuleMessage<string>): Rule<string> => [
+    (value) => value.endsWith(suffix),
+    message ?? `Must end with ${suffix}`
+  ],
+  includes: (substring: string, message?: RuleMessage<string>): Rule<string> => [
+    (value) => value.includes(substring),
+    message ?? `Must contain ${substring}`
+  ],
+  equals: (expected: string, message?: RuleMessage<string>): Rule<string> => [
+    (value) => value === expected,
+    message ?? `Must match ${expected}`
+  ],
+  oneOf: (values: ReadonlyArray<string>, message?: RuleMessage<string>): Rule<string> => [
+    (value) => values.includes(value),
+    message ?? `Must be one of: ${values.join(", ")}`
+  ],
+  minItems: (min: number, message?: RuleMessage<ReadonlyArray<unknown>>): Rule<ReadonlyArray<unknown>> => [
+    (value) => value.length >= min,
+    message ?? `Must select at least ${min}`
+  ],
+  maxItems: (max: number, message?: RuleMessage<ReadonlyArray<unknown>>): Rule<ReadonlyArray<unknown>> => [
+    (value) => value.length <= max,
+    message ?? `Must select at most ${max}`
+  ],
+  fromSchema: <A, I>(schema: Schema.Codec<A, I>, message: RuleMessage<I>): Rule<I> => {
+    const decode = Schema.decodeOption(schema)
+    return [(value) => Option.isSome(decode(value)), message]
+  }
+} as const
+
+/**
+ * When a field starts showing its result.
+ *
+ * **Details**
+ *
+ * - `"onChange"`: once the field was edited.
+ * - `"onBlur"`: once the field was left, recorded with `blur`.
+ * - `"onSubmit"`: once a submit was tried. The default, as in Base UI.
+ *
+ * After a tried submit every field shows its result, in every mode. Errors
+ * from `reject` always show.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type Mode = "onChange" | "onBlur" | "onSubmit"
+
+/**
+ * Options for {@link make}.
+ *
+ * **Details**
+ *
+ * `errors: "first"`, the default, reports the first failing rule.
+ * `errors: "all"` reports every failing rule, like Foldkit's `validateAll`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Options {
+  readonly mode?: Mode | undefined
+  readonly errors?: "first" | "all" | undefined
+}
+
+/**
+ * The value type of a field: its `value` Schema's `Type`, or `string` when the
+ * field has no `value`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type FieldType<S> = [S] extends [Schema.Top] ? S["Type"] : string
+
+/**
+ * One field passed to {@link make}.
+ *
+ * **Details**
+ *
+ * - `value`: the Schema of what the control holds, such as `Schema.Boolean`
+ *   for a checkbox. Defaults to `Schema.String`.
+ * - `required`: the message for an empty value, or a function of every value
+ *   that returns the message, or `false` when the field is optional for those
+ *   values. Without it an empty value is acceptable and shows as
+ *   `NotValidated`.
+ * - `rules`: checked in order, only when the value isn't empty.
+ * - `isEmpty`: what counts as empty. Defaults to an empty string or array.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface FieldOptions<S, Values> {
+  readonly value?: S & Schema.Top
+  readonly required?: string | ((values: Values) => string | false) | undefined
+  readonly rules?: ReadonlyArray<Rule<FieldType<S>, Values>> | undefined
+  readonly isEmpty?: ((value: FieldType<S>) => boolean) | undefined
+}
+
+/**
+ * What a form remembers, kept in the Model through {@link Validation.State}.
+ *
+ * **Details**
+ *
+ * `values` are what the controls hold. `edited` and `touched` list the fields
+ * that were changed and left, `submitted` records a tried submit, and
+ * `rejected` holds the server's errors by field. Nothing derived is stored.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface State<Values> {
+  readonly values: Values
+  readonly edited: ReadonlyArray<Extract<keyof Values, string>>
+  readonly touched: ReadonlyArray<Extract<keyof Values, string>>
+  readonly submitted: boolean
+  readonly rejected: { readonly [K in keyof Values]?: Arr.NonEmptyReadonlyArray<string> }
+}
+
+/**
+ * A field that isn't showing a result yet, or is optional and empty.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface NotValidated<A> {
+  readonly _tag: "NotValidated"
+  readonly value: A
+  readonly required: boolean
+}
+
+/**
+ * A field that passes its rules and waits on a check.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Validating<A> {
+  readonly _tag: "Validating"
+  readonly value: A
+  readonly required: boolean
+}
+
+/**
+ * A field that passes its rules and its check.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Valid<A> {
+  readonly _tag: "Valid"
+  readonly value: A
+  readonly required: boolean
+}
+
+/**
+ * A field with at least one error.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Invalid<A> {
+  readonly _tag: "Invalid"
+  readonly value: A
+  readonly required: boolean
+  readonly errors: Arr.NonEmptyReadonlyArray<string>
+}
+
+/**
+ * A field as {@link Validation.validate} derives it.
+ *
+ * **Details**
+ *
+ * Each state has the field's `value` and `required`, which is `true` when an
+ * empty value would be an error, for a `*` next to the label.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type Field<A> = NotValidated<A> | Validating<A> | Valid<A> | Invalid<A>
+
+/**
+ * One rule of a field, as {@link Validation.checklist} reports it: its message
+ * and whether the field's value meets it.
+ *
+ * **Example** (A password's requirements)
+ *
+ * ```ts import.meta.vitest
+ * import { Validation } from "@effect/ui"
+ *
+ * const Rule = Validation.Rule
+ *
+ * const Signup = Validation.make({
+ *   password: {
+ *     required: "Password is required",
+ *     rules: [Rule.minLength(8, "At least 8 characters"), Rule.pattern(/\d/, "At least one number")]
+ *   }
+ * })
+ *
+ * // Nothing was submitted, so the field shows no error yet. The list is there anyway.
+ * const state = Signup.change(Signup.init({ password: "" }), "password", "hunter2")
+ * Signup.checklist(state, "password") // => [{ message: "At least 8 characters", met: false }, { message: "At least one number", met: true }]
+ * ```
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface ChecklistItem {
+  readonly message: string
+  readonly met: boolean
+}
+
+/**
+ * The errors from async checks, by field: usually a query's result, mapped to
+ * a list of errors.
+ *
+ * **Details**
+ *
+ * A check is read only when its field is filled in and passes its rules.
+ * While it is `Initial` or waiting, the field is `Validating`. A `Success`
+ * with errors makes it `Invalid`, and one with none leaves it `Valid`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type Checks<Values> = {
+  readonly [K in keyof Values]?: AsyncResult.AsyncResult<ReadonlyArray<string>, never> | undefined
+}
+
+/**
+ * What {@link Validation.validate} derives from a {@link State}.
+ *
+ * **Details**
+ *
+ * - `fields`: each field as a {@link Field}.
+ * - `value`: `Some` of the values when every field is acceptable, whether
+ *   or not it shows yet. Use it to gate a submit.
+ * - `invalid`: some field is `Invalid`.
+ * - `validating`: some field is `Validating`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Validated<Values> {
+  readonly fields: { readonly [K in keyof Values]: Field<Values[K]> }
+  readonly value: Option.Option<Values>
+  readonly invalid: boolean
+  readonly validating: boolean
+}
+
+/**
+ * A form's validation, made by {@link make}.
+ *
+ * **Details**
+ *
+ * `State` goes in the Model. `init`, `change`, `blur`, `submit` and
+ * `reject` record what the user and the server did, and return a new state.
+ * `change`, `blur` and `reject` are also data-last, so they fit an updater:
+ * `{ ...model, form: Form.change("email", value)(model.form) }`.
+ *
+ * - `change(state, name, value)`: sets the value, marks the field edited and
+ *   drops its server errors.
+ * - `blur(state, name)`: marks the field touched.
+ * - `submit(state)`: records a tried submit, so every field shows its result.
+ * - `reject(state, { name: errors })`: stores server errors. They show at
+ *   once and hold back `value` until the field changes. An empty list
+ *   clears a field's errors.
+ * - `passes(state, name)`: whether the field is filled in and passes its own
+ *   rules, ignoring checks and server errors. Use it to enable the query
+ *   behind a check.
+ * - `checklist(state, name)`: every rule of the field with its message and
+ *   whether the value meets it, in the order written. It ignores the mode,
+ *   `errors`, checks and server errors, so a list of requirements can show
+ *   from the first render. An empty value meets no rule.
+ * - `validate(state, checks?)`: derives a {@link Validated}. It is pure, so
+ *   call it from `view`, `update` and tests.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Validation<Fields extends Validation.Fields> {
+  readonly State: Schema.Codec<
+    State<Validation.Values<Fields>>,
+    State<Validation.Encoded<Fields>>,
+    Fields[keyof Fields]["DecodingServices"],
+    Fields[keyof Fields]["EncodingServices"]
+  >
+  readonly init: (values: Validation.Values<Fields>) => State<Validation.Values<Fields>>
+  readonly change: {
+    <K extends Validation.Name<Fields>>(
+      name: K,
+      value: Validation.Values<Fields>[K]
+    ): (self: State<Validation.Values<Fields>>) => State<Validation.Values<Fields>>
+    <K extends Validation.Name<Fields>>(
+      self: State<Validation.Values<Fields>>,
+      name: K,
+      value: Validation.Values<Fields>[K]
+    ): State<Validation.Values<Fields>>
+  }
+  readonly blur: {
+    (name: Validation.Name<Fields>): (self: State<Validation.Values<Fields>>) => State<Validation.Values<Fields>>
+    (self: State<Validation.Values<Fields>>, name: Validation.Name<Fields>): State<Validation.Values<Fields>>
+  }
+  readonly submit: (self: State<Validation.Values<Fields>>) => State<Validation.Values<Fields>>
+  readonly reject: {
+    (
+      errors: { readonly [K in Validation.Name<Fields>]?: ReadonlyArray<string> }
+    ): (self: State<Validation.Values<Fields>>) => State<Validation.Values<Fields>>
+    (
+      self: State<Validation.Values<Fields>>,
+      errors: { readonly [K in Validation.Name<Fields>]?: ReadonlyArray<string> }
+    ): State<Validation.Values<Fields>>
+  }
+  readonly passes: (self: State<Validation.Values<Fields>>, name: Validation.Name<Fields>) => boolean
+  readonly checklist: (
+    self: State<Validation.Values<Fields>>,
+    name: Validation.Name<Fields>
+  ) => ReadonlyArray<ChecklistItem>
+  readonly validate: (
+    self: State<Validation.Values<Fields>>,
+    checks?: Checks<Validation.Values<Fields>>
+  ) => Validated<Validation.Values<Fields>>
+}
+
+/**
+ * Types that make up a {@link Validation}.
+ *
+ * @stability experimental
+ * @since 0.1.0
+ */
+export declare namespace Validation {
+  /**
+   * The Schema of each field's value.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  export type Fields = { readonly [name: string]: Schema.Top }
+
+  /**
+   * The values of a form, as the controls hold them.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  export type Values<Fields extends Validation.Fields> = { readonly [K in keyof Fields]: Fields[K]["Type"] }
+
+  /**
+   * The values of a form, encoded.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  export type Encoded<Fields extends Validation.Fields> = { readonly [K in keyof Fields]: Fields[K]["Encoded"] }
+
+  /**
+   * The name of a field.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  export type Name<Fields extends Validation.Fields> = Extract<keyof Fields, string>
+
+  /**
+   * The values {@link make} infers from its fields: each field's `value`
+   * Schema's `Type`, or `string`.
+   *
+   * **Details**
+   *
+   * `K` is inferred from the field names on their own, so a field made only
+   * of functions still has a value.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  export type InferValues<S, K extends string> = Values<InferFields<S, K>>
+
+  /**
+   * The value Schemas {@link make} infers from its fields: each field's
+   * `value`, or `Schema.String`.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  export type InferFields<S, K extends string> = {
+    readonly [P in K]: P extends keyof S ? [S[P]] extends [Schema.Top] ? S[P] : Schema.String : Schema.String
+  }
+}
+
+interface Spec {
+  readonly required: string | ((values: unknown) => string | false) | undefined
+  readonly rules: ReadonlyArray<Rule<unknown, unknown>>
+  readonly isEmpty: (value: unknown) => boolean
+}
+
+type AnyState = State<Record<string, unknown>>
+
+const isEmptyValue = (value: unknown): boolean =>
+  (typeof value === "string" || Array.isArray(value)) && value.length === 0
+
+const requiredMessage = (spec: Spec, values: unknown): string | undefined => {
+  if (typeof spec.required === "function") {
+    const message = spec.required(values)
+    return message === false ? undefined : message
+  }
+  return spec.required
+}
+
+const ruleErrors = (spec: Spec, value: unknown, values: unknown, all: boolean): Array<string> => {
+  const errors: Array<string> = []
+  for (const [predicate, message] of spec.rules) {
+    if (!predicate(value, values)) {
+      errors.push(resolveMessage(message, value))
+      if (!all) break
+    }
+  }
+  return errors
+}
+
+const isNonEmpty = <A>(errors: ReadonlyArray<A>): errors is Arr.NonEmptyReadonlyArray<A> => errors.length > 0
+
+const add = <A>(names: ReadonlyArray<A>, name: A): ReadonlyArray<A> => names.includes(name) ? names : [...names, name]
+
+/**
+ * Builds a form's validation from its fields.
+ *
+ * **When to use**
+ *
+ * Use when a form's fields show errors as the user fills them in. Put
+ * `State` in the Model, record each change with `change`, and derive the
+ * fields with `validate` in `view` and `update`.
+ *
+ * **Details**
+ *
+ * `validate` derives each field in this order:
+ *
+ * 1. Errors from `reject` make it `Invalid`, and always show.
+ * 2. An empty value is `Invalid` with the `required` message, or acceptable
+ *    when the field is optional.
+ * 3. The first failing rule is the error, or every failing rule with
+ *    `errors: "all"`.
+ * 4. A check that is `Initial` or waiting is `Validating`. A check that
+ *    returned errors is `Invalid`.
+ * 5. Otherwise the field is `Valid`.
+ *
+ * A field shows its result once a submit was tried, or by its `mode`. A
+ * field that isn't showing, or is optional and empty, is `NotValidated`.
+ *
+ * **Gotchas**
+ *
+ * - Derived errors aren't in the Model or the MessageLog. Read them in a test
+ *   with `validate(s.model.form)`.
+ * - A check is typed to never fail. A failed result, from a defect, keeps the
+ *   field `Validating`: map a fetch that can fail to errors first.
+ * - The values are what the controls hold, not a parsed value. Parse them
+ *   at submit, with the Schema that `Rule.fromSchema` checks.
+ * - The `value` Schemas go in the Model, so they must encode to JSON.
+ * - A form sets `novalidate`: native constraint validation isn't used.
+ *
+ * **Example** (A login form with a server error)
+ *
+ * ```ts import.meta.vitest
+ * import { Validation } from "@effect/ui"
+ * import { Option } from "effect"
+ *
+ * const Login = Validation.make({
+ *   email: { required: "Email is required", rules: [Validation.Rule.email("Please enter a valid email")] },
+ *   password: { required: "Password is required" }
+ * })
+ *
+ * // The default mode shows nothing until a submit is tried.
+ * let form = Login.init({ email: "ada@example", password: "" })
+ * Login.validate(form).fields.email._tag // => "NotValidated"
+ *
+ * form = Login.submit(form)
+ * Login.validate(form).fields.email // => { _tag: "Invalid", value: "ada@example", required: true, errors: ["Please enter a valid email"] }
+ *
+ * form = Login.change(form, "email", "ada@example.com")
+ * form = Login.change(form, "password", "secret")
+ * Login.validate(form).value // => Option.some({ email: "ada@example.com", password: "secret" })
+ *
+ * // The server's error shows on the password until the password changes.
+ * form = Login.reject(form, { password: ["Invalid credentials"] })
+ * Login.validate(form).invalid // => true
+ * ```
+ *
+ * @stability experimental
+ * @category constructors
+ * @since 0.1.0
+ */
+export const make = <S, K extends string>(
+  fields:
+    & { readonly [P in keyof S]: FieldOptions<S[P], Validation.InferValues<S, K>> }
+    & { readonly [P in K]: unknown },
+  options: Options = {}
+): Validation<Validation.InferFields<S, K>> => {
+  const mode = options.mode ?? "onSubmit"
+  const all = options.errors === "all"
+  const input = fields as Record<string, FieldOptions<Schema.Top, unknown>>
+  const names = Object.keys(input)
+  const specs = new Map<string, Spec>(names.map((name) => [name, {
+    required: input[name].required,
+    rules: input[name].rules ?? [],
+    isEmpty: input[name].isEmpty ?? isEmptyValue
+  }]))
+  const Name = Schema.Literals(names)
+  // Records keyed by field name are built with `fromEntries`, so a name
+  // such as `__proto__` stays an own key.
+  const byName = <A>(f: (name: string) => A): Record<string, A> =>
+    Object.fromEntries(names.map((name) => [name, f(name)]))
+  const State = Schema.Struct({
+    values: Schema.Struct(byName((name) => input[name].value ?? Schema.String)),
+    edited: Schema.Array(Name),
+    touched: Schema.Array(Name),
+    submitted: Schema.Boolean,
+    rejected: Schema.Struct(byName(() => Schema.optionalKey(Schema.NonEmptyArray(Schema.String))))
+  })
+
+  const shows = (state: AnyState, name: string): boolean =>
+    state.submitted ||
+    (mode === "onChange" && state.edited.includes(name)) ||
+    (mode === "onBlur" && state.touched.includes(name))
+
+  const passes = (state: AnyState, name: string): boolean => {
+    const spec = specs.get(name)!
+    const value = state.values[name]
+    return !spec.isEmpty(value) && spec.rules.every(([predicate]) => predicate(value, state.values))
+  }
+
+  const checklist = (state: AnyState, name: string): ReadonlyArray<ChecklistItem> => {
+    const spec = specs.get(name)!
+    const value = state.values[name]
+    const empty = spec.isEmpty(value)
+    return spec.rules.map(([predicate, message]) => ({
+      message: resolveMessage(message, value),
+      met: !empty && predicate(value, state.values)
+    }))
+  }
+
+  const validate = (
+    state: AnyState,
+    checks: Record<string, AsyncResult.AsyncResult<ReadonlyArray<string>, never> | undefined> = {}
+  ) => {
+    const fields: Array<[string, Field<unknown>]> = []
+    let acceptable = true
+    let invalid = false
+    let validating = false
+    for (const [name, spec] of specs) {
+      const value = state.values[name]
+      const message = requiredMessage(spec, state.values)
+      const required = message !== undefined
+      const rejected = Object.hasOwn(state.rejected, name) ? state.rejected[name] : undefined
+      // The field's result before it shows. An optional empty field is
+      // acceptable and has no result to show.
+      let result: Field<unknown>
+      if (rejected !== undefined) {
+        result = { _tag: "Invalid", value, required, errors: rejected }
+      } else if (spec.isEmpty(value)) {
+        result = message === undefined
+          ? { _tag: "NotValidated", value, required }
+          : { _tag: "Invalid", value, required, errors: [message] }
+      } else {
+        const errors = ruleErrors(spec, value, state.values, all)
+        const check = Object.hasOwn(checks, name) ? checks[name] : undefined
+        if (isNonEmpty(errors)) {
+          result = { _tag: "Invalid", value, required, errors }
+        } else if (check === undefined) {
+          result = { _tag: "Valid", value, required }
+        } else if (check._tag === "Success" && !check.waiting) {
+          result = isNonEmpty(check.value)
+            ? { _tag: "Invalid", value, required, errors: check.value }
+            : { _tag: "Valid", value, required }
+        } else {
+          result = { _tag: "Validating", value, required }
+        }
+      }
+      acceptable &&= result._tag === "Valid" || result._tag === "NotValidated"
+      if (rejected === undefined && !shows(state, name)) {
+        result = { _tag: "NotValidated", value, required }
+      }
+      fields.push([name, result])
+      invalid ||= result._tag === "Invalid"
+      validating ||= result._tag === "Validating"
+    }
+    return {
+      fields: Object.fromEntries(fields),
+      value: acceptable ? Option.some(state.values) : Option.none(),
+      invalid,
+      validating
+    }
+  }
+
+  return {
+    State,
+    init: (values: Record<string, unknown>): AnyState => ({
+      values,
+      edited: [],
+      touched: [],
+      submitted: false,
+      rejected: {}
+    }),
+    change: dual(3, (self: AnyState, name: string, value: unknown): AnyState => {
+      const { [name]: _, ...rejected } = self.rejected
+      return { ...self, values: { ...self.values, [name]: value }, edited: add(self.edited, name), rejected }
+    }),
+    blur: dual(2, (self: AnyState, name: string): AnyState => ({ ...self, touched: add(self.touched, name) })),
+    submit: (self: AnyState): AnyState => self.submitted ? self : { ...self, submitted: true },
+    reject: dual(2, (self: AnyState, errors: Record<string, ReadonlyArray<string> | undefined>): AnyState => {
+      const merged = new Map<string, ReadonlyArray<string> | undefined>(Object.entries(self.rejected))
+      for (const [name, list] of Object.entries(errors)) {
+        if (list !== undefined) merged.set(name, list)
+      }
+      // `fromEntries` keeps any field name, `__proto__` included, as an own key.
+      const kept = [...merged].filter((entry): entry is [string, Arr.NonEmptyReadonlyArray<string>] =>
+        entry[1] !== undefined && isNonEmpty(entry[1])
+      )
+      return { ...self, rejected: Object.fromEntries(kept) }
+    }),
+    passes,
+    checklist,
+    validate
+  } as any
+}
