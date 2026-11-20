@@ -146,6 +146,23 @@ describe("Runtime", () => {
       assert.deepStrictEqual(root.model(), ["Inner", "Outer"])
     })))
 
+  it.effect("an event reaches a handler below thousands of elements", () =>
+    provideHost(Effect.gen(function*() {
+      const Deep = Component.define({ name: "Deep", model: Schema.Number, message: Schema.Null }).make({
+        init: () => 0,
+        update: (count) => count + 1,
+        view: (_, h) => {
+          let node = h.el("button").on("click", null).children("deep")
+          for (let depth = 0; depth < 3000; depth++) node = h.el("div", node)
+          return node
+        }
+      })
+      const root = yield* TestHost.mount(Deep, {})
+      click(root, "deep")
+      yield* TestHost.settle
+      assert.strictEqual(root.model(), 1)
+    })))
+
   describe("keyed list", () => {
     it.effect("adds, removes and reorders children, closing the Scopes of the removed ones", () =>
       provideHost(Effect.gen(function*() {

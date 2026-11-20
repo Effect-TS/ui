@@ -244,6 +244,12 @@ const listOf = (items: Packed): Array<Rendered> =>
 /** How a list is held. */
 const packed = (items: Array<Rendered>): Packed => items.length > 1 ? items : items[0]
 
+/** Where a walk down the tree along an event's path is: the items to look in next, and the instance they are in. */
+interface EventCursor {
+  inst: Instance
+  items: Packed
+}
+
 /**
  * For each event a part handles, the paths of the instances that get it, deepest owner first and the
  * view's author last. An event only the author handles isn't listed. What `TestElement.owners` shows.
@@ -5013,7 +5019,10 @@ const setup = (
     }
   }
   const noEvents: Renderer.Events = { handlers: View.noFields, dispatch: () => {}, options: View.noFields }
-  /** Writes to `out` the events of each node of `path`, from index `from` inwards, that `items` hold. */
+  /**
+   * Writes to `out` the events of each node of `path`, from index `from` inwards, that `items` hold. A loop
+   * along the path, so an event far down a tree takes no more stack than one at its top.
+   */
   const walkEvents = (
     inst: Instance,
     items: Packed,
@@ -5021,52 +5030,44 @@ const setup = (
     from: number,
     out: Array<Renderer.Events | undefined>
   ): void => {
+    // Where the walk is: made for this lookup, so nothing holds an instance once it returns.
+    const cursor: EventCursor = { inst, items }
     for (let at = from; at >= 0; at--) {
-      if (findElement(inst, items, path, at, out)) return
+      const found = findElement(cursor.inst, cursor.items, path[at], cursor)
+      if (found !== undefined) out[at] = eventsOf(cursor.inst, found.v)
     }
   }
   /**
-   * Whether `path[at]` is an element of `items`, looked for through the children and fallbacks they place.
-   * If it is, its events are written, and the walk goes on below it, in the instance that rendered it.
+   * The element of `items` whose node is `node`, looked for through the children and fallbacks they place.
+   * When there is one, `cursor` moves below it, into the instance that rendered it.
    */
-  const findElement = (
-    inst: Instance,
-    items: Packed,
-    path: ReadonlyArray<unknown>,
-    at: number,
-    out: Array<Renderer.Events | undefined>
-  ): boolean => {
-    if (items === undefined) return false
-    if (!Array.isArray(items)) return findIn(inst, items, path, at, out)
+  const findElement = (inst: Instance, items: Packed, node: unknown, cursor: EventCursor): RElement | undefined => {
+    if (items === undefined) return undefined
+    if (!Array.isArray(items)) return findIn(inst, items, node, cursor)
     for (let index = 0; index < items.length; index++) {
-      if (findIn(inst, items[index]!, path, at, out)) return true
+      const found = findIn(inst, items[index]!, node, cursor)
+      if (found !== undefined) return found
     }
-    return false
+    return undefined
   }
-  const findIn = (
-    inst: Instance,
-    item: Rendered,
-    path: ReadonlyArray<unknown>,
-    at: number,
-    out: Array<Renderer.Events | undefined>
-  ): boolean => {
+  const findIn = (inst: Instance, item: Rendered, node: unknown, cursor: EventCursor): RElement | undefined => {
     switch (item._tag) {
       case "Element":
-        if (item.node !== path[at]) return false
-        out[at] = eventsOf(inst, item.v)
-        walkEvents(inst, item.children, path, at - 1, out)
-        return true
+        if (item.node !== node) return undefined
+        cursor.inst = inst
+        cursor.items = item.children
+        return item
       case "Child":
       case "Outlet":
-        return findElement(item.inst, item.inst.rendered, path, at, out)
+        return findElement(item.inst, item.inst.rendered, node, cursor)
       case "Fallback":
       // A detached child's nodes are in its container, where no path from the document leads, but while
       // it is attached they are in the document before the tree holds them.
       case "Detached":
-        return findIn(inst, item.inner, path, at, out)
+        return findIn(inst, item.inner, node, cursor)
       // Text holds no events.
       default:
-        return false
+        return undefined
     }
   }
 
