@@ -120,6 +120,7 @@ const open = async (variant) => {
 }
 
 const rounds = Number(args.rounds)
+const median = (values) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)]
 const stat = (values) => {
   const sorted = [...values].sort((a, b) => a - b)
   return sorted[Math.floor(sorted.length / 2)].toFixed(2) + " (" + sorted[0].toFixed(2) + "-" +
@@ -226,7 +227,6 @@ if (only === undefined || only === "memory") {
   }
   if (results.plain !== undefined && results.component !== undefined) {
     // What a row component costs over the same row as plain elements.
-    const median = (values) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)]
     const bytes = (median(results.component["10k"]) - median(results.plain["10k"])) * 1024 * 1024 / 10000
     console.log("per row component, over a plain row at 10k: " + Math.round(bytes) + " bytes")
   }
@@ -247,10 +247,7 @@ if ((only === undefined || only === "ssr") && ssrVariants.length > 0) {
       await client.close()
       const runs = []
       for (let j = 0; j < 11; j++) runs.push(await page.evaluate((v) => window.ssr(v), variant))
-      for (const key of keys) {
-        const measured = runs.slice(2).map((run) => run[key]).sort((a, b) => a - b)
-        results[variant][key].push(measured[Math.floor(measured.length / 2)])
-      }
+      for (const key of keys) results[variant][key].push(median(runs.slice(2).map((run) => run[key])))
       await page.close()
     }
   }

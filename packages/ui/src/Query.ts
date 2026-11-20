@@ -1524,7 +1524,7 @@ export class Cache extends Context.Service<Cache, {
 export const layer = (options?: {
   readonly idleTimeToLive?: Duration.Input | undefined
 }): Layer.Layer<Cache> => {
-  const idleMs = cacheIdleMs(options?.idleTimeToLive)
+  const idleMs = queryCore.cacheIdleMs(options?.idleTimeToLive)
   return Layer.effect(
     Cache,
     Effect.gen(function*() {
@@ -1555,14 +1555,7 @@ const BuildTypeId = "~@effect/ui/Query/Build"
 // Keys
 // -----------------------------------------------------------------------------
 
-/**
- * Canonical JSON: sorted object keys, `undefined` properties dropped, no
- * whitespace, `-0` kept apart from `0`. It parses back with `JSON.parse`.
- * Throws a `NonJsonLeaf` on a leaf JSON can't carry.
- *
- * @internal
- */
-export const canonical: (u: unknown) => string = queryCore.canonical
+const canonical = queryCore.canonical
 
 /**
  * A snapshot of a value for the `PatchMutated` check, deep and following
@@ -2059,13 +2052,6 @@ const makeListDef = (options: {
     encodeCursor: (cursor) => (encode ??= Schema.encodeUnknownSync(jsonCodec(options.cursor)))(cursor)
   }
 }
-
-/**
- * The cache-wide idle time in milliseconds. Throws on a negative one.
- *
- * @internal
- */
-export const cacheIdleMs: (input: Duration.Input | undefined) => number = queryCore.cacheIdleMs
 
 /** @internal */
 export const defOf = (query: { readonly [TypeId]: unknown }): QueryDef => query[TypeId] as QueryDef

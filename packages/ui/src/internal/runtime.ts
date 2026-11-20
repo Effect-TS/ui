@@ -654,7 +654,6 @@ export interface Root {
   readonly session: string
   readonly instance: Instance
   readonly emitted: ReadonlyArray<unknown>
-  readonly find: (path: string) => Instance | undefined
   readonly model: () => unknown
   readonly send: (message: unknown) => void
   /** The Commands still running, queued, awaiting or stopping anywhere in the tree. */
@@ -993,6 +992,7 @@ const serializeTree = (
   }
   // `under`: inside a deferred instance, whose subtree the client builds fresh.
   const instance = (inst: Instance, under: boolean) => {
+    const path = inst.path
     let inner = under
     if (!under) {
       const codec = stateCodecOf(inst.component)
@@ -1013,19 +1013,19 @@ const serializeTree = (
         if (Option.isNone(baseline)) encoded = Option.none()
       }
       if (Option.isNone(encoded)) {
-        deferredPaths.push(inst.path)
+        deferredPaths.push(path)
         inner = true
       } else {
-        state[inst.path] = encoded.value
-        if (Option.isSome(baseline)) collected[inst.path] = baseline.value
-        if (inst.component.layer !== undefined) ship(inst.path, inst.env.status)
+        state[path] = encoded.value
+        if (Option.isSome(baseline)) collected[path] = baseline.value
+        if (inst.component.layer !== undefined) ship(path, inst.env.status)
       }
     }
-    sink.enter(inst.path)
+    sink.enter(path)
     if (inst.failure === undefined) {
       for (const rendered of inst.rendered) serialize(inst, rendered, inner)
     }
-    sink.leave(inst.path)
+    sink.leave(path)
   }
   const serialize = (inst: Instance, rendered: Rendered, under: boolean): void => {
     switch (rendered._tag) {
@@ -1488,7 +1488,6 @@ const setup = (
   }
   // Hydration: the server's entries and when they arrived, for a cache made after the mount.
   const hydratedQueries = hydrating?.state["~query"]
-  const hydratedStatic = hydrating?.state["~static"] === true
   const hydratedAt = hydratedQueries === undefined ? 0 : clock.currentTimeMillisUnsafe()
   // Adoption or a navigation has closed the fetch-free window.
   let windowClosed = false
@@ -1514,7 +1513,7 @@ const setup = (
     // Hydration: the server's entries, held raw until their queries register. This opens the fetch-free
     // window, which closes at adoption or the first navigation.
     if (hydratedQueries !== undefined) {
-      made.hydrate(hydratedQueries, { static: hydratedStatic, at: hydratedAt })
+      made.hydrate(hydratedQueries, { static: fromStatic, at: hydratedAt })
       if (windowClosed) made.closeWindow()
     }
     // The runs issued before the cache was made begin now, in the order they were issued and ahead of
@@ -2489,10 +2488,8 @@ const setup = (
    * included, the release stays the instance's: the instance's close waits for it.
    */
   const releaseSelection = (selection: Selection, retired: Retired) => {
-    const fiber = forkNow(ctx, releaseOf(retired), uninterruptibly)
-    if (fiber.pollUnsafe() !== undefined) return
-    track(closing, fiber)
-    track(selection.releasing, fiber)
+    const fiber = settleClose(releaseOf(retired))
+    if (fiber !== undefined) track(selection.releasing, fiber)
   }
 
   /**
@@ -2885,8 +2882,9 @@ const setup = (
     }
   }
 
-  for (const name of Object.keys(new Rare()) as Array<keyof Rare>) {
-    const empty = new Rare()[name]
+  const blank = new Rare()
+  for (const name of Object.keys(blank) as Array<keyof Rare>) {
+    const empty = blank[name]
     Object.defineProperty(Inst.prototype, name, {
       get(this: { rare: Rare | undefined }) {
         const rare = this.rare
@@ -3018,7 +3016,7 @@ const setup = (
     /** The status the server recorded for the instance's provide, when it wasn't ready there. */
     readonly shipped: Shipped | undefined
     buffering = true
-    readonly early: Array<() => void> = []
+    readonly early: Array<Draft> = []
     constructing = true
     failedEarly: Cause.Cause<unknown> | undefined = undefined
     pending = false
@@ -3028,12 +3026,12 @@ const setup = (
       this.awaits = range !== undefined && Option.isSome(fromServer) && this.shipped === undefined
     }
     lifecycle(draft: Draft) {
-      if (this.buffering) this.early.push(() => record(this.inst, draft))
+      if (this.buffering) this.early.push(draft)
       else record(this.inst, draft)
     }
     readonly logEarly = () => {
       this.buffering = false
-      for (const f of this.early.splice(0)) f()
+      for (const draft of this.early.splice(0)) record(this.inst, draft)
     }
   }
 
@@ -6492,11 +6490,7 @@ const setup = (
     }
     // Collected first, as `destroy` does: closing a child empties what it rendered.
     const nodes: Array<unknown> = []
-    for (let index = 0; index < olds.length; index++) {
-      const old = olds[index]!
-      if (old._tag === "Element" || old._tag === "Text") nodes.push(old.node)
-      else nodes.push(...nodesOf(old))
-    }
+    for (let index = 0; index < olds.length; index++) collectNodes(olds[index]!, nodes)
     for (let index = 0; index < olds.length; index++) closeAll(inst, olds[index]!)
     host.removeChildren(parentNode, nodes)
   }
@@ -6610,15 +6604,6 @@ const setup = (
   rendering = false
   runCommitted()
 
-  const find = (path: string, from: Instance = root): Instance | undefined => {
-    if (from.path === path) return from
-    for (const child of from.children) {
-      const hit = find(path, child)
-      if (hit !== undefined) return hit
-    }
-    return undefined
-  }
-
   const runsOf = (inst: Instance): Array<Pending> =>
     inst.runs.map((run) => ({ path: inst.path, name: run.command.name, status: run.status }))
   const pendingOf = (inst: Instance): Array<Pending> => [
@@ -6631,7 +6616,6 @@ const setup = (
     session,
     instance: root,
     emitted: rootEmitted,
-    find,
     model: () => root.failure === undefined ? root.model : undefined,
     send: (message) => root.dispatch(message, { _tag: "Dispatch" }),
     pending: () => pendingOf(root),
