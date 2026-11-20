@@ -1362,9 +1362,9 @@ export interface MountOptions<V extends View.Elements, RF = never> {
  * props on both sides when both Routers are at the same URL. Each instance adopts its server
  * Model and replays `init` only to recover its Commands; server Commands the
  * Model already has the result of are skipped, and those that missed the
- * budget run now. `onMount` fires on adoption. An instance whose view doesn't
- * match the server's nodes is rebuilt on its own, and one the server deferred
- * is built fresh.
+ * budget run now. `onMount` fires on adoption. Where an instance's view stops
+ * matching the server's nodes, the nodes before stay adopted and the rest is
+ * built fresh, and an instance the server deferred is built fresh.
  *
  * An instance the server rendered with its provided Layer ready, whose
  * Layer is still building here, keeps the server's nodes until the Layer is

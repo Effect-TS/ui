@@ -453,9 +453,10 @@ export type HostOf<V> = [V] extends [never] ? never : V extends View.Elements ? 
  * With `state` from a server render, the tree hydrates: each instance adopts
  * its server Model instead of running `init` and, on a host with
  * `hydration`, adopts the server's nodes inside `container`. `init` is
- * replayed only for its Commands, and every one of them runs. An instance
- * whose view doesn't match its nodes is rebuilt on its own, and a deferred
- * one is built fresh. An instance whose provided Layer is still building
+ * replayed only for its Commands, and every one of them runs. Where an
+ * instance's view stops matching its nodes, the nodes before stay adopted and
+ * the rest is built fresh, and a deferred instance is built fresh. An
+ * instance whose provided Layer is still building
  * keeps the server's nodes, inert, until the Layer is ready; `adopted`
  * completes when none is left waiting.
  *
