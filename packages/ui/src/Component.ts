@@ -923,10 +923,16 @@ const applyFields = (self: any, fields: Record<string, unknown>) => {
  * **Details**
  *
  * Unlike `Struct.evolve` from `effect`, a field can't change type: a value
- * or a function's result of the wrong type, and an unknown key, are errors
- * on that field. A field takes a whole value, so a partial struct isn't
- * merged: write `coupon: Component.evolve({ status: "Idle" })` and not
+ * or a function's result of the wrong type is an error on that field. A
+ * field takes a whole value, so a partial struct isn't merged: write
+ * `coupon: Component.evolve({ status: "Idle" })` and not
  * `coupon: { status: "Idle" }`.
+ *
+ * An unknown key is an error when it's written in the fields literal.
+ * TypeScript doesn't check the keys of an object built elsewhere and passed
+ * in, so a misspelt key there is copied onto the result. Check fields
+ * declared on their own where they're declared, which also types the
+ * updaters: `const bump = { count: (n) => n + 1 } satisfies Component.EvolveFields<Model>`.
  *
  * A function is always the updater. A union is an error, nullable structs
  * included: match it first, with `match` on a `UiSchema.TaggedEnum`, then

@@ -58,6 +58,11 @@ describe("Component.evolve", () => {
     expect(Component.evolve(coupon, { status: "Idle" })).type.toBe<Coupon>()
     expect(Component.evolve<Coupon>({ code: (code) => code.trim() })).type.toBe<(self: Coupon) => Coupon>()
     expect(Component.evolve).type.not.toBeCallableWith(coupon, { stauts: "Idle" })
+    // Fields declared on their own are checked with `satisfies`, which also types the updaters.
+    const trim = { code: (code) => code.trim() } satisfies Component.EvolveFields<Coupon>
+    expect(Component.evolve(coupon, trim)).type.toBe<Coupon>()
+    // @ts-expect-error 'stauts' does not exist
+    void ({ stauts: "Idle" } satisfies Component.EvolveFields<Coupon>)
     expect(Component.evolve).type.not.toBeCallableWith(coupon, { status: "Nope" })
     // With nowhere to take the struct's type from, it is asked for.
     expect(Component.evolve).type.not.toBeCallableWith({ status: "Idle" })

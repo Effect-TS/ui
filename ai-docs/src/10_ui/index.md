@@ -142,7 +142,16 @@ const failedSaveNote = NoteEditorDef.update(
 ```
 
 A misspelt key, a value of the wrong type and a function that returns the
-wrong type are errors on that field. Unlike with `Struct.evolve` from
+wrong type are errors on that field. TypeScript checks the keys written in
+the fields literal, not those of an object built elsewhere and passed in:
+a misspelt key there is copied onto the Model. Check fields declared on
+their own where they're declared, which also types the updaters:
+
+```ts
+const bump = { attempts: (n) => n + 1, notice: null } satisfies Component.EvolveFields<Checkout>
+```
+
+Unlike with `Struct.evolve` from
 `effect`, a field can't change type. A field takes a whole value, so
 `coupon: { status: "Idle" }` is an error: write
 `coupon: Component.evolve({ status: "Idle" })`. A function is always the
