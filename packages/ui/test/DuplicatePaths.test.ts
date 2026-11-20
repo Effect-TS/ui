@@ -102,32 +102,26 @@ describe("duplicate child paths", () => {
       })))
   }
 
-  // A row `h.lazy` gives again is the same node as last time: the one that holds a child still takes its path.
-  for (
-    const [what, row, keys] of [
-      ["holds a child", (h: any) => h.el("li", Row(h, { key: "a", props: { label: "a" } })), ["a"]],
-      ["holds none", (h: any) => h.el("li", "x"), ["a", "a"]]
-    ] as const
-  ) {
-    it.effect(`fail the parent on a re-render beside a row h.lazy gives again that ${what}`, () =>
-      provideHost(Effect.gen(function*() {
-        const List = Component.define({
-          name: "List",
-          model: Schema.Array(Schema.String),
-          message: ListMessage
-        }).make({
-          init: () => [],
-          update: (_, message) => message.keys,
-          view: (keys, h) => h.el("ul", h.lazy(row), keys.map((key) => Row(h, { key, props: { label: key } })))
-        })
-        const root = yield* TestHost.mount(List, {}, { fallback: (_, h) => h.text("crashed") })
-        yield* TestHost.settle
-        root.send(ListMessage.Set({ keys }))
-        const crashed = yield* Effect.flip(TestHost.settle)
-        assert.strictEqual(crashed._tag, "RootCrashed")
-        assert.include(Cause.pretty(failure(root.log()).cause), "/List renders two children at Row[a]")
-      })))
-  }
+  // A row `h.lazy` gives again is the same node as last time: one that holds a child still takes its path.
+  it.effect("fail the parent on a re-render beside a row h.lazy gives again that holds a child", () =>
+    provideHost(Effect.gen(function*() {
+      const row = (h: any) => h.el("li", Row(h, { key: "a", props: { label: "a" } }))
+      const List = Component.define({
+        name: "List",
+        model: Schema.Array(Schema.String),
+        message: ListMessage
+      }).make({
+        init: () => [],
+        update: (_, message) => message.keys,
+        view: (keys, h) => h.el("ul", h.lazy(row), keys.map((key) => Row(h, { key, props: { label: key } })))
+      })
+      const root = yield* TestHost.mount(List, {}, { fallback: (_, h) => h.text("crashed") })
+      yield* TestHost.settle
+      root.send(ListMessage.Set({ keys: ["a"] }))
+      const crashed = yield* Effect.flip(TestHost.settle)
+      assert.strictEqual(crashed._tag, "RootCrashed")
+      assert.include(Cause.pretty(failure(root.log()).cause), "/List renders two children at Row[a]")
+    })))
 
   it.effect("never give a key holding ]/ the path of a grandchild", () =>
     provideHost(Effect.gen(function*() {

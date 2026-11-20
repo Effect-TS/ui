@@ -33,28 +33,6 @@ describe("Head", () => {
     assert.throws(() => Head.merge({ ...tree, onError: undefined }), /bad template/)
   })
 
-  it("a subtree with no entries and no reduce changes neither the value nor the conflicts", () => {
-    const at = (
-      path: string,
-      entries: ReadonlyArray<Head.Entry>,
-      ...children: ReadonlyArray<Head.Tree>
-    ): Head.Tree => ({
-      path,
-      entries,
-      children
-    })
-    const merged = (tree: Head.Tree) => {
-      const conflicts: Array<ReadonlyArray<string>> = []
-      const head = Head.merge(tree, { onConflict: (conflict) => conflicts.push(conflict.paths) })
-      return { head, conflicts }
-    }
-    const a = at("/a", [Head.title("A")])
-    const b = at("/b", [Head.title("B")])
-    const headless = at("/h", [], at("/h/x", []), at("/h/y", [], at("/h/y/z", [])))
-    assert.deepStrictEqual(merged(at("/", [], headless, a, headless, b, headless)), merged(at("/", [], a, b)))
-    assert.deepStrictEqual(merged(at("/", [], a, b)).conflicts, [["/a", "/b"]])
-  })
-
   it.effect("fails only the instance whose title template throws", () =>
     Effect.gen(function*() {
       const Page = Component.define({

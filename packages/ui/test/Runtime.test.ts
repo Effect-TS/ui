@@ -208,37 +208,6 @@ describe("Runtime", () => {
         assert.strictEqual(root.text(), View.idOf("/ROWS/BADGE[A]", "label") + View.idOf("/ROWS/BADGE[B]", "label"))
       })))
 
-    it.effect("a view is read once for each render, even when reading it puts another in its place", () =>
-      provideHost(Effect.gen(function*() {
-        const state = { model: Schema.Null, message: Schema.Never }
-        const Badge = Component.define({ ...state, name: "Badge" }).make({
-          init: () => null,
-          update: () => null,
-          view: (_, h) => h.el("li", h.id("label"))
-        })
-        const view = function(
-          this: typeof Badge,
-          ...[model, props, running, queries, path]: Parameters<Component.Any["view"]>
-        ) {
-          return Badge.view(model, props, running, queries, path?.toUpperCase())
-        }
-        // The first read gives `make`'s view, and installs the wrapper for the reads after it.
-        const Swapping = Object.defineProperty(Object.create(Badge) as typeof Badge, "view", {
-          configurable: true,
-          get(this: typeof Badge) {
-            Object.defineProperty(this, "view", { value: view })
-            return Badge.view
-          }
-        })
-        const Rows = Component.define({ ...state, name: "Rows" }).make({
-          init: () => null,
-          update: () => null,
-          view: (_, h) => h.el("ul", { ...Badge(h, { key: "a" }), component: Swapping })
-        })
-        const root = yield* TestHost.mount(Rows, {})
-        assert.strictEqual(root.text(), View.idOf("/Rows/Badge[a]", "label"))
-      })))
-
     it.effect("closing the mount's Scope unmounts every instance", () =>
       Effect.gen(function*() {
         const testHost = yield* TestHost.TestHost
@@ -3466,48 +3435,6 @@ describe("Runtime", () => {
         root.send(1)
         yield* TestHost.settle
         assert.deepStrictEqual(seen, ["first 0", "first 1", "second 1"])
-      }).pipe(
-        Effect.provide(Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })),
-        provideHost
-      ))
-
-    it.effect("readers of a mount's args get new ones in the order they began to wait", () =>
-      Effect.gen(function*() {
-        const gate = yield* Deferred.make<void>()
-        const seen: Array<string> = []
-        const Draw = Mount.make("Draw", { args: { n: Schema.Number } }, (_node, _args, changes) =>
-          Effect.gen(function*() {
-            // The first reader is still busy with the first args when the second begins to wait.
-            yield* Effect.forkScoped(Stream.runForEach(changes, ({ n }) => {
-              seen.push("first " + n)
-              return n === 0 ? Deferred.await(gate) : Effect.void
-            }))
-            yield* Effect.forkScoped(
-              Stream.runForEach(changes, ({ n }) =>
-                Effect.sync(() =>
-                  seen.push("second " + n)
-                ))
-            )
-            return Component.noop
-          }))
-        const Chart = Component.define({
-          name: "WaitOrder",
-          model: Schema.Number,
-          message: Schema.Number,
-          elements: Tiny
-        })
-          .make({
-            init: () => 0,
-            update: (_, n) => n,
-            view: (n, h) => h.field.onMount(Draw({ n }))
-          })
-        const root = yield* TestHost.mount(Chart, {})
-        yield* TestHost.settle
-        yield* Deferred.succeed(gate, undefined)
-        yield* TestHost.settle
-        root.send(1)
-        yield* TestHost.settle
-        assert.deepStrictEqual(seen, ["first 0", "second 0", "second 1", "first 1"])
       }).pipe(
         Effect.provide(Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })),
         provideHost

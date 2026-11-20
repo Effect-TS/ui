@@ -23,18 +23,18 @@ const freshHost = async () => {
   return { apply: host.head!, warnings }
 }
 
-const description = (content: string): HtmlHeadModule.Meta => ({
+const meta = (name: string, content: string): HtmlHeadModule.Meta => ({
   _tag: "Meta",
   key: undefined,
-  name: "description",
+  name,
   property: undefined,
   content
 })
 
 /** A head written as a literal, as a `reduceHead` may build one. */
-const literal = (meta: ReadonlyArray<HtmlHeadModule.Meta>): HtmlHeadModule.HtmlHead => ({
+const literal = (entries: ReadonlyArray<HtmlHeadModule.Meta>): HtmlHeadModule.HtmlHead => ({
   title: "App",
-  meta,
+  meta: entries,
   links: [],
   jsonLd: [],
   html: { lang: "en", dir: undefined, class: [], data: {} },
@@ -43,24 +43,18 @@ const literal = (meta: ReadonlyArray<HtmlHeadModule.Meta>): HtmlHeadModule.HtmlH
 
 // Every test syncs the one global document.
 describe("BrowserHost head in an app that imports nothing from HtmlHead", { concurrent: false }, () => {
-  it("syncs a head written as a literal", async () => {
-    const { apply, warnings } = await freshHost()
-    apply(literal([description("About")]))
-    expect(document.title).toBe("App")
-    expect(document.head.querySelector("meta[data-eui]")?.getAttribute("content")).toBe("About")
-    expect(document.documentElement.getAttribute("lang")).toBe("en")
-    expect(document.body.className).toBe("dark")
-    expect(warnings).toEqual([])
-  })
-
-  it("adopts the server's marked tag the head wants, and removes the one it doesn't", async () => {
-    document.head.innerHTML = `<title data-eui>App</title><meta name="description" content="About" data-eui>` +
+  it("syncs a literal head, adopts wanted server tags, and removes unwanted ones", async () => {
+    document.head.innerHTML = `<title data-eui>Old</title><meta name="description" content="About" data-eui>` +
       `<meta name="robots" content="noindex" data-eui>`
     const kept = document.head.querySelector("meta[name=description]")
     const { apply, warnings } = await freshHost()
-    apply(literal([description("About")]))
+    apply(literal([meta("description", "About"), meta("author", "Ada")]))
+    expect(document.title).toBe("App")
     expect(document.head.querySelector("meta[name=description]")).toBe(kept)
+    expect(document.head.querySelector("meta[name=author][data-eui]")?.getAttribute("content")).toBe("Ada")
     expect(document.head.querySelector("meta[name=robots]")).toBeNull()
+    expect(document.documentElement.getAttribute("lang")).toBe("en")
+    expect(document.body.className).toBe("dark")
     expect(warnings).toEqual([])
   })
 })

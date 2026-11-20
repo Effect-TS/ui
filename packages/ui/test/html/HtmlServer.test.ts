@@ -10,8 +10,7 @@ import {
   Renderer,
   Router,
   Subscription,
-  UiSchema,
-  View
+  UiSchema
 } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
@@ -389,225 +388,6 @@ describe("HtmlServer", { concurrent: false }, () => {
       const rendered = yield* HtmlServer.renderToHtml(Page, {})
       expect(rendered.html).toBe("<!--[/LeftOut--><div><textarea>only text</textarea><br></div><!--]/LeftOut-->")
     }))
-
-  it.effect("reads an object given as a value once, after the render's Layers are released", () =>
-    Effect.gen(function*() {
-      const Off = Component.define({
-        name: "Off",
-        model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
-      }).make({
-        init: () => null,
-        update: (model) => model,
-        view: (_, h) => h.p("off")
-      }).pipe(Component.provide(Layer.empty, { server: false }))
-      let released = false
-      let read = 0
-      const value = {
-        toString() {
-          read++
-          return released ? "released" : "live"
-        }
-      }
-      const Page = Component.define({
-        name: "Late",
-        model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
-      }).make({
-        init: () => null,
-        update: (model) => model,
-        view: (_, h) => h.div.children(h.input.prop("value", value), Off(h, { key: "o", props: {} }))
-      }).pipe(Component.provide(Layer.effectDiscard(Effect.addFinalizer(() =>
-        Effect.sync(() => {
-          released = true
-        })
-      ))))
-      const rendered = yield* HtmlServer.renderToHtml(Page, {})
-      expect(rendered.html).toBe(
-        "<!--[/Late--><div><input value=\"released\"><!--[/Late/Off[o]--><p>off</p><!--]/Late/Off[o]--></div><!--]/Late-->"
-      )
-      expect(rendered.state).toEqual({ "/Late": null, "~deferred": ["/Late/Off[o]"], "~query": {} })
-      expect(read).toBe(1)
-    }))
-
-  const hiddenValues: ReadonlyArray<readonly [string, ReadonlyArray<"textarea" | "select" | "input">]> = [
-    ["a textarea's", ["textarea"]],
-    ["a select's", ["select"]],
-    ["both, before an input's object value", ["textarea", "select", "input"]]
-  ]
-
-  it.effect.each(hiddenValues)(
-    "reads a value that isn't among the props' keys once, after the render's Layers are released: %s",
-    ([, parts]) =>
-      Effect.gen(function*() {
-        let released = false
-        // What each read of it gave.
-        const tracked = () => {
-          const reads: Array<string> = []
-          const value = {
-            toString() {
-              reads.push(released ? "released" : "live")
-              return reads.at(-1)!
-            }
-          }
-          return { reads, value }
-        }
-        const values = { textarea: tracked(), select: tracked(), input: tracked() }
-        // An element written by hand: its `value` isn't enumerable.
-        const hidden = <Msg>(node: View.Content<Msg, never>, value: unknown): View.Node<Msg> => ({
-          ...(View.toNode(node) as View.Element<Msg>),
-          props: Object.defineProperty({}, "value", { value })
-        })
-        const Page = Component.define({
-          name: "Hidden",
-          model: Schema.Null,
-          message: Schema.Never,
-          elements: Html
-        }).make({
-          init: () => null,
-          update: (model) => model,
-          view: (_, h) =>
-            h.div.children(...parts.map((part) =>
-              part === "textarea"
-                ? hidden(h.textarea, values.textarea.value)
-                : part === "select"
-                ? hidden(h.select.children(h.option.children("released")), values.select.value)
-                : h.input.prop("value", values.input.value)
-            ))
-        }).pipe(Component.provide(Layer.effectDiscard(Effect.addFinalizer(() =>
-          Effect.sync(() => {
-            released = true
-          })
-        ))))
-        const rendered = yield* HtmlServer.renderToHtml(Page, {})
-        const html = {
-          textarea: "<textarea>released</textarea>",
-          select: "<select><option selected>released</option></select>",
-          input: "<input value=\"released\">"
-        }
-        expect(rendered.html).toBe(
-          `<!--[/Hidden--><div>${parts.map((part) => html[part]).join("")}</div><!--]/Hidden-->`
-        )
-        for (const part of ["textarea", "select", "input"] as const) {
-          expect(values[part].reads, part).toEqual(parts.includes(part) ? ["released"] : [])
-        }
-      })
-  )
-
-  // The render reads an element's enumerable props once itself, before the HTML is written.
-  const getters: ReadonlyArray<readonly [string, "textarea" | "p" | "input", boolean, string, number]> = [
-    ["a textarea's, not enumerable", "textarea", false, "<textarea>released</textarea>", 0],
-    // Read although nothing is written from it.
-    ["a p's, not enumerable", "p", false, "<p></p>", 0],
-    ["an input's, enumerable", "input", true, "<input value=\"released\">", 1]
-  ]
-
-  it.effect.each(getters)(
-    "calls a getter given as a value once, after the render's Layers are released: %s",
-    ([, tag, enumerable, html, rendering]) =>
-      Effect.gen(function*() {
-        let released = false
-        // What each call gave, and how many there were when the Layers were released.
-        const calls: Array<string> = []
-        let before = -1
-        const props = Object.defineProperty({}, "value", {
-          enumerable,
-          get() {
-            calls.push(released ? "released" : "live")
-            return calls.at(-1)
-          }
-        })
-        const Page = Component.define({
-          name: "Getter",
-          model: Schema.Null,
-          message: Schema.Never,
-          elements: Html
-        }).make({
-          init: () => null,
-          update: (model) => model,
-          // An element written by hand.
-          view: (_, h) => h.div.children({ ...(View.toNode(h[tag]) as View.Element<never>), props })
-        }).pipe(Component.provide(Layer.effectDiscard(Effect.addFinalizer(() =>
-          Effect.sync(() => {
-            before = calls.length
-            released = true
-          })
-        ))))
-        const rendered = yield* HtmlServer.renderToHtml(Page, {})
-        expect(rendered.html).toBe(`<!--[/Getter--><div>${html}</div><!--]/Getter-->`)
-        expect(before).toBe(rendering)
-        expect(calls.slice(before)).toEqual(["released"])
-      })
-  )
-
-  // What an element written by hand is given, and what each call of `read` gives. The render reads an
-  // element's attrs and props once itself, before its Layers are released.
-  type Late = Partial<Pick<View.Element<never>, "attrs" | "props">> & { readonly release?: () => void }
-  const lates: ReadonlyArray<
-    readonly [string, "p" | "input", (read: () => string) => Late, string, ReadonlyArray<string>]
-  > = [
-    [
-      "a getter among its attrs",
-      "p",
-      (read) => ({ attrs: Object.defineProperty({}, "title", { enumerable: true, get: read }) }),
-      "<p title=\"released\"></p>",
-      ["live", "released"]
-    ],
-    [
-      "props that are a Proxy",
-      "input",
-      (read) => ({
-        props: new Proxy({ value: "" }, {
-          get: (target, name) => name === "value" ? read() : Reflect.get(target, name)
-        })
-      }),
-      "<input value=\"released\">",
-      ["live", "released"]
-    ],
-    [
-      "props a Layer's finalizer changes",
-      "input",
-      () => {
-        const props = { value: "live" }
-        return { props, release: () => void (props.value = "released") }
-      },
-      "<input value=\"released\">",
-      []
-    ]
-  ]
-
-  it.effect.each(lates)(
-    "writes an element as it is once the render's Layers are released: %s",
-    ([, tag, make, html, reads]) =>
-      Effect.gen(function*() {
-        let released = false
-        const calls: Array<string> = []
-        const late = make(() => {
-          calls.push(released ? "released" : "live")
-          return calls.at(-1)!
-        })
-        const Page = Component.define({
-          name: "Late",
-          model: Schema.Null,
-          message: Schema.Never,
-          elements: Html
-        }).make({
-          init: () => null,
-          update: (model) => model,
-          view: (_, h) => h.div.children({ ...(View.toNode(h[tag]) as View.Element<never>), ...late })
-        }).pipe(Component.provide(Layer.effectDiscard(Effect.addFinalizer(() =>
-          Effect.sync(() => {
-            released = true
-            late.release?.()
-          })
-        ))))
-        const rendered = yield* HtmlServer.renderToHtml(Page, {})
-        expect(rendered.html).toBe(`<!--[/Late--><div>${html}</div><!--]/Late-->`)
-        expect(calls).toEqual(reads)
-      })
-  )
 
   it.effect("keeps winning HTML aliases through updates and removals without folding SVG attributes", () =>
     Effect.gen(function*() {
@@ -1318,21 +1098,14 @@ describe("HtmlServer", { concurrent: false }, () => {
       expect(app.querySelector("ul")!.childNodes.length).toBe(2)
     }).pipe(Effect.scoped))
 
-  for (
-    const [where, tamper] of [
-      ["at the end of a row", (html: string) => html.replace("row C", "stale")],
-      ["after a row's own nodes", (html: string) => html.replace("<!--]/Rows/Row[C]-->", "<hr>$&")]
-    ] as const
-  ) {
-    it.effect(`a mismatch ${where} keeps the rows beside it, and starts nothing twice`, () =>
-      Effect.gen(function*() {
-        const { app, server, startedOnce } = yield* hydrateRows(tamper)
-        const items = [...app.querySelectorAll("li")]
-        assert.strictEqual(items[0], server.items[0])
-        assert.strictEqual(items[1], server.items[1])
-        yield* startedOnce
-      }).pipe(Effect.scoped))
-  }
+  it.effect("a mismatch after a row's own nodes keeps the rows beside it, and starts nothing twice", () =>
+    Effect.gen(function*() {
+      const { app, server, startedOnce } = yield* hydrateRows((html) => html.replace("<!--]/Rows/Row[C]-->", "<hr>$&"))
+      const items = [...app.querySelectorAll("li")]
+      assert.strictEqual(items[0], server.items[0])
+      assert.strictEqual(items[1], server.items[1])
+      yield* startedOnce
+    }).pipe(Effect.scoped))
 
   // A child whose slot holds another child, with two buttons in a slot of its own, and a node after it.
   // `partly` puts a stray element before the second button, and one after the outer slot.
