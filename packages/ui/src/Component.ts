@@ -680,8 +680,6 @@ export interface InitStep<in out Model, in out Msg, in out Events, out R = never
   readonly emitted: ReadonlyArray<Events>
   /** Replaces the Model. */
   set(model: Model): InitStep<Model, Msg, Events, R>
-  /** Changes the Model with a function of the current one. */
-  modify(f: (model: Model) => Model): InitStep<Model, Msg, Events, R>
   /** Changes some fields of the Model, as `Step.evolve` does. */
   evolve(fields: EvolveFields<Model>): InitStep<Model, Msg, Events, R>
   /** Runs Commands owned by this instance, as `Step.run` does. */
@@ -716,8 +714,6 @@ export interface Step<in out Model, in out Msg, in out Events, out R = never, L 
   readonly sends: ReadonlyArray<Send>
   /** Replaces the Model. */
   set(model: Model): Step<Model, Msg, Events, R, L>
-  /** Changes the Model with a function of the current one. */
-  modify(f: (model: Model) => Model): Step<Model, Msg, Events, R, L>
   /**
    * Changes some fields of the Model and keeps the rest. Each field takes
    * its new value, or a function from its old value to the new one, with the
@@ -946,9 +942,8 @@ const applyFields = (self: any, fields: Record<PropertyKey, unknown>) => {
  * the same struct when every field keeps its value. It is for plain
  * structs, not `Schema.Class` or other class instances: evolving a
  * changed field on a class instance compiles, but drops the prototype so
- * class methods are missing at runtime. For a class Model, use `$.set`
- * or `$.modify` with a constructor or method that returns a valid
- * instance.
+ * class methods are missing at runtime. For a class Model, use `$.set` with
+ * a constructor or method that returns a valid instance.
  *
  * **Example** (A row of a list and a nested struct)
  *
@@ -997,9 +992,6 @@ const StepProto = {
   },
   set(this: Step<any, any, any, any>, model: unknown) {
     return makeStep(model, this.commands, this.emitted, this.lists, this.sends)
-  },
-  modify(this: Step<any, any, any, any>, f: (model: any) => any) {
-    return makeStep(f(this.model), this.commands, this.emitted, this.lists, this.sends)
   },
   evolve(this: Step<any, any, any, any>, fields: Record<PropertyKey, unknown>) {
     return makeStep(applyFields(this.model, fields), this.commands, this.emitted, this.lists, this.sends)

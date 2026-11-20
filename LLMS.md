@@ -198,8 +198,8 @@ too.
 `evolve` is for plain structs, not `Schema.Class` or other class
 instances: evolving a changed field returns a plain-object shallow copy,
 dropping the prototype even though the static type still exposes class
-methods. For a class Model, use `$.set` or `$.modify` with a constructor
-or method that returns a valid instance.
+methods. For a class Model, use `$.set` with a constructor or method that
+returns a valid instance.
 
 ### Stateless view wrappers
 
