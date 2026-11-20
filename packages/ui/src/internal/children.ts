@@ -161,5 +161,25 @@ export const held = (owner: string, children: Children, model: unknown): Array<V
 export const lists = (children: Children, key: string): boolean =>
   children.some(([name, entry]) => entry[TypeId] === "keyed" ? key.startsWith(name + "[") : key === name)
 
+/**
+ * Throws when a child other than a listed one has a ref key `children` can list: a send by that ref goes to
+ * the listed child. `written` holds the refs of an author's view and of the content it gives others.
+ *
+ * @internal
+ */
+export const checkRefs = (
+  author: string,
+  children: Children,
+  written: ReadonlyArray<{ readonly refs: ReadonlyMap<string, View.Child<any, any>> | undefined }>
+): void => {
+  for (const paths of written) {
+    for (const [key, view] of paths.refs ?? []) {
+      if ((view.component as Component.Any).definition?.lifetime !== "model" && lists(children, key)) {
+        throw new Error(`${author}: ref ${key} names a listed child`)
+      }
+    }
+  }
+}
+
 const declaration = (listed: Listed, slots: View.Child<any, any>["slots"]): View.Child<any, any> =>
   child.make(listed.entry.component, { ref: listed.ref, props: listed.props, onEmit: listed.entry.onEmit, slots })

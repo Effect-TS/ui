@@ -1,4 +1,4 @@
-import { Child, Command, Component, Head, type MessageLog, Mount, Renderer, UiSchema } from "@effect/ui"
+import { Child, Command, Component, Feature, Head, type MessageLog, Mount, Renderer, UiSchema } from "@effect/ui"
 import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Context, Deferred, Effect, Layer, Option, Schema } from "effect"
@@ -1368,4 +1368,129 @@ describe("model children drawn across trees", () => {
       const crashed = yield* Effect.flip(TestHost.settle)
       assert.include(String(crashed), "/Page: ref box names a listed child")
     }).pipe(provideHost))
+
+  it.effect("keeps a row where it's drawn when a parked Frame reopens the slot it left", () =>
+    Effect.gen(function*() {
+      const mounts: Array<string> = []
+      const Track = Mount.make("Track", { args: {} }, () =>
+        Effect.acquireRelease(
+          Effect.sync(() => mounts.push("start")),
+          () => Effect.sync(() => mounts.push("stop"))
+        )
+          .pipe(Effect.andThen(Effect.never)))
+      const Row = Component.define({ name: "Row", lifetime: "model", model: Schema.Null, message: Schema.Never })
+        .make({ init: () => null, update: (m) => m, view: (_, h) => h.el("i").onMount(Track()).children("row") })
+      const FrameMsg = UiSchema.TaggedEnum({ Toggle: {} })
+      const Frame = Component.define({
+        name: "Frame",
+        lifetime: "model",
+        model: Schema.Boolean,
+        message: FrameMsg,
+        receives: ["Toggle"],
+        slots: ["body"]
+      }).make({
+        init: () => true,
+        update: (open) => !open,
+        view: (open, h) => h.el("article", open ? h.slots.body : null)
+      })
+      const Tab = Component.define({
+        name: "Tab",
+        lifetime: "model",
+        model: Schema.Null,
+        message: Schema.Never,
+        slots: ["aside"]
+      }).make({ init: () => null, update: (m) => m, view: (_, h) => h.el("aside", h.slots.aside) })
+      // Shows its slot while open: closing it parks Tab without a render of Page.
+      const Fold = Component.define({
+        name: "Fold",
+        lifetime: "view",
+        model: Schema.Boolean,
+        message: FrameMsg,
+        receives: ["Toggle"],
+        slots: ["body"]
+      }).make({ init: () => true, update: (open) => !open, view: (open, h) => h.el("div", open ? h.slots.body : null) })
+      const FoldRef = Fold.ref("fold")
+      const PageMsg = UiSchema.TaggedEnum({ Move: {}, Fold: {}, Toggle: {} })
+      const Page = Component.define({ name: "Page", lifetime: "view", model: Schema.Boolean, message: PageMsg }).make({
+        children: { frame: Frame, tab: Tab, row: Row },
+        init: () => false,
+        update: (moved, message, $) =>
+          PageMsg.match(message, {
+            Move: () => true,
+            Fold: () => $.set(moved).send(FoldRef, FrameMsg.Toggle()),
+            Toggle: () => $.set(moved).send(Frame.ref("frame"), FrameMsg.Toggle())
+          }),
+        view: (moved, h) =>
+          h.el(
+            "main",
+            moved ? null : h.children.frame({ slots: { body: h.children.row() } }),
+            Fold(h, {
+              ref: FoldRef,
+              slots: { body: h.children.tab({ slots: { aside: moved ? h.children.row() : null } }) }
+            })
+          )
+      })
+      const root = yield* TestHost.mount(Page, {})
+      yield* TestHost.settle
+      // Frame is parked with the row in its slot, which Tab's aside draws now.
+      root.send(PageMsg.Move())
+      yield* TestHost.settle
+      root.send(PageMsg.Fold())
+      yield* TestHost.settle
+      // Frame's old slot closes, opens and closes again: the row stays in Tab's aside throughout.
+      root.send(PageMsg.Toggle())
+      yield* TestHost.settle
+      root.send(PageMsg.Toggle())
+      yield* TestHost.settle
+      root.send(PageMsg.Toggle())
+      yield* TestHost.settle
+      root.send(PageMsg.Fold())
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "row")
+      assert.deepStrictEqual(
+        lifecycle(root, "/Page/Row[row]").filter((tag) => tag === "Detached" || tag === "Attached"),
+        []
+      )
+      assert.deepStrictEqual(mounts, ["start", "stop", "start"])
+      assert.deepStrictEqual(root.log().filter((e) => e._tag === "Failed"), [])
+    }).pipe(
+      Effect.provide(Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })),
+      provideHost
+    ))
+
+  it.effect("fails the author of a feature fallback that gives a child a listed child's ref", () =>
+    Effect.gen(function*() {
+      class Editor extends Feature.Service<Editor>()("ParkedChildren/Editor", { props: Schema.Struct({}) }) {}
+      const EditorView = Component.define({
+        name: "EditorView",
+        lifetime: "view",
+        model: Schema.Null,
+        message: Schema.Never
+      })
+        .make({ init: () => null, update: (m) => m, view: (_, h) => h.text("editor") })
+      const Leaf = Component.define({ name: "Leaf", lifetime: "view", model: Schema.Null, message: Schema.Never })
+        .make({ init: () => null, update: (m) => m, view: (_, h) => h.el("b", "leaf") })
+      const Box = Component.define({ name: "Box", lifetime: "model", model: Schema.Null, message: Schema.Never })
+        .make({ init: () => null, update: (m) => m, view: (_, h) => h.el("i", "box") })
+      const Page = Component.define({ name: "Page", lifetime: "view", model: Schema.Null, message: Schema.Never })
+        .make({
+          children: { box: Box },
+          init: () => null,
+          update: (m) => m,
+          view: (_, h) =>
+            h.el("main", Editor.render(h, { key: "e", props: {}, fallback: () => Leaf(h, { ref: Leaf.ref("box") }) }))
+        })
+        .pipe(Component.provide(Editor.toLayer(EditorView).pipe(Layer.provide(Layer.effectDiscard(Effect.never)))))
+      yield* TestHost.mount(Page, {})
+      const crashed = yield* Effect.flip(TestHost.settle)
+      assert.include(String(crashed), "/Page: ref box names a listed child")
+    }).pipe(provideHost))
+
+  it.effect("fails a scene whose view gives a child a listed child's ref", () =>
+    Effect.gen(function*() {
+      const crashed = yield* Effect.exit(
+        Effect.flatMap(Scene.make(refPage("ref"), {}), (s) => Effect.sync(() => s.view))
+      )
+      assert.include(String(crashed), "/Page: ref box names a listed child")
+    }).pipe(Effect.scoped))
 })

@@ -548,7 +548,8 @@ const expandRoot = <Msg>(
   root: Owners,
   status: ReadonlyMap<string, SlotResult> | undefined,
   slotStatus: SlotResult | undefined,
-  models: ReadonlyMap<string, ModelChild> | undefined
+  models: ReadonlyMap<string, ModelChild> | undefined,
+  listed: listedChildren.Children | undefined
 ): View.Node<Msg, any> => {
   const replaced: Array<View.Child<any, any>> = []
   const placed: Array<Occurrence> = []
@@ -683,6 +684,7 @@ const expandRoot = <Msg>(
   const expanded = expand(view, "/" + name, 0, true, root, (label) => checkChildPaths(label, view), slotStatus)
   checkAuthorRefs("/" + name, written)
   checkAuthorPlacements("/" + name, written)
+  if (listed !== undefined) listedChildren.checkRefs("/" + name, listed, written)
   if (replaced.length > 0) expandedChildren.set(expanded, replaced)
   // A root the expansion left as it was may be a node the component cached and another story shows,
   // and its children are all declared by the view itself, so it keeps nothing.
@@ -841,7 +843,8 @@ export const expandedView = (fields: Fields<any, any, any, any>): View.Node<any,
     ownersBelow(noOwners, fields.component, fields.model, fields.props),
     fields.childStatus,
     fields.slotStatus,
-    fields.models
+    fields.models,
+    listedChildren.of(fields.component)
   )
 
 /** The story's component's own view, before its headless children are expanded. */
