@@ -5672,6 +5672,13 @@ const setup = (
     const from = found.parent!
     if (found.site === undefined) undrop(found)
     else from.children.delete(found)
+    // Held by its author: the holder lets it go now, as the author may not render again this flush.
+    const held = from.held?.get(found.path)
+    if (held !== undefined && held.inner === found.site) {
+      from.held!.delete(found.path)
+      if (from.held!.size === 0) from.held = undefined
+      unpark(from, held.container)
+    }
     reparent(found, inst)
     const rendered: RChild = new ChildRecord(view, found)
     found.site = rendered
@@ -5756,12 +5763,38 @@ const setup = (
     refChecks.add(author)
   }
   const undrop = (inst: Instance) => dropped.get(inst.parent!.author)?.delete(inst)
-  /** Closes what `author`'s trees dropped and didn't declare again. */
+  /**
+   * Closes what `author`'s trees dropped and didn't declare again. A `"model"` child placed inside one,
+   * through a slot, by an author outside it, is still listed: that author holds it first, so it leaves
+   * the subtree rather than closing with it.
+   */
   const releaseDropped = (author: Instance) => {
     const list = dropped.get(author)
     if (list === undefined) return
+    for (const inst of list) {
+      for (const listing of listingAuthors(inst)) holdOrFail(listing)
+    }
     dropped.delete(author)
     for (const inst of list) endInstance(inst)
+  }
+  /** The authors outside `inst`'s subtree that list children placed in it. */
+  const listingAuthors = (inst: Instance): Set<Instance> => {
+    const authors = new Set<Instance>()
+    const visit = (at: Instance) => {
+      for (const child of at.children) {
+        const author = child.parent!.author
+        if (listedOf(author.component) !== undefined && !within(author, inst)) authors.add(author)
+        visit(child)
+      }
+    }
+    visit(inst)
+    return authors
+  }
+  const within = (inst: Instance, root: Instance): boolean => {
+    for (let at: Instance | undefined = inst; at !== undefined; at = at.parent) {
+      if (at === root) return true
+    }
+    return false
   }
   const releaseAllDropped = () => {
     if (dropped.size === 0) return
@@ -5787,8 +5820,9 @@ const setup = (
       const path = childPath(author, view)
       const found = live.get(path)
       const kept = before?.get(path)
-      // Placed by one of its trees.
-      if (found !== undefined && found.site !== undefined && found.site !== kept?.inner) continue
+      // Placed by one of its trees, in a part of it that stays: a site inside a subtree the flush drops goes
+      // with that subtree, so the child moves to the holder before it closes.
+      if (found !== undefined && found.site !== undefined && found.site !== kept?.inner && !inDropped(found)) continue
       before?.delete(path)
       after.set(
         path,
@@ -5800,6 +5834,13 @@ const setup = (
     author.held = after.size === 0 ? undefined : after
     // Placed again, which leaves nothing to close, or no longer listed.
     if (before !== undefined) { for (const kept of before.values()) closeAll(author, kept) }
+  }
+  /** Whether one of `inst`'s ancestors was dropped this flush, so it closes with it unless it moves. */
+  const inDropped = (inst: Instance): boolean => {
+    for (let at = inst.parent; at?.parent !== undefined; at = at.parent) {
+      if (dropped.get(at.parent.author)?.has(at)) return true
+    }
+    return false
   }
   /** `holdListed`, which fails `author` with source `view` when it can't hold a child. */
   const holdOrFail = (author: Instance) => {

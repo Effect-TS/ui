@@ -158,6 +158,84 @@ describe("model children", () => {
   })
 })
 
+// A slot receiver removed with the form in its slot: the form leaves it before it closes, unless unlisted.
+
+const Fold = Component.define({
+  name: "Fold",
+  lifetime: "view",
+  model: Schema.Boolean,
+  message: ToggleMsg,
+  elements: Html,
+  slots: ["body"]
+}).make({
+  init: () => true,
+  update: (open) => !open,
+  view: (open, h) =>
+    h.section(
+      h.button.onClick(ToggleMsg.ClickedToggle()).children("fold"),
+      open ? Card(h, { key: "card", slots: { body: h.slots.body } }) : null
+    )
+})
+const ShelfMsg = UiSchema.TaggedEnum({ Toggled: {}, Unlisted: {}, Listed: {} })
+const shelf = (view: (shown: boolean, form: () => View.Child<any, any> | null, h: any) => View.Content<any, any>) =>
+  Component.define({
+    name: "Page",
+    lifetime: "view",
+    model: Schema.Struct({ shown: Schema.Boolean, listed: Schema.Boolean }),
+    message: ShelfMsg,
+    elements: Html
+  }).make({
+    children: { form: Child.optional(Form, { props: (model) => model.listed ? {} : null }) },
+    init: () => ({ shown: true, listed: true }),
+    update: (model, message) =>
+      ShelfMsg.match(message, {
+        Toggled: () => ({ ...model, shown: !model.shown }),
+        Unlisted: () => ({ shown: false, listed: false }),
+        Listed: () => ({ shown: true, listed: true })
+      }),
+    view: (model, h) => view(model.shown, () => h.children.form?.() ?? null, h)
+  })
+const inCard = shelf((shown, form, h) => h.main(shown ? Card(h, { key: "card", slots: { body: form() } }) : null))
+const formLog = (root: Root) =>
+  root.log().flatMap((entry) =>
+    "path" in entry && entry.path === "/Page/Form[form]" && entry._tag !== "Update" ? [entry._tag] : []
+  )
+const send = (root: Root, message: typeof ShelfMsg.Type) => settle(() => root.send(message))
+
+describe("a model child in a slot whose receiver is removed", () => {
+  it.effect.each([
+    {
+      name: "by the child's author",
+      view: inCard,
+      relayout: (root: Root) => Effect.andThen(send(root, ShelfMsg.Toggled()), send(root, ShelfMsg.Toggled()))
+    },
+    {
+      name: "by another component, through a forwarded slot",
+      view: shelf((_, form, h) => h.main(Fold(h, { key: "fold", slots: { body: form() } }))),
+      relayout: (root: Root) => Effect.andThen(click(root, "fold"), click(root, "fold"))
+    }
+  ])("keeps its draft, detached and attached again, $name", ({ relayout, view }) =>
+    Effect.gen(function*() {
+      const root = yield* TestHost.mount(view, {})
+      yield* TestHost.settle
+      yield* click(root, "draft:")
+      yield* relayout(root)
+      assert.include(root.text(), "draft:a")
+      assert.deepStrictEqual(formLog(root), ["Mounted", "Detached", "Attached"])
+    }).pipe(Effect.provide(TestHost.layer())))
+
+  it.effect("releases it when the same update unlists it", () =>
+    Effect.gen(function*() {
+      const root = yield* TestHost.mount(inCard, {})
+      yield* TestHost.settle
+      yield* click(root, "draft:")
+      yield* send(root, ShelfMsg.Unlisted())
+      yield* send(root, ShelfMsg.Listed())
+      assert.strictEqual(root.text(), "draft:")
+      assert.deepStrictEqual(formLog(root), ["Mounted", "Unmounted", "Mounted"])
+    }).pipe(Effect.provide(TestHost.layer())))
+})
+
 // A child the view doesn't place, wherever the view leaves it out: it gets sends while hidden.
 
 const CounterMsg = UiSchema.TaggedEnum({ Ping: {} })
