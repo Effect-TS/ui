@@ -370,18 +370,22 @@ const taken = -1
  * in it, and the closures of the headless children declared there, which it wrote too. Each render
  * checks that at most one child across them has the key.
  */
-const findChild = (rendered: ReadonlyArray<Rendered>, key: string): RChild | RFallback | undefined => {
+const findChild = (
+  rendered: ReadonlyArray<Rendered>,
+  key: string,
+  renderedOf: (inst: Instance) => ReadonlyArray<Rendered>
+): RChild | RFallback | undefined => {
   for (const r of rendered) {
     let found: RChild | RFallback | undefined
     if (r._tag === "Element") {
-      found = findChild(listOf(r.children), key)
+      found = findChild(listOf(r.children), key, renderedOf)
     } else if (r._tag === "Child" && !holds(r)) {
       // Left behind by a move: the child is found where it is now.
     } else if (r._tag === "Child" || r._tag === "Fallback") {
       if (r.v.ref !== undefined && r.v.ref.key === key) return r
-      if (r._tag === "Fallback") found = findChild([r.inner], key)
-      else if (r.inst.owner !== undefined) found = findChild(r.inst.rendered, key)
-      else found = firstInOutlets(r.inst, (out) => findChild(out.rendered, key))
+      if (r._tag === "Fallback") found = findChild([r.inner], key, renderedOf)
+      else if (r.inst.owner !== undefined) found = findChild(renderedOf(r.inst), key, renderedOf)
+      else found = firstInOutlets(r.inst, (out) => findChild(out.rendered, key, renderedOf))
     }
     // An outlet in the tree shows what another author wrote, so the search passes it by.
     if (found !== undefined) return found
@@ -2533,6 +2537,14 @@ const setup = (
     } else {
       clearRendered(inst)
     }
+    if (inst.held !== undefined) {
+      // Listed children held off-screen below a changed key remount against the new Env too.
+      for (const kept of inst.held.values()) {
+        unpark(inst, kept.container)
+        closeAll(inst, kept.inner)
+      }
+      inst.held = undefined
+    }
     // What still closes may use the old services, removed in an earlier flush or just now.
     if (inst.closes !== undefined) waits.push(...inst.closes)
     if (previous.ctx !== undefined && selection.retired === undefined) {
@@ -3829,6 +3841,8 @@ const setup = (
       owner.dispatch(send.message, { _tag: "Send", path: inst.path, seq: entrySeq })
     }
   }
+  const liveRenderedOf = (inst: Instance): ReadonlyArray<Rendered> =>
+    pendingRange.get(inst)?.heldRendered ?? inst.rendered
   /**
    * Delivers the sends of `inst`'s updates to its direct children, matched by ref key in its last
    * render. A send whose child can't take it is dropped and logged, never kept for a later instance.
@@ -3840,10 +3854,9 @@ const setup = (
     if (!countSends(inst, "its children")) return
     for (const { issued, send } of outbox) {
       if (inst.closed) return
-      const rendered = pendingRange.get(inst)?.heldRendered ?? inst.rendered
       // A headless instance wrote none of the tree it renders, so it has no children to send to.
       const child = inst.owner === undefined
-        ? findChild(rendered, send.ref.key) ?? findHeld(inst, send.ref.key)
+        ? findChild(liveRenderedOf(inst), send.ref.key, liveRenderedOf) ?? findHeld(inst, send.ref.key)
         : undefined
       const reason: MessageLog.SendDropped["reason"] | undefined = child === undefined
         ? "unrendered"
@@ -5830,15 +5843,13 @@ const setup = (
       const after = host.nextOf(range.close)
       const adopted = adopt && adoptExisting(inst, range)
       if (!range.claimed) { for (const node of nodes) host.remove(node) }
-      if (!adopted && !inst.closed && inst.failure === undefined) {
-        inst.serverView = undefined
+      if (!inst.closed && inst.failure === undefined) {
+        if (!adopted) inst.serverView = undefined
+        if (parentNode !== undefined) placeEach(parentNode, inst.rendered, after)
         if (!isDetached(inst.parent)) {
           for (const item of inst.rendered) toggleMounts(inst, item, inst.env, true)
         }
-        if (parentNode !== undefined) placeEach(parentNode, inst.rendered, after)
-        markDirty(inst)
-      } else if (inst.failure === undefined && parentNode !== undefined) {
-        placeEach(parentNode, inst.rendered, after)
+        if (!adopted) markDirty(inst)
       }
       if (!inst.closed) syncDetached(inst, isDetached(inst.parent))
       if (adopt) recordAdopted(inst)
@@ -5861,9 +5872,13 @@ const setup = (
     const oldRendered = inst.rendered
     const initial = inst.serverView
     inst.serverView = undefined
-    const needsPatch = initial === undefined || dirty.has(inst) || inst.owner !== undefined ||
+    const needsPatch = initial === undefined || dirty.has(inst) ||
       oldRendered.length !== 1 || oldRendered[0]!.v !== initial
-    const current = needsPatch ? viewOf(inst) : initial
+    const current = !needsPatch
+      ? initial
+      : !dirty.has(inst) && oldRendered.length === 1
+      ? oldRendered[0]!.v
+      : viewOf(inst)
     const adoptView = initial ?? current
     if (adoptView === undefined) return false
     const parentNode = host.parentOf(range.open)
@@ -5873,7 +5888,7 @@ const setup = (
     const prevAuthorPaths = adoptingLiveByAuthor.get(inst.author)
     if (prevRoot === undefined) adoptingRoot = inst
     if (needsPatch && initial !== undefined) {
-      const livePaths = new Set<string>()
+      const livePaths = hasPrevAuthor ? new Set(prevAuthorPaths) : new Set<string>()
       if (current !== undefined) collectViewChildPaths(inst.author, current, livePaths)
       adoptingLiveByAuthor.set(inst.author, livePaths)
     }
@@ -5950,7 +5965,6 @@ const setup = (
     if (range !== undefined) {
       found.onEmit = view.onEmit
       found.onFailure = view.onFailure
-      if (found.owner !== undefined) found.content = view.view
       if (shouldAwaitLayer(found)) {
         awaitExistingLayer(found, range, heldContainer)
         adopted = true
@@ -6931,8 +6945,9 @@ const setup = (
         const changed = !propsEqual(child.props, instance.props)
         if (changed) changeProps(instance, child.props)
         // A headless child's view is the closure, which is new on every render of whoever declared it.
-        if (instance.owner !== undefined) instance.content = child.view
-        if ((changed || instance.owner !== undefined) && !instance.closed) {
+        const contentChanged = instance.owner !== undefined && instance.content !== child.view
+        if (contentChanged) instance.content = child.view
+        if ((changed || contentChanged) && !instance.closed) {
           // The instance a message is on its way to keeps its view until the flush: see `renderAbove`.
           if (instance === receiving) markDirty(instance)
           else {

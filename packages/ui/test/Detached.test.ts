@@ -1,7 +1,7 @@
 import { Child, Command, Component, Head, type MessageLog, Mount, Renderer, UiSchema } from "@effect/ui"
 import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Cause, Deferred, Effect, Option, Schema } from "effect"
+import { Cause, Context, Deferred, Effect, Layer, Option, Schema } from "effect"
 
 const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(TestHost.layer()))
 const click = (root: TestHost.TestRoot<any, any, any>, text: string) =>
@@ -755,4 +755,89 @@ describe("detached children", () => {
     assert.throws(() => s.expectMount(Track()), /no rendered mount matches Track/)
     s.click(Locator.text("toggle")).expectMount(Track())
   })
+
+  it.effect("remounts unplaced held model children when a parent's keyed Layer changes", () =>
+    provideHost(Effect.gen(function*() {
+      class RoomSvc extends Context.Service<RoomSvc, string>()("test/HeldKeyedRoomSvc") {}
+      class WorkerRes extends Context.Service<WorkerRes, string>()("test/HeldKeyedWorkerRes") {}
+      const Key = Schema.Literals(["a", "b", "slow", "fast"])
+      const makeRoom = (
+        slowGate: Deferred.Deferred<void>,
+        opened: Array<string>,
+        closed: Array<string>
+      ) => {
+        const Worker = Component.define({
+          name: "Worker",
+          lifetime: "model",
+          model: Schema.Null,
+          message: Schema.Never
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => h.el("p", "worker")
+        }).pipe(
+          Component.provide(
+            Layer.effect(
+              WorkerRes,
+              Effect.gen(function*() {
+                const room = yield* RoomSvc
+                return yield* Effect.acquireRelease(
+                  Effect.sync(() => {
+                    opened.push(room)
+                    return room
+                  }),
+                  () => Effect.sync(() => void closed.push(room))
+                )
+              })
+            )
+          )
+        )
+        return Component.provide(
+          Component.define({
+            name: "Room",
+            lifetime: "view",
+            props: Schema.Struct({ key: Key }),
+            model: Key,
+            message: Key
+          }).make({
+            children: { worker: Worker },
+            init: ($) => $.props.key,
+            update: (_, next) => next,
+            view: (_, h) => h.el("div", "hidden")
+          }),
+          {
+            key: (_, key) => key,
+            layer: (key) =>
+              key === "slow"
+                ? Layer.effect(RoomSvc, Effect.as(Deferred.await(slowGate), "slow"))
+                : Layer.succeed(RoomSvc, key)
+          }
+        )
+      }
+
+      // Old key ready -> new key ready: old held child's resource closes and new one opens immediately.
+      const opened1: Array<string> = []
+      const closed1: Array<string> = []
+      const gate1 = yield* Deferred.make<void>()
+      const root1 = yield* TestHost.mount(makeRoom(gate1, opened1, closed1), { key: "a" as const })
+      yield* TestHost.settle
+      assert.deepStrictEqual(opened1, ["a"])
+      assert.deepStrictEqual(closed1, [])
+      root1.send("b")
+      yield* TestHost.settle
+      assert.deepStrictEqual(opened1, ["a", "b"])
+      assert.deepStrictEqual(closed1, ["a"])
+
+      // Old key pending -> new key ready: new held child's resource opens immediately on key change.
+      const opened2: Array<string> = []
+      const closed2: Array<string> = []
+      const gate2 = yield* Deferred.make<void>()
+      const root2 = yield* TestHost.mount(makeRoom(gate2, opened2, closed2), { key: "slow" as const })
+      yield* TestHost.settle
+      assert.deepStrictEqual(opened2, [])
+      root2.send("fast")
+      yield* TestHost.settle
+      assert.deepStrictEqual(opened2, ["fast"])
+      assert.deepStrictEqual(closed2, [])
+    })))
 })

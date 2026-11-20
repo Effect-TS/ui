@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Child, Component, Feature, MessageLog, UiSchema } from "@effect/ui"
+import { Child, Component, Feature, MessageLog, Mount, UiSchema } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { HtmlLocator, ssr } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
@@ -1497,6 +1497,438 @@ describe("model children on the server", () => {
       assert.isNull(app.querySelector("section p"))
       assert.isNull(app.querySelector("section em"))
       assert.notInclude(app.innerHTML, "<!--")
+    }).pipe(Effect.scoped))
+
+  it.live("starts element mounts on a child added to a pending Box once its Layer settles", () =>
+    Effect.gen(function*() {
+      class CardSlow extends Context.Service<CardSlow, string>()("test/CardSlowMountSettle") {}
+      class BoxSlow extends Context.Service<BoxSlow, string>()("test/BoxSlowMountSettle") {}
+      let started = 0
+      let closed = 0
+      const Track = Mount.make(
+        "Track",
+        { args: {} },
+        () =>
+          Effect.acquireRelease(
+            Effect.sync(() => void started++),
+            () => Effect.sync(() => void closed++)
+          ).pipe(Effect.andThen(Effect.never))
+      )
+      const Widget = Component.define({
+        name: "Widget",
+        lifetime: "view",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => h.b.onMount(Track()).children("widget")
+      })
+      const makePage = (cardLayer: Layer.Layer<CardSlow>, boxLayer: Layer.Layer<BoxSlow>) => {
+        const Box = Component.define({
+          name: "Box",
+          lifetime: "model",
+          props: Schema.Struct({ show: Schema.Boolean }),
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => h.div(h.props.show ? Widget(h, { key: "w" }) : h.span("empty"))
+        }).pipe(Component.provide(boxLayer))
+        const Card = Component.define({
+          name: "Card",
+          lifetime: "view",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html,
+          slots: ["body"]
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => h.section(h.slots.body)
+        }).pipe(Component.provide(cardLayer))
+        return Component.define({
+          name: "Page",
+          lifetime: "view",
+          model: Schema.Boolean,
+          message: Schema.Boolean,
+          elements: Html
+        }).make({
+          children: { box: Child.one(Box, { props: (show) => ({ show }) }) },
+          init: () => false,
+          update: (_, show) => show,
+          view: (_, h) => Card(h, { key: "c", slots: { body: h.children.box() } })
+        })
+      }
+
+      const rendered = yield* HtmlServer.renderToHtml(
+        makePage(Layer.succeed(CardSlow, "ready"), Layer.succeed(BoxSlow, "ready")),
+        {}
+      )
+      const app = yield* makeContainer(rendered.html)
+      const releaseCard = yield* Deferred.make<void>()
+      const releaseBox = yield* Deferred.make<void>()
+      const root = yield* BrowserHost.mountEffect(
+        makePage(
+          Layer.effect(CardSlow, Effect.as(Deferred.await(releaseCard), "ready")),
+          Layer.effect(BoxSlow, Effect.as(Deferred.await(releaseBox), "ready"))
+        ),
+        {},
+        app,
+        { state: rendered.state }
+      )
+      yield* Deferred.succeed(releaseCard, undefined)
+      yield* tick
+      root.send(true)
+      yield* tick
+      assert.strictEqual(started, 0)
+      yield* Deferred.succeed(releaseBox, undefined)
+      yield* root.adopted
+      yield* tick
+      assert.strictEqual(app.querySelector("section b")?.textContent, "widget")
+      assert.strictEqual(started, 1)
+      assert.strictEqual(closed, 0)
+      root.send(false)
+      yield* tick
+      assert.strictEqual(closed, 1)
+    }).pipe(Effect.scoped))
+
+  it.live("delivers sends to a ref inside a pending headless child's closure", () =>
+    Effect.gen(function*() {
+      class CardSlow extends Context.Service<CardSlow, string>()("test/CardSlowHeadlessSend") {}
+      class PanelSlow extends Context.Service<PanelSlow, string>()("test/PanelSlowHeadlessSend") {}
+      const LeafMsg = UiSchema.TaggedEnum({ Inc: {} })
+      const BoxMsg = UiSchema.TaggedEnum({ Forward: {} })
+      const PageMsg = UiSchema.TaggedEnum({ Forward: {} })
+      const makePage = (cardLayer: Layer.Layer<CardSlow>, panelLayer: Layer.Layer<PanelSlow>, initial: number) => {
+        const Leaf = Component.define({
+          name: "Leaf",
+          lifetime: "view",
+          model: Schema.Number,
+          message: LeafMsg,
+          receives: ["Inc"],
+          elements: Html
+        }).make({
+          init: () => initial,
+          update: (n) => n + 1,
+          view: (n, h) => h.p(String(n))
+        })
+        const LeafRef = Leaf.ref("leaf")
+        const Panel = Component.define({
+          name: "Panel",
+          lifetime: "view",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          parts: () => ({})
+        }).pipe(Component.provide(panelLayer) as unknown as <C>(component: C) => C)
+        const Box = Component.define({
+          name: "Box",
+          lifetime: "model",
+          model: Schema.Null,
+          message: BoxMsg,
+          receives: ["Forward"],
+          elements: Html
+        }).make({
+          init: () => null,
+          update: (_, __, $) => $.send(LeafRef, LeafMsg.Inc()),
+          view: (_, h) => h.div(Panel(h, { key: "p", view: () => Leaf(h, { ref: LeafRef }) }))
+        })
+        const BoxRef = Box.ref("box")
+        const Card = Component.define({
+          name: "Card",
+          lifetime: "view",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html,
+          slots: ["body"]
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => h.section(h.slots.body)
+        }).pipe(Component.provide(cardLayer))
+        return Component.define({
+          name: "Page",
+          lifetime: "view",
+          model: Schema.Null,
+          message: PageMsg,
+          elements: Html
+        }).make({
+          children: { box: Box },
+          init: () => null,
+          update: (_, __, $) => $.send(BoxRef, BoxMsg.Forward()),
+          view: (_, h) => Card(h, { key: "c", slots: { body: h.children.box() } })
+        })
+      }
+
+      const rendered = yield* HtmlServer.renderToHtml(
+        makePage(Layer.succeed(CardSlow, "ready"), Layer.succeed(PanelSlow, "ready"), 41),
+        {}
+      )
+      const app = yield* makeContainer(rendered.html)
+      const releaseCard = yield* Deferred.make<void>()
+      const releasePanel = yield* Deferred.make<void>()
+      const log = MessageLog.makeMemory()
+      const root = yield* BrowserHost.mountEffect(
+        makePage(
+          Layer.effect(CardSlow, Effect.as(Deferred.await(releaseCard), "ready")),
+          Layer.effect(PanelSlow, Effect.as(Deferred.await(releasePanel), "ready")),
+          0
+        ),
+        {},
+        app,
+        { state: rendered.state }
+      ).pipe(Effect.provideService(MessageLog.MessageLog, log))
+      yield* Deferred.succeed(releaseCard, undefined)
+      yield* tick
+      root.send(PageMsg.Forward())
+      yield* tick
+      yield* Deferred.succeed(releasePanel, undefined)
+      yield* root.adopted
+      yield* tick
+      assert.strictEqual(app.querySelector("section p")?.textContent, "42")
+      assert.deepStrictEqual(log.entries().filter((entry) => entry._tag === "SendDropped"), [])
+      assert.notInclude(app.innerHTML, "<!--")
+    }).pipe(Effect.scoped))
+
+  it.live("preserves headless closures during adoption without restarting removed children or duplicating listed placements", () =>
+    Effect.gen(function*() {
+      class CardSlow extends Context.Service<CardSlow, string>()("test/CardSlowHeadlessAdopt") {}
+      class FeatureRes extends Context.Service<FeatureRes, string>()("test/HeadlessRemovedFeatureRes") {}
+      class ChildRes extends Context.Service<ChildRes, string>()("test/HeadlessRemovedChildRes") {}
+      class PanelFeature extends Feature.Service<PanelFeature>()("test/HeadlessRemovedPanel", {
+        props: Schema.Struct({})
+      }) {}
+      const Headless = Component.define({
+        name: "Headless",
+        lifetime: "view",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        parts: () => ({})
+      })
+      const Shell = Component.define({
+        name: "Shell",
+        lifetime: "view",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html,
+        slots: ["body"]
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => h.div(h.slots.body)
+      })
+
+      // 1. Removed slotted feature & child inside a headless closure do not restart on adoption.
+      let featureAcquires = 0
+      let featureReleases = 0
+      let childAcquires = 0
+      let childReleases = 0
+      const makeRemovedPage = (cardLayer: Layer.Layer<CardSlow>, track: boolean) => {
+        const PanelImpl = Component.define({
+          name: "PanelImpl",
+          lifetime: "view",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => h.p("panel")
+        }).pipe(
+          Component.provide(
+            Layer.effect(
+              FeatureRes,
+              Effect.acquireRelease(
+                Effect.sync(() => {
+                  if (track) featureAcquires++
+                  return "f"
+                }),
+                () =>
+                  Effect.sync(() => {
+                    if (track) featureReleases++
+                  })
+              )
+            )
+          )
+        )
+        const Widget = Component.define({
+          name: "Widget",
+          lifetime: "view",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => h.em("widget")
+        }).pipe(
+          Component.provide(
+            Layer.effect(
+              ChildRes,
+              Effect.acquireRelease(
+                Effect.sync(() => {
+                  if (track) childAcquires++
+                  return "c"
+                }),
+                () =>
+                  Effect.sync(() => {
+                    if (track) childReleases++
+                  })
+              )
+            )
+          )
+        )
+        const Box = Component.define({
+          name: "Box",
+          lifetime: "model",
+          props: Schema.Struct({ show: Schema.Boolean }),
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) =>
+            Headless(h, {
+              key: "h",
+              view: () =>
+                Shell(h, {
+                  key: "s",
+                  slots: {
+                    body: h.props.show
+                      ? [
+                        PanelFeature.render(h, { key: "p", props: {}, fallback: () => h.p("loading") }),
+                        Widget(h, { key: "w" })
+                      ]
+                      : h.span("removed")
+                  }
+                })
+            })
+        }).pipe(Component.provide(PanelFeature.toLayer(PanelImpl)))
+        const Card = Component.define({
+          name: "Card",
+          lifetime: "view",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html,
+          slots: ["body"]
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => h.section(h.slots.body)
+        }).pipe(Component.provide(cardLayer))
+        return Component.define({
+          name: "Page",
+          lifetime: "view",
+          model: Schema.Boolean,
+          message: Schema.Boolean,
+          elements: Html
+        }).make({
+          children: { box: Child.one(Box, { props: (show) => ({ show }) }) },
+          init: () => true,
+          update: (_, show) => show,
+          view: (_, h) => Card(h, { key: "c", slots: { body: h.children.box() } })
+        })
+      }
+
+      const rendered1 = yield* HtmlServer.renderToHtml(makeRemovedPage(Layer.succeed(CardSlow, "ready"), false), {})
+      const app1 = yield* makeContainer(rendered1.html)
+      const releaseCard1 = yield* Deferred.make<void>()
+      const root1 = yield* BrowserHost.mountEffect(
+        makeRemovedPage(Layer.effect(CardSlow, Effect.as(Deferred.await(releaseCard1), "ready")), true),
+        {},
+        app1,
+        { state: rendered1.state }
+      )
+      yield* tick
+      root1.send(false)
+      yield* tick
+      yield* Deferred.succeed(releaseCard1, undefined)
+      yield* root1.adopted
+      yield* tick
+      assert.strictEqual(featureAcquires, 1)
+      assert.strictEqual(featureReleases, 1)
+      assert.strictEqual(childAcquires, 1)
+      assert.strictEqual(childReleases, 1)
+      assert.strictEqual(app1.querySelector("section span")?.textContent, "removed")
+      assert.notInclude(app1.innerHTML, "<!--")
+
+      // 2. A single h.children.leaf() inside a headless closure in a listed Box adopts cleanly without duplicate placement.
+      const Leaf = Component.define({
+        name: "Leaf",
+        lifetime: "model",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => h.p("leaf")
+      })
+      const makeLeafPage = (cardLayer: Layer.Layer<CardSlow>) => {
+        const Box = Component.define({
+          name: "Box",
+          lifetime: "model",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        }).make({
+          children: { leaf: Leaf },
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => Headless(h, { key: "h", view: () => h.children.leaf() })
+        })
+        const Card = Component.define({
+          name: "Card",
+          lifetime: "view",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html,
+          slots: ["body"]
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => h.section(h.slots.body)
+        }).pipe(Component.provide(cardLayer))
+        return Component.define({
+          name: "Page",
+          lifetime: "view",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        }).make({
+          children: { box: Box },
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => Card(h, { key: "c", slots: { body: h.children.box() } })
+        })
+      }
+
+      const rendered2 = yield* HtmlServer.renderToHtml(makeLeafPage(Layer.succeed(CardSlow, "ready")), {})
+      const app2 = yield* makeContainer(rendered2.html)
+      const releaseCard2 = yield* Deferred.make<void>()
+      const root2 = yield* BrowserHost.mountEffect(
+        makeLeafPage(Layer.effect(CardSlow, Effect.as(Deferred.await(releaseCard2), "ready"))),
+        {},
+        app2,
+        { state: rendered2.state }
+      )
+      yield* Deferred.succeed(releaseCard2, undefined)
+      yield* root2.adopted
+      yield* tick
+      assert.strictEqual(app2.querySelector("section p")?.textContent, "leaf")
+      assert.notInclude(app2.innerHTML, "<!--")
     }).pipe(Effect.scoped))
 
   it.effect("serializes a listed model child parked in a collapsed slot during SSR", () =>
