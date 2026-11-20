@@ -228,17 +228,25 @@ class Layered {
 const none: ReadonlyArray<never> = []
 
 /** A rendered element's children as a list, made for the one child that is held without one. */
-const listOf = (children: Rendered | Array<Rendered> | undefined): ReadonlyArray<Rendered> =>
+const listOf = (children: Packed): ReadonlyArray<Rendered> =>
   children === undefined ? none : Array.isArray(children) ? children : [children]
+/**
+ * How a rendered element holds its children, and an instance what it rendered: most hold one, so a
+ * list with one item is that item, and an empty one is `undefined`.
+ */
+type Packed = Rendered | Array<Rendered> | undefined
 /** How a rendered element holds a list of children. */
-const packed = (children: Array<Rendered>): Rendered | Array<Rendered> | undefined =>
-  children.length > 1 ? children : children[0]
+const packed = (children: Array<Rendered>): Packed => children.length > 1 ? children : children[0]
 
 /**
  * The list an instance holds until it adds to it: frozen, so an append to it fails loudly. Compare
  * with it before the first append.
  */
 const emptyList: Array<never> = Object.freeze([]) as unknown as Array<never>
+
+/** As `listOf`, for `patchList`, which can return the list it's given. */
+const arrayOf = (items: Packed): Array<Rendered> =>
+  items === undefined ? emptyList : Array.isArray(items) ? items : [items]
 
 /**
  * For each event a part handles, the paths of the instances that get it, deepest owner first and the
@@ -363,22 +371,25 @@ const taken = -1
  * in it, and the closures of the headless children declared there, which it wrote too. Each render
  * checks that at most one child across them has the key.
  */
-const findChild = (rendered: ReadonlyArray<Rendered>, key: string): RChild | RFallback | undefined => {
+const findChild = (rendered: Packed, key: string): RChild | RFallback | undefined => {
+  if (rendered === undefined) return undefined
+  if (!Array.isArray(rendered)) return findChildIn(rendered, key)
   for (const r of rendered) {
-    let found: RChild | RFallback | undefined
-    if (r._tag === "Element") {
-      found = findChild(listOf(r.children), key)
-    } else if (r._tag === "Detached") {
-      found = findChild([r.inner], key)
-    } else if (r._tag === "Child" || r._tag === "Fallback") {
-      if (r.v.ref !== undefined && r.v.ref.key === key) return r
-      if (r._tag === "Fallback") found = findChild([r.inner], key)
-      else if (r.inst.owner !== undefined) found = findChild(r.inst.rendered, key)
-      else found = firstInOutlets(r.inst, (out) => findChild(out.rendered, key))
-    }
-    // An outlet in the tree shows what another author wrote, so the search passes it by.
+    const found = findChildIn(r, key)
     if (found !== undefined) return found
   }
+  return undefined
+}
+const findChildIn = (r: Rendered, key: string): RChild | RFallback | undefined => {
+  if (r._tag === "Element") return findChild(r.children, key)
+  if (r._tag === "Detached") return findChildIn(r.inner, key)
+  if (r._tag === "Child" || r._tag === "Fallback") {
+    if (r.v.ref !== undefined && r.v.ref.key === key) return r
+    if (r._tag === "Fallback") return findChildIn(r.inner, key)
+    if (r.inst.owner !== undefined) return findChild(r.inst.rendered, key)
+    return firstInOutlets(r.inst, (out) => findChild(out.rendered, key))
+  }
+  // An outlet in the tree shows what another author wrote, so the search passes it by.
   return undefined
 }
 
@@ -519,7 +530,7 @@ export interface Instance {
    * fails once its nodes are in place, so the instance closes over what it rendered.
    */
   clash: unknown
-  rendered: Array<Rendered>
+  rendered: Packed
   /**
    * From the moment its Scope or an ancestor's starts closing, not once it has: nothing new starts
    * in a teardown that an async cleanup holds open, its own or one that a sequential close of an
@@ -1027,7 +1038,7 @@ const serializeTree = (
     }
     sink.enter(path)
     if (inst.failure === undefined) {
-      for (const rendered of inst.rendered) serialize(inst, rendered, inner)
+      for (const rendered of listOf(inst.rendered)) serialize(inst, rendered, inner)
     }
     sink.leave(path)
   }
@@ -1049,7 +1060,7 @@ const serializeTree = (
       case "Outlet": {
         const outlet = rendered.inst
         sink.enter(outlet.path)
-        for (const child of outlet.rendered) serialize(outlet, child, under)
+        for (const child of listOf(outlet.rendered)) serialize(outlet, child, under)
         return sink.leave(outlet.path)
       }
       case "Fallback": {
@@ -1811,7 +1822,7 @@ const setup = (
     let children: Array<Instance> = emptyList
     if (below) {
       children = []
-      for (const rendered of inst.rendered) placed(rendered, children)
+      for (const rendered of listOf(inst.rendered)) placed(rendered, children)
     }
     return { inst, entries, reduce: reduce === undefined ? undefined : (below) => reduce(model, below), children }
   }
@@ -2035,7 +2046,7 @@ const setup = (
    * the text node is in, and then the old nodes go, once.
    */
   const swapForPlaceholder = (inst: Instance, release: () => void) => {
-    const nodes = inst.rendered.flatMap(nodesOf)
+    const nodes = listOf(inst.rendered).flatMap(nodesOf)
     const placeholder = host.createText("")
     const at = nodes[0]
     const parentNode = at === undefined ? undefined : host.parentOf(at)
@@ -2043,7 +2054,7 @@ const setup = (
     else if (inst.parent === undefined) host.insertBefore(container, placeholder, undefined)
     release()
     for (const node of nodes) host.remove(node)
-    inst.rendered = [new TextRecord(emptyText, placeholder)]
+    inst.rendered = new TextRecord(emptyText, placeholder)
   }
 
   /** Swaps the instance's nodes for an empty text node, closing its Scope. */
@@ -2107,7 +2118,7 @@ const setup = (
     try {
       const view = fallback(AsyncResult.failure(cause), View.makeHelper({}, root.component.elements()))
       const node = buildStatic(View.toNode(view))
-      const placeholder = nodesOf(root.rendered[0]!)[0]
+      const placeholder = nodesOf(listOf(root.rendered)[0]!)[0]
       host.insertBefore(
         container,
         node,
@@ -2567,9 +2578,9 @@ const setup = (
 
   /** Swaps everything the instance rendered for an empty text node: its descendants and mounts end. */
   const clearRendered = (inst: Instance) => {
-    if (inst.rendered.length === 0) return
+    if (inst.rendered === undefined) return
     swapForPlaceholder(inst, () => {
-      for (const rendered of inst.rendered) closeAll(inst, rendered)
+      for (const rendered of listOf(inst.rendered)) closeAll(inst, rendered)
     })
     viewChanged = true
   }
@@ -2718,7 +2729,7 @@ const setup = (
     onFailure: ((failure: AsyncResult.Failure<never, unknown>) => unknown) | undefined
     failure: Cause.Cause<unknown> | undefined = undefined
     childPaths: ChildPaths | undefined = undefined
-    rendered: Array<Rendered> = emptyList
+    rendered: Packed = undefined
     waiting = false
     adoptsChildren = false
     runs: Array<Run> = emptyList
@@ -3260,7 +3271,7 @@ const setup = (
       return
     }
     if (taken !== undefined) claim(range!)
-    inst.rendered = [rendered]
+    inst.rendered = rendered
     viewChanged = true
     if (inst.failure !== undefined) return
     if (Option.isSome(adopted)) {
@@ -3299,12 +3310,12 @@ const setup = (
     inst.waiting = true
     waiting++
     range.claimed = true
-    inst.rendered = rangeNodes(range).map((node) => new TextRecord(emptyText, node))
+    inst.rendered = packed(rangeNodes(range).map((node) => new TextRecord(emptyText, node)))
     const resume = (adopt: boolean) => {
       if (inst.closed || !inst.waiting) return
       inst.waiting = false
-      const nodes = inst.rendered.flatMap(nodesOf)
-      inst.rendered = []
+      const nodes = listOf(inst.rendered).flatMap(nodesOf)
+      inst.rendered = undefined
       range.claimed = false
       // Where its nodes go. Read before it renders: adopting removes the markers.
       const parentNode = host.parentOf(range.open)
@@ -4711,9 +4722,9 @@ const setup = (
         return rendered.inst.owner === undefined
           ? firstInOutlets(
             rendered.inst,
-            (out) => firstDefined(out.rendered, (child) => findRef(child, key, who, author))
+            (out) => firstDefined(listOf(out.rendered), (child) => findRef(child, key, who, author))
           )
-          : firstDefined(rendered.inst.rendered, (child) => findRef(child, key, who, author))
+          : firstDefined(listOf(rendered.inst.rendered), (child) => findRef(child, key, who, author))
       case "Text":
       case "Outlet":
         return undefined
@@ -4733,7 +4744,7 @@ const setup = (
         afterCommit(() => {
           const found = inst.closed
             ? undefined
-            : firstDefined(inst.rendered, (rendered) => findRef(rendered, ref.key, inst, inst.author))
+            : firstDefined(listOf(inst.rendered), (rendered) => findRef(rendered, ref.key, inst, inst.author))
           // A node in a detached child, the instance's own included, is out of the document.
           const node = found === undefined || isParked(found) ? undefined : found
           resume(Effect.succeed(Option.fromUndefinedOr(node as Node | undefined)))
@@ -5127,8 +5138,8 @@ const setup = (
   const checked = (inst: Instance, tree: View.Node<any, any>): View.Node<any, any> => {
     // The tree it rendered last, when that held no child, as `inst.childPaths` found: only a view that
     // used `h.lazy` gives its nodes again, so only its tree is worth comparing.
-    const last = inst.lazy !== undefined && inst.childPaths === undefined && inst.rendered.length === 1
-      ? inst.rendered[0]!
+    const last = inst.lazy !== undefined && inst.childPaths === undefined && !Array.isArray(inst.rendered)
+      ? inst.rendered
       : undefined
     const paths = checkChildPaths(inst, tree, last?._tag === "Element" ? last.v : undefined)
     // A view with no child, ref or outlet has nothing to check its fallbacks or refs against.
@@ -5229,10 +5240,11 @@ const setup = (
     guard(inst, "view", () => {
       const parentNode = host.parentOf(firstNodeOfList(inst.rendered))!
       const ref = host.nextOf(lastNodeOfList(inst.rendered))
-      releaseRemoved(inst.rendered, [tree])
       const before = inst.rendered
-      const next = patchList(inst, parentNode, before, [tree], ref, inst.env)
-      if (inst.rendered === before) inst.rendered = next
+      const olds = arrayOf(before)
+      releaseRemoved(olds, [tree])
+      const next = patchList(inst, parentNode, olds, [tree], ref, inst.env)
+      if (inst.rendered === before) inst.rendered = packed(next)
       else {
         // Failed while rendering, as when a fallback in its tree throws: `close` left the placeholder,
         // which stays, and what the patch built goes.
@@ -5324,18 +5336,18 @@ const setup = (
     try {
       if (range !== undefined) {
         // The markers go, and the server's nodes that match are the content's.
-        out.rendered = adoptList(out, views, host.nextOf(range.open), range.close, out.env)
+        out.rendered = packed(adoptList(out, views, host.nextOf(range.open), range.close, out.env))
         host.remove(range.open)
         host.remove(range.close)
       } else {
         const rendered: Array<Rendered> = new Array(views.length)
         for (let index = 0; index < views.length; index++) rendered[index] = create(out, views[index]!, out.env)
-        out.rendered = rendered
+        out.rendered = packed(rendered)
       }
     } catch (error) {
       contentFailed(out, error)
       created++
-      out.rendered = [new TextRecord(emptyText, host.createText(""))]
+      out.rendered = new TextRecord(emptyText, host.createText(""))
     }
     failClash(out)
     if (inst.children === noChildren) inst.children = new Set()
@@ -5432,8 +5444,9 @@ const setup = (
     try {
       const parentNode = host.parentOf(firstNodeOfList(out.rendered))!
       const ref = host.nextOf(lastNodeOfList(out.rendered))
-      releaseRemoved(out.rendered, views)
-      out.rendered = patchList(out, parentNode, out.rendered, views, ref, out.env)
+      const olds = arrayOf(out.rendered)
+      releaseRemoved(olds, views)
+      out.rendered = packed(patchList(out, parentNode, olds, views, ref, out.env))
     } catch (error) {
       contentFailed(out, error)
     }
@@ -5525,7 +5538,7 @@ const setup = (
     if (range !== undefined && !range.claimed) removeRange(range)
     if (child.failure !== undefined) {
       // Failed while mounting: the child shows its fallback in the placeholder's place.
-      const nodes = child.rendered.flatMap(nodesOf)
+      const nodes = listOf(child.rendered).flatMap(nodesOf)
       for (const node of nodes) host.remove(node)
       return failedChild(inst, view, child.failure, env)
     }
@@ -6353,6 +6366,8 @@ const setup = (
       case "Outlet":
       case "Child": {
         const items = rendered.inst.rendered
+        if (items === undefined) return
+        if (!Array.isArray(items)) return collectNodes(items, out)
         for (let index = 0; index < items.length; index++) collectNodes(items[index]!, out)
       }
     }
@@ -6373,17 +6388,23 @@ const setup = (
       : rendered.node
   const hasNodes = (rendered: Rendered): boolean =>
     rendered._tag === "Child" || rendered._tag === "Outlet"
-      ? rendered.inst.rendered.some(hasNodes)
+      ? hasNodesIn(rendered.inst.rendered)
       : rendered._tag === "Fallback"
       ? hasNodes(rendered.inner)
       : true
-  const firstNodeOfList = (items: ReadonlyArray<Rendered>): unknown => {
+  const hasNodesIn = (items: Packed): boolean =>
+    items === undefined ? false : Array.isArray(items) ? items.some(hasNodes) : hasNodes(items)
+  const firstNodeOfList = (items: Packed): unknown => {
+    if (items === undefined) return undefined
+    if (!Array.isArray(items)) return hasNodes(items) ? firstNodeOf(items) : undefined
     for (let index = 0; index < items.length; index++) {
       if (hasNodes(items[index]!)) return firstNodeOf(items[index]!)
     }
     return undefined
   }
-  const lastNodeOfList = (items: ReadonlyArray<Rendered>): unknown => {
+  const lastNodeOfList = (items: Packed): unknown => {
+    if (items === undefined) return undefined
+    if (!Array.isArray(items)) return hasNodes(items) ? lastNodeOf(items) : undefined
     for (let index = items.length - 1; index >= 0; index--) {
       if (hasNodes(items[index]!)) return lastNodeOf(items[index]!)
     }
@@ -6421,7 +6442,8 @@ const setup = (
    * As `place`, for what hydration adopted. An item there can hold nodes built fresh among the server's,
    * so every node is checked, not each item's last. Returns the first node, or `ref` when there is none.
    */
-  const placeEach = (parentNode: unknown, items: ReadonlyArray<Rendered>, ref: unknown): unknown => {
+  const placeEach = (parentNode: unknown, packedItems: Packed, ref: unknown): unknown => {
+    const items = listOf(packedItems)
     let next = ref
     for (let index = items.length - 1; index >= 0; index--) {
       let item = items[index]!
@@ -6449,6 +6471,8 @@ const setup = (
       case "Outlet":
       case "Child": {
         const items = rendered.inst.rendered
+        if (items === undefined) return
+        if (!Array.isArray(items)) return insertNodes(parentNode, items, ref)
         for (let index = 0; index < items.length; index++) insertNodes(parentNode, items[index]!, ref)
       }
     }
@@ -6526,7 +6550,7 @@ const setup = (
       case "Child":
       case "Outlet": {
         const child = rendered.inst
-        for (const item of child.rendered) toggleMounts(child, item, child.env, start)
+        for (const item of listOf(child.rendered)) toggleMounts(child, item, child.env, start)
         return
       }
       case "Detached":
@@ -6643,7 +6667,7 @@ const setup = (
     rootRange
   )
   if (rootRange !== undefined && !rootRange.claimed) removeRange(rootRange)
-  rootRendered = () => root.rendered
+  rootRendered = () => listOf(root.rendered)
   rootInstance = root
   // Added after the root forked its Scope, so it runs before that Scope closes.
   addFinalizer(rootScope, Effect.sync(() => leave(root)))
