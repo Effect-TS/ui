@@ -249,6 +249,8 @@ const write = (tape: ReadonlyArray<any>): string => {
         // Most elements: outside a select, and closed by their closing tag.
         if (selectValue === undefined && !framed.has(tag)) {
           out += `<${tag}${plain ?? written(elementAttributes(tag, attrs, props))}>`
+          // Read for nothing: every element's `value` is read once, whether or not its tag writes it.
+          void props.value
           break
         }
         out += `<${tag}`
@@ -264,7 +266,7 @@ const write = (tape: ReadonlyArray<any>): string => {
           if (option === undefined) out += `${written(attributes)}>`
         }
         const kind = voidTags.has(tag) ? "void" : textOnlyTags.has(tag) ? "text" : undefined
-        const value = tag === "select" || tag === "textarea" ? props.value : undefined
+        const value = kind === "void" ? undefined : props.value
         const inside = tag === "select" && value !== undefined
           ? String(value)
           : tag === "option" || tag === "optgroup"

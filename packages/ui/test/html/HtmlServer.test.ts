@@ -10,7 +10,8 @@ import {
   Renderer,
   Router,
   Subscription,
-  UiSchema
+  UiSchema,
+  View
 } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
@@ -387,6 +388,58 @@ describe("HtmlServer", { concurrent: false }, () => {
       })
       const rendered = yield* HtmlServer.renderToHtml(Page, {})
       expect(rendered.html).toBe("<!--[/LeftOut--><div><textarea>only text</textarea><br></div><!--]/LeftOut-->")
+    }))
+
+  it.effect("reads a non-void element's value property on both writer paths before later siblings", () =>
+    Effect.gen(function*() {
+      const steps = ["first", "second", "third"]
+      let index = 0
+      const next = () => steps[index++]!
+      const withHiddenValue = (node: View.Content<never, never>): View.Node<never> => ({
+        ...(View.toNode(node) as View.Element<never>),
+        props: Object.freeze(Object.defineProperty({}, "value", { get: next }))
+      })
+      const Page = Component.define({
+        name: "ValueReads",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) =>
+          h.div.children(
+            withHiddenValue(h.button),
+            h.select.value("a").children(withHiddenValue(h.option.attr("value", "a").children("A"))),
+            h.input.prop("value", Object.freeze({ toString: next }))
+          )
+      })
+      const rendered = yield* HtmlServer.renderToHtml(Page, {})
+      expect(rendered.html).toBe(
+        "<!--[/ValueReads--><div><button></button><select><option value=\"a\" selected>A</option></select><input value=\"third\"></div><!--]/ValueReads-->"
+      )
+    }))
+
+  it.effect("writes element values after the render's Layers are released", () =>
+    Effect.gen(function*() {
+      let closed = false
+      const value = Object.freeze({ toString: () => closed ? "closed" : "open" })
+      const Page = Component.define({
+        name: "AfterRelease",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => h.div.children(h.input.prop("value", value))
+      }).pipe(Component.provide(Layer.effectDiscard(Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          closed = true
+        })
+      ))))
+      const rendered = yield* HtmlServer.renderToHtml(Page, {})
+      expect(rendered.html).toBe("<!--[/AfterRelease--><div><input value=\"closed\"></div><!--]/AfterRelease-->")
     }))
 
   it.effect("keeps winning HTML aliases through updates and removals without folding SVG attributes", () =>
