@@ -8,8 +8,6 @@ const InfoRow = <M>(h: View.H<M>, label: string, value: string) =>
     h.p.class("font-medium text-gray-800").children(value)
   )
 
-// The Sign Out button sends the caller's message, so the page needs no
-// Model or messages of its own.
 export const SettingsPage = <M>(h: View.H<M>, options: {
   readonly session: Session
   readonly onSignOut: M

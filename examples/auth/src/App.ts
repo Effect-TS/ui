@@ -16,12 +16,6 @@ import {
   settingsRoute
 } from "./routes.ts"
 
-// ---------------------------------------------------------------------------
-// Model
-// ---------------------------------------------------------------------------
-
-// The app is either signed out or signed in, never a flat struct with an
-// optional session. Each state holds only the routes it can show.
 export const LoggedOut = Schema.TaggedStruct("LoggedOut", { route: LoggedOutRoute })
 export const LoggedIn = Schema.TaggedStruct("LoggedIn", { route: LoggedInRoute, session: Session })
 export const AppModel = Schema.Union([LoggedOut, LoggedIn])
@@ -30,36 +24,22 @@ export type AppModel = typeof AppModel.Type
 const isLoggedOutRoute = Schema.is(LoggedOutRoute)
 const isLoggedInRoute = Schema.is(LoggedInRoute)
 
-// The route guard. A route the state can't show becomes the state's
-// landing page.
 const guard = (route: AppRoute, session: Option.Option<Session>): AppModel =>
   Option.match(session, {
     onNone: () => LoggedOut.make({ route: isLoggedOutRoute(route) ? route : loginRoute }),
     onSome: (session) => LoggedIn.make({ route: isLoggedInRoute(route) ? route : dashboardRoute, session })
   })
 
-// The guard changed the route, so the URL has to follow.
 const redirected = (model: AppModel, route: AppRoute) => model.route._tag !== route._tag
-
-// ---------------------------------------------------------------------------
-// Props: the route and the stored session, read before the app mounts
-// ---------------------------------------------------------------------------
 
 const AppProps = Schema.Struct({ route: AppRoute, session: Schema.Option(Session) })
 
-// What Foldkit calls flags. The entry module and the app test mount the
-// root with this Effect, so `init` stays pure. A missing or unreadable
-// session counts as signed out.
 export const appProps = Effect.gen(function*() {
   const route = yield* Router.currentRoute(AppRoute)
   const store = yield* sessionStore
   const session = yield* store.get.pipe(Effect.orElseSucceed(() => Option.none()))
   return { route, session }
 })
-
-// ---------------------------------------------------------------------------
-// Messages and Commands
-// ---------------------------------------------------------------------------
 
 export const AppMessage = UiSchema.TaggedEnum({
   ChangedRoute: { route: AppRoute },
@@ -87,7 +67,6 @@ export const LogError = Command.make(
   ({ entries }) => Console.error(...entries).pipe(Effect.as(Component.noop))
 )
 
-// A save or a clear that succeeds has nothing to report.
 const saveSession = (session: Session) =>
   SaveSession.make({ session }).pipe(Command.match({
     onSuccess: () => Component.noop,
@@ -103,10 +82,6 @@ const clearSession = () =>
 // The new route comes back through the Router subscription, so a redirect
 // sends nothing of its own.
 const redirectTo = (route: AppRoute) => Router.replace(AppRoute, route).pipe(Command.asNoop)
-
-// ---------------------------------------------------------------------------
-// View
-// ---------------------------------------------------------------------------
 
 const AppDef = Component.define({
   name: "App",
@@ -168,12 +143,7 @@ const LoggedInView = AppDef.fragment((h, model: typeof LoggedIn.Type) =>
   )
 )
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
 export const AppNoDeps = AppDef.make({
-  // A URL the state can't show is redirected from the first render.
   init: ($) => {
     const model = guard($.props.route, $.props.session)
     return redirected(model, $.props.route) ? $.set(model).run(redirectTo(model.route)) : model
@@ -200,6 +170,4 @@ export const AppNoDeps = AppDef.make({
     )
 })
 
-// The session Commands capture the `KeyValueStore`, which the entry module
-// provides.
 export const App = AppNoDeps.pipe(Component.provide([SaveSession.layer, ClearSession.layer]))

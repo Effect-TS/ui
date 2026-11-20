@@ -11,8 +11,6 @@ import { AppRoute } from "./routes.ts"
 
 const alice: Session = { userId: "1", email: "alice@example.com", name: "alice" }
 
-// What the entry module provides, with the Router in memory and the store
-// in memory in place of localStorage.
 const AppTest = (url: string) =>
   Layer.mergeAll(Router.memory({ routes: AppRoute, url }), KeyValueStore.layerMemory, TestHost.layer())
 
