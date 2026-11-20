@@ -95,12 +95,13 @@ const FormField = <M>(h: View.H<M>, options: {
   readonly type: "email" | "password"
   readonly placeholder: string
   readonly field: LoginField
+  readonly disabled: boolean
   readonly onUpdate: (value: string) => M
 }) => {
   const { field } = options
   return Field(h, {
     key: options.key,
-    props: { invalid: invalidOf(field), filled: field.value !== "" },
+    props: { invalid: invalidOf(field), filled: field.value !== "", disabled: options.disabled },
     view: (f) =>
       f.root(h.div).children(
         h.div.class("flex items-center gap-2 mb-1").children(
@@ -116,7 +117,7 @@ const FormField = <M>(h: View.H<M>, options: {
           .attr("type", options.type)
           .attr("placeholder", options.placeholder)
           .class(
-            "w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500",
+            "w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100",
             borderClass(field)
           ),
         field._tag === "Invalid" &&
@@ -159,7 +160,9 @@ export const LoginPageNoDeps = Component.define({
     // The page stays in its submitting state: the app leaves it for the
     // dashboard.
     SucceededSimulateAuthRequest: (model, { session }, $) => $.set(model).emit(LoginEvents.SignedIn({ session })),
-    // The error sits on the password until the password changes.
+    // The error sits on the password until the password changes. The fields
+    // are disabled while submitting, so the form still holds the values the
+    // request was made with.
     FailedSimulateAuthRequest: (model, { error }) => ({
       submitting: false,
       form: LoginValidation.reject(model.form, { password: [error] })
@@ -184,6 +187,7 @@ export const LoginPageNoDeps = Component.define({
               type: "email",
               placeholder: "you@example.com",
               field: validated.fields.email,
+              disabled: model.submitting,
               onUpdate: (value) => LoginMessage.ChangedEmail({ value })
             }),
             FormField(h, {
@@ -192,6 +196,7 @@ export const LoginPageNoDeps = Component.define({
               type: "password",
               placeholder: "Enter your password",
               field: validated.fields.password,
+              disabled: model.submitting,
               onUpdate: (value) => LoginMessage.ChangedPassword({ value })
             }),
             Button(h, { props: { type: "submit", disabled: !canSubmit } })

@@ -60,12 +60,14 @@ describe("LoginPage", () => {
         .expect(submitButton).toBeDisabled(false)
     }))
 
-  it.effect("submitting with valid fields shows the loading state and requests auth", () =>
+  it.effect("submitting with valid fields shows the loading state, locks the fields and requests auth", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(LoginPage, {})
       s.given(validModel)
         .submit(form)
         .expect(submittingButton).toBeDisabled()
+        .expect(emailField).toBeDisabled()
+        .expect(passwordField).toBeDisabled()
         .expectExact(SimulateAuthRequest)
         .fail(SimulateAuthRequest, invalidCredentials)
     }))
