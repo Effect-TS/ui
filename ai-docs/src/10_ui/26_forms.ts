@@ -46,8 +46,8 @@ export class Accounts extends Context.Service<Accounts, {
 //
 // The mode decides when a field starts showing its result: here once it was
 // edited. Every field shows once a submit was tried. By default each field
-// stops at its first failing rule; pass `errors: "all"` to collect every
-// failing rule.
+// stops at its first failing rule; `errors: "all"` collects every failing
+// rule.
 const Rule = Validation.Rule
 
 export const SignupValidation = Validation.make({
@@ -63,7 +63,7 @@ export const SignupValidation = Validation.make({
     required: "Confirm your password",
     rules: [[(confirm, values) => confirm === values.password, "Passwords must match"]]
   }
-}, { mode: "onChange" })
+}, { mode: "onChange", errors: "all" })
 
 // ---------------------------------------------------------------------------
 // The username check and the submit
