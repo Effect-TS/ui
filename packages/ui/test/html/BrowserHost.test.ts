@@ -27,14 +27,14 @@ import { maxTitle, TodoApp } from "./fixtures/todos.ts"
 /** Lets the render flush, Commands and the controlled-property restore run. */
 const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))
 
-/** Defines a custom element that clicks its button once it is in the document, after `before` runs. */
+/** Defines a custom element that clicks its buttons once it is in the document, after `before` runs. */
 const clicksWhenConnected = (name: string, before?: () => void) =>
   customElements.define(
     name,
     class extends HTMLElement {
       connectedCallback() {
         before?.()
-        this.querySelector("button")?.click()
+        for (const button of this.querySelectorAll("button")) button.click()
       }
     }
   )
@@ -792,35 +792,45 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect([a.model(), b.model()]).toEqual([["click inner"], ["click outer", "click inner"]])
       }).pipe(Effect.scoped))
 
-    it.effect("an element a patch inserts gets the events it fires as it is inserted", () =>
+    clicksWhenConnected("x-clicks-on-connect")
+    const LogPage = Component.define({ name: "Page", model: Schema.Array(Schema.String), message: Schema.String })
+    const logPage = (view: Parameters<typeof LogPage.make>[0]["view"]) =>
+      LogPage.make({
+        init: (): ReadonlyArray<string> => [],
+        update: (log, message) => [...log, message],
+        view
+      })
+
+    it.effect("an event an insertion fires reaches the inserted element and its ancestors' post-patch handlers", () =>
       Effect.gen(function*() {
-        clicksWhenConnected("x-clicks-on-insert")
-        const Page = Component.define({ name: "Page", model: Schema.Array(Schema.String), message: Schema.String })
-          .make({
-            init: (): ReadonlyArray<string> => [],
-            update: (log, message) => [...log, message],
-            view: (log, h) =>
-              h.el(
-                "div",
-                log.length === 0
-                  ? h.el("span", h.el("button").on("click", "show").children("Show"))
-                  : h.el("x-clicks-on-insert", h.el("button").on("click", "inserted").children("Inserted"))
-              )
-          })
+        const Page = logPage((log, h) => {
+          // The patch changes the outer handler and takes the inner one away, as it inserts the element.
+          const inner = log.length === 0 ? h.el("section").on("click", "inner") : h.el("section")
+          return h.el("div").on("click", log.length === 0 ? "old" : "new").children(
+            inner.children(
+              log.length === 0
+                ? h.el("span")
+                : h.el(
+                  "x-clicks-on-connect",
+                  h.el("button").on("click", "inserted").children("Inserted"),
+                  h.el("button").children("Go")
+                )
+            )
+          )
+        })
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Page, {}, app)
-        HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name: "Show" }))
+        root.send("start")
         yield* tick
-        expect(root.model()).toEqual(["show", "inserted"])
+        expect(root.model()).toEqual(["start", "inserted", "new"])
       }).pipe(Effect.scoped))
 
     it.effect("a detached child gets the events it fires as it is attached", () =>
       Effect.gen(function*() {
-        clicksWhenConnected("x-clicks-on-attach")
         const Counter = Component.define({ name: "Counter", model: Schema.Number, message: Schema.String }).make({
           init: () => 0,
           update: (count) => count + 1,
-          view: (count, h) => h.el("x-clicks-on-attach", h.el("button").on("click", "hit").children(`Hit ${count}`))
+          view: (count, h) => h.el("x-clicks-on-connect", h.el("button").on("click", "hit").children(`Hit ${count}`))
         })
         const Shell = Component.define({ name: "Shell", model: Schema.Boolean, message: Schema.String }).make({
           init: () => true,
@@ -836,45 +846,17 @@ describe("BrowserHost", { concurrent: false }, () => {
 
     it.effect("an element hydration rebuilds gets the events it fires as it goes in", () =>
       Effect.gen(function*() {
-        clicksWhenConnected("x-clicks-on-repair")
-        const Page = Component.define({ name: "Page", model: Schema.Array(Schema.String), message: Schema.String })
-          .make({
-            init: (): ReadonlyArray<string> => [],
-            update: (log, message) => [...log, message],
-            view: (_, h) => h.el("main", h.el("x-clicks-on-repair", h.el("button").on("click", "hit").children("Hit")))
-          })
+        const Page = logPage((_, h) =>
+          h.el("main", h.el("x-clicks-on-connect", h.el("button").on("click", "hit").children("Hit")))
+        )
         const rendered = yield* HtmlServer.renderToHtml(Page, {})
         const app = yield* container
         app.innerHTML = rendered.html
         // The client finds a span where the server wrote the custom element, and builds that one anew.
-        app.querySelector("x-clicks-on-repair")!.replaceWith(document.createElement("span"))
+        app.querySelector("x-clicks-on-connect")!.replaceWith(document.createElement("span"))
         const root = yield* BrowserHost.mountEffect(Page, {}, app, { state: rendered.state })
         yield* tick
         expect(root.model()).toEqual(["hit"])
-      }).pipe(Effect.scoped))
-
-    it.effect("an event an insertion fires reaches the handlers its ancestors have after the same patch", () =>
-      Effect.gen(function*() {
-        clicksWhenConnected("x-clicks-on-patch")
-        const Page = Component.define({ name: "Page", model: Schema.Array(Schema.String), message: Schema.String })
-          .make({
-            init: (): ReadonlyArray<string> => [],
-            update: (log, message) => [...log, message],
-            view: (log, h) => {
-              // The patch changes the outer handler and takes the inner one away, as it inserts the element.
-              const inner = log.length === 0 ? h.el("section").on("click", "inner") : h.el("section")
-              return h.el("div").on("click", log.length === 0 ? "old" : "new").children(
-                inner.children(
-                  log.length === 0 ? h.el("span") : h.el("x-clicks-on-patch", h.el("button").children("Go"))
-                )
-              )
-            }
-          })
-        const app = yield* container
-        const root = yield* BrowserHost.mountEffect(Page, {}, app)
-        root.send("start")
-        yield* tick
-        expect(root.model()).toEqual(["start", "new"])
       }).pipe(Effect.scoped))
 
     // A custom element that submits its form once it is in the document, and keeps whether the app took it.
@@ -901,11 +883,9 @@ describe("BrowserHost", { concurrent: false }, () => {
       it.effect(`a submission during a patch is the app's: ${name}`, () =>
         Effect.gen(function*() {
           prevented.length = 0
-          const Page = Component.define({ name: "Page", model: Schema.Boolean, message: Schema.String }).make({
-            init: () => false,
-            update: () => true,
-            view: (after, h) => form(h, after).children(after ? h.el("x-submits-on-insert") : h.el("span"))
-          })
+          const Page = logPage((log, h) =>
+            form(h, log.length > 0).children(log.length > 0 ? h.el("x-submits-on-insert") : h.el("span"))
+          )
           const app = yield* container
           const root = yield* BrowserHost.mountEffect(Page, {}, app)
           root.send("insert")
@@ -929,19 +909,15 @@ describe("BrowserHost", { concurrent: false }, () => {
               ...Array.from({ length: count }, (_, index) => h.el("p", `${index}`))
             )
         })
-        const Page = Component.define({ name: "Page", model: Schema.Array(Schema.String), message: Schema.String })
-          .make({
-            init: (): ReadonlyArray<string> => [],
-            update: (log, message) => [...log, message],
-            view: (log, h) =>
-              h.el(
-                "div",
-                Rows(h, { key: "r" }),
-                ...(log.length === 0
-                  ? []
-                  : [h.el("x-flushes-then-clicks", h.el("button").on("click", "appended").children("Appended"))])
-              )
-          })
+        const Page = logPage((log, h) =>
+          h.el(
+            "div",
+            Rows(h, { key: "r" }),
+            ...(log.length === 0
+              ? []
+              : [h.el("x-flushes-then-clicks", h.el("button").on("click", "appended").children("Appended"))])
+          )
+        )
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Page, {}, app)
         testHost.drain(testHost.budget)
