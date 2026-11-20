@@ -61,12 +61,13 @@ import * as Component from "../Component.ts"
 import * as Feature from "../Feature.ts"
 import type * as Head from "../Head.ts"
 import * as Executor from "../internal/executor.ts"
+import * as hostEvents from "../internal/hostEvents.ts"
 import * as runtime from "../internal/runtime.ts"
 import * as MessageLog from "../MessageLog.ts"
 import * as Query from "../Query.ts"
 import * as Renderer from "../Renderer.ts"
 import * as Subscription from "../Subscription.ts"
-import type * as View from "../View.ts"
+import * as View from "../View.ts"
 import * as Locator from "./Locator.ts"
 import * as TestQuery from "./TestQuery.ts"
 
@@ -132,8 +133,7 @@ export type TestNode = TestElement | TestText
 /** The events of each node of a path, innermost first: what a host's lookups find. */
 type EventsAlong = (path: ReadonlyArray<TestNode>) => ReadonlyArray<Renderer.Events | undefined>
 
-const noEvents: EventsAlong = () => []
-const noFields: Readonly<Record<string, never>> = {}
+const noLookup: EventsAlong = () => []
 
 /** `node` and its ancestors. */
 const pathFrom = (node: TestNode): Array<TestNode> => {
@@ -150,7 +150,7 @@ const fireFrom = (along: EventsAlong, node: TestNode, event: string, payload: un
   throw new Error(`TestHost: nothing handles "${event}" here or above`)
 }
 
-const makeElement = (tag: string, along: EventsAlong = noEvents): TestElement => {
+const makeElement = (tag: string, along: EventsAlong = noLookup): TestElement => {
   const events = () => along(pathFrom(element))[0]
   const element: TestElement = {
     _tag: "Element",
@@ -160,14 +160,14 @@ const makeElement = (tag: string, along: EventsAlong = noEvents): TestElement =>
     children: [],
     parent: undefined,
     get handlers() {
-      return events()?.handlers ?? noFields
+      return events()?.handlers ?? View.noFields
     },
     get eventOptions() {
-      return events()?.options ?? noFields
+      return events()?.options ?? View.noFields
     },
     get owners() {
       const found = events()
-      return found === undefined ? noFields : runtime.eventOwners(found.handlers)
+      return found === undefined ? View.noFields : runtime.eventOwners(found.handlers)
     },
     get dispatch() {
       return events()?.dispatch
@@ -214,18 +214,7 @@ export const makeHost = (): Renderer.Host<TestNode> & {
   let operations: Array<string> = []
   let commits = 0
   const listeners = new Set<() => void>()
-  // Each mount's lookup, and the events `setEvents` was given by a renderer that doesn't connect one.
-  const lookups: Array<EventsAlong> = []
-  const bound = new WeakMap<TestNode, Renderer.Events>()
-  const along: EventsAlong = (path) => {
-    const out: Array<Renderer.Events | undefined> = new Array(path.length)
-    for (const lookup of lookups) {
-      const found = lookup(path)
-      for (let i = 0; i < path.length; i++) out[i] ??= found[i]
-    }
-    for (let i = 0; i < path.length; i++) out[i] ??= bound.get(path[i]!)
-    return out
-  }
+  const { along, connect, set } = hostEvents.make<TestNode>()
   return {
     operations: () => operations,
     clearOperations: () => {
@@ -287,17 +276,9 @@ export const makeHost = (): Renderer.Host<TestNode> & {
       return parent === undefined ? undefined : parent.children[parent.children.indexOf(node) + 1]
     },
     setEvents(node, handlers, dispatch, options) {
-      bound.set(node, { handlers, dispatch, options })
+      set(node, { handlers, dispatch, options })
     },
-    events: {
-      connect(lookup) {
-        lookups.push(lookup)
-        return () => {
-          lookups.splice(lookups.indexOf(lookup), 1)
-        }
-      },
-      listen() {}
-    },
+    events: { connect, listen() {} },
     elements: "any",
     controlled: new Set(["value", "checked", "selected", "open"]),
     runsMounts: false,

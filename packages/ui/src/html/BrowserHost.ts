@@ -106,6 +106,7 @@ import * as Layer from "effect/Layer"
 import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import type * as Scope from "effect/Scope"
 import type * as Component from "../Component.ts"
+import * as hostEvents from "../internal/hostEvents.ts"
 import * as queryCore from "../internal/queryCore.ts"
 import * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
@@ -224,8 +225,6 @@ const controlOf = (node: globalThis.Node): globalThis.Element => {
   const element = node as globalThis.Element
   return element.localName === "option" ? element.closest("select") ?? element : element
 }
-
-type Bound = Renderer.Events
 
 /** The node above `node` on an event's path: its parent, or a shadow root's host. */
 const upFrom = (node: globalThis.Node): globalThis.Node | null =>
@@ -431,25 +430,11 @@ export const makeHost = (
     // oxlint-disable-next-line no-console
     options?.warn ?? ((message) => console.warn(message))
   )
-  // Each mount's lookup: an element's events are read from the mount's tree when an event fires.
-  const lookups: Array<(path: ReadonlyArray<globalThis.Node>) => ReadonlyArray<Bound | undefined>> = []
-  // The events `setEvents` was given, by a caller that doesn't connect a lookup. Weak, so a node the page
-  // keeps after the app is gone doesn't keep the app's dispatch alive.
-  const bound = new WeakMap<globalThis.Node, Bound>()
-  let anyBound = false
-  /** The events of each node of `path`, innermost first. */
-  const eventsAlong = (path: ReadonlyArray<globalThis.Node>): ReadonlyArray<Bound | undefined> => {
-    if (lookups.length === 1 && !anyBound) return lookups[0]!(path)
-    const out: Array<Bound | undefined> = new Array(path.length)
-    for (const lookup of lookups) {
-      const found = lookup(path)
-      for (let i = 0; i < path.length; i++) out[i] ??= found[i]
-    }
-    if (anyBound) { for (let i = 0; i < path.length; i++) out[i] ??= bound.get(path[i]!) }
-    return out
-  }
+  // An element's events are read from its mount's tree when an event fires.
+  const stored = hostEvents.make<globalThis.Node>()
+  const eventsAlong = stored.along
   /** The events of `node` itself. */
-  const eventsOf = (node: globalThis.Node): Bound | undefined => eventsAlong(pathFrom(node))[0]
+  const eventsOf = (node: globalThis.Node): Renderer.Events | undefined => eventsAlong(pathFrom(node))[0]
   // The last value the renderer set for each controlled property: what the element must show.
   const wanted = new WeakMap<globalThis.Node, Map<string, unknown>>()
   const listening = new Map<string, (event: Event) => void>()
@@ -768,19 +753,22 @@ export const makeHost = (
     Array.from((event as DragEvent).dataTransfer?.types ?? [], (type) => type.toLowerCase())
 
   /** Whether an element with the events `entry` is a drop target that accepts a drag of `types`. */
-  const accepts = (entry: Bound | undefined, types: ReadonlyArray<string>): boolean => {
+  const accepts = (entry: Renderer.Events | undefined, types: ReadonlyArray<string>): boolean => {
     if (entry === undefined || entry.handlers.drop === undefined) return false
     const accepted = (entry.options.drop as Html.DropTargetOptions | undefined)?.accepts
     return accepted?.some((type) => types.includes(type.toLowerCase())) === true
   }
 
-  const dropTargetOf = (event: Event): globalThis.Element | undefined => {
+  /** The innermost element on the event's path that accepts its drag, with its events. */
+  const dropTargetOf = (
+    event: Event
+  ): { readonly element: globalThis.Element; readonly events: Renderer.Events } | undefined => {
     const types = typesOf(event)
     if (types.length === 0) return undefined
     const path = event.composedPath() as Array<globalThis.Node>
     const entries = eventsAlong(path)
     for (let i = 0; i < path.length; i++) {
-      if (accepts(entries[i], types)) return path[i] as globalThis.Element
+      if (accepts(entries[i], types)) return { element: path[i] as globalThis.Element, events: entries[i]! }
     }
     return undefined
   }
@@ -855,10 +843,11 @@ export const makeHost = (
         // Any enter or over means the pointer is still in the document.
         cancelExitCheck()
         if (name === "dragenter") entered = event.target
-        const target = dropTargetOf(event)
-        if (target !== undefined) {
+        const found = dropTargetOf(event)
+        const target = found?.element
+        if (found !== undefined) {
           event.preventDefault()
-          const dropEffect = (eventsOf(target)!.options.drop as Html.DropTargetOptions).dropEffect
+          const dropEffect = (found.events.options.drop as Html.DropTargetOptions).dropEffect
           if (dropEffect !== undefined && event.dataTransfer !== null) event.dataTransfer.dropEffect = dropEffect
         }
         activate(target)
@@ -878,7 +867,7 @@ export const makeHost = (
         return
       }
       case "drop": {
-        const target = dropTargetOf(event)
+        const target = dropTargetOf(event)?.element
         if (target === undefined) {
           endTargets()
           return
@@ -900,12 +889,12 @@ export const makeHost = (
     }
   }
 
-  /** Puts the innermost drag source's data on the drag. */
-  const startDrag = (event: DragEvent) => {
+  /** Puts the innermost drag source's data on the drag: `entries` are the events along its path. */
+  const startDrag = (event: DragEvent, entries: ReadonlyArray<Renderer.Events | undefined>) => {
     droppedHere = false
     const transfer = event.dataTransfer
     if (transfer === null) return
-    for (const entry of eventsAlong(event.composedPath() as Array<globalThis.Node>)) {
+    for (const entry of entries) {
       const source = entry?.options.dragstart as Html.DragSourceOptions | undefined
       if (source?.data === undefined) continue
       for (const type in source.data) transfer.setData(type, source.data[type]!)
@@ -931,9 +920,9 @@ export const makeHost = (
         if (!dialog.open) modals.delete(dialog)
       }
     }
-    if (name === "dragstart") startDrag(event as DragEvent)
     const path = event.composedPath() as Array<globalThis.Node>
     const entries = eventsAlong(path)
+    if (name === "dragstart") startDrag(event as DragEvent, entries)
     // The app owns its forms' submissions, handled or not. Other forms in the document are left alone.
     // An unhandled one is marked, so the browser Router can still route a GET form.
     if (
@@ -984,7 +973,7 @@ export const makeHost = (
   }
   for (const name of alwaysEvents) listen(name)
   /** Listens for what an element's handlers and options need. */
-  const listenFor = (handlers: Bound["handlers"], options: Bound["options"]) => {
+  const listenFor = (handlers: Renderer.Events["handlers"], options: Renderer.Events["options"]) => {
     for (const name in handlers) listen(name)
     // A drag source needs its `dragstart` without a handler, and a drop target all of its events.
     if (options.dragstart !== undefined) { for (const name of dragSourceEvents) listen(name) }
@@ -1121,24 +1110,11 @@ export const makeHost = (
     nextOf: (node) => node.nextSibling ?? undefined,
     setEvents(node, handlers, dispatch, options) {
       // An element with no events needs no entry, except a form: an entry marks it as the app's.
-      if (isEmpty(handlers) && isEmpty(options) && node.nodeName !== "FORM") {
-        bound.delete(node)
-        return
-      }
-      anyBound = true
-      bound.set(node, { handlers, dispatch, options })
+      if (isEmpty(handlers) && isEmpty(options) && node.nodeName !== "FORM") return stored.set(node, undefined)
+      stored.set(node, { handlers, dispatch, options })
       listenFor(handlers, options)
     },
-    events: {
-      connect(lookup) {
-        lookups.push(lookup)
-        return () => {
-          const index = lookups.indexOf(lookup)
-          if (index >= 0) lookups.splice(index, 1)
-        }
-      },
-      listen: listenFor
-    },
+    events: { connect: stored.connect, listen: listenFor },
     elements: [Html.name],
     controlled,
     runsMounts: true,

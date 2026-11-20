@@ -794,15 +794,7 @@ describe("BrowserHost", { concurrent: false }, () => {
 
     it.effect("an element a patch inserts gets the events it fires as it is inserted", () =>
       Effect.gen(function*() {
-        // A custom element that clicks its button once it is in the document, while the patch inserts it.
-        customElements.define(
-          "x-clicks-on-insert",
-          class extends HTMLElement {
-            connectedCallback() {
-              this.querySelector("button")?.click()
-            }
-          }
-        )
+        clicksWhenConnected("x-clicks-on-insert")
         const Page = Component.define({ name: "Page", model: Schema.Array(Schema.String), message: Schema.String })
           .make({
             init: (): ReadonlyArray<string> => [],
