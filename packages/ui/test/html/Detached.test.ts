@@ -1864,7 +1864,21 @@ describe("model children on the server", () => {
       assert.strictEqual(app1.querySelector("section span")?.textContent, "removed")
       assert.notInclude(app1.innerHTML, "<!--")
 
-      // 2. A single h.children.leaf() inside a headless closure in a listed Box adopts cleanly without duplicate placement.
+      // 2. A single h.children.leaf() inside a headless closure in a listed Box adopts cleanly and survives headless updates.
+      const ToggleHeadless = Component.define({
+        name: "ToggleHeadless",
+        lifetime: "view",
+        model: Schema.Boolean,
+        message: Schema.Boolean,
+        elements: Html
+      }).make({
+        init: () => false,
+        update: (on) => !on,
+        parts: (on, p) => ({
+          label: on ? "on" : "off",
+          toggle: p.part("button", (b) => b.onClick(true))
+        })
+      })
       const Leaf = Component.define({
         name: "Leaf",
         lifetime: "model",
@@ -1887,7 +1901,11 @@ describe("model children on the server", () => {
           children: { leaf: Leaf },
           init: () => null,
           update: (model) => model,
-          view: (_, h) => Headless(h, { key: "h", view: () => h.children.leaf() })
+          view: (_, h) =>
+            ToggleHeadless(h, {
+              key: "h",
+              view: (parts) => h.div(parts.toggle(h.button(parts.label)), h.children.leaf())
+            })
         })
         const Card = Component.define({
           name: "Card",
@@ -1928,7 +1946,51 @@ describe("model children on the server", () => {
       yield* root2.adopted
       yield* tick
       assert.strictEqual(app2.querySelector("section p")?.textContent, "leaf")
+      assert.strictEqual(app2.querySelector("section button")?.textContent, "off")
+      ;(app2.querySelector("section button") as HTMLButtonElement).click()
+      yield* tick
+      assert.strictEqual(app2.querySelector("section p")?.textContent, "leaf")
+      assert.strictEqual(app2.querySelector("section button")?.textContent, "on")
       assert.notInclude(app2.innerHTML, "<!--")
+    }).pipe(Effect.scoped))
+
+  it.live("restores a controlled input inside an h.lazy headless child on author update", () =>
+    Effect.gen(function*() {
+      const Panel = Component.define({
+        name: "Panel",
+        lifetime: "view",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        parts: () => ({})
+      })
+      const PageDef = Component.define({
+        name: "Page",
+        lifetime: "view",
+        model: Schema.Number,
+        message: Schema.Number,
+        elements: Html
+      })
+      const panel = (h: Component.Helper<typeof PageDef>) => Panel(h, { key: "p", view: () => h.input.value("fixed") })
+      const Page = PageDef.make({
+        init: () => 0,
+        update: (n) => n + 1,
+        view: (n, h) => h.div(h.output(String(n)), h.lazy(panel))
+      })
+      const app = yield* makeContainer()
+      const root = yield* BrowserHost.mountEffect(Page, {}, app)
+      yield* tick
+      const input = app.querySelector("input") as HTMLInputElement
+      assert.strictEqual(input.value, "fixed")
+      input.value = "edited"
+      root.send(1)
+      yield* tick
+      assert.strictEqual(app.querySelector("output")?.textContent, "1")
+      assert.strictEqual(app.querySelector("input"), input)
+      assert.strictEqual(input.value, "fixed")
     }).pipe(Effect.scoped))
 
   it.effect("serializes a listed model child parked in a collapsed slot during SSR", () =>

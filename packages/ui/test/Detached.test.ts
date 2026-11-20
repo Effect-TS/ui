@@ -840,4 +840,73 @@ describe("detached children", () => {
       assert.deepStrictEqual(opened2, ["fast"])
       assert.deepStrictEqual(closed2, [])
     })))
+
+  it.effect(
+    "allows a headless child's own updates to re-render a single listed child while rejecting simultaneous duplicates",
+    () =>
+      provideHost(Effect.gen(function*() {
+        const Leaf = Component.define({ name: "Leaf", lifetime: "model", model: Schema.Null, message: Schema.Never })
+          .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p", "leaf") })
+        const Panel = Component.define({
+          name: "Panel",
+          lifetime: "view",
+          model: Schema.Boolean,
+          message: Schema.Boolean
+        }).make({
+          init: () => false,
+          update: (on) => !on,
+          parts: (on, p) => ({
+            label: on ? "on" : "off",
+            toggle: p.part((b) => b.on("click", true))
+          })
+        })
+        const Page = Component.define({ name: "Page", lifetime: "view", model: Schema.Null, message: Schema.Never })
+          .make({
+            children: { leaf: Leaf },
+            init: () => null,
+            update: (model) => model,
+            view: (_, h) =>
+              Panel(h, {
+                key: "p",
+                view: (parts) => h.el("div", parts.toggle(h.el("button", parts.label)), h.children.leaf())
+              })
+          })
+        const root = yield* TestHost.mount(Page, {})
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "offleaf")
+        Locator.fire(root.get(Locator.text("off", { exact: true })), "click")
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "onleaf")
+
+        // Simultaneous duplicate placement across author view and headless closure still fails the author.
+        const Duplicate = Component.define({
+          name: "Duplicate",
+          lifetime: "view",
+          model: Schema.Null,
+          message: Schema.Never
+        }).make({
+          children: { leaf: Leaf },
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) =>
+            h.el(
+              "div",
+              h.children.leaf(),
+              Panel(h, { key: "p", view: () => h.children.leaf() })
+            )
+        })
+        const Host = Component.define({ name: "Host", lifetime: "view", model: Schema.Null, message: Schema.Never })
+          .make({
+            init: () => null,
+            update: (model) => model,
+            view: (_, h) => Duplicate(h, { key: "d", fallback: () => h.el("p", "failed") })
+          })
+        const dup = yield* TestHost.mount(Host, {})
+        yield* TestHost.settle
+        assert.strictEqual(dup.text(), "failed")
+        const failed = dup.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed | undefined
+        assert.isDefined(failed)
+        assert.include(Cause.pretty(failed!.cause), "renders two children at Leaf[leaf]")
+      }))
+  )
 })

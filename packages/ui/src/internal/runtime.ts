@@ -6945,9 +6945,8 @@ const setup = (
         const changed = !propsEqual(child.props, instance.props)
         if (changed) changeProps(instance, child.props)
         // A headless child's view is the closure, which is new on every render of whoever declared it.
-        const contentChanged = instance.owner !== undefined && instance.content !== child.view
-        if (contentChanged) instance.content = child.view
-        if ((changed || contentChanged) && !instance.closed) {
+        if (instance.owner !== undefined) instance.content = child.view
+        if ((changed || instance.owner !== undefined) && !instance.closed) {
           // The instance a message is on its way to keeps its view until the flush: see `renderAbove`.
           if (instance === receiving) markDirty(instance)
           else {

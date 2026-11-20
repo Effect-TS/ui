@@ -121,19 +121,12 @@ export const list = (owner: string, children: Children, model: unknown): Array<L
  */
 export const helpers = (owner: string, children: Children, model: unknown): Record<string, unknown> => {
   const listed = list(owner, children, model)
-  const placed = new Set<Listed>()
   const out: Record<string, unknown> = {}
-  const place = (found: Listed, options: { readonly slots?: View.Child<any, any>["slots"] } | undefined) => {
-    if (placed.has(found)) {
-      throw new Error(`${owner} places ${found.ref.key} twice: a child of children is placed once`)
-    }
-    placed.add(found)
-    return declaration(found, options?.slots)
-  }
   const rows = new Map<string, Map<string, Listed>>()
   for (const found of listed) {
     if (found.key === undefined) {
-      out[found.name] = (options?: { readonly slots?: View.Child<any, any>["slots"] }) => place(found, options)
+      out[found.name] = (options?: { readonly slots?: View.Child<any, any>["slots"] }) =>
+        declaration(found, options?.slots)
       continue
     }
     let byKey = rows.get(found.name)
@@ -147,7 +140,7 @@ export const helpers = (owner: string, children: Children, model: unknown): Reco
       if (found === undefined) {
         throw new Error(`${owner} places ${name}[${key}], and its children list no ${name} with that key`)
       }
-      return place(found, options)
+      return declaration(found, options?.slots)
     }
   }
   return out
