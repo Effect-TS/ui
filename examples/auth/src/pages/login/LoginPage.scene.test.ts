@@ -1,15 +1,11 @@
 import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
-import { describe, it } from "@effect/vitest"
+import { assert, describe, it } from "@effect/vitest"
 import { Effect } from "effect"
-import { InvalidCredentials, LoginPage, LoginValidation, SimulateAuthRequest } from "./LoginPage.ts"
+import { InvalidCredentials, LoginEvents, LoginPage, SimulateAuthRequest } from "./LoginPage.ts"
 
-const validModel = {
-  form: LoginValidation.init({ email: "alice@example.com", password: "password" }),
-  submitting: false
-}
+const alice = { userId: "1", email: "alice@example.com", name: "alice" }
 
-const heading = HtmlLocator.role("heading", { name: "Sign In" })
 const form = HtmlLocator.role("form", { name: "Sign in" })
 const emailField = HtmlLocator.label("Email")
 const passwordField = HtmlLocator.label("Password")
@@ -18,62 +14,44 @@ const submittingButton = HtmlLocator.role("button", { name: "Signing in..." })
 const invalidCredentials = new InvalidCredentials({ message: "Invalid credentials" })
 
 describe("LoginPage", () => {
-  it.effect("renders the heading, both fields, and the submit button", () =>
-    Effect.gen(function*() {
-      const s = yield* HtmlScene.make(LoginPage, {})
-      s.expect(heading).toExist()
-        .expect(emailField).toExist()
-        .expect(passwordField).toExist()
-        .expect(submitButton).toExist()
-    }))
-
-  it.effect("submit button starts disabled", () =>
+  it.effect("validates fields on input and invalid submit, enabling submit once valid", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(LoginPage, {})
       s.expect(submitButton).toBeDisabled()
-    }))
-
-  it.effect("typing a valid email shows the checkmark", () =>
-    Effect.gen(function*() {
-      const s = yield* HtmlScene.make(LoginPage, {})
-      s.type(emailField, "alice@example.com")
-        .expect(Locator.text("✓")).toExist()
-    }))
-
-  it.effect("typing an invalid email shows the error message", () =>
-    Effect.gen(function*() {
-      const s = yield* HtmlScene.make(LoginPage, {})
-      s.type(emailField, "notanemail")
+        .submit(form)
+        .expectNone()
+        .expect(Locator.text("Email is required")).toExist()
+        .expect(Locator.text("Password is required")).toExist()
+        .type(emailField, "notanemail")
         .expect(Locator.text("Please enter a valid email")).toExist()
-        .expect(emailField).toHaveAccessibleName("Email")
-    }))
-
-  it.effect("submit button is enabled after typing a valid email and password", () =>
-    Effect.gen(function*() {
-      const s = yield* HtmlScene.make(LoginPage, {})
-      s.type(emailField, "alice@example.com")
+        .expect(submitButton).toBeDisabled()
+        .type(emailField, alice.email)
+        .expect(Locator.text("✓")).toExist()
         .type(passwordField, "password")
         .expect(submitButton).toBeDisabled(false)
     }))
 
-  it.effect("submitting with valid fields shows the loading state, locks the fields and requests auth", () =>
+  it.effect("submitting locks the form, requests auth, and emits SignedIn on success", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(LoginPage, {})
-      s.given(validModel)
+      s.type(emailField, alice.email)
+        .type(passwordField, "password")
         .submit(form)
         .expect(submittingButton).toBeDisabled()
         .expect(emailField).toBeDisabled()
         .expect(passwordField).toBeDisabled()
         .expectExact(SimulateAuthRequest)
-        .fail(SimulateAuthRequest, invalidCredentials)
+      assert.deepStrictEqual(s.pending[0].command.args, { email: alice.email, password: "password" })
+      s.resolve(SimulateAuthRequest, alice)
+        .emitted(LoginEvents.SignedIn({ session: alice }))
     }))
 
   it.effect("failed auth shows the error and leaves submit disabled until the password changes", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(LoginPage, {})
-      s.given(validModel)
+      s.type(emailField, alice.email)
+        .type(passwordField, "wrong")
         .submit(form)
-        .expectExact(SimulateAuthRequest)
         .fail(SimulateAuthRequest, invalidCredentials)
         .expect(Locator.inside(form, Locator.text("Invalid credentials"))).toExist()
         .expect(submitButton).toBeDisabled()
