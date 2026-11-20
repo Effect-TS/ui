@@ -318,6 +318,36 @@ fires one with `s.fireDocument("keydown", { key: "Escape" })`, and a
 `TestHost` test adds `TestGlobalEvents.layer` and calls
 `TestGlobalEvents.fire("document", "keydown", { key: "Escape" })`.
 
+### Forms
+
+Validate a form with `Validation.make`. It takes each field's rules: a
+`required` message, a list of rules, and a `value` Schema when the control
+holds something other than a string. A rule is a predicate and a message, and
+`Validation.Rule` has the common ones, such as `minLength`, `email` and
+`fromSchema`. A predicate also gets every value of the form, so a rule like
+"passwords must match" is a rule on the confirm field.
+
+The Model holds the form's `State`: the values as typed, which fields were
+edited or left, whether a submit was tried, and the server's errors.
+`update` records what happened with `change`, `blur`, `submit` and
+`reject`. Errors are never stored. `validate(state)` derives each field as
+`NotValidated`, `Validating`, `Valid` or `Invalid`, and `value`, which
+is `Some` of the values only when every field passes. `view` and `update`
+both call it, so write one function that calls it and share it.
+
+The `mode` decides when a field starts showing its result: once it was
+edited, once it was left, or, by default, once a submit was tried. A tried
+submit shows every field. An error from `reject` shows at once and stays
+until its field changes.
+
+An async check, such as "is this username taken", is a query whose args
+are `undefined` until `passes(state, "username")`. Pass its result to
+`validate`, mapped to a list of errors. The field is `Validating` while
+the query loads, and `value` is `None`, so a submit waits for the answer.
+A query keeps its result per args, so an answer about an earlier value is
+never shown. Forms set `novalidate`, so the browser's own checks stay out of
+the way.
+
 ### Organizing an app
 
 The examples below are one notes app. Each example is an entry module, for
@@ -427,6 +457,10 @@ client, not the services.
 - **[Document and window events](./ai-docs/src/10_ui/25_document-events.ts)**:
   Listen for keys on the document while a game runs, test it in a scene,
   and press a key in a whole-app test.
+- **[Validating forms](./ai-docs/src/10_ui/26_forms.ts)**:
+  Validate a sign-up form with `Validation`: rules on each field, a rule
+  that reads another field, a username check run by a debounced query, and
+  an error from the server. A story and a scene read each field's state.
 - **[Routing and the document head](./ai-docs/src/10_ui/30_routing.ts)**:
   Define typed routes with `Route` and keep the current route in the root's
   Model. Each page's `head` option sets its title with `Head` and its meta
