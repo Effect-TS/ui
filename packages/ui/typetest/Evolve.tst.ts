@@ -22,6 +22,9 @@ const AuthDef = Component.define({ name: "Auth", model: Auth, message: Message }
 declare const coupon: Coupon
 declare const auth: Auth
 declare const withFunction: { readonly format: (n: number) => string; readonly label: string }
+declare const withCallback: { readonly onSave?: (n: number) => string; readonly label: string }
+declare const overlapping: { readonly count: number } | { readonly count: number; readonly extra: string }
+declare const withAny: { readonly value: any }
 
 describe("$.evolve", () => {
   it("takes a value or a function of the old value for each field, and nothing else", () => {
@@ -33,9 +36,11 @@ describe("$.evolve", () => {
       expect($.evolve).type.not.toBeCallableWith({ attempts: (n: number) => String(n) })
       // A partial struct isn't merged.
       expect($.evolve).type.not.toBeCallableWith({ coupon: { status: "Idle" } })
-      expect($.evolve).type.not.toBeCallableWith({ coupon: Component.evolve({ status: "Nope" }) })
+      // @ts-expect-error Type '"Nope"' is not assignable
+      $.evolve({ coupon: Component.evolve({ status: "Nope" }) })
       // A nullable struct is a union.
-      expect($.evolve).type.not.toBeCallableWith({ maybe: Component.evolve({ status: "Idle" }) })
+      // @ts-expect-error match the union first
+      $.evolve({ maybe: Component.evolve({ status: "Idle" }) })
       return $
     })
   })
@@ -54,10 +59,15 @@ describe("Component.evolve", () => {
     expect(Component.evolve<Coupon>({ code: (code) => code.trim() })).type.toBe<(self: Coupon) => Coupon>()
     expect(Component.evolve).type.not.toBeCallableWith(coupon, { stauts: "Idle" })
     expect(Component.evolve).type.not.toBeCallableWith(coupon, { status: "Nope" })
+    // With nowhere to take the struct's type from, it is asked for.
+    expect(Component.evolve).type.not.toBeCallableWith({ status: "Idle" })
+    expect(Component.evolve).type.not.toBeCallableWith([1, 2], [3])
   })
 
   it("rejects a union until it is matched", () => {
     expect(Component.evolve).type.not.toBeCallableWith(auth, { email: "a@b.c" })
+    // Members that overlap are still a union.
+    expect(Component.evolve).type.not.toBeCallableWith(overlapping, { count: 1 })
     expect(Auth.match(auth, { LoggedOut: (auth) => auth, LoggedIn: Component.evolve({ name: "Ada" }) })).type.toBe<
       Auth
     >()
@@ -72,5 +82,8 @@ describe("Component.evolve", () => {
   it("can't set a field whose type is a function", () => {
     expect(Component.evolve(withFunction, { label: "x" })).type.toBe<typeof withFunction>()
     expect(Component.evolve).type.not.toBeCallableWith(withFunction, { format: (n: number) => String(n + 1) })
+    // An optional callback may be a function too.
+    expect(Component.evolve).type.not.toBeCallableWith(withCallback, { onSave: (n: number) => String(n) })
+    expect(Component.evolve(withAny, { value: 1 })).type.toBe<typeof withAny>()
   })
 })

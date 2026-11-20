@@ -869,26 +869,37 @@ type RawStepRequirements<U> = U extends InitStep<infer _Model, infer _Msg, infer
  *
  * **Details**
  *
- * A function is always the updater, so a field whose own type is a function
- * is `never` here and can't be set through `evolve`. A function doesn't
- * belong in a Model anyway, since it can't be encoded for hydration or
- * history. When `S` is a union, nullable structs included, this is an error
- * message instead: match the union first, then evolve the member.
+ * A function is always the updater, so a field that may hold a function,
+ * an optional callback included, is `never` here and can't be set through
+ * `evolve`. A function doesn't belong in a Model anyway, since it can't be
+ * encoded for hydration or history.
+ *
+ * It is an error message instead when `S` is a union, nullable structs and
+ * overlapping members included (match the union first, then evolve the
+ * member), an array, or unknown, as for a data-last `evolve` with nowhere
+ * to take its type from.
  *
  * @stability experimental
  * @category utility types
  * @since 0.1.0
  */
-export type EvolveFields<S> = IsUnion<S> extends true ? "evolve takes one struct: match the union first"
+export type EvolveFields<S> = unknown extends S ? "evolve needs the struct's type: write evolve<Model>(...)"
+  : true extends IsUnion<S> ? "evolve takes one struct: match the union first"
+  : S extends ReadonlyArray<unknown> ? "evolve takes a struct, not an array"
   : { readonly [K in keyof S]?: EvolveField<S[K]> }
 
+// `true` in some branch when `T` is a union, even one whose members overlap.
 type IsUnion<T, U = T> = T extends unknown ? ([U] extends [T] ? false : true) : never
 
-type EvolveField<A> = [A] extends [(...args: any) => any] ? never : A | ((value: A) => A)
+// A field that may hold a function, optional callbacks included, can't be
+// told from an updater.
+type EvolveField<A> = 0 extends 1 & A ? any
+  : [Extract<A, (...args: any) => any>] extends [never] ? A | ((value: A) => A)
+  : never
 
 const applyFields = (self: any, fields: Record<string, unknown>) => {
   let out = self
-  for (const key of Object.keys(fields)) {
+  for (const key of Reflect.ownKeys(fields) as Array<string>) {
     const field = fields[key]
     const value = typeof field === "function" ? field(self[key]) : field
     if (!Object.is(value, self[key])) {
@@ -921,7 +932,8 @@ const applyFields = (self: any, fields: Record<string, unknown>) => {
  * included: match it first, with `match` on a `UiSchema.TaggedEnum`, then
  * evolve the member. The data-last form takes the struct's type from where
  * it's written, so `Auth.match(model, { LoggedIn: Component.evolve({ name }) })`
- * needs no annotation.
+ * needs no annotation. Where nothing gives it one, pass the type:
+ * `Component.evolve<Coupon>({ status: "Idle" })`.
  *
  * The result is a shallow copy with the changed fields, or the same struct
  * when every field keeps its value.

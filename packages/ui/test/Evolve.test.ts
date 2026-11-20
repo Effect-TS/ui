@@ -105,6 +105,14 @@ describe("evolve", () => {
     assert.strictEqual(s.model.notice, "Your basket is empty")
   })
 
+  it("changes a field under a symbol key", () => {
+    const key = Symbol("key")
+    assert.deepStrictEqual(Component.evolve({ [key]: 1, label: "a" }, { [key]: (n) => n + 1 }), {
+      [key]: 2,
+      label: "a"
+    })
+  })
+
   it("evolves a union field after matching it", () => {
     const s = Story.start(Account, {})
     s.send(AuthMessage.UpdatedName({ value: "Grace" }))
