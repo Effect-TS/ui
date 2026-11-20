@@ -29,6 +29,7 @@ import type * as Query from "../Query.ts"
 import type * as Renderer from "../Renderer.ts"
 import * as Subscription from "../Subscription.ts"
 import * as View from "../View.ts"
+import * as listedChildren from "./children.ts"
 import { propsEqual, sharedEqual } from "./equal.ts"
 import * as Executor from "./executor.ts"
 import * as headFold from "./headFold.ts"
@@ -392,6 +393,19 @@ const findChild = (rendered: ReadonlyArray<Rendered>, key: string): RChild | RFa
   return undefined
 }
 
+/** The `"model"` child `inst` holds with the ref `key`, while no tree places it. */
+const findHeld = (inst: Instance, key: string): RChild | RFallback | undefined => {
+  if (inst.held === undefined) return undefined
+  for (const held of inst.held.values()) {
+    if (held.v.ref?.key === key && (held.inner._tag !== "Child" || holds(held.inner))) return held.inner
+  }
+  return undefined
+}
+
+/** A component's `children`, when it has some. */
+const listedOf = (component: Component.Any): listedChildren.Children | undefined =>
+  (component as { readonly "~children"?: listedChildren.Children | undefined })["~children"]
+
 // Kept beside the instances, so a component without slots carries no field for them.
 const slottedBy = new WeakMap<Instance, Slotted>()
 const outletOf = new WeakMap<Instance, OutletOf>()
@@ -536,7 +550,8 @@ export interface Instance {
   model: unknown
   /** The query results, beside the Model: what each query last returned. */
   results: componentQueries.Results | undefined
-  onEmit: (events: unknown) => unknown
+  /** `model` is the current Model of whoever declared it, which a `"model"` child's handlers read. */
+  onEmit: (events: unknown, model?: unknown) => unknown
   onFailure: ((failure: AsyncResult.Failure<never, unknown>) => unknown) | undefined
   failure: Cause.Cause<unknown> | undefined
   /** What the current or last render uses: each fallback it shows is checked against it, and adds to it. */
@@ -568,6 +583,11 @@ export interface Instance {
   heads: number
   /** The containers of the detached children its view declares, unregistered when it leaves. */
   parked: Set<unknown> | undefined
+  /**
+   * The `"model"` children its Model lists and none of the trees it wrote places, by path: each detached,
+   * in a container of its own. `undefined` while it holds none.
+   */
+  held: Map<string, RDetached> | undefined
   /**
    * The closes still running of Scopes forked from this instance's and closed early: removed
    * descendants, stopped Subscriptions and mounts. Their cleanup can use this instance's services,
@@ -1055,6 +1075,13 @@ const serializeTree = (
     sink.enter(path)
     if (inst.failure === undefined) {
       for (const rendered of inst.rendered) serialize(inst, rendered, inner)
+      // A held child has no place in the document: only its subtree's state is sent.
+      if (inst.held !== undefined) {
+        const shown = sink
+        sink = noSink
+        for (const held of inst.held.values()) serialize(inst, held, inner)
+        sink = shown
+      }
     }
     sink.leave(path)
   }
@@ -2742,6 +2769,7 @@ const setup = (
     deferred: Instance["deferred"] = false
     lazy: Instance["lazy"] = undefined
     heads: Instance["heads"] = 0
+    held: Instance["held"] = undefined
   }
 
   /**
@@ -2759,7 +2787,7 @@ const setup = (
     props: unknown
     model: unknown = undefined
     results: componentQueries.Results | undefined = undefined
-    onEmit: (events: unknown) => unknown
+    onEmit: (events: unknown, model?: unknown) => unknown
     onFailure: ((failure: AsyncResult.Failure<never, unknown>) => unknown) | undefined
     failure: Cause.Cause<unknown> | undefined = undefined
     childPaths: ChildPaths | undefined = undefined
@@ -2772,12 +2800,12 @@ const setup = (
     /** The instance's event dispatch and finalizer: see `fireOn`. */
     private fired: OmitThisParameter<typeof fireOn> | undefined = undefined
     /**
-     * The instance's Scope, made when it's first asked for. Until then the instance's finalizer, `held`,
+     * The instance's Scope, made when it's first asked for. Until then the instance's finalizer, `finalizerHeld`,
      * is registered in its parent's Scope: most instances fork nothing and start no work.
      */
     private own: Scope.Closeable | undefined
     /** Whether its finalizer waits in its parent's Scope. */
-    private held = false
+    private finalizerHeld = false
     /** Closed before it had a Scope of its own. */
     private dead = false
     /** Its path once made: a root's, a feature's or a headless instance's at once, others' when asked for. */
@@ -2801,7 +2829,7 @@ const setup = (
       scope: Scope.Closeable | undefined,
       env: Env,
       props: unknown,
-      onEmit: (events: unknown) => unknown,
+      onEmit: (events: unknown, model?: unknown) => unknown,
       onFailure: ((failure: AsyncResult.Failure<never, unknown>) => unknown) | undefined,
       content: ((parts: any) => View.Content<any, any>) | undefined,
       author: Instance | undefined
@@ -2853,6 +2881,7 @@ const setup = (
     declare deferred: Instance["deferred"]
     declare lazy: Instance["lazy"]
     declare heads: Instance["heads"]
+    declare held: Instance["held"]
     /**
      * From the moment its Scope or an ancestor's starts closing, not once it has: see `Instance.closed`.
      */
@@ -2868,11 +2897,11 @@ const setup = (
         Scope.closeUnsafe(own, Exit.void)
       } else {
         const under = this.parent!.scope
-        if (this.held && under.state._tag === "Open") {
+        if (this.finalizerHeld && under.state._tag === "Open") {
           // It takes the slot its finalizer held in the parent, so it closes among its siblings where
           // one forked when the instance was made would: a late Scope doesn't make it close first. Its
           // finalizer moves into it. `close` frees the slot.
-          this.held = false
+          this.finalizerHeld = false
           own = Scope.makeUnsafe("sequential")
           scopeAddFinalizerUnsafe(own, this, this.bound())
           const scope = own
@@ -2892,13 +2921,13 @@ const setup = (
         track(closing, forkNow(ctx, Effect.suspend(() => finishInstance(this))))
         return
       }
-      if (own === undefined) this.held = true
+      if (own === undefined) this.finalizerHeld = true
       scopeAddFinalizerUnsafe(under, this, this.bound())
     }
     /** Run by the Scope that holds the instance's finalizer. */
     finalize(): Effect.Effect<void> {
-      if (this.held) {
-        this.held = false
+      if (this.finalizerHeld) {
+        this.finalizerHeld = false
         this.dead = true
       }
       return finishInstance(this)
@@ -2914,8 +2943,8 @@ const setup = (
       }
       if (this.dead) return undefined
       this.dead = true
-      if (!this.held) return undefined
-      this.held = false
+      if (!this.finalizerHeld) return undefined
+      this.finalizerHeld = false
       scopeRemoveFinalizerUnsafe(this.parent!.scope, this)
       try {
         return finishInstance(this)
@@ -2937,11 +2966,11 @@ const setup = (
         const fromOwn = (from as Inst | undefined)?.own
         if (fromOwn !== undefined) scopeRemoveFinalizerUnsafe(fromOwn, this)
         scopeMoveUnsafe(own, to.scope)
-      } else if (this.held) {
+      } else if (this.finalizerHeld) {
         if (from !== undefined) scopeRemoveFinalizerUnsafe(from.scope, this)
         const under = to.scope
         if (under.state._tag === "Closed") {
-          this.held = false
+          this.finalizerHeld = false
           this.dead = true
           track(closing, forkNow(ctx, Effect.suspend(() => finishInstance(this))))
         } else {
@@ -2989,7 +3018,7 @@ const setup = (
     key: string,
     parent: Instance | undefined,
     parentEnv: Env,
-    onEmit: (events: unknown) => unknown,
+    onEmit: (events: unknown, model?: unknown) => unknown,
     onFailure: ((failure: AsyncResult.Failure<never, unknown>) => unknown) | undefined,
     range: Range | undefined,
     content?: ((parts: any) => View.Content<any, any>) | undefined,
@@ -3335,6 +3364,9 @@ const setup = (
     inst.rendered = [rendered]
     viewChanged = true
     if (inst.failure !== undefined) return
+    // Before its first sends are delivered: the children it lists that its view leaves out.
+    holdOrFail(inst)
+    if (inst.closed) return
     if (Option.isSome(adopted)) {
       apply(inst, { model: inst.model, commands: none, events: none }, mountedSeq, true)
       const commands = first.commands
@@ -3757,7 +3789,9 @@ const setup = (
     for (const { issued, send } of outbox) {
       if (inst.closed) return
       // A headless instance wrote none of the tree it renders, so it has no children to send to.
-      const child = inst.owner === undefined ? findChild(inst.rendered, send.ref.key) : undefined
+      const child = inst.owner === undefined
+        ? findChild(inst.rendered, send.ref.key) ?? findHeld(inst, send.ref.key)
+        : undefined
       const reason: MessageLog.SendDropped["reason"] | undefined = child === undefined
         ? "unrendered"
         : child._tag === "Fallback"
@@ -3785,7 +3819,7 @@ const setup = (
         rootEmitted.push(emitted)
         continue
       }
-      const message = guard(parent, "onEmit", () => inst.onEmit(emitted))
+      const message = guard(parent, "onEmit", () => inst.onEmit(emitted, parent.model))
       if (message !== undefined) parent.dispatch(message, { _tag: "Emit", path: inst.path, seq: entrySeq })
     }
   }
@@ -5145,7 +5179,9 @@ const setup = (
    */
   const checkRefs = (author: Instance) => {
     refChecks.delete(author)
-    // Every tree it wrote is current: what they dropped and didn't declare again closes.
+    // Every tree it wrote is current: the children its Model lists that none places are held, and what
+    // they dropped and didn't declare again closes.
+    holdOrFail(author)
     releaseDropped(author)
     if (author.closed) return
     const written: Array<ChildPaths> = author.childPaths === undefined ? [] : [author.childPaths]
@@ -5577,6 +5613,8 @@ const setup = (
       )
     }
     const path = childPath(inst.author, view)
+    const failure = heldFailure(inst.author, path)
+    if (failure !== undefined) return failedChild(inst, view, failure, env)
     const found = live.get(path)
     if (found !== undefined && movable(inst, found, component, env)) return move(inst, found, view, env)
     const child = makeInstance(
@@ -5727,7 +5765,57 @@ const setup = (
   }
   const releaseAllDropped = () => {
     if (dropped.size === 0) return
-    for (const author of Array.from(dropped.keys())) releaseDropped(author)
+    for (const author of Array.from(dropped.keys())) {
+      holdOrFail(author)
+      releaseDropped(author)
+    }
+  }
+
+  /**
+   * Holds each `"model"` child `author`'s Model lists that none of its trees places, detached, so it keeps
+   * its Model, runs and Subscriptions and gets sends. Membership comes from the Model and placement from
+   * the trees as rendered, so it holds a child wherever the view leaves it out: under any root, or in a
+   * slot its receiver doesn't show. One a tree places again leaves the holder, and one the Model no longer
+   * lists closes. Run once `author`'s trees are current, before what they dropped closes.
+   */
+  const holdListed = (author: Instance) => {
+    const listed = listedOf(author.component)
+    if (listed === undefined || author.closed || author.waiting || author.failure !== undefined) return
+    const before = author.held
+    const after = new Map<string, RDetached>()
+    for (const view of listedChildren.held(author.component.definition.name, listed, author.model)) {
+      const path = childPath(author, view)
+      const found = live.get(path)
+      const kept = before?.get(path)
+      // Placed by one of its trees.
+      if (found !== undefined && found.site !== undefined && found.site !== kept?.inner) continue
+      before?.delete(path)
+      after.set(
+        path,
+        (kept === undefined
+          ? createChild(author, view, author.env)
+          : patchDetached(author, kept, view, author.env)) as RDetached
+      )
+    }
+    author.held = after.size === 0 ? undefined : after
+    // Placed again, which leaves nothing to close, or no longer listed.
+    if (before !== undefined) { for (const kept of before.values()) closeAll(author, kept) }
+  }
+  /** `holdListed`, which fails `author` with source `view` when it can't hold a child. */
+  const holdOrFail = (author: Instance) => {
+    try {
+      holdListed(author)
+    } catch (error) {
+      failInstance(author, Cause.die(error), "view")
+    }
+  }
+  /**
+   * The failure of the `"model"` child at `path` that `author` holds, failed: placed, it shows its
+   * fallback until its Model stops listing it.
+   */
+  const heldFailure = (author: Instance, path: string): Cause.Cause<unknown> | undefined => {
+    const inner = author.held?.get(path)?.inner
+    return inner?._tag === "Fallback" && inner.status._tag === "Failed" ? inner.status.cause : undefined
   }
 
   /**

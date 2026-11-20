@@ -1,6 +1,6 @@
-import { Child, Component, UiSchema, type View } from "@effect/ui"
+import { Child, Component, UiSchema, View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Locator, TestHost } from "@effect/ui/testing"
+import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 
@@ -65,6 +65,11 @@ describe("model children", () => {
       name: "P2: moved between two elements",
       view: page((moved, form, h) => h.main(h.aside(!moved && form()), h.article(moved && form()))),
       relayout: toggle
+    },
+    {
+      name: "P9: left out of a component root, then placed again",
+      view: page((hidden, form, h) => Card(h, { key: "card", slots: { body: hidden ? null : form() } })),
+      relayout: (root: Root) => Effect.andThen(toggle(root), toggle(root))
     },
     {
       name: "P8: in a slot its receiver stops placing, then places again",
@@ -151,4 +156,196 @@ describe("model children", () => {
     assert.throws(() => (erased as any)(undefined, {}), /Form has lifetime "model", so it isn't called in a view/)
     assert.throws(() => Child.one(Card as Component.Any), /Child\.one Card, and its lifetime is "view"/)
   })
+})
+
+// A child the view doesn't place, wherever the view leaves it out: it gets sends while hidden.
+
+const CounterMsg = UiSchema.TaggedEnum({ Ping: {} })
+const CounterEvents = UiSchema.TaggedEnum({ Pinged: {} })
+const Counter = Component.define({
+  name: "Counter",
+  lifetime: "model",
+  model: Schema.Number,
+  message: CounterMsg,
+  events: CounterEvents,
+  receives: ["Ping"],
+  elements: Html
+}).make({
+  init: () => 0,
+  update: (pings, _, $) => $.set(pings + 1).emit(CounterEvents.Pinged()),
+  view: (pings, h) => h.p("pings:" + pings)
+})
+const CounterRef = Counter.ref("counter")
+const Drawer = Component.define({
+  name: "Drawer",
+  lifetime: "view",
+  model: Schema.Boolean,
+  message: ToggleMsg,
+  elements: Html,
+  slots: ["body"]
+}).make({
+  init: () => false,
+  update: (open) => !open,
+  view: (open, h) => h.section(h.button.onClick(ToggleMsg.ClickedToggle()).children("open"), open && h.slots.body)
+})
+const HostMsg = UiSchema.TaggedEnum({ Ping: {}, Show: {} })
+const host = (view: (shown: boolean, counter: () => View.Child<any, any>, h: any) => View.Content<any, any>) =>
+  Component.define({ name: "Host", lifetime: "view", model: Schema.Boolean, message: HostMsg, elements: Html }).make({
+    children: { counter: Counter },
+    init: () => false,
+    update: (shown, message, $) => message._tag === "Ping" ? $.send(CounterRef, CounterMsg.Ping()) : !shown,
+    view: (shown, h) => view(shown, () => h.children.counter(), h)
+  })
+const show = (root: Root) => settle(() => root.send(HostMsg.Show()))
+
+describe("model children the view leaves out", () => {
+  it.effect.each([
+    {
+      name: "computed but left out of an element root",
+      view: host((shown, counter, h) => {
+        const node = counter()
+        return h.main(shown ? node : null)
+      }),
+      show
+    },
+    {
+      name: "left out of a component root",
+      view: host((shown, counter, h) => Card(h, { key: "card", slots: { body: shown ? counter() : null } })),
+      show
+    },
+    {
+      name: "the root once shown, text while hidden",
+      view: host((shown, counter) => shown ? counter() : View.text("hidden")),
+      show
+    },
+    {
+      name: "in a slot that never opened",
+      view: host((_, counter, h) => Drawer(h, { key: "drawer", slots: { body: counter() } })),
+      show: (root: Root) => click(root, "open")
+    }
+  ])("gets a send while hidden: $name", ({ show, view }) =>
+    Effect.gen(function*() {
+      const root = yield* TestHost.mount(view, {})
+      yield* TestHost.settle
+      yield* settle(() => root.send(HostMsg.Ping()))
+      yield* show(root)
+      assert.include(root.text(), "pings:1")
+      assert.notInclude(root.log().map((entry) => entry._tag), "Unmounted")
+    }).pipe(Effect.provide(TestHost.layer())))
+
+  it.effect("a story and a scene keep a child left out of a component root", () =>
+    Effect.gen(function*() {
+      const Host = host((shown, counter, h) =>
+        Card(h, {
+          key: "card",
+          slots: {
+            body: [
+              h.button.onClick(HostMsg.Ping()).children("ping"),
+              h.button.onClick(HostMsg.Show()).children("show"),
+              shown ? counter() : null
+            ]
+          }
+        })
+      )
+      const s = yield* Story.make(Host, {})
+      s.send(HostMsg.Ping()).send(HostMsg.Show())
+      assert.deepStrictEqual(s.children, { counter: 1 })
+      const scene = yield* Scene.make(Host, {})
+      scene.click("ping").expect(Locator.text("pings:1")).toBeAbsent()
+        .click("show").expect(Locator.text("pings:1")).toExist()
+    }))
+})
+
+// A story runs a model child's pure transitions as the renderer does.
+
+const absent = Component.define({
+  name: "Host",
+  lifetime: "view",
+  model: Schema.Boolean,
+  message: HostMsg,
+  elements: Html
+}).make({
+  children: { counter: Child.optional(Counter, { props: (shown) => shown ? {} : null }) },
+  init: () => false,
+  update: (shown, message, $) => message._tag === "Ping" ? $.send(CounterRef, CounterMsg.Ping()) : !shown,
+  view: (shown, h) => h.div(shown ? h.children.counter?.() : null)
+})
+
+const Greeter = Component.define({
+  name: "Greeter",
+  lifetime: "model",
+  model: Schema.Null,
+  message: Schema.Never,
+  events: CounterEvents
+}).make({
+  init: ($) => $.set(null).emit(CounterEvents.Pinged()),
+  update: (model) => model,
+  view: () => View.text("hi")
+})
+const Greeted = Component.define({
+  name: "Greeted",
+  lifetime: "view",
+  model: Schema.Number,
+  message: Schema.Literal("Greeted")
+})
+  .make({
+    children: { greeter: Child.one(Greeter, { onEmit: () => "Greeted" as const }) },
+    init: () => 0,
+    update: (greeted) => greeted + 1,
+    view: () => View.text("page")
+  })
+
+const TabMsg = UiSchema.TaggedEnum({ Ping: {}, Show: { tab: Schema.String }, Heard: { tab: Schema.String } })
+const Tabs = Component.define({
+  name: "Tabs",
+  lifetime: "view",
+  model: Schema.Struct({ tab: Schema.String, heard: Schema.Array(Schema.String) }),
+  message: TabMsg,
+  elements: Html
+}).make({
+  children: { counter: Child.one(Counter, { onEmit: (_, model) => TabMsg.Heard({ tab: model.tab }) }) },
+  init: () => ({ tab: "counter", heard: [] }),
+  update: (model, message, $) =>
+    TabMsg.match(message, {
+      Ping: () => $.send(CounterRef, CounterMsg.Ping()),
+      Show: ({ tab }) => ({ ...model, tab }),
+      Heard: ({ tab }) => ({ ...model, heard: [...model.heard, tab] })
+    }),
+  view: (model, h) => h.div(model.tab === "counter" ? h.children.counter() : "other")
+})
+
+describe("a story matches the renderer", () => {
+  it.effect("drops a send to an optional child that isn't listed", () =>
+    Effect.gen(function*() {
+      const root = yield* TestHost.mount(absent, {})
+      yield* TestHost.settle
+      yield* settle(() => root.send(HostMsg.Ping()))
+      yield* show(root)
+      assert.strictEqual(root.text(), "pings:0")
+      const s = yield* Story.make(absent, {})
+      s.send(HostMsg.Ping()).send(HostMsg.Show())
+      assert.deepStrictEqual(s.children, { counter: 0 })
+    }).pipe(Effect.provide(TestHost.layer())))
+
+  it.effect("takes what a hidden child emits from init", () =>
+    Effect.gen(function*() {
+      const root = yield* TestHost.mount(Greeted, {})
+      yield* TestHost.settle
+      assert.strictEqual(root.model(), 1)
+      const s = yield* Story.make(Greeted, {})
+      assert.strictEqual(s.model, 1)
+    }).pipe(Effect.provide(TestHost.layer())))
+
+  it.effect("gives onEmit the parent's current Model while the child is hidden", () =>
+    Effect.gen(function*() {
+      const root = yield* TestHost.mount(Tabs, {})
+      yield* TestHost.settle
+      yield* settle(() => root.send(TabMsg.Ping()))
+      yield* settle(() => root.send(TabMsg.Show({ tab: "other" })))
+      yield* settle(() => root.send(TabMsg.Ping()))
+      assert.deepStrictEqual(root.model()?.heard, ["counter", "other"])
+      const s = yield* Story.make(Tabs, {})
+      s.send(TabMsg.Ping()).send(TabMsg.Show({ tab: "other" })).send(TabMsg.Ping())
+      assert.deepStrictEqual(s.model.heard, ["counter", "other"])
+    }).pipe(Effect.provide(TestHost.layer())))
 })

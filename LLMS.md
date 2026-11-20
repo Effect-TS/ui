@@ -58,8 +58,8 @@ unmounts and loses its Model. Pick `"view"` for most components: rows,
 inputs, menus, anything whose state is fine to lose when it goes away.
 
 A `"model"` component lives as long as its parent lists it. The parent
-lists it in `children` in `make`, with props and `onEmit` as functions of
-the parent's Model, and its view places it with `h.children`:
+lists it in `children` in `make`, with props as a function of the parent's
+Model, and its view places it with `h.children`:
 
 ```ts
 const Settings = SettingsDef.make({
@@ -75,9 +75,11 @@ const Settings = SettingsDef.make({
 })
 ```
 
-A listed child the view doesn't place keeps its Model, its Commands in
-flight, its Subscriptions and what the user typed. Its nodes are kept out
-of the document, its element mounts stop until it's placed again, and the
+A listed child that no tree of the parent places keeps its Model, its
+Commands in flight, its Subscriptions and what the user typed. That holds
+wherever the view leaves it out: not in what the view returns, under a root
+that is another component, or in a slot whose receiver doesn't show it. Its
+nodes are kept out of the document, its element mounts stop until it's placed again, and the
 log records `Detached` and `Attached`. It still gets props, sends and query
 results, and emits through `onEmit`. Pick `"model"` for a tab, a wizard
 step or a panel the user comes back to and expects to find as they left
@@ -93,11 +95,30 @@ the view shows something else in its place.
 - `Child.keyed(C, options)` lists one child per `[key, props]` entry, placed
   with `h.children.rows(key)`.
 
+`onEmit` gets the event and the parent's Model as it is when the event
+arrives, shown or hidden: `onEmit: (event, model) => model.tab === "profile" ? Saved(event) : SavedInBackground(event)`.
+A view closure that read the parent's state to map an event moves into
+this second argument, or into the parent's `update`.
+
 A `"model"` child's ref is named by its key in `children`:
 `Profile.ref("profile")`, and `Row.ref("rows").at(id)` for a keyed row.
+A send to a child the Model doesn't list is dropped.
 `Story` runs listed children with their parent: `s.children.profile` reads
 a child's Model, shown or hidden, and `.sendChild("profile", message)`
-delivers a message to it. A Story fails if a `"model"` child runs a Command.
+delivers a message to it. Their events from `init` and `update` reach the
+parent through `onEmit`, as in the renderer.
+
+Two limits apply for now:
+
+- A Story runs a listed child's `init`, `update` and `view`, not its
+  effects. It fails when a listed child runs a Command or sends to anything
+  but its own listed children. Test those in the child's own Story, which
+  resolves its Commands and acknowledges its sends, or test the parent with
+  `TestHost`.
+- `h.children` exists only in the view written in `make`. A view written
+  with `Def.view` or typed with `Component.Helper<typeof Def>` doesn't
+  have it: place the child in `make`'s view and pass the placed child to the
+  other view as an argument.
 
 Calling a `"model"` component in a view, or listing a `"view"` component in
 `children`, is a type error. A headless component is always `"view"`.

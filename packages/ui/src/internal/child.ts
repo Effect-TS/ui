@@ -14,7 +14,11 @@ export interface Options {
   // Every ref fits `Ref.Any`; the call's type has checked what it receives.
   readonly ref?: Component.Ref.Any | undefined
   readonly props?: unknown
-  readonly onEmit?: ((event: any) => unknown) | Readonly<Record<string, (event: any) => unknown>> | undefined
+  // A `"model"` child's handlers take the current Model of whoever declared it too.
+  readonly onEmit?:
+    | ((event: any, model?: any) => unknown)
+    | Readonly<Record<string, (event: any, model?: any) => unknown>>
+    | undefined
   readonly fallback?: ((result: any) => View.Content<any, any>) | undefined
   readonly onFailure?: ((failure: AsyncResult.Failure<never, unknown>) => unknown) | undefined
   readonly view?: ((parts: any) => View.Content<any, any>) | undefined
@@ -22,7 +26,7 @@ export interface Options {
 }
 
 /**
- * `detached` holds a `"model"` child its parent's view doesn't place: only `h.children` passes it.
+ * `detached` declares a `"model"` child no tree of its parent places: only the runtime's holder passes it.
  *
  * @internal
  */
@@ -43,7 +47,9 @@ export const make = (
     key: options.ref !== undefined ? options.ref.key : options.key ?? "",
     ref: options.ref,
     props: options.props ?? {},
-    onEmit: typeof onEmit === "object" ? (event) => onEmit[event._tag](event) : onEmit ?? ignore,
+    onEmit: typeof onEmit === "object"
+      ? (event, model?: unknown) => onEmit[event._tag](event, model)
+      : onEmit ?? ignore,
     fallback: options.fallback,
     onFailure: options.onFailure,
     view: options.view,

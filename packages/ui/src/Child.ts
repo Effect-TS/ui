@@ -6,9 +6,12 @@
  *
  * A component with `lifetime: "model"` is listed in its parent's
  * `children`, by name, and lives while it is listed, whether or not the
- * parent's view shows it. Its props and `onEmit` are functions of the
- * parent's Model, so a hidden child gets the same props as a shown one. The
- * view places it with `h.children.<name>()`, which takes only slot content.
+ * parent's view shows it. Its props are a function of the parent's Model,
+ * so a hidden child gets the same props as a shown one, and `onEmit` gets
+ * the parent's Model as it is when the event arrives. The view places it
+ * with `h.children.<name>()`, which takes only slot content. A child the
+ * view leaves out, wherever it leaves it out, is held out of the document
+ * and keeps running.
  *
  * A component listed bare lives as long as its parent, with no props.
  * `Child.one` gives it props, `Child.optional` makes it exist while
@@ -45,7 +48,6 @@
  */
 import type * as Component from "./Component.ts"
 import * as children from "./internal/children.ts"
-import type * as View from "./View.ts"
 
 /**
  * Identifies an entry of `children`.
@@ -107,8 +109,8 @@ export interface Entry<in Model, out Msg, out K extends Kind = Kind, out R = unk
   readonly component: Component.Any
   readonly props: ((model: Model) => unknown) | undefined
   readonly onEmit:
-    | ((events: any) => Msg | undefined)
-    | { readonly [tag: string]: (event: any) => Msg | undefined }
+    | ((events: any, model: Model) => Msg | undefined)
+    | { readonly [tag: string]: (event: any, model: Model) => Msg | undefined }
     | undefined
   readonly "~R"?: (_: never) => R
   readonly "~Sl"?: (_: never) => Sl
@@ -126,6 +128,38 @@ export type Children<Model, Msg> = {
 }
 
 /**
+ * A child's `onEmit`: a callback, or one handler per tag for tagged events.
+ * Each gets the event and the parent's Model as it is when the event
+ * arrives, shown or hidden.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type OnEmit<Events, Model, Msg> =
+  | ((event: Events, model: Model) => Msg | undefined)
+  | EmitHandlers<Events, Model, Msg>
+
+/**
+ * One handler for each tag in a child's event union, given the event and the
+ * parent's current Model.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type EmitHandlers<Events, Model, Msg> = [Events] extends [never] ? never
+  : [Events] extends [{ readonly _tag: string }]
+  // Reject a wide tag, as `View.Child.EmitHandlers` does.
+    ? [(tag: EventTag<Events>) => void] extends [(tag: string) => void] ? never
+    : {
+      readonly [T in EventTag<Events>]: (event: Extract<Events, { readonly _tag: T }>, model: Model) => Msg | undefined
+    }
+  : never
+
+type EventTag<Events> = Events extends { readonly _tag: infer T extends string } ? T : never
+
+/**
  * The options of an entry. `props` is a function of the parent's Model.
  *
  * @stability experimental
@@ -135,7 +169,7 @@ export type Children<Model, Msg> = {
 export interface Options<in Events, in Model, out Msg, out P> {
   readonly props: (model: Model) => P
   /** Handle the child's events with a callback, or one handler per tag for tagged events. */
-  readonly onEmit?: ((events: Events) => Msg | undefined) | View.Child.EmitHandlers<Events, Msg> | undefined
+  readonly onEmit?: OnEmit<Events, Model, Msg> | undefined
 }
 
 /**
@@ -149,7 +183,7 @@ export interface Options<in Events, in Model, out Msg, out P> {
 export interface OptionsNoProps<in Events, in Model, out Msg, out P> {
   readonly props?: ((model: Model) => P) | undefined
   /** Handle the child's events with a callback, or one handler per tag for tagged events. */
-  readonly onEmit?: ((events: Events) => Msg | undefined) | View.Child.EmitHandlers<Events, Msg> | undefined
+  readonly onEmit?: OnEmit<Events, Model, Msg> | undefined
 }
 
 /**

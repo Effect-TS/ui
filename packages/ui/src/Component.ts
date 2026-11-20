@@ -2083,7 +2083,12 @@ export interface Definition<
   update<U extends Model | Step<Model, Msg, Events, any, L>>(
     update: (model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L>) => U
   ): (model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L>) => U
-  /** A view, to pass as `view` or call from another view. */
+  /**
+   * A view, to pass as `view` or call from another view. Its `h` has no
+   * `h.children`, which `make` gives the view it's passed: a component with
+   * `children` places them in the view written in `make`, and may pass the
+   * placed child to a view written here as an argument.
+   */
   view<UV extends View.Content<Msg, any>>(
     view: (
       model: Model,
@@ -2309,7 +2314,9 @@ export declare namespace Definition {
 
 /**
  * `h` in the view of a definition, for a function that takes it without
- * `Def.fragment`.
+ * `Def.fragment`. It has no `h.children`, which only the view written in
+ * `make` gets: place a `"model"` child there, and pass the placed child to
+ * such a function as an argument.
  *
  * **Example** (A row fragment)
  *
@@ -2377,11 +2384,12 @@ export type Helper<D> = D extends Definition<
  * `lifetime` says how long the component's Model lives. A `"view"`
  * component is called in a view, `Counter(h, { key, props })`, and lives
  * while the view renders it: dropped from the view, it unmounts. A `"model"`
- * component is listed in its parent's `children`, with its props and
- * `onEmit` as functions of the parent's Model, and the parent's view places
- * it with `h.children.<name>()`. It lives while it is listed, placed or not,
- * so a hidden tab keeps its draft. A route page and the mounted root may be
- * either. A headless component is `"view"`.
+ * component is listed in its parent's `children`, with its props a function
+ * of the parent's Model and an `onEmit` that gets the parent's current
+ * Model, and the parent's view places it with `h.children.<name>()`. It
+ * lives while it is listed, placed or not, so a hidden tab keeps its draft.
+ * A route page and the mounted root may be either. A headless component is
+ * `"view"`.
  *
  * `init` and `update` get `$`, a step holding the current Model and props.
  * `view` gets `h`, bound to the component's message type and carrying the
@@ -2924,17 +2932,11 @@ const finish = (
           h.patched = context.patched
         }
         if (reads.length > 0) h.shared = readShared(definition.name, reads, shared)
+        if (listed !== undefined) h.children = children.helpers(definition.name, listed, model)
         const lazies = lazy?.lazy as View.Lazies | undefined
         lazies?.begin()
         try {
-          let node: View.Node<any, any>
-          if (listed === undefined) {
-            node = View.toNode(view(model, h))
-          } else {
-            const rendered = children.render(definition.name, listed, model)
-            h.children = rendered.helpers
-            node = rendered.hold(View.toNode(view(model, h)))
-          }
+          const node = View.toNode(view(model, h))
           lazies?.end()
           return node
         } catch (error) {

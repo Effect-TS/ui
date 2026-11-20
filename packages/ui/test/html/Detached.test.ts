@@ -54,7 +54,7 @@ describe("model children on the server", () => {
       inits = { avatar: 0, profile: 0 }
       // Fails if the client rebuilt nodes the server wrote, or didn't adopt a Model the server sent.
       const result = yield* ssr(Settings, {})
-      assert.include(result.html, "<!--[/Settings/Profile[profile]--><!--]/Settings/Profile[profile]-->")
+      assert.notInclude(result.html, "Profile")
       assert.notInclude(result.html, "draft from")
       assert.include(result.adopted, "/Settings/Profile[profile]")
       assert.include(result.adopted, "/Settings/Profile[profile]/Avatar[a]")

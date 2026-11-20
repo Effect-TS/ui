@@ -286,12 +286,13 @@ export const stepModelChild = <Props, Model, Msg, Events>(
   if (events.length > 0) after = update(after, { emitted: [] })
   let out = update(story, { models: new Map(models).set(key, { listed: before.listed, state: after }) })
   const onEmit = before.listed.entry.onEmit
+  // Each handler reads the Model as it is when the event arrives, as the runtime's does.
   for (const event of events) {
     const message = onEmit === undefined
       ? undefined
       : typeof onEmit === "function"
-      ? onEmit(event)
-      : onEmit[(event as { readonly _tag: string })._tag]?.(event)
+      ? onEmit(event, out.model)
+      : onEmit[(event as { readonly _tag: string })._tag]?.(event, out.model)
     out = dispatch(out, message as Msg | undefined)
   }
   return out
@@ -621,8 +622,6 @@ const expandRoot = <Msg>(
         placed.push({ child: node, path: childPath, scope })
         const run = own && node.ref !== undefined ? models?.get(node.ref.key) : undefined
         if (run !== undefined && run.listed.entry.component === node.component) {
-          // A `"model"` child the view doesn't place is out of the document, and its record is kept.
-          if (node.detached) return node
           const slots = node.slots
           const shown = slots === undefined ? run.state.view() : fillOutlets(
             run.state.view(),
@@ -1318,18 +1317,34 @@ export const apply = <Props, Model, Msg, Events>(
   }
   out = update(out, { emitted: [...out.emitted, ...next.events] })
   const sends: Array<Component.Send> = []
+  const listed = listedOf(out.component)
   for (const send of next.sends ?? []) {
     if (!delivered(out, send)) continue
-    // A send to a `"model"` child is delivered, as the runtime does.
+    // A send to a `"model"` child is delivered, as the runtime does, and dropped while the Model doesn't
+    // list the child.
     const key = send.ref?.key
-    if (key !== undefined && modelChildren.get(out)?.has(key)) {
-      out = stepModelChild(out, key, (child) => dispatch(child, send.message))
+    if (key !== undefined && listed !== undefined && listedChildren.lists(listed, key)) {
+      if (modelChildren.get(out)?.has(key)) out = stepModelChild(out, key, (child) => dispatch(child, send.message))
     } else {
       sends.push(send)
     }
   }
   if (sends.length > 0) out = update(out, { sent: [...out.sent, ...sends] })
   for (const list of next.lists ?? []) out = applyList(out, list)
+  return listed === undefined ? out : takeInitEvents(out)
+}
+
+// What the `"model"` children this step listed emitted from `init`, through their `onEmit`, as the runtime
+// delivers it once they mount.
+const takeInitEvents = <Props, Model, Msg, Events>(
+  story: State<Props, Model, Msg, Events>
+): State<Props, Model, Msg, Events> => {
+  let out = story
+  for (const [key, child] of modelChildren.get(story) ?? []) {
+    if (child.state.emitted.length > 0 && modelChildren.get(out)?.get(key) === child) {
+      out = stepModelChild(out, key, (state) => state)
+    }
+  }
   return out
 }
 

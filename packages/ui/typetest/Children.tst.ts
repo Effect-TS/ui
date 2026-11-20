@@ -126,6 +126,27 @@ describe("children", () => {
     expect<Component.Requirements<typeof Page>>().type.toBe<Clock>()
   })
 
+  it("gives onEmit the parent's Model", () => {
+    PageDef.make({
+      children: {
+        profile: Child.one(ProfileForm, {
+          props: () => ({ id: "a" }),
+          onEmit: (event, model) => {
+            expect(model).type.toBe<typeof PageDef.model.Type>()
+            return PageMessage.Saved({ id: model.selected ?? event.id })
+          }
+        }),
+        rows: Child.keyed(ProfileForm, {
+          props: (model) => model.order.map((id) => [id, { id }]),
+          onEmit: { Saved: (event, model) => PageMessage.Saved({ id: model.selected ?? event.id }) }
+        })
+      },
+      init: () => ({ selected: null, order: [] }),
+      update: (model) => model,
+      view: (_, h) => h.main(h.children.profile())
+    })
+  })
+
   it("rejects a view component and wrong props", () => {
     // @ts-expect-error A component with lifetime 'view' is called in a view, not listed in `children`
     Child.one(Tooltip, { props: () => ({ id: "a" }) })

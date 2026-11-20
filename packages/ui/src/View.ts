@@ -328,8 +328,8 @@ export type MountHint =
  * user should find a child as they left it, such as a hidden tab with a
  * half-filled form or a wizard step, give the child `lifetime: "model"` and
  * list it in its parent's `children`. The parent's view places it with
- * `h.children`, and while the view doesn't, the child is detached: its
- * nodes leave the document and the runtime keeps them, so it keeps its
+ * `h.children`, and while no tree of the parent places it, wherever the
+ * view leaves it out, the child is detached: its nodes leave the document and the runtime keeps them, so it keeps its
  * Model, its Commands in flight, its Subscriptions and what the user typed
  * into its inputs. It contributes no head entries, a ref lookup inside it
  * finds nothing, and its element mounts stop until it is placed again, when

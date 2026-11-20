@@ -1,12 +1,12 @@
 /**
  * A component's `children`: the children whose state its Model owns. Each
- * render lists them from the Model, gives the view `h.children` to place
- * them, and holds the ones it doesn't place, detached.
+ * render lists them from the Model and gives the view `h.children` to place
+ * them. The runtime holds the ones no tree places, detached.
  *
  * @internal
  */
 import type * as Component from "../Component.ts"
-import * as View from "../View.ts"
+import type * as View from "../View.ts"
 import * as child from "./child.ts"
 import * as childRef from "./ref.ts"
 
@@ -110,15 +110,15 @@ export const list = (owner: string, children: Children, model: unknown): Array<L
 }
 
 /**
- * What a component's view gets for one render: `h.children`, and `hold`, which adds the children the
- * view didn't place to what it returned, detached.
+ * `h.children` for one render: a helper per name that returns the child's declaration. Where the view
+ * puts it is up to the view: the runtime holds each listed child that no tree it renders places.
  *
  * @internal
  */
-export const render = (owner: string, children: Children, model: unknown) => {
+export const helpers = (owner: string, children: Children, model: unknown): Record<string, unknown> => {
   const listed = list(owner, children, model)
   const placed = new Set<Listed>()
-  const helpers: Record<string, unknown> = {}
+  const out: Record<string, unknown> = {}
   const place = (found: Listed, options: { readonly slots?: View.Child<any, any>["slots"] } | undefined) => {
     if (placed.has(found)) {
       throw new Error(`${owner} places ${found.ref.key} twice: a child of children is placed once`)
@@ -129,7 +129,7 @@ export const render = (owner: string, children: Children, model: unknown) => {
   const rows = new Map<string, Map<string, Listed>>()
   for (const found of listed) {
     if (found.key === undefined) {
-      helpers[found.name] = (options?: { readonly slots?: View.Child<any, any>["slots"] }) => place(found, options)
+      out[found.name] = (options?: { readonly slots?: View.Child<any, any>["slots"] }) => place(found, options)
       continue
     }
     let byKey = rows.get(found.name)
@@ -138,7 +138,7 @@ export const render = (owner: string, children: Children, model: unknown) => {
   }
   for (const [name, entry] of children) {
     if (entry[TypeId] !== "keyed") continue
-    helpers[name] = (key: string, options?: { readonly slots?: View.Child<any, any>["slots"] }) => {
+    out[name] = (key: string, options?: { readonly slots?: View.Child<any, any>["slots"] }) => {
       const found = rows.get(name)?.get(key)
       if (found === undefined) {
         throw new Error(`${owner} places ${name}[${key}], and its children list no ${name} with that key`)
@@ -146,16 +146,24 @@ export const render = (owner: string, children: Children, model: unknown) => {
       return place(found, options)
     }
   }
-  return {
-    helpers,
-    /** `root` with the children the view didn't place added at its end, detached. */
-    hold: (root: View.Node<any, any>): View.Node<any, any> => {
-      const held: Array<View.Child<any, any>> = []
-      for (const found of listed) if (!placed.has(found)) held.push(declaration(found, undefined, true))
-      return held.length === 0 ? root : holdIn(owner, root, held)
-    }
-  }
+  return out
 }
+
+/**
+ * The declarations of the children a Model lists, detached: how the runtime holds one no tree places.
+ *
+ * @internal
+ */
+export const held = (owner: string, children: Children, model: unknown): Array<View.Child<any, any>> =>
+  list(owner, children, model).map((found) => declaration(found, undefined, true))
+
+/**
+ * Whether `key` is a ref key `children` can list, such as `profile` or `rows[a]`, listed now or not.
+ *
+ * @internal
+ */
+export const lists = (children: Children, key: string): boolean =>
+  children.some(([name, entry]) => entry[TypeId] === "keyed" ? key.startsWith(name + "[") : key === name)
 
 const declaration = (
   listed: Listed,
@@ -167,21 +175,3 @@ const declaration = (
     { ref: listed.ref, props: listed.props, onEmit: listed.entry.onEmit, slots },
     detached
   )
-
-// The children a view doesn't place are held at the end of its root element, or of the root element a
-// headless child's view returns. Their placeholders are empty text, so the document doesn't change.
-const holdIn = (
-  owner: string,
-  root: View.Node<any, any>,
-  held: ReadonlyArray<View.Child<any, any>>
-): View.Node<any, any> => {
-  if (root._tag === "Element") return { ...root, children: [...root.children, ...held] }
-  if (root._tag === "Child" && root.view !== undefined) {
-    const view = root.view
-    return { ...root, view: (parts: unknown) => holdIn(owner, View.toNode(view(parts)), held) }
-  }
-  throw new Error(
-    `${owner} doesn't place every child of its children, and its view returns no element to hold the rest: ` +
-      `return an element, such as h.div(...)`
-  )
-}
