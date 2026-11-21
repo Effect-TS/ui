@@ -242,6 +242,10 @@ describe("scoped", () => {
     if (Component.isComponent(found)) {
       // @ts-expect-error This expression is not callable
       found(h, {})
+      if (!found.definition.scoped) {
+        // @ts-expect-error This expression is not callable
+        found(h, {})
+      }
     }
   })
 

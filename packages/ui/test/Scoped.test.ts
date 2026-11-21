@@ -1,7 +1,8 @@
 import { Command, Component, Head, type MessageLog, Mount, Renderer, Route, Router, UiSchema } from "@effect/ui"
+import { Html } from "@effect/ui/html"
 import { Locator, Scene, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Cause, Deferred, Effect, Schema } from "effect"
+import { Cause, Deferred, Effect, Redacted, Schema } from "effect"
 
 const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(TestHost.layer()))
 const click = (root: Pick<TestHost.TestRoot<any, any, any>, "get">, text: string) =>
@@ -1136,24 +1137,33 @@ const Nested = Component.define({
     update: (draft) => draft + "a",
     view: (draft, h) => h.el("button").on("click", "type").children("nested:" + draft)
   })
-const Holder = Component.define({ name: "Holder", scoped: true, model: Schema.Null, message: Schema.Never })
-  .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("div", Nested(h, { key: "n" })) })
-
-const FormPage = Component.define({
-  name: "FormPage",
-  scoped: false,
-  props: Schema.Struct({ hidden: Schema.Boolean, ended: Schema.Boolean }),
+const Holder = Component.define({
+  name: "Holder",
+  scoped: true,
+  props: Schema.Struct({ bare: Schema.Boolean }),
   model: Schema.Null,
   message: Schema.Never
 }).make({
   init: () => null,
+  update: (model) => model,
+  view: (_, h) => h.el("div", h.props.bare ? null : Nested(h, { key: "n" }))
+})
+
+const FormPage = Component.define({
+  name: "FormPage",
+  scoped: false,
+  props: Schema.Struct({ hidden: Schema.Boolean, ended: Schema.Boolean, bare: Schema.Boolean }),
+  model: Schema.Redacted(Schema.String),
+  message: Schema.Never
+}).make({
+  init: () => Redacted.make(""),
   update: (model) => model,
   view: (_, h) =>
     h.el(
       "section",
       h.scoped(
         ({ props }) => !props.ended,
-        (s) => h.props.hidden ? null : [Draft(s, { key: "d" }), Holder(s, { key: "h" })]
+        (s) => h.props.hidden ? null : [Draft(s, { key: "d" }), Holder(s, { key: "h", props: { bare: h.props.bare } })]
       )
     )
 })
@@ -1163,23 +1173,25 @@ const ShellMsg = UiSchema.TaggedEnum({
   Go: { route: TabsRoute },
   Done: {},
   Hide: { hidden: Schema.Boolean },
-  End: { ended: Schema.Boolean }
+  End: { ended: Schema.Boolean },
+  Bare: { bare: Schema.Boolean }
 })
 const Shell = Component.define({
   name: "Shell",
   scoped: false,
   props: Schema.Struct({ route: TabsRoute }),
-  model: Schema.Struct({ route: TabsRoute, hidden: Schema.Boolean, ended: Schema.Boolean }),
+  model: Schema.Struct({ route: TabsRoute, hidden: Schema.Boolean, ended: Schema.Boolean, bare: Schema.Boolean }),
   message: ShellMsg
 }).make({
-  init: ($) => ({ route: $.props.route, hidden: false, ended: false }),
+  init: ($) => ({ route: $.props.route, hidden: false, ended: false, bare: false }),
   update: (model, message, $) =>
     ShellMsg.match(message, {
       Changed: ({ route }) => ({ ...model, route }),
       Go: ({ route }) => $.run(Router.push(TabsRoute, route).pipe(Command.map(() => ShellMsg.Done()))),
       Done: () => model,
       Hide: ({ hidden }) => ({ ...model, hidden }),
-      End: ({ ended }) => ({ ...model, ended })
+      End: ({ ended }) => ({ ...model, ended }),
+      Bare: ({ bare }) => ({ ...model, bare })
     }),
   subscriptions: (model) => [
     Router.subscription(TabsRoute, model.route, (route) => ShellMsg.Changed({ route }))
@@ -1189,7 +1201,7 @@ const Shell = Component.define({
       "div",
       h.el("button").on("click", ShellMsg.Go({ route: TabsRoute.make({ _tag: "Home" }) })).children("Home"),
       model.route._tag === "Tabs"
-        ? FormPage(h, { key: "/tabs", props: { hidden: model.hidden, ended: model.ended } })
+        ? FormPage(h, { key: "/tabs", props: { hidden: model.hidden, ended: model.ended, bare: model.bare } })
         : h.el("p", "home")
     )
 })
@@ -1278,6 +1290,56 @@ describe("scoped children across a router restore", () => {
         history.go(-1)
         yield* TestHost.settle
         root.send(ShellMsg.End({ ended: false }))
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "Homedraft:nested:")
+      })
+    ))
+
+  it.effect("starts a fresh push blank after a restore that didn't claim the draft, and Back still restores it", () =>
+    routed((history) =>
+      Effect.gen(function*() {
+        const root = yield* TestHost.mount(Shell, Router.props(TabsRoute))
+        yield* TestHost.settle
+        click(root, "draft:")
+        yield* TestHost.settle
+        click(root, "Home")
+        yield* TestHost.settle
+        yield* hide(root, true)
+        history.go(-1)
+        yield* TestHost.settle
+        click(root, "Home")
+        yield* TestHost.settle
+        yield* hide(root, false)
+        root.send(ShellMsg.Go({ route: TabsRoute.make({ _tag: "Tabs" }) }))
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "Homedraft:nested:")
+        history.go(-1)
+        yield* TestHost.settle
+        history.go(-1)
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "Homedraft:anested:")
+      })
+    ))
+
+  it.effect("starts blank the subtree of a restored child that ended before drawing it", () =>
+    routed((history) =>
+      Effect.gen(function*() {
+        const root = yield* TestHost.mount(Shell, Router.props(TabsRoute))
+        yield* TestHost.settle
+        click(root, "nested:")
+        yield* TestHost.settle
+        click(root, "Home")
+        yield* TestHost.settle
+        root.send(ShellMsg.Bare({ bare: true }))
+        yield* TestHost.settle
+        history.go(-1)
+        yield* TestHost.settle
+        root.send(ShellMsg.Hide({ hidden: true }))
+        root.send(ShellMsg.End({ ended: true }))
+        yield* TestHost.settle
+        root.send(ShellMsg.End({ ended: false }))
+        yield* hide(root, false)
+        root.send(ShellMsg.Bare({ bare: false }))
         yield* TestHost.settle
         assert.strictEqual(root.text(), "Homedraft:nested:")
       })
@@ -1505,9 +1567,123 @@ describe("scoped children written into closed slots", () => {
       assert.strictEqual(root.text(), "count:1")
     })))
 
-  it.effect.each([true, false])(
-    "fails the author whose two closures write one child, the first slot open: %s",
-    (open) =>
+  it.effect("keeps a child whose headless writer is replaced by another that writes it", () =>
+    provideHost(Effect.gen(function*() {
+      const Row = Component.define({
+        name: "Row",
+        scoped: true,
+        model: Schema.Number,
+        message: Schema.Literal("inc"),
+        elements: Html
+      }).make({
+        init: () => 0,
+        update: (count) => count + 1,
+        view: (count, h) => h.button.onClick("inc").children("count:" + count)
+      })
+      const Writer = Component.define({
+        name: "Writer",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({ init: () => null, update: (model) => model, parts: () => ({}) })
+      const Switch = Component.define({
+        name: "Switch",
+        scoped: false,
+        model: Schema.Literals(["a", "b"]),
+        message: Schema.Literal("flip"),
+        elements: Html
+      }).make({
+        init: () => "a" as const,
+        update: (which) => which === "a" ? "b" : "a",
+        parts: (which, p) => ({ which, flip: p.part("button", (b) => b.onClick("flip")) })
+      })
+      const Page = Component.define({
+        name: "Page",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) =>
+          h.scoped((s) =>
+            Switch(h, {
+              key: "s",
+              view: (parts) =>
+                h.div(
+                  parts.flip(h.button.children("flip")),
+                  Writer(h, { key: parts.which, view: () => Row(s, { key: "r" }) })
+                )
+            })
+          )
+      })
+      const root = yield* TestHost.mount(Page, {})
+      yield* TestHost.settle
+      click(root, "count:0")
+      yield* TestHost.settle
+      click(root, "flip")
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "flipcount:1")
+    })))
+
+  it.effect("a receiver that redraws an old write doesn't start a child its author ended", () =>
+    provideHost(Effect.gen(function*() {
+      let starts = 0
+      const Probe = Component.define({ name: "Probe", scoped: true, model: Schema.Null, message: Schema.Never })
+        .make({
+          init: () => {
+            starts++
+            return null
+          },
+          update: (model) => model,
+          view: (_, h) => h.el("i", "probe")
+        })
+      const ToggleMsg = UiSchema.TaggedEnum({ Toggle: {} })
+      const Toggling = Component.define({
+        name: "Toggling",
+        scoped: true,
+        model: Schema.Boolean,
+        message: ToggleMsg,
+        receives: ["Toggle"],
+        slots: ["body"]
+      }).make({
+        init: () => true,
+        update: (open) => !open,
+        view: (open, h) => h.el("section", open ? h.slots.body : null)
+      })
+      const BoxRef = Toggling.ref("B")
+      const Page = Component.define({
+        name: "Page",
+        scoped: false,
+        model: Schema.Literals(["box", "page", "ended"]),
+        message: Schema.Literals(["page", "end", "toggle"])
+      }).make({
+        init: () => "box" as const,
+        update: (_, message, $) =>
+          message === "toggle" ? $.send(BoxRef, ToggleMsg.Toggle()) : message === "end" ? "ended" : "page",
+        view: (mode, h) =>
+          h.el(
+            "main",
+            h.scoped((s) =>
+              mode === "box" ? Toggling(s, { ref: BoxRef, slots: { body: Probe(s, { key: "p" }) } }) : null
+            ),
+            h.scoped(({ model }) => model !== "ended", (s) => mode === "box" ? null : Probe(s, { key: "p" }))
+          )
+      })
+      const root = yield* TestHost.mount(Page, {})
+      yield* TestHost.settle
+      for (const message of ["page", "end", "toggle", "toggle"] as const) {
+        root.send(message)
+        yield* TestHost.settle
+      }
+      assert.strictEqual(starts, 1)
+    })))
+
+  it.effect.each(["open", "closed", "false"] as const)(
+    "fails the author whose two closures write one child, the first slot or predicate %s",
+    (first) =>
       provideHost(Effect.gen(function*() {
         const Side = Component.define({ name: "Side", scoped: false, model: Schema.Null, message: Schema.Never })
           .make({ init: () => null, update: (model) => model, parts: () => ({}) })
@@ -1516,19 +1692,18 @@ describe("scoped children written into closed slots", () => {
             init: () => null,
             update: (model) => model,
             view: (_, h) =>
-              h.scoped((s) =>
+              h.scoped(({ model }) => first !== "false" || model !== null, (s) =>
                 h.el(
                   "div",
                   Side(h, {
                     key: "a",
                     view: () =>
-                      open
+                      first === "open"
                         ? h.el("p", Billing(s, { key: "b" }))
                         : Shut(h, { key: "x", slots: { body: Billing(s, { key: "b" }) } })
                   }),
                   Side(h, { key: "b", view: () => Shut(h, { key: "y", slots: { body: Billing(s, { key: "b" }) } }) })
-                )
-              )
+                ))
           })
         const root = yield* TestHost.mount(host(Inner), {})
         yield* TestHost.settle

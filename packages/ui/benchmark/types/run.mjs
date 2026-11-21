@@ -22,7 +22,6 @@ const imports = [
 
 const scopedField = (scoped) => values.main ? "" : `\n  scoped: ${scoped},`
 
-// What the library costs a file that uses it, measured on its own and taken off the deep chain.
 const importsOnly = `${imports}
 
 export const used = [Component.define, UiSchema.TaggedEnum, Html, Schema.String]
@@ -230,7 +229,6 @@ const lsp = async (file, marker, runs = 10) => {
         pending.get(message.id)?.(message)
         pending.delete(message.id)
       } else if (message.id !== undefined) {
-        // A request from the server, such as workspace/configuration.
         send({ jsonrpc: "2.0", id: message.id, result: null })
       }
     }
@@ -262,7 +260,6 @@ const lsp = async (file, marker, runs = 10) => {
   const diagnostics = []
   const completions = []
   let items = 0
-  // An edit adds a comment line at the top, which moves the completion down a line.
   const edit = (version, text) => {
     notify("textDocument/didChange", {
       textDocument: { uri, version },

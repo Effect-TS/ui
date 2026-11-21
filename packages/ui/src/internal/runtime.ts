@@ -373,21 +373,25 @@ interface Kept {
   drawer: Instance
   container: unknown
   round: number
-  view: View.Child<any, any>
-  writer: Instance | undefined
-  wrote: number
+}
+
+interface Claim {
+  readonly by: Instance
+  readonly view: View.Child<any, any>
 }
 
 interface KeptTable {
   round: number
   readonly children: Map<Component.Any | Feature.Any, Map<string, Kept>>
+  readonly writes: Map<Component.Any | Feature.Any, Map<string, Array<Claim>>>
   ask: ((alive: (input: Component.Alive<any, any, any>) => boolean, key: string) => boolean) | undefined
 }
 
 const keptTables = new WeakMap<Instance, KeptTable>()
 const keptEntries = new WeakMap<Instance, Kept>()
-const lastWrites = new WeakMap<Instance, Array<Kept>>()
+const lastWrites = new WeakMap<Instance, ReadonlyArray<View.Child<any, any>>>()
 let keptLive = 0
+let writersLive = 0
 
 /** How many times one instance may deliver sends in a flush before it fails. */
 const maxSendPasses = 100
@@ -1302,21 +1306,58 @@ const setup = (
   let hydrating: {
     readonly state: Renderer.State
     readonly deferred: ReadonlySet<string>
+    readonly drawn: ReadonlySet<string>
   } | undefined = options?.state === undefined || server !== undefined ? undefined : {
     state: options.state,
-    deferred: new Set(options.state["~deferred"] ?? [])
+    deferred: new Set(options.state["~deferred"] ?? []),
+    drawn: new Set(options.state["~scoped"] as ReadonlyArray<string> | undefined)
+  }
+  let unadopted: Array<readonly [Instance, View.Child<any, any>]> | undefined
+  const settleUnadopted = () => {
+    const pending = unadopted
+    if (pending === undefined) return
+    unadopted = undefined
+    defer(() => {
+      for (const [inst, view] of pending) if (!inst.closed) settleWrites(inst, [view])
+      if (keeping.length > 0) flushKept()
+    })
   }
   let waitingState: Map<string, unknown> | undefined
+  const waitingUnder = new Map<string, Set<string>>()
+  const eachAbove = (path: string, f: (above: string) => void) => {
+    for (let cut = path.lastIndexOf("/"); cut > 0; cut = path.lastIndexOf("/", cut - 1)) f(path.slice(0, cut))
+  }
+  const setWaiting = (path: string, saved: unknown) => {
+    if (!(waitingState ??= new Map()).has(path)) {
+      eachAbove(path, (above) => {
+        let under = waitingUnder.get(above)
+        if (under === undefined) waitingUnder.set(above, under = new Set())
+        under.add(path)
+      })
+    }
+    waitingState.set(path, saved)
+  }
+  const dropWaiting = (path: string) => {
+    if (waitingState === undefined || !waitingState.delete(path)) return
+    eachAbove(path, (above) => {
+      const under = waitingUnder.get(above)
+      if (under !== undefined && under.delete(path) && under.size === 0) waitingUnder.delete(above)
+    })
+    if (waitingState.size === 0) waitingState = undefined
+  }
+  const forget = (path: string) => {
+    const under = waitingUnder.get(path)
+    if (under !== undefined) { for (const saved of Array.from(under)) dropWaiting(saved) }
+    dropWaiting(path)
+  }
   const addWaiting = (saved: unknown) => {
     if (saved === null || typeof saved !== "object") return
-    for (const path in saved) (waitingState ??= new Map()).set(path, (saved as Record<string, unknown>)[path])
+    for (const path in saved) setWaiting(path, (saved as Record<string, unknown>)[path])
   }
   if (hydrating !== undefined) {
     addWaiting(hydrating.state["~kept"])
     const state = hydrating.state
-    for (const path of (state["~scoped"] as ReadonlyArray<string> | undefined) ?? []) {
-      ;(waitingState ??= new Map()).set(path, state[path])
-    }
+    for (const path of hydrating.drawn) setWaiting(path, state[path])
   }
   // Slots still waiting for their Layer before they adopt, and whether the first render is done.
   let waiting = 0
@@ -1344,6 +1385,7 @@ const setup = (
     if (adoptedDone) return
     adoptedDone = true
     hydrating = undefined
+    settleUnadopted()
     // `adopted` completes at the end of this flush.
     reportPending = true
     // Head sync starts with the flush after adoption.
@@ -2722,6 +2764,8 @@ const setup = (
   const finishInstance = (inst: Instance): Effect.Effect<void> => {
     // However the instance goes, a removed ancestor and failure included, its owners forget it.
     if (inst.owners !== undefined) { for (const owner of inst.owners.values()) owner.readers?.delete(inst) }
+    if (writersLive > 0) endWrites(inst)
+    if (waitingState !== undefined) forget(inst.path)
     const waits = stopRuns(inst)
     if (waits.length === 0) {
       unmounted(inst)
@@ -3251,6 +3295,7 @@ const setup = (
     const first = guard(inst, "init", initOf)
     const component = inst.component
     let adopted = serverModel
+    if (first !== undefined && hooks !== undefined) addWaiting(hooks.restore("~kept" + rootPath))
     // An owner of shared state isn't restored from history: a reload would reopen what nobody hovers.
     if (
       first !== undefined && Option.isNone(adopted) && hooks !== undefined &&
@@ -3258,7 +3303,6 @@ const setup = (
     ) {
       const restored = hooks.restore(inst.path)
       if (restored !== undefined) {
-        addWaiting(hooks.restore("~kept" + rootPath))
         adopted = Option.map(
           stateCodecOf(component).decode(restored),
           (state) => ({ model: state.model, results: restoreQueries(component, state.results) })
@@ -3267,10 +3311,7 @@ const setup = (
     }
     if (first !== undefined && waitingState !== undefined) {
       const saved = waitingState.get(inst.path)
-      if (saved !== undefined) {
-        waitingState.delete(inst.path)
-        if (waitingState.size === 0) waitingState = undefined
-      }
+      if (saved !== undefined) dropWaiting(inst.path)
       if (saved !== undefined && Option.isNone(adopted)) {
         adopted = Option.map(
           stateCodecOf(component).decode(saved),
@@ -6701,7 +6742,7 @@ const setup = (
     const table = tableOf(author)
     let byKey = table.children.get(view.component)
     const entry = byKey?.get(view.key)
-    if (entry !== undefined && entry.view !== view) return blankText(range)
+    if (!isCurrent(table, view)) return blankText(range)
     const alive = aliveOf(view)
     if (alive !== undefined && !askAlive(author, table, alive, view)) {
       if (entry !== undefined) endKept(entry)
@@ -6729,10 +6770,7 @@ const setup = (
       at,
       drawer: inst,
       container: undefined,
-      round: table.round,
-      view,
-      writer: undefined,
-      wrote: -1
+      round: table.round
     }
     if (byKey === undefined) table.children.set(component, byKey = new Map())
     byKey.set(view.key, made)
@@ -6743,51 +6781,64 @@ const setup = (
 
   const tableOf = (author: Instance): KeptTable => {
     let table = keptTables.get(author)
-    if (table === undefined) keptTables.set(author, table = { round: 0, children: new Map(), ask: undefined })
-    return table
-  }
-
-  const forget = (path: string) => {
-    if (waitingState === undefined) return
-    for (const saved of waitingState.keys()) {
-      if (saved === path || saved.startsWith(path + "/")) waitingState.delete(saved)
+    if (table === undefined) {
+      keptTables.set(author, table = { round: 0, children: new Map(), writes: new Map(), ask: undefined })
     }
-    if (waitingState.size === 0) waitingState = undefined
+    return table
   }
 
   const noteWrites = (inst: Instance, written: ReadonlyArray<View.Child<any, any>> | undefined) => {
     const last = lastWrites.get(inst)
-    if (last !== undefined) {
-      lastWrites.delete(inst)
-      for (const entry of last) if (entry.writer === inst) entry.writer = undefined
-    }
-    if (written === undefined) return
+    if (last === undefined && written === undefined) return
     const author = inst.author
     const table = tableOf(author)
-    const seen = written.length > 1 ? new Set<string>() : undefined
+    if (last !== undefined) dropClaims(inst, table, last)
+    if (written === undefined) {
+      lastWrites.delete(inst)
+      writersLive--
+      return
+    }
+    if (last === undefined) writersLive++
+    lastWrites.set(inst, written)
     for (const view of written) {
-      if (seen !== undefined) {
-        const id = segment(view)
-        if (seen.has(id)) return failLater(author, new Error(`${author.path} writes ${id} twice in one render`))
-        seen.add(id)
+      let byKey = table.writes.get(view.component)
+      if (byKey === undefined) table.writes.set(view.component, byKey = new Map())
+      const claims = byKey.get(view.key)
+      if (claims === undefined) {
+        byKey.set(view.key, [{ by: inst, view }])
+        continue
       }
-      const entry = entryAt(author, view)
-      if (entry !== undefined && !ownWrite(inst, table, entry, view)) return
+      if (claims.some((claim) => claim.by === inst)) return failTwice(author, view)
+      claims.push({ by: inst, view })
+      defer(() => {
+        if (claims.filter((claim) => !claim.by.closed).length > 1 && !author.closed) failTwice(author, view)
+      })
     }
   }
-  const ownWrite = (inst: Instance, table: KeptTable, entry: Kept, view: View.Child<any, any>): boolean => {
-    if (entry.writer === inst && entry.view === view) return true
-    if (entry.writer !== undefined && entry.writer !== inst && entry.wrote === table.round) {
-      failLater(inst.author, new Error(`${inst.author.path} writes ${segment(view)} twice in one render`))
-      return false
+  const failTwice = (author: Instance, view: View.Child<any, any>) =>
+    failLater(author, new Error(`${author.path} writes ${segment(view)} twice in one render`))
+  const dropClaims = (inst: Instance, table: KeptTable, written: ReadonlyArray<View.Child<any, any>>) => {
+    for (const view of written) {
+      const byKey = table.writes.get(view.component)
+      const claims = byKey?.get(view.key)
+      if (claims === undefined) continue
+      const at = claims.findIndex((claim) => claim.by === inst)
+      if (at === -1) continue
+      claims.splice(at, 1)
+      if (claims.length === 0) byKey!.delete(view.key)
     }
-    entry.writer = inst
-    entry.wrote = table.round
-    entry.view = view
+  }
+  const endWrites = (inst: Instance) => {
     const last = lastWrites.get(inst)
-    if (last === undefined) lastWrites.set(inst, [entry])
-    else last.push(entry)
-    return true
+    if (last === undefined) return
+    const table = keptTables.get(inst.author)
+    if (table !== undefined) dropClaims(inst, table, last)
+    lastWrites.delete(inst)
+    writersLive--
+  }
+  const isCurrent = (table: KeptTable, view: View.Child<any, any>) => {
+    const claims = table.writes.get(view.component)?.get(view.key)
+    return claims !== undefined && claims[claims.length - 1].view === view
   }
 
   const settleWrites = (inst: Instance, written: ReadonlyArray<View.Child<any, any>>) => {
@@ -6795,10 +6846,7 @@ const setup = (
     const table = tableOf(author)
     for (const view of written) {
       const entry = entryAt(author, view)
-      if (entry !== undefined) {
-        if (!ownWrite(inst, table, entry, view)) return
-        if (entry.at?.v === view) continue
-      }
+      if (!isCurrent(table, view) || entry?.at?.v === view) continue
       const alive = aliveOf(view)
       if (alive !== undefined && !askAlive(author, table, alive, view)) {
         if (entry !== undefined) endKept(entry)
@@ -6816,14 +6864,12 @@ const setup = (
         }
         continue
       }
-      const inner = makeChild(
-        author,
-        view,
-        author.env,
-        undefined,
-        `${author.path}/${segment(view)}`,
-        Scope.forkUnsafe(author.scope, "sequential")
-      )
+      const path = `${author.path}/${segment(view)}`
+      if (hydrating?.drawn.has(path)) {
+        ;(unadopted ??= []).push([inst, view])
+        continue
+      }
+      const inner = makeChild(author, view, author.env, undefined, path, Scope.forkUnsafe(author.scope, "sequential"))
       if (inner._tag === "Child") {
         unhook(inner.inst)
         leaveOwners(inner.inst)
@@ -6836,17 +6882,13 @@ const setup = (
         at: undefined,
         drawer: author,
         container: undefined,
-        round: table.round,
-        view,
-        writer: undefined,
-        wrote: -1
+        round: table.round
       }
       let byKey = table.children.get(view.component)
       if (byKey === undefined) table.children.set(view.component, byKey = new Map())
       byKey.set(view.key, made)
       if (inner._tag === "Child") keptEntries.set(inner.inst, made)
       keptLive++
-      ownWrite(inst, table, made, view)
       keeping.push(made)
     }
   }
@@ -7095,7 +7137,7 @@ const setup = (
     const old = at.inner
     const entry = old._tag === "Text" ? undefined : entryAt(inst.author, view)
     if (entry !== undefined && entry.at === at) {
-      if (entry.view !== view) {
+      if (!isCurrent(entry.table, view)) {
         pull(entry)
         keep(entry)
         return at
@@ -7291,6 +7333,7 @@ const setup = (
   if (waiting === 0 && !adoptedDone) {
     adoptedDone = true
     hydrating = undefined
+    settleUnadopted()
     reportPending = true
   }
   // Mounting drains like a flush, its head fold included. `onMount` work runs after the commit, so its

@@ -28,3 +28,7 @@ The fixtures are written to `tmp`. Each shape is written twice: with children wr
 | `leaves` | 100 components, each with props, a Model, a message and one event.                                                                                                                                                                                                                 |
 | `owner`  | One component over all 100: a third always there, a third behind a condition and a third from a list, every one with props and an `onEmit` handler. The scoped owner writes the first two thirds in a scope without a predicate and the lists in one with a predicate, in a `div`. |
 | `deep`   | A chain of components, each one the child of the one above, 8 and 16 long.                                                                                                                                                                                                         |
+
+A file that only imports the library measures what the library itself costs a file that uses it. The deep chains are reported with that cost taken off.
+
+For `--lsp`, each edit adds a comment line at the top of the owner, so the completion position moves down a line with every edit. The script answers requests the server sends, such as `workspace/configuration`.

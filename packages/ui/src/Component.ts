@@ -1907,8 +1907,9 @@ export type OnChange<S, M, Msg> = M extends Query.Query.Any
   : never
 
 /**
- * Returns `true` if `u` is a component. It narrows to `Any` or `Scoped`:
- * check `definition.scoped` before calling it with `h` or `s`.
+ * Returns `true` if `u` is a component. It narrows to `Any` or `Scoped`, which
+ * can't be called, even after checking `definition.scoped`: render a component
+ * through its own type.
  *
  * @stability experimental
  * @category guards

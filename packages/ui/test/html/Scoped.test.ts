@@ -6,6 +6,7 @@ import { TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Context, Effect, Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
+import { collectGarbage } from "../utils/gc.ts"
 
 let inits = { avatar: 0, profile: 0, badge: 0 }
 const side = (count: number) => count === 0 ? "server" : "client"
@@ -205,7 +206,7 @@ const SlowPage = Component.define({
   })
 
 describe("scoped children in a receiver that waits for its Layer", () => {
-  it.live("stay in the document once the receiver adopts the server's nodes", () =>
+  it.live("keep the server's nodes once the receiver adopts them", () =>
     Effect.gen(function*() {
       leafInits = 0
       noteInits = 0
@@ -218,8 +219,58 @@ describe("scoped children in a receiver that waits for its Layer", () => {
         }),
         (element) => Effect.sync(() => element.remove())
       )
+      const field = app.querySelector("p")
       const root = yield* BrowserHost.mountEffect(SlowPage, {}, app, { state: rendered.state })
       yield* root.adopted
-      assert.strictEqual(app.querySelector("p")?.textContent, "server-draft")
+      assert.strictEqual(app.querySelector("p"), field)
     }).pipe(Effect.scoped))
+})
+
+describe("scoped children of a headless child", () => {
+  const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 0)))
+  it.effect.skipIf(process.versions.bun !== undefined || process.versions.deno !== undefined)(
+    "a kept one doesn't keep alive the closure's nodes once the headless child is removed",
+    () =>
+      Effect.gen(function*() {
+        const Editor = Component.define({
+          name: "Editor",
+          scoped: true,
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        }).make({ init: () => null, update: (model) => model, view: (_, h) => h.p("editor") })
+        const Pane = Component.define({
+          name: "Pane",
+          scoped: false,
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        }).make({ init: () => null, update: (model) => model, parts: () => ({}) })
+        const Page = Component.define({
+          name: "Page",
+          scoped: false,
+          model: Schema.Boolean,
+          message: Schema.Boolean,
+          elements: Html
+        }).make({
+          init: () => true,
+          update: (_, shown) => shown,
+          view: (shown, h) =>
+            h.scoped((s) =>
+              h.main(shown ? Pane(h, { key: "p", view: () => h.div(h.button("pane"), Editor(s, { key: "e" })) }) : null)
+            )
+        })
+        const app = yield* Effect.acquireRelease(
+          Effect.sync(() => document.body.appendChild(document.createElement("div"))),
+          (element) => Effect.sync(() => element.remove())
+        )
+        const root = yield* BrowserHost.mountEffect(Page, {}, app)
+        yield* tick
+        const button = new WeakRef(app.querySelector("button")!)
+        root.send(false)
+        yield* tick
+        yield* collectGarbage
+        assert.isUndefined(button.deref())
+      }).pipe(Effect.scoped)
+  )
 })
