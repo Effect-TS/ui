@@ -26,6 +26,7 @@ import { isNoop } from "./noop.ts"
 import {
   checkAuthorPlacements,
   checkAuthorRefs,
+  checkAuthorWrites,
   checkChildPaths,
   checkContentPaths,
   childName,
@@ -547,6 +548,7 @@ const expandRoot = <Msg>(
   const expanded = expand(view, "/" + name, 0, true, root, (label) => checkChildPaths(label, view), slotStatus)
   checkAuthorRefs("/" + name, written)
   checkAuthorPlacements("/" + name, written)
+  checkAuthorWrites("/" + name, written)
   if (replaced.length > 0) expandedChildren.set(expanded, replaced)
   // A root the expansion left as it was may be a node the component cached and another story shows,
   // and its children are all declared by the view itself, so it keeps nothing.

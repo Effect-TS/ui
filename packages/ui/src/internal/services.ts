@@ -36,8 +36,7 @@ export interface RootHandle {
   readonly snapshot: () => Record<string, unknown>
   /**
    * The Router navigated. It closes the cache's fetch-free window after hydration, if adoption
-   * hasn't yet. The Router calls it first in `set`, before the route changes and once the Models a pop
-   * restores are set. `leaves` is false for a quiet navigation, which stays on the page.
+   * hasn't yet. The Router calls it first in `set`, before the route changes.
    */
   readonly navigated: (leaves: boolean) => void
   /** The runtime's problems sink. */

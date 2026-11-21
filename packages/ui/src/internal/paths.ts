@@ -280,3 +280,27 @@ export const checkAuthorPlacements = (at: At, written: ReadonlyArray<ChildPaths>
     }
   }
 }
+
+/**
+ * Throws when two of `written`, as `checkAuthorRefs` takes them, hold a scoped
+ * child of one name and key. A scoped child's path is under its author wherever
+ * it's written, so the author wrote one child twice. Each tree's own are checked
+ * as it renders.
+ *
+ * @internal
+ */
+export const checkAuthorWrites = (at: At, written: ReadonlyArray<ChildPaths>): void => {
+  if (written.length < 2) return
+  const taken = new Set<string>()
+  for (const paths of written) {
+    if (paths.paths === undefined) continue
+    for (const byKey of paths.paths.values()) {
+      for (const child of byKey.values()) {
+        if (child.alive === undefined) continue
+        const named = segment(child)
+        if (taken.has(named)) throw new Error(`${pathAt(at)} writes ${named} twice in one render`)
+        taken.add(named)
+      }
+    }
+  }
+}
