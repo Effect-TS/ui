@@ -139,13 +139,15 @@ rejects.
 
 `Command.map`, `Command.asNoop` and `Command.match` are for a Command that
 can't know its caller's messages: one from a library, such as
-`Router.replace`, or one that two components issue. `Command.match` maps both
-channels of one that can fail:
+`Router.replace`, or one that two components issue. Map or silence one that
+can't fail with `Command.map` or `Command.asNoop`:
 
 ```ts
 Router.replace(AppRoute, route).pipe(Command.map((outcome) => Message.CompletedReplace({ outcome })))
 Router.replace(AppRoute, route).pipe(Command.asNoop)
 ```
+
+For one whose body can fail, `Command.match` maps both channels to messages.
 
 In a `Story` or `Scene`, a Command that returns a message resolves with the
 message: `s.resolve(SaveNote, NoteEditorMessage.SucceededSaveNote({ note }))`.
