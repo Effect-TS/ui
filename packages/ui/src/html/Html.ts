@@ -935,9 +935,11 @@ export class VoidElement<
    * the attribute. Merge objects with spread to keep earlier declarations.
    * Raw CSS text can still be set with `attr("style", text)`.
    *
-   * This writes the whole attribute, so styles set by `onMount` are lost when
-   * the style text changes. A Content Security Policy must allow inline style
-   * attributes (for example, `style-src-attr 'unsafe-inline'`). Values are not
+   * Declarations written through `element.style` (such as from `onMount`)
+   * survive when the view's style text changes and win over the view on the
+   * same property, except shorthands set to a `var()` value. A Content Security
+   * Policy must allow inline style attributes (for example,
+   * `style-src-attr 'unsafe-inline'`). Values are not
    * parsed: a semicolon can start another declaration. Do not pass untrusted
    * input as a raw value.
    *

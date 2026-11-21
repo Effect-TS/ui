@@ -998,6 +998,48 @@ export const makeHost = (
     host.setProp(node, name, value)
   }
 
+  let scratchStyle: CSSStyleDeclaration | undefined
+
+  const writeStyle = (element: globalThis.Element, value: string | undefined): void => {
+    if (value === undefined) element.removeAttribute("style")
+    else element.setAttribute("style", value)
+  }
+
+  const setStyle = (
+    element: globalThis.Element,
+    value: string | undefined,
+    previous: string | undefined
+  ): void => {
+    if ((element.getAttribute("style") ?? undefined) === previous) {
+      writeStyle(element, value)
+      return
+    }
+    const style = (element as HTMLElement).style
+    if (style === undefined) {
+      writeStyle(element, value)
+      return
+    }
+    if (scratchStyle === undefined) scratchStyle = document.createElement("div").style
+    scratchStyle.cssText = previous ?? ""
+    const kept: Array<readonly [string, string, string]> = []
+    for (let i = 0; i < style.length; i++) {
+      const prop = style[i]
+      const propValue = style.getPropertyValue(prop)
+      const propPriority = style.getPropertyPriority(prop)
+      if (
+        propValue !== scratchStyle.getPropertyValue(prop) ||
+        propPriority !== scratchStyle.getPropertyPriority(prop)
+      ) {
+        kept.push([prop, propValue, propPriority])
+      }
+    }
+    writeStyle(element, value)
+    for (let i = 0; i < kept.length; i++) {
+      const [prop, propValue, propPriority] = kept[i]
+      style.setProperty(prop, propValue, propPriority)
+    }
+  }
+
   const host: Renderer.Host<globalThis.Node> & { readonly dispose: () => void } = {
     createElement: (tag) =>
       elements.svgTags.has(tag) ? document.createElementNS(SVG, tag) : document.createElement(tag),
@@ -1017,11 +1059,15 @@ export const makeHost = (
       }
       return attrs
     },
-    setAttr(node, name, value) {
+    setAttr(node, name, value, previous) {
       const element = node as globalThis.Element
       const normalized = elements.attributeName(name, element.namespaceURI === SVG)
       if (normalized === undefined) return
       name = normalized
+      if (name === "style") {
+        setStyle(element, value, previous)
+        return
+      }
       if (value === undefined) element.removeAttribute(name)
       else element.setAttribute(name, value)
     },

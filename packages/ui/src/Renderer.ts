@@ -165,7 +165,13 @@ export interface Host<Node> {
   createElement(tag: string): Node
   createText(text: string): Node
   setText(node: Node, text: string): void
-  setAttr(node: Node, name: string, value: string | undefined): void
+  /**
+   * Sets or removes an attribute on `node`. `previous` is the value the
+   * renderer last set for `name` when patching, or the value read from the
+   * DOM when hydrating, and `undefined` when mounting or when `name` was not
+   * previously set.
+   */
+  setAttr(node: Node, name: string, value: string | undefined, previous?: string | undefined): void
   setProp(node: Node, name: string, value: unknown): void
   insertBefore(parent: Node, node: Node, ref: Node | undefined): void
   remove(node: Node): void

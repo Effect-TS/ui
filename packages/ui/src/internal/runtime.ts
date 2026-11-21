@@ -5755,7 +5755,8 @@ const setup = (
         if (kind?._tag !== "Element" || kind.tag !== view.tag) return undefined
         const next = host.nextOf(node)
         for (const name in view.attrs) {
-          if (hydration!.getAttr(node, name) !== view.attrs[name]) host.setAttr(node, name, view.attrs[name])
+          const current = hydration!.getAttr(node, name)
+          if (current !== view.attrs[name]) host.setAttr(node, name, view.attrs[name], current)
         }
         setEvents(inst, node, view)
         checkKeys(inst, view.children)
@@ -6175,11 +6176,12 @@ const setup = (
       next = host.normalizeAttrs(node, next)
     }
     for (const name in prev) {
-      if (typeof next[name] !== "string") host.setAttr(node, name, undefined)
+      if (typeof next[name] !== "string") host.setAttr(node, name, undefined, prev[name])
     }
     for (const name in next) {
       const value = next[name]
-      if (prev[name] !== value) host.setAttr(node, name, value)
+      const previous = typeof prev[name] === "string" ? prev[name] : undefined
+      if (previous !== value) host.setAttr(node, name, value, previous)
     }
   }
 
