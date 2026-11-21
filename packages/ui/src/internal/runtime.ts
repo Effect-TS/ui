@@ -3841,7 +3841,6 @@ const setup = (
     if (!countSends(inst, "its children")) return
     for (const { issued, send } of outbox) {
       if (inst.closed) return
-      // A headless instance wrote none of the tree it renders, so it sends only to the children it owns.
       const child = inst.owner === undefined ? findChild(inst.rendered, send.ref.key) : findOwned(inst, send.ref.key)
       const reason: MessageLog.SendDropped["reason"] | undefined = child === undefined
         ? "unrendered"
@@ -3862,7 +3861,6 @@ const setup = (
     }
   }
   const deliverEvents = (inst: Instance, events: ReadonlyArray<unknown>, entrySeq: number) => {
-    // The child's `onEmit` was written by the author of the tree it sits in, or by the instance that owns it.
     const parent = inst.declarer ?? inst.parent?.author
     for (const emitted of events) {
       if (inst.closed) return
