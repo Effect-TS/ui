@@ -115,8 +115,12 @@
  * close on focus leaving with it.
  *
  * The modal is the kit's, not the browser's: find-in-page and a script's
- * `focus()` still reach the page behind it, and close requests other than
- * Escape, such as Android's back gesture, don't reach it.
+ * `focus()` still reach the page behind it. On Android, in a browser with
+ * `CloseWatcher` such as Chrome, the back gesture asks the topmost open
+ * dialog to close, with `close-watcher`, and a refused close keeps it open as
+ * often as back is used. Firefox on Android has no `CloseWatcher`, so back
+ * doesn't reach the dialog there. On desktop and iOS, close requests other than
+ * Escape don't reach it.
  *
  * **Nesting**
  *
@@ -302,8 +306,9 @@ export type DialogProps = typeof DialogProps.Type
 
 /**
  * Why a dialog asks to close: a press on its open trigger, a press outside
- * the popup, Escape, a press on the close part, or focus leaving a dialog
- * with `modal: false`.
+ * the popup, Escape, a press on the close part, focus leaving a dialog with
+ * `modal: false`, or a close request from the browser, such as Android's back
+ * gesture.
  *
  * @stability experimental
  * @category schemas
@@ -314,7 +319,8 @@ export const DialogDismissReason = Schema.Literals([
   "outside-press",
   "escape-key",
   "close-press",
-  "focus-out"
+  "focus-out",
+  "close-watcher"
 ])
 
 /**
@@ -367,6 +373,7 @@ const Message = UiSchema.TaggedEnum({
   PressedEscape: {},
   PressedOutside: { pointerType: Schema.String },
   FocusedOutside: {},
+  RequestedClose: {},
   ShowedPortal: {},
   RenderedFirstFrame: {},
   FinishedTransition: { open: Schema.Boolean },
@@ -488,7 +495,16 @@ const TrackDialogArgs = {
 type TrackDialogArgs = Schema.Struct<typeof TrackDialogArgs>["Type"]
 
 let nextOrder = 0
-const showing: Array<{ readonly node: HTMLDialogElement; readonly order: number; readonly open: () => boolean }> = []
+const showing: Array<{
+  readonly node: HTMLDialogElement
+  readonly order: number
+  readonly open: () => boolean
+  readonly watch: (make: boolean) => void
+}> = []
+const rewatch = () => {
+  for (const entry of showing) entry.watch(false)
+  for (const entry of showing) entry.watch(true)
+}
 const orderOf = (node: Element): number => showing.findIndex((entry) => entry.node === node)
 const onTop = (node: HTMLDialogElement): boolean => {
   const mine = orderOf(node)
@@ -535,6 +551,15 @@ const finite = (animation: Animation): boolean => {
   return typeof end === "number" && Number.isFinite(end)
 }
 
+type CloseWatcher = EventTarget & { readonly destroy: () => void }
+
+const closeWatcherOf = (view: Window | null): (new() => CloseWatcher) | undefined => {
+  if (view === null) return undefined
+  const agent = view.navigator as Navigator & { readonly userAgentData?: { readonly platform: string } }
+  const android = agent.userAgentData?.platform === "Android" || /android/i.test(agent.userAgent)
+  return android ? (view as Window & { readonly CloseWatcher?: new() => CloseWatcher }).CloseWatcher : undefined
+}
+
 const onScrollbar = (target: EventTarget | null, event: MouseEvent): boolean => {
   if (!(target instanceof HTMLElement)) return false
   const document = target.ownerDocument
@@ -562,8 +587,31 @@ const TrackDialog = Mount.makeStream(
       let current: TrackDialogArgs = args
       const send = (message: Message) => Queue.offerUnsafe(queue, message)
       const popup = (): HTMLElement => (document.getElementById(current.popupId) as HTMLElement | null) ?? node
-      const entry = { node, order: ++nextOrder, open: () => current.open }
+      const controller = new AbortController()
+      const { signal } = controller
       const topmost = () => current.topmost && onTop(node)
+      const Watcher = closeWatcherOf(view)
+      let watcher: CloseWatcher | undefined
+      const watch = (make: boolean) => {
+        if (Watcher === undefined) return
+        if (signal.aborted || !current.open || !topmost()) {
+          watcher?.destroy()
+          watcher = undefined
+        } else if (make && watcher === undefined) {
+          const made = new Watcher()
+          made.addEventListener("cancel", (event) => {
+            if (event.cancelable) event.preventDefault()
+            send(Message.RequestedClose())
+          })
+          made.addEventListener("close", () => {
+            if (watcher !== made) return
+            watcher = undefined
+            frame(() => watch(true))
+          })
+          watcher = made
+        }
+      }
+      const entry = { node, order: ++nextOrder, open: () => current.open, watch }
       const controls = `[aria-controls="${CSS.escape(args.portalId)}"]`
       const anyTrigger = `${controls},[data-dialog-trigger="${CSS.escape(args.portalId)}"]`
       const onTrigger = (target: Node): boolean =>
@@ -759,6 +807,7 @@ const TrackDialog = Mount.makeStream(
         current = next
         if (next.open && next.triggerId !== previous.triggerId) trigger = findTrigger() ?? trigger
         if (next.open !== previous.open || next.modal !== previous.modal) hold()
+        if (next.open !== previous.open || next.topmost !== previous.topmost) rewatch()
         if (previous.open && !next.open) {
           pressed = undefined
         } else if (!previous.open && next.open) {
@@ -773,9 +822,6 @@ const TrackDialog = Mount.makeStream(
         if (wait === undefined) generation++
         else settle(wait)
       }
-
-      const controller = new AbortController()
-      const { signal } = controller
 
       return Effect.acquireRelease(
         Effect.sync(() => {
@@ -796,6 +842,7 @@ const TrackDialog = Mount.makeStream(
             attributeFilter: ["class", "style", "hidden"]
           })
           hold()
+          rewatch()
           raiseAbove(node)
           if (!current.mounted) send(Message.ShowedPortal())
           opening(active)
@@ -806,6 +853,8 @@ const TrackDialog = Mount.makeStream(
           Effect.sync(() => {
             showing.splice(showing.indexOf(entry), 1)
             controller.abort()
+            watch(false)
+            rewatch()
             observer.disconnect()
             page.disconnect()
             release?.()
@@ -1042,6 +1091,8 @@ export const Dialog = Component.define({
       $.props.open && topmost(model) && $.props.disablePointerDismissal !== true
         ? dismiss(model, $, "outside-press", methodOf(pointerType))
         : model,
+    RequestedClose: (model, _message, $) =>
+      $.props.open && topmost(model) ? dismiss(model, $, "close-watcher", null) : model,
     FocusedOutside: (model, _message, $) =>
       $.props.open && topmost(model) && $.props.modal === false && $.props.disablePointerDismissal !== true
         ? dismiss(model, $, "focus-out", null)

@@ -44,15 +44,16 @@
  * **Keyboard**
  *
  * The trigger and the close button are native buttons, so Enter and Space
- * press them. Escape asks the alert dialog to close, with `escape-key`.
+ * press them. Escape asks the alert dialog to close, with `escape-key`, and so
+ * does the back gesture on Android, with `close-watcher`, as in a `Dialog`.
  * Focus moves into the popup when it opens, stays inside while it shows, and
  * goes back to the trigger once its exit ends, as in a modal `Dialog`. Put
  * `initialFocus` on the least destructive answer, such as Cancel.
  *
  * **Dismissal**
  *
- * The alert dialog asks to close only from its trigger, its close part and
- * Escape. A press outside the popup, on the backdrop included, asks nothing.
+ * The alert dialog asks to close only from its trigger, its close part,
+ * Escape and the back gesture on Android. A press outside the popup, on the backdrop included, asks nothing.
  * Answers other than closing, such as Discard, are the consumer's buttons,
  * which send the consumer's messages.
  *
@@ -172,8 +173,8 @@ const alert = (node: View.ElementBuilder<any, any, any, any>) => node.attr("role
  *
  * It declares a `Dialog` with `modal: true` and `disablePointerDismissal:
  * true`, so it emits the `Dialog`'s events. `Dismissed` carries
- * `trigger-press`, `escape-key` or `close-press`, never `outside-press` or
- * `focus-out`.
+ * `trigger-press`, `escape-key`, `close-press` or `close-watcher`, never
+ * `outside-press` or `focus-out`.
  *
  * On top of the `Dialog`'s attributes, the portal's `role="alertdialog"` wins
  * over the consumer's, whether the consumer set it on the builder it passes
