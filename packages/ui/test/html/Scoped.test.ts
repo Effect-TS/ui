@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, Query, UiSchema } from "@effect/ui"
+import { Command, Component, Query, Route, Router, UiSchema } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
@@ -890,6 +890,109 @@ describe("scoped children in a receiver that waits for its Layer", () => {
       assert.strictEqual(app.querySelector("input"), field)
       assert.strictEqual(field.value, "typed")
     }).pipe(Effect.scoped))
+
+  it.effect("leave the one field drawn after them, which takes an edit once, when moved out of the slot", () =>
+    Effect.gen(function*() {
+      const Lead = Component.define({
+        name: "Lead",
+        scoped: false,
+        props: Schema.Struct({ moved: Schema.Boolean }),
+        model: Schema.String,
+        message: Schema.String,
+        elements: Html
+      }).make({
+        init: () => "",
+        update: (text, typed) => text + typed,
+        view: (text, h) =>
+          h.scoped((s) => {
+            const row = Row(s, { key: "r" })
+            return h.main(
+              Bare(h, { key: "g", slots: { body: h.props.moved ? null : row } }),
+              h.article(h.props.moved ? row : null, h.input.value(text).onInput(({ value }) => value)),
+              h.em(text)
+            )
+          })
+      })
+      const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Lead, { moved: false }))
+      const field = app.querySelector("input")!
+      const root = yield* BrowserHost.mountEffect(Lead, { moved: true }, app, { state })
+      yield* open
+      yield* root.adopted
+      field.value = "typed"
+      field.dispatchEvent(new Event("input", { bubbles: true }))
+      yield* tick
+      assert.deepStrictEqual(Array.from(app.querySelectorAll("input")), [field])
+      assert.strictEqual(app.querySelector("em")!.textContent, "typed")
+    }).pipe(Effect.scoped))
+
+  it.effect.each([[0, "client"], [1, "server"]] as const)(
+    "after a Back while a receiver waits, when first drawn %i entries forward of it, start as the %s's",
+    ([forward, drawn]) =>
+      Effect.gen(function*() {
+        let from = "server"
+        const Draft = Component.define({
+          name: "Draft",
+          scoped: true,
+          model: Schema.String,
+          message: Schema.Never,
+          elements: Html
+        }).make({ init: () => from, update: (text) => text, view: (text, h) => h.em(text) })
+        const Routes = Route.union({
+          Form: Route.make("/form", { search: { q: Schema.optional(Schema.String) } })
+        })
+        const Message = UiSchema.TaggedEnum({ Changed: { route: Routes }, Go: {}, Went: {}, Draw: {} })
+        const App = Component.define({
+          name: "App",
+          scoped: false,
+          props: Schema.Struct({ route: Routes }),
+          model: Schema.Struct({ route: Routes, draws: Schema.Boolean }),
+          message: Message,
+          elements: Html
+        }).make({
+          init: ($) => ({ route: $.props.route, draws: from === "server" }),
+          update: (model, message, $) =>
+            Message.match(message, {
+              Changed: ({ route }) => ({ ...model, route }),
+              Go: () =>
+                $.run(Router.push(Routes, Routes.Form({ search: { q: "q" } })).pipe(Command.map(() => Message.Went()))),
+              Went: () => model,
+              Draw: () => ({ ...model, draws: true })
+            }),
+          subscriptions: (model) => [Router.subscription(Routes, model.route, (route) => Message.Changed({ route }))],
+          view: (model, h) =>
+            h.main(Gated(h, { key: "g", slots: { body: null } }), model.draws ? h.scoped((s) => Draft(s, {})) : null)
+        })
+        const history = Router.memoryHistory("/form")
+        const routed = Effect.provide(Router.make({ routes: Routes, history }))
+        from = "client"
+        yield* Effect.gen(function*() {
+          const first = yield* BrowserHost.mountEffect(App, Router.props(Routes), document.createElement("div"))
+          first.send(Message.Go())
+          yield* tick
+        }).pipe(Effect.scoped, routed)
+        from = "server"
+        const { app, open, state } = yield* serve(
+          HtmlServer.renderToHtml(App, Router.props(Routes)).pipe(
+            Effect.provide(Router.make({ routes: Routes, history: Router.memoryHistory("/form?q=q") }))
+          )
+        )
+        from = "client"
+        yield* Effect.gen(function*() {
+          const root = yield* BrowserHost.mountEffect(App, Router.props(Routes), app, {
+            state: { ...state, "/App": { ...(state["/App"] as object), draws: false } }
+          })
+          history.go(-1)
+          yield* tick
+          yield* open
+          yield* root.adopted
+          history.go(forward)
+          yield* tick
+          root.send(Message.Draw())
+          yield* tick
+          assert.strictEqual(app.querySelector("em")!.textContent, drawn)
+        }).pipe(routed)
+      }).pipe(Effect.scoped)
+  )
 
   const moving = () => {
     let inits = 0

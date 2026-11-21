@@ -1468,19 +1468,29 @@ const setup = (
     }
   }
   const takenAt = new WeakMap<Array<Rendered>, number>()
+  const heldAt = new WeakMap<Array<Rendered>, Map<unknown, number>>()
   const rangeOf = (from: Served | undefined): Range | undefined => {
     if (from === undefined || host.parentOf(from.range.open) === undefined) return undefined
     const list = from.waiter.rendered
     if (from.waiter.waiting && Array.isArray(list)) {
       const open = from.range.open
-      const near = takenAt.get(list) ?? 0
-      let at = near
-      while (at < list.length && (list[at] as RText).node !== open) at++
-      if (at === list.length) {
-        at = near - 1
-        while (at >= 0 && (list[at] as RText).node !== open) at--
+      let at = takenAt.get(list) ?? 0
+      if ((list[at] as RText | undefined)?.node !== open) {
+        let held = heldAt.get(list)
+        if (held === undefined) {
+          heldAt.set(list, held = new Map())
+          for (let index = 0; index < list.length; index++) held.set((list[index] as RText).node, index)
+        }
+        const first = held.get(open) ?? list.length
+        at = 0
+        let end = list.length
+        while (at < end) {
+          const middle = (at + end) >> 1
+          if (held.get((list[middle] as RText).node)! < first) at = middle + 1
+          else end = middle
+        }
       }
-      if (at >= 0) {
+      if ((list[at] as RText | undefined)?.node === open) {
         list.splice(at, rangeNodes(from.range).length)
         takenAt.set(list, at)
       }
@@ -6207,9 +6217,10 @@ const setup = (
           : undefined
         if (range === undefined) {
           if (view._tag !== "Child" || view.alive === undefined) return undefined
-          adoptedUpTo = node
           created++
-          return createChild(inst, view, env)
+          const made = createChild(inst, view, env)
+          adoptedUpTo = node
+          return made
         }
         const next = host.nextOf(range.close)
         // A child's content matches itself against the range, as an outlet's does, and builds fresh what doesn't.
@@ -7753,7 +7764,9 @@ const setup = (
       navigated: (leaves, pops) => {
         closeWindow()
         if ((leaves || pops) && waitingState !== undefined) {
-          for (const path of Array.from(waitingState.keys())) if (!hydrating?.drawn.has(path)) dropWaiting(path)
+          for (const path of Array.from(waitingState.keys())) {
+            if (servedIn?.get(path)?.view === undefined) dropWaiting(path)
+          }
         }
         if (leaves) {
           restoredAt = instancesMade
