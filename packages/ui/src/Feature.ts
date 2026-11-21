@@ -108,7 +108,7 @@ export interface Service<in out Self, in out Props, in out Events, in out Receiv
   /** The Schema of the messages a parent may send. `Schema.Never` when it declares none. */
   readonly receives: Schema.Codec<Receives, any>
   /** A ref for this feature's children, so a parent can send them messages. */
-  readonly ref: (name: string) => Component.Ref.Of<Receives>
+  readonly ref: <const N extends string>(name: N) => Component.Ref.Of<Receives, Component.Ref.Dynamic<N>>
   /**
    * Declares a child of this feature in a parent's view, from the parent's
    * `h`. The parent requires the service only. `fallback` is required: the

@@ -1,24 +1,3 @@
-// Type-checking cost of scoped children against the same shapes written with `h`, as on `main`.
-//
-// Run from the repository root:
-//
-//   node packages/ui/benchmark/types/run.mjs [--main] [--lsp] [--sessions <n>] [--json <file>] [--base <file>]
-//
-// Counts are instantiations from `tsc --singleThreaded --extendedDiagnostics` (TypeScript 7) with the
-// Effect plugin off. `--singleThreaded` makes the count independent of how files are split across checker
-// threads. `--lsp` also times `tsc --lsp --stdio` on the 100-wide owner: diagnostics after an edit and a
-// completion at `h.`, the median of 10 edits, for each of `--sessions` sessions that measure the inline
-// owner and then the scoped one. `--main` writes only the inline fixtures, without `scoped`, for a checkout
-// of `main`, and `--base` reads that run's `--json` to compare with it. It exits non-zero over a ceiling.
-//
-// The fixtures, written to `tmp`, are each shape twice: with children written with `h`, as on `main`,
-// and as scoped components written with the `s` of `h.scoped`.
-//
-//   leaves  100 components, each with props, a Model, a message and one event.
-//   owner   one component over all 100: a third always there, a third behind a condition and a third
-//           from a list, every one with props and an `onEmit` handler. The scoped owner writes the first
-//           two thirds in a scope without a predicate and the lists in one with a predicate, in a `div`.
-//   deep    a chain of components, each one the child of the one above, 8 and 16 long.
 import { execFileSync, spawn } from "node:child_process"
 import * as fs from "node:fs"
 import * as path from "node:path"
@@ -143,7 +122,6 @@ export const L${i} = Component.define({
   return out.join("\n")
 }
 
-// Writes every fixture into `dir` and returns the file name of each.
 const generate = (dir) => {
   fs.rmSync(dir, { recursive: true, force: true })
   fs.mkdirSync(dir, { recursive: true })
@@ -170,7 +148,6 @@ const root = path.resolve(import.meta.dirname, "../../../..")
 const dir = path.join(import.meta.dirname, "tmp")
 const tsc = path.join(root, "node_modules/.bin/tsc")
 
-// The ceilings EFF-4042 sets for the scoped shapes.
 const ceilings = {
   leaves: 1_060_000,
   owner: 150_000,
@@ -200,7 +177,6 @@ const config = (names) => ({
     }
   }
 })
-// The language server opens the owner in this project.
 fs.writeFileSync(path.join(dir, "tsconfig.json"), JSON.stringify(config(files), null, 2))
 
 const count = (file) => {
@@ -231,7 +207,6 @@ const measures = {
   deepRatio: measure((shape) => (n(`${shape}-deep16`) - n("imports")) / (n(`${shape}-deep8`) - n("imports")))
 }
 
-// Drives `tsc --lsp --stdio` on one file: after each edit, pull diagnostics, then a completion after `marker`.
 const lsp = async (file, marker, runs = 10) => {
   const uri = pathToFileURL(file).href
   const text = fs.readFileSync(file, "utf8")

@@ -152,6 +152,13 @@ describe("scoped", () => {
     h.scoped((s) => NoteEditor(s, { ref: Editors.at(id as "pinned" | `row-${string}`), props: { noteId: id } }))
     // @ts-expect-error "~dynamicKey"
     h.scoped((s) => NoteEditor(s, { ref: NoteEditor.ref(id), props: { noteId: id } }))
+    class Rows extends Feature.Service<Rows>()("Rows", {
+      props: Schema.Struct({}),
+      receives: EditorMessage.cases.Focus
+    }) {}
+    expect(h.scoped((s) => NoteEditor(s, { ref: Rows.ref("main"), props: { noteId: id } }))).type.not.toRaiseError()
+    // @ts-expect-error "~dynamicKey"
+    h.scoped((s) => NoteEditor(s, { ref: Rows.ref(id), props: { noteId: id } }))
     type Focus = Extract<typeof EditorMessage.Type, { readonly _tag: "Focus" }>
     const forwarded = (ref: Component.Ref.Within<Focus>) =>
       // @ts-expect-error "~dynamicKey"
@@ -231,6 +238,11 @@ describe("scoped", () => {
     class Notes extends Feature.Service<Notes>()("Notes", { props: Schema.Struct({}) }) {}
     // @ts-expect-error "written inside h.scoped((s) => ...)"
     Notes.toLayer(Wide)
+    const found: unknown = Wide
+    if (Component.isComponent(found)) {
+      // @ts-expect-error This expression is not callable
+      found(h, {})
+    }
   })
 
   it("rejects scoped: true on a headless component", () => {

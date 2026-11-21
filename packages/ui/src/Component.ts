@@ -344,10 +344,8 @@ export interface Ref<in out Rcv, out Dynamic extends boolean = boolean> {
    */
   readonly "~dynamicKey"?: Dynamic
   /** A ref for one row: `Row.at(id)`. */
-  readonly at: <const K extends string | number>(key: K) => Ref<Rcv, Dynamic | DynamicKey<K>>
+  readonly at: <const K extends string | number>(key: K) => Ref<Rcv, Dynamic | Ref.Dynamic<K>>
 }
-
-type DynamicKey<K extends string | number> = true extends WideKey<`${K}`> ? true : false
 
 type WideKey<K extends string> = K extends unknown ? {} extends Record<K, 1> ? true : false : never
 
@@ -429,6 +427,16 @@ export declare namespace Ref {
    * @since 0.1.0
    */
   export type Of<Rcv, Dynamic extends boolean = false> = 0 extends 1 & Rcv ? Any : Ref<Rcv, Dynamic>
+
+  /**
+   * `true` when a ref's name or `at` key `K` isn't a literal, or is a union
+   * with a member that isn't, such as `string` or `\`row-${string}\``.
+   *
+   * @stability experimental
+   * @category utility types
+   * @since 0.1.0
+   */
+  export type Dynamic<K extends string | number> = true extends WideKey<`${K}`> ? true : false
 }
 
 /**
@@ -1189,7 +1197,7 @@ export interface Members<
   /** The Schema of the messages a parent may send: the cases of `message` listed in `receives`. */
   readonly receives: Schema.Codec<Rcv, any>
   /** A ref for this component's children, so a parent can send them messages. */
-  readonly ref: <const N extends string>(name: N) => Ref.Of<Rcv, DynamicKey<N>>
+  readonly ref: <const N extends string>(name: N) => Ref.Of<Rcv, Ref.Dynamic<N>>
   readonly init: (props: Props) => Next<Model, Msg, Events, R>
   readonly update: (model: Model, msg: Msg, props: Props, queries?: Results | undefined) => Next<Model, Msg, Events, R>
   readonly view: (
@@ -1339,7 +1347,7 @@ export interface Headless<
   /** The Schema of the messages a parent may send: the cases of `message` listed in `receives`. */
   readonly receives: Schema.Codec<Rcv, any>
   /** A ref for a child of this component, which a parent renders it with to send it messages. */
-  readonly ref: <const N extends string>(name: N) => Ref.Of<Rcv, DynamicKey<N>>
+  readonly ref: <const N extends string>(name: N) => Ref.Of<Rcv, Ref.Dynamic<N>>
   readonly init: (props: Props) => Next<any, any, Events, R>
   readonly update: (model: any, msg: never, props: Props, queries?: Results | undefined) => Next<any, any, Events, R>
   /** The parts for one render: plain values and decorators stamped with `owner`. */
@@ -1899,13 +1907,14 @@ export type OnChange<S, M, Msg> = M extends Query.Query.Any
   : never
 
 /**
- * Returns `true` if `u` is a component.
+ * Returns `true` if `u` is a component. It narrows to `Any` or `Scoped`:
+ * check `definition.scoped` before calling it with `h` or `s`.
  *
  * @stability experimental
  * @category guards
  * @since 0.1.0
  */
-export const isComponent = (u: unknown): u is Any => Predicate.hasProperty(u, TypeId)
+export const isComponent = (u: unknown): u is Any | Scoped<any, any, any, never> => Predicate.hasProperty(u, TypeId)
 
 // A component is a function, so the prototypes keep `call`, `apply` and `bind`.
 const Proto = Object.assign(Object.create(Function.prototype), {
