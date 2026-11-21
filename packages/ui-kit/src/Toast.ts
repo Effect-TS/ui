@@ -40,7 +40,7 @@
  * `viewport` takes the consumer's builder. Every other part takes
  * `{ element, toast }`, with a toast from the parts' `toasts`, and returns
  * the builder for the consumer to chain on and fill:
- * `t.title({ element: h.strong, toast }).children(toast.title)`. `root` sets
+ * `toastProvider.title({ element: h.strong, toast }).children(toast.title)`. `root` sets
  * the element's key to the toast's `id`, so a toast keeps its element as
  * the list changes. The viewport adds, after the consumer's children, a
  * visually hidden alert for each high-priority toast.
@@ -84,10 +84,22 @@
  * again from the full timeout when it resumes. A toast added while paused
  * waits for the resume.
  *
+ * **Layering**
+ *
+ * The viewport is a manual popover, shown while the provider is drawn, so
+ * it sits in the top layer above the page. When a `Dialog` shows, the
+ * viewport shows itself again to stay in front of it, so its toasts can be
+ * pressed while a modal is open. `z-index` on the viewport has no effect.
+ *
+ * The browser gives a popover its own box: `position: fixed`, `inset: 0`,
+ * `margin: auto`, a border, padding, `overflow: auto` and the `Canvas`
+ * colors. The viewport keeps that box, so its CSS places it, for example
+ * `inset: auto 1rem 1rem auto; margin: 0; border: 0; padding: 0;
+ * background: none; overflow: visible`.
+ *
  * **Limits**
  *
- * The toasts render where the viewport is, so place it with CSS, such as
- * `position: fixed`. Toasts anchored to another element, swiping a toast
+ * Toasts anchored to another element, swiping a toast
  * away, and adding a toast from outside the component tree aren't
  * supported. Code outside the tree reaches the app through a Command result,
  * whose `update` can send to the provider.
@@ -120,14 +132,14 @@
  *   update: (model) => model,
  *   view: (_, h) =>
  *     ToastProvider(h, {
- *       view: (t) =>
+ *       view: (toastProvider) =>
  *         h.div(
  *           Editor(h, {}),
- *           t.viewport(h.div.class("toasts")).children(
- *             ...t.toasts.map((toast) =>
- *               t.root({ element: h.div.class("toast"), toast }).children(
- *                 t.title({ element: h.strong, toast }).children(toast.title),
- *                 t.close({ element: h.button, toast }).children("Dismiss")
+ *           toastProvider.viewport(h.div.class("toasts")).children(
+ *             ...toastProvider.toasts.map((toast) =>
+ *               toastProvider.root({ element: h.div.class("toast"), toast }).children(
+ *                 toastProvider.title({ element: h.strong, toast }).children(toast.title),
+ *                 toastProvider.close({ element: h.button, toast }).children("Dismiss")
  *               )
  *             )
  *           )
@@ -155,6 +167,7 @@ import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { flag, visuallyHidden, withStyle } from "./internal/attributes.ts"
+import { keepOnTop } from "./internal/topLayer.ts"
 
 /**
  * The content of a toast, as a sender posts it in `AddedToast`.
@@ -466,6 +479,7 @@ const TrackViewport = Mount.makeStream(
         }
         yield* Effect.acquireRelease(
           Effect.sync(() => {
+            const unkeep = keepOnTop(node)
             const observer = new MutationObserver(handOff)
             observer.observe(node, { subtree: true, attributes: true, attributeFilter: ["data-ending-style"] })
             const controller = new AbortController()
@@ -475,6 +489,7 @@ const TrackViewport = Mount.makeStream(
             node.addEventListener("focusin", onFocusIn, { signal })
             node.addEventListener("focusout", onFocusOut, { signal })
             return () => {
+              unkeep()
               observer.disconnect()
               controller.abort()
             }
@@ -586,7 +601,7 @@ const withToast = <Tag extends string, R>(part: View.Part<Tag, [toast: ToastItem
 /**
  * Keeps the app's toasts, and draws them with the consumer's markup where it
  * places the viewport. Call it once near the root with a `view` closure that
- * holds the app's body and the toasts, drawn with `t.toasts` and the parts.
+ * holds the app's body and the toasts, drawn with `toastProvider.toasts` and the parts.
  *
  * **Details**
  *
@@ -711,6 +726,7 @@ export const ToastProvider = Component.define({
         .attr("data-expanded", flag(expanded))
         .on("mouseenter", Message.EnteredViewport())
         .on("mouseleave", Message.LeftViewport())
+        .popover("manual", true)
         .onMount(TrackViewport({ empty, hovering: model.hovering }).pipe(Mount.map((fact) => Message[fact]())))
         .forward((node) => {
           const labelled = node.attrs["aria-label"] === undefined ? node.attr("aria-label", "Notifications") : node

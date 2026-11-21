@@ -6,8 +6,8 @@ description: Port one Base UI component into packages/ui-kit as an unstyled Effe
 # Port a Base UI component into ui-kit
 
 One run ports one component. If the port needs another ui-kit
-component that doesn't exist yet, such as a Form, a Popover or a positioning
-helper, stop and open a separate issue for it. When the missing piece only
+component that doesn't exist yet, such as a Form or a Popover, stop and open a
+separate issue for it. When the missing piece only
 backs an optional feature, leave it out and document any resulting limitation in ui-kit terms.
 
 Read [references/conventions.md](references/conventions.md) before step 3.
@@ -91,6 +91,8 @@ Work top to bottom. Put the notes from steps 1 to 3 in the PR description.
      component with `HtmlServer.renderToHtml` and throws unless the HTML
      shows one thing, such as the consumer's class next to the part's role.
    - Add `@since`, `@category` and `@stability experimental` to every export.
+   - Name the parts argument after the component in the JSDoc, the README
+     and the tests, as the "Call shape" section of the conventions says.
    - Add the component to `packages/ui-kit/README.md`.
    - Add a changeset: `"@effect/ui-kit": minor`.
    - Run each of these with `nix develop -c`: `pnpm lint`, `pnpm check`,

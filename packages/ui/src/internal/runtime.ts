@@ -550,7 +550,7 @@ export interface Instance {
   // empty Map or Set costs about 150 bytes.
   /** `Unmounted` is logged: the instance left the tree, though its Scope may still be closing. */
   left: boolean
-  /** How many instances that declare a head are in the tree at or below it: see `declaresHead`. */
+  /** How many instances whose component has a `head` are in the tree at or below it. */
   heads: number
   /** The containers of the detached children its view declares, unregistered when it leaves. */
   parked: Set<unknown> | undefined
@@ -803,20 +803,15 @@ const neutralFold: View.HeadFold<Head.Entry, Head.Head> = { merge: Head.merge, t
 
 /** The fold of a component's vocabulary, or the title-only one. */
 const foldOf = (component: Component.Any): View.HeadFold => component.elements()?.head ?? neutralFold
-/** Whether an instance of `component` can add to the head: it has entries of its own, or reduces the ones below it. */
-const declaresHead = (component: Component.Any): boolean =>
-  component.head !== undefined || component.reduceHead !== undefined
 
-/** One instance's part of the head, over its state when it was read: its entries, its reducer and the instances it placed. */
 interface HeadPart {
   readonly inst: Instance
   readonly entries: ReadonlyArray<unknown>
-  readonly reduce: ((below: unknown) => unknown) | undefined
   readonly children: ReadonlyArray<Instance>
 }
 
 /** A tree with no entries, which folds to the vocabulary's empty head. */
-const emptyTree: Head.Tree<any, any> = { entries: [], children: [] }
+const emptyTree: Head.Tree<any> = { entries: [], children: [] }
 
 /** An entry about an instance, without what `record` adds. */
 type Draft = MessageLog.InstanceEntry extends infer E
@@ -831,7 +826,10 @@ let sessions = 0
 /** Each runtime's interrupter id for the Layer builds it ends: negative, so never a fiber's. */
 let buildInterrupters = 0
 
-/** The server's nodes for one instance: between its two markers. */
+/**
+ * The server's nodes for one instance: between its two markers, or the one element of a child written
+ * without them, which is then both `open` and `close`.
+ */
 interface Range {
   readonly open: unknown
   readonly close: unknown
@@ -1038,11 +1036,13 @@ const serializeTree = (
         if (inst.component.layer !== undefined) ship(path, inst.env.status)
       }
     }
-    sink.enter(path)
+    const bare = !inner && inst.parent !== undefined && inst.component.layer === undefined &&
+      !Array.isArray(inst.rendered) && inst.rendered?._tag === "Element"
+    if (!bare) sink.enter(path)
     if (inst.failure === undefined) {
       for (const rendered of listOf(inst.rendered)) serialize(inst, rendered, inner)
     }
-    sink.leave(path)
+    if (!bare) sink.leave(path)
   }
   const serialize = (inst: Instance, rendered: Rendered, under: boolean): void => {
     switch (rendered._tag) {
@@ -1707,11 +1707,6 @@ const setup = (
     runCommitted()
     checkIdle()
   }
-  /**
-   * Renders what's dirty, runs deferred work and folds the head, until none
-   * is left. A `head`, `reduceHead` or title template that throws fails its
-   * instance, so the fallback renders and the head is folded again.
-   */
   function drain() {
     draining = true
     try {
@@ -1778,9 +1773,6 @@ const setup = (
   let viewChanged = false
   // The root vocabulary's fold, or the title-only one.
   const rootFold = foldOf(component)
-  // Under a root fold that folds a subtree with no entries and no `reduce` to nothing, such subtrees
-  // are left out of the tree: most instances, such as a list's rows, have no head. A host-neutral root
-  // may hand the fold to a vocabulary that sees every node, so its tree is built whole.
   const skipsEmpty = rootFold !== neutralFold && headFold.skipsEmpty(rootFold.merge)
   const emptyHead: unknown = rootFold.merge(emptyTree)
   let merged: unknown = emptyHead
@@ -1801,12 +1793,6 @@ const setup = (
   let rootInstance: Instance | undefined
   let handle: services.RootHandle | undefined
 
-  /**
-   * One instance's part of the head, read now: its entries, its `reduceHead` over its Model and the
-   * instances its view placed. A closed or failed instance has none, and nor does one still waiting to
-   * adopt, whose Model isn't there yet, or one whose `head` throws, which `onError` is told. With
-   * `below` false the instances it placed aren't looked for: none of them has a part the fold keeps.
-   */
   const headPart = (
     inst: Instance,
     onError: (inst: Instance, error: unknown) => void,
@@ -1823,14 +1809,12 @@ const setup = (
         return undefined
       }
     }
-    const reduce = inst.component.reduceHead
-    const model = inst.model
     let children: Array<Instance> = emptyList
     if (below) {
       children = []
       for (const rendered of listOf(inst.rendered)) placed(rendered, children)
     }
-    return { inst, entries, reduce: reduce === undefined ? undefined : (below) => reduce(model, below), children }
+    return { inst, entries, children }
   }
   /** Adds the instances a rendered node places to `out`, in document order: a fallback's content included. */
   const placed = (rendered: Rendered, out: Array<Instance>): void => {
@@ -1854,15 +1838,6 @@ const setup = (
         return
     }
   }
-  /**
-   * Folds the head of the tree under `root`, one node per instance that `partOf` has a part for. What
-   * throws in the fold is `onError`'s, with the instance that declared it.
-   *
-   * The fold is the root vocabulary's, or under a host-neutral root, the first vocabulary's in the tree
-   * with a fold of its own, so an Html child keeps its entries. A `reduceHead` of another vocabulary
-   * than the fold's has its value laid over `below`: a host-neutral one sets the title and keeps the Html
-   * fields.
-   */
   const foldTree = (
     root: Instance,
     partOf: (inst: Instance) => HeadPart | undefined,
@@ -1871,27 +1846,21 @@ const setup = (
   ): { readonly head: unknown; readonly title: string | undefined } => {
     let fold = rootFold
     const skip = skipsEmpty
-    const node = (inst: Instance): Head.Tree<unknown, unknown> | undefined => {
+    const node = (inst: Instance): Head.Tree<unknown> | undefined => {
       const part = partOf(inst)
       if (part === undefined) return skip ? undefined : { path: inst.path, ...emptyTree }
-      const own = foldOf(inst.component)
-      if (fold === neutralFold) fold = own
-      const reduce = part.reduce
+      if (fold === neutralFold) fold = foldOf(inst.component)
       const below = part.children
-      const children: Array<Head.Tree<unknown, unknown>> = []
+      const children: Array<Head.Tree<unknown>> = []
       for (let index = 0; index < below.length; index++) {
         const child = node(below[index]!)
         if (child !== undefined) children.push(child)
       }
-      if (skip && reduce === undefined && part.entries.length === 0 && children.length === 0) return undefined
+      if (skip && part.entries.length === 0 && children.length === 0) return undefined
       return {
         path: inst.path,
         entries: part.entries,
         children,
-        reduce: reduce === undefined ? undefined : (below) => {
-          const value = reduce(below)
-          return own === fold ? value : { ...(below as object), ...(value as object) }
-        },
         onError: (error) => onError(inst, error)
       }
     }
@@ -1973,7 +1942,7 @@ const setup = (
           if (prune) {
             const heads = inst.heads
             if (heads === 0) return undefined
-            below = heads > (declaresHead(inst.component) ? 1 : 0)
+            below = heads > (inst.component.head !== undefined ? 1 : 0)
           }
           const part = headPart(inst, failHead, below)
           if (part !== undefined && adoption !== undefined) parts.push(part)
@@ -2033,7 +2002,7 @@ const setup = (
     if (inst.left) return
     inst.left = true
     inst.lazy = undefined
-    if (declaresHead(inst.component)) {
+    if (inst.component.head !== undefined) {
       for (let at: Instance | undefined = inst; at !== undefined; at = at.parent) at.heads--
     }
     // At once, not when the Scope closes: the host may hand out a container's handle again.
@@ -2142,7 +2111,8 @@ const setup = (
     if (view._tag === "Text") return host.createText(view.text)
     if (view._tag === "Child" || view._tag === "Outlet") return host.createText("")
     const node = host.createElement(view.tag)
-    for (const name in view.attrs) host.setAttr(node, name, view.attrs[name])
+    const attrs = normalized(node, view.attrs)
+    for (const name in attrs) host.setAttr(node, name, attrs[name])
     for (const child of view.children) host.insertBefore(node, buildStatic(child), undefined)
     for (const name in view.props) host.setProp(node, name, view.props[name])
     return node
@@ -2963,7 +2933,7 @@ const setup = (
       owner === undefined || parent === undefined ? undefined : parent.author
     )
     addInstanceFinalizer(inst)
-    if (declaresHead(component)) {
+    if (component.head !== undefined) {
       for (let at: Instance | undefined = inst; at !== undefined; at = at.parent) {
         at.heads++
       }
@@ -3270,7 +3240,7 @@ const setup = (
     let rendered: Rendered
     try {
       if (range !== undefined && Option.isSome(serverModel)) {
-        taken = adoptNode(inst, tree, host.nextOf(range.open), range.close, inst.env)
+        taken = adoptNode(inst, tree, firstOf(range), stopOf(range), inst.env)
       }
       rendered = taken ?? create(inst, tree, inst.env)
       throwClash(inst)
@@ -5342,8 +5312,10 @@ const setup = (
         return new TextRecord(view, host.createText(view.text))
       case "Element": {
         const node = host.createElement(view.tag)
-        const attrs = view.attrs
-        if (attrs !== View.noFields) { for (const name in attrs) host.setAttr(node, name, attrs[name]) }
+        if (view.attrs !== View.noFields) {
+          const attrs = normalized(node, view.attrs)
+          for (const name in attrs) host.setAttr(node, name, attrs[name])
+        }
         setEvents(inst, node, view)
         const views = view.children
         let children: Packed
@@ -5373,7 +5345,6 @@ const setup = (
   const outletComponent: Component.Any = {
     definition: { name: "[outlet]", slots: [] },
     head: undefined,
-    reduceHead: undefined,
     subscriptions: undefined,
     layer: undefined,
     "~queries": undefined,
@@ -5674,7 +5645,7 @@ const setup = (
     let inner: Rendered | undefined
     if (range !== undefined) {
       if (shippedStatus(`${inst.path}/${segment(view)}`) === status._tag) {
-        inner = adoptNode(inst, shown, host.nextOf(range.open), range.close, settled(env))
+        inner = adoptNode(inst, shown, firstOf(range), stopOf(range), settled(env))
       }
       if (inner !== undefined) claim(range)
       else removeRange(range)
@@ -5691,6 +5662,9 @@ const setup = (
     }
     return undefined
   }
+
+  const firstOf = (range: Range): unknown => range.open === range.close ? range.open : host.nextOf(range.open)
+  const stopOf = (range: Range): unknown => range.open === range.close ? host.nextOf(range.open) : range.close
 
   /** A range's nodes, its markers included. */
   const rangeNodes = (range: Range): Array<unknown> => {
@@ -5720,6 +5694,10 @@ const setup = (
   /** Adopted: what's left of the server's nodes in the range goes, with its markers. */
   const claim = (range: Range) => {
     range.claimed = true
+    if (range.open === range.close) {
+      if (adoptedUpTo === range.open) host.remove(range.open)
+      return
+    }
     removeUpTo(adoptedUpTo, range.close)
     host.remove(range.open)
     host.remove(range.close)
@@ -5728,8 +5706,9 @@ const setup = (
   /**
    * Adopts the server's node `node` for `view`, with everything under it, in one pass: nothing is
    * matched ahead. `undefined` when `node`, which is `stop` or missing once the server's nodes run out,
-   * isn't what the view renders: nothing was adopted then. A child matches by its marker range, which it
-   * adopts itself. A server never writes an empty text node, so an empty text takes no node and is created.
+   * isn't what the view renders: nothing was adopted then. A child matches by its marker range, or by an
+   * element when the state has its path, and adopts it itself. A server never writes an empty text node, so
+   * an empty text takes no node and is created.
    */
   const adoptNode = (
     inst: Instance,
@@ -5754,8 +5733,10 @@ const setup = (
       case "Element": {
         if (kind?._tag !== "Element" || kind.tag !== view.tag) return undefined
         const next = host.nextOf(node)
-        for (const name in view.attrs) {
-          if (hydration!.getAttr(node, name) !== view.attrs[name]) host.setAttr(node, name, view.attrs[name])
+        const attrs = normalized(node, view.attrs)
+        for (const name in attrs) {
+          const current = hydration!.getAttr(node, name)
+          if (current !== attrs[name]) host.setAttr(node, name, attrs[name], current)
         }
         setEvents(inst, node, view)
         checkKeys(inst, view.children)
@@ -5778,8 +5759,12 @@ const setup = (
       case "Child":
       case "Outlet": {
         const path = view._tag === "Child" ? `${inst.path}/${segment(view)}` : outletPath(inst.author, view.name)
-        if (kind?._tag !== "Open" || kind.path !== path) return undefined
-        const range = rangeFrom(node, path, stop)
+        const range: Range | undefined = kind?._tag === "Open" && kind.path === path
+          ? rangeFrom(node, path, stop)
+          : view._tag === "Child" && kind?._tag === "Element" && hydrating !== undefined &&
+              Object.hasOwn(hydrating.state, path)
+          ? { open: node, close: node, claimed: false }
+          : undefined
         if (range === undefined) return undefined
         const next = host.nextOf(range.close)
         // A child's content matches itself against the range, as an outlet's does, and builds fresh what doesn't.
@@ -6160,6 +6145,11 @@ const setup = (
     }
   }
 
+  const normalized = (
+    node: unknown,
+    attrs: Readonly<Record<string, string>>
+  ): Readonly<Record<string, string>> => host.normalizeAttrs === undefined ? attrs : host.normalizeAttrs(node, attrs)
+
   /**
    * Sets what changed between two attribute records: the names that went first, then the values
    * that differ. A record's own values are strings, which nothing it inherits from
@@ -6170,16 +6160,15 @@ const setup = (
     prev: Readonly<Record<string, string>>,
     next: Readonly<Record<string, string>>
   ) => {
-    if (host.normalizeAttrs !== undefined) {
-      prev = host.normalizeAttrs(node, prev)
-      next = host.normalizeAttrs(node, next)
-    }
+    prev = normalized(node, prev)
+    next = normalized(node, next)
     for (const name in prev) {
-      if (typeof next[name] !== "string") host.setAttr(node, name, undefined)
+      if (typeof next[name] !== "string") host.setAttr(node, name, undefined, prev[name])
     }
     for (const name in next) {
       const value = next[name]
-      if (prev[name] !== value) host.setAttr(node, name, value)
+      const previous = prev[name]
+      if (previous !== value) host.setAttr(node, name, value, typeof previous === "string" ? previous : undefined)
     }
   }
 

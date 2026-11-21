@@ -75,6 +75,7 @@ import * as childRef from "./internal/ref.ts"
 import * as sharedReads from "./internal/shared.ts"
 import type * as Query from "./Query.ts"
 import type * as Subscription from "./Subscription.ts"
+import * as UiStruct from "./UiStruct.ts"
 import * as View from "./View.ts"
 
 /**
@@ -679,8 +680,8 @@ export interface InitStep<in out Model, in out Msg, in out Events, out R = never
   readonly emitted: ReadonlyArray<Events>
   /** Replaces the Model. */
   set(model: Model): InitStep<Model, Msg, Events, R>
-  /** Changes the Model with a function of the current one. */
-  modify(f: (model: Model) => Model): InitStep<Model, Msg, Events, R>
+  /** Changes some fields of the Model, as `Step.evolve` does. */
+  evolve(fields: UiStruct.EvolveFields<Model>): InitStep<Model, Msg, Events, R>
   /** Runs Commands owned by this instance, as `Step.run` does. */
   run<const C extends ReadonlyArray<Command.Command<Msg | Noop, any>>>(
     ...commands: C
@@ -713,8 +714,13 @@ export interface Step<in out Model, in out Msg, in out Events, out R = never, L 
   readonly sends: ReadonlyArray<Send>
   /** Replaces the Model. */
   set(model: Model): Step<Model, Msg, Events, R, L>
-  /** Changes the Model with a function of the current one. */
-  modify(f: (model: Model) => Model): Step<Model, Msg, Events, R, L>
+  /**
+   * Changes some fields of the Model and keeps the rest. Each field takes
+   * its new value, or a function from its old value to the new one, with the
+   * rules of `UiStruct.evolve`: `$.evolve({ submitting: true, attempts: (n) => n + 1 })`.
+   * On a union Model it's a compile error: match the union first.
+   */
+  evolve(fields: UiStruct.EvolveFields<Model>): Step<Model, Msg, Events, R, L>
   /**
    * Runs Commands owned by this instance: each ends when the instance does,
    * and gets a Scope of its own that closes with it. Their results come back as
@@ -861,8 +867,14 @@ const StepProto = {
   set(this: Step<any, any, any, any>, model: unknown) {
     return makeStep(model, this.commands, this.emitted, this.lists, this.sends)
   },
-  modify(this: Step<any, any, any, any>, f: (model: any) => any) {
-    return makeStep(f(this.model), this.commands, this.emitted, this.lists, this.sends)
+  evolve(this: Step<any, any, any, any>, fields: Record<PropertyKey, unknown>) {
+    return makeStep(
+      UiStruct.evolve<any>(this.model, fields as never),
+      this.commands,
+      this.emitted,
+      this.lists,
+      this.sends
+    )
   },
   run(this: Step<any, any, any, any>, ...commands: ReadonlyArray<Command.Command<any, any>>) {
     return makeStep(this.model, [...this.commands, ...commands], this.emitted, this.lists, this.sends)
@@ -1032,8 +1044,6 @@ export interface Mountable<in out Props, out Events, out R = never, in Rcv = nev
     | undefined
   /** The instance's head entries, a pure function of its Model, props and queries. */
   readonly head: ((model: any, props: Props, queries?: Results | undefined) => ReadonlyArray<unknown>) | undefined
-  /** Maps the folded head of the instance and everything its view placed, a pure function of its Model. */
-  readonly reduceHead: ((model: any, below: any) => unknown) | undefined
   /** The component's vocabulary: its `elements` override, else the registered one. Read lazily. */
   readonly elements: () => View.Vocabulary<any> | undefined
   /**
@@ -1137,7 +1147,6 @@ export interface Component<
   readonly head:
     | ((model: Model, props: Props, queries?: Results | undefined) => ReadonlyArray<View.HeadEntry<V>>)
     | undefined
-  readonly reduceHead: ((model: Model, below: any) => View.HeadValue<V>) | undefined
   readonly layerFailure: ((failure: AsyncResult.Failure<never, any>) => Msg) | undefined
   readonly "~V"?: V
   readonly "~L"?: L
@@ -1274,7 +1283,6 @@ export interface Headless<
     | ((model: any, props: Props, queries?: Results | undefined) => ReadonlyArray<Subscription.Subscription<any, R>>)
     | undefined
   readonly head: ((model: any, props: Props, queries?: Results | undefined) => ReadonlyArray<unknown>) | undefined
-  readonly reduceHead: ((model: any, below: any) => unknown) | undefined
   readonly elements: () => View.Vocabulary<any> | undefined
   readonly "~queries": unknown
 }
@@ -1931,9 +1939,8 @@ type UpdateRecord<Model, Msg, Events, Props, L, UR> = {
  * fits. A record key that isn't a message tag is a type error.
  * `view` and `fragment` return the function they're given.
  *
- * `make` takes `init`, `update`, `view`, `subscriptions`, `head` and
- * `reduceHead`, and
- * reads `R` off what they return.
+ * `make` takes `init`, `update`, `view`, `subscriptions` and `head`,
+ * and reads `R` off what they return.
  *
  * @stability experimental
  * @category models
@@ -2044,7 +2051,6 @@ export interface Definition<
           queries: { readonly [K in keyof L]: QueryResultOf<L[K]> }
         ) => ReadonlyArray<View.HeadEntry<V>>)
         | undefined
-      readonly reduceHead?: ((model: Model, below: View.HeadValue<V>) => View.HeadValue<V>) | undefined
     } & SelfShares<SR, SV>
   ): Headless<
     Props,
@@ -2098,7 +2104,6 @@ export interface Definition<
             queries: { readonly [K in keyof L]: QueryResultOf<L[K]> }
           ) => ReadonlyArray<View.HeadEntry<V>>)
           | undefined
-        readonly reduceHead?: ((model: Model, below: View.HeadValue<V>) => View.HeadValue<V>) | undefined
       }
       & OwnersAreHeadless<SV>
       & SelfShares<SR, SV>
@@ -2227,7 +2232,7 @@ export type Helper<D> = D extends Definition<
 /**
  * Defines a component, in two steps. `define` takes the name, the Schemas,
  * `queries` and `elements`, and `make` on the definition it returns takes
- * `init`, `update`, `view`, `subscriptions`, `head` and `reduceHead`.
+ * `init`, `update`, `view`, `subscriptions` and `head`.
  *
  * **Details**
  *
@@ -2284,14 +2289,14 @@ export type Helper<D> = D extends Definition<
  * message's `update` sees it in `$.queries`.
  *
  * `head` returns the instance's head entries, typed by the component's
- * vocabulary: `Head.title` and `Head.titleTemplate` on any vocabulary, and
- * `HtmlHead`'s on `Html`. It's a pure function of the Model, the props and
- * the queries' results, like a view. On every flush that changed a view, the
- * runtime folds the head of the placed tree, a child's `fallback` content
- * included, with the root vocabulary's merge (see `Head`).
- * `reduceHead` maps the folded head of the instance and everything its view
- * placed, as `(model, below) => value`: a layout derives an `og:title` from
- * the title that won, say. It's pure too, and the root's result is final.
+ * vocabulary: `Head.title`, `Head.titleTemplate` and `Head.reduce` on any
+ * vocabulary, and `HtmlHead`'s on `Html`. It's a pure function of the
+ * Model, the props and the queries' results, like a view. On every flush that
+ * changed a view, the runtime folds the head of the placed tree, a child's
+ * `fallback` content included, with the root vocabulary's merge (see
+ * `Head`). A `Head.reduce` or `HtmlHead.reduce` entry maps the folded
+ * head of the instance and everything its view placed: a layout derives an
+ * `og:title` from the title that won, say. The root's result is final.
  *
  * `update` is a function over the whole message type, or a record with a
  * function for every `_tag` of the message, which gets that tag's member and
@@ -2404,7 +2409,7 @@ import { Query } from "@effect/ui"
  * **Example** (A note page whose update is split into slices)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { Component, UiSchema, UiStruct } from "@effect/ui"
  * import { Schema } from "effect"
  *
  * const NotePageMessage = UiSchema.TaggedEnum({ UpdatedBody: { body: Schema.String }, ClickedSave: {} })
@@ -2416,12 +2421,12 @@ import { Query } from "@effect/ui"
  * })
  *
  * // Over the whole message type, so `$.combine` takes them.
- * const touch = NotePageDef.update((model) => ({ ...model, edits: model.edits + 1 }))
- * const validate = NotePageDef.update((model) => ({ ...model, error: model.body === "" ? "Empty" : null }))
+ * const touch = NotePageDef.update((_model, _msg, $) => $.evolve({ edits: (edits) => edits + 1 }))
+ * const validate = NotePageDef.update((model, _msg, $) => $.evolve({ error: model.body === "" ? "Empty" : null }))
  *
  * // `msg` is the UpdatedBody message.
- * const handleUpdatedBody = NotePageDef.update("UpdatedBody", (model, msg, $) =>
- *   $.combine(() => ({ ...model, body: msg.body }), touch))
+ * const handleUpdatedBody = NotePageDef.update("UpdatedBody", (_model, msg, $) =>
+ *   $.combine((model) => UiStruct.evolve(model, { body: msg.body }), touch))
  *
  * // `h` first, then any other arguments.
  * const counter = NotePageDef.fragment((h, edits: number) => h.el("small", `${edits} edits`))
@@ -2678,7 +2683,6 @@ const finish = (
       ) => ReadonlyArray<Subscription.Subscription<any, any> | false | null | undefined>)
       | undefined
     readonly head?: ((model: any, props: any, queries: any) => ReadonlyArray<unknown>) | undefined
-    readonly reduceHead?: ((model: any, below: any) => unknown) | undefined
   }
 ): Any => {
   const bound = bindQueries(definition.name, definition.queries)
@@ -2787,7 +2791,6 @@ const finish = (
     head: head === undefined
       ? undefined
       : (model: unknown, props: unknown, results?: Results) => head(model, props, open(model, props, results)),
-    reduceHead: options.reduceHead,
     elements: () => elements ?? View.registeredElements(),
     layer: undefined,
     layerKeys: undefined,
@@ -3223,11 +3226,11 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F } ? "onFailure" ext
  *   message: RoomMessage
  * }).make({
  *   init: ($) => $.set({ room: "lobby", joined: "" }).run(JoinRoom.make()),
- *   update: (model, message, $) =>
+ *   update: (_model, message, $) =>
  *     RoomMessage.match(message, {
  *       // Selects the new room's Layer: JoinRoom runs against it.
- *       SelectedRoom: ({ room }) => $.set({ ...model, room }).run(JoinRoom.make()),
- *       CompletedJoinRoom: ({ room }) => ({ ...model, joined: room })
+ *       SelectedRoom: ({ room }) => $.evolve({ room }).run(JoinRoom.make()),
+ *       CompletedJoinRoom: ({ room }) => $.evolve({ joined: room })
  *     }),
  *   view: (model, h) => h.el("p", model.joined)
  * })

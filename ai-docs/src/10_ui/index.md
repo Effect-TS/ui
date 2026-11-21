@@ -62,6 +62,7 @@ the current Model. `Set*`, `Update*` and bare imperatives such as `Save` or
 | Event                                         | What the user did, past tense, with no cause              | `Toggled`, `Picked`, `Saved`                                    |
 | Command                                       | Imperative, for what its body does                        | `SaveNote`, `WaitBeforeDismissal`                               |
 | Mount                                         | Imperative, for what it does to the element               | `DrawChart`, `Measure`, `TrackPointer`                          |
+| Parts argument of a headless component        | The component's name in camel case, in full               | `listbox`, `tooltipProvider`                                    |
 
 A Command result takes `Succeeded` and `Failed` when the Command can fail,
 and `Completed` otherwise. Name a Command for what its body does, not for
@@ -107,6 +108,86 @@ Effect UI differs from Foldkit in three places:
 - A message listed in `receives` has no prefix of its own. It is named like
   any other message, for the fact it reports.
 - A Command or mount with nothing to report needs no `Completed*` message. `Component.noop` is enough.
+
+### Changing the Model
+
+`$.evolve` changes some fields of the Model and keeps the rest, so a
+handler doesn't spread `...model`. Each field takes its new value, or a
+function from its old value to the new one. It returns a step, so `.run`,
+`.emit` and another `.evolve` chain after it:
+
+```ts
+const submittedOrder = CheckoutDef.update("SubmittedOrder", (model, _message, $) =>
+  model.submitting
+    ? model
+    : $.evolve({ form: submit, submitting: true, attempts: (n) => n + 1, notice: null })
+      .run(placeOrder(model.form.values)))
+```
+
+`UiStruct.evolve` takes the same fields for a struct inside the Model:
+data-first for a row of a list, and data-last for a struct field, where it
+takes the struct's type from the field. It also changes the Model in a
+handler that returns a bare Model, with no `$`:
+
+```ts
+const clickedIncrement = CheckoutDef.update("ClickedIncrement", (_model, { id }, $) =>
+  $.evolve({
+    lines: Arr.map((line) => line.id === id ? UiStruct.evolve(line, { quantity: (n) => n + 1 }) : line),
+    coupon: UiStruct.evolve({ status: "Idle" })
+  }))
+
+const failedSaveNote = NoteEditorDef.update(
+  "FailedSaveNote",
+  (model, { reason }) => UiStruct.evolve(model, { error: reason })
+)
+```
+
+A misspelt key, a value of the wrong type and a function that returns the
+wrong type are errors on that field. TypeScript checks the keys written in
+the fields literal, not those of an object built elsewhere and passed in:
+a misspelt key there is copied onto the Model. Check fields declared on
+their own where they're declared, which also types the updaters:
+
+```ts
+const bump = { attempts: (n) => n + 1, notice: null } satisfies UiStruct.EvolveFields<Checkout>
+```
+
+Unlike with `Struct.evolve` from
+`effect`, a field can't change type. A field takes a whole value, so
+`coupon: { status: "Idle" }` is an error: write
+`coupon: UiStruct.evolve({ status: "Idle" })`. A function is always the
+updater, so a field whose type is a function can't be set through
+`evolve`. A Model shouldn't hold a function anyway, since it can't be
+encoded for hydration or history.
+
+A function sees only its own field. One that depends on another field
+reads the handler's `model`, which is the Model before this step.
+
+`evolve` doesn't take a union, and a nullable struct counts as one. Match
+the union first and evolve the member:
+
+```ts
+const updatedName = AuthDef.update(
+  "UpdatedName",
+  (model, { value }) => Auth.match(model, { LoggedOut: (auth) => auth, LoggedIn: UiStruct.evolve({ name: value }) })
+)
+
+// A union field in a struct Model, with `match` data-last.
+$.evolve({ auth: Auth.match({ LoggedOut: (auth) => auth, LoggedIn: UiStruct.evolve({ name: value }) }) })
+
+// A nullable struct.
+$.evolve({ coupon: (coupon) => coupon === null ? null : UiStruct.evolve(coupon, { status: "Idle" }) })
+```
+
+A union Model has no `$.evolve`, so a handler that also runs a Command
+wraps the match in `$.set(...)`. Switching to another member is a `$.set`
+too.
+
+`evolve` is for plain structs, not `Schema.Class` or other class
+instances: evolving a changed field returns a plain-object shallow copy,
+dropping the prototype even though the static type still exposes class
+methods. For a class Model, use `$.set` with a constructor or method that
+returns a valid instance.
 
 ### Stateless view wrappers
 
@@ -230,13 +311,24 @@ A component finished with `parts` instead of `view` is headless: it keeps
 its own Model, `update` and Commands, and owns behaviour such as keyboard
 handling, ids and ARIA, but no markup. A consumer calls it with `h`
 and a `view` closure that applies each part to a builder of its own:
-`m.trigger(h.button).children("Open")`. The closure is the consumer's code,
+`listbox.trigger(h.button).children("Open")`. The closure is the consumer's code,
 so children declared in it report to the consumer. Pass rows as Schema data in
 props, and keep richer row content in the closure, looked up by id. The
 closure runs whenever the consumer renders, so wrap a headless child in a
 small normal component when the consumer renders often. Test one with
 `Story.parts`, which needs no runtime, and render it in a `Scene`, which
 runs it with a stand-in view for the consumer.
+
+Name the closure's argument after the component, in camel case and in full:
+`view: (listbox) => listbox.trigger(h.button)` for a `Listbox`, and
+`tooltipProvider` for a `TooltipProvider`. A one-letter name reads like one
+the library fixes, such as `h` for builders, `p` in `parts`, `$` in
+`update` and `s` for a Scene. When the name is a reserved word, such as
+`switch`, use `parts`. When the closure also reads a variable of that name,
+add `Parts` (`listboxParts`) or rename the variable. Two of one component
+nested get a role in front, `outerDialog` and `innerDialog`. Parts built
+outside a closure follow the same rule:
+`const listbox = Story.parts(Listbox, { model, props })`.
 
 ### Shared state
 

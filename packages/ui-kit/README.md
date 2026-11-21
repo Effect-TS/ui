@@ -1,21 +1,23 @@
 # @effect/ui-kit
 
-Unstyled components for [`@effect/ui`](../ui). Each one owns the behaviour, ARIA, data attributes and any form field, and you draw the markup with your own `h` builders and style it. A component that keeps no state, such as `Switch`, is a plain view function and takes no `key`.
+Unstyled components for [`@effect/ui`](../ui). Each one owns the behaviour, ARIA, data attributes and any form field, and you draw the markup with your own `h` builders and style it.
 
 ```ts
-import { Switch } from "@effect/ui-kit"
+import { Checkbox } from "@effect/ui-kit"
 
 // In a view:
-Switch(h, {
-  props: { checked: model.notify, name: "notify" },
-  onToggle: ({ checked }) => Message.ToggledNotify({ checked }),
-  view: (s) =>
+Checkbox(h, {
+  props: { checked: model.terms, name: "terms" },
+  onEmit: { Toggled: ({ checked }) => Message.ToggledTerms({ checked }) },
+  view: (checkbox) =>
     h.label(
-      s.root(h.button.class("switch")).children(s.thumb(h.span.class("thumb"))),
-      "Notifications"
+      checkbox.root(h.button.class("checkbox")).children(checkbox.indicator(h.span.class("tick"))),
+      "I accept the terms"
     )
 })
 ```
+
+A component that keeps no state, such as `Switch`, is a plain view function instead: it takes no `key`, and an `on<Event>` option in place of `onEmit`.
 
 ## Components
 
@@ -33,3 +35,7 @@ Switch(h, {
 - [Toast](src/Toast.ts): `ToastProvider`, a stack of notifications that components inside it post to, which close after a timeout.
 - [Toggle](src/Toggle.ts): a controlled two-state button, pressed or not.
 - [Tooltip](src/Tooltip.ts): a popup shown when its trigger is hovered or focused, with `TooltipProvider` to open neighbouring tooltips without the delay.
+
+## Other modules
+
+- [Positioning](src/Positioning.ts): places a popup of your own against an anchor, as `Tooltip` places its popup. `Positioning.place` computes a position from rectangles, and the `Positioning.TrackPosition` mount keeps a positioner next to its anchor.

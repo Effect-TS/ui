@@ -22,14 +22,14 @@ describe("Meter", () => {
       view: (_, h) =>
         Meter(h, {
           props: { value: 40 },
-          view: (s) => {
-            expect(s.percentage).type.toBe<number>()
-            expect(s.valueText).type.toBe<string>()
-            expect(s.label(h.span).children(needsClock)).type.toBe<Span<Clock>>()
-            expect(s.value(h.span.onClick(Msg.Clicked()))).type.toBe<Span<never>>()
-            expect(s.track(h.div)).type.toBe<Div<never>>()
-            expect(s.indicator(h.div)).type.toBe<Div<never>>()
-            const root = s.root(h.div).children(s.label(h.span), needsClock)
+          view: (meter) => {
+            expect(meter.percentage).type.toBe<number>()
+            expect(meter.valueText).type.toBe<string>()
+            expect(meter.label(h.span).children(needsClock)).type.toBe<Span<Clock>>()
+            expect(meter.value(h.span.onClick(Msg.Clicked()))).type.toBe<Span<never>>()
+            expect(meter.track(h.div)).type.toBe<Div<never>>()
+            expect(meter.indicator(h.div)).type.toBe<Div<never>>()
+            const root = meter.root(h.div).children(meter.label(h.span), needsClock)
             expect(root).type.toBe<Div<Clock>>()
             return root
           }
@@ -44,14 +44,14 @@ describe("Meter", () => {
       view: (_, h) =>
         Meter(h, {
           props: { value: 40 },
-          view: (s) => {
-            expect(s.root).type.not.toBeCallableWith(h.span)
-            expect(s.root).type.not.toBeCallableWith({ element: h.div })
-            expect(s.track).type.not.toBeCallableWith(h.span)
-            expect(s.indicator).type.not.toBeCallableWith(h.span)
-            expect(s.label).type.not.toBeCallableWith(h.div)
-            expect(s.value).type.not.toBeCallableWith(h.div)
-            return s.root(h.div)
+          view: (meter) => {
+            expect(meter.root).type.not.toBeCallableWith(h.span)
+            expect(meter.root).type.not.toBeCallableWith({ element: h.div })
+            expect(meter.track).type.not.toBeCallableWith(h.span)
+            expect(meter.indicator).type.not.toBeCallableWith(h.span)
+            expect(meter.label).type.not.toBeCallableWith(h.div)
+            expect(meter.value).type.not.toBeCallableWith(h.div)
+            return meter.root(h.div)
           }
         })
     })

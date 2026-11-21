@@ -213,10 +213,10 @@ export const Panel = Component.define({
   elements: Html
 }).make({
   init: () => ({ open: false, groupOpen: false }),
-  update: (model, message) =>
+  update: (_model, message, $) =>
     PanelMessage.match(message, {
-      Toggled: () => ({ ...model, open: !model.open }),
-      ChangedGroup: ({ anyOpen }) => ({ ...model, groupOpen: anyOpen })
+      Toggled: () => $.evolve({ open: (open) => !open }),
+      ChangedGroup: ({ anyOpen }) => $.evolve({ groupOpen: anyOpen })
     }),
   view: (model, h) =>
     h.section(
@@ -243,7 +243,7 @@ export const panels = Effect.gen(function*() {
 
   const group = yield* Scene.make(PanelGroup, {}, {
     elements: Html,
-    view: (parts, h) => h.p.children(parts.anyOpen ? "open" : "closed")
+    view: (panelGroup, h) => h.p.children(panelGroup.anyOpen ? "open" : "closed")
   })
   // The same message as for no reports: nothing is sent.
   group.collected([false, false])
@@ -286,7 +286,7 @@ export const Menu = Component.define({
 export const nestedMenu = Effect.gen(function*() {
   const menu = yield* Scene.make(Menu, { open: true }, {
     elements: Html,
-    view: (parts, h) => h.p.children(parts.nested ? "nested" : "outermost")
+    view: (menu, h) => h.p.children(menu.nested ? "nested" : "outermost")
   })
   menu.expect(Locator.text("outermost")).toExist()
   menu.shared(Menu, { open: true })

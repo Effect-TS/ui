@@ -107,8 +107,8 @@ describe("HtmlServerHttp.layerHttp", () => {
     assert.strictEqual((await request(withStatus, "/people/9")).status, 410)
     assert.strictEqual((await request(withStatus, "/nowhere")).status, 200)
     assert.deepStrictEqual(seen, [
-      AppRoute.make({ _tag: "Person", params: { id: 9 } }),
-      AppRoute.make({ _tag: "NotFound", params: { "*": "nowhere" } })
+      AppRoute.Person({ params: { id: 9 } }),
+      AppRoute.NotFound({ params: { "*": "nowhere" } })
     ])
   })
 })

@@ -46,16 +46,15 @@
  * The trigger and the close button are native buttons, so Enter and Space
  * press them. Escape asks the alert dialog to close, with `escape-key`.
  * Focus moves into the popup when it opens, stays inside while it shows, and
- * goes back to the trigger when it closes, as in a modal `Dialog`. Put
+ * goes back to the trigger once its exit ends, as in a modal `Dialog`. Put
  * `initialFocus` on the least destructive answer, such as Cancel.
  *
  * **Dismissal**
  *
  * The alert dialog asks to close only from its trigger, its close part and
- * Escape. A press outside the popup, on the backdrop included, asks nothing,
- * and the portal's `closedby` stays `"closerequest"`, so the browser doesn't
- * close it on a backdrop click either. Answers other than closing, such as
- * Discard, are the consumer's buttons, which send the consumer's messages.
+ * Escape. A press outside the popup, on the backdrop included, asks nothing.
+ * Answers other than closing, such as Discard, are the consumer's buttons,
+ * which send the consumer's messages.
  *
  * An alert dialog drawn inside a `Dialog`'s popup is nested in it, as a
  * `Dialog` would be: the outer popup gets `data-nested-dialog-open`, and only
@@ -94,14 +93,14 @@
  *         Dismissed: () => EditorMessage.Kept(),
  *         Settled: () => undefined
  *       },
- *       view: (s) =>
+ *       view: (alertDialog) =>
  *         h.div(
- *           s.trigger(h.button).children("Discard draft"),
- *           s.portal(h.dialog)?.children(
- *             s.popup(h.div.class("popup")).children(
- *               s.title(h.h2).children("Discard draft?"),
- *               s.description(h.p).children("You can't undo this."),
- *               s.initialFocus(s.close(h.button)).children("Cancel"),
+ *           alertDialog.trigger(h.button).children("Discard draft"),
+ *           alertDialog.portal(h.dialog)?.children(
+ *             alertDialog.popup(h.div.class("popup")).children(
+ *               alertDialog.title(h.h2).children("Discard draft?"),
+ *               alertDialog.description(h.p).children("You can't undo this."),
+ *               alertDialog.initialFocus(alertDialog.close(h.button)).children("Cancel"),
  *               h.button.onClick(EditorMessage.Discarded()).children("Discard")
  *             )
  *           )
@@ -161,17 +160,12 @@ export type AlertDialogProps = typeof AlertDialogProps.Type
  */
 export type AlertDialogParts = Component.Headless.Parts<typeof Dialog>
 
-// The portal is the element the dialog is labelled on, so its role goes
-// there. Set with `forward`, so it wins over a `role` or `closedby` the
-// consumer set on the builder or chained after the part. `closedby` keeps
-// the browser from closing the modal on a backdrop click.
-const alert = (node: View.ElementBuilder<any, any, any, any>) =>
-  node.attr("role", "alertdialog").attr("closedby", "closerequest")
+const alert = (node: View.ElementBuilder<any, any, any, any>) => node.attr("role", "alertdialog")
 
 /**
  * A headless alert dialog. Call it as a `Dialog`, with the consumer's `h`, a
  * `key` when it needs one, `props`, `onEmit` and a `view` closure that draws
- * the trigger with `s.trigger` and the alert dialog with `s.portal` and the
+ * the trigger with `alertDialog.trigger` and the alert dialog with `alertDialog.portal` and the
  * parts inside it.
  *
  * **Details**
@@ -181,9 +175,9 @@ const alert = (node: View.ElementBuilder<any, any, any, any>) =>
  * `trigger-press`, `escape-key` or `close-press`, never `outside-press` or
  * `focus-out`.
  *
- * On top of the `Dialog`'s attributes, the portal's `role="alertdialog"` and
- * `closedby="closerequest"` win over the consumer's, whether the consumer set
- * them on the builder it passes in or chained them after the part.
+ * On top of the `Dialog`'s attributes, the portal's `role="alertdialog"` wins
+ * over the consumer's, whether the consumer set it on the builder it passes
+ * in or chained it after the part.
  *
  * @stability experimental
  * @category components
@@ -205,5 +199,5 @@ export const AlertDialog = <Msg, RV = never, RF = never>(
   Dialog<Msg, RV, RF>(h, {
     ...options,
     props: { ...options.props, modal: true, disablePointerDismissal: true },
-    view: (s) => options.view({ ...s, portal: (element) => s.portal(element)?.forward(alert) })
+    view: (dialog) => options.view({ ...dialog, portal: (element) => dialog.portal(element)?.forward(alert) })
   })

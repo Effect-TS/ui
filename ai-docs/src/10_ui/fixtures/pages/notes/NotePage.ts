@@ -34,10 +34,10 @@ export const NotePageNoDeps = Component.define({
 }).make({
   init: () => ({ notice: "" }),
   // `update` can read the results too, as `$.queries`.
-  update: (model, message, $) =>
+  update: (_model, message, $) =>
     NotePageMessage.match(message, {
-      SavedNote: () => ({ ...model, notice: "Saved" }),
-      FailedEditor: () => ({ ...model, notice: "The editor crashed" }),
+      SavedNote: () => $.evolve({ notice: "Saved" }),
+      FailedEditor: () => $.evolve({ notice: "The editor crashed" }),
       // "Save now" is a one-shot instruction, so it's a send, not a prop.
       // State the editor shows, like the note, stays in its props. The
       // editor's `update` handles the message after this render, with the

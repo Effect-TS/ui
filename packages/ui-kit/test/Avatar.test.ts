@@ -9,12 +9,12 @@ import { Effect, Layer, Schema } from "effect"
 const standIn = {
   elements: Html,
   view: (
-    s: Component.Headless.Parts<typeof Avatar>,
+    avatar: Component.Headless.Parts<typeof Avatar>,
     h: View.Helper<never, AvatarProps> & View.Tags<Html.Elements, never>
   ) =>
-    s.root(h.span.attr("data-status", s.imageLoadingStatus)).children(
-      s.image(h.img),
-      s.fallback(h.span.class("fallback"))?.children("AL")
+    avatar.root(h.span.attr("data-status", avatar.imageLoadingStatus)).children(
+      avatar.image(h.img),
+      avatar.fallback(h.span.class("fallback"))?.children("AL")
     )
 }
 
@@ -47,10 +47,10 @@ describe("Avatar", () => {
         view: (src, h) =>
           Avatar(h, {
             props: { src },
-            view: (s) =>
-              s.root(h.span.attr("data-status", s.imageLoadingStatus)).children(
-                s.image(h.img),
-                s.fallback(h.span.class("fallback"))
+            view: (avatar) =>
+              avatar.root(h.span.attr("data-status", avatar.imageLoadingStatus)).children(
+                avatar.image(h.img),
+                avatar.fallback(h.span.class("fallback"))
               )
           })
       })
@@ -84,12 +84,12 @@ describe("Avatar", () => {
       .attr("crossorigin", "use-credentials")
       .attr("referrerpolicy", "origin")
     const shown = (props: AvatarProps) => {
-      const s = Story.parts(Avatar, {
+      const avatar = Story.parts(Avatar, {
         model: { report: { source: props, status: "loaded" }, delayElapsed: true },
         props
       })
       // A source attribute chained after the part loses too.
-      return View.build(s.image(element)!.attr("src", "/chained.png").attr("title", "Ada"), []).attrs
+      return View.build(avatar.image(element)!.attr("src", "/chained.png").attr("title", "Ada"), []).attrs
     }
     assert.deepStrictEqual(shown({ src: "/ada.png" }), {
       class: "photo",

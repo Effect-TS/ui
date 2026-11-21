@@ -88,8 +88,7 @@ describe("Html", () => {
         assert.strictEqual(
           rendered.html,
           "<!--[/Todos--><form><input value=\"draft\"><button type=\"submit\">Add</button><span>Todos</span>" +
-            "<!--[/Todos/Item[Milk]--><li>Milk</li><!--]/Todos/Item[Milk]-->" +
-            "<!--[/Todos/Item[Eggs]--><li>Eggs</li><!--]/Todos/Item[Eggs]--></form><!--]/Todos-->"
+            "<li>Milk</li><li>Eggs</li></form><!--]/Todos-->"
         )
       }))
 

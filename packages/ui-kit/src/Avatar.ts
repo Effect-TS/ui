@@ -51,10 +51,10 @@
  *     Avatar(h, {
  *       key: "avatar",
  *       props: { src: "/ada.png" },
- *       view: (s) =>
- *         s.root(h.span.class("avatar")).children(
- *           s.image(h.img.attr("alt", "Ada Lovelace")),
- *           s.fallback(h.span.class("initials"))?.children("AL")
+ *       view: (avatar) =>
+ *         avatar.root(h.span.class("avatar")).children(
+ *           avatar.image(h.img.attr("alt", "Ada Lovelace")),
+ *           avatar.fallback(h.span.class("initials"))?.children("AL")
  *         )
  *     })
  * })
@@ -210,8 +210,8 @@ export type AvatarImg<Msg, R = never> = Html.VoidElement<Msg, R, Html.EventsOf<"
 
 /**
  * A headless avatar. Call it with the consumer's `h` and a `view` closure
- * that draws the root with `s.root(h.span)`, with the image,
- * `s.image(h.img)`, and the fallback, `s.fallback(h.span)?.children(...)`,
+ * that draws the root with `avatar.root(h.span)`, with the image,
+ * `avatar.image(h.img)`, and the fallback, `avatar.fallback(h.span)?.children(...)`,
  * as its children.
  *
  * **Details**

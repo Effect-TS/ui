@@ -19,14 +19,14 @@ describe("Avatar", () => {
       view: (_, h) =>
         Avatar(h, {
           props: { src: "/ada.png" },
-          view: (s) => {
-            expect(s.imageLoadingStatus).type.toBe<"loading" | "loaded" | "error">()
-            expect(s.root(h.span.class("avatar"))).type.toBe<AvatarSpan<Msg>>()
-            expect(s.image(h.img.attr("alt", "Ada"))).type.toBe<AvatarImg<Msg> | undefined>()
-            expect(s.fallback(h.span.onClick(Msg.Clicked()))).type.toBe<AvatarSpan<Msg> | undefined>()
-            const fallback = s.fallback(h.span)?.children("AL", needsClock)
+          view: (avatar) => {
+            expect(avatar.imageLoadingStatus).type.toBe<"loading" | "loaded" | "error">()
+            expect(avatar.root(h.span.class("avatar"))).type.toBe<AvatarSpan<Msg>>()
+            expect(avatar.image(h.img.attr("alt", "Ada"))).type.toBe<AvatarImg<Msg> | undefined>()
+            expect(avatar.fallback(h.span.onClick(Msg.Clicked()))).type.toBe<AvatarSpan<Msg> | undefined>()
+            const fallback = avatar.fallback(h.span)?.children("AL", needsClock)
             expect(fallback).type.toBe<AvatarSpan<Msg, Clock> | undefined>()
-            const root = s.root(h.span).children(s.image(h.img), fallback)
+            const root = avatar.root(h.span).children(avatar.image(h.img), fallback)
             expect(root).type.toBe<AvatarSpan<Msg, Clock>>()
             return root
           }
@@ -41,16 +41,16 @@ describe("Avatar", () => {
       view: (_, h) =>
         Avatar(h, {
           props: {},
-          view: (s) => {
-            expect(s.root).type.not.toBeCallableWith(h.div)
-            expect(s.root).type.not.toBeCallableWith({ element: h.span })
+          view: (avatar) => {
+            expect(avatar.root).type.not.toBeCallableWith(h.div)
+            expect(avatar.root).type.not.toBeCallableWith({ element: h.span })
             // An object with an `attr` method isn't a builder.
-            expect(s.root).type.not.toBeCallableWith({ attr: () => 1 })
-            expect(s.image).type.not.toBeCallableWith(h.span)
-            expect(s.image).type.not.toBeCallableWith({ element: h.img })
-            expect(s.fallback).type.not.toBeCallableWith(h.div)
-            expect(s.fallback).type.not.toBeCallableWith({ element: h.span })
-            return s.root(h.span)
+            expect(avatar.root).type.not.toBeCallableWith({ attr: () => 1 })
+            expect(avatar.image).type.not.toBeCallableWith(h.span)
+            expect(avatar.image).type.not.toBeCallableWith({ element: h.img })
+            expect(avatar.fallback).type.not.toBeCallableWith(h.div)
+            expect(avatar.fallback).type.not.toBeCallableWith({ element: h.span })
+            return avatar.root(h.span)
           }
         })
     })

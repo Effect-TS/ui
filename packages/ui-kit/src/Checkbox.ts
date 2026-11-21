@@ -13,7 +13,7 @@
  *
  * Each part takes the consumer's builder and returns it, so the consumer
  * goes on chaining and adds children with `.children(...)`:
- * `s.root(h.button).children(s.indicator(h.span))`. When the checkbox has
+ * `checkbox.root(h.button).children(checkbox.indicator(h.span))`. When the checkbox has
  * a form value to submit, `root` appends its hidden input after any
  * children already on the button and before children you chain afterward,
  * so the form value can't be left out. `indicator` adds no markup.
@@ -25,9 +25,9 @@
  * one pointing at its `id`, an `aria-label` or `aria-labelledby` on the
  * button, or text inside it. A `Field` does it, and adds a description,
  * an error and the validity state: draw the root on its control,
- * `s.root(f.control(h.button))`. A disabled field disables the button, but
+ * `checkbox.root(field.control(h.button))`. A disabled field disables the button, but
  * the checkbox's other parts follow the `disabled` prop, so pass
- * `disabled: f.disabled` as well.
+ * `disabled: field.disabled` as well.
  *
  * **Data attributes**
  *
@@ -63,7 +63,7 @@
  * **Indicator visibility**
  *
  * The indicator stays in the DOM whenever your view renders it. Hide it
- * with `[data-unchecked]` or render it only when `s.checked || s.indeterminate`.
+ * with `[data-unchecked]` or render it only when `checkbox.checked || checkbox.indeterminate`.
  *
  * **Example** (A labelled checkbox whose value lives in the consumer's Model)
  *
@@ -89,9 +89,9 @@
  *     Checkbox(h, {
  *       props: { checked: model.terms, name: "terms", required: true },
  *       onEmit: { Toggled: ({ checked }) => SignupMessage.ToggledTerms({ checked }) },
- *       view: (s) =>
+ *       view: (checkbox) =>
  *         h.label.class("terms").children(
- *           s.root(h.button.class("checkbox")).children(s.indicator(h.span.class("tick"))),
+ *           checkbox.root(h.button.class("checkbox")).children(checkbox.indicator(h.span.class("tick"))),
  *           "I accept the terms"
  *         )
  *     })
@@ -203,8 +203,8 @@ const state = <B extends { readonly attr: (name: string, value: string | undefin
 
 /**
  * A headless checkbox. Call it with the consumer's `h`, the `props`, and a
- * `view` closure that draws the root with `s.root(h.button)`, usually with
- * `s.indicator(h.span)` as a child.
+ * `view` closure that draws the root with `checkbox.root(h.button)`, usually with
+ * `checkbox.indicator(h.span)` as a child.
  *
  * **Details**
  *
@@ -225,7 +225,7 @@ const state = <B extends { readonly attr: (name: string, value: string | undefin
  * and the data attributes. That includes the ones a state leaves absent,
  * so a `disabled` on the consumer's button is removed unless the
  * `disabled` prop is set. A part writes them when it is applied, so an
- * attribute the consumer chains after `s.root(...)` or `s.indicator(...)`
+ * attribute the consumer chains after `checkbox.root(...)` or `checkbox.indicator(...)`
  * is the consumer's to answer for.
  *
  * @stability experimental

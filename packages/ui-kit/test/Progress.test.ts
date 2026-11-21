@@ -10,14 +10,15 @@ import { Effect } from "effect"
 const standIn = {
   elements: Html,
   view: (
-    s: Component.Headless.Parts<typeof Progress>,
+    progress: Component.Headless.Parts<typeof Progress>,
     h: View.Helper<never, ProgressProps> & View.Tags<Html.Elements, never>
   ) =>
-    s.root(h.div.attr("aria-labelledby", "heading").attr("aria-valuenow", "99").attr("data-complete", "")).children(
-      s.label(h.span.class("label")).children("Uploading"),
-      s.value(h.span.class("value").attr("aria-hidden", "false")),
-      s.track(h.div.class("track")).children(s.indicator(h.div.class("fill")))
-    )
+    progress.root(h.div.attr("aria-labelledby", "heading").attr("aria-valuenow", "99").attr("data-complete", ""))
+      .children(
+        progress.label(h.span.class("label")).children("Uploading"),
+        progress.value(h.span.class("value").attr("aria-hidden", "false")),
+        progress.track(h.div.class("track")).children(progress.indicator(h.div.class("fill")))
+      )
 }
 
 const root = Locator.attr("role", "progressbar")
@@ -77,11 +78,11 @@ describe("Progress", () => {
     }))
 
   it("custom value children remain visible before the root's hidden label helper", () => {
-    const s = parts({ value: 1, max: 3 })
-    assert.strictEqual(s.valueText, "33%")
-    const custom = s.value(h.span).children("Almost there")
-    const before = s.value(h.span.children("Starting"))
-    const bar = build(s.root(h.div.attr("aria-label", "Upload").children(before)).children(custom))
+    const progress = parts({ value: 1, max: 3 })
+    assert.strictEqual(progress.valueText, "33%")
+    const custom = progress.value(h.span).children("Almost there")
+    const before = progress.value(h.span.children("Starting"))
+    const bar = build(progress.root(h.div.attr("aria-label", "Upload").children(before)).children(custom))
     assert.strictEqual(bar.attrs["aria-label"], "Upload")
     const children = bar.children
     assert.deepStrictEqual(children.map((child) => child._tag === "Element" ? child.tag : child._tag), [
@@ -100,16 +101,16 @@ describe("Progress", () => {
   })
 
   it("the indicator's width wins over the consumer's inline style, whose other declarations stay", () => {
-    const s = parts({ value: 15, min: 10, max: 20 })
-    assert.strictEqual(build(s.root(h.div)).attrs["aria-valuemin"], "10")
-    assert.strictEqual(s.status, "progressing")
-    assert.strictEqual(s.percentage, 50)
+    const progress = parts({ value: 15, min: 10, max: 20 })
+    assert.strictEqual(build(progress.root(h.div)).attrs["aria-valuemin"], "10")
+    assert.strictEqual(progress.status, "progressing")
+    assert.strictEqual(progress.percentage, 50)
     const own = "inset-inline-start:0;height:inherit;width:50%"
     assert.strictEqual(
-      build(s.indicator(h.div).style({ background: "red", width: "10%" })).attrs.style,
+      build(progress.indicator(h.div).style({ background: "red", width: "10%" })).attrs.style,
       `background:red;width:10%;${own}`
     )
-    assert.strictEqual(build(s.indicator(h.div.style({ color: "red" }))).attrs.style, `color:red;${own}`)
+    assert.strictEqual(build(progress.indicator(h.div.style({ color: "red" }))).attrs.style, `color:red;${own}`)
     // While indeterminate, the consumer's style is all there is.
     const unknown = parts({ value: Number.NaN })
     assert.strictEqual(unknown.status, "indeterminate")

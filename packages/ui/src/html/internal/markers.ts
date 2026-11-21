@@ -1,5 +1,5 @@
 /**
- * The comment markers around each instance's nodes in server HTML:
+ * The comment markers around an instance's nodes in server HTML:
  * `<!--[path-->` and `<!--]path-->`.
  *
  * A path is escaped so it can't end the comment early, and so it reads back

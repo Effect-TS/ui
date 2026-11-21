@@ -41,7 +41,7 @@
  * `indicator` adds `inset-inline-start:0;height:inherit;width:<percentage>%`
  * after the consumer's inline style, so its width wins and the consumer's
  * other declarations stay. To draw the meter another way, such as
- * vertically or as a ring, skip `indicator` and use `s.percentage`.
+ * vertically or as a ring, skip `indicator` and use `meter.percentage`.
  *
  * **Example** (A labelled storage meter)
  *
@@ -62,11 +62,11 @@
  *   view: (model, h) =>
  *     Meter(h, {
  *       props: { value: model.used, max: model.quota, valueText: `${model.used} of ${model.quota} GB` },
- *       view: (s) =>
- *         s.root(h.div.class("meter")).children(
- *           s.label(h.span).children("Storage"),
- *           s.value(h.span),
- *           s.track(h.div.class("track")).children(s.indicator(h.div.class("fill")))
+ *       view: (meter) =>
+ *         meter.root(h.div.class("meter")).children(
+ *           meter.label(h.span).children("Storage"),
+ *           meter.value(h.span),
+ *           meter.track(h.div.class("track")).children(meter.indicator(h.div.class("fill")))
  *         )
  *     })
  * })
@@ -125,7 +125,7 @@ export type MeterProps = typeof MeterProps.Type
 
 /**
  * A headless meter. Call it with the consumer's `h`, the `props`, and a
- * `view` closure that draws the root with `s.root(h.div)`, usually with
+ * `view` closure that draws the root with `meter.root(h.div)`, usually with
  * a label, the value and a track holding the indicator inside it.
  *
  * **Details**

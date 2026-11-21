@@ -12,6 +12,15 @@ const AppRoute = Route.union({
 })
 type AppRoute = typeof AppRoute.Type
 
+const Search = Route.union({
+  Search: Route.make("/search", {
+    search: {
+      q: Schema.optional(Schema.String),
+      page: Schema.Number.pipe(Schema.withDecodingDefaultKey(Effect.succeed(1)))
+    }
+  })
+})
+
 describe("Route", () => {
   it("requires a Schema for every :param", () => {
     expect(Route.make).type.not.toBeCallableWith("/people/:id")
@@ -34,14 +43,6 @@ describe("Route", () => {
   })
 
   it("types a defaulted search field as required, and lets make leave it out", () => {
-    const Search = Route.union({
-      Search: Route.make("/search", {
-        search: {
-          q: Schema.optional(Schema.String),
-          page: Schema.Number.pipe(Schema.withDecodingDefaultKey(Effect.succeed(1)))
-        }
-      })
-    })
     expect<typeof Search.Type["search"]>().type.toBe<{ readonly q?: string | undefined; readonly page: number }>()
     expect(Search.make).type.toBeCallableWith({ _tag: "Search" })
     expect(Search.make).type.toBeCallableWith({ _tag: "Search", search: { q: "a" } })
@@ -49,8 +50,28 @@ describe("Route", () => {
     expect(Search.make).type.not.toBeCallableWith({ _tag: "Search", search: { page: "2" } })
   })
 
+  it("has a constructor per route, whose argument is optional when make needs only the tag", () => {
+    expect(AppRoute.Home()).type.toBe<Extract<AppRoute, { _tag: "Home" }>>()
+    expect(AppRoute.Person({ params: { id: 1 } })).type.toBe<Extract<AppRoute, { _tag: "Person" }>>()
+    expect(AppRoute.Person).type.not.toBeCallableWith()
+    expect(AppRoute.Person).type.not.toBeCallableWith({ params: { id: "1" } })
+    expect(Search.Search).type.toBeCallableWith()
+    expect(Search.Search).type.toBeCallableWith({ search: { page: 2 } })
+    expect(AppRoute.subset(["Home"])).type.not.toHaveProperty("Person")
+  })
+
+  it("rejects reserved tags", () => {
+    expect(Route.union).type.not.toBeCallableWith({ parse: Route.make("/") })
+    expect(Route.union).type.not.toBeCallableWith({ Type: Route.make("/") })
+    expect(Route.union).type.not.toBeCallableWith({ name: Route.make("/") })
+    expect(Route.union).type.not.toBeCallableWith({ valueOf: Route.make("/") })
+    // oxlint-disable-next-line unicorn/no-thenable
+    expect(Route.union).type.not.toBeCallableWith({ then: Route.make("/") })
+    expect(Route.union).type.toBeCallableWith({ Parse: Route.make("/") })
+  })
+
   it("prints only the union's own route values", () => {
-    expect(AppRoute.print).type.toBeCallableWith(AppRoute.make({ _tag: "Home" }))
+    expect(AppRoute.print).type.toBeCallableWith(AppRoute.Home())
     expect(AppRoute.print).type.not.toBeCallableWith({ _tag: "Elsewhere", params: {}, search: {} })
   })
 })
@@ -67,22 +88,22 @@ describe("Router", () => {
       update: (model, message, $) =>
         message._tag === "Go"
           ? $.run(
-            Router.push(AppRoute, AppRoute.make({ _tag: "Home" })).pipe(
+            Router.push(AppRoute, AppRoute.Home()).pipe(
               Command.map(() => Message.Done())
             )
           )
           : model,
-      subscriptions: () => [Router.subscription(AppRoute, AppRoute.make({ _tag: "Home" }), () => Message.Done())],
+      subscriptions: () => [Router.subscription(AppRoute, AppRoute.Home(), () => Message.Done())],
       view: (_, h) => h.text("")
     })
     expect<Component.Requirements<typeof Nav>>().type.toBe<Router.Push | Router.Router>()
   })
 
   it("takes only complete route values of the given union", () => {
-    const person = AppRoute.make({ _tag: "Person", params: { id: 1 } })
+    const person = AppRoute.Person({ params: { id: 1 } })
     expect(Router.push).type.toBeCallableWith(AppRoute, person)
     const People = AppRoute.subset(["Person"])
-    expect(Router.replace).type.toBeCallableWith(People, People.make({ _tag: "Person", params: { id: 1 } }))
+    expect(Router.replace).type.toBeCallableWith(People, People.Person({ params: { id: 1 } }))
     expect(Router.push).type.not.toBeCallableWith(AppRoute, { _tag: "Person" })
     expect(Router.push).type.not.toBeCallableWith(AppRoute, { _tag: "Person", params: {}, search: {} })
     expect(Router.replace).type.not.toBeCallableWith(AppRoute, { _tag: "Elsewhere", params: {}, search: {} })
@@ -102,10 +123,10 @@ describe("Router", () => {
     expect(Router.subscription).type.not.toBeCallableWith(AppRoute, { _tag: "Person" }, () => 1)
     expect(Router.subscription).type.not.toBeCallableWith(
       AppRoute.subset(["Home"]),
-      AppRoute.make({ _tag: "Person", params: { id: 1 } }),
+      AppRoute.Person({ params: { id: 1 } }),
       () => 1
     )
-    expect(Router.subscription(AppRoute, AppRoute.make({ _tag: "Home" }), (route) => route._tag)).type.toBe<
+    expect(Router.subscription(AppRoute, AppRoute.Home(), (route) => route._tag)).type.toBe<
       Subscription.Subscription<AppRoute["_tag"], Router.Router>
     >()
   })

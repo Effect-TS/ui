@@ -21,15 +21,15 @@ describe("Switch", () => {
         const root = Switch(h, {
           props: { checked: false },
           onToggle: ({ checked }) => Msg.Toggled({ checked }),
-          view: (s) => {
+          view: (parts) => {
             type Button<R> = Html.Element<Msg, R, Html.EventsOf<"button">, HTMLButtonElement, "button">
             // Each part returns the builder it was given, for children or another call's `element`.
-            expect(s.root(h.button)).type.toBe<Button<never>>()
-            expect(s.thumb(h.span.class("thumb")).children(needsClock)).type.toBe<
+            expect(parts.root(h.button)).type.toBe<Button<never>>()
+            expect(parts.thumb(h.span.class("thumb")).children(needsClock)).type.toBe<
               Html.Element<Msg, Clock, Html.EventsOf<"span">, HTMLSpanElement, "span">
             >()
-            return s.root(h.button.on("focus", Msg.Clicked()))
-              .children(s.thumb(h.span.class("thumb")), needsClock)
+            return parts.root(h.button.on("focus", Msg.Clicked()))
+              .children(parts.thumb(h.span.class("thumb")), needsClock)
           }
         })
         expect(root).type.toBe<Html.Element<Msg, Clock, Html.EventsOf<"button">, HTMLButtonElement, "button">>()
@@ -50,11 +50,11 @@ describe("Switch", () => {
         })
         return Switch(h, {
           props: { checked: false },
-          view: (s) => {
-            expect(s.root).type.not.toBeCallableWith(h.span)
-            expect(s.root).type.not.toBeCallableWith({ element: h.button })
-            expect(s.thumb).type.not.toBeCallableWith(h.div)
-            return s.root(h.button)
+          view: (parts) => {
+            expect(parts.root).type.not.toBeCallableWith(h.span)
+            expect(parts.root).type.not.toBeCallableWith({ element: h.button })
+            expect(parts.thumb).type.not.toBeCallableWith(h.div)
+            return parts.root(h.button)
           }
         })
       }

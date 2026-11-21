@@ -17,29 +17,38 @@
  * | `control`     | `<input>`, `<textarea>`, `<select>` or `<button>`   |
  * | `legend`      | any element, the group's visible name               |
  * | `group`       | any element, around the group's controls            |
+ * | `focusWithin` | any element, around a control and its popup         |
  * | `member`      | `<input>`, `<textarea>`, `<select>` or `<button>`   |
  * | `description` | any element, usually a `<p>`                        |
  * | `error`       | any element, usually a `<div>`                      |
  *
  * Each part takes the consumer's builder and returns it, so the consumer
  * goes on chaining and adds children with `.children(...)`:
- * `f.root(h.div).children(f.label(h.label).children("Name"), f.control(h.input))`.
+ * `field.root(h.div).children(field.label(h.label).children("Name"), field.control(h.input))`.
  * No part adds markup.
  *
  * `control`'s result is still a builder, so it is another kit call's
  * `element`, and both share one element:
- * `Input(h, { element: f.control(h.input), props })` for a text input, and
- * `s.root(f.control(h.button))` for a checkbox or a switch.
+ * `Input(h, { element: field.control(h.input), props })` for a text input,
+ * `checkbox.root(field.control(h.button))` for a checkbox and
+ * `parts.root(field.control(h.button))` for a switch.
  *
- * A field has either one `control` and a `label`, or a `group` of
- * `member`s and a `legend`. The group is for a control made of several
- * focusable elements, such as a range slider's thumbs, or for a set of
- * controls, such as checkboxes. For a range slider, draw the slider's root
- * with `s.root(f.group(h.div))` and each thumb's input with
- * `f.member(h.input)`.
+ * A field takes one of three shapes:
+ *
+ * - one `control` and a `label`
+ * - a `group` of `member`s and a `legend`, for a control made of several
+ *   focusable elements, such as a range slider's thumbs, or for a set of
+ *   controls, such as checkboxes. For a range slider, draw the slider's root
+ *   with `slider.root(field.group(h.div))` and each thumb's input with
+ *   `field.member(h.input)`
+ * - a `focusWithin` wrapper with a `member` trigger, for a single control
+ *   whose focus moves into a popup, such as a select or a combobox. Wrap the
+ *   trigger and the popup's positioner in `field.focusWithin(h.div)` (or
+ *   combine it with the root, `field.root(field.focusWithin(h.div))`) and
+ *   draw the trigger with `field.member`
  *
  * `error` returns `undefined` unless the field is invalid and enabled, so
- * write `f.error(h.div)?.children(message)`. The message is the consumer's:
+ * write `field.error(h.div)?.children(message)`. The message is the consumer's:
  * validate in `update`, pass the outcome as `invalid` and the text as the
  * error's children.
  *
@@ -49,8 +58,10 @@
  *
  * - `data-disabled`
  * - `data-invalid` / `data-valid`, neither while `invalid` is left out
- * - `data-touched`: the control, or the group, has lost focus at least once
- * - `data-focused`: the control, or one of the group's members, has focus
+ * - `data-touched`: the control, the group or the `focusWithin` wrapper has
+ *   lost focus at least once
+ * - `data-focused`: the control, or an element inside the group or the
+ *   `focusWithin` wrapper, has focus
  * - `data-dirty`
  * - `data-filled`
  *
@@ -72,7 +83,7 @@
  * field that can be invalid.
  *
  * A disabled field disables its control, which then submits nothing. A
- * control's own parts don't hear of it: pass `disabled: f.disabled` to a
+ * control's own parts don't hear of it: pass `disabled: field.disabled` to a
  * checkbox whose indicator shows `data-disabled`.
  *
  * In a group, the legend names the group and each member keeps its own
@@ -80,11 +91,17 @@
  * the group points at an id nothing has. The description and the error
  * are read on each member, where focus lands.
  *
- * Focus moving from one member to another neither touches the field nor
- * drops its focus. Focus leaving the window counts as leaving the group,
- * as it counts as leaving a single control. An element between the group
- * and a member that handles `focusin` or `focusout` itself hides them from
- * the field, because only the innermost handler gets a bubbling event.
+ * A field drawn with `focusWithin` draws neither `field.label` nor
+ * `field.legend`: the control's own label part names it, and `focusWithin`
+ * and `field.member` write no `id` and no `aria-labelledby`. Drawing
+ * `field.label` would point `for` at an id nothing has.
+ *
+ * In a `group` or `focusWithin`, focus moving inside neither touches the
+ * field nor drops its focus. Focus leaving the window counts as leaving it,
+ * as it counts as leaving a single control. An element between `group` or
+ * `focusWithin` and a focusable descendant that handles `focusin` or
+ * `focusout` itself hides them from the field, because only the innermost
+ * handler gets a bubbling event.
  *
  * `touched` and `focused` are the field's own. Give the field another
  * `key` to start over, such as after the form is reset.
@@ -112,16 +129,16 @@
  *   view: (model, h) =>
  *     Field(h, {
  *       props: { invalid: model.name === "", filled: model.name !== "", described: true },
- *       view: (f) =>
- *         f.root(h.div.class("field")).children(
- *           f.label(h.label).children("Name"),
+ *       view: (field) =>
+ *         field.root(h.div.class("field")).children(
+ *           field.label(h.label).children("Name"),
  *           Input(h, {
- *             element: f.control(h.input),
+ *             element: field.control(h.input),
  *             props: { value: model.name },
  *             onUpdate: ({ value }) => ProfileMessage.UpdatedName({ value })
  *           }).attr("name", "name"),
- *           f.description(h.p).children("Visible on your profile"),
- *           f.error(h.div)?.children("Enter your name")
+ *           field.description(h.p).children("Visible on your profile"),
+ *           field.error(h.div)?.children("Enter your name")
  *         )
  *     })
  * })
@@ -196,7 +213,7 @@ const lostFocus = Subscription.make("lostFocus", Stream.make(Message.BlurredCont
 
 /**
  * A headless field. Call it with the consumer's `h`, the `props`, and a
- * `view` closure that draws the root with `f.root(h.div)` and, inside it,
+ * `view` closure that draws the root with `field.root(h.div)` and, inside it,
  * the label, the control, and the description and error when it has them.
  *
  * **Details**
@@ -237,9 +254,9 @@ const lostFocus = Subscription.make("lostFocus", Stream.make(Message.BlurredCont
  *
  * `control` handles `focus` and `blur` on a layer of its own, so the
  * consumer's handlers for them, and another kit call's, still run.
- * `group` does the same with `focusin` and `focusout`, and `member`
- * handles no focus event. A disabled field shows no focus, and isn't
- * touched until it is enabled and left. A field disabled while its
+ * `focusWithin` and `group` do the same with `focusin` and `focusout`, and
+ * `member` handles no focus event. A disabled field shows no focus, and
+ * isn't touched until it is enabled and left. A field disabled while its
  * control has focus drops the focus, and shows it again only when the
  * control is focused again.
  *
@@ -294,6 +311,14 @@ export const Field = Component.define({
       flags(builder).attr("data-disabled", flag(disabled))
     const describedBy = [described && descriptionId, showsError && errorId].filter((id) => id !== false).join(" ")
     const error = p.part((b) => state(b).attr("id", errorId))
+    // The parts that use it take any element, so the payload isn't typed.
+    const trackFocus = (b: View.ContainerBuilder<typeof Message.Type>) =>
+      state(b)
+        .on("focusin", Message.FocusedControl())
+        .on(
+          "focusout",
+          (payload) => (payload as Html.FocusWithinPayload).within ? undefined : Message.BlurredControl()
+        )
     // `control`, with the id and the focus handlers, or `member`, with
     // neither.
     const formControl = (own: boolean) =>
@@ -323,18 +348,10 @@ export const Field = Component.define({
       label: p.part("label", (b) => state(b).attr("for", controlId)),
       control: formControl(true),
       legend: p.part((b) => state(b).attr("id", legendId)),
+      focusWithin: p.part(trackFocus),
       group: p.part((b) =>
-        state(b)
-          // A token list: added to the consumer's own.
+        trackFocus(b)
           .attr("aria-labelledby", legendId)
-          .on("focusin", Message.FocusedControl())
-          // Focus moving between members neither leaves the field nor
-          // touches it. The part is for any element, so the payload isn't
-          // typed.
-          .on(
-            "focusout",
-            (payload) => (payload as Html.FocusWithinPayload).within ? undefined : Message.BlurredControl()
-          )
           // Read when the element is built, so a role chained after the
           // part, or another kit call's, is kept.
           .forward((node) =>

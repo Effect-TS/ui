@@ -1,4 +1,4 @@
-import { Command, Component, Head, UiSchema } from "@effect/ui"
+import { Command, Component, Head, UiSchema, UiStruct } from "@effect/ui"
 import { Duration, Effect, Schema } from "effect"
 
 export const UploadStatus = Schema.Literals(["Uploading", "Done", "Cancelled"])
@@ -20,10 +20,10 @@ export type UploadsModel = typeof UploadsModel.Type
 
 const isUploading = (upload: Upload): boolean => upload.status === "Uploading"
 
-const withStatus = (model: UploadsModel, uploadId: number, status: UploadStatus): UploadsModel => ({
-  ...model,
-  uploads: model.uploads.map((upload) => upload.id === uploadId ? { ...upload, status } : upload)
-})
+// Sets the status of one upload. `UiStruct.evolve` changes one row, and
+// returning a function lets `$.evolve` pass it the current uploads.
+const withStatus = (uploadId: number, status: UploadStatus) => (uploads: ReadonlyArray<Upload>) =>
+  uploads.map((upload) => upload.id === uploadId ? UiStruct.evolve(upload, { status }) : upload)
 
 export const UploadsMessage = UiSchema.TaggedEnum({
   ClickedStartUpload: {},
@@ -129,25 +129,25 @@ export const UploadsNoDeps = UploadsDef.make({
 
     ClickedCancelUpload: (model, { uploadId }, $) =>
       model.uploads.some((upload) => upload.id === uploadId && isUploading(upload))
-        ? $.set(withStatus(model, uploadId, "Cancelled")).run(Command.interrupt(UploadFile, { uploadId }))
+        ? $.evolve({ uploads: withStatus(uploadId, "Cancelled") }).run(Command.interrupt(UploadFile, { uploadId }))
         : model,
 
-    ClickedCancelAllUploads: (model, _message, $) =>
-      $.set({
-        ...model,
-        uploads: model.uploads.map((upload) => isUploading(upload) ? { ...upload, status: "Cancelled" } : upload)
+    ClickedCancelAllUploads: (_model, _message, $) =>
+      $.evolve({
+        uploads: (uploads) =>
+          uploads.map((upload) => isUploading(upload) ? UiStruct.evolve(upload, { status: "Cancelled" }) : upload)
       }).run(Command.interrupt(UploadFile)),
 
     ClickedRestartUpload: (model, { uploadId }, $) => {
       const upload = model.uploads.find((upload) => upload.id === uploadId && upload.status === "Cancelled")
       return upload === undefined
         ? model
-        : $.set(withStatus(model, uploadId, "Uploading")).run(
+        : $.evolve({ uploads: withStatus(uploadId, "Uploading") }).run(
           UploadFile.make({ uploadId, sizeMegabytes: upload.sizeMegabytes })
         )
     },
 
-    CompletedUploadFile: (model, { uploadId }) => withStatus(model, uploadId, "Done")
+    CompletedUploadFile: (_model, { uploadId }, $) => $.evolve({ uploads: withStatus(uploadId, "Done") })
   },
   head: () => [Head.title("Effect UI Interrupting Commands Example")],
   view: (model, h) =>

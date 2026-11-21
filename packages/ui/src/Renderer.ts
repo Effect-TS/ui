@@ -165,7 +165,13 @@ export interface Host<Node> {
   createElement(tag: string): Node
   createText(text: string): Node
   setText(node: Node, text: string): void
-  setAttr(node: Node, name: string, value: string | undefined): void
+  /**
+   * Sets an attribute of `node`, or removes it when `value` is `undefined`.
+   * `previous` is the value the renderer takes the attribute to hold before
+   * the call: the one it last set, or the one hydration read from the node,
+   * and `undefined` when it holds none.
+   */
+  setAttr(node: Node, name: string, value: string | undefined, previous?: string | undefined): void
   setProp(node: Node, name: string, value: unknown): void
   insertBefore(parent: Node, node: Node, ref: Node | undefined): void
   remove(node: Node): void
@@ -184,8 +190,7 @@ export interface Host<Node> {
    * Returns `attrs` keyed by the names `setAttr` stores them under on `node`,
    * the later of two aliases winning, so that updating or removing a losing
    * alias does not change the winning one. May return `attrs` itself. The
-   * names it returns are passed to `setAttr` as they are when two records are
-   * diffed; mounting and hydration pass the original names.
+   * names it returns are passed to `setAttr` as they are.
    */
   readonly normalizeAttrs?:
     | ((node: Node, attrs: Readonly<Record<string, string>>) => Readonly<Record<string, string>>)
@@ -203,13 +208,17 @@ export interface Host<Node> {
  *
  * **Details**
  *
- * The server brackets each instance's nodes with two markers carrying its
- * path, `<!--[path-->` and `<!--]path-->` in HTML. `inspect` tells the
- * renderer what a node is: an element by tag, a text node, one of those
- * markers, or anything else, which never matches. Siblings are read with the
- * host's `nextOf`. An element whose content the host parses as text only,
- * such as an HTML `textarea`, is marked `textOnly`: the server writes only
- * its text, and hydration adopts the element but builds its children fresh.
+ * The server brackets an instance's nodes with two markers carrying its path,
+ * `<!--[path-->` and `<!--]path-->` in HTML, except for a declared child whose
+ * state is shipped, whose component provides no `Layer`, and whose view's root
+ * is an element: that child is written as its element alone, and hydration
+ * matches it by position when its path is in the state. Hydration still
+ * accepts marker pairs for any child. `inspect` tells the renderer what a node
+ * is: an element by tag, a text node, one of those markers, or anything else,
+ * which never matches. Siblings are read with the host's `nextOf`. An element
+ * whose content the host parses as text only, such as an HTML `textarea`, is
+ * marked `textOnly`: the server writes only its text, and hydration adopts the
+ * element but builds its children fresh.
  *
  * `adoptProp`, if given, sets a property of an adopted element in place of
  * `setProp`, so the host can keep what the user changed in the server's
@@ -282,8 +291,11 @@ export interface State {
 }
 
 /**
- * A node of a server-rendered tree. A `Range` is one instance's nodes, or
- * the `fallback` of a child, under its path.
+ * A node of a server-rendered tree. A `Range` is one instance's nodes, a
+ * slot's content, or the `fallback` of a child, under its path. A declared
+ * child whose state is shipped, whose component provides no `Layer`, and whose
+ * view's root is an element is emitted as that `Element` without a wrapping
+ * `Range`.
  *
  * @stability experimental
  * @category models

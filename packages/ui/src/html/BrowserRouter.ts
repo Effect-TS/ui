@@ -54,7 +54,7 @@
  *   subscriptions: (model) => [Router.subscription(AppRoute, model, (route) => Message.ChangedRoute({ route }))],
  *   view: (route, h) =>
  *     h.div(
- *       h.a.attr("href", AppRoute.print(AppRoute.make({ _tag: "Person", params: { id: 1 } }))).children("Ada"),
+ *       h.a.attr("href", AppRoute.print(AppRoute.Person({ params: { id: 1 } }))).children("Ada"),
  *       h.h1(route._tag)
  *     )
  * })
