@@ -1,12 +1,6 @@
-import { Context, Effect, Layer, type Option, Schema } from "effect"
+import { Session } from "#domain/Session"
+import { Context, Effect, Layer, type Option, type Schema } from "effect"
 import { KeyValueStore } from "effect/persistence"
-
-export const Session = Schema.Struct({
-  userId: Schema.String,
-  email: Schema.String,
-  name: Schema.String
-})
-export type Session = typeof Session.Type
 
 const SESSION_STORAGE_KEY = "auth_session"
 

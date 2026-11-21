@@ -1,5 +1,5 @@
+import type { Session } from "#domain/Session"
 import type { View } from "@effect/ui"
-import type { Session } from "../../auth/domain/Session.ts"
 
 const StatCard = <M>(h: View.H<M>, title: string, value: string) =>
   h.div.class("bg-white rounded-lg shadow-md p-6").children(

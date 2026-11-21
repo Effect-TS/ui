@@ -1,6 +1,7 @@
+import { Session } from "#domain/Session"
 import { Command, Component, Head, Router, UiSchema } from "@effect/ui"
 import { Console, Effect, Option, Schema } from "effect"
-import { Session, SessionStore } from "./auth/domain/Session.ts"
+import { SessionStore } from "./auth/services/SessionStore.ts"
 import { LoggedIn } from "./LoggedIn.ts"
 import { LoggedOut } from "./LoggedOut.ts"
 import { AppRoute, LoggedInRoute, LoggedOutRoute } from "./routes.ts"

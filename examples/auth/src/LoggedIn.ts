@@ -1,6 +1,6 @@
+import { Session } from "#domain/Session"
 import { Component, UiSchema } from "@effect/ui"
 import { Schema } from "effect"
-import { Session } from "./auth/domain/Session.ts"
 import { DashboardPage } from "./pages/dashboard/DashboardPage.ts"
 import { NotFound } from "./pages/NotFound.ts"
 import { SettingsPage } from "./pages/settings/SettingsPage.ts"
