@@ -178,7 +178,7 @@ const visit = (
     }
     taken.set(node.key, node)
     const ref = node.ref
-    if (ref !== undefined) {
+    if (ref !== undefined && node.owner === undefined) {
       const refs = paths.refs ??= new Map()
       const refHolder = refs.get(ref.key)
       if (refHolder !== undefined && refHolder !== replaced) failure(paths.at, `with the ref ${ref.key}${where}`)
