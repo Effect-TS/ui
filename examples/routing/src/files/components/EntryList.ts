@@ -1,6 +1,6 @@
 import type { View } from "@effect/ui"
+import { FileTreeEntry, formatFileSize } from "../../domain/FileTree.ts"
 import { AppRoute } from "../../routes.ts"
-import { FileTreeEntry, formatFileSize } from "../domain/FileTree.ts"
 
 export const filesUrl = (path: ReadonlyArray<string>) =>
   AppRoute.print(AppRoute.Files({ params: { "*": path.join("/") } }))

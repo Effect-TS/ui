@@ -1,5 +1,6 @@
 import { Component, Head, Router, UiSchema } from "@effect/ui"
 import { Schema } from "effect"
+import { addSearchToHistory } from "./domain/SearchHistory.ts"
 import { FilesIndexPage } from "./pages/files/FilesIndexPage.ts"
 import { FilesPage } from "./pages/files/FilesPage.ts"
 import { HomePage } from "./pages/HomePage.ts"
@@ -7,7 +8,6 @@ import { NestedPage } from "./pages/nested/route/is/very/nested/NestedPage.ts"
 import { NotFoundPage } from "./pages/NotFoundPage.ts"
 import { PeoplePage } from "./pages/people/PeoplePage.ts"
 import { PersonPage } from "./pages/people/PersonPage.ts"
-import { addSearchToHistory } from "./people/domain/SearchHistory.ts"
 import { AppRoute } from "./routes.ts"
 
 const filesPathOf = (route: typeof AppRoute.cases.Files.Type): ReadonlyArray<string> => route.params["*"].split("/")

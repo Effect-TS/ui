@@ -2,7 +2,7 @@ import { Command, Component, Router, UiSchema } from "@effect/ui"
 import { Button, Input } from "@effect/ui-kit"
 import { Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
-import type { Person } from "../../people/domain/Person.ts"
+import type { Person } from "../../domain/Person.ts"
 import { SearchPeople } from "../../people/queries/SearchPeople.ts"
 import { AppRoute } from "../../routes.ts"
 
