@@ -140,7 +140,11 @@ const Message = UiSchema.TaggedEnum({ Closed: {}, Opened: {} })
 
 const Page = Component.define({
   name: "Page",
-  props: Schema.Struct({ sideOffset: Schema.Number, disableAnchorTracking: Schema.Boolean }),
+  props: Schema.Struct({
+    sideOffset: Schema.Number,
+    disableAnchorTracking: Schema.Boolean,
+    anchor: Schema.optional(Schema.String)
+  }),
   model: Schema.Struct({ open: Schema.Boolean }),
   message: Message,
   elements: Html
@@ -156,7 +160,8 @@ const Page = Component.define({
         open: model.open,
         side: "bottom",
         sideOffset: h.props.sideOffset,
-        disableAnchorTracking: h.props.disableAnchorTracking
+        disableAnchorTracking: h.props.disableAnchorTracking,
+        anchor: h.props.anchor
       },
       view: (s) =>
         h.div.attr("id", "clip").children(
@@ -168,12 +173,12 @@ const Page = Component.define({
     })
 })
 
-const mountPage = Effect.fnUntraced(function*(sideOffset = 8, disableAnchorTracking = false) {
+const mountPage = Effect.fnUntraced(function*(sideOffset = 8, disableAnchorTracking = false, anchor?: string) {
   yield* popovers
   yield* geometry
   rects.set("trigger", rects.get("trigger") ?? { x: 400, y: 700, width: 100, height: 40 })
   const app = yield* container
-  const root = yield* BrowserHost.mountEffect(Page, { sideOffset, disableAnchorTracking }, app)
+  const root = yield* BrowserHost.mountEffect(Page, { sideOffset, disableAnchorTracking, anchor }, app)
   yield* tick
   return root
 })
@@ -284,6 +289,31 @@ describe("Tooltip in a document", { concurrent: false }, () => {
       resize(byId("positioner"), true)
       yield* tick
       assert.strictEqual(style("top"), "652px")
+    }).pipe(Effect.scoped))
+
+  it.effect("places against the element that matches the anchor now, and reports it hidden once none does", () =>
+    Effect.gen(function*() {
+      const first = yield* container
+      const second = yield* container
+      const left = { x: 100, y: 300, width: 100, height: 40 }
+      const right = { x: 500, y: 300, width: 100, height: 40 }
+      first.id = "spot"
+      rects.set("spot", left)
+      yield* mountPage(8, false, "spot")
+      assert.strictEqual(style("left"), "50px")
+
+      first.id = "first"
+      rects.set("first", left)
+      second.id = "spot"
+      rects.set("spot", right)
+      window.dispatchEvent(new Event("resize"))
+      assert.strictEqual(style("left"), "450px")
+
+      second.id = "second"
+      rects.set("second", right)
+      window.dispatchEvent(new Event("resize"))
+      yield* tick
+      assert.strictEqual(byId("positioner").getAttribute("data-anchor-hidden"), "")
     }).pipe(Effect.scoped))
 
   it.effect("follows the trigger on a scroll until the tooltip closes, and reopens on another side", () =>

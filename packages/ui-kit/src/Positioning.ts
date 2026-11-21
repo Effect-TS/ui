@@ -1219,9 +1219,6 @@ export const trackPosition = (
     let current = args
     let reported: Placement | null = null
     let owned = written.get(node) ?? new Map<string, string>()
-    let found: Element | null = null
-    const anchorOf = (): Element | null =>
-      found?.isConnected ? found : (found = document.querySelector(current.anchorSelector))
 
     const restore = () => {
       for (const [name, value] of owned) {
@@ -1257,7 +1254,7 @@ export const trackPosition = (
     })
 
     const pass = (popup: Size): void => {
-      const anchor = anchorOf()
+      const anchor = document.querySelector(current.anchorSelector)
       const arrow = current.arrowId === null ? null : document.getElementById(current.arrowId)
       const viewport = viewportOf()
       const anchorRect = anchor === null ? zero : clientRect(anchor)
@@ -1315,7 +1312,7 @@ export const trackPosition = (
     }
 
     const observe = (): () => void => {
-      const anchor = current.disableAnchorTracking ? null : anchorOf()
+      const anchor = current.disableAnchorTracking ? null : document.querySelector(current.anchorSelector)
       const styles = new view.MutationObserver(restore)
       styles.observe(node, { attributes: true, attributeFilter: ["style"] })
       view.addEventListener("resize", update)
@@ -1351,7 +1348,6 @@ export const trackPosition = (
     let stop = () => {}
     const start = (): void => {
       stop()
-      found = null
       stop = observe()
       update()
     }
