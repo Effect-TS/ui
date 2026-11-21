@@ -245,13 +245,13 @@ const Above = Component.define({ name: "Above", model: Schema.Boolean, message: 
   update: { Opened: () => true },
   view: (open, h) =>
     ToastProvider(h, {
-      view: (t) =>
+      view: (toastProvider) =>
         h.div(
           h.button.attr("id", "open").onClick(AboveMessage.Opened()).children("Open"),
-          t.viewport(h.div.attr("id", "toasts")),
+          toastProvider.viewport(h.div.attr("id", "toasts")),
           Dialog(h, {
             props: { open },
-            view: (s) => h.div(s.portal(h.dialog)?.children(s.popup(h.div)))
+            view: (dialog) => h.div(dialog.portal(h.dialog)?.children(dialog.popup(h.div)))
           })
         )
     })
