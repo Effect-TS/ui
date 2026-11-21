@@ -59,6 +59,7 @@ export const PositionerFields = {
 
 export type PositionerOptions = Schema.Struct.Type<typeof PositionerFields>
 
+export const dropdownCollisionAvoidance: CollisionAvoidance = { fallbackAxisSide: "none" }
 export const popupCollisionAvoidance: CollisionAvoidance = { fallbackAxisSide: "end" }
 
 export type Rect = typeof RectSchema.Type
@@ -709,7 +710,7 @@ const written = new WeakMap<HTMLElement, Map<string, string>>()
 const sameReport = Schema.toEquivalence(Reported)
 const sameArgs = Schema.toEquivalence(TrackPositionArgs)
 
-const trackPosition = (
+export const trackPosition = (
   node: HTMLElement,
   args: TrackPositionArgs,
   changes: Stream.Stream<TrackPositionArgs>
@@ -805,11 +806,13 @@ const trackPosition = (
       }
     }
 
+    let settled: Size = { width: 0, height: 0 }
     const update = (): void => {
       const before = popupSize()
       pass(before)
       const after = popupSize()
       if (before.width !== after.width || before.height !== after.height) pass(after)
+      settled = popupSize()
     }
 
     const trackAnchor = (): () => void => {
@@ -861,7 +864,12 @@ const trackPosition = (
         Effect.tap(() =>
           Effect.forkScoped(Stream.runForEach(changes, (next) =>
             Effect.sync(() => {
-              if (sameArgs(next, current)) return
+              if (sameArgs(next, current)) {
+                restore()
+                const size = popupSize()
+                if (size.width !== settled.width || size.height !== settled.height) update()
+                return
+              }
               current = next
               start()
             })))

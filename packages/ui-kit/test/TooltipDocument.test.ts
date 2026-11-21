@@ -9,6 +9,7 @@ import { byId, container, tick } from "./utils/document.ts"
 const rects = new Map<string, { x: number; y: number; width: number; height: number }>()
 const layouts = new Map<string, { width: number; height: number }>()
 const content = { width: 200, height: 100 }
+let heightFor: ((node: Element) => number) | null = null
 
 const resizeObservers = new Set<FakeResizeObserver>()
 let deliveries = 0
@@ -87,7 +88,7 @@ const geometry = Effect.acquireRelease(
       if (node.id === "positioner") {
         return {
           width: content.width + padding("left") + padding("right"),
-          height: content.height + padding("top") + padding("bottom")
+          height: (heightFor?.(node) ?? content.height) + padding("top") + padding("bottom")
         }
       }
       if (node.id.endsWith("arrow")) return { width: 10, height: 10 }
@@ -135,6 +136,7 @@ const geometry = Effect.acquireRelease(
       deliveries = 0
       content.width = 200
       content.height = 100
+      heightFor = null
       layouts.clear()
       delete root.clientWidth
       delete root.clientHeight
@@ -148,7 +150,7 @@ const Message = UiSchema.TaggedEnum({ Closed: {}, Opened: {} })
 
 const Page = Component.define({
   name: "Page",
-  props: Schema.Struct({ sideOffset: Schema.Number }),
+  props: Schema.Struct({ sideOffset: Schema.Number, disableAnchorTracking: Schema.Boolean }),
   model: Schema.Struct({ open: Schema.Boolean }),
   message: Message,
   elements: Html
@@ -160,7 +162,12 @@ const Page = Component.define({
   },
   view: (model, h) =>
     Tooltip(h, {
-      props: { open: model.open, side: "bottom", sideOffset: h.props.sideOffset },
+      props: {
+        open: model.open,
+        side: "bottom",
+        sideOffset: h.props.sideOffset,
+        disableAnchorTracking: h.props.disableAnchorTracking
+      },
       view: (s) =>
         h.div.attr("id", "clip").children(
           h.div.attr("id", "layer").children(s.trigger(h.button.attr("id", "trigger")).children("B")),
@@ -171,11 +178,11 @@ const Page = Component.define({
     })
 })
 
-const mountPage = Effect.fnUntraced(function*(sideOffset = 8) {
+const mountPage = Effect.fnUntraced(function*(sideOffset = 8, disableAnchorTracking = false) {
   yield* geometry
   rects.set("trigger", rects.get("trigger") ?? { x: 400, y: 700, width: 100, height: 40 })
   const app = yield* container
-  const root = yield* BrowserHost.mountEffect(Page, { sideOffset }, app)
+  const root = yield* BrowserHost.mountEffect(Page, { sideOffset, disableAnchorTracking }, app)
   yield* tick
   return root
 })
@@ -247,7 +254,7 @@ describe("Tooltip in a document", { concurrent: false }, () => {
       clip.style.transform = ""
       clip.style.willChange = "transform-origin"
       assert.isFalse(yield* hidden)
-      clip.style.willChange = "transform"
+      clip.style.willChange = "left, Offset-Path"
       assert.isTrue(yield* hidden)
       clip.style.willChange = ""
 
@@ -256,7 +263,9 @@ describe("Tooltip in a document", { concurrent: false }, () => {
       clip.style.position = "relative"
       assert.isTrue(yield* hidden)
 
-      trigger.style.position = ""
+      clip.style.position = ""
+      trigger.style.position = "fixed"
+      clip.style.transform = "translateX(0)"
       byId("layer").showPopover()
       assert.isFalse(yield* hidden)
     }).pipe(Effect.scoped))
@@ -267,6 +276,16 @@ describe("Tooltip in a document", { concurrent: false }, () => {
       yield* mountPage(-8)
       assert.strictEqual(style("top"), "332px")
       assert.strictEqual(style("padding-top"), "")
+    }).pipe(Effect.scoped))
+
+  it.effect("re-measures after an initial flip changes the popup's size even with anchor tracking disabled", () =>
+    Effect.gen(function*() {
+      rects.set("trigger", { x: 400, y: 760, width: 100, height: 40 })
+      heightFor = (node) => node.getAttribute("data-side") === "top" ? 100 : 40
+      yield* mountPage(8, true)
+      assert.strictEqual(byId("positioner").getAttribute("data-side"), "top")
+      assert.strictEqual(style("top"), "652px")
+      assert.strictEqual(resizeObservers.size, 0)
     }).pipe(Effect.scoped))
 
   it.effect("follows the trigger on a scroll until the tooltip closes, and reopens on another side", () =>
