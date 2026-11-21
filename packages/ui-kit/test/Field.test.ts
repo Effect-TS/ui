@@ -72,7 +72,39 @@ describe("Field", () => {
     const member = attrsOf(parts({ disabled: true }).member(h.input).disabled(false))
     assert.strictEqual(member.disabled, "")
     assert.strictEqual(member["data-disabled"], "")
+
+    const scope = attrsOf(field.focusWithin(h.div))
+    assert.isUndefined(scope.role)
+    assert.isUndefined(scope["aria-labelledby"])
+    assert.strictEqual(attrsOf(field.focusWithin(h.div.attr("aria-labelledby", "own")))["aria-labelledby"], "own")
   })
+
+  it.effect("focusWithin keeps focus while it moves inside, touches when it leaves, and ignores disabled blur", () =>
+    Effect.gen(function*() {
+      const wrapper = Locator.tag("section")
+      const s = yield* Scene.make(Field, {}, {
+        elements: Html,
+        view: (field: Parts, h: H) =>
+          field.root(h.div).children(
+            field.focusWithin(h.section).children(field.member(h.button))
+          )
+      })
+      const state = () => [s.get(wrapper).attrs?.["data-focused"], s.get(wrapper).attrs?.["data-touched"]]
+      s.fire(wrapper, "focusin")
+      assert.deepStrictEqual(state(), ["", undefined])
+      s.fire(wrapper, "focusout", { within: true }).expectIgnored()
+      assert.deepStrictEqual(state(), ["", undefined])
+
+      s.props({ disabled: true })
+      assert.deepStrictEqual(state(), [undefined, undefined])
+      s.subscription("lostFocus", { _tag: "BlurredControl" }).props({})
+      assert.deepStrictEqual(state(), [undefined, undefined])
+
+      s.fire(wrapper, "focusin")
+      assert.deepStrictEqual(state(), ["", undefined])
+      s.fire(wrapper, "focusout", { within: false })
+      assert.deepStrictEqual(state(), [undefined, ""])
+    }))
 
   it("field state overrides stale attributes without replacing consumer attributes", () => {
     const field = parts({ invalid: false, dirty: true, filled: true })

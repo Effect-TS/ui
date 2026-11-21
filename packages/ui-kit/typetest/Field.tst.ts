@@ -30,6 +30,7 @@ describe("Field", () => {
           view: (field) => {
             expect(field.legend(h.div)).type.toBe<Element<"div">>()
             expect(field.group(h.fieldset)).type.toBe<Element<"fieldset">>()
+            expect(field.focusWithin(h.div)).type.toBe<Element<"div">>()
             expect(field.member(h.input)).type.toBe<InputElement<Msg>>()
             expect(field.focused).type.toBe<boolean>()
             expect(field.label(h.label.class("label"))).type.toBe<Element<"label">>()

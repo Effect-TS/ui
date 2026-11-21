@@ -92,6 +92,15 @@ to more than one element, since that gives two elements one id, and don't
 handle `focusin` or `focusout` on an element between the group and its
 members, since that hides them from the field.
 
+A single control whose focus moves into a popup, such as a select or a
+combobox, reaches a Field through `field.focusWithin` and `field.member`.
+Wrap the trigger and the popup's positioner in `field.focusWithin(h.div)`
+(or combine it with the root, `field.root(field.focusWithin(h.div))`) and
+draw the trigger with `field.member`. `focusWithin` tracks focus with
+`focusin` and `focusout` without writing `role` or `aria-labelledby`, and
+the control's own label part names the trigger; the same `focusin` /
+`focusout` bubbling rule applies to elements between them.
+
 ARIA allows `aria-invalid` on `radiogroup` and not on `radio`, the reverse
 of a checkbox or a slider. So RadioGroup takes `invalid: field.invalid` and
 writes `aria-invalid` on its root, and the radio's root removes the one
