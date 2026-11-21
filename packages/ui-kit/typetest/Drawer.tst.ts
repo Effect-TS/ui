@@ -31,8 +31,9 @@ describe("Drawer", () => {
         snapToSequentialPoints: true
       },
       onEmit: {
-        Opened: ({ triggerId }) => {
+        Opened: ({ reason, triggerId }) => {
           expect(triggerId).type.toBe<string | null>()
+          expect(reason).type.toBe<"trigger-press" | "swipe">()
           return Msg.Clicked()
         },
         Dismissed: ({ reason }) => {
@@ -72,6 +73,8 @@ describe("Drawer", () => {
         expect(drawer.viewport(h.div)).type.toBe<Div>()
         expect(drawer.content(h.div)).type.toBe<Div>()
         expect(drawer.portal(h.dialog)).type.toBe<DialogElement | undefined>()
+        expect(drawer.swipeArea({ element: h.div, swipeDirection: "up", disabled: true })).type.toBe<Div>()
+        expect(drawer.swipeArea({ element: h.div })).type.toBe<Div>()
         expect(drawer.swiping).type.toBe<boolean>()
         expect(drawer.swipeDirection).type.toBe<DrawerSwipeDirection>()
         expect(drawer.expanded).type.toBe<boolean>()
@@ -82,6 +85,8 @@ describe("Drawer", () => {
         expect(drawer.popup).type.not.toBeCallableWith(h.span)
         expect(drawer.backdrop).type.not.toBeCallableWith(h.span)
         expect(drawer.content).type.not.toBeCallableWith(h.span)
+        expect(drawer.swipeArea).type.not.toBeCallableWith({ element: h.span })
+        expect(drawer.swipeArea).type.not.toBeCallableWith({ element: h.div, swipeDirection: "sideways" })
         return h.div(drawer.portal(h.dialog)?.children(drawer.popup(h.div)))
       }
     })

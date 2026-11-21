@@ -14,6 +14,7 @@
  * | Part           | Element                                                  |
  * | :------------- | :------------------------------------------------------- |
  * | `trigger`      | `<button>` that opens the drawer                         |
+ * | `swipeArea`    | `<div>` outside the portal that a swipe opens the drawer from |
  * | `portal`       | `<dialog>` in the top layer, around the parts below      |
  * | `backdrop`     | `<div>` that covers the page                             |
  * | `viewport`     | `<div>` that positions the popup                         |
@@ -23,6 +24,8 @@
  *
  * Each part takes the consumer's builder and returns it, as a `Dialog`'s do:
  * `drawer.portal(h.dialog)?.children(drawer.popup(h.div).children(...))`.
+ * `swipeArea` takes `{ element, swipeDirection, disabled }` and can be drawn
+ * more than once. Its direction is the opposite of the drawer's by default.
  *
  * Style the popup's position from the variables below, so a swipe moves it:
  * `.popup { transform: translateY(var(--drawer-swipe-movement-y)) }`, and
@@ -46,6 +49,13 @@
  * on the nearest snap point, pushed further by a fast release, and emits
  * `Snapped` for a new one. Past the lowest, it dismisses.
  *
+ * A swipe on a swipe area emits `Opened` with the reason `"swipe"` once it
+ * moves, so the drawer opens as the swipe starts. Once `open` is true the
+ * popup follows the finger. A release past half the popup's size, or faster
+ * than 0.1 px per ms, keeps it open, and a shorter one emits `Dismissed`
+ * with the reason `"swipe"`. A consumer that refuses or delays the open sees
+ * nothing follow the finger.
+ *
  * **Data attributes**
  *
  * Each present with an empty value or absent, on top of the `Dialog`'s:
@@ -55,6 +65,8 @@
  *   `data-expanded` at the snap point `1`, `data-nested-drawer-open` and
  *   `data-nested-drawer-swiping`
  * - `backdrop`: `data-swiping` and `data-swipe-dismiss`
+ * - `swipeArea`: `data-open` / `data-closed`, `data-disabled`,
+ *   `data-swipe-direction` and `data-swiping`
  *
  * The popup sets the CSS variables `--nested-drawers`, `--drawer-height`,
  * `--drawer-frontmost-height` (the height of the frontmost nested drawer),
@@ -142,7 +154,7 @@ import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
-import type * as View from "@effect/ui/View"
+import * as View from "@effect/ui/View"
 import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import type * as AsyncResult from "effect/reactivity/AsyncResult"
@@ -247,10 +259,30 @@ export const DrawerDismissReason = Schema.Literals([...DialogDismissReason.liter
 export type DrawerDismissReason = typeof DrawerDismissReason.Type
 
 /**
- * `Opened` requests that the drawer open, with the trigger's `id`, as a
- * `Dialog`'s does. `Dismissed` requests that it close, with the reason.
- * `Settled` reports that the transitions of an open or a close finished, as
- * a `Dialog`'s does. `Snapped` requests that the drawer rest at another snap
+ * Why a drawer asks to open: a press on a trigger, or a swipe on a swipe
+ * area.
+ *
+ * @stability experimental
+ * @category schemas
+ * @since 0.1.0
+ */
+export const DrawerOpenReason = Schema.Literals(["trigger-press", "swipe"])
+
+/**
+ * Why a drawer asks to open.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type DrawerOpenReason = typeof DrawerOpenReason.Type
+
+/**
+ * `Opened` requests that the drawer open, with the trigger's `id` and the
+ * reason. A swipe on a swipe area has no trigger, so its `triggerId` is
+ * `null`. `Dismissed` requests that it close, with the reason. `Settled`
+ * reports that the transitions of an open or a close finished, as a
+ * `Dialog`'s does. `Snapped` requests that the drawer rest at another snap
  * point, after a swipe. The consumer decides whether to change `open` and
  * `snapPoint`.
  *
@@ -259,7 +291,7 @@ export type DrawerDismissReason = typeof DrawerDismissReason.Type
  * @since 0.1.0
  */
 export const DrawerEvents = UiSchema.TaggedEnum({
-  Opened: { triggerId: Schema.NullOr(Schema.String) },
+  Opened: { triggerId: Schema.NullOr(Schema.String), reason: DrawerOpenReason },
   Dismissed: { reason: DrawerDismissReason },
   Settled: { open: Schema.Boolean },
   Snapped: { snapPoint: DrawerSnapPoint }
@@ -292,6 +324,10 @@ const minVelocityDuration = 50
 const minSampleDuration = 4
 const maxSampleAge = 80
 const minSampleDistance = 1
+const openRatio = 0.5
+const fallbackOpenThreshold = 40
+const openVelocityThreshold = 0.1
+const minOpenDistance = 1
 
 const interactive = "button,a,input,select,textarea,label,[role=\"button\"]"
 const ignoreAttribute = "data-swipe-ignore"
@@ -511,6 +547,9 @@ const Message = UiSchema.TaggedEnum({
   RefusedSwipe: {},
   ShowedPopup: {},
   Measured: { width: Schema.Number, height: Schema.Number, viewport: Schema.Number, fontSize: Schema.Number },
+  StartedAreaSwipe: { key: Schema.String },
+  ReleasedAreaSwipe: { displacement: Schema.Number, velocity: Schema.Number, size: Schema.NullOr(Schema.Number) },
+  CancelledAreaSwipe: {},
   ChangedNested: { count: Schema.Number, swiping: Schema.Boolean, height: Schema.Number }
 })
 
@@ -518,6 +557,8 @@ type Message = typeof Message.Type
 
 const Model = Schema.Struct({
   swiping: Schema.Boolean,
+  area: Schema.NullOr(Schema.String),
+  openedByArea: Schema.Boolean,
   dismissed: Schema.Boolean,
   strength: Schema.NullOr(Schema.Number),
   releases: Schema.Number,
@@ -735,7 +776,8 @@ const TrackSwipeArgs = {
   height: Schema.Number,
   rest: Schema.Number,
   dismissed: Schema.Boolean,
-  releases: Schema.Number
+  releases: Schema.Number,
+  area: Schema.Boolean
 }
 
 type TrackSwipeArgs = Schema.Struct<typeof TrackSwipeArgs>["Type"]
@@ -950,7 +992,7 @@ const TrackSwipe = Mount.makeStream(
           if (args.open) takeBack()
         }
         const canStart = (target: EventTarget | null): Element | null =>
-          args.open && args.enabled && gesture === null && pending === null ? inOwn(target) : null
+          args.open && args.enabled && !args.area && gesture === null && pending === null ? inOwn(target) : null
         const begin = (point: Point, time: number, pointer: number | null, first: boolean): Gesture => {
           const g: Gesture = {
             pointer,
@@ -1110,7 +1152,7 @@ const TrackSwipe = Mount.makeStream(
               if (area !== null) observer.observe(area)
             }
             if (args.open && args.dismissed) send(Message.ShowedPopup())
-            if (args.open) writeProgress(document, args, null)
+            if (args.open && !args.area) writeProgress(document, args, null)
           }),
           () =>
             Effect.sync(() => {
@@ -1132,16 +1174,195 @@ const TrackSwipe = Mount.makeStream(
           Effect.sync(() => {
             const previous = args
             args = next
-            if (gesture !== null && (!next.open || !next.enabled)) cancel()
+            if (gesture !== null && (!next.open || !next.enabled || next.area)) cancel()
             if (pending !== null && next.releases >= pending) decided()
             if (
-              gesture === null && pending === null &&
+              gesture === null && pending === null && !next.area &&
               (next.open !== previous.open || next.rest !== previous.rest)
             ) writeProgress(document, next, null)
+            if (previous.area && !next.area && next.open && gesture === null) {
+              if (next.dismissed) takeBack()
+              else rest()
+            }
             if (next.open && !previous.open) {
-              rest()
+              if (!next.area) rest()
               if (next.dismissed) send(Message.ShowedPopup())
             }
+          })).pipe(Effect.forkScoped)
+      })
+    )
+)
+
+const opensOnRelease = (moved: number, speed: number, size: number | null): boolean =>
+  moved >= (size === null || size <= 0 ? fallbackOpenThreshold : size * openRatio) || speed >= openVelocityThreshold
+
+const TrackSwipeAreaArgs = {
+  key: Schema.String,
+  drawerId: Schema.String,
+  open: Schema.Boolean,
+  direction: DrawerSwipeDirection,
+  drawerDirection: DrawerSwipeDirection,
+  disabled: Schema.Boolean,
+  snapOffset: Schema.Number,
+  rest: Schema.Number
+}
+
+type TrackSwipeAreaArgs = Schema.Struct<typeof TrackSwipeAreaArgs>["Type"]
+
+interface AreaGesture {
+  readonly pointer: number | null
+  readonly start: Point
+  readonly velocity: Velocity
+  moved: number
+  started: boolean
+  popup: HTMLElement | null
+  size: number
+  frozen: Frozen | null
+  listening: AbortController | null
+}
+
+const TrackSwipeArea = Mount.makeStream(
+  "TrackSwipeArea",
+  { args: TrackSwipeAreaArgs },
+  (node: HTMLElement, initial, changes) =>
+    Stream.callback<Message>((queue) =>
+      Effect.gen(function*() {
+        const document = node.ownerDocument
+        let args: TrackSwipeAreaArgs = initial
+        let gesture: AreaGesture | null = null
+        const send = (message: Message) => Queue.offerUnsafe(queue, message)
+        const apply = (g: AreaGesture) => {
+          if (!args.open || !g.started) return
+          if (g.popup === null) {
+            const popup = byAttribute(document, "data-drawer-popup", args.drawerId)
+            if (popup === null) return
+            g.popup = popup
+            g.frozen = freeze(popup, null)
+          }
+          if (g.size <= 0) g.size = isHorizontal(args.drawerDirection) ? g.popup.offsetWidth : g.popup.offsetHeight
+          const closed = Math.max(0, g.size - args.snapOffset)
+          const remaining = closed - g.moved
+          const offset = remaining >= 0 ? remaining : -Math.sqrt(-remaining)
+          const signed = (args.drawerDirection === "down" || args.drawerDirection === "right" ? offset : -offset) + "px"
+          const horizontal = isHorizontal(args.drawerDirection)
+          g.popup.style.setProperty(movementX, horizontal ? signed : "0px")
+          g.popup.style.setProperty(movementY, horizontal ? "0px" : signed)
+          writeProgress(document, args, closed > 0 ? clamp(remaining / closed, 0, 1) : 0, g.popup.offsetHeight)
+        }
+        const finish = (g: AreaGesture) => {
+          gesture = null
+          g.listening?.abort()
+          if (g.pointer !== null && node.hasPointerCapture?.(g.pointer) === true) node.releasePointerCapture(g.pointer)
+          thaw(g.frozen)
+          if (g.popup !== null) writeProgress(document, args, null)
+        }
+        const begin = (point: Point, time: number, pointer: number | null): AreaGesture | null => {
+          if (args.disabled || args.open || gesture !== null) return null
+          const g: AreaGesture = {
+            pointer,
+            start: point,
+            velocity: velocity(),
+            moved: 0,
+            started: false,
+            popup: null,
+            size: 0,
+            frozen: null,
+            listening: null
+          }
+          record(g.velocity, { x: 0, y: 0 }, time)
+          gesture = g
+          return g
+        }
+        const move = (g: AreaGesture, point: Point, time: number) => {
+          g.moved = displacement(args.direction, point.x - g.start.x, point.y - g.start.y)
+          record(g.velocity, { x: g.moved, y: 0 }, time)
+          if (!g.started) {
+            if (g.moved < minOpenDistance) return
+            g.started = true
+            send(Message.StartedAreaSwipe({ key: args.key }))
+          }
+          apply(g)
+        }
+        const release = (g: AreaGesture, time: number) => {
+          finish(g)
+          if (!g.started) return
+          send(Message.ReleasedAreaSwipe({
+            displacement: g.moved,
+            velocity: releaseVelocity(g.velocity, { x: g.moved, y: 0 }, time).x,
+            size: g.popup === null ? null : g.size
+          }))
+        }
+        const onPointerMove = (event: PointerEvent) => {
+          const g = gesture
+          if (g === null || g.pointer !== event.pointerId) return
+          move(g, { x: event.clientX, y: event.clientY }, event.timeStamp)
+          if (event.buttons === 0) release(g, event.timeStamp)
+        }
+        const onPointerUp = (event: PointerEvent) => {
+          const g = gesture
+          if (g !== null && g.pointer === event.pointerId) release(g, event.timeStamp)
+        }
+        const onPointerDown = (event: PointerEvent) => {
+          if (event.pointerType === "touch" || event.button !== 0) return
+          const g = begin({ x: event.clientX, y: event.clientY }, event.timeStamp, event.pointerId)
+          if (g === null) return
+          if (event.cancelable) event.preventDefault()
+          try {
+            node.setPointerCapture?.(event.pointerId)
+          } catch {
+            // The pointer is already gone, as after a synthetic event.
+          }
+          g.listening = new AbortController()
+          const { signal } = g.listening
+          document.addEventListener("pointermove", onPointerMove, { signal })
+          document.addEventListener("pointerup", onPointerUp, { signal })
+          document.addEventListener("pointercancel", onPointerUp, { signal })
+        }
+        const onTouchStart = (event: TouchEvent) => {
+          const first = event.touches[0]
+          if (first === undefined || event.touches.length > 1) return
+          begin({ x: first.clientX, y: first.clientY }, event.timeStamp, null)
+        }
+        const onTouchMove = (event: TouchEvent) => {
+          const g = gesture
+          const point = event.touches[0]
+          if (g === null || g.pointer !== null || point === undefined) return
+          move(g, { x: point.clientX, y: point.clientY }, event.timeStamp)
+          if (g.started && event.cancelable) event.preventDefault()
+        }
+        const onTouchEnd = (event: TouchEvent) => {
+          const g = gesture
+          if (g !== null && g.pointer === null) release(g, event.timeStamp)
+        }
+        yield* Effect.acquireRelease(
+          Effect.sync(() => {
+            node.addEventListener("pointerdown", onPointerDown)
+            node.addEventListener("touchstart", onTouchStart, { passive: true })
+            node.addEventListener("touchmove", onTouchMove, { passive: false })
+            node.addEventListener("touchend", onTouchEnd)
+            node.addEventListener("touchcancel", onTouchEnd)
+          }),
+          () =>
+            Effect.sync(() => {
+              node.removeEventListener("pointerdown", onPointerDown)
+              node.removeEventListener("touchstart", onTouchStart)
+              node.removeEventListener("touchmove", onTouchMove)
+              node.removeEventListener("touchend", onTouchEnd)
+              node.removeEventListener("touchcancel", onTouchEnd)
+              if (gesture !== null) finish(gesture)
+            })
+        )
+        yield* Stream.runForEach(changes, (next) =>
+          Effect.sync(() => {
+            args = next
+            const g = gesture
+            if (g === null) return
+            if (next.disabled) {
+              finish(g)
+              if (g.started) send(Message.CancelledAreaSwipe())
+              return
+            }
+            apply(g)
           })).pipe(Effect.forkScoped)
       })
     )
@@ -1182,6 +1403,8 @@ const DrawerCore = Component.define({
 }).make({
   init: () => ({
     swiping: false,
+    area: null,
+    openedByArea: false,
     dismissed: false,
     strength: null,
     releases: 0,
@@ -1215,6 +1438,18 @@ const DrawerCore = Component.define({
     ShowedPopup: (model, _message, $) =>
       $.props.open && model.dismissed ? { ...model, dismissed: false, strength: null } : model,
     Measured: (model, sizes) => ({ ...model, ...sizes }),
+    StartedAreaSwipe: (model, { key }, $) =>
+      $.props.open || model.area !== null
+        ? model
+        : $.set({ ...model, area: key, openedByArea: true, dismissed: false, strength: null }).emit(
+          DrawerEvents.Opened({ triggerId: null, reason: "swipe" })
+        ),
+    ReleasedAreaSwipe: (model, { displacement: moved, size, velocity: speed }, $) => {
+      const next = { ...model, area: null, openedByArea: false }
+      if (!$.props.open || opensOnRelease(moved, speed, size) || !model.openedByArea) return next
+      return $.set({ ...next, dismissed: true, strength: null }).emit(DrawerEvents.Dismissed({ reason: "swipe" }))
+    },
+    CancelledAreaSwipe: (model) => ({ ...model, area: null, openedByArea: false }),
     ChangedNested: (model, { count, height, swiping }) => ({
       ...model,
       nestedOpen: count,
@@ -1229,13 +1464,14 @@ const DrawerCore = Component.define({
     const snapping = snappingOf(props, sizesOf(model))
     const rest = restingProgress(snapping)
     const drawerId = p.id("drawer")
-    const swiping = model.swiping
+    const swiping = model.swiping || model.area !== null
     const nestedDrawers = model.nestedOpen
     const nestedDrawerSwiping = model.nestedSwiping
     const frontmost = frontmostOf(model)
     const active = props.snapPoint ?? props.snapPoints?.[0]
     const expanded = active === 1
     const swipeDismiss = model.dismissed && !open
+    let areas = 0
 
     const popup = p.part("div", (b) =>
       b
@@ -1275,7 +1511,8 @@ const DrawerCore = Component.define({
           height: model.height,
           rest,
           dismissed: model.dismissed,
-          releases: model.releases
+          releases: model.releases,
+          area: model.area !== null
         })))
 
     const backdrop = p.part("div", (b) =>
@@ -1287,6 +1524,58 @@ const DrawerCore = Component.define({
 
     const content = p.part("div", (b) => b.attr(contentAttribute, ""))
 
+    const swipeAreaPart = p.part(
+      "div",
+      (b, key: string, direction: DrawerSwipeDirection, disabled: boolean) => {
+        const running = model.area === key
+        return b
+          .attr("role", "presentation")
+          .attr("aria-hidden", "true")
+          .attr("data-open", flag(open))
+          .attr("data-closed", flag(!open))
+          .attr("data-disabled", flag(disabled))
+          .attr("data-swipe-direction", direction)
+          .attr("data-swiping", flag(running))
+          .forward((node) =>
+            node.attr(
+              "style",
+              withStyle(
+                node.attrs.style,
+                "touch-action:" + (isHorizontal(direction) ? "pan-y" : "pan-x") +
+                  (disabled || (open && !running) ? ";pointer-events:none" : "")
+              )
+            )
+          )
+          .onMount(TrackSwipeArea({
+            key,
+            drawerId,
+            open,
+            direction,
+            drawerDirection: swipeDirection,
+            disabled,
+            snapOffset: snapping?.offset ?? 0,
+            rest
+          }))
+      }
+    )
+    const swipeArea = View.wrapPart(
+      swipeAreaPart,
+      <B extends View.PartTarget<"div">>(options: {
+        /** The area's element. */
+        readonly element: B
+        /** The direction a swipe on the area opens the drawer in. The opposite of the drawer's by default. */
+        readonly swipeDirection?: DrawerSwipeDirection | undefined
+        /** Whether a swipe on the area does nothing. */
+        readonly disabled?: boolean | undefined
+      }): ReturnType<B["attr"]> =>
+        swipeAreaPart(
+          options.element,
+          p.id("swipe-area", areas++),
+          options.swipeDirection ?? opposite[swipeDirection],
+          options.disabled === true
+        )
+    )
+
     return {
       swiping,
       swipeDirection,
@@ -1295,7 +1584,8 @@ const DrawerCore = Component.define({
       nestedDrawerSwiping,
       popup,
       backdrop,
-      content
+      content,
+      swipeArea
     }
   }
 })
@@ -1323,6 +1613,9 @@ const handle = <Msg>(onEmit: Handlers<Msg>, event: DrawerEvents): Msg | undefine
   const handler = (onEmit as Record<string, ((event: DrawerEvents) => Msg | undefined) | undefined>)[event._tag]
   return handler?.(event)
 }
+
+const fromDialog = (event: DialogEvents): DrawerEvents =>
+  event._tag === "Opened" ? DrawerEvents.Opened({ triggerId: event.triggerId, reason: "trigger-press" }) : event
 
 const dialogPropsOf = (props: DrawerProps): DialogProps => {
   const {
@@ -1384,7 +1677,7 @@ const asComponent = (call: (h: View.Helper<any, unknown>, options: any) => unkno
  *
  * The parts stack on the `Dialog`'s: `drawer.popup` and `drawer.backdrop`
  * add the drawer's attributes and mounts to the `Dialog`'s, and
- * `drawer.content` is its own. The
+ * `drawer.content` and `drawer.swipeArea` are its own. The
  * popup carries the swipe's mount, so it can't take one of the consumer's.
  *
  * It renders a `Drawer` and a `Dialog` instance, so a `Scene` of the
@@ -1403,7 +1696,7 @@ export const Drawer: DrawerComponent = asComponent((h, options) =>
       Dialog(h, {
         key: options.key ?? options.ref?.key,
         props: dialogPropsOf(options.props),
-        onEmit: (event: DialogEvents) => handle(options.onEmit, event),
+        onEmit: (event: DialogEvents) => handle(options.onEmit, fromDialog(event)),
         view: (dialog) =>
           options.view({
             ...dialog,

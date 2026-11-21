@@ -11,6 +11,7 @@ const Config = Schema.Struct({
   direction: Schema.Literals(["up", "down", "left", "right"]),
   snapPoints: Schema.optional(Schema.Array(Schema.Number)),
   refuse: Schema.Boolean,
+  area: Schema.Boolean,
   scroll: Schema.Boolean
 })
 type Config = typeof Config.Type
@@ -19,12 +20,13 @@ const config = (overrides: Partial<Config>): Config => ({
   open: true,
   direction: "down",
   refuse: false,
+  area: false,
   scroll: false,
   ...overrides
 })
 
 const Message = UiSchema.TaggedEnum({
-  Opened: {},
+  Opened: { reason: Schema.String },
   Dismissed: { reason: Schema.String },
   Snapped: { snapPoint: Schema.Union([Schema.Number, Schema.String]) },
   Settled: { open: Schema.Boolean }
@@ -44,7 +46,11 @@ const Page = Component.define({
 }).make({
   init: ({ props }) => ({ open: props.open, snapPoint: null, events: [], config: props }),
   update: {
-    Opened: (model) => ({ ...model, open: !model.config.refuse, events: [...model.events, "Opened"] }),
+    Opened: (model, { reason }) => ({
+      ...model,
+      open: !model.config.refuse,
+      events: [...model.events, "Opened:" + reason]
+    }),
     Dismissed: (model, { reason }) => ({
       ...model,
       open: model.config.refuse,
@@ -63,13 +69,14 @@ const Page = Component.define({
         snapPoint: model.snapPoint
       },
       onEmit: {
-        Opened: () => Message.Opened(),
+        Opened: ({ reason }) => Message.Opened({ reason }),
         Dismissed: ({ reason }) => Message.Dismissed({ reason }),
         Snapped: ({ snapPoint }) => Message.Snapped({ snapPoint }),
         Settled: ({ open }) => Message.Settled({ open })
       },
       view: (drawer) =>
         h.div(
+          props.area ? drawer.swipeArea({ element: h.div.attr("id", "area") }) : undefined,
           drawer.portal(h.dialog)?.children(
             drawer.backdrop(h.div.attr("id", "backdrop")),
             drawer.viewport(h.div.attr("id", "viewport")).children(
@@ -263,5 +270,45 @@ describe("Drawer in a document", { concurrent: false }, () => {
       touch(scroller, "touchend", 10, 250)
       yield* tick
       assert.include(root.model()!.events, "Dismissed:swipe")
+    }))
+
+  it.effect("opens from a swipe area, follows the finger once open, and its click doesn't dismiss", () =>
+    Effect.gen(function*() {
+      const root = yield* mount({ open: false, area: true })
+      const area = document.getElementById("area")!
+      assert.strictEqual(area.getAttribute("data-swipe-direction"), "up")
+      assert.include(area.getAttribute("style") ?? "", "touch-action:pan-x")
+      pointer(area, "pointerdown", 10, 500)
+      pointer(document, "pointermove", 10, 495)
+      yield* tick
+      assert.deepStrictEqual(root.model()!.events.slice(0, 1), ["Opened:swipe"])
+      sized(popup(), 300, 200)
+      pointer(document, "pointermove", 10, 400)
+      assert.strictEqual(movement(), "100px")
+      assert.strictEqual(popup().style.getPropertyValue("transition"), "none")
+      pointer(document, "pointerup", 10, 380, 0)
+      area.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }))
+      yield* tick
+      assert.isTrue(root.model()!.open)
+      assert.notInclude(root.model()!.events, "Dismissed:outside-press")
+      assert.strictEqual(movement(), "0px")
+      assert.strictEqual(popup().style.getPropertyValue("transition"), "")
+    }))
+
+  it.effect("closes again when a swipe area's swipe stops short", () =>
+    Effect.gen(function*() {
+      const root = yield* mount({ open: false, area: true })
+      const area = document.getElementById("area")!
+      pointer(area, "pointerdown", 10, 500)
+      pointer(document, "pointermove", 10, 495)
+      yield* tick
+      sized(popup(), 300, 200)
+      time += 200
+      pointer(document, "pointermove", 10, 480)
+      time += 200
+      pointer(document, "pointerup", 10, 480, 0)
+      yield* tick
+      assert.include(root.model()!.events, "Dismissed:swipe")
+      assert.isFalse(root.model()!.open)
     }))
 })
