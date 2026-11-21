@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { Component, UiSchema } from "@effect/ui"
-import { Drawer } from "@effect/ui-kit"
+import { Drawer, DrawerProvider } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
@@ -12,6 +12,7 @@ const Config = Schema.Struct({
   snapPoints: Schema.optional(Schema.Array(Schema.Number)),
   refuse: Schema.Boolean,
   area: Schema.Boolean,
+  provider: Schema.Boolean,
   scroll: Schema.Boolean
 })
 type Config = typeof Config.Type
@@ -21,6 +22,7 @@ const config = (overrides: Partial<Config>): Config => ({
   direction: "down",
   refuse: false,
   area: false,
+  provider: false,
   scroll: false,
   ...overrides
 })
@@ -61,7 +63,7 @@ const Page = Component.define({
   },
   view: (model, h) => {
     const props = model.config
-    return Drawer(h, {
+    const drawer = Drawer(h, {
       props: {
         open: model.open,
         swipeDirection: props.direction,
@@ -92,6 +94,11 @@ const Page = Component.define({
           )
         )
     })
+    return props.provider
+      ? DrawerProvider(h, {
+        view: (provider) => h.div(provider.indentBackground(h.div), provider.indent(h.div.attr("id", "indent")), drawer)
+      })
+      : drawer
   }
 })
 
@@ -310,5 +317,42 @@ describe("Drawer in a document", { concurrent: false }, () => {
       yield* tick
       assert.include(root.model()!.events, "Dismissed:swipe")
       assert.isFalse(root.model()!.open)
+    }))
+
+  it.effect("scales the indent while a swipe runs and puts it back to 0", () =>
+    Effect.gen(function*() {
+      yield* mount({ provider: true })
+      const indent = document.getElementById("indent")!
+      assert.strictEqual(indent.getAttribute("data-active"), "")
+      assert.strictEqual(indent.style.getPropertyValue("--drawer-swipe-progress"), "0")
+      sized(popup(), 300, 200)
+      drag(document.getElementById("handle")!, [10, 10], [10, 60])
+      assert.strictEqual(indent.style.getPropertyValue("--drawer-swipe-progress"), "0.25")
+      assert.strictEqual(indent.style.getPropertyValue("--drawer-height"), "200px")
+      const backdrop = document.querySelector<HTMLElement>("[data-drawer-backdrop]")!
+      assert.strictEqual(backdrop.style.getPropertyValue("--drawer-swipe-progress"), "0.25")
+      pointer(document, "pointerup", 10, 60, 0)
+      yield* tick
+      assert.strictEqual(indent.style.getPropertyValue("--drawer-swipe-progress"), "0")
+      assert.strictEqual(indent.style.getPropertyValue("--drawer-height"), "")
+      assert.strictEqual(backdrop.style.getPropertyValue("--drawer-swipe-progress"), "0")
+    }))
+
+  it.effect("rests the indent at the backdrop's progress at a lower snap point, and at 0 once closed", () =>
+    Effect.gen(function*() {
+      const root = yield* mount({ provider: true, snapPoints: [0.5, 1] })
+      const indent = document.getElementById("indent")!
+      const backdrop = document.querySelector<HTMLElement>("[data-drawer-backdrop]")!
+      sized(popup(), 300, 800)
+      document.querySelectorAll("[role=presentation]").forEach((element) => sized(element, 300, 800))
+      drag(document.getElementById("handle")!, [10, 10], [10, 12])
+      pointer(document, "pointerup", 10, 12, 0)
+      yield* tick
+      assert.strictEqual(backdrop.style.getPropertyValue("--drawer-swipe-progress"), "1")
+      assert.strictEqual(indent.style.getPropertyValue("--drawer-swipe-progress"), "1")
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+      yield* tick
+      assert.isFalse(root.model()!.open)
+      assert.strictEqual(indent.style.getPropertyValue("--drawer-swipe-progress"), "0")
     }))
 })

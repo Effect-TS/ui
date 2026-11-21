@@ -306,6 +306,24 @@ export const DrawerEvents = UiSchema.TaggedEnum({
  */
 export type DrawerEvents = typeof DrawerEvents.Type
 
+/**
+ * The props of a `DrawerProvider`: none.
+ *
+ * @stability experimental
+ * @category schemas
+ * @since 0.1.0
+ */
+export const DrawerProviderProps = Schema.Struct({})
+
+/**
+ * The props of a `DrawerProvider`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type DrawerProviderProps = typeof DrawerProviderProps.Type
+
 const fastSwipeVelocity = 0.5
 const minSwipeThreshold = 10
 const reverseCancelThreshold = 10
@@ -728,12 +746,20 @@ const heightVar = "--drawer-height"
 interface ProgressArgs {
   readonly drawerId: string
   readonly rest: number
+  readonly nested: boolean
+  readonly indent: string | null
+  readonly open: boolean
 }
 
 const writeProgress = (document: Document, args: ProgressArgs, value: number | null, size = 0): void => {
+  const height = value !== null && value > 0 && size > 0 ? size + "px" : null
   const backdrop = byAttribute(document, "data-drawer-backdrop", args.drawerId)
   setVar(backdrop, progressVar, String(value ?? args.rest))
-  setVar(backdrop, heightVar, value !== null && value > 0 && size > 0 ? size + "px" : null)
+  setVar(backdrop, heightVar, height)
+  if (args.nested || args.indent === null) return
+  const indent = document.getElementById(args.indent)
+  setVar(indent, progressVar, String(value ?? (args.open ? args.rest : 0)))
+  setVar(indent, heightVar, height)
 }
 
 const frame = (view: Window | null, f: () => void): void => {
@@ -777,7 +803,9 @@ const TrackSwipeArgs = {
   rest: Schema.Number,
   dismissed: Schema.Boolean,
   releases: Schema.Number,
-  area: Schema.Boolean
+  area: Schema.Boolean,
+  nested: Schema.Boolean,
+  indent: Schema.NullOr(Schema.String)
 }
 
 type TrackSwipeArgs = Schema.Struct<typeof TrackSwipeArgs>["Type"]
@@ -1167,7 +1195,7 @@ const TrackSwipe = Mount.makeStream(
                 g.listening?.abort()
                 thaw(g.frozen)
               }
-              writeProgress(document, args, null)
+              writeProgress(document, { ...args, open: false }, null)
             })
         )
         yield* Stream.runForEach(changes, (next) =>
@@ -1178,7 +1206,7 @@ const TrackSwipe = Mount.makeStream(
             if (pending !== null && next.releases >= pending) decided()
             if (
               gesture === null && pending === null && !next.area &&
-              (next.open !== previous.open || next.rest !== previous.rest)
+              (next.open !== previous.open || next.rest !== previous.rest || next.indent !== previous.indent)
             ) writeProgress(document, next, null)
             if (previous.area && !next.area && next.open && gesture === null) {
               if (next.dismissed) takeBack()
@@ -1204,7 +1232,9 @@ const TrackSwipeAreaArgs = {
   drawerDirection: DrawerSwipeDirection,
   disabled: Schema.Boolean,
   snapOffset: Schema.Number,
-  rest: Schema.Number
+  rest: Schema.Number,
+  nested: Schema.Boolean,
+  indent: Schema.NullOr(Schema.String)
 }
 
 type TrackSwipeAreaArgs = Schema.Struct<typeof TrackSwipeAreaArgs>["Type"]
@@ -1368,6 +1398,91 @@ const TrackSwipeArea = Mount.makeStream(
     )
 )
 
+const ProviderMessage = UiSchema.TaggedEnum({
+  ChangedOpen: { active: Schema.Boolean },
+  MountedIndent: { id: Schema.String }
+})
+
+const ReportIndent = Mount.makeStream(
+  "ReportIndent",
+  { args: { id: Schema.String } },
+  (_node: HTMLElement, args, changes) =>
+    Stream.concat(Stream.succeed(args), changes).pipe(
+      Stream.map(({ id }) => ProviderMessage.MountedIndent({ id }))
+    )
+)
+
+const idOf = (builder: unknown): string | null => {
+  const id = (builder as { readonly attrs?: Readonly<Record<string, string>> | undefined }).attrs?.id
+  return id === undefined || id === "" ? null : id
+}
+
+/**
+ * Scales the page behind the drawers below it, as a native sheet does.
+ * Headless: call it with the consumer's `h` and a `view` closure that draws
+ * the page with `provider.indent`.
+ *
+ * **Details**
+ *
+ * - `indent`: a `<div>` around the page. It gets `data-active` while a
+ *   drawer below the provider is open, `data-inactive` otherwise, and a
+ *   resting `--drawer-swipe-progress: 0`, or the backdrop's while an open
+ *   drawer rests at a lower snap point. While a drawer is swiped, its
+ *   `--drawer-swipe-progress` and `--drawer-height`, the height of the
+ *   frontmost drawer, follow the finger. Give the element its `id` on the
+ *   builder passed in, if it needs one.
+ * - `indentBackground`: a `<div>` behind the indent, with the same
+ *   `data-active` and `data-inactive`.
+ * - `active`: whether a drawer below the provider is open.
+ *
+ * A drawer reports to the nearest provider above it. One without a provider
+ * works as before.
+ *
+ * @stability experimental
+ * @category components
+ * @since 0.1.0
+ */
+export const DrawerProvider = Component.define({
+  name: "DrawerProvider",
+  props: DrawerProviderProps,
+  model: Schema.Struct({ active: Schema.Boolean, indent: Schema.NullOr(Schema.String) }),
+  message: ProviderMessage,
+  shares: {
+    value: (model) => ({ indent: model.indent }),
+    collects: {
+      schema: Schema.Boolean,
+      onChange: (reports) => ProviderMessage.ChangedOpen({ active: reports.some((open) => open) })
+    }
+  },
+  elements: Html
+}).make({
+  init: () => ({ active: false, indent: null }),
+  update: {
+    ChangedOpen: (model, { active }) => ({ ...model, active }),
+    MountedIndent: (model, { id }) => model.indent === id ? model : { ...model, indent: id }
+  },
+  parts: (model, p) => {
+    const active = model.active
+    const indentPart = p.part("div", (b, id: string) =>
+      b
+        .attr("id", id)
+        .attr("data-active", flag(active))
+        .attr("data-inactive", flag(!active))
+        .forward((node) => node.attr("style", withStyle(node.attrs.style, progressVar + ":0")))
+        .onMount(ReportIndent({ id })))
+    const indent = View.wrapPart(
+      indentPart,
+      <B extends View.PartTarget<"div">>(element: B): ReturnType<B["attr"]> =>
+        indentPart(element, idOf(element) ?? p.id("indent"))
+    )
+    const indentBackground = p.part(
+      "div",
+      (b) => b.attr("data-active", flag(active)).attr("data-inactive", flag(!active))
+    )
+    return { active, indent, indentBackground }
+  }
+})
+
 const sizesOf = (model: Model): Sizes => ({ height: model.height, viewport: model.viewport, fontSize: model.fontSize })
 
 const DrawerCore = Component.define({
@@ -1397,6 +1512,11 @@ const DrawerCore = Component.define({
         swiping: model.swiping || model.nestedSwiping,
         height: props.open ? frontmostOf(model) : 0
       })
+    },
+    provider: {
+      owner: DrawerProvider,
+      optional: true,
+      report: (_, props) => props.open
     }
   },
   elements: Html
@@ -1465,8 +1585,10 @@ const DrawerCore = Component.define({
     const rest = restingProgress(snapping)
     const drawerId = p.id("drawer")
     const swiping = model.swiping || model.area !== null
+    const nested = p.shared.parent !== undefined
     const nestedDrawers = model.nestedOpen
     const nestedDrawerSwiping = model.nestedSwiping
+    const indent = p.shared.provider?.indent ?? null
     const frontmost = frontmostOf(model)
     const active = props.snapPoint ?? props.snapPoints?.[0]
     const expanded = active === 1
@@ -1512,7 +1634,9 @@ const DrawerCore = Component.define({
           rest,
           dismissed: model.dismissed,
           releases: model.releases,
-          area: model.area !== null
+          area: model.area !== null,
+          nested,
+          indent
         })))
 
     const backdrop = p.part("div", (b) =>
@@ -1554,7 +1678,9 @@ const DrawerCore = Component.define({
             drawerDirection: swipeDirection,
             disabled,
             snapOffset: snapping?.offset ?? 0,
-            rest
+            rest,
+            nested,
+            indent
           }))
       }
     )

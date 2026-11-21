@@ -4,6 +4,7 @@ import {
   Drawer,
   type DrawerDismissReason,
   type DrawerEvents,
+  DrawerProvider,
   type DrawerSnapPoint,
   type DrawerSwipeDirection
 } from "@effect/ui-kit"
@@ -94,5 +95,20 @@ describe("Drawer", () => {
 
   it("a dismiss reason is a Dialog's or a swipe", () => {
     expect<DrawerDismissReason>().type.toBe<DialogDismissReason | "swipe">()
+  })
+})
+
+describe("DrawerProvider", () => {
+  it("its parts return the builder they were given", () => {
+    DrawerProvider(h, {
+      view: (provider) => {
+        expect(provider.active).type.toBe<boolean>()
+        expect(provider.indent(h.div.attr("id", "page"))).type.toBe<Div>()
+        expect(provider.indentBackground(h.div)).type.toBe<Div>()
+        expect(provider.indent).type.not.toBeCallableWith(h.span)
+        expect(provider.indentBackground).type.not.toBeCallableWith(h.span)
+        return h.div(provider.indentBackground(h.div), provider.indent(h.div))
+      }
+    })
   })
 })

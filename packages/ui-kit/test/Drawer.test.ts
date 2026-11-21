@@ -1,9 +1,9 @@
-import type { Component, Mount, View } from "@effect/ui"
-import { Drawer, type DrawerEvents, type DrawerProps } from "@effect/ui-kit"
+import { Component, type Mount, UiSchema, type View } from "@effect/ui"
+import { Drawer, type DrawerEvents, type DrawerProps, DrawerProvider } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
-import { Locator, Scene } from "@effect/ui/testing"
+import { Locator, Scene, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 
 type Parts = Component.Headless.Parts<typeof Drawer>
 type H = View.Helper<never, DrawerProps> & View.Tags<Html.Elements, never>
@@ -253,4 +253,64 @@ describe("Drawer", () => {
         style: "touch-action:pan-y;pointer-events:none"
       })
     }))
+})
+
+const PageMessage = UiSchema.TaggedEnum({ Toggled: { open: Schema.Boolean } })
+const Page = Component.define({
+  name: "Page",
+  model: Schema.Struct({ open: Schema.Boolean }),
+  message: PageMessage,
+  elements: Html
+}).make({
+  init: () => ({ open: false }),
+  update: {
+    Toggled: (model, { open }) => ({ ...model, open })
+  },
+  view: (model, h) =>
+    DrawerProvider(h, {
+      view: (provider) =>
+        h.div(
+          provider.indentBackground(h.div.class("background")),
+          provider.indent(h.div.class("indent")),
+          Drawer(h, {
+            props: { open: model.open },
+            onEmit: {
+              Opened: () => PageMessage.Toggled({ open: true }),
+              Dismissed: () => PageMessage.Toggled({ open: false }),
+              Settled: () => undefined,
+              Snapped: () => undefined
+            },
+            view: (drawer) =>
+              h.div(
+                drawer.trigger(h.button).children("Open"),
+                drawer.portal(h.dialog)?.children(
+                  drawer.popup(h.div).children(drawer.close(h.button).children("Close"))
+                )
+              )
+          })
+        )
+    })
+})
+
+describe("DrawerProvider", () => {
+  it.effect("is active while a drawer below it is open", () =>
+    Effect.gen(function*() {
+      const root = yield* TestHost.mount(Page, {})
+      yield* TestHost.settle
+      const parts = [Locator.attr("class", "indent"), Locator.attr("class", "background")]
+      const expectActive = (active: boolean) => {
+        for (const part of parts) {
+          assert.strictEqual(root.get(part).attrs?.["data-active"], active ? "" : undefined)
+          assert.strictEqual(root.get(part).attrs?.["data-inactive"], active ? undefined : "")
+        }
+      }
+      expectActive(false)
+      assert.strictEqual(root.get(parts[0]!).attrs?.style, "--drawer-swipe-progress:0")
+      Locator.fire(root.get(Locator.text("Open", { exact: true })), "click")
+      yield* TestHost.settle
+      expectActive(true)
+      Locator.fire(root.get(Locator.text("Close", { exact: true })), "click")
+      yield* TestHost.settle
+      expectActive(false)
+    }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
 })
