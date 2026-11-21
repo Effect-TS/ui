@@ -13,7 +13,8 @@ const Config = Schema.Struct({
   refuse: Schema.Boolean,
   area: Schema.Boolean,
   provider: Schema.Boolean,
-  scroll: Schema.Boolean
+  scroll: Schema.Boolean,
+  keyboard: Schema.Boolean
 })
 type Config = typeof Config.Type
 
@@ -24,6 +25,7 @@ const config = (overrides: Partial<Config>): Config => ({
   area: false,
   provider: false,
   scroll: false,
+  keyboard: false,
   ...overrides
 })
 
@@ -68,7 +70,8 @@ const Page = Component.define({
         open: model.open,
         swipeDirection: props.direction,
         snapPoints: props.snapPoints,
-        snapPoint: model.snapPoint
+        snapPoint: model.snapPoint,
+        virtualKeyboard: props.keyboard
       },
       onEmit: {
         Opened: ({ reason }) => Message.Opened({ reason }),
@@ -86,6 +89,7 @@ const Page = Component.define({
                 h.p.attr("id", "handle").children("Handle"),
                 drawer.content(h.div.attr("id", "content")).children("Text"),
                 h.button.attr("id", "button").children("Go"),
+                h.input.attr("id", "field"),
                 props.scroll
                   ? h.div.attr("id", "scroller").attr("style", "overflow-y:auto").children("Long")
                   : undefined
@@ -162,6 +166,44 @@ const swipeTouch = (target: Element, from: [number, number], to: [number, number
 }
 
 const movement = () => popup().style.getPropertyValue("--drawer-swipe-movement-y")
+
+class FakeVisualViewport extends EventTarget {
+  height = 800
+  offsetTop = 0
+  scale = 1
+  move(changes: Partial<Pick<FakeVisualViewport, "height" | "offsetTop">>) {
+    Object.assign(this, changes)
+    this.dispatchEvent(new Event("resize"))
+  }
+}
+
+// happy-dom drops `100svh`, so the hidden element that measures it is stubbed.
+const isProbe = (element: Element) =>
+  element.parentElement === document.body && (element as HTMLElement).style.visibility === "hidden" &&
+  (element as HTMLElement).style.position === "fixed"
+
+const visualViewport = Effect.acquireRelease(
+  Effect.sync(() => {
+    const html = window.HTMLElement.prototype
+    const offsetHeight = Object.getOwnPropertyDescriptor(html, "offsetHeight")!
+    const visual = new FakeVisualViewport()
+    Object.defineProperty(window, "visualViewport", { configurable: true, value: visual })
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 800 })
+    Object.defineProperty(html, "offsetHeight", {
+      configurable: true,
+      get(this: HTMLElement) {
+        return isProbe(this) ? 800 : offsetHeight.get!.call(this)
+      }
+    })
+    return { visual, offsetHeight }
+  }),
+  ({ offsetHeight }) =>
+    Effect.sync(() => {
+      Object.defineProperty(window.HTMLElement.prototype, "offsetHeight", offsetHeight)
+      delete (window as { visualViewport?: unknown }).visualViewport
+      delete (window as { innerHeight?: unknown }).innerHeight
+    })
+)
 
 const mount = Effect.fnUntraced(function*(overrides: Partial<Config>) {
   yield* popovers
@@ -354,5 +396,21 @@ describe("Drawer in a document", { concurrent: false }, () => {
       yield* tick
       assert.isFalse(root.model()!.open)
       assert.strictEqual(indent.style.getPropertyValue("--drawer-swipe-progress"), "0")
+    }))
+
+  it.effect("writes the keyboard inset on the viewport while a field has the keyboard up", () =>
+    Effect.gen(function*() {
+      const { visual } = yield* visualViewport
+      yield* mount({ keyboard: true })
+      const viewport = document.getElementById("viewport")!
+      const inset = () => viewport.style.getPropertyValue("--drawer-keyboard-inset")
+      assert.strictEqual(inset(), "")
+      document.getElementById("field")!.focus()
+      visual.move({ height: 500 })
+      yield* tick
+      assert.strictEqual(inset(), "300px")
+      document.getElementById("button")!.focus()
+      yield* tick
+      assert.strictEqual(inset(), "")
     }))
 })

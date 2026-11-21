@@ -79,15 +79,21 @@
  * With snap points it runs from `0` at the tallest snap point to `1` at the
  * next one, and rests there, so the backdrop shows only while the drawer is
  * expanded.
+ * With `virtualKeyboard`, the viewport sets `--drawer-keyboard-inset` while
+ * the software keyboard covers part of it: read it as
+ * `var(--drawer-keyboard-inset, 0px)`.
  *
  * **Keyboard**
  *
- * As a `Dialog`'s.
+ * As a `Dialog`'s. With `virtualKeyboard` and the `viewport` part, the
+ * viewport follows the software keyboard: the focused field scrolls into the
+ * part of the screen the keyboard leaves, and a modal drawer keeps the page
+ * from scrolling under it.
  *
  * **Limits**
  *
- * - The popup carries the swipe's mount, so it doesn't take a mount of the
- *   consumer's.
+ * - The popup carries the swipe's mount and the viewport the keyboard's, so
+ *   neither takes a mount of the consumer's.
  * - Snap points apply to a drawer that swipes `up` or `down`.
  * - It renders a `Drawer` and a `Dialog` instance, so a `Scene` of the
  *   consumer finds both, as the `Drawer` export describes.
@@ -162,6 +168,7 @@ import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { Dialog, DialogDismissReason, type DialogEvents, DialogProps } from "./Dialog.ts"
 import { flag, withStyle } from "./internal/attributes.ts"
+import { trackKeyboard, TrackKeyboardArgs } from "./internal/drawerKeyboard.ts"
 
 /**
  * The direction a swipe dismisses a drawer in, which is also the edge it
@@ -218,6 +225,8 @@ export type DrawerSnapPoint = typeof DrawerSnapPoint.Type
  *   Store what `Snapped` reports. Left out or `null`, it is the first one.
  * - `snapToSequentialPoints`: a release moves at most one snap point, however
  *   fast the swipe.
+ * - `virtualKeyboard`: the viewport follows the software keyboard, as the
+ *   module describes. It needs the `viewport` part.
  *
  * @stability experimental
  * @category schemas
@@ -228,7 +237,8 @@ export const DrawerProps = Schema.Struct({
   swipeDirection: Schema.optional(DrawerSwipeDirection),
   snapPoints: Schema.optional(Schema.Array(DrawerSnapPoint)),
   snapPoint: Schema.optional(Schema.NullOr(DrawerSnapPoint)),
-  snapToSequentialPoints: Schema.optional(Schema.Boolean)
+  snapToSequentialPoints: Schema.optional(Schema.Boolean),
+  virtualKeyboard: Schema.optional(Schema.Boolean)
 })
 
 /**
@@ -1398,6 +1408,8 @@ const TrackSwipeArea = Mount.makeStream(
     )
 )
 
+const TrackKeyboard = Mount.makeStream("TrackDrawerKeyboard", { args: TrackKeyboardArgs }, trackKeyboard)
+
 const ProviderMessage = UiSchema.TaggedEnum({
   ChangedOpen: { active: Schema.Boolean },
   MountedIndent: { id: Schema.String }
@@ -1646,6 +1658,11 @@ const DrawerCore = Component.define({
         .attr("data-swipe-dismiss", flag(swipeDismiss))
         .forward((node) => node.attr("style", withStyle(node.attrs.style, progressVar + ":" + rest))))
 
+    const viewport = p.part("div", (b) =>
+      props.virtualKeyboard === true
+        ? b.onMount(TrackKeyboard({ open, modal: props.modal ?? true, popupId: drawerId }))
+        : b)
+
     const content = p.part("div", (b) => b.attr(contentAttribute, ""))
 
     const swipeAreaPart = p.part(
@@ -1710,6 +1727,7 @@ const DrawerCore = Component.define({
       nestedDrawerSwiping,
       popup,
       backdrop,
+      viewport,
       content,
       swipeArea
     }
@@ -1727,7 +1745,7 @@ type CoreParts = Component.Headless.Parts<typeof DrawerCore>
  * @category models
  * @since 0.1.0
  */
-export type DrawerParts = Omit<DialogParts, "popup"> & CoreParts & {
+export type DrawerParts = Omit<DialogParts, "popup" | "viewport"> & CoreParts & {
   readonly backdrop: DialogParts["backdrop"]
 }
 
@@ -1749,6 +1767,7 @@ const dialogPropsOf = (props: DrawerProps): DialogProps => {
     snapPoints: _snapPoints,
     snapToSequentialPoints: _sequential,
     swipeDirection: _direction,
+    virtualKeyboard: _keyboard,
     ...dialog
   } = props
   return dialog
@@ -1801,9 +1820,9 @@ const asComponent = (call: (h: View.Helper<any, unknown>, options: any) => unkno
  *
  * **Details**
  *
- * The parts stack on the `Dialog`'s: `drawer.popup` and `drawer.backdrop`
- * add the drawer's attributes and mounts to the `Dialog`'s, and
- * `drawer.content` and `drawer.swipeArea` are its own. The
+ * The parts stack on the `Dialog`'s: `drawer.popup`, `drawer.backdrop` and
+ * `drawer.viewport` add the drawer's attributes and mounts to the
+ * `Dialog`'s, and `drawer.content` and `drawer.swipeArea` are its own. The
  * popup carries the swipe's mount, so it can't take one of the consumer's.
  *
  * It renders a `Drawer` and a `Dialog` instance, so a `Scene` of the
@@ -1831,7 +1850,8 @@ export const Drawer: DrawerComponent = asComponent((h, options) =>
               const out = dialog.backdrop(element)
               return out === undefined ? undefined : drawer.backdrop(out)
             },
-            popup: <B extends View.PartTarget<"div">>(element: B) => drawer.popup(dialog.popup(element))
+            popup: <B extends View.PartTarget<"div">>(element: B) => drawer.popup(dialog.popup(element)),
+            viewport: <B extends View.PartTarget<"div">>(element: B) => drawer.viewport(dialog.viewport(element))
           })
       })
   })

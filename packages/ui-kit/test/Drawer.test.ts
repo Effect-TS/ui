@@ -14,13 +14,15 @@ const standIn = {
     h.div(
       drawer.swipeArea({ element: h.div.class("area").attr("style", "z-index:1") }),
       drawer.backdrop(h.div.class("backdrop").attr("data-swiping", "x")),
-      drawer.popup(
-        h.div.class("popup")
-          .attr("data-swiping", "x")
-          .attr("data-swipe-direction", "sideways")
-          .attr("data-nested-drawer-open", "x")
-          .attr("style", "color:red")
-      ).children(drawer.content(h.div.class("content")))
+      drawer.viewport(h.div.class("viewport")).children(
+        drawer.popup(
+          h.div.class("popup")
+            .attr("data-swiping", "x")
+            .attr("data-swipe-direction", "sideways")
+            .attr("data-nested-drawer-open", "x")
+            .attr("style", "color:red")
+        ).children(drawer.content(h.div.class("content")))
+      )
     )
 }
 

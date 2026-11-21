@@ -29,7 +29,8 @@ describe("Drawer", () => {
         swipeDirection: "left",
         snapPoints: [0.5, 1, "320px", "20rem"],
         snapPoint: null,
-        snapToSequentialPoints: true
+        snapToSequentialPoints: true,
+        virtualKeyboard: true
       },
       onEmit: {
         Opened: ({ reason, triggerId }) => {
