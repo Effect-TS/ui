@@ -43,25 +43,27 @@ export const AppMessage = UiSchema.TaggedEnum({
 export class SaveSession extends Command.Service<SaveSession>()(
   "auth/SaveSession",
   { args: { session: Session } },
-  Effect.map(SessionStore, (store) => ({ session }) =>
+  SessionStore.useSync((store) => ({ session }) =>
     store.set(session).pipe(
       Effect.match({
         onSuccess: () => Component.noop,
         onFailure: (error) => AppMessage.FailedSaveSession({ error: error.message })
       })
-    ))
+    )
+  )
 ) {}
 
 export class ClearSession extends Command.Service<ClearSession>()(
   "auth/ClearSession",
   { args: {} },
-  Effect.map(SessionStore, (store) => () =>
+  SessionStore.useSync((store) => () =>
     store.remove.pipe(
       Effect.match({
         onSuccess: () => Component.noop,
         onFailure: (error) => AppMessage.FailedClearSession({ error: error.message })
       })
-    ))
+    )
+  )
 ) {}
 
 export const LogError = Command.make(
