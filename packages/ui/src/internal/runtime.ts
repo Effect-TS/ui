@@ -3194,14 +3194,14 @@ const setup = (
     const from = supply
     const served = from !== undefined && from === hydrating?.state
     if (served) supply = undefined
-    const hydrates = hydrating !== undefined &&
+    // An owner of shared state isn't restored from history: a reload would reopen what nobody hovers.
+    const restored = hooks !== undefined && component.definition.shares === undefined
+      ? hooks.restore(inst.path)
+      : undefined
+    const hydrates = restored === undefined && hydrating !== undefined &&
       (scope !== undefined ? served : parent === undefined || parent.adoptsChildren) &&
       !hydrating.deferred.has(path!) &&
       Object.hasOwn(hydrating.state, path!)
-    // An owner of shared state isn't restored from history: a reload would reopen what nobody hovers.
-    const restored = !hydrates && hooks !== undefined && component.definition.shares === undefined
-      ? hooks.restore(inst.path)
-      : undefined
     if (popped !== undefined) claimSaved(inst, popped)
     if (from !== undefined && !served) claimSaved(inst, from)
     const saved = hydrates || restored !== undefined || from === undefined || served ? undefined : from[inst.path]

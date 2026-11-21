@@ -88,4 +88,20 @@ describe("history restore of a page whose hydration hasn't settled", () => {
       assert.strictEqual(app.querySelector("input")!.value, "server")
     }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
   })
+
+  it.effect("Back restores what the user typed, over the server's Model, while another component waits", () => {
+    const history = Router.memoryHistory("/")
+    return Effect.gen(function*() {
+      const { app, root } = yield* visit("slow side")
+      const field = app.querySelector("input")!
+      field.value = "typed"
+      field.dispatchEvent(new Event("input", { bubbles: true }))
+      yield* tick
+      root.send(Msg.Go())
+      yield* tick
+      history.go(-1)
+      yield* tick
+      assert.strictEqual(app.querySelector("input")!.value, "typed")
+    }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
+  })
 })
