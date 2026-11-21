@@ -18,9 +18,9 @@ const AppTest = (url: string) =>
     TestHost.layer()
   )
 
-const storedSession = Effect.flatMap(SessionStore, (store) => store.get)
+const storedSession = SessionStore.use((store) => store.get)
 
-const storeSession = (session: Session) => Effect.flatMap(SessionStore, (store) => store.set(session))
+const storeSession = (session: Session) => SessionStore.use((store) => store.set(session))
 
 const currentUrl = Effect.map(Router.Router, (router) => router.location().url)
 

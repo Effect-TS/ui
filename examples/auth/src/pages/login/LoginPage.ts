@@ -23,23 +23,25 @@ export type LoginMessage = typeof LoginMessage.Type
 
 export const LoginEvents = UiSchema.TaggedEnum({ SignedIn: { session: Session } })
 
-const runSimulateAuthRequest: (
-  args: { readonly email: string; readonly password: string }
-) => Effect.Effect<LoginMessage> = Effect.fn("auth/SimulateAuthRequest")(function*({ email, password }) {
-  yield* Effect.sleep(Duration.seconds(1))
-  if (password !== "password") {
-    return LoginMessage.FailedSimulateAuthRequest({ error: "Invalid credentials" })
+const runSimulateAuthRequest = Effect.fn("auth/SimulateAuthRequest")(
+  function*(
+    { email, password }: { readonly email: string; readonly password: string }
+  ): Effect.fn.Return<LoginMessage> {
+    yield* Effect.sleep(Duration.seconds(1))
+    if (password !== "password") {
+      return LoginMessage.FailedSimulateAuthRequest({ error: "Invalid credentials" })
+    }
+    const [name] = email.split("@")
+    return LoginMessage.SucceededSimulateAuthRequest({
+      session: { userId: "1", email, name: name === "" ? email : name }
+    })
   }
-  const [name] = email.split("@")
-  return LoginMessage.SucceededSimulateAuthRequest({
-    session: { userId: "1", email, name: name === "" ? email : name }
-  })
-})
+)
 
 export class SimulateAuthRequest extends Command.Service<SimulateAuthRequest>()(
   "auth/SimulateAuthRequest",
   { args: { email: Schema.String, password: Schema.String } },
-  Effect.succeed(runSimulateAuthRequest)
+  Effect.succeed((args) => runSimulateAuthRequest(args))
 ) {}
 
 type LoginField = Validation.Field<string>
@@ -96,29 +98,25 @@ export const LoginPageNoDeps = Component.define({
   }),
 
   update: {
-    ChangedEmail: (model, { value }) => ({ ...model, form: LoginValidation.change(model.form, "email", value) }),
+    ChangedEmail: (_model, { value }, $) => $.evolve({ form: (form) => LoginValidation.change(form, "email", value) }),
 
-    ChangedPassword: (model, { value }) => ({
-      ...model,
-      form: LoginValidation.change(model.form, "password", value)
-    }),
+    ChangedPassword: (_model, { value }, $) =>
+      $.evolve({ form: (form) => LoginValidation.change(form, "password", value) }),
 
     SubmittedForm: (model, _message, $) => {
       if (model.submitting) return model
       const form = LoginValidation.submit(model.form)
       return Option.match(LoginValidation.validate(form).value, {
-        onNone: () => ({ ...model, form }),
+        onNone: () => $.evolve({ form }),
         onSome: ({ email, password }) =>
-          $.set({ form, submitting: true }).run(SimulateAuthRequest.make({ email, password }))
+          $.evolve({ form, submitting: true }).run(SimulateAuthRequest.make({ email, password }))
       })
     },
 
     SucceededSimulateAuthRequest: (_model, { session }, $) => $.emit(LoginEvents.SignedIn({ session })),
 
-    FailedSimulateAuthRequest: (model, { error }) => ({
-      submitting: false,
-      form: LoginValidation.reject(model.form, { password: [error] })
-    })
+    FailedSimulateAuthRequest: (_model, { error }, $) =>
+      $.evolve({ submitting: false, form: (form) => LoginValidation.reject(form, { password: [error] }) })
   },
 
   view: (model, h) => {
