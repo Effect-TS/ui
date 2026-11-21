@@ -180,11 +180,18 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
   const sharedOf = (wire: Extract<MessageLog.Wire, { _tag: "Update" }>): Component.SharedRecord | undefined => {
     const encoded = wire.shared as { readonly [name: string]: unknown } | undefined
     if (encoded === undefined) return undefined
+    const placeholder = findPlaceholder(encoded)
+    if (placeholder !== undefined) {
+      throw new Error(
+        `${label}: entry #${wire.seq} (${path}) has a shared value that can't be decoded, because it was logged as a ${placeholder} placeholder`
+      )
+    }
     const out: { [name: string]: unknown } = {}
     for (const read of reads) {
-      if (!(read.name in encoded)) continue
       const schema = read.owner.definition.sharesSchema
-      out[read.name] = schema === undefined
+      out[read.name] = !Object.hasOwn(encoded, read.name)
+        ? undefined
+        : schema === undefined
         ? encoded[read.name]
         : decodeWith(wire, `shared "${read.name}"`, schema, encoded[read.name])
     }

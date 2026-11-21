@@ -511,6 +511,40 @@ describe("shared state in update", () => {
       }
     })))
 
+  it.effect("rejects a shared record logged as a placeholder, naming the entry", () =>
+    provideHost(Effect.gen(function*() {
+      const root = yield* TestHost.mount(Face, {})
+      yield* TestHost.settle
+      click(root, "saw []")
+      yield* TestHost.settle
+      const encode = MessageLog.makeEncoder({ maxEntryBytes: 30 }).encode
+      assert.throws(
+        () => Story.fromLog(Watch, root.log().map(encode)),
+        /entry #\d+ \(\/Face\/Clock\[clock\]\/Watch\[w\]\) has a shared value .* ~truncated placeholder/
+      )
+    })))
+
+  it.effect("replays an absent optional owner under its name from a Wire frame", () =>
+    provideHost(Effect.gen(function*() {
+      const Keys = Component.define({
+        name: "Keys",
+        model: Schema.Array(Schema.String),
+        message: WatchMessage,
+        shared: { clock: { owner: Clock, optional: true } }
+      }).make({
+        init: () => [],
+        update: (_, __, $) => Object.keys($.shared),
+        view: (keys, h) => h.el("button").on("click", WatchMessage.Clicked()).children(`keys [${keys.join(",")}]`)
+      })
+      const root = yield* TestHost.mount(Keys, {})
+      yield* TestHost.settle
+      click(root, "keys []")
+      yield* TestHost.settle
+      const replay = Story.fromLog(Keys, root.log().map(MessageLog.makeEncoder().encode))
+      assert.isUndefined(replay.divergence)
+      assert.deepStrictEqual(replay.model, ["clock"])
+    })))
+
   it("throws for an update called with no shared values only when it reads one", () => {
     assert.isTrue(makeReader(() => false).update(false, ReaderMessage.Clicked(), {}).model)
     assert.throws(() => Watch.update([], WatchMessage.Clicked(), {}), /render it below a Clock/)
