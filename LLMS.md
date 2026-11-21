@@ -60,9 +60,8 @@ A view writes scoped children inside `h.scoped`, calling them with the `s`
 it passes instead of `h`. A scoped child belongs to the component whose
 view called `h.scoped`, its author, and its path is `Name[key]` under the
 author wherever the view puts it. Moving it to another element, or into
-another child's slot, keeps the instance. One written into a slot that its
-receiver doesn't place starts kept, and sends reach it. Writing one
-`Name[key]` twice in a render fails the author.
+another child's slot, keeps the instance. Placing one `Name[key]` twice in
+a render fails the author.
 
 ```ts
 const view = (model: Model, h: H) =>
@@ -75,7 +74,7 @@ A scoped child that no view writes is kept. Its nodes leave the document,
 and its Model, Commands in flight, Subscriptions and typed input stay. Its
 element mounts stop, and it adds nothing to the head or to an owner's
 `collects`, until a view writes it again. It keeps the props and `onEmit`
-it was last written with, and its events reach the author's `update`, with
+of the last render that placed it, and its events reach the author's `update`, with
 the current Model, through that `onEmit`. When a kept child needs fresh
 props, write it inside a `hidden` element instead. Subscriptions keep
 running while it's kept, so gate those on the Model.
@@ -110,21 +109,37 @@ have the predicate reject the old one: with
 `({ key, model }) => key === model.draftId`, a new `draftId` ends the old
 draft and the next render writes a fresh one.
 
+A scoped child starts the first time it's placed in the tree while its
+predicate holds. One written into a slot that nothing places, such as a
+closed Collapsible's, or into the slot of a component still waiting for its
+Layer, hasn't started: it runs nothing, and a `$.send` to it is dropped and
+logged as `SendDropped`.
+
 A scoped component mounted as the root needs no scope and behaves like any
 other. Saved state from the server or from a history entry holds the Model
-of a kept child, and the child takes it once a view writes it again; its
-queries fetch again.
+of a child that hasn't started, with everything below it. The state belongs
+to the author it arrived with, the child takes it when it starts, and it's
+dropped when the author ends or the predicate is false as the child is
+placed. On the client a child adopts the server's nodes only where the
+server drew it. Placed anywhere else, it keeps the state and builds new
+nodes.
 
 Known limits:
 
 - The guard also fails a predicate that returns from `key` alone, and it
   misses one that reads `$.model` and also the view's `model`.
 - A kept child has stale props and `onEmit`.
-- After a router restore, saved state for a child that's never written again
-  has no predicate to end it, and a later child at that key takes it.
-- A scoped child that leaves a waiting receiver before hydration settles
-  keeps the server's nodes only while they're still in the document. Otherwise
-  it's built fresh from its state.
+- Saved state for a child that hasn't started has no predicate to end it, so
+  a later child at that key takes it. That includes a row deleted before its
+  child ever started.
+- A child the server rendered runs nothing on the client until it's placed.
+  Its Subscriptions don't run and its predicate isn't asked.
+- What the user typed into a server-rendered field before hydration is lost
+  when the field's child is built again: moved out of a component that's
+  still waiting for its Layer, or moved while it waits for its own.
+- While a moved child's server-rendered copy sits in a waiting component, the
+  form shows twice, with the same ids and field names.
+- A child moved while it waits for its own Layer builds that Layer again.
 
 ### Naming
 
