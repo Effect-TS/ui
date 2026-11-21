@@ -214,9 +214,9 @@ describe("Dialog", () => {
       const s = yield* Scene.make(Dialog, { open: false, keepMounted: true }, standIn)
       assert.deepInclude(s.get(portal).props, { open: false, popoverOpen: false })
       assert.deepInclude(s.get(popup).attrs, { "data-closed": "" })
-      const [layer, first] = (s.get(portal) as View.Element<unknown>).children as ReadonlyArray<View.Element<unknown>>
+      const [layer, child] = (s.get(portal) as View.Element<unknown>).children as ReadonlyArray<View.Element<unknown>>
       assert.strictEqual(layer!.attrs.inert, "")
-      assert.strictEqual(first!.attrs.class, "backdrop")
+      assert.strictEqual(child!.attrs.class, "backdrop")
     }))
 
   it.effect("the other modes draw no layer and no aria-modal", () =>

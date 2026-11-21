@@ -435,7 +435,7 @@ const blocker = new Html.Element<never>("div").attr("role", "presentation").attr
   "position:fixed;inset:0;" + noSelect
 )
 const layer = View.toNode(blocker)
-const closingLayer = View.toNode(blocker.attr("inert", ""))
+const inertLayer = View.toNode(blocker.attr("inert", ""))
 
 const tabbableSelector = [
   "a[href]",
@@ -1157,7 +1157,7 @@ export const Dialog = Component.define({
     )
 
     const portalPart = p.part("dialog", (b) => {
-      const box = b
+      const dialog = b
         .attr("id", portalId)
         .open(false)
         .popover("manual", shown)
@@ -1167,7 +1167,7 @@ export const Dialog = Component.define({
             .attr("aria-labelledby", withTokens(node.attrs["aria-labelledby"], titleId))
             .attr("aria-describedby", withTokens(node.attrs["aria-describedby"], descriptionId))
         )
-      const dialog = modal === true ? box.children(open ? layer : closingLayer) : box
+        .children(modal === true && (open ? layer : inertLayer))
       if (!shown) return dialog
       return dialog.onMount(
         TrackDialog({
