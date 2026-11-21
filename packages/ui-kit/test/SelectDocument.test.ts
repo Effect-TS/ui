@@ -234,7 +234,7 @@ describe("Select in a document", { concurrent: false }, () => {
       assert.strictEqual(byId("positioner").getAttribute("data-side"), "top")
     }).pipe(Effect.scoped))
 
-  it.effect("aligned with the trigger, it covers it with the selected item's text over the value", () =>
+  it.effect("aligned with the trigger, the selected item's text is over the value, inside the CSS margins", () =>
     Effect.gen(function*() {
       const { root } = yield* mountPage({ align: true })
       root.send(Message.Picked({ value: "dark" }))
@@ -253,6 +253,14 @@ describe("Select in a document", { concurrent: false }, () => {
       assert.strictEqual(style("left"), "102px")
       assert.strictEqual(style("top"), "255px")
       assert.strictEqual(document.activeElement, item("dark"))
+      root.send(Message.Dismissed({ reason: "test" }))
+      yield* tick
+      const margins = document.head.appendChild(document.createElement("style"))
+      margins.textContent = "#positioner { margin-top: 30px; margin-bottom: 50px }"
+      yield* Effect.addFinalizer(() => Effect.sync(() => margins.remove()))
+      mousedown(byId("trigger"))
+      yield* tick
+      assert.strictEqual(style("top"), "235px")
     }).pipe(Effect.scoped))
 
   it.effect("falls back to placing the popup below a trigger near the top of the viewport", () =>
@@ -365,7 +373,7 @@ describe("Select in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(log(), ["Opened list-navigation", "Picked light", "Dismissed item-press"])
     }).pipe(Effect.scoped))
 
-  it.effect("focus leaving closes it and touches the field, and a press outside closes it", () =>
+  it.effect("focus leaving closes it and touches the field, and a press outside closes it, but not on a scrollbar", () =>
     Effect.gen(function*() {
       const { log } = yield* mountPage()
       keydown(byId("trigger"), "ArrowDown")
@@ -377,7 +385,23 @@ describe("Select in a document", { concurrent: false }, () => {
       assert.isTrue(touched())
       keydown(byId("trigger"), "ArrowDown")
       yield* tick
-      press(document.body)
+      const page = document.documentElement
+      Object.defineProperty(page, "scrollHeight", { configurable: true, value: 2000 })
+      yield* Effect.addFinalizer(() => Effect.sync(() => delete (page as any).scrollHeight))
+      const pressPage = (offsetX: number) => {
+        const event = new PointerEvent("pointerdown", {
+          bubbles: true,
+          isPrimary: true,
+          pointerType: "mouse",
+          button: 0
+        })
+        Object.defineProperty(event, "offsetX", { value: offsetX })
+        page.dispatchEvent(event)
+      }
+      pressPage(1005)
+      yield* tick
+      assert.isTrue(shown())
+      pressPage(500)
       yield* tick
       assert.isFalse(shown())
       assert.deepStrictEqual(log(), [
@@ -391,9 +415,11 @@ describe("Select in a document", { concurrent: false }, () => {
   it.effect("a press on the modal backdrop keeps focus, so only leaving touches the field", () =>
     Effect.gen(function*() {
       yield* mountPage()
+      const popup = document.querySelector(".popup")
       byId("trigger").focus()
       keydown(byId("trigger"), "ArrowDown")
       yield* tick
+      assert.strictEqual(document.querySelector(".popup"), popup)
       assert.strictEqual(document.body.style.overflowY, "hidden")
       const blocker = byId("positioner").querySelector("[data-select-blocker]")!
       assert.isNotNull(blocker)

@@ -103,7 +103,9 @@
  * the popup below the trigger when the trigger is within 20px of the top
  * or bottom of the viewport, when there's no room for the popup's
  * `min-height` (100px when unset), and for a select opened by touch.
- * While aligned, a resize of the window closes it. Set
+ * While aligned, the positioner's `margin-top` and `margin-bottom` in CSS
+ * are the gaps it keeps to the top and bottom of the viewport, 10px each
+ * when unset, and a resize of the window closes it. Set
  * `alignItemWithTrigger: false` to always place it next to the trigger,
  * where the `Positioning` props apply and it flips when it doesn't fit.
  *
@@ -199,7 +201,7 @@ import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { type Attributed, flag, idSelector, noSelect, visuallyHidden, withStyle } from "./internal/attributes.ts"
-import { methodOf } from "./internal/interaction.ts"
+import { methodOf, onScrollbar } from "./internal/interaction.ts"
 import { lockScroll } from "./internal/modal.ts"
 import { clamp } from "./internal/range.ts"
 import { inKept, raiseAbove } from "./internal/topLayer.ts"
@@ -275,7 +277,8 @@ export type SelectInteraction = typeof SelectInteraction.Type
  * - `"trigger-press"`: a press, or Enter or Space, on the trigger
  * - `"list-navigation"`: ArrowDown or ArrowUp on the closed trigger
  * - `"item-press"`: an item was picked
- * - `"outside-press"`: a press outside the trigger and the popup
+ * - `"outside-press"`: a press outside the trigger and the popup, other
+ *   than on a scrollbar
  * - `"escape-key"`: Escape in the popup
  * - `"focus-out"`: focus left the trigger and the popup, or Shift+Tab in
  *   the popup
@@ -839,7 +842,7 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
           const textCenter = textRect.top - positionerRect.top + textRect.height / 2
           offsetY = textCenter - valueCenter
         }
-        const ideal = beneath + offsetY + marginBottom + borderBottom
+        const ideal = beneath + offsetY + marginTop + borderBottom
         let height = Math.min(viewportHeight, ideal)
         const maxHeight = viewportHeight - marginTop - marginBottom
         const scrollTop = ideal - height
@@ -1015,7 +1018,7 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
       if (!current.open || target === null || event.button !== 0 || !event.isPrimary || inside(target)) return
       if (inKept(target)) return
       if (event.pointerType === "touch") touchPress = true
-      else send(Message.PressedOutside({ pointerType: event.pointerType }))
+      else if (!onScrollbar(target, event)) send(Message.PressedOutside({ pointerType: event.pointerType }))
     }
     const onClick = (event: MouseEvent) => {
       if (!touchPress) return
@@ -1153,6 +1156,9 @@ const blocker = new Html.Element<never>("div")
   .attr("style", "position:fixed;inset:0;z-index:-1;" + noSelect)
 const blocking = View.toNode(blocker)
 const blockingClosed = View.toNode(blocker.attr("inert", ""))
+
+const alignedBox =
+  "position:fixed;inset:auto;margin-left:0;margin-right:0;--available-width:100vw;--available-height:100vh"
 
 const backdropBox = "position:fixed;inset:0;width:auto;height:auto;max-width:none;max-height:none;margin:0;" + noSelect
 
@@ -1462,16 +1468,17 @@ export const Select = Component.define({
           node.attr("style", withStyle(node.attrs.style, open ? backdropBox : backdropBox + ";pointer-events:none"))
         ))
 
-    const positionerStyle = Positioning.positionerStyle(aligned ? "fixed" : tracked.positionMethod)
+    const positionerStyle = aligned ? alignedBox : Positioning.positionerStyle(tracked.positionMethod)
     const positioner = p.part("div", (b) => {
       const decorated = placed(b)
         .attr("role", "presentation")
         .attr("data-anchor-hidden", flag(shown && !aligned && model.placement?.anchorHidden))
         .popover("manual", shown)
         .forward((node) => node.attr("style", withStyle(node.attrs.style, positionerStyle)))
-      if (!shown) return decorated
+      const layered = modal ? decorated.children(open ? blocking : blockingClosed) : decorated
+      if (!shown) return layered
       const alignItem = props.items.find((item) => chosen.has(item.value)) ?? props.items[0]
-      return (modal ? decorated.children(open ? blocking : blockingClosed) : decorated).onMount(
+      return layered.onMount(
         TrackSelect({
           position,
           open,

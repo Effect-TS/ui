@@ -207,7 +207,7 @@ import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { type Attributed, flag, noSelect, withStyle } from "./internal/attributes.ts"
-import { methodOf } from "./internal/interaction.ts"
+import { methodOf, onScrollbar } from "./internal/interaction.ts"
 import { hideOthers, lockScroll } from "./internal/modal.ts"
 import { inKept, raiseAbove } from "./internal/topLayer.ts"
 import { frameOf, settling, statusOf, transitionAttrs } from "./internal/transition.ts"
@@ -553,22 +553,6 @@ const closeWatcherOf = (view: Window | null): (new() => CloseWatcher) | undefine
   const agent = view.navigator as Navigator & { readonly userAgentData?: { readonly platform: string } }
   const android = agent.userAgentData?.platform === "Android" || /android/i.test(agent.userAgent)
   return android ? (view as Window & { readonly CloseWatcher?: new() => CloseWatcher }).CloseWatcher : undefined
-}
-
-const onScrollbar = (target: EventTarget | null, event: MouseEvent): boolean => {
-  if (!(target instanceof HTMLElement)) return false
-  const document = target.ownerDocument
-  const style = document.defaultView?.getComputedStyle(target)
-  if (style === undefined) return false
-  const page = target === document.documentElement || target === document.body
-  const scrollsX = (page || /auto|scroll/.test(style.overflowX)) && target.clientWidth > 0 &&
-    target.scrollWidth > target.clientWidth
-  const scrollsY = (page || /auto|scroll/.test(style.overflowY)) && target.clientHeight > 0 &&
-    target.scrollHeight > target.clientHeight
-  const onY = scrollsY && (style.direction === "rtl"
-    ? event.offsetX <= target.offsetWidth - target.clientWidth
-    : event.offsetX > target.clientWidth)
-  return onY || (scrollsX && event.offsetY > target.clientHeight)
 }
 
 const TrackDialog = Mount.makeStream(
