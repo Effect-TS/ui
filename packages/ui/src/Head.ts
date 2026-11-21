@@ -24,10 +24,9 @@
  *   ancestors' templates outward, nearest first.
  * - **Conflicts.** Siblings that set one single slot, such as the title, to
  *   the same value pass it up once. When they set different values, neither
- *   wins: the slot is left unset until an ancestor's `reduceHead` sets it,
- *   for example from one child's head by name. A conflict no ancestor settles
- *   is reported as a `Conflict` naming every path that set the slot. The
- *   runtime sends it to `Query.Problems`.
+ *   wins: the slot is left unset until an ancestor's `reduceHead` sets it. A
+ *   conflict no ancestor settles is reported as a `Conflict` naming every
+ *   path that set the slot. The runtime sends it to `Query.Problems`.
  *
  * **Example** (A layout template and a page title)
  *
@@ -130,11 +129,10 @@ export interface Head {
  * Siblings with entries or a `reduce` in their subtree need distinct paths:
  * a merge throws when two have none or share one, whatever their order.
  * `reduce` maps the node's value, its own entries merged with its children's
- * values, as a component's `reduceHead` does. It also gets each child's
- * value by the child's path. `onError` is called when one of the node's own
- * title templates or its `reduce` throws: the merge then skips that
- * template, or keeps the value the `reduce` was given. Without `onError`
- * the error is rethrown.
+ * values, as a component's `reduceHead` does. `onError` is called when one
+ * of the node's own title templates or its `reduce` throws: the merge then
+ * skips that template, or keeps the value the `reduce` was given. Without
+ * `onError` the error is rethrown.
  *
  * @stability experimental
  * @category models
@@ -144,7 +142,7 @@ export interface Tree<E = Entry, H = Head> {
   readonly path?: string | undefined
   readonly entries: ReadonlyArray<E>
   readonly children: ReadonlyArray<Tree<E, H>>
-  readonly reduce?: ((below: H, children: ReadonlyMap<string, H>) => H) | undefined
+  readonly reduce?: ((below: H) => H) | undefined
   readonly onError?: ((error: unknown) => void) | undefined
 }
 
@@ -184,8 +182,7 @@ export interface MergeOptions {
  */
 export const conflict = (slot: string, paths: ReadonlyArray<string>): Conflict =>
   new Conflict({
-    message: `Head: ${listOf(paths)} set ${slot} to different values, so it's left unset. ` +
-      "A reduceHead above them can pick one",
+    message: `Head: ${listOf(paths)} set ${slot} to different values, so it's left unset`,
     slot,
     paths
   })

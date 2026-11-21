@@ -8,7 +8,6 @@ const Neutral = Component.define({ name: "Neutral", model: Schema.Null, message:
 const Page = Component.define({ name: "Page", model: Schema.Null, message: Schema.Never, elements: Html })
 
 declare const content: View.Content<never, any>
-declare const Row: Component.Any
 
 const base = {
   init: () => null,
@@ -48,20 +47,9 @@ describe("Head and HtmlHead", () => {
     })
     Page.make({
       ...base,
-      reduceHead: (_, below, children) => {
+      reduceHead: (_, below) => {
         expect(below).type.toBe<HtmlHead.HtmlHead>()
-        expect(children.get(Row, "a")).type.toBe<HtmlHead.HtmlHead | undefined>()
-        expect(children.slot).type.not.toBeCallableWith("main")
         return { ...below, meta: [...below.meta, HtmlHead.meta({ property: "og:title", content: below.title ?? "" })] }
-      },
-      view: () => content
-    })
-    Component.define({ name: "Frame", model: Schema.Null, message: Schema.Never, slots: ["main"] }).make({
-      ...base,
-      reduceHead: (_, below, children) => {
-        expect(children.slot("main")).type.toBe<Head.Head | undefined>()
-        expect(children.slot).type.not.toBeCallableWith("aside")
-        return below
       },
       view: () => content
     })

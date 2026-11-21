@@ -811,19 +811,9 @@ const declaresHead = (component: Component.Any): boolean =>
 interface HeadPart {
   readonly inst: Instance
   readonly entries: ReadonlyArray<unknown>
-  readonly reduce: ((below: unknown, children: ReadonlyMap<string, unknown>) => unknown) | undefined
+  readonly reduce: ((below: unknown) => unknown) | undefined
   readonly children: ReadonlyArray<Instance>
 }
-
-const outletPath = (receiver: Instance, name: string): string => receiver.path + "/" + slotSegment(name)
-
-const headChildren = (
-  inst: Instance,
-  values: ReadonlyMap<string, unknown>
-): Component.HeadChildren<unknown, string> => ({
-  get: (component, key = "") => values.get(inst.path + "/" + segmentOf(component, key)),
-  slot: (name) => values.get(outletPath(inst, name))
-})
 
 /** A tree with no entries, which folds to the vocabulary's empty head. */
 const emptyTree: Head.Tree<any, any> = { entries: [], children: [] }
@@ -1840,12 +1830,7 @@ const setup = (
       children = []
       for (const rendered of listOf(inst.rendered)) placed(rendered, children)
     }
-    return {
-      inst,
-      entries,
-      reduce: reduce === undefined ? undefined : (below, values) => reduce(model, below, headChildren(inst, values)),
-      children
-    }
+    return { inst, entries, reduce: reduce === undefined ? undefined : (below) => reduce(model, below), children }
   }
   /** Adds the instances a rendered node places to `out`, in document order: a fallback's content included. */
   const placed = (rendered: Rendered, out: Array<Instance>): void => {
@@ -1903,8 +1888,8 @@ const setup = (
         path: inst.path,
         entries: part.entries,
         children,
-        reduce: reduce === undefined ? undefined : (below, values) => {
-          const value = reduce(below, values)
+        reduce: reduce === undefined ? undefined : (below) => {
+          const value = reduce(below)
           return own === fold ? value : { ...(below as object), ...(value as object) }
         },
         onError: (error) => onError(inst, error)
@@ -5459,6 +5444,8 @@ const setup = (
     })
     return out
   }
+
+  const outletPath = (receiver: Instance, name: string): string => receiver.path + "/" + slotSegment(name)
 
   /** What the receiver's parent last passed for the outlet's slot. */
   const contentOf = (outlet: OutletOf): unknown => outlet.slotted.values?.[outlet.view.name]

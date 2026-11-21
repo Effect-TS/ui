@@ -1,4 +1,4 @@
-import { Component, Head, type MessageLog, type View } from "@effect/ui"
+import { Component, Head, type MessageLog } from "@effect/ui"
 import { TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
@@ -303,48 +303,5 @@ describe("Head", () => {
       assert.deepStrictEqual(conflicts.map((conflict) => (conflict as Head.Conflict).paths), [paths, paths])
       yield* TestHost.settle
       assert.deepStrictEqual(roots.map((root) => root.head().title), [undefined, undefined])
-    }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
-
-  it.effect("a reduceHead settles its children's conflict by component and key, or by slot", () =>
-    Effect.gen(function*() {
-      const Frame = Component.define({
-        name: "Frame",
-        props: Schema.Struct({ swapped: Schema.Boolean }),
-        model: Schema.Null,
-        message: Schema.Never,
-        slots: ["main"]
-      }).make({
-        init: () => null,
-        update: (model) => model,
-        reduceHead: (_, below, children) => ({
-          ...below,
-          title: `${children.slot("main")?.title} beside ${children.get(Titled, "side")?.title}`
-        }),
-        view: (_, h) => {
-          const side = Titled(h, { key: "side", props: { title: "Side" } })
-          return h.el("div", ...ordered<View.Node<never>>(h.props.swapped, side, h.slots.main))
-        }
-      })
-      const App = Component.define({ name: "App", model: Schema.Boolean, message: Schema.Boolean }).make({
-        init: () => false,
-        update: (_, swapped) => swapped,
-        reduceHead: (_, below, children) => ({ ...below, title: children.get(Frame)?.title }),
-        view: (swapped, h) =>
-          h.el(
-            "main",
-            ...ordered(
-              swapped,
-              Titled(h, { key: "first", props: { title: "First" } }),
-              Titled(h, { key: "second", props: { title: "Second" } })
-            ),
-            Frame(h, { props: { swapped }, slots: { main: Titled(h, { key: "main", props: { title: "Main" } }) } })
-          )
-      })
-      const root = yield* TestHost.mount(App, {})
-      for (const swapped of [false, true]) {
-        root.send(swapped)
-        yield* TestHost.settle
-        assert.strictEqual(root.head().title, "Main beside Side")
-      }
     }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
 })

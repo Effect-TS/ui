@@ -1768,7 +1768,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       })
       const siblings = yield* Effect.flip(ssr(Siblings, {}))
       const conflict = "HeadConflict: Head: /Siblings/Box[a] and /Siblings/Box[a]%2FBox[b] set title to different " +
-        "values, so it's left unset. A reduceHead above them can pick one"
+        "values, so it's left unset"
       expect(siblings.problems).toEqual([conflict, conflict])
       yield* TestHost.expectProblem("HeadConflict")
 

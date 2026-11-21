@@ -63,7 +63,6 @@ export const fold = <E, H>(
     const reduce = node.reduce
     const below = node.children.length > 1 ? [...node.children].sort(byPath) : node.children
     const children: Array<Folded<H>> = []
-    const values = reduce === undefined ? undefined : new Map<string, H>()
     let last: string | undefined
     for (const child of below) {
       const folded = visit(child)
@@ -77,7 +76,6 @@ export const fold = <E, H>(
       }
       last = path
       children.push(folded)
-      if (values !== undefined && child.path !== undefined) values.set(child.path, folded.head)
     }
     if (node.entries.length === 0 && reduce === undefined && children.length < 2) return children[0] ?? nothing
     const slots = new Map<string, Merging>()
@@ -98,7 +96,7 @@ export const fold = <E, H>(
     let after = before
     if (reduce !== undefined) {
       try {
-        head = reduce(head, values!)
+        head = reduce(head)
       } catch (error) {
         if (node.onError === undefined) throw error
         node.onError(error)
