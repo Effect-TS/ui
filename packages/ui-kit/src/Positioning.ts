@@ -2,9 +2,9 @@
  * Places a popup against an anchor element, keeps it inside a boundary, and
  * reports where it ended up.
  *
- * The kit's own popups, such as `Tooltip`, are placed with this module. Use
- * it for a popup the kit doesn't have. The options have the names and
- * defaults of Base UI's positioner props.
+ * The kit's own popups, such as `Tooltip` and `Select`, are placed with this
+ * module. Use it for a popup the kit doesn't have. The options have the
+ * same names and defaults as the positioner props of those popups.
  *
  * It has two layers:
  *
@@ -43,13 +43,19 @@
  * - with `offsetAsPadding`, the side offset as padding on the side that
  *   faces the anchor
  *
+ * With `leaveCoordinates`, it writes everything but `left` and `top`, for
+ * a component that places the positioner itself and still wants the
+ * variables and the `Placement`.
+ *
  * They survive view-rendered changes to the positioner's `style` attribute,
  * and stay after the mount ends, so a closing popup keeps its place through
  * an exit transition.
  *
  * While it runs, the mount places the popup again when the window resizes,
  * when the positioner changes size, and, unless `disableAnchorTracking` is
- * set, when anything scrolls or the anchor changes size or moves.
+ * set, when anything outside the positioner scrolls or the anchor changes size
+ * or moves. Scrolling inside the positioner, such as a long list, doesn't
+ * move it.
  *
  * **Gotchas**
  *
@@ -931,6 +937,8 @@ export type Placement = typeof Placement.Type
  *   side facing the anchor, and move the positioner up against the anchor.
  *   The gap is then part of the positioner, so a pointer can cross it
  *   without leaving the popup.
+ * - `leaveCoordinates`: don't write `left` and `top`, and leave whatever
+ *   is there. False when left out.
  *
  * @stability experimental
  * @category schemas
@@ -943,7 +951,8 @@ export const TrackPositionArgs = Schema.Struct({
   disableAnchorTracking: Schema.Boolean,
   anchorSelector: Schema.String,
   arrowId: Schema.NullOr(Schema.String),
-  offsetAsPadding: Schema.Boolean
+  offsetAsPadding: Schema.Boolean,
+  leaveCoordinates: Schema.optional(Schema.Boolean)
 })
 
 /**
@@ -974,6 +983,7 @@ const idSelector = (id: string): string => `[id="${id.replace(/["\\]/g, "\\$&")}
  *   overrides.
  * - `arrowId`: the id of its arrow, when it draws one.
  * - `offsetAsPadding`: see `TrackPositionArgs`. False when left out.
+ * - `leaveCoordinates`: see `TrackPositionArgs`. False when left out.
  *
  * The result is plain data, so a view can also read the defaults from it:
  * `args.options.side` is the side to render before the mount first reports.
@@ -990,6 +1000,7 @@ export const trackArgs = (
     readonly anchorSelector: string
     readonly arrowId?: string | null | undefined
     readonly offsetAsPadding?: boolean | undefined
+    readonly leaveCoordinates?: boolean | undefined
   }
 ): TrackPositionArgs => ({
   options: resolveOptions(props, popup),
@@ -998,7 +1009,8 @@ export const trackArgs = (
   disableAnchorTracking: props.disableAnchorTracking === true,
   anchorSelector: props.anchor === undefined ? popup.anchorSelector : idSelector(props.anchor),
   arrowId: popup.arrowId ?? null,
-  offsetAsPadding: popup.offsetAsPadding === true
+  offsetAsPadding: popup.offsetAsPadding === true,
+  leaveCoordinates: popup.leaveCoordinates === true
 })
 
 /**
@@ -1277,11 +1289,17 @@ export const trackPosition = (
         ["--available-height", placed.availableHeight + "px"],
         ["--transform-origin", placed.transformOrigin]
       ])
+      if (current.leaveCoordinates === true) {
+        next.delete("left")
+        next.delete("top")
+      }
       if (bridge > 0) next.set("padding-" + opposite[side], bridge + "px")
       if (placed.arrow?.x != null) next.set(arrowX, placed.arrow.x + "px")
       if (placed.arrow?.y != null) next.set(arrowY, placed.arrow.y + "px")
       for (const name of owned.keys()) {
-        if (!next.has(name)) node.style.removeProperty(name)
+        if (!next.has(name) && !(current.leaveCoordinates === true && (name === "left" || name === "top"))) {
+          node.style.removeProperty(name)
+        }
       }
       owned = next
       written.set(node, owned)
@@ -1307,11 +1325,15 @@ export const trackPosition = (
       if (before.width !== after.width || before.height !== after.height) pass(after)
     }
 
+    const onScroll = (event: Event): void => {
+      if (!(event.target instanceof Node && node.contains(event.target))) update()
+    }
+
     const observe = (): () => void => {
       const anchor = current.disableAnchorTracking ? null : document.querySelector(current.anchorSelector)
       view.addEventListener("resize", update)
       if (!current.disableAnchorTracking) {
-        document.addEventListener("scroll", update, { capture: true, passive: true })
+        document.addEventListener("scroll", onScroll, { capture: true, passive: true })
       }
       let frame = -1
       const watch = () => sizes?.observe(node, { box: "border-box" })
@@ -1331,7 +1353,7 @@ export const trackPosition = (
       const moves = anchor === null ? () => {} : observeMove(anchor, update)
       return () => {
         view.removeEventListener("resize", update)
-        document.removeEventListener("scroll", update, { capture: true })
+        document.removeEventListener("scroll", onScroll, { capture: true })
         view.cancelAnimationFrame(frame)
         sizes?.disconnect()
         moves()

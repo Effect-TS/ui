@@ -209,6 +209,7 @@ import * as Stream from "effect/Stream"
 import { flag, withStyle } from "./internal/attributes.ts"
 import { hideOthers, lockScroll } from "./internal/modal.ts"
 import { inKept, raiseAbove } from "./internal/topLayer.ts"
+import { frameOf, settling } from "./internal/transition.ts"
 
 /**
  * How a dialog limits the page behind it: `true` for a modal, `"trap-focus"`
@@ -554,11 +555,6 @@ if (typeof document !== "undefined") {
   }, true)
 }
 
-const finite = (animation: Animation): boolean => {
-  const end = animation.effect?.getComputedTiming().endTime
-  return typeof end === "number" && Number.isFinite(end)
-}
-
 const closeWatcherOf = (view: Window | null): (new() => CloseWatcher) | undefined => {
   if (view === null) return undefined
   const agent = view.navigator as Navigator & { readonly userAgentData?: { readonly platform: string } }
@@ -589,7 +585,7 @@ const TrackDialog = Mount.makeStream(
     Stream.callback<Message>((queue) => {
       const document = node.ownerDocument
       const view = document.defaultView
-      const frame = (f: () => void) => view === null ? setTimeout(f, 0) : view.requestAnimationFrame(f)
+      const frame = frameOf(view)
       let current: TrackDialogArgs = args
       const send = (message: Message) => Queue.offerUnsafe(queue, message)
       const popup = (): HTMLElement => (document.getElementById(current.popupId) as HTMLElement | null) ?? node
@@ -787,22 +783,7 @@ const TrackDialog = Mount.makeStream(
           if (current.open && !current.started) frame(() => send(Message.RenderedFirstFrame()))
         })
 
-      let generation = 0
-      const settle = (open: boolean) => {
-        const mine = ++generation
-        const read = () => {
-          if (mine !== generation || !node.isConnected) return
-          const element = popup()
-          const running = element.getAnimations().filter(finite).map((animation) => animation.finished)
-          Promise.all(running).then(
-            () => {
-              if (mine === generation && node.isConnected) send(Message.FinishedTransition({ open }))
-            },
-            () => frame(read)
-          )
-        }
-        frame(read)
-      }
+      const transition = settling(node, popup, frame, (open) => send(Message.FinishedTransition({ open })))
       const waits = (state: TrackDialogArgs): boolean | undefined =>
         state.open ? (state.started ? true : undefined) : state.mounted && !state.holdExit ? false : undefined
       const onChange = (next: TrackDialogArgs) => {
@@ -822,8 +803,8 @@ const TrackDialog = Mount.makeStream(
         }
         const wait = waits(next)
         if (wait === waits(previous)) return
-        if (wait === undefined) generation++
-        else settle(wait)
+        if (wait === undefined) transition.cancel()
+        else transition.settle(wait)
       }
 
       const controller = new AbortController()
@@ -863,7 +844,7 @@ const TrackDialog = Mount.makeStream(
             observer.disconnect()
             page.disconnect()
             release?.()
-            generation++
+            transition.cancel()
             const { closedByFocusOut, closeMethod, finalFocus, portalId } = current
             const lost = focusInside
             const parents = showing.filter((other) => other.node.contains(node))

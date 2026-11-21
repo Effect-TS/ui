@@ -82,6 +82,12 @@ export * from "./Progress.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * from "./Select.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./Slider.ts"
 
 /**
