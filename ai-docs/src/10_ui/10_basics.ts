@@ -20,8 +20,8 @@ import { FetchHttpClient } from "effect/http"
 // oxlint-disable-next-line no-unassigned-import
 import "@effect/ui/html/register"
 // An entry module defines no components. The editor and its `SaveNote`
-// command are in the notes feature, next to the service they use, and the
-// Schema they share is in `domain`. Read them in this order:
+// command are in the notes feature, next to the service they use. Read them
+// in this order:
 //
 // - `fixtures/domain/Note.ts`: the Schema, the errors and `NotesTag`
 // - `fixtures/notes/services/Notes.ts`: the service all the I/O goes through

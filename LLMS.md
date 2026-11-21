@@ -597,18 +597,16 @@ fixtures/
   server/NotesApi.ts          // the JSON API that Notes calls
 ```
 
-`domain` imports packages and other `domain` files, and nothing else from the
-app. It holds Schemas with their types and errors, pure functions over them,
+`domain` holds Schemas with their types and errors, pure functions over them,
 and `Query.Tag` invalidation tags. Services and their Layers, queries and
-components stay in a feature. Pages import features, features import
-`domain`, and `domain` imports neither. Domain files can then build on each
-other without one feature importing another.
+components stay in a feature. `domain` imports packages and other `domain`
+files, and nothing else from the app, so domain files can build on each other
+without one feature importing another.
 
-A second feature is a sibling of `notes/`, with its own `services`, `queries`
-and `components` folders, and its types go in `domain` next to `Note.ts`.
-Features never import pages. Keep `AppRoute` in `routes.ts`, outside
-`pages/` and separate from `App.ts`; pages can then build links without
-importing the root component that imports them.
+A second feature is a sibling of `notes/`, and its types go in `domain` next
+to `Note.ts`. Pages import features, but features never import pages. Keep
+`AppRoute` in `routes.ts`, outside `pages/` and separate from `App.ts`; pages
+can then build links without importing the root component that imports them.
 
 From outside `domain`, import it through a subpath import, declared once in
 the app's `package.json`:
@@ -630,8 +628,7 @@ config, so a server entry that imports `domain` still runs under plain `node`.
 The mapping adds the `.ts`, so the specifier has none: with
 `rewriteRelativeImportExtensions` set, TypeScript accepts `.ts` only on a
 relative specifier. Between domain files, and everywhere else, imports stay
-relative, with their `.ts` extension. These docs map `#domain/*` to
-`./src/10_ui/fixtures/domain/*.ts` in `ai-docs/package.json`.
+relative, with their `.ts` extension.
 
 Keep one file per route in `pages/`, in folders that mirror the URL. A page's
 folder is the static segments of its route's path, and its file is named after
