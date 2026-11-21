@@ -1,5 +1,5 @@
 import { Component, type Mount, UiSchema, type View } from "@effect/ui"
-import { Drawer, type DrawerEvents, type DrawerProps, DrawerProvider } from "@effect/ui-kit"
+import { Dialog, Drawer, type DrawerEvents, type DrawerProps, DrawerProvider } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Locator, Scene, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -152,6 +152,18 @@ describe("Drawer", () => {
       s.expectMount(tracked(s)).expectMount(trackedArea(s))
     }))
 
+  it.effect("emits what its dialog emits, an open with the reason trigger-press", () =>
+    Effect.gen(function*() {
+      const s = yield* Scene.make(Drawer, { open: true }, standIn)
+      s.expectMount(tracked(s)).expectMount(trackedArea(s))
+        .childEmit(Dialog, { _tag: "Opened", triggerId: "menu" })
+        .emitted({ _tag: "Opened", triggerId: "menu", reason: "trigger-press" })
+        .childEmit(Dialog, { _tag: "Dismissed", reason: "escape-key" })
+        .emitted({ _tag: "Dismissed", reason: "escape-key" })
+        .childEmit(Dialog, { _tag: "Settled", open: false })
+        .emitted({ _tag: "Settled", open: false })
+    }))
+
   it.effect("a nested drawer's report marks the popup and stops its swipes", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(Drawer, { open: true }, standIn)
@@ -284,5 +296,54 @@ describe("DrawerProvider", () => {
       Locator.fire(root.get(Locator.text("Close", { exact: true })), "click")
       yield* TestHost.settle
       expectActive(false)
+    }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
+})
+
+// A drawer in a dialog's popup, and a dialog in the drawer's, all open.
+const Mixed = Component.define({ name: "Mixed", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+  init: () => null,
+  update: (model) => model,
+  view: (_, h) =>
+    Dialog(h, {
+      key: "outer",
+      props: { open: true },
+      view: (outerDialog) =>
+        h.div(
+          outerDialog.portal(h.dialog)?.children(
+            outerDialog.popup(h.div.class("outer")).children(
+              Drawer(h, {
+                props: { open: true },
+                view: (drawer) =>
+                  h.div(
+                    drawer.portal(h.dialog)?.children(
+                      drawer.popup(h.div.class("middle")).children(
+                        Dialog(h, {
+                          key: "inner",
+                          props: { open: true },
+                          view: (innerDialog) =>
+                            h.div(innerDialog.portal(h.dialog)?.children(innerDialog.popup(h.div.class("inner"))))
+                        })
+                      )
+                    )
+                  )
+              })
+            )
+          )
+        )
+    })
+})
+
+describe("a Drawer among Dialogs", () => {
+  it.effect("is a nested dialog inside a dialog, and counts the dialog inside it", () =>
+    Effect.gen(function*() {
+      const root = yield* TestHost.mount(Mixed, {})
+      yield* TestHost.settle
+      const attrsOf = (name: string) => root.get(Locator.attr("class", name)).attrs
+      assert.include(attrsOf("outer")?.style, "--nested-dialogs:2")
+      assert.isUndefined(attrsOf("outer")?.["data-nested"])
+      assert.deepInclude(attrsOf("middle"), { "data-nested": "", "data-nested-dialog-open": "" })
+      assert.include(attrsOf("middle")?.style, "--nested-dialogs:1")
+      assert.isUndefined(attrsOf("middle")?.["data-nested-drawer-open"])
+      assert.strictEqual(attrsOf("inner")?.["data-nested"], "")
     }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
 })

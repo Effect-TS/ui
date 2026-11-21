@@ -95,8 +95,6 @@
  * - The popup carries the swipe's mount and the viewport the keyboard's, so
  *   neither takes a mount of the consumer's.
  * - Snap points apply to a drawer that swipes `up` or `down`.
- * - It renders a `Drawer` and a `Dialog` instance, so a `Scene` of the
- *   consumer finds both, as the `Drawer` export describes.
  * - On the server, and on a host that doesn't run mounts, nothing swipes.
  *
  * **Example** (A bottom sheet whose open state lives in the consumer's Model)
@@ -163,11 +161,10 @@ import * as UiSchema from "@effect/ui/UiSchema"
 import * as View from "@effect/ui/View"
 import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
-import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import * as Struct from "effect/Struct"
-import { Dialog, DialogDismissReason, type DialogEvents, DialogProps } from "./Dialog.ts"
+import { Dialog, DialogDismissReason, DialogProps } from "./Dialog.ts"
 import { flag, idOf, withStyle } from "./internal/attributes.ts"
 import { byAttribute, onRange, saved } from "./internal/dom.ts"
 import { popupAttribute, trackKeyboard, TrackKeyboardArgs } from "./internal/drawerKeyboard.ts"
@@ -581,7 +578,10 @@ const Message = UiSchema.TaggedEnum({
   StartedAreaSwipe: { key: Schema.String },
   ReleasedAreaSwipe: { displacement: Schema.Number, velocity: Schema.Number, size: Schema.NullOr(Schema.Number) },
   CancelledAreaSwipe: {},
-  ChangedNested: NestedReport.fields
+  ChangedNested: NestedReport.fields,
+  OpenedDialog: { triggerId: Schema.NullOr(Schema.String) },
+  DismissedDialog: { reason: DialogDismissReason },
+  SettledDialog: { open: Schema.Boolean }
 })
 
 type Message = typeof Message.Type
@@ -1433,7 +1433,36 @@ export const DrawerProvider = Component.define({
   }
 })
 
-const DrawerCore = Component.define({
+const dialogPropsOf = Struct.omit([
+  "snapPoint",
+  "snapPoints",
+  "snapToSequentialPoints",
+  "swipeDirection",
+  "virtualKeyboard"
+]) satisfies (props: DrawerProps) => DialogProps
+
+/**
+ * A headless drawer: a `Dialog` that slides in from an edge of the screen
+ * and is swiped away. Call it as a `Dialog`, with the consumer's `h`, a `key`
+ * when it needs one, `props`, `onEmit` and a `view` closure that draws it
+ * from its parts.
+ *
+ * **Details**
+ *
+ * The parts stack on the `Dialog`'s: `drawer.popup`, `drawer.backdrop` and
+ * `drawer.viewport` add the drawer's attributes and mounts to the
+ * `Dialog`'s, and `drawer.content` and `drawer.swipeArea` are its own. The
+ * popup carries the swipe's mount, so it can't take one of the consumer's.
+ *
+ * The drawer owns its `Dialog` and emits what it emits, so a `Scene` of the
+ * consumer gives `childEmit(Drawer, event)` every event. A `Scene` of the
+ * `Drawer` stands in for the `Dialog` with `childEmit(Dialog, event)`.
+ *
+ * @stability experimental
+ * @category components
+ * @since 0.1.0
+ */
+export const Drawer = Component.define({
   name: "Drawer",
   props: DrawerProps,
   model: Model,
@@ -1521,7 +1550,11 @@ const DrawerCore = Component.define({
       nestedOpen: count,
       nestedSwiping: swiping,
       nestedHeight: height
-    })
+    }),
+    OpenedDialog: (model, { triggerId }, $) =>
+      $.set(model).emit(DrawerEvents.Opened({ triggerId, reason: "trigger-press" })),
+    DismissedDialog: (model, { reason }, $) => $.set(model).emit(DrawerEvents.Dismissed({ reason })),
+    SettledDialog: (model, { open }, $) => $.set(model).emit(DrawerEvents.Settled({ open }))
   },
   parts: (model, p) => {
     const props = p.props
@@ -1649,125 +1682,29 @@ const DrawerCore = Component.define({
         )
     )
 
-    return {
-      swiping,
-      swipeDirection,
-      expanded,
-      nestedDrawers,
-      nestedDrawerSwiping,
-      popup,
-      backdrop,
-      viewport,
-      content,
-      swipeArea
-    }
+    return p.child(Dialog, {
+      props: dialogPropsOf(props),
+      onEmit: {
+        Opened: ({ triggerId }) => Message.OpenedDialog({ triggerId }),
+        Dismissed: ({ reason }) => Message.DismissedDialog({ reason }),
+        Settled: ({ open }) => Message.SettledDialog({ open })
+      },
+      parts: (dialog) => ({
+        ...dialog,
+        swiping,
+        swipeDirection,
+        expanded,
+        nestedDrawers,
+        nestedDrawerSwiping,
+        popup: <B extends View.PartTarget<"div">>(element: B) => popup(dialog.popup(element)),
+        backdrop: <B extends View.PartTarget<"div">>(element: B) => {
+          const out = dialog.backdrop(element)
+          return out === undefined ? undefined : backdrop(out)
+        },
+        viewport: <B extends View.PartTarget<"div">>(element: B) => viewport(dialog.viewport(element)),
+        content,
+        swipeArea
+      })
+    })
   }
 })
-
-type DialogParts = Component.Headless.Parts<typeof Dialog>
-type CoreParts = Component.Headless.Parts<typeof DrawerCore>
-
-/**
- * What a `Drawer`'s `view` gets: a `Dialog`'s parts and plain values, with
- * the drawer's on top.
- *
- * @stability experimental
- * @category models
- * @since 0.1.0
- */
-export type DrawerParts = Omit<DialogParts, "popup" | "viewport"> & CoreParts & {
-  readonly backdrop: DialogParts["backdrop"]
-}
-
-type Handlers<Msg> = View.Child.Options<DrawerProps, DrawerEvents, Msg>["onEmit"]
-
-const handle = <Msg>(onEmit: Handlers<Msg>, event: DrawerEvents): Msg | undefined => {
-  if (onEmit === undefined) return undefined
-  if (typeof onEmit === "function") return onEmit(event)
-  const handler = (onEmit as Record<string, ((event: DrawerEvents) => Msg | undefined) | undefined>)[event._tag]
-  return handler?.(event)
-}
-
-const fromDialog = (event: DialogEvents): DrawerEvents =>
-  event._tag === "Opened" ? DrawerEvents.Opened({ triggerId: event.triggerId, reason: "trigger-press" }) : event
-
-const dialogPropsOf = Struct.omit([
-  "snapPoint",
-  "snapPoints",
-  "snapToSequentialPoints",
-  "swipeDirection",
-  "virtualKeyboard"
-]) satisfies (props: DrawerProps) => DialogProps
-
-/**
- * The type of `Drawer`: a call that draws a drawer from its parts, and the
- * component a `Scene` or a ref names.
- *
- * @stability experimental
- * @category models
- * @since 0.1.0
- */
-export type DrawerComponent =
-  & (<Msg, RV = never, RF = never>(
-    h: View.Helper<Msg, unknown>,
-    options:
-      & View.Child.Options<DrawerProps, DrawerEvents, NoInfer<Msg>>
-      & {
-        /** Shown if the drawer fails, until its key changes. Without it, it is blank. */
-        readonly fallback?:
-          | ((result: AsyncResult.Failure<never, unknown>) => View.Content<NoInfer<Msg>, RF>)
-          | undefined
-        /** The drawer's whole view, from its parts. */
-        readonly view: (parts: DrawerParts) => View.Content<NoInfer<Msg>, RV>
-      }
-  ) => ReturnType<typeof DrawerCore<Msg, RV, RF>>)
-  & Omit<typeof DrawerCore, never>
-
-/**
- * A headless drawer: a `Dialog` that slides in from an edge of the screen
- * and is swiped away. Call it as a `Dialog`, with the consumer's `h`, a `key`
- * when it needs one, `props`, `onEmit` and a `view` closure that draws it
- * from its parts.
- *
- * **Details**
- *
- * The parts stack on the `Dialog`'s: `drawer.popup`, `drawer.backdrop` and
- * `drawer.viewport` add the drawer's attributes and mounts to the
- * `Dialog`'s, and `drawer.content` and `drawer.swipeArea` are its own. The
- * popup carries the swipe's mount, so it can't take one of the consumer's.
- *
- * It renders a `Drawer` and a `Dialog` instance, so a `Scene` of the
- * consumer finds both: `childEmit(Drawer, event)` for a swipe's events and
- * `childEmit(Dialog, event)` for a trigger's, an outside press's or the
- * escape key's.
- *
- * @stability experimental
- * @category components
- * @since 0.1.0
- */
-export const Drawer: DrawerComponent = Object.setPrototypeOf(
-  // The call inherits the core component's fields, so a Scene or a ref
-  // names the instance it declares.
-  (h: View.Helper<any, unknown>, options: any) =>
-    DrawerCore(h, {
-      ...options,
-      view: (drawer: CoreParts) =>
-        Dialog(h, {
-          key: options.key ?? options.ref?.key,
-          props: dialogPropsOf(options.props),
-          onEmit: (event: DialogEvents) => handle(options.onEmit, fromDialog(event)),
-          view: (dialog) =>
-            options.view({
-              ...dialog,
-              ...drawer,
-              backdrop: <B extends View.PartTarget<"div">>(element: B) => {
-                const out = dialog.backdrop(element)
-                return out === undefined ? undefined : drawer.backdrop(out)
-              },
-              popup: <B extends View.PartTarget<"div">>(element: B) => drawer.popup(dialog.popup(element)),
-              viewport: <B extends View.PartTarget<"div">>(element: B) => drawer.viewport(dialog.viewport(element))
-            })
-        })
-    }),
-  DrawerCore
-)
