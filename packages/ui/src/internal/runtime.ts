@@ -3220,7 +3220,7 @@ const setup = (
     }
     if (Exit.isExit(decoded)) start(decoded)
     else {
-      const resume = hold(inst, hydrates ? range : undefined)
+      const resume = hold(inst, hydrates ? range : undefined, hydrates ? undefined : restored ?? saved)
       decoded.addObserver((exit) =>
         resume(Exit.isSuccess(exit) && Option.isSome(exit.value.fromServer), () => start(exit))
       )
@@ -3590,8 +3590,10 @@ const setup = (
     })
   }
 
-  const hold = (inst: Instance, range: Range | undefined) => {
+  const restoring = new WeakMap<Instance, unknown>()
+  const hold = (inst: Instance, range: Range | undefined, restored?: unknown) => {
     inst.waiting = true
+    if (restored !== undefined) restoring.set(inst, restored)
     waiting++
     if (range !== undefined) {
       range.claimed = true
@@ -3600,6 +3602,7 @@ const setup = (
     const resume = (adopt: boolean, start: () => void) => {
       if (inst.closed || !inst.waiting) return
       inst.waiting = false
+      restoring.delete(inst)
       const nodes = listOf(inst.rendered).flatMap(nodesOf)
       inst.rendered = undefined
       if (range !== undefined) range.claimed = false
@@ -7448,9 +7451,20 @@ const setup = (
       // navigation issued in the `update` that changed them runs in the flush's deferred work, which
       // can come before the drain gets to them.
       if (inst.keyed !== undefined && inst.keyed.size > 0) drainKeyed(inst)
-      if (inst.closed || inst.failure !== undefined || inst.waiting) return
+      if (inst.closed || inst.failure !== undefined) return
       const was = into
       const entry = keptLive > 0 ? keptEntries.get(inst) : undefined
+      if (inst.waiting) {
+        if (entry !== undefined) return
+        const path = inst.path
+        const restored = restoring.get(inst)
+        if (restored !== undefined) into[path] = restored
+        else if (hydrating !== undefined) {
+          const state = hydrating.state
+          for (const key in state) if (key === path || key.startsWith(path + "/")) into[key] = state[key]
+        }
+        return
+      }
       if (entry !== undefined) {
         const author = entry.author
         into = ((keptIn(homes.get(author) ?? out)[author.path] ??= {}) as Saved)[inst.path] = {}
