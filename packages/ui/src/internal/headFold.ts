@@ -38,7 +38,9 @@ export const skipsEmpty = (merge: Function): boolean => plainMerges.has(merge)
 
 const compare = (a: string, b: string): number => a < b ? -1 : a > b ? 1 : 0
 
-const byPath = (a: Head.Tree<any, any>, b: Head.Tree<any, any>): number => compare(a.path ?? "", b.path ?? "")
+const pathOf = (tree: Head.Tree<any, any>): string => tree.path ?? ""
+
+const byPath = (a: Head.Tree<any, any>, b: Head.Tree<any, any>): number => compare(pathOf(a), pathOf(b))
 
 const noSlots = new Map<string, never>()
 const noConflicts: ReadonlySet<string> = new Set()
@@ -70,9 +72,10 @@ export const fold = <E, H>(
     for (const child of below) {
       const folded = visit(child)
       if (folded === nothing) continue
-      if (last !== undefined && last.path === child.path) {
+      if (last !== undefined && byPath(last, child) === 0) {
+        const path = pathOf(child)
         throw new Error(
-          `Head: two siblings ${child.path === undefined ? "have no path" : `share the path ${child.path}`}, ` +
+          `Head: two siblings ${path === "" ? "have no path" : `share the path ${path}`}, ` +
             "so their order is ambiguous. Give each sibling with head entries its own path"
         )
       }

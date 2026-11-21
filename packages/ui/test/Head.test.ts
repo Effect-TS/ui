@@ -35,10 +35,11 @@ describe("Head", () => {
 
   it("rejects siblings without distinct paths, in either order", () => {
     const at = (path: string | undefined, title: string): Head.Tree => ({ path, ...node([Head.title(title)]) })
-    for (const path of [undefined, "/App/Page"]) {
-      const a = at(path, "A")
-      const b = at(path, "B")
-      const message = path === undefined ? /two siblings have no path/ : /two siblings share the path \/App\/Page/
+    const pairs = [[undefined, undefined], [undefined, ""], ["/App/Page", "/App/Page"]] as const
+    for (const [first, second] of pairs) {
+      const a = at(first, "A")
+      const b = at(second, "B")
+      const message = first === undefined ? /two siblings have no path/ : /two siblings share the path \/App\/Page/
       assert.throws(() => Head.merge(node([], a, b)), message)
       assert.throws(() => Head.merge(node([], b, a)), message)
     }
