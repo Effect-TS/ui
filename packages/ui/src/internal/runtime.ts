@@ -550,7 +550,7 @@ export interface Instance {
   // empty Map or Set costs about 150 bytes.
   /** `Unmounted` is logged: the instance left the tree, though its Scope may still be closing. */
   left: boolean
-  /** How many instances that declare a head are in the tree at or below it: see `declaresHead`. */
+  /** How many instances whose component has a `head` are in the tree at or below it. */
   heads: number
   /** The containers of the detached children its view declares, unregistered when it leaves. */
   parked: Set<unknown> | undefined
@@ -803,20 +803,15 @@ const neutralFold: View.HeadFold<Head.Entry, Head.Head> = { merge: Head.merge, t
 
 /** The fold of a component's vocabulary, or the title-only one. */
 const foldOf = (component: Component.Any): View.HeadFold => component.elements()?.head ?? neutralFold
-/** Whether an instance of `component` can add to the head: it has entries of its own, or reduces the ones below it. */
-const declaresHead = (component: Component.Any): boolean =>
-  component.head !== undefined || component.reduceHead !== undefined
 
-/** One instance's part of the head, over its state when it was read: its entries, its reducer and the instances it placed. */
 interface HeadPart {
   readonly inst: Instance
   readonly entries: ReadonlyArray<unknown>
-  readonly reduce: ((below: unknown) => unknown) | undefined
   readonly children: ReadonlyArray<Instance>
 }
 
 /** A tree with no entries, which folds to the vocabulary's empty head. */
-const emptyTree: Head.Tree<any, any> = { entries: [], children: [] }
+const emptyTree: Head.Tree<any> = { entries: [], children: [] }
 
 /** An entry about an instance, without what `record` adds. */
 type Draft = MessageLog.InstanceEntry extends infer E
@@ -1712,11 +1707,6 @@ const setup = (
     runCommitted()
     checkIdle()
   }
-  /**
-   * Renders what's dirty, runs deferred work and folds the head, until none
-   * is left. A `head`, `reduceHead` or title template that throws fails its
-   * instance, so the fallback renders and the head is folded again.
-   */
   function drain() {
     draining = true
     try {
@@ -1783,9 +1773,6 @@ const setup = (
   let viewChanged = false
   // The root vocabulary's fold, or the title-only one.
   const rootFold = foldOf(component)
-  // Under a root fold that folds a subtree with no entries and no `reduce` to nothing, such subtrees
-  // are left out of the tree: most instances, such as a list's rows, have no head. A host-neutral root
-  // may hand the fold to a vocabulary that sees every node, so its tree is built whole.
   const skipsEmpty = rootFold !== neutralFold && headFold.skipsEmpty(rootFold.merge)
   const emptyHead: unknown = rootFold.merge(emptyTree)
   let merged: unknown = emptyHead
@@ -1806,12 +1793,6 @@ const setup = (
   let rootInstance: Instance | undefined
   let handle: services.RootHandle | undefined
 
-  /**
-   * One instance's part of the head, read now: its entries, its `reduceHead` over its Model and the
-   * instances its view placed. A closed or failed instance has none, and nor does one still waiting to
-   * adopt, whose Model isn't there yet, or one whose `head` throws, which `onError` is told. With
-   * `below` false the instances it placed aren't looked for: none of them has a part the fold keeps.
-   */
   const headPart = (
     inst: Instance,
     onError: (inst: Instance, error: unknown) => void,
@@ -1828,14 +1809,12 @@ const setup = (
         return undefined
       }
     }
-    const reduce = inst.component.reduceHead
-    const model = inst.model
     let children: Array<Instance> = emptyList
     if (below) {
       children = []
       for (const rendered of listOf(inst.rendered)) placed(rendered, children)
     }
-    return { inst, entries, reduce: reduce === undefined ? undefined : (below) => reduce(model, below), children }
+    return { inst, entries, children }
   }
   /** Adds the instances a rendered node places to `out`, in document order: a fallback's content included. */
   const placed = (rendered: Rendered, out: Array<Instance>): void => {
@@ -1859,15 +1838,6 @@ const setup = (
         return
     }
   }
-  /**
-   * Folds the head of the tree under `root`, one node per instance that `partOf` has a part for. What
-   * throws in the fold is `onError`'s, with the instance that declared it.
-   *
-   * The fold is the root vocabulary's, or under a host-neutral root, the first vocabulary's in the tree
-   * with a fold of its own, so an Html child keeps its entries. A `reduceHead` of another vocabulary
-   * than the fold's has its value laid over `below`: a host-neutral one sets the title and keeps the Html
-   * fields.
-   */
   const foldTree = (
     root: Instance,
     partOf: (inst: Instance) => HeadPart | undefined,
@@ -1876,27 +1846,21 @@ const setup = (
   ): { readonly head: unknown; readonly title: string | undefined } => {
     let fold = rootFold
     const skip = skipsEmpty
-    const node = (inst: Instance): Head.Tree<unknown, unknown> | undefined => {
+    const node = (inst: Instance): Head.Tree<unknown> | undefined => {
       const part = partOf(inst)
       if (part === undefined) return skip ? undefined : { path: inst.path, ...emptyTree }
-      const own = foldOf(inst.component)
-      if (fold === neutralFold) fold = own
-      const reduce = part.reduce
+      if (fold === neutralFold) fold = foldOf(inst.component)
       const below = part.children
-      const children: Array<Head.Tree<unknown, unknown>> = []
+      const children: Array<Head.Tree<unknown>> = []
       for (let index = 0; index < below.length; index++) {
         const child = node(below[index]!)
         if (child !== undefined) children.push(child)
       }
-      if (skip && reduce === undefined && part.entries.length === 0 && children.length === 0) return undefined
+      if (skip && part.entries.length === 0 && children.length === 0) return undefined
       return {
         path: inst.path,
         entries: part.entries,
         children,
-        reduce: reduce === undefined ? undefined : (below) => {
-          const value = reduce(below)
-          return own === fold ? value : { ...(below as object), ...(value as object) }
-        },
         onError: (error) => onError(inst, error)
       }
     }
@@ -1978,7 +1942,7 @@ const setup = (
           if (prune) {
             const heads = inst.heads
             if (heads === 0) return undefined
-            below = heads > (declaresHead(inst.component) ? 1 : 0)
+            below = heads > (inst.component.head !== undefined ? 1 : 0)
           }
           const part = headPart(inst, failHead, below)
           if (part !== undefined && adoption !== undefined) parts.push(part)
@@ -2038,7 +2002,7 @@ const setup = (
     if (inst.left) return
     inst.left = true
     inst.lazy = undefined
-    if (declaresHead(inst.component)) {
+    if (inst.component.head !== undefined) {
       for (let at: Instance | undefined = inst; at !== undefined; at = at.parent) at.heads--
     }
     // At once, not when the Scope closes: the host may hand out a container's handle again.
@@ -2969,7 +2933,7 @@ const setup = (
       owner === undefined || parent === undefined ? undefined : parent.author
     )
     addInstanceFinalizer(inst)
-    if (declaresHead(component)) {
+    if (component.head !== undefined) {
       for (let at: Instance | undefined = inst; at !== undefined; at = at.parent) {
         at.heads++
       }
@@ -5381,7 +5345,6 @@ const setup = (
   const outletComponent: Component.Any = {
     definition: { name: "[outlet]", slots: [] },
     head: undefined,
-    reduceHead: undefined,
     subscriptions: undefined,
     layer: undefined,
     "~queries": undefined,

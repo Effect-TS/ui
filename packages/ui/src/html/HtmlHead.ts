@@ -13,15 +13,15 @@
  *
  * - A node's value is its own entries followed by its children's values, so
  *   a descendant overrides its ancestors. Children are taken in the order of
- *   their paths, never in document order. A component's `reduceHead` then
- *   maps the value.
+ *   their paths, never in document order. The node's `reduce` entries
+ *   then map the value, in written order.
  * - The title, `lang`, `dir` and `<link rel="canonical">` each have one entry.
  *   A meta tag is identified by its `key`, else its `name` or `property`; a
  *   link by its `key`, else `rel` plus `href`; a JSON-LD block by its `key`,
  *   else its canonical form. `data-*` attributes have one entry per name.
  * - Siblings that set one of these to the same value pass it up once. When
  *   they set different values it's left unset, and reported as a
- *   `Head.Conflict` unless a `reduceHead` above them sets it.
+ *   `Head.Conflict` unless a `reduce` above them sets it.
  * - `class` tokens are unioned in the order they were first contributed.
  * - Titles follow `Head`'s template rule.
  *
@@ -52,8 +52,8 @@ import * as headFold from "../internal/headFold.ts"
 import * as headAttributes from "./internal/headAttributes.ts"
 
 /**
- * One entry of the HTML vocabulary's head: `Head`'s title entries, or one of
- * the HTML ones.
+ * One entry of the HTML vocabulary's head: `Head`'s entries, or one of the
+ * HTML ones.
  *
  * @stability experimental
  * @category models
@@ -61,6 +61,7 @@ import * as headAttributes from "./internal/headAttributes.ts"
  */
 export type Entry =
   | Head.Entry
+  | Reduce
   | Meta
   | Link
   | Lang
@@ -506,6 +507,54 @@ export interface HtmlHead extends Head.Head {
 }
 
 /**
+ * Maps the folded head of its node, its own entries merged with its
+ * children's values, with every HTML field in view.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Reduce {
+  readonly _tag: "HtmlHeadReduce"
+  readonly apply: (below: HtmlHead) => HtmlHead
+}
+
+/**
+ * Maps the folded head of the instance and everything its view placed, such
+ * as deriving `og:title` from the title that won.
+ *
+ * **Details**
+ *
+ * It runs with the node's other reduce entries, `Head.reduce`'s included,
+ * in written order, after its own entries and its children's values are
+ * merged. `Head.merge` ignores it.
+ *
+ * **Example** (Deriving og:title)
+ *
+ * ```ts import.meta.vitest
+ * import { Head } from "@effect/ui"
+ * import { HtmlHead } from "@effect/ui/html"
+ *
+ * const ogTitle = HtmlHead.reduce((below) => ({
+ *   ...below,
+ *   meta: [...below.meta, HtmlHead.meta({ property: "og:title", content: below.title ?? "App" })]
+ * }))
+ *
+ * const head = HtmlHead.merge({
+ *   entries: [Head.titleTemplate((title) => `${title} · App`), ogTitle],
+ *   children: [{ entries: [Head.title("Ada")], children: [] }]
+ * })
+ *
+ * head.meta.map((meta) => meta.content) // => ["Ada · App"]
+ * ```
+ *
+ * @stability experimental
+ * @category constructors
+ * @since 0.1.0
+ */
+export const reduce = (apply: (below: HtmlHead) => HtmlHead): Reduce => ({ _tag: "HtmlHeadReduce", apply })
+
+/**
  * The head with no entries.
  *
  * @stability experimental
@@ -593,7 +642,7 @@ const slotsOf = (head: HtmlHead): ReadonlyMap<string, string> => {
 }
 
 const combine = (
-  node: Head.Tree<Entry, HtmlHead>,
+  node: Head.Tree<Entry>,
   children: ReadonlyArray<HtmlHead>,
   conflicted: ReadonlySet<string>
 ): HtmlHead => {
@@ -673,17 +722,22 @@ const combine = (
   }
 }
 
+const reducer = (entry: Entry): ((below: HtmlHead) => HtmlHead) | undefined =>
+  entry._tag === "Reduce" || entry._tag === "HtmlHeadReduce" ? entry.apply : undefined
+
 /**
  * Folds a tree's entries into one `HtmlHead`, applying each node's `reduce`
- * bottom up. The `Html` vocabulary installs it as its merge.
+ * entries bottom up. The `Html` vocabulary installs it as its merge.
  *
  * **Details**
  *
  * A node's value is its own entries, then its children's values ordered by
  * path, so a descendant's entry wins over its ancestor's per identity. The
  * title passes through the `titleTemplate` of each ancestor of the node that
- * set it, nearest first, as `Head.resolveTitle` says. A template or a
- * `reduce` that throws is reported to its node's `onError` and skipped.
+ * set it, nearest first, as `Head.resolveTitle` says. A node's
+ * `HtmlHead.reduce` and `Head.reduce` entries then map its value, in
+ * written order. A template or a reduce that throws is reported to its
+ * node's `onError` and skipped.
  *
  * When siblings set the title, `lang`, `dir`, a `data-*` attribute or a
  * meta, link or JSON-LD entry of one identity to different values, it's left
@@ -695,12 +749,13 @@ const combine = (
  * @category combinators
  * @since 0.1.0
  */
-export const merge: (tree: Head.Tree<Entry, HtmlHead>, options?: Head.MergeOptions) => HtmlHead =
-  /* @__PURE__ */ headFold.plain((tree: Head.Tree<Entry, HtmlHead>, options?: Head.MergeOptions): HtmlHead => {
+export const merge: (tree: Head.Tree<Entry>, options?: Head.MergeOptions) => HtmlHead = /* @__PURE__ */ headFold.plain(
+  (tree: Head.Tree<Entry>, options?: Head.MergeOptions): HtmlHead => {
     const onConflict = options?.onConflict
     return headFold.fold(
       tree,
-      { combine, slots: slotsOf },
+      { combine, slots: slotsOf, reducer },
       onConflict === undefined ? undefined : (slot, paths) => onConflict(Head.conflict(slot, paths))
     )
-  })
+  }
+)

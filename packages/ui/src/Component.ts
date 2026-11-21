@@ -1044,8 +1044,6 @@ export interface Mountable<in out Props, out Events, out R = never, in Rcv = nev
     | undefined
   /** The instance's head entries, a pure function of its Model, props and queries. */
   readonly head: ((model: any, props: Props, queries?: Results | undefined) => ReadonlyArray<unknown>) | undefined
-  /** Maps the folded head of the instance and everything its view placed, a pure function of its Model. */
-  readonly reduceHead: ((model: any, below: any) => unknown) | undefined
   /** The component's vocabulary: its `elements` override, else the registered one. Read lazily. */
   readonly elements: () => View.Vocabulary<any> | undefined
   /**
@@ -1149,7 +1147,6 @@ export interface Component<
   readonly head:
     | ((model: Model, props: Props, queries?: Results | undefined) => ReadonlyArray<View.HeadEntry<V>>)
     | undefined
-  readonly reduceHead: ((model: Model, below: any) => View.HeadValue<V>) | undefined
   readonly layerFailure: ((failure: AsyncResult.Failure<never, any>) => Msg) | undefined
   readonly "~V"?: V
   readonly "~L"?: L
@@ -1286,7 +1283,6 @@ export interface Headless<
     | ((model: any, props: Props, queries?: Results | undefined) => ReadonlyArray<Subscription.Subscription<any, R>>)
     | undefined
   readonly head: ((model: any, props: Props, queries?: Results | undefined) => ReadonlyArray<unknown>) | undefined
-  readonly reduceHead: ((model: any, below: any) => unknown) | undefined
   readonly elements: () => View.Vocabulary<any> | undefined
   readonly "~queries": unknown
 }
@@ -1943,9 +1939,8 @@ type UpdateRecord<Model, Msg, Events, Props, L, UR> = {
  * fits. A record key that isn't a message tag is a type error.
  * `view` and `fragment` return the function they're given.
  *
- * `make` takes `init`, `update`, `view`, `subscriptions`, `head` and
- * `reduceHead`, and
- * reads `R` off what they return.
+ * `make` takes `init`, `update`, `view`, `subscriptions` and `head`,
+ * and reads `R` off what they return.
  *
  * @stability experimental
  * @category models
@@ -2056,7 +2051,6 @@ export interface Definition<
           queries: { readonly [K in keyof L]: QueryResultOf<L[K]> }
         ) => ReadonlyArray<View.HeadEntry<V>>)
         | undefined
-      readonly reduceHead?: ((model: Model, below: View.HeadValue<V>) => View.HeadValue<V>) | undefined
     } & SelfShares<SR, SV>
   ): Headless<
     Props,
@@ -2110,7 +2104,6 @@ export interface Definition<
             queries: { readonly [K in keyof L]: QueryResultOf<L[K]> }
           ) => ReadonlyArray<View.HeadEntry<V>>)
           | undefined
-        readonly reduceHead?: ((model: Model, below: View.HeadValue<V>) => View.HeadValue<V>) | undefined
       }
       & OwnersAreHeadless<SV>
       & SelfShares<SR, SV>
@@ -2239,7 +2232,7 @@ export type Helper<D> = D extends Definition<
 /**
  * Defines a component, in two steps. `define` takes the name, the Schemas,
  * `queries` and `elements`, and `make` on the definition it returns takes
- * `init`, `update`, `view`, `subscriptions`, `head` and `reduceHead`.
+ * `init`, `update`, `view`, `subscriptions` and `head`.
  *
  * **Details**
  *
@@ -2296,14 +2289,14 @@ export type Helper<D> = D extends Definition<
  * message's `update` sees it in `$.queries`.
  *
  * `head` returns the instance's head entries, typed by the component's
- * vocabulary: `Head.title` and `Head.titleTemplate` on any vocabulary, and
- * `HtmlHead`'s on `Html`. It's a pure function of the Model, the props and
- * the queries' results, like a view. On every flush that changed a view, the
- * runtime folds the head of the placed tree, a child's `fallback` content
- * included, with the root vocabulary's merge (see `Head`).
- * `reduceHead` maps the folded head of the instance and everything its view
- * placed, as `(model, below) => value`: a layout derives an `og:title` from
- * the title that won, say. It's pure too, and the root's result is final.
+ * vocabulary: `Head.title`, `Head.titleTemplate` and `Head.reduce` on any
+ * vocabulary, and `HtmlHead`'s on `Html`. It's a pure function of the
+ * Model, the props and the queries' results, like a view. On every flush that
+ * changed a view, the runtime folds the head of the placed tree, a child's
+ * `fallback` content included, with the root vocabulary's merge (see
+ * `Head`). A `Head.reduce` or `HtmlHead.reduce` entry maps the folded
+ * head of the instance and everything its view placed: a layout derives an
+ * `og:title` from the title that won, say. The root's result is final.
  *
  * `update` is a function over the whole message type, or a record with a
  * function for every `_tag` of the message, which gets that tag's member and
@@ -2690,7 +2683,6 @@ const finish = (
       ) => ReadonlyArray<Subscription.Subscription<any, any> | false | null | undefined>)
       | undefined
     readonly head?: ((model: any, props: any, queries: any) => ReadonlyArray<unknown>) | undefined
-    readonly reduceHead?: ((model: any, below: any) => unknown) | undefined
   }
 ): Any => {
   const bound = bindQueries(definition.name, definition.queries)
@@ -2799,7 +2791,6 @@ const finish = (
     head: head === undefined
       ? undefined
       : (model: unknown, props: unknown, results?: Results) => head(model, props, open(model, props, results)),
-    reduceHead: options.reduceHead,
     elements: () => elements ?? View.registeredElements(),
     layer: undefined,
     layerKeys: undefined,

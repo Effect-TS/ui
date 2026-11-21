@@ -31,7 +31,6 @@ const meta = (name: string, content: string): HtmlHeadModule.Meta => ({
   content
 })
 
-/** A head written as a literal, as a `reduceHead` may build one. */
 const literal = (entries: ReadonlyArray<HtmlHeadModule.Meta>): HtmlHeadModule.HtmlHead => ({
   title: "App",
   meta: entries,
