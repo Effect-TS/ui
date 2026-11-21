@@ -44,8 +44,8 @@ A parent passes a child state through props, and a child answers through
 `events`. A one-shot instruction, such as "save now" or "clear your draft",
 is a send: the child lists the tags it accepts in `receives`, the parent
 renders the child with a ref from `Child.ref("Name")`, and its `update` calls
-`$.send(ref, message)`. Don't send what the child shows: that belongs in its
-props.
+`$.send(ref, message)`. Don't send a current value that the parent
+controls: pass it as a prop. See **Who owns the state** below.
 
 A child the view stops declaring unmounts and loses its Model. To hide a tab
 or a wizard step the user will come back to, keep declaring it with
@@ -101,8 +101,10 @@ its `CommandEnded` with `silent: true`. A mount that returns `Component.noop`
 likewise sends no message and logs `MountEnded` with `silent: true`. A
 component with no messages takes `message: Schema.Never`.
 
-Effect UI differs from Foldkit in three places:
+Effect UI differs from Foldkit in four places:
 
+- A child declares what it tells its parent in `events`. Foldkit calls these
+  OutMessages.
 - There is no `Got*`. A parent never wraps a child's messages: it maps the
   child's events in `onEmit`, so its message is the event's verb and its
   name for the child.
@@ -381,15 +383,26 @@ A headless component with `shares: (model, props) => value` owns shared
 state: every component in its `view` closure, at any depth, can read the
 value. A reader lists the owners it reads in
 `shared: { provider: TooltipProvider }` and reads `h.shared.provider` or
-`p.shared.provider` in `view` or `parts`. Any `update` below the owner can
-call `$.send(TooltipProvider, message)` with one of the messages the owner
-`receives`. Reads and sends put `Component.Shared<"TooltipProvider">`
-in a component's requirements, and the owner's closure removes it, so a
-reader with no owner of that name above it doesn't compile. Use distinct owner
-names: a different definition with the same name satisfies the type, but a
-required read still fails at mount. To name the requirement from the component,
-use `Component.Shared.Of<typeof TooltipProvider>`. The state is the owner's
-Model, so the log records every change. In a `Scene`,
+`p.shared.provider` in `view` or `parts`. The long form of an entry,
+`{ owner: TooltipProvider, ... }`, adds three options. `optional: true` lets
+the reader work with no owner above it, where the value reads as `undefined`.
+`report` is what the reader tells an owner whose `shares` has `collects`.
+`onChange` is the reader's message when the shared value changes.
+
+A descendant's `update` can call `$.send(TooltipProvider, message)` without a
+`shared` entry. One `receives` list serves both the parent's ref and every
+descendant, so the owner can't tell which sent a message. A read or a send
+puts `Component.Shared<"TooltipProvider">` in a component's requirements,
+unless the owner's entry is optional, and the owner's closure removes it. The
+component compiles on its own: with no owner of that name above it, the type
+error appears where the tree's mount effect is run, as a missing service.
+Use distinct owner names: a different definition with the same name
+satisfies the type, but a required read still fails at mount. To name the
+requirement from the component, use
+`Component.Shared.Of<typeof TooltipProvider>`.
+
+The state is the owner's Model, so the log records every change, but an
+owner's Model isn't restored from history. In a `Scene`,
 `s.shared(TooltipProvider, value)` or
 `s.given(model, {}, [[TooltipProvider, value]])` gives readers a value, and
 each send to the owner is acknowledged with
@@ -407,15 +420,74 @@ re-render each time, so put normal components directly under an owner.
 Every reader re-renders when the shared value changes, so keep readers few
 and the shared value small.
 
+### Who owns the state
+
+As a convention, give each value one authoritative source:
+
+- If the caller sets the value or can refuse a change, pass a controlled prop.
+- If nobody outside decides the value, keep it in the component's Model.
+- Observing a value doesn't move ownership. Part values, shared reads,
+  reports and event payloads let other components observe it.
+- A prop read only in `init` is a seed, not a mirror: later changes to it
+  don't reach the Model. Name it `initial*`.
+
+| Direction            | A current value                | A request or something that happened          |
+| -------------------- | ------------------------------ | --------------------------------------------- |
+| Parent to child      | props                          | `receives` and `$.send(ref)`                  |
+| Child to parent      | a headless child's part values | `events`                                      |
+| Owner to descendants | `shares`                       | `shared.onChange`, or a payload from the view |
+| Descendant to owner  | `report` and `collects`        | `receives` and `$.send(Owner)`                |
+
+The columns differ in how long they last. A send happens once. If its target
+is absent, the log records `SendDropped` and nothing is queued, and `init`
+can't send. Unmounting the sender doesn't withdraw a send, while a report
+goes away with the reader that made it. So if a fact should stop being true
+when the sender unmounts, or would need sending again when the receiver
+remounts, use the current-value column. "Open the import wizard" can be a
+send if the wizard decides what happens next. "The dialog must stay open" is
+a value, even if it rarely changes.
+
+A component with a controlled value reads it from props and emits what the
+user asked for, instead of updating a second copy. Its Model holds only
+interaction state the caller would never store, such as a typeahead buffer.
+A disabled or read-only control reports nothing: guard its `update`, or omit
+the DOM event handler in a view function. `@effect/ui-kit` goes further for
+its own components and takes no seed props.
+
+Choose a popup by who decides when it closes:
+
+- With an `open` prop, use `.popover("manual", open)`. Report Escape and an
+  outside press as dismissal requests, which the caller can refuse.
+- Use `.popover("auto", open)` with `onToggle` only if the component owns
+  `open` in its Model and nobody can refuse a browser dismissal.
+- For a controlled modal, use a dialog with `.modal(open)`. `onCancel` is a
+  dismissal request. `onClose` reports a close, the caller's own included,
+  so treat it as a dismissal only while `$.props.open` is still true: a
+  browser can force a modal closed, and the host reopens it while the prop
+  stays true. TestHost doesn't model the forced close.
+
+Nothing is dispatched when a prop changes: the log records `PropsChanged`,
+and the next `update` reads the new value from `$.props`. To act on the
+change itself, re-key the child if the new value should start a fresh
+instance. If work should restart without resetting the Model, key a
+Subscription on the prop with `Subscription.make(name, deps, build)`. If the
+work needs a host node, pass the prop as a mount argument and observe
+argument changes in the mount.
+
+The **Who owns the state** example has a controlled modal, a workflow started
+by a send, a provider that owns visibility, a seed, and three patterns that
+compile but shouldn't be written.
+
 ### Mounts
 
 Work that needs an element's host node, such as measuring it or hosting a
 chart, map or editor, is a mount. Define it once at module level, like a
 Command: `Mount.make(name, { args }, (node, args, changes) => effect)` for
 work that ends with one result, or `Mount.makeStream` for work that sends a
-result per event for as long as the element lives. Annotate `node` with the
-node the body needs. A view issues it with its args and maps the result to a
-message: `h.canvas.onMount(DrawChart({ points }).pipe(Mount.map(toMessage)))`.
+result per stream emission, such as a DOM event, for as long as the element
+lives. Annotate `node` with the node the body needs. A view issues it with
+its args and maps the result to a message:
+`h.canvas.onMount(DrawChart({ points }).pipe(Mount.map(toMessage)))`.
 If the body has nothing to report, end it with `Effect.as(Component.noop)`. An element takes one mount. Args with no real Schema, such as a
 callback, need `Schema.declare`. Mounts never run on the server or in
 `TestHost`. A `Scene` tracks the mounts in its view:
@@ -594,6 +666,10 @@ client, not the services.
   Validate a sign-up form with `Validation`: rules on each field, a rule
   that reads another field, a username check run by a debounced query, and
   an error from the server. A story and a scene read each field's state.
+- **[Who owns the state](./ai-docs/src/10_ui/27_state-ownership.ts)**:
+  Compare a controlled modal, a workflow started by a send, and a provider
+  that owns visibility. Contrast an initial prop with a live prop and see
+  how competing routes for the same value or request can still compile.
 - **[Routing and the document head](./ai-docs/src/10_ui/30_routing.ts)**:
   Define typed routes with `Route` and keep the current route in the root's
   Model. Each page's `head` option sets its title with `Head` and its meta
