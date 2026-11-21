@@ -368,22 +368,14 @@ export const scoped = <S extends Cursor>(make: Function, begin: () => S): Effect
   )
 }
 
-/**
- * Where `fn` was called from: a trace that starts at its caller, where the engine supports it.
- *
- * @internal
- */
+/** @internal */
 export const callSite = (fn: Function): Error => {
   const site = new Error()
   ;(Error as { captureStackTrace?: (target: object, fn: Function) => void }).captureStackTrace?.(site, fn)
   return site
 }
 
-/**
- * Runs `f`, and gives an error it throws the stack of `site`.
- *
- * @internal
- */
+/** @internal */
 export const atSite = (site: Error, f: () => void): void => {
   try {
     f()

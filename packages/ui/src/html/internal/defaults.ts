@@ -151,7 +151,6 @@ const popoverToggle = (button: Locator.Node, popover: Locator.Node): Html.Popove
 export const formOf = (path: ReadonlyArray<Locator.Node>, root: Locator.Node): Locator.Node | undefined =>
   path[0]?.tag === "form" ? path[0] : ownerOf(root, path)
 
-/** The radio buttons `radio` unchecks when it is checked: the others with its name and form owner. */
 const radioGroup = (
   root: Locator.Node,
   radio: Locator.Node,
@@ -173,7 +172,6 @@ export interface ClickEvent {
   readonly event: string
   readonly payload: (root: Locator.Node, at: (node: Locator.Node, description: string) => Locator.Node) => unknown
   readonly isDefault: boolean
-  /** The `checked` the browser gives each node before this event, for a tree that keeps what the user entered. */
   readonly checks?: (() => ReadonlyArray<readonly [node: Locator.Node, checked: boolean]>) | undefined
 }
 
@@ -245,19 +243,11 @@ const pathIn = (root: Locator.Node, node: Locator.Node): ReadonlyArray<Locator.N
   return undefined
 }
 
-/**
- * The payload of the `input` typing `value` into `node` sends.
- *
- * @internal
- */
+/** @internal */
 export const inputPayload = (node: Locator.Node, value: string): Partial<Html.InputPayload> =>
   node.tag === "input" ? { value, checked: HtmlLocator.checked(node) === true } : { value }
 
-/**
- * The payload of the `change` `node` sends, with what `given` leaves out read from the node.
- *
- * @internal
- */
+/** @internal */
 export const changePayload = (
   node: Locator.Node,
   given: string | Partial<Html.InputPayload>
@@ -266,11 +256,7 @@ export const changePayload = (
   return node.tag === "input" ? { value, checked: checked ?? HtmlLocator.checked(node) === true } : { value }
 }
 
-/**
- * The payload of a `keydown` of `key`, each modifier key `false` unless given.
- *
- * @internal
- */
+/** @internal */
 export const keyPayload = (key: string, modifiers: Partial<Html.KeyPayload> | undefined): Html.KeyPayload => ({
   key,
   shift: modifiers?.shift === true,
@@ -280,12 +266,7 @@ export const keyPayload = (key: string, modifiers: Partial<Html.KeyPayload> | un
   composing: false
 })
 
-/**
- * A drop of `given`: its payload, whether a target with `options` for `drop` accepts one of its types,
- * and the error of a step when no target does.
- *
- * @internal
- */
+/** @internal */
 export const drop = (given: Partial<Html.DropPayload> | undefined) => {
   const payload: Html.DropPayload = { data: {}, files: [], x: 0, y: 0, width: 0, height: 0, ...given }
   const types = Object.keys(payload.data).concat(payload.files.length > 0 ? ["Files"] : [])
@@ -305,11 +286,7 @@ export const drop = (given: Partial<Html.DropPayload> | undefined) => {
   }
 }
 
-/**
- * The matchers of an HTML cursor's `expect`: the scene's, plus checks on fields.
- *
- * @internal
- */
+/** @internal */
 export const matchers = {
   ...scene.matchers,
   toHaveValue: (expected: string) =>

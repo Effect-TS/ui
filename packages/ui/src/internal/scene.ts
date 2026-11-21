@@ -57,13 +57,7 @@ export const matchers = {
 const describeExpected = (expected: unknown): string =>
   expected instanceof RegExp ? String(expected) : JSON.stringify(expected)
 
-/**
- * An expectation over `locator`: one method per matcher. Each returns what `run` does with the method
- * and its `check`, which throws what the matcher found on `nodes` of `root`, listing the elements of
- * `listed`.
- *
- * @internal
- */
+/** @internal */
 export const makeExpectation = <A>(
   step: string,
   locator: Locator.Locator,

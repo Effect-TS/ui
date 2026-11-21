@@ -85,7 +85,6 @@ import type * as HtmlScene from "./HtmlScene.ts"
  */
 export type Expect = HtmlScene.Expect<Effect.Effect<void, Play.StepError>>
 
-/** The modifier keys of a key payload, each `false` unless given. */
 type Modifiers = Partial<Pick<Html.KeyPayload, "shift" | "ctrl" | "alt" | "meta">>
 
 /**
