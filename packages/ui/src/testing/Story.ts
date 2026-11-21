@@ -321,16 +321,7 @@ export const parts = <Props, Events, Parts, R, Rcv>(
 ): Parts => {
   const state = cursor.stateOf.get(record)
   const model = state !== undefined ? state.model : (record as { readonly model: unknown }).model
-  const lookup = state ?? record
-  const context: Component.PartsContext = {
-    owner: { path: "/" + component.definition.name, depth: 0 },
-    shared: engine.rootShared(engine.sharedGiven.get(lookup))
-  }
-  return engine.resolveParts(
-    component.parts(model, record.props, context),
-    context,
-    state === undefined ? undefined : engine.childModels.get(state)
-  )
+  return engine.rootParts(component, model, record.props, state ?? record)
 }
 
 /**

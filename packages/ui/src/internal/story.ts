@@ -514,9 +514,8 @@ const expandRoot = <Msg>(
         if (node.view === undefined || component.parts === undefined) return node
         replaced.push(node)
         const model = given?.has(childPath) ? given.get(childPath) : component.init(node.props).model
-        const owner: View.Owner = { path: childPath, depth: depth + 1 }
         const parts = component.parts(model, node.props, {
-          owner,
+          owner: { path: childPath, depth: depth + 1 },
           shared: sharedLookup(shared, owners)
         })
         const tree = View.toNode(childOf.expand(parts, node.view))
@@ -1828,19 +1827,22 @@ export const findStream = (story: State<any, any, any, any>, target: StreamTarge
 }
 
 /** @internal */
-export const resolveParts = <Parts>(
-  result: Parts | Component.Composed<Parts, any, any>,
-  context: Component.PartsContext,
-  given: ReadonlyMap<string, unknown> | undefined
+export const rootParts = <Props, Parts>(
+  component: Pick<Component.Headless<Props, any, Parts, any, any>, "definition" | "parts">,
+  model: unknown,
+  props: Props,
+  lookup: object
 ): Parts => {
-  let value: unknown = result
-  let owner = context.owner
+  const shared = rootShared(sharedGiven.get(lookup))
+  const given = childModels.get(lookup)
+  let owner: View.Owner = { path: "/" + component.definition.name, depth: 0 }
+  let value: unknown = component.parts(model, props, { owner, shared })
   while (childOf.isComposed(value)) {
     const child = value.child
-    const component = child.component as unknown as Component.Headless.Any
+    const owned = child.component as unknown as Component.Headless.Any
     owner = { path: owner.path + "/" + segment(child), depth: owner.depth + 1 }
-    const model = given?.has(owner.path) ? given.get(owner.path) : component.init(child.props).model
-    value = childOf.merge(value, component.parts(model, child.props, { owner, shared: context.shared }))
+    const ownedModel = given?.has(owner.path) ? given.get(owner.path) : owned.init(child.props).model
+    value = value.parts(owned.parts(ownedModel, child.props, { owner, shared }))
   }
   return value as Parts
 }

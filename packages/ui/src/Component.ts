@@ -2930,8 +2930,7 @@ const finish = (
             typeof args[0] === "function"
               ? View.makePart(owner, undefined, args[0])
               : View.makePart(owner, typeof args[0] === "string" ? [args[0]] : args[0], args[1]),
-          child: (component: Headless.Any, options: child.Options & { readonly parts: (parts: any) => unknown }) =>
-            child.compose(owner, component, options)
+          child: (component: Headless.Any, options: child.ComposeOptions) => child.compose(owner, component, options)
         }
         if (bound !== undefined) {
           const opened = bound.context(model, props, context.queries)

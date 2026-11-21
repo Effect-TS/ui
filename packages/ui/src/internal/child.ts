@@ -20,13 +20,18 @@ export interface Options {
   readonly view?: ((parts: any) => View.Content<any, any>) | undefined
   readonly slots?: Readonly<Record<string, View.Input<any, any>>> | undefined
   readonly detached?: boolean | undefined
-  readonly owner?: View.Owner | undefined
+}
+
+/** @internal */
+export interface ComposeOptions extends Options {
+  readonly parts: (parts: any) => unknown
 }
 
 /** @internal */
 export const make = (
   component: Component.Any | Component.Headless.Any | Feature.Any,
-  options: Options
+  options: Options,
+  owner?: View.Owner
 ): View.Child<any, any> => {
   // A child with a key and a ref would have two identities that can disagree.
   if (options.key !== undefined && options.ref !== undefined) {
@@ -46,7 +51,7 @@ export const make = (
     view: options.view,
     slots: options.slots,
     detached: options.detached === true,
-    owner: options.owner
+    owner
   }
 }
 
@@ -69,7 +74,7 @@ const refused = ["view", "slots", "fallback", "detached"] as const
 export const compose = (
   owner: View.Owner,
   component: Component.Headless.Any,
-  options: Options & { readonly parts: (parts: any) => unknown }
+  options: ComposeOptions
 ): Composed => {
   for (const name of refused) {
     if (options[name] !== undefined) {
@@ -78,36 +83,31 @@ export const compose = (
   }
   return {
     [ComposedTypeId]: ComposedTypeId,
-    child: make(component, { ...options, owner }),
+    child: make(component, options, owner),
     parts: options.parts
-  }
-}
-
-/** @internal */
-export class MergeFailure extends Error {
-  readonly owner: View.Owner
-  constructor(owner: View.Owner, cause: unknown) {
-    super(cause instanceof Error ? cause.message : String(cause), { cause })
-    this.owner = owner
-  }
-}
-
-/** @internal */
-export const merge = (composed: Composed, parts: unknown): unknown => {
-  try {
-    return composed.parts(parts)
-  } catch (cause) {
-    throw new MergeFailure(composed.child.owner!, cause)
   }
 }
 
 /** @internal */
 export const expand = (
   result: unknown,
-  content: (parts: any) => View.Content<any, any>
-): View.Content<any, any> =>
-  isComposed(result)
-    ? { ...result.child, view: (parts) => expand(merge(result, parts), content) }
-    : content(result)
+  content: (parts: any) => View.Content<any, any>,
+  failed?: (owner: View.Owner, cause: unknown) => View.Content<any, any>
+): View.Content<any, any> => {
+  if (!isComposed(result)) return content(result)
+  return {
+    ...result.child,
+    view: (parts) => {
+      let merged: unknown
+      try {
+        merged = result.parts(parts)
+      } catch (cause) {
+        if (failed === undefined) throw cause
+        return failed(result.child.owner!, cause)
+      }
+      return expand(merged, content, failed)
+    }
+  }
+}
 
 const ignore = () => undefined

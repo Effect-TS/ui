@@ -5309,16 +5309,16 @@ const setup = (
     }))
     if (parts === undefined) return undefined
     // A closure is the consumer's code: what goes wrong in it is logged as `content`.
-    return guard(inst, "content", () => {
-      try {
-        return checked(inst, View.toNode(childOf.expand(parts.value, inst.content!)))
-      } catch (error) {
-        if (!(error instanceof childOf.MergeFailure)) throw error
-        const declarer = owners.get(error.owner)!
-        defer(() => failInstance(declarer, Cause.die(error.cause), "view"))
-        return emptyText
-      }
-    })
+    return guard(
+      inst,
+      "content",
+      () => checked(inst, View.toNode(childOf.expand(parts.value, inst.content!, mergeFailed)))
+    )
+  }
+
+  const mergeFailed = (owner: View.Owner, error: unknown): View.Text => {
+    failLater(owners.get(owner)!, error)
+    return emptyText
   }
 
   const ownView = (inst: Instance): View.Node<any, any> => {
@@ -5546,7 +5546,7 @@ const setup = (
         out.rendered = packed(rendered)
       }
     } catch (error) {
-      contentFailed(out, error)
+      failLater(out.author, error)
       created++
       out.rendered = new TextRecord(emptyText, host.createText(""))
     }
@@ -5624,7 +5624,7 @@ const setup = (
       refChecks.add(out.author)
       return views.length === 0 ? [emptyText] : views
     } catch (error) {
-      contentFailed(out, error)
+      failLater(out.author, error)
       out.childPaths = undefined
       return [emptyText]
     }
@@ -5634,9 +5634,8 @@ const setup = (
    * A content is its author's code, so a mistake in it fails the author. Deferred, as a fallback clash
    * is: failing an ancestor midway through a patch would close it over nodes the patch has removed.
    */
-  const contentFailed = (out: Instance, error: unknown) => {
-    const author = out.author
-    defer(() => failInstance(author, Cause.die(error), "view"))
+  const failLater = (inst: Instance, error: unknown) => {
+    defer(() => failInstance(inst, Cause.die(error), "view"))
   }
 
   const renderOutlet = (out: Instance) => {
@@ -5649,7 +5648,7 @@ const setup = (
       releaseRemoved(olds, views)
       out.rendered = packed(patchList(out, parentNode, olds, views, ref, out.env))
     } catch (error) {
-      contentFailed(out, error)
+      failLater(out.author, error)
     }
     failClash(out)
   }
@@ -5660,7 +5659,7 @@ const setup = (
     const clash = out.clash
     if (clash === undefined) return
     out.clash = undefined
-    contentFailed(out, clash)
+    failLater(out.author, clash)
   }
 
   /** Re-renders the placed outlets whose content the parent changed. */
