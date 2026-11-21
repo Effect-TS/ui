@@ -41,7 +41,9 @@
  * `.viewport { position: fixed; inset: 0; display: grid; place-items: center }`.
  * With `modal: true`, the kit draws a transparent layer over the whole
  * viewport as the portal's first child, before the consumer's children. It
- * takes the presses meant for the page behind.
+ * takes the presses meant for the page behind. A closed `keepMounted` portal
+ * keeps it, inert, so the children after it keep their elements when the
+ * dialog opens.
  *
  * **Data attributes**
  *
@@ -1155,7 +1157,7 @@ export const Dialog = Component.define({
     )
 
     const portalPart = p.part("dialog", (b) => {
-      const dialog = b
+      const box = b
         .attr("id", portalId)
         .open(false)
         .popover("manual", shown)
@@ -1165,8 +1167,9 @@ export const Dialog = Component.define({
             .attr("aria-labelledby", withTokens(node.attrs["aria-labelledby"], titleId))
             .attr("aria-describedby", withTokens(node.attrs["aria-describedby"], descriptionId))
         )
+      const dialog = modal === true ? box.children(open ? layer : closingLayer) : box
       if (!shown) return dialog
-      return (modal === true ? dialog.children(open ? layer : closingLayer) : dialog).onMount(
+      return dialog.onMount(
         TrackDialog({
           modal,
           open,
