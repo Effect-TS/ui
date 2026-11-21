@@ -147,15 +147,15 @@ const TrackArrowKeys = Mount.makeStream(
         let { vertical } = args
         const onKeyDown = (event: KeyboardEvent) => {
           if (event.defaultPrevented || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return
-          const rtl = node.ownerDocument.defaultView?.getComputedStyle(node).direction === "rtl"
-          const forward = vertical ? "ArrowDown" : rtl ? "ArrowLeft" : "ArrowRight"
-          const backward = vertical ? "ArrowUp" : rtl ? "ArrowRight" : "ArrowLeft"
-          if (event.key !== forward && event.key !== backward) return
-          const links = Array.from(node.querySelectorAll<HTMLElement>("[" + linkAttribute + "]"))
-            .filter((link) => link.getAttribute(linkAttribute) === args.scope)
+          const [backward, forward] = vertical ? ["ArrowUp", "ArrowDown"] : ["ArrowLeft", "ArrowRight"]
+          if (event.key !== backward && event.key !== forward) return
+          const rtl = !vertical && node.ownerDocument.defaultView?.getComputedStyle(node).direction === "rtl"
+          const links = Array.from(
+            node.querySelectorAll<HTMLElement>(`[${linkAttribute}="${CSS.escape(args.scope)}"]`)
+          )
           const from = links.findIndex((link) => link.contains(event.target as Node | null))
           if (from < 0) return
-          const ahead = event.key === forward ? links.slice(from + 1) : links.slice(0, from).reverse()
+          const ahead = (event.key === forward) !== rtl ? links.slice(from + 1) : links.slice(0, from).reverse()
           const next = ahead.find(reachable)
           if (next === undefined) return
           event.preventDefault()

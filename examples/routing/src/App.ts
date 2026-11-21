@@ -85,7 +85,7 @@ export const App = AppDef.make({
           view: (navigationMenu) =>
             navigationMenu.root(h.nav.class("bg-blue-500 text-white p-4 mb-6").attr("aria-label", "Main")).children(
               navigationMenu.list(h.ul.class("max-w-4xl mx-auto flex gap-6 list-none")).children(
-                ...navLinks(route).map(({ active, label, to }) =>
+                navLinks(route).map(({ active, label, to }) =>
                   navigationMenu.item(h.li.key(label)).children(
                     navigationMenu.link({
                       element: h.a.attr("href", AppRoute.print(to))

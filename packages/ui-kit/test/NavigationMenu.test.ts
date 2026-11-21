@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { Component, UiSchema, View } from "@effect/ui"
-import { NavigationMenu, type NavigationMenuProps } from "@effect/ui-kit"
+import { NavigationMenu } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -139,8 +139,7 @@ describe("NavigationMenu", () => {
 
   it("each part takes only its own tag, and the link's attributes win over the consumer's, present or absent", () => {
     const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
-    const parts = (props: NavigationMenuProps = {}) => Story.parts(NavigationMenu, { model: {}, props })
-    const navigationMenu = parts()
+    const navigationMenu = Story.parts(NavigationMenu, { model: {}, props: {} })
     assert.throws(() => navigationMenu.root(h.div as any), /a part for <nav> was given <div>/)
     assert.throws(() => navigationMenu.list(h.ol as any), /a part for <ul> was given <ol>/)
     assert.throws(() => navigationMenu.item(h.div as any), /a part for <li> was given <div>/)
