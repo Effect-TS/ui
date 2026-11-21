@@ -71,6 +71,7 @@
 import * as Effect from "effect/Effect"
 import * as Option from "effect/Option"
 import * as Schema from "effect/Schema"
+import type * as Command from "./Command.ts"
 
 /**
  * Marks a route definition.
@@ -304,7 +305,7 @@ export declare namespace Union {
    */
   export type Constructors<Routes extends Record<string, Any>> = {
     readonly [K in keyof Routes & string]: (
-      ...args: ConstructorArgs<WithoutTag<Cases<Routes>[K]["~type.make.in"]>>
+      ...args: Command.MakeArgs<WithoutTag<Cases<Routes>[K]["~type.make.in"]>>
     ) => Cases<Routes>[K]["Type"]
   }
 
@@ -334,8 +335,6 @@ export declare namespace Union {
 }
 
 type WithoutTag<Input> = { readonly [K in keyof Input as K extends "_tag" ? never : K]: Input[K] }
-
-type ConstructorArgs<Args> = {} extends Args ? [args?: Args] : [args: Args]
 
 /**
  * Any route union.
@@ -773,7 +772,7 @@ const build = (
     return Option.none()
   }
 
-  const members: Record<string, unknown> = {
+  const result: Record<string, any> = Object.assign(union, {
     routes,
     resolve,
     parse: (url: string) => Option.map(resolve(url), (resolved) => resolved.route),
@@ -786,13 +785,13 @@ const build = (
     setBase: (base: string) => {
       baseRef.value = normaliseBase(base)
     }
-  }
+  })
   for (const tag of Object.keys(routes)) {
-    if (tag in union || tag in members || tag === "then") throw new Error(`Route tag "${tag}" is reserved`)
+    if (tag in result || tag === "then") throw new Error(`Route tag "${tag}" is reserved`)
     const make = union.cases[tag]!.make
-    members[tag] = (args?: object) => make((args ?? {}) as any)
+    result[tag] = (args?: object) => make((args ?? {}) as any)
   }
-  return Object.assign(union, members)
+  return result
 }
 
 /**

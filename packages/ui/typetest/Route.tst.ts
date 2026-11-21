@@ -12,6 +12,15 @@ const AppRoute = Route.union({
 })
 type AppRoute = typeof AppRoute.Type
 
+const Search = Route.union({
+  Search: Route.make("/search", {
+    search: {
+      q: Schema.optional(Schema.String),
+      page: Schema.Number.pipe(Schema.withDecodingDefaultKey(Effect.succeed(1)))
+    }
+  })
+})
+
 describe("Route", () => {
   it("requires a Schema for every :param", () => {
     expect(Route.make).type.not.toBeCallableWith("/people/:id")
@@ -34,14 +43,6 @@ describe("Route", () => {
   })
 
   it("types a defaulted search field as required, and lets make leave it out", () => {
-    const Search = Route.union({
-      Search: Route.make("/search", {
-        search: {
-          q: Schema.optional(Schema.String),
-          page: Schema.Number.pipe(Schema.withDecodingDefaultKey(Effect.succeed(1)))
-        }
-      })
-    })
     expect<typeof Search.Type["search"]>().type.toBe<{ readonly q?: string | undefined; readonly page: number }>()
     expect(Search.make).type.toBeCallableWith({ _tag: "Search" })
     expect(Search.make).type.toBeCallableWith({ _tag: "Search", search: { q: "a" } })
@@ -55,11 +56,6 @@ describe("Route", () => {
     expect(AppRoute.Person).type.not.toBeCallableWith()
     expect(AppRoute.Person).type.not.toBeCallableWith({ params: { id: "1" } })
     expect(AppRoute.Files).type.not.toBeCallableWith()
-    const Search = Route.union({
-      Search: Route.make("/search", {
-        search: { page: Schema.Number.pipe(Schema.withDecodingDefaultKey(Effect.succeed(1))) }
-      })
-    })
     expect(Search.Search).type.toBeCallableWith()
     expect(Search.Search).type.toBeCallableWith({ search: { page: 2 } })
     expect(AppRoute.subset(["Home"])).type.not.toHaveProperty("Person")
