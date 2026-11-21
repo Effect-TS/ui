@@ -82,7 +82,7 @@ describe("Field", () => {
   it.effect("focusWithin keeps focus while it moves inside, touches when it leaves, and ignores disabled blur", () =>
     Effect.gen(function*() {
       const wrapper = Locator.tag("section")
-      const s = yield* Scene.make(Field, {}, {
+      const s = yield* Scene.make(Field, { disabled: true }, {
         elements: Html,
         view: (field: Parts, h: H) =>
           field.root(h.div).children(
@@ -90,17 +90,12 @@ describe("Field", () => {
           )
       })
       const state = () => [s.get(wrapper).attrs?.["data-focused"], s.get(wrapper).attrs?.["data-touched"]]
-      s.fire(wrapper, "focusin")
+      s.fire(wrapper, "focusin").fire(wrapper, "focusout", { within: false })
+      assert.deepStrictEqual(state(), [undefined, undefined])
+
+      s.props({}).fire(wrapper, "focusin")
       assert.deepStrictEqual(state(), ["", undefined])
       s.fire(wrapper, "focusout", { within: true }).expectIgnored()
-      assert.deepStrictEqual(state(), ["", undefined])
-
-      s.props({ disabled: true })
-      assert.deepStrictEqual(state(), [undefined, undefined])
-      s.subscription("lostFocus", { _tag: "BlurredControl" }).props({})
-      assert.deepStrictEqual(state(), [undefined, undefined])
-
-      s.fire(wrapper, "focusin")
       assert.deepStrictEqual(state(), ["", undefined])
       s.fire(wrapper, "focusout", { within: false })
       assert.deepStrictEqual(state(), [undefined, ""])
