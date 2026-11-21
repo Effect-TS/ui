@@ -795,7 +795,7 @@ export const stateCodecOf = (component: Component.Any): StateCodec => {
       found = {
         redacted: false,
         encode: (model) => codec.encode(model),
-        decode: (encoded) => Effect.map(codec.decode(encoded), (model) => ({ model, results: undefined }))
+        decode: (encoded) => Effect.mapEager(codec.decode(encoded), (model) => ({ model, results: undefined }))
       }
     } else {
       const codec = jsonCodecOf(Schema.Struct({ model: schema, queries: bound.schema }))
@@ -803,7 +803,7 @@ export const stateCodecOf = (component: Component.Any): StateCodec => {
         redacted: false,
         encode: (model, results) => codec.encode({ model, queries: results ?? bound.empty }),
         decode: (encoded) =>
-          Effect.map(codec.decode(encoded), (state: any) => ({ model: state.model, results: state.queries }))
+          Effect.mapEager(codec.decode(encoded), (state: any) => ({ model: state.model, results: state.queries }))
       }
     }
     stateCodecs.set(component, found)
@@ -817,30 +817,51 @@ const warnedUnencoded = new WeakSet<Component.Any>()
 const warnedLate = new WeakSet<Component.Any>()
 const formatIssue = SchemaIssue.makeFormatterDefault()
 
+const warnOnce = (
+  warned: WeakSet<Component.Any>,
+  inst: Instance,
+  ctx: Context.Context<any>,
+  message: () => string
+) => {
+  if (warned.has(inst.component)) return
+  warned.add(inst.component)
+  Effect.runForkWith(ctx)(Effect.logWarning(`${inst.component.definition.name}: ${message()}`))
+}
+
+/** A `Redacted` in an instance's state defers it and its subtree, so the client builds them fresh. */
+const warnRedacted = (inst: Instance, ctx: Context.Context<any>) =>
+  warnOnce(
+    warnedRedacted,
+    inst,
+    ctx,
+    () =>
+      "its state holds a Schema.Redacted, so the server sends no state for it and the client builds it and " +
+      "everything under it fresh, without hydration. Keep the secret in a leaf component or in a service."
+  )
+
 const warnUnencoded = (inst: Instance, ctx: Context.Context<any>, cause: Cause.Cause<SchemaIssue.Issue>) => {
-  const error = Cause.findError(cause)
-  if (Result.isSuccess(error) && error.success === redactedIssue) return
-  if (warnedUnencoded.has(inst.component)) return
-  warnedUnencoded.add(inst.component)
-  Effect.runForkWith(ctx)(
-    Effect.logWarning(
-      `${inst.component.definition.name}: its state doesn't encode as JSON, so the server sends no state for it and ` +
-        "the client builds it and everything under it fresh, without hydration, and history doesn't restore it. " +
-        (Result.isSuccess(error) ? formatIssue(error.success) : Cause.pretty(cause))
-    )
+  const error = Cause.findErrorOption(cause)
+  if (Option.isSome(error) && error.value === redactedIssue) return
+  warnOnce(
+    warnedUnencoded,
+    inst,
+    ctx,
+    () =>
+      "its state doesn't encode as JSON, so the server sends no state for it and the client builds it and " +
+      "everything under it fresh, without hydration, and history doesn't restore it. " +
+      Option.match(error, { onNone: () => Cause.pretty(cause), onSome: formatIssue })
   )
 }
 
-const warnLate = (inst: Instance, ctx: Context.Context<any>) => {
-  if (warnedLate.has(inst.component)) return
-  warnedLate.add(inst.component)
-  Effect.runForkWith(ctx)(
-    Effect.logWarning(
-      `${inst.component.definition.name}: its state encodes asynchronously, so history keeps it in memory only. ` +
-        "Back and forward restore it, and after a reload it starts from init."
-    )
+const warnLate = (inst: Instance, ctx: Context.Context<any>) =>
+  warnOnce(
+    warnedLate,
+    inst,
+    ctx,
+    () =>
+      "its state encodes asynchronously, so history keeps it in memory only. Back and forward restore it, and " +
+      "after a reload it starts from init."
   )
-}
 
 /** An entry of the cache, by query name and args key: what a watch registered on, or a prefetch fetched. */
 const entryKey = (query: string, argsKey: string): string => `${query}\u0000${argsKey}`
@@ -998,50 +1019,31 @@ const onScheduler = (ctx: Context.Context<any>): Context.Context<any> => {
   )
 }
 
-/** A `Redacted` in an instance's state defers it and its subtree, so the client builds them fresh. */
-const warnRedacted = (inst: Instance, ctx: Context.Context<any>) => {
-  if (warnedRedacted.has(inst.component)) return
-  warnedRedacted.add(inst.component)
-  Effect.runForkWith(ctx)(
-    Effect.logWarning(
-      `${inst.component.definition.name}: its state holds a Schema.Redacted, so the server sends no state for it and the ` +
-        "client builds it and everything under it fresh, without hydration. Keep the secret in a leaf component " +
-        "or in a service."
-    )
-  )
-}
-
 interface PageState {
   readonly state: unknown
-  readonly reported: Option.Option<unknown>
+  readonly reported: unknown
 }
 
 const encodePage = (inst: Instance): Effect.Effect<PageState, SchemaIssue.Issue> => {
   const state = stateCodecOf(inst.component).encode(inst.model, inst.results)
   const last = inst.owning?.collected
-  if (last === undefined) return Effect.map(state, (state) => ({ state, reported: Option.none() }))
+  if (last === undefined) return Effect.mapEager(state, (state) => ({ state, reported: undefined }))
   const message = inst.component.definition.message
   // An owner whose message can't be shipped, a `Redacted` in its Schema included, is deferred with its
   // subtree, as a Model adopted without it would get the same message again.
-  return Effect.zipWith(
-    state,
-    holdsRedacted(message.ast) ? failRedacted : jsonCodecOf(message).encode(last.message),
-    (state, reported) => ({ state, reported: Option.some(reported) })
-  )
+  const reported = holdsRedacted(message.ast) ? failRedacted : jsonCodecOf(message).encode(last.message)
+  return Effect.flatMapEager(state, (state) => Effect.mapEager(reported, (reported) => ({ state, reported })))
 }
 
 const encodeTree = (root: Instance): Effect.Effect<Map<Instance, Exit.Exit<PageState, SchemaIssue.Issue>>> => {
   const exits = new Map<Instance, Exit.Exit<PageState, SchemaIssue.Issue>>()
-  const late: Array<Instance> = []
-  const fibers: Array<Fiber.Fiber<PageState, SchemaIssue.Issue>> = []
+  const late = new Map<Instance, Fiber.Fiber<PageState, SchemaIssue.Issue>>()
   const visit = (inst: Instance) => {
     if (inst.failure !== undefined || inst.deferred) return
     if (inst.component !== outletComponent) {
       const encoded = runCodec(encodePage(inst))
-      if (!Exit.isExit(encoded)) {
-        late.push(inst)
-        fibers.push(encoded)
-      } else {
+      if (!Exit.isExit(encoded)) late.set(inst, encoded)
+      else {
         exits.set(inst, encoded)
         if (Exit.isFailure(encoded)) return
       }
@@ -1049,13 +1051,15 @@ const encodeTree = (root: Instance): Effect.Effect<Map<Instance, Exit.Exit<PageS
     for (const child of inst.children) visit(child)
   }
   visit(root)
-  if (fibers.length === 0) return Effect.succeed(exits)
+  if (late.size === 0) return Effect.succeed(exits)
   return Effect.onInterrupt(
-    Effect.map(Fiber.awaitAll(fibers), (done) => {
-      for (let index = 0; index < late.length; index++) exits.set(late[index]!, done[index]!)
-      return exits
-    }),
-    () => Fiber.interruptAll(fibers)
+    Effect.as(
+      Effect.forEach(late, ([inst, fiber]) => Effect.map(Fiber.await(fiber), (exit) => exits.set(inst, exit)), {
+        discard: true
+      }),
+      exits
+    ),
+    () => Fiber.interruptAll(late.values())
   )
 }
 
@@ -1127,7 +1131,7 @@ const serializeTree = (
       } else {
         state[path] = exit.value.state
         // What an owner's reports last sent: the client compares its reports with it.
-        if (Option.isSome(exit.value.reported)) collected[path] = exit.value.reported.value
+        if (exit.value.reported !== undefined) collected[path] = exit.value.reported
         if (inst.component.layer !== undefined) ship(path, inst.env.status)
       }
     }
@@ -3051,52 +3055,32 @@ const setup = (
     }
 
     // Hydration: the Model and query results the server rendered this path with, unless it deferred the path.
-    if (
-      hydrating !== undefined &&
+    const hydrates = hydrating !== undefined &&
       (parent === undefined || parent.adoptsChildren) &&
       !hydrating.deferred.has(path!) &&
       Object.hasOwn(hydrating.state, path!)
-    ) {
-      const decoded = runCodec(decodeServer(component, path!, hydrating.state))
-      const startWith = (exit: Exit.Exit<ServerStart>) =>
-        Exit.isSuccess(exit) ? exit.value : { fromServer: Option.none(), collected: Option.none() }
-      if (Exit.isExit(decoded)) {
-        const { collected, fromServer } = startWith(decoded)
-        startInstance(inst, parentEnv, range, fromServer, collected)
-      } else {
-        hold(inst, range, (resume) =>
-          decoded.addObserver((exit) =>
-            defer(() => {
-              const { collected, fromServer } = startWith(exit)
-              resume(Option.isSome(fromServer), () => startInstance(inst, parentEnv, range, fromServer, collected))
-            })
-          ))
-      }
-      return inst
-    }
-    const restored = hooks !== undefined && component.definition.shares === undefined
+    // An owner of shared state isn't restored from history: a reload would reopen what nobody hovers.
+    const restored = !hydrates && hooks !== undefined && component.definition.shares === undefined
       ? hooks.restore(inst.path)
       : undefined
-    if (restored !== undefined) {
-      const decoded = runCodec(stateCodecOf(component).decode(restored))
-      const keep = (exit: Exit.Exit<Decoded, SchemaIssue.Issue>) => {
-        if (Exit.isSuccess(exit)) restoredState.set(inst, exit.value)
-      }
-      if (!Exit.isExit(decoded)) {
-        hold(inst, undefined, (resume) =>
-          decoded.addObserver((exit) =>
-            defer(() =>
-              resume(false, () => {
-                keep(exit)
-                startInstance(inst, parentEnv, range, Option.none(), Option.none())
-              })
-            )
-          ))
-        return inst
-      }
-      keep(decoded)
+    if (!hydrates && restored === undefined) {
+      startInstance(inst, parentEnv, range, Option.none(), Option.none())
+      return inst
     }
-    startInstance(inst, parentEnv, range, Option.none(), Option.none())
+    const decoded = runCodec(
+      hydrates ? decodeServer(component, path!, hydrating!.state) : decodeRestored(inst, restored)
+    )
+    const start = (exit: Exit.Exit<ServerStart, SchemaIssue.Issue>) => {
+      const { collected, fromServer } = Exit.isSuccess(exit) ? exit.value : fresh
+      startInstance(inst, parentEnv, range, fromServer, collected)
+    }
+    if (Exit.isExit(decoded)) start(decoded)
+    else {
+      const resume = hold(inst, hydrates ? range : undefined)
+      decoded.addObserver((exit) =>
+        resume(Exit.isSuccess(exit) && Option.isSome(exit.value.fromServer), () => start(exit))
+      )
+    }
     return inst
   }
 
@@ -3104,21 +3088,28 @@ const setup = (
     readonly fromServer: Adopted
     readonly collected: Option.Option<unknown>
   }
-  const decodeServer = (component: Component.Any, path: string, state: Renderer.State): Effect.Effect<ServerStart> =>
-    Effect.matchCauseEffect(stateCodecOf(component).decode(state[path]), {
-      onFailure: () => Effect.succeed({ fromServer: Option.none(), collected: Option.none() }),
-      onSuccess: (decoded) => {
-        // An owner adopting the server's Model starts from what its reports last sent there.
-        const reported = component.definition.collects === undefined ? undefined : state["~reported"]?.[path]
-        return Effect.map(
-          reported === undefined
-            ? Effect.succeedNone
-            : Effect.option(jsonCodecOf(component.definition.message).decode(reported)),
-          (collected) => ({ fromServer: Option.some(decoded), collected })
-        )
-      }
+  const fresh: ServerStart = { fromServer: Option.none(), collected: Option.none() }
+  const decodeServer = (
+    component: Component.Any,
+    path: string,
+    state: Renderer.State
+  ): Effect.Effect<ServerStart, SchemaIssue.Issue> =>
+    Effect.flatMapEager(stateCodecOf(component).decode(state[path]), (decoded) => {
+      // An owner adopting the server's Model starts from what its reports last sent there.
+      const reported = component.definition.collects === undefined ? undefined : state["~reported"]?.[path]
+      return Effect.mapEager(
+        reported === undefined
+          ? Effect.succeedNone
+          : Effect.option(jsonCodecOf(component.definition.message).decode(reported)),
+        (collected) => ({ fromServer: Option.some(decoded), collected })
+      )
     })
   const restoredState = new WeakMap<Instance, Decoded>()
+  const decodeRestored = (inst: Instance, restored: unknown): Effect.Effect<ServerStart, SchemaIssue.Issue> =>
+    Effect.mapEager(stateCodecOf(inst.component).decode(restored), (state) => {
+      restoredState.set(inst, state)
+      return fresh
+    })
 
   const startInstance = (
     inst: Instance,
@@ -3319,11 +3310,10 @@ const setup = (
   const startFrom = (inst: Instance, serverModel: Adopted): Start => {
     const first = guard(inst, "init", initOf)
     let adopted = serverModel
-    // An owner of shared state isn't restored from history: a reload would reopen what nobody hovers.
     const restored = restoredState.get(inst)
     if (restored !== undefined) {
       restoredState.delete(inst)
-      if (first !== undefined && Option.isNone(adopted)) {
+      if (first !== undefined) {
         adopted = Option.some({ model: restored.model, results: restoreQueries(inst.component, restored.results) })
       }
     }
@@ -3423,7 +3413,7 @@ const setup = (
 
   /**
    * Keeps the server's nodes of an instance whose Layer is still building, and adopts them once it's
-   * ready. See `makeInstance`.
+   * ready. See `startInstance`.
    */
   const awaitLayer = (
     inst: Instance,
@@ -3441,26 +3431,22 @@ const setup = (
       ...(bound === undefined ? undefined : { queries: fromServer.value.results ?? bound.empty })
     })
     layer.logEarly()
-    const start = (adopt: boolean) => () =>
-      begin(inst, range, adopt ? fromServer : Option.none(), undefined, collectedOnServer, layer)
-    hold(inst, range, (resume) =>
-      whenReady(inst.env, () => defer(() => resume(true, start(true))), () => {
-        if (inst.component.layerFailure !== undefined) defer(() => resume(false, start(false)))
-      }))
+    const resume = hold(inst, range)
+    const start = (adopt: boolean) =>
+      resume(adopt, () => begin(inst, range, adopt ? fromServer : Option.none(), undefined, collectedOnServer, layer))
+    whenReady(inst.env, () => start(true), () => {
+      if (inst.component.layerFailure !== undefined) start(false)
+    })
   }
 
-  const hold = (
-    inst: Instance,
-    range: Range | undefined,
-    wait: (resume: (adopt: boolean, start: () => void) => void) => void
-  ) => {
+  const hold = (inst: Instance, range: Range | undefined) => {
     inst.waiting = true
     waiting++
     if (range !== undefined) {
       range.claimed = true
       inst.rendered = packed(rangeNodes(range).map((node) => new TextRecord(emptyText, node)))
     } else inst.rendered = new TextRecord(emptyText, host.createText(""))
-    wait((adopt, start) => {
+    const resume = (adopt: boolean, start: () => void) => {
       if (inst.closed || !inst.waiting) return
       inst.waiting = false
       const nodes = listOf(inst.rendered).flatMap(nodesOf)
@@ -3491,7 +3477,8 @@ const setup = (
       if (held !== undefined && adopt && !inst.closed && inst.failure === undefined) applyPlacement(inst, held)
       viewChanged = true
       settleWaiting()
-    })
+    }
+    return (adopt: boolean, start: () => void) => defer(() => resume(adopt, start))
   }
 
   const apply = (inst: Instance, next: Component.Next<any, any, any, any>, entrySeq: number, initial: boolean) => {
@@ -6894,6 +6881,10 @@ const setup = (
   host.commit?.()
 
   const snapshot = (out: Record<string, unknown>): void => {
+    const write = (inst: Instance, path: string, exit: Exit.Exit<unknown, SchemaIssue.Issue>) => {
+      if (Exit.isSuccess(exit)) out[path] = exit.value
+      else warnUnencoded(inst, ctx, exit.cause)
+    }
     const visit = (inst: Instance) => {
       // A keyed query's pending writes go first, so the result holds only the declared keys. A
       // navigation issued in the `update` that changed them runs in the flush's deferred work, which
@@ -6903,18 +6894,12 @@ const setup = (
       // An outlet has no state of its own, only the children of the content it places. An owner of shared
       // state is left out: a reload would reopen what nobody hovers. Its subtree isn't.
       if (inst.component !== outletComponent && inst.component.definition.shares === undefined) {
-        const codec = stateCodecOf(inst.component)
-        if (!codec.redacted) {
-          const path = inst.path
-          const encoded = runCodec(codec.encode(inst.model, inst.results))
-          if (!Exit.isExit(encoded)) {
-            warnLate(inst, ctx)
-            encoded.addObserver((exit) => {
-              if (Exit.isSuccess(exit)) out[path] = exit.value
-              else warnUnencoded(inst, ctx, exit.cause)
-            })
-          } else if (Exit.isSuccess(encoded)) out[path] = encoded.value
-          else warnUnencoded(inst, ctx, encoded.cause)
+        const path = inst.path
+        const encoded = runCodec(stateCodecOf(inst.component).encode(inst.model, inst.results))
+        if (Exit.isExit(encoded)) write(inst, path, encoded)
+        else {
+          warnLate(inst, ctx)
+          encoded.addObserver((exit) => write(inst, path, exit))
         }
       }
       for (const child of inst.children) visit(child)

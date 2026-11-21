@@ -1498,7 +1498,8 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
         else replaceNow(href, writeState({ index }))
       } else {
         leave()
-        // The Model snapshot also goes into the entry itself, so it survives a reload.
+        // The Model snapshot also goes into the entry itself, so it survives a reload. A copy: the one in
+        // memory gains the states that encode later, and a history that keeps its state by reference would too.
         writeSnapshot(current.url + current.hash, { index, snapshot: { ...snapshots.get(index) } })
         index++
         for (const key of snapshots.keys()) if (key >= index) snapshots.delete(key)
