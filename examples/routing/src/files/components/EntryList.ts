@@ -1,6 +1,6 @@
 import type { View } from "@effect/ui"
 import { AppRoute } from "../../routes.ts"
-import { type FileTreeEntry, formatFileSize } from "../domain/FileTree.ts"
+import { FileTreeEntry, formatFileSize } from "../domain/FileTree.ts"
 
 export const filesUrl = (path: ReadonlyArray<string>) =>
   AppRoute.print(AppRoute.Files({ params: { "*": path.join("/") } }))
@@ -14,7 +14,10 @@ export const EntryList = <M>(h: View.H<M>, parentPath: ReadonlyArray<string>, en
         h.a.attr("href", filesUrl([...parentPath, entry.name])).class("text-blue-500 hover:underline")
           .children(entry.name),
         h.span.class("text-sm text-gray-500").children(
-          entry._tag === "File" ? formatFileSize(entry.sizeInBytes) : entryCountLabel(entry.entries.length)
+          FileTreeEntry.$match(entry, {
+            File: ({ sizeInBytes }) => formatFileSize(sizeInBytes),
+            Directory: ({ entries }) => entryCountLabel(entries.length)
+          })
         )
       )
     )

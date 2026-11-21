@@ -1,7 +1,7 @@
 import type { View } from "@effect/ui"
 import { Option } from "effect"
 import { EntryList, filesUrl } from "../../files/components/EntryList.ts"
-import { findEntry, formatFileSize } from "../../files/domain/FileTree.ts"
+import { FileTreeEntry, findEntry, formatFileSize } from "../../files/domain/FileTree.ts"
 import { AppRoute } from "../../routes.ts"
 
 const filesIndexUrl = AppRoute.print(AppRoute.FilesIndex())
@@ -27,12 +27,13 @@ export const FilesPage = <M>(h: View.H<M>, path: ReadonlyArray<string>) =>
           h.p.class("text-lg text-gray-600 mb-4").children(`No file or directory at "${path.join("/")}".`),
           h.a.attr("href", filesIndexUrl).class("text-blue-500 hover:underline").children("← Back to Files")
         ),
-      onSome: (entry) =>
-        entry._tag === "File"
-          ? h.div.class("bg-gray-50 border border-gray-200 rounded-lg p-6").children(
-            h.h2.class("text-2xl font-bold text-gray-800 mb-2").children(entry.name),
-            h.p.class("text-gray-600").children(formatFileSize(entry.sizeInBytes))
-          )
-          : EntryList(h, path, entry.entries)
+      onSome: FileTreeEntry.$match({
+        File: ({ name, sizeInBytes }) =>
+          h.div.class("bg-gray-50 border border-gray-200 rounded-lg p-6").children(
+            h.h2.class("text-2xl font-bold text-gray-800 mb-2").children(name),
+            h.p.class("text-gray-600").children(formatFileSize(sizeInBytes))
+          ),
+        Directory: ({ entries }) => EntryList(h, path, entries)
+      })
     })
   )
