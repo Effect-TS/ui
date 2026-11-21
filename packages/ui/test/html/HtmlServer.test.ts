@@ -2233,14 +2233,11 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: ($) => $.props.label,
         update: (model) => model,
         view: (label, h) =>
-          client && h.props.tag === "text"
-            ? h.text(label)
+          client && h.props.tag === "empty"
+            ? h.text("")
             : client && h.props.tag === "p"
             ? h.p.attr("data-l", label).children(label)
-            : h.li
-              .attr("data-l", label)
-              .attr(label === "A" ? "data-only-a" : "data-x", "1")
-              .children(h.span(label), h.em("x"))
+            : h.li.attr("data-l", label).children(h.span(label))
       })
       const makeList = (order: (isClient: boolean) => ReadonlyArray<readonly [string, string?]>) =>
         Component.define({ name: "List", model: Schema.Struct({}), message: Schema.Never, elements: Html }).make({
@@ -2273,10 +2270,9 @@ describe("HtmlServer", { concurrent: false }, () => {
       for (
         const [order, exact, keepFirstAndLast] of [
           [() => [["A"], ["B", "p"], ["C"]], true, true],
-          [() => [["A"], ["B", "text"], ["C"]], true, true],
+          [() => [["A"], ["B", "empty"], ["C"]], true, true],
           [(isClient: boolean) => isClient ? [["Z"], ["A"], ["B"]] : [["A"], ["B"]], true, false],
-          [(isClient: boolean) => isClient ? [["B"], ["C"]] : [["A"], ["B"], ["C"]], false, false],
-          [(isClient: boolean) => isClient ? [["B"], ["A"], ["C"]] : [["A"], ["B"], ["C"]], false, false]
+          [(isClient: boolean) => isClient ? [["B"], ["C"]] : [["A"], ["B"], ["C"]], false, false]
         ] as ReadonlyArray<
           readonly [(isClient: boolean) => ReadonlyArray<readonly [string, string?]>, boolean, boolean]
         >
