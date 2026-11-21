@@ -122,8 +122,9 @@ Known limits:
 - A kept child has stale props and `onEmit`.
 - After a router restore, saved state for a child that's never written again
   has no predicate to end it, and a later child at that key takes it.
-- A scoped child that leaves a waiting receiver before hydration settles is
-  built fresh from its state, not adopted from the server's nodes.
+- A scoped child that leaves a waiting receiver before hydration settles
+  keeps the server's nodes only while they're still in the document. Otherwise
+  it's built fresh from its state.
 
 ### Naming
 
