@@ -324,7 +324,7 @@ Name the closure's argument after the component, in camel case and in full:
 `AlertDialog`, `toastProvider` for `ToastProvider`. A one-letter name reads
 like one the library fixes, such as `h` for builders, `p` in `parts`, `$`
 in `update` and `s` for a Scene. When the name is a reserved word, use
-`parts`: `Switch(h, { view: (parts) => parts.root(h.button) })`. When the
+`parts`, as `Switch` does: `view: (parts) => parts.root(h.button)`. When the
 closure also reads a variable of that name, add `Parts` (`fieldParts`) or
 rename the variable. Two of one component nested get a role in front,
 `outerDialog` and `innerDialog`. Parts built outside a closure follow the

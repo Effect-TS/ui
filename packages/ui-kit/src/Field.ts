@@ -28,8 +28,9 @@
  *
  * `control`'s result is still a builder, so it is another kit call's
  * `element`, and both share one element:
- * `Input(h, { element: field.control(h.input), props })` for a text input, and
- * `checkbox.root(field.control(h.button))` for a checkbox or a switch.
+ * `Input(h, { element: field.control(h.input), props })` for a text input,
+ * `checkbox.root(field.control(h.button))` for a checkbox and
+ * `parts.root(field.control(h.button))` for a switch.
  *
  * A field has either one `control` and a `label`, or a `group` of
  * `member`s and a `legend`. The group is for a control made of several

@@ -23,7 +23,7 @@ describe("Switch", () => {
           onToggle: ({ checked }) => Msg.Toggled({ checked }),
           view: (parts) => {
             type Button<R> = Html.Element<Msg, R, Html.EventsOf<"button">, HTMLButtonElement, "button">
-            // Each part returns the builder it was given, for children or another call'parts `element`.
+            // Each part returns the builder it was given, for children or another call's `element`.
             expect(parts.root(h.button)).type.toBe<Button<never>>()
             expect(parts.thumb(h.span.class("thumb")).children(needsClock)).type.toBe<
               Html.Element<Msg, Clock, Html.EventsOf<"span">, HTMLSpanElement, "span">
