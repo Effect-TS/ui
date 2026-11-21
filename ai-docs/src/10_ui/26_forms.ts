@@ -81,15 +81,6 @@ export class IsUsernameTaken extends Query.Service<IsUsernameTaken>()(
   })
 ) {}
 
-export class CreateAccount extends Command.Service<CreateAccount>()(
-  "accounts/CreateAccount",
-  { args: { username: Schema.String, email: Schema.String, password: Schema.String } },
-  Effect.gen(function*() {
-    const accounts = yield* Accounts
-    return (account) => accounts.create(account)
-  })
-) {}
-
 const FieldName = Schema.Literals(["username", "email", "password", "confirm"])
 
 export const SignupMessage = UiSchema.TaggedEnum({
@@ -101,11 +92,20 @@ export const SignupMessage = UiSchema.TaggedEnum({
 
 export const SignupEvents = UiSchema.TaggedEnum({ SignedUp: { username: Schema.String } })
 
-const createAccount = (account: NewAccount) =>
-  CreateAccount.make(account).pipe(Command.match({
-    onSuccess: () => SignupMessage.SucceededCreateAccount(),
-    onFailure: ({ field, message }) => SignupMessage.FailedCreateAccount({ field, message })
-  }))
+export class CreateAccount extends Command.Service<CreateAccount>()(
+  "accounts/CreateAccount",
+  { args: { username: Schema.String, email: Schema.String, password: Schema.String } },
+  Effect.gen(function*() {
+    const accounts = yield* Accounts
+    return (account) =>
+      accounts.create(account).pipe(
+        Effect.match({
+          onSuccess: () => SignupMessage.SucceededCreateAccount(),
+          onFailure: ({ field, message }) => SignupMessage.FailedCreateAccount({ field, message })
+        })
+      )
+  })
+) {}
 
 // The form's fields, derived. The view, `update` and the tests all call it,
 // so they agree on what the form shows. The query's answer becomes the
@@ -164,7 +164,7 @@ export const SignupForm = Component.define({
       return Option.match(validateSignup(form, $.queries.usernameTaken).value, {
         onNone: () => ({ ...model, form }),
         onSome: ({ confirm: _, ...account }) =>
-          model.submitting ? model : $.set({ form, submitting: true }).run(createAccount(account))
+          model.submitting ? model : $.set({ form, submitting: true }).run(CreateAccount.make(account))
       })
     },
     SucceededCreateAccount: (model, _message, $) =>
@@ -248,7 +248,10 @@ export const rejectedEmail = Effect.gen(function*() {
     // An edit that arrives while the account is being created is dropped.
     .keepPending(CreateAccount)
     .send(SignupMessage.UpdatedField({ name: "email", value: "grace@example.com" }))
-    .fail(CreateAccount, new SignupRejected({ field: "email", message: "That email already has an account" }))
+    .resolve(
+      CreateAccount,
+      SignupMessage.FailedCreateAccount({ field: "email", message: "That email already has an account" })
+    )
   const before = validateSignup(s.model.form, s.queries.usernameTaken).fields.email
   s.send(SignupMessage.UpdatedField({ name: "email", value: "ada@example.org" }))
   const after = validateSignup(s.model.form, s.queries.usernameTaken).fields.email
