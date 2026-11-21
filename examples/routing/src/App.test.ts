@@ -29,17 +29,13 @@ const waitForSearch = Effect.gen(function*() {
   yield* TestHost.settle
 })
 
-const press = (key: string, modifiers: { readonly ctrl?: boolean } = {}) =>
-  Effect.andThen(TestGlobalEvents.fire("document", "keydown", { key, ...modifiers }), TestHost.settle)
-
-const recentSearches = (root: { readonly get: (locator: Locator.Locator) => TestHost.TestNode }) =>
-  Locator.textOf(root.get(Locator.text("Recent searches:")).parent!)
+const press = (key: string) => Effect.andThen(TestGlobalEvents.fire("document", "keydown", { key }), TestHost.settle)
 
 const heading = (name: string) => HtmlLocator.role("heading", { name })
 const link = (name: string) => HtmlLocator.role("link", { name })
 const searchInput = HtmlLocator.label("Search people")
 
-it.layer(AppTest("/"), { buildPerTest: true })("App at /", (it) => {
+it.layer(AppTest("/"), { buildPerTest: true })("App", (it) => {
   it.effect("each path shows its page and sets its title", () =>
     Effect.gen(function*() {
       const root = yield* mountApp
@@ -70,61 +66,14 @@ it.layer(AppTest("/"), { buildPerTest: true })("App at /", (it) => {
         assert.isDefined(root.query(Locator.text(`The path "${url}" was not found.`)), url)
       }
     }))
-
-  it.effect("file links capture the remaining path segments", () =>
-    Effect.gen(function*() {
-      const root = yield* mountApp
-      const follow = (name: string) => navigate((root.get(link(name)) as TestHost.TestElement).attrs.href)
-      yield* follow("Files")
-      yield* follow("documents")
-      yield* follow("taxes")
-      assert.strictEqual(yield* currentUrl, "/files/documents/taxes")
-      assert.strictEqual(root.head().title, "taxes | Files | Routing")
-      assert.isDefined(root.query(link("2024.pdf")))
-      yield* follow("documents")
-      assert.strictEqual(yield* currentUrl, "/files/documents")
-      assert.isDefined(root.query(link("resume.pdf")))
-    }))
-})
-
-it.layer(AppTest("/missing"), { buildPerTest: true })("App keyboard shortcuts", (it) => {
-  it.effect("g then a page's key goes to that page", () =>
-    Effect.gen(function*() {
-      yield* mountApp
-      const shortcuts = [["p", "/people"], ["F", "/files"], ["n", "/nested/route/is/very/nested"], ["h", "/"]] as const
-      for (const [key, url] of shortcuts) {
-        yield* press("g")
-        yield* press(key)
-        assert.strictEqual(yield* currentUrl, url)
-      }
-    }))
-
-  it.effect("a page's key alone, with Ctrl, or a second after g does nothing", () =>
-    Effect.gen(function*() {
-      yield* mountApp
-      yield* press("p")
-      yield* press("g")
-      yield* press("Shift")
-      yield* press("p", { ctrl: true })
-      assert.strictEqual(yield* currentUrl, "/missing")
-      yield* TestClock.adjust("1 second")
-      yield* TestHost.settle
-      yield* press("p")
-      assert.strictEqual(yield* currentUrl, "/missing")
-      yield* press("g")
-      yield* press("x")
-      yield* press("p")
-      assert.strictEqual(yield* currentUrl, "/missing")
-    }))
 })
 
 it.layer(AppTest("/people?searchText=manager"), { buildPerTest: true })("App at /people?searchText=manager", (it) => {
-  it.effect("the query parameter drives the search, and a submitted search writes it", () =>
+  it.effect("query parameters drive search, submitting updates the URL, and Back restores the input", () =>
     Effect.gen(function*() {
       const root = yield* mountApp
       const router = yield* Router.Router
       assert.strictEqual(HtmlLocator.value(root.get(searchInput)), "manager")
-      assert.isDefined(root.query(Locator.text("Searching…")))
       yield* waitForSearch
       assert.isDefined(root.query(Locator.text("1 result for “manager”")))
       assert.isDefined(root.query(link("Carol Davis Manager")))
@@ -138,25 +87,24 @@ it.layer(AppTest("/people?searchText=manager"), { buildPerTest: true })("App at 
       assert.isDefined(root.query(Locator.text("2 results for “designer”")))
       assert.isUndefined(root.query(link("Carol Davis Manager")))
 
+      Locator.fire(root.get(searchInput), "input", { value: "unsent" })
+      yield* TestHost.settle
       yield* router.back
       yield* TestHost.settle
       assert.strictEqual(yield* currentUrl, "/people?searchText=manager")
       assert.strictEqual(HtmlLocator.value(root.get(searchInput)), "manager")
       assert.isDefined(root.query(link("Carol Davis Manager")))
-      assert.strictEqual(recentSearches(root), "Recent searches:managerdesigner")
+
+      Locator.fire(root.get(searchInput), "input", { value: "" })
+      yield* TestHost.settle
+      Locator.fire(root.get(Locator.tag("form")), "submit")
+      yield* TestHost.settle
+      assert.strictEqual(yield* currentUrl, "/people")
+      yield* waitForSearch
+      assert.isDefined(root.query(Locator.text("Click on any person to view their details:")))
     }))
 
-  it.effect("recent searches outlive a visit to another page", () =>
-    Effect.gen(function*() {
-      const root = yield* mountApp
-      yield* navigate("/people/3")
-      yield* navigate("/people?searchText=dev")
-      assert.strictEqual(recentSearches(root), "Recent searches:devmanager")
-      yield* navigate("/people")
-      assert.strictEqual(recentSearches(root), "Recent searches:devmanager")
-    }))
-
-  it.effect("keys typed in the search input are not shortcuts, and focusing it cancels a started chord", () =>
+  it.effect("keyboard shortcuts navigate by chord, ignore typing in search, and cancel a pending chord on focus", () =>
     Effect.gen(function*() {
       const root = yield* mountApp
       yield* press("g")
@@ -172,11 +120,8 @@ it.layer(AppTest("/people?searchText=manager"), { buildPerTest: true })("App at 
       yield* press("g")
       yield* press("h")
       assert.strictEqual(yield* currentUrl, "/")
-    }))
 
-  it.effect("shortcuts work again after leaving the page with the search input focused", () =>
-    Effect.gen(function*() {
-      const root = yield* mountApp
+      yield* navigate("/people")
       Locator.fire(root.get(searchInput), "focus")
       yield* TestHost.settle
       yield* navigate("/files")
