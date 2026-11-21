@@ -822,19 +822,20 @@ export const trackPosition = (
         document.addEventListener("scroll", update, { capture: true, passive: true })
       }
       let frame = -1
+      const watch = () => sizes?.observe(node, { box: "border-box" })
       const sizes = typeof view.ResizeObserver === "function"
         ? new view.ResizeObserver((entries) => {
           if (entries[0]?.target === anchor) {
             // A size the update gives the popup after the anchor resized would be reported as a loop.
             sizes?.unobserve(node)
             view.cancelAnimationFrame(frame)
-            frame = view.requestAnimationFrame(() => sizes?.observe(node))
+            frame = view.requestAnimationFrame(watch)
           }
           update()
         })
         : null
       if (anchor !== null) sizes?.observe(anchor)
-      sizes?.observe(node)
+      watch()
       const moves = anchor === null ? () => {} : observeMove(anchor, update)
       return () => {
         styles.disconnect()

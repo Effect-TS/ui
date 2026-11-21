@@ -16,13 +16,15 @@ let deliveries = 0
 
 class FakeResizeObserver {
   readonly observed = new Set<Element>()
+  readonly bordered = new Set<Element>()
   readonly pending = new Set<Element>()
   timer: ReturnType<typeof setTimeout> | undefined
   constructor(readonly callback: (entries: Array<{ target: Element }>, observer: FakeResizeObserver) => void) {
     resizeObservers.add(this)
   }
-  observe(target: Element) {
+  observe(target: Element, options?: { readonly box?: string }) {
     this.observed.add(target)
+    if (options?.box === "border-box") this.bordered.add(target)
     this.queue(target)
   }
   unobserve(target: Element) {
@@ -49,8 +51,10 @@ class FakeResizeObserver {
   }
 }
 
-const resize = (target: Element) => {
-  for (const observer of resizeObservers) observer.queue(target)
+const resize = (target: Element, borderOnly = false) => {
+  for (const observer of resizeObservers) {
+    if (!borderOnly || observer.bordered.has(target)) observer.queue(target)
+  }
 }
 
 const geometry = Effect.acquireRelease(
@@ -290,7 +294,7 @@ describe("Tooltip in a document", { concurrent: false }, () => {
       window.dispatchEvent(new Event("resize"))
       yield* tick
       assert.strictEqual(byId("positioner").getAttribute("data-side"), "top")
-      resize(byId("positioner"))
+      resize(byId("positioner"), true)
       yield* tick
       assert.strictEqual(style("top"), "652px")
     }).pipe(Effect.scoped))
