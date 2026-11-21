@@ -1517,6 +1517,7 @@ export interface PartsHelper<Msg, Props, V extends View.Elements> {
    *
    * const Dialog = Component.define({
    *   name: "Dialog",
+   *   scoped: false,
    *   model: Schema.Boolean,
    *   message: DialogMessage,
    *   events: DialogEvents
@@ -1538,6 +1539,7 @@ export interface PartsHelper<Msg, Props, V extends View.Elements> {
    *
    * const Drawer = Component.define({
    *   name: "Drawer",
+   *   scoped: false,
    *   model: Schema.Number,
    *   message: DrawerMessage
    * }).make({

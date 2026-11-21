@@ -242,6 +242,7 @@ describe("Drawer", () => {
 const PageMessage = UiSchema.TaggedEnum({ Toggled: { open: Schema.Boolean } })
 const Page = Component.define({
   name: "Page",
+  scoped: false,
   model: Schema.Struct({ open: Schema.Boolean }),
   message: PageMessage,
   elements: Html
@@ -300,7 +301,13 @@ describe("DrawerProvider", () => {
 })
 
 // A drawer in a dialog's popup, and a dialog in the drawer's, all open.
-const Mixed = Component.define({ name: "Mixed", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+const Mixed = Component.define({
+  name: "Mixed",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+}).make({
   init: () => null,
   update: (model) => model,
   view: (_, h) =>
