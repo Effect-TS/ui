@@ -226,15 +226,14 @@ describe("HtmlHead", () => {
         HtmlHead.reduce(() => {
           throw new Error("boom")
         }),
-        HtmlHead.reduce((below) => ({ ...below, html: { ...below.html, dir: "rtl" } })),
+        HtmlHead.reduce((below) => ({ ...below, title: `[${below.title}]` })),
         Head.title("Own")
       ],
       children: [],
       onError: (error) => errors.push(error)
     })
-    assert.strictEqual(head.title, "Own!")
+    assert.strictEqual(head.title, "[Own!]")
     assert.strictEqual(head.html.lang, "en")
-    assert.strictEqual(head.html.dir, "rtl")
     assert.strictEqual(errors.length, 1)
   })
 
