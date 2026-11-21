@@ -1,9 +1,9 @@
 import { Command, Component, Head, Router, UiSchema } from "@effect/ui"
 import { Console, Effect, Option, Schema } from "effect"
-import { Session, sessionStore } from "./auth/domain/Session.ts"
+import { Session, SessionStore } from "./auth/domain/Session.ts"
 import { LoggedIn } from "./LoggedIn.ts"
 import { LoggedOut } from "./LoggedOut.ts"
-import { AppRoute, dashboardRoute, homeRoute, LoggedInRoute, LoggedOutRoute, loginRoute } from "./routes.ts"
+import { AppRoute, LoggedInRoute, LoggedOutRoute } from "./routes.ts"
 
 export const AppModel = UiSchema.TaggedEnum({
   LoggedOut: { route: LoggedOutRoute },
@@ -16,8 +16,9 @@ const isLoggedInRoute = Schema.is(LoggedInRoute)
 
 const guard = (route: AppRoute, session: Option.Option<Session>): AppModel =>
   Option.match(session, {
-    onNone: () => AppModel.LoggedOut({ route: isLoggedOutRoute(route) ? route : loginRoute }),
-    onSome: (session) => AppModel.LoggedIn({ route: isLoggedInRoute(route) ? route : dashboardRoute, session })
+    onNone: () => AppModel.LoggedOut({ route: isLoggedOutRoute(route) ? route : LoggedOutRoute.Login() }),
+    onSome: (session) =>
+      AppModel.LoggedIn({ route: isLoggedInRoute(route) ? route : LoggedInRoute.Dashboard(), session })
   })
 
 const redirected = (model: AppModel, route: AppRoute) => model.route._tag !== route._tag
@@ -26,7 +27,7 @@ const AppProps = Schema.Struct({ route: AppRoute, session: Schema.Option(Session
 
 export const appProps = Effect.gen(function*() {
   const route = yield* Router.currentRoute(AppRoute)
-  const store = yield* sessionStore
+  const store = yield* SessionStore
   const session = yield* store.get.pipe(Effect.orElseSucceed(() => Option.none()))
   return { route, session }
 })
@@ -42,13 +43,13 @@ export const AppMessage = UiSchema.TaggedEnum({
 export class SaveSession extends Command.Service<SaveSession>()(
   "auth/SaveSession",
   { args: { session: Session } },
-  Effect.map(sessionStore, (store) => ({ session }) => store.set(session))
+  Effect.map(SessionStore, (store) => ({ session }) => store.set(session))
 ) {}
 
 export class ClearSession extends Command.Service<ClearSession>()(
   "auth/ClearSession",
   { args: {} },
-  Effect.map(sessionStore, (store) => () => store.remove)
+  Effect.map(SessionStore, (store) => () => store.remove)
 ) {}
 
 export const LogError = Command.make(
@@ -89,13 +90,16 @@ export const AppNoDeps = Component.define({
     },
 
     SignedIn: (_model, { session }, $) =>
-      $.set(AppModel.LoggedIn({ route: dashboardRoute, session })).run(
+      $.set(AppModel.LoggedIn({ route: LoggedInRoute.Dashboard(), session })).run(
         saveSession(session),
-        redirectTo(dashboardRoute)
+        redirectTo(LoggedInRoute.Dashboard())
       ),
 
     SignedOut: (_model, _message, $) =>
-      $.set(AppModel.LoggedOut({ route: homeRoute })).run(clearSession(), redirectTo(homeRoute)),
+      $.set(AppModel.LoggedOut({ route: LoggedOutRoute.Home() })).run(
+        clearSession(),
+        redirectTo(LoggedOutRoute.Home())
+      ),
 
     FailedSaveSession: (_model, { error }, $) => $.run(LogError({ entries: ["Failed to save session:", error] })),
 

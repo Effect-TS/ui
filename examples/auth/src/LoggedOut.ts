@@ -4,7 +4,7 @@ import { Session } from "./auth/domain/Session.ts"
 import { HomePage } from "./pages/HomePage.ts"
 import { LoginPage } from "./pages/login/LoginPage.ts"
 import { NotFound } from "./pages/NotFound.ts"
-import { AppRoute, homeRoute, LoggedOutRoute } from "./routes.ts"
+import { AppRoute, LoggedOutRoute } from "./routes.ts"
 
 export const LoggedOutMessage = UiSchema.TaggedEnum({ SignedInLogin: { session: Session } })
 
@@ -28,7 +28,7 @@ export const LoggedOut = Component.define({
         Login: () =>
           LoginPage(h, { onEmit: { SignedIn: ({ session }) => LoggedOutMessage.SignedInLogin({ session }) } }),
         NotFound: (route) =>
-          NotFound(h, { path: route.params["*"], backHref: AppRoute.print(homeRoute), backText: "Go Home" })
+          NotFound(h, { path: route.params["*"], backHref: AppRoute.print(LoggedOutRoute.Home()), backText: "Go Home" })
       })
     )
 })

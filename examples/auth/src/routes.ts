@@ -14,8 +14,3 @@ export type LoggedOutRoute = typeof LoggedOutRoute.Type
 
 export const LoggedInRoute = AppRoute.subset(["Dashboard", "Settings", "NotFound"])
 export type LoggedInRoute = typeof LoggedInRoute.Type
-
-export const homeRoute = LoggedOutRoute.make({ _tag: "Home" })
-export const loginRoute = LoggedOutRoute.make({ _tag: "Login" })
-export const dashboardRoute = LoggedInRoute.make({ _tag: "Dashboard" })
-export const settingsRoute = LoggedInRoute.make({ _tag: "Settings" })

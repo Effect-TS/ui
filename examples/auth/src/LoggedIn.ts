@@ -4,7 +4,7 @@ import { Session } from "./auth/domain/Session.ts"
 import { DashboardPage } from "./pages/dashboard/DashboardPage.ts"
 import { NotFound } from "./pages/NotFound.ts"
 import { SettingsPage } from "./pages/settings/SettingsPage.ts"
-import { AppRoute, dashboardRoute, LoggedInRoute, settingsRoute } from "./routes.ts"
+import { AppRoute, LoggedInRoute } from "./routes.ts"
 
 export const LoggedInMessage = UiSchema.TaggedEnum({ ClickedSignOut: {} })
 
@@ -39,8 +39,8 @@ export const LoggedIn = LoggedInDef.make({
       h.nav.class("bg-blue-500 text-white p-4").children(
         h.div.class("max-w-4xl mx-auto flex justify-between items-center").children(
           h.ul.class("flex gap-6 list-none").children(
-            NavLink(h, "Dashboard", dashboardRoute),
-            NavLink(h, "Settings", settingsRoute)
+            NavLink(h, "Dashboard", LoggedInRoute.Dashboard()),
+            NavLink(h, "Settings", LoggedInRoute.Settings())
           ),
           h.div.class("text-sm").children(`Signed in as ${session.email}`)
         )
@@ -52,7 +52,7 @@ export const LoggedIn = LoggedInDef.make({
           NotFound: (route) =>
             NotFound(h, {
               path: route.params["*"],
-              backHref: AppRoute.print(dashboardRoute),
+              backHref: AppRoute.print(LoggedInRoute.Dashboard()),
               backText: "Go to Dashboard"
             })
         })

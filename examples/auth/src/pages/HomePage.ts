@@ -1,5 +1,5 @@
 import type { View } from "@effect/ui"
-import { AppRoute, loginRoute } from "../routes.ts"
+import { AppRoute, LoggedOutRoute } from "../routes.ts"
 
 const FeatureCard = <M>(h: View.H<M>, title: string, description: string) =>
   h.div.class("bg-white rounded-lg shadow-md p-6").children(
@@ -14,7 +14,7 @@ export const HomePage = <M>(h: View.H<M>) =>
       h.p.class("text-xl text-gray-600 mb-8").children(
         "A demonstration of authentication with a Model union and route guards in Effect UI."
       ),
-      h.a.attr("href", AppRoute.print(loginRoute))
+      h.a.attr("href", AppRoute.print(LoggedOutRoute.Login()))
         .class("inline-block px-8 py-3 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-600 transition")
         .children("Sign In")
     ),
