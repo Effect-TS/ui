@@ -429,7 +429,7 @@ describe("Infinite queries", () => {
           ChangedRoute: ({ route }) => route,
           Go: () =>
             $.set(model).run(
-              Router.push(ShellRoute, ShellRoute.make({ _tag: "Home" })).pipe(
+              Router.push(ShellRoute, ShellRoute.Home()).pipe(
                 Command.map(() => ShellMessage.Navigated())
               )
             ),

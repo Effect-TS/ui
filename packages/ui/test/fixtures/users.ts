@@ -131,7 +131,7 @@ export const AppRoute = Route.union({
   NotFound: Route.make("/*")
 })
 
-const detailUrl = (id: string) => AppRoute.print(AppRoute.make({ _tag: "Detail", params: { id } }))
+const detailUrl = (id: string) => AppRoute.print(AppRoute.Detail({ params: { id } }))
 
 // UserCard: one user, with a like button
 
@@ -332,7 +332,7 @@ export const App = Component.define({
   ) => [Router.subscription(AppRoute, model, (route) => AppMessage.RouteChanged({ route }))],
   view: (route, h) =>
     h.div(
-      h.header(h.a.attr("href", AppRoute.print(AppRoute.make({ _tag: "List" }))).children("Users")),
+      h.header(h.a.attr("href", AppRoute.print(AppRoute.List())).children("Users")),
       h.main(
         AppRoute.match(route, {
           List: () => ListPage(h, { key: "list" }),

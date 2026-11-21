@@ -89,7 +89,7 @@ describe("Router", { concurrent: false }, () => {
     run(
       Router.memory({ routes: AppRoute, url: "/people/1" }),
       Effect.gen(function*() {
-        const root = yield* TestHost.mount(App, { route: AppRoute.make({ _tag: "Person", params: { id: 2 } }) })
+        const root = yield* TestHost.mount(App, { route: AppRoute.Person({ params: { id: 2 } }) })
         yield* Effect.exit(TestHost.settle)
         const reported = yield* TestHost.expectProblem("RouteMismatch")
         assert.strictEqual(reported.length, 1)
@@ -98,9 +98,9 @@ describe("Router", { concurrent: false }, () => {
         assert.strictEqual(root.model()?.route._tag, "Person")
         const router = yield* Router.Router
         yield* router.navigate("/people/2")
-        const delayed = yield* TestHost.mount(App, { route: AppRoute.make({ _tag: "Home" }) })
+        const delayed = yield* TestHost.mount(App, { route: AppRoute.Home() })
         yield* TestHost.settle
-        assert.deepStrictEqual(delayed.model()?.route, AppRoute.make({ _tag: "Person", params: { id: 2 } }))
+        assert.deepStrictEqual(delayed.model()?.route, AppRoute.Person({ params: { id: 2 } }))
         assert.deepStrictEqual(yield* TestHost.problems, [])
       })
     ))
@@ -113,7 +113,7 @@ describe("Router", { concurrent: false }, () => {
       const messages: Array<typeof People.Type> = []
       const subscription = Router.subscription(
         People,
-        People.make({ _tag: "Person", params: { id: 1 } }),
+        People.Person({ params: { id: 1 } }),
         (route) => route
       )
       yield* Stream.runForEach(subscription.stream, (route) =>
@@ -123,7 +123,7 @@ describe("Router", { concurrent: false }, () => {
       yield* Effect.yieldNow
       yield* router.navigate("/people/2")
       yield* Effect.yieldNow
-      assert.deepStrictEqual(messages, [People.make({ _tag: "Person", params: { id: 2 } })])
+      assert.deepStrictEqual(messages, [People.Person({ params: { id: 2 } })])
       assert.deepStrictEqual(problems, [])
     }).pipe(
       Effect.provide(Router.memory({ routes: AppRoute })),
@@ -236,7 +236,7 @@ describe("Router", { concurrent: false }, () => {
       Search: Route.make("/search", { search: { q: Schema.optional(Schema.String) } })
     })
     const history = Router.memoryHistory("/search?q=x&utm=1")
-    const x = routes.make({ _tag: "Search", search: { q: "x" } })
+    const x = routes.Search({ search: { q: "x" } })
     return Effect.gen(function*() {
       const router = yield* Router.Router
       const messages: Array<typeof routes.Type> = []
@@ -268,9 +268,9 @@ describe("Router", { concurrent: false }, () => {
       const router = yield* Router.Router
       assert.strictEqual((yield* current)._tag, "Home")
       yield* router.navigate("/people/2")
-      assert.deepStrictEqual(yield* current, AppRoute.make({ _tag: "Person", params: { id: 2 } }))
+      assert.deepStrictEqual(yield* current, AppRoute.Person({ params: { id: 2 } }))
       const subset = Route.union({ Person: Route.make("/people/:id", { params: { id: Schema.Number } }) })
-      assert.deepStrictEqual(yield* Router.currentRoute(subset), subset.make({ _tag: "Person", params: { id: 2 } }))
+      assert.deepStrictEqual(yield* Router.currentRoute(subset), subset.Person({ params: { id: 2 } }))
       yield* router.navigate("/")
       assert.isTrue(Exit.isFailure(yield* Effect.exit(Router.currentRoute(subset))))
       assert.strictEqual(
@@ -671,7 +671,7 @@ describe("Router", { concurrent: false }, () => {
       layer,
       Effect.gen(function*() {
         const router = yield* Router.Router
-        const root = yield* TestHost.mount(Shell, { route: AppRoute.make({ _tag: "Home" }) })
+        const root = yield* TestHost.mount(Shell, { route: AppRoute.Home() })
         yield* TestHost.settle
         yield* router.navigate("/people/1")
         yield* TestHost.settle
@@ -696,7 +696,7 @@ describe("Router", { concurrent: false }, () => {
     Effect.gen(function*() {
       const router = yield* Router.Router
       assert.strictEqual(router.location().route._tag, "Person")
-      assert.strictEqual(yield* router.push(AppRoute.make({ _tag: "Home" })), "blocked")
+      assert.strictEqual(yield* router.push(AppRoute.Home()), "blocked")
     }).pipe(Effect.provide(Router.static({ routes: AppRoute, url: "/old/4" }))))
 })
 
@@ -812,7 +812,7 @@ describe("Router.patchSearch", { concurrent: false }, () => {
         click(root, "clear")
         yield* TestHost.settle
         assert.deepStrictEqual(history.entries(), ["/search?utm_source=news"])
-        assert.deepStrictEqual(root.model()?.route, Routes.make({ _tag: "Search" }))
+        assert.deepStrictEqual(root.model()?.route, Routes.Search())
         // Two writers in one round trip both land: each patches the Router's search, not the held route.
         click(root, "both")
         yield* TestHost.settle
@@ -879,17 +879,17 @@ describe("Router.patchSearch", { concurrent: false }, () => {
   it.effect("returns stale when the Router's path no longer matches the held route", () =>
     Effect.gen(function*() {
       const router = yield* Router.Router
-      const item1 = Routes.make({ _tag: "Item", params: { id: 1 } })
+      const item1 = Routes.Item({ params: { id: 1 } })
       assert.strictEqual(yield* router.patchSearch(item1, { tab: "a" }), "navigated")
       assert.strictEqual(router.location().url, "/items/1?tab=a")
       yield* router.navigate("/items/2")
       assert.strictEqual(yield* router.patchSearch(item1, { tab: "b" }), "stale")
-      assert.strictEqual(yield* router.patchSearch(Routes.make({ _tag: "Home" }), {}), "stale")
+      assert.strictEqual(yield* router.patchSearch(Routes.Home(), {}), "stale")
       assert.strictEqual(router.location().url, "/items/2")
       // A patch that changes nothing is no navigation.
       const seq = router.location().seq
       assert.strictEqual(
-        yield* router.patchSearch(Routes.make({ _tag: "Item", params: { id: 2 } }), { tab: undefined }),
+        yield* router.patchSearch(Routes.Item({ params: { id: 2 } }), { tab: undefined }),
         "navigated"
       )
       assert.strictEqual(router.location().seq, seq)
@@ -920,8 +920,8 @@ describe("Router.patchSearch", { concurrent: false }, () => {
         assert.strictEqual(history.index(), 0)
         assert.isTrue(root.text().includes("q=a page=1;"))
         // Leaving the page is still blocked.
-        assert.strictEqual(yield* router.push(Routes.make({ _tag: "Home" })), "blocked")
-        assert.strictEqual(yield* router.replace(Routes.make({ _tag: "Search", search: { q: "b" } })), "blocked")
+        assert.strictEqual(yield* router.push(Routes.Home()), "blocked")
+        assert.strictEqual(yield* router.replace(Routes.Search({ search: { q: "b" } })), "blocked")
         assert.deepStrictEqual(quietness(settled), [
           "replace /search?q=a quiet",
           "push /search?q=a&page=3 quiet",
@@ -960,13 +960,13 @@ describe("Router.patchSearch", { concurrent: false }, () => {
     const history = Router.memoryHistory("#/search?utm=1&q=a")
     return Effect.gen(function*() {
       const router = yield* Router.Router
-      const held = Routes.make({ _tag: "Search", search: { q: "a" } })
+      const held = Routes.Search({ search: { q: "a" } })
       assert.deepStrictEqual(history.entries(), ["#/search?utm=1&q=a"])
       assert.strictEqual(yield* router.patchSearch(held, { page: 2 }), "navigated")
       assert.deepStrictEqual(history.entries(), ["#/search?q=a&page=2&utm=1"])
       assert.strictEqual(yield* router.patchSearch(held, { q: undefined }, { history: "push" }), "navigated")
       assert.deepStrictEqual(history.entries(), ["#/search?q=a&page=2&utm=1", "#/search?page=2&utm=1"])
-      assert.deepStrictEqual(router.location().route, Routes.make({ _tag: "Search", search: { page: 2 } }))
+      assert.deepStrictEqual(router.location().route, Routes.Search({ search: { page: 2 } }))
       yield* router.navigate("#/items/1")
       assert.strictEqual(yield* router.patchSearch(held, { page: 3 }), "stale")
     }).pipe(
@@ -1160,7 +1160,7 @@ describe("Router.prefetch", { concurrent: false }, () => {
         Prefetching.probe.location = () => router.location().url
         yield* mountApp
         yield* TestHost.settle
-        const held = Routes.make({ _tag: "Person", params: { id: 7 } })
+        const held = Routes.Person({ params: { id: 7 } })
         // A replace stays on the page: no declaration runs.
         yield* router.patchSearch(held, { tab: "a" })
         yield* TestHost.settle
@@ -1383,7 +1383,7 @@ describe("Router throttle", { concurrent: false }, () => {
       yield* router.navigate("/search")
       yield* router.block("dirty")
       // A patch isn't blocked.
-      const held = Routes.make({ _tag: "Search" })
+      const held = Routes.Search()
       yield* router.patchSearch(held, { q: "a" })
       yield* router.patchSearch(held, { q: "ab" })
       t.writes.length = 0
