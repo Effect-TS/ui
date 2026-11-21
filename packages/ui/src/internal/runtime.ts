@@ -3894,7 +3894,6 @@ const setup = (
     const reports: Array<unknown> = []
     for (const reader of owner.readers ?? []) {
       if (reader.left || reader.closed || reader.failure !== undefined) continue
-      if (keptLive > 0 && isKept(reader)) continue
       for (const read of sharedReads.readsOf(reader.component.definition)) {
         if (read.report === undefined || reader.owners?.get(read.owner.definition) !== owner) continue
         const report = guard(reader, "shared", () => read.report!(reader.model, reader.props), read.name)
