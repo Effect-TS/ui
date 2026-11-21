@@ -208,7 +208,7 @@ import {
   flag,
   idSelector,
   noSelect,
-  separator as separatorAttrs,
+  separatorAttrs,
   visuallyHidden,
   withStyle
 } from "./internal/attributes.ts"

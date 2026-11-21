@@ -56,14 +56,14 @@
  * @since 0.1.0
  */
 import type * as Html from "@effect/ui/html/Html"
-import { separator } from "./internal/attributes.ts"
+import { separatorAttrs } from "./internal/attributes.ts"
 
 /**
- * Options for the separator's orientation.
+ * The direction of a `Separator`.
  *
  * **Details**
  *
- * - `orientation`: `"horizontal"` or `"vertical"`. Defaults to `"horizontal"`.
+ * - `orientation`: `"horizontal"` by default.
  *
  * @stability experimental
  * @category models
@@ -109,5 +109,5 @@ export const Separator = <Msg, R = never>(
 ): SeparatorElement<Msg, R> => {
   const element: SeparatorElement<Msg, R> = options.element ?? h.div
   const orientation = options.props?.orientation ?? "horizontal"
-  return element.forward((node) => separator(node, orientation))
+  return element.forward((node) => separatorAttrs(node, orientation))
 }
