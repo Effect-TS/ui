@@ -75,6 +75,7 @@ the current Model. `Set*`, `Update*` and bare imperatives such as `Save` or
 | Event                                         | What the user did, past tense, with no cause              | `Toggled`, `Picked`, `Saved`                                    |
 | Command                                       | Imperative, for what its body does                        | `SaveNote`, `WaitBeforeDismissal`                               |
 | Mount                                         | Imperative, for what it does to the element               | `DrawChart`, `Measure`, `TrackPointer`                          |
+| Parts argument of a headless component        | The component's name in camel case, in full               | `field`, `alertDialog`, `parts` for `Switch`                    |
 
 A Command result takes `Succeeded` and `Failed` when the Command can fail,
 and `Completed` otherwise. Name a Command for what its body does, not for
@@ -323,13 +324,24 @@ A component finished with `parts` instead of `view` is headless: it keeps
 its own Model, `update` and Commands, and owns behaviour such as keyboard
 handling, ids and ARIA, but no markup. A consumer calls it with `h`
 and a `view` closure that applies each part to a builder of its own:
-`m.trigger(h.button).children("Open")`. The closure is the consumer's code,
+`menu.trigger(h.button).children("Open")`. The closure is the consumer's code,
 so children declared in it report to the consumer. Pass rows as Schema data in
 props, and keep richer row content in the closure, looked up by id. The
 closure runs whenever the consumer renders, so wrap a headless child in a
 small normal component when the consumer renders often. Test one with
 `Story.parts`, which needs no runtime, and render it in a `Scene`, which
 runs it with a stand-in view for the consumer.
+
+Name the closure's argument after the component, in camel case and in full:
+`Field(h, { view: (field) => field.root(h.div) })`, `alertDialog` for
+`AlertDialog`, `toastProvider` for `ToastProvider`. A one-letter name reads
+like one the library fixes, such as `h` for builders, `p` in `parts`, `$`
+in `update` and `s` for a Scene. When the name is a reserved word, use
+`parts`: `Switch(h, { view: (parts) => parts.root(h.button) })`. When the
+closure also reads a variable of that name, add `Parts` (`fieldParts`) or
+rename the variable. Two of one component nested get a role in front,
+`outerDialog` and `innerDialog`. Parts built outside a closure follow the
+same rule: `const tooltip = Story.parts(Tooltip, { model, props })`.
 
 ### Shared state
 

@@ -40,7 +40,7 @@
  * `viewport` takes the consumer's builder. Every other part takes
  * `{ element, toast }`, with a toast from the parts' `toasts`, and returns
  * the builder for the consumer to chain on and fill:
- * `t.title({ element: h.strong, toast }).children(toast.title)`. `root` sets
+ * `toastProvider.title({ element: h.strong, toast }).children(toast.title)`. `root` sets
  * the element's key to the toast's `id`, so a toast keeps its element as
  * the list changes. The viewport adds, after the consumer's children, a
  * visually hidden alert for each high-priority toast.
@@ -120,14 +120,14 @@
  *   update: (model) => model,
  *   view: (_, h) =>
  *     ToastProvider(h, {
- *       view: (t) =>
+ *       view: (toastProvider) =>
  *         h.div(
  *           Editor(h, {}),
- *           t.viewport(h.div.class("toasts")).children(
- *             ...t.toasts.map((toast) =>
- *               t.root({ element: h.div.class("toast"), toast }).children(
- *                 t.title({ element: h.strong, toast }).children(toast.title),
- *                 t.close({ element: h.button, toast }).children("Dismiss")
+ *           toastProvider.viewport(h.div.class("toasts")).children(
+ *             ...toastProvider.toasts.map((toast) =>
+ *               toastProvider.root({ element: h.div.class("toast"), toast }).children(
+ *                 toastProvider.title({ element: h.strong, toast }).children(toast.title),
+ *                 toastProvider.close({ element: h.button, toast }).children("Dismiss")
  *               )
  *             )
  *           )
@@ -586,7 +586,7 @@ const withToast = <Tag extends string, R>(part: View.Part<Tag, [toast: ToastItem
 /**
  * Keeps the app's toasts, and draws them with the consumer's markup where it
  * places the viewport. Call it once near the root with a `view` closure that
- * holds the app's body and the toasts, drawn with `t.toasts` and the parts.
+ * holds the app's body and the toasts, drawn with `toastProvider.toasts` and the parts.
  *
  * **Details**
  *

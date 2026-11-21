@@ -10,12 +10,12 @@ import { TestClock } from "effect/testing"
 const standIn = {
   elements: Html,
   view: (
-    s: Component.Headless.Parts<typeof Tooltip>,
+    tooltip: Component.Headless.Parts<typeof Tooltip>,
     h: View.Helper<never, TooltipProps> & View.Tags<Html.Elements, never>
   ) =>
     h.span(
-      s.trigger(h.button.attr("aria-label", "Bold")).children("B"),
-      s.positioner(h.div).children(s.popup(h.div.class("popup")).children(s.arrow(h.div), "Bold"))
+      tooltip.trigger(h.button.attr("aria-label", "Bold")).children("B"),
+      tooltip.positioner(h.div).children(tooltip.popup(h.div.class("popup")).children(tooltip.arrow(h.div), "Bold"))
     )
 }
 
@@ -53,13 +53,13 @@ const Toolbar = Component.define({
         key: "bold",
         props: { open: model.open },
         onEmit: (event) => event._tag === "Opened" ? ToolbarMessage.OpenedBoldTip() : ToolbarMessage.DismissedBoldTip(),
-        view: (t) =>
+        view: (tooltip) =>
           h.span(
             Button(h, {
-              element: t.trigger(h.button),
+              element: tooltip.trigger(h.button),
               onPress: ToolbarMessage.PressedBold()
             }).class("tool").attr("aria-label", "Bold").children("B"),
-            t.positioner(h.div).children("Bold")
+            tooltip.positioner(h.div).children("Bold")
           )
       }),
       h.output(`pressed ${model.pressed}, dismissed ${model.dismissed}`)
@@ -92,10 +92,10 @@ const Grouped = Component.define({
               props: { open: model.tip === tip },
               onEmit: (event) =>
                 event._tag === "Opened" ? GroupedMessage.OpenedTip({ tip }) : GroupedMessage.DismissedTip({ tip }),
-              view: (s) =>
+              view: (tooltip) =>
                 h.span(
-                  s.trigger(h.button.attr("aria-label", tip)).children(tip),
-                  s.positioner(h.div).children(s.popup(h.div.class(`${tip}-popup`)).children(tip))
+                  tooltip.trigger(h.button.attr("aria-label", tip)).children(tip),
+                  tooltip.positioner(h.div).children(tooltip.popup(h.div.class(`${tip}-popup`)).children(tip))
                 )
             })
           )
@@ -136,10 +136,10 @@ const Independent = Component.define({
                   event._tag === "Opened"
                     ? IndependentMessage.OpenedTip({ tip })
                     : IndependentMessage.DismissedTip({ tip }),
-                view: (s) =>
+                view: (tooltip) =>
                   h.span(
-                    s.trigger(h.button.attr("aria-label", tip)).children(tip),
-                    s.positioner(h.div).children(s.popup(h.div).children(tip))
+                    tooltip.trigger(h.button.attr("aria-label", tip)).children(tip),
+                    tooltip.positioner(h.div).children(tooltip.popup(h.div).children(tip))
                   )
               })
             )
@@ -194,10 +194,10 @@ const Deferred = Component.define({
                   event._tag === "Opened"
                     ? DeferredMessage.RequestedOpen({ tip })
                     : DeferredMessage.RequestedClose({ tip }),
-                view: (s) =>
+                view: (tooltip) =>
                   h.span(
-                    s.trigger(h.button.attr("aria-label", tip)).children(tip),
-                    s.positioner(h.div).children(s.popup(h.div).children(tip))
+                    tooltip.trigger(h.button.attr("aria-label", tip)).children(tip),
+                    tooltip.positioner(h.div).children(tooltip.popup(h.div).children(tip))
                   )
               })
             )
@@ -334,7 +334,7 @@ describe("Tooltip", () => {
     }))
 
   it("parts clear stale state and add their styles after the consumer's", () => {
-    const s = Story.parts(Tooltip, {
+    const tooltip = Story.parts(Tooltip, {
       model: {
         hovered: false,
         focused: false,
@@ -346,9 +346,9 @@ describe("Tooltip", () => {
       },
       props: { open: false, positionMethod: "fixed" }
     })
-    const trigger = View.build(s.trigger(h.button.attr("data-popup-open", "")), [])
+    const trigger = View.build(tooltip.trigger(h.button.attr("data-popup-open", "")), [])
     assert.isUndefined(trigger.attrs["data-popup-open"])
-    const positioner = View.build(s.positioner(h.div).style({ zIndex: "10" }), [])
+    const positioner = View.build(tooltip.positioner(h.div).style({ zIndex: "10" }), [])
     assert.match(positioner.attrs.style ?? "", /^z-index:10;position:fixed;inset:auto;margin:0;/)
   })
 

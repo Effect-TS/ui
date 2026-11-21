@@ -111,20 +111,20 @@ const Page = Component.define({
           openMethod: props.openMethod ?? model.method
         },
         onEmit: on("a"),
-        view: (s) =>
+        view: (dialog) =>
           h.div(
             props.triggers
               ? h.div(
-                s.trigger(h.button.attr("id", "ta")).children("A"),
-                s.trigger(h.button.attr("id", "tb")).children("B")
+                dialog.trigger(h.button.attr("id", "ta")).children("A"),
+                dialog.trigger(h.button.attr("id", "tb")).children("B")
               )
               : props.detached
               ? null
-              : s.trigger(h.button.attr("id", "trigger")).children("Open"),
-            s.portal(h.dialog)?.children(
-              s.popup(h.div.attr("class", "popup-a")).children(
+              : dialog.trigger(h.button.attr("id", "trigger")).children("Open"),
+            dialog.portal(h.dialog)?.children(
+              dialog.popup(h.div.attr("class", "popup-a")).children(
                 h.input.attr("id", "first"),
-                props.marked ? s.initialFocus(h.input.attr("id", "second")) : h.input.attr("id", "second"),
+                props.marked ? dialog.initialFocus(h.input.attr("id", "second")) : h.input.attr("id", "second"),
                 props.siblings
                   ? h.button.attr("id", "open-b").onClick(Message.Opened({ which: "b", triggerId: null, method: null }))
                     .children("Open B")
@@ -138,10 +138,10 @@ const Page = Component.define({
           key: "b",
           props: { open: model.b, modal: props.modal },
           onEmit: on("b"),
-          view: (s) =>
+          view: (dialog) =>
             h.div(
-              s.trigger(h.button.attr("id", "trigger-b")).children("B"),
-              s.portal(h.dialog)?.children(s.popup(h.div).children(h.input.attr("id", "b-field")))
+              dialog.trigger(h.button.attr("id", "trigger-b")).children("B"),
+              dialog.portal(h.dialog)?.children(dialog.popup(h.div).children(h.input.attr("id", "b-field")))
             )
         })
         : null

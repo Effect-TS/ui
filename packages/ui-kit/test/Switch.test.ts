@@ -31,7 +31,7 @@ const Settings = Component.define({
       Switch(h, {
         props: { checked: model.notify, ...h.props },
         onToggle: ({ checked }) => SettingsMessage.ToggledNotify({ checked }),
-        view: (s) => h.label(s.root(h.button).children(s.thumb(h.span.class("thumb"))), "Notifications")
+        view: (parts) => h.label(parts.root(h.button).children(parts.thumb(h.span.class("thumb"))), "Notifications")
       }),
       h.output(String(model.rowClicks))
     )
@@ -49,7 +49,7 @@ const rootOf = (
   props: SwitchProps,
   element: SwitchButton<never> = h.button,
   chain: (root: SwitchButton<never>) => SwitchButton<never> = (root) => root
-) => View.build(Switch(h, { props, view: (s) => chain(s.root(element)).children("label") }), [])
+) => View.build(Switch(h, { props, view: (parts) => chain(parts.root(element)).children("label") }), [])
 
 describe("Switch", () => {
   it.effect("a click asks for the other value, and the root and thumb show the value they were given", () =>
@@ -148,13 +148,13 @@ describe("Switch", () => {
       .attr("data-readonly", "")
       .attr("data-required", "")
     const thumbOf = (checked: boolean, span: SwitchSpan<never>) =>
-      View.build(Switch(h, { props: { checked }, view: (s) => s.thumb(span).children("on") }), [])
+      View.build(Switch(h, { props: { checked }, view: (parts) => parts.thumb(span).children("on") }), [])
     const finished = thumbOf(false, element)
     assert.deepStrictEqual(finished.attrs, { class: "thumb", "data-unchecked": "" })
     assert.strictEqual(finished.children.length, 1)
     // The part returns the builder, so a second call takes it as its
     // element. Both write when the span is built, the inner call last.
-    const builder = Switch(h, { props: { checked: false, required: true }, view: (s) => s.thumb(element) })
+    const builder = Switch(h, { props: { checked: false, required: true }, view: (parts) => parts.thumb(element) })
     assert.deepStrictEqual(thumbOf(true, builder).attrs, {
       class: "thumb",
       "data-unchecked": "",
@@ -170,7 +170,8 @@ describe("Switch", () => {
         Switch(h, {
           props,
           onToggle: () => undefined,
-          view: (s) => when === "before" ? s.root(h.button.onClick(handler)) : s.root(h.button).onClick(handler)
+          view: (parts) =>
+            when === "before" ? parts.root(h.button.onClick(handler)) : parts.root(h.button).onClick(handler)
         }),
         []
       )

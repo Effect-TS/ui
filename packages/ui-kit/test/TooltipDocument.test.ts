@@ -164,11 +164,11 @@ const Page = Component.define({
         disableAnchorTracking: h.props.disableAnchorTracking,
         anchor: h.props.anchor
       },
-      view: (s) =>
+      view: (tooltip) =>
         h.div.attr("id", "clip").children(
-          h.div.attr("id", "layer").children(s.trigger(h.button.attr("id", "trigger")).children("B")),
-          s.positioner(h.div.attr("id", "positioner").style(model.tinted ? { zIndex: "10" } : {})).children(
-            s.popup(h.div.attr("id", "popup")).children(s.arrow(h.div), "Bold")
+          h.div.attr("id", "layer").children(tooltip.trigger(h.button.attr("id", "trigger")).children("B")),
+          tooltip.positioner(h.div.attr("id", "positioner").style(model.tinted ? { zIndex: "10" } : {})).children(
+            tooltip.popup(h.div.attr("id", "popup")).children(tooltip.arrow(h.div), "Bold")
           )
         )
     })

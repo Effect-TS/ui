@@ -25,9 +25,9 @@ const Toolbar = Component.define({
       key: "bold",
       props: { open: model.open },
       onEmit: (event) => event._tag === "Dismissed" ? ToolbarMessage.DismissedTip() : undefined,
-      view: (t) =>
+      view: (tooltip) =>
         Toggle(h, {
-          element: t.trigger(h.button),
+          element: tooltip.trigger(h.button),
           props: { pressed: model.bold },
           onToggle: ({ pressed }) => ToolbarMessage.ToggledBold({ pressed })
         }).children("Bold")

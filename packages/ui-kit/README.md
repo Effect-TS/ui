@@ -3,16 +3,16 @@
 Unstyled components for [`@effect/ui`](../ui). Each one owns the behaviour, ARIA, data attributes and any form field, and you draw the markup with your own `h` builders and style it. A component that keeps no state, such as `Switch`, is a plain view function and takes no `key`.
 
 ```ts
-import { Switch } from "@effect/ui-kit"
+import { Checkbox } from "@effect/ui-kit"
 
 // In a view:
-Switch(h, {
-  props: { checked: model.notify, name: "notify" },
-  onToggle: ({ checked }) => Message.ToggledNotify({ checked }),
-  view: (s) =>
+Checkbox(h, {
+  props: { checked: model.terms, name: "terms" },
+  onEmit: { Toggled: ({ checked }) => Message.ToggledTerms({ checked }) },
+  view: (checkbox) =>
     h.label(
-      s.root(h.button.class("switch")).children(s.thumb(h.span.class("thumb"))),
-      "Notifications"
+      checkbox.root(h.button.class("checkbox")).children(checkbox.indicator(h.span.class("tick"))),
+      "I accept the terms"
     )
 })
 ```

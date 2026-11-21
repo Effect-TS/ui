@@ -7,4 +7,4 @@
 
 A view value is a builder until it is built, so read a node with `View.build(builder, [])`. `View.buildOwned` is removed. A field added to a library builder under a symbol is no longer kept by its chain calls: looking for one on every copy took about half of the time to build a view.
 
-`Switch`'s parts now take the consumer's builder and return it: `s.root(h.button).children(s.thumb(h.span))`. The form field is the root's first child.
+`Switch`'s parts now take the consumer's builder and return it: `parts.root(h.button).children(parts.thumb(h.span))`. The form field is the root's first child.

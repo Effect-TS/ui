@@ -919,7 +919,7 @@ const makeCopier = (proto: object, first: ElementBuilder<any, any, any, any>): C
  * as `p.part(["h2", "h3"], ...)`.
  *
  * The result is the builder's chain type, never the callable root, so
- * `m.trigger(h.button)("Open")` doesn't compile.
+ * `menu.trigger(h.button)("Open")` doesn't compile.
  *
  * @stability experimental
  * @category models

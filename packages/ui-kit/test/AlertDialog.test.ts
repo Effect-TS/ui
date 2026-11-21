@@ -21,10 +21,10 @@ const Page = Component.define({
     AlertDialog(h, {
       props: { open: model.open },
       onEmit: { Opened: () => undefined, Dismissed: () => Message.Dismissed(), Settled: () => undefined },
-      view: (s) =>
+      view: (alertDialog) =>
         h.div(
-          s.portal(h.dialog.attr("role", "dialog").attr("closedby", "any"))
-            ?.attr("role", "region").attr("closedby", "any").children(s.popup(h.div))
+          alertDialog.portal(h.dialog.attr("role", "dialog").attr("closedby", "any"))
+            ?.attr("role", "region").attr("closedby", "any").children(alertDialog.popup(h.div))
         )
     })
 })

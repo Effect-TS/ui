@@ -68,7 +68,7 @@ const App = Component.define({
       view: () =>
         h.el("div", [
           Tip(h, { key: "a", props: { id: "a" } }),
-          Trigger(h, { key: "t", view: (parts) => h.el("i", parts.open ?? "") })
+          Trigger(h, { key: "t", view: (trigger) => h.el("i", trigger.open ?? "") })
         ])
     })
 })
@@ -228,7 +228,7 @@ describe("shared state in a Scene", () => {
         view: (_, h) => TipsProvider(h, { key: "tips", props: { label: "placed" }, view: () => h.slots.body })
       })
       const s = yield* Scene.make(Frame, {}, {
-        slots: (h) => ({ body: Trigger(h, { key: "t", view: (parts) => h.el("i", parts.label) }) })
+        slots: (h) => ({ body: Trigger(h, { key: "t", view: (trigger) => h.el("i", trigger.label) }) })
       })
       assert.strictEqual(Locator.textOf(s.root), "placed")
     }))
@@ -558,7 +558,7 @@ describe("optional owners, reports and onChange in a Story", () => {
 
   it.effect("collected sends the owner's collects.onChange message when it differs from the last", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Group, {}, { view: (parts, h) => h.el("p", parts.on ? "on" : "off") })
+      const s = yield* Scene.make(Group, {}, { view: (groupParts, h) => h.el("p", groupParts.on ? "on" : "off") })
       // The same message as for no reports.
       s.collected([false, false])
       assert.strictEqual(Locator.textOf(s.root), "off")
@@ -592,16 +592,20 @@ describe("a component that reads its own kind", () => {
     init: () => true,
     update: (open) => !open,
     view: (open, h) => {
-      const label = (name: string, parts: { readonly nested: boolean; readonly below: number }) =>
-        h.el("span", `${name} ${parts.nested ? "nested" : "outer"} ${parts.below}`)
+      const label = (name: string, nest: { readonly nested: boolean; readonly below: number }) =>
+        h.el("span", `${name} ${nest.nested ? "nested" : "outer"} ${nest.below}`)
       return Nest(h, {
         props: { open: true },
-        view: (a) =>
+        view: (outerNest) =>
           h.el("div", [
-            label("a", a),
+            label("a", outerNest),
             Nest(h, {
               props: { open: true },
-              view: (b) => h.el("div", [label("b", b), Nest(h, { props: { open }, view: (c) => label("c", c) })])
+              view: (middleNest) =>
+                h.el("div", [
+                  label("b", middleNest),
+                  Nest(h, { props: { open }, view: (innerNest) => label("c", innerNest) })
+                ])
             })
           ])
       })
@@ -623,7 +627,7 @@ describe("a component that reads its own kind", () => {
     Effect.gen(function*() {
       assert.deepStrictEqual(Story.parts(Nest, { model: 0, props: { open: true } }), { nested: false, below: 0 })
       const scene = yield* Scene.make(Nest, { open: true }, {
-        view: (parts, h) => h.el("p", parts.nested ? "nested" : "outermost")
+        view: (nest, h) => h.el("p", nest.nested ? "nested" : "outermost")
       })
       scene.expect(Locator.text("outermost")).toExist()
       scene.shared(Nest, { open: true }).expect(Locator.text("nested")).toExist()
