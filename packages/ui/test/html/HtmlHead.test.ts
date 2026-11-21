@@ -239,10 +239,7 @@ describe("HtmlHead", () => {
   })
 
   it("Head.merge ignores HtmlHead.reduce", () => {
-    const head = Head.merge<HtmlHead.Entry>({
-      entries: [Head.title("Own"), HtmlHead.reduce((below) => ({ ...below, title: "Html" }))],
-      children: []
-    })
+    const head = Head.merge(node([Head.title("Own"), HtmlHead.reduce((below) => ({ ...below, title: "Html" }))]))
     assert.deepStrictEqual(head, { title: "Own" })
   })
 

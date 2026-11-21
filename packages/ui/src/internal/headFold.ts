@@ -85,13 +85,12 @@ export const fold = <E, H>(
         if (merged.signature === undefined) conflicted.add(slot)
       }
     }
-    let head = folding.combine(node, children.map((child) => child.head), conflicted)
-    const before = folding.slots(head)
-    let reduced = false
+    const combined = folding.combine(node, children.map((child) => child.head), conflicted)
+    const before = folding.slots(combined)
+    let head = combined
     for (const entry of node.entries) {
       const reduce = folding.reducer(entry)
       if (reduce === undefined) continue
-      reduced = true
       try {
         head = reduce(head)
       } catch (error) {
@@ -99,7 +98,7 @@ export const fold = <E, H>(
         node.onError(error)
       }
     }
-    const after = reduced ? folding.slots(head) : before
+    const after = head === combined ? before : folding.slots(head)
     for (const [slot, set] of slots) if (set.signature !== undefined && !after.has(slot)) slots.delete(slot)
     const own = [pathOf(node)]
     for (const [slot, signature] of after) {

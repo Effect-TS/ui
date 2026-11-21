@@ -295,17 +295,19 @@ export const merge: <E extends { readonly _tag: string } = Entry>(
   tree: Tree<E>,
   options?: MergeOptions
 ) => Head = /* @__PURE__ */ headFold.plain((tree, options) =>
-  headFold.fold(tree, {
-    combine: (node, children, conflicted) => {
-      if (conflicted.has("title")) return { title: undefined }
-      let below: string | undefined
-      for (const child of children) if (child.title !== undefined) below = child.title
-      return { title: resolveTitle(node, below) }
-    },
-    slots: (head) => new Map(head.title === undefined ? [] : [["title", head.title]]),
-    reducer: (entry) => entry._tag === "Reduce" ? (entry as unknown as Reduce).apply : undefined
-  }, options?.onConflict === undefined ? undefined : reportTo(options.onConflict))
+  headFold.fold(tree, folding, options?.onConflict === undefined ? undefined : reportTo(options.onConflict))
 )
+
+const folding: headFold.Folding<{ readonly _tag: string }, Head> = {
+  combine: (node, children, conflicted) => {
+    if (conflicted.has("title")) return { title: undefined }
+    let below: string | undefined
+    for (const child of children) if (child.title !== undefined) below = child.title
+    return { title: resolveTitle(node, below) }
+  },
+  slots: (head) => new Map(head.title === undefined ? [] : [["title", head.title]]),
+  reducer: (entry) => entry._tag === "Reduce" ? (entry as Reduce).apply : undefined
+}
 
 const listOf = (paths: ReadonlyArray<string>): string =>
   paths.length < 2 ? paths.join("") : `${paths.slice(0, -1).join(", ")} and ${paths[paths.length - 1]}`

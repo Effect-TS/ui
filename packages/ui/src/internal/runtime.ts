@@ -550,7 +550,7 @@ export interface Instance {
   // empty Map or Set costs about 150 bytes.
   /** `Unmounted` is logged: the instance left the tree, though its Scope may still be closing. */
   left: boolean
-  /** How many instances that declare a head are in the tree at or below it: see `declaresHead`. */
+  /** How many instances whose component has a `head` are in the tree at or below it. */
   heads: number
   /** The containers of the detached children its view declares, unregistered when it leaves. */
   parked: Set<unknown> | undefined
@@ -803,7 +803,6 @@ const neutralFold: View.HeadFold<Head.Entry, Head.Head> = { merge: Head.merge, t
 
 /** The fold of a component's vocabulary, or the title-only one. */
 const foldOf = (component: Component.Any): View.HeadFold => component.elements()?.head ?? neutralFold
-const declaresHead = (component: Component.Any): boolean => component.head !== undefined
 
 interface HeadPart {
   readonly inst: Instance
@@ -1943,7 +1942,7 @@ const setup = (
           if (prune) {
             const heads = inst.heads
             if (heads === 0) return undefined
-            below = heads > (declaresHead(inst.component) ? 1 : 0)
+            below = heads > (inst.component.head !== undefined ? 1 : 0)
           }
           const part = headPart(inst, failHead, below)
           if (part !== undefined && adoption !== undefined) parts.push(part)
@@ -2003,7 +2002,7 @@ const setup = (
     if (inst.left) return
     inst.left = true
     inst.lazy = undefined
-    if (declaresHead(inst.component)) {
+    if (inst.component.head !== undefined) {
       for (let at: Instance | undefined = inst; at !== undefined; at = at.parent) at.heads--
     }
     // At once, not when the Scope closes: the host may hand out a container's handle again.
@@ -2934,7 +2933,7 @@ const setup = (
       owner === undefined || parent === undefined ? undefined : parent.author
     )
     addInstanceFinalizer(inst)
-    if (declaresHead(component)) {
+    if (component.head !== undefined) {
       for (let at: Instance | undefined = inst; at !== undefined; at = at.parent) {
         at.heads++
       }
