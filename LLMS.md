@@ -610,8 +610,8 @@ Features never import pages. Keep `AppRoute` in `routes.ts`, outside
 `pages/` and separate from `App.ts`; pages can then build links without
 importing the root component that imports them.
 
-Import `domain` through a subpath import, declared once in the app's
-`package.json`:
+From outside `domain`, import it through a subpath import, declared once in
+the app's `package.json`:
 
 ```json
 {
@@ -626,12 +626,12 @@ import { Note } from "#domain/Note"
 ```
 
 Node, TypeScript, Vite and Vitest all read the `imports` field with no other
-config, so a server entry that imports `domain` still runs under plain
-`node`. The mapping adds the `.ts`, so the specifier has none: with
+config, so a server entry that imports `domain` still runs under plain `node`.
+The mapping adds the `.ts`, so the specifier has none: with
 `rewriteRelativeImportExtensions` set, TypeScript accepts `.ts` only on a
-relative specifier. Every other import stays relative, with its `.ts`
-extension. These docs map `#domain/*` to `./src/10_ui/fixtures/domain/*.ts`
-in `ai-docs/package.json`.
+relative specifier. Between domain files, and everywhere else, imports stay
+relative, with their `.ts` extension. These docs map `#domain/*` to
+`./src/10_ui/fixtures/domain/*.ts` in `ai-docs/package.json`.
 
 Keep one file per route in `pages/`, in folders that mirror the URL. A page's
 folder is the static segments of its route's path, and its file is named after

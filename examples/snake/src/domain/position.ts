@@ -1,7 +1,8 @@
 import { Match, Schema } from "effect"
 
-import { GAME } from "../constants.ts"
 import type * as Direction from "./direction.ts"
+
+export const GRID_SIZE = 20
 
 export const Position = Schema.Struct({
   x: Schema.Number,
@@ -13,8 +14,8 @@ export const equivalence = Schema.toEquivalence(Position)
 export type Position = typeof Position.Type
 
 export const wrap = ({ x, y }: Position): Position => ({
-  x: x < 0 ? GAME.GRID_SIZE - 1 : x >= GAME.GRID_SIZE ? 0 : x,
-  y: y < 0 ? GAME.GRID_SIZE - 1 : y >= GAME.GRID_SIZE ? 0 : y
+  x: x < 0 ? GRID_SIZE - 1 : x >= GRID_SIZE ? 0 : x,
+  y: y < 0 ? GRID_SIZE - 1 : y >= GRID_SIZE ? 0 : y
 })
 
 export const move = (

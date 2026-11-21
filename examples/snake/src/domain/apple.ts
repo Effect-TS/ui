@@ -1,15 +1,14 @@
 import { Effect, Random, Schedule } from "effect"
 
-import { GAME } from "../constants.ts"
-import type { Position } from "./position.ts"
+import { GRID_SIZE, type Position } from "./position.ts"
 import * as Snake from "./snake.ts"
 
 export const generatePosition = Effect.fnUntraced(
   function*(snake: Snake.Snake) {
-    const x = yield* Random.nextIntBetween(0, GAME.GRID_SIZE, {
+    const x = yield* Random.nextIntBetween(0, GRID_SIZE, {
       halfOpen: true
     })
-    const y = yield* Random.nextIntBetween(0, GAME.GRID_SIZE, {
+    const y = yield* Random.nextIntBetween(0, GRID_SIZE, {
       halfOpen: true
     })
     const pos: Position = { x, y }
