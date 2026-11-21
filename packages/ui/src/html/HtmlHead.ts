@@ -572,13 +572,16 @@ export const attributes = (entry: Meta | Link): ReadonlyArray<readonly [string, 
   return out
 }
 
+const linkSignature = (entry: Link): string =>
+  JSON.stringify([...headAttributes.normalize(attributes(entry))].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0))
+
 const slotsOf = (head: HtmlHead): ReadonlyMap<string, string> => {
   const out = new Map<string, string>()
   if (head.title !== undefined) out.set("title", head.title)
   if (head.html.lang !== undefined) out.set("lang", head.html.lang)
   if (head.html.dir !== undefined) out.set("dir", head.html.dir)
   for (const entry of head.meta) out.set(identity(entry), JSON.stringify(attributes(entry)))
-  for (const entry of head.links) out.set(identity(entry), JSON.stringify(attributes(entry)))
+  for (const entry of head.links) out.set(identity(entry), linkSignature(entry))
   for (const entry of head.jsonLd) out.set(identity(entry), entry.json)
   for (const name in head.html.data) out.set(`html ${name}`, head.html.data[name]!)
   for (const name in head.body.data) out.set(`body ${name}`, head.body.data[name]!)

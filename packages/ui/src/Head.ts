@@ -127,6 +127,8 @@ export interface Head {
  * **Details**
  *
  * `path` names the node in a `Conflict`, and orders it among its siblings.
+ * Siblings with entries or a `reduce` in their subtree need distinct paths:
+ * a merge throws when two have none or share one, whatever their order.
  * `reduce` maps the node's value, its own entries merged with its children's
  * values, as a component's `reduceHead` does. It also gets each child's
  * value by the child's path. `onError` is called when one of the node's own

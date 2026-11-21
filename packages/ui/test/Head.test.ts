@@ -33,6 +33,18 @@ describe("Head", () => {
     assert.throws(() => Head.merge({ ...tree, onError: undefined }), /bad template/)
   })
 
+  it("rejects siblings without distinct paths, in either order", () => {
+    const at = (path: string | undefined, title: string): Head.Tree => ({ path, ...node([Head.title(title)]) })
+    for (const path of [undefined, "/App/Page"]) {
+      const a = at(path, "A")
+      const b = at(path, "B")
+      const message = path === undefined ? /two siblings have no path/ : /two siblings share the path \/App\/Page/
+      assert.throws(() => Head.merge(node([], a, b)), message)
+      assert.throws(() => Head.merge(node([], b, a)), message)
+    }
+    assert.strictEqual(Head.merge(node([], at(undefined, "A"), node([]))).title, "A")
+  })
+
   it.effect("fails only the instance whose title template throws", () =>
     Effect.gen(function*() {
       const Page = Component.define({

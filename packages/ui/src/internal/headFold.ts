@@ -1,17 +1,7 @@
-/**
- * The fold behind every vocabulary's head merge: children sorted by path, then the node's own entries
- * and its children's values, then the node's `reduce`. It tracks which paths set each single slot. A
- * slot siblings set to different values is left out until a `reduce` above them sets it, and one that
- * reaches the root unset is reported.
- */
 import type * as Head from "../Head.ts"
 
 /** @internal */
 export interface Folding<E, H> {
-  /**
-   * The node's value before its `reduce`: its own entries, then its children's values in order,
-   * without the slots in `conflicted`.
-   */
   readonly combine: (node: Head.Tree<E, H>, children: ReadonlyArray<H>, conflicted: ReadonlySet<string>) => H
   /** The single slots a value holds, each with a signature of its value. */
   readonly slots: (head: H) => ReadonlyMap<string, string>
@@ -20,7 +10,6 @@ export interface Folding<E, H> {
 interface Folded<H> {
   readonly head: H
   readonly slots: ReadonlyMap<string, string>
-  /** Which paths set each single slot of `head`. */
   readonly from: ReadonlyMap<string, ReadonlyArray<string>>
   readonly conflicts: ReadonlyMap<string, ReadonlyArray<string>>
 }
@@ -77,9 +66,17 @@ export const fold = <E, H>(
     const below = node.children.length > 1 ? [...node.children].sort(byPath) : node.children
     const children: Array<Folded<H>> = []
     const values = reduce === undefined ? undefined : new Map<string, H>()
+    let last: Head.Tree<E, H> | undefined
     for (const child of below) {
       const folded = visit(child)
       if (folded === nothing) continue
+      if (last !== undefined && last.path === child.path) {
+        throw new Error(
+          `Head: two siblings ${child.path === undefined ? "have no path" : `share the path ${child.path}`}, ` +
+            "so their order is ambiguous. Give each sibling with head entries its own path"
+        )
+      }
+      last = child
       children.push(folded)
       if (values !== undefined && child.path !== undefined) values.set(child.path, folded.head)
     }

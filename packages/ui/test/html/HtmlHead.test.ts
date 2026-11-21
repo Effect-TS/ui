@@ -26,6 +26,7 @@ describe("HtmlHead", () => {
       HtmlHead.meta({ property: "og:site_name", content: "Site" }),
       HtmlHead.meta({ name: "author", content: "Ada" }),
       HtmlHead.link({ rel: "stylesheet", href: "/a.css" }),
+      HtmlHead.link({ rel: "preload", href: "/font.woff2", as: "font" }),
       HtmlHead.jsonLd({ a: 1 }, { key: "page" }),
       HtmlHead.htmlData("data-theme", "light"),
       HtmlHead.htmlClass("a")
@@ -36,6 +37,7 @@ describe("HtmlHead", () => {
       HtmlHead.meta({ name: "description", content: "b" }),
       HtmlHead.meta({ property: "og:site_name", content: "Site" }),
       HtmlHead.link({ rel: "stylesheet", href: "/b.css" }),
+      HtmlHead.link({ as: "font", href: "/font.woff2", rel: "preload" }),
       HtmlHead.jsonLd({ b: 1 }, { key: "page" }),
       HtmlHead.htmlData("data-theme", "dark"),
       HtmlHead.htmlClass("b")
@@ -65,6 +67,7 @@ describe("HtmlHead", () => {
       "/reset.css",
       "/app.css",
       "/a.css",
+      "/font.woff2",
       "/b.css"
     ])
     assert.deepStrictEqual(folded.head.jsonLd, [])
@@ -119,7 +122,11 @@ describe("HtmlHead", () => {
     assert.strictEqual(a.json, "{\"a\":{\"c\":\"\\u003c/script>\",\"d\":[1,\"x\"]},\"b\":1}")
     assert.strictEqual(a.json, b.json)
     const head = HtmlHead.merge(
-      node([a], node([b]), node([HtmlHead.jsonLd({ b: 2 }, { key: "k" }), HtmlHead.jsonLd({ b: 3 }, { key: "k" })]))
+      node(
+        [a],
+        { path: "/b", ...node([b]) },
+        { path: "/k", ...node([HtmlHead.jsonLd({ b: 2 }, { key: "k" }), HtmlHead.jsonLd({ b: 3 }, { key: "k" })]) }
+      )
     )
     assert.deepStrictEqual(head.jsonLd.map((entry) => entry.json), [a.json, "{\"b\":3}"])
   })
