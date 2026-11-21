@@ -26,6 +26,8 @@ A component that keeps no state, such as `Switch`, is a plain view function inst
 - [Button](src/Button.ts): a native button that can stay focusable while disabled.
 - [Checkbox](src/Checkbox.ts): a controlled checkbox with an indicator.
 - [Dialog](src/Dialog.ts): a popup in the top layer whose open state lives in your Model, as a modal, a focus trap or a non-modal panel, with `DialogTrigger` to open it from another component.
+- [Drawer](src/Drawer.ts): a `Dialog` that slides in from an edge of the screen. A swipe toward that edge dismisses it once it travels far enough or is released fast enough. It has snap points, drawers nested in one another, and swipe areas that open it.
+- [DrawerProvider](src/Drawer.ts): scales the page behind the drawers inside it while one is open, as a native sheet does.
 - [Field](src/Field.ts): a label, a description and an error for a form control or a group of them, such as a range slider, with its validity, touched and focused state.
 - [Input](src/Input.ts): a native text input whose value lives in your Model.
 - [Meter](src/Meter.ts): a measurement within a known range, such as disk usage, whose value lives in your Model, with a label, a value text and an indicator sized to the value.
@@ -39,3 +41,4 @@ A component that keeps no state, such as `Switch`, is a plain view function inst
 ## Other modules
 
 - [Positioning](src/Positioning.ts): places a popup of your own against an anchor, as `Tooltip` places its popup. `Positioning.place` computes a position from rectangles, and the `Positioning.TrackPosition` mount keeps a positioner next to its anchor.
+- [VirtualKeyboard](src/VirtualKeyboard.ts): tells which band of the screen the software keyboard leaves visible, read from `visualViewport`, so content fixed to the bottom can sit above it. `VirtualKeyboard.step` works out the band from the viewport's sizes, without reading the DOM. `VirtualKeyboard.watch` is a Stream of the band, and the `VirtualKeyboard.TrackKeyboard` mount writes the covered height on its node as `--keyboard-inset`.

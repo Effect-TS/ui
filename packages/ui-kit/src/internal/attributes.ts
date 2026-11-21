@@ -7,6 +7,11 @@ export const flag = (on: boolean | undefined): string | undefined => on === true
 export const withStyle = (consumer: string | undefined, own: string): string =>
   consumer === undefined || consumer.trim() === "" ? own : consumer.replace(/;\s*$/, "") + ";" + own
 
+export const idOf = (builder: unknown): string | null => {
+  const id = (builder as { readonly attrs?: Readonly<Record<string, string>> | undefined }).attrs?.id
+  return id === undefined || id === "" ? null : id
+}
+
 // Visually hidden, but read by screen readers.
 export const visuallyHidden =
   "position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"
