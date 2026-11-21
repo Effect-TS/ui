@@ -7135,7 +7135,7 @@ const setup = (
 
   const keep = (entry: Kept) => {
     const inner = entry.inner
-    if (inner._tag === "Child" && inner.inst.waiting) return endKept(entry, true)
+    if (inner._tag === "Child" && inner.inst.waiting) return dropKept(entry)
     entry.at = undefined
     if (inner._tag === "Fallback") closeAll(entry.drawer, inner)
     entry.drawer = entry.author
@@ -7186,10 +7186,10 @@ const setup = (
     return false
   }
 
-  const endKept = (entry: Kept, pulled?: boolean) => {
+  const endKept = (entry: Kept) => {
     dropKept(entry)
     const inner = entry.inner
-    if (!pulled) pull(entry)
+    pull(entry)
     viewChanged = true
     if (inner._tag === "Fallback") return closeAll(entry.drawer, inner)
     const child = inner.inst
@@ -7333,8 +7333,9 @@ const setup = (
         const entry = rendered.scoped ? entryAt(inst.author, rendered.v) : undefined
         if (entry !== undefined && entry.inner === inner) {
           if (entry.at !== rendered) return
-          if (!entry.author.left) return keep(entry)
-          dropKept(entry)
+          if (!entry.author.left) keep(entry)
+          else dropKept(entry)
+          if (entry.at === undefined) return
         }
         return closeAll(inst, inner)
       }

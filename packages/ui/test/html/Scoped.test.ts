@@ -407,6 +407,96 @@ describe("scoped children in a receiver that waits for its Layer", () => {
     }
   })
 
+  let drafts = 0
+  const Where = Schema.Literals(["slot", "aside", "none", "ended"])
+  const draft = (name: string) =>
+    Component.define({ name, scoped: true, model: Schema.String, message: Schema.Never, elements: Html }).make({
+      init: () => side(drafts++),
+      update: (text) => text,
+      view: (text, h) => h.input.value(text)
+    })
+  const Draft = draft("Draft")
+  const SlowDraft = draft("SlowDraft")
+    .pipe(Component.provide(Layer.effect(Slow, Effect.suspend(() => Effect.as(gate, "ready")))))
+  const Moving = Component.define({ name: "Moving", scoped: false, model: Where, message: Where, elements: Html })
+    .make({
+      init: () => "slot" as const,
+      update: (_, where) => where,
+      view: (where, h) =>
+        h.scoped(({ model }) => model !== "ended", (s) => {
+          const written = Draft(s, { key: "d" })
+          return h.main(
+            Gated(h, { key: "g", slots: { body: where === "slot" || where === "ended" ? written : null } }),
+            h.aside(where === "aside" ? written : null)
+          )
+        })
+    })
+  const Restarting = Component.define({
+    name: "Restarting",
+    scoped: false,
+    model: Where,
+    message: Where,
+    elements: Html
+  }).make({
+    init: () => "slot" as const,
+    update: (_, where) => where,
+    view: (where, h) =>
+      h.scoped((s) => {
+        const written = SlowDraft(s, { key: "d" })
+        return h.main(h.p(where === "slot" ? written : null), h.aside(where === "aside" ? written : null))
+      })
+  })
+
+  it.effect("take the server's Model and new nodes when moved out of the receiver while it waits", () =>
+    Effect.gen(function*() {
+      drafts = 0
+      const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Moving, {}))
+      const served = app.querySelector("input")!
+      const root = yield* BrowserHost.mountEffect(Moving, {}, app, { state })
+      root.send("aside")
+      yield* tick
+      const moved = app.querySelector<HTMLInputElement>("aside input")!
+      assert.notStrictEqual(moved, served)
+      assert.strictEqual(moved.value, "server")
+      yield* open
+      yield* root.adopted
+      assert.deepStrictEqual(Array.from(app.querySelectorAll("input")), [moved])
+    }).pipe(Effect.scoped))
+
+  it.effect.each([["none", "server"], ["ended", "client"]] as const)(
+    "left out of the slot as the receiver resumes (%s), start as the %s's when written again",
+    ([left, expected]) =>
+      Effect.gen(function*() {
+        drafts = 0
+        const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Moving, {}))
+        const root = yield* BrowserHost.mountEffect(Moving, {}, app, { state })
+        root.send(left)
+        yield* tick
+        yield* open
+        yield* root.adopted
+        assert.strictEqual(app.querySelector("input"), null)
+        root.send("aside")
+        yield* tick
+        assert.strictEqual(app.querySelector<HTMLInputElement>("aside input")!.value, expected)
+      }).pipe(Effect.scoped)
+  )
+
+  it.effect("start again with the server's Model when moved as they wait for their own Layer", () =>
+    Effect.gen(function*() {
+      drafts = 0
+      const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Restarting, {}))
+      const root = yield* BrowserHost.mountEffect(Restarting, {}, app, { state })
+      const served = app.querySelector("input")!
+      root.send("aside")
+      yield* tick
+      yield* open
+      yield* root.adopted
+      const moved = app.querySelector<HTMLInputElement>("aside input")!
+      assert.deepStrictEqual(Array.from(app.querySelectorAll("input")), [moved])
+      assert.notStrictEqual(moved, served)
+      assert.strictEqual(moved.value, "server")
+    }).pipe(Effect.scoped))
+
   it.effect("get no message sent as a flush ended them, when that flush lists them again", () =>
     Effect.gen(function*() {
       const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Rows, {}))
