@@ -178,7 +178,7 @@ const owning = (
 }
 
 describe("p.child", () => {
-  it.effect("an owned child's event goes through the declaring component's update", () =>
+  it.effect("an owned child's event goes through the declaring component's update, and replays from the log", () =>
     Effect.gen(function*() {
       const root = yield* TestHost.mount(App, {})
       Locator.fire(element(root, "Copy"), "click")
@@ -193,6 +193,12 @@ describe("p.child", () => {
         "/App DomEvent Clicked"
       ])
       assert.strictEqual(element(root, "picked c, clicked c").attrs["data-count"], "2")
+      // @ts-expect-error Story.fromLog's signature takes no headless component, though the replay runs one
+      const replay = Story.fromLog(Combo, root.log())
+      assert.strictEqual(replay.path, "/App/Combo[combo]")
+      assert.strictEqual(replay.replayed, 2)
+      assert.isUndefined(replay.divergence)
+      assert.deepStrictEqual(replay.model, ["picked c", "closed"])
     }).pipe(provideHost))
 
   it.effect("an event the child emits from init goes to the declaring component", () =>
