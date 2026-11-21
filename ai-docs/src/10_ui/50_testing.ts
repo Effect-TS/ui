@@ -28,7 +28,7 @@ import {
   NoteEditorNoDeps,
   SaveNote
 } from "./fixtures/notes/components/NoteEditor.ts"
-import { type Note, NoteSaveError } from "./fixtures/notes/domain/Note.ts"
+import type { Note } from "./fixtures/notes/domain/Note.ts"
 import { Notes } from "./fixtures/notes/services/Notes.ts"
 import { NotePageNoDeps } from "./fixtures/pages/notes/NotePage.ts"
 import { NotesIndexNoDeps } from "./fixtures/pages/NotesIndex.ts"
@@ -81,8 +81,10 @@ describe("NoteEditor", () => {
       // definition matches any args; `pending` holds them.
       s.send(NoteEditorMessage.RequestedSave()).expectExact(SaveNote)
       assert.deepStrictEqual(s.pending[0].command.args, { note: edited })
-      // `resolve` takes the Command's own result. `fail` takes its typed error.
-      s.resolve(SaveNote, edited)
+      // `SaveNote` returns `NoteEditorMessage`, so `resolve` takes the message
+      // itself. A Command mapped with `Command.match` or `Command.map` resolves
+      // with its own value (or fails with `fail`) and runs the mapping in the test.
+      s.resolve(SaveNote, NoteEditorMessage.SucceededSaveNote({ note: edited }))
       assert.strictEqual(s.model.saved, edited.body)
       // An event the component emitted is acknowledged by naming it.
       s.emitted(NoteEditorEvents.Saved({ note: edited }))
@@ -101,7 +103,7 @@ describe("NoteEditor", () => {
         .click(HtmlLocator.role("button", { name: "Save" }))
         .expectExact(SaveNote)
         .expect(HtmlLocator.role("button", { name: "Saving…" })).toBeDisabled(false)
-        .resolve(SaveNote, edited)
+        .resolve(SaveNote, NoteEditorMessage.SucceededSaveNote({ note: edited }))
         .emitted(NoteEditorEvents.Saved({ note: edited }))
         .expect(HtmlLocator.role("button", { name: "Save" })).toBeDisabled()
     }))
@@ -114,7 +116,7 @@ describe("NoteEditor", () => {
       s.type(body, edited.body).keydown(body, "s", { ctrl: true })
       assert.isTrue(s.defaultPrevented)
       s.expectExact(SaveNote)
-        .resolve(SaveNote, edited)
+        .resolve(SaveNote, NoteEditorMessage.SucceededSaveNote({ note: edited }))
         .emitted(NoteEditorEvents.Saved({ note: edited }))
       // Any other step resets it.
       assert.isFalse(s.defaultPrevented)
@@ -152,7 +154,7 @@ describe("NoteEditor", () => {
       const s = yield* HtmlScene.make(NoteEditor, { note })
       s.type(body, edited.body)
         .submit(body)
-        .fail(SaveNote, new NoteSaveError({ reason: "You are offline" }))
+        .resolve(SaveNote, NoteEditorMessage.FailedSaveNote({ reason: "You are offline" }))
         .expect(HtmlLocator.role("alert")).toHaveText("You are offline")
     }))
 })
@@ -212,15 +214,20 @@ describe("NotesIndex", () => {
 it.layer(SaveNote.layer.pipe(Layer.provideMerge(Notes.layerMemory([note]))), { buildPerTest: true })(
   "SaveNote",
   (it) => {
-    it.effect("writes through Notes, and fails with a typed error", () =>
+    it.effect("writes through Notes, and turns a failure into a message", () =>
       Effect.gen(function*() {
         const notes = yield* Notes
-        // `.effect` is the Command's work, before any `Command.match`.
-        assert.deepStrictEqual(yield* SaveNote.make({ note: edited }).effect, edited)
+        // `.effect` is the Command's work.
+        assert.deepStrictEqual(
+          yield* SaveNote.make({ note: edited }).effect,
+          NoteEditorMessage.SucceededSaveNote({ note: edited })
+        )
         assert.deepStrictEqual(yield* notes.get(note.id), edited)
 
-        const error = yield* Effect.flip(SaveNote.make({ note: { ...note, title: "" } }).effect)
-        assert.strictEqual(error._tag, "NoteSaveError")
+        assert.deepStrictEqual(
+          yield* SaveNote.make({ note: { ...note, title: "" } }).effect,
+          NoteEditorMessage.FailedSaveNote({ reason: "A note needs a title" })
+        )
       }))
   }
 )

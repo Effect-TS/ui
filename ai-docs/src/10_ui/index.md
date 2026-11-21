@@ -81,17 +81,48 @@ A component with `shares` takes the `Provider` suffix, as in
 `h.shared.provider`. A reader of several owners names each one after its
 owner instead, such as `tooltip` and `theme`.
 
-Map each `Command.Service` to its messages once, beside the Message union,
-and call that function from `update`. A result is mapped where the Command
-is issued, so nothing else ties `SaveNote` to `SucceededSaveNote`:
+When only one component consumes a Command's result, return that component's
+message directly from the Command's body instead of wrapping a raw result in a
+second helper. Because a Command already lives in the file of the component
+that runs it, this is the usual form for an app's own Commands. Handle typed
+failures inside the body with `Effect.match` so both channels become messages:
 
 ```ts
-const saveNote = (note: Note) =>
-  SaveNote.make({ note }).pipe(Command.match({
-    onSuccess: (note) => NoteEditorMessage.SucceededSaveNote({ note }),
-    onFailure: (error) => NoteEditorMessage.FailedSaveNote({ reason: error.reason })
-  }))
+export class SaveNote extends Command.Service<SaveNote>()(
+  "notes/SaveNote",
+  { args: { note: Note }, mode: "queue", invalidates: () => [NotesTag] },
+  Effect.gen(function*() {
+    const notes = yield* Notes
+    return ({ note }) =>
+      notes.save(note).pipe(
+        Effect.match({
+          onSuccess: (note) => NoteEditorMessage.SucceededSaveNote({ note }),
+          onFailure: (error) => NoteEditorMessage.FailedSaveNote({ reason: error.reason })
+        })
+      )
+  })
+) {}
 ```
+
+A body that leaves a typed error still produces an unmatched Command, which
+`$.run` rejects. In a `Story` or `Scene`, resolve a Command that returns a
+message with the message itself:
+`s.resolve(SaveNote, NoteEditorMessage.SucceededSaveNote({ note }))`.
+
+Use `Command.match`, `Command.map` and `Command.asNoop` for a Command that
+cannot know its caller's messages: one from a library, such as `Router.replace`,
+or one that two components issue:
+
+```ts
+Router.replace(AppRoute, route).pipe(Command.map((outcome) => Message.CompletedReplace({ outcome })))
+Router.replace(AppRoute, route).pipe(Command.asNoop)
+```
+
+When a shared or library Command can fail, map both channels at the issue site
+with `Command.match({ onSuccess, onFailure })` (or in a small helper beside the
+Message union when several handlers issue it). In a `Story` or `Scene`, a
+mapped Command resolves with its own value via `s.resolve` or fails with its
+typed error via `s.fail`, and the mapping runs in the test.
 
 Never write a no-op message, such as `Noop` or a tag added only so a result
 has something to send. A Command with nothing to report ends in `Component.noop`,

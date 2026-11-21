@@ -32,34 +32,31 @@ export const NoteEditorEvents = UiSchema.TaggedEnum({ Saved: { note: Note } })
 // `Notes`. `Command.make` is only for bodies that need no service. Calling
 // `fetch` in one compiles, but a test can't fake it.
 //
-// The command lives in the file of the component that runs it. A second
-// component that needs the same write shares `Notes.save` and keeps its own
-// command.
+// The command lives in the file of the component that runs it. Because only
+// `NoteEditor` consumes its result, its body returns `NoteEditorMessage`
+// directly, turning both success and failure into messages with `Effect.match`.
+// A second component that needs the same write shares `Notes.save` and keeps
+// its own command.
 export class SaveNote extends Command.Service<SaveNote>()(
   "notes/SaveNote",
   {
     args: { note: Note },
     // Saves from one editor run one at a time, in order.
     mode: "queue",
-    // Required. Returns the tags of the queries a run makes stale, or `[]`.
+    // Optional. Returns the tags of the queries a run makes stale.
     invalidates: () => [NotesTag]
   },
   Effect.gen(function*() {
     const notes = yield* Notes
-    return ({ note }) => notes.save(note)
+    return ({ note }) =>
+      notes.save(note).pipe(
+        Effect.match({
+          onSuccess: (note) => NoteEditorMessage.SucceededSaveNote({ note }),
+          onFailure: (error) => NoteEditorMessage.FailedSaveNote({ reason: error.reason })
+        })
+      )
   })
 ) {}
-
-// Each Command maps to its messages once, here, next to the Message union
-// and the Command. This function is all that ties `SucceededSaveNote` and
-// `FailedSaveNote` to `SaveNote`, so `update` calls it and never maps the
-// Command inline. `SaveNote` can fail, so `Command.match` maps
-// its success and its failure. A Command that can't fail takes `Command.map`.
-const saveNote = (note: Note) =>
-  SaveNote.make({ note }).pipe(Command.match({
-    onSuccess: (note) => NoteEditorMessage.SucceededSaveNote({ note }),
-    onFailure: (error) => NoteEditorMessage.FailedSaveNote({ reason: error.reason })
-  }))
 
 // The editor is large, so it is written in pieces. `Component.define`
 // takes what nothing is inferred from: the name and the Schemas, plus
@@ -106,7 +103,7 @@ const save = NoteEditorDef.update("RequestedSave", (model, _message, $) =>
     // before returned, and returns a step, so `.run` follows it. Ctrl+S can
     // save while the menu is open, so a save closes it. `$.run` only takes
     // Commands whose result is one of this component's messages.
-    : $.combine(closeActions, clearError).run(saveNote({ ...$.props.note, body: model.draft })))
+    : $.combine(closeActions, clearError).run(SaveNote.make({ note: { ...$.props.note, body: model.draft } })))
 
 // Choosing a menu item closes the menu, and the confirm dialog's state is in
 // the Model, like any other.
