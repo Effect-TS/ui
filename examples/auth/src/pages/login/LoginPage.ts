@@ -58,23 +58,23 @@ const FormField = <M>(h: View.H<M>, options: {
   readonly label: string
   readonly type: "email" | "password"
   readonly placeholder: string
-  readonly field: LoginField
+  readonly state: LoginField
   readonly disabled: boolean
   readonly onUpdate: (value: string) => M
 }) => {
-  const { field } = options
+  const { state } = options
   return Field(h, {
     key: options.key,
-    props: { invalid: invalidOf(field), filled: field.value !== "", disabled: options.disabled },
-    view: (f) =>
-      f.root(h.div).children(
+    props: { invalid: invalidOf(state), filled: state.value !== "", disabled: options.disabled },
+    view: (field) =>
+      field.root(h.div).children(
         h.div.class("flex items-center gap-2 mb-1").children(
-          f.label(h.label).class("block text-sm font-medium text-gray-700").children(options.label),
-          field._tag === "Valid" && h.span.class("text-green-600 text-sm").children("✓")
+          field.label(h.label).class("block text-sm font-medium text-gray-700").children(options.label),
+          state._tag === "Valid" && h.span.class("text-green-600 text-sm").children("✓")
         ),
         Input(h, {
-          element: f.control(h.input),
-          props: { value: field.value },
+          element: field.control(h.input),
+          props: { value: state.value },
           onUpdate: ({ value }) => options.onUpdate(value)
         })
           .attr("type", options.type)
@@ -83,8 +83,8 @@ const FormField = <M>(h: View.H<M>, options: {
             "w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500",
             "disabled:bg-gray-100 data-valid:border-green-500 data-invalid:border-red-500"
           ),
-        field._tag === "Invalid" &&
-          f.error(h.div)?.class("text-red-600 text-sm mt-1").children(field.errors[0])
+        state._tag === "Invalid" &&
+          field.error(h.div)?.class("text-red-600 text-sm mt-1").children(state.errors[0])
       )
   })
 }
@@ -142,7 +142,7 @@ export const LoginPageNoDeps = Component.define({
               label: "Email",
               type: "email",
               placeholder: "you@example.com",
-              field: validated.fields.email,
+              state: validated.fields.email,
               disabled: model.submitting,
               onUpdate: (value) => LoginMessage.ChangedEmail({ value })
             }),
@@ -151,7 +151,7 @@ export const LoginPageNoDeps = Component.define({
               label: "Password",
               type: "password",
               placeholder: "Enter your password",
-              field: validated.fields.password,
+              state: validated.fields.password,
               disabled: model.submitting,
               onUpdate: (value) => LoginMessage.ChangedPassword({ value })
             }),
