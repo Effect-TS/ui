@@ -1,7 +1,7 @@
 import type { View } from "@effect/ui"
 import { Option } from "effect"
+import { FileTreeEntry, findEntry, formatFileSize } from "../../domain/FileTree.ts"
 import { EntryList, filesUrl } from "../../files/components/EntryList.ts"
-import { FileTreeEntry, findEntry, formatFileSize } from "../../files/domain/FileTree.ts"
 import { AppRoute } from "../../routes.ts"
 
 const filesIndexUrl = AppRoute.print(AppRoute.FilesIndex())
