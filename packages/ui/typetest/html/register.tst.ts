@@ -19,6 +19,7 @@ describe("@effect/ui/html/register", () => {
       message: Schema.Literal("Save")
     }).view((_, h) => {
       expect(Button<"Save">).type.not.toBeCallableWith(h, "Delete")
+      expect((h: View.H<never>) => h.span).type.not.toBeCallableWith(h)
       return Button(h, "Save")
     })
   })
@@ -43,18 +44,6 @@ describe("@effect/ui/html/register", () => {
         expect(h.p).type.toBe<Html.Tags<never>["p"]>()
         return h.p(Label(h, "Hello"))
       }
-    })
-  })
-
-  it("rejects passing a component's h with messages to a View.H<never> helper", () => {
-    const Label = (h: View.H<never>, text: string) => h.span(text)
-    Component.define({
-      name: "Page",
-      model: Schema.Null,
-      message: Schema.Literal("ClickedSave")
-    }).view((_, h) => {
-      expect(Label).type.not.toBeCallableWith(h, "Total")
-      return h.div
     })
   })
 })
