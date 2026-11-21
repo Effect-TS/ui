@@ -3,7 +3,7 @@ import { Button, Field, Input } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Duration, Effect, Option, Schema } from "effect"
 import { Session } from "../../auth/domain/Session.ts"
-import { AppRoute, homeRoute } from "../../routes.ts"
+import { AppRoute, LoggedOutRoute } from "../../routes.ts"
 
 const Rule = Validation.Rule
 
@@ -26,20 +26,21 @@ export class InvalidCredentials extends Schema.TaggedError<InvalidCredentials>()
   message: Schema.String
 }) {}
 
+const runSimulateAuthRequest: (
+  args: { readonly email: string; readonly password: string }
+) => Effect.Effect<Session, InvalidCredentials> = Effect.fn("auth/SimulateAuthRequest")(function*({ email, password }) {
+  yield* Effect.sleep(Duration.seconds(1))
+  if (password !== "password") {
+    return yield* new InvalidCredentials({ message: "Invalid credentials" })
+  }
+  const [name] = email.split("@")
+  return { userId: "1", email, name: name === "" ? email : name }
+})
+
 export class SimulateAuthRequest extends Command.Service<SimulateAuthRequest>()(
   "auth/SimulateAuthRequest",
   { args: { email: Schema.String, password: Schema.String } },
-  Effect.gen(function*() {
-    return ({ email, password }) =>
-      Effect.gen(function*() {
-        yield* Effect.sleep(Duration.seconds(1))
-        if (password !== "password") {
-          return yield* new InvalidCredentials({ message: "Invalid credentials" })
-        }
-        const [name] = email.split("@")
-        return { userId: "1", email, name: name === "" ? email : name } satisfies Session
-      })
-  })
+  Effect.succeed(runSimulateAuthRequest)
 ) {}
 
 const simulateAuthRequest = (email: string, password: string) =>
@@ -164,7 +165,9 @@ export const LoginPageNoDeps = Component.define({
           ),
         h.div.class("mt-6 text-center").children(
           h.span.class("text-gray-600").children("Back to "),
-          h.a.attr("href", AppRoute.print(homeRoute)).class("text-blue-500 hover:underline").children("Home")
+          h.a.attr("href", AppRoute.print(LoggedOutRoute.Home())).class("text-blue-500 hover:underline").children(
+            "Home"
+          )
         )
       )
     )

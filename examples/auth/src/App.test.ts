@@ -6,17 +6,21 @@ import { Effect, Layer, Option } from "effect"
 import { KeyValueStore } from "effect/persistence"
 import { TestClock } from "effect/testing"
 import { App, appProps } from "./App.ts"
-import { type Session, sessionStore } from "./auth/domain/Session.ts"
+import { type Session, SessionStore } from "./auth/domain/Session.ts"
 import { AppRoute } from "./routes.ts"
 
 const alice: Session = { userId: "1", email: "alice@example.com", name: "alice" }
 
 const AppTest = (url: string) =>
-  Layer.mergeAll(Router.memory({ routes: AppRoute, url }), KeyValueStore.layerMemory, TestHost.layer())
+  Layer.mergeAll(
+    Router.memory({ routes: AppRoute, url }),
+    SessionStore.layer.pipe(Layer.provide(KeyValueStore.layerMemory)),
+    TestHost.layer()
+  )
 
-const storedSession = Effect.flatMap(sessionStore, (store) => store.get)
+const storedSession = Effect.flatMap(SessionStore, (store) => store.get)
 
-const storeSession = (session: Session) => Effect.flatMap(sessionStore, (store) => store.set(session))
+const storeSession = (session: Session) => Effect.flatMap(SessionStore, (store) => store.set(session))
 
 const currentUrl = Effect.map(Router.Router, (router) => router.location().url)
 
