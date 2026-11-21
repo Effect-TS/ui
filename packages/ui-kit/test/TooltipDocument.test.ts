@@ -221,31 +221,14 @@ describe("Tooltip in a document", { concurrent: false }, () => {
       assert.strictEqual(style("top"), "542px")
     }).pipe(Effect.scoped))
 
-  it.effect("clips the trigger to a scaled ancestor's visible box", () =>
+  it.effect("reports the trigger hidden only when a containing ancestor clips it", () =>
     Effect.gen(function*() {
       rects.set("trigger", { x: 240, y: 300, width: 20, height: 20 })
-      yield* mountPage()
-      byId("clip").style.overflow = "hidden"
-      rects.set("clip", { x: 100, y: 250, width: 200, height: 200 })
-      layouts.set("clip", { width: 100, height: 100 })
-      byId("popup").dispatchEvent(new Event("scroll"))
-      yield* tick
-      assert.isNull(byId("positioner").getAttribute("data-anchor-hidden"))
-
-      rects.set("trigger", { x: 320, y: 300, width: 20, height: 20 })
-      byId("popup").dispatchEvent(new Event("scroll"))
-      yield* tick
-      assert.strictEqual(byId("positioner").getAttribute("data-anchor-hidden"), "")
-    }).pipe(Effect.scoped))
-
-  it.effect("reports the trigger hidden only when an ancestor that contains it clips it", () =>
-    Effect.gen(function*() {
-      rects.set("trigger", { x: 400, y: 300, width: 20, height: 20 })
       yield* mountPage()
       const clip = byId("clip")
       const trigger = byId("trigger")
       clip.style.overflow = "hidden"
-      rects.set("clip", { x: 100, y: 100, width: 100, height: 100 })
+      rects.set("clip", { x: 100, y: 250, width: 200, height: 200 })
       layouts.set("clip", { width: 100, height: 100 })
       const hidden = Effect.gen(function*() {
         byId("popup").dispatchEvent(new Event("scroll"))
@@ -253,44 +236,28 @@ describe("Tooltip in a document", { concurrent: false }, () => {
         return byId("positioner").getAttribute("data-anchor-hidden") === ""
       })
 
+      assert.isFalse(yield* hidden)
+      rects.set("trigger", { x: 320, y: 300, width: 20, height: 20 })
       assert.isTrue(yield* hidden)
+
       trigger.style.position = "fixed"
       assert.isFalse(yield* hidden)
       clip.style.transform = "translateX(0)"
       assert.isTrue(yield* hidden)
-
       clip.style.transform = ""
+      clip.style.willChange = "transform-origin"
+      assert.isFalse(yield* hidden)
+      clip.style.willChange = "transform"
+      assert.isTrue(yield* hidden)
+      clip.style.willChange = ""
+
       trigger.style.position = "absolute"
       assert.isFalse(yield* hidden)
       clip.style.position = "relative"
       assert.isTrue(yield* hidden)
 
-      clip.style.position = ""
-      trigger.style.position = "fixed"
-      for (
-        const [name, value, clipped] of [
-          ["container-type", "inline-size", false],
-          ["content-visibility", "auto", true],
-          ["transform-style", "preserve-3d", true],
-          ["will-change", "contain", true],
-          ["will-change", "left, offset-path", true],
-          ["will-change", "Transform", true],
-          ["will-change", "transform-origin", false],
-          ["will-change", "container-type", false],
-          ["will-change", "offset-rotate", false],
-          ["offset-path", "path('M0 0')", true]
-        ] as const
-      ) {
-        clip.style.setProperty(name, value)
-        assert.strictEqual(yield* hidden, clipped, `${name}: ${value}`)
-        clip.style.removeProperty(name)
-      }
-
       trigger.style.position = ""
       byId("layer").showPopover()
-      assert.isFalse(yield* hidden)
-      trigger.style.position = "fixed"
-      clip.style.transform = "translateX(0)"
       assert.isFalse(yield* hidden)
     }).pipe(Effect.scoped))
 

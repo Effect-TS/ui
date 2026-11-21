@@ -32,7 +32,13 @@ const at = (options: PositionerOptions, overrides?: Partial<Omit<PlaceInput, "op
 
 describe("place", () => {
   it("puts the popup on the requested side, lined up as asked, with logical sides following the direction", () => {
-    assert.deepStrictEqual(at({}), { side: "bottom", align: "center", x: 350, y: 440 })
+    const placed = place(input({}))
+    assert.deepStrictEqual(
+      { side: placed.side, align: placed.align, x: placed.x, y: placed.y },
+      { side: "bottom", align: "center", x: 350, y: 440 }
+    )
+    assert.strictEqual(placed.availableHeight, 355)
+    assert.strictEqual(placed.availableWidth, 990)
     assert.deepStrictEqual(at({ side: "top", align: "start" }), { side: "top", align: "start", x: 400, y: 300 })
     assert.deepStrictEqual(at({ side: "right", align: "end" }), { side: "right", align: "end", x: 500, y: 340 })
     assert.deepStrictEqual(at({ side: "inline-end" }, { rtl: true }), {
@@ -102,12 +108,6 @@ describe("place", () => {
     assert.strictEqual(at({ collisionAvoidance: { fallbackAxisSide: "start" } }, tall).side, "left")
     assert.strictEqual(at({ collisionAvoidance: { fallbackAxisSide: "none" } }, tall).side, "bottom")
     assert.strictEqual(at({}, { boundary: { x: 0, y: 0, width: 1000, height: 500 } }).side, "top")
-  })
-
-  it("reports the space left on the popup's side and along its edge", () => {
-    const placed = place(input({}))
-    assert.strictEqual(placed.availableHeight, 800 - 5 - 440)
-    assert.strictEqual(placed.availableWidth, 1000 - 10)
   })
 
   it("follows an anchor scrolled out of view only when sticky, and reports it hidden", () => {
