@@ -50,8 +50,6 @@ const simulateAuthRequest = (email: string, password: string) =>
 
 type LoginField = Validation.Field<string>
 
-// ui-kit's Field takes `invalid: true` for an invalid field and `false` for
-// a valid one. Before the field shows a result it is neither.
 const invalidOf = (field: LoginField): boolean | undefined =>
   field._tag === "Invalid" ? true : field._tag === "Valid" ? false : undefined
 
@@ -102,12 +100,15 @@ export const LoginPageNoDeps = Component.define({
     form: LoginValidation.init({ email: "", password: "" }),
     submitting: false
   }),
+
   update: {
     ChangedEmail: (model, { value }) => ({ ...model, form: LoginValidation.change(model.form, "email", value) }),
+
     ChangedPassword: (model, { value }) => ({
       ...model,
       form: LoginValidation.change(model.form, "password", value)
     }),
+
     SubmittedForm: (model, _message, $) => {
       if (model.submitting) return model
       const form = LoginValidation.submit(model.form)
@@ -116,14 +117,15 @@ export const LoginPageNoDeps = Component.define({
         onSome: ({ email, password }) => $.set({ form, submitting: true }).run(simulateAuthRequest(email, password))
       })
     },
-    // The page stays in its submitting state: the app leaves it for the
-    // dashboard.
+
     SucceededSimulateAuthRequest: (_model, { session }, $) => $.emit(LoginEvents.SignedIn({ session })),
+
     FailedSimulateAuthRequest: (model, { error }) => ({
       submitting: false,
       form: LoginValidation.reject(model.form, { password: [error] })
     })
   },
+
   view: (model, h) => {
     const validated = LoginValidation.validate(model.form)
     const canSubmit = Option.isSome(validated.value) && !model.submitting
@@ -133,8 +135,6 @@ export const LoginPageNoDeps = Component.define({
         h.div.class("mb-6 p-3 bg-blue-50 border border-blue-200 rounded-lg").children(
           h.p.class("text-sm text-blue-700").children("Hint: Use any email with password \"password\"")
         ),
-        // `novalidate` keeps the browser's own checks out of the way of the
-        // rules above.
         h.form.attr("aria-label", "Sign in").attr("novalidate", "").class("space-y-6")
           .onSubmit(LoginMessage.SubmittedForm()).children(
             FormField(h, {
