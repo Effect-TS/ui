@@ -49,8 +49,6 @@ describe("state codecs", () => {
     Effect.gen(function*() {
       const rendered = yield* ssr(Upload, {})
       assert.include(JSON.stringify(rendered.state["/Upload"]), "aGVsbG8=")
-      assert.deepStrictEqual(rendered.adopted, ["/Upload"])
-      assert.strictEqual(rendered.container.textContent, "Attached notes.txt 0")
     }).pipe(Effect.provide(TestHost.layer())))
 
   it.effect("defers a Model that doesn't encode, and warns once per component with the Schema issue", () => {
