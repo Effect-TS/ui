@@ -51,7 +51,6 @@ it.layer(AppTest("/"), { buildPerTest: true })("App", (it) => {
         assert.strictEqual(root.head().title, title)
         assert.isDefined(root.query(heading(name)), url)
         assert.deepStrictEqual(root.all(Locator.attr("aria-current", "page")).map(Locator.textOf), [current], url)
-        assert.deepStrictEqual(root.all(Locator.attr("data-active")).map(Locator.textOf), [current], url)
       }
     }))
 

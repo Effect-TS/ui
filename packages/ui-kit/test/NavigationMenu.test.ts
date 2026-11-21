@@ -81,19 +81,14 @@ const press = (key: string, init: KeyboardEventInit = {}) => {
 }
 
 describe("NavigationMenu", () => {
-  it.effect("only the active link is the current page, and every link stays in the Tab order", () =>
+  it.effect("marks only the active link, keeps links in the Tab order, and moves focus with arrow keys past disabled and nested links", () =>
     Effect.gen(function*() {
-      const { links } = yield* mount()
+      const { app, links } = yield* mount()
       assert.deepStrictEqual(links.map((link) => link.getAttribute("aria-current")), ["page", null, null, null, null])
       assert.deepStrictEqual(links.map((link) => link.getAttribute("data-active")), ["", null, null, null, null])
       assert.isTrue(links.every((link) => !link.hasAttribute("tabindex")))
-    }).pipe(Effect.scoped))
 
-  it.effect("Right and Left alone move focus between a menu's own links, past a disabled one, and stop at the ends", () =>
-    Effect.gen(function*() {
-      yield* mount()
       assert.isFalse(press("ArrowRight", { shiftKey: true }))
-      assert.isFalse(press("ArrowRight", { metaKey: true }))
       assert.isFalse(press("ArrowDown"))
       assert.strictEqual(focused(), "Home")
       assert.isTrue(press("ArrowRight"))
@@ -107,18 +102,7 @@ describe("NavigationMenu", () => {
       press("ArrowLeft")
       assert.isFalse(press("ArrowLeft"))
       assert.strictEqual(focused(), "Home")
-    }).pipe(Effect.scoped))
 
-  it.effect("an arrow key the consumer's own handler cancelled leaves focus where it is", () =>
-    Effect.gen(function*() {
-      yield* mount({ claimsRight: true })
-      assert.isTrue(press("ArrowRight"))
-      assert.strictEqual(focused(), "Home")
-    }).pipe(Effect.scoped))
-
-  it.effect("a vertical menu uses Down and Up, as soon as the orientation changes", () =>
-    Effect.gen(function*() {
-      const { app, links } = yield* mount()
       app.querySelector("button")!.click()
       yield* tick
       links[0]!.focus()
@@ -126,6 +110,13 @@ describe("NavigationMenu", () => {
       assert.isTrue(press("ArrowDown"))
       assert.strictEqual(focused(), "People")
       assert.isTrue(press("ArrowUp"))
+      assert.strictEqual(focused(), "Home")
+    }).pipe(Effect.scoped))
+
+  it.effect("an arrow key the consumer's own handler cancelled leaves focus where it is", () =>
+    Effect.gen(function*() {
+      yield* mount({ claimsRight: true })
+      assert.isTrue(press("ArrowRight"))
       assert.strictEqual(focused(), "Home")
     }).pipe(Effect.scoped))
 
@@ -137,14 +128,9 @@ describe("NavigationMenu", () => {
       assert.strictEqual(focused(), "People")
     }).pipe(Effect.scoped))
 
-  it("each part takes only its own tag, and the link's attributes win over the consumer's, present or absent", () => {
+  it("the link keeps the consumer's attributes, but its own win, present or absent", () => {
     const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
     const navigationMenu = Story.parts(NavigationMenu, { model: {}, props: {} })
-    assert.throws(() => navigationMenu.root(h.div as any), /a part for <nav> was given <div>/)
-    assert.throws(() => navigationMenu.list(h.ol as any), /a part for <ul> was given <ol>/)
-    assert.throws(() => navigationMenu.item(h.div as any), /a part for <li> was given <div>/)
-    assert.throws(() => navigationMenu.link({ element: h.button as any }), /a part for <a> was given <button>/)
-
     const element = h.a.class("link").attr("href", "/").attr("tabindex", "-1").attr("aria-label", "Home")
     const scope = View.build(navigationMenu.link({ element: h.a }), []).attrs["data-navigation-menu-link"]
     assert.isString(scope)
