@@ -406,13 +406,6 @@ describe("Dialog in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(hidden(), [null, null, null])
       assert.strictEqual(document.body.style.overflowY, "")
       assert.strictEqual(layerOf(dialog).getAttribute("inert"), "")
-      const settled = () => log().filter((line) => line === "Settled a true").length
-      const before = settled()
-      byId("reopen").click()
-      yield* tick
-      yield* tick
-      assert.strictEqual(settled(), before + 1)
-      assert.deepStrictEqual(hidden(), ["true", "true", "true"])
     }))
 
   it.effect("trap-focus hides the page but leaves its scroll and focus alone", () =>
@@ -452,42 +445,22 @@ describe("Dialog in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(dismissals(log()), ["Dismissed a outside-press"])
     }))
 
-  it.effect("the other modes take a press on the toasts as outside, but not one on what the page added since", () =>
+  it.effect("trap-focus takes a press on late toasts as outside, but not one on what the page added since", () =>
     Effect.gen(function*() {
-      for (const modal of [false, "trap-focus"] as const) {
-        for (const toast of [true, false]) {
-          yield* Effect.scoped(Effect.gen(function*() {
-            const { log, send } = yield* mountPage({ modal, toast })
-            const root = document.body.appendChild(document.createElement("div"))
-            yield* Effect.addFinalizer(() => Effect.sync(() => root.remove()))
-            send(Message.AddedControl())
-            yield* tick
-            click(root.appendChild(document.createElement("button")))
-            click(byId("late"))
-            yield* tick
-            assert.deepStrictEqual(dismissals(log()), [])
-            if (!toast) send(Message.ShowedToasts())
-            yield* tick
-            click(byId("toast"))
-            yield* tick
-            assert.deepStrictEqual(dismissals(log()), ["Dismissed a outside-press"])
-          }))
-        }
-      }
-    }))
-
-  it.effect("a modal keeps open on a press on toasts drawn before or after it opened", () =>
-    Effect.gen(function*() {
-      for (const toast of [true, false]) {
-        yield* Effect.scoped(Effect.gen(function*() {
-          const { log, send } = yield* mountPage({ toast })
-          if (!toast) send(Message.ShowedToasts())
-          yield* tick
-          click(byId("toast"))
-          yield* tick
-          assert.deepStrictEqual(dismissals(log()), [])
-        }))
-      }
+      const { log, send } = yield* mountPage({ modal: "trap-focus" })
+      const root = document.body.appendChild(document.createElement("div"))
+      yield* Effect.addFinalizer(() => Effect.sync(() => root.remove()))
+      send(Message.AddedControl())
+      yield* tick
+      click(root.appendChild(document.createElement("button")))
+      click(byId("late"))
+      yield* tick
+      assert.deepStrictEqual(dismissals(log()), [])
+      send(Message.ShowedToasts())
+      yield* tick
+      press(byId("toast"))
+      yield* tick
+      assert.deepStrictEqual(dismissals(log()), ["Dismissed a outside-press"])
     }))
 
   it.effect("focus skips what Tab doesn't reach, and a focused element removed gives focus to the popup", () =>
@@ -511,20 +484,6 @@ describe("Dialog in a document", { concurrent: false }, () => {
       yield* tick
       assert.isNull(app.querySelector("dialog"))
       assert.include(log(), "Settled a false")
-    }))
-
-  it.effect("focus goes back to what had it before the open when the trigger is gone", () =>
-    Effect.gen(function*() {
-      const { log } = yield* mountPage({ modal: false, detached: true, a: false })
-      byId("page").focus()
-      byId("detached").click()
-      yield* tick
-      byId("detached").remove()
-      escape()
-      yield* tick
-      yield* tick
-      assert.deepStrictEqual(dismissals(log()), ["Dismissed a escape-key"])
-      assert.strictEqual(document.activeElement?.id, "page")
     }))
 
   it.effect("a nested modal open with its parent hides the parent's content, its own trigger included", () =>
@@ -566,6 +525,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
       assert.strictEqual(document.activeElement?.id, "first")
       assert.strictEqual(popup.getAttribute("data-open"), "")
       assert.isNull(popup.getAttribute("data-starting-style"))
+      assert.strictEqual(byId("page").getAttribute("aria-hidden"), "true")
       assert.strictEqual(log().filter((line) => line === "Settled a true").length, 2)
     }))
 

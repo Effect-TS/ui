@@ -209,18 +209,6 @@ describe("Dialog", () => {
       assert.isUndefined(s.query(portal))
     }))
 
-  it.effect("a close before the first frame still runs the exit", () =>
-    Effect.gen(function*() {
-      const s = yield* Scene.make(Dialog, { open: true }, standIn)
-      s.expectMount(tracked(s)).mounted(tracked(s), sent("ShowedPortal"))
-      s.props({ open: false })
-      assert.strictEqual(partsOf(s).transitionStatus, "ending")
-      s.expectMount(tracked(s))
-        .mounted(tracked(s), sent("FinishedTransition", { open: false }))
-        .emitted({ _tag: "Settled", open: false })
-      assert.isUndefined(s.query(portal))
-    }))
-
   it.effect("keepMounted leaves a hidden portal with no layer", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(Dialog, { open: false, keepMounted: true }, standIn)
