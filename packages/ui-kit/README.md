@@ -32,6 +32,7 @@ A component that keeps no state, such as `Switch`, is a plain view function inst
 - [Input](src/Input.ts): a native text input whose value lives in your Model.
 - [Meter](src/Meter.ts): a measurement within a known range, such as disk usage, whose value lives in your Model, with a label, a value text and an indicator sized to the value.
 - [Progress](src/Progress.ts): a progress bar whose value lives in your Model, with a label, a value text and an indicator sized to the value.
+- [Select](src/Select.ts): a button that opens a list of options, whose open state and value live in your Model, with typeahead, the popup laid over the trigger with the selected option on its text, and inputs for a form.
 - [Slider](src/Slider.ts): a controlled slider with one thumb or a range, each thumb a native range input you supply.
 - [Switch](src/Switch.ts): a controlled on/off setting.
 - [Toast](src/Toast.ts): `ToastProvider`, a stack of notifications that components inside it post to, which close after a timeout.

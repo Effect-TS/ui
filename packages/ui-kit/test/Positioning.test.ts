@@ -186,8 +186,12 @@ describe("trackArgs", () => {
       disableAnchorTracking: false,
       anchorSelector: "#save",
       arrowId: null,
-      offsetAsPadding: false
+      offsetAsPadding: false,
+      leaveCoordinates: false
     })
+    assert.isTrue(
+      trackArgs({}, { side: "bottom", anchorSelector: "#save", leaveCoordinates: true }).leaveCoordinates
+    )
     assert.strictEqual(
       trackArgs({ anchor: "save\"as" }, { side: "bottom", anchorSelector: "#save" }).anchorSelector,
       "[id=\"save\\\"as\"]"

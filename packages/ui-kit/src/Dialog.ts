@@ -208,10 +208,12 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import { flag, idOf, withStyle } from "./internal/attributes.ts"
+import { type Attributed, flag, idOf, noSelect, withStyle } from "./internal/attributes.ts"
+import { methodOf, onScrollbar } from "./internal/interaction.ts"
 import { hideOthers, lockScroll } from "./internal/modal.ts"
 import { isAndroid } from "./internal/platform.ts"
 import { inKept, raiseAbove } from "./internal/topLayer.ts"
+import { frameOf, settling, statusOf, transitionAttrs } from "./internal/transition.ts"
 
 /**
  * How a dialog limits the page behind it: `true` for a modal, `"trap-focus"`
@@ -397,12 +399,6 @@ const Model = Schema.Struct({
 
 type Model = typeof Model.Type
 
-const methodOf = (pointerType: string): DialogInteraction =>
-  pointerType === "touch" || pointerType === "pen" ? pointerType : pointerType === "" ? "keyboard" : "mouse"
-
-const statusOf = (model: Model, props: DialogProps): DialogTransitionStatus =>
-  props.open ? (model.started ? null : "starting") : model.mounted ? "ending" : null
-
 type DialogUpdate = Component.Update<Model, Message, DialogEvents, DialogProps>
 
 const topmost = (model: Model): boolean => model.nestedOpen === 0
@@ -428,8 +424,6 @@ const portalBox = [
   "background:transparent",
   "color:inherit"
 ].join(";")
-
-const noSelect = "user-select:none;-webkit-user-select:none"
 
 const blocker = new Html.Element<never>("div").attr("role", "presentation").attr(
   "style",
@@ -557,31 +551,10 @@ if (typeof document !== "undefined") {
   }, true)
 }
 
-const finite = (animation: Animation): boolean => {
-  const end = animation.effect?.getComputedTiming().endTime
-  return typeof end === "number" && Number.isFinite(end)
-}
-
 const closeWatcherOf = (view: Window | null): (new() => CloseWatcher) | undefined =>
   view !== null && isAndroid(view)
     ? (view as Window & { readonly CloseWatcher?: new() => CloseWatcher }).CloseWatcher
     : undefined
-
-const onScrollbar = (target: EventTarget | null, event: MouseEvent): boolean => {
-  if (!(target instanceof HTMLElement)) return false
-  const document = target.ownerDocument
-  const style = document.defaultView?.getComputedStyle(target)
-  if (style === undefined) return false
-  const page = target === document.documentElement || target === document.body
-  const scrollsX = (page || /auto|scroll/.test(style.overflowX)) && target.clientWidth > 0 &&
-    target.scrollWidth > target.clientWidth
-  const scrollsY = (page || /auto|scroll/.test(style.overflowY)) && target.clientHeight > 0 &&
-    target.scrollHeight > target.clientHeight
-  const onY = scrollsY && (style.direction === "rtl"
-    ? event.offsetX <= target.offsetWidth - target.clientWidth
-    : event.offsetX > target.clientWidth)
-  return onY || (scrollsX && event.offsetY > target.clientHeight)
-}
 
 const TrackDialog = Mount.makeStream(
   "TrackDialog",
@@ -590,7 +563,7 @@ const TrackDialog = Mount.makeStream(
     Stream.callback<Message>((queue) => {
       const document = node.ownerDocument
       const view = document.defaultView
-      const frame = (f: () => void) => view === null ? setTimeout(f, 0) : view.requestAnimationFrame(f)
+      const frame = frameOf(view)
       let current: TrackDialogArgs = args
       const send = (message: Message) => Queue.offerUnsafe(queue, message)
       const popup = (): HTMLElement => (document.getElementById(current.popupId) as HTMLElement | null) ?? node
@@ -806,24 +779,7 @@ const TrackDialog = Mount.makeStream(
           if (current.open && !current.started) frame(() => send(Message.RenderedFirstFrame()))
         })
 
-      let generation = 0
-      const settle = (open: boolean) => {
-        const mine = ++generation
-        const read = () => {
-          if (mine !== generation || !node.isConnected) return
-          const element = popup()
-          const running = element.getAnimations().filter(finite).map((animation) => animation.finished)
-          Promise.all(running).then(
-            () => {
-              if (mine === generation && node.isConnected) send(Message.FinishedTransition({ open }))
-            },
-            () => frame(read)
-          )
-        }
-        frame(read)
-      }
-      const waits = (state: TrackDialogArgs): boolean | undefined =>
-        state.open ? (state.started ? true : undefined) : state.mounted && !state.holdExit ? false : undefined
+      const transition = settling(node, popup, frame, (open) => send(Message.FinishedTransition({ open })))
       const onChange = (next: TrackDialogArgs) => {
         const previous = current
         current = next
@@ -840,10 +796,7 @@ const TrackDialog = Mount.makeStream(
           if (focused instanceof HTMLElement && !node.contains(focused)) before = focused
           opening(focused)
         }
-        const wait = waits(next)
-        if (wait === waits(previous)) return
-        if (wait === undefined) generation++
-        else settle(wait)
+        transition.follow(previous, next)
       }
 
       const controller = new AbortController()
@@ -883,7 +836,7 @@ const TrackDialog = Mount.makeStream(
             observer.disconnect()
             page.disconnect()
             release?.()
-            generation++
+            transition.cancel()
             const { closedByFocusOut, closeMethod, finalFocus, portalId } = current
             const lost = focusInside
             const parents = showing.filter((other) => other.node.contains(node))
@@ -912,10 +865,6 @@ const TrackDialog = Mount.makeStream(
       )
     })
 )
-
-interface Attributed<B> {
-  readonly attr: (name: string, value: string | undefined) => B
-}
 
 const triggerAttrs = <B extends Attributed<B>>(builder: B, active: boolean, popupId: string | undefined): B =>
   builder
@@ -1138,7 +1087,7 @@ export const Dialog = Component.define({
     const modal = props.modal ?? true
     const open = props.open
     const shown = open || model.mounted
-    const transitionStatus = statusOf(model, props)
+    const transitionStatus: DialogTransitionStatus = statusOf(model, props)
     const nested = p.shared.parent !== undefined
     const nestedDialogs = model.nestedOpen
     const portalId = props.id ?? p.id("portal")
@@ -1148,12 +1097,7 @@ export const Dialog = Component.define({
     let triggers = 0
     let titleId: string | undefined
     let descriptionId: string | undefined
-    const states = <B extends Attributed<B>>(builder: B): B =>
-      builder
-        .attr("data-open", flag(open))
-        .attr("data-closed", flag(!open))
-        .attr("data-starting-style", flag(transitionStatus === "starting"))
-        .attr("data-ending-style", flag(transitionStatus === "ending"))
+    const states = <B extends Attributed<B>>(builder: B): B => transitionAttrs(builder, open, transitionStatus)
     const nesting = <B extends Attributed<B>>(builder: B): B =>
       states(builder)
         .attr("data-nested", flag(nested))
