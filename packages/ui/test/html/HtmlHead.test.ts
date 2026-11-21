@@ -9,16 +9,14 @@ const node = (
   ...children: ReadonlyArray<Head.Tree<HtmlHead.Entry, HtmlHead.HtmlHead>>
 ): Head.Tree<HtmlHead.Entry, HtmlHead.HtmlHead> => ({ entries, children })
 
+const at = (
+  path: string,
+  entries: ReadonlyArray<HtmlHead.Entry>,
+  ...children: ReadonlyArray<Head.Tree<HtmlHead.Entry, HtmlHead.HtmlHead>>
+): Head.Tree<HtmlHead.Entry, HtmlHead.HtmlHead> => ({ path, entries, children })
+
 describe("HtmlHead", () => {
   it("folds the same head and conflicts whatever the siblings' order", () => {
-    const at = (
-      path: string,
-      entries: ReadonlyArray<HtmlHead.Entry>
-    ): Head.Tree<HtmlHead.Entry, HtmlHead.HtmlHead> => ({
-      path,
-      entries,
-      children: []
-    })
     const a = at("/App/A[a]", [
       HtmlHead.lang("en"),
       HtmlHead.link({ rel: "canonical", href: "/a" }),
@@ -44,17 +42,20 @@ describe("HtmlHead", () => {
     ])
     const fold = (children: ReadonlyArray<Head.Tree<HtmlHead.Entry, HtmlHead.HtmlHead>>) => {
       const conflicts: Array<Head.Conflict> = []
-      const head = HtmlHead.merge({
-        path: "/App",
-        entries: [
-          Head.title("App"),
-          HtmlHead.meta({ name: "author", content: "App" }),
-          HtmlHead.link({ rel: "stylesheet", href: "/reset.css" }),
-          HtmlHead.link({ rel: "stylesheet", href: "/app.css" }),
-          HtmlHead.htmlClass("app")
-        ],
-        children
-      }, { onConflict: (conflict) => conflicts.push(conflict) })
+      const head = HtmlHead.merge(
+        at(
+          "/App",
+          [
+            Head.title("App"),
+            HtmlHead.meta({ name: "author", content: "App" }),
+            HtmlHead.link({ rel: "stylesheet", href: "/reset.css" }),
+            HtmlHead.link({ rel: "stylesheet", href: "/app.css" }),
+            HtmlHead.htmlClass("app")
+          ],
+          ...children
+        ),
+        { onConflict: (conflict) => conflicts.push(conflict) }
+      )
       return { head, conflicts: conflicts.map((conflict) => [conflict.slot, conflict.paths]) }
     }
     const folded = fold([a, b])
@@ -124,8 +125,8 @@ describe("HtmlHead", () => {
     const head = HtmlHead.merge(
       node(
         [a],
-        { path: "/b", ...node([b]) },
-        { path: "/k", ...node([HtmlHead.jsonLd({ b: 2 }, { key: "k" }), HtmlHead.jsonLd({ b: 3 }, { key: "k" })]) }
+        at("/b", [b]),
+        at("/k", [HtmlHead.jsonLd({ b: 2 }, { key: "k" }), HtmlHead.jsonLd({ b: 3 }, { key: "k" })])
       )
     )
     assert.deepStrictEqual(head.jsonLd.map((entry) => entry.json), [a.json, "{\"b\":3}"])

@@ -281,17 +281,17 @@ describe("Head", () => {
       const App = Component.define({
         name: "App",
         props: Schema.Struct({ swapped: Schema.Boolean }),
-        model: Schema.Boolean,
+        model: Schema.Null,
         message: Schema.Never
       }).make({
-        init: ($) => $.props.swapped,
+        init: () => null,
         update: (model) => model,
         head: () => [Head.title("App")],
-        view: (swapped, h) =>
+        view: (_, h) =>
           h.el(
             "main",
             ...ordered(
-              swapped,
+              h.props.swapped,
               Titled(h, { key: "first", props: { title: "First" } }),
               Titled(h, { key: "second", props: { title: "Second" } })
             )
