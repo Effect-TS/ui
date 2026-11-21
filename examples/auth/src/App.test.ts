@@ -57,6 +57,20 @@ it.layer(AppTest("/dashboard"), { buildPerTest: true })("App at /dashboard", (it
     }))
 })
 
+it.layer(AppTest("/settings"), { buildPerTest: true })("App at /settings", (it) => {
+  it.effect("signing out clears the session and lands on the home page", () =>
+    Effect.gen(function*() {
+      yield* storeSession(alice)
+      const root = yield* TestHost.mount(App, appProps)
+      yield* TestHost.settle
+      Locator.fire(root.get(HtmlLocator.role("button", { name: "Sign Out" })), "click")
+      yield* TestHost.settle
+      assert.deepStrictEqual(yield* storedSession, Option.none())
+      assert.strictEqual(yield* currentUrl, "/")
+      assert.isDefined(root.query(HtmlLocator.role("heading", { name: "Welcome to Auth Example" })))
+    }))
+})
+
 it.layer(AppTest("/"), { buildPerTest: true })("App at /", (it) => {
   it.effect("a signed-out navigation to /settings redirects to the login page", () =>
     Effect.gen(function*() {
