@@ -1,12 +1,13 @@
 // @vitest-environment happy-dom
 import { Component, UiSchema } from "@effect/ui"
-import { ToastProvider } from "@effect/ui-kit"
+import { Dialog, ToastProvider } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { TestGlobalEvents } from "@effect/ui/html/testing"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Layer, Schema } from "effect"
 import { TestClock } from "effect/testing"
+import { popovers } from "./utils/document.ts"
 
 // The first post is a loading toast; Complete turns it into a timed success.
 const PosterMessage = UiSchema.TaggedEnum({ ClickedPost: {}, ClickedDrop: {}, CompletedUpload: {} })
@@ -74,6 +75,7 @@ const Page = Component.define({
 const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))
 
 const mountPage = Effect.fnUntraced(function*(timeout: number) {
+  yield* popovers
   const container = yield* Effect.acquireRelease(
     Effect.sync(() => document.body.appendChild(document.createElement("div"))),
     (element) => Effect.sync(() => element.remove())
@@ -234,5 +236,50 @@ describe("ToastProvider", { concurrent: false }, () => {
       yield* TestClock.adjust("200 millis")
       yield* tick
       assert.isNull(byId("t4"))
+    }))
+})
+
+const AboveMessage = UiSchema.TaggedEnum({ Opened: {} })
+const Above = Component.define({ name: "Above", model: Schema.Boolean, message: AboveMessage, elements: Html }).make({
+  init: () => false,
+  update: { Opened: () => true },
+  view: (open, h) =>
+    ToastProvider(h, {
+      view: (toastProvider) =>
+        h.div(
+          h.button.attr("id", "open").onClick(AboveMessage.Opened()).children("Open"),
+          toastProvider.viewport(h.div.attr("id", "toasts")),
+          Dialog(h, {
+            props: { open },
+            view: (dialog) => h.div(dialog.portal(h.dialog)?.children(dialog.popup(h.div)))
+          })
+        )
+    })
+})
+
+describe("ToastProvider above a dialog", { concurrent: false }, () => {
+  it.effect("the viewport is a popover, shown again after a dialog opens", () =>
+    Effect.gen(function*() {
+      yield* popovers
+      const shown: Array<string> = []
+      const proto = window.HTMLElement.prototype as any
+      const show = proto.showPopover
+      proto.showPopover = function(this: HTMLElement) {
+        shown.push(this.localName)
+        return show.call(this)
+      }
+      const container = yield* Effect.acquireRelease(
+        Effect.sync(() => document.body.appendChild(document.createElement("div"))),
+        (element) => Effect.sync(() => element.remove())
+      )
+      yield* BrowserHost.mountEffect(Above, {}, container)
+      yield* tick
+      const viewport = container.querySelector<HTMLElement>("#toasts")!
+      assert.strictEqual(viewport.getAttribute("popover"), "manual")
+      assert.isTrue(viewport.matches(":popover-open"))
+      shown.length = 0
+      container.querySelector<HTMLElement>("#open")!.click()
+      yield* tick
+      assert.deepStrictEqual(shown, ["dialog", "div"])
     }))
 })
