@@ -225,6 +225,12 @@ const reveals = Effect.acquireRelease(
   }),
   ({ restore }) => Effect.sync(restore)
 ).pipe(Effect.map(({ seen }) => seen))
+const until = (done: () => boolean) =>
+  Effect.promise(async () => {
+    for (let waited = 0; !done() && waited < 2000; waited += 10) {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+  })
 const touched = () => byId("field").hasAttribute("data-touched")
 
 describe("Select in a document", { concurrent: false }, () => {
@@ -237,6 +243,7 @@ describe("Select in a document", { concurrent: false }, () => {
       assert.isTrue(shown())
       assert.strictEqual(style("left"), "60px")
       assert.strictEqual(style("top"), "330px")
+      yield* until(() => revealed.length > 0)
       assert.deepStrictEqual(revealed, ["light with the popup at 330px"])
       assert.strictEqual(style("--anchor-width"), "120px")
       assert.strictEqual(byId("positioner").getAttribute("data-side"), "bottom")
@@ -298,12 +305,12 @@ describe("Select in a document", { concurrent: false }, () => {
       root.send(Message.Picked({ value: "dark" }))
       yield* tick
       mousedown(byId("trigger"))
-      yield* tick
+      yield* until(() => revealed.length > 0)
+      assert.deepStrictEqual(revealed, ["dark with the popup at 40px"])
       assert.strictEqual(byId("positioner").getAttribute("data-side"), "bottom")
       assert.strictEqual(style("left"), "60px")
       assert.strictEqual(style("top"), "40px")
       assert.strictEqual(style("height"), "")
-      assert.deepStrictEqual(revealed, ["dark with the popup at 40px"])
       const blocker = byId("positioner").querySelector<HTMLElement>("[data-select-blocker]")!
       assert.include(blocker.style.getPropertyValue("clip-path"), "100px 10px")
     }).pipe(Effect.scoped))
@@ -313,7 +320,7 @@ describe("Select in a document", { concurrent: false }, () => {
       rects.set("trigger", { x: 100, y: 10, width: 120, height: 30 })
       const { root } = yield* mountPage({ align: true })
       mousedown(byId("trigger"))
-      yield* tick
+      yield* until(() => style("top") !== "")
       assert.strictEqual(style("top"), "40px")
       root.send(Message.Dismissed({ reason: "test" }))
       yield* tick
@@ -356,6 +363,7 @@ describe("Select in a document", { concurrent: false }, () => {
       keydown(item("light"), "ArrowDown")
       yield* tick
       assert.strictEqual(document.activeElement, item("dark"))
+      yield* until(() => scrolled.length > 0)
       assert.deepStrictEqual(scrolled, ["dark with the popup at 330px"])
       scrolled.length = 0
       item("system").dispatchEvent(new MouseEvent("mouseenter"))
