@@ -91,11 +91,18 @@ const causeOf = (entry: Extract<Layer, { _tag: "LayerFailed" }>) => {
   ))
 }
 
-const placeholders = ["~unserialisable", "~redacted", "~truncated"]
+const placeholders: Record<string, (value: unknown) => boolean> = {
+  "~unserialisable": (value) => typeof value === "string",
+  "~redacted": (value) => value === true,
+  "~truncated": (value) => typeof value === "number"
+}
 const findPlaceholder = (value: unknown): string | undefined => {
   if (typeof value !== "object" || value === null) return undefined
-  for (const key of Object.keys(value)) {
-    if (placeholders.includes(key)) return key
+  const keys = Object.keys(value)
+  if (keys.length === 1 && Object.hasOwn(placeholders, keys[0]) && placeholders[keys[0]]((value as any)[keys[0]])) {
+    return keys[0]
+  }
+  for (const key of keys) {
     const inner = findPlaceholder((value as any)[key])
     if (inner !== undefined) return inner
   }

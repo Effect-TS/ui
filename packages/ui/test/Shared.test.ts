@@ -524,6 +524,41 @@ describe("shared state in update", () => {
       )
     })))
 
+  it.effect("replays a shared value with a field named like a placeholder from a Wire frame", () =>
+    provideHost(Effect.gen(function*() {
+      const Marked = Component.define({
+        name: "Marked",
+        model: Schema.Null,
+        message: Schema.Never,
+        shares: {
+          value: () => ({ "~redacted": false, count: 1 }),
+          schema: Schema.Struct({ "~redacted": Schema.Boolean, count: Schema.Number })
+        }
+      }).make({ init: () => null, update: (model) => model, parts: () => ({}) })
+      const Counter = Component.define({
+        name: "Counter",
+        model: Schema.Number,
+        message: WatchMessage,
+        shared: { marked: Marked }
+      }).make({
+        init: () => 0,
+        update: (_, __, $) => $.shared.marked.count,
+        view: (count, h) => h.el("button").on("click", WatchMessage.Clicked()).children(`count ${count}`)
+      })
+      const Host = Component.define({ name: "Host", model: Schema.Null, message: WatchMessage }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => Marked(h, { view: () => Counter(h, { key: "c" }) })
+      })
+      const root = yield* TestHost.mount(Host, {})
+      yield* TestHost.settle
+      click(root, "count 0")
+      yield* TestHost.settle
+      const replay = Story.fromLog(Counter, root.log().map(MessageLog.makeEncoder().encode))
+      assert.isUndefined(replay.divergence)
+      assert.strictEqual(replay.model, 1)
+    })))
+
   it.effect("replays an absent optional owner under its name from a Wire frame", () =>
     provideHost(Effect.gen(function*() {
       const Keys = Component.define({
