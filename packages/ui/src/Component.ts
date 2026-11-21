@@ -68,6 +68,7 @@ import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Schema from "effect/Schema"
 import type * as Types from "effect/Types"
 import * as Command from "./Command.ts"
+import type * as Feature from "./Feature.ts"
 import * as child from "./internal/child.ts"
 import * as internalNoop from "./internal/noop.ts"
 import * as queryCore from "./internal/queryCore.ts"
@@ -1033,7 +1034,7 @@ export interface Mountable<in out Props, out Events, out R = never, in Rcv = nev
   /** The instance's head entries, a pure function of its Model, props and queries. */
   readonly head: ((model: any, props: Props, queries?: Results | undefined) => ReadonlyArray<unknown>) | undefined
   /** Maps the folded head of the instance and everything its view placed, a pure function of its Model. */
-  readonly reduceHead: ((model: any, below: any) => unknown) | undefined
+  readonly reduceHead: ((model: any, below: any, children: HeadChildren<any, string>) => unknown) | undefined
   /** The component's vocabulary: its `elements` override, else the registered one. Read lazily. */
   readonly elements: () => View.Vocabulary<any> | undefined
   /**
@@ -1137,7 +1138,9 @@ export interface Component<
   readonly head:
     | ((model: Model, props: Props, queries?: Results | undefined) => ReadonlyArray<View.HeadEntry<V>>)
     | undefined
-  readonly reduceHead: ((model: Model, below: any) => View.HeadValue<V>) | undefined
+  readonly reduceHead:
+    | ((model: Model, below: any, children: HeadChildren<any, string>) => View.HeadValue<V>)
+    | undefined
   readonly layerFailure: ((failure: AsyncResult.Failure<never, any>) => Msg) | undefined
   readonly "~V"?: V
   readonly "~L"?: L
@@ -1274,7 +1277,7 @@ export interface Headless<
     | ((model: any, props: Props, queries?: Results | undefined) => ReadonlyArray<Subscription.Subscription<any, R>>)
     | undefined
   readonly head: ((model: any, props: Props, queries?: Results | undefined) => ReadonlyArray<unknown>) | undefined
-  readonly reduceHead: ((model: any, below: any) => unknown) | undefined
+  readonly reduceHead: ((model: any, below: any, children: HeadChildren<any, string>) => unknown) | undefined
   readonly elements: () => View.Vocabulary<any> | undefined
   readonly "~queries": unknown
 }
@@ -1479,6 +1482,52 @@ type SlotRequirements<SC> = SC extends unknown ? View.Requirements<SC[keyof SC]>
  * @since 0.1.0
  */
 export type Any = Mountable<any, any, any, never>
+
+/**
+ * The folded heads of the children an instance's view placed, as
+ * `reduceHead` gets them, found by who the child is rather than where the
+ * view put it.
+ *
+ * **Details**
+ *
+ * `get` takes the child's component or feature and its key, the empty key
+ * by default, as in its path `Name[key]`. `slot` takes the name of one of
+ * the instance's slots and gives the head of what its parent passed there.
+ * Each gives `undefined` when the view placed no such child, or nothing in
+ * that child's subtree has a head.
+ *
+ * **Example** (A layout that takes the details' title)
+ *
+ * ```ts
+ * import { Component, Head } from "@effect/ui"
+ * import { Schema } from "effect"
+ *
+ * const Titled = (name: string) =>
+ *   Component.define({ name, model: Schema.Null, message: Schema.Never }).make({
+ *     init: () => null,
+ *     update: (model) => model,
+ *     head: () => [Head.title(name)],
+ *     view: (_, h) => h.text(name)
+ *   })
+ * const Sidebar = Titled("Sidebar")
+ * const Details = Titled("Details")
+ *
+ * const Layout = Component.define({ name: "Layout", model: Schema.Null, message: Schema.Never }).make({
+ *   init: () => null,
+ *   update: (model) => model,
+ *   reduceHead: (_, below, children) => ({ ...below, title: children.get(Details)?.title }),
+ *   view: (_, h) => h.el("main", Sidebar(h, { props: {} }), Details(h, { props: {} }))
+ * })
+ * ```
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface HeadChildren<H, Sl extends string = never> {
+  readonly get: (component: Any | Feature.Any, key?: string) => H | undefined
+  readonly slot: (name: Sl) => H | undefined
+}
 
 /**
  * The props of a component.
@@ -2044,7 +2093,13 @@ export interface Definition<
           queries: { readonly [K in keyof L]: QueryResultOf<L[K]> }
         ) => ReadonlyArray<View.HeadEntry<V>>)
         | undefined
-      readonly reduceHead?: ((model: Model, below: View.HeadValue<V>) => View.HeadValue<V>) | undefined
+      readonly reduceHead?:
+        | ((
+          model: Model,
+          below: View.HeadValue<V>,
+          children: HeadChildren<View.HeadValue<V>, Sl>
+        ) => View.HeadValue<V>)
+        | undefined
     } & SelfShares<SR, SV>
   ): Headless<
     Props,
@@ -2098,7 +2153,13 @@ export interface Definition<
             queries: { readonly [K in keyof L]: QueryResultOf<L[K]> }
           ) => ReadonlyArray<View.HeadEntry<V>>)
           | undefined
-        readonly reduceHead?: ((model: Model, below: View.HeadValue<V>) => View.HeadValue<V>) | undefined
+        readonly reduceHead?:
+          | ((
+            model: Model,
+            below: View.HeadValue<V>,
+            children: HeadChildren<View.HeadValue<V>, Sl>
+          ) => View.HeadValue<V>)
+          | undefined
       }
       & OwnersAreHeadless<SV>
       & SelfShares<SR, SV>
@@ -2290,8 +2351,11 @@ export type Helper<D> = D extends Definition<
  * runtime folds the head of the placed tree, a child's `fallback` content
  * included, with the root vocabulary's merge (see `Head`).
  * `reduceHead` maps the folded head of the instance and everything its view
- * placed, as `(model, below) => value`: a layout derives an `og:title` from
- * the title that won, say. It's pure too, and the root's result is final.
+ * placed, as `(model, below, children) => value`: a layout derives an
+ * `og:title` from the title that won, say. `children` holds the folded head
+ * of each child it placed, by component and key or by slot, so a layout can
+ * pick the title of one child when two set different ones (see `Head`). It's
+ * pure too, and the root's result is final.
  *
  * `update` is a function over the whole message type, or a record with a
  * function for every `_tag` of the message, which gets that tag's member and
@@ -2678,7 +2742,7 @@ const finish = (
       ) => ReadonlyArray<Subscription.Subscription<any, any> | false | null | undefined>)
       | undefined
     readonly head?: ((model: any, props: any, queries: any) => ReadonlyArray<unknown>) | undefined
-    readonly reduceHead?: ((model: any, below: any) => unknown) | undefined
+    readonly reduceHead?: ((model: any, below: any, children: HeadChildren<any, string>) => unknown) | undefined
   }
 ): Any => {
   const bound = bindQueries(definition.name, definition.queries)

@@ -1,25 +1,30 @@
 /**
- * The fold behind every vocabulary's head merge: children first, then the node's own entries and its
- * children's values, then the node's `reduce`. It tracks which path set each single slot, so a slot
- * two siblings set is reported, and the later sibling keeps it.
+ * The fold behind every vocabulary's head merge: children sorted by path, then the node's own entries
+ * and its children's values, then the node's `reduce`. It tracks which paths set each single slot. A
+ * slot siblings set to different values is left out until a `reduce` above them sets it, and one that
+ * reaches the root unset is reported.
  */
 import type * as Head from "../Head.ts"
 
 /** @internal */
 export interface Folding<E, H> {
-  /** The node's value before its `reduce`: its own entries, then its children's values in order. */
-  readonly combine: (node: Head.Tree<E, H>, children: ReadonlyArray<H>) => H
+  /**
+   * The node's value before its `reduce`: its own entries, then its children's values in order,
+   * without the slots in `conflicted`.
+   */
+  readonly combine: (node: Head.Tree<E, H>, children: ReadonlyArray<H>, conflicted: ReadonlySet<string>) => H
   /** The single slots a value holds, each with a signature of its value. */
   readonly slots: (head: H) => ReadonlyMap<string, string>
 }
 
 interface Folded<H> {
   readonly head: H
-  /** Which path set each single slot of `head`. */
-  readonly from: Map<string, string>
+  readonly slots: ReadonlyMap<string, string>
+  /** Which paths set each single slot of `head`. */
+  readonly from: ReadonlyMap<string, ReadonlyArray<string>>
+  readonly conflicts: ReadonlyMap<string, ReadonlyArray<string>>
 }
 
-// The merges that are this fold and nothing more: see `skipsEmpty`.
 const plainMerges = new WeakSet<Function>()
 
 /**
@@ -42,49 +47,90 @@ export const plain = <F extends Function>(merge: F): F => {
  */
 export const skipsEmpty = (merge: Function): boolean => plainMerges.has(merge)
 
+const compare = (a: string, b: string): number => a < b ? -1 : a > b ? 1 : 0
+
+const byPath = (a: Head.Tree<any, any>, b: Head.Tree<any, any>): number => compare(a.path ?? "", b.path ?? "")
+
+const noSlots = new Map<string, never>()
+const noConflicts: ReadonlySet<string> = new Set()
+
+const add = (into: Map<string, Array<string>>, slot: string, paths: ReadonlyArray<string>) => {
+  const list = into.get(slot)
+  if (list === undefined) into.set(slot, [...paths])
+  else list.push(...paths)
+}
+
 /** @internal */
 export const fold = <E, H>(
   tree: Head.Tree<E, H>,
   folding: Folding<E, H>,
-  onConflict: ((slot: string, earlier: string, later: string) => void) | undefined
+  onConflict: ((slot: string, paths: ReadonlyArray<string>) => void) | undefined
 ): H => {
-  // What a node with no entries and nothing below it folds to.
-  const nothing: Folded<H> = { head: folding.combine({ entries: [], children: [] }, []), from: new Map() }
-  const visit = (node: Head.Tree<E, H>): Folded<H> => {
-    const children: Array<Folded<H>> = []
-    for (const child of node.children) {
-      const folded = visit(child)
-      if (folded !== nothing) children.push(folded)
-    }
-    // Most nodes have nothing of their own: such a node passes its only child's value up as it is.
-    if (node.entries.length === 0 && node.reduce === undefined && children.length < 2) return children[0] ?? nothing
-    const path = node.path ?? ""
-    const from = new Map<string, string>()
-    // Two children setting one slot is a conflict.
-    for (const child of children) {
-      for (const [slot, at] of child.from) {
-        const earlier = from.get(slot)
-        if (earlier !== undefined && onConflict !== undefined) onConflict(slot, earlier, at)
-        from.set(slot, at)
-      }
-    }
-    let head = folding.combine(node, children.map((child) => child.head))
-    const before = folding.slots(head)
-    // A slot no child set is the node's own: a descendant overrides its ancestor's.
-    for (const slot of before.keys()) if (!from.has(slot)) from.set(slot, path)
-    if (node.reduce !== undefined) {
-      try {
-        head = node.reduce(head)
-      } catch (error) {
-        if (node.onError === undefined) throw error
-        node.onError(error)
-      }
-      const after = folding.slots(head)
-      // What the reduce changed is the reducing node's.
-      for (const [slot, signature] of after) if (before.get(slot) !== signature) from.set(slot, path)
-      for (const slot of from.keys()) if (!after.has(slot)) from.delete(slot)
-    }
-    return { head, from }
+  const nothing: Folded<H> = {
+    head: folding.combine({ entries: [], children: [] }, [], noConflicts),
+    slots: noSlots,
+    from: noSlots,
+    conflicts: noSlots
   }
-  return visit(tree).head
+  const visit = (node: Head.Tree<E, H>): Folded<H> => {
+    const reduce = node.reduce
+    const below = node.children.length > 1 ? [...node.children].sort(byPath) : node.children
+    const children: Array<Folded<H>> = []
+    const values = reduce === undefined ? undefined : new Map<string, H>()
+    for (const child of below) {
+      const folded = visit(child)
+      if (folded === nothing) continue
+      children.push(folded)
+      if (values !== undefined && child.path !== undefined) values.set(child.path, folded.head)
+    }
+    if (node.entries.length === 0 && reduce === undefined && children.length < 2) return children[0] ?? nothing
+    const path = node.path ?? ""
+    const from = new Map<string, Array<string>>()
+    const conflicts = new Map<string, Array<string>>()
+    const signatures = new Map<string, string>()
+    for (const child of children) {
+      for (const [slot, paths] of child.conflicts) add(conflicts, slot, paths)
+      for (const [slot, signature] of child.slots) {
+        const set = signatures.get(slot)
+        if (set === undefined) signatures.set(slot, signature)
+        else if (set !== signature) conflicts.set(slot, conflicts.get(slot) ?? [])
+        add(from, slot, child.from.get(slot)!)
+      }
+    }
+    for (const [slot, paths] of conflicts) {
+      const setters = from.get(slot)
+      if (setters === undefined) continue
+      paths.push(...setters)
+      from.delete(slot)
+    }
+    let head = folding.combine(
+      node,
+      children.map((child) => child.head),
+      conflicts.size === 0 ? noConflicts : new Set(conflicts.keys())
+    )
+    const before = folding.slots(head)
+    for (const slot of before.keys()) if (!from.has(slot)) from.set(slot, [path])
+    if (reduce === undefined) return { head, slots: before, from, conflicts }
+    try {
+      head = reduce(head, values!)
+    } catch (error) {
+      if (node.onError === undefined) throw error
+      node.onError(error)
+    }
+    const after = folding.slots(head)
+    for (const [slot, signature] of after) {
+      if (before.get(slot) === signature) continue
+      from.set(slot, [path])
+      conflicts.delete(slot)
+    }
+    for (const slot of from.keys()) if (!after.has(slot)) from.delete(slot)
+    return { head, slots: after, from, conflicts }
+  }
+  const root = visit(tree)
+  if (onConflict !== undefined) {
+    for (const slot of [...root.conflicts.keys()].sort(compare)) {
+      onConflict(slot, [...new Set(root.conflicts.get(slot))].sort(compare))
+    }
+  }
+  return root.head
 }

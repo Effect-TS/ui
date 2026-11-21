@@ -1,4 +1,4 @@
-import { Component, Head, type MessageLog } from "@effect/ui"
+import { Component, Head, type MessageLog, type View } from "@effect/ui"
 import { TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
@@ -250,35 +250,88 @@ describe("Head", () => {
       assert.strictEqual(root.head().title, "Unavailable · App")
     }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
 
-  it.effect("reports siblings that set the title to Query.Problems with both paths, and applies the later one", () =>
+  const Titled = Component.define({
+    name: "Titled",
+    props: Schema.Struct({ title: Schema.String }),
+    model: Schema.Null,
+    message: Schema.Never
+  }).make({
+    init: () => null,
+    update: (model) => model,
+    head: (_, props) => [Head.title(props.title)],
+    view: (_, h) => h.text(h.props.title)
+  })
+  const ordered = <A>(swapped: boolean, a: A, b: A): readonly [A, A] => swapped ? [b, a] : [a, b]
+
+  it.effect("siblings that set different titles leave it unset and are reported, in either order", () =>
     Effect.gen(function*() {
-      const Titled = Component.define({
-        name: "Titled",
-        props: Schema.Struct({ title: Schema.String }),
-        model: Schema.Null,
+      const App = Component.define({
+        name: "App",
+        props: Schema.Struct({ swapped: Schema.Boolean }),
+        model: Schema.Boolean,
         message: Schema.Never
+      }).make({
+        init: ($) => $.props.swapped,
+        update: (model) => model,
+        head: () => [Head.title("App")],
+        view: (swapped, h) =>
+          h.el(
+            "main",
+            ...ordered(
+              swapped,
+              Titled(h, { key: "first", props: { title: "First" } }),
+              Titled(h, { key: "second", props: { title: "Second" } })
+            )
+          )
+      })
+      const roots = [yield* TestHost.mount(App, { swapped: false }), yield* TestHost.mount(App, { swapped: true })]
+      const conflicts = yield* TestHost.expectProblem("HeadConflict")
+      const paths = ["/App/Titled[first]", "/App/Titled[second]"]
+      assert.deepStrictEqual(conflicts.map((conflict) => (conflict as Head.Conflict).paths), [paths, paths])
+      yield* TestHost.settle
+      assert.deepStrictEqual(roots.map((root) => root.head().title), [undefined, undefined])
+    }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
+
+  it.effect("a reduceHead settles its children's conflict by component and key, or by slot", () =>
+    Effect.gen(function*() {
+      const Frame = Component.define({
+        name: "Frame",
+        props: Schema.Struct({ swapped: Schema.Boolean }),
+        model: Schema.Null,
+        message: Schema.Never,
+        slots: ["main"]
       }).make({
         init: () => null,
         update: (model) => model,
-        head: (_, props) => [Head.title(props.title)],
-        view: (_, h) => h.text(h.props.title)
+        reduceHead: (_, below, children) => ({
+          ...below,
+          title: `${children.slot("main")?.title} beside ${children.get(Titled, "side")?.title}`
+        }),
+        view: (_, h) => {
+          const side = Titled(h, { key: "side", props: { title: "Side" } })
+          return h.el("div", ...ordered<View.Node<never>>(h.props.swapped, side, h.slots.main))
+        }
       })
-      const App = Component.define({ name: "App", model: Schema.Null, message: Schema.Never }).make({
-        init: () => null,
-        update: (model) => model,
-        head: () => [Head.title("App")],
-        view: (_, h) =>
+      const App = Component.define({ name: "App", model: Schema.Boolean, message: Schema.Boolean }).make({
+        init: () => false,
+        update: (_, swapped) => swapped,
+        reduceHead: (_, below, children) => ({ ...below, title: children.get(Frame)?.title }),
+        view: (swapped, h) =>
           h.el(
             "main",
-            Titled(h, { key: "first", props: { title: "First" } }),
-            Titled(h, { key: "second", props: { title: "Second" } })
+            ...ordered(
+              swapped,
+              Titled(h, { key: "first", props: { title: "First" } }),
+              Titled(h, { key: "second", props: { title: "Second" } })
+            ),
+            Frame(h, { props: { swapped }, slots: { main: Titled(h, { key: "main", props: { title: "Main" } }) } })
           )
       })
       const root = yield* TestHost.mount(App, {})
-      const [conflict] = yield* TestHost.expectProblem("HeadConflict")
-      assert.deepStrictEqual((conflict as Head.Conflict).paths, ["/App/Titled[first]", "/App/Titled[second]"])
-      assert.strictEqual((conflict as Head.Conflict).slot, "title")
-      yield* TestHost.settle
-      assert.strictEqual(root.head().title, "Second")
+      for (const swapped of [false, true]) {
+        root.send(swapped)
+        yield* TestHost.settle
+        assert.strictEqual(root.head().title, "Main beside Side")
+      }
     }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
 })
