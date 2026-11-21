@@ -112,6 +112,7 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
+import { idSelector } from "./internal/attributes.ts"
 
 /**
  * The side of the anchor a popup shows on. `"inline-start"` and
@@ -967,8 +968,6 @@ export type TrackPositionArgs = typeof TrackPositionArgs.Type
 const arrowX = "--ui-kit-arrow-x"
 const arrowY = "--ui-kit-arrow-y"
 
-const idSelector = (id: string): string => `[id="${id.replace(/["\\]/g, "\\$&")}"]`
-
 /**
  * Makes the args of `TrackPosition` from a popup's positioning props.
  *
@@ -1289,21 +1288,17 @@ export const trackPosition = (
         ["--available-height", placed.availableHeight + "px"],
         ["--transform-origin", placed.transformOrigin]
       ])
-      if (current.leaveCoordinates === true) {
-        next.delete("left")
-        next.delete("top")
-      }
       if (bridge > 0) next.set("padding-" + opposite[side], bridge + "px")
       if (placed.arrow?.x != null) next.set(arrowX, placed.arrow.x + "px")
       if (placed.arrow?.y != null) next.set(arrowY, placed.arrow.y + "px")
       for (const name of owned.keys()) {
-        if (!next.has(name) && !(current.leaveCoordinates === true && (name === "left" || name === "top"))) {
-          node.style.removeProperty(name)
-        }
+        if (!next.has(name)) node.style.removeProperty(name)
       }
       owned = next
       written.set(node, owned)
+      const leave = current.leaveCoordinates === true
       for (const [name, value] of owned) {
+        if (leave && (name === "left" || name === "top")) continue
         if (node.style.getPropertyValue(name) !== value) node.style.setProperty(name, value)
       }
       const report: Placement = {

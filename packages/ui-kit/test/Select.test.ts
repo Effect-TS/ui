@@ -1,4 +1,4 @@
-import type { Component, Mount, View } from "@effect/ui"
+import { Component, type Mount, type View } from "@effect/ui"
 import { Select, type SelectEvents, type SelectProps } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { HtmlScene } from "@effect/ui/html/testing"
@@ -33,7 +33,7 @@ const standIn = {
           select.group(h.div.class("group"), "all").children(
             select.groupLabel(h.div.class("group-label"), "all").children("All"),
             ...items.map(({ label, value }) =>
-              select.item(h.div.key(value).attr("data-testid", value), value).children(
+              select.item(h.div.attr("data-testid", value), value).children(
                 select.itemText(h.div).children(label),
                 select.itemIndicator(h.span.class("check"), value)?.children("✓")
               )
@@ -135,7 +135,7 @@ describe("Select", () => {
               select.popup(h.div.class("popup").attr("role", "menu").attr("tabindex", "0")).children(
                 ...items.map(({ value }) =>
                   select.item(
-                    h.div.key(value).attr("data-testid", value).attr("role", "menuitem").attr("aria-selected", "true")
+                    h.div.attr("data-testid", value).attr("role", "menuitem").attr("aria-selected", "true")
                       .attr("data-selected", "x").attr("data-highlighted", "x"),
                     value
                   )
@@ -162,7 +162,7 @@ describe("Select", () => {
       const s = yield* HtmlScene.make(Select, { open: false, items }, standIn)
       s.click(label)
       assert.deepStrictEqual(s.current.pending.map(({ command }) => command.name), ["Html.focus"])
-      s.resolve(s.current.pending[0]!.command, sent("CompletedFocus"))
+      s.resolve(s.current.pending[0]!.command, Component.noop as never)
     }))
 
   it.effect("a mouse press on the trigger opens it, and the popup is a listbox of options", () =>
@@ -254,7 +254,7 @@ describe("Select", () => {
       const s = yield* HtmlScene.make(Select, { open: false, items }, standIn)
       s.fire(trigger, "keydown", key(" ")).expectIgnored()
       s.fire(trigger, "click", pointer("")).emitted(opened("trigger-press"))
-      s.fire(trigger, "click", pointer("mouse"))
+      s.fire(trigger, "click", pointer("mouse")).expectIgnored()
     }))
 
   it.effect("arrows, Home and End move between items, disabled ones included, without wrapping", () =>
@@ -366,7 +366,7 @@ describe("Select", () => {
       s.fire(item("dark"), "mouseleave")
       assert.isNull(partsOf(s).highlighted)
       s.props({ open: true, items, value: "light", highlightItemOnHover: false })
-      s.fire(item("system"), "mouseenter")
+      s.fire(item("system"), "mouseenter").expectIgnored()
       assert.isNull(partsOf(s).highlighted)
     }))
 
@@ -438,7 +438,7 @@ describe("Select", () => {
       assert.deepInclude(s.get(trigger).attrs, { "aria-required": "true", "data-required": "" })
       s.fire(Locator.tag("input"), "focus")
       assert.deepStrictEqual(s.current.pending.map(({ command }) => command.name), ["Html.focus"])
-      s.resolve(s.current.pending[0]!.command, sent("CompletedFocus"))
+      s.resolve(s.current.pending[0]!.command, Component.noop as never)
       s.fire(Locator.tag("input"), "change", { value: "System", checked: false }).emitted(picked("system", "none"))
       s.fire(Locator.tag("input"), "change", { value: "nope", checked: false })
     }))

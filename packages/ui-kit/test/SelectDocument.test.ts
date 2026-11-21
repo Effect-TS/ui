@@ -145,7 +145,7 @@ const Page = Component.define({
                 select.positioner(h.div.attr("id", "positioner")).children(
                   select.popup(h.div.class("popup")).children(
                     ...items.map(({ label, value }) =>
-                      select.item(h.div.key(value).attr("data-testid", value), value).children(
+                      select.item(h.div.attr("data-testid", value), value).children(
                         select.itemText(h.div.attr("data-geo", "text-" + value)).children(label)
                       )
                     )
@@ -266,6 +266,40 @@ describe("Select in a document", { concurrent: false }, () => {
       assert.strictEqual(style("left"), "60px")
       assert.strictEqual(style("top"), "40px")
       assert.strictEqual(style("height"), "")
+      const blocker = byId("positioner").querySelector<HTMLElement>("[data-select-blocker]")!
+      assert.include(blocker.style.getPropertyValue("clip-path"), "100px 10px")
+    }).pipe(Effect.scoped))
+
+  it.effect("aligned from the bottom after a fallback, it drops the top the fallback left", () =>
+    Effect.gen(function*() {
+      rects.set("trigger", { x: 100, y: 10, width: 120, height: 30 })
+      const { root } = yield* mountPage({ align: true })
+      mousedown(byId("trigger"))
+      yield* tick
+      assert.strictEqual(style("top"), "40px")
+      root.send(Message.Dismissed({ reason: "test" }))
+      yield* tick
+      rects.set("trigger", { x: 100, y: 300, width: 120, height: 30 })
+      const html = window.HTMLElement.prototype as any
+      const sized = (size: number) => ({
+        configurable: true,
+        get(this: Element) {
+          return this.classList.contains("popup") ? size : 0
+        }
+      })
+      Object.defineProperty(html, "scrollHeight", sized(400))
+      Object.defineProperty(html, "clientHeight", sized(150))
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          delete html.scrollHeight
+          delete html.clientHeight
+        })
+      )
+      mousedown(byId("trigger"))
+      yield* tick
+      assert.strictEqual(byId("positioner").getAttribute("data-side"), "none")
+      assert.strictEqual(style("bottom"), "0px")
+      assert.strictEqual(style("top"), "auto")
     }).pipe(Effect.scoped))
 
   it.effect("moves focus into the items, and back to the trigger before it hides, so the field isn't touched", () =>
