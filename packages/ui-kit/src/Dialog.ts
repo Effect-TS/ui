@@ -119,17 +119,17 @@
  * `CloseWatcher` such as Chrome, the back gesture asks the topmost open
  * dialog to close, with `close-watcher`, and a refused close keeps it open as
  * often as back is used. Firefox on Android has no `CloseWatcher`, so back
- * doesn't reach the dialog there. On desktop and iOS, close requests other than
- * Escape don't reach it.
+ * doesn't reach the dialog there. On desktop and iOS, close requests other
+ * than Escape don't reach it.
  *
  * **Nesting**
  *
  * A dialog drawn inside another one's popup is nested. It finds the dialog
  * above it by itself: the outer popup gets `data-nested-dialog-open` and
  * `--nested-dialogs`, the inner one `data-nested`, and only the inner one hears
- * Escape and outside presses. Two dialogs under one parent each take a `key`.
- * Of two dialogs open side by side, the one opened later is on top, as in the
- * browser's top layer, and only it hears Escape and outside presses. Focus
+ * Escape, outside presses and Android's back gesture. Two dialogs under one
+ * parent each take a `key`. Of two dialogs open side by side, the one opened
+ * later is on top, as in the browser's top layer, and only it hears them. Focus
  * a dialog moves by itself, into it as it opens or back to its trigger as it
  * closes, doesn't close another one with `modal: false`. Focus the user
  * moves out of it still does.
@@ -494,16 +494,24 @@ const TrackDialogArgs = {
 
 type TrackDialogArgs = Schema.Struct<typeof TrackDialogArgs>["Type"]
 
-let nextOrder = 0
-const showing: Array<{
+type CloseWatcher = EventTarget & { readonly destroy: () => void }
+type Showing = {
   readonly node: HTMLDialogElement
   readonly order: number
   readonly open: () => boolean
-  readonly watch: (make: boolean) => void
-}> = []
+  readonly top: () => boolean
+  readonly watch: () => CloseWatcher | undefined
+}
+
+let nextOrder = 0
+const showing: Array<Showing> = []
+let watched: { readonly entry: Showing; readonly watcher: CloseWatcher } | undefined
 const rewatch = () => {
-  for (const entry of showing) entry.watch(false)
-  for (const entry of showing) entry.watch(true)
+  const top = showing.find((entry) => entry.top())
+  if (watched?.entry === top) return
+  watched?.watcher.destroy()
+  const watcher = top?.watch()
+  watched = top !== undefined && watcher !== undefined ? { entry: top, watcher } : undefined
 }
 const orderOf = (node: Element): number => showing.findIndex((entry) => entry.node === node)
 const onTop = (node: HTMLDialogElement): boolean => {
@@ -551,8 +559,6 @@ const finite = (animation: Animation): boolean => {
   return typeof end === "number" && Number.isFinite(end)
 }
 
-type CloseWatcher = EventTarget & { readonly destroy: () => void }
-
 const closeWatcherOf = (view: Window | null): (new() => CloseWatcher) | undefined => {
   if (view === null) return undefined
   const agent = view.navigator as Navigator & { readonly userAgentData?: { readonly platform: string } }
@@ -587,31 +593,28 @@ const TrackDialog = Mount.makeStream(
       let current: TrackDialogArgs = args
       const send = (message: Message) => Queue.offerUnsafe(queue, message)
       const popup = (): HTMLElement => (document.getElementById(current.popupId) as HTMLElement | null) ?? node
-      const controller = new AbortController()
-      const { signal } = controller
       const topmost = () => current.topmost && onTop(node)
       const Watcher = closeWatcherOf(view)
-      let watcher: CloseWatcher | undefined
-      const watch = (make: boolean) => {
-        if (Watcher === undefined) return
-        if (signal.aborted || !current.open || !topmost()) {
-          watcher?.destroy()
-          watcher = undefined
-        } else if (make && watcher === undefined) {
-          const made = new Watcher()
-          made.addEventListener("cancel", (event) => {
+      const entry: Showing = {
+        node,
+        order: ++nextOrder,
+        open: () => current.open,
+        top: () => current.open && topmost(),
+        watch: () => {
+          if (Watcher === undefined) return undefined
+          const watcher = new Watcher()
+          watcher.addEventListener("cancel", (event) => {
             if (event.cancelable) event.preventDefault()
             send(Message.RequestedClose())
           })
-          made.addEventListener("close", () => {
-            if (watcher !== made) return
-            watcher = undefined
-            frame(() => watch(true))
+          watcher.addEventListener("close", () => {
+            if (watched?.watcher !== watcher) return
+            watched = undefined
+            frame(rewatch)
           })
-          watcher = made
+          return watcher
         }
       }
-      const entry = { node, order: ++nextOrder, open: () => current.open, watch }
       const controls = `[aria-controls="${CSS.escape(args.portalId)}"]`
       const anyTrigger = `${controls},[data-dialog-trigger="${CSS.escape(args.portalId)}"]`
       const onTrigger = (target: Node): boolean =>
@@ -823,6 +826,9 @@ const TrackDialog = Mount.makeStream(
         else settle(wait)
       }
 
+      const controller = new AbortController()
+      const { signal } = controller
+
       return Effect.acquireRelease(
         Effect.sync(() => {
           showing.push(entry)
@@ -853,7 +859,6 @@ const TrackDialog = Mount.makeStream(
           Effect.sync(() => {
             showing.splice(showing.indexOf(entry), 1)
             controller.abort()
-            watch(false)
             rewatch()
             observer.disconnect()
             page.disconnect()

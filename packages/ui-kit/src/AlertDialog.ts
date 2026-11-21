@@ -44,8 +44,7 @@
  * **Keyboard**
  *
  * The trigger and the close button are native buttons, so Enter and Space
- * press them. Escape asks the alert dialog to close, with `escape-key`, and so
- * does the back gesture on Android, with `close-watcher`, as in a `Dialog`.
+ * press them. Escape asks the alert dialog to close, with `escape-key`.
  * Focus moves into the popup when it opens, stays inside while it shows, and
  * goes back to the trigger once its exit ends, as in a modal `Dialog`. Put
  * `initialFocus` on the least destructive answer, such as Cancel.
@@ -53,9 +52,10 @@
  * **Dismissal**
  *
  * The alert dialog asks to close only from its trigger, its close part,
- * Escape and the back gesture on Android. A press outside the popup, on the backdrop included, asks nothing.
- * Answers other than closing, such as Discard, are the consumer's buttons,
- * which send the consumer's messages.
+ * Escape and, on Android, the back gesture, with `close-watcher` as in a
+ * `Dialog`. A press outside the popup, on the backdrop included, asks
+ * nothing. Answers other than closing, such as Discard, are the consumer's
+ * buttons, which send the consumer's messages.
  *
  * An alert dialog drawn inside a `Dialog`'s popup is nested in it, as a
  * `Dialog` would be: the outer popup gets `data-nested-dialog-open`, and only
