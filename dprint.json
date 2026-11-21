@@ -10,7 +10,9 @@
     "quoteStyle": "alwaysDouble",
     "trailingCommas": "never",
     "operatorPosition": "maintain",
-    "arrowFunction.useParentheses": "force"
+    "arrowFunction.useParentheses": "force",
+    "module.sortImportDeclarations": "maintain",
+    "importDeclaration.sortNamedImports": "maintain"
   },
   "excludes": [
     "LLMS.md",
