@@ -48,7 +48,8 @@ it passes instead of `h`. A scoped child belongs to the component whose
 view called `h.scoped`, its author, and its path is `Name[key]` under the
 author wherever the view puts it. Moving it to another element, or into
 another child's slot, keeps the instance. Placing one `Name[key]` twice in
-a render fails the author.
+a render fails the author. So do an ordinary child and a scoped child of
+the same name and key that resolve to one path.
 
 ```ts
 const view = (model: Model, h: H) =>

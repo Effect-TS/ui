@@ -1891,47 +1891,54 @@ describe("scoped children written into closed slots", () => {
       provideHost
     ))
 
-  it.effect("start when a slot first places them, and a send before that is dropped", () =>
-    provideHost(Effect.gen(function*() {
-      let inits = 0
-      const Late = Component.define({
-        name: "Late",
-        scoped: true,
-        model: Schema.Number,
-        message: CounterMsg,
-        receives: ["Inc"]
-      }).make({
-        init: () => {
-          inits++
-          return 0
-        },
-        update: (count) => count + 1,
-        view: (count, h) => h.el("b", "count:" + count)
-      })
-      const LateRef = Late.ref("L")
-      const Page = Component.define({
-        name: "Page",
-        scoped: false,
-        model: Schema.Null,
-        message: Schema.Literal("send")
-      })
-        .make({
-          init: () => null,
-          update: (_, __, $) => $.send(LateRef, CounterMsg.Inc()),
-          view: (_, h) =>
-            h.scoped((s) =>
-              h.el("main", Billing(s, { key: "b" }), Shut(h, { key: "c", slots: { body: Late(s, { ref: LateRef }) } }))
-            )
+  it.effect.each([true, false])(
+    "start when a slot first places them, and a send before that is dropped (%s)",
+    (beside) =>
+      provideHost(Effect.gen(function*() {
+        let inits = 0
+        const Late = Component.define({
+          name: "Late",
+          scoped: true,
+          model: Schema.Number,
+          message: CounterMsg,
+          receives: ["Inc"]
+        }).make({
+          init: () => {
+            inits++
+            return 0
+          },
+          update: (count) => count + 1,
+          view: (count, h) => h.el("b", "count:" + count)
         })
-      const root = yield* TestHost.mount(Page, {})
-      yield* TestHost.settle
-      root.send("send")
-      yield* TestHost.settle
-      assert.strictEqual(inits, 0)
-      click(root, "toggle")
-      yield* TestHost.settle
-      assert.strictEqual(root.text(), "billingtogglecount:0")
-    })))
+        const LateRef = Late.ref("L")
+        const Page = Component.define({
+          name: "Page",
+          scoped: false,
+          model: Schema.Null,
+          message: Schema.Literal("send")
+        })
+          .make({
+            init: () => null,
+            update: (_, __, $) => $.send(LateRef, CounterMsg.Inc()),
+            view: (_, h) =>
+              h.scoped((s) =>
+                h.el(
+                  "main",
+                  beside ? Billing(s, { key: "b" }) : null,
+                  Shut(h, { key: "c", slots: { body: Late(s, { ref: LateRef }) } })
+                )
+              )
+          })
+        const root = yield* TestHost.mount(Page, {})
+        yield* TestHost.settle
+        root.send("send")
+        yield* TestHost.settle
+        assert.strictEqual(inits, 0)
+        click(root, "toggle")
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), (beside ? "billing" : "") + "togglecount:0")
+      }))
+  )
 
   it.effect("keep the props and onEmit of the last render that placed them", () =>
     provideHost(Effect.gen(function*() {

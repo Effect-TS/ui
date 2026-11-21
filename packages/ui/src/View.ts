@@ -340,11 +340,11 @@ export type MountHint =
  * and the child keeps its Model, its Commands in flight, its Subscriptions
  * and what the user typed into its inputs. It still gets `$.send` and query
  * results, and its events reach the author's `update` through the `onEmit`
- * it was last written with. It contributes no head entries and no reports to
- * `collects`, a ref lookup inside it finds nothing, and its element mounts
- * stop until it's written again. The log records `Kept` and `Drawn`. Saved
- * state, from the server or a history entry, holds a kept child's Model, and
- * the child takes it once it's written again.
+ * of the last render that placed it. It contributes no head entries and no
+ * reports to `collects`, a ref lookup inside it finds nothing, and its
+ * element mounts stop until it's written again. The log records `Kept` and
+ * `Drawn`. Saved state, from the server or a history entry, holds a kept
+ * child's Model, and the child takes it once it's written again.
  *
  * Without a predicate it lives as long as its author. With one,
  * `h.scoped(({ key, model }) => key in model.rows, (s) => ...)`, the runtime
@@ -368,8 +368,8 @@ export type MountHint =
  * so gate one on the Model when it should pause. A dialog or popover open
  * inside it closes when it's kept, and focus inside it is lost. A host
  * without `createContainer` fails the author of a kept child. The props and
- * `onEmit` it has are the ones it was last written with: write it inside a
- * `hidden` element instead when it needs fresh ones.
+ * `onEmit` it has are those of the last render that placed it: write it
+ * inside a `hidden` element instead when it needs fresh ones.
  *
  * @stability experimental
  * @category models
