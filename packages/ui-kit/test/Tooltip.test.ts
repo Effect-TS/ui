@@ -1,5 +1,5 @@
 import { Component, UiSchema, View } from "@effect/ui"
-import { Tooltip, type TooltipProps, TooltipProvider } from "@effect/ui-kit"
+import { Positioning, Tooltip, type TooltipProps, TooltipProvider } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { HtmlScene, TestGlobalEvents } from "@effect/ui/html/testing"
 import { Locator, Story, TestHost } from "@effect/ui/testing"
@@ -15,7 +15,7 @@ const standIn = {
   ) =>
     h.span(
       s.trigger(h.button.attr("aria-label", "Bold")).children("B"),
-      s.positioner(h.div).children(s.popup(h.div).children(s.arrow(h.div), "Bold"))
+      s.positioner(h.div).children(s.popup(h.div.class("popup")).children(s.arrow(h.div), "Bold"))
     )
 }
 
@@ -211,6 +211,11 @@ const trigger = Locator.tag("button")
 const positioner = Locator.attr("role", "presentation")
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
+const top = { side: "top", align: "center", anchorHidden: false, arrowUncentered: false } as const
+
+const opened = (props: TooltipProps) =>
+  HtmlScene.make(Tooltip, props, standIn).pipe(Effect.map((s) => s.mounted(Positioning.TrackPosition, top)))
+
 // The message a wait would have produced: the Command's own result.
 const completed = (tag: "CompletedWaitBeforeOpening" | "CompletedWaitBeforeClosing") => ({ _tag: tag }) as never
 
@@ -224,12 +229,11 @@ describe("Tooltip", () => {
       s.resolve(opening!.command, completed("CompletedWaitBeforeOpening"))
         .emitted({ _tag: "Opened" })
       assert.isFalse(s.get(positioner).props?.popoverOpen)
-      s.props({ open: true, side: "bottom", sideOffset: 8 })
+      s.props({ open: true, side: "bottom", sideOffset: 8 }).mounted(Positioning.TrackPosition, top)
 
       assert.isTrue(s.get(positioner).props?.popoverOpen)
       // Each part draws the children it was given.
       assert.strictEqual(Locator.textOf(s.get(positioner)), "Bold")
-      assert.include(s.get(positioner).attrs?.style, "padding-top:8px")
 
       s.fire(trigger, "mouseleave")
       // The gap is the positioner's padding, so the pointer reaches it as it
@@ -245,7 +249,7 @@ describe("Tooltip", () => {
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Tooltip, { open: false }, standIn)
       assert.deepStrictEqual(s.subscriptions, [])
-      s.props({ open: true })
+      s.props({ open: true }).mounted(Positioning.TrackPosition, top)
       assert.deepStrictEqual(s.subscriptions, [
         `@effect/ui/html/document:"keydown"`,
         `@effect/ui/html/document:"mousedown","capture"`
@@ -254,7 +258,7 @@ describe("Tooltip", () => {
 
   it.effect("document Escape skips another key, a composition and an Escape already handled", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Tooltip, { open: true }, standIn)
+      const s = yield* opened({ open: true })
       s.fireDocument("keydown", { key: "a" }).expectIgnored().expectDefaultPrevented(false)
         .fireDocument("keydown", { key: "Escape", composing: true }).expectIgnored()
         .fireDocument("keydown", { key: "Escape", defaultPrevented: true }).expectIgnored()
@@ -267,7 +271,7 @@ describe("Tooltip", () => {
       s.fire(trigger, "mousedown")
         .fire(trigger, "focus")
       assert.deepStrictEqual(s.current.emitted, [])
-      s.props({ open: true })
+      s.props({ open: true }).mounted(Positioning.TrackPosition, top)
         .fire(trigger, "mouseleave")
       s.resolve(s.current.pending[0]!.command, completed("CompletedWaitBeforeClosing"))
         .emitted({ _tag: "Dismissed" })
@@ -275,7 +279,7 @@ describe("Tooltip", () => {
 
   it.effect("activation dismisses on click rather than mousedown unless closeOnClick is false", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Tooltip, { open: true }, standIn)
+      const s = yield* opened({ open: true })
       s.fire(trigger, "click")
         .emitted({ _tag: "Dismissed" })
       s.fire(trigger, "mousedown")
@@ -291,6 +295,7 @@ describe("Tooltip", () => {
       s.fire(trigger, "focus")
         .emitted({ _tag: "Opened" })
         .props({ open: true, closeDelay: 300 })
+        .mounted(Positioning.TrackPosition, top)
       // A press with the pointer on the trigger or the positioner is inside.
       s.fire(positioner, "mouseenter")
         .fireDocument("mousedown")
@@ -328,19 +333,41 @@ describe("Tooltip", () => {
       assert.deepStrictEqual(s.current.emitted, [])
     }))
 
-  it("parts clear stale state and preserve consumer styles alongside their shared anchor", () => {
+  it("parts clear stale state and add their styles after the consumer's", () => {
     const s = Story.parts(Tooltip, {
-      model: { hovered: false, focused: false, pressed: false, instant: null, turn: 0, yieldedTo: null },
-      props: { open: false }
+      model: {
+        hovered: false,
+        focused: false,
+        pressed: false,
+        instant: null,
+        turn: 0,
+        yieldedTo: null,
+        placement: null
+      },
+      props: { open: false, positionMethod: "fixed" }
     })
-    // The anchor survives a style the consumer chains after the part.
-    const trigger = View.build(s.trigger(h.button.attr("data-popup-open", "")).style({ color: "red" }), [])
+    const trigger = View.build(s.trigger(h.button.attr("data-popup-open", "")), [])
     assert.isUndefined(trigger.attrs["data-popup-open"])
-    const anchor = /^color:red;anchor-name:(--[\w-]+)$/.exec(trigger.attrs.style ?? "")?.[1]
-    assert.isDefined(anchor)
-    const positioner = View.build(s.positioner(h.div.style({ zIndex: "10" })), [])
-    assert.include(positioner.attrs.style, `z-index:10;position-anchor:${anchor};`)
+    const positioner = View.build(s.positioner(h.div).style({ zIndex: "10" }), [])
+    assert.match(positioner.attrs.style ?? "", /^z-index:10;position:fixed;inset:auto;margin:0;/)
   })
+
+  it.effect("the placement the positioner reports reaches every part", () =>
+    Effect.gen(function*() {
+      const s = yield* HtmlScene.make(Tooltip, { open: false, side: "bottom" }, standIn)
+      const popup = Locator.attr("class", "popup")
+      const arrow = Locator.attr("aria-hidden", "true")
+      s.props({ open: true, side: "bottom" })
+      assert.strictEqual(s.get(popup).attrs?.["data-side"], "bottom")
+      s.mounted(Positioning.TrackPosition, { side: "left", align: "end", anchorHidden: true, arrowUncentered: true })
+      for (const part of [positioner, popup, arrow]) {
+        assert.strictEqual(s.get(part).attrs?.["data-side"], "left")
+        assert.strictEqual(s.get(part).attrs?.["data-align"], "end")
+      }
+      assert.strictEqual(s.get(positioner).attrs?.["data-anchor-hidden"], "")
+      assert.strictEqual(s.get(arrow).attrs?.["data-uncentered"], "")
+      assert.include(s.get(arrow).attrs?.style, "top:var(")
+    }))
 
   it.effect("one click on a trigger stacked under a styled Button reaches both the Button and the tooltip", () =>
     Effect.gen(function*() {
@@ -348,7 +375,6 @@ describe("Tooltip", () => {
       const button = root.get(trigger)
       assert.strictEqual(button.attrs?.class, "tool")
       assert.strictEqual(button.attrs?.type, "button")
-      assert.match(button.attrs?.style ?? "", /^anchor-name:--/)
       assert.strictEqual(button.attrs?.["data-popup-open"], "")
 
       Locator.fire(button, "click")

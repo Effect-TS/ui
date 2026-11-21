@@ -21,7 +21,7 @@
  * | Part         | Element                                        |
  * | :----------- | :--------------------------------------------- |
  * | `trigger`    | `<button>` the tooltip describes               |
- * | `positioner` | `<div>`, a manual popover placed by the anchor |
+ * | `positioner` | `<div>`, a manual popover placed by the tooltip  |
  * | `popup`      | `<div>` inside the positioner                  |
  * | `arrow`      | `<div>` inside the popup                       |
  *
@@ -33,15 +33,25 @@
  * `Button(h, { element: s.trigger(h.button) }).class("tool").children("B")`.
  *
  * The positioner is a manual popover, so it renders in the top layer and
- * needs no portal. It's placed against the trigger with CSS anchor
- * positioning: the trigger gets an `anchor-name` and the positioner the
- * matching `position-anchor`, with a `position-area` from the `side` and
- * `align` props. `sideOffset` is padding on the positioner's side facing the
- * trigger, so the gap is part of the positioner and the pointer can cross it
- * to the popup without leaving the tooltip. Both parts add these
- * declarations after the consumer's own inline style. The browser gives a
- * popover a border, padding, a background and `overflow: auto`, so reset
- * those on the positioner and style the popup instead.
+ * needs no portal. While it shows, the tooltip measures the trigger and
+ * writes the positioner's `left` and `top`, again when the page scrolls,
+ * the window resizes, or the trigger or the positioner changes size or
+ * moves. It needs no CSS anchor positioning. `sideOffset` is padding on the
+ * positioner's side facing the trigger, so the gap is part of the positioner
+ * and the pointer can cross it to the popup without leaving the tooltip.
+ * The positioner's `position`, `inset` and `margin` come after the
+ * consumer's own inline style. The browser gives a popover a border,
+ * padding, a background and `overflow: auto`, so reset those on the
+ * positioner and style the popup instead.
+ *
+ * **CSS variables**
+ *
+ * Set on the positioner:
+ *
+ * - `--anchor-width`, `--anchor-height`: the trigger's size
+ * - `--available-width`, `--available-height`: the space between the
+ *   trigger and the edge of the collision boundary, for a `max-height`
+ * - `--transform-origin`: the point on the trigger the popup grows from
  *
  * **Data attributes**
  *
@@ -49,16 +59,22 @@
  * `data-align` and `data-instant`, which hold a value:
  *
  * - `trigger`: `data-popup-open`, `data-trigger-disabled`
- * - `positioner`: `data-open` / `data-closed`, `data-side`, `data-align`
+ * - `positioner`: `data-open` / `data-closed`, `data-side`, `data-align`,
+ *   `data-anchor-hidden`
  * - `popup`: `data-open` / `data-closed`, `data-side`, `data-align`,
  *   `data-instant`
  * - `arrow`: `data-open` / `data-closed`, `data-side`, `data-align`,
- *   `data-instant`
+ *   `data-instant`, `data-uncentered`
  *
  * `data-instant` is `focus` when focus opened the tooltip, `dismiss` when
  * a click on the trigger or Escape closed it, and `delay` when a
  * `TooltipProvider` let it open without its hover delay or another tooltip
  * of the group replaced it, so a transition can be skipped.
+ *
+ * `data-side` and `data-align` report where the popup is, which can differ
+ * from the props after a flip. `data-anchor-hidden` is present while the
+ * trigger is scrolled out of view, and `data-uncentered` while the arrow
+ * can't point at the trigger's middle without leaving the popup.
  *
  * **Keyboard**
  *
@@ -71,10 +87,13 @@
  *
  * **Placement and timing**
  *
- * The browser can flip the popup to the opposite side when it doesn't fit.
- * `data-side` still reports the requested side. If you render an arrow,
- * position it against the popup in your CSS. To animate the popover, use
- * `@starting-style` and `transition-behavior: allow-discrete`.
+ * When the popup doesn't fit, it flips to the opposite side and shifts along
+ * the edge, keeping `collisionPadding` from the viewport. The tooltip
+ * places the arrow too: it gets `position: absolute` and a `left` or `top`
+ * that points it at the trigger, so give it only its size and the offset
+ * across the edge in your CSS. To animate the popover, use
+ * `@starting-style` and `transition-behavior: allow-discrete`. The
+ * `Positioning` module does the placing, and a popup of your own can use it.
  *
  * Each tooltip has one trigger. On its own it waits its own `delay` on
  * every hover. Below a `TooltipProvider`, once one tooltip of the group
@@ -124,7 +143,7 @@
  *     })
  * })
  *
- * // The positioner is a manual popover, placed against the trigger's anchor.
+ * // The positioner is a manual popover.
  * const { html } = await Effect.runPromise(HtmlServer.renderToHtml(Toolbar, {}))
  * if (!/<div class="tip-positioner"[^>]* popover="manual"/.test(html)) throw new Error("the positioner isn't a popover")
  * ```
@@ -135,11 +154,13 @@
 import * as Command from "@effect/ui/Command"
 import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
+import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
 import { flag, withStyle } from "./internal/attributes.ts"
+import * as Positioning from "./Positioning.ts"
 
 /**
  * The side of the trigger a tooltip shows on.
@@ -148,7 +169,7 @@ import { flag, withStyle } from "./internal/attributes.ts"
  * @category schemas
  * @since 0.1.0
  */
-export const TooltipSide = Schema.Literals(["top", "bottom", "left", "right"])
+export const TooltipSide = Positioning.Side
 
 /**
  * The side of the trigger a tooltip shows on.
@@ -166,7 +187,7 @@ export type TooltipSide = typeof TooltipSide.Type
  * @category schemas
  * @since 0.1.0
  */
-export const TooltipAlign = Schema.Literals(["start", "center", "end"])
+export const TooltipAlign = Positioning.Align
 
 /**
  * How a tooltip lines up with its trigger along the side it shows on.
@@ -195,9 +216,31 @@ export type TooltipAlign = typeof TooltipAlign.Type
  * - `disableHoverablePopup`: the pointer on the popup doesn't keep the
  *   tooltip open, and the positioner takes no pointer events.
  * - `side`: the side of the trigger the popup shows on, `"top"` by default.
+ *   `"inline-start"` and `"inline-end"` follow the writing direction.
  * - `align`: how the popup lines up with the trigger along that side,
  *   `"center"` by default.
  * - `sideOffset`: the gap between the trigger and the popup, in pixels.
+ * - `alignOffset`: pixels the popup moves along the side, toward the
+ *   trigger's other end when aligned to the start or the end, and right or
+ *   down when centred.
+ * - `collisionAvoidance`: what happens when the popup doesn't fit: `side`
+ *   and `align` each `"flip"`, `"shift"` or `"none"`, both `"flip"` by
+ *   default, and `fallbackAxisSide`, the side on the other axis to try when
+ *   neither side fits, `"end"` by default.
+ * - `collisionBoundary`: the area the popup keeps inside, the viewport by
+ *   default, an element's `{ id }`, or a rectangle in viewport coordinates.
+ * - `collisionPadding`: pixels kept from the boundary's edges, 5 by
+ *   default, as one number or per side.
+ * - `sticky`: the popup stays in view when the trigger scrolls out of it.
+ * - `arrowPadding`: pixels kept between the arrow and the popup's corners,
+ *   5 by default.
+ * - `positionMethod`: `"absolute"`, the default, or `"fixed"`, which
+ *   doesn't make the page taller when the popup reaches past its end.
+ * - `disableAnchorTracking`: the popup is placed only when it opens, when
+ *   the window resizes and when its own size changes, not when the page
+ *   scrolls or the trigger moves or changes size.
+ * - `anchor`: the id of an element to place the popup against instead of
+ *   the trigger.
  *
  * @stability experimental
  * @category schemas
@@ -210,9 +253,7 @@ export const TooltipProps = Schema.Struct({
   closeDelay: Schema.optional(Schema.Number),
   closeOnClick: Schema.optional(Schema.Boolean),
   disableHoverablePopup: Schema.optional(Schema.Boolean),
-  side: Schema.optional(TooltipSide),
-  align: Schema.optional(TooltipAlign),
-  sideOffset: Schema.optional(Schema.Number)
+  ...Positioning.PositionerFields
 })
 
 /**
@@ -268,7 +309,8 @@ const Message = UiSchema.TaggedEnum({
   CompletedWaitBeforeClosing: {},
   // The provider's shared value changed: the newest turn that shows, and the
   // turn a newly shown tooltip takes.
-  ChangedGroup: { newest: Schema.NullOr(Schema.Number), next: Schema.Number }
+  ChangedGroup: { newest: Schema.NullOr(Schema.Number), next: Schema.Number },
+  ChangedPlacement: { placement: Positioning.Placement }
 })
 
 // Only the pointer and focus, which the consumer would never store.
@@ -287,7 +329,8 @@ const Model = Schema.Struct({
   pressed: Schema.Boolean,
   instant: Schema.NullOr(Schema.Literals(["focus", "dismiss", "delay"])),
   turn: Schema.Number,
-  yieldedTo: Schema.NullOr(Schema.Number)
+  yieldedTo: Schema.NullOr(Schema.Number),
+  placement: Schema.NullOr(Positioning.Placement)
 })
 
 // `switch`: a new wait replaces the running one, and leaving or entering
@@ -351,40 +394,6 @@ const left = (model: typeof Model.Type, _message: unknown, $: TooltipUpdate) => 
   if (!shownBy($.props)) return $.set(next).run(Command.interrupt(WaitBeforeOpening))
   if (model.focused) return next
   return $.set(next).run(WaitBeforeClosing({ delay: $.props.closeDelay ?? 0 }))
-}
-
-// `position-area` for each side and alignment. `x-start` and `y-start`
-// follow the writing direction.
-const areas: Record<TooltipSide, Record<TooltipAlign, string>> = {
-  top: { start: "top span-x-end", center: "top", end: "top span-x-start" },
-  bottom: { start: "bottom span-x-end", center: "bottom", end: "bottom span-x-start" },
-  left: { start: "left span-y-end", center: "left", end: "left span-y-start" },
-  right: { start: "right span-y-end", center: "right", end: "right span-y-start" }
-}
-
-// The gap is padding on the side facing the trigger, so the pointer is
-// still on the positioner while it crosses to the popup.
-const gaps: Record<TooltipSide, string> = {
-  top: "padding-bottom",
-  bottom: "padding-top",
-  left: "padding-right",
-  right: "padding-left"
-}
-
-// The popover's UA style centres it in the viewport with `inset: 0` and
-// `margin: auto`. Both go, so `position-area` places it.
-const placement = (anchor: string, props: TooltipProps): string => {
-  const side = props.side ?? "top"
-  return [
-    `position-anchor:${anchor}`,
-    `position-area:${areas[side][props.align ?? "center"]}`,
-    `position-try-fallbacks:${side === "top" || side === "bottom" ? "flip-block" : "flip-inline"}`,
-    "inset:auto",
-    "margin:0",
-    `${gaps[side]}:${props.sideOffset ?? 0}px`,
-    // Let pointer events pass through a non-hoverable popup.
-    props.disableHoverablePopup === true ? "pointer-events:none" : undefined
-  ].filter((declaration) => declaration !== undefined).join(";")
 }
 
 /**
@@ -537,8 +546,8 @@ export const TooltipProvider = Component.define({
  * builder it passes in: the data attributes on every part, `popover` and
  * `role="presentation"` on the positioner, and `aria-hidden` on the arrow.
  * That includes the ones a state leaves absent, so a `data-open` on the
- * consumer's popup is removed while the tooltip is closed. The trigger's
- * `anchor-name` and the positioner's placement are added after the
+ * consumer's popup is removed while the tooltip is closed. The
+ * positioner's placement and the arrow's offset are added after the
  * consumer's inline style, including one chained after the part. Other
  * attributes the consumer chains after a part are the consumer's. A
  * handler the consumer adds to a part runs after the tooltip's own.
@@ -565,7 +574,15 @@ export const Tooltip = Component.define({
   },
   elements: Html
 }).make({
-  init: () => ({ hovered: false, focused: false, pressed: false, instant: null, turn: 0, yieldedTo: null }),
+  init: () => ({
+    hovered: false,
+    focused: false,
+    pressed: false,
+    instant: null,
+    turn: 0,
+    yieldedTo: null,
+    placement: null
+  }),
   update: {
     EnteredTrigger: (model, { instant }, $) => {
       const next = { ...model, hovered: true }
@@ -619,16 +636,24 @@ export const Tooltip = Component.define({
       return newest !== null && newest !== model.turn && newest !== model.yieldedTo
         ? $.set({ ...model, yieldedTo: newest }).run(Command.interrupt(WaitBeforeClosing)).emit(dismissed)
         : model
-    }
+    },
+    ChangedPlacement: (model, { placement }) => ({ ...model, placement })
   },
   // Only an open tooltip listens on the document.
   subscriptions: (_model, props) => shownBy(props) ? dismissals : [],
   parts: (model, p) => {
     const shown = shownBy(p.props)
-    const side = p.props.side ?? "top"
-    const align = p.props.align ?? "center"
-    // Ids are letters, digits, `_` and `-`, so this is a valid dashed ident.
-    const anchor = "--" + p.id("anchor")
+    const placement = model.placement
+    const triggerId = p.id("trigger")
+    const arrowId = p.id("arrow")
+    const tracked = Positioning.trackArgs(p.props, {
+      side: "top",
+      anchorSelector: `[data-tooltip-trigger="${triggerId}"]`,
+      arrowId,
+      offsetAsPadding: true
+    })
+    const side = placement?.side ?? tracked.options.side
+    const align = placement?.align ?? tracked.options.align
     // An attribute a part sets to `undefined` is removed from the
     // consumer's builder too, so a consumer's `data-open` can't report a
     // state the tooltip isn't in.
@@ -654,19 +679,33 @@ export const Tooltip = Component.define({
           .onClick(Message.ClickedTrigger())
           .onFocus(Message.FocusedTrigger())
           .onBlur(Message.BlurredTrigger())
-          .forward((node) => node.attr("style", withStyle(node.attrs.style, `anchor-name:${anchor}`)))
+          .attr("data-tooltip-trigger", triggerId)
     )
+    const style = Positioning.positionerStyle(tracked.positionMethod) +
+      (p.props.disableHoverablePopup === true ? ";pointer-events:none" : "")
     const positioner = p.part("div", (b) => {
       const decorated = placed(b)
         .attr("role", "presentation")
+        .attr("data-anchor-hidden", flag(shown && placement?.anchorHidden))
         .popover("manual", shown)
-        .forward((node) => node.attr("style", withStyle(node.attrs.style, placement(anchor, p.props))))
-      return p.props.disableHoverablePopup === true
+        .forward((node) => node.attr("style", withStyle(node.attrs.style, style)))
+      const hoverable = p.props.disableHoverablePopup === true
         ? decorated
         : decorated.on("mouseenter", Message.EnteredPositioner()).on("mouseleave", Message.LeftPositioner())
+      return shown
+        ? hoverable.onMount(
+          Positioning.TrackPosition(tracked).pipe(Mount.map((placement) => Message.ChangedPlacement({ placement })))
+        )
+        : hoverable
     })
     const popup = p.part("div", instant)
-    const arrow = p.part("div", (b) => instant(b).attr("aria-hidden", "true"))
+    const arrowStyle = Positioning.arrowStyle(side)
+    const arrow = p.part("div", (b) =>
+      instant(b)
+        .attr("id", arrowId)
+        .attr("aria-hidden", "true")
+        .attr("data-uncentered", flag(placement?.arrowUncentered))
+        .forward((node) => node.attr("style", withStyle(node.attrs.style, arrowStyle))))
     return {
       open: shown,
       side,

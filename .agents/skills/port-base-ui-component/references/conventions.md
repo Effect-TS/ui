@@ -36,6 +36,9 @@ the components that already follow it.
   - any other type the API needs (`SwitchButton`, `ListboxOption`)
 
   A component's message Schema stays private.
+- A public module that isn't a component, such as `Positioning`, has
+  unprefixed exports (`Positioning.place`), so the barrel exports it as a
+  namespace: `export * as Positioning from "./Positioning.ts"`.
 - Code that several components share goes in `src/internal/<topic>.ts`,
   once a second component needs it.
 - In `src`, import from module paths (`@effect/ui/Component`,
@@ -425,6 +428,11 @@ portal. The details are in the JSDoc of `popover` and `modal` in
   popup that doesn't track the pointer, or that moves focus in the same
   handler, still uses a stream mount on the popover. The popup stays open
   until the consumer passes `open: false`, so a consumer can refuse.
+- A popup that sits next to an anchor is placed by `Positioning`
+  (`packages/ui-kit/src/Positioning.ts`), as `Tooltip` does: spread
+  `PositionerFields` into the props, keep the reported `Placement` in the
+  Model, and issue `TrackPosition` on the positioner while the popup
+  shows. Don't use CSS anchor positioning.
 - `.popover("auto", open)` with `onToggle` follows the browser: it closes
   on Escape, an outside click, or another auto popover opening, and the
   Model stores what `onToggle` reports. Use it only when `open` is the
