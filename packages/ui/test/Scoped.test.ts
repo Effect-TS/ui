@@ -13,7 +13,7 @@ import {
 import { Html } from "@effect/ui/html"
 import { Locator, Scene, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Cause, Deferred, Effect, Redacted, Schema, SchemaGetter } from "effect"
+import { Cause, Deferred, Effect, Layer, Redacted, Schema, SchemaGetter } from "effect"
 
 const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(TestHost.layer()))
 const click = (root: Pick<TestHost.TestRoot<any, any, any>, "get">, text: string) =>
@@ -888,6 +888,38 @@ const Shut = Component.define({
 })
 
 describe("scoped children drawn by other children", () => {
+  it.effect("keeps a child its receiver stops placing as its Layer builds again", () =>
+    provideHost(Effect.gen(function*() {
+      const Room = Component.define({
+        name: "Room",
+        scoped: false,
+        model: Schema.Literals(["a", "b"]),
+        message: Schema.Literal("move"),
+        slots: ["body"]
+      }).make({
+        init: () => "a" as const,
+        update: () => "b" as const,
+        view: (room, h) =>
+          h.el("section", h.el("button").on("click", "move").children("move"), room === "a" ? h.slots.body : null)
+      })
+      const Keyed = Component.provide(Room, {
+        key: (_, room) => room,
+        layer: () => Layer.empty
+      })
+      const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => h.scoped((s) => h.el("main", Keyed(h, { key: "r", slots: { body: Counter(s, { key: "c" }) } })))
+      })
+      const root = yield* TestHost.mount(Page, {})
+      click(root, "count:0")
+      yield* TestHost.settle
+      click(root, "move")
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "move")
+      assert.deepStrictEqual(lifecycle(root, "/Page/Counter[c]"), ["Mounted", "Kept"])
+    })))
+
   it.effect("keeps a child drawn in a receiver whose own scope ends", () =>
     provideHost(Effect.gen(function*() {
       const Shown = Schema.Struct({ box: Schema.Boolean, direct: Schema.Boolean })

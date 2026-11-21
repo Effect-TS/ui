@@ -2275,7 +2275,6 @@ const setup = (
     inst.parent?.children.delete(inst)
     // A render that threw kept the paths it checked, and nothing reads them once the instance is closed.
     inst.childPaths = undefined
-    if (keeping.length > 0 && patching === 0) flushKept()
   }
 
   const failInstance = (
@@ -2792,7 +2791,6 @@ const setup = (
     swapForPlaceholder(inst, () => {
       for (const rendered of listOf(inst.rendered)) closeAll(inst, rendered)
     })
-    if (keeping.length > 0 && patching === 0) flushKept()
     viewChanged = true
   }
 
@@ -3549,7 +3547,6 @@ const setup = (
     inst.rendered = rendered
     viewChanged = true
     if (inst.failure !== undefined) return
-    if (keeping.length > 0 && patching === 0) flushKept()
     if (Option.isSome(adopted)) {
       apply(inst, { model: inst.model, commands: none, events: none }, mountedSeq, true)
       const commands = first.commands
@@ -5615,7 +5612,6 @@ const setup = (
     // Its closures render with it, so all it wrote is current. A closure that rendered alone is checked
     // in the drain, after the render that holds it.
     if (inst.owner === undefined) checkRefs(inst)
-    if (keeping.length > 0 && patching === 0) flushKept()
     if (table !== undefined && !inst.closed) askKept(inst, table)
     if (!inst.closed) viewChanged = true
     deliverSends(inst)
@@ -7360,14 +7356,12 @@ const setup = (
       // One node, with nothing to collect.
       closeAll(inst, rendered)
       host.remove(rendered.node)
-      if (keeping.length > 0 && patching === 0) flushKept()
       return
     }
     // Collected first: closing a child empties what it rendered.
     const nodes = nodesOf(rendered)
     closeAll(inst, rendered)
     for (let index = 0; index < nodes.length; index++) host.remove(nodes[index])
-    if (keeping.length > 0 && patching === 0) flushKept()
   }
 
   /** Destroys every node of a list, in one step when the host can clear their parent. */
@@ -7381,7 +7375,6 @@ const setup = (
     for (let index = 0; index < olds.length; index++) collectNodes(olds[index]!, nodes)
     for (let index = 0; index < olds.length; index++) closeAll(inst, olds[index]!)
     host.removeChildren(parentNode, nodes)
-    if (keeping.length > 0 && patching === 0) flushKept()
   }
 
   // -- root -----------------------------------------------------------------
