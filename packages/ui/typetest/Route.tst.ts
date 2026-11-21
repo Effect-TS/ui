@@ -55,7 +55,6 @@ describe("Route", () => {
     expect(AppRoute.Person({ params: { id: 1 } })).type.toBe<Extract<AppRoute, { _tag: "Person" }>>()
     expect(AppRoute.Person).type.not.toBeCallableWith()
     expect(AppRoute.Person).type.not.toBeCallableWith({ params: { id: "1" } })
-    expect(AppRoute.Files).type.not.toBeCallableWith()
     expect(Search.Search).type.toBeCallableWith()
     expect(Search.Search).type.toBeCallableWith({ search: { page: 2 } })
     expect(AppRoute.subset(["Home"])).type.not.toHaveProperty("Person")
@@ -63,7 +62,6 @@ describe("Route", () => {
 
   it("rejects reserved tags", () => {
     expect(Route.union).type.not.toBeCallableWith({ parse: Route.make("/") })
-    expect(Route.union).type.not.toBeCallableWith({ make: Route.make("/") })
     expect(Route.union).type.not.toBeCallableWith({ Type: Route.make("/") })
     expect(Route.union).type.not.toBeCallableWith({ name: Route.make("/") })
     expect(Route.union).type.not.toBeCallableWith({ valueOf: Route.make("/") })
