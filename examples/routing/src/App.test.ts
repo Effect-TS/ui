@@ -156,9 +156,10 @@ it.layer(AppTest("/people?searchText=manager"), { buildPerTest: true })("App at 
       assert.strictEqual(recentSearches(root), "Recent searches:devmanager")
     }))
 
-  it.effect("keys typed in the search input are not shortcuts", () =>
+  it.effect("keys typed in the search input are not shortcuts, and focusing it cancels a started chord", () =>
     Effect.gen(function*() {
       const root = yield* mountApp
+      yield* press("g")
       Locator.fire(root.get(searchInput), "focus")
       yield* TestHost.settle
       yield* press("g")
@@ -166,6 +167,8 @@ it.layer(AppTest("/people?searchText=manager"), { buildPerTest: true })("App at 
       assert.strictEqual(yield* currentUrl, "/people?searchText=manager")
       Locator.fire(root.get(searchInput), "blur")
       yield* TestHost.settle
+      yield* press("h")
+      assert.strictEqual(yield* currentUrl, "/people?searchText=manager")
       yield* press("g")
       yield* press("h")
       assert.strictEqual(yield* currentUrl, "/")

@@ -6,23 +6,20 @@ import { AppRoute } from "../../routes.ts"
 
 const filesIndexUrl = AppRoute.print(AppRoute.FilesIndex())
 
-const Breadcrumb = <M>(h: View.H<M>, path: ReadonlyArray<string>) =>
-  h.nav.attr("aria-label", "Breadcrumb").class("flex flex-wrap items-center gap-2 mb-6 text-sm").children(
-    h.a.attr("href", filesIndexUrl).class("text-blue-500 hover:underline").children("Files"),
-    path.map((segment, index) => {
-      const crumbPath = path.slice(0, index + 1)
-      return h.span.key(crumbPath.join("/")).class("flex items-center gap-2").children(
-        h.span.class("text-gray-400").children("/"),
-        index === path.length - 1
-          ? h.span.class("font-medium text-gray-800").children(segment)
-          : h.a.attr("href", filesUrl(crumbPath)).class("text-blue-500 hover:underline").children(segment)
-      )
-    })
-  )
-
 export const FilesPage = <M>(h: View.H<M>, path: ReadonlyArray<string>) =>
   h.div.class("max-w-4xl mx-auto px-4").children(
-    Breadcrumb(h, path),
+    h.nav.attr("aria-label", "Breadcrumb").class("flex flex-wrap items-center gap-2 mb-6 text-sm").children(
+      h.a.attr("href", filesIndexUrl).class("text-blue-500 hover:underline").children("Files"),
+      path.map((segment, index) => {
+        const crumbPath = path.slice(0, index + 1)
+        return h.span.key(crumbPath.join("/")).class("flex items-center gap-2").children(
+          h.span.class("text-gray-400").children("/"),
+          index === path.length - 1
+            ? h.span.class("font-medium text-gray-800").children(segment)
+            : h.a.attr("href", filesUrl(crumbPath)).class("text-blue-500 hover:underline").children(segment)
+        )
+      })
+    ),
     Option.match(findEntry(path), {
       onNone: () =>
         h.div.children(
