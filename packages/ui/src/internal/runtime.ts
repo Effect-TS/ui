@@ -32,7 +32,7 @@ import type * as Query from "../Query.ts"
 import type * as Renderer from "../Renderer.ts"
 import * as Subscription from "../Subscription.ts"
 import * as View from "../View.ts"
-import { writes as scopedWrites } from "./child.ts"
+import * as childOf from "./child.ts"
 import { propsEqual, sharedEqual } from "./equal.ts"
 import * as Executor from "./executor.ts"
 import * as headFold from "./headFold.ts"
@@ -436,12 +436,25 @@ const findChildIn = (r: Rendered, key: string): RChild | RFallback | undefined =
   if (r._tag === "Element") return findChild(r.children, key)
   if (r._tag === "Fallback" && r.scoped) return findChildIn(r.inner, key)
   if (r._tag === "Child" || r._tag === "Fallback") {
-    if (r.v.ref !== undefined && r.v.ref.key === key) return r
+    if (r.v.ref !== undefined && r.v.ref.key === key && r.v.owner === undefined) return r
     if (r._tag === "Fallback") return findChildIn(r.inner, key)
     if (r.inst.owner !== undefined) return findChild(r.inst.rendered, key)
     return firstInOutlets(r.inst, (out) => findChild(out.rendered, key))
   }
   // An outlet in the tree shows what another author wrote, so the search passes it by.
+  return undefined
+}
+
+const findOwned = (inst: Instance, key: string): RChild | RFallback | undefined => {
+  let r = inst.rendered
+  while (
+    r !== undefined && !Array.isArray(r) && (r._tag === "Child" || r._tag === "Fallback" && !r.scoped) &&
+    r.v.owner !== undefined
+  ) {
+    if (r.v.owner === inst.owner && r.v.ref !== undefined && r.v.ref.key === key) return r
+    if (r._tag === "Fallback") return undefined
+    r = r.inst.rendered
+  }
   return undefined
 }
 
@@ -646,6 +659,7 @@ export interface Instance {
   owners: Map<Component.Definition.Any, Instance> | undefined
   /** A reader with an `onChange`: the value of each owner its `onChange` last saw. */
   seen: Map<Instance, unknown> | undefined
+  declarer: Instance | undefined
   readonly dispatch: (message: unknown, source: MessageLog.Source) => void
   readonly fire: Renderer.Dispatch
 }
@@ -2450,7 +2464,7 @@ const setup = (
     const onFailure = inst.onFailure
     if (onFailure !== undefined) {
       // The code of whoever declared the child, so a defect in it is theirs, and it runs between renders.
-      const author = parent.author
+      const author = inst.declarer ?? parent.author
       defer(() => {
         const message = guard(author, "onFailure", () => onFailure(AsyncResult.failure(cause)))
         if (message !== undefined) author.dispatch(message, { _tag: "Failure", path: inst.path, seq: failedSeq })
@@ -3059,6 +3073,7 @@ const setup = (
     deferred: Instance["deferred"] = false
     lazy: Instance["lazy"] = undefined
     heads: Instance["heads"] = 0
+    declarer: Instance["declarer"] = undefined
   }
 
   /**
@@ -3167,6 +3182,7 @@ const setup = (
     declare deferred: Instance["deferred"]
     declare lazy: Instance["lazy"]
     declare heads: Instance["heads"]
+    declare declarer: Instance["declarer"]
     /**
      * From the moment its Scope or an ancestor's starts closing, not once it has: see `Instance.closed`.
      */
@@ -3281,7 +3297,8 @@ const setup = (
     range: Range | undefined,
     content?: ((parts: any) => View.Content<any, any>) | undefined,
     slots?: Slotted["values"],
-    scope?: Scope.Closeable
+    scope?: Scope.Closeable,
+    declarer?: Instance | undefined
   ): Instance => {
     // A child's Scope is made when it's needed: see `Inst.scope`.
     const ownScope = parent === undefined ? Scope.forkUnsafe(rootScope, "sequential") : scope
@@ -3306,6 +3323,7 @@ const setup = (
       content,
       owner === undefined || parent === undefined ? undefined : parent.author
     )
+    if (declarer !== undefined) inst.declarer = declarer
     addInstanceFinalizer(inst)
     if (component.head !== undefined) {
       for (let at: Instance | undefined = inst; at !== undefined; at = at.parent) {
@@ -4120,10 +4138,9 @@ const setup = (
     for (const held of outbox) {
       if (inst.closed) return
       const { issued, send } = held
-      // A headless instance wrote none of the tree it renders, so it has no children to send to.
       const child = inst.owner === undefined
         ? findChild(inst.rendered, send.ref.key) ?? (keptLive > 0 ? findKept(inst, send.ref.key) : undefined)
-        : undefined
+        : findOwned(inst, send.ref.key)
       if (child === undefined && servedIn !== undefined && holdSend(inst, held)) continue
       const queue = late?.get(inst)
       if (queue !== undefined) queue.push([heldCount++, held, child])
@@ -4151,8 +4168,7 @@ const setup = (
     else (child as RChild).inst.dispatch(send.message, { _tag: "Send", path: inst.path, seq: issued.seq })
   }
   const deliverEvents = (inst: Instance, events: ReadonlyArray<unknown>, entrySeq: number) => {
-    // The child's `onEmit` was written by the author of the tree it sits in.
-    const parent = (inst.parent ?? keptAuthor(inst))?.author
+    const parent = inst.declarer ?? (inst.parent ?? keptAuthor(inst))?.author
     for (const emitted of events) {
       if (inst.closed) return
       if (parent === undefined) {
@@ -5591,14 +5607,14 @@ const setup = (
   // -- create ---------------------------------------------------------------
   /** The instance's view. A headless instance's is the closure it was declared with, run against its parts. */
   const viewOf = (inst: Instance): View.Node<any, any> | undefined => {
-    scopedWrites.on = true
+    childOf.writes.on = true
     try {
       return buildView(inst)
     } finally {
-      scopedWrites.on = false
+      childOf.writes.on = false
     }
   }
-  const takeWrites = () => scopedWrites.list.length === 0 ? undefined : scopedWrites.list.splice(0)
+  const takeWrites = () => childOf.writes.list.length === 0 ? undefined : childOf.writes.list.splice(0)
 
   const buildView = (inst: Instance): View.Node<any, any> | undefined => {
     const owner = inst.owner
@@ -5613,7 +5629,16 @@ const setup = (
     }))
     if (parts === undefined) return undefined
     // A closure is the consumer's code: what goes wrong in it is logged as `content`.
-    return guard(inst, "content", () => checked(inst, View.toNode(inst.content!(parts.value))))
+    return guard(
+      inst,
+      "content",
+      () => checked(inst, View.toNode(childOf.expand(parts.value, inst.content!, mergeFailed)))
+    )
+  }
+
+  const mergeFailed = (owner: View.Owner, error: unknown): View.Text => {
+    failLater(owners.get(owner)!, error)
+    return emptyText
   }
 
   const ownView = (inst: Instance): View.Node<any, any> => {
@@ -5851,7 +5876,7 @@ const setup = (
         out.rendered = packed(rendered)
       }
     } catch (error) {
-      contentFailed(out, error)
+      failLater(out.author, error)
       created++
       out.rendered = new TextRecord(emptyText, host.createText(""))
     }
@@ -5930,7 +5955,7 @@ const setup = (
       refChecks.add(out.author)
       return views.length === 0 ? [emptyText] : views
     } catch (error) {
-      contentFailed(out, error)
+      failLater(out.author, error)
       out.childPaths = undefined
       return [emptyText]
     }
@@ -5940,9 +5965,8 @@ const setup = (
    * A content is its author's code, so a mistake in it fails the author. Deferred, as a fallback clash
    * is: failing an ancestor midway through a patch would close it over nodes the patch has removed.
    */
-  const contentFailed = (out: Instance, error: unknown) => {
-    const author = out.author
-    defer(() => failInstance(author, Cause.die(error), "view"))
+  const failLater = (inst: Instance, error: unknown) => {
+    defer(() => failInstance(inst, Cause.die(error), "view"))
   }
 
   const renderOutlet = (out: Instance) => {
@@ -5955,7 +5979,7 @@ const setup = (
       releaseRemoved(olds, views)
       out.rendered = packed(patchList(out, parentNode, olds, views, ref, out.env))
     } catch (error) {
-      contentFailed(out, error)
+      failLater(out.author, error)
     }
     failClash(out)
   }
@@ -5966,7 +5990,7 @@ const setup = (
     const clash = out.clash
     if (clash === undefined) return
     out.clash = undefined
-    contentFailed(out, clash)
+    failLater(out.author, clash)
   }
 
   /** Re-renders the placed outlets whose content the parent changed. */
@@ -6043,7 +6067,8 @@ const setup = (
       range,
       view.view,
       view.slots,
-      scope
+      scope,
+      view.owner === undefined ? undefined : owners.get(view.owner)
     )
     // Built fresh: the server's nodes go, and the parent places the new ones.
     if (range !== undefined && !range.claimed) removeRange(range)
@@ -7038,10 +7063,6 @@ const setup = (
 
   const entryAt = (author: Instance, view: View.Child<any, any>): Kept | undefined =>
     keptTables.get(author)?.children.get(view.component)?.get(view.key)
-
-  const failLater = (author: Instance, error: unknown) => {
-    defer(() => failInstance(author, Cause.die(error), "view"))
-  }
 
   const askAlive = (
     author: Instance,

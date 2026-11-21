@@ -22,10 +22,16 @@ export interface Options {
 }
 
 /** @internal */
+export interface ComposeOptions extends Options {
+  readonly parts: (parts: any) => unknown
+}
+
+/** @internal */
 export const make = (
   component: Component.Any | Component.Headless.Any | Feature.Any,
   options: Options,
-  alive?: View.Child<any, any>["alive"]
+  alive?: View.Child<any, any>["alive"],
+  owner?: View.Owner
 ): View.Child<any, any> => {
   // A child with a key and a ref would have two identities that can disagree.
   if (options.key !== undefined && options.ref !== undefined) {
@@ -44,10 +50,66 @@ export const make = (
     onFailure: options.onFailure,
     view: options.view,
     slots: options.slots,
-    alive
+    alive,
+    owner
   }
   if (alive !== undefined && writes.on) writes.list.push(made)
   return made
+}
+
+/** @internal */
+export const ComposedTypeId = "~@effect/ui/Component/Composed"
+
+/** @internal */
+export interface Composed {
+  readonly [ComposedTypeId]: typeof ComposedTypeId
+  readonly child: View.Child<any, any>
+  readonly parts: (parts: any) => unknown
+}
+
+/** @internal */
+export const isComposed = (u: unknown): u is Composed => typeof u === "object" && u !== null && ComposedTypeId in u
+
+const refused = ["view", "slots", "fallback"] as const
+
+/** @internal */
+export const compose = (
+  owner: View.Owner,
+  component: Component.Headless.Any,
+  options: ComposeOptions
+): Composed => {
+  for (const name of refused) {
+    if (options[name] !== undefined) {
+      throw new Error(`p.child(${component.definition.name}) takes no \`${name}\``)
+    }
+  }
+  return {
+    [ComposedTypeId]: ComposedTypeId,
+    child: make(component, options, undefined, owner),
+    parts: options.parts
+  }
+}
+
+/** @internal */
+export const expand = (
+  result: unknown,
+  content: (parts: any) => View.Content<any, any>,
+  failed?: (owner: View.Owner, cause: unknown) => View.Content<any, any>
+): View.Content<any, any> => {
+  if (!isComposed(result)) return content(result)
+  return {
+    ...result.child,
+    view: (parts) => {
+      let merged: unknown
+      try {
+        merged = result.parts(parts)
+      } catch (cause) {
+        if (failed === undefined) throw cause
+        return failed(result.child.owner!, cause)
+      }
+      return expand(merged, content, failed)
+    }
+  }
 }
 
 const ignore = () => undefined

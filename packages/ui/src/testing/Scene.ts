@@ -164,7 +164,7 @@ export interface Expect<S> {
 // `Rcv` is invariant, and `any` doesn't stand for `never`, so one that receives nothing needs its own members too.
 /** The events a child emits: a component's, a headless component's or a feature's. */
 type EventsOf<Child> = Child extends Feature.Service<any, any, infer E, any> ? E
-  : Child extends Component.Headless<any, infer E, any, any, any, never> ? E
+  : Child extends Component.Headless<any, infer E, any, any, infer _Rcv, never> ? E
   : Component.Events<Child>
 
 // The same union as `Steps.ts`'s, so `Scene.Steps.Any` extends `Steps.Steps.Any`.

@@ -21,6 +21,7 @@ import type * as Subscription from "../Subscription.ts"
 import * as Locator from "../testing/Locator.ts"
 import type { AwaitedQuery, KeyedLoad, Pending, QueryInfo, StreamTarget, Target } from "../testing/Steps.ts"
 import * as View from "../View.ts"
+import * as childOf from "./child.ts"
 import { sharedEqual } from "./equal.ts"
 import { isNoop } from "./noop.ts"
 import {
@@ -523,7 +524,7 @@ const expandRoot = <Msg>(
           owner: { path: childPath, depth: depth + 1 },
           shared: sharedLookup(shared, owners)
         })
-        const tree = View.toNode(node.view(parts))
+        const tree = View.toNode(childOf.expand(parts, node.view))
         const paths = checkChildPaths(childPath, tree)
         if (own) written.push(paths)
         // An owner expanded here is the nearest one for the readers in its closure.
@@ -1833,6 +1834,44 @@ export const findStream = (story: State<any, any, any, any>, target: StreamTarge
   return entry
 }
 
+/** @internal */
+export const rootParts = <Props, Parts>(
+  component: Pick<Component.Headless<Props, any, Parts, any, any>, "definition" | "parts">,
+  model: unknown,
+  props: Props,
+  lookup: object
+): Parts => {
+  const shared = sharedGiven.get(lookup)
+  const given = childModels.get(lookup)
+  const resolve = (
+    value: unknown,
+    owner: View.Owner,
+    owners: Owners
+  ): readonly [unknown, View.Owner, Owners] => {
+    while (childOf.isComposed(value)) {
+      const child = value.child
+      const owned = child.component as unknown as Component.Headless.Any
+      const at: View.Owner = { path: owner.path + "/" + segment(child), depth: owner.depth + 1 }
+      const ownedModel = given?.has(at.path) ? given.get(at.path) : owned.init(child.props).model
+      const [parts, inner, below] = resolve(
+        owned.parts(ownedModel, child.props, { owner: at, shared: sharedLookup(shared, owners) }),
+        at,
+        ownersBelow(owners, owned, ownedModel, child.props)
+      )
+      value = value.parts(parts)
+      owner = inner
+      owners = below
+    }
+    return [value, owner, owners]
+  }
+  const owner: View.Owner = { path: "/" + component.definition.name, depth: 0 }
+  return resolve(
+    component.parts(model, props, { owner, shared: rootShared(shared) }),
+    owner,
+    ownersBelow(noOwners, component, model, props)
+  )[0] as Parts
+}
+
 /**
  * A headless component with `view` as its consumer, as a component a story
  * can run. `view` has no messages of its own, so every handler that runs is
@@ -1857,7 +1896,9 @@ export const withView = (
       shared?: Component.SharedLookup
     ) => {
       const h = View.makeHelper(props, elements ?? component.elements(), running, owner.path)
-      return View.toNode(view(component.parts(model, props, { owner, running, queries, shared }), h))
+      return View.toNode(
+        childOf.expand(component.parts(model, props, { owner, running, queries, shared }), (parts) => view(parts, h))
+      )
     }
   })
 }
@@ -1947,11 +1988,19 @@ export const findChild = (
     : typeof key === "string"
     ? `with key "${key}"`
     : `with the ref ${key.key}`
-  throw new Error(
-    found.length === 0
-      ? `${step}: no child ${name} ${which}; children: ${
+  if (found.length === 0) {
+    throw new Error(
+      `${step}: no child ${name} ${which}; children: ${
         all.map(({ child }) => segment(child) + (child.ref !== undefined ? " (ref)" : "")).join(", ")
       }`
-      : `${step}: ${found.length} children ${name} ${which}: give each one its own key or ref`
+    )
+  }
+  const owners = found.flatMap(({ child }) => child.owner === undefined ? [] : [child.owner.path])
+  throw new Error(
+    owners.length === 0
+      ? `${step}: ${found.length} children ${name} ${which}: give each one its own key or ref`
+      : `${step}: ${found.length} children ${name} ${which}, declared with p.child by ${
+        owners.join(" and ")
+      }. A scene can't choose between the children that one component owns in several places`
   )
 }

@@ -434,6 +434,16 @@ nested get a role in front, `outerDialog` and `innerDialog`. Parts built
 outside a closure follow the same rule:
 `const listbox = Story.parts(Listbox, { model, props })`.
 
+A headless component can build on another: `parts` returns
+`p.child(Listbox, { props, onEmit, parts: (listbox) => ({ ...listbox, tags }) })`,
+and the consumer's closure gets what that `parts` returns. The component owns
+the child: the child's events and failures go through its `update`, its
+`$.send` reaches the child by ref, and a consumer's ref of the same key never
+matches it. A child that fails shows nothing, the consumer's closure with it,
+and the failure goes no further than its `onFailure`. A `Scene` of the
+component stands in for the child with `childEmit`, and a `Scene` of a
+consumer refuses to, because it doesn't run the component's `update`.
+
 ### Shared state
 
 A headless component with `shares: (model, props) => value` owns shared

@@ -400,6 +400,8 @@ export interface Child<out Msg, out R = never> {
    * `h.scoped`: its scope's predicate, or `true` for a scope without one.
    */
   readonly alive?: ((input: any) => boolean) | true | undefined
+  /** The headless instance that declared the child with `p.child`, which takes its events and failures. */
+  readonly owner?: Owner | undefined
   /** Phantom: the child's requirements surface in its parent's. */
   readonly "~R"?: (_: never) => R
 }

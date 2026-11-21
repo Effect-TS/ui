@@ -18,6 +18,25 @@ import { Cursor } from "./steps.ts"
 import * as cursor from "./steps.ts"
 import * as engine from "./story.ts"
 
+const findDeclared = (
+  state: engine.State<any, any, any, any>,
+  child: ChildTarget,
+  key: string | Component.Ref.Any | undefined,
+  step: string
+): engine.Occurrence => {
+  const found = engine.findChild(state.view(), child, key, step)
+  const owner = found.child.owner
+  if (owner !== undefined && owner.path !== "/" + state.component.definition.name) {
+    throw new Error(
+      `${step}: ${
+        engine.pathOf(state, found)
+      } is declared with p.child by ${owner.path}, whose update takes its events. ` +
+        "A scene doesn't run a child's update: write a scene of that component, or a TestHost test."
+    )
+  }
+  return found
+}
+
 /**
  * A check on the elements a locator matched. It returns what it found when the check fails, or
  * `undefined` when it passes. `root` is the whole tree, for checks such as an accessible name that read
@@ -337,14 +356,14 @@ export class SceneCursor extends Cursor {
   childEmit(child: ChildTarget, ...args: KeyAnd<unknown>): this {
     const [key, event] = keyAnd(args)
     return this.act("childEmit", "message", (state) => {
-      const found = engine.findChild(state.view(), child, key, this.name("childEmit")).child
+      const found = findDeclared(state, child, key, this.name("childEmit")).child
       return engine.dispatch(state, found.onEmit(event))
     })
   }
   childFailure(child: ChildTarget, ...args: KeyAnd<Cause.Cause<unknown>>): this {
     const [key, cause] = keyAnd(args)
     return this.act("childFailure", "message", (state) => {
-      const found = engine.findChild(state.view(), child, key, this.name("childFailure"))
+      const found = findDeclared(state, child, key, this.name("childFailure"))
       const failure: AsyncResult.Failure<never, unknown> = AsyncResult.failure(cause)
       return engine.dispatch(withSlot(state, found, failure), found.child.onFailure?.(failure))
     })
@@ -352,7 +371,7 @@ export class SceneCursor extends Cursor {
   childPending(child: ChildTarget, key?: string | Component.Ref.Any): this {
     const step = this.name("childPending")
     return this.act("childPending", "acting", (state) => {
-      const found = engine.findChild(state.view(), child, key, step)
+      const found = findDeclared(state, child, key, step)
       if (found.child.fallback === undefined) {
         throw new Error(`${step}: the child has no fallback to show while it's pending`)
       }
@@ -411,12 +430,7 @@ export class SceneCursor extends Cursor {
     if (component.parts === undefined) {
       throw new Error(`${this.name("parts")}: ${this.state.component.definition.name} is not a headless component`)
     }
-    f(
-      component.parts(this.state.model, this.state.props, {
-        owner: { path: "/" + this.state.component.definition.name, depth: 0 },
-        shared: engine.rootShared(engine.sharedGiven.get(this.state))
-      })
-    )
+    f(engine.rootParts(component as Component.Headless.Any, this.state.model, this.state.props, this.state))
     return this
   }
   expect(locator: Locator.Locator): object {
