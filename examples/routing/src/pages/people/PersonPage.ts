@@ -14,13 +14,13 @@ const Detail = <M>(h: View.H<M>, label: string, value: string) =>
 export const PersonPage = <M>(h: View.H<M>, personId: number) =>
   Option.match(findPerson(personId), {
     onNone: () =>
-      h.div.class("max-w-4xl mx-auto px-4").children(
+      h.div.children(
         h.h2.class("text-4xl font-bold text-red-600 mb-6").children("Person Not Found"),
         h.p.class("text-lg text-gray-600 mb-4").children(`No person found with ID: ${personId}`),
         h.a.attr("href", peopleUrl).class("text-blue-500 hover:underline").children("← Back to People")
       ),
     onSome: (person) =>
-      h.div.class("max-w-4xl mx-auto px-4").children(
+      h.div.children(
         h.a.attr("href", peopleUrl).class("text-blue-500 hover:underline mb-4 inline-block")
           .children("← Back to People"),
         h.article.children(

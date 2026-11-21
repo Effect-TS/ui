@@ -6,11 +6,11 @@ import { searchPeople } from "../../people/domain/Person.ts"
 import { AppRoute } from "../../routes.ts"
 import { PeoplePage, PeoplePageEvents, PeoplePageMessage } from "./PeoplePage.ts"
 
-const people = (searchText?: string) => AppRoute.People(searchText === undefined ? {} : { search: { searchText } })
+const people = (searchText = "") => AppRoute.People({ search: { searchText } })
 
-const makeStory = Effect.fn(function*(searchText?: string) {
+const makeStory = Effect.fn(function*(searchText = "") {
   const s = yield* Story.make(PeoplePage, { route: people(searchText), searchHistory: [] })
-  return s.loaded("people", searchPeople(searchText ?? ""))
+  return s.loaded("people", searchPeople(searchText))
 })
 
 describe("PeoplePage", () => {
@@ -38,7 +38,7 @@ describe("PeoplePage", () => {
         .expectExact(Router.PatchSearch)
       assert.deepStrictEqual(s.pending[0].command.args, {
         route: people("designer"),
-        patch: { searchText: undefined },
+        patch: { searchText: "" },
         history: "push",
         scroll: false
       })
@@ -59,9 +59,9 @@ describe("PeoplePage", () => {
   it.effect("reports the search input gaining and losing focus", () =>
     Effect.gen(function*() {
       const s = yield* makeStory()
-      s.send(PeoplePageMessage.FocusedSearchInput())
-        .emitted(PeoplePageEvents.FocusedSearchInput())
-        .send(PeoplePageMessage.BlurredSearchInput())
-        .emitted(PeoplePageEvents.BlurredSearchInput())
+      s.send(PeoplePageMessage.ChangedSearchInputFocus({ focused: true }))
+        .emitted(PeoplePageEvents.ChangedSearchInputFocus({ focused: true }))
+        .send(PeoplePageMessage.ChangedSearchInputFocus({ focused: false }))
+        .emitted(PeoplePageEvents.ChangedSearchInputFocus({ focused: false }))
     }))
 })

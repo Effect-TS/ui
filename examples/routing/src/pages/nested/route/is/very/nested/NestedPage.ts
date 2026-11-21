@@ -1,7 +1,7 @@
 import type { View } from "@effect/ui"
 
 export const NestedPage = <M>(h: View.H<M>) =>
-  h.div.class("max-w-4xl mx-auto px-4").children(
+  h.div.children(
     h.h1.class("text-4xl font-bold text-gray-800 mb-6").children("Very Nested Route!"),
     h.p.class("text-lg text-gray-600").children(
       "You found the deeply nested route at /nested/route/is/very/nested"
