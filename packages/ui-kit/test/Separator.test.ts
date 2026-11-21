@@ -7,21 +7,13 @@ const Msg = UiSchema.TaggedEnum({ Clicked: {} })
 const h = View.makeHelper<typeof Msg.Type, {}, Html.Elements>({}, Html)
 
 describe("Separator", () => {
-  it("sets role, aria-orientation and data-orientation for horizontal by default and for vertical", () => {
+  it("defaults to horizontal and overrides its own attributes for vertical while keeping consumer class, attributes and handlers", () => {
     assert.deepStrictEqual(View.build(Separator(h), []).attrs, {
       role: "separator",
       "aria-orientation": "horizontal",
       "data-orientation": "horizontal"
     })
 
-    assert.deepStrictEqual(View.build(Separator(h, { props: { orientation: "vertical" } }), []).attrs, {
-      role: "separator",
-      "aria-orientation": "vertical",
-      "data-orientation": "vertical"
-    })
-  })
-
-  it("overrides consumer values for its own attributes while keeping class, other attributes and handlers", () => {
     const built = Separator(h, {
       props: { orientation: "vertical" },
       element: h.div
