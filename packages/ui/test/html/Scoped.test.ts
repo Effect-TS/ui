@@ -689,9 +689,9 @@ describe("scoped children in a receiver that waits for its Layer", () => {
   const NotePage = Component.define({
     name: "NotePage",
     scoped: false,
-    model: Schema.Literals(["in the slot", "in an article", "in an article, the receiver gone"]),
+    model: Schema.Literals(["in the slot", "in an article", "in an article, the receiver gone", "nowhere"]),
     message: Schema.Struct({
-      at: Schema.Literals(["in the slot", "in an article", "in an article, the receiver gone"]),
+      at: Schema.Literals(["in the slot", "in an article", "in an article, the receiver gone", "nowhere"]),
       add: Schema.String
     }),
     elements: Html
@@ -702,10 +702,10 @@ describe("scoped children in a receiver that waits for its Layer", () => {
       h.scoped((s) => {
         const note = Note(s, { ref: NoteRef })
         return h.main(
-          at === "in an article, the receiver gone"
+          at === "in an article, the receiver gone" || at === "nowhere"
             ? null
             : Bare(h, { key: "g", slots: { body: at === "in the slot" ? note : null } }),
-          at === "in the slot" ? null : h.article(note)
+          at === "in the slot" || at === "nowhere" ? null : h.article(note)
         )
       })
   })
@@ -725,6 +725,21 @@ describe("scoped children in a receiver that waits for its Layer", () => {
         assert.strictEqual(app.querySelector("input")?.value, "serverABC")
       }).pipe(Effect.scoped)
   )
+
+  it.effect("keep what the user typed, and get a message after it, when drawn nowhere at adoption", () =>
+    Effect.gen(function*() {
+      const { app, state } = yield* serve(HtmlServer.renderToHtml(NotePage, {}))
+      const field = app.querySelector("input")!
+      field.value = "typed"
+      const root = yield* BrowserHost.mountEffect(NotePage, {}, app, { state })
+      root.send({ at: "nowhere", add: "" })
+      yield* root.adopted
+      yield* tick
+      root.send({ at: "in an article, the receiver gone", add: "!" })
+      yield* tick
+      assert.strictEqual(app.querySelector("input"), field)
+      assert.strictEqual(field.value, "typed!")
+    }).pipe(Effect.scoped))
 
   it.effect("get a message after the edit the user made before they adopted", () =>
     Effect.gen(function*() {
