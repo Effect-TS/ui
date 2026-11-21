@@ -649,4 +649,26 @@ describe("Dialog in a document", { concurrent: false }, () => {
       yield* tick
       assert.strictEqual(document.activeElement?.id, "page")
     }))
+
+  it.effect("without a backdrop, a mouse press that focuses a late button keeps the dialog open, and Tab out closes it", () =>
+    Effect.gen(function*() {
+      const { log, send } = yield* mountPage({ modal: false })
+      const root = document.body.appendChild(document.createElement("div"))
+      yield* Effect.addFinalizer(() => Effect.sync(() => root.remove()))
+      send(Message.AddedControl())
+      yield* tick
+      for (const button of [byId("late"), root.appendChild(document.createElement("button"))]) {
+        press(button)
+        button.focus()
+        button.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerType: "mouse" }))
+        button.dispatchEvent(new PointerEvent("click", { bubbles: true, detail: 1, pointerType: "mouse" }))
+        yield* tick
+        assert.strictEqual(document.activeElement, button)
+      }
+      assert.deepStrictEqual(dismissals(log()), [])
+      byId("first").focus()
+      byId("late").focus()
+      yield* tick
+      assert.deepStrictEqual(dismissals(log()), ["Dismissed a focus-out"])
+    }))
 })

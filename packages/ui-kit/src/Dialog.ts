@@ -109,8 +109,10 @@
  * counts, a toast's too, even in a toast viewport drawn after the dialog
  * opened, except one on an element added to the page since the dialog
  * opened, in a new root or inside one already there. An element the renderer
- * reuses for new content counts as already there. `disablePointerDismissal`
- * turns that off, and the close on focus leaving with it.
+ * reuses for new content counts as already there. Focus that such a press
+ * moves out of the dialog doesn't close it either, but moving focus there
+ * with the keyboard does. `disablePointerDismissal` turns that off, and the
+ * close on focus leaving with it.
  *
  * The modal is the kit's, not the browser's: find-in-page and a script's
  * `focus()` still reach the page behind it, and close requests other than
@@ -685,12 +687,14 @@ const TrackDialog = Mount.makeStream(
         )
       const touches = new Set<number>()
       let pressed: string | undefined
+      let ignored: Node | null = null
       const listens = (): boolean => current.open && current.dismissible && topmost()
       const onPointerDown = (event: PointerEvent) => {
         pressed = undefined
+        const target = event.target as Node | null
+        ignored = target !== null && current.open && !node.contains(target) && !outside(target) ? target : null
         if (event.pointerType === "touch") touches.add(event.pointerId)
         if (!listens() || !event.isPrimary || event.button !== 0 || touches.size > 1) return
-        const target = event.target as Node | null
         if (target === null || (event.pointerType !== "touch" && onScrollbar(target, event)) || !outside(target)) {
           return
         }
@@ -702,6 +706,7 @@ const TrackDialog = Mount.makeStream(
       }
       const onPointerEnd = (event: PointerEvent) => {
         touches.delete(event.pointerId)
+        ignored = null
         const target = event.target as Node | null
         if (event.type === "pointercancel" || target === null || !outside(target)) pressed = undefined
       }
@@ -721,7 +726,7 @@ const TrackDialog = Mount.makeStream(
         if (focusInside) lastFocused = target as HTMLElement
         else if (target instanceof HTMLElement && visited.push(target) > 20) visited.shift()
         if (focusInside || target === null || current.modal !== false || !current.open) return
-        if (!topmost() || inDialogAbove(node, target)) return
+        if (!topmost() || inDialogAbove(node, target) || (ignored !== null && target.contains(ignored))) return
         if (current.dismissible && handingOff === 0 && !onTrigger(target)) send(Message.FocusedOutside())
       }
 
