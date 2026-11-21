@@ -208,13 +208,17 @@ export interface Host<Node> {
  *
  * **Details**
  *
- * The server brackets each instance's nodes with two markers carrying its
- * path, `<!--[path-->` and `<!--]path-->` in HTML. `inspect` tells the
- * renderer what a node is: an element by tag, a text node, one of those
- * markers, or anything else, which never matches. Siblings are read with the
- * host's `nextOf`. An element whose content the host parses as text only,
- * such as an HTML `textarea`, is marked `textOnly`: the server writes only
- * its text, and hydration adopts the element but builds its children fresh.
+ * The server brackets an instance's nodes with two markers carrying its path,
+ * `<!--[path-->` and `<!--]path-->` in HTML, except for a declared child whose
+ * state is shipped, whose component provides no `Layer`, and whose view's root
+ * is an element: that child is written as its element alone, and hydration
+ * matches it by position when its path is in the state. Hydration still
+ * accepts marker pairs for any child. `inspect` tells the renderer what a node
+ * is: an element by tag, a text node, one of those markers, or anything else,
+ * which never matches. Siblings are read with the host's `nextOf`. An element
+ * whose content the host parses as text only, such as an HTML `textarea`, is
+ * marked `textOnly`: the server writes only its text, and hydration adopts the
+ * element but builds its children fresh.
  *
  * `adoptProp`, if given, sets a property of an adopted element in place of
  * `setProp`, so the host can keep what the user changed in the server's
@@ -287,8 +291,11 @@ export interface State {
 }
 
 /**
- * A node of a server-rendered tree. A `Range` is one instance's nodes, or
- * the `fallback` of a child, under its path.
+ * A node of a server-rendered tree. A `Range` is one instance's nodes, a
+ * slot's content, or the `fallback` of a child, under its path. A declared
+ * child whose state is shipped, whose component provides no `Layer`, and whose
+ * view's root is an element is emitted as that `Element` without a wrapping
+ * `Range`.
  *
  * @stability experimental
  * @category models

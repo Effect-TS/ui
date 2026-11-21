@@ -831,7 +831,10 @@ let sessions = 0
 /** Each runtime's interrupter id for the Layer builds it ends: negative, so never a fiber's. */
 let buildInterrupters = 0
 
-/** The server's nodes for one instance: between its two markers. */
+/**
+ * The server's nodes for one instance: between its two markers, or the one element of a child written
+ * without them, which is then both `open` and `close`.
+ */
 interface Range {
   readonly open: unknown
   readonly close: unknown
@@ -1038,11 +1041,13 @@ const serializeTree = (
         if (inst.component.layer !== undefined) ship(path, inst.env.status)
       }
     }
-    sink.enter(path)
+    const bare = !inner && inst.parent !== undefined && inst.component.layer === undefined &&
+      !Array.isArray(inst.rendered) && inst.rendered?._tag === "Element"
+    if (!bare) sink.enter(path)
     if (inst.failure === undefined) {
       for (const rendered of listOf(inst.rendered)) serialize(inst, rendered, inner)
     }
-    sink.leave(path)
+    if (!bare) sink.leave(path)
   }
   const serialize = (inst: Instance, rendered: Rendered, under: boolean): void => {
     switch (rendered._tag) {
@@ -3271,7 +3276,7 @@ const setup = (
     let rendered: Rendered
     try {
       if (range !== undefined && Option.isSome(serverModel)) {
-        taken = adoptNode(inst, tree, host.nextOf(range.open), range.close, inst.env)
+        taken = adoptNode(inst, tree, firstOf(range), stopOf(range), inst.env)
       }
       rendered = taken ?? create(inst, tree, inst.env)
       throwClash(inst)
@@ -5677,7 +5682,7 @@ const setup = (
     let inner: Rendered | undefined
     if (range !== undefined) {
       if (shippedStatus(`${inst.path}/${segment(view)}`) === status._tag) {
-        inner = adoptNode(inst, shown, host.nextOf(range.open), range.close, settled(env))
+        inner = adoptNode(inst, shown, firstOf(range), stopOf(range), settled(env))
       }
       if (inner !== undefined) claim(range)
       else removeRange(range)
@@ -5694,6 +5699,9 @@ const setup = (
     }
     return undefined
   }
+
+  const firstOf = (range: Range): unknown => range.open === range.close ? range.open : host.nextOf(range.open)
+  const stopOf = (range: Range): unknown => range.open === range.close ? host.nextOf(range.open) : range.close
 
   /** A range's nodes, its markers included. */
   const rangeNodes = (range: Range): Array<unknown> => {
@@ -5723,6 +5731,10 @@ const setup = (
   /** Adopted: what's left of the server's nodes in the range goes, with its markers. */
   const claim = (range: Range) => {
     range.claimed = true
+    if (range.open === range.close) {
+      if (adoptedUpTo === range.open) host.remove(range.open)
+      return
+    }
     removeUpTo(adoptedUpTo, range.close)
     host.remove(range.open)
     host.remove(range.close)
@@ -5731,8 +5743,9 @@ const setup = (
   /**
    * Adopts the server's node `node` for `view`, with everything under it, in one pass: nothing is
    * matched ahead. `undefined` when `node`, which is `stop` or missing once the server's nodes run out,
-   * isn't what the view renders: nothing was adopted then. A child matches by its marker range, which it
-   * adopts itself. A server never writes an empty text node, so an empty text takes no node and is created.
+   * isn't what the view renders: nothing was adopted then. A child matches by its marker range, or by an
+   * element when the state has its path, and adopts it itself. A server never writes an empty text node, so
+   * an empty text takes no node and is created.
    */
   const adoptNode = (
     inst: Instance,
@@ -5783,8 +5796,12 @@ const setup = (
       case "Child":
       case "Outlet": {
         const path = view._tag === "Child" ? `${inst.path}/${segment(view)}` : outletPath(inst.author, view.name)
-        if (kind?._tag !== "Open" || kind.path !== path) return undefined
-        const range = rangeFrom(node, path, stop)
+        const range: Range | undefined = kind?._tag === "Open" && kind.path === path
+          ? rangeFrom(node, path, stop)
+          : view._tag === "Child" && kind?._tag === "Element" && hydrating !== undefined &&
+              Object.hasOwn(hydrating.state, path)
+          ? { open: node, close: node, claimed: false }
+          : undefined
         if (range === undefined) return undefined
         const next = host.nextOf(range.close)
         // A child's content matches itself against the range, as an outlet's does, and builds fresh what doesn't.
