@@ -1,3 +1,5 @@
+import { saved } from "./dom.ts"
+
 const layers: Array<{ readonly inside: Element; readonly order: number }> = []
 let marked: Element | undefined
 let unmark: (() => void) | undefined
@@ -89,13 +91,6 @@ const lock = (document: Document): (() => void) | undefined => {
   const htmlStyle = view.getComputedStyle(html)
   const scroller = overflows(htmlStyle) ? html : body
   if (/hidden|clip/.test(view.getComputedStyle(scroller).overflowY)) return undefined
-  const saved = (
-    element: HTMLElement,
-    names: ReadonlyArray<"overflowX" | "overflowY" | "scrollbarGutter" | "position" | "height" | "width" | "boxSizing">
-  ) => {
-    const values = names.map((name) => element.style[name])
-    return () => names.forEach((name, i) => (element.style[name] = values[i]!))
-  }
   const gutter = htmlStyle.scrollbarGutter.includes("both-edges") ? "stable both-edges" : "stable"
   const scrollbar = view.innerWidth - html.clientWidth > 0
   if (!scrollbar || gutterHolds(html, scroller)) {

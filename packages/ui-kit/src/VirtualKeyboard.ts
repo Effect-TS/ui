@@ -83,6 +83,7 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
+import { activeOf, isHTMLElement } from "./internal/dom.ts"
 import { isAndroid } from "./internal/platform.ts"
 
 const threshold = 60
@@ -249,11 +250,6 @@ export const step = (state: State, sample: Sample): Step => {
 
 const textTypes = new Set(["email", "number", "password", "search", "tel", "text", "url"])
 
-const isHTMLElement = (target: unknown): target is HTMLElement => {
-  const view = (target as Node | null)?.ownerDocument?.defaultView
-  return view != null && target instanceof view.HTMLElement
-}
-
 const opensKeyboard = (element: HTMLElement): boolean => {
   if (element.isContentEditable) return true
   const view = element.ownerDocument.defaultView!
@@ -292,12 +288,6 @@ export const textFieldOf = (target: EventTarget | null): HTMLElement | null => {
   return isHTMLElement(control) && opensKeyboard(control) ? control : null
 }
 
-const activeOf = (document: Document): Element | null => {
-  let active = document.activeElement
-  while (active?.shadowRoot?.activeElement != null) active = active.shadowRoot.activeElement
-  return active
-}
-
 const sameBand = Schema.toEquivalence(Schema.NullOr(Band))
 
 /**
@@ -328,7 +318,6 @@ export const watch = (node: Node): Stream.Stream<Band | null> =>
       const android = isAndroid(view)
       let state = initialState({ layoutWidth: view.innerWidth, layoutHeight: view.innerHeight })
       let probe: HTMLElement | null = null
-      let reported: Band | null | undefined
       let frame = -1
 
       const smallViewportHeight = (): number => {
@@ -353,18 +342,12 @@ export const watch = (node: Node): Stream.Stream<Band | null> =>
           focused
         })
         state = next.state
-        if (reported === undefined || !sameBand(reported, next.band)) {
-          reported = next.band
-          Queue.offerUnsafe(queue, next.band)
-        }
+        Queue.offerUnsafe(queue, next.band)
       }
 
       const later = (): void => {
         view.cancelAnimationFrame(frame)
-        frame = view.requestAnimationFrame(() => {
-          frame = -1
-          sample()
-        })
+        frame = view.requestAnimationFrame(sample)
       }
 
       const controller = new AbortController()
@@ -385,7 +368,7 @@ export const watch = (node: Node): Stream.Stream<Band | null> =>
             probe?.remove()
           })
       )
-    })
+    }).pipe(Stream.changesWith(sameBand))
   })
 
 const insetProperty = "--keyboard-inset"

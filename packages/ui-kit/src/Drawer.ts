@@ -166,9 +166,12 @@ import * as Queue from "effect/Queue"
 import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
+import * as Struct from "effect/Struct"
 import { Dialog, DialogDismissReason, type DialogEvents, DialogProps } from "./Dialog.ts"
-import { flag, withStyle } from "./internal/attributes.ts"
-import { trackKeyboard, TrackKeyboardArgs } from "./internal/drawerKeyboard.ts"
+import { flag, idOf, withStyle } from "./internal/attributes.ts"
+import { byAttribute, onRange, saved } from "./internal/dom.ts"
+import { popupAttribute, trackKeyboard, TrackKeyboardArgs } from "./internal/drawerKeyboard.ts"
+import { clamp } from "./internal/range.ts"
 
 /**
  * The direction a swipe dismisses a drawer in, which is also the edge it
@@ -373,8 +376,6 @@ const isHorizontal = (direction: DrawerSwipeDirection): boolean => direction ===
 const displacement = (direction: DrawerSwipeDirection, x: number, y: number): number =>
   direction === "up" ? -y : direction === "down" ? y : direction === "left" ? -x : x
 
-const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max)
-
 const closestIndex = (values: ReadonlyArray<number>, target: number): number => {
   let index = -1
   let distance = Infinity
@@ -506,13 +507,12 @@ const decide = (props: DrawerProps, snapping: Snapping | null, release: Release)
   }
   const height = release.height
   if (height <= 0) return settle
-  const down = direction === "down"
-  const drag = down ? release.deltaY : -release.deltaY
+  const drag = displacement(direction, 0, release.deltaY)
   const dragSign = Math.sign(drag)
-  let velocity = down ? release.releaseVelocityY : -release.releaseVelocityY
+  let velocity = displacement(direction, 0, release.releaseVelocityY)
   if (dragSign !== 0 && Math.abs(drag) >= minSwipeThreshold) {
     const sign = Math.sign(velocity)
-    if (sign !== 0 && sign !== dragSign) velocity = down ? release.velocityY : -release.velocityY
+    if (sign !== 0 && sign !== dragSign) velocity = displacement(direction, 0, release.velocityY)
   }
   const current = snapping.offset
   const dragTarget = clamp(current + drag, 0, height)
@@ -568,17 +568,19 @@ const ReleaseFields = {
   height: Schema.Number
 }
 
+const NestedReport = Schema.Struct({ count: Schema.Number, swiping: Schema.Boolean, height: Schema.Number })
+
 const Message = UiSchema.TaggedEnum({
   StartedSwipe: {},
   ReleasedSwipe: ReleaseFields,
   CancelledSwipe: {},
   RefusedSwipe: {},
   ShowedPopup: {},
-  Measured: { width: Schema.Number, height: Schema.Number, viewport: Schema.Number, fontSize: Schema.Number },
+  Measured: { height: Schema.Number, viewport: Schema.Number, fontSize: Schema.Number },
   StartedAreaSwipe: { key: Schema.String },
   ReleasedAreaSwipe: { displacement: Schema.Number, velocity: Schema.Number, size: Schema.NullOr(Schema.Number) },
   CancelledAreaSwipe: {},
-  ChangedNested: { count: Schema.Number, swiping: Schema.Boolean, height: Schema.Number }
+  ChangedNested: NestedReport.fields
 })
 
 type Message = typeof Message.Type
@@ -586,11 +588,9 @@ type Message = typeof Message.Type
 const Model = Schema.Struct({
   swiping: Schema.Boolean,
   area: Schema.NullOr(Schema.String),
-  openedByArea: Schema.Boolean,
   dismissed: Schema.Boolean,
   strength: Schema.NullOr(Schema.Number),
   releases: Schema.Number,
-  width: Schema.Number,
   height: Schema.Number,
   viewport: Schema.Number,
   fontSize: Schema.Number,
@@ -600,8 +600,6 @@ const Model = Schema.Struct({
 })
 
 type Model = typeof Model.Type
-
-const NestedReport = Schema.Struct({ count: Schema.Number, swiping: Schema.Boolean, height: Schema.Number })
 
 const frontmostOf = (model: Model): number => model.nestedHeight > 0 ? model.nestedHeight : model.height
 
@@ -662,40 +660,35 @@ const snapMovement = (base: number, movement: number): number => {
   return next >= 0 ? movement : -Math.sqrt(-next) - base
 }
 
-type Axis = "vertical" | "horizontal"
+const scrollMetrics = (element: HTMLElement, horizontal: boolean) =>
+  horizontal
+    ? { offset: element.scrollLeft, max: Math.max(0, element.scrollWidth - element.clientWidth) }
+    : { offset: element.scrollTop, max: Math.max(0, element.scrollHeight - element.clientHeight) }
 
-const axisOf = (direction: DrawerSwipeDirection): Axis => isHorizontal(direction) ? "horizontal" : "vertical"
-
-const scrollable = (element: HTMLElement, axis: Axis): boolean => {
+const scrollable = (element: HTMLElement, horizontal: boolean): boolean => {
   const view = element.ownerDocument.defaultView
   if (view === null) return false
   const style = view.getComputedStyle(element)
-  const overflow = axis === "vertical" ? style.overflowY : style.overflowX
-  if (overflow !== "auto" && overflow !== "scroll") return false
-  return axis === "vertical" ? element.scrollHeight > element.clientHeight : element.scrollWidth > element.clientWidth
+  const overflow = horizontal ? style.overflowX : style.overflowY
+  return (overflow === "auto" || overflow === "scroll") && scrollMetrics(element, horizontal).max > 0
 }
 
-const scrollableAncestor = (target: EventTarget | null, root: HTMLElement, axis: Axis): HTMLElement | null => {
+const scrollableAncestor = (target: EventTarget | null, root: HTMLElement, horizontal: boolean): HTMLElement | null => {
   let node = target instanceof Element ? target : null
   while (node !== null && node !== root) {
-    if (node instanceof HTMLElement && scrollable(node, axis)) return node
+    if (node instanceof HTMLElement && scrollable(node, horizontal)) return node
     node = node.parentElement
   }
   return null
 }
 
-const scrollTargetOf = (target: EventTarget | null, root: HTMLElement, axis: Axis): HTMLElement | null =>
-  scrollableAncestor(target, root, axis) ?? (scrollable(root, axis) ? root : null)
-
-const scrollMetrics = (element: HTMLElement, axis: Axis) =>
-  axis === "vertical"
-    ? { offset: element.scrollTop, max: Math.max(0, element.scrollHeight - element.clientHeight) }
-    : { offset: element.scrollLeft, max: Math.max(0, element.scrollWidth - element.clientWidth) }
+const scrollTargetOf = (target: EventTarget | null, root: HTMLElement, horizontal: boolean): HTMLElement | null =>
+  scrollableAncestor(target, root, horizontal) ?? (scrollable(root, horizontal) ? root : null)
 
 const fromStartEdge = (direction: DrawerSwipeDirection): boolean => direction === "down" || direction === "right"
 
 const atSwipeEdge = (element: HTMLElement, direction: DrawerSwipeDirection): boolean => {
-  const { max, offset } = scrollMetrics(element, axisOf(direction))
+  const { max, offset } = scrollMetrics(element, isHorizontal(direction))
   return fromStartEdge(direction) ? offset <= 0 : offset >= max
 }
 
@@ -723,20 +716,14 @@ const selectedIn = (document: Document, root: HTMLElement): boolean => {
     root.contains(elementOf(selection.focusNode))
 }
 
-const onRange = (event: Event): boolean =>
-  event.composedPath().some((target) => target instanceof HTMLInputElement && target.type === "range")
-
-const transformOf = (element: HTMLElement): { readonly x: number; readonly y: number; readonly scale: number } => {
+const scaleOf = (element: HTMLElement): number => {
   const view = element.ownerDocument.defaultView
   const transform = view === null ? "none" : view.getComputedStyle(element).transform
   const matrix = transform !== undefined && transform !== "none" ? /matrix(?:3d)?\(([^)]+)\)/.exec(transform) : null
-  if (matrix === null) return { x: 0, y: 0, scale: 1 }
+  if (matrix === null) return 1
   const values = matrix[1]!.split(",").map((value) => Number.parseFloat(value))
-  if (values.length === 6) {
-    return { x: values[4]!, y: values[5]!, scale: Math.sqrt(values[0]! * values[0]! + values[1]! * values[1]!) }
-  }
-  if (values.length === 16) return { x: values[12]!, y: values[13]!, scale: values[0]! }
-  return { x: 0, y: 0, scale: 1 }
+  if (values.length === 6) return Math.sqrt(values[0]! * values[0]! + values[1]! * values[1]!)
+  return values.length === 16 ? values[0]! : 1
 }
 
 const setVar = (element: HTMLElement | null | undefined, name: string, value: string | null): void => {
@@ -745,28 +732,26 @@ const setVar = (element: HTMLElement | null | undefined, name: string, value: st
   else element.style.setProperty(name, value)
 }
 
-const byAttribute = (document: Document, name: string, id: string): HTMLElement | null =>
-  document.querySelector<HTMLElement>("[" + name + "=\"" + CSS.escape(id) + "\"]")
-
 const movementX = "--drawer-swipe-movement-x"
 const movementY = "--drawer-swipe-movement-y"
 const progressVar = "--drawer-swipe-progress"
 const heightVar = "--drawer-height"
 
-interface ProgressArgs {
-  readonly drawerId: string
-  readonly rest: number
-  readonly nested: boolean
-  readonly indent: string | null
-  readonly open: boolean
+const ProgressArgs = {
+  drawerId: Schema.String,
+  open: Schema.Boolean,
+  rest: Schema.Number,
+  indent: Schema.NullOr(Schema.String)
 }
+
+type ProgressArgs = Schema.Struct<typeof ProgressArgs>["Type"]
 
 const writeProgress = (document: Document, args: ProgressArgs, value: number | null, size = 0): void => {
   const height = value !== null && value > 0 && size > 0 ? size + "px" : null
   const backdrop = byAttribute(document, "data-drawer-backdrop", args.drawerId)
   setVar(backdrop, progressVar, String(value ?? args.rest))
   setVar(backdrop, heightVar, height)
-  if (args.nested || args.indent === null) return
+  if (args.indent === null) return
   const indent = document.getElementById(args.indent)
   setVar(indent, progressVar, String(value ?? (args.open ? args.rest : 0)))
   setVar(indent, heightVar, height)
@@ -777,32 +762,47 @@ const frame = (view: Window | null, f: () => void): void => {
   else setTimeout(f, 0)
 }
 
-interface Frozen {
-  readonly element: HTMLElement
-  readonly transition: string
-  readonly transform: string
+const freeze = (element: HTMLElement): () => void => {
+  const thaw = saved(element, ["transition"])
+  element.style.transition = "none"
+  return thaw
 }
 
-const freeze = (element: HTMLElement, transform: string | null): Frozen => {
-  const frozen = {
-    element,
-    transition: element.style.getPropertyValue("transition"),
-    transform: element.style.getPropertyValue("transform")
+const followPointer = (
+  node: HTMLElement,
+  pointer: number,
+  onMove: (event: PointerEvent) => void,
+  onEnd: (event: PointerEvent) => void
+): () => void => {
+  try {
+    node.setPointerCapture?.(pointer)
+  } catch {
+    // The pointer is already gone, as after a synthetic event.
   }
-  element.style.setProperty("transition", "none")
-  if (transform !== null) element.style.setProperty("transform", transform)
-  return frozen
-}
-
-const thaw = (frozen: Frozen | null): void => {
-  if (frozen === null) return
-  setVar(frozen.element, "transition", frozen.transition === "" ? null : frozen.transition)
-  setVar(frozen.element, "transform", frozen.transform === "" ? null : frozen.transform)
+  const listening = new AbortController()
+  const options = { signal: listening.signal }
+  const own = (f: (event: PointerEvent) => void) => (event: PointerEvent) => {
+    if (event.pointerId === pointer) f(event)
+  }
+  const document = node.ownerDocument
+  document.addEventListener(
+    "pointermove",
+    own((event) => {
+      onMove(event)
+      if (event.buttons === 0) onEnd(event)
+    }),
+    options
+  )
+  document.addEventListener("pointerup", own(onEnd), options)
+  document.addEventListener("pointercancel", own(onEnd), options)
+  return () => {
+    listening.abort()
+    if (node.hasPointerCapture?.(pointer) === true) node.releasePointerCapture(pointer)
+  }
 }
 
 const TrackSwipeArgs = {
-  drawerId: Schema.String,
-  open: Schema.Boolean,
+  ...ProgressArgs,
   direction: DrawerSwipeDirection,
   enabled: Schema.Boolean,
   snapping: Schema.Boolean,
@@ -810,12 +810,9 @@ const TrackSwipeArgs = {
   snapMin: Schema.Number,
   snapRange: Schema.Number,
   height: Schema.Number,
-  rest: Schema.Number,
   dismissed: Schema.Boolean,
   releases: Schema.Number,
-  area: Schema.Boolean,
-  nested: Schema.Boolean,
-  indent: Schema.NullOr(Schema.String)
+  area: Schema.Boolean
 }
 
 type TrackSwipeArgs = Schema.Struct<typeof TrackSwipeArgs>["Type"]
@@ -824,17 +821,16 @@ interface Gesture {
   readonly pointer: number | null
   start: Point
   startTime: number
-  last: Point
   first: boolean
   active: boolean
   intended: DrawerSwipeDirection | null
   peak: number
   reversed: boolean
-  initial: { readonly x: number; readonly y: number; readonly scale: number }
+  scale: number
   movement: Point
   readonly velocity: Velocity
-  frozen: Frozen | null
-  listening: AbortController | null
+  thaw: (() => void) | null
+  stop: (() => void) | null
 }
 
 interface TouchState {
@@ -862,12 +858,10 @@ const TrackSwipe = Mount.makeStream(
         let held: Gesture | null = null
         let pending: number | null = null
         let touch: TouchState | null = null
-        let ignoreTouch = false
         let lastPointer = ""
         let measured = ""
         const send = (message: Message) => Queue.offerUnsafe(queue, message)
         const portal = () => node.closest("dialog")
-        const axis = () => axisOf(args.direction)
         const directions = (): ReadonlyArray<DrawerSwipeDirection> =>
           args.snapping ? [args.direction, opposite[args.direction]] : [args.direction]
         const snapDown = () => args.snapping && args.direction === "down"
@@ -884,12 +878,11 @@ const TrackSwipe = Mount.makeStream(
           const fontSize = Number.parseFloat(view?.getComputedStyle(root).fontSize ?? "") || 16
           const area = viewport()
           const sizes = {
-            width: node.offsetWidth,
             height: node.offsetHeight,
             viewport: area !== null ? area.offsetHeight : root.clientHeight,
             fontSize
           }
-          const key = sizes.width + " " + sizes.height + " " + sizes.viewport + " " + sizes.fontSize
+          const key = sizes.height + " " + sizes.viewport + " " + sizes.fontSize
           if (key === measured) return
           measured = key
           send(Message.Measured(sizes))
@@ -908,7 +901,7 @@ const TrackSwipe = Mount.makeStream(
           }
           const direction = args.snapping ? g.intended : args.direction
           if (direction === null) return 0
-          const size = (isHorizontal(direction) ? node.offsetWidth : node.offsetHeight) * (g.initial.scale || 1)
+          const size = (isHorizontal(direction) ? node.offsetWidth : node.offsetHeight) * (g.scale || 1)
           const along = displacement(direction, g.movement.x, g.movement.y)
           return size > 0 && along > 0 ? clamp(along / size, 0, 1) : 0
         }
@@ -922,8 +915,8 @@ const TrackSwipe = Mount.makeStream(
         const activate = (g: Gesture, touched: boolean) => {
           measure()
           g.active = true
-          g.initial = transformOf(node)
-          g.frozen = freeze(node, null)
+          g.scale = scaleOf(node)
+          g.thaw = freeze(node)
           if (!touched) {
             const selection = document.getSelection?.()
             if (
@@ -941,7 +934,6 @@ const TrackSwipe = Mount.makeStream(
             g.velocity.sample = null
             g.velocity.stationary = false
           }
-          g.last = point
           const dx = point.x - g.start.x
           const dy = point.y - g.start.y
           const allowed = directions()
@@ -979,8 +971,7 @@ const TrackSwipe = Mount.makeStream(
         const end = (g: Gesture) => {
           gesture = null
           touch = null
-          g.listening?.abort()
-          if (g.pointer !== null && node.hasPointerCapture?.(g.pointer) === true) node.releasePointerCapture(g.pointer)
+          g.stop?.()
         }
         const release = (time: number) => {
           const g = gesture
@@ -1010,7 +1001,7 @@ const TrackSwipe = Mount.makeStream(
           if (g === null) return
           end(g)
           if (!g.active) return
-          thaw(g.frozen)
+          g.thaw?.()
           rest()
           progress(null)
           send(Message.CancelledSwipe())
@@ -1023,7 +1014,7 @@ const TrackSwipe = Mount.makeStream(
           })
         const decided = () => {
           pending = null
-          thaw(held?.frozen ?? null)
+          held?.thaw?.()
           held = null
           progress(null)
           if (!args.dismissed) return rest()
@@ -1036,30 +1027,19 @@ const TrackSwipe = Mount.makeStream(
             pointer,
             start: point,
             startTime: time,
-            last: point,
             first,
             active: false,
             intended: null,
             peak: 0,
             reversed: false,
-            initial: { x: 0, y: 0, scale: 1 },
+            scale: 1,
             movement: { x: 0, y: 0 },
             velocity: velocity(),
-            frozen: null,
-            listening: null
+            thaw: null,
+            stop: null
           }
           gesture = g
           return g
-        }
-        const onPointerMove = (event: PointerEvent) => {
-          const g = gesture
-          if (g === null || event.pointerId !== g.pointer) return
-          event.preventDefault()
-          move(g, { x: event.clientX, y: event.clientY }, event.timeStamp, false)
-          if (event.buttons === 0) release(event.timeStamp)
-        }
-        const onPointerUp = (event: PointerEvent) => {
-          if (gesture !== null && gesture.pointer === event.pointerId) release(event.timeStamp)
         }
         const onPointerDown = (event: PointerEvent) => {
           lastPointer = event.pointerType
@@ -1068,24 +1048,16 @@ const TrackSwipe = Mount.makeStream(
           if (target === null) return
           if (
             target.closest("[" + ignoreAttribute + "],[" + contentAttribute + "]," + interactive) !== null ||
-            scrollableAncestor(target, node, axis()) !== null
+            scrollableAncestor(target, node, isHorizontal(args.direction)) !== null
           ) return
           const g = begin({ x: event.clientX, y: event.clientY }, event.timeStamp, event.pointerId, false)
-          try {
-            node.setPointerCapture?.(event.pointerId)
-          } catch {
-            // The pointer is already gone, as after a synthetic event.
-          }
-          g.listening = new AbortController()
-          const { signal } = g.listening
-          document.addEventListener("pointermove", onPointerMove, { signal })
-          document.addEventListener("pointerup", onPointerUp, { signal })
-          document.addEventListener("pointercancel", onPointerUp, { signal })
+          g.stop = followPointer(node, event.pointerId, (moved) => {
+            moved.preventDefault()
+            move(g, { x: moved.clientX, y: moved.clientY }, moved.timeStamp, false)
+          }, (ended) => release(ended.timeStamp))
         }
-        const cross = () => isHorizontal(args.direction) ? "y" : "x"
         const onTouchStart = (event: TouchEvent) => {
           touch = null
-          ignoreTouch = false
           if (lastPointer === "pen") {
             lastPointer = ""
             return
@@ -1093,20 +1065,19 @@ const TrackSwipe = Mount.makeStream(
           const first = event.touches[0]
           const target = first === undefined ? null : canStart(event.target)
           if (first === undefined || target === null || onRange(event)) return
-          const ignored = "[" + ignoreAttribute + "]:not([" + ignoreAttribute + "=\"" + cross() + "\"])"
-          if (target.closest(ignored) !== null || selectedIn(document, node)) {
-            ignoreTouch = true
-            return
-          }
-          const scrollTarget = scrollTargetOf(target, node, axis())
+          const horizontal = isHorizontal(args.direction)
+          const cross = "[" + ignoreAttribute + "=\"" + (horizontal ? "y" : "x") + "\"]"
+          if (
+            target.closest("[" + ignoreAttribute + "]:not(" + cross + ")") !== null || selectedIn(document, node)
+          ) return
+          const scrollTarget = scrollTargetOf(target, node, horizontal)
           touch = {
             startX: first.clientX,
             startY: first.clientY,
             lastX: first.clientX,
             lastY: first.clientY,
             scrollTarget,
-            cross: scrollTargetOf(target, node, isHorizontal(args.direction) ? "vertical" : "horizontal") !== null ||
-              target.closest("[" + ignoreAttribute + "=\"" + cross() + "\"]") !== null,
+            cross: scrollTargetOf(target, node, !horizontal) !== null || target.closest(cross) !== null,
             allowSwipe: scrollTarget !== null && !atSwipeEdge(scrollTarget, args.direction) ? false : null,
             yielded: false,
             attributed: false
@@ -1142,7 +1113,7 @@ const TrackSwipe = Mount.makeStream(
             if (event.cancelable) event.preventDefault()
             return move(g, at, event.timeStamp, true)
           }
-          if (scrollMetrics(target, axis()).max <= 0) {
+          if (scrollMetrics(target, isHorizontal(args.direction)).max <= 0) {
             if (event.cancelable) event.preventDefault()
             return
           }
@@ -1165,23 +1136,24 @@ const TrackSwipe = Mount.makeStream(
           const state = touch
           const g = gesture
           const point = event.touches[0]
-          if (ignoreTouch || state === null || g === null || g.pointer !== null || point === undefined) return
+          if (state === null || g === null || g.pointer !== null || point === undefined) return
           touchMove(event, state, g, point)
           state.lastX = point.clientX
           state.lastY = point.clientY
         }
         const onTouchEnd = (event: TouchEvent) => {
-          ignoreTouch = false
           if (gesture !== null && gesture.pointer === null) release(event.timeStamp)
         }
+        const listening = new AbortController()
+        const { signal } = listening
         let observer: ResizeObserver | undefined
         yield* Effect.acquireRelease(
           Effect.sync(() => {
-            node.addEventListener("pointerdown", onPointerDown)
-            node.addEventListener("touchstart", onTouchStart, { passive: true })
-            node.addEventListener("touchmove", onTouchMove, { passive: false })
-            node.addEventListener("touchend", onTouchEnd)
-            node.addEventListener("touchcancel", onTouchEnd)
+            node.addEventListener("pointerdown", onPointerDown, { signal })
+            node.addEventListener("touchstart", onTouchStart, { passive: true, signal })
+            node.addEventListener("touchmove", onTouchMove, { passive: false, signal })
+            node.addEventListener("touchend", onTouchEnd, { signal })
+            node.addEventListener("touchcancel", onTouchEnd, { signal })
             measure()
             if (typeof ResizeObserver === "function") {
               observer = new ResizeObserver(measure)
@@ -1194,17 +1166,11 @@ const TrackSwipe = Mount.makeStream(
           }),
           () =>
             Effect.sync(() => {
-              node.removeEventListener("pointerdown", onPointerDown)
-              node.removeEventListener("touchstart", onTouchStart)
-              node.removeEventListener("touchmove", onTouchMove)
-              node.removeEventListener("touchend", onTouchEnd)
-              node.removeEventListener("touchcancel", onTouchEnd)
+              listening.abort()
               observer?.disconnect()
               const g = gesture ?? held
-              if (g !== null) {
-                g.listening?.abort()
-                thaw(g.frozen)
-              }
+              g?.stop?.()
+              g?.thaw?.()
               writeProgress(document, { ...args, open: false }, null)
             })
         )
@@ -1235,16 +1201,12 @@ const opensOnRelease = (moved: number, speed: number, size: number | null): bool
   moved >= (size === null || size <= 0 ? fallbackOpenThreshold : size * openRatio) || speed >= openVelocityThreshold
 
 const TrackSwipeAreaArgs = {
+  ...ProgressArgs,
   key: Schema.String,
-  drawerId: Schema.String,
-  open: Schema.Boolean,
   direction: DrawerSwipeDirection,
   drawerDirection: DrawerSwipeDirection,
   disabled: Schema.Boolean,
-  snapOffset: Schema.Number,
-  rest: Schema.Number,
-  nested: Schema.Boolean,
-  indent: Schema.NullOr(Schema.String)
+  snapOffset: Schema.Number
 }
 
 type TrackSwipeAreaArgs = Schema.Struct<typeof TrackSwipeAreaArgs>["Type"]
@@ -1257,8 +1219,8 @@ interface AreaGesture {
   started: boolean
   popup: HTMLElement | null
   size: number
-  frozen: Frozen | null
-  listening: AbortController | null
+  thaw: (() => void) | null
+  stop: (() => void) | null
 }
 
 const TrackSwipeArea = Mount.makeStream(
@@ -1274,10 +1236,10 @@ const TrackSwipeArea = Mount.makeStream(
         const apply = (g: AreaGesture) => {
           if (!args.open || !g.started) return
           if (g.popup === null) {
-            const popup = byAttribute(document, "data-drawer-popup", args.drawerId)
+            const popup = byAttribute(document, popupAttribute, args.drawerId)
             if (popup === null) return
             g.popup = popup
-            g.frozen = freeze(popup, null)
+            g.thaw = freeze(popup)
           }
           if (g.size <= 0) g.size = isHorizontal(args.drawerDirection) ? g.popup.offsetWidth : g.popup.offsetHeight
           const closed = Math.max(0, g.size - args.snapOffset)
@@ -1291,9 +1253,8 @@ const TrackSwipeArea = Mount.makeStream(
         }
         const finish = (g: AreaGesture) => {
           gesture = null
-          g.listening?.abort()
-          if (g.pointer !== null && node.hasPointerCapture?.(g.pointer) === true) node.releasePointerCapture(g.pointer)
-          thaw(g.frozen)
+          g.stop?.()
+          g.thaw?.()
           if (g.popup !== null) writeProgress(document, args, null)
         }
         const begin = (point: Point, time: number, pointer: number | null): AreaGesture | null => {
@@ -1306,8 +1267,8 @@ const TrackSwipeArea = Mount.makeStream(
             started: false,
             popup: null,
             size: 0,
-            frozen: null,
-            listening: null
+            thaw: null,
+            stop: null
           }
           record(g.velocity, { x: 0, y: 0 }, time)
           gesture = g
@@ -1332,31 +1293,17 @@ const TrackSwipeArea = Mount.makeStream(
             size: g.popup === null ? null : g.size
           }))
         }
-        const onPointerMove = (event: PointerEvent) => {
-          const g = gesture
-          if (g === null || g.pointer !== event.pointerId) return
-          move(g, { x: event.clientX, y: event.clientY }, event.timeStamp)
-          if (event.buttons === 0) release(g, event.timeStamp)
-        }
-        const onPointerUp = (event: PointerEvent) => {
-          const g = gesture
-          if (g !== null && g.pointer === event.pointerId) release(g, event.timeStamp)
-        }
         const onPointerDown = (event: PointerEvent) => {
           if (event.pointerType === "touch" || event.button !== 0) return
           const g = begin({ x: event.clientX, y: event.clientY }, event.timeStamp, event.pointerId)
           if (g === null) return
           if (event.cancelable) event.preventDefault()
-          try {
-            node.setPointerCapture?.(event.pointerId)
-          } catch {
-            // The pointer is already gone, as after a synthetic event.
-          }
-          g.listening = new AbortController()
-          const { signal } = g.listening
-          document.addEventListener("pointermove", onPointerMove, { signal })
-          document.addEventListener("pointerup", onPointerUp, { signal })
-          document.addEventListener("pointercancel", onPointerUp, { signal })
+          g.stop = followPointer(
+            node,
+            event.pointerId,
+            (moved) => move(g, { x: moved.clientX, y: moved.clientY }, moved.timeStamp),
+            (ended) => release(g, ended.timeStamp)
+          )
         }
         const onTouchStart = (event: TouchEvent) => {
           const first = event.touches[0]
@@ -1374,21 +1321,19 @@ const TrackSwipeArea = Mount.makeStream(
           const g = gesture
           if (g !== null && g.pointer === null) release(g, event.timeStamp)
         }
+        const listening = new AbortController()
+        const { signal } = listening
         yield* Effect.acquireRelease(
           Effect.sync(() => {
-            node.addEventListener("pointerdown", onPointerDown)
-            node.addEventListener("touchstart", onTouchStart, { passive: true })
-            node.addEventListener("touchmove", onTouchMove, { passive: false })
-            node.addEventListener("touchend", onTouchEnd)
-            node.addEventListener("touchcancel", onTouchEnd)
+            node.addEventListener("pointerdown", onPointerDown, { signal })
+            node.addEventListener("touchstart", onTouchStart, { passive: true, signal })
+            node.addEventListener("touchmove", onTouchMove, { passive: false, signal })
+            node.addEventListener("touchend", onTouchEnd, { signal })
+            node.addEventListener("touchcancel", onTouchEnd, { signal })
           }),
           () =>
             Effect.sync(() => {
-              node.removeEventListener("pointerdown", onPointerDown)
-              node.removeEventListener("touchstart", onTouchStart)
-              node.removeEventListener("touchmove", onTouchMove)
-              node.removeEventListener("touchend", onTouchEnd)
-              node.removeEventListener("touchcancel", onTouchEnd)
+              listening.abort()
               if (gesture !== null) finish(gesture)
             })
         )
@@ -1418,16 +1363,8 @@ const ProviderMessage = UiSchema.TaggedEnum({
 const ReportIndent = Mount.makeStream(
   "ReportIndent",
   { args: { id: Schema.String } },
-  (_node: HTMLElement, args, changes) =>
-    Stream.concat(Stream.succeed(args), changes).pipe(
-      Stream.map(({ id }) => ProviderMessage.MountedIndent({ id }))
-    )
+  (_node: HTMLElement, _args, changes) => changes.pipe(Stream.map(({ id }) => ProviderMessage.MountedIndent({ id })))
 )
-
-const idOf = (builder: unknown): string | null => {
-  const id = (builder as { readonly attrs?: Readonly<Record<string, string>> | undefined }).attrs?.id
-  return id === undefined || id === "" ? null : id
-}
 
 /**
  * Scales the page behind the drawers below it, as a native sheet does.
@@ -1495,8 +1432,6 @@ export const DrawerProvider = Component.define({
   }
 })
 
-const sizesOf = (model: Model): Sizes => ({ height: model.height, viewport: model.viewport, fontSize: model.fontSize })
-
 const DrawerCore = Component.define({
   name: "Drawer",
   props: DrawerProps,
@@ -1536,11 +1471,9 @@ const DrawerCore = Component.define({
   init: () => ({
     swiping: false,
     area: null,
-    openedByArea: false,
     dismissed: false,
     strength: null,
     releases: 0,
-    width: 0,
     height: 0,
     viewport: 0,
     fontSize: 16,
@@ -1553,7 +1486,7 @@ const DrawerCore = Component.define({
     ReleasedSwipe: (model, release, $) => {
       const next = { ...model, swiping: false, releases: model.releases + 1 }
       if (!$.props.open) return next
-      const decision = decide($.props, snappingOf($.props, sizesOf(model)), release)
+      const decision = decide($.props, snappingOf($.props, model), release)
       switch (decision._tag) {
         case "Dismiss":
           return $.set({ ...next, dismissed: true, strength: decision.strength }).emit(
@@ -1573,15 +1506,15 @@ const DrawerCore = Component.define({
     StartedAreaSwipe: (model, { key }, $) =>
       $.props.open || model.area !== null
         ? model
-        : $.set({ ...model, area: key, openedByArea: true, dismissed: false, strength: null }).emit(
+        : $.set({ ...model, area: key, dismissed: false, strength: null }).emit(
           DrawerEvents.Opened({ triggerId: null, reason: "swipe" })
         ),
     ReleasedAreaSwipe: (model, { displacement: moved, size, velocity: speed }, $) => {
-      const next = { ...model, area: null, openedByArea: false }
-      if (!$.props.open || opensOnRelease(moved, speed, size) || !model.openedByArea) return next
+      const next = { ...model, area: null }
+      if (!$.props.open || opensOnRelease(moved, speed, size) || model.area === null) return next
       return $.set({ ...next, dismissed: true, strength: null }).emit(DrawerEvents.Dismissed({ reason: "swipe" }))
     },
-    CancelledAreaSwipe: (model) => ({ ...model, area: null, openedByArea: false }),
+    CancelledAreaSwipe: (model) => ({ ...model, area: null }),
     ChangedNested: (model, { count, height, swiping }) => ({
       ...model,
       nestedOpen: count,
@@ -1593,14 +1526,18 @@ const DrawerCore = Component.define({
     const props = p.props
     const open = props.open
     const swipeDirection = props.swipeDirection ?? "down"
-    const snapping = snappingOf(props, sizesOf(model))
+    const snapping = snappingOf(props, model)
     const rest = restingProgress(snapping)
     const drawerId = p.id("drawer")
     const swiping = model.swiping || model.area !== null
-    const nested = p.shared.parent !== undefined
     const nestedDrawers = model.nestedOpen
     const nestedDrawerSwiping = model.nestedSwiping
-    const indent = p.shared.provider?.indent ?? null
+    const progress = {
+      drawerId,
+      open,
+      rest,
+      indent: p.shared.parent !== undefined ? null : p.shared.provider?.indent ?? null
+    }
     const frontmost = frontmostOf(model)
     const active = props.snapPoint ?? props.snapPoints?.[0]
     const expanded = active === 1
@@ -1609,7 +1546,7 @@ const DrawerCore = Component.define({
 
     const popup = p.part("div", (b) =>
       b
-        .attr("data-drawer-popup", drawerId)
+        .attr(popupAttribute, drawerId)
         .attr("data-swiping", flag(swiping))
         .attr("data-swipe-direction", swipeDirection)
         .attr("data-swipe-dismiss", flag(swipeDismiss))
@@ -1634,8 +1571,7 @@ const DrawerCore = Component.define({
           )
         )
         .onMount(TrackSwipe({
-          drawerId,
-          open,
+          ...progress,
           direction: swipeDirection,
           enabled: nestedDrawers === 0,
           snapping: snapping !== null,
@@ -1643,12 +1579,9 @@ const DrawerCore = Component.define({
           snapMin: snapping?.min ?? 0,
           snapRange: snapping?.range ?? 0,
           height: model.height,
-          rest,
           dismissed: model.dismissed,
           releases: model.releases,
-          area: model.area !== null,
-          nested,
-          indent
+          area: model.area !== null
         })))
 
     const backdrop = p.part("div", (b) =>
@@ -1688,16 +1621,12 @@ const DrawerCore = Component.define({
             )
           )
           .onMount(TrackSwipeArea({
+            ...progress,
             key,
-            drawerId,
-            open,
             direction,
             drawerDirection: swipeDirection,
             disabled,
-            snapOffset: snapping?.offset ?? 0,
-            rest,
-            nested,
-            indent
+            snapOffset: snapping?.offset ?? 0
           }))
       }
     )
@@ -1761,17 +1690,13 @@ const handle = <Msg>(onEmit: Handlers<Msg>, event: DrawerEvents): Msg | undefine
 const fromDialog = (event: DialogEvents): DrawerEvents =>
   event._tag === "Opened" ? DrawerEvents.Opened({ triggerId: event.triggerId, reason: "trigger-press" }) : event
 
-const dialogPropsOf = (props: DrawerProps): DialogProps => {
-  const {
-    snapPoint: _snapPoint,
-    snapPoints: _snapPoints,
-    snapToSequentialPoints: _sequential,
-    swipeDirection: _direction,
-    virtualKeyboard: _keyboard,
-    ...dialog
-  } = props
-  return dialog
-}
+const dialogPropsOf = Struct.omit([
+  "snapPoint",
+  "snapPoints",
+  "snapToSequentialPoints",
+  "swipeDirection",
+  "virtualKeyboard"
+]) satisfies (props: DrawerProps) => DialogProps
 
 /**
  * The type of `Drawer`: a call that draws a drawer from its parts, and the

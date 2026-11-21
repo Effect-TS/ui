@@ -58,7 +58,7 @@ const swiped = { _tag: "Dismissed", reason: "swipe" } as DrawerEvents
 
 const opened = { _tag: "Opened", triggerId: null, reason: "swipe" } as DrawerEvents
 const snapped = (snapPoint: number) => ({ _tag: "Snapped", snapPoint }) as DrawerEvents
-const measured = sent("Measured", { width: 400, height: 800, viewport: 800, fontSize: 16 })
+const measured = sent("Measured", { height: 800, viewport: 800, fontSize: 16 })
 
 const openedByArea = Effect.gen(function*() {
   const s = yield* Scene.make(Drawer, { open: false }, standIn)

@@ -208,7 +208,7 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import { flag, withStyle } from "./internal/attributes.ts"
+import { flag, idOf, withStyle } from "./internal/attributes.ts"
 import { hideOthers, lockScroll } from "./internal/modal.ts"
 import { isAndroid } from "./internal/platform.ts"
 import { inKept, raiseAbove } from "./internal/topLayer.ts"
@@ -925,11 +925,6 @@ const triggerAttrs = <B extends Attributed<B>>(builder: B, active: boolean, popu
     .attr("aria-controls", active ? popupId : undefined)
     .attr("data-popup-open", flag(active))
     .attr("data-dialog-trigger", popupId)
-
-const idOf = (builder: unknown): string | null => {
-  const id = (builder as { readonly attrs?: Readonly<Record<string, string>> | undefined }).attrs?.id
-  return id === undefined || id === "" ? null : id
-}
 
 const withTokens = (consumer: string | undefined, own: string | undefined): string | undefined =>
   own === undefined ? consumer : consumer === undefined || consumer.trim() === "" ? own : consumer + " " + own

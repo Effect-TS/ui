@@ -2,7 +2,9 @@ import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import * as VirtualKeyboard from "../VirtualKeyboard.ts"
+import { activeOf, byAttribute, isHTMLElement, onRange, saved } from "./dom.ts"
 import { isAndroid } from "./platform.ts"
+import { clamp } from "./range.ts"
 
 export const TrackKeyboardArgs = {
   open: Schema.Boolean,
@@ -11,6 +13,8 @@ export const TrackKeyboardArgs = {
 }
 
 export type TrackKeyboardArgs = Schema.Struct<typeof TrackKeyboardArgs>["Type"]
+
+export const popupAttribute = "data-drawer-popup"
 
 export const insetProperty = "--drawer-keyboard-inset"
 
@@ -29,9 +33,7 @@ const blocked = Symbol("blocked")
 
 interface Adjustment {
   readonly element: HTMLElement
-  readonly overflowAnchor: string
-  readonly paddingBottom: string
-  readonly scrollPaddingBottom: string
+  readonly restore: () => void
   readonly computedPaddingBottom: number
   readonly computedScrollPaddingBottom: number
 }
@@ -48,14 +50,7 @@ interface Pin {
   readonly top: number
 }
 
-const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max)
-
 const isElement = (node: unknown): node is Element => (node as Node | null)?.nodeType === 1
-
-const isHTMLElement = (node: unknown): node is HTMLElement => {
-  const view = (node as Node | null)?.ownerDocument?.defaultView
-  return view != null && node instanceof view.HTMLElement
-}
 
 const parentOf = (node: Node): Node | null => {
   const slot = isElement(node) ? node.assignedSlot : null
@@ -80,22 +75,10 @@ const dialogOf = (node: Node): Node | null => {
 
 const targetOf = (event: Event): EventTarget | null => event.composedPath()[0] ?? event.target
 
-const activeOf = (document: Document): Element | null => {
-  let active = document.activeElement
-  while (active?.shadowRoot?.activeElement != null) active = active.shadowRoot.activeElement
-  return active
-}
-
 const elementAt = (root: Node, x: number, y: number): Element | null => {
   const from = (root as Partial<Pick<Document, "elementFromPoint">>).elementFromPoint
   return typeof from === "function" ? from.call(root, x, y) : null
 }
-
-const onRange = (event: Event): boolean =>
-  event.composedPath().some((target) =>
-    isHTMLElement(target) && target.localName === "input" &&
-    (target as HTMLInputElement).type === "range"
-  )
 
 const lastTraversable = (node: Node): boolean =>
   node.nodeType === 9 || (isElement(node) && (node.localName === "html" || node.localName === "body"))
@@ -126,10 +109,8 @@ const touchTargetOf = (target: EventTarget | null): TouchTarget | null => {
 
 const touchTargetAt = (root: Node, x: number, y: number): TouchTarget | typeof blocked | null => {
   const exact = elementAt(root, x, y)
-  if (isHTMLElement(exact)) {
-    const focus = VirtualKeyboard.textFieldOf(exact)
-    if (focus !== null) return { focus, click: exact }
-  }
+  const hit = touchTargetOf(exact)
+  if (hit !== null) return hit
   if (exact !== null && (exact.closest(interactive) !== null || exact.closest("label") !== null)) return blocked
   for (const [dx, dy] of [[0, hitSlop], [0, -hitSlop], [hitSlop, 0], [-hitSlop, 0]] as const) {
     const focus = VirtualKeyboard.textFieldOf(elementAt(root, x + dx, y + dy))
@@ -157,15 +138,11 @@ const dispatchClick = (target: HTMLElement, touch: Pick<Touch, "clientX" | "clie
 // WebKit samples the painted rect of an element as it gains focus to decide its reveal
 // scroll, so the rect is moved for the synchronous focus and put back before paint.
 const overrideGeometry = (target: HTMLElement, translateY: number): () => void => {
-  const { opacity, transform, transition } = target.style
+  const restore = saved(target, ["opacity", "transform", "transition"])
   target.style.transition = "none"
   target.style.opacity = "0"
   target.style.transform = `translateY(${translateY}px)`
-  return () => {
-    target.style.opacity = opacity
-    target.style.transform = transform
-    target.style.transition = transition
-  }
+  return restore
 }
 
 const focusWithoutScroll = (target: HTMLElement): void => {
@@ -195,7 +172,6 @@ export const trackKeyboard = (
     let adjustment: Adjustment | null = null
     let programmatic = false
     let touchStart: { readonly x: number; readonly y: number } | null = null
-    let moved = false
     let pen = false
     let restorePreempted: (() => void) | null = null
     let pin: Pin | null = null
@@ -211,41 +187,27 @@ export const trackKeyboard = (
     let pinFrame = -1
     let timer: number | undefined
 
+    const cancelFrame = (): void => view.cancelAnimationFrame(frame)
     const request = (f: () => void): void => {
-      view.cancelAnimationFrame(frame)
-      frame = view.requestAnimationFrame(() => {
-        frame = -1
-        f()
-      })
+      cancelFrame()
+      frame = view.requestAnimationFrame(f)
     }
-    const cancelFrame = (): void => {
-      view.cancelAnimationFrame(frame)
-      frame = -1
-    }
+    const clearTimer = (): void => view.clearTimeout(timer)
     const startTimer = (f: () => void): void => {
-      view.clearTimeout(timer)
+      clearTimer()
       timer = view.setTimeout(f, realignInterval)
     }
-    const clearTimer = (): void => {
-      view.clearTimeout(timer)
-      timer = undefined
-    }
 
-    const popup = (): HTMLElement =>
-      document.querySelector<HTMLElement>("[data-drawer-popup=\"" + CSS.escape(current.popupId) + "\"]") ?? node
+    const popup = (): HTMLElement => byAttribute(document, popupAttribute, current.popupId) ?? node
     const owns = (element: HTMLElement): boolean => contains(popup(), element) && dialogOf(element) === dialogOf(node)
 
     const setInset = (inset: number | null): void => {
       if (inset === null) node.style.removeProperty(insetProperty)
-      else node.style.setProperty(insetProperty, `${Math.max(0, Math.ceil(inset))}px`)
+      else node.style.setProperty(insetProperty, inset + "px")
     }
 
     const restoreAdjustment = (): void => {
-      if (adjustment === null) return
-      const { element } = adjustment
-      element.style.overflowAnchor = adjustment.overflowAnchor
-      element.style.paddingBottom = adjustment.paddingBottom
-      element.style.scrollPaddingBottom = adjustment.scrollPaddingBottom
+      adjustment?.restore()
       adjustment = null
     }
 
@@ -258,9 +220,7 @@ export const trackKeyboard = (
         const style = view.getComputedStyle(element)
         adjustment = {
           element,
-          overflowAnchor: element.style.overflowAnchor,
-          paddingBottom: element.style.paddingBottom,
-          scrollPaddingBottom: element.style.scrollPaddingBottom,
+          restore: saved(element, ["overflowAnchor", "paddingBottom", "scrollPaddingBottom"]),
           computedPaddingBottom: Number.parseFloat(style.paddingBottom) || 0,
           computedScrollPaddingBottom: Number.parseFloat(style.scrollPaddingBottom) || 0
         }
@@ -308,18 +268,13 @@ export const trackKeyboard = (
     const align = (): void => {
       consumePreempted()
       const field = target
-      if (field === null || !contains(node, field)) {
+      const visible = band
+      if (field === null || !contains(node, field) || visible === null) {
         setInset(null)
         restoreAdjustment()
         return
       }
       restoreScroll()
-      const visible = band
-      if (visible === null) {
-        setInset(null)
-        restoreAdjustment()
-        return
-      }
       setInset(visible.inset)
       const scroller = keyboardScroller(field, node)
       if (scroller === null) return restoreAdjustment()
@@ -455,7 +410,6 @@ export const trackKeyboard = (
     }
 
     const resetTouch = (): void => {
-      moved = false
       touchStart = null
     }
 
@@ -472,21 +426,20 @@ export const trackKeyboard = (
       if (touch === undefined) return
       const eventTarget = targetOf(event)
       if (onRange(event) || !isElement(eventTarget) || !contains(node, eventTarget)) return resetTouch()
-      moved = false
       touchStart = { x: touch.clientX, y: touch.clientY }
     }
 
     const onTouchMove = (event: TouchEvent): void => {
       const touch = event.touches[0]
-      if (touch === undefined || touchStart === null || moved) return
+      if (touch === undefined || touchStart === null) return
       if (Math.abs(touch.clientX - touchStart.x) > tapMove || Math.abs(touch.clientY - touchStart.y) > tapMove) {
-        moved = true
+        resetTouch()
       }
     }
 
     const onTouchEnd = (event: TouchEvent): void => {
       pen = false
-      if (!current.open || touchStart === null || moved) return resetTouch()
+      if (!current.open || touchStart === null) return resetTouch()
       const touch = event.changedTouches[0] ?? event.touches[0]
       if (touch === undefined) return resetTouch()
       const atPoint = touchTargetAt(node.getRootNode(), touch.clientX, touch.clientY)
