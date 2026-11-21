@@ -5,7 +5,6 @@ import { Schema } from "effect"
 export const CounterModel = Schema.Struct({
   count: Schema.Number
 })
-export type CounterModel = typeof CounterModel.Type
 
 export const CounterMessage = UiSchema.TaggedEnum({
   ClickedDecrement: {},
