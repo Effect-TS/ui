@@ -19,22 +19,21 @@ export const LoginMessage = UiSchema.TaggedEnum({
   SucceededSimulateAuthRequest: { session: Session },
   FailedSimulateAuthRequest: { error: Schema.String }
 })
+export type LoginMessage = typeof LoginMessage.Type
 
 export const LoginEvents = UiSchema.TaggedEnum({ SignedIn: { session: Session } })
 
-export class InvalidCredentials extends Schema.TaggedError<InvalidCredentials>()("InvalidCredentials", {
-  message: Schema.String
-}) {}
-
 const runSimulateAuthRequest: (
   args: { readonly email: string; readonly password: string }
-) => Effect.Effect<Session, InvalidCredentials> = Effect.fn("auth/SimulateAuthRequest")(function*({ email, password }) {
+) => Effect.Effect<LoginMessage> = Effect.fn("auth/SimulateAuthRequest")(function*({ email, password }) {
   yield* Effect.sleep(Duration.seconds(1))
   if (password !== "password") {
-    return yield* new InvalidCredentials({ message: "Invalid credentials" })
+    return LoginMessage.FailedSimulateAuthRequest({ error: "Invalid credentials" })
   }
   const [name] = email.split("@")
-  return { userId: "1", email, name: name === "" ? email : name }
+  return LoginMessage.SucceededSimulateAuthRequest({
+    session: { userId: "1", email, name: name === "" ? email : name }
+  })
 })
 
 export class SimulateAuthRequest extends Command.Service<SimulateAuthRequest>()(
@@ -42,12 +41,6 @@ export class SimulateAuthRequest extends Command.Service<SimulateAuthRequest>()(
   { args: { email: Schema.String, password: Schema.String } },
   Effect.succeed(runSimulateAuthRequest)
 ) {}
-
-const simulateAuthRequest = (email: string, password: string) =>
-  SimulateAuthRequest.make({ email, password }).pipe(Command.match({
-    onSuccess: (session) => LoginMessage.SucceededSimulateAuthRequest({ session }),
-    onFailure: (error) => LoginMessage.FailedSimulateAuthRequest({ error: error.message })
-  }))
 
 type LoginField = Validation.Field<string>
 
@@ -115,7 +108,8 @@ export const LoginPageNoDeps = Component.define({
       const form = LoginValidation.submit(model.form)
       return Option.match(LoginValidation.validate(form).value, {
         onNone: () => ({ ...model, form }),
-        onSome: ({ email, password }) => $.set({ form, submitting: true }).run(simulateAuthRequest(email, password))
+        onSome: ({ email, password }) =>
+          $.set({ form, submitting: true }).run(SimulateAuthRequest.make({ email, password }))
       })
     },
 

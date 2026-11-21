@@ -2,7 +2,7 @@ import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect } from "effect"
-import { InvalidCredentials, LoginEvents, LoginPage, SimulateAuthRequest } from "./LoginPage.ts"
+import { LoginEvents, LoginMessage, LoginPage, SimulateAuthRequest } from "./LoginPage.ts"
 
 const alice = { userId: "1", email: "alice@example.com", name: "alice" }
 
@@ -11,7 +11,6 @@ const emailField = HtmlLocator.label("Email")
 const passwordField = HtmlLocator.label("Password")
 const submitButton = HtmlLocator.role("button", { name: "Sign In" })
 const submittingButton = HtmlLocator.role("button", { name: "Signing in..." })
-const invalidCredentials = new InvalidCredentials({ message: "Invalid credentials" })
 
 describe("LoginPage", () => {
   it.effect("validates fields on input and invalid submit, enabling submit once valid", () =>
@@ -43,7 +42,7 @@ describe("LoginPage", () => {
         .expect(passwordField).toBeDisabled()
         .expectExact(SimulateAuthRequest)
       assert.deepStrictEqual(s.pending[0].command.args, { email: alice.email, password: "password" })
-      s.resolve(SimulateAuthRequest, alice)
+      s.resolve(SimulateAuthRequest, LoginMessage.SucceededSimulateAuthRequest({ session: alice }))
         .emitted(LoginEvents.SignedIn({ session: alice }))
     }))
 
@@ -53,7 +52,7 @@ describe("LoginPage", () => {
       s.type(emailField, alice.email)
         .type(passwordField, "wrong")
         .submit(form)
-        .fail(SimulateAuthRequest, invalidCredentials)
+        .resolve(SimulateAuthRequest, LoginMessage.FailedSimulateAuthRequest({ error: "Invalid credentials" }))
         .expect(Locator.inside(form, Locator.text("Invalid credentials"))).toExist()
         .expect(submitButton).toBeDisabled()
         .type(passwordField, "correcthorse")

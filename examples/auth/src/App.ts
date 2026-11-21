@@ -43,13 +43,25 @@ export const AppMessage = UiSchema.TaggedEnum({
 export class SaveSession extends Command.Service<SaveSession>()(
   "auth/SaveSession",
   { args: { session: Session } },
-  Effect.map(SessionStore, (store) => ({ session }) => store.set(session))
+  Effect.map(SessionStore, (store) => ({ session }) =>
+    store.set(session).pipe(
+      Effect.match({
+        onSuccess: () => Component.noop,
+        onFailure: (error) => AppMessage.FailedSaveSession({ error: error.message })
+      })
+    ))
 ) {}
 
 export class ClearSession extends Command.Service<ClearSession>()(
   "auth/ClearSession",
   { args: {} },
-  Effect.map(SessionStore, (store) => () => store.remove)
+  Effect.map(SessionStore, (store) => () =>
+    store.remove.pipe(
+      Effect.match({
+        onSuccess: () => Component.noop,
+        onFailure: (error) => AppMessage.FailedClearSession({ error: error.message })
+      })
+    ))
 ) {}
 
 export const LogError = Command.make(
@@ -57,18 +69,6 @@ export const LogError = Command.make(
   { args: { entries: Schema.Array(Schema.String) } },
   ({ entries }) => Console.error(...entries).pipe(Effect.as(Component.noop))
 )
-
-const saveSession = (session: Session) =>
-  SaveSession.make({ session }).pipe(Command.match({
-    onSuccess: () => Component.noop,
-    onFailure: (error) => AppMessage.FailedSaveSession({ error: error.message })
-  }))
-
-const clearSession = () =>
-  ClearSession.make({}).pipe(Command.match({
-    onSuccess: () => Component.noop,
-    onFailure: (error) => AppMessage.FailedClearSession({ error: error.message })
-  }))
 
 const redirectTo = (route: AppRoute) => Router.replace(AppRoute, route).pipe(Command.asNoop)
 
@@ -91,13 +91,13 @@ export const AppNoDeps = Component.define({
 
     SignedIn: (_model, { session }, $) =>
       $.set(AppModel.LoggedIn({ route: LoggedInRoute.Dashboard(), session })).run(
-        saveSession(session),
+        SaveSession.make({ session }),
         redirectTo(LoggedInRoute.Dashboard())
       ),
 
     SignedOut: (_model, _message, $) =>
       $.set(AppModel.LoggedOut({ route: LoggedOutRoute.Home() })).run(
-        clearSession(),
+        ClearSession.make({}),
         redirectTo(LoggedOutRoute.Home())
       ),
 
