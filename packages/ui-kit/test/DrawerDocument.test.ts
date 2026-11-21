@@ -8,6 +8,7 @@ import { container, popovers, tick, visualViewport } from "./utils/document.ts"
 
 const Config = Schema.Struct({
   open: Schema.Boolean,
+  modal: Schema.Boolean,
   direction: Schema.Literals(["up", "down", "left", "right"]),
   snapPoints: Schema.optional(Schema.Array(Schema.Number)),
   refuse: Schema.Boolean,
@@ -20,6 +21,7 @@ type Config = typeof Config.Type
 
 const config = (overrides: Partial<Config>): Config => ({
   open: true,
+  modal: true,
   direction: "down",
   refuse: false,
   area: false,
@@ -68,6 +70,7 @@ const Page = Component.define({
     const drawer = Drawer(h, {
       props: {
         open: model.open,
+        modal: props.modal,
         swipeDirection: props.direction,
         snapPoints: props.snapPoints,
         snapPoint: model.snapPoint,
@@ -272,7 +275,7 @@ describe("Drawer in a document", { concurrent: false }, () => {
 
   it.effect("opens from a swipe area, closes if released short, and stays open on a long swipe without its click dismissing", () =>
     Effect.gen(function*() {
-      const root = yield* mount({ open: false, area: true })
+      const root = yield* mount({ open: false, area: true, modal: false })
       const area = document.getElementById("area")!
       assert.strictEqual(area.getAttribute("data-swipe-direction"), "up")
       assert.include(area.getAttribute("style") ?? "", "touch-action:pan-x")
@@ -303,6 +306,12 @@ describe("Drawer in a document", { concurrent: false }, () => {
       assert.notInclude(root.model()!.events, "Dismissed:outside-press")
       assert.strictEqual(movement(), "0px")
       assert.strictEqual(popup().style.getPropertyValue("transition"), "")
+      pointer(area, "pointerdown", 10, 500)
+      pointer(area, "pointerup", 10, 500, 0)
+      area.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }))
+      yield* tick
+      assert.include(root.model()!.events, "Dismissed:outside-press")
+      assert.isFalse(root.model()!.open)
     }))
 
   it.effect("scales the indent while a swipe runs and puts it back to 0", () =>

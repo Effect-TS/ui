@@ -226,8 +226,9 @@ export type DrawerSnapPoint = typeof DrawerSnapPoint.Type
  *   tallest. Only a drawer that swipes `"up"` or `"down"` uses them.
  * - `snapPoint`: the snap point the drawer rests at, controlled like `open`.
  *   Store what `Snapped` reports. Left out or `null`, it is the first one.
- * - `snapToSequentialPoints`: a release moves at most one snap point, however
- *   fast the swipe.
+ * - `snapToSequentialPoints`: disables velocity-based snap skipping so drag
+ *   distance determines the next snap point (a long drag can still cross
+ *   multiple points).
  * - `virtualKeyboard`: the viewport follows the software keyboard, as the
  *   module describes. It needs the `viewport` part.
  *
