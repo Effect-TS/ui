@@ -208,8 +208,9 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import { flag, withStyle } from "./internal/attributes.ts"
+import { flag, idOf, withStyle } from "./internal/attributes.ts"
 import { hideOthers, lockScroll } from "./internal/modal.ts"
+import { isAndroid } from "./internal/platform.ts"
 import { inKept, raiseAbove } from "./internal/topLayer.ts"
 
 /**
@@ -561,12 +562,10 @@ const finite = (animation: Animation): boolean => {
   return typeof end === "number" && Number.isFinite(end)
 }
 
-const closeWatcherOf = (view: Window | null): (new() => CloseWatcher) | undefined => {
-  if (view === null) return undefined
-  const agent = view.navigator as Navigator & { readonly userAgentData?: { readonly platform: string } }
-  const android = agent.userAgentData?.platform === "Android" || /android/i.test(agent.userAgent)
-  return android ? (view as Window & { readonly CloseWatcher?: new() => CloseWatcher }).CloseWatcher : undefined
-}
+const closeWatcherOf = (view: Window | null): (new() => CloseWatcher) | undefined =>
+  view !== null && isAndroid(view)
+    ? (view as Window & { readonly CloseWatcher?: new() => CloseWatcher }).CloseWatcher
+    : undefined
 
 const onScrollbar = (target: EventTarget | null, event: MouseEvent): boolean => {
   if (!(target instanceof HTMLElement)) return false
@@ -728,6 +727,23 @@ const TrackDialog = Mount.makeStream(
       let pressed: string | undefined
       let ignored: Node | null = null
       const listens = (): boolean => current.open && current.dismissible && topmost()
+      // A touch dismisses on pointerdown, so the dialog has left the top
+      // layer before the tap's click, which would land on the page below.
+      const swallowClick = (press: PointerEvent) => {
+        const done = new AbortController()
+        const options = { capture: true, signal: done.signal }
+        const stop = () => done.abort()
+        document.addEventListener("click", (event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          stop()
+        }, options)
+        document.addEventListener("pointerdown", (event) => event !== press && stop(), options)
+        document.addEventListener("pointercancel", (event) => event.pointerId === press.pointerId && stop(), options)
+        document.addEventListener("pointerup", (event) => {
+          if (event.pointerId === press.pointerId) setTimeout(stop, 400)
+        }, options)
+      }
       const onPointerDown = (event: PointerEvent) => {
         pressed = undefined
         const target = event.target as Node | null
@@ -737,6 +753,7 @@ const TrackDialog = Mount.makeStream(
         if (!listens() || !event.isPrimary || event.button !== 0 || touches.size > 1) return
         if (!out || (event.pointerType !== "touch" && onScrollbar(target, event))) return
         if (event.pointerType === "touch" || (current.modal === "trap-focus" && !hasBackdrop())) {
+          if (event.pointerType === "touch") swallowClick(event)
           send(Message.PressedOutside({ pointerType: event.pointerType }))
         } else {
           pressed = event.pointerType
@@ -816,6 +833,7 @@ const TrackDialog = Mount.makeStream(
         if (previous.open && !next.open) {
           pressed = undefined
         } else if (!previous.open && next.open) {
+          send(Message.ShowedPortal())
           page.takeRecords()
           added = new WeakSet()
           const focused = document.activeElement
@@ -907,11 +925,6 @@ const triggerAttrs = <B extends Attributed<B>>(builder: B, active: boolean, popu
     .attr("aria-controls", active ? popupId : undefined)
     .attr("data-popup-open", flag(active))
     .attr("data-dialog-trigger", popupId)
-
-const idOf = (builder: unknown): string | null => {
-  const id = (builder as { readonly attrs?: Readonly<Record<string, string>> | undefined }).attrs?.id
-  return id === undefined || id === "" ? null : id
-}
 
 const withTokens = (consumer: string | undefined, own: string | undefined): string | undefined =>
   own === undefined ? consumer : consumer === undefined || consumer.trim() === "" ? own : consumer + " " + own
@@ -1104,7 +1117,12 @@ export const Dialog = Component.define({
       $.props.open && topmost(model) && $.props.modal === false && $.props.disablePointerDismissal !== true
         ? dismiss(model, $, "focus-out", null)
         : model,
-    ShowedPortal: (model) => model.mounted ? model : { ...model, mounted: true },
+    ShowedPortal: (model, _message, $) =>
+      $.props.open
+        ? { ...model, mounted: true, reason: null, closeMethod: null }
+        : model.mounted
+        ? model
+        : { ...model, mounted: true },
     RenderedFirstFrame: (model, _message, $) => $.props.open && !model.started ? { ...model, started: true } : model,
     FinishedTransition: (model, { open }, $) => {
       if (open !== $.props.open) return model

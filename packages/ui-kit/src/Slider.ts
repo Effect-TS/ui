@@ -173,6 +173,7 @@ import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { flag, withStyle } from "./internal/attributes.ts"
+import { clamp } from "./internal/range.ts"
 
 // One number, or one per thumb.
 const Value = Schema.Union([Schema.Number, Schema.Array(Schema.Number)])
@@ -277,8 +278,6 @@ type Model = typeof Model.Type
 type SliderUpdate = Component.Update<Model, Message, SliderEvents, SliderProps>
 
 // -- the value arithmetic ----------------------------------------------------
-
-const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max)
 
 const decimals = (value: number): number => {
   if (value === 0 || !Number.isFinite(value)) return 0

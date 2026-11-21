@@ -52,6 +52,12 @@ export * from "./Dialog.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * from "./Drawer.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./Field.ts"
 
 /**
@@ -107,3 +113,9 @@ export * from "./Toggle.ts"
  * @since 0.1.0
  */
 export * from "./Tooltip.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
+export * as VirtualKeyboard from "./VirtualKeyboard.ts"
