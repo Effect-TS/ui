@@ -32,8 +32,11 @@ export interface RootHandle {
   readonly flush: () => number
   /** Whether a flush is running, so what it delivers now renders in `flush()` and not the next one. */
   readonly flushing: () => boolean
-  /** The JSON-encoded Model of every mounted instance, by path. Models that don't encode are left out. */
-  readonly snapshot: () => Record<string, unknown>
+  /**
+   * Writes the JSON-encoded Model of every mounted instance into `out`, by path. One that encodes
+   * asynchronously is written once encoded, after this returns. Models that don't encode are left out.
+   */
+  readonly snapshot: (out: Record<string, unknown>) => void
   /**
    * The Router navigated. It closes the cache's fetch-free window after hydration, if adoption
    * hasn't yet. The Router calls it first in `set`, before the route changes.

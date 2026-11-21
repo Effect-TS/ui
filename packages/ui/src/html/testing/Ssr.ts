@@ -491,7 +491,7 @@ export const ssr = <
         problems.push(`${path}: the client didn't adopt the server's Model`)
         continue
       }
-      const encoded = runtime.stateCodecOf(entry.component).encode(entry.model, entry.queries)
+      const encoded = yield* Effect.option(runtime.stateCodecOf(entry.component).encode(entry.model, entry.queries))
       const json = encoded._tag === "Some" ? JSON.stringify(encoded.value) : undefined
       if (json !== JSON.stringify(state[path])) {
         problems.push(
