@@ -33,3 +33,7 @@ Switch(h, {
 - [Toast](src/Toast.ts): `ToastProvider`, a stack of notifications that components inside it post to, which close after a timeout.
 - [Toggle](src/Toggle.ts): a controlled two-state button, pressed or not.
 - [Tooltip](src/Tooltip.ts): a popup shown when its trigger is hovered or focused, with `TooltipProvider` to open neighbouring tooltips without the delay.
+
+## Other modules
+
+- [Positioning](src/Positioning.ts): places a popup of your own against an anchor, as `Tooltip` places its popup. `Positioning.place` computes a position from rectangles, and the `Positioning.TrackPosition` mount keeps a positioner next to its anchor.
