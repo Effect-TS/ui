@@ -1,6 +1,6 @@
 # @effect/ui-kit
 
-Unstyled components for [`@effect/ui`](../ui). Each one owns the behaviour, ARIA, data attributes and any form field, and you draw the markup with your own `h` builders and style it. A component that keeps no state, such as `Switch`, is a plain view function and takes no `key`.
+Unstyled components for [`@effect/ui`](../ui). Each one owns the behaviour, ARIA, data attributes and any form field, and you draw the markup with your own `h` builders and style it.
 
 ```ts
 import { Checkbox } from "@effect/ui-kit"
@@ -16,6 +16,8 @@ Checkbox(h, {
     )
 })
 ```
+
+A component that keeps no state, such as `Switch`, is a plain view function instead: it takes no `key`, and an `on<Event>` option in place of `onEmit`.
 
 ## Components
 

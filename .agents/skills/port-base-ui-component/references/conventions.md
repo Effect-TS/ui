@@ -147,16 +147,10 @@ Checkbox(h, {
   call does. Don't take a builder per part
   (`elements: { root, thumb }`): it stops working once a part has
   children of its own or repeats.
-- Name the parts argument after the component, in camel case and in
-  full, in the JSDoc, the README and the tests:
-  `view: (checkbox) => checkbox.root(h.button)`, `alertDialog`,
-  `toastProvider`. A one-letter name reads like `h`, `p`, `$` or a
-  Scene's `s`. When the name is a reserved word, as for `Switch`, use
-  `parts`. When the closure also reads a variable with that name, add
-  `Parts` (`fieldParts`) or rename the variable. Two of one component
-  nested get a role in front, `outerDialog` and `innerDialog`. Parts
-  built outside a closure follow the same rule:
-  `const tooltip = Story.parts(Tooltip, { model, props })`.
+- Name the parts argument as "Headless components" in
+  `ai-docs/src/10_ui/index.md` says, in the JSDoc, the README and the
+  tests: `view: (checkbox) => checkbox.root(h.button)`, and `parts` for
+  `Switch`, whose name is a reserved word.
 - `on<Event>` is a view function's event, one option per event. Name it
   as the present tense of the event a component would emit: `onPress`
   for `Pressed`, `onToggle` for `Toggled`. An event with no payload takes
@@ -232,7 +226,7 @@ model.advanced
   and adds children with `.children(...)`:
 
   ```ts
-  parts.root(h.button.class("switch")).children(parts.thumb(h.span.class("thumb")))
+  checkbox.root(h.button.class("checkbox")).children(checkbox.indicator(h.span.class("tick")))
   ```
 
   A part takes an options object only when it has more than one argument,

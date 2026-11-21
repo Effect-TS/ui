@@ -385,8 +385,7 @@ describe("Scene", () => {
           {},
           {
             elements: Html,
-            view: (anchorParts, h) =>
-              h.div(anchorParts.anchor(h.button).children("target"), h.p(String(anchorParts.width)))
+            view: (anchor, h) => h.div(anchor.anchor(h.button).children("target"), h.p(String(anchor.width)))
           }
         )
         anchor.mounted(Place, 21).expect(Locator.tag("p")).toHaveText("42")
@@ -407,7 +406,7 @@ describe("Scene", () => {
                   key: "frame",
                   slots: { body: h.div.onMount(Measure({ id: "body" }).pipe(Mount.map(String))) }
                 }),
-                Anchor(h, { key: "anchor", view: (anchorParts) => anchorParts.anchor(h.button).children("go") }),
+                Anchor(h, { key: "anchor", view: (anchor) => anchor.anchor(h.button).children("go") }),
                 h.p(seen)
               )
           })

@@ -105,10 +105,8 @@ describe("Field", () => {
         init: () => ({}),
         update: (model) => model,
         view: (_model, h) => {
-          const formField = (
-            key: string,
-            draw: (field: Component.Headless.Parts<typeof Field>) => View.Content<never>
-          ) => Field(h, { key, props: { disabled: h.props.disabled }, view: draw })
+          const formField = (key: string, draw: (field: Parts) => View.Content<never>) =>
+            Field(h, { key, props: { disabled: h.props.disabled }, view: draw })
           const props = { checked: true, name: "terms" }
           return h.form(
             formField(

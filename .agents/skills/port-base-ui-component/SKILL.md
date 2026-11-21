@@ -92,8 +92,7 @@ Work top to bottom. Put the notes from steps 1 to 3 in the PR description.
      shows one thing, such as the consumer's class next to the part's role.
    - Add `@since`, `@category` and `@stability experimental` to every export.
    - Name the parts argument after the component in the JSDoc, the README
-     and the tests: `checkbox`, `alertDialog`, or `parts` when the name
-     is a reserved word. "Call shape" in the conventions has the rule.
+     and the tests, as the "Call shape" section of the conventions says.
    - Add the component to `packages/ui-kit/README.md`.
    - Add a changeset: `"@effect/ui-kit": minor`.
    - Run each of these with `nix develop -c`: `pnpm lint`, `pnpm check`,

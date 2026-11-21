@@ -558,7 +558,7 @@ describe("optional owners, reports and onChange in a Story", () => {
 
   it.effect("collected sends the owner's collects.onChange message when it differs from the last", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Group, {}, { view: (groupParts, h) => h.el("p", groupParts.on ? "on" : "off") })
+      const s = yield* Scene.make(Group, {}, { view: (group, h) => h.el("p", group.on ? "on" : "off") })
       // The same message as for no reports.
       s.collected([false, false])
       assert.strictEqual(Locator.textOf(s.root), "off")

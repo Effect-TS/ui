@@ -141,7 +141,10 @@
  *                 slider.control(h.div.class("control")).children(
  *                   slider.track(h.div.class("track")).children(
  *                     slider.indicator(h.div.class("indicator")),
- *                     slider.thumb({ element: h.div.class("thumb"), input: field.control(h.input).attr("name", "volume") })
+ *                     slider.thumb({
+ *                       element: h.div.class("thumb"),
+ *                       input: field.control(h.input).attr("name", "volume")
+ *                     })
  *                   )
  *                 )
  *               )
