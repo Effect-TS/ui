@@ -51,10 +51,11 @@
  *
  * **Dismissal**
  *
- * The alert dialog asks to close only from its trigger, its close part and
- * Escape. A press outside the popup, on the backdrop included, asks nothing.
- * Answers other than closing, such as Discard, are the consumer's buttons,
- * which send the consumer's messages.
+ * The alert dialog asks to close only from its trigger, its close part,
+ * Escape and, on Android, the back gesture, with `close-watcher` as in a
+ * `Dialog`. A press outside the popup, on the backdrop included, asks
+ * nothing. Answers other than closing, such as Discard, are the consumer's
+ * buttons, which send the consumer's messages.
  *
  * An alert dialog drawn inside a `Dialog`'s popup is nested in it, as a
  * `Dialog` would be: the outer popup gets `data-nested-dialog-open`, and only
@@ -172,8 +173,8 @@ const alert = (node: View.ElementBuilder<any, any, any, any>) => node.attr("role
  *
  * It declares a `Dialog` with `modal: true` and `disablePointerDismissal:
  * true`, so it emits the `Dialog`'s events. `Dismissed` carries
- * `trigger-press`, `escape-key` or `close-press`, never `outside-press` or
- * `focus-out`.
+ * `trigger-press`, `escape-key`, `close-press` or `close-watcher`, never
+ * `outside-press` or `focus-out`.
  *
  * On top of the `Dialog`'s attributes, the portal's `role="alertdialog"` wins
  * over the consumer's, whether the consumer set it on the builder it passes

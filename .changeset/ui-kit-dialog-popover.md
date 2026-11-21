@@ -9,6 +9,5 @@ Also: Escape is handled on `keydown` in every mode and ignored while an input me
 Known costs:
 
 - The browser no longer enforces the modal. Find-in-page and a script's `focus()` reach the page behind it.
-- Close requests other than Escape, such as Android's back gesture, no longer reach the dialog.
 - With `modal: true`, a press outside closes on `click`, not `pointerdown`. A press on another of the dialog's triggers while it is open switches to that trigger.
 - The page takes presses, scrolls and is read by screen readers as soon as a close starts, during the exit transition. Focus still goes back once the exit ends.

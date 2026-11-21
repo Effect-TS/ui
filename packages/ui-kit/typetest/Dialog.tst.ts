@@ -63,7 +63,9 @@ describe("Dialog", () => {
           return Msg.Clicked()
         },
         Dismissed: ({ reason }) => {
-          expect(reason).type.toBe<"trigger-press" | "outside-press" | "escape-key" | "close-press" | "focus-out">()
+          expect(reason).type.toBe<
+            "trigger-press" | "outside-press" | "escape-key" | "close-press" | "focus-out" | "close-watcher"
+          >()
           return undefined
         },
         Settled: () => undefined
