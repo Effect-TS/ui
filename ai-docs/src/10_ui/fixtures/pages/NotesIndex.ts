@@ -29,11 +29,11 @@ export const NotesIndexNoDeps = Component.define({
   queries: { notes: { query: ListNotes, args: () => ({}) } }
 }).make({
   init: () => ({ pinned: [], over: false }),
-  update: (model, message) =>
+  update: (_model, message, $) =>
     Match.valueTags(message, {
-      PinnedNote: ({ id }) => ({ ...model, pinned: model.pinned.includes(id) ? model.pinned : [...model.pinned, id] }),
-      DraggedIntoPins: () => ({ ...model, over: true }),
-      DraggedOutOfPins: () => ({ ...model, over: false })
+      PinnedNote: ({ id }) => $.evolve({ pinned: (pinned) => pinned.includes(id) ? pinned : [...pinned, id] }),
+      DraggedIntoPins: () => $.evolve({ over: true }),
+      DraggedOutOfPins: () => $.evolve({ over: false })
     }),
   // Every mounted instance contributes head entries. They merge in document
   // order, and the later entry wins.

@@ -213,10 +213,10 @@ export const Panel = Component.define({
   elements: Html
 }).make({
   init: () => ({ open: false, groupOpen: false }),
-  update: (model, message) =>
+  update: (_model, message, $) =>
     PanelMessage.match(message, {
-      Toggled: () => ({ ...model, open: !model.open }),
-      ChangedGroup: ({ anyOpen }) => ({ ...model, groupOpen: anyOpen })
+      Toggled: () => $.evolve({ open: (open) => !open }),
+      ChangedGroup: ({ anyOpen }) => $.evolve({ groupOpen: anyOpen })
     }),
   view: (model, h) =>
     h.section(

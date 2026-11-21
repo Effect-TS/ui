@@ -732,7 +732,7 @@ const listenFor = (
  *   elements: Html
  * }).make({
  *   init: () => ({ running: true, heading: "ArrowRight" as const }),
- *   update: { PressedArrow: (model, { key }) => ({ ...model, heading: key }) },
+ *   update: { PressedArrow: (_model, { key }, $) => $.evolve({ heading: key }) },
  *   view: (model, h) => h.p(model.heading),
  *   subscriptions: (model) => [
  *     model.running && Html.onDocument(

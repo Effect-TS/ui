@@ -37,11 +37,11 @@
  *   elements: Html
  * }).make({
  *   init: () => ({ zip: "", forecast: "" }),
- *   update: (model, message, $) =>
+ *   update: (_model, message, $) =>
  *     Message.match(message, {
- *       UpdatedZip: ({ zip }) => ({ ...model, zip }),
+ *       UpdatedZip: ({ zip }) => $.evolve({ zip }),
  *       SubmittedForm: ({ zip }) => $.run(FetchWeather.make({ zip })),
- *       CompletedFetchWeather: ({ forecast }) => ({ ...model, forecast })
+ *       CompletedFetchWeather: ({ forecast }) => $.evolve({ forecast })
  *     }),
  *   view: (model, h) =>
  *     h.div(
