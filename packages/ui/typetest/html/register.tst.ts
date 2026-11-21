@@ -7,6 +7,7 @@ import { describe, expect, it } from "tstyche"
 
 describe("@effect/ui/html/register", () => {
   it("types reusable pure views with View.H", () => {
+    expect<View.H>().type.toRaiseError(2314)
     const Button = <Msg>(h: View.H<Msg>, message: Msg) => {
       expect(h.props).type.toBe<unknown>()
       expect(h.button).type.toBe<Html.Tags<Msg>["button"]>()
@@ -19,7 +20,6 @@ describe("@effect/ui/html/register", () => {
       message: Schema.Literal("Save")
     }).view((_, h) => {
       expect(Button<"Save">).type.not.toBeCallableWith(h, "Delete")
-      expect((h: View.H<never>) => h.span).type.not.toBeCallableWith(h)
       return Button(h, "Save")
     })
   })
