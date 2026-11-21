@@ -12,6 +12,11 @@ interface Slot {
   readonly paths: ReadonlyArray<string>
 }
 
+interface Merging {
+  signature: string | undefined
+  readonly paths: Array<string>
+}
+
 interface Folded<H> {
   readonly head: H
   readonly slots: ReadonlyMap<string, Slot>
@@ -75,16 +80,16 @@ export const fold = <E, H>(
       if (values !== undefined && child.path !== undefined) values.set(child.path, folded.head)
     }
     if (node.entries.length === 0 && reduce === undefined && children.length < 2) return children[0] ?? nothing
-    const slots = new Map<string, Slot>()
+    const slots = new Map<string, Merging>()
     const conflicted = new Set<string>()
     for (const child of children) {
       for (const [slot, set] of child.slots) {
-        const seen = slots.get(slot)
-        const merged = seen === undefined ? set : {
-          signature: seen.signature === set.signature ? set.signature : undefined,
-          paths: [...seen.paths, ...set.paths]
+        let merged = slots.get(slot)
+        if (merged === undefined) slots.set(slot, merged = { signature: set.signature, paths: [...set.paths] })
+        else {
+          if (merged.signature !== set.signature) merged.signature = undefined
+          for (const path of set.paths) merged.paths.push(path)
         }
-        slots.set(slot, merged)
         if (merged.signature === undefined) conflicted.add(slot)
       }
     }
