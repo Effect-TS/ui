@@ -1,5 +1,5 @@
+import { FileTreeEntry, formatFileSize } from "#domain/FileTree"
 import type { View } from "@effect/ui"
-import { FileTreeEntry, formatFileSize } from "../../domain/FileTree.ts"
 import { AppRoute } from "../../routes.ts"
 
 export const filesUrl = (path: ReadonlyArray<string>) =>

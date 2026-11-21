@@ -1,6 +1,6 @@
+import { Person, searchPeople } from "#domain/Person"
 import { Query } from "@effect/ui"
 import { Duration, Effect, Schema } from "effect"
-import { Person, searchPeople } from "../../domain/Person.ts"
 
 const SEARCH_LATENCY = Duration.millis(300)
 
