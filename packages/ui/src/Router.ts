@@ -1248,6 +1248,13 @@ const commandLayers = Layer.mergeAll(
  * write throws, the entry is written with its index only and
  * `SnapshotWriteFailed` is reported.
  *
+ * A state whose Schema encodes asynchronously, as `Schema.File` does, joins
+ * the snapshot in memory once it is encoded, after the push has written the
+ * entry. Back and forward restore it, and after a reload it starts fresh,
+ * with a warning logged the first time. A state that doesn't encode is left
+ * out, with a warning logged once per component. A state whose Schema decodes
+ * asynchronously shows nothing until it is decoded, then starts from it.
+ *
  * With `throttle`, a replace that stays on the page is written at once, and
  * then at most once per interval, with the latest URL. A pending one is
  * written before a push, a change to the hash, back, forward, a full page
@@ -1310,7 +1317,7 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
     const primary = (): services.RootHandle | undefined => roots.values().next().value
     const snapshot = (): Record<string, unknown> => {
       const out: Record<string, unknown> = {}
-      for (const root of roots) Object.assign(out, root.snapshot())
+      for (const root of roots) root.snapshot(out)
       return out
     }
     const leave = () => {
@@ -1494,8 +1501,9 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
         else replaceNow(href, writeState({ index }))
       } else {
         leave()
-        // The Model snapshot also goes into the entry itself, so it survives a reload.
-        writeSnapshot(current.url + current.hash, { index, snapshot: snapshots.get(index) })
+        // The Model snapshot also goes into the entry itself, so it survives a reload. A copy: the one in
+        // memory gains the states that encode later, and a history that keeps its state by reference would too.
+        writeSnapshot(current.url + current.hash, { index, snapshot: { ...snapshots.get(index) } })
         index++
         for (const key of snapshots.keys()) if (key >= index) snapshots.delete(key)
         history.push(href, writeState({ index }))

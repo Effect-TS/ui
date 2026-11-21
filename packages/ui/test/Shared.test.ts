@@ -197,7 +197,9 @@ describe("shared state", () => {
       }
       yield* TestHost.mount(App, {}).pipe(Effect.provideService(services.RootHooks, hooks))
       yield* TestHost.settle
-      const snapshot = Object.keys(handle!.snapshot())
+      const out: Record<string, unknown> = {}
+      handle!.snapshot(out)
+      const snapshot = Object.keys(out)
       assert.notInclude(snapshot, "/App/TipsProvider[tips]")
       assert.include(snapshot, "/App/TipsProvider[tips]/Tip[a]")
       assert.notInclude(restored, "/App/TipsProvider[tips]")

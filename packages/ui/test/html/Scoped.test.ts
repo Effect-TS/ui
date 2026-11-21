@@ -4,7 +4,7 @@ import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Context, Deferred, Effect, Layer, Schema } from "effect"
+import { Context, Deferred, Effect, Layer, Schema, SchemaGetter } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { collectGarbage } from "../utils/gc.ts"
 
@@ -179,6 +179,53 @@ describe("scoped children on the client after hydration", () => {
       root.send("a")
       yield* Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))
       assert.strictEqual(app.querySelector("p")?.textContent, "server-draft")
+    }).pipe(Effect.scoped))
+
+  it.effect("keep a server's Model that decodes later, when the server didn't draw them", () =>
+    Effect.gen(function*() {
+      let decoding = Promise.resolve()
+      let inits = 0
+      const Later = Schema.String.pipe(Schema.decode({
+        decode: SchemaGetter.transformEffect((text: string) => Effect.promise(() => decoding.then(() => text))),
+        encode: SchemaGetter.passthrough()
+      }))
+      const Slip = Component.define({
+        name: "Slip",
+        scoped: true,
+        model: Later,
+        message: Schema.Never,
+        elements: Html
+      }).make({ init: () => side(inits++), update: (text) => text, view: (text, h) => h.p(text) })
+      const Desk = Component.define({
+        name: "Desk",
+        scoped: false,
+        model: Schema.Boolean,
+        message: Schema.Literal("show"),
+        elements: Html
+      }).make({
+        init: () => false,
+        update: () => true,
+        view: (shown, h) =>
+          h.scoped((s) => {
+            const slip = Slip(s, {})
+            return h.main(shown ? slip : "none")
+          })
+      })
+      const rendered = yield* HtmlServer.renderToHtml(Desk, {})
+      let decode = () => {}
+      decoding = new Promise<void>((resolve) => {
+        decode = resolve
+      })
+      const app = document.createElement("div")
+      app.innerHTML = rendered.html
+      const root = yield* BrowserHost.mountEffect(Desk, {}, app, { state: rendered.state })
+      root.send("show")
+      yield* tick
+      assert.strictEqual(app.querySelector("p"), null)
+      decode()
+      yield* root.adopted
+      yield* tick
+      assert.strictEqual(app.querySelector("p")?.textContent, "server")
     }).pipe(Effect.scoped))
 })
 
