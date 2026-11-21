@@ -204,6 +204,7 @@ import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { type Attributed, flag, idSelector, noSelect, visuallyHidden, withStyle } from "./internal/attributes.ts"
+import { byAttribute } from "./internal/dom.ts"
 import { methodOf, onScrollbar } from "./internal/interaction.ts"
 import { lockScroll } from "./internal/modal.ts"
 import { clamp } from "./internal/range.ts"
@@ -980,9 +981,7 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
       const focused = document.activeElement
       const lost = focused === null || focused === document.body || node.contains(focused)
       if (current.finalFocus && !current.focusLeft) {
-        const marked = document.querySelector<HTMLElement>(
-          "[data-final-focus=\"" + CSS.escape(current.popupId) + "\"]"
-        )
+        const marked = byAttribute(document, "data-final-focus", current.popupId)
         const back = marked ?? trigger()
         if (back !== null && (marked !== null || lost)) {
           back.focus({ preventScroll: true, focusVisible: current.closeMethod === "keyboard" } as FocusOptions)
