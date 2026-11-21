@@ -98,6 +98,31 @@ const Settings = Component.define({
   }
 }).pipe(Component.provide(GetTab.layer))
 
+const Sketch = Component.define({
+  name: "Sketch",
+  scoped: true,
+  model: Schema.declare((u): u is () => string => typeof u === "function"),
+  message: Schema.Never,
+  elements: Html
+}).make({ init: () => () => "sketch", update: (model) => model, view: (text, h) => h.em(text()) })
+
+const Board = Component.define({
+  name: "Board",
+  scoped: false,
+  model: Schema.Boolean,
+  message: Schema.Boolean,
+  elements: Html,
+  queries: { tab: { query: GetTab, args: () => ({}) } }
+}).make({
+  init: () => false,
+  update: (_, shown) => shown,
+  view: (shown, h) =>
+    h.main(
+      h.scoped((s) => Sketch(s, { key: "drawn" })),
+      shown || !AsyncResult.isSuccess(h.queries.tab) ? h.scoped((s) => Sketch(s, { key: "kept" })) : null
+    )
+}).pipe(Component.provide(GetTab.layer))
+
 describe("scoped children on the server", () => {
   it.effect("writes no nodes for a kept child, and the client takes its state once it's written", () =>
     Effect.gen(function*() {
@@ -112,6 +137,17 @@ describe("scoped children on the server", () => {
       assert.strictEqual(result.container.querySelector("i")!.textContent, "avatar from the server")
       assert.strictEqual(result.container.querySelector("b")!.textContent, "badge from the server")
       assert.strictEqual(result.container.querySelector("s")!.textContent, "down")
+    }).pipe(Effect.provide(TestHost.layer())))
+
+  it.effect("lists a child whose Model doesn't encode as deferred where it's drawn, and sends a kept one no state", () =>
+    Effect.gen(function*() {
+      const result = yield* ssr(Board, {})
+      assert.deepStrictEqual(result.state["~deferred"], ["/Board/Sketch[drawn]"])
+      assert.deepStrictEqual(result.state["~kept"], { "/Board": { "/Board/Sketch[kept]": {} } })
+
+      result.root.send(true)
+      yield* TestHost.settle
+      assert.strictEqual(result.container.textContent, "sketchsketch")
     }).pipe(Effect.provide(TestHost.layer())))
 })
 

@@ -913,6 +913,128 @@ describe("scoped children of a headless child", () => {
       assert.strictEqual(root.text(), "[any open]A-B+")
       assert.deepStrictEqual(lifecycle(root, "/App/Panel[b]"), ["Mounted", "Kept", "Drawn"])
     })))
+
+  it.effect("a headless child's send doesn't reach a failed scoped child another declarer gave the same ref key", () =>
+    provideHost(Effect.gen(function*() {
+      const RowMsg = UiSchema.TaggedEnum({ Inc: {} })
+      const Row = Component.define({
+        name: "Row",
+        scoped: true,
+        model: Schema.Null,
+        message: RowMsg,
+        receives: ["Inc"]
+      })
+        .make({
+          init: () => null,
+          update: (model) => model,
+          view: (): never => {
+            throw new Error("broken")
+          }
+        })
+      const Item = Component.define({
+        name: "Item",
+        scoped: false,
+        model: Schema.Null,
+        message: RowMsg,
+        receives: ["Inc"]
+      })
+        .make({ init: () => null, update: (model) => model, parts: () => ({}) })
+      const ListMsg = UiSchema.TaggedEnum({ Go: {} })
+      const List = Component.define({
+        name: "List",
+        scoped: false,
+        model: Schema.Null,
+        message: ListMsg,
+        receives: ["Go"]
+      })
+        .make({
+          init: () => null,
+          update: (model, _, $) => $.set(model).send(Item.ref("r"), RowMsg.Inc()),
+          parts: () => ({})
+        })
+      const ListRef = List.ref("l")
+      const RowRef = Row.ref("r")
+      const Page = Component.define({
+        name: "Page",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Literals(["list", "row"])
+      })
+        .make({
+          init: () => null,
+          update: (model, to, $) =>
+            to === "list" ? $.set(model).send(ListRef, ListMsg.Go()) : $.set(model).send(RowRef, RowMsg.Inc()),
+          view: (_, h) =>
+            List(h, {
+              ref: ListRef,
+              view: () => h.scoped((s) => Row(s, { ref: RowRef, fallback: () => h.el("p", "down") }))
+            })
+        })
+      const root = yield* TestHost.mount(Page, {})
+      root.send("list")
+      yield* TestHost.settle
+      root.send("row")
+      yield* TestHost.settle
+      assert.deepStrictEqual(
+        root.log().flatMap((entry) => entry._tag === "SendDropped" ? [entry.path + " " + entry.reason] : []),
+        ["/Page/List[l] unrendered", "/Page failed"]
+      )
+    })))
+
+  it.effect.each(["moved up a level", "first rendered there"] as const)(
+    "headless owners in a scoped child %s get an event deepest first",
+    (how) =>
+      provideHost(Effect.gen(function*() {
+        const HitMsg = UiSchema.TaggedEnum({ Hit: {} })
+        const owner = <Name extends string>(name: Name) =>
+          Component.define({ name, scoped: false, model: Schema.Null, message: HitMsg }).make({
+            init: () => null,
+            update: (model) => model,
+            parts: (_, p) => ({ hit: p.part((b) => b.on("click", HitMsg.Hit())) })
+          })
+        const Outer = owner("Outer")
+        const Inner = owner("Inner")
+        const Tree = Component.define({
+          name: "Tree",
+          scoped: true,
+          model: Schema.Boolean,
+          message: Schema.Literal("nest")
+        }).make({
+          init: () => false,
+          update: () => true,
+          view: (nested, h) =>
+            h.el(
+              "div",
+              h.el("button").on("click", "nest").children("nest"),
+              Outer(h, {
+                key: "o",
+                view: (outer) =>
+                  nested
+                    ? Inner(h, { key: "i", view: (inner) => inner.hit(outer.hit(h.el("button"))).children("go") })
+                    : outer.hit(h.el("button")).children("go")
+              })
+            )
+        })
+        const Page = Component.define({ name: "Page", scoped: false, model: Schema.Boolean, message: Schema.Boolean })
+          .make({
+            init: () => how === "moved up a level",
+            update: (_, deep) => deep,
+            view: (deep, h) =>
+              h.scoped((s) => {
+                const tree = Tree(s, { key: "t" })
+                return h.el("main", deep ? Box(s, { key: "b", slots: { body: tree } }) : tree)
+              })
+          })
+        const root = yield* TestHost.mount(Page, {})
+        root.send(false)
+        yield* TestHost.settle
+        click(root, "nest")
+        yield* TestHost.settle
+        assert.deepStrictEqual((root.get(Locator.text("go", { exact: true })) as TestHost.TestElement).owners, {
+          click: ["/Page/Tree[t]/Outer[o]/Inner[i]", "/Page/Tree[t]/Outer[o]"]
+        })
+      }))
+  )
 })
 
 const CounterMsg = UiSchema.TaggedEnum({ Inc: {} })
