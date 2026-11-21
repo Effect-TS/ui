@@ -81,9 +81,9 @@ describe("NoteEditor", () => {
       // definition matches any args; `pending` holds them.
       s.send(NoteEditorMessage.RequestedSave()).expectExact(SaveNote)
       assert.deepStrictEqual(s.pending[0].command.args, { note: edited })
-      // `SaveNote` returns `NoteEditorMessage`, so `resolve` takes the message
-      // itself. A Command mapped with `Command.match` or `Command.map` resolves
-      // with its own value (or fails with `fail`) and runs the mapping in the test.
+      // `SaveNote` returns a `NoteEditorMessage`, so `resolve` takes the
+      // message. A Command mapped with `Command.match` or `Command.map` takes
+      // its own value instead, or its typed error in `fail`.
       s.resolve(SaveNote, NoteEditorMessage.SucceededSaveNote({ note: edited }))
       assert.strictEqual(s.model.saved, edited.body)
       // An event the component emitted is acknowledged by naming it.

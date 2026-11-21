@@ -24,18 +24,18 @@
  * `invalidates`, `optimistic` and `writes` are optional. Omitting
  * `invalidates` means the run invalidates nothing.
  *
- * When only one component consumes a Command's result (the usual case for an
- * app's own Commands), return that component's message directly from the body
- * and handle typed failures inside it with `Effect.match`. A body that leaves
- * a typed error produces an `Unmatched` Command that `$.run` rejects. In a
- * `Story` or `Scene`, resolve a Command that returns a message with the
- * message itself.
+ * When one component consumes a Command's result, the usual case for an
+ * app's own Commands, the body returns that component's message and handles
+ * a typed failure with `Effect.match`. A body that leaves a typed error
+ * gives an `Unmatched` Command, which `$.run` rejects.
  *
- * Use `Command.match`, `Command.map` and `Command.asNoop` for a Command that
- * cannot know its caller's messages: one from a library, such as
- * `Router.replace`, or one shared by multiple components. In a `Story` or
- * `Scene`, a mapped Command resolves with its own value or fails with its
- * typed error, and the mapping runs in the test.
+ * `Command.match`, `Command.map` and `Command.asNoop` are for a Command that
+ * can't know its caller's messages: one from a library, such as
+ * `Router.replace`, or one that several components issue.
+ *
+ * In a `Story` or `Scene`, `resolve` takes what the body returns: the
+ * message in the first case, and the Command's own value in the second, where
+ * `fail` takes its typed error and the mapping runs in the test.
  *
  * **Example** (A Command service with a captured dependency)
  *
@@ -60,7 +60,6 @@
  * })) {}
  *
  * // `update` issues `DeleteTodo.make({ id })`, and the component requires `DeleteTodo`.
- * const command = DeleteTodo.make({ id: "1" })
  * // The live wiring provides `DeleteTodo.layer`, which requires `KeyValueStore`.
  * ```
  *
@@ -720,8 +719,9 @@ export interface Service<
   readonly args: Schema.Top
   /**
    * Issues the Command. The component requires `Self`. When the body can
-   * fail (`Err` isn't `never`) the result is `Unmatched`: map both channels
-   * with `Command.match` before running it.
+   * fail (`Err` isn't `never`) the result is `Unmatched`, which `$.run`
+   * rejects: handle the failure in the body, or map both channels with
+   * `Command.match`.
    */
   make(
     ...args: MakeArgs<Args>
@@ -1037,14 +1037,12 @@ export const make: {
  * key is the Command's name in the log and in story tests.
  *
  * The body may use framework services on each call without them appearing in
- * `layer`'s requirements. When only one component consumes the result, return
- * its message directly from the body and handle typed failures inside it with
- * `Effect.match`. For a library or shared Command that can't know its caller's
- * messages, return the raw result (or fail with a typed error): a body that
- * leaves a typed error makes `make` issue an `Unmatched` Command, which the
- * issue site maps with `Command.match({ onSuccess, onFailure })`, while a
- * body that can't fail is mapped with `Command.map` or silenced with
- * `Command.asNoop`.
+ * `layer`'s requirements. When one component consumes the result, the body
+ * returns that component's message and handles a typed failure with
+ * `Effect.match`. A library or shared Command returns its own result
+ * instead, and the issue site maps it: `Command.match` when the body can
+ * fail, since `make` then issues an `Unmatched` Command, and `Command.map`
+ * or `Command.asNoop` when it can't.
  *
  * The options declare what a run does to the query cache, from the args:
  * `invalidates` (optional), `optimistic` patches, live from issue, and
@@ -1084,6 +1082,7 @@ export const make: {
  *     )
  * })) {}
  *
+ * // Issue: `$.run` takes the Command as is
  * const command = SaveTodo.make({ id: "1", title: "Buy milk" })
  * // Live: provide `SaveTodo.layer`, which requires `KeyValueStore`
  * // Test: a fake that needs nothing
@@ -1183,11 +1182,9 @@ export const Service: <Self>() => {
  *
  * **When to use**
  *
- * Use when issuing a Command that can't know its caller's messages, such as a library
- * Command like `Router.replace` or a shared `UploadFile` Command that returns
- * a URL. When only one component consumes a Command's result, return its
- * message directly from the Command's body instead. A Command whose body can
- * fail takes `match` instead.
+ * Use when issuing a Command that can't know its caller's messages, such as
+ * `Router.replace` or a shared `UploadFile` Command that returns a URL. A
+ * Command whose body can fail takes `match` instead.
  *
  * **Details**
  *
@@ -1322,21 +1319,21 @@ export const asNoop = <C extends Command<any, any>>(self: C): Mapped<C, Componen
  *
  * **When to use**
  *
- * Use when issuing a library or shared `Command.Service` that can't know its
- * caller's messages and whose body has a typed error: `$.run` rejects the
- * `Unmatched` Command its `make` returns. When only one component consumes
- * the Command, handle typed errors inside its body (for an Effect Command,
- * with `Effect.match`) and return the component's message directly instead.
+ * Use when issuing a library or shared `Command.Service` whose body has a
+ * typed error: `$.run` rejects the `Unmatched` Command its `make` returns.
+ * A Command that one component consumes handles the error in its body
+ * instead.
  *
  * **Details**
  *
  * `onSuccess` maps the body's success, or each element of a Stream Command,
  * and `onFailure` the typed failure, which ends a Stream Command. A defect or
  * an interrupt isn't mapped. A Command whose body can't fail takes `map`, and
- * `match` on it doesn't compile. In a `Story` or `Scene`, a matched Effect
- * Command resolves with its own success via `s.resolve` (a Stream Command
- * emits elements with `s.next` and completes with `s.end`) or fails with its
- * typed error via `s.fail`, and the mapping runs in the test.
+ * `match` on it doesn't compile.
+ *
+ * In a `Story` or `Scene` the mapping runs in the test: `resolve` takes the
+ * body's success and `fail` its typed error. A Stream Command takes `next`
+ * for each element and `end` when it completes.
  *
  * **Example** (Mapping a shared Command that can fail)
  *

@@ -81,11 +81,28 @@ A component with `shares` takes the `Provider` suffix, as in
 `h.shared.provider`. A reader of several owners names each one after its
 owner instead, such as `tooltip` and `theme`.
 
-When only one component consumes a Command's result, return that component's
-message directly from the Command's body instead of wrapping a raw result in a
-second helper. Because a Command already lives in the file of the component
-that runs it, this is the usual form for an app's own Commands. Handle typed
-failures inside the body with `Effect.match` so both channels become messages:
+Never write a no-op message, such as `Noop` or a tag added only so a result
+has something to send. A Command with nothing to report ends in `Component.noop`,
+usually through `Command.asNoop`. It sends nothing, and the log still records
+its `CommandEnded` with `silent: true`. A mount that returns `Component.noop`
+likewise sends no message and logs `MountEnded` with `silent: true`. A
+component with no messages takes `message: Schema.Never`.
+
+Effect UI differs from Foldkit in three places:
+
+- There is no `Got*`. A parent never wraps a child's messages: it maps the
+  child's events in `onEmit`, so its message is the event's verb and its
+  name for the child.
+- A message listed in `receives` has no prefix of its own. It is named like
+  any other message, for the fact it reports.
+- A Command or mount with nothing to report needs no `Completed*` message. `Component.noop` is enough.
+
+### Command results
+
+A Command whose result one component consumes returns that component's
+message from its body. This is the usual form for an app's own Commands,
+which live in the file of the component that runs them. `Effect.match` turns
+a typed failure into a message as well:
 
 ```ts
 export class SaveNote extends Command.Service<SaveNote>()(
@@ -104,41 +121,23 @@ export class SaveNote extends Command.Service<SaveNote>()(
 ) {}
 ```
 
-A body that leaves a typed error still produces an unmatched Command, which
-`$.run` rejects. In a `Story` or `Scene`, resolve a Command that returns a
-message with the message itself:
-`s.resolve(SaveNote, NoteEditorMessage.SucceededSaveNote({ note }))`.
+A body that leaves a typed error gives an unmatched Command, which `$.run`
+rejects.
 
-Use `Command.match`, `Command.map` and `Command.asNoop` for a Command that
-cannot know its caller's messages: one from a library, such as `Router.replace`,
-or one that two components issue:
+`Command.map`, `Command.asNoop` and `Command.match` are for a Command that
+can't know its caller's messages: one from a library, such as
+`Router.replace`, or one that two components issue. `Command.match` maps both
+channels of one that can fail:
 
 ```ts
 Router.replace(AppRoute, route).pipe(Command.map((outcome) => Message.CompletedReplace({ outcome })))
 Router.replace(AppRoute, route).pipe(Command.asNoop)
 ```
 
-When a shared or library Command can fail, map both channels at the issue site
-with `Command.match({ onSuccess, onFailure })` (or in a small helper beside the
-Message union when several handlers issue it). In a `Story` or `Scene`, a
-mapped Command resolves with its own value via `s.resolve` or fails with its
-typed error via `s.fail`, and the mapping runs in the test.
-
-Never write a no-op message, such as `Noop` or a tag added only so a result
-has something to send. A Command with nothing to report ends in `Component.noop`,
-usually through `Command.asNoop`. It sends nothing, and the log still records
-its `CommandEnded` with `silent: true`. A mount that returns `Component.noop`
-likewise sends no message and logs `MountEnded` with `silent: true`. A
-component with no messages takes `message: Schema.Never`.
-
-Effect UI differs from Foldkit in three places:
-
-- There is no `Got*`. A parent never wraps a child's messages: it maps the
-  child's events in `onEmit`, so its message is the event's verb and its
-  name for the child.
-- A message listed in `receives` has no prefix of its own. It is named like
-  any other message, for the fact it reports.
-- A Command or mount with nothing to report needs no `Completed*` message. `Component.noop` is enough.
+In a `Story` or `Scene`, a Command that returns a message resolves with the
+message: `s.resolve(SaveNote, NoteEditorMessage.SucceededSaveNote({ note }))`.
+A mapped Command takes its own value in `s.resolve`, or its typed error in
+`s.fail`, and the mapping runs in the test.
 
 ### Changing the Model
 

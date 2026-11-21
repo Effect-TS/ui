@@ -32,11 +32,10 @@ export const NoteEditorEvents = UiSchema.TaggedEnum({ Saved: { note: Note } })
 // `Notes`. `Command.make` is only for bodies that need no service. Calling
 // `fetch` in one compiles, but a test can't fake it.
 //
-// The command lives in the file of the component that runs it. Because only
-// `NoteEditor` consumes its result, its body returns `NoteEditorMessage`
-// directly, turning both success and failure into messages with `Effect.match`.
-// A second component that needs the same write shares `Notes.save` and keeps
-// its own command.
+// The command lives in the file of the component that runs it. Only
+// `NoteEditor` consumes its result, so its body returns a `NoteEditorMessage`
+// for the success and for the typed failure. A second component that needs
+// the same write shares `Notes.save` and keeps its own command.
 export class SaveNote extends Command.Service<SaveNote>()(
   "notes/SaveNote",
   {
