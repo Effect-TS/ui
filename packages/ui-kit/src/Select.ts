@@ -928,6 +928,13 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
       if (scroll) item.scrollIntoView({ block: "nearest" })
     }
 
+    const reveal = () =>
+      frame(() => {
+        if (current.open && current.active !== null) {
+          document.getElementById(current.active)?.scrollIntoView({ block: "nearest" })
+        }
+      })
+
     let release: (() => void) | undefined
     const hold = () => {
       release?.()
@@ -944,7 +951,8 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
       cut()
       align()
       arrows()
-      focusActive(!current.aligned)
+      focusActive(false)
+      if (!current.aligned) reveal()
       if (!current.started) frame(() => frame(() => send(Message.RenderedFirstFrame())))
     }
 
@@ -1080,6 +1088,7 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
       if (previous.aligned && !next.aligned) {
         clear()
         cut()
+        if (previous.open) reveal()
       }
       if (previous.open && !next.open) closing()
       else if (!previous.open && next.open) {

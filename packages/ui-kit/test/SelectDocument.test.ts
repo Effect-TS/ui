@@ -197,17 +197,31 @@ const keyup = (target: Element, key: string) =>
 const mousedown = (target: Element) =>
   target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }))
 const shown = () => byId("positioner").matches(":popover-open")
+const reveals = Effect.acquireRelease(
+  Effect.sync(() => {
+    const element = window.Element.prototype as any
+    const saved = element.scrollIntoView
+    const seen: Array<string> = []
+    element.scrollIntoView = function(this: Element) {
+      seen.push(this.getAttribute("data-testid") + " with the popup at " + style("top"))
+    }
+    return { seen, restore: () => (element.scrollIntoView = saved) }
+  }),
+  ({ restore }) => Effect.sync(restore)
+).pipe(Effect.map(({ seen }) => seen))
 const touched = () => byId("field").hasAttribute("data-touched")
 
 describe("Select in a document", { concurrent: false }, () => {
   it.effect("places the popup below the trigger, flips it near the bottom, and reports the side", () =>
     Effect.gen(function*() {
+      const revealed = yield* reveals
       const { root } = yield* mountPage()
       keydown(byId("trigger"), "ArrowDown")
       yield* tick
       assert.isTrue(shown())
       assert.strictEqual(style("left"), "60px")
       assert.strictEqual(style("top"), "330px")
+      assert.deepStrictEqual(revealed, ["light with the popup at 330px"])
       assert.strictEqual(style("--anchor-width"), "120px")
       assert.strictEqual(byId("positioner").getAttribute("data-side"), "bottom")
       assert.strictEqual(byId("trigger").getAttribute("data-popup-side"), "bottom")
@@ -244,13 +258,17 @@ describe("Select in a document", { concurrent: false }, () => {
   it.effect("falls back to placing the popup below a trigger near the top of the viewport", () =>
     Effect.gen(function*() {
       rects.set("trigger", { x: 100, y: 10, width: 120, height: 30 })
-      yield* mountPage({ align: true })
+      const revealed = yield* reveals
+      const { root } = yield* mountPage({ align: true })
+      root.send(Message.Picked({ value: "dark" }))
+      yield* tick
       mousedown(byId("trigger"))
       yield* tick
       assert.strictEqual(byId("positioner").getAttribute("data-side"), "bottom")
       assert.strictEqual(style("left"), "60px")
       assert.strictEqual(style("top"), "40px")
       assert.strictEqual(style("height"), "")
+      assert.deepStrictEqual(revealed, ["dark with the popup at 40px"])
       const blocker = byId("positioner").querySelector<HTMLElement>("[data-select-blocker]")!
       assert.include(blocker.style.getPropertyValue("clip-path"), "100px 10px")
     }).pipe(Effect.scoped))
@@ -289,18 +307,8 @@ describe("Select in a document", { concurrent: false }, () => {
 
   it.effect("moves focus into the items, and back to the trigger before it hides, so the field isn't touched", () =>
     Effect.gen(function*() {
+      const scrolled = yield* reveals
       const { log } = yield* mountPage()
-      const scrolled: Array<Element> = []
-      const element = window.Element.prototype as any
-      const savedScrollIntoView = element.scrollIntoView
-      element.scrollIntoView = function(this: Element) {
-        scrolled.push(this)
-      }
-      yield* Effect.addFinalizer(() =>
-        Effect.sync(() => {
-          element.scrollIntoView = savedScrollIntoView
-        })
-      )
       byId(byId("trigger").getAttribute("aria-labelledby")!).click()
       yield* tick
       assert.strictEqual(document.activeElement, byId("trigger"))
@@ -313,7 +321,7 @@ describe("Select in a document", { concurrent: false }, () => {
       keydown(item("light"), "ArrowDown")
       yield* tick
       assert.strictEqual(document.activeElement, item("dark"))
-      assert.deepStrictEqual(scrolled, [item("dark")])
+      assert.deepStrictEqual(scrolled, ["dark with the popup at 330px"])
       scrolled.length = 0
       item("system").dispatchEvent(new MouseEvent("mouseenter"))
       yield* tick
