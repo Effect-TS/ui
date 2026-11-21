@@ -1,6 +1,6 @@
+import { addSearchToHistory } from "#domain/SearchHistory"
 import { Component, Head, Router, UiSchema } from "@effect/ui"
 import { Schema } from "effect"
-import { addSearchToHistory } from "./domain/SearchHistory.ts"
 import { FilesIndexPage } from "./pages/files/FilesIndexPage.ts"
 import { FilesPage } from "./pages/files/FilesPage.ts"
 import { HomePage } from "./pages/HomePage.ts"

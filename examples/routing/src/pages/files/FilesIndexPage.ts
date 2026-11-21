@@ -1,5 +1,5 @@
+import { fileTree } from "#domain/FileTree"
 import type { View } from "@effect/ui"
-import { fileTree } from "../../domain/FileTree.ts"
 import { EntryList } from "../../files/components/EntryList.ts"
 
 export const FilesIndexPage = <M>(h: View.H<M>) =>

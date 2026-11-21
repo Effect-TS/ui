@@ -1,6 +1,6 @@
+import { findPerson } from "#domain/Person"
 import type { View } from "@effect/ui"
 import { Option } from "effect"
-import { findPerson } from "../../domain/Person.ts"
 import { AppRoute } from "../../routes.ts"
 
 const peopleUrl = AppRoute.print(AppRoute.People())
