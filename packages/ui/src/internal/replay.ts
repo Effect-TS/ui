@@ -195,12 +195,11 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
     }
     const out: { [name: string]: unknown } = {}
     for (const read of reads) {
+      const value = Object.hasOwn(encoded, read.name) ? encoded[read.name] : undefined
       const schema = read.owner.definition.sharesSchema
-      out[read.name] = !Object.hasOwn(encoded, read.name)
-        ? undefined
-        : schema === undefined
-        ? encoded[read.name]
-        : decodeWith(wire, `shared "${read.name}"`, schema, encoded[read.name])
+      out[read.name] = value === undefined || schema === undefined
+        ? value
+        : decodeWith(wire, `shared "${read.name}"`, schema, value)
     }
     return out
   }

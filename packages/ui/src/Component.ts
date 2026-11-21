@@ -2183,7 +2183,7 @@ export interface Definition<
   readonly elements: View.Vocabulary<V> | undefined
   /** The names of the slots a parent may fill. */
   readonly slots: ReadonlyArray<Sl>
-  /** The owners whose shared state `view` or `parts` reads, by local name. */
+  /** The owners whose shared state the component reads, by local name. */
   readonly shared: SR | undefined
   /** What an owner shares with the components below it, from its Model and props: the `value` of `shares`. */
   readonly shares: ((model: Model, props: Props) => SV) | undefined
@@ -2757,7 +2757,7 @@ export const define = <
     /** The names of the slots a parent may fill, each placed in `view` with `h.slots.<name>`. None by default. */
     readonly slots?: ReadonlyArray<Sl> | undefined
     /**
-     * The owners whose shared state `view` or `parts` reads, by the name `h.shared` and `p.shared` use:
+     * The owners whose shared state the component reads, by the name `h.shared`, `p.shared` and `$.shared` use:
      * each an owner, or `{ owner, optional, report, onChange }`. With `optional`, the read is
      * `undefined` when no owner is above, and a send to it is dropped. `report` is what this
      * component tells an owner whose `shares` has `collects`. `onChange` is its message when the
@@ -2937,6 +2937,7 @@ const finish = (
   }
   // Read once the component exists, since an entry for `"self"` names it.
   let reads: ReadonlyArray<sharedReads.Read> = []
+  let unsupplied: SharedRecord = {}
   const component: Any = makeComponent(view === undefined ? HeadlessProto : Proto, {
     definition,
     props: definition.props,
@@ -2946,19 +2947,7 @@ const finish = (
     receives: definition.receives,
     init: (props: unknown) => toNext(options.init(makeInit(props))),
     update: (model: unknown, msg: unknown, props: unknown, results?: Results, shared?: SharedRecord) =>
-      toNext(
-        updateFn(
-          model,
-          msg,
-          makeUpdate(
-            model,
-            props,
-            open(model, props, results),
-            shared ?? sharedReads.unsupplied(definition.name, reads),
-            msg
-          )
-        )
-      ),
+      toNext(updateFn(model, msg, makeUpdate(model, props, open(model, props, results), shared ?? unsupplied, msg))),
     view: view === undefined
       ? undefined
       : View.readsPathLazily((
@@ -3039,6 +3028,7 @@ const finish = (
     "~queries": bound
   })
   reads = sharedReads.readsOf(definition, component)
+  unsupplied = sharedReads.unsupplied(definition.name, reads)
   return component
 }
 

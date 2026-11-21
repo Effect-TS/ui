@@ -2692,12 +2692,11 @@ const setup = (
       renderAbove(inst)
       if (inst.closed || inst.waiting || frozen) return
       const component = inst.component
-      const reads = sharedReads.readsOf(component.definition)
       let next: ReturnType<typeof component.update>
       let shared: Component.SharedRecord | undefined
       busy++
       try {
-        if (reads.length > 0) shared = sharedReads.values(component.definition.name, reads, sharedOf(inst))
+        shared = sharedReads.record(component, sharedOf(inst))
         next = component.update(inst.model, message as never, inst.props, inst.results, shared)
       } catch (error) {
         // No `Update` is logged for it, so the failure carries the message.

@@ -8,7 +8,7 @@ import type * as Component from "../Component.ts"
 
 /** @internal */
 export interface Read {
-  /** The local name `h.shared` and `p.shared` read the owner under. */
+  /** The local name `h.shared`, `p.shared` and `$.shared` read the owner under. */
   readonly name: string
   readonly owner: Component.Headless.Any
   readonly optional: boolean
@@ -17,7 +17,6 @@ export interface Read {
 }
 
 const none: ReadonlyArray<Read> = []
-const noValues: Component.SharedRecord = Object.freeze({})
 const cache = new WeakMap<object, ReadonlyArray<Read>>()
 
 /**
@@ -48,43 +47,46 @@ export const readsOf = (definition: Component.Definition.Any, self?: Component.A
   return reads
 }
 
+const missing = (name: string, read: Read): never => {
+  throw new Error(
+    `${name} reads the shared state of ${read.owner.definition.name}, and nothing supplies it: render it below a ${read.owner.definition.name}`
+  )
+}
+
 /** @internal */
 export const values = (
   name: string,
   reads: ReadonlyArray<Read>,
   lookup: Component.SharedLookup | undefined
 ): Component.SharedRecord => {
-  if (reads.length === 0) return noValues
   const out: { [name: string]: unknown } = {}
   for (const read of reads) {
-    if (lookup === undefined) {
-      if (read.optional) {
-        out[read.name] = undefined
-        continue
-      }
-      throw new Error(
-        `${name} reads the shared state of ${read.owner.definition.name}, and nothing supplies it: render it below a ${read.owner.definition.name}`
-      )
-    }
-    out[read.name] = lookup(read.owner, read.optional)
+    out[read.name] = lookup !== undefined
+      ? lookup(read.owner, read.optional)
+      : read.optional
+      ? undefined
+      : missing(name, read)
   }
   return out
 }
 
 /** @internal */
+export const record = (
+  component: Component.Any,
+  lookup: Component.SharedLookup | undefined
+): Component.SharedRecord | undefined => {
+  const reads = readsOf(component.definition)
+  return reads.length === 0 ? undefined : values(component.definition.name, reads, lookup)
+}
+
+/** @internal */
 export const unsupplied = (name: string, reads: ReadonlyArray<Read>): Component.SharedRecord => {
-  if (reads.length === 0) return noValues
   const out: { [name: string]: unknown } = {}
   for (const read of reads) {
     if (read.optional) out[read.name] = undefined
-    else {
-      Object.defineProperty(out, read.name, {
-        enumerable: true,
-        get: () => values(name, [read], undefined)[read.name]
-      })
-    }
+    else Object.defineProperty(out, read.name, { enumerable: true, get: () => missing(name, read) })
   }
-  return out
+  return Object.freeze(out)
 }
 
 /**
