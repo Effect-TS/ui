@@ -131,8 +131,9 @@ export class SsrError extends Data.TaggedError("SsrError")<{
 const isSlotPath = (path: string): boolean => path[path.lastIndexOf("]/") + 2] === "["
 
 /**
- * The instance that adopts a node: the innermost around it. A slot's content is placed by the
- * instance whose view placed the slot, so it adopts with that instance's render.
+ * The instance a node is judged with: the innermost with markers around it, so the nodes of a child
+ * written without them are its parent's. A slot's content is placed by the instance whose view placed
+ * the slot, so it adopts with that instance's render.
  */
 const ownerOf = (paths: ReadonlyArray<string>): string => {
   for (let index = paths.length - 1; index > 0; index--) {
@@ -141,7 +142,7 @@ const ownerOf = (paths: ReadonlyArray<string>): string => {
   return paths[0]!
 }
 
-/** A node the server rendered, and the paths of the instances around it, innermost last. */
+/** A node the server rendered, and the paths of the marker ranges around it, innermost last. */
 interface ServerNode {
   readonly node: globalThis.Node
   readonly paths: ReadonlyArray<string>
@@ -414,7 +415,7 @@ export const ssr = <
     // update, such as the message an `onMount` sends, may replace nodes without counting against it.
     const deferred = new Set(state["~deferred"] ?? [])
     let unjudged = before.filter(({ paths }) => paths.length > 0 && !paths.some((path) => deferred.has(path)))
-    const rebuilt = new Map<string, Set<string>>()
+    const rebuilt = new Map<string, string>()
     let read = 0
     const judge = () => {
       const entries = clientLog.entries()
@@ -425,11 +426,9 @@ export const ssr = <
       }
       unjudged = unjudged.filter(({ node, paths }) => {
         if (!adoptedNow.has(ownerOf(paths))) return true
-        if (!container.contains(node)) {
-          const path = paths[paths.length - 1]!
-          let tags = rebuilt.get(path)
-          if (tags === undefined) rebuilt.set(path, tags = new Set())
-          tags.add(node.nodeType === 1 ? `<${(node as globalThis.Element).localName}>` : "#text")
+        const path = paths[paths.length - 1]!
+        if (!container.contains(node) && !rebuilt.has(path)) {
+          rebuilt.set(path, node.nodeType === 1 ? `<${(node as globalThis.Element).localName}>` : "#text")
         }
         return false
       })
@@ -500,8 +499,8 @@ export const ssr = <
         )
       }
     }
-    for (const [path, tags] of rebuilt) {
-      problems.push(`${path}: the client rebuilt the server's nodes instead of adopting them (${[...tags].join(", ")})`)
+    for (const [path, first] of rebuilt) {
+      problems.push(`${path}: the client rebuilt the server's nodes instead of adopting them, starting at ${first}`)
     }
     // Every server node outside a deferred instance is judged: one whose instance never adopted under
     // the path its markers carry was not adopted either.

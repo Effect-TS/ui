@@ -2352,7 +2352,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       const error = yield* Effect.flip(ssr(List, {}))
       assert.include(
         String(error),
-        "/List: the client rebuilt the server's nodes instead of adopting them (<li>"
+        "/List: the client rebuilt the server's nodes instead of adopting them, starting at <li>"
       )
     })))
 })

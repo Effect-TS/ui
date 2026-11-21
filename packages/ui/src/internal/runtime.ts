@@ -831,7 +831,10 @@ let sessions = 0
 /** Each runtime's interrupter id for the Layer builds it ends: negative, so never a fiber's. */
 let buildInterrupters = 0
 
-/** The server's nodes for one instance: between its two markers. */
+/**
+ * The server's nodes for one instance: between its two markers, or the one element of a child written
+ * without them, which is then both `open` and `close`.
+ */
 interface Range {
   readonly open: unknown
   readonly close: unknown
@@ -1038,9 +1041,8 @@ const serializeTree = (
         if (inst.component.layer !== undefined) ship(path, inst.env.status)
       }
     }
-    const bare = !inner && inst.parent !== undefined && inst.failure === undefined &&
-      inst.component.layer === undefined && inst.rendered !== undefined && !Array.isArray(inst.rendered) &&
-      inst.rendered._tag === "Element"
+    const bare = !inner && inst.parent !== undefined && inst.component.layer === undefined &&
+      !Array.isArray(inst.rendered) && inst.rendered?._tag === "Element"
     if (!bare) sink.enter(path)
     if (inst.failure === undefined) {
       for (const rendered of listOf(inst.rendered)) serialize(inst, rendered, inner)
@@ -5738,8 +5740,9 @@ const setup = (
   /**
    * Adopts the server's node `node` for `view`, with everything under it, in one pass: nothing is
    * matched ahead. `undefined` when `node`, which is `stop` or missing once the server's nodes run out,
-   * isn't what the view renders: nothing was adopted then. A child matches by its marker range, which it
-   * adopts itself. A server never writes an empty text node, so an empty text takes no node and is created.
+   * isn't what the view renders: nothing was adopted then. A child matches by its marker range, or by an
+   * element when the state has its path, and adopts it itself. A server never writes an empty text node, so
+   * an empty text takes no node and is created.
    */
   const adoptNode = (
     inst: Instance,
@@ -5791,7 +5794,7 @@ const setup = (
         const range: Range | undefined = kind?._tag === "Open" && kind.path === path
           ? rangeFrom(node, path, stop)
           : view._tag === "Child" && kind?._tag === "Element" && hydrating !== undefined &&
-              Object.hasOwn(hydrating.state, path) && !hydrating.deferred.has(path)
+              Object.hasOwn(hydrating.state, path)
           ? { open: node, close: node, claimed: false }
           : undefined
         if (range === undefined) return undefined
