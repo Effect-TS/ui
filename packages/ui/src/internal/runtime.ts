@@ -1539,7 +1539,7 @@ const setup = (
   }
   let waitingState: Map<string, unknown> | undefined
   let waitingLate: Set<string> | undefined
-  const crossed = new Set<string>()
+  const landing = new Map<string, readonly [saved: unknown, late: boolean | undefined] | undefined>()
   let restoredAt = 0
   const waitingUnder = new Map<string, Set<string>>()
   const eachAbove = (path: string, f: (above: string) => void) => {
@@ -1560,7 +1560,6 @@ const setup = (
   const dropWaiting = (path: string) => {
     if (waitingState === undefined || !waitingState.delete(path)) return
     waitingLate?.delete(path)
-    crossed.delete(path)
     eachAbove(path, (above) => {
       const under = waitingUnder.get(above)
       if (under !== undefined && under.delete(path) && under.size === 0) waitingUnder.delete(above)
@@ -1573,24 +1572,28 @@ const setup = (
     dropWaiting(path)
   }
   const holding = new Set<string>()
+  const servedAt = (path: string): boolean => holding.has(path) || servedIn?.get(path)?.view !== undefined
   const servedLive = (path: string): boolean => {
     for (let cut = path.length; cut > 0; cut = path.lastIndexOf("/", cut - 1)) {
-      const above = path.slice(0, cut)
-      if (holding.has(above) || servedIn?.get(above)?.view !== undefined) return true
+      if (servedAt(path.slice(0, cut))) return true
     }
     return false
   }
-  const dropCrossed = () => {
-    for (const path of crossed) {
+  const land = () => {
+    for (const [path, saved] of landing) {
       if (servedLive(path)) continue
+      landing.delete(path)
       dropWaiting(path)
       hydrating?.deferred.add(path)
+      if (saved !== undefined) setWaiting(path, saved[0], saved[1])
     }
   }
   const addWaiting = (saved: unknown, late?: boolean) => {
     if (saved === null || typeof saved !== "object") return
     for (const path in saved) {
-      if (!servedLive(path)) setWaiting(path, (saved as Record<string, unknown>)[path], late)
+      const state = (saved as Record<string, unknown>)[path]
+      if (servedLive(path)) landing.set(path, [state, late])
+      else setWaiting(path, state, late)
     }
   }
   const restoreKept = () => {
@@ -2353,7 +2356,7 @@ const setup = (
       for (const container of inst.parked) unpark(inst, container)
     }
     if (servedIn !== undefined) releaseServed(inst)
-    if (inst.waiting && holding.delete(inst.path)) dropCrossed()
+    if (inst.waiting && holding.delete(inst.path)) land()
     // Its reports go with it.
     markReports(inst)
     for (const child of inst.children) leave(child)
@@ -3576,7 +3579,10 @@ const setup = (
         adopted = Option.some({ model: restored.model, results: restoreQueries(inst.component, restored.results) })
       }
     }
-    if (first !== undefined) dropWaiting(inst.path)
+    if (first !== undefined) {
+      dropWaiting(inst.path)
+      if (landing.size > 0) landing.delete(inst.path)
+    }
     return { first, adopted }
   }
 
@@ -3748,7 +3754,7 @@ const setup = (
       if (held !== undefined && adopt && !inst.closed && inst.failure === undefined) applyPlacement(inst, held)
       viewChanged = true
       releaseServed(inst)
-      dropCrossed()
+      land()
       settleWaiting()
     }
     return (adopt: boolean, start: () => void) => defer(() => resume(adopt, start))
@@ -7781,8 +7787,11 @@ const setup = (
     visit(root)
     if (waitingState !== undefined) {
       for (const [path, saved] of waitingState) {
-        if (!live.has(path)) keepState(path, saved, waitingLate?.has(path))
+        if (!live.has(path) && (servedAt(path) || !landing.has(path))) keepState(path, saved, waitingLate?.has(path))
       }
+    }
+    for (const [path, saved] of landing) {
+      if (saved !== undefined && !servedAt(path)) keepState(path, saved[0], saved[1])
     }
   }
   if (hooks !== undefined) {
@@ -7798,11 +7807,12 @@ const setup = (
       // The first navigation closes the fetch-free window, if adoption hasn't yet.
       navigated: (leaves, pops) => {
         closeWindow()
-        if ((leaves || pops) && waitingState !== undefined) {
-          for (const path of waitingState.keys()) crossed.add(path)
-          dropCrossed()
-        }
-        if (leaves) {
+        if (leaves || pops) {
+          landing.clear()
+          if (waitingState !== undefined) {
+            for (const path of waitingState.keys()) landing.set(path, undefined)
+            land()
+          }
           restoredAt = instancesMade
           wake()
         }

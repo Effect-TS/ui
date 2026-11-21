@@ -1394,6 +1394,167 @@ describe("scoped children in a receiver that waits for its Layer", () => {
       }).pipe(routed)
     }).pipe(Effect.scoped))
 
+  it.effect.each(
+    [
+      ["takes the draft that entry saved", true, false, "saved"],
+      ["starts afresh in an entry that saved none", false, false, "client"],
+      ["takes the draft that entry saved, after a push and a Back to it", true, true, "saved"],
+      ["starts afresh in an entry that saved none, after a push and a Back to it", false, true, "client"]
+    ] as const
+  )(
+    "keep their draft through a Back while the receiver waits, where one first written after it %s",
+    ([, saved, detour, expected]) =>
+      Effect.gen(function*() {
+        let draft = "saved"
+        const Slip = Component.define({
+          name: "Slip",
+          scoped: true,
+          model: Schema.String,
+          message: Schema.Never,
+          elements: Html
+        }).make({ init: () => draft, update: (text) => text, view: (text, h) => h.p(text) })
+        const Panel = Component.define({
+          name: "Panel",
+          scoped: true,
+          props: Schema.Struct({ open: Schema.Boolean }),
+          model: Schema.Boolean,
+          message: Schema.Literal("show"),
+          elements: Html
+        }).make({
+          init: () => false,
+          update: () => true,
+          view: (shown, h) =>
+            h.scoped((s) =>
+              h.article(
+                h.header(Slip(s, { key: "drawn" })),
+                h.footer(shown || h.props.open ? Slip(s, { key: "later" }) : null),
+                h.button.onClick("show").children("show")
+              )
+            )
+        })
+        const Routes = Route.union({
+          Form: Route.make("/form", { search: { q: Schema.optional(Schema.String) } }),
+          Away: Route.make("/away")
+        })
+        const App = Component.define({
+          name: "App",
+          scoped: false,
+          props: Schema.Struct({ route: Routes }),
+          model: Routes,
+          message: Routes,
+          elements: Html
+        }).make({
+          init: ($) => $.props.route,
+          update: (_, route) => route,
+          subscriptions: (model) => [Router.subscription(Routes, model, (route) => route)],
+          view: (route, h) => {
+            const open = route._tag === "Form" && route.search.q !== undefined
+            return h.scoped((s) => h.main(Gated(h, { key: "g", slots: { body: Panel(s, { props: { open } }) } })))
+          }
+        })
+        const history = Router.memoryHistory("/form")
+        const routed = Effect.provide(Router.make({ routes: Routes, history }))
+        gate = Effect.void
+        yield* Effect.gen(function*() {
+          const before = yield* Effect.acquireRelease(
+            Effect.sync(() => document.body.appendChild(document.createElement("div"))),
+            (element) => Effect.sync(() => element.remove())
+          )
+          yield* BrowserHost.mountEffect(App, Router.props(Routes), before)
+          if (saved) before.querySelector("button")!.click()
+          yield* tick
+          yield* (yield* Router.Router).navigate("/form?q=q")
+          yield* tick
+        }).pipe(Effect.scoped, routed)
+        draft = "server"
+        const { app, open, state } = yield* serve(HtmlServer.renderToHtml(App, Router.props(Routes)).pipe(routed))
+        draft = "client"
+        yield* Effect.gen(function*() {
+          const root = yield* BrowserHost.mountEffect(App, Router.props(Routes), app, { state })
+          history.go(-1)
+          yield* tick
+          if (detour) yield* (yield* Router.Router).navigate("/away")
+          yield* tick
+          yield* open
+          yield* root.adopted
+          if (detour) history.go(-1)
+          yield* tick
+          app.querySelector("button")!.click()
+          yield* tick
+          assert.deepStrictEqual(
+            [app.querySelector("header")?.textContent, app.querySelector("footer")?.textContent],
+            ["server", expected]
+          )
+        }).pipe(routed)
+      }).pipe(Effect.scoped)
+  )
+
+  it.effect("take the draft an entry saved when first written after a Back to it, which removed the one that wrote them as it waited", () =>
+    Effect.gen(function*() {
+      let draft = "saved"
+      const Slip = Component.define({
+        name: "Slip",
+        scoped: true,
+        model: Schema.String,
+        message: Schema.Never,
+        elements: Html
+      }).make({ init: () => draft, update: (text) => text, view: (text, h) => h.p(text) })
+      const Panel = Component.define({
+        name: "Panel",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => h.scoped((s) => h.section(Slip(s, {})))
+      }).pipe(Component.provide(Layer.effect(Slow, Effect.suspend(() => Effect.as(gate, "ready")))))
+      const Routes = Route.union({
+        Form: Route.make("/form", { search: { q: Schema.optional(Schema.String) } })
+      })
+      const Msg = UiSchema.TaggedEnum({ Show: {}, Changed: { route: Routes } })
+      const App = Component.define({
+        name: "App",
+        scoped: false,
+        props: Schema.Struct({ route: Routes }),
+        model: Schema.Struct({ route: Routes, shown: Schema.Boolean }),
+        message: Msg,
+        elements: Html
+      }).make({
+        init: ($) => ({ route: $.props.route, shown: false }),
+        update: (model, message) =>
+          Msg.match(message, {
+            Show: () => ({ ...model, shown: true }),
+            Changed: ({ route }) => ({ ...model, route })
+          }),
+        subscriptions: (model) => [Router.subscription(Routes, model.route, (route) => Msg.Changed({ route }))],
+        view: (model, h) => h.main(model.shown || model.route.search.q !== undefined ? Panel(h, { key: "p" }) : null)
+      })
+      const history = Router.memoryHistory("/form")
+      const routed = Effect.provide(Router.make({ routes: Routes, history }))
+      gate = Effect.void
+      yield* Effect.gen(function*() {
+        const root = yield* BrowserHost.mountEffect(App, Router.props(Routes), document.createElement("div"))
+        root.send(Msg.Show())
+        yield* tick
+        yield* (yield* Router.Router).navigate("/form?q=q")
+        yield* tick
+      }).pipe(Effect.scoped, routed)
+      draft = "server"
+      const { app, open, state } = yield* serve(HtmlServer.renderToHtml(App, Router.props(Routes)).pipe(routed))
+      yield* Effect.gen(function*() {
+        const root = yield* BrowserHost.mountEffect(App, Router.props(Routes), app, { state })
+        history.go(-1)
+        yield* tick
+        yield* open
+        yield* root.adopted
+        root.send(Msg.Show())
+        yield* tick
+        assert.strictEqual(app.querySelector("p")?.textContent, "saved")
+      }).pipe(routed)
+    }).pipe(Effect.scoped))
+
   const moving = () => {
     let inits = 0
     const DraftMsg = UiSchema.TaggedEnum({ Bump: {} })

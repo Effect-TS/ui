@@ -125,9 +125,6 @@ Known limits:
 - A scoped child that leaves a waiting receiver before hydration settles
   keeps the server's nodes only while they're still in the document. Otherwise
   it's built fresh from its state.
-- A Back while a receiver still waits for its Layer during hydration doesn't
-  restore the state saved for the scoped children drawn in it. One it still
-  draws keeps its state, and one written later starts from `init`.
 
 ### Naming
 
