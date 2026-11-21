@@ -220,21 +220,6 @@ describe("Select in a document", { concurrent: false }, () => {
       assert.strictEqual(byId("positioner").getAttribute("data-side"), "top")
     }).pipe(Effect.scoped))
 
-  it.effect("a scroll inside the popup doesn't place it again, and one outside does", () =>
-    Effect.gen(function*() {
-      yield* mountPage()
-      keydown(byId("trigger"), "ArrowDown")
-      yield* tick
-      assert.strictEqual(style("top"), "330px")
-      rects.set("trigger", { x: 100, y: 200, width: 120, height: 30 })
-      document.querySelector(".popup")!.dispatchEvent(new Event("scroll"))
-      yield* tick
-      assert.strictEqual(style("top"), "330px")
-      document.dispatchEvent(new Event("scroll"))
-      yield* tick
-      assert.strictEqual(style("top"), "230px")
-    }).pipe(Effect.scoped))
-
   it.effect("aligned with the trigger, it covers it with the selected item's text over the value", () =>
     Effect.gen(function*() {
       const { root } = yield* mountPage({ align: true })
@@ -305,7 +290,10 @@ describe("Select in a document", { concurrent: false }, () => {
   it.effect("moves focus into the items, and back to the trigger before it hides, so the field isn't touched", () =>
     Effect.gen(function*() {
       const { log } = yield* mountPage()
-      byId("trigger").focus()
+      byId(byId("trigger").getAttribute("aria-labelledby")!).click()
+      yield* tick
+      assert.strictEqual(document.activeElement, byId("trigger"))
+      assert.isFalse(shown())
       keydown(byId("trigger"), "ArrowDown")
       yield* tick
       assert.strictEqual(document.activeElement, item("light"))

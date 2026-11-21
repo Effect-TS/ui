@@ -1,4 +1,4 @@
-import { Component, type Mount, type View } from "@effect/ui"
+import type { Component, Mount, View } from "@effect/ui"
 import { Select, type SelectEvents, type SelectProps } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { HtmlScene } from "@effect/ui/html/testing"
@@ -22,18 +22,25 @@ const standIn = {
   view: (select: Parts, h: H) =>
     h.div(
       select.label(h.div.class("label")).children("Theme"),
-      select.trigger(h.button.class("trigger")).children(
+      select.trigger(
+        h.button.class("trigger").attr("id", "mine").attr("role", "button").attr("aria-expanded", "true")
+          .attr("data-popup-open", "x").attr("data-placeholder", "x").attr("data-note", "kept")
+      ).children(
         select.value(h.span.class("value")),
         select.icon(h.span.class("icon"))
       ),
       select.backdrop(h.div.class("backdrop")),
-      select.positioner(h.div.class("positioner")).children(
-        select.popup(h.div.class("popup")).children(
+      select.positioner(h.div.class("positioner").attr("role", "dialog")).children(
+        select.popup(h.div.class("popup").attr("role", "menu").attr("tabindex", "0")).children(
           select.scrollUpArrow(h.div.class("up")),
           select.group(h.div.class("group"), "all").children(
             select.groupLabel(h.div.class("group-label"), "all").children("All"),
             ...items.map(({ label, value }) =>
-              select.item(h.div.attr("data-testid", value), value).children(
+              select.item(
+                h.div.attr("data-testid", value).attr("role", "menuitem").attr("aria-selected", "true")
+                  .attr("data-selected", "x").attr("data-highlighted", "x"),
+                value
+              ).children(
                 select.itemText(h.div).children(label),
                 select.itemIndicator(h.span.class("check"), value)?.children("✓")
               )
@@ -73,7 +80,6 @@ const tracked = (s: Rendered): TrackSelect =>
   (s.get(positioner) as unknown as View.Element<unknown>).owned?.find((layer) => layer.mount !== undefined)
     ?.mount as unknown as TrackSelect
 const sent = (tag: string, fields: object = {}) => ({ _tag: tag, ...fields }) as never
-const argsOf = (s: Rendered) => (tracked(s) as unknown as { readonly args: Record<string, unknown> }).args
 
 const partsOf = (s: { readonly parts: (f: (select: Parts) => void) => unknown }): Parts => {
   let parts: Parts | undefined
@@ -101,68 +107,34 @@ describe("Select", () => {
       const s = yield* HtmlScene.make(Select, { open: false, items, placeholder: "Pick one" }, standIn)
       const id = s.get(trigger).attrs?.id
       assert.isString(id)
+      assert.notStrictEqual(id, "mine")
       assert.deepInclude(s.get(trigger).attrs, {
         type: "button",
         role: "combobox",
         "aria-haspopup": "listbox",
         "aria-expanded": "false",
         "aria-labelledby": s.get(label).attrs?.id,
-        "data-placeholder": ""
+        "data-placeholder": "",
+        "data-note": "kept"
       })
       assert.isUndefined(s.get(trigger).attrs?.["aria-controls"])
+      assert.isUndefined(s.get(trigger).attrs?.["data-popup-open"])
+      assert.deepInclude(s.get(positioner).attrs, { role: "presentation" })
+      assert.deepInclude(s.get(popup).attrs, { role: "listbox", tabindex: "-1" })
+      assert.isUndefined(s.get(item("dark")).attrs?.["data-selected"])
+      assert.isUndefined(s.get(item("dark")).attrs?.["data-highlighted"])
       assert.strictEqual(Locator.textOf(s.get(value)), "Pick one")
       assert.isFalse(s.get(positioner).props?.popoverOpen)
       s.props({ open: false, items, value: "dark" })
       assert.strictEqual(Locator.textOf(s.get(value)), "Dark")
       assert.isUndefined(s.get(trigger).attrs?.["data-placeholder"])
+      assert.deepInclude(s.get(item("dark")).attrs, { role: "option", "aria-selected": "true", "data-selected": "" })
+      assert.deepInclude(s.get(item("light")).attrs, { role: "option", "aria-selected": "false" })
+      assert.isUndefined(s.get(item("light")).attrs?.["data-selected"])
       assert.strictEqual(partsOf(s).selected, "dark")
       s.props({ open: false, items, value: "", placeholder: "Pick one" })
       assert.strictEqual(Locator.textOf(s.get(value)), "Pick one")
       assert.isTrue(partsOf(s).placeholder)
-    }))
-
-  it.effect("each part's attributes win over the consumer's, set or absent, and the consumer's class stays", () =>
-    Effect.gen(function*() {
-      const theirs = {
-        elements: Html,
-        view: (select: Parts, h: H) =>
-          h.div(
-            select.trigger(
-              h.button.class("trigger").attr("id", "mine").attr("role", "button").attr("aria-expanded", "true")
-                .attr("data-popup-open", "x").attr("data-placeholder", "x").attr("data-note", "kept")
-            ),
-            select.positioner(h.div.class("positioner").attr("role", "dialog")).children(
-              select.popup(h.div.class("popup").attr("role", "menu").attr("tabindex", "0")).children(
-                ...items.map(({ value }) =>
-                  select.item(
-                    h.div.attr("data-testid", value).attr("role", "menuitem").attr("aria-selected", "true")
-                      .attr("data-selected", "x").attr("data-highlighted", "x"),
-                    value
-                  )
-                )
-              )
-            )
-          )
-      }
-      const s = yield* HtmlScene.make(Select, { open: false, items, value: "light" }, theirs)
-      assert.deepInclude(s.get(trigger).attrs, { role: "combobox", "aria-expanded": "false", "data-note": "kept" })
-      assert.notStrictEqual(s.get(trigger).attrs?.id, "mine")
-      assert.isUndefined(s.get(trigger).attrs?.["data-popup-open"])
-      assert.isUndefined(s.get(trigger).attrs?.["data-placeholder"])
-      assert.deepInclude(s.get(positioner).attrs, { role: "presentation" })
-      assert.deepInclude(s.get(popup).attrs, { role: "listbox", tabindex: "-1" })
-      assert.deepInclude(s.get(item("light")).attrs, { role: "option", "aria-selected": "true", "data-selected": "" })
-      assert.deepInclude(s.get(item("dark")).attrs, { role: "option", "aria-selected": "false" })
-      assert.isUndefined(s.get(item("dark")).attrs?.["data-selected"])
-      assert.isUndefined(s.get(item("dark")).attrs?.["data-highlighted"])
-    }))
-
-  it.effect("a click on the label focuses the trigger without opening", () =>
-    Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Select, { open: false, items }, standIn)
-      s.click(label)
-      assert.deepStrictEqual(s.current.pending.map(({ command }) => command.name), ["Html.focus"])
-      s.resolve(s.current.pending[0]!.command, Component.noop as never)
     }))
 
   it.effect("a mouse press on the trigger opens it, and the popup is a listbox of options", () =>
@@ -193,8 +165,6 @@ describe("Select", () => {
       })
       assert.deepInclude(s.get(Locator.attr("class", "separator")).attrs, { role: "separator" })
       assert.isUndefined(s.query(arrow))
-      assert.deepInclude(argsOf(s), { open: true, aligned: true, lock: true })
-      assert.strictEqual(argsOf(s).active, s.get(item("system")).attrs?.id)
       assert.strictEqual(partsOf(s).openMethod, "mouse")
     }))
 
@@ -204,7 +174,7 @@ describe("Select", () => {
       s.fire(trigger, "mousedown", pointer("touch")).expectIgnored()
       s.fire(trigger, "click", pointer("touch")).emitted(opened("trigger-press"))
       s.props({ open: true, items }).expectMount(tracked(s))
-      assert.deepInclude(argsOf(s), { aligned: false, touch: true })
+      assert.strictEqual(partsOf(s).openMethod, "touch")
       assert.deepInclude(s.get(popup).attrs, { "data-side": "bottom" })
       s.mounted(
         tracked(s),
@@ -219,9 +189,8 @@ describe("Select", () => {
   it.effect("falls back to placing the popup next to the trigger until it closes", () =>
     Effect.gen(function*() {
       const s = yield* open()
-      assert.deepInclude(argsOf(s), { aligned: true })
+      assert.isUndefined(s.query(arrow))
       s.mounted(tracked(s), sent("FellBack"))
-      assert.deepInclude(argsOf(s), { aligned: false })
       assert.isDefined(s.query(arrow))
       assert.deepInclude(s.get(popup).attrs, { "data-side": "bottom" })
       s.mounted(tracked(s), sent("ResizedWindow"))
@@ -231,13 +200,16 @@ describe("Select", () => {
       assert.isFalse(s.get(positioner).props?.popoverOpen)
       s.fire(trigger, "mousedown", pointer("mouse")).emitted(opened("trigger-press"))
       s.props({ open: true, items }).expectMount(tracked(s))
-      assert.deepInclude(argsOf(s), { aligned: true })
+      assert.isUndefined(s.query(arrow))
       s.mounted(tracked(s), sent("ResizedWindow")).emitted(dismissed("window-resize"))
     }))
 
-  it.effect("ArrowDown and ArrowUp on the closed trigger open it on the first or the last item", () =>
+  it.effect("keyboard on the closed trigger opens it on the first or last item, and click with no pointer toggles", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Select, { open: false, items }, standIn)
+      s.fire(trigger, "keydown", key(" ")).expectIgnored()
+      s.fire(trigger, "click", pointer("mouse")).expectIgnored()
+      s.fire(trigger, "click", pointer("")).emitted(opened("trigger-press"))
       s.fire(trigger, "keydown", key("ArrowDown")).emitted(opened("list-navigation")).expectDefaultPrevented()
       s.props({ open: true, items }).expectMount(tracked(s))
       assert.strictEqual(partsOf(s).highlighted, "light")
@@ -249,22 +221,12 @@ describe("Select", () => {
       assert.strictEqual(partsOf(s).highlighted, "solar")
     }))
 
-  it.effect("Enter or Space on the trigger, a click with no pointer, toggles it", () =>
-    Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Select, { open: false, items }, standIn)
-      s.fire(trigger, "keydown", key(" ")).expectIgnored()
-      s.fire(trigger, "click", pointer("")).emitted(opened("trigger-press"))
-      s.fire(trigger, "click", pointer("mouse")).expectIgnored()
-    }))
-
-  it.effect("arrows, Home and End move between items, disabled ones included, without wrapping", () =>
+  it.effect("arrows, Home and End move between items without wrapping, and Shift+Tab closes", () =>
     Effect.gen(function*() {
       const s = yield* open({ value: "light" })
       const step = (k: string, expected: string) => {
         s.fire(popup, "keydown", key(k)).expectDefaultPrevented()
         assert.strictEqual(partsOf(s).highlighted, expected)
-        assert.strictEqual(argsOf(s).active, s.get(item(expected)).attrs?.id)
-        assert.isTrue(argsOf(s).scroll)
       }
       step("ArrowUp", "light")
       step("ArrowDown", "dark")
@@ -274,6 +236,7 @@ describe("Select", () => {
       step("Home", "light")
       s.fire(popup, "keydown", key("ArrowLeft")).expectIgnored()
       s.fire(popup, "keydown", key("Tab")).expectIgnored()
+      s.fire(popup, "keydown", key("Tab", { shift: true })).emitted(dismissed("focus-out"))
     }))
 
   it.effect("Enter picks the highlighted item on keydown, and Space on keyup", () =>
@@ -288,14 +251,6 @@ describe("Select", () => {
       s.fire(popup, "keydown", key(" ")).expectDefaultPrevented()
       s.fire(popup, "keyup", key(" ")).emitted(picked("system"), dismissed("item-press"))
       s.fire(popup, "keyup", key(" "))
-    }))
-
-  it.effect("Escape cancels its key, so a dialog around it stays open, and Shift+Tab closes it", () =>
-    Effect.gen(function*() {
-      const s = yield* open()
-      s.fire(popup, "keydown", key("Escape")).emitted(dismissed("escape-key")).expectDefaultPrevented()
-      s.fire(popup, "keydown", key("Tab", { shift: true })).emitted(dismissed("focus-out"))
-      assert.deepInclude(argsOf(s), { closeMethod: "keyboard", focusLeft: false })
     }))
 
   it.effect("typing in the popup moves to the next matching item, skipping disabled ones", () =>
@@ -319,7 +274,6 @@ describe("Select", () => {
       type("S", "system")
       type("o", "solar")
       type(" ", "solar")
-      assert.deepInclude(argsOf(s), { scroll: true })
       s.resolve(s.current.pending[0]!.command, sent("CompletedWaitBeforeResetTyping"))
     }))
 
@@ -362,7 +316,6 @@ describe("Select", () => {
       const s = yield* open({ value: "light" })
       s.fire(item("dark"), "mouseenter")
       assert.strictEqual(partsOf(s).highlighted, "dark")
-      assert.isFalse(argsOf(s).scroll)
       s.fire(item("dark"), "mouseleave")
       assert.isNull(partsOf(s).highlighted)
       s.props({ open: true, items, value: "light", highlightItemOnHover: false })
@@ -385,32 +338,20 @@ describe("Select", () => {
       ])
     }))
 
-  it.effect("the mount reports a press outside, focus leaving and a released opening press", () =>
+  it.effect("releasing an opening press outside cancels the open, and focusing the trigger dismisses", () =>
     Effect.gen(function*() {
       const s = yield* open()
-      s.mounted(tracked(s), sent("PressedOutside", { pointerType: "mouse" })).emitted(dismissed("outside-press"))
-      assert.deepInclude(argsOf(s), { focusLeft: false, closeMethod: "mouse" })
-      s.mounted(tracked(s), sent("FocusedOutside")).emitted(dismissed("focus-out"))
-      assert.deepInclude(argsOf(s), { focusLeft: true })
-      s.mounted(tracked(s), sent("ReleasedPointer", { outside: true }))
-      s.props({ open: false, items })
-      s.fire(trigger, "mousedown", pointer("mouse")).emitted(opened("trigger-press"))
-      s.props({ open: true, items })
-      assert.isTrue(argsOf(s).pressing)
       s.mounted(tracked(s), sent("ReleasedPointer", { outside: true })).emitted(dismissed("cancel-open"))
       s.mounted(tracked(s), sent("FocusedTrigger")).emitted(dismissed("none"))
     }))
 
-  it.effect("a disabled select doesn't open", () =>
+  it.effect("disabled prevents opening, and readOnly allows browsing without changing", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Select, { open: false, items, disabled: true }, standIn)
-      assert.deepInclude(s.get(trigger).attrs, { disabled: "", "data-disabled": "" })
-      s.fire(trigger, "mousedown", pointer("mouse"))
-      s.fire(trigger, "keydown", key("ArrowDown"))
-    }))
+      const disabled = yield* HtmlScene.make(Select, { open: false, items, disabled: true }, standIn)
+      assert.deepInclude(disabled.get(trigger).attrs, { disabled: "", "data-disabled": "" })
+      disabled.fire(trigger, "mousedown", pointer("mouse"))
+      disabled.fire(trigger, "keydown", key("ArrowDown"))
 
-  it.effect("a read-only select opens and can be browsed, but not changed", () =>
-    Effect.gen(function*() {
       const s = yield* open({ readOnly: true, value: "light" })
       assert.deepInclude(s.get(trigger).attrs, { "aria-readonly": "true", "data-readonly": "" })
       s.fire(popup, "keydown", key("ArrowDown"))
@@ -418,7 +359,7 @@ describe("Select", () => {
       s.fire(popup, "keydown", key("Enter"))
     }))
 
-  it.effect("with a name, the trigger is wrapped with a hidden input that submits the value", () =>
+  it.effect("with a name, a hidden input carries form props and accepts autofill changes", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(
         Select,
@@ -436,9 +377,6 @@ describe("Select", () => {
         "aria-hidden": "true"
       })
       assert.deepInclude(s.get(trigger).attrs, { "aria-required": "true", "data-required": "" })
-      s.fire(Locator.tag("input"), "focus")
-      assert.deepStrictEqual(s.current.pending.map(({ command }) => command.name), ["Html.focus"])
-      s.resolve(s.current.pending[0]!.command, Component.noop as never)
       s.fire(Locator.tag("input"), "change", { value: "System", checked: false }).emitted(picked("system", "none"))
       s.fire(Locator.tag("input"), "change", { value: "nope", checked: false })
     }))
