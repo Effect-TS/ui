@@ -113,7 +113,7 @@
  * import { Tooltip } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
- * const ToolbarMessage = UiSchema.TaggedEnum({ ToggledBoldTip: { open: Schema.Boolean } })
+ * const ToolbarMessage = UiSchema.TaggedEnum({ OpenedBoldTip: {}, DismissedBoldTip: {} })
  *
  * const Toolbar = Component.define({
  *   name: "Toolbar",
@@ -123,15 +123,16 @@
  * }).make({
  *   init: () => ({ boldTip: false }),
  *   update: {
- *     ToggledBoldTip: (model, { open }) => ({ ...model, boldTip: open })
+ *     OpenedBoldTip: (model) => ({ ...model, boldTip: true }),
+ *     DismissedBoldTip: (model) => ({ ...model, boldTip: false })
  *   },
  *   view: (model, h) =>
  *     Tooltip(h, {
  *       key: "bold",
  *       props: { open: model.boldTip, sideOffset: 8 },
  *       onEmit: {
- *         Opened: () => ToolbarMessage.ToggledBoldTip({ open: true }),
- *         Dismissed: () => ToolbarMessage.ToggledBoldTip({ open: false })
+ *         Opened: () => ToolbarMessage.OpenedBoldTip(),
+ *         Dismissed: () => ToolbarMessage.DismissedBoldTip()
  *       },
  *       view: (tooltip) =>
  *         h.span(
