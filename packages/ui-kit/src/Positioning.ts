@@ -43,9 +43,9 @@
  * - with `offsetAsPadding`, the side offset as padding on the side that
  *   faces the anchor
  *
- * The mount writes them again when a render replaces the positioner's
- * `style` attribute. They stay after the mount ends, so a closing popup
- * keeps its place through an exit transition.
+ * They survive view-rendered changes to the positioner's `style` attribute,
+ * and stay after the mount ends, so a closing popup keeps its place through
+ * an exit transition.
  *
  * While it runs, the mount places the popup again when the window resizes,
  * when the positioner changes size, and, unless `disableAnchorTracking` is
