@@ -92,7 +92,8 @@
  * places the arrow too: it gets `position: absolute` and a `left` or `top`
  * that points it at the trigger, so give it only its size and the offset
  * across the edge in your CSS. To animate the popover, use
- * `@starting-style` and `transition-behavior: allow-discrete`.
+ * `@starting-style` and `transition-behavior: allow-discrete`. The
+ * `Positioning` module does the placing, and a popup of your own can use it.
  *
  * Each tooltip has one trigger. On its own it waits its own `delay` on
  * every hover. Below a `TooltipProvider`, once one tooltip of the group
@@ -159,7 +160,7 @@ import * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
 import { flag, withStyle } from "./internal/attributes.ts"
-import * as Positioning from "./internal/positioning.ts"
+import * as Positioning from "./Positioning.ts"
 
 /**
  * The side of the trigger a tooltip shows on.
@@ -309,7 +310,7 @@ const Message = UiSchema.TaggedEnum({
   // The provider's shared value changed: the newest turn that shows, and the
   // turn a newly shown tooltip takes.
   ChangedGroup: { newest: Schema.NullOr(Schema.Number), next: Schema.Number },
-  ChangedPlacement: Positioning.Reported.fields
+  ChangedPlacement: Positioning.Placement.fields
 })
 
 // Only the pointer and focus, which the consumer would never store.
@@ -329,7 +330,7 @@ const Model = Schema.Struct({
   instant: Schema.NullOr(Schema.Literals(["focus", "dismiss", "delay"])),
   turn: Schema.Number,
   yieldedTo: Schema.NullOr(Schema.Number),
-  placement: Schema.NullOr(Positioning.Reported)
+  placement: Schema.NullOr(Positioning.Placement)
 })
 
 // `switch`: a new wait replaces the running one, and leaving or entering

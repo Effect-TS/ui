@@ -6,6 +6,9 @@
  * as `Switch(h, { ... })`. Its module, such as `@effect/ui-kit/Switch`,
  * holds the same exports.
  *
+ * A module that isn't a component, such as `Positioning`, is exported as a
+ * namespace: `Positioning.place`.
+ *
  * @stability experimental
  * @since 0.1.0
  */
@@ -13,7 +16,8 @@
 // Not a generated barrel: `pnpm codegen` would export each module as a
 // namespace, and a namespace can't be called. Add each new module here with
 // `export *`, in alphabetical order. Its exports carry the component's name,
-// such as `SwitchProps`, so they never collide.
+// such as `SwitchProps`, so they never collide. A module that isn't a
+// component is exported with `export * as`, since its exports have no prefix.
 
 /**
  * @stability experimental
@@ -62,6 +66,12 @@ export * from "./Input.ts"
  * @since 0.1.0
  */
 export * from "./Meter.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
+export * as Positioning from "./Positioning.ts"
 
 /**
  * @stability experimental

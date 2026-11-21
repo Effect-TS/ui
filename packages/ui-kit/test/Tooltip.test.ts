@@ -1,6 +1,5 @@
 import { Component, UiSchema, View } from "@effect/ui"
-import { Tooltip, type TooltipProps, TooltipProvider } from "@effect/ui-kit"
-import { TrackPosition } from "@effect/ui-kit/internal/positioning"
+import { Positioning, Tooltip, type TooltipProps, TooltipProvider } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { HtmlScene, TestGlobalEvents } from "@effect/ui/html/testing"
 import { Locator, Story, TestHost } from "@effect/ui/testing"
@@ -215,7 +214,7 @@ const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 const top = { side: "top", align: "center", anchorHidden: false, arrowUncentered: false } as const
 
 const opened = (props: TooltipProps) =>
-  HtmlScene.make(Tooltip, props, standIn).pipe(Effect.map((s) => s.mounted(TrackPosition, top)))
+  HtmlScene.make(Tooltip, props, standIn).pipe(Effect.map((s) => s.mounted(Positioning.TrackPosition, top)))
 
 // The message a wait would have produced: the Command's own result.
 const completed = (tag: "CompletedWaitBeforeOpening" | "CompletedWaitBeforeClosing") => ({ _tag: tag }) as never
@@ -230,7 +229,7 @@ describe("Tooltip", () => {
       s.resolve(opening!.command, completed("CompletedWaitBeforeOpening"))
         .emitted({ _tag: "Opened" })
       assert.isFalse(s.get(positioner).props?.popoverOpen)
-      s.props({ open: true, side: "bottom", sideOffset: 8 }).mounted(TrackPosition, top)
+      s.props({ open: true, side: "bottom", sideOffset: 8 }).mounted(Positioning.TrackPosition, top)
 
       assert.isTrue(s.get(positioner).props?.popoverOpen)
       // Each part draws the children it was given.
@@ -250,7 +249,7 @@ describe("Tooltip", () => {
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Tooltip, { open: false }, standIn)
       assert.deepStrictEqual(s.subscriptions, [])
-      s.props({ open: true }).mounted(TrackPosition, top)
+      s.props({ open: true }).mounted(Positioning.TrackPosition, top)
       assert.deepStrictEqual(s.subscriptions, [
         `@effect/ui/html/document:"keydown"`,
         `@effect/ui/html/document:"mousedown","capture"`
@@ -272,7 +271,7 @@ describe("Tooltip", () => {
       s.fire(trigger, "mousedown")
         .fire(trigger, "focus")
       assert.deepStrictEqual(s.current.emitted, [])
-      s.props({ open: true }).mounted(TrackPosition, top)
+      s.props({ open: true }).mounted(Positioning.TrackPosition, top)
         .fire(trigger, "mouseleave")
       s.resolve(s.current.pending[0]!.command, completed("CompletedWaitBeforeClosing"))
         .emitted({ _tag: "Dismissed" })
@@ -296,7 +295,7 @@ describe("Tooltip", () => {
       s.fire(trigger, "focus")
         .emitted({ _tag: "Opened" })
         .props({ open: true, closeDelay: 300 })
-        .mounted(TrackPosition, top)
+        .mounted(Positioning.TrackPosition, top)
       // A press with the pointer on the trigger or the positioner is inside.
       s.fire(positioner, "mouseenter")
         .fireDocument("mousedown")
@@ -360,7 +359,7 @@ describe("Tooltip", () => {
       const arrow = Locator.attr("aria-hidden", "true")
       s.props({ open: true, side: "bottom" })
       assert.strictEqual(s.get(popup).attrs?.["data-side"], "bottom")
-      s.mounted(TrackPosition, { side: "left", align: "end", anchorHidden: true, arrowUncentered: true })
+      s.mounted(Positioning.TrackPosition, { side: "left", align: "end", anchorHidden: true, arrowUncentered: true })
       for (const part of [positioner, popup, arrow]) {
         assert.strictEqual(s.get(part).attrs?.["data-side"], "left")
         assert.strictEqual(s.get(part).attrs?.["data-align"], "end")

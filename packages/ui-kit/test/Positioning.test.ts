@@ -3,8 +3,9 @@ import {
   place,
   type PlaceInput,
   type PositionerOptions,
-  resolveOptions
-} from "@effect/ui-kit/internal/positioning"
+  resolveOptions,
+  trackArgs
+} from "@effect/ui-kit/Positioning"
 import { assert, describe, it } from "@effect/vitest"
 import * as fc from "fast-check"
 
@@ -164,5 +165,32 @@ describe("place", () => {
           : placed.y >= 5 && placed.y + height <= 795
       }
     ))
+  })
+})
+
+describe("trackArgs", () => {
+  it("fills in what the props and the component leave out, and places against the anchor prop when it's set", () => {
+    assert.deepStrictEqual(trackArgs({}, { side: "bottom", anchorSelector: "#save" }), {
+      options: {
+        side: "bottom",
+        align: "center",
+        sideOffset: 0,
+        alignOffset: 0,
+        collisionAvoidance: { side: "flip", align: "flip", fallbackAxisSide: "end" },
+        collisionPadding: { top: 5, right: 5, bottom: 5, left: 5 },
+        sticky: false,
+        arrowPadding: 5
+      },
+      positionMethod: "absolute",
+      collisionBoundary: "clipping-ancestors",
+      disableAnchorTracking: false,
+      anchorSelector: "#save",
+      arrowId: null,
+      offsetAsPadding: false
+    })
+    assert.strictEqual(
+      trackArgs({ anchor: "save\"as" }, { side: "bottom", anchorSelector: "#save" }).anchorSelector,
+      "[id=\"save\\\"as\"]"
+    )
   })
 })
