@@ -105,7 +105,9 @@
  * `min-height` (100px when unset), and for a select opened by touch.
  * While aligned, the positioner's `margin-top` and `margin-bottom` in CSS
  * are the gaps it keeps to the top and bottom of the viewport, 10px each
- * when unset, and a resize of the window closes it. Set
+ * when unset. A margin of 0 puts it against that edge, also when the 0
+ * comes from a reset such as `* { margin: 0 }`. A resize of the window
+ * closes an aligned popup. Set
  * `alignItemWithTrigger: false` to always place it next to the trigger,
  * where the `Positioning` props apply and it flips when it doesn't fit.
  *
@@ -805,6 +807,19 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
       )
     }
 
+    const gaps = (style: CSSStyleDeclaration): readonly [top: number, bottom: number] => {
+      const top = parseFloat(style.marginTop)
+      const bottom = parseFloat(style.marginBottom)
+      if (top !== 0 && bottom !== 0) return [top || 10, bottom || 10]
+      // An unset margin is `auto`, which reads as 0px like a margin set to 0, until
+      // the box is held to both edges and its `auto` margins take the space left.
+      const undo = [override(node, "top", "0px"), override(node, "bottom", "0px"), override(node, "height", "0px")]
+      const heldTop = parseFloat(style.marginTop)
+      const heldBottom = parseFloat(style.marginBottom)
+      undo.forEach((restore) => restore())
+      return [top === 0 && heldTop === 0 ? 0 : top || 10, bottom === 0 && heldBottom === 0 ? 0 : bottom || 10]
+    }
+
     const align = () => {
       const anchor = trigger()
       const list = popup()
@@ -824,8 +839,7 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
         const element = scroller()
         const scrollHeight = element.scrollHeight
         const borderBottom = parseFloat(popupStyle.borderBottomWidth) || 0
-        const marginTop = parseFloat(positionerStyle.marginTop) || 10
-        const marginBottom = parseFloat(positionerStyle.marginBottom) || 10
+        const [marginTop, marginBottom] = gaps(positionerStyle)
         const minHeight = parseFloat(positionerStyle.minHeight) || 100
         const maxPopupHeight = maxHeightOf(popupStyle)
         const viewportHeight = html.clientHeight - marginTop - marginBottom

@@ -45,9 +45,24 @@ const geometry = Effect.acquireRelease(
       rect: element.getBoundingClientRect,
       offsetWidth: Object.getOwnPropertyDescriptor(html, "offsetWidth"),
       offsetHeight: Object.getOwnPropertyDescriptor(html, "offsetHeight"),
-      ResizeObserver: (window as any).ResizeObserver
+      ResizeObserver: (window as any).ResizeObserver,
+      getComputedStyle: window.getComputedStyle
     }
     ;(window as any).ResizeObserver = StillResizeObserver
+    window.getComputedStyle = (target: Element, pseudo?: string | null) => {
+      const computed = saved.getComputedStyle.call(window, target, pseudo)
+      if (target.id !== "positioner") return computed
+      const inline = (target as HTMLElement).style
+      const usedMargin = (declared: string) =>
+        declared !== "" ? declared : inline.top === "0px" && inline.bottom === "0px" ? "400px" : "0px"
+      return new Proxy(computed, {
+        get: (style, name) => {
+          const value = Reflect.get(style, name)
+          if (name === "marginTop" || name === "marginBottom") return usedMargin(value)
+          return typeof value === "function" ? value.bind(style) : value
+        }
+      })
+    }
     element.getBoundingClientRect = function(this: Element) {
       const { height, width, x, y } = rectOf(this)
       return { x, y, width, height, left: x, top: y, right: x + width, bottom: y + height }
@@ -71,6 +86,7 @@ const geometry = Effect.acquireRelease(
       Object.defineProperty(html, "offsetWidth", saved.offsetWidth!)
       Object.defineProperty(html, "offsetHeight", saved.offsetHeight!)
       ;(window as any).ResizeObserver = saved.ResizeObserver
+      window.getComputedStyle = saved.getComputedStyle
       delete root.clientWidth
       delete root.clientHeight
       rects.clear()
@@ -245,6 +261,8 @@ describe("Select in a document", { concurrent: false }, () => {
       assert.strictEqual(byId("positioner").getAttribute("data-side"), "none")
       assert.strictEqual(style("left"), "102px")
       assert.strictEqual(style("top"), "255px")
+      assert.strictEqual(style("margin-top"), "10px")
+      assert.strictEqual(style("margin-bottom"), "10px")
       assert.strictEqual(style("height"), "150px")
       assert.strictEqual(style("max-height"), "none")
       assert.strictEqual(style("--anchor-width"), "120px")
@@ -253,14 +271,23 @@ describe("Select in a document", { concurrent: false }, () => {
       assert.strictEqual(style("left"), "102px")
       assert.strictEqual(style("top"), "255px")
       assert.strictEqual(document.activeElement, item("dark"))
-      root.send(Message.Dismissed({ reason: "test" }))
-      yield* tick
       const margins = document.head.appendChild(document.createElement("style"))
-      margins.textContent = "#positioner { margin-top: 30px; margin-bottom: 50px }"
       yield* Effect.addFinalizer(() => Effect.sync(() => margins.remove()))
-      mousedown(byId("trigger"))
-      yield* tick
-      assert.strictEqual(style("top"), "235px")
+      for (
+        const [css, top, marginTop, marginBottom] of [
+          ["margin-top: 0; margin-bottom: 50px", "265px", "0px", "50px"],
+          ["margin-top: 30px; margin-bottom: 0", "235px", "30px", "0px"]
+        ]
+      ) {
+        root.send(Message.Dismissed({ reason: "test" }))
+        yield* tick
+        margins.textContent = "#positioner { " + css + " }"
+        mousedown(byId("trigger"))
+        yield* tick
+        assert.strictEqual(style("top"), top)
+        assert.strictEqual(style("margin-top"), marginTop)
+        assert.strictEqual(style("margin-bottom"), marginBottom)
+      }
     }).pipe(Effect.scoped))
 
   it.effect("falls back to placing the popup below a trigger near the top of the viewport", () =>
