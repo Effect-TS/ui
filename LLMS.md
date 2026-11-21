@@ -492,11 +492,19 @@ A headless component with `shares: (model, props) => value` owns shared
 state: every component in its `view` closure, at any depth, can read the
 value. A reader lists the owners it reads in
 `shared: { provider: TooltipProvider }` and reads `h.shared.provider` or
-`p.shared.provider` in `view` or `parts`. The long form of an entry,
-`{ owner: TooltipProvider, ... }`, adds three options. `optional: true` lets
-the reader work with no owner above it, where the value reads as `undefined`.
-`report` is what the reader tells an owner whose `shares` has `collects`.
-`onChange` is the reader's message when the shared value changes.
+`p.shared.provider` in `view` or `parts`, and `$.shared.provider` in
+`update`. The long form of an entry, `{ owner: TooltipProvider, ... }`, adds
+three options. `optional: true` lets the reader work with no owner above it,
+where the value reads as `undefined`. `report` is what the reader tells an
+owner whose `shares` has `collects`. `onChange` is the reader's message when
+the shared value changes, for an `update` that must act on the change. To
+read the value, `update` has `$.shared`, so a reader doesn't copy it into its
+Model.
+
+`$.shared` follows the rule of `$.props`: it is the owner's value as the
+reader's `update` runs. A reader that sends to its owner still reads the old
+value in that `update`. An `onChange` message can be older than `$.shared`,
+when another reader changed the owner within the same round.
 
 A descendant's `update` can call `$.send(TooltipProvider, message)` without a
 `shared` entry. One `receives` list serves both the parent's ref and every
@@ -510,8 +518,11 @@ satisfies the type, but a required read still fails at mount. To name the
 requirement from the component, use
 `Component.Shared.Of<typeof TooltipProvider>`.
 
-The state is the owner's Model, so the log records every change, but an
-owner's Model isn't restored from history. In a `Scene`,
+The state is the owner's Model, so the log records every change, and each
+reader's `Update` records what `$.shared` held, so `Story.fromLog` replays
+it. On the Wire the value is encoded through the `schema` of the owner's
+`shares`, `{ value, schema }`, or best effort without one. An owner's Model
+isn't restored from history. In a `Scene`,
 `s.shared(TooltipProvider, value)` or
 `s.given(model, {}, [[TooltipProvider, value]])` gives readers a value, and
 each send to the owner is acknowledged with
@@ -540,12 +551,12 @@ As a convention, give each value one authoritative source:
 - A prop read only in `init` is a seed, not a mirror: later changes to it
   don't reach the Model. Name it `initial*`.
 
-| Direction            | A current value                | A request or something that happened          |
-| -------------------- | ------------------------------ | --------------------------------------------- |
-| Parent to child      | props                          | `receives` and `$.send(ref)`                  |
-| Child to parent      | a headless child's part values | `events`                                      |
-| Owner to descendants | `shares`                       | `shared.onChange`, or a payload from the view |
-| Descendant to owner  | `report` and `collects`        | `receives` and `$.send(Owner)`                |
+| Direction            | A current value                | A request or something that happened |
+| -------------------- | ------------------------------ | ------------------------------------ |
+| Parent to child      | props                          | `receives` and `$.send(ref)`         |
+| Child to parent      | a headless child's part values | `events`                             |
+| Owner to descendants | `shares`                       | `shared.onChange`                    |
+| Descendant to owner  | `report` and `collects`        | `receives` and `$.send(Owner)`       |
 
 The columns differ in how long they last. A send happens once. If its target
 is absent, the log records `SendDropped` and nothing is queued, and `init`

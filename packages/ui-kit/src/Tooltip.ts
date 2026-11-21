@@ -295,9 +295,7 @@ export type TooltipEvents = typeof TooltipEvents.Type
 // Pointer, focus and key facts from the trigger, the positioner and the
 // document, and the ends of the two timers.
 const Message = UiSchema.TaggedEnum({
-  // `instant`: what a TooltipProvider above shared when the trigger last
-  // rendered. `update` can't read shared state, so the value comes in here.
-  EnteredTrigger: { instant: Schema.Boolean },
+  EnteredTrigger: {},
   LeftTrigger: {},
   FocusedTrigger: {},
   BlurredTrigger: {},
@@ -588,12 +586,14 @@ export const Tooltip = Component.define({
     placement: null
   }),
   update: {
-    EnteredTrigger: (model, { instant }, $) => {
+    EnteredTrigger: (model, _message, $) => {
       const next = { ...model, hovered: true }
       if ($.props.disabled === true) return next
       if (shownBy($.props)) return $.set(next).run(Command.interrupt(WaitBeforeClosing))
       // A provider's group is open, or closed less than `timeout` ago.
-      if (instant) return $.set({ ...next, instant: "delay" }).run(Command.interrupt(WaitBeforeOpening)).emit(opened)
+      if ($.shared.provider?.instant === true) {
+        return $.set({ ...next, instant: "delay" }).run(Command.interrupt(WaitBeforeOpening)).emit(opened)
+      }
       return $.set(next).run(WaitBeforeOpening({ delay: $.props.delay ?? 600 }))
     },
     LeftTrigger: left,
@@ -677,7 +677,7 @@ export const Tooltip = Component.define({
       (b) =>
         b.attr("data-popup-open", flag(shown))
           .attr("data-trigger-disabled", flag(p.props.disabled))
-          .on("mouseenter", Message.EnteredTrigger({ instant: group?.instant === true }))
+          .on("mouseenter", Message.EnteredTrigger())
           .on("mouseleave", Message.LeftTrigger())
           .on("mousedown", Message.PressedTrigger())
           .onClick(Message.ClickedTrigger())

@@ -42,6 +42,7 @@ import type * as componentQueries from "./internal/queries.ts"
 import { canonical } from "./internal/queryCore.ts"
 import { getIndexSignatureKeys } from "./internal/schemaAST.ts"
 import { holdsRedacted, redactAST } from "./internal/schemaRedact.ts"
+import * as sharedReads from "./internal/shared.ts"
 import type * as Query from "./Query.ts"
 import type * as Subscription from "./Subscription.ts"
 
@@ -282,6 +283,12 @@ export interface Update extends InstanceBase {
    * component with queries has them.
    */
   readonly queries?: Component.Results | undefined
+  /**
+   * The shared values `update` read as `$.shared`, by the local name its
+   * `shared` lists each owner under: what `Story.fromLog` gives it back.
+   * Only a component that reads shared state has them.
+   */
+  readonly shared?: Component.SharedRecord | undefined
   /**
    * The `instance` of the provider whose Layer entries this instance's
    * feature slots read: itself for a component with a provided Layer, or the
@@ -1012,8 +1019,11 @@ const RunWire = {
  * **Details**
  *
  * Models, messages, props and events are encoded through the component's
- * Schemas, and a send's message through its ref's or its owner's `receives`. Command args and a mount's args are encoded through the definition's `args` Schema,
- * field by field, and a field that doesn't encode falls back to a structural
+ * Schemas, and a send's message through its ref's or its owner's `receives`.
+ * A shared value a reader's `Update` holds is encoded through the
+ * `schema` of its owner's `shares`, or structurally without one. Command
+ * args and a mount's args are encoded through the definition's `args`
+ * Schema, field by field, and a field that doesn't encode falls back to a structural
  * encoding, best effort: a value with no JSON form becomes
  * `{ "~unserialisable": "<kind>" }`, a `Redacted` becomes
  * `{ "~redacted": true }`, and a Model or message over `maxEntryBytes` becomes
@@ -1077,6 +1087,7 @@ export const Wire = Schema.Union([
     props: Schema.Json,
     model: Schema.Json,
     queries: Schema.optionalKey(Schema.Json),
+    shared: Schema.optionalKey(Schema.Json),
     commands: Schema.Array(CommandWire),
     events: Schema.Array(Schema.Json),
     lists: Schema.Array(Schema.Struct({ name: Schema.String, op: Schema.Literals(["loadMore", "reset"]) })),
@@ -1223,6 +1234,22 @@ export const makeEncoder = (options?: {
         : cap(encodeWith(schema, `${component.definition.name}.queries`, results) as Schema.Json)
     }
   }
+  const encodeShared = (
+    component: Component.Any,
+    shared: Component.SharedRecord | undefined
+  ): { readonly shared?: Schema.Json } => {
+    if (shared === undefined) return {}
+    const out: Record<string, Schema.Json> = {}
+    for (const read of sharedReads.readsOf(component.definition)) {
+      const value = shared[read.name]
+      if (value === undefined) continue
+      const schema = read.owner.definition.sharesSchema
+      out[read.name] = schema === undefined
+        ? structural(value)
+        : encodeWith(schema, `${read.owner.definition.name}.shares`, value) as Schema.Json
+    }
+    return { shared: cap(out) }
+  }
   // A message can carry a query's whole result, so messages are capped like Models and query results.
   const capped = (component: Component.Any, field: "model" | "message", value: unknown): Schema.Json =>
     cap(through(component, field, value) as Schema.Json)
@@ -1290,6 +1317,7 @@ export const makeEncoder = (options?: {
             props: props(entry),
             model: capped(entry.component, "model", entry.model),
             ...encodeQueries(entry.component, entry.queries),
+            ...encodeShared(entry.component, entry.shared),
             commands: entry.commands.map(encodeCommand),
             events: events(entry),
             lists: entry.lists,

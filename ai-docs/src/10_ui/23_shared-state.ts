@@ -57,11 +57,11 @@ const TooltipMessage = UiSchema.TaggedEnum({
   BlurredTooltip: { id: Schema.String }
 })
 
-// `h.shared.provider` is the nearest TooltipProvider's value. Reading it, or
-// sending to it, puts `Component.Shared<"TooltipProvider">` in the
-// component's requirements, which the provider's `view` closure removes.
-// Reads are in `view` and `parts` only, so `update` stays a pure function of
-// what the log records.
+// `h.shared.provider` is the nearest TooltipProvider's value, and
+// `$.shared.provider` is the same value in `update`. Reading it, or sending
+// to it, puts `Component.Shared<"TooltipProvider">` in the component's
+// requirements, which the provider's `view` closure removes. Each `Update` in
+// the log records what `$.shared` held, so a replay reads the same value.
 export const Tooltip = Component.define({
   name: "Tooltip",
   scoped: false,
@@ -72,8 +72,14 @@ export const Tooltip = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  // Delivered as this update applies, and logged with this update as its source.
-  update: (model, message, $) => $.set(model).send(TooltipProvider, message),
+  // `$.shared.provider` is the provider's value as this update runs: a blur
+  // of a tooltip that isn't open would change nothing, so it isn't sent. A
+  // send is delivered as this update applies, and logged with this update as
+  // its source.
+  update: (model, message, $) =>
+    message._tag === "BlurredTooltip" && $.shared.provider.open !== message.id
+      ? model
+      : $.set(model).send(TooltipProvider, message),
   view: (_, h) => {
     const id = h.id("tip")
     return h.span(
@@ -152,8 +158,10 @@ export const focused = Effect.gen(function*() {
 
 const GroupMessage = UiSchema.TaggedEnum({ ChangedOpen: { open: Schema.Boolean } })
 
-// `shares` in its long form. `value` is what readers read. `collects` is
-// what the owner collects from them: `schema` is the Schema of what each
+// `shares` in its long form. `value` is what readers read, and `schema` its
+// Schema, which encodes it in a reader's `Update` on the Wire. Without one,
+// the value is sent as `MessageLog.structural` encodes it, best effort.
+// `collects` is what the owner collects from them: `schema` is the Schema of what each
 // reader tells the owner, and `onChange` the owner's message for the current
 // reports. Once a render pass has nothing left to render, the runtime calls
 // `onChange` with every mounted reader's report, in no promised order, and
@@ -168,6 +176,7 @@ export const PanelGroup = Component.define({
   message: GroupMessage,
   shares: {
     value: (model) => ({ anyOpen: model.anyOpen }),
+    schema: Schema.Struct({ anyOpen: Schema.Boolean }),
     collects: {
       schema: Schema.Boolean,
       onChange: (collected) => GroupMessage.ChangedOpen({ open: collected.includes(true) })
@@ -191,11 +200,14 @@ const PanelMessage = UiSchema.TaggedEnum({ Toggled: {}, ChangedGroup: { anyOpen:
 // - `report`: what the Panel tells the owner, from its own Model and props.
 //   It fails to compile for an owner whose `shares` has no `collects`.
 // - `onChange`: the Panel's message when the owner's value changes, for an
-//   `update` that must act on it. `view` and `parts` read `h.shared` as
-//   usual. It isn't sent at mount, so `init` can't read the value, and never
-//   with an optional owner absent. Changes are delivered in one round per
-//   owner before the next render, with the value as it is then: a burst of
-//   changes is one message, and a value that changes back sends nothing.
+//   `update` that must act on the change, as counting the times the group
+//   opened does here. To read the current value, `update` has
+//   `$.shared.group`, so there's no need to copy it into the Model. It isn't
+//   sent at mount, and never with an optional owner absent. Changes are
+//   delivered in one round per owner before the next render, with the value
+//   as it is then: a burst of changes is one message, and a value that
+//   changes back sends nothing. When another reader changes the owner within
+//   that round, `$.shared` is already newer than the message being handled.
 //
 // A `report` or `onChange` that answers the shared value with a change of
 // its own can loop. The owner counts its `collects.onChange` messages and
@@ -205,7 +217,7 @@ export const Panel = Component.define({
   name: "Panel",
   scoped: false,
   props: Schema.Struct({ title: Schema.String }),
-  model: Schema.Struct({ open: Schema.Boolean, groupOpen: Schema.Boolean }),
+  model: Schema.Struct({ open: Schema.Boolean, groupOpened: Schema.Number }),
   message: PanelMessage,
   shared: {
     group: {
@@ -217,11 +229,11 @@ export const Panel = Component.define({
   },
   elements: Html
 }).make({
-  init: () => ({ open: false, groupOpen: false }),
-  update: (_model, message, $) =>
+  init: () => ({ open: false, groupOpened: 0 }),
+  update: (model, message, $) =>
     PanelMessage.match(message, {
       Toggled: () => $.evolve({ open: (open) => !open }),
-      ChangedGroup: ({ anyOpen }) => $.evolve({ groupOpen: anyOpen })
+      ChangedGroup: ({ anyOpen }) => anyOpen ? $.evolve({ groupOpened: (times) => times + 1 }) : model
     }),
   view: (model, h) =>
     h.section(
@@ -243,7 +255,7 @@ export const panels = Effect.gen(function*() {
   // A change sends `onChange`'s message. `given`'s third argument gives a
   // value without sending.
   panel.shared(PanelGroup, { anyOpen: true })
-  console.log(panel.model.groupOpen) // true
+  console.log(panel.model.groupOpened) // 1
   console.log(panel.current.reports) // { group: false }
 
   const group = yield* Scene.make(PanelGroup, {}, {
