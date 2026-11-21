@@ -113,3 +113,9 @@ export * from "./Toggle.ts"
  * @since 0.1.0
  */
 export * from "./Tooltip.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
+export * as VirtualKeyboard from "./VirtualKeyboard.ts"

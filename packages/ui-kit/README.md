@@ -41,3 +41,4 @@ A component that keeps no state, such as `Switch`, is a plain view function inst
 ## Other modules
 
 - [Positioning](src/Positioning.ts): places a popup of your own against an anchor, as `Tooltip` places its popup. `Positioning.place` computes a position from rectangles, and the `Positioning.TrackPosition` mount keeps a positioner next to its anchor.
+- [VirtualKeyboard](src/VirtualKeyboard.ts): tells which band of the screen the software keyboard leaves visible, read from `visualViewport`, so content fixed to the bottom can sit above it. `VirtualKeyboard.step` works out the band from the viewport's sizes, without reading the DOM. `VirtualKeyboard.watch` is a Stream of the band, and the `VirtualKeyboard.TrackKeyboard` mount writes the covered height on its node as `--keyboard-inset`.

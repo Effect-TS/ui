@@ -210,6 +210,7 @@ import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { flag, withStyle } from "./internal/attributes.ts"
 import { hideOthers, lockScroll } from "./internal/modal.ts"
+import { isAndroid } from "./internal/platform.ts"
 import { inKept, raiseAbove } from "./internal/topLayer.ts"
 
 /**
@@ -561,12 +562,10 @@ const finite = (animation: Animation): boolean => {
   return typeof end === "number" && Number.isFinite(end)
 }
 
-const closeWatcherOf = (view: Window | null): (new() => CloseWatcher) | undefined => {
-  if (view === null) return undefined
-  const agent = view.navigator as Navigator & { readonly userAgentData?: { readonly platform: string } }
-  const android = agent.userAgentData?.platform === "Android" || /android/i.test(agent.userAgent)
-  return android ? (view as Window & { readonly CloseWatcher?: new() => CloseWatcher }).CloseWatcher : undefined
-}
+const closeWatcherOf = (view: Window | null): (new() => CloseWatcher) | undefined =>
+  view !== null && isAndroid(view)
+    ? (view as Window & { readonly CloseWatcher?: new() => CloseWatcher }).CloseWatcher
+    : undefined
 
 const onScrollbar = (target: EventTarget | null, event: MouseEvent): boolean => {
   if (!(target instanceof HTMLElement)) return false
