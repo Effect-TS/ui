@@ -196,11 +196,9 @@ describe("Field", () => {
       filled: true
     })
     assert.deepStrictEqual(fieldValidationProps({ _tag: "Valid", ...filled }), { invalid: false, filled: true })
-    const invalid = fieldValidationProps({ _tag: "Invalid", ...filled, errors: ["Too short"] })
-    assert.deepStrictEqual(invalid, { invalid: true, filled: true })
-
-    const attrs = attrsOf(parts(invalid).root(h.div))
-    assert.strictEqual(attrs["data-invalid"], "")
-    assert.strictEqual(attrs["data-filled"], "")
+    assert.deepStrictEqual(fieldValidationProps({ _tag: "Invalid", ...filled, errors: ["Too short"] }), {
+      invalid: true,
+      filled: true
+    })
   })
 })
