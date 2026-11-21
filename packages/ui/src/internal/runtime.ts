@@ -7473,8 +7473,8 @@ const setup = (
         const path = inst.path
         const restored = restoring.get(inst)
         if (restored !== undefined) into[path] = restored
-        else if (hydrating !== undefined) {
-          const { "~kept": kept, "~scoped": _, ...state } = subtree(hydrating.state, path)
+        else {
+          const { "~kept": kept, "~scoped": _, ...state } = subtree(hydrating!.state, path)
           Object.assign(into, state)
           if (kept !== undefined) Object.assign(keptIn(into), kept)
         }
