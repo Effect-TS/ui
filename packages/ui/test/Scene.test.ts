@@ -166,10 +166,10 @@ describe("Scene", () => {
         view: (_, h) =>
           Disclosure(h, {
             ref: Outer,
-            view: (outer) =>
+            view: (outerDisclosure) =>
               h.div(
-                h.p(state(outer.open)),
-                Disclosure(h, { key: "D", view: (inner) => h.p(state(inner.open)) })
+                h.p(state(outerDisclosure.open)),
+                Disclosure(h, { key: "D", view: (innerDisclosure) => h.p(state(innerDisclosure.open)) })
               )
           })
       })
@@ -205,7 +205,7 @@ describe("Scene", () => {
       // One cached child node: Top shows it in its own view, Nested in a closure.
       let cached: View.Child<never, any> | undefined
       const inner = (h: View.Helper<never, unknown>) =>
-        cached ??= Disclosure(h, { key: "inner", view: (parts) => h.el("p", state(parts.open)) })
+        cached ??= Disclosure(h, { key: "inner", view: (disclosure) => h.el("p", state(disclosure.open)) })
       const page = (name: string, nested: boolean) =>
         Component.define({ name, model: Schema.Null, message: Schema.Never }).make({
           init: () => null,
@@ -383,7 +383,10 @@ describe("Scene", () => {
         const anchor = yield* Scene.make(
           Anchor,
           {},
-          { elements: Html, view: (p, h) => h.div(p.anchor(h.button).children("target"), h.p(String(p.width))) }
+          {
+            elements: Html,
+            view: (anchor, h) => h.div(anchor.anchor(h.button).children("target"), h.p(String(anchor.width)))
+          }
         )
         anchor.mounted(Place, 21).expect(Locator.tag("p")).toHaveText("42")
         const Frame = Component.define({
@@ -403,7 +406,7 @@ describe("Scene", () => {
                   key: "frame",
                   slots: { body: h.div.onMount(Measure({ id: "body" }).pipe(Mount.map(String))) }
                 }),
-                Anchor(h, { key: "anchor", view: (p) => p.anchor(h.button).children("go") }),
+                Anchor(h, { key: "anchor", view: (anchor) => anchor.anchor(h.button).children("go") }),
                 h.p(seen)
               )
           })

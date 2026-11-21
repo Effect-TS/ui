@@ -27,10 +27,10 @@
  *
  * Each part takes the consumer's builder and returns it with the part
  * applied, and the consumer adds the children:
- * `s.positioner(h.div).children(s.popup(h.div).children("Bold"))`.
+ * `tooltip.positioner(h.div).children(tooltip.popup(h.div).children("Bold"))`.
  * A part's result is a builder, so it can also be another kit call's
  * `element`. That puts a tooltip on a ui-kit Button:
- * `Button(h, { element: s.trigger(h.button) }).class("tool").children("B")`.
+ * `Button(h, { element: tooltip.trigger(h.button) }).class("tool").children("B")`.
  *
  * The positioner is a manual popover, so it renders in the top layer and
  * needs no portal. While it shows, the tooltip measures the trigger and
@@ -133,11 +133,11 @@
  *         Opened: () => ToolbarMessage.ToggledBoldTip({ open: true }),
  *         Dismissed: () => ToolbarMessage.ToggledBoldTip({ open: false })
  *       },
- *       view: (s) =>
+ *       view: (tooltip) =>
  *         h.span(
- *           s.trigger(h.button.class("tool").attr("aria-label", "Bold")).children("B"),
- *           s.positioner(h.div.class("tip-positioner")).children(
- *             s.popup(h.div.class("tip")).children(s.arrow(h.div.class("tip-arrow")), "Bold")
+ *           tooltip.trigger(h.button.class("tool").attr("aria-label", "Bold")).children("B"),
+ *           tooltip.positioner(h.div.class("tip-positioner")).children(
+ *             tooltip.popup(h.div.class("tip")).children(tooltip.arrow(h.div.class("tip-arrow")), "Bold")
  *           )
  *         )
  *     })
@@ -528,8 +528,8 @@ export const TooltipProvider = Component.define({
 
 /**
  * A headless tooltip. Call it with the consumer's `h` and a `view` closure
- * that draws the button the tooltip describes with `s.trigger`, and the
- * popup's markup with `s.positioner`, `s.popup` and `s.arrow`.
+ * that draws the button the tooltip describes with `tooltip.trigger`, and the
+ * popup's markup with `tooltip.positioner`, `tooltip.popup` and `tooltip.arrow`.
  *
  * **Details**
  *

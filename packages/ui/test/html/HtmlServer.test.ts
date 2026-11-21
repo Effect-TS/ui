@@ -225,9 +225,9 @@ describe("HtmlServer", { concurrent: false }, () => {
         view: (_, h) =>
           Group(h, {
             key: "g",
-            view: (parts) =>
+            view: (group) =>
               h.div.children(
-                h.p.children(`collected ${parts.count}`),
+                h.p.children(`collected ${group.count}`),
                 h.props.item !== null && Shown(h, { key: "i", props: { open: h.props.item } })
               )
           })

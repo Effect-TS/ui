@@ -51,18 +51,18 @@ const Picker = Component.define({
       key: "confirm",
       props: { label: "Confirm" },
       onEmit: () => PickerMessage.Closed(),
-      view: (d) =>
+      view: (dialog) =>
         h.div(
-          d.trigger(h.button).children("Open"),
-          d.popup(h.dialog).children(
-            d.title(h.h2).children("Pick one"),
+          dialog.trigger(h.button).children("Open"),
+          dialog.popup(h.dialog).children(
+            dialog.title(h.h2).children("Pick one"),
             Menu(h, {
               key: "actions",
               props: { items },
               onEmit: (event) => PickerMessage.Picked({ id: event.id }),
-              view: (m) =>
-                h.ul.children(m.visible.map((item) =>
-                  d.close(m.item(h.li.key(item.id), item))
+              view: (menu) =>
+                h.ul.children(menu.visible.map((item) =>
+                  dialog.close(menu.item(h.li.key(item.id), item))
                     .onClick(PickerMessage.Clicked({ id: item.id }))
                     .children(item.label)
                 ))
@@ -116,8 +116,8 @@ const Board = Component.define({
     Menu(h, {
       key: "actions",
       props: { items },
-      view: (m) =>
-        m.popup(h.div).children(
+      view: (menu) =>
+        menu.popup(h.div).children(
           Bell(h, {
             key: "bell",
             onEmit: () => BoardMessage.Rang(),
@@ -178,11 +178,11 @@ const Opener = Component.define({
       Menu(h, {
         ref: Actions,
         props: { items },
-        view: (m) =>
+        view: (menu) =>
           h.p(
-            m.open ? "shown" : "hidden",
+            menu.open ? "shown" : "hidden",
             // The closure is the parent's code, so a child in it takes the parent's refs.
-            (model.twin || (h.props.twin === "open" && m.open)) &&
+            (model.twin || (h.props.twin === "open" && menu.open)) &&
               Menu(h, { ref: Actions, props: { items }, view: () => h.span("again") }),
             // Removed with its holder when the ref moves back to the view. The holder's Scope closes
             // after its `Lingering` child's, which its Command holds open.
@@ -291,7 +291,7 @@ const Form = Component.define({ name: "Form", model: Schema.Null, message: Schem
   view: (_, h) =>
     Field(
       h,
-      { key: "f", view: (f) => f.input(h.input.class("wide field")).attr("aria-describedby", "note") }
+      { key: "f", view: (field) => field.input(h.input.class("wide field")).attr("aria-describedby", "note") }
     )
 })
 
@@ -502,8 +502,8 @@ describe("headless components", () => {
             Control(h, {
               key: "control",
               props: { active },
-              view: (s) =>
-                s.root(
+              view: (control) =>
+                control.root(
                   h.button.disabled(true).attr("aria-readonly", "true").attr("data-checked", "")
                     .attr("data-removed", "consumer").attr("title", "consumer")
                     .attr("aria-label", "Keep me").class("consumer")

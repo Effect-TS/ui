@@ -10,13 +10,15 @@ import { Effect } from "effect"
 const standIn = {
   elements: Html,
   view: (
-    s: Component.Headless.Parts<typeof Meter>,
+    meter: Component.Headless.Parts<typeof Meter>,
     h: View.Helper<never, MeterProps> & View.Tags<Html.Elements, never>
   ) =>
-    s.root(h.div.attr("role", "progressbar").attr("aria-labelledby", "heading")).children(
-      s.label(h.span.class("label")).children("Storage"),
-      s.value(h.span.class("value").attr("aria-hidden", "false")),
-      s.track(h.div.class("track")).children(s.indicator(h.div.class("fill")).attr("style", "background:red;width:1px"))
+    meter.root(h.div.attr("role", "progressbar").attr("aria-labelledby", "heading")).children(
+      meter.label(h.span.class("label")).children("Storage"),
+      meter.value(h.span.class("value").attr("aria-hidden", "false")),
+      meter.track(h.div.class("track")).children(
+        meter.indicator(h.div.class("fill")).attr("style", "background:red;width:1px")
+      )
     )
 }
 
@@ -69,8 +71,8 @@ describe("Meter", () => {
 
   it("a value outside the range is clamped, NaN counts as min, and an empty range is 0%", () => {
     const at = (props: MeterProps) => {
-      const s = parts(props)
-      return [built(s.root(h.div)).attrs["aria-valuenow"], s.percentage, s.valueText]
+      const meter = parts(props)
+      return [built(meter.root(h.div)).attrs["aria-valuenow"], meter.percentage, meter.valueText]
     }
     assert.deepStrictEqual(at({ value: -5 }), ["0", 0, "0%"])
     assert.deepStrictEqual(at({ value: Number.NaN, min: 10, max: 20 }), ["10", 0, "0%"])

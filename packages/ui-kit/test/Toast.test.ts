@@ -54,15 +54,15 @@ const Page = Component.define({
     ToastProvider(h, {
       props: { timeout: h.props.timeout, limit: 2 },
       onEmit: { Dismissed: ({ id }) => PageMessage.Dismissed({ id }) },
-      view: (t) =>
+      view: (toastProvider) =>
         h.div(
           Poster(h, {}),
           h.output(dismissed),
-          t.viewport(h.div).children(
-            ...t.toasts.map((toast) =>
-              t.root({ element: h.div.attr("id", toast.id), toast }).children(
+          toastProvider.viewport(h.div).children(
+            ...toastProvider.toasts.map((toast) =>
+              toastProvider.root({ element: h.div.attr("id", toast.id), toast }).children(
                 toast.title,
-                t.close({ element: h.button.attr("id", "close-" + toast.id), toast }).children("Close")
+                toastProvider.close({ element: h.button.attr("id", "close-" + toast.id), toast }).children("Close")
               )
             )
           )

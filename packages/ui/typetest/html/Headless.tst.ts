@@ -50,21 +50,21 @@ describe("headless components", () => {
             expect(event).type.toBe<typeof MenuEvents.Type>()
             return Msg.Picked({ id: event.id })
           },
-          view: (m) => {
-            expect(m.visible).type.toBe<ReadonlyArray<Item>>()
-            expect(m.open).type.toBe<boolean>()
+          view: (menu) => {
+            expect(menu.visible).type.toBe<ReadonlyArray<Item>>()
+            expect(menu.open).type.toBe<boolean>()
             // Args is fixed by the author: (b, item: Item).
-            expect(m.item).type.toBe<View.Part<"li", [item: Item], never>>()
-            const trigger = m.trigger(h.button.class("btn"))
+            expect(menu.item).type.toBe<View.Part<"li", [item: Item], never>>()
+            const trigger = menu.trigger(h.button.class("btn"))
             expect(trigger).type.toBe<Html.Element<Msg, never, Html.EventsOf<"button">, HTMLButtonElement, "button">>()
             return h.div.class("toolbar").children(
               trigger.children("Actions"),
-              m.popup(h.div.class("menu")).children(
-                m.input(h.input.attr("aria-label", "Filter actions")),
-                m.visible.length === 0 && h.p("No actions found."),
-                h.ul.children(m.visible.map((item) => {
+              menu.popup(h.div.class("menu")).children(
+                menu.input(h.input.attr("aria-label", "Filter actions")),
+                menu.visible.length === 0 && h.p("No actions found."),
+                h.ul.children(menu.visible.map((item) => {
                   expect(item).type.toBe<Item>()
-                  return m.item(h.li.key(item.id), item).onClick(Msg.Clicked()).children(item.label)
+                  return menu.item(h.li.key(item.id), item).onClick(Msg.Clicked()).children(item.label)
                 }))
               )
             )
@@ -81,23 +81,24 @@ describe("headless components", () => {
         Menu(h, {
           key: "actions",
           props: { items },
-          view: (m) => {
-            // The root is callable and what a part returns isn't: m.trigger(h.button)("Actions") doesn't compile.
-            expect(m.trigger(h.button)).type.toBe<
+          view: (menu) => {
+            // The root is callable and what a part returns isn't: menu.trigger(h.button)("Actions") doesn't compile.
+            expect(menu.trigger(h.button)).type.toBe<
               Html.Element<Msg, never, Html.EventsOf<"button">, HTMLButtonElement, "button">
             >()
-            expect(m.trigger(h.button)).type.not.toBeAssignableTo<(...children: ReadonlyArray<string>) => unknown>()
+            expect(menu.trigger(h.button)).type.not.toBeAssignableTo<(...children: ReadonlyArray<string>) => unknown>()
             expect(h.button).type.toBeCallableWith("Actions")
             // A part is tied to its tag name: a button part rejects a div, and the missing item is an error.
-            expect(m.trigger).type.not.toBeCallableWith(h.div)
-            expect(m.trigger).type.not.toBeCallableWith(h.el("button"))
-            expect(m.item).type.not.toBeCallableWith(h.li)
-            expect(m.item).type.not.toBeCallableWith(h.li, "a")
+            expect(menu.trigger).type.not.toBeCallableWith(h.div)
+            expect(menu.trigger).type.not.toBeCallableWith(h.el("button"))
+            expect(menu.item).type.not.toBeCallableWith(h.li)
+            expect(menu.item).type.not.toBeCallableWith(h.li, "a")
             // The tagless part takes any element.
             return Dialog(h, {
               key: "confirm",
               props: { label: "Confirm" },
-              view: (d) => d.popup(h.dialog).children(d.close(m.item(h.li, items[0]!)).children("Close"))
+              view: (dialog) =>
+                dialog.popup(h.dialog).children(dialog.close(menu.item(h.li, items[0]!)).children("Close"))
             })
           }
         })
@@ -125,9 +126,9 @@ describe("headless components", () => {
       view: (_, h) =>
         Timed(h, {
           key: "t",
-          view: (t) =>
-            t.clock(h.time).onMount(MarkSeen().pipe(Mount.map(() => Msg.Seen())))
-              .children(String(t.now))
+          view: (timed) =>
+            timed.clock(h.time).onMount(MarkSeen().pipe(Mount.map(() => Msg.Seen())))
+              .children(String(timed.now))
         })
     })
     expect<Component.Requirements<typeof App>>().type.toBe<Clock | Tracker>()
@@ -166,17 +167,17 @@ describe("headless components", () => {
       view: (_, h) =>
         Wrapped(h, {
           key: "wrapped",
-          view: (w) => {
-            expect(w.clock).type.not.toBeCallableWith(h.div)
-            expect(w.seen).type.not.toBeCallableWith({ element: h.div })
-            expect(w.seen).type.not.toBeCallableWith({ element: h.time, label: "Seen" })
-            expect(w.clock(h.time)).type.toBe<
+          view: (wrapped) => {
+            expect(wrapped.clock).type.not.toBeCallableWith(h.div)
+            expect(wrapped.seen).type.not.toBeCallableWith({ element: h.div })
+            expect(wrapped.seen).type.not.toBeCallableWith({ element: h.time, label: "Seen" })
+            expect(wrapped.clock(h.time)).type.toBe<
               Html.Element<Msg, never, Html.EventsOf<"time">, HTMLTimeElement, "time">
             >()
-            expect(w.seen({ element: h.div, label: "Seen" })).type.toBe<
+            expect(wrapped.seen({ element: h.div, label: "Seen" })).type.toBe<
               Html.Element<Msg, never, Html.EventsOf<"div">, HTMLDivElement, "div">
             >()
-            return h.div(w.clock(h.time), w.seen({ element: h.div, label: "Seen" }))
+            return h.div(wrapped.clock(h.time), wrapped.seen({ element: h.div, label: "Seen" }))
           }
         })
     })
@@ -191,17 +192,17 @@ describe("headless components", () => {
         Dialog(h, {
           key: "confirm",
           props: { label: "Confirm" },
-          view: (d) => {
+          view: (dialog) => {
             // Both are HTMLHeadingElement: the check is by tag name, as at runtime.
-            expect(d.title).type.toBeCallableWith(h.h2)
-            expect(d.title).type.not.toBeCallableWith(h.h3)
+            expect(dialog.title).type.toBeCallableWith(h.h2)
+            expect(dialog.title).type.not.toBeCallableWith(h.h3)
             return Heading(h, {
               key: "h",
-              view: (p) => {
-                expect(p.heading).type.toBe<View.Part<"h2" | "h3", [], never>>()
-                expect(p.heading).type.toBeCallableWith(h.h3)
-                expect(p.heading).type.not.toBeCallableWith(h.h4)
-                return p.heading(h.h2)
+              view: (heading) => {
+                expect(heading.heading).type.toBe<View.Part<"h2" | "h3", [], never>>()
+                expect(heading.heading).type.toBeCallableWith(h.h3)
+                expect(heading.heading).type.not.toBeCallableWith(h.h4)
+                return heading.heading(h.h2)
               }
             })
           }

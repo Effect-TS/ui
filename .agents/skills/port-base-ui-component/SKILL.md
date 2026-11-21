@@ -91,6 +91,8 @@ Work top to bottom. Put the notes from steps 1 to 3 in the PR description.
      component with `HtmlServer.renderToHtml` and throws unless the HTML
      shows one thing, such as the consumer's class next to the part's role.
    - Add `@since`, `@category` and `@stability experimental` to every export.
+   - Name the parts argument after the component in the JSDoc, the README
+     and the tests, as the "Call shape" section of the conventions says.
    - Add the component to `packages/ui-kit/README.md`.
    - Add a changeset: `"@effect/ui-kit": minor`.
    - Run each of these with `nix develop -c`: `pnpm lint`, `pnpm check`,

@@ -81,11 +81,11 @@ const Headless = Component.define(app).make({
     h.ul.children(rows.map((row) =>
       Disclosure(h, {
         key: row.id,
-        view: (d) =>
+        view: (disclosure) =>
           h.li.class("row").attr("data-done", row.done ? "" : undefined).children(
-            d.trigger(h.button).children(row.label),
+            disclosure.trigger(h.button).children(row.label),
             h.span(row.done ? "done" : "todo"),
-            d.panel(h.div).children("details")
+            disclosure.panel(h.div).children("details")
           )
       })
     ))
@@ -104,11 +104,11 @@ const WrappedRow = Component.define({
   view: (_, h) =>
     Disclosure(h, {
       key: "d",
-      view: (d) =>
+      view: (disclosure) =>
         h.li.class("row").attr("data-done", h.props.row.done ? "" : undefined).children(
-          d.trigger(h.button).children(h.props.row.label),
+          disclosure.trigger(h.button).children(h.props.row.label),
           h.span(h.props.row.done ? "done" : "todo"),
-          d.panel(h.div).children("details")
+          disclosure.panel(h.div).children("details")
         )
     })
 })
@@ -160,10 +160,10 @@ type H = Component.Helper<typeof AppDef>
 const underProvider = <RV>(h: H, rows: () => View.Content<AppMessage, RV>) =>
   Provider(h, {
     key: "tips",
-    view: (state) =>
+    view: (provider) =>
       h.div(
-        h.span.class("touches").children(String(state.touches)),
-        h.span.class("open").children(String(state.open)),
+        h.span.class("touches").children(String(provider.touches)),
+        h.span.class("open").children(String(provider.open)),
         Poker(h, { key: "poke" }),
         rows()
       )
@@ -178,11 +178,11 @@ const OwnerHeadless = Component.define(app).make({
       h.ul.children(rows.map((row) =>
         Disclosure(h, {
           key: row.id,
-          view: (d) =>
+          view: (disclosure) =>
             h.li.class("row").attr("data-done", row.done ? "" : undefined).children(
-              d.trigger(h.button).children(row.label),
+              disclosure.trigger(h.button).children(row.label),
               h.span(row.done ? "done" : "todo"),
-              d.panel(h.div).children("details")
+              disclosure.panel(h.div).children("details")
             )
         })
       )))
@@ -210,11 +210,11 @@ const Body = Component.define({
     h.ul.children(h.props.rows.map((row) =>
       Disclosure(h, {
         key: row.id,
-        view: (d) =>
+        view: (disclosure) =>
           h.li.class("row").attr("data-done", row.done ? "" : undefined).children(
-            d.trigger(h.button).children(row.label),
+            disclosure.trigger(h.button).children(row.label),
             h.span(row.done ? "done" : "todo"),
-            d.panel(h.div).children("details")
+            disclosure.panel(h.div).children("details")
           )
       })
     ))
@@ -239,12 +239,12 @@ const ReaderRow = Component.define({
   view: (_, h) =>
     Disclosure(h, {
       key: "d",
-      view: (d) =>
+      view: (disclosure) =>
         h.li.class("row").attr("data-done", h.props.row.done ? "" : undefined)
           .attr("data-open", h.shared.provider.open === h.props.row.id ? "" : undefined).children(
-            d.trigger(h.button).children(h.props.row.label),
+            disclosure.trigger(h.button).children(h.props.row.label),
             h.span(h.props.row.done ? "done" : "todo"),
-            d.panel(h.div).children("details")
+            disclosure.panel(h.div).children("details")
           )
     })
 })
