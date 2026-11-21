@@ -1497,6 +1497,45 @@ describe("scoped children across a router restore", () => {
         assert.strictEqual(root.text(), "Homedraft:")
       })
     ))
+
+  it.effect("drops a draft a Back restores in a root that doesn't render the route, once its page is removed", () =>
+    routed((history) =>
+      Effect.gen(function*() {
+        const Sidebar = Component.define({
+          name: "Sidebar",
+          scoped: false,
+          model: Schema.Boolean,
+          message: Schema.Boolean
+        })
+          .make({
+            init: () => false,
+            update: (_, hidden) => hidden,
+            view: (hidden, h) =>
+              h.el(
+                "aside",
+                hidden ? null : FormPage(h, { key: "p", props: { hidden: false, ended: false, bare: true } })
+              )
+          })
+        const reopen = Effect.fnUntraced(function*(side: TestHost.TestRoot<any, any, any>) {
+          side.send(true)
+          yield* TestHost.settle
+          side.send(false)
+          yield* TestHost.settle
+        })
+        const root = yield* TestHost.mount(Shell, Router.props(TabsRoute))
+        const side = yield* TestHost.mount(Sidebar, {})
+        yield* TestHost.settle
+        click(side, "draft:")
+        yield* TestHost.settle
+        click(root, "Home")
+        yield* TestHost.settle
+        yield* reopen(side)
+        history.go(-1)
+        yield* TestHost.settle
+        yield* reopen(side)
+        assert.strictEqual(side.text(), "draft:")
+      })
+    ))
 })
 
 const RowMsg = UiSchema.TaggedEnum({ Ping: {} })

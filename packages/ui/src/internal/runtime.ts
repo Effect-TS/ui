@@ -369,6 +369,13 @@ interface Kept {
   drawer: Instance
   container: unknown
   round: number
+  served: Served | undefined
+}
+
+interface Served {
+  waiter: Instance
+  readonly range: Range
+  kept: Kept | undefined
 }
 
 interface Claim {
@@ -862,6 +869,7 @@ interface Range {
   readonly close: unknown
   /** Whether the instance took these nodes, so whoever declared the child leaves them in place. */
   claimed: boolean
+  held?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -1309,49 +1317,45 @@ const setup = (
     deferred: new Set(options.state["~deferred"] ?? []),
     drawn: new Set(options.state["~scoped"] as ReadonlyArray<string> | undefined)
   }
-  let unadopted: Map<Instance, Array<View.Child<any, any>>> | undefined
-  let servedIn: Map<string, Instance> | undefined
+  let servedIn: Map<string, Served> | undefined
   const noteServed = (node: unknown, stop: unknown, waiter: Instance, served: Array<string>) => {
     for (; node !== undefined && node !== stop; node = host.nextOf(node)) {
       const kind = hydration!.inspect(node)
       if (kind._tag === "Element") noteServed(hydration!.firstChild(node), undefined, waiter, served)
       else if (kind._tag === "Open" && hydrating!.drawn.has(kind.path)) {
-        ;(servedIn ??= new Map()).set(kind.path, waiter)
+        const noted = servedIn?.get(kind.path)
+        if (noted !== undefined) noted.waiter = waiter
+        else {
+          const range = rangeFrom(node, kind.path, stop)
+          if (range === undefined) continue
+          range.held = true
+          ;(servedIn ??= new Map()).set(kind.path, { waiter, range, kept: undefined })
+        }
         served.push(kind.path)
       }
     }
   }
-  const writerOf = (inst: Instance) => (inst.parent ?? keptAuthor(inst))?.author
-  const collectHeld = (input: unknown, writer: Instance | undefined, into: Set<unknown>): boolean => {
-    if (Array.isArray(input)) {
-      for (const item of input) if (!collectHeld(item, writer, into)) return false
-      return true
-    }
-    if (input === null || typeof input !== "object") return true
-    const node = input as View.Node<any, any> & { readonly content?: unknown; readonly hooks?: unknown }
-    if (node._tag === "Child") {
-      if (node.alive !== undefined) into.add(node)
-      return node.view === undefined && node.fallback === undefined &&
-        (node.slots === undefined || collectHeld(Object.values(node.slots), writer, into))
-    }
-    if (node._tag === "Outlet") {
-      return writer === undefined || collectHeld(slottedBy.get(writer)?.values?.[node.name], writerOf(writer), into)
-    }
-    return node.hooks === undefined && collectHeld(node._tag === "Element" ? node.children : node.content, writer, into)
+  const servedBy = new WeakMap<Instance, Array<string>>()
+  const unserve = (entry: Kept) => {
+    const from = entry.served
+    if (from === undefined) return
+    from.kept = entry.served = undefined
+    from.range.held = false
   }
-  const heldBy = (waiter: Instance): Set<unknown> | null => {
-    const into = new Set<unknown>()
-    const held = heldPlacement.get(waiter)
-    const values = held === undefined ? slottedBy.get(waiter)?.values : held.slots
-    return values === undefined || collectHeld(Object.values(values), writerOf(waiter), into) ? into : null
-  }
-  const settleUnadopted = () => {
-    if (unadopted === undefined) return
-    defer(() => {
-      for (const inst of Array.from(unadopted?.keys() ?? [])) settleWrites(inst, [])
-      if (unadopted?.size === 0) unadopted = undefined
-      if (keeping.length > 0) flushKept()
-    })
+  const releaseServed = (waiter: Instance) => {
+    const served = servedBy.get(waiter)
+    if (served === undefined) return
+    servedBy.delete(waiter)
+    for (const path of served) {
+      const from = servedIn?.get(path)
+      if (from?.waiter !== waiter) continue
+      servedIn!.delete(path)
+      const entry = from.kept
+      if (entry === undefined) continue
+      unserve(entry)
+      if (!entry.author.left) keep(entry)
+    }
+    if (keeping.length > 0 && patching === 0) flushKept()
   }
   let waitingState: Map<string, unknown> | undefined
   let restoredAt = 0
@@ -1405,7 +1409,6 @@ const setup = (
   const shippedStatus = (path: string): Shipped | undefined =>
     (hydrating?.state["~status"] as { readonly [path: string]: Shipped } | undefined)?.[path]
   const settleWaiting = () => {
-    settleUnadopted()
     // A reader below a held owner may have mounted, or gone.
     if (heldReports.size > 0) {
       for (const owner of heldReports) dueReports(owner)
@@ -2142,6 +2145,7 @@ const setup = (
     if (inst.parked !== undefined) {
       for (const container of inst.parked) unpark(inst, container)
     }
+    if (servedIn !== undefined) releaseServed(inst)
     // Its reports go with it.
     markReports(inst)
     for (const child of inst.children) leave(child)
@@ -2769,7 +2773,6 @@ const setup = (
     if (inst.owners !== undefined) { for (const owner of inst.owners.values()) owner.readers?.delete(inst) }
     if (writersLive > 0) endWrites(inst)
     if (waitingState !== undefined && inst.born > restoredAt) forget(inst.path)
-    unadopted?.delete(inst)
     const waits = stopRuns(inst)
     if (waits.length === 0) {
       unmounted(inst)
@@ -3452,14 +3455,7 @@ const setup = (
     if (hydrating!.drawn.size > 0) {
       const served: Array<string> = []
       noteServed(host.nextOf(range.open), range.close, inst, served)
-      if (served.length > 0) {
-        addFinalizer(
-          inst.scope,
-          Effect.sync(() => {
-            for (const path of served) if (servedIn?.get(path) === inst) servedIn.delete(path)
-          })
-        )
-      }
+      if (served.length > 0) servedBy.set(inst, served)
     }
     waiting++
     range.claimed = true
@@ -3486,10 +3482,13 @@ const setup = (
       // Rebuilt: the server's nodes go. Adopted, the ones it kept are in place, and what it built fresh for
       // the rest isn't in the document yet. Nothing above it renders now, so it places its own nodes.
       if (!range.claimed) { for (const node of nodes) host.remove(node) }
-      if (inst.failure === undefined && parentNode !== undefined) placeEach(parentNode, inst.rendered, after)
+      if (inst.failure === undefined && parentNode !== undefined) {
+        placeEach(parentNode, inst.rendered, range.held && range.claimed ? range.close : after)
+      }
       if (adopt) recordAdopted(inst)
       if (held !== undefined && adopt && !inst.closed && inst.failure === undefined) applyPlacement(inst, held)
       viewChanged = true
+      releaseServed(inst)
       settleWaiting()
     }
     whenReady(inst.env, () => defer(() => resume(true)), () => {
@@ -5156,6 +5155,11 @@ const setup = (
         break
       }
     }
+    if (servedIn !== undefined) {
+      for (const { kept } of servedIn.values()) {
+        if (kept !== undefined) walkEvents(kept.author, kept.inner, path, path.length - 1, out)
+      }
+    }
     if (published.length > 0 || made.length > 0) publishedAlong(path, out)
     return out
   }
@@ -5478,7 +5482,7 @@ const setup = (
     // Its closures render with it, so all it wrote is current. A closure that rendered alone is checked
     // in the drain, after the render that holds it.
     if (inst.owner === undefined) checkRefs(inst)
-    if ((written !== undefined || unadopted?.has(inst)) && !inst.closed) settleWrites(inst, written ?? [])
+    if (written !== undefined && !inst.closed) settleWrites(inst, written)
     if (keeping.length > 0 && patching === 0) flushKept()
     if (table !== undefined && !inst.closed) askKept(inst, table)
     if (!inst.closed) viewChanged = true
@@ -5905,6 +5909,7 @@ const setup = (
       return
     }
     removeUpTo(adoptedUpTo, range.close)
+    if (range.held) return
     host.remove(range.open)
     host.remove(range.close)
   }
@@ -6785,8 +6790,10 @@ const setup = (
     let byKey = table.children.get(view.component)
     const entry = byKey?.get(view.key)
     const named = `${author.path}/${segment(view)}`
-    if (!isCurrent(table, view, entry, inst) && (range === undefined || entry !== undefined || !servedIn?.has(named))) {
-      return blankText(range)
+    if (!isCurrent(table, view, entry, inst)) {
+      return range !== undefined && entry?.served !== undefined
+        ? take(entry, inst, at, entry.inner.v as View.Child<any, any>, env, range)
+        : blankText(range)
     }
     const alive = aliveOf(view)
     if (alive !== undefined && !askAlive(author, table, alive, view)) {
@@ -6812,7 +6819,8 @@ const setup = (
       at,
       drawer: inst,
       container: undefined,
-      round: table.round
+      round: table.round,
+      served: undefined
     }
     if (byKey === undefined) table.children.set(component, byKey = new Map())
     byKey.set(view.key, made)
@@ -6898,14 +6906,9 @@ const setup = (
   }
 
   const settleWrites = (inst: Instance, written: ReadonlyArray<View.Child<any, any>>) => {
-    const pending = unadopted?.get(inst)
-    const views = pending === undefined ? written : pending.concat(written)
-    if (views.length === 0) return
-    unadopted?.delete(inst)
     const author = inst.author
     const table = tableOf(author)
-    let held: Map<Instance, Set<unknown> | null> | undefined
-    for (const view of views) {
+    for (const view of written) {
       const entry = entryAt(author, view)
       if (!isCurrent(table, view, entry, inst) || entry?.at?.v === view) continue
       const alive = aliveOf(view)
@@ -6925,21 +6928,17 @@ const setup = (
         continue
       }
       const path = `${author.path}/${segment(view)}`
-      const waiter = servedIn?.get(path)
-      if (waiter !== undefined && waiter.waiting) {
-        let holds = (held ??= new Map()).get(waiter)
-        if (holds === undefined) held.set(waiter, holds = heldBy(waiter))
-        if (holds === null || holds.has(view)) {
-          const waits = (unadopted ??= new Map()).get(inst)
-          if (waits === undefined) unadopted.set(inst, [view])
-          else waits.push(view)
-          continue
-        }
-      }
-      const inner = makeChild(author, view, author.env, undefined, path, Scope.forkUnsafe(author.scope, "sequential"))
+      const from = servedIn?.get(path)
+      const range = from === undefined || from.range.claimed ? undefined : from.range
+      const before = created
+      const inner = makeChild(author, view, author.env, range, path, Scope.forkUnsafe(author.scope, "sequential"))
       if (inner._tag === "Child") {
         unhook(inner.inst)
         leaveOwners(inner.inst)
+      }
+      const served = range !== undefined && range.claimed && inner._tag === "Child"
+      if (served && created !== before && !inner.inst.waiting) {
+        placeEach(host.parentOf(range.close), inner.inst.rendered, range.close)
       }
       const made: Kept = {
         author,
@@ -6949,14 +6948,16 @@ const setup = (
         at: undefined,
         drawer: author,
         container: undefined,
-        round: table.round
+        round: table.round,
+        served: served ? from : undefined
       }
       let byKey = table.children.get(view.component)
       if (byKey === undefined) table.children.set(view.component, byKey = new Map())
       byKey.set(view.key, made)
       if (inner._tag === "Child") keptEntries.set(inner.inst, made)
       keptLive++
-      keeping.push(made)
+      if (made.served === undefined) keeping.push(made)
+      else made.served.kept = made
     }
   }
 
@@ -6969,6 +6970,7 @@ const setup = (
       if (entry.container !== undefined) unpark(entry.author, entry.container)
     }
     entry.container = entry.at = undefined
+    unserve(entry)
   }
 
   const blankText = (range: Range | undefined): RText => {
@@ -6994,18 +6996,27 @@ const setup = (
     env: Env,
     range: Range | undefined
   ): RChild | RFallback => {
-    if (range !== undefined && !range.claimed) {
-      removeRange(range)
-      created++
-    }
     const inner = entry.inner
     const from = entry.at
     const wasKept = entry.container !== undefined || from !== undefined && inner._tag === "Child" && isKept(inner.inst)
-    pull(entry)
-    entry.at = at
     const failure = inner._tag === "Fallback"
       ? (inner.status as { readonly cause: Cause.Cause<unknown> }).cause
       : inner.inst.failure
+    if (range !== undefined && !range.claimed && entry.served !== undefined && failure === undefined) {
+      if (!(inner as RChild).inst.waiting) {
+        host.remove(range.open)
+        host.remove(range.close)
+      }
+      range.claimed = true
+      unserve(entry)
+    } else {
+      if (range !== undefined && !range.claimed) {
+        removeRange(range)
+        created++
+      }
+      pull(entry)
+    }
+    entry.at = at
     if (failure !== undefined) {
       if (inner._tag === "Fallback" && from !== undefined) closeAll(entry.drawer, inner)
       entry.drawer = inst
@@ -7472,7 +7483,10 @@ const setup = (
         if (leaves && waitingState !== undefined) {
           for (const path of Array.from(waitingState.keys())) if (!hydrating?.drawn.has(path)) dropWaiting(path)
         }
-        if (leaves) restoredAt = instancesMade
+        if (leaves) {
+          restoredAt = instancesMade
+          wake()
+        }
         addWaiting(hooks.restore("~kept" + rootPath))
       },
       report

@@ -329,10 +329,14 @@ describe("scoped children in a receiver that waits for its Layer", () => {
   const Field = Component.define({
     name: "Field",
     scoped: true,
-    model: Schema.Null,
-    message: Schema.Never,
+    model: Schema.String,
+    message: Schema.String,
     elements: Html
-  }).make({ init: () => null, update: (model) => model, view: (_, h) => h.input.value("server") })
+  }).make({
+    init: () => "server",
+    update: (_, text) => text,
+    view: (text, h) => h.input.value(text).onInput(({ value }) => value)
+  })
   const Box = Component.define({
     name: "Box",
     scoped: false,
@@ -371,6 +375,7 @@ describe("scoped children in a receiver that waits for its Layer", () => {
       const root = yield* BrowserHost.mountEffect(Page, {}, app, { state })
       yield* open
       yield* root.adopted
+      yield* tick
       assert.strictEqual(app.querySelector("input"), field)
       assert.strictEqual(field.value, "typed")
     }).pipe(Effect.scoped))
@@ -388,6 +393,96 @@ describe("scoped children in a receiver that waits for its Layer", () => {
       yield* root.adopted
       assert.strictEqual(app.querySelector("input"), field)
       assert.strictEqual(field.value, "typed")
+    }).pipe(Effect.scoped))
+
+  const stopping = (placed: "by a forwarded builder" | "by a headless child's view", how: "unplaced" | "omitted") => {
+    let inits = 0
+    const DraftMsg = UiSchema.TaggedEnum({ Bump: {} })
+    const Draft = Component.define({
+      name: "Draft",
+      scoped: true,
+      model: Schema.String,
+      message: DraftMsg,
+      receives: ["Bump"],
+      elements: Html
+    }).make({
+      init: () => inits++ === 0 ? "server draft" : "client draft",
+      update: (draft) => draft + "!",
+      view: (draft, h) => h.p(draft)
+    })
+    const DraftRef = Draft.ref("d")
+    return Component.define({
+      name: "StoppingPage",
+      scoped: false,
+      model: Schema.Literals(["show", "hide", "remove"]),
+      message: Schema.Literals(["show", "hide", "remove", "bump"]),
+      elements: Html
+    }).make({
+      init: () => "show" as const,
+      update: (_, message, $) => message === "bump" ? $.send(DraftRef, DraftMsg.Bump()) : message,
+      view: (state, h) =>
+        h.scoped(({ model }) => model !== undefined, (s) => {
+          const shown = state === "show"
+          const field = Field(s, { key: "f" })
+          const draft = shown || how === "unplaced" ? Draft(s, { ref: DraftRef }) : null
+          const body = placed === "by a forwarded builder"
+            ? h.label.forward((label) => h.div(label, field, shown ? draft : null))
+            : Box(h, { key: "box", view: () => h.div(field, shown ? draft : null) })
+          return h.main(state === "remove" ? null : Gated(h, { key: "g", slots: { body } }))
+        })
+    })
+  }
+
+  it.effect.each(
+    [
+      ["by a forwarded builder", "unplaced"],
+      ["by a forwarded builder", "omitted"],
+      ["by a headless child's view", "unplaced"],
+      ["by a headless child's view", "omitted"]
+    ] as const
+  )(
+    "get a message while the slot, drawn %s, stops drawing them (%s) and keeps the field it still draws",
+    ([placed, how]) =>
+      Effect.gen(function*() {
+        const Page = stopping(placed, how)
+        const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Page, {}))
+        const field = app.querySelector("input")!
+        field.value = "typed"
+        const root = yield* BrowserHost.mountEffect(Page, {}, app, { state })
+        root.send("hide")
+        yield* tick
+        root.send("bump")
+        yield* tick
+        yield* open
+        yield* root.adopted
+        assert.strictEqual(app.querySelector("input"), field)
+        assert.strictEqual(field.value, "typed")
+        assert.isNull(app.querySelector("p"))
+        root.send("show")
+        yield* tick
+        assert.strictEqual(app.querySelector("p")?.textContent, "server draft!")
+      }).pipe(Effect.scoped)
+  )
+
+  it.effect("get a message once the receiver is removed while it waits, and are drawn again as they were", () =>
+    Effect.gen(function*() {
+      const Page = stopping("by a forwarded builder", "unplaced")
+      const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Page, {}))
+      const field = app.querySelector("input")!
+      field.value = "typed"
+      const root = yield* BrowserHost.mountEffect(Page, {}, app, { state })
+      root.send("remove")
+      yield* tick
+      root.send("bump")
+      yield* tick
+      yield* open
+      yield* root.adopted
+      assert.isNull(app.querySelector("input"))
+      root.send("show")
+      yield* tick
+      assert.strictEqual(app.querySelector("input"), field)
+      assert.strictEqual(field.value, "typed")
+      assert.strictEqual(app.querySelector("p")?.textContent, "server draft!")
     }).pipe(Effect.scoped))
 
   const moving = () => {
