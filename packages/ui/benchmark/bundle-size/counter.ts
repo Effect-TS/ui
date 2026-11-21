@@ -4,7 +4,13 @@ import { Effect, Layer, Schema } from "effect"
 
 const Message = UiSchema.TaggedEnum({ Increment: {}, Decrement: {} })
 
-const Counter = Component.define({ name: "Counter", model: Schema.Number, message: Message, elements: Html }).make({
+const Counter = Component.define({
+  name: "Counter",
+  scoped: false,
+  model: Schema.Number,
+  message: Message,
+  elements: Html
+}).make({
   init: () => 0,
   update: (model, message) => message._tag === "Increment" ? model + 1 : model - 1,
   view: (model, h) =>

@@ -44,6 +44,7 @@
  *
  * const App = Component.define({
  *   name: "App",
+ *   scoped: false,
  *   props: Schema.Struct({ route: AppRoute }),
  *   model: AppRoute,
  *   message: Message,

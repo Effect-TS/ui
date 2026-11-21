@@ -58,6 +58,7 @@
  *
  * const App = Component.define({
  *   name: "App",
+ *   scoped: false,
  *   props: Schema.Struct({ route: AppRoute }),
  *   model: Schema.Struct({ route: AppRoute }),
  *   message: Message
@@ -570,6 +571,7 @@ export const currentRoute = <U extends Routes>(routes: U): Effect.Effect<U["Type
  *
  * const App = Component.define({
  *   name: "App",
+ *   scoped: false,
  *   props: Schema.Struct({ route: AppRoute }),
  *   model: AppRoute,
  *   message: Schema.Never
@@ -743,7 +745,7 @@ const PageTypeId = "~@effect/ui/Router/Page" as const
  */
 export interface Page<out R = never> {
   readonly [PageTypeId]: { readonly _R: Types.Covariant<R> }
-  readonly component: Component.Any
+  readonly component: Component.AnyRoot
   readonly props: unknown
 }
 
@@ -788,7 +790,7 @@ interface ErasedPage {
  * @category subscriptions
  * @since 0.1.0
  */
-export const page = <C extends Component.Any>(
+export const page = <C extends Component.AnyRoot>(
   component: C & PageInput<C>,
   ...props: {} extends Component.Props<C> ? [props?: Component.Props<C>] : [props: Component.Props<C>]
 ): Page<PageRequirements<C>> => ({ [PageTypeId]: pageVariance, component, props: props[0] ?? {} })
@@ -878,6 +880,7 @@ type PageRequirement<P> = P extends Page<infer R> ? R : never
  *
  * const Person = Component.define({
  *   name: "Person",
+ *   scoped: false,
  *   props: Schema.Struct({ id: Schema.Number }),
  *   model: Schema.Struct({}),
  *   message: Schema.Never,

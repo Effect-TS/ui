@@ -212,10 +212,10 @@ export type StreamTarget = Command.Definition<any, any, true, any, any> | Comman
 // A component with no messages has `Msg = never`, and its `update` can't take `any`, so it needs its own member.
 // `Rcv` is invariant, and `any` doesn't stand for `never`, so one that receives nothing needs its own members too.
 type AnyComponent =
-  | Component.Component<any, any, any, any, any, any, any, any, any>
-  | Component.Component<any, any, any, never, any, any, any, any, any>
-  | Component.Component<any, any, any, any, any, any, any, any, never>
-  | Component.Component<any, any, any, never, any, any, any, any, never>
+  | Component.Members<any, any, any, any, any, any, any, any, any>
+  | Component.Members<any, any, any, never, any, any, any, any, any>
+  | Component.Members<any, any, any, any, any, any, any, any, never>
+  | Component.Members<any, any, any, never, any, any, any, any, never>
 
 /**
  * The steps every kind of test shares. Each step runs as soon as it's
@@ -239,6 +239,7 @@ type AnyComponent =
  * const Message = UiSchema.TaggedEnum({ ClickedIncrement: {} })
  * const Counter = Component.define({
  *   name: "Counter",
+ *   scoped: false,
  *   model: Schema.Struct({ count: Schema.Number }),
  *   message: Message
  * }).make({

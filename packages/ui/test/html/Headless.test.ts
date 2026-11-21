@@ -34,6 +34,7 @@ const PickerMessage = UiSchema.TaggedEnum({
 
 const Picker = Component.define({
   name: "Picker",
+  scoped: false,
   model: Schema.Array(Schema.String),
   message: PickerMessage,
   elements: Html
@@ -88,6 +89,7 @@ const ToolbarMessage = UiSchema.TaggedEnum({
 
 const Toolbar = Component.define({
   name: "Toolbar",
+  scoped: false,
   model: Schema.Array(Schema.String),
   message: ToolbarMessage,
   elements: Html
@@ -135,6 +137,7 @@ const PlaceAnchor = Mount.make("PlaceAnchor", { args: {} }, (node: HTMLElement) 
 
 const Anchor = Component.define({
   name: "Anchor",
+  scoped: false,
   model: Schema.Number,
   message: Schema.Literal("placed"),
   elements: Html
@@ -149,6 +152,7 @@ const Anchor = Component.define({
 
 const Tip = Component.define({
   name: "Tip",
+  scoped: false,
   model: Schema.Boolean,
   message: Schema.Literal("toggle"),
   elements: Html
@@ -174,7 +178,13 @@ const flaky = { throws: false }
 // The closure's second child takes the ref `Actions` on the client only, at the path the server gave it.
 const twin = { client: false }
 const TwinActions = Menu.ref("Actions")
-const Twin = Component.define({ name: "Twin", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+const Twin = Component.define({
+  name: "Twin",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+}).make({
   init: () => null,
   update: (model) => model,
   view: (_, h) =>
@@ -192,7 +202,13 @@ const Twin = Component.define({ name: "Twin", model: Schema.Null, message: Schem
         )
     })
 })
-const TwinShell = Component.define({ name: "Shell", model: Schema.Null, message: Schema.Never, elements: Html })
+const TwinShell = Component.define({
+  name: "Shell",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+})
   .make({
     init: () => null,
     update: (model) => model,
@@ -201,6 +217,7 @@ const TwinShell = Component.define({ name: "Shell", model: Schema.Null, message:
 
 const Page = Component.define({
   name: "Page",
+  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
@@ -238,6 +255,7 @@ const Page = Component.define({
 
 const Keys = Component.define({
   name: "Keys",
+  scoped: false,
   model: Schema.Array(Schema.String),
   message: Schema.String,
   elements: Html
@@ -253,6 +271,7 @@ const Keys = Component.define({
 
 const KeysApp = Component.define({
   name: "KeysApp",
+  scoped: false,
   model: Schema.Array(Schema.String),
   message: Schema.String,
   elements: Html
@@ -279,6 +298,7 @@ const KeysApp = Component.define({
 
 const Confirm = Component.define({
   name: "Confirm",
+  scoped: false,
   model: Schema.Number,
   message: Schema.Literal("closed"),
   elements: Html
@@ -343,7 +363,13 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
     Effect.gen(function*() {
       // The closure throws once: on the server, which renders before the client mounts.
       flaky.throws = true
-      const failing = Component.define({ name: "Shell", model: Schema.Null, message: Schema.Never, elements: Html })
+      const failing = Component.define({
+        name: "Shell",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      })
         .make({
           init: () => null,
           update: (model) => model,
@@ -513,6 +539,7 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
     Effect.gen(function*() {
       const Hit = Component.define({
         name: "Hit",
+        scoped: false,
         model: Schema.Number,
         message: Schema.Literal("hit"),
         elements: Html
@@ -522,7 +549,13 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
           update: (count) => count + 1,
           parts: (_, p) => ({ button: p.part("button", (b) => b.onClick("hit", { preventDefault: true })) })
         })
-      const App = Component.define({ name: "App", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+      const App = Component.define({
+        name: "App",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
         init: () => null,
         update: (model) => model,
         view: (_, h) =>
@@ -542,6 +575,7 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
     Effect.gen(function*() {
       const Plain = Component.define({
         name: "Plain",
+        scoped: false,
         model: Schema.Null,
         message: Schema.Literal("hit"),
         elements: Html
@@ -550,7 +584,13 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
         update: (model) => model,
         parts: (_, p) => ({ button: p.part("button", (b) => b.onClick("hit")) })
       })
-      const App = Component.define({ name: "App", model: Schema.Null, message: Schema.Literal("own"), elements: Html })
+      const App = Component.define({
+        name: "App",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Literal("own"),
+        elements: Html
+      })
         .make({
           init: () => null,
           update: (model) => model,

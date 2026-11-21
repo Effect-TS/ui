@@ -10,13 +10,25 @@ import { Effect, Schema } from "effect"
 let inits = { avatar: 0, profile: 0 }
 const side = (count: number) => count === 0 ? "server" : "client"
 
-const Avatar = Component.define({ name: "Avatar", model: Schema.String, message: Schema.Never, elements: Html }).make({
+const Avatar = Component.define({
+  name: "Avatar",
+  scoped: false,
+  model: Schema.String,
+  message: Schema.Never,
+  elements: Html
+}).make({
   init: () => "avatar from the " + side(inits.avatar++),
   update: (model) => model,
   view: (text, h) => h.i(text)
 })
 
-const Profile = Component.define({ name: "Profile", model: Schema.String, message: Schema.Never, elements: Html })
+const Profile = Component.define({
+  name: "Profile",
+  scoped: false,
+  model: Schema.String,
+  message: Schema.Never,
+  elements: Html
+})
   .make({
     init: () => "draft from the " + side(inits.profile++),
     update: (model) => model,
@@ -25,6 +37,7 @@ const Profile = Component.define({ name: "Profile", model: Schema.String, messag
 
 const Settings = Component.define({
   name: "Settings",
+  scoped: false,
   model: Schema.String,
   message: UiSchema.TaggedEnum({ Show: { tab: Schema.String } }),
   elements: Html

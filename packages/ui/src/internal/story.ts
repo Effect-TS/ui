@@ -1917,7 +1917,7 @@ const isChildOf = (child: View.Child<any, any>, component: object): boolean => {
  */
 export const findChild = (
   view: View.Node<any, any>,
-  component: Component.Any | Component.Headless.Any | Feature.Any,
+  component: Component.AnyRoot | Component.Headless.Any | Feature.Any,
   key: string | Component.Ref.Any | undefined,
   step: string
 ): Occurrence => {

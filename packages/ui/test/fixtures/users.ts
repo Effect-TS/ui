@@ -142,6 +142,7 @@ export const UserCardMessage = UiSchema.TaggedEnum({
 
 export const UserCard = Component.define({
   name: "UserCard",
+  scoped: false,
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.Struct({}),
   message: UserCardMessage,
@@ -191,6 +192,7 @@ export const RenameFormMessage = UiSchema.TaggedEnum({
 
 export const RenameForm = Component.define({
   name: "RenameForm",
+  scoped: false,
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.Struct({
     draft: Schema.Option(Schema.String),
@@ -254,6 +256,7 @@ export const DetailPageMessage = UiSchema.TaggedEnum({ ToggleRename: {} })
 
 export const DetailPage = Component.define({
   name: "DetailPage",
+  scoped: false,
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.Struct({ renaming: Schema.Boolean }),
   message: DetailPageMessage,
@@ -277,6 +280,7 @@ export const ListPageMessage = UiSchema.TaggedEnum({
 
 export const ListPage = Component.define({
   name: "ListPage",
+  scoped: false,
   model: Schema.Struct({ page: Schema.Number }),
   message: ListPageMessage,
   elements: Html,
@@ -320,6 +324,7 @@ export const AppMessage = UiSchema.TaggedEnum({ RouteChanged: { route: AppRoute 
 
 export const App = Component.define({
   name: "App",
+  scoped: false,
   props: Schema.Struct({ route: AppRoute }),
   model: AppRoute,
   message: AppMessage,

@@ -63,6 +63,7 @@ import type * as Renderer from "./Renderer.ts"
  *
  * export const Counter = Component.define({
  *   name: "Counter",
+ *   scoped: false,
  *   model: Schema.Number,
  *   message: Schema.Literal("ClickedIncrement")
  * }).make({
@@ -466,6 +467,75 @@ export declare namespace Child {
    * @since 0.1.0
    */
   export type Receives<Rcv> = [Rcv] extends [ErasedReceives] ? never : Rcv
+
+  /**
+   * The options of a scoped child: `Options`, with the key and ref checked
+   * against the scope. `K` is the key as written, and `Ends` is `true`
+   * in a scope with a predicate. Without one, the key's type must be a
+   * literal, so the source fixes how many children the scope can keep, and a
+   * ref must not come from `at` with a key that isn't one.
+   *
+   * @category models
+   * @since 0.1.0
+   */
+  export type ScopedOptions<Props, Events, Msg, Rcv, K, Ends extends boolean> =
+    & (
+      | {
+        /** The child's identity among the scoped children of one component. The empty string by default. */
+        readonly key?: ScopedKey<K, Ends> | undefined
+        readonly ref?: undefined
+      }
+      | {
+        /** Names the child, so the parent can send it messages. Its key is the child's key. */
+        readonly ref: Component.Ref.For<Receives<Rcv>> & ScopedRef<Ends>
+        readonly key?: undefined
+      }
+    )
+    & {
+      /**
+       * Handle the child's events with a callback, or supply one handler per tag for tagged events.
+       * Return a parent message to dispatch it, or `undefined` to ignore the event.
+       */
+      readonly onEmit?: ((events: Events) => Msg | undefined) | EmitHandlers<Events, Msg> | undefined
+      /** Also tells the parent that the child failed. The failure stays in the child either way. */
+      readonly onFailure?: ((failure: AsyncResult.Failure<never, unknown>) => Msg | undefined) | undefined
+    }
+    & ({} extends Props ? { readonly props?: Props | undefined } : { readonly props: Props })
+}
+
+type ScopedKey<K, Ends extends boolean> = [Ends] extends [true] ? K
+  : [K] extends [never] ? K
+  : {} extends Record<K & string, 1> ? ScopedKeyHint
+  : K
+
+type ScopedRef<Ends extends boolean> = [Ends] extends [true] ? unknown : { readonly "~dynamicKey"?: false }
+
+/**
+ * The type a key takes when it needs a predicate, so the error names the fix.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type ScopedKeyHint =
+  "A scoped child whose key isn't a literal needs a predicate that says when it ends: h.scoped(($) => ..., (s) => ...)"
+
+/**
+ * `s`, what `h.scoped` gives its content: `h`, marked as written in a
+ * scope. A scoped component is called with it, and a component that isn't
+ * scoped takes it as it takes `h`. `Ends` is `true` in a scope with a
+ * predicate. A function that takes `s` types it `Scope<Msg, true>` to
+ * write children whose keys aren't literals, `Scope<Msg, false>` for a
+ * scope without a predicate, or `Scope<Msg>` for either, where keys must be
+ * literals.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Scope<Msg, out Ends extends boolean = boolean> extends Helper<Msg, unknown> {
+  /** Phantom: the brand only `h.scoped` gives. Its name is the error a scoped component called with `h` shows. */
+  readonly "written inside h.scoped((s) => ...)": Ends
 }
 
 type EventTag<Events> = Events extends { readonly _tag: infer T extends string } ? T : never

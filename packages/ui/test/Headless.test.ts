@@ -33,6 +33,7 @@ const PickerMessage = UiSchema.TaggedEnum({
 
 const Picker = Component.define({
   name: "Picker",
+  scoped: false,
   model: Schema.Array(Schema.String),
   message: PickerMessage,
   elements: Html
@@ -81,6 +82,7 @@ const BellMessage = UiSchema.TaggedEnum({ Ring: {}, Break: {} })
 
 const Bell = Component.define({
   name: "Bell",
+  scoped: false,
   model: Schema.Number,
   message: BellMessage,
   events: Schema.Literal("rang"),
@@ -105,6 +107,7 @@ const BoardMessage = UiSchema.TaggedEnum({ Rang: {}, Failed: {} })
 
 const Board = Component.define({
   name: "Board",
+  scoped: false,
   props: Schema.Struct({ fallbackThrows: Schema.Boolean }),
   model: Schema.Array(Schema.String),
   message: BoardMessage,
@@ -142,11 +145,12 @@ const Linger = Command.make(
   { args: {} },
   () => Effect.onInterrupt(Effect.never, () => Deferred.await(lingering.release))
 )
-const Lingering = Component.define({ name: "Lingering", model: Schema.Null, message: Schema.Never }).make({
-  init: ($) => $.set(null).run(Linger()),
-  update: (model) => model,
-  view: (_, h) => h.el("span")
-})
+const Lingering = Component.define({ name: "Lingering", scoped: false, model: Schema.Null, message: Schema.Never })
+  .make({
+    init: ($) => $.set(null).run(Linger()),
+    update: (model) => model,
+    view: (_, h) => h.el("span")
+  })
 
 const OpenerMessage = UiSchema.TaggedEnum({ Open: {}, Twin: {}, Swap: {} })
 
@@ -160,6 +164,7 @@ const Spare = Menu.ref("Spare")
  */
 const Opener = Component.define({
   name: "Opener",
+  scoped: false,
   props: Schema.Struct({ twin: Schema.Literals(["never", "mount", "open"]) }),
   model: Schema.Struct({ twin: Schema.Boolean, swapped: Schema.Boolean }),
   message: OpenerMessage,
@@ -212,12 +217,13 @@ const Opener = Component.define({
 // ---------------------------------------------------------------------------
 
 class Badge extends Feature.Service<Badge>()("Badge", { props: Schema.Struct({}) }) {}
-const BadgeImpl = Component.define({ name: "BadgeImpl", model: Schema.Null, message: Schema.Never }).make({
-  init: () => null,
-  update: (model) => model,
-  view: (_, h) => h.el("span", "badge")
-})
-const Bare = Component.define({ name: "Bare", model: Schema.Null, message: Schema.Never }).make({
+const BadgeImpl = Component.define({ name: "BadgeImpl", scoped: false, model: Schema.Null, message: Schema.Never })
+  .make({
+    init: () => null,
+    update: (model) => model,
+    view: (_, h) => h.el("span", "badge")
+  })
+const Bare = Component.define({ name: "Bare", scoped: false, model: Schema.Null, message: Schema.Never }).make({
   init: () => null,
   update: (model) => model,
   parts: () => ({})
@@ -225,6 +231,7 @@ const Bare = Component.define({ name: "Bare", model: Schema.Null, message: Schem
 const ConsumerMessage = UiSchema.TaggedEnum({ Break: {} })
 const Consumer = Component.define({
   name: "Consumer",
+  scoped: false,
   props: Schema.Struct({ throwsAt: Schema.Literals(["mount", "re-render"]) }),
   model: Schema.Boolean,
   message: ConsumerMessage
@@ -255,6 +262,7 @@ const Provided = Component.provide(
 )
 const Waiting = Component.define({
   name: "Waiting",
+  scoped: false,
   props: Schema.Struct({ throwsAt: Schema.Literals(["mount", "re-render"]) }),
   model: Schema.Null,
   message: Schema.Never
@@ -273,7 +281,13 @@ const Waiting = Component.define({
 // Token lists: a part adds to the consumer's class and aria-describedby
 // ---------------------------------------------------------------------------
 
-const Field = Component.define({ name: "Field", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+const Field = Component.define({
+  name: "Field",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+}).make({
   init: () => null,
   update: (model) => model,
   parts: (_, p) => ({
@@ -284,7 +298,13 @@ const Field = Component.define({ name: "Field", model: Schema.Null, message: Sch
   })
 })
 
-const Form = Component.define({ name: "Form", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+const Form = Component.define({
+  name: "Form",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+}).make({
   init: () => null,
   update: (model) => model,
   // One list set before the part is applied, and one after.
@@ -297,6 +317,7 @@ const Form = Component.define({ name: "Form", model: Schema.Null, message: Schem
 
 const Shell = Component.define({
   name: "Shell",
+  scoped: false,
   props: Schema.Struct({ fallbackThrows: Schema.Boolean }),
   model: Schema.Null,
   message: Schema.Never,
@@ -414,7 +435,13 @@ describe("headless components", () => {
 
     it.effect("fail the parent for a closure inside another closure", () =>
       provideHost(Effect.gen(function*() {
-        const Nested = Component.define({ name: "Nested", model: Schema.Null, message: Schema.Never, elements: Html })
+        const Nested = Component.define({
+          name: "Nested",
+          scoped: false,
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        })
           .make({
             init: () => null,
             update: (model) => model,
@@ -471,6 +498,7 @@ describe("headless components", () => {
     provideHost(Effect.gen(function*() {
       const Control = Component.define({
         name: "Control",
+        scoped: false,
         props: Schema.Struct({ active: Schema.Boolean }),
         model: Schema.Null,
         message: Schema.Never,
@@ -490,6 +518,7 @@ describe("headless components", () => {
       })
       const Consumer = Component.define({
         name: "Consumer",
+        scoped: false,
         model: Schema.Boolean,
         message: Schema.Literal("toggle"),
         elements: Html
@@ -525,7 +554,12 @@ describe("headless components", () => {
 
   it.effect("an element written by hand leaves owned out", () =>
     provideHost(Effect.gen(function*() {
-      const Hand = Component.define({ name: "Hand", model: Schema.Number, message: Schema.Literal("hit") }).make({
+      const Hand = Component.define({
+        name: "Hand",
+        scoped: false,
+        model: Schema.Number,
+        message: Schema.Literal("hit")
+      }).make({
         init: () => 0,
         update: (count) => count + 1,
         view: (count): View.Element<"hit"> => ({

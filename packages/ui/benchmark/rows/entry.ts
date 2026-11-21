@@ -25,7 +25,7 @@ const Message = UiSchema.TaggedEnum({
   Remove: { id: Schema.Number }
 })
 
-const app = { name: "Table", model: Model, message: Message, elements: Html } as const
+const app = { name: "Table", scoped: false, model: Model, message: Message, elements: Html } as const
 const TableDef = Component.define(app)
 
 const lazyRow = (h: Component.Helper<typeof TableDef>, row: typeof Row.Type, selected: boolean) =>
@@ -45,6 +45,7 @@ const lazyRow = (h: Component.Helper<typeof TableDef>, row: typeof Row.Type, sel
 const RowMessage = UiSchema.TaggedEnum({ Select: {}, Remove: {} })
 const RowView = Component.define({
   name: "Row",
+  scoped: false,
   props: Schema.Struct({ row: Row, selected: Schema.Boolean }),
   model: Schema.Null,
   message: RowMessage,

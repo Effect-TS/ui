@@ -20,6 +20,7 @@ const Editor = NoteEditor.ref("Editor")
 
 export const NotePageNoDeps = Component.define({
   name: "NotePage",
+  scoped: false,
   props: Schema.Struct({ id: Schema.String }),
   // The Model holds no copy of the note. The runtime keeps each query's
   // last result beside the Model, and the Model plus the query results is

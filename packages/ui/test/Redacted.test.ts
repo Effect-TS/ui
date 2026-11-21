@@ -32,6 +32,7 @@ class GetFailing extends Query.Service<GetFailing>()(
 /** A Redacted in a query's args, in its error, and in a keyed query's args. */
 const ByArgs = Component.define({
   name: "ByArgs",
+  scoped: false,
   model: Schema.Number,
   message: Schema.Never,
   queries: { value: { query: GetByKey, args: () => ({ key: Redacted.make("args-secret") }) } }
@@ -42,6 +43,7 @@ const ByArgs = Component.define({
 })
 const ByError = Component.define({
   name: "ByError",
+  scoped: false,
   model: Schema.Number,
   message: Schema.Never,
   queries: { value: { query: GetFailing, args: () => ({}) } }
@@ -52,6 +54,7 @@ const ByError = Component.define({
 })
 const ByKeys = Component.define({
   name: "ByKeys",
+  scoped: false,
   model: Schema.Number,
   message: Schema.Never,
   queries: { value: { queryMany: GetByKey, args: () => [{ key: Redacted.make("keyed-secret") }] } }
@@ -63,6 +66,7 @@ const ByKeys = Component.define({
 
 const Secret = Component.define({
   name: "Secret",
+  scoped: false,
   model: Schema.Struct({ token: Schema.Redacted(Schema.String), n: Schema.Number }),
   message: Schema.Never
 }).make({
@@ -73,6 +77,7 @@ const Secret = Component.define({
 
 const Loaded = Component.define({
   name: "Loaded",
+  scoped: false,
   model: Schema.Number,
   message: Schema.Never,
   queries: { token: { query: GetToken, args: () => ({}) } }
@@ -109,26 +114,27 @@ const legacyState = (component: Component.Any, model: unknown) => {
   return Schema.encodeUnknownSync(codec)({ model, queries: bound.empty })
 }
 
-const Plain = Component.define({ name: "Plain", model: Schema.Number, message: Schema.Never }).make({
+const Plain = Component.define({ name: "Plain", scoped: false, model: Schema.Number, message: Schema.Never }).make({
   init: () => 1,
   update: (n) => n,
   view: (n, h) => h.text(String(n))
 })
 
-const QueryPage = Component.define({ name: "QueryPage", model: Schema.Null, message: Schema.Never }).make({
-  init: () => null,
-  update: (model) => model,
-  view: (_, h) =>
-    h.el(
-      "main",
-      ByArgs(h, { key: "args" }),
-      ByError(h, { key: "error" }),
-      ByKeys(h, { key: "keys" }),
-      Plain(h, { key: "plain" })
-    )
-})
+const QueryPage = Component.define({ name: "QueryPage", scoped: false, model: Schema.Null, message: Schema.Never })
+  .make({
+    init: () => null,
+    update: (model) => model,
+    view: (_, h) =>
+      h.el(
+        "main",
+        ByArgs(h, { key: "args" }),
+        ByError(h, { key: "error" }),
+        ByKeys(h, { key: "keys" }),
+        Plain(h, { key: "plain" })
+      )
+  })
 
-const Page = Component.define({ name: "Page", model: Schema.Null, message: Schema.Never }).make({
+const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
   init: () => null,
   update: (model) => model,
   view: (_, h) =>
@@ -230,13 +236,18 @@ describe("Redacted state", () => {
 
   it.effect("serialises a suspended or recursive Schema without a Redacted, and finds one behind a suspend", () =>
     Effect.gen(function*() {
-      const Lazy = Component.define({ name: "Lazy", model: Schema.suspend(() => Schema.Number), message: Schema.Never })
+      const Lazy = Component.define({
+        name: "Lazy",
+        scoped: false,
+        model: Schema.suspend(() => Schema.Number),
+        message: Schema.Never
+      })
         .make({ init: () => 1, update: (n) => n, view: (n, h) => h.text(String(n)) })
       const rendered = yield* Renderer.prerender(Lazy, {}).pipe(Effect.provide(Logger.layer([])))
       assert.deepStrictEqual(rendered.state["~deferred"], [])
       assert.strictEqual(rendered.state["/Lazy"], 1)
       const component = (model: Schema.Codec<any, any>) =>
-        Component.define({ name: "Tree", model, message: Schema.Never }).make({
+        Component.define({ name: "Tree", scoped: false, model, message: Schema.Never }).make({
           init: () => null as any,
           update: (m) => m,
           view: (_, h) => h.text("")

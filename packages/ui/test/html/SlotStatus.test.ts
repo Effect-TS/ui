@@ -10,7 +10,13 @@ import { TestClock } from "effect/testing"
 import { describe } from "vitest"
 
 class Editor extends Feature.Service<Editor>()("SlotStatus/HtmlEditor", { props: Schema.Struct({}) }) {}
-const EditorView = Component.define({ name: "EditorView", model: Schema.Null, message: Schema.Never, elements: Html })
+const EditorView = Component.define({
+  name: "EditorView",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+})
   .make({
     init: () => null,
     update: (model) => model,
@@ -21,11 +27,12 @@ const shown = (result: AsyncResult.AsyncResult<never, unknown>) =>
   AsyncResult.isFailure(result) ? Cause.pretty(result.cause) : "loading"
 
 const Message = UiSchema.TaggedEnum({ Failed: {} })
-const Page = Component.define({ name: "Page", model: Schema.String, message: Message, elements: Html }).make({
-  init: () => "fine",
-  update: () => "failed",
-  view: (_, h) => h.div(Editor.render(h, { key: "e", props: {}, fallback: (result) => h.p(shown(result)) }))
-})
+const Page = Component.define({ name: "Page", scoped: false, model: Schema.String, message: Message, elements: Html })
+  .make({
+    init: () => "fine",
+    update: () => "failed",
+    view: (_, h) => h.div(Editor.render(h, { key: "e", props: {}, fallback: (result) => h.p(shown(result)) }))
+  })
 const slot = "/Page/SlotStatus/HtmlEditor[e]"
 
 /** The text a view shows. */

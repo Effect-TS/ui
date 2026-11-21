@@ -84,6 +84,7 @@
  *
  * const Counter = Component.define({
  *   name: "Counter",
+ *   scoped: false,
  *   model: Schema.Number,
  *   message: Message,
  *   elements: Html
@@ -1396,6 +1397,7 @@ export interface MountOptions<V extends View.Elements, RF = never> {
  *
  * const App = Component.define({
  *   name: "App",
+ *   scoped: false,
  *   model: Schema.Struct({}),
  *   message: Schema.Never,
  *   elements: Html
@@ -1425,7 +1427,7 @@ export const mount = <
   RP = never,
   Rcv = never
 >(
-  component: Component.Component<Name, Props, Model, Msg, Events, R, V, any, Rcv> & HtmlRoot<V>,
+  component: Component.Members<Name, Props, Model, Msg, Events, R, V, any, Rcv> & HtmlRoot<V>,
   props: Props | Effect.Effect<Props, never, RP>,
   container: globalThis.Element,
   options?: MountOptions<V, RF>
@@ -1462,7 +1464,7 @@ export const mountEffect = <
   RP = never,
   Rcv = never
 >(
-  component: Component.Component<Name, Props, Model, Msg, Events, R, V, any, Rcv> & HtmlRoot<V>,
+  component: Component.Members<Name, Props, Model, Msg, Events, R, V, any, Rcv> & HtmlRoot<V>,
   props: Props | Effect.Effect<Props, never, RP>,
   container: globalThis.Element,
   options?: MountOptions<V, RF>

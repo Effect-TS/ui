@@ -32,6 +32,7 @@
  *
  * const TodoItem = Component.define({
  *   name: "TodoItem",
+ *   scoped: false,
  *   props: Schema.Struct({ todo: Todo }),
  *   model: Schema.Struct({}),
  *   message: TodoItemMessage,
@@ -329,7 +330,7 @@ export type RefTypeId = typeof RefTypeId
  * @category models
  * @since 0.1.0
  */
-export interface Ref<in out Rcv> {
+export interface Ref<in out Rcv, out Dynamic extends boolean = boolean> {
   readonly [RefTypeId]: { readonly _Rcv: Types.Invariant<Rcv> }
   /** The name the ref was made with. */
   readonly name: string
@@ -337,9 +338,18 @@ export interface Ref<in out Rcv> {
   readonly key: string
   /** The Schema of the messages the child receives. */
   readonly receives: Schema.Codec<Rcv, any>
+  /**
+   * Phantom: `true` once `at` was given a key whose type isn't a literal. A
+   * scope with no predicate takes only refs where this is `false`.
+   */
+  readonly "~dynamicKey"?: Dynamic
   /** A ref for one row: `Row.at(id)`. */
-  readonly at: (key: string | number) => Ref<Rcv>
+  readonly at: <const K extends string | number>(key: K) => Ref<Rcv, Dynamic | DynamicKey<K>>
 }
+
+type DynamicKey<K extends string | number> = IsLiteral<`${K}`> extends true ? false : true
+
+type IsLiteral<K> = [K] extends [never] ? true : {} extends Record<K & string, 1> ? false : true
 
 /**
  * Types for refs: the erased form, and the ref a component or feature hands
@@ -416,7 +426,7 @@ export declare namespace Ref {
    * @category utility types
    * @since 0.1.0
    */
-  export type Of<Rcv> = 0 extends 1 & Rcv ? Any : Ref<Rcv>
+  export type Of<Rcv> = 0 extends 1 & Rcv ? Any : Ref<Rcv, false>
 }
 
 /**
@@ -973,88 +983,8 @@ const toNext = (result: unknown): Next<any, any, any, any> =>
  * @since 0.1.0
  */
 export interface Mountable<in out Props, out Events, out R = never, in Rcv = never, in Sl extends string = never>
-  extends Pipeable.Pipeable
-{
-  /**
-   * Declares a child of this component in a parent's view, from the parent's
-   * `h`, which types `onEmit`, `onFailure` and `fallback` against the
-   * parent's message type. The component's requirements, and the fallback's,
-   * surface in the parent's. A component whose props are erased, such as a
-   * `Component.Any`, takes `props` even when it needs none.
-   */
-  // The type parameters don't depend on the component, so a union of
-  // components without slots is callable. `SC` is the slots map as passed:
-  // `SlotOptions` checks its names and content, since a constraint that
-  // failed would stand in for it and accept the map. With `Msg` given and
-  // `SC` not, `SC` isn't inferred, and nothing could check the map's names
-  // or requirements, so the call takes no slots.
-  <Msg, RF = never, const SC extends object = never>(
-    h: View.Helper<Msg, unknown>,
-    options:
-      & View.Child.Options<Props, Events, NoInfer<Msg>, Rcv>
-      & {
-        /** Shown if the child fails, until its key changes. Without it, the child is blank. */
-        readonly fallback?:
-          | ((result: AsyncResult.Failure<never, unknown>) => View.Content<NoInfer<Msg>, RF>)
-          | undefined
-      }
-      & SlotOptions<Sl, SC, NoInfer<Msg>>
-      // Erased props are required, so every component is a `Component.Any`:
-      // its options must fit every component's, including one whose props
-      // are required.
-      & (0 extends 1 & Props ? { readonly props: Props } : {})
-  ): View.Child<Msg, R | NoInfer<RF> | SlotRequirements<SC>>
-  readonly [TypeId]: Mountable.Variance<Props, Events, R, Rcv, Sl>
-  /** What `define` returned. `provide` keeps it, so `definition.name` is the name the component was defined with. */
-  readonly definition: Definition.Any
-  readonly props: Schema.Codec<Props, any>
-  readonly model: Schema.Codec<any, any>
-  readonly message: Schema.Codec<any, any>
-  readonly events: Schema.Codec<Events, any>
-  readonly init: (props: Props) => Next<any, any, Events, R>
-  /** `queries` is the instance's query results. Without it every result is empty. */
-  readonly update: (model: any, msg: never, props: Props, queries?: Results | undefined) => Next<any, any, Events, R>
-  /** `running` answers `h.isRunning` for the instance being rendered. Without it nothing is running. */
-  readonly view: (
-    model: any,
-    props: Props,
-    running?: ((name: string, groupKey: string | undefined) => boolean) | undefined,
-    queries?: Results | undefined,
-    /** The instance's path, which `h.id` derives ids from. Without it, the root path `/<name>`. */
-    path?: string | undefined,
-    /** Answers `h.shared`: an owner's current value. Without it, a component that reads shared state throws. */
-    shared?: SharedLookup | undefined,
-    /** Where `h.lazy` keeps its nodes between renders. Without it, `h.lazy` builds every time. */
-    lazy?: View.LazyStore | undefined
-  ) => View.Node<any, R>
-  readonly subscriptions:
-    | ((model: any, props: Props, queries?: Results | undefined) => ReadonlyArray<Subscription.Subscription<any, R>>)
-    | undefined
-  /** The instance's head entries, a pure function of its Model, props and queries. */
-  readonly head: ((model: any, props: Props, queries?: Results | undefined) => ReadonlyArray<unknown>) | undefined
-  /** Maps the folded head of the instance and everything its view placed, a pure function of its Model. */
-  readonly reduceHead: ((model: any, below: any) => unknown) | undefined
-  /** The component's vocabulary: its `elements` override, else the registered one. Read lazily. */
-  readonly elements: () => View.Vocabulary<any> | undefined
-  /**
-   * Set by `provide`: the Layer built for each instance, in its Scope. Descendants inherit its services.
-   * `keys` is what `layerKeys` read, one value per keyed provide, and empty without one.
-   */
-  readonly layer: ((props: Props, keys: ReadonlyArray<unknown>) => Layer.Layer<any, any, any>) | undefined
-  /**
-   * Set by a keyed `provide`: the key of each, innermost first. The instance's Layer is built again
-   * when any of them changes by `Equal.equals`.
-   */
-  readonly layerKeys: ReadonlyArray<(props: Props, model: any) => unknown> | undefined
-  /** Set by `provide`: maps a provided Layer's failure to one of this component's messages. */
-  readonly layerFailure: ((failure: AsyncResult.Failure<never, any>) => any) | undefined
-  /** Set by `provide` when every provided Layer is a value: shared by every instance resolving from one Env. */
-  readonly sharedLayer: Layer.Layer<any, any, any> | undefined
-  /** `false` when a `provide` opted out of the server: the server never builds the Layer and defers the instance. */
-  readonly layerOnServer: boolean
-  /** The bound `queries`, read by the runtime and `Story`. `undefined` without any. */
-  readonly "~queries": unknown
-}
+  extends Mountable.Members<Props, Events, R, Rcv, Sl>, Mountable.Call<Props, Events, R, Rcv, Sl>
+{}
 
 /**
  * An instance's query results, by query name. Opaque: only the runtime and
@@ -1073,6 +1003,106 @@ export type Results = { readonly [name: string]: unknown }
  * @since 0.1.0
  */
 export declare namespace Mountable {
+  /**
+   * What every component has, whatever its call takes: `Mountable` without
+   * its call signature, which a scoped component shares too.
+   *
+   * @category models
+   * @since 0.1.0
+   */
+  export interface Members<in out Props, out Events, out R = never, in Rcv = never, in Sl extends string = never>
+    extends Pipeable.Pipeable
+  {
+    readonly [TypeId]: Mountable.Variance<Props, Events, R, Rcv, Sl>
+    /** What `define` returned. `provide` keeps it, so `definition.name` is the name the component was defined with. */
+    readonly definition: Definition.Any
+    readonly props: Schema.Codec<Props, any>
+    readonly model: Schema.Codec<any, any>
+    readonly message: Schema.Codec<any, any>
+    readonly events: Schema.Codec<Events, any>
+    readonly init: (props: Props) => Next<any, any, Events, R>
+    /** `queries` is the instance's query results. Without it every result is empty. */
+    readonly update: (model: any, msg: never, props: Props, queries?: Results | undefined) => Next<any, any, Events, R>
+    /** `running` answers `h.isRunning` for the instance being rendered. Without it nothing is running. */
+    readonly view: (
+      model: any,
+      props: Props,
+      running?: ((name: string, groupKey: string | undefined) => boolean) | undefined,
+      queries?: Results | undefined,
+      /** The instance's path, which `h.id` derives ids from. Without it, the root path `/<name>`. */
+      path?: string | undefined,
+      /** Answers `h.shared`: an owner's current value. Without it, a component that reads shared state throws. */
+      shared?: SharedLookup | undefined,
+      /** Where `h.lazy` keeps its nodes between renders. Without it, `h.lazy` builds every time. */
+      lazy?: View.LazyStore | undefined
+    ) => View.Node<any, R>
+    readonly subscriptions:
+      | ((model: any, props: Props, queries?: Results | undefined) => ReadonlyArray<Subscription.Subscription<any, R>>)
+      | undefined
+    /** The instance's head entries, a pure function of its Model, props and queries. */
+    readonly head: ((model: any, props: Props, queries?: Results | undefined) => ReadonlyArray<unknown>) | undefined
+    /** Maps the folded head of the instance and everything its view placed, a pure function of its Model. */
+    readonly reduceHead: ((model: any, below: any) => unknown) | undefined
+    /** The component's vocabulary: its `elements` override, else the registered one. Read lazily. */
+    readonly elements: () => View.Vocabulary<any> | undefined
+    /**
+     * Set by `provide`: the Layer built for each instance, in its Scope. Descendants inherit its services.
+     * `keys` is what `layerKeys` read, one value per keyed provide, and empty without one.
+     */
+    readonly layer: ((props: Props, keys: ReadonlyArray<unknown>) => Layer.Layer<any, any, any>) | undefined
+    /**
+     * Set by a keyed `provide`: the key of each, innermost first. The instance's Layer is built again
+     * when any of them changes by `Equal.equals`.
+     */
+    readonly layerKeys: ReadonlyArray<(props: Props, model: any) => unknown> | undefined
+    /** Set by `provide`: maps a provided Layer's failure to one of this component's messages. */
+    readonly layerFailure: ((failure: AsyncResult.Failure<never, any>) => any) | undefined
+    /** Set by `provide` when every provided Layer is a value: shared by every instance resolving from one Env. */
+    readonly sharedLayer: Layer.Layer<any, any, any> | undefined
+    /** `false` when a `provide` opted out of the server: the server never builds the Layer and defers the instance. */
+    readonly layerOnServer: boolean
+    /** The bound `queries`, read by the runtime and `Story`. `undefined` without any. */
+    readonly "~queries": unknown
+  }
+
+  /**
+   * The call signature of a component that isn't scoped.
+   *
+   * @category models
+   * @since 0.1.0
+   */
+  export interface Call<in out Props, out Events, out R = never, in Rcv = never, in Sl extends string = never> {
+    /**
+     * Declares a child of this component in a parent's view, from the parent's
+     * `h`, which types `onEmit`, `onFailure` and `fallback` against the
+     * parent's message type. The component's requirements, and the fallback's,
+     * surface in the parent's. A component whose props are erased, such as a
+     * `Component.Any`, takes `props` even when it needs none.
+     */
+    // The type parameters don't depend on the component, so a union of
+    // components without slots is callable. `SC` is the slots map as passed:
+    // `SlotOptions` checks its names and content, since a constraint that
+    // failed would stand in for it and accept the map. With `Msg` given and
+    // `SC` not, `SC` isn't inferred, and nothing could check the map's names
+    // or requirements, so the call takes no slots.
+    <Msg, RF = never, const SC extends object = never>(
+      h: View.Helper<Msg, unknown>,
+      options:
+        & View.Child.Options<Props, Events, NoInfer<Msg>, Rcv>
+        & {
+          /** Shown if the child fails, until its key changes. Without it, the child is blank. */
+          readonly fallback?:
+            | ((result: AsyncResult.Failure<never, unknown>) => View.Content<NoInfer<Msg>, RF>)
+            | undefined
+        }
+        & SlotOptions<Sl, SC, NoInfer<Msg>>
+        // Erased props are required, so every component is a `Component.Any`:
+        // its options must fit every component's, including one whose props
+        // are required.
+        & (0 extends 1 & Props ? { readonly props: Props } : {})
+    ): View.Child<Msg, R | NoInfer<RF> | SlotRequirements<SC>>
+  }
+
   /**
    * Phantom variance for a component's props, events, requirements and the
    * messages it receives.
@@ -1107,7 +1137,49 @@ export interface Component<
   out L = {},
   in out Rcv = never,
   in Sl extends string = never
-> extends Mountable<Props, Events, R, Rcv, Sl> {
+> extends Members<Name, Props, Model, Msg, Events, R, V, L, Rcv, Sl>, Mountable.Call<Props, Events, R, Rcv, Sl> {}
+
+/**
+ * A component defined with `scoped: true`: the same as a `Component`, but
+ * written inside `h.scoped`, with the `s` it gives, in place of `h`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface ScopedComponent<
+  out Name extends string,
+  in out Props,
+  in out Model,
+  in out Msg,
+  out Events,
+  out R = never,
+  out V extends View.Elements = never,
+  out L = {},
+  in out Rcv = never,
+  in Sl extends string = never
+> extends Members<Name, Props, Model, Msg, Events, R, V, L, Rcv, Sl>, Scoped.Call<Props, Events, R, Rcv, Sl> {}
+
+/**
+ * What a component has, scoped or not: a `Component` or a `ScopedComponent`
+ * without its call signature.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Members<
+  out Name extends string,
+  in out Props,
+  in out Model,
+  in out Msg,
+  out Events,
+  out R = never,
+  out V extends View.Elements = never,
+  out L = {},
+  in out Rcv = never,
+  in Sl extends string = never
+> extends Mountable.Members<Props, Events, R, Rcv, Sl> {
   /** What `define` returned. `provide` keeps it, so `definition.name` is the name the component was defined with. */
   readonly definition: Definition.Of<Name>
   readonly model: Schema.Codec<Model, any>
@@ -1481,13 +1553,80 @@ type SlotRequirements<SC> = SC extends unknown ? View.Requirements<SC[keyof SC]>
 export type Any = Mountable<any, any, any, never>
 
 /**
+ * What a parent needs from a scoped child: `Mountable`, with the call a
+ * scoped component takes.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Scoped<in out Props, out Events, out R = never, in Rcv = never, in Sl extends string = never>
+  extends Mountable.Members<Props, Events, R, Rcv, Sl>, Scoped.Call<Props, Events, R, Rcv, Sl>
+{}
+
+/**
+ * Helper types for `Scoped`.
+ *
+ * @stability experimental
+ * @since 0.1.0
+ */
+export declare namespace Scoped {
+  /**
+   * The call signature of a scoped component. It takes the `s` of
+   * `h.scoped`, which says whether the scope has a predicate. Without one,
+   * the child's key must be a literal, or left out, and a ref's too.
+   *
+   * @category models
+   * @since 0.1.0
+   */
+  export interface Call<in out Props, out Events, out R = never, in Rcv = never, in Sl extends string = never> {
+    /**
+     * Declares a scoped child in a parent's view, from the `s` of the
+     * parent's `h.scoped`. It lives until the scope's predicate is false
+     * for its key, or the parent ends.
+     */
+    <Msg, Ends extends boolean, const K extends string = never, RF = never, const SC extends object = never>(
+      s: View.Scope<Msg, Ends>,
+      options:
+        & View.Child.ScopedOptions<Props, Events, NoInfer<Msg>, Rcv, K, Ends>
+        & {
+          /** Shown if the child fails, until its key changes. Without it, the child is blank. */
+          readonly fallback?:
+            | ((result: AsyncResult.Failure<never, unknown>) => View.Content<NoInfer<Msg>, RF>)
+            | undefined
+        }
+        & SlotOptions<Sl, SC, NoInfer<Msg>>
+        & (0 extends 1 & Props ? { readonly props: Props } : {})
+    ): View.Child<Msg, R | NoInfer<RF> | SlotRequirements<SC>>
+  }
+
+  /**
+   * Any scoped component.
+   *
+   * @category models
+   * @since 0.1.0
+   */
+  export type Any = Scoped<any, any, any, never>
+}
+
+/**
+ * Any component that can be mounted at the root or a route: a component or a
+ * scoped one, which has no scope there.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type AnyRoot = Any | Scoped.Any
+
+/**
  * The props of a component.
  *
  * @stability experimental
  * @category utility types
  * @since 0.1.0
  */
-export type Props<C> = C extends Mountable<infer P, infer _Events, infer _R, infer _Rcv> ? P : never
+export type Props<C> = C extends Mountable.Members<infer P, infer _Events, infer _R, infer _Rcv> ? P : never
 
 /**
  * The events of a component.
@@ -1496,7 +1635,7 @@ export type Props<C> = C extends Mountable<infer P, infer _Events, infer _R, inf
  * @category utility types
  * @since 0.1.0
  */
-export type Events<C> = C extends Mountable<infer _Props, infer E, infer _R, infer _Rcv> ? E : never
+export type Events<C> = C extends Mountable.Members<infer _Props, infer E, infer _R, infer _Rcv> ? E : never
 
 /**
  * The requirements of a component: the Commands and feature services it uses.
@@ -1505,7 +1644,7 @@ export type Events<C> = C extends Mountable<infer _Props, infer E, infer _R, inf
  * @category utility types
  * @since 0.1.0
  */
-export type Requirements<C> = C extends Mountable<infer _Props, infer _Events, infer R, infer _Rcv> ? R : never
+export type Requirements<C> = C extends Mountable.Members<infer _Props, infer _Events, infer R, infer _Rcv> ? R : never
 
 /**
  * The Model of a component.
@@ -1515,7 +1654,7 @@ export type Requirements<C> = C extends Mountable<infer _Props, infer _Events, i
  * @since 0.1.0
  */
 export type Model<C> = C extends
-  Component<infer _N, infer _P, infer M, infer _Msg, infer _E, infer _R, infer _V, infer _L, infer _Rcv> ? M
+  Members<infer _N, infer _P, infer M, infer _Msg, infer _E, infer _R, infer _V, infer _L, infer _Rcv> ? M
   : never
 
 /**
@@ -1526,7 +1665,7 @@ export type Model<C> = C extends
  * @since 0.1.0
  */
 export type Message<C> = C extends
-  Component<infer _N, infer _P, infer _M, infer Msg, infer _E, infer _R, infer _V, infer _L, infer _Rcv> ? Msg
+  Members<infer _N, infer _P, infer _M, infer Msg, infer _E, infer _R, infer _V, infer _L, infer _Rcv> ? Msg
   : never
 
 /**
@@ -1537,7 +1676,7 @@ export type Message<C> = C extends
  * @category utility types
  * @since 0.1.0
  */
-export type Receives<C> = C extends Mountable<infer _Props, infer _Events, infer _R, infer Rcv> ? Rcv : never
+export type Receives<C> = C extends Mountable.Members<infer _Props, infer _Events, infer _R, infer Rcv> ? Rcv : never
 
 /**
  * The names of the slots a component declares, `never` for one without slots.
@@ -1546,7 +1685,8 @@ export type Receives<C> = C extends Mountable<infer _Props, infer _Events, infer
  * @category utility types
  * @since 0.1.0
  */
-export type Slots<C> = C extends Mountable<infer _Props, infer _Events, infer _R, infer _Rcv, infer Sl> ? Sl : never
+export type Slots<C> = C extends Mountable.Members<infer _Props, infer _Events, infer _R, infer _Rcv, infer Sl> ? Sl
+  : never
 
 /**
  * A `query` entry of `queries`, as the types see it: one query, or a list
@@ -1951,9 +2091,12 @@ export interface Definition<
   Sl extends string = never,
   SR = {},
   SV = never,
-  Rp = never
+  Rp = never,
+  Sc extends boolean = boolean
 > {
   readonly name: Name
+  /** Whether the component is written inside `h.scoped`, and lives as its scope says. */
+  readonly scoped: Sc
   readonly props: Schema.Codec<Props, any>
   readonly model: Schema.Codec<Model, any>
   readonly message: Schema.Codec<Msg, any>
@@ -1988,11 +2131,11 @@ export interface Definition<
   view<UV extends View.Content<Msg, any>>(
     view: (
       model: Model,
-      h: View.Helper<Msg, Props> & View.Tags<V, Msg> & QueryHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>
+      h: ViewHelper<Model, Props, Msg, V, L, Sl, SR>
     ) => UV
   ): (
     model: Model,
-    h: View.Helper<Msg, Props> & View.Tags<V, Msg> & QueryHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>
+    h: ViewHelper<Model, Props, Msg, V, L, Sl, SR>
   ) => UV
   /**
    * A view fragment: a function that takes `h` first and any other
@@ -2000,11 +2143,11 @@ export interface Definition<
    */
   fragment<Args extends ReadonlyArray<unknown>, Out>(
     fragment: (
-      h: View.Helper<Msg, Props> & View.Tags<V, Msg> & QueryHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>,
+      h: ViewHelper<Model, Props, Msg, V, L, Sl, SR>,
       ...args: Args
     ) => Out
   ): (
-    h: View.Helper<Msg, Props> & View.Tags<V, Msg> & QueryHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>,
+    h: ViewHelper<Model, Props, Msg, V, L, Sl, SR>,
     ...args: Args
   ) => Out
   /**
@@ -2026,9 +2169,14 @@ export interface Definition<
       readonly update:
         | ((model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L>) => U)
         | UpdateRecord<Model, Msg, Events, Props, L, UR>
-      /** A headless component has no view to place slots in, so a definition with slots can't take `parts`. */
+      /**
+       * A headless component has no view to place slots in, so a definition with slots can't take `parts`.
+       * Nor can a scoped one: a headless child lives where its declarer's view writes it.
+       */
       readonly parts: [Sl] extends [never] ?
-        (model: Model, p: PartsHelper<Msg, Props, V> & QueryHelpers<L> & SharedHelpers<SR>) => Parts
+        [Sc] extends [false] ?
+          (model: Model, p: PartsHelper<Msg, Props, V> & QueryHelpers<L> & SharedHelpers<SR>) => Parts
+        : never
         : never
       readonly subscriptions?:
         | ((
@@ -2082,7 +2230,7 @@ export interface Definition<
           | UpdateRecord<Model, Msg, Events, Props, L, UR>
         readonly view: (
           model: Model,
-          h: View.Helper<Msg, Props> & View.Tags<V, Msg> & QueryHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>
+          h: ViewHelper<Model, Props, Msg, V, L, Sl, SR>
         ) => UV
         readonly subscriptions?:
           | ((
@@ -2102,7 +2250,8 @@ export interface Definition<
       }
       & OwnersAreHeadless<SV>
       & SelfShares<SR, SV>
-  ): Component<
+  ): ComponentOf<
+    Sc,
     Name,
     Props,
     Model,
@@ -2122,6 +2271,21 @@ export interface Definition<
     Sl
   >
 }
+
+type ComponentOf<
+  Sc extends boolean,
+  Name extends string,
+  Props,
+  Model,
+  Msg,
+  Events,
+  R,
+  V extends View.Elements,
+  L,
+  Rcv,
+  Sl extends string
+> = [Sc] extends [true] ? ScopedComponent<Name, Props, Model, Msg, Events, R, V, L, Rcv, Sl>
+  : Component<Name, Props, Model, Msg, Events, R, V, L, Rcv, Sl>
 
 /**
  * Types for definitions: what a component keeps of the one it was made from.
@@ -2146,6 +2310,7 @@ export declare namespace Definition {
    */
   export interface Any {
     readonly name: string
+    readonly scoped: boolean
     readonly props: Schema.Codec<any, any>
     readonly model: Schema.Codec<any, any>
     readonly message: Schema.Codec<any, any>
@@ -2190,6 +2355,7 @@ export declare namespace Definition {
  *
  * const NoteListDef = Component.define({
  *   name: "NoteList",
+ *   scoped: false,
  *   model: Schema.Struct({ notes: Schema.Array(Note) }),
  *   message: Schema.Never
  * })
@@ -2211,7 +2377,7 @@ export declare namespace Definition {
 export type Helper<D> = D extends Definition<
   infer _N,
   infer P,
-  infer _M,
+  infer M,
   infer Msg,
   infer _E,
   infer V,
@@ -2220,9 +2386,74 @@ export type Helper<D> = D extends Definition<
   infer Sl,
   infer SR,
   infer _SV,
-  infer _Rp
-> ? View.Helper<Msg, P> & View.Tags<V, Msg> & QueryHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>
+  infer _Rp,
+  infer _Sc
+> ? ViewHelper<M, P, Msg, V, L, Sl, SR>
   : never
+
+/**
+ * `h` in a component's view: the helpers of `View.Helper`, the tags of its
+ * vocabulary, its queries, slots and shared state, and `h.scoped`.
+ *
+ * @stability experimental
+ * @category utility types
+ * @since 0.1.0
+ */
+export type ViewHelper<Model, Props, Msg, V extends View.Elements, L, Sl extends string, SR> = WithScoped<
+  Model,
+  Props,
+  Msg,
+  L,
+  View.Helper<Msg, Props> & View.Tags<V, Msg> & QueryHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>
+>
+
+type WithScoped<Model, Props, Msg, L, H> = H & ScopedHelpers<Model, Props, Msg, L, H>
+
+/**
+ * `h.scoped`, which writes scoped children. `H` is the rest of `h`,
+ * which `s` is too.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface ScopedHelpers<Model, Props, Msg, L, H> {
+  /**
+   * A scope whose children live as long as the component whose view wrote
+   * it. Each is a scoped component called with `s`, and its key must be a
+   * literal, or left out. Returns what `content` returns, and adds no node.
+   */
+  scoped<C>(content: (s: H & View.Scope<Msg, false>) => C): C
+  /**
+   * A scope whose children each live while `alive` holds for their key.
+   * `alive` is asked on every render of this component, for each child it
+   * keeps, so it reads the Model from `$`, not from the view's `model`:
+   * `({ model, key }) => key in model.notes`. Returns what `content`
+   * returns, and adds no node.
+   */
+  scoped<C>(
+    alive: ($: Alive<Model, Props, QueryResults<L>>) => boolean,
+    content: (s: H & View.Scope<Msg, true>) => C
+  ): C
+}
+
+/**
+ * What a scope's predicate is asked with: the current Model, props and query
+ * results of the component whose view wrote the scope, and the key of the
+ * child it is asked about.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Alive<out Model, out Props, out Queries> {
+  readonly model: Model
+  readonly key: string
+  readonly props: Props
+  readonly queries: Queries
+}
+
+type QueryResults<L> = { readonly [K in keyof L]: QueryResultOf<L[K]> }
 
 /**
  * Defines a component, in two steps. `define` takes the name, the Schemas,
@@ -2332,6 +2563,7 @@ export type Helper<D> = D extends Definition<
  *
  * const Counter = Component.define({
  *   name: "Counter",
+ *   scoped: false,
  *   props: Schema.Struct({ initial: Schema.Number }),
  *   model: Schema.Struct({ count: Schema.Number }),
  *   message: CounterMessage
@@ -2376,6 +2608,7 @@ import { Query } from "@effect/ui"
  *
  * const UserPage = Component.define({
  *   name: "UserPage",
+ *   scoped: false,
  *   props: Schema.Struct({ id: Schema.String }),
  *   model: Schema.Struct({}),
  *   message: Schema.Never,
@@ -2411,6 +2644,7 @@ import { Query } from "@effect/ui"
  *
  * const NotePageDef = Component.define({
  *   name: "NotePage",
+ *   scoped: false,
  *   model: Schema.Struct({ body: Schema.String, edits: Schema.Number, error: Schema.NullOr(Schema.String) }),
  *   message: NotePageMessage
  * })
@@ -2446,6 +2680,7 @@ import { Query } from "@effect/ui"
  *
  * const Card = Component.define({
  *   name: "Card",
+ *   scoped: false,
  *   model: Schema.Boolean,
  *   message: Schema.Literal("ClickedToggle"),
  *   slots: ["title", "body"]
@@ -2458,6 +2693,7 @@ import { Query } from "@effect/ui"
  *
  * export const Page = Component.define({
  *   name: "Page",
+ *   scoped: false,
  *   model: Schema.Number,
  *   message: Schema.Literal("ClickedLike")
  * }).make({
@@ -2499,10 +2735,19 @@ export const define = <
   SV = never,
   Rp = never,
   // The owner of each entry of `shared`, inferred before `report` and `onChange` are typed.
-  SO extends { readonly [name: string]: Headless.Any | "self" } = {}
+  SO extends { readonly [name: string]: Headless.Any | "self" } = {},
+  Sc extends boolean = boolean
 >(
   options: {
     readonly name: Name
+    /**
+     * Whether the component is written inside `h.scoped`, with its `s`.
+     * A scoped child lives until its scope's predicate is false for its key,
+     * or the component whose view wrote it ends, whether or not the view
+     * writes it. One that isn't scoped lives while the view writes it at its
+     * place.
+     */
+    readonly scoped: Sc
     readonly props?: Schema.Codec<Props, any> | undefined
     readonly model: Schema.Codec<Model, any>
     readonly message: Schema.Codec<Msg, any>
@@ -2597,7 +2842,8 @@ export const define = <
   Sl,
   ResolveSelf<Listed<SR>, SelfOwner<Name, Props, Events, Tagged<Msg, Tags>, SV, Rp>>,
   SV,
-  Rp
+  Rp,
+  Sc
 > => {
   const shares = options.shares
   const definition: Definition<
@@ -2612,9 +2858,11 @@ export const define = <
     Sl,
     ResolveSelf<Listed<SR>, SelfOwner<Name, Props, Events, Tagged<Msg, Tags>, SV, Rp>>,
     SV,
-    Rp
+    Rp,
+    Sc
   > = {
     name: options.name,
+    scoped: options.scoped,
     props: options.props ?? (Schema.Struct({}) as any),
     model: options.model,
     message: options.message,
@@ -2875,7 +3123,17 @@ export interface LocalOption {
 export type Provided<C, ROut, RIn> = C extends
   Component<infer N, infer P, infer M, infer Msg, infer E, infer _R, infer V, infer L, infer Rcv, infer Sl>
   ? Component<N, P, M, Msg, E, Exclude<Requirements<C>, Exclude<ROut, RuntimeService>> | RIn, V, L, Rcv, Sl>
-  : Mountable<Props<C>, Events<C>, Exclude<Requirements<C>, Exclude<ROut, RuntimeService>> | RIn, Receives<C>, Slots<C>>
+  : C extends
+    ScopedComponent<infer N, infer P, infer M, infer Msg, infer E, infer _R, infer V, infer L, infer Rcv, infer Sl>
+    ? ScopedComponent<N, P, M, Msg, E, Exclude<Requirements<C>, Exclude<ROut, RuntimeService>> | RIn, V, L, Rcv, Sl>
+  : C extends Mountable.Call<any, any, any, never, never> ? Mountable<
+      Props<C>,
+      Events<C>,
+      Exclude<Requirements<C>, Exclude<ROut, RuntimeService>> | RIn,
+      Receives<C>,
+      Slots<C>
+    >
+  : Scoped<Props<C>, Events<C>, Exclude<Requirements<C>, Exclude<ROut, RuntimeService>> | RIn, Receives<C>, Slots<C>>
 
 /**
  * Services the runtime owns or reads once at mount: the framework services,
@@ -3067,18 +3325,20 @@ const toLayer = (layers: Layer.Any | ReadonlyArray<Layer.Any>): Layer.Layer<any,
 // checks it on the component argument, which that pass skips too: a
 // component that is still `Any` once inferred takes no message, as
 // `Message<Any>` says.
-type ProvideMessage<C, M> = [Any] extends [C] ? M : Message<C>
+type Erased<C> = [Any] extends [C] ? true : [Scoped.Any] extends [C] ? true : false
+
+type ProvideMessage<C, M> = Erased<C> extends true ? M : Message<C>
 
 type ErasedHint = "An erased component takes no message, so onFailure can't return one"
 
 // `M` is what the handler returns, inferred from the call.
-type ErasedMessage<C, M> = [Any] extends [C] ? [M] extends [never] ? unknown : { readonly [K in ErasedHint]: M }
+type ErasedMessage<C, M> = Erased<C> extends true ? [M] extends [never] ? unknown : { readonly [K in ErasedHint]: M }
   : unknown
 
 // The handler in `O`, if any, checked against the call it gets: one that
 // returns no message. An overloaded handler passes only if the overload for
 // that call does. A Layer that can't fail still calls it on a defect.
-type ErasedHandler<C, O, E> = [Any] extends [C] ?
+type ErasedHandler<C, O, E> = Erased<C> extends true ?
   [HandlerOf<O>] extends [((failure: AsyncResult.Failure<never, E>) => never) | undefined] ? unknown
   : { readonly [K in ErasedHint]: HandlerOf<O> }
   : unknown
@@ -3178,6 +3438,7 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F } ? "onFailure" ext
  *
  * const Row = Component.define({
  *   name: "Row",
+ *   scoped: false,
  *   props: Schema.Struct({ id: Schema.String }),
  *   model: Schema.Struct({}),
  *   message: RowMessage
@@ -3219,6 +3480,7 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F } ? "onFailure" ext
  *
  * const RoomView = Component.define({
  *   name: "RoomView",
+ *   scoped: false,
  *   model: Schema.Struct({ room: Schema.String, joined: Schema.String }),
  *   message: RoomMessage
  * }).make({
@@ -3246,29 +3508,31 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F } ? "onFailure" ext
 export const provide: {
   <Props, L extends Layer.Layer<never, never, any>>(
     layer: (props: Props) => L
-  ): <C extends Mountable<Props, any, any, never>>(component: C) => Provided<C, CommonSuccess<L>, AnyServices<L>>
+  ): <C extends Mountable.Members<Props, any, any, never>>(
+    component: C
+  ) => Provided<C, CommonSuccess<L>, AnyServices<L>>
   <Props, Model, K, L extends Layer.Layer<never, never, any>>(
     keyed: ProvideKeyed<Props, Model, K, L>,
     options?: { readonly server?: false | undefined; readonly local?: never }
-  ): <C extends Mountable<Props, any, any, never>>(
+  ): <C extends Mountable.Members<Props, any, any, never>>(
     component: C & KeyTakes<C, Model>
   ) => Provided<C, CommonSuccess<L>, AnyServices<L>>
   <const L extends Layer.Any | ReadonlyArray<Layer.Any>>(
     layer: L & CurriedCantFail<L>,
     options?: LocalOption
-  ): <C extends Any>(component: C) => Provided<C, ProvideInput.Success<L>, ProvideInput.Services<L>>
-  <C extends Any, L extends Layer.Layer<never, never, any>>(
+  ): <C extends AnyRoot>(component: C) => Provided<C, ProvideInput.Success<L>, ProvideInput.Services<L>>
+  <C extends AnyRoot, L extends Layer.Layer<never, never, any>>(
     component: C,
     layer: (props: Props<C>) => L
   ): Provided<C, CommonSuccess<L>, AnyServices<L>>
-  <C extends Any, L extends Layer.Layer<never, any, any>, M = never>(
+  <C extends AnyRoot, L extends Layer.Layer<never, any, any>, M = never>(
     component: C & ErasedMessage<C, M>,
     layer: (props: Props<C>) => L,
     options: ProvideOptions<AnyError<L>, ProvideMessage<C, M>>
   ): Provided<C, CommonSuccess<L>, AnyServices<L>>
   // One overload whether or not the Layer can fail: a failed candidate would fix `onFailure`'s
   // parameter type before the next one is tried.
-  <C extends Any, K, L extends Layer.Layer<never, any, any>, M = never>(
+  <C extends AnyRoot, K, L extends Layer.Layer<never, any, any>, M = never>(
     component: C & ErasedMessage<C, M>,
     keyed: ProvideKeyed<Props<C>, Model<C>, K, L>,
     ...options: KeyedRest<AnyError<L>, ProvideMessage<C, M>>
@@ -3277,7 +3541,7 @@ export const provide: {
   // defined inline isn't inferred yet when they are, so it takes the next
   // overload.
   <
-    C extends Any,
+    C extends AnyRoot,
     const L extends Layer.Any | ReadonlyArray<Layer.Any>,
     const O extends ProvideRest<L, Message<C>>[0] = never
   >(
@@ -3286,7 +3550,7 @@ export const provide: {
     options?: O & ProvideRest<L, Message<C>>[0]
   ): Provided<C, ProvideInput.Success<L>, ProvideInput.Services<L>>
   <
-    C extends Any,
+    C extends AnyRoot,
     const L extends Layer.Any | ReadonlyArray<Layer.Any>,
     const O extends ProvideRest<L, ProvideMessage<C, any>>[0] = never
   >(

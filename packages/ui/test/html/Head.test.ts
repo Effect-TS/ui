@@ -10,7 +10,13 @@ const head = (...entries: ReadonlyArray<HtmlHead.Entry>) => HtmlHead.merge({ ent
 const render = (entries: ReadonlyArray<HtmlHead.Entry>) =>
   Effect.runPromise(
     HtmlServer.renderToHtml(
-      Component.define({ name: "HeadNames", model: Schema.Null, message: Schema.Never, elements: Html.vocabulary })
+      Component.define({
+        name: "HeadNames",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html.vocabulary
+      })
         .make({
           init: () => null,
           update: (model) => model,
@@ -282,6 +288,7 @@ const Rename = UiSchema.TaggedEnum({ Rename: { title: Schema.String } })
 
 const Titled = Component.define({
   name: "Titled",
+  scoped: false,
   props: Schema.Struct({ title: Schema.String }),
   model: Schema.String,
   message: Rename,

@@ -101,6 +101,7 @@
  *
  * const Profile = Component.define({
  *   name: "Profile",
+ *   scoped: false,
  *   model: Schema.Struct({ name: Schema.String }),
  *   message: ProfileMessage,
  *   elements: Html
@@ -249,6 +250,7 @@ const lostFocus = Subscription.make("lostFocus", Stream.make(Message.BlurredCont
  */
 export const Field = Component.define({
   name: "Field",
+  scoped: false,
   props: FieldProps,
   model: Schema.Struct({ focused: Schema.Boolean, touched: Schema.Boolean }),
   message: Message,

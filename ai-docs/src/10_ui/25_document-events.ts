@@ -36,6 +36,7 @@ const SnakeMessage = UiSchema.TaggedEnum({
 // `defaultPrevented` skips a key an element's handler already took.
 export const Snake = Component.define({
   name: "Snake",
+  scoped: false,
   model: Schema.Struct({ running: Schema.Boolean, heading: Direction }),
   message: SnakeMessage,
   elements: Html

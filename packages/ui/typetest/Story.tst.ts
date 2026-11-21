@@ -45,6 +45,7 @@ describe("Story", () => {
     const Message = UiSchema.TaggedEnum({ Set: { value: Schema.Number }, Reset: {} })
     const Receiver = Component.define({
       name: "Receiver",
+      scoped: false,
       model: Schema.Number,
       message: Message,
       receives: ["Set"]
@@ -131,6 +132,7 @@ describe("Story", () => {
   it("a component with no messages is a story, with its types kept", () => {
     const Static = Component.define({
       name: "Static",
+      scoped: false,
       model: Schema.Number,
       message: Schema.Never
     }).make({

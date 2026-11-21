@@ -35,6 +35,7 @@ const makeForm = (saving: Deferred.Deferred<void>) => {
   )
   return Component.define({
     name: "Profile",
+    scoped: false,
     model: FormModel,
     message: FormMsg,
     events: FormEvents,
@@ -59,7 +60,7 @@ const makeForm = (saving: Deferred.Deferred<void>) => {
   })
 }
 
-const Billing = Component.define({ name: "Billing", model: Schema.Null, message: Schema.Never }).make({
+const Billing = Component.define({ name: "Billing", scoped: false, model: Schema.Null, message: Schema.Never }).make({
   init: () => null,
   update: (model) => model,
   view: (_, h) => h.el("p", "billing")
@@ -74,7 +75,7 @@ const SettingsModel = Schema.Struct({ tab: Schema.String, saved: Schema.Array(Sc
 
 const makeSettings = (Profile: ReturnType<typeof makeForm>) => {
   const Form = Profile.ref("Form")
-  return Component.define({ name: "Settings", model: SettingsModel, message: SettingsMsg }).make({
+  return Component.define({ name: "Settings", scoped: false, model: SettingsModel, message: SettingsMsg }).make({
     head: () => [Head.title("Settings")],
     init: () => ({ tab: "profile", saved: [] }),
     update: (model, message, $) =>
@@ -220,6 +221,7 @@ describe("detached children", () => {
         }))
       const Leaf = Component.define({
         name: "Leaf",
+        scoped: false,
         props: Schema.Struct({ label: Schema.String }),
         model: Schema.NullOr(Schema.Boolean),
         message: Schema.Boolean
@@ -231,6 +233,7 @@ describe("detached children", () => {
       const State = Schema.Struct({ outer: Schema.Boolean, inner: Schema.Boolean, key: Schema.String })
       const Outer = Component.define({
         name: "Outer",
+        scoped: false,
         props: Schema.Struct({ inner: Schema.Boolean, key: Schema.String }),
         model: Schema.Null,
         message: Schema.Never
@@ -244,7 +247,7 @@ describe("detached children", () => {
             Leaf(h, { key: h.props.key, props: { label: h.props.key }, detached: h.props.inner })
           )
       })
-      const Page = Component.define({ name: "Page", model: State, message: State }).make({
+      const Page = Component.define({ name: "Page", scoped: false, model: State, message: State }).make({
         init: () => ({ outer: true, inner: true, key: "a" }),
         update: (_, next) => next,
         view: (state, h) =>
@@ -278,11 +281,17 @@ describe("detached children", () => {
     provideHost(Effect.gen(function*() {
       const Msg = UiSchema.TaggedEnum({ Break: {} })
       const Boom = Command.make("Boom", { args: {} }, () => Effect.die("boom"))
-      const Fragile = Component.define({ name: "Fragile", model: Schema.Null, message: Msg, receives: ["Break"] })
+      const Fragile = Component.define({
+        name: "Fragile",
+        scoped: false,
+        model: Schema.Null,
+        message: Msg,
+        receives: ["Break"]
+      })
         .make({ init: () => null, update: (_, __, $) => $.run(Boom()), view: (_, h) => h.el("p", "fine") })
       const Ref = Fragile.ref("F")
       const PageMsg = UiSchema.TaggedEnum({ Detach: { detached: Schema.Boolean }, Break: {} })
-      const Page = Component.define({ name: "Page", model: Schema.Boolean, message: PageMsg }).make({
+      const Page = Component.define({ name: "Page", scoped: false, model: Schema.Boolean, message: PageMsg }).make({
         init: () => false,
         update: (_, message, $) => message._tag === "Break" ? $.send(Ref, Msg.Break()) : message.detached,
         view: (detached, h) => h.el("div", Fragile(h, { ref: Ref, detached, fallback: () => h.el("p", "down") }))
@@ -304,15 +313,22 @@ describe("detached children", () => {
 
   it.effect("keeps slot content and a headless child's view current while detached", () =>
     provideHost(Effect.gen(function*() {
-      const Frame = Component.define({ name: "Frame", model: Schema.Null, message: Schema.Never, slots: ["body"] })
-        .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("article", h.slots.body) })
-      const Listbox = Component.define({ name: "Listbox", model: Schema.Null, message: Schema.Never }).make({
-        init: () => null,
-        update: (model) => model,
-        parts: (_, p) => ({ id: p.id("list") })
+      const Frame = Component.define({
+        name: "Frame",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never,
+        slots: ["body"]
       })
+        .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("article", h.slots.body) })
+      const Listbox = Component.define({ name: "Listbox", scoped: false, model: Schema.Null, message: Schema.Never })
+        .make({
+          init: () => null,
+          update: (model) => model,
+          parts: (_, p) => ({ id: p.id("list") })
+        })
       const State = Schema.Struct({ detached: Schema.Boolean, label: Schema.String })
-      const Page = Component.define({ name: "Page", model: State, message: State }).make({
+      const Page = Component.define({ name: "Page", scoped: false, model: State, message: State }).make({
         init: () => ({ detached: false, label: "one" }),
         update: (_, next) => next,
         view: (state, h) =>
@@ -337,12 +353,12 @@ describe("detached children", () => {
 
   it.effect("fails the parent on a host that can't hold detached nodes", () =>
     Effect.gen(function*() {
-      const Tabs = Component.define({ name: "Tabs", model: Schema.Null, message: Schema.Never }).make({
+      const Tabs = Component.define({ name: "Tabs", scoped: false, model: Schema.Null, message: Schema.Never }).make({
         init: () => null,
         update: (model) => model,
         view: (_, h) => h.el("div", Billing(h, { key: "b", detached: true }))
       })
-      const Page = Component.define({ name: "Page", model: Schema.Null, message: Schema.Never }).make({
+      const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
         init: () => null,
         update: (model) => model,
         view: (_, h) => Tabs(h, { key: "t", fallback: () => h.el("p", "down") })
@@ -365,16 +381,23 @@ describe("detached children", () => {
             Effect.acquireRelease(Effect.sync(() => running.add(name)), () => Effect.sync(() => running.delete(name)))
               .pipe(Effect.andThen(Effect.never))
         )()
-      const Frame = Component.define({ name: "Frame", model: Schema.Null, message: Schema.Never, slots: ["body"] })
+      const Frame = Component.define({
+        name: "Frame",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never,
+        slots: ["body"]
+      })
         .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("article", h.slots.body) })
       const Reveal = Command.make("Reveal", { args: {} }, () => Effect.succeed(true))
-      const Inner = Component.define({ name: "Inner", model: Schema.Boolean, message: Schema.Boolean }).make({
-        init: ($) => $.set(false).run(Reveal()),
-        update: (_, shown) => shown,
-        view: (shown, h) => h.el("div", shown ? h.el("i").onMount(track("inner")) : null)
-      })
+      const Inner = Component.define({ name: "Inner", scoped: false, model: Schema.Boolean, message: Schema.Boolean })
+        .make({
+          init: ($) => $.set(false).run(Reveal()),
+          update: (_, shown) => shown,
+          view: (shown, h) => h.el("div", shown ? h.el("i").onMount(track("inner")) : null)
+        })
       const State = Schema.Struct({ frame: Schema.Boolean, inner: Schema.Boolean })
-      const Page = Component.define({ name: "Page", model: State, message: State }).make({
+      const Page = Component.define({ name: "Page", scoped: false, model: State, message: State }).make({
         init: () => ({ frame: true, inner: false }),
         update: (_, next) => next,
         view: (state, h) =>
@@ -411,14 +434,20 @@ describe("detached children", () => {
         { args: {} },
         () => Effect.sync(() => void started++).pipe(Effect.andThen(Effect.never))
       )
-      const Tabs = Component.define({ name: "Tabs", props: Schema.Boolean, model: Schema.Null, message: Schema.Never })
+      const Tabs = Component.define({
+        name: "Tabs",
+        scoped: false,
+        props: Schema.Boolean,
+        model: Schema.Null,
+        message: Schema.Never
+      })
         .make({
           init: () => null,
           update: (model) => model,
           view: (_, h) => h.el("div", Billing(h, { key: "b", detached: h.props }))
         })
       const State = Schema.Struct({ key: Schema.String, detached: Schema.Boolean, tracked: Schema.Boolean })
-      const Page = Component.define({ name: "Page", model: State, message: State }).make({
+      const Page = Component.define({ name: "Page", scoped: false, model: State, message: State }).make({
         init: () => ({ key: "a", detached: true, tracked: false }),
         update: (_, next) => next,
         view: (state, h) =>
@@ -449,18 +478,26 @@ describe("detached children", () => {
 
   it("a Scene counts a mount in a detached child's slot as new once the child is attached", () => {
     const Track = Mount.make("Track", { args: {} }, () => Effect.never)
-    const Frame = Component.define({ name: "Frame", model: Schema.Null, message: Schema.Never, slots: ["body"] })
-      .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("article", h.slots.body) })
-    const Page = Component.define({ name: "Page", model: Schema.Boolean, message: Schema.Boolean }).make({
-      init: () => true,
-      update: (detached) => !detached,
-      view: (detached, h) =>
-        h.el(
-          "div",
-          h.el("button").on("click", true).children("toggle"),
-          Frame(h, { key: "f", detached, slots: { body: h.el("b").onMount(Track()) } })
-        )
+    const Frame = Component.define({
+      name: "Frame",
+      scoped: false,
+      model: Schema.Null,
+      message: Schema.Never,
+      slots: ["body"]
     })
+      .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("article", h.slots.body) })
+    const Page = Component.define({ name: "Page", scoped: false, model: Schema.Boolean, message: Schema.Boolean }).make(
+      {
+        init: () => true,
+        update: (detached) => !detached,
+        view: (detached, h) =>
+          h.el(
+            "div",
+            h.el("button").on("click", true).children("toggle"),
+            Frame(h, { key: "f", detached, slots: { body: h.el("b").onMount(Track()) } })
+          )
+      }
+    )
     const s = Scene.start(Page, {})
     assert.throws(() => s.expectMount(Track()), /no rendered mount matches Track/)
     s.click(Locator.text("toggle")).expectMount(Track())

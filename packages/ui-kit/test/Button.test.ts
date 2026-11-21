@@ -11,6 +11,7 @@ const CardMessage = UiSchema.TaggedEnum({ PressedSave: {}, ClickedCard: {} })
 // see which one a click reaches.
 const Card = Component.define({
   name: "Card",
+  scoped: false,
   props: Schema.Struct({
     press: Schema.Boolean,
     button: Schema.Struct({

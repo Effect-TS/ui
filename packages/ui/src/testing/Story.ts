@@ -33,6 +33,7 @@
  *
  * const TodoItem = Component.define({
  *   name: "TodoItem",
+ *   scoped: false,
  *   props: Schema.Struct({ id: Schema.String }),
  *   model: Schema.Struct({ saved: Schema.Boolean }),
  *   message: Message
@@ -144,10 +145,10 @@ export interface Story<Props, Model, Msg, Events, Queries = { readonly [name: st
 // `Rcv` is invariant, and `any` doesn't stand for `never`, so one that receives nothing needs its own members too.
 // The same union as `Steps.ts`'s, so `Story.Steps.Any` extends `Steps.Steps.Any`.
 type AnyComponent =
-  | Component.Component<any, any, any, any, any, any, any, any, any>
-  | Component.Component<any, any, any, never, any, any, any, any, any>
-  | Component.Component<any, any, any, any, any, any, any, any, never>
-  | Component.Component<any, any, any, never, any, any, any, any, never>
+  | Component.Members<any, any, any, any, any, any, any, any, any>
+  | Component.Members<any, any, any, never, any, any, any, any, any>
+  | Component.Members<any, any, any, any, any, any, any, any, never>
+  | Component.Members<any, any, any, never, any, any, any, any, never>
 
 /**
  * A cursor over one story. It has the steps every kind of test shares, from
@@ -170,6 +171,7 @@ type AnyComponent =
  * const Message = UiSchema.TaggedEnum({ ClickedIncrement: {} })
  * const Counter = Component.define({
  *   name: "Counter",
+ *   scoped: false,
  *   model: Schema.Struct({ count: Schema.Number }),
  *   message: Message
  * }).make({
@@ -283,7 +285,10 @@ export const make = <C extends AnyComponent>(
 ): Effect.Effect<Steps<C>, never, Scope.Scope> =>
   cursor.scoped(
     make,
-    () => new StepsImpl("Story", cursor.initial(component, props)) as unknown as cursor.Cursor & Steps<C>
+    () =>
+      new StepsImpl("Story", cursor.initial(component as unknown as Component.Any, props)) as unknown as
+        & cursor.Cursor
+        & Steps<C>
   )
 
 /**
@@ -295,7 +300,7 @@ export const make = <C extends AnyComponent>(
  * @since 0.1.0
  */
 export const start = <C extends AnyComponent>(component: C, props: Component.Props<C>): Steps<C> =>
-  new StepsImpl("Story", cursor.initial(component, props)) as unknown as Steps<C>
+  new StepsImpl("Story", cursor.initial(component as unknown as Component.Any, props)) as unknown as Steps<C>
 
 /**
  * The parts of a headless component for a Model and props: the plain values
@@ -345,6 +350,7 @@ export const parts = <Props, Events, Parts, R, Rcv>(
  *
  * const Person = Component.define({
  *   name: "Person",
+ *   scoped: false,
  *   model: Schema.Struct({ name: Schema.String }),
  *   message: Schema.Never
  * }).make({
