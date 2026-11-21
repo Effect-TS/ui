@@ -414,7 +414,7 @@ export const ssr = <
     // update, such as the message an `onMount` sends, may replace nodes without counting against it.
     const deferred = new Set(state["~deferred"] ?? [])
     let unjudged = before.filter(({ paths }) => paths.length > 0 && !paths.some((path) => deferred.has(path)))
-    const rebuilt = new Set<string>()
+    const rebuilt = new Map<string, Set<string>>()
     let read = 0
     const judge = () => {
       const entries = clientLog.entries()
@@ -425,7 +425,12 @@ export const ssr = <
       }
       unjudged = unjudged.filter(({ node, paths }) => {
         if (!adoptedNow.has(ownerOf(paths))) return true
-        if (!container.contains(node)) rebuilt.add(paths[paths.length - 1]!)
+        if (!container.contains(node)) {
+          const path = paths[paths.length - 1]!
+          let tags = rebuilt.get(path)
+          if (tags === undefined) rebuilt.set(path, tags = new Set())
+          tags.add(node.nodeType === 1 ? `<${(node as globalThis.Element).localName}>` : "#text")
+        }
         return false
       })
     }
@@ -495,7 +500,9 @@ export const ssr = <
         )
       }
     }
-    for (const path of rebuilt) problems.push(`${path}: the client rebuilt the server's nodes instead of adopting them`)
+    for (const [path, tags] of rebuilt) {
+      problems.push(`${path}: the client rebuilt the server's nodes instead of adopting them (${[...tags].join(", ")})`)
+    }
     // Every server node outside a deferred instance is judged: one whose instance never adopted under
     // the path its markers carry was not adopted either.
     for (const path of new Set(unjudged.map(({ paths }) => ownerOf(paths)))) {

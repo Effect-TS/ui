@@ -1153,7 +1153,7 @@ describe("HtmlServer", { concurrent: false }, () => {
 
   it.effect("a mismatch after a row's own nodes keeps the rows beside it, and starts nothing twice", () =>
     Effect.gen(function*() {
-      const { app, server, startedOnce } = yield* hydrateRows((html) => html.replace("<!--]/Rows/Row[C]-->", "<hr>$&"))
+      const { app, server, startedOnce } = yield* hydrateRows((html) => html.replace("</ul>", "<hr>$&"))
       const items = [...app.querySelectorAll("li")]
       assert.strictEqual(items[0], server.items[0])
       assert.strictEqual(items[1], server.items[1])
@@ -1286,9 +1286,7 @@ describe("HtmlServer", { concurrent: false }, () => {
     () =>
       Effect.gen(function*() {
         // A stray element between the second row and the third, where the list's view has the third.
-        const { app, server, startedOnce } = yield* hydrateRows((html) =>
-          html.replace("<!--[/Rows/Row[C]-->", "<hr>$&")
-        )
+        const { app, server, startedOnce } = yield* hydrateRows((html) => html.replace("<li><button>C", "<hr>$&"))
         const items = [...app.querySelectorAll("li")]
         assert.strictEqual(items[0], server.items[0])
         assert.strictEqual(items[1], server.items[1])
@@ -2221,6 +2219,142 @@ describe("HtmlServer", { concurrent: false }, () => {
         expect(result.document.title).toBe("leaf - App")
       }))
     }).pipe(Effect.scoped))
+
+  it.effect("recovers from mismatches on marker-free single-element children", () =>
+    Effect.gen(function*() {
+      let client = false
+      const Item = Component.define({
+        name: "Item",
+        props: Schema.Struct({ label: Schema.String, tag: Schema.String }),
+        model: Schema.String,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: ($) => $.props.label,
+        update: (model) => model,
+        view: (label, h) =>
+          client && h.props.tag === "text"
+            ? h.text(label)
+            : client && h.props.tag === "p"
+            ? h.p.attr("data-l", label).children(label)
+            : h.li
+              .attr("data-l", label)
+              .attr(label === "A" ? "data-only-a" : "data-x", "1")
+              .children(h.span(label), h.em("x"))
+      })
+      const makeList = (order: (isClient: boolean) => ReadonlyArray<readonly [string, string?]>) =>
+        Component.define({ name: "List", model: Schema.Struct({}), message: Schema.Never, elements: Html }).make({
+          init: () => ({}),
+          update: (model) => model,
+          view: (_, h) =>
+            h.ul(
+              order(client).map(([label, tag]) => Item(h, { key: label, props: { label, tag: tag ?? "" } })),
+              h.li("tail")
+            )
+        })
+      const assertMatchesDeclared = (actual: Element, expected: Element) => {
+        const actualNodes = [...actual.querySelector("ul")!.childNodes]
+        const expectedNodes = [...expected.querySelector("ul")!.childNodes]
+        assert.strictEqual(actualNodes.length, expectedNodes.length)
+        for (let i = 0; i < expectedNodes.length; i++) {
+          const a = actualNodes[i]!
+          const e = expectedNodes[i]!
+          assert.strictEqual(a.nodeType, e.nodeType)
+          assert.strictEqual(a.textContent, e.textContent)
+          if (e.nodeType === 1) {
+            assert.strictEqual((a as Element).tagName, (e as Element).tagName)
+            for (const attr of (e as Element).attributes) {
+              assert.strictEqual((a as Element).getAttribute(attr.name), attr.value)
+            }
+          }
+        }
+      }
+
+      for (
+        const [order, exact, keepFirstAndLast] of [
+          [() => [["A"], ["B", "p"], ["C"]], true, true],
+          [() => [["A"], ["B", "text"], ["C"]], true, true],
+          [(isClient: boolean) => isClient ? [["Z"], ["A"], ["B"]] : [["A"], ["B"]], true, false],
+          [(isClient: boolean) => isClient ? [["B"], ["C"]] : [["A"], ["B"], ["C"]], false, false],
+          [(isClient: boolean) => isClient ? [["B"], ["A"], ["C"]] : [["A"], ["B"], ["C"]], false, false]
+        ] as ReadonlyArray<
+          readonly [(isClient: boolean) => ReadonlyArray<readonly [string, string?]>, boolean, boolean]
+        >
+      ) {
+        const List = makeList(order)
+        client = false
+        const rendered = yield* HtmlServer.renderToHtml(List, {})
+        assert.notInclude(rendered.html, "<!--[/List/Item[")
+        const fresh = yield* container("")
+        client = true
+        yield* BrowserHost.mountEffect(List, {}, fresh, {})
+        const app = yield* container(rendered.html)
+        const serverItems = [...app.querySelectorAll("li")]
+        const root = yield* BrowserHost.mountEffect(List, {}, app, { state: rendered.state })
+        yield* root.adopted
+        yield* tick
+        if (exact) assert.strictEqual(app.innerHTML, fresh.innerHTML)
+        else assertMatchesDeclared(app, fresh)
+        if (keepFirstAndLast) {
+          const hydratedItems = [...app.querySelectorAll("li")]
+          assert.strictEqual(hydratedItems[0], serverItems[0])
+          assert.strictEqual(hydratedItems[1], serverItems[2])
+        }
+      }
+    }).pipe(Effect.scoped))
+
+  it.effect("hydrates single-element children wrapped in legacy marker pairs", () =>
+    Effect.gen(function*() {
+      const Item = Component.define({
+        name: "Item",
+        props: Schema.Struct({ label: Schema.String }),
+        model: Schema.String,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: ($) => $.props.label,
+        update: (model) => model,
+        view: (label, h) => h.li(label)
+      })
+      const List = Component.define({ name: "List", model: Schema.Struct({}), message: Schema.Never, elements: Html })
+        .make({
+          init: () => ({}),
+          update: (model) => model,
+          view: (_, h) =>
+            h.ul(Item(h, { key: "A", props: { label: "A" } }), Item(h, { key: "B", props: { label: "B" } }))
+        })
+      const rendered = yield* HtmlServer.renderToHtml(List, {})
+      const legacyHtml = rendered.html
+        .replace("<li>A</li>", "<!--[/List/Item[A]--><li>A</li><!--]/List/Item[A]-->")
+        .replace("<li>B</li>", "<!--[/List/Item[B]--><li>B</li><!--]/List/Item[B]-->")
+      const app = yield* container(legacyHtml)
+      const serverItems = [...app.querySelectorAll("li")]
+      const root = yield* BrowserHost.mountEffect(List, {}, app, { state: rendered.state })
+      yield* root.adopted
+      yield* tick
+      assert.deepStrictEqual([...app.querySelectorAll("li")], serverItems)
+      assert.notInclude(app.innerHTML, "<!--")
+    }).pipe(Effect.scoped))
+
+  it.effect("ssr() includes the rebuilt node's tag when a marker-free child mismatches", () =>
+    hosted(Effect.gen(function*() {
+      let renders = 0
+      const Item = Component.define({ name: "Item", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => renders++ === 0 ? h.li("a") : h.p("a")
+      })
+      const List = Component.define({ name: "List", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => h.ul(Item(h, { key: "a", props: {} }))
+      })
+      const error = yield* Effect.flip(ssr(List, {}))
+      assert.include(
+        String(error),
+        "/List: the client rebuilt the server's nodes instead of adopting them (<li>"
+      )
+    })))
 })
 
 /** A query that counts its fetches and fails for id 404, and an `Item` that watches it by its props. */
