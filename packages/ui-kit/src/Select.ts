@@ -203,7 +203,15 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import { type Attributed, flag, idSelector, noSelect, visuallyHidden, withStyle } from "./internal/attributes.ts"
+import {
+  type Attributed,
+  flag,
+  idSelector,
+  noSelect,
+  separator as separatorAttrs,
+  visuallyHidden,
+  withStyle
+} from "./internal/attributes.ts"
 import { byAttribute } from "./internal/dom.ts"
 import { methodOf, onScrollbar } from "./internal/interaction.ts"
 import { lockScroll } from "./internal/modal.ts"
@@ -1607,10 +1615,7 @@ export const Select = Component.define({
 
     const group = p.part("div", (b, key: string) => b.attr("role", "group").attr("aria-labelledby", groupLabelId(key)))
     const groupLabel = p.part("div", (b, key: string) => b.attr("id", groupLabelId(key)).attr("aria-hidden", "true"))
-    const separator = p.part("div", (b) =>
-      b.attr("role", "separator")
-        .attr("aria-orientation", "horizontal")
-        .attr("data-orientation", "horizontal"))
+    const separator = p.part("div", (b) => separatorAttrs(b, "horizontal"))
 
     const scrollArrow = (direction: "up" | "down") => {
       const visible = (direction === "up" ? model.scrollUp : model.scrollDown) && !touch && shown

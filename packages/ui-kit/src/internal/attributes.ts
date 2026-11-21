@@ -23,3 +23,6 @@ export const idSelector = (id: string): string => `[id="${id.replace(/["\\]/g, "
 export interface Attributed<B> {
   readonly attr: (name: string, value: string | undefined) => B
 }
+
+export const separator = <B extends Attributed<B>>(builder: B, orientation: "horizontal" | "vertical"): B =>
+  builder.attr("role", "separator").attr("aria-orientation", orientation).attr("data-orientation", orientation)
