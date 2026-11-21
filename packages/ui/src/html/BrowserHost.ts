@@ -1025,6 +1025,7 @@ export const makeHost = (
     for (let i = 0; i < style.length; i++) {
       const prop = style[i]
       const propValue = style.getPropertyValue(prop)
+      if (propValue === "") continue
       const propPriority = style.getPropertyPriority(prop)
       if (
         propValue !== scratchStyle.getPropertyValue(prop) ||

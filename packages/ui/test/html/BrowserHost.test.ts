@@ -2213,6 +2213,25 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(box.getAttribute("style")).toBe("color: blue; margin-top: 8px")
       }).pipe(Effect.scoped))
 
+    it.effect("the later of two aliased style attributes wins on initial render", () =>
+      Effect.gen(function*() {
+        const Page = Component.define({
+          name: "AliasedStyle",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => h.div.attr("STYLE", "color:red").attr("style", "color:blue")
+        })
+        const app = yield* container
+        yield* BrowserHost.mountEffect(Page, {}, app)
+        yield* tick
+        const box = app.firstElementChild as HTMLElement
+        expect(box.getAttribute("style")).toBe("color:blue")
+      }).pipe(Effect.scoped))
+
     it.effect("a hydration style mismatch replaces the server's style text", () =>
       Effect.gen(function*() {
         const Page = Component.define({

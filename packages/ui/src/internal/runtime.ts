@@ -2142,7 +2142,10 @@ const setup = (
     if (view._tag === "Text") return host.createText(view.text)
     if (view._tag === "Child" || view._tag === "Outlet") return host.createText("")
     const node = host.createElement(view.tag)
-    for (const name in view.attrs) host.setAttr(node, name, view.attrs[name])
+    if (view.attrs !== View.noFields) {
+      const attrs = host.normalizeAttrs !== undefined ? host.normalizeAttrs(node, view.attrs) : view.attrs
+      for (const name in attrs) host.setAttr(node, name, attrs[name])
+    }
     for (const child of view.children) host.insertBefore(node, buildStatic(child), undefined)
     for (const name in view.props) host.setProp(node, name, view.props[name])
     return node
@@ -5342,8 +5345,10 @@ const setup = (
         return new TextRecord(view, host.createText(view.text))
       case "Element": {
         const node = host.createElement(view.tag)
-        const attrs = view.attrs
-        if (attrs !== View.noFields) { for (const name in attrs) host.setAttr(node, name, attrs[name]) }
+        if (view.attrs !== View.noFields) {
+          const attrs = host.normalizeAttrs !== undefined ? host.normalizeAttrs(node, view.attrs) : view.attrs
+          for (const name in attrs) host.setAttr(node, name, attrs[name])
+        }
         setEvents(inst, node, view)
         const views = view.children
         let children: Packed
@@ -5754,9 +5759,12 @@ const setup = (
       case "Element": {
         if (kind?._tag !== "Element" || kind.tag !== view.tag) return undefined
         const next = host.nextOf(node)
-        for (const name in view.attrs) {
-          const current = hydration!.getAttr(node, name)
-          if (current !== view.attrs[name]) host.setAttr(node, name, view.attrs[name], current)
+        if (view.attrs !== View.noFields) {
+          const attrs = host.normalizeAttrs !== undefined ? host.normalizeAttrs(node, view.attrs) : view.attrs
+          for (const name in attrs) {
+            const current = hydration!.getAttr(node, name)
+            if (current !== attrs[name]) host.setAttr(node, name, attrs[name], current)
+          }
         }
         setEvents(inst, node, view)
         checkKeys(inst, view.children)

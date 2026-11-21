@@ -190,8 +190,7 @@ export interface Host<Node> {
    * Returns `attrs` keyed by the names `setAttr` stores them under on `node`,
    * the later of two aliases winning, so that updating or removing a losing
    * alias does not change the winning one. May return `attrs` itself. The
-   * names it returns are passed to `setAttr` as they are when two records are
-   * diffed; mounting and hydration pass the original names.
+   * names it returns are passed to `setAttr` as they are.
    */
   readonly normalizeAttrs?:
     | ((node: Node, attrs: Readonly<Record<string, string>>) => Readonly<Record<string, string>>)
