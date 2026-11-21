@@ -49,10 +49,7 @@ const refresh = () => {
 export const hideOthers = (inside: Element): () => void => {
   layers.push(inside)
   refresh()
-  let done = false
   return () => {
-    if (done) return
-    done = true
     layers.splice(layers.lastIndexOf(inside), 1)
     refresh()
   }
@@ -95,9 +92,10 @@ const lock = (document: Document): (() => void) | undefined => {
     return () => names.forEach((name, i) => (element.style[name] = values[i]!))
   }
   const gutter = htmlStyle.scrollbarGutter.includes("both-edges") ? "stable both-edges" : "stable"
-  if (view.innerWidth - html.clientWidth <= 0 || gutterHolds(html, scroller)) {
+  const scrollbar = view.innerWidth - html.clientWidth > 0
+  if (!scrollbar || gutterHolds(html, scroller)) {
     const restore = [saved(html, ["scrollbarGutter"]), saved(scroller, ["overflowX", "overflowY"])]
-    if (view.innerWidth - html.clientWidth > 0) html.style.scrollbarGutter = gutter
+    if (scrollbar) html.style.scrollbarGutter = gutter
     scroller.style.overflowX = "hidden"
     scroller.style.overflowY = "hidden"
     return () => restore.forEach((undo) => undo())
@@ -138,10 +136,7 @@ const lock = (document: Document): (() => void) | undefined => {
 
 export const lockScroll = (document: Document): () => void => {
   if (locks++ === 0) unlock = lock(document)
-  let done = false
   return () => {
-    if (done) return
-    done = true
     if (--locks > 0) return
     unlock?.()
     unlock = undefined

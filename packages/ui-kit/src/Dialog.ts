@@ -421,15 +421,12 @@ const portalBox = [
 
 const noSelect = "user-select:none;-webkit-user-select:none"
 
-const layer = View.toNode(
-  new Html.Element<never>("div").attr("role", "presentation").attr("style", "position:fixed;inset:0;" + noSelect)
+const blocker = new Html.Element<never>("div").attr("role", "presentation").attr(
+  "style",
+  "position:fixed;inset:0;" + noSelect
 )
-const closingLayer = View.toNode(
-  new Html.Element<never>("div").attr("role", "presentation").attr("inert", "").attr(
-    "style",
-    "position:fixed;inset:0;" + noSelect
-  )
-)
+const layer = View.toNode(blocker)
+const closingLayer = View.toNode(blocker.attr("inert", ""))
 
 const tabbableSelector = [
   "a[href]",
@@ -450,12 +447,6 @@ const closestOf = (target: Node, selector: string): Element | null | undefined =
 
 const inNested = (dialog: Element, element: Element): boolean => element.parentElement?.closest("dialog") !== dialog
 
-const inDisabledFieldset = (element: HTMLElement): boolean => {
-  if (!element.matches("button,input,select,textarea")) return false
-  const fieldset = element.closest("fieldset[disabled]")
-  return fieldset !== null && fieldset.querySelector(":scope > legend")?.contains(element) !== true
-}
-
 const radioOut = (element: HTMLElement): boolean => {
   if (!(element instanceof HTMLInputElement) || element.type !== "radio" || element.name === "" || element.checked) {
     return false
@@ -471,7 +462,7 @@ const tabbables = (dialog: Element, root: Element): Array<HTMLElement> => {
   const view = dialog.ownerDocument.defaultView
   return Array.from(root.querySelectorAll<HTMLElement>(tabbableSelector)).filter((element) =>
     element.tabIndex >= 0 && element.getClientRects().length > 0 && !inNested(dialog, element) &&
-    !element.matches(":disabled") && !inDisabledFieldset(element) && element.closest("[inert]") === null &&
+    !element.matches(":disabled") && element.closest("[inert]") === null &&
     view?.getComputedStyle(element).visibility !== "hidden" && !radioOut(element)
   )
 }
@@ -619,17 +610,15 @@ const TrackDialog = Mount.makeStream(
 
       let release: (() => void) | undefined
       const hold = () => {
-        if (release !== undefined || current.modal === false) return
+        release?.()
+        release = undefined
+        if (!current.open || current.modal === false) return
         const shown = hideOthers(node)
         const unlock = current.modal === true ? lockScroll(document) : undefined
         release = () => {
           shown()
           unlock?.()
         }
-      }
-      const letGo = () => {
-        release?.()
-        release = undefined
       }
 
       // Safari sends `compositionend` before the `keydown` that ends a composition,
@@ -674,17 +663,17 @@ const TrackDialog = Mount.makeStream(
         const root = popup()
         if (root.contains(target) || onTrigger(target)) return false
         if (current.modal === true) {
-          return target instanceof Element && target !== node && node.contains(target) &&
-            closestOf(target, "dialog") === node &&
+          return target instanceof Element && target !== node && target.closest("dialog") === node &&
             (target.contains(root) || target.getAttribute("role") === "presentation")
         }
         return node.contains(target) || inKept(target) || !addedSince(target)
       }
-      const hasBackdrop = (): boolean =>
-        current.modal === true ||
-        Array.from(node.querySelectorAll("[role=\"presentation\"]")).some((element) =>
-          !element.contains(popup()) && closestOf(element, "dialog") === node
+      const hasBackdrop = (): boolean => {
+        const root = popup()
+        return Array.from(node.querySelectorAll("[role=\"presentation\"]")).some((element) =>
+          !element.contains(root) && element.closest("dialog") === node
         )
+      }
       const touches = new Set<number>()
       let pressed: string | undefined
       let ignored: Node | null = null
@@ -692,12 +681,11 @@ const TrackDialog = Mount.makeStream(
       const onPointerDown = (event: PointerEvent) => {
         pressed = undefined
         const target = event.target as Node | null
-        ignored = target !== null && current.open && !node.contains(target) && !outside(target) ? target : null
+        const out = target !== null && outside(target)
+        ignored = target !== null && current.open && !out && !node.contains(target) ? target : null
         if (event.pointerType === "touch") touches.add(event.pointerId)
         if (!listens() || !event.isPrimary || event.button !== 0 || touches.size > 1) return
-        if (target === null || (event.pointerType !== "touch" && onScrollbar(target, event)) || !outside(target)) {
-          return
-        }
+        if (!out || (event.pointerType !== "touch" && onScrollbar(target, event))) return
         if (event.pointerType === "touch" || (current.modal === "trap-focus" && !hasBackdrop())) {
           send(Message.PressedOutside({ pointerType: event.pointerType }))
         } else {
@@ -767,47 +755,42 @@ const TrackDialog = Mount.makeStream(
         }
         frame(read)
       }
+      const waits = (state: TrackDialogArgs): boolean | undefined =>
+        state.open ? (state.started ? true : undefined) : state.mounted && !state.holdExit ? false : undefined
       const onChange = (next: TrackDialogArgs) => {
         const previous = current
         current = next
         if (next.open && next.triggerId !== previous.triggerId) trigger = findTrigger() ?? trigger
+        if (next.open !== previous.open || next.modal !== previous.modal) hold()
         if (previous.open && !next.open) {
-          letGo()
           pressed = undefined
         } else if (!previous.open && next.open) {
-          hold()
-          record(page.takeRecords())
+          page.takeRecords()
           added = new WeakSet()
           const focused = document.activeElement
           if (focused instanceof HTMLElement && !node.contains(focused)) before = focused
           opening(focused)
-        } else if (next.open && next.modal !== previous.modal) {
-          letGo()
-          hold()
         }
-        if (next.open && next.started && !previous.started) settle(true)
-        else if (next.open && !previous.open && previous.mounted) {
-          if (next.started) settle(true)
-          else generation++
-        } else if (!next.open && next.mounted && next.holdExit) generation++
-        else if (!next.open && next.mounted && (previous.open || !previous.mounted || previous.holdExit)) settle(false)
+        const wait = waits(next)
+        if (wait === waits(previous)) return
+        if (wait === undefined) generation++
+        else settle(wait)
       }
 
-      const listeners: ReadonlyArray<readonly [string, (event: any) => void, boolean]> = [
-        ["keydown", onKeyDown, false],
-        ["compositionend", onCompositionEnd, true],
-        ["pointerdown", onPointerDown, true],
-        ["pointerup", onPointerEnd, true],
-        ["pointercancel", onPointerEnd, true],
-        ["click", onClick, true],
-        ["focusin", onFocusIn, true]
-      ]
+      const controller = new AbortController()
+      const { signal } = controller
 
       return Effect.acquireRelease(
         Effect.sync(() => {
           showing.push(entry)
-          for (const [name, listener, capture] of listeners) document.addEventListener(name, listener, capture)
-          node.addEventListener("focusout", onFocusOut)
+          document.addEventListener("keydown", onKeyDown, { signal })
+          document.addEventListener("compositionend", onCompositionEnd, { capture: true, signal })
+          document.addEventListener("pointerdown", onPointerDown, { capture: true, signal })
+          document.addEventListener("pointerup", onPointerEnd, { capture: true, signal })
+          document.addEventListener("pointercancel", onPointerEnd, { capture: true, signal })
+          document.addEventListener("click", onClick, { capture: true, signal })
+          document.addEventListener("focusin", onFocusIn, { capture: true, signal })
+          node.addEventListener("focusout", onFocusOut, { signal })
           if (document.body !== null) page.observe(document.body, { subtree: true, childList: true })
           observer.observe(node, {
             subtree: true,
@@ -815,7 +798,7 @@ const TrackDialog = Mount.makeStream(
             attributes: true,
             attributeFilter: ["class", "style", "hidden"]
           })
-          if (current.open) hold()
+          hold()
           raiseAbove(node)
           if (!current.mounted) send(Message.ShowedPortal())
           opening(active)
@@ -825,11 +808,10 @@ const TrackDialog = Mount.makeStream(
         () =>
           Effect.sync(() => {
             showing.splice(showing.indexOf(entry), 1)
-            for (const [name, listener, capture] of listeners) document.removeEventListener(name, listener, capture)
-            node.removeEventListener("focusout", onFocusOut)
+            controller.abort()
             observer.disconnect()
             page.disconnect()
-            letGo()
+            release?.()
             generation++
             const { closedByFocusOut, closeMethod, finalFocus, portalId } = current
             const lost = focusInside
@@ -1103,7 +1085,7 @@ export const Dialog = Component.define({
       states(builder)
         .attr("data-nested", flag(nested))
         .attr("data-nested-dialog-open", flag(nestedDialogs > 0))
-    const closing = open ? "" : ";pointer-events:none"
+    const passThrough = "pointer-events:none"
 
     const triggerPart = p.part(
       "button",
@@ -1130,9 +1112,8 @@ export const Dialog = Component.define({
             .attr("aria-labelledby", withTokens(node.attrs["aria-labelledby"], titleId))
             .attr("aria-describedby", withTokens(node.attrs["aria-describedby"], descriptionId))
         )
-      const layered = modal === true && shown ? dialog.children(open ? layer : closingLayer) : dialog
-      if (!shown) return layered
-      return layered.onMount(
+      if (!shown) return dialog
+      return (modal === true ? dialog.children(open ? layer : closingLayer) : dialog).onMount(
         TrackDialog({
           modal,
           open,
@@ -1163,7 +1144,9 @@ export const Dialog = Component.define({
     const backdropPart = p.part("div", (b) =>
       states(b)
         .attr("role", "presentation")
-        .forward((node) => node.attr("style", withStyle(node.attrs.style, noSelect + closing))))
+        .forward((node) =>
+          node.attr("style", withStyle(node.attrs.style, open ? noSelect : noSelect + ";" + passThrough))
+        ))
     const backdrop = View.wrapPart(
       backdropPart,
       <B extends View.PartTarget<"div">>(element: B): ReturnType<B["attr"]> | undefined => {
@@ -1174,7 +1157,7 @@ export const Dialog = Component.define({
     const viewport = p.part("div", (b) =>
       nesting(b)
         .attr("role", "presentation")
-        .forward((node) => open ? node : node.attr("style", withStyle(node.attrs.style, closing.slice(1)))))
+        .forward((node) => open ? node : node.attr("style", withStyle(node.attrs.style, passThrough))))
     const popup = p.part("div", (b) =>
       nesting(b)
         .attr("id", popupId)

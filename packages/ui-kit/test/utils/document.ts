@@ -25,7 +25,8 @@ export const click = (target: Element, pointerType = "mouse") => {
 /**
  * happy-dom has no popover API. Showing one sends `beforetoggle`, and focuses
  * an `autofocus` element in it, or in a `<dialog>` the first field, as a
- * browser does before the dialog's own mount starts.
+ * browser does before the dialog's own mount starts. Its `:disabled` also
+ * misses a control in a disabled fieldset.
  */
 export const popovers = Effect.acquireRelease(
   Effect.sync(() => {
@@ -45,7 +46,9 @@ export const popovers = Effect.acquireRelease(
       showing.delete(this)
     }
     elementProto.matches = function(this: Element, selector: string) {
-      return selector === ":popover-open" ? showing.has(this) : matches.call(this, selector)
+      if (selector === ":popover-open") return showing.has(this)
+      return matches.call(this, selector) || (selector === ":disabled" &&
+        matches.call(this, "button,input,select,textarea") && this.closest("fieldset[disabled]") !== null)
     }
     return () => {
       delete proto.showPopover
