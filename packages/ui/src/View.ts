@@ -323,18 +323,29 @@ export type MountHint =
  * failure boundary: a failed child shows `fallback`, or nothing, until its
  * key changes, and the parent's optional `onFailure` is also messaged.
  *
- * A child dropped from the view unmounts, and its Model goes with it. Declare
- * it with `detached: true` instead when the user should find it as they left
- * it, such as a hidden tab with a half-filled form or a wizard step. Its nodes
- * leave the document and the runtime keeps them, so the child keeps its
- * Model, its Commands in flight, its Subscriptions and what the user typed
- * into its inputs. It still gets props, `$.send` and query results, and its
- * events reach the parent through the `onEmit` of the latest render. It
- * contributes no head entries, a ref lookup inside it finds nothing, and its
- * element mounts stop until it is attached again, when they start anew. The
- * log records `Detached` and `Attached`. A server render writes no nodes
- * for a detached child but sends its state, and the client builds its nodes,
- * detached, from the server's Model.
+ * A child dropped from the view unmounts, and its Model goes with it. A
+ * component defined with `scoped: true` is kept instead, so the user finds it
+ * as they left it: a hidden tab with a half-filled form, a wizard step, a row
+ * a filter hides. It's written inside `h.scoped` with the `s` that passes,
+ * `h.scoped((s) => Profile(s, { key: "profile" }))`, and it belongs to the
+ * component whose view called `h.scoped`, its author. Its path is
+ * `Name[key]` under the author wherever the view puts it, so moving it to
+ * another element or into another child's slot keeps the instance.
+ *
+ * While no view writes it, the runtime keeps its nodes out of the document,
+ * and the child keeps its Model, its Commands in flight, its Subscriptions
+ * and what the user typed into its inputs. It still gets `$.send` and query
+ * results, and its events reach the author's `update` through the `onEmit`
+ * it was last written with. It contributes no head entries and no reports to
+ * `collects`, a ref lookup inside it finds nothing, and its element mounts
+ * stop until it's written again. The log records `Kept` and `Drawn`. Saved
+ * state, from the server or a history entry, holds a kept child's Model, and
+ * the child takes it once it's written again.
+ *
+ * Without a predicate it lives as long as its author. With one,
+ * `h.scoped(({ key, model }) => key in model.rows, (s) => ...)`, the runtime
+ * asks the predicate about each live child on every render of the author and
+ * ends the child once it says no.
  *
  * **Gotchas**
  *
@@ -349,12 +360,12 @@ export type MountHint =
  * keeps the Model when `cond` changes, and `init` doesn't run again. Key each
  * branch when the component's Model holds state that shouldn't carry over.
  *
- * A detached child costs what a shown one does. Declare a wizard step once it
- * has been visited, `detached: step !== model.current`, rather than every
- * step up front. Its Subscriptions keep running, so gate one on the Model
- * when it should pause. A dialog or popover open inside it closes when it is
- * detached, and focus inside it is lost. A host without `createContainer`
- * fails the parent of a detached child.
+ * A kept child costs what a shown one does. Its Subscriptions keep running,
+ * so gate one on the Model when it should pause. A dialog or popover open
+ * inside it closes when it's kept, and focus inside it is lost. A host
+ * without `createContainer` fails the author of a kept child. The props and
+ * `onEmit` it has are the ones it was last written with: write it inside a
+ * `hidden` element instead when it needs fresh ones.
  *
  * @stability experimental
  * @category models
@@ -380,8 +391,11 @@ export interface Child<out Msg, out R = never> {
   readonly view: ((parts: any) => Content<Msg, any>) | undefined
   /** What the parent passed for each of the child's slots. */
   readonly slots: Readonly<Record<string, Input<any, any>>> | undefined
-  /** The child's nodes are out of the document, and its instance goes on. */
-  readonly detached?: boolean | undefined
+  /**
+   * Set when the child is a scoped component written with the `s` of
+   * `h.scoped`: its scope's predicate, or `true` for a scope without one.
+   */
+  readonly alive?: ((input: any) => boolean) | true | undefined
   /** Phantom: the child's requirements surface in its parent's. */
   readonly "~R"?: (_: never) => R
 }
@@ -436,12 +450,6 @@ export declare namespace Child {
       readonly onEmit?: ((events: Events) => Msg | undefined) | EmitHandlers<Events, Msg> | undefined
       /** Also tells the parent that the child failed. The failure stays in the child either way. */
       readonly onFailure?: ((failure: AsyncResult.Failure<never, unknown>) => Msg | undefined) | undefined
-      /**
-       * Takes the child's nodes out of the document while it stays declared.
-       * Its Model, Commands, Subscriptions, props and `onEmit` go on, and its
-       * element mounts stop until it is attached again. `false` by default.
-       */
-      readonly detached?: boolean | undefined
     }
     & ({} extends Props ? { readonly props?: Props | undefined } : { readonly props: Props })
 
@@ -2021,6 +2029,11 @@ class HelperImpl<Msg, Props> implements Helper<Msg, Props> {
     }
     lazies.used++
     return node
+  }
+  scoped(this: any, ...args: Array<any>): unknown {
+    const s = Object.create(this)
+    s["~alive"] = args.length === 1 ? true : args[0]
+    return args[args.length - 1](s)
   }
   isRunning(command: Command.Definition.Any, group?: unknown): boolean {
     return this.runningFn(Command.nameOf(command), Command.groupKeyOf(command, group))

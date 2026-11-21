@@ -416,35 +416,35 @@ export interface Unmounted extends InstanceBase {
 }
 
 /**
- * A child declared `detached` took its nodes out of the document. It stays
- * mounted: it takes messages, props and query results, and its Commands and
- * Subscriptions go on.
+ * A scoped child that no view writes now, and that its scope keeps, took
+ * its nodes out of the document. It stays mounted: it takes messages and
+ * query results, and its Commands and Subscriptions go on.
  *
  * **Details**
  *
- * A detached child shows nothing, contributes no head entries, and its
- * element mounts are stopped. A ref lookup inside it finds no node, so it
- * gets no DOM events. A child declared `detached` from the start logs it
- * right after `Mounted`. `Attached` ends the interval.
+ * A kept child shows nothing, contributes no head entries and no reports,
+ * and its element mounts are stopped. A ref lookup inside it finds no node.
+ * A child moved from one place to another in one render logs nothing.
+ * `Drawn` ends the interval.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface Detached extends InstanceBase {
-  readonly _tag: "Detached"
+export interface Kept extends InstanceBase {
+  readonly _tag: "Kept"
 }
 
 /**
- * A detached child put its nodes back in the document, and its element
- * mounts started again.
+ * A kept child was written again, put its nodes back in the document, and
+ * started its element mounts again.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface Attached extends InstanceBase {
-  readonly _tag: "Attached"
+export interface Drawn extends InstanceBase {
+  readonly _tag: "Drawn"
 }
 
 /**
@@ -823,8 +823,8 @@ export type InstanceEntry =
   | LayerFailed
   | Failed
   | Unmounted
-  | Detached
-  | Attached
+  | Kept
+  | Drawn
   | MountStarted
   | MountEnded
   | CommandAwaiting
@@ -1107,8 +1107,8 @@ export const Wire = Schema.Union([
     update: Schema.optionalKey(Schema.Struct({ message: Schema.Json, source: SourceWire }))
   }),
   Schema.TaggedStruct("Unmounted", InstanceWire),
-  Schema.TaggedStruct("Detached", InstanceWire),
-  Schema.TaggedStruct("Attached", InstanceWire),
+  Schema.TaggedStruct("Kept", InstanceWire),
+  Schema.TaggedStruct("Drawn", InstanceWire),
   Schema.TaggedStruct("MountStarted", { ...InstanceWire, name: Schema.String, args: Schema.Json }),
   Schema.TaggedStruct("MountEnded", {
     ...InstanceWire,
@@ -1323,8 +1323,8 @@ export const makeEncoder = (options?: {
           return { _tag: "LayerPending", ...instanceBase(entry), status: entry.status }
         case "LayerReady":
         case "Unmounted":
-        case "Detached":
-        case "Attached":
+        case "Kept":
+        case "Drawn":
           return { _tag: entry._tag, ...instanceBase(entry) }
         case "LayerFailed":
           return {

@@ -1945,7 +1945,8 @@ const makeComponent = (
   proto: object,
   fields: { readonly [key: string]: unknown }
 ): any => {
-  const component = (_h: unknown, options: child.Options) => child.make(component as any, options)
+  const component = (h: any, options: child.Options) =>
+    child.make(component as any, options, (component as any).definition.scoped ? h["~alive"] : undefined)
   Object.setPrototypeOf(component, proto)
   for (const key of Object.keys(fields)) {
     Object.defineProperty(component, key, { value: fields[key], enumerable: true, writable: true, configurable: true })

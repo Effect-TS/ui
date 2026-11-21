@@ -843,11 +843,11 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(root.model()).toEqual(["start", "inserted", "new"])
       }).pipe(Effect.scoped))
 
-    it.effect("a detached child gets the events it fires as it is attached", () =>
+    it.effect("a kept scoped child gets the events it fires as it is drawn again", () =>
       Effect.gen(function*() {
         const Counter = Component.define({
           name: "Counter",
-          scoped: false,
+          scoped: true,
           model: Schema.Number,
           message: Schema.String
         }).make({
@@ -855,17 +855,22 @@ describe("BrowserHost", { concurrent: false }, () => {
           update: (count) => count + 1,
           view: (count, h) => h.el("x-clicks-on-connect", h.el("button").on("click", "hit").children(`Hit ${count}`))
         })
-        const Shell = Component.define({ name: "Shell", scoped: false, model: Schema.Boolean, message: Schema.String })
+        const Shell = Component.define({ name: "Shell", scoped: false, model: Schema.Boolean, message: Schema.Boolean })
           .make({
             init: () => true,
-            update: () => false,
-            view: (detached, h) => h.el("div", Counter(h, { key: "c", detached }))
+            update: (_, shown) => shown,
+            view: (shown, h) => h.el("div", h.scoped((s) => shown ? Counter(s, { key: "c" }) : null))
           })
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Shell, {}, app)
-        root.send("attach")
         yield* tick
         assert.strictEqual(HtmlLocator.getByRole(app, "button").textContent, "Hit 1")
+        root.send(false)
+        yield* tick
+        assert.strictEqual(app.querySelector("button"), null)
+        root.send(true)
+        yield* tick
+        assert.strictEqual(HtmlLocator.getByRole(app, "button").textContent, "Hit 2")
       }).pipe(Effect.scoped))
 
     it.effect("an element hydration rebuilds gets the events it fires as it goes in", () =>

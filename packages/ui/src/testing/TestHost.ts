@@ -236,7 +236,7 @@ export const makeHost = (): Renderer.Host<TestNode> & {
       operations.push(`create ${JSON.stringify(text)}`)
       return makeText(text, along)
     },
-    // A detached child's nodes go in an element that is never inserted, so no query reaches them.
+    // A kept child's nodes go in an element that is never inserted, so no query reaches them.
     createContainer() {
       operations.push("create container")
       return makeElement("#container", along)

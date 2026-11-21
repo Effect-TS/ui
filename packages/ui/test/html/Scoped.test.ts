@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
-import { Component, UiSchema } from "@effect/ui"
+import { Component, Query } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
+import { AsyncResult } from "effect/reactivity"
 
 // The first init of each runs on the server: a Model the client built with its own init would say so.
 let inits = { avatar: 0, profile: 0 }
@@ -24,7 +25,7 @@ const Avatar = Component.define({
 
 const Profile = Component.define({
   name: "Profile",
-  scoped: false,
+  scoped: true,
   model: Schema.String,
   message: Schema.Never,
   elements: Html
@@ -35,30 +36,42 @@ const Profile = Component.define({
     view: (draft, h) => h.form(h.p(draft), Avatar(h, { key: "a" }))
   })
 
+class GetTab extends Query.Service<GetTab>()("GetTab", {
+  args: {},
+  success: Schema.String,
+  error: Schema.Never,
+  staleTime: "30 seconds"
+}, Effect.succeed(() => Effect.succeed("billing"))) {}
+
 const Settings = Component.define({
   name: "Settings",
   scoped: false,
-  model: Schema.String,
-  message: UiSchema.TaggedEnum({ Show: { tab: Schema.String } }),
-  elements: Html
+  model: Schema.Boolean,
+  message: Schema.Boolean,
+  elements: Html,
+  queries: { tab: { query: GetTab, args: () => ({}) } }
 }).make({
-  init: () => "billing",
-  update: (_, { tab }) => tab,
-  view: (tab, h) => h.main(h.h1(tab), Profile(h, { key: "p", detached: tab !== "profile" }))
-})
+  init: () => false,
+  update: (_, shown) => shown,
+  // Written while the tab loads, then kept once it says billing: the server holds a kept child.
+  view: (shown, h) => {
+    const billing = AsyncResult.isSuccess(h.queries.tab) && h.queries.tab.value === "billing"
+    return h.main(
+      h.h1(billing ? "billing" : "profile"),
+      shown || !billing ? h.scoped((s) => Profile(s, { key: "p" })) : null
+    )
+  }
+}).pipe(Component.provide(GetTab.layer))
 
-describe("detached children on the server", () => {
-  it.effect("writes no nodes for a detached child, and the client builds them from the server's state", () =>
+describe("scoped children on the server", () => {
+  it.effect("writes no nodes for a kept child, and the client takes its state once it's written", () =>
     Effect.gen(function*() {
       inits = { avatar: 0, profile: 0 }
-      // Fails if the client rebuilt nodes the server wrote, or didn't adopt a Model the server sent.
       const result = yield* ssr(Settings, {})
-      assert.include(result.html, "<!--[/Settings/Profile[p]--><!--]/Settings/Profile[p]-->")
       assert.notInclude(result.html, "draft from")
-      assert.include(result.adopted, "/Settings/Profile[p]")
-      assert.include(result.adopted, "/Settings/Profile[p]/Avatar[a]")
+      assert.deepStrictEqual(result.adopted, ["/Settings"])
 
-      result.root.send({ _tag: "Show", tab: "profile" })
+      result.root.send(true)
       yield* TestHost.settle
       assert.strictEqual(result.container.querySelector("p")!.textContent, "draft from the server")
       assert.strictEqual(result.container.querySelector("i")!.textContent, "avatar from the server")

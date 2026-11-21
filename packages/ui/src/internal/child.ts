@@ -19,13 +19,13 @@ export interface Options {
   readonly onFailure?: ((failure: AsyncResult.Failure<never, unknown>) => unknown) | undefined
   readonly view?: ((parts: any) => View.Content<any, any>) | undefined
   readonly slots?: Readonly<Record<string, View.Input<any, any>>> | undefined
-  readonly detached?: boolean | undefined
 }
 
 /** @internal */
 export const make = (
   component: Component.Any | Component.Headless.Any | Feature.Any,
-  options: Options
+  options: Options,
+  alive?: View.Child<any, any>["alive"]
 ): View.Child<any, any> => {
   // A child with a key and a ref would have two identities that can disagree.
   if (options.key !== undefined && options.ref !== undefined) {
@@ -44,7 +44,7 @@ export const make = (
     onFailure: options.onFailure,
     view: options.view,
     slots: options.slots,
-    detached: options.detached === true
+    alive
   }
 }
 
