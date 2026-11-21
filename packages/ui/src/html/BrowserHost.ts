@@ -717,9 +717,7 @@ export const makeHost = (
     edited.clear()
     for (const node of controls) {
       const control = node as HTMLInputElement
-      if ((!control.isConnected && control.getRootNode().nodeType !== 11) || (isRadio(control) && !control.checked)) {
-        continue
-      }
+      if (!control.isConnected || (isRadio(control) && !control.checked)) continue
       report(control, "input")
       const typing = control.localName === "textarea" ||
         (control.localName === "input" && changeOnBlur.has(control.type))
