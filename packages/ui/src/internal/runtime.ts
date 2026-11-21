@@ -1482,6 +1482,7 @@ const setup = (
     if (held?._tag !== "Held") return
     const parentNode = host.parentOf(held.node)
     if (parentNode === undefined) return
+    held.nodes = emptyList
     for (const node of nodesOf(taken)) {
       if (host.parentOf(node) !== parentNode) continue
       if (linked) host.insertBefore(parentNode, node, held.node)
@@ -1538,6 +1539,7 @@ const setup = (
   }
   let waitingState: Map<string, unknown> | undefined
   let waitingLate: Set<string> | undefined
+  const crossed = new Set<string>()
   let restoredAt = 0
   const waitingUnder = new Map<string, Set<string>>()
   const eachAbove = (path: string, f: (above: string) => void) => {
@@ -1558,6 +1560,7 @@ const setup = (
   const dropWaiting = (path: string) => {
     if (waitingState === undefined || !waitingState.delete(path)) return
     waitingLate?.delete(path)
+    crossed.delete(path)
     eachAbove(path, (above) => {
       const under = waitingUnder.get(above)
       if (under !== undefined && under.delete(path) && under.size === 0) waitingUnder.delete(above)
@@ -1576,6 +1579,13 @@ const setup = (
       if (holding.has(above) || servedIn?.get(above)?.view !== undefined) return true
     }
     return false
+  }
+  const dropCrossed = () => {
+    for (const path of crossed) {
+      if (servedLive(path)) continue
+      dropWaiting(path)
+      hydrating?.deferred.add(path)
+    }
   }
   const addWaiting = (saved: unknown, late?: boolean) => {
     if (saved === null || typeof saved !== "object") return
@@ -2343,6 +2353,7 @@ const setup = (
       for (const container of inst.parked) unpark(inst, container)
     }
     if (servedIn !== undefined) releaseServed(inst)
+    if (inst.waiting && holding.delete(inst.path)) dropCrossed()
     // Its reports go with it.
     markReports(inst)
     for (const child of inst.children) leave(child)
@@ -2969,7 +2980,6 @@ const setup = (
     // However the instance goes, a removed ancestor and failure included, its owners forget it.
     if (inst.owners !== undefined) { for (const owner of inst.owners.values()) owner.readers?.delete(inst) }
     if (writersLive > 0) endWrites(inst)
-    if (inst.waiting) holding.delete(inst.path)
     if (waitingState !== undefined && inst.born > restoredAt) forget(inst.path)
     const waits = stopRuns(inst)
     if (waits.length === 0) {
@@ -3699,7 +3709,7 @@ const setup = (
     if (range !== undefined) {
       if (hydrating!.drawn.size > 0) {
         const served: Array<string> = []
-        noteServed(host.nextOf(range.open), range.close, inst, served)
+        noteServed(firstOf(range), stopOf(range), inst, served)
         if (served.length > 0) servedBy.set(inst, served)
       }
       range.claimed = true
@@ -3738,6 +3748,7 @@ const setup = (
       if (held !== undefined && adopt && !inst.closed && inst.failure === undefined) applyPlacement(inst, held)
       viewChanged = true
       releaseServed(inst)
+      dropCrossed()
       settleWaiting()
     }
     return (adopt: boolean, start: () => void) => defer(() => resume(adopt, start))
@@ -7788,11 +7799,8 @@ const setup = (
       navigated: (leaves, pops) => {
         closeWindow()
         if ((leaves || pops) && waitingState !== undefined) {
-          for (const path of Array.from(waitingState.keys())) {
-            if (servedLive(path)) continue
-            dropWaiting(path)
-            hydrating?.deferred.add(path)
-          }
+          for (const path of waitingState.keys()) crossed.add(path)
+          dropCrossed()
         }
         if (leaves) {
           restoredAt = instancesMade
