@@ -963,6 +963,7 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
 
     let timer: ReturnType<typeof setTimeout> | undefined
     const opening = () => {
+      send(Message.ShowedPopup())
       node.inert = false
       clear()
       clearTimeout(timer)
@@ -1132,7 +1133,6 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
         view?.addEventListener("resize", onResize, { signal })
         hold()
         raiseAbove(node)
-        if (!current.mounted) send(Message.ShowedPopup())
         if (current.open) opening()
         else node.inert = true
       }).pipe(
@@ -1304,7 +1304,8 @@ export const Select = Component.define({
         : next
     },
     CompletedWaitBeforeResetTyping: (_model, _message, $) => $.evolve({ typed: "" }),
-    ShowedPopup: (_model, _message, $) => $.evolve({ mounted: true }),
+    ShowedPopup: (_model, _message, $) =>
+      $.evolve($.props.open ? { mounted: true, closeMethod: null, focusLeft: false } : { mounted: true }),
     RenderedFirstFrame: (model, _message, $) => $.props.open ? $.evolve({ started: true }) : model,
     FinishedTransition: (model, { open }, $) => {
       if (open !== $.props.open) return model

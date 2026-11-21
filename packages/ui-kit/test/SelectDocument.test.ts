@@ -104,7 +104,9 @@ const items = [
 const Config = Schema.Struct({
   align: Schema.Boolean,
   required: Schema.Boolean,
-  dialog: Schema.Boolean
+  dialog: Schema.Boolean,
+  finalFocus: Schema.Boolean,
+  holdExit: Schema.Boolean
 })
 type Config = typeof Config.Type
 
@@ -145,7 +147,8 @@ const Page = Component.define({
             id: "trigger",
             name: "theme",
             required: h.props.required,
-            alignItemWithTrigger: h.props.align
+            alignItemWithTrigger: h.props.align,
+            holdExit: h.props.holdExit
           },
           onEmit: {
             Opened: ({ reason }) => Message.Opened({ reason }),
@@ -156,6 +159,7 @@ const Page = Component.define({
           view: (select) =>
             field.root(h.div.attr("id", "field")).children(
               select.label(h.div.attr("id", "label")).children("Theme"),
+              h.props.finalFocus ? select.finalFocus(h.button.attr("id", "final")).children("Final") : null,
               field.focusWithin(h.div).children(
                 select.trigger(field.member(h.button)).children(select.value(h.span.attr("data-geo", "value"))),
                 select.positioner(h.div.attr("id", "positioner")).children(
@@ -196,7 +200,11 @@ const mountPage = Effect.fnUntraced(function*(config: Partial<Config> = {}) {
   rects.set("trigger", rects.get("trigger") ?? { x: 100, y: 300, width: 120, height: 30 })
   rects.set("value", { x: 110, y: 305, width: 60, height: 20 })
   const app = yield* container
-  const root = yield* BrowserHost.mountEffect(Page, { align: false, required: false, dialog: false, ...config }, app)
+  const root = yield* BrowserHost.mountEffect(
+    Page,
+    { align: false, required: false, dialog: false, finalFocus: false, holdExit: false, ...config },
+    app
+  )
   yield* tick
   return { root, log: () => root.model()?.log ?? [] }
 })
@@ -407,6 +415,42 @@ describe("Select in a document", { concurrent: false }, () => {
       yield* tick
       assert.deepStrictEqual(log(), ["Opened list-navigation", "Picked light", "Dismissed item-press"])
     }).pipe(Effect.scoped))
+
+  it.effect("a close the consumer makes after a reopen returns focus, whatever the last close did", () =>
+    Effect.gen(function*() {
+      for (const kept of [false, true]) {
+        yield* Effect.scoped(Effect.gen(function*() {
+          const { root } = yield* mountPage({ finalFocus: kept, holdExit: kept })
+          const back = byId(kept ? "final" : "trigger")
+          const visible: Array<unknown> = []
+          const focus = back.focus
+          back.focus = (options?: FocusOptions) => {
+            visible.push((options as { readonly focusVisible?: boolean } | undefined)?.focusVisible)
+            focus.call(back, options)
+          }
+          const reopenAndClose = Effect.gen(function*() {
+            root.send(Message.Opened({ reason: "test" }))
+            yield* tick
+            assert.strictEqual(document.activeElement, item("light"))
+            root.send(Message.Dismissed({ reason: "test" }))
+            yield* tick
+            assert.strictEqual(document.activeElement, back, String(kept))
+          })
+          keydown(byId("trigger"), "ArrowDown")
+          yield* tick
+          byId("after").focus()
+          yield* tick
+          assert.strictEqual(document.activeElement, byId("after"))
+          yield* reopenAndClose
+          keydown(byId("trigger"), "ArrowDown")
+          yield* tick
+          keydown(item("light"), "Escape")
+          yield* tick
+          yield* reopenAndClose
+          assert.deepStrictEqual(visible, [false, true, false])
+        }))
+      }
+    }))
 
   it.effect("focus leaving closes it and touches the field, and a press outside closes it, but not on a scrollbar", () =>
     Effect.gen(function*() {
