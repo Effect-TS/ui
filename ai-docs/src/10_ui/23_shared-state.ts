@@ -58,9 +58,9 @@ const TooltipMessage = UiSchema.TaggedEnum({
 
 // `h.shared.provider` is the nearest TooltipProvider's value. Reading it, or
 // sending to it, puts `Component.Shared<"TooltipProvider">` in the
-// component's requirements: it compiles only below a TooltipProvider. Reads
-// are in `view` and `parts` only, so `update` stays a pure function of what
-// the log records.
+// component's requirements, which the provider's `view` closure removes.
+// Reads are in `view` and `parts` only, so `update` stays a pure function of
+// what the log records.
 export const Tooltip = Component.define({
   name: "Tooltip",
   props: Schema.Struct({ label: Schema.String, tip: Schema.String }),
