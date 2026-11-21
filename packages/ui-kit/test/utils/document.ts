@@ -17,10 +17,17 @@ export const press = (target: Element, pointerType = "mouse") =>
     new PointerEvent("pointerdown", { bubbles: true, composed: true, isPrimary: true, pointerType, button: 0 })
   )
 
+/** A press that starts and ends on `target`, as a click outside listens for. */
+export const click = (target: Element, pointerType = "mouse") => {
+  press(target, pointerType)
+  target.dispatchEvent(new PointerEvent("click", { bubbles: true, composed: true, detail: 1, pointerType }))
+}
+
 /**
  * happy-dom has no popover API. What the kit relies on is that showing and
- * hiding one changes `:popover-open`, and that showing a dialog focuses its
- * first field, as a browser does before the dialog's own mount starts.
+ * hiding one changes `:popover-open`, and that showing one focuses an
+ * `autofocus` element in it, as a browser does before the dialog's own mount
+ * starts.
  */
 export const popovers = Effect.acquireRelease(
   Effect.sync(() => {
@@ -30,7 +37,7 @@ export const popovers = Effect.acquireRelease(
     const matches = elementProto.matches
     proto.showPopover = function(this: HTMLElement) {
       showing.add(this)
-      if (this.localName === "dialog") this.querySelector<HTMLElement>("input, button")?.focus()
+      this.querySelector<HTMLElement>("[autofocus]")?.focus()
     }
     proto.hidePopover = function(this: HTMLElement) {
       showing.delete(this)
