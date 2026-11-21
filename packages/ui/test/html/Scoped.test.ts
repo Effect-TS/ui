@@ -485,6 +485,137 @@ describe("scoped children in a receiver that waits for its Layer", () => {
       assert.strictEqual(app.querySelector("p")?.textContent, "server draft!")
     }).pipe(Effect.scoped))
 
+  const Owner = Component.define({
+    name: "Owner",
+    scoped: false,
+    model: Schema.Null,
+    message: Schema.Never,
+    elements: Html,
+    shares: { value: () => ({ hint: "owned" }) }
+  }).make({ init: () => null, update: (model) => model, parts: () => ({}) })
+  const Required = Component.define({
+    name: "Reading",
+    scoped: true,
+    model: Schema.String,
+    message: Schema.String,
+    elements: Html,
+    shared: { owner: Owner }
+  }).make({
+    init: () => "server",
+    update: (_, text) => text,
+    view: (text, h) => h.label(h.shared.owner.hint, h.input.value(text).onInput(({ value }) => value), h.p(text))
+  })
+  const Optional = Component.define({
+    name: "Reading",
+    scoped: true,
+    model: Schema.String,
+    message: Schema.String,
+    elements: Html,
+    shared: { owner: { owner: Owner, optional: true } }
+  }).make({
+    init: () => "server",
+    update: (_, text) => text,
+    view: (text, h) =>
+      h.shared.owner === undefined
+        ? h.span("no owner")
+        : h.label(h.input.value(text).onInput(({ value }) => value), h.p(text))
+  })
+
+  it.effect.each(
+    [
+      ["must", "the slot draws"],
+      ["may", "the slot draws"],
+      ["must", "draws the receiver"]
+    ] as const
+  )(
+    "keep what the user typed into a field that %s read the shared state of an owner that %s",
+    ([reads, owner]) =>
+      Effect.gen(function*() {
+        const Page = Component.define({
+          name: "ReadingPage",
+          scoped: false,
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) =>
+            h.scoped((s) => {
+              const field = reads === "must" ? Required(s, { key: "f" }) : Optional(s, { key: "f" })
+              return h.main(
+                owner === "the slot draws"
+                  ? Gated(h, { key: "g", slots: { body: Owner(h, { key: "o", view: () => h.div(field) }) } })
+                  : Owner(h, { key: "o", view: () => Gated(h, { key: "g", slots: { body: h.div(field) } }) })
+              )
+            })
+        })
+        const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Page, {}))
+        const field = app.querySelector("input")!
+        field.value = "typed"
+        const root = yield* BrowserHost.mountEffect(Page, {}, app, { state })
+        yield* open
+        yield* root.adopted
+        yield* tick
+        assert.strictEqual(app.querySelector("input"), field)
+        assert.strictEqual(app.querySelector("p")?.textContent, "typed")
+      }).pipe(Effect.scoped)
+  )
+
+  it.effect.each(["by a forwarded builder", "by a headless child's view"] as const)(
+    "get a message, and no click on the button the server drew, once the slot, drawn %s, stops drawing them",
+    (placed) =>
+      Effect.gen(function*() {
+        const GoMsg = UiSchema.TaggedEnum({ Bump: {} })
+        const Go = Component.define({
+          name: "Go",
+          scoped: true,
+          model: Schema.String,
+          message: GoMsg,
+          receives: ["Bump"],
+          elements: Html
+        }).make({
+          init: () => "go",
+          update: (text) => text + "!",
+          view: (text, h) => h.button.onClick(GoMsg.Bump()).children(text)
+        })
+        const GoRef = Go.ref("go")
+        const Page = Component.define({
+          name: "GoPage",
+          scoped: false,
+          model: Schema.Literals(["drawn", "replaced"]),
+          message: Schema.Literals(["drawn", "replaced", "bump"]),
+          elements: Html
+        }).make({
+          init: () => "drawn" as const,
+          update: (_, message, $) => message === "bump" ? $.send(GoRef, GoMsg.Bump()) : message,
+          view: (state, h) =>
+            h.scoped((s) => {
+              const go = state === "drawn" ? Go(s, { ref: GoRef }) : "gone"
+              const body = placed === "by a forwarded builder"
+                ? h.label.forward((label) => h.div(label, go))
+                : Box(h, { key: "box", view: () => h.div(go) })
+              return h.main(h.i(state), Gated(h, { key: "g", slots: { body } }))
+            })
+        })
+        const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Page, {}))
+        const root = yield* BrowserHost.mountEffect(Page, {}, app, { state })
+        root.send("replaced")
+        yield* tick
+        assert.strictEqual(app.querySelector("i")?.textContent, "replaced")
+        app.querySelector("button")!.click()
+        yield* tick
+        root.send("bump")
+        yield* tick
+        yield* open
+        yield* root.adopted
+        assert.isNull(app.querySelector("button"))
+        root.send("drawn")
+        yield* tick
+        assert.strictEqual(app.querySelector("button")?.textContent, "go!")
+      }).pipe(Effect.scoped)
+  )
+
   const moving = () => {
     let inits = 0
     const DraftMsg = UiSchema.TaggedEnum({ Bump: {} })
@@ -522,7 +653,7 @@ describe("scoped children in a receiver that waits for its Layer", () => {
     })
   }
 
-  it.effect("start at once when moved to another receiver that waits, which has none of their nodes", () =>
+  it.effect("get a message once moved to another receiver that waits, which has none of their nodes", () =>
     Effect.gen(function*() {
       const Page = moving()
       const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Page, {}))

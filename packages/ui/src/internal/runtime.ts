@@ -369,13 +369,15 @@ interface Kept {
   drawer: Instance
   container: unknown
   round: number
-  served: Served | undefined
 }
 
 interface Served {
   waiter: Instance
   readonly range: Range
-  kept: Kept | undefined
+  author: Instance | undefined
+  view: View.Child<any, any> | undefined
+  round: number
+  sends: Instance["outbox"] | undefined
 }
 
 interface Claim {
@@ -869,7 +871,6 @@ interface Range {
   readonly close: unknown
   /** Whether the instance took these nodes, so whoever declared the child leaves them in place. */
   claimed: boolean
-  held?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -1328,19 +1329,39 @@ const setup = (
         else {
           const range = rangeFrom(node, kind.path, stop)
           if (range === undefined) continue
-          range.held = true
-          ;(servedIn ??= new Map()).set(kind.path, { waiter, range, kept: undefined })
+          ;(servedIn ??= new Map()).set(kind.path, {
+            waiter,
+            range,
+            author: undefined,
+            view: undefined,
+            round: 0,
+            sends: undefined
+          })
         }
         served.push(kind.path)
       }
     }
   }
   const servedBy = new WeakMap<Instance, Array<string>>()
-  const unserve = (entry: Kept) => {
-    const from = entry.served
-    if (from === undefined) return
-    from.kept = entry.served = undefined
-    from.range.held = false
+  const unserve = (path: string, from: Served) => {
+    if (servedIn?.delete(path) && from.view !== undefined) keptLive--
+  }
+  const sendHeld = (from: Served, child: RChild | RFallback | undefined) => {
+    const sends = from.sends
+    if (sends === undefined) return
+    from.sends = undefined
+    const author = from.author!
+    defer(() => {
+      for (const { issued, send } of sends) sendTo(author, child, issued, send)
+    })
+  }
+  const holdSend = (author: Instance, held: Instance["outbox"][number]): boolean => {
+    for (const from of servedIn!.values()) {
+      if (from.author !== author || from.view!.ref?.key !== held.send.ref.key) continue
+      ;(from.sends ??= []).push(held)
+      return true
+    }
+    return false
   }
   const releaseServed = (waiter: Instance) => {
     const served = servedBy.get(waiter)
@@ -1349,11 +1370,13 @@ const setup = (
     for (const path of served) {
       const from = servedIn?.get(path)
       if (from?.waiter !== waiter) continue
-      servedIn!.delete(path)
-      const entry = from.kept
-      if (entry === undefined) continue
-      unserve(entry)
-      if (!entry.author.left) keep(entry)
+      unserve(path, from)
+      const author = from.author
+      if (author === undefined || author.left) continue
+      const claims = keptTables.get(author)?.writes.get(segment(from.view!))
+      const claim = claims?.[claims.length - 1]
+      settleWrites(claim?.by ?? author, [claim?.view ?? from.view!], from)
+      sendHeld(from, undefined)
     }
     if (keeping.length > 0 && patching === 0) flushKept()
   }
@@ -3483,7 +3506,7 @@ const setup = (
       // the rest isn't in the document yet. Nothing above it renders now, so it places its own nodes.
       if (!range.claimed) { for (const node of nodes) host.remove(node) }
       if (inst.failure === undefined && parentNode !== undefined) {
-        placeEach(parentNode, inst.rendered, range.held && range.claimed ? range.close : after)
+        placeEach(parentNode, inst.rendered, after)
       }
       if (adopt) recordAdopted(inst)
       if (held !== undefined && adopt && !inst.closed && inst.failure === undefined) applyPlacement(inst, held)
@@ -3837,29 +3860,36 @@ const setup = (
     const outbox = inst.outbox
     inst.outbox = emptyList
     if (!countSends(inst, "its children")) return
-    for (const { issued, send } of outbox) {
+    for (const held of outbox) {
       if (inst.closed) return
+      const { issued, send } = held
       // A headless instance wrote none of the tree it renders, so it has no children to send to.
       const child = inst.owner === undefined
         ? findChild(inst.rendered, send.ref.key) ?? (keptLive > 0 ? findKept(inst, send.ref.key) : undefined)
         : undefined
-      const reason: MessageLog.SendDropped["reason"] | undefined = child === undefined
-        ? "unrendered"
-        : child._tag === "Fallback"
-        ? (child.failedChild ? "failed" : "fallback")
-        : child.inst.failure !== undefined
-        ? "failed"
-        : child.inst.closed
-        ? "unrendered"
-        : child.inst.waiting
-        ? "waiting"
-        : undefined
-      if (reason !== undefined) {
-        record(inst, { _tag: "SendDropped", ref: send.ref.key, issued, reason })
-        continue
-      }
-      ;(child as RChild).inst.dispatch(send.message, { _tag: "Send", path: inst.path, seq: issued.seq })
+      if (child === undefined && servedIn !== undefined && holdSend(inst, held)) continue
+      sendTo(inst, child, issued, send)
     }
+  }
+  const sendTo = (
+    inst: Instance,
+    child: RChild | RFallback | undefined,
+    issued: MessageLog.Issued,
+    send: Component.Send.ToChild
+  ) => {
+    const reason: MessageLog.SendDropped["reason"] | undefined = child === undefined
+      ? "unrendered"
+      : child._tag === "Fallback"
+      ? (child.failedChild ? "failed" : "fallback")
+      : child.inst.failure !== undefined
+      ? "failed"
+      : child.inst.closed
+      ? "unrendered"
+      : child.inst.waiting
+      ? "waiting"
+      : undefined
+    if (reason !== undefined) record(inst, { _tag: "SendDropped", ref: send.ref.key, issued, reason })
+    else (child as RChild).inst.dispatch(send.message, { _tag: "Send", path: inst.path, seq: issued.seq })
   }
   const deliverEvents = (inst: Instance, events: ReadonlyArray<unknown>, entrySeq: number) => {
     // The child's `onEmit` was written by the author of the tree it sits in.
@@ -5155,11 +5185,6 @@ const setup = (
         break
       }
     }
-    if (servedIn !== undefined) {
-      for (const { kept } of servedIn.values()) {
-        if (kept !== undefined) walkEvents(kept.author, kept.inner, path, path.length - 1, out)
-      }
-    }
     if (published.length > 0 || made.length > 0) publishedAlong(path, out)
     return out
   }
@@ -5909,7 +5934,6 @@ const setup = (
       return
     }
     removeUpTo(adoptedUpTo, range.close)
-    if (range.held) return
     host.remove(range.open)
     host.remove(range.close)
   }
@@ -6790,10 +6814,10 @@ const setup = (
     let byKey = table.children.get(view.component)
     const entry = byKey?.get(view.key)
     const named = `${author.path}/${segment(view)}`
+    const from = entry === undefined ? servedIn?.get(named) : undefined
     if (!isCurrent(table, view, entry, inst)) {
-      return range !== undefined && entry?.served !== undefined
-        ? take(entry, inst, at, entry.inner.v as View.Child<any, any>, env, range)
-        : blankText(range)
+      if (range === undefined || from?.view === undefined) return blankText(range)
+      view = from.view
     }
     const alive = aliveOf(view)
     if (alive !== undefined && !askAlive(author, table, alive, view)) {
@@ -6819,13 +6843,16 @@ const setup = (
       at,
       drawer: inst,
       container: undefined,
-      round: table.round,
-      served: undefined
+      round: table.round
     }
     if (byKey === undefined) table.children.set(component, byKey = new Map())
     byKey.set(view.key, made)
     if (inner._tag === "Child") keptEntries.set(inner.inst, made)
     keptLive++
+    if (from !== undefined) {
+      unserve(named, from)
+      sendHeld(from, inner)
+    }
     return inner
   }
 
@@ -6899,13 +6926,17 @@ const setup = (
       forget(path)
       if (hydrating !== undefined) {
         hydrating.deferred.add(path)
-        servedIn?.delete(path)
+        const from = servedIn?.get(path)
+        if (from !== undefined) {
+          unserve(path, from)
+          sendHeld(from, undefined)
+        }
       }
     }
     if (entry !== undefined) endKept(entry)
   }
 
-  const settleWrites = (inst: Instance, written: ReadonlyArray<View.Child<any, any>>) => {
+  const settleWrites = (inst: Instance, written: ReadonlyArray<View.Child<any, any>>, released?: Served) => {
     const author = inst.author
     const table = tableOf(author)
     for (const view of written) {
@@ -6928,17 +6959,19 @@ const setup = (
         continue
       }
       const path = `${author.path}/${segment(view)}`
-      const from = servedIn?.get(path)
-      const range = from === undefined || from.range.claimed ? undefined : from.range
-      const before = created
+      const from = released ?? servedIn?.get(path)
+      if (from !== undefined && from !== released) {
+        if (from.view === undefined) keptLive++
+        from.author = author
+        from.view = view
+        from.round = table.round
+        continue
+      }
+      const range = from !== undefined && host.parentOf(from.range.open) !== undefined ? from.range : undefined
       const inner = makeChild(author, view, author.env, range, path, Scope.forkUnsafe(author.scope, "sequential"))
       if (inner._tag === "Child") {
         unhook(inner.inst)
         leaveOwners(inner.inst)
-      }
-      const served = range !== undefined && range.claimed && inner._tag === "Child"
-      if (served && created !== before && !inner.inst.waiting) {
-        placeEach(host.parentOf(range.close), inner.inst.rendered, range.close)
       }
       const made: Kept = {
         author,
@@ -6948,16 +6981,15 @@ const setup = (
         at: undefined,
         drawer: author,
         container: undefined,
-        round: table.round,
-        served: served ? from : undefined
+        round: table.round
       }
       let byKey = table.children.get(view.component)
       if (byKey === undefined) table.children.set(view.component, byKey = new Map())
       byKey.set(view.key, made)
       if (inner._tag === "Child") keptEntries.set(inner.inst, made)
       keptLive++
-      if (made.served === undefined) keeping.push(made)
-      else made.served.kept = made
+      keeping.push(made)
+      if (from !== undefined) sendHeld(from, inner)
     }
   }
 
@@ -6970,7 +7002,6 @@ const setup = (
       if (entry.container !== undefined) unpark(entry.author, entry.container)
     }
     entry.container = entry.at = undefined
-    unserve(entry)
   }
 
   const blankText = (range: Range | undefined): RText => {
@@ -7002,20 +7033,11 @@ const setup = (
     const failure = inner._tag === "Fallback"
       ? (inner.status as { readonly cause: Cause.Cause<unknown> }).cause
       : inner.inst.failure
-    if (range !== undefined && !range.claimed && entry.served !== undefined && failure === undefined) {
-      if (!(inner as RChild).inst.waiting) {
-        host.remove(range.open)
-        host.remove(range.close)
-      }
-      range.claimed = true
-      unserve(entry)
-    } else {
-      if (range !== undefined && !range.claimed) {
-        removeRange(range)
-        created++
-      }
-      pull(entry)
+    if (range !== undefined && !range.claimed) {
+      removeRange(range)
+      created++
     }
+    pull(entry)
     entry.at = at
     if (failure !== undefined) {
       if (inner._tag === "Fallback" && from !== undefined) closeAll(entry.drawer, inner)
@@ -7189,6 +7211,14 @@ const setup = (
   }
 
   const askKept = (author: Instance, table: KeptTable) => {
+    if (servedIn !== undefined) {
+      for (const from of servedIn.values()) {
+        const view = from.view
+        if (view === undefined || from.author !== author || from.round === table.round) continue
+        const alive = aliveOf(view)
+        if (alive !== undefined && !askAlive(author, table, alive, view)) endWrite(author, view, undefined)
+      }
+    }
     for (const byKey of table.children.values()) {
       for (const entry of byKey.values()) {
         if (entry.round === table.round || entry.alive === undefined) continue
