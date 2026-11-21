@@ -209,15 +209,14 @@ describe("Dialog", () => {
       assert.isUndefined(s.query(portal))
     }))
 
-  it.effect("keepMounted leaves a hidden portal with no layer", () =>
+  it.effect("keepMounted leaves a hidden portal with an inert layer", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(Dialog, { open: false, keepMounted: true }, standIn)
       assert.deepInclude(s.get(portal).props, { open: false, popoverOpen: false })
       assert.deepInclude(s.get(popup).attrs, { "data-closed": "" })
-      assert.strictEqual(
-        ((s.get(portal) as View.Element<unknown>).children[0] as View.Element<unknown>).attrs.class,
-        "backdrop"
-      )
+      const [layer, child] = (s.get(portal) as View.Element<unknown>).children as ReadonlyArray<View.Element<unknown>>
+      assert.strictEqual(layer!.attrs.inert, "")
+      assert.strictEqual(child!.attrs.class, "backdrop")
     }))
 
   it.effect("the other modes draw no layer and no aria-modal", () =>

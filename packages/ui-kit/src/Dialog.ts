@@ -41,7 +41,9 @@
  * `.viewport { position: fixed; inset: 0; display: grid; place-items: center }`.
  * With `modal: true`, the kit draws a transparent layer over the whole
  * viewport as the portal's first child, before the consumer's children. It
- * takes the presses meant for the page behind.
+ * takes the presses meant for the page behind. A closed `keepMounted` portal
+ * keeps it, inert, so the children after it keep their elements when the
+ * dialog opens.
  *
  * **Data attributes**
  *
@@ -433,7 +435,7 @@ const blocker = new Html.Element<never>("div").attr("role", "presentation").attr
   "position:fixed;inset:0;" + noSelect
 )
 const layer = View.toNode(blocker)
-const closingLayer = View.toNode(blocker.attr("inert", ""))
+const inertLayer = View.toNode(blocker.attr("inert", ""))
 
 const tabbableSelector = [
   "a[href]",
@@ -1165,8 +1167,9 @@ export const Dialog = Component.define({
             .attr("aria-labelledby", withTokens(node.attrs["aria-labelledby"], titleId))
             .attr("aria-describedby", withTokens(node.attrs["aria-describedby"], descriptionId))
         )
+        .children(modal === true && (open ? layer : inertLayer))
       if (!shown) return dialog
-      return (modal === true ? dialog.children(open ? layer : closingLayer) : dialog).onMount(
+      return dialog.onMount(
         TrackDialog({
           modal,
           open,
