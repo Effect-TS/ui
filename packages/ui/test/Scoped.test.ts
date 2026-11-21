@@ -242,7 +242,7 @@ const List = Component.define({ name: "List", scoped: false, model: ListModel, m
 const failureOf = (root: { readonly log: () => ReadonlyArray<MessageLog.Entry> }) =>
   root.log().find((entry) => entry._tag === "Failed") as MessageLog.Failed | undefined
 
-const host = (Inner: Component.Component<"Inner", {}, null, never, never>) =>
+const host = <Model, Message>(Inner: Component.Component<"Inner", {}, Model, Message, never>) =>
   Component.define({ name: "Host", scoped: false, model: Schema.Null, message: Schema.Never }).make({
     init: () => null,
     update: (model) => model,
@@ -301,26 +301,38 @@ describe("scope predicates", () => {
       })))
   }
 
-  it.effect("fails the author when it throws", () =>
-    provideHost(Effect.gen(function*() {
-      const Inner = Component.define({ name: "Inner", scoped: false, model: Schema.Null, message: Schema.Never })
-        .make({
-          init: () => null,
-          update: (model) => model,
-          view: (_, h) =>
-            h.el(
-              "div",
-              h.scoped(({ model }) => {
-                if (model === null) throw new Error("no model")
-                return true
-              }, (s) => Billing(s, { key: "b" }))
-            )
+  it.effect.each([true, false])(
+    "fails the author when it throws (for a child that render writes: %s)",
+    (written) =>
+      provideHost(Effect.gen(function*() {
+        const Inner = Component.define({
+          name: "Inner",
+          scoped: false,
+          model: Schema.Boolean,
+          message: Schema.Literal("go")
         })
-      const root = yield* TestHost.mount(host(Inner), {})
-      yield* TestHost.settle
-      assert.strictEqual(root.text(), "down")
-      assert.include(Cause.pretty(failureOf(root)!.cause), "no model")
-    })))
+          .make({
+            init: () => false,
+            update: () => true,
+            view: (gone, h) =>
+              h.el(
+                "div",
+                h.el("button").on("click", "go").children("go"),
+                h.scoped(({ model }) => {
+                  if (model) throw new Error("no model")
+                  return true
+                }, (s) => gone && !written ? null : Billing(s, { key: "b" }))
+              )
+          })
+        const root = yield* TestHost.mount(host(Inner), {})
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "gobilling")
+        click(root, "go")
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "down")
+        assert.include(Cause.pretty(failureOf(root)!.cause), "no model")
+      }))
+  )
 })
 
 describe("scoped paths", () => {
@@ -429,37 +441,48 @@ describe("scoped lifetimes", () => {
       assert.strictEqual(root.text(), "billing")
     })))
 
-  it.effect("shows a child that failed while kept as its fallback once drawn", () =>
-    provideHost(Effect.gen(function*() {
-      const Msg = UiSchema.TaggedEnum({ Break: {} })
-      const Boom = Command.make("Boom", { args: {} }, () => Effect.die("boom"))
-      const Fragile = Component.define({
-        name: "Fragile",
-        scoped: true,
-        model: Schema.Null,
-        message: Msg,
-        receives: ["Break"]
-      })
-        .make({ init: () => null, update: (_, __, $) => $.run(Boom()), view: (_, h) => h.el("p", "fine") })
-      const Ref = Fragile.ref("F")
-      const PageMsg = UiSchema.TaggedEnum({ Show: { shown: Schema.Boolean }, Break: {} })
-      const Page = Component.define({ name: "Page", scoped: false, model: Schema.Boolean, message: PageMsg }).make({
-        init: () => true,
-        update: (_, message, $) => message._tag === "Break" ? $.send(Ref, Msg.Break()) : message.shown,
-        view: (shown, h) =>
-          h.el("div", h.scoped((s) => shown ? Fragile(s, { ref: Ref, fallback: () => h.el("p", "down") }) : null))
-      })
-      const root = yield* TestHost.mount(Page, {})
-      yield* TestHost.settle
-      root.send(PageMsg.Show({ shown: false }))
-      root.send(PageMsg.Break())
-      yield* TestHost.settle
-      assert.strictEqual(root.text(), "")
-      assert.include(Cause.pretty(failureOf(root)!.cause), "boom")
-      root.send(PageMsg.Show({ shown: true }))
-      yield* TestHost.settle
-      assert.strictEqual(root.text(), "down")
-    })))
+  it.effect.each(["while kept", "in the flush that hid it"] as const)(
+    "shows a child that failed %s as its fallback once drawn",
+    (when) =>
+      provideHost(Effect.gen(function*() {
+        const Msg = UiSchema.TaggedEnum({ Break: {} })
+        const Boom = Command.make("Boom", { args: {} }, () => Effect.die("boom"))
+        const Fragile = Component.define({
+          name: "Fragile",
+          scoped: true,
+          model: Schema.Null,
+          message: Msg,
+          receives: ["Break"]
+        })
+          .make({
+            init: () => null,
+            update: (_, __, $) => {
+              if (when !== "while kept") throw new Error("boom")
+              return $.run(Boom())
+            },
+            view: (_, h) => h.el("button").on("click", Msg.Break()).children("fine")
+          })
+        const Ref = Fragile.ref("F")
+        const PageMsg = UiSchema.TaggedEnum({ Show: { shown: Schema.Boolean }, Break: {} })
+        const Page = Component.define({ name: "Page", scoped: false, model: Schema.Boolean, message: PageMsg }).make({
+          init: () => true,
+          update: (_, message, $) => message._tag === "Break" ? $.send(Ref, Msg.Break()) : message.shown,
+          view: (shown, h) =>
+            h.el("div", h.scoped((s) => shown ? Fragile(s, { ref: Ref, fallback: () => h.el("p", "down") }) : null))
+        })
+        const root = yield* TestHost.mount(Page, {})
+        yield* TestHost.settle
+        if (when !== "while kept") click(root, "fine")
+        root.send(PageMsg.Show({ shown: false }))
+        if (when === "while kept") root.send(PageMsg.Break())
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "")
+        assert.include(Cause.pretty(failureOf(root)!.cause), "boom")
+        root.send(PageMsg.Show({ shown: true }))
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "down")
+      }))
+  )
 
   it.effect("fails the author on a host that can't hold kept nodes", () =>
     Effect.gen(function*() {
@@ -923,6 +946,77 @@ const Shut = Component.define({
 })
 
 describe("scoped children drawn by other children", () => {
+  it.effect("a root that places a slot draws nothing there", () =>
+    provideHost(Effect.gen(function*() {
+      const root = yield* TestHost.mount(Shut, {})
+      click(root, "toggle")
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "toggle")
+    })))
+
+  it.effect("are drawn again once their own keyed Layer builds again", () =>
+    provideHost(Effect.gen(function*() {
+      const Room = Component.define({
+        name: "Room",
+        scoped: true,
+        model: Schema.Literals(["a", "b"]),
+        message: Schema.Literal("move")
+      }).make({
+        init: () => "a" as const,
+        update: () => "b" as const,
+        view: (room, h) => h.el("button").on("click", "move").children("room:" + room)
+      })
+      const Keyed = Component.provide(Room, { key: (_, room) => room, layer: () => Layer.empty })
+      const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => h.scoped((s) => h.el("main", Keyed(s, { key: "r" })))
+      })
+      const root = yield* TestHost.mount(Page, {})
+      click(root, "room:a")
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "room:b")
+    })))
+
+  it.effect("keeps a child drawn in a receiver that fails, and draws it elsewhere after", () =>
+    provideHost(Effect.gen(function*() {
+      const Frail = Component.define({
+        name: "Frail",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Literal("break"),
+        slots: ["body"]
+      }).make({
+        init: () => null,
+        update: () => {
+          throw new Error("broken")
+        },
+        view: (_, h) => h.el("section", h.el("button").on("click", "break").children("break"), h.slots.body)
+      })
+      const Page = Component.define({ name: "Page", scoped: false, model: Schema.Boolean, message: Schema.Boolean })
+        .make({
+          init: () => false,
+          update: (_, direct) => direct,
+          view: (direct, h) =>
+            h.scoped((s) => {
+              const counter = Counter(s, { key: "c" })
+              return h.el(
+                "main",
+                direct ? counter : Frail(h, { key: "f", slots: { body: counter }, fallback: () => h.el("p", "down") })
+              )
+            })
+        })
+      const root = yield* TestHost.mount(Page, {})
+      click(root, "count:0")
+      yield* TestHost.settle
+      click(root, "break")
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "down")
+      root.send(true)
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "count:1")
+    })))
+
   it.effect("keeps a child its receiver stops placing as its Layer builds again", () =>
     provideHost(Effect.gen(function*() {
       const Room = Component.define({
@@ -1205,7 +1299,7 @@ const Holder = Component.define({
 }).make({
   init: () => null,
   update: (model) => model,
-  view: (_, h) => h.el("div", h.props.bare ? null : Nested(h, { key: "n" }))
+  view: (_, h) => h.el("div", h.props.bare ? null : Nested(h, { key: "n", fallback: () => h.el("p", "down") }))
 })
 
 const FormPage = Component.define({
@@ -1824,7 +1918,10 @@ describe("scoped children written into closed slots", () => {
         .make({
           init: () => null,
           update: (_, __, $) => $.send(LateRef, CounterMsg.Inc()),
-          view: (_, h) => h.scoped((s) => Shut(h, { key: "c", slots: { body: Late(s, { ref: LateRef }) } }))
+          view: (_, h) =>
+            h.scoped((s) =>
+              h.el("main", Billing(s, { key: "b" }), Shut(h, { key: "c", slots: { body: Late(s, { ref: LateRef }) } }))
+            )
         })
       const root = yield* TestHost.mount(Page, {})
       yield* TestHost.settle
@@ -1833,7 +1930,7 @@ describe("scoped children written into closed slots", () => {
       assert.strictEqual(inits, 0)
       click(root, "toggle")
       yield* TestHost.settle
-      assert.strictEqual(root.text(), "togglecount:0")
+      assert.strictEqual(root.text(), "billingtogglecount:0")
     })))
 
   it.effect("keep the props and onEmit of the last render that placed them", () =>
@@ -2246,6 +2343,41 @@ describe("scoped children written into closed slots", () => {
         assert.include(Cause.pretty(failureOf(root)!.cause), "Row[k]")
       }))
   )
+
+  it.effect("a scoped child takes the path of an ordinary one of its name and key that the same render ends", () =>
+    provideHost(Effect.gen(function*() {
+      const Kept = Component.define({ name: "Row", scoped: true, model: Schema.Null, message: Schema.Never })
+        .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p", "kept") })
+      const Plain = Component.define({
+        name: "Row",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never,
+        slots: ["body"]
+      }).make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p", "plain", h.slots.body) })
+      const Inner = Component.define({
+        name: "Inner",
+        scoped: false,
+        model: Schema.Boolean,
+        message: Schema.Literal("swap")
+      }).make({
+        init: () => false,
+        update: () => true,
+        view: (swapped, h) =>
+          h.scoped((s) =>
+            h.el(
+              "div",
+              h.el("button").on("click", "swap").children("swap"),
+              swapped ? Plain(h, { key: "o", slots: { body: Kept(s, { key: "k" }) } }) : null,
+              swapped ? null : Plain(h, { key: "k" })
+            )
+          )
+      })
+      const root = yield* TestHost.mount(host(Inner), {})
+      click(root, "swap")
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "swapplainkept")
+    })))
 
   it.effect("draws a child its author returns again without writing it again", () =>
     provideHost(Effect.gen(function*() {

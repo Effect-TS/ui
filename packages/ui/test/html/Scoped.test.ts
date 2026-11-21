@@ -464,6 +464,23 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
       assert.deepStrictEqual(Array.from(app.querySelectorAll("input")), [moved])
     }).pipe(Effect.scoped))
 
+  it.effect("keep the nodes they got outside the receiver when moved back in before it resumes", () =>
+    Effect.gen(function*() {
+      drafts = 0
+      const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Moving, {}))
+      const root = yield* BrowserHost.mountEffect(Moving, {}, app, { state })
+      root.send("aside")
+      yield* tick
+      const moved = app.querySelector<HTMLInputElement>("aside input")!
+      root.send("slot")
+      yield* tick
+      yield* open
+      yield* root.adopted
+      assert.deepStrictEqual(Array.from(app.querySelectorAll("input")), [moved])
+      assert.strictEqual(app.querySelector("aside input"), null)
+      assert.strictEqual(moved.value, "server")
+    }).pipe(Effect.scoped))
+
   it.effect.each([["none", "server"], ["ended", "client"]] as const)(
     "left out of the slot as the receiver resumes (%s), start as the %s's when written again",
     ([left, expected]) =>

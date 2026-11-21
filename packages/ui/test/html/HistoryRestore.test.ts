@@ -96,11 +96,58 @@ const LateSettings = Component.define({
   view: (shown, h) =>
     h.div(
       h.button.onClick("shown").children("show"),
-      shown !== "" || !AsyncResult.isSuccess(h.queries.tab) ? h.scoped((s) => Draft(s, { key: "d" })) : null
+      shown !== "" || !AsyncResult.isSuccess(h.queries.tab)
+        ? h.scoped(({ queries }) => !AsyncResult.isFailure(queries.tab), (s) => Draft(s, { key: "d" }))
+        : null
     )
 }).pipe(Component.provide(GetTab.layer))
+const LateScoped = Component.define({
+  name: "LateScoped",
+  scoped: true,
+  model: Late,
+  message: Schema.Never,
+  elements: Html
+}).make({
+  init: () => inits++ === 0 ? "server" : "client",
+  update: (model) => model,
+  view: (text, h) => h.input.value(text)
+})
+const LateHolder = Component.define({
+  name: "LateHolder",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+}).make({
+  init: () => null,
+  update: (model) => model,
+  view: (_, h) => h.scoped((s) => h.div(LateScoped(s, { key: "d" })))
+})
+const Outer = Component.define({
+  name: "Outer",
+  scoped: true,
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+})
+  .make({
+    init: () => null,
+    update: (model) => model,
+    view: (_, h) => h.scoped((s) => h.div(Draft(s, { key: "d" })))
+  })
+const Nesting = Component.define({
+  name: "Nesting",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+}).make({
+  init: () => null,
+  update: (model) => model,
+  view: (_, h) => h.scoped((s) => h.div(Outer(s, { key: "o" })))
+})
 
-type Page = "slow form" | "slow side" | "late form" | "scoped form" | "late settings"
+type Page = "slow form" | "slow side" | "late form" | "scoped form" | "late settings" | "nested" | "late scoped"
 const Routes = Route.union({ Home: Route.make("/"), Away: Route.make("/away") })
 const Msg = UiSchema.TaggedEnum({ Changed: { route: Routes }, Go: {}, Went: {} })
 const appOf = (page: Page) =>
@@ -133,6 +180,10 @@ const appOf = (page: Page) =>
           ? Holder(h, { key: "f" })
           : page === "late settings"
           ? LateSettings(h, { key: "f" })
+          : page === "nested"
+          ? Nesting(h, { key: "f" })
+          : page === "late scoped"
+          ? LateHolder(h, { key: "f" })
           : SlowForm(h, { key: "f" })
       )
   })
@@ -156,17 +207,49 @@ const visit = Effect.fnUntraced(function*(page: Page, ready = false) {
 })
 
 describe("history restore of a page whose hydration hasn't settled", { concurrent: false }, () => {
-  it.effect.each(["slow form", "scoped form"] as const)(
-    "Back restores the server's Model of a %s a push closed as it waited for its Layer",
-    (page) => {
+  it.effect("Back restores the server's Model of a scoped child whose state still decodes after that Back", () => {
+    const history = Router.memoryHistory("/")
+    return Effect.gen(function*() {
+      const { app, open, root } = yield* visit("late scoped")
+      root.send(Msg.Go())
+      yield* tick
+      history.go(-1)
+      yield* tick
+      yield* open
+      yield* tick
+      assert.strictEqual(app.querySelector("input")!.value, "server")
+    }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
+  })
+
+  it.effect("Back restores a scoped child drawn by a scoped child", () => {
+    const history = Router.memoryHistory("/")
+    return Effect.gen(function*() {
+      const { app, root } = yield* visit("nested", true)
+      root.send(Msg.Go())
+      yield* tick
+      history.go(-1)
+      yield* tick
+      assert.strictEqual(app.querySelector("input")!.value, "server")
+    }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
+  })
+
+  it.effect.each(
+    [["slow form", "before"], ["scoped form", "before"], ["slow form", "after"], ["scoped form", "after"]] as const
+  )(
+    "Back restores the server's Model of a %s a push closed as it waited for its Layer, built %s the Back",
+    ([page, built]) => {
       const history = Router.memoryHistory("/")
       return Effect.gen(function*() {
         const { app, open, root } = yield* visit(page)
         root.send(Msg.Go())
         yield* tick
-        yield* open
+        if (built === "before") yield* open
         history.go(-1)
         yield* tick
+        if (built === "after") {
+          yield* open
+          yield* tick
+        }
         assert.strictEqual(app.querySelector("input")!.value, "server")
       }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
     }

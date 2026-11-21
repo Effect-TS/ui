@@ -1172,7 +1172,7 @@ const serializeTree = (
     let inner = under
     const entry = keptLive > 0 ? keptEntries.get(inst) : undefined
     const was = into
-    const home = entry === undefined ? undefined : homes.get(entry.author) ?? state
+    const home = entry === undefined ? undefined : homes.get(entry.author)!
     const nested = home !== undefined && (entry!.at === undefined || home !== into)
     if (nested) into = ((noted(home, "~kept")[entry!.author.path] ??= {}) as Saved)[path] = {}
     if (!under) {
@@ -1472,8 +1472,7 @@ const setup = (
   const takeSaved = (author: Instance, path: string): Saved | undefined => {
     const waits = waitingOf.get(author)
     const from = waits?.[path]
-    if (from === undefined) return undefined
-    delete waits![path]
+    delete waits?.[path]
     return from === hydrating?.state ? undefined : from
   }
   const restoreKept = () => {
@@ -5558,7 +5557,7 @@ const setup = (
     const slotted = slottedBy.get(inst)
     if (slotted !== undefined) {
       slotted.values = child.slots
-      if (inst.parent !== undefined) slotted.round = roundAt(inst.parent)
+      slotted.round = roundAt(inst.parent!)
     }
     if (inst.owner !== undefined) inst.content = child.view
     return slotted
@@ -6888,7 +6887,7 @@ const setup = (
       },
       get queries() {
         read = true
-        return author.results
+        return author.results ?? queryCore.boundOf(author.component)?.empty
       }
     }
     return (alive, key) => {
@@ -7231,17 +7230,13 @@ const setup = (
     for (const byKey of table.children.values()) {
       for (const entry of byKey.values()) {
         if (entry.round === table.round || entry.alive === undefined) continue
-        if (askAlive(author, table, entry.alive, entry.inner.v)) continue
-        if (author.closed) return
-        endWrite(author, entry.inner.v, entry)
+        if (!askAlive(author, table, entry.alive, entry.inner.v)) endWrite(author, entry.inner.v, entry)
       }
     }
   }
 
   const findKept = (inst: Instance, key: string): RChild | RFallback | undefined => {
-    const table = keptTables.get(inst)
-    if (table === undefined) return undefined
-    for (const byKey of table.children.values()) {
+    for (const byKey of keptTables.get(inst)?.children.values() ?? []) {
       for (const entry of byKey.values()) {
         if (entry.inner.v.ref?.key === key) return entry.inner
       }
@@ -7329,8 +7324,7 @@ const setup = (
         const entry = rendered.scoped ? entryAt(inst.author, rendered.v) : undefined
         if (entry !== undefined && entry.inner === inner) {
           if (entry.at !== rendered) return
-          if (!entry.author.left) keep(entry)
-          else dropKept(entry)
+          keep(entry)
           if (entry.at === undefined) return
         }
         return closeAll(inst, inner)
@@ -7465,7 +7459,7 @@ const setup = (
       if (entry !== undefined) {
         if (inst.waiting) return
         const author = entry.author
-        into = ((keptIn(homes.get(author) ?? out)[author.path] ??= {}) as Saved)[inst.path] = {}
+        into = ((keptIn(homes.get(author)!)[author.path] ??= {}) as Saved)[inst.path] = {}
       }
       const waits = claims ? waitingOf.get(inst) : undefined
       if (waits !== undefined) {
