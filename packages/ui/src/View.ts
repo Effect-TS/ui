@@ -42,9 +42,13 @@ import type * as Renderer from "./Renderer.ts"
 
 /**
  * The view helper for reusable pure view functions, without a component
- * definition. `Msg` defaults to `never` for views that emit no messages.
+ * definition.
  *
  * **Details**
+ *
+ * A shared view function takes the message as a type parameter,
+ * `<M>(h: View.H<M>, ...)`, whether or not it sends a message. `View.H<never>`
+ * only accepts the `h` of a component with `message: Schema.Never`.
  *
  * Includes the app's registered vocabulary (for example, import
  * `@effect/ui/html/register` for HTML tags). Props remain `unknown` and
@@ -76,7 +80,7 @@ import type * as Renderer from "./Renderer.ts"
  * @category utility types
  * @since 0.1.0
  */
-export type H<Msg = never> = Helper<Msg, unknown> & Tags<Registered, Msg>
+export type H<Msg> = Helper<Msg, unknown> & Tags<Registered, Msg>
 
 /**
  * A node of a view: an element, text, or a child component.
@@ -1818,10 +1822,10 @@ export interface Helper<Msg, Props> {
    *
    * type Row = { readonly id: number; readonly label: string }
    *
-   * const row = (h: View.H<never>, row: Row, selected: boolean) =>
+   * const row = <M>(h: View.H<M>, row: Row, selected: boolean) =>
    *   h.tr.key(String(row.id)).class(selected && "danger").children(row.label)
    *
-   * const rows = (h: View.H<never>, rows: ReadonlyArray<Row>, selected: number) =>
+   * const rows = <M>(h: View.H<M>, rows: ReadonlyArray<Row>, selected: number) =>
    *   h.tbody.children(rows.map((item) => h.lazy(row, item, item.id === selected)))
    * ```
    */

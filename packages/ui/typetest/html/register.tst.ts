@@ -7,7 +7,6 @@ import { describe, expect, it } from "tstyche"
 
 describe("@effect/ui/html/register", () => {
   it("types reusable pure views with View.H", () => {
-    expect<View.H>().type.toBe<View.H<never>>()
     const Button = <Msg>(h: View.H<Msg>, message: Msg) => {
       expect(h.props).type.toBe<unknown>()
       expect(h.button).type.toBe<Html.Tags<Msg>["button"]>()
@@ -29,7 +28,7 @@ describe("@effect/ui/html/register", () => {
   })
 
   it("gives a component without `elements` the HTML tags", () => {
-    const Label = (h: View.H, text: string) => {
+    const Label = (h: View.H<never>, text: string) => {
       expect(h.span).type.toBe<Html.Tags<never>["span"]>()
       return h.span(text)
     }
@@ -44,6 +43,18 @@ describe("@effect/ui/html/register", () => {
         expect(h.p).type.toBe<Html.Tags<never>["p"]>()
         return h.p(Label(h, "Hello"))
       }
+    })
+  })
+
+  it("rejects passing a component's h with messages to a View.H<never> helper", () => {
+    const Label = (h: View.H<never>, text: string) => h.span(text)
+    Component.define({
+      name: "Page",
+      model: Schema.Null,
+      message: Schema.Literal("ClickedSave")
+    }).view((_, h) => {
+      expect(Label).type.not.toBeCallableWith(h, "Total")
+      return h.div
     })
   })
 })
