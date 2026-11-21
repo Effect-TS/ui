@@ -46,16 +46,15 @@
  * The trigger and the close button are native buttons, so Enter and Space
  * press them. Escape asks the alert dialog to close, with `escape-key`.
  * Focus moves into the popup when it opens, stays inside while it shows, and
- * goes back to the trigger when it closes, as in a modal `Dialog`. Put
+ * goes back to the trigger once its exit ends, as in a modal `Dialog`. Put
  * `initialFocus` on the least destructive answer, such as Cancel.
  *
  * **Dismissal**
  *
  * The alert dialog asks to close only from its trigger, its close part and
- * Escape. A press outside the popup, on the backdrop included, asks nothing,
- * and the portal's `closedby` stays `"closerequest"`, so the browser doesn't
- * close it on a backdrop click either. Answers other than closing, such as
- * Discard, are the consumer's buttons, which send the consumer's messages.
+ * Escape. A press outside the popup, on the backdrop included, asks nothing.
+ * Answers other than closing, such as Discard, are the consumer's buttons,
+ * which send the consumer's messages.
  *
  * An alert dialog drawn inside a `Dialog`'s popup is nested in it, as a
  * `Dialog` would be: the outer popup gets `data-nested-dialog-open`, and only
@@ -162,12 +161,7 @@ export type AlertDialogProps = typeof AlertDialogProps.Type
  */
 export type AlertDialogParts = Component.Headless.Parts<typeof Dialog>
 
-// The portal is the element the dialog is labelled on, so its role goes
-// there. Set with `forward`, so it wins over a `role` or `closedby` the
-// consumer set on the builder or chained after the part. `closedby` keeps
-// the browser from closing the modal on a backdrop click.
-const alert = (node: View.ElementBuilder<any, any, any, any>) =>
-  node.attr("role", "alertdialog").attr("closedby", "closerequest")
+const alert = (node: View.ElementBuilder<any, any, any, any>) => node.attr("role", "alertdialog")
 
 /**
  * A headless alert dialog. Call it as a `Dialog`, with the consumer's `h`, a
@@ -182,9 +176,9 @@ const alert = (node: View.ElementBuilder<any, any, any, any>) =>
  * `trigger-press`, `escape-key` or `close-press`, never `outside-press` or
  * `focus-out`.
  *
- * On top of the `Dialog`'s attributes, the portal's `role="alertdialog"` and
- * `closedby="closerequest"` win over the consumer's, whether the consumer set
- * them on the builder it passes in or chained them after the part.
+ * On top of the `Dialog`'s attributes, the portal's `role="alertdialog"` wins
+ * over the consumer's, whether the consumer set it on the builder it passes
+ * in or chained it after the part.
  *
  * @stability experimental
  * @category components

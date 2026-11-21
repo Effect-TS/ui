@@ -13,16 +13,20 @@
  *
  * **The fold**
  *
- * Each node's value is its own entries followed by its children's values, in
- * document order, so a descendant overrides its ancestors. A component's
- * `reduceHead` then maps that value, and the root's result is final.
+ * Each node's value is its own entries followed by its children's values, so
+ * a descendant overrides its ancestors. Children are taken in the order of
+ * their paths, never in document order, so moving a component in its
+ * parent's view can't change the head. The node's `reduce` entries then map
+ * that value in written order, and the root's result is final.
  *
  * - **Titles.** A `titleTemplate` applies to a title set by a descendant,
  *   never to its own instance's title, so the title passes through its
  *   ancestors' templates outward, nearest first.
- * - **Conflicts.** When two siblings set one single slot, such as the title,
- *   the later one wins and the merge reports a `Conflict` naming both paths.
- *   The runtime sends it to `Query.Problems`.
+ * - **Conflicts.** Siblings that set one single slot, such as the title, to
+ *   the same value pass it up once. When they set different values, neither
+ *   wins: the slot is left unset until an ancestor's `reduce` sets it. A
+ *   conflict no ancestor settles is reported as a `Conflict` naming every
+ *   path that set the slot. The runtime sends it to `Query.Problems`.
  *
  * **Example** (A layout template and a page title)
  *
@@ -47,13 +51,13 @@ import * as Data from "effect/Data"
 import * as headFold from "./internal/headFold.ts"
 
 /**
- * A host-neutral head entry: a title or a title template.
+ * A host-neutral head entry: a title, a title template or a reduce.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export type Entry = Title | TitleTemplate
+export type Entry = Title | TitleTemplate | Reduce
 
 /**
  * The title: the document's, a window's or a screen's, as the host gives it
@@ -81,6 +85,19 @@ export interface TitleTemplate {
 }
 
 /**
+ * Maps the folded head of its node: its own entries merged with its
+ * children's values.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Reduce {
+  readonly _tag: "Reduce"
+  readonly apply: <H extends Head>(below: H) => Omit<H, "title"> & Head
+}
+
+/**
  * Sets the title.
  *
  * @stability experimental
@@ -105,6 +122,48 @@ export const title = (text: string): Title => ({ _tag: "Title", text })
 export const titleTemplate = (apply: (title: string) => string): TitleTemplate => ({ _tag: "TitleTemplate", apply })
 
 /**
+ * Maps the folded head of the instance and everything its view placed.
+ * Only the title of `f`'s result is used: every other field of the full
+ * value is kept, so under the HTML vocabulary the meta, links and
+ * `<html>` and `<body>` attributes stay as they were.
+ *
+ * **Details**
+ *
+ * A node's reduce entries run after its own entries and its children's
+ * values are merged, in written order wherever they sit among the other
+ * entries, each given the previous one's result. A reduce that throws fails
+ * its instance, as a throwing `head` does. A merge called directly reports
+ * it to the node's `onError` and gives the next reduce the value the
+ * thrower was given. Use `HtmlHead.reduce` to read or set the HTML fields.
+ *
+ * **Example** (Marking a preview)
+ *
+ * ```ts import.meta.vitest
+ * import { Head } from "@effect/ui"
+ *
+ * const preview = Head.reduce((below) => ({ title: `[preview] ${below.title}` }))
+ *
+ * const head = Head.merge({
+ *   entries: [Head.titleTemplate((title) => `${title} · App`), preview],
+ *   children: [{ entries: [Head.title("Ada")], children: [] }]
+ * })
+ *
+ * head.title // => "[preview] Ada · App"
+ * ```
+ *
+ * @stability experimental
+ * @category constructors
+ * @since 0.1.0
+ */
+export const reduce = (f: (below: Head) => Head): Reduce => ({
+  _tag: "Reduce",
+  apply: (below) => {
+    const title = f(below).title
+    return title === below.title ? below : { ...below, title }
+  }
+})
+
+/**
  * The folded head of a host-neutral tree.
  *
  * @stability experimental
@@ -121,28 +180,27 @@ export interface Head {
  *
  * **Details**
  *
- * `path` names the node in a `Conflict`. `reduce` maps the node's value,
- * its own entries merged with its children's values, as a component's
- * `reduceHead` does. `onError` is called when one of the node's own title
- * templates or its `reduce` throws: the merge then skips that template, or
- * keeps the value the `reduce` was given. Without `onError` the error is
- * rethrown.
+ * `path` names the node in a `Conflict`, and orders it among its siblings.
+ * Siblings with entries in their subtree need distinct paths: a merge throws
+ * when two have none or share one, whatever their order. `onError` is called
+ * when one of the node's own title templates or `reduce` entries throws: the
+ * merge then skips that entry. Without `onError` the error is rethrown.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface Tree<E = Entry, H = Head> {
+export interface Tree<E = Entry> {
   readonly path?: string | undefined
   readonly entries: ReadonlyArray<E>
-  readonly children: ReadonlyArray<Tree<E, H>>
-  readonly reduce?: ((below: H) => H) | undefined
+  readonly children: ReadonlyArray<Tree<E>>
   readonly onError?: ((error: unknown) => void) | undefined
 }
 
 /**
- * Two siblings set the same single slot, such as the title. The later one
- * wins. `paths` holds the earlier sibling's path, then the later one's.
+ * Siblings set the same single slot, such as the title, to different values,
+ * and no ancestor's `reduce` set it. The slot is left unset. `paths`
+ * holds every path that set it, sorted.
  *
  * @stability experimental
  * @category problems
@@ -151,7 +209,7 @@ export interface Tree<E = Entry, H = Head> {
 export class Conflict extends Data.TaggedClass("HeadConflict")<{
   readonly message: string
   readonly slot: string
-  readonly paths: readonly [string, string]
+  readonly paths: ReadonlyArray<string>
 }> {}
 
 /**
@@ -166,17 +224,18 @@ export interface MergeOptions {
 }
 
 /**
- * Makes the `Conflict` for a slot two siblings set.
+ * Makes the `Conflict` for a slot that the components at `paths` set to
+ * different values.
  *
  * @stability experimental
  * @category constructors
  * @since 0.1.0
  */
-export const conflict = (slot: string, earlier: string, later: string): Conflict =>
+export const conflict = (slot: string, paths: ReadonlyArray<string>): Conflict =>
   new Conflict({
-    message: `Head: ${earlier} and ${later} both set ${slot}, and the later one, ${later}, wins`,
+    message: `Head: ${listOf(paths)} set ${slot} to different values, so it's left unset`,
     slot,
-    paths: [earlier, later]
+    paths
   })
 
 /**
@@ -220,30 +279,38 @@ export const resolveTitle = (
 
 /**
  * Folds a host-neutral tree into its title, applying each node's `reduce`
- * bottom up.
+ * entries bottom up.
  *
  * **Details**
  *
- * Entries of other vocabularies are ignored. Two siblings that both pass a
- * title up are reported to `onConflict`, and the later one wins.
+ * Entries of other vocabularies are ignored, `HtmlHead.reduce` included.
+ * Siblings that pass different titles up leave the title unset, and are
+ * reported to `onConflict` unless a `reduce` above them sets it.
  *
  * @stability experimental
  * @category combinators
  * @since 0.1.0
  */
 export const merge: <E extends { readonly _tag: string } = Entry>(
-  tree: Tree<E, Head>,
+  tree: Tree<E>,
   options?: MergeOptions
 ) => Head = /* @__PURE__ */ headFold.plain((tree, options) =>
-  headFold.fold(tree, {
-    combine: (node, children) => {
-      let below: string | undefined
-      for (const child of children) if (child.title !== undefined) below = child.title
-      return { title: resolveTitle(node, below) }
-    },
-    slots: (head) => new Map(head.title === undefined ? [] : [["title", head.title]])
-  }, options?.onConflict === undefined ? undefined : reportTo(options.onConflict))
+  headFold.fold(tree, folding, options?.onConflict === undefined ? undefined : reportTo(options.onConflict))
 )
 
-const reportTo = (onConflict: (conflict: Conflict) => void) => (slot: string, earlier: string, later: string) =>
-  onConflict(conflict(slot, earlier, later))
+const folding: headFold.Folding<{ readonly _tag: string }, Head> = {
+  combine: (node, children, conflicted) => {
+    if (conflicted.has("title")) return { title: undefined }
+    let below: string | undefined
+    for (const child of children) if (child.title !== undefined) below = child.title
+    return { title: resolveTitle(node, below) }
+  },
+  slots: (head) => new Map(head.title === undefined ? [] : [["title", head.title]]),
+  reducer: (entry) => entry._tag === "Reduce" ? (entry as Reduce).apply : undefined
+}
+
+const listOf = (paths: ReadonlyArray<string>): string =>
+  paths.length < 2 ? paths.join("") : `${paths.slice(0, -1).join(", ")} and ${paths[paths.length - 1]}`
+
+const reportTo = (onConflict: (conflict: Conflict) => void) => (slot: string, paths: ReadonlyArray<string>) =>
+  onConflict(conflict(slot, paths))
