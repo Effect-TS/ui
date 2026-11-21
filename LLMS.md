@@ -333,7 +333,7 @@ small normal component when the consumer renders often. Test one with
 runs it with a stand-in view for the consumer.
 
 Name the closure's argument after the component, in camel case and in full:
-`Listbox(h, { view: (listbox) => listbox.trigger(h.button) })`, and
+`view: (listbox) => listbox.trigger(h.button)` for a `Listbox`, and
 `tooltipProvider` for a `TooltipProvider`. A one-letter name reads like one
 the library fixes, such as `h` for builders, `p` in `parts`, `$` in
 `update` and `s` for a Scene. When the name is a reserved word, such as
