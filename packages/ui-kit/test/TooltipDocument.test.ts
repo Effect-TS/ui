@@ -273,6 +273,11 @@ describe("Tooltip in a document", { concurrent: false }, () => {
           ["content-visibility", "auto", true],
           ["transform-style", "preserve-3d", true],
           ["will-change", "contain", true],
+          ["will-change", "left, offset-path", true],
+          ["will-change", "Transform", true],
+          ["will-change", "transform-origin", false],
+          ["will-change", "container-type", false],
+          ["will-change", "offset-rotate", false],
           ["offset-path", "path('M0 0')", true]
         ] as const
       ) {

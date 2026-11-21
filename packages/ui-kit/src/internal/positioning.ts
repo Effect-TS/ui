@@ -619,7 +619,20 @@ const innerRect = (element: Element): Rect => {
 const clipping = /auto|scroll|hidden|clip/
 const painting = /paint|strict|content/
 const containing = /paint|layout|strict|content/
-const transforming = /transform|translate|scale|rotate|perspective|filter|contain/
+const fixedChanges = new Set([
+  "transform",
+  "translate",
+  "scale",
+  "rotate",
+  "perspective",
+  "filter",
+  "backdrop-filter",
+  "offset",
+  "offset-path",
+  "offset-position",
+  "contain",
+  "transform-style"
+])
 
 const set = (value: string | undefined, none = "none"): boolean => value !== undefined && value !== "" && value !== none
 
@@ -639,7 +652,8 @@ const containsFixed = (style: CSSStyleDeclaration): boolean =>
   ]
     .some((value) => set(value)) ||
   style.transformStyle === "preserve-3d" ||
-  transforming.test(style.willChange) || containing.test(style.contain) || paintContained(style)
+  style.willChange.toLowerCase().split(",").some((name) => fixedChanges.has(name.trim())) ||
+  containing.test(style.contain) || paintContained(style)
 
 const contains = (style: CSSStyleDeclaration, position: string): boolean =>
   position === "fixed"
