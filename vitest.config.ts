@@ -81,6 +81,7 @@ export default defineConfig({
       // Node reuses workers across test files, which skips re-importing the effect module graph for every file.
       ...project("@effect/ui", "packages/ui", true, { test: { isolate: !isNode } }),
       ...project("@effect/ui-kit", "packages/ui-kit"),
+      ...example("counter"),
       ...example("interrupting-commands"),
       ...example("snake")
     ]
