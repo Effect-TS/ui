@@ -11,8 +11,8 @@
  * a body that receives the args as one struct:
  *
  * - `Command.make(name, { args }, body)` for Commands that need nothing beyond
- *   the framework services. It returns a factory: `RollDie({ sides: 6 })`.
- *   Its body can't fail.
+ *   the framework services. Issue one with `RollDie.make({ sides: 6 })`. Its
+ *   body can't fail.
  * - `Command.Service<Self>()(key, { args, invalidates }, implementation)` for
  *   Commands that reach any other service. The implementation runs once per
  *   Layer build and captures the services it uses, so a component's
@@ -668,7 +668,8 @@ export declare namespace Definition {
 }
 
 /**
- * What `make` returns: call it with the Command's args struct to issue it.
+ * What `make` returns: call its `make` method with the Command's args struct to
+ * issue it.
  *
  * @stability experimental
  * @category models
@@ -677,7 +678,8 @@ export declare namespace Definition {
 export interface Factory<in out Args, in out Msg, out IsStream extends boolean = false, out G extends string = never>
   extends Definition<Args, Msg, IsStream, never, G>
 {
-  (
+  /** Issues the Command. */
+  make(
     ...args: MakeArgs<Args>
   ): IsStream extends true ? Issued<Msg, never, Msg, "Stream"> : Issued<Msg, never, Msg, "Effect">
   readonly name: string
@@ -922,8 +924,8 @@ export const groupKeyOf = (definition: Definition.Any, group: unknown): string |
  *
  * **Details**
  *
- * Requires an `args` Schema and returns a factory that takes the args struct
- * and issues a Command. Story tests can inspect its `args` without running
+ * Requires an `args` Schema and returns a definition whose `make` method takes
+ * the args struct and issues a Command. Story tests can inspect its `args` without running
  * the Effect. The body can't fail. Its requirements may only be framework
  * services, which are removed from `R`. A body that requires anything else
  * doesn't compile, and the error names `FrameworkService` rather than the
@@ -946,7 +948,7 @@ export const groupKeyOf = (definition: Definition.Any, group: unknown): string |
  * const RollDie = Command.make("RollDie", { args: { sides: Schema.Number } }, ({ sides }) =>
  *   Random.nextIntBetween(1, sides).pipe(Effect.map((n) => DieMessage.CompletedRollDie({ n }))))
  *
- * // In a component: `$.run(RollDie({ sides: 6 }))`, pending in a story as { name: "RollDie", args: { sides: 6 } }
+ * // In a component: `$.run(RollDie.make({ sides: 6 }))`, pending in a story as { name: "RollDie", args: { sides: 6 } }
  * ```
  *
  * @stability experimental
@@ -986,35 +988,35 @@ export const make: {
   const group = options.group ?? []
   const argsSchema = argsSchemaOf(options.args)
   const groupOf = makeGroup(name, argsSchema, group)
-  const factory = (args: unknown = {}) => {
-    const source = groupOf(args)
-    return makeIssued({
-      _tag: stream ? "Stream" : "Effect",
-      name,
-      args,
-      mode,
-      groupKey: source?.key,
-      "~group": source,
-      argsSchema,
-      service: undefined,
-      invalidates: noTargets,
-      optimistic: noTargets,
-      writes: undefined,
-      afterRefetch: undefined,
-      work: run(args),
-      resolve: identity,
-      reject: undefined
-    })
-  }
-  Object.defineProperty(factory, "name", { value: name })
-  return Object.assign(factory, {
+  return {
     [DefinitionTypeId]: DefinitionTypeId,
+    name,
     stream,
     mode,
     group,
     args: argsSchema,
-    "~group": groupOf
-  })
+    "~group": groupOf,
+    make(args: unknown = {}) {
+      const source = groupOf(args)
+      return makeIssued({
+        _tag: stream ? "Stream" : "Effect",
+        name,
+        args,
+        mode,
+        groupKey: source?.key,
+        "~group": source,
+        argsSchema,
+        service: undefined,
+        invalidates: noTargets,
+        optimistic: noTargets,
+        writes: undefined,
+        afterRefetch: undefined,
+        work: run(args),
+        resolve: identity,
+        reject: undefined
+      })
+    }
+  }
 }
 
 /**
@@ -1212,7 +1214,7 @@ export const Service: <Self>() => {
  * const UploadFile = Command.make("UploadFile", { args: { name: Schema.String } }, ({ name }) =>
  *   Effect.succeed(`https://cdn/${name}`))
  *
- * const upload = UploadFile({ name: "photo.png" }).pipe(
+ * const upload = UploadFile.make({ name: "photo.png" }).pipe(
  *   Command.map((url) => Message.CompletedUploadFile({ url }))
  * )
  * ```
@@ -1303,7 +1305,7 @@ export const as: {
  *
  * const Track = Command.make("Track", { args: { event: Schema.String } }, () => Effect.succeed(200))
  *
- * const track = Track({ event: "opened" }).pipe(Command.asNoop)
+ * const track = Track.make({ event: "opened" }).pipe(Command.asNoop)
  * ```
  *
  * @see as

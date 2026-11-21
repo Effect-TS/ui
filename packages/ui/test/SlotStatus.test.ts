@@ -146,7 +146,7 @@ describe("slot status", () => {
         init: () => null,
         update: (model, message, $) =>
           Msg.match(message, {
-            Go: () => $.set(model).run(Job().pipe(Command.asNoop)),
+            Go: () => $.set(model).run(Job.make().pipe(Command.asNoop)),
             Stop: () => $.set(model).run(Command.interrupt(Job))
           }),
         view: (_, h) => h.text(h.isRunning(Job) ? "running" : "idle")

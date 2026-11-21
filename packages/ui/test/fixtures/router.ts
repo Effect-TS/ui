@@ -99,7 +99,7 @@ export const Person = Component.define({
     }
   }
 }).make({
-  init: ($) => $.set({ id: $.props.id, name: "Loading", count: 0, visits: 0 }).run(CountVisit()),
+  init: ($) => $.set({ id: $.props.id, name: "Loading", count: 0, visits: 0 }).run(CountVisit.make()),
   update: (model, message, $) =>
     PersonMessage.match(message, {
       Loaded: ({ name }) => ({ ...model, name }),
