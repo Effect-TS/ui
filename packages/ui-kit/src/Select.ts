@@ -196,6 +196,7 @@ import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
+import * as UiStruct from "@effect/ui/UiStruct"
 import * as View from "@effect/ui/View"
 import * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
@@ -1233,7 +1234,7 @@ export const Select = Component.define({
   }),
   update: {
     PressedTrigger: (model, { pointerType }, $) => toggle(model, $, methodOf(pointerType)),
-    ReleasedTrigger: (model) => model.pressing ? { ...model, pressing: false } : model,
+    ReleasedTrigger: (_model, _message, $) => $.evolve({ pressing: false }),
     ClickedTrigger: (model, { pointerType }, $) => toggle(model, $, methodOf(pointerType)),
     PressedTriggerKey: (model, { key }, $) => {
       const props = $.props
@@ -1277,7 +1278,7 @@ export const Select = Component.define({
         case "Tab":
           return dismiss(model, $, "focus-out", "keyboard")
         case " ":
-          return typing(model) ? typeKey(model, $, key) : { ...model, spaceDown: true }
+          return typing(model) ? typeKey(model, $, key) : $.evolve({ spaceDown: true })
         default:
           return typeKey(model, $, key)
       }
@@ -1289,7 +1290,7 @@ export const Select = Component.define({
     },
     EnteredItem: (model, { value }) => hover(model, value),
     LeftItem: (model) => hover(model, null),
-    PressedItem: (model) => model.pressedItem ? model : { ...model, pressedItem: true },
+    PressedItem: (_model, _message, $) => $.evolve({ pressedItem: true }),
     ReleasedItem: (model, { pointerType, value }, $) => {
       if (model.pressedItem || !$.props.open) return model
       const selected = valuesOf($.props).includes(value)
@@ -1297,21 +1298,20 @@ export const Select = Component.define({
       return pick(model, $, value, methodOf(pointerType))
     },
     ClickedItem: (model, { pointerType, value }, $) => {
-      const next = model.pressedItem ? { ...model, pressedItem: false } : model
+      const next = UiStruct.evolve(model, { pressedItem: false })
       if (!$.props.open) return next
       return pointerType === "touch" || pointerType === "" || model.pressedItem
         ? pick(next, $, value, methodOf(pointerType))
         : next
     },
-    CompletedWaitBeforeResetTyping: (model) => model.typed === "" ? model : { ...model, typed: "" },
-    ShowedPopup: (model) => model.mounted ? model : { ...model, mounted: true },
-    RenderedFirstFrame: (model, _message, $) => $.props.open && !model.started ? { ...model, started: true } : model,
+    CompletedWaitBeforeResetTyping: (_model, _message, $) => $.evolve({ typed: "" }),
+    ShowedPopup: (_model, _message, $) => $.evolve({ mounted: true }),
+    RenderedFirstFrame: (model, _message, $) => $.props.open ? $.evolve({ started: true }) : model,
     FinishedTransition: (model, { open }, $) => {
       if (open !== $.props.open) return model
       if (open) return $.emit(SelectEvents.Settled({ open }))
       return model.mounted && $.props.holdExit !== true
-        ? $.set({
-          ...model,
+        ? $.evolve({
           mounted: false,
           started: false,
           fellBack: false,
@@ -1321,7 +1321,7 @@ export const Select = Component.define({
         }).emit(SelectEvents.Settled({ open }))
         : model
     },
-    ChangedPlacement: (model, { placement }) => ({ ...model, placement }),
+    ChangedPlacement: (_model, { placement }, $) => $.evolve({ placement }),
     PressedOutside: (model, { pointerType }, $) => dismiss(model, $, "outside-press", methodOf(pointerType)),
     FocusedOutside: (model, _message, $) => dismiss(model, $, "focus-out", null, true),
     FocusedTrigger: (model, _message, $) => alignedOf(model, $.props) ? dismiss(model, $, "none", null) : model,
@@ -1331,11 +1331,11 @@ export const Select = Component.define({
       return outside ? dismiss(next, $, "cancel-open", "mouse") : next
     },
     ResizedWindow: (model, _message, $) => alignedOf(model, $.props) ? dismiss(model, $, "window-resize", null) : model,
-    FellBack: (model) => model.fellBack ? model : { ...model, fellBack: true },
-    ChangedScrollArrows: (model, { down, up }) => ({ ...model, scrollUp: up, scrollDown: down }),
+    FellBack: (_model, _message, $) => $.evolve({ fellBack: true }),
+    ChangedScrollArrows: (_model, { down, up }, $) => $.evolve({ scrollUp: up, scrollDown: down }),
     ScrolledByArrow: (model) => hover(model, null),
-    AllowedRelease: (model) => ({ ...model, releaseSelected: true, releaseUnselected: true }),
-    DraggedPointer: (model) => model.releaseUnselected ? model : { ...model, releaseUnselected: true }
+    AllowedRelease: (_model, _message, $) => $.evolve({ releaseSelected: true, releaseUnselected: true }),
+    DraggedPointer: (_model, _message, $) => $.evolve({ releaseUnselected: true })
   },
   parts: (model, p) => {
     const props = p.props
