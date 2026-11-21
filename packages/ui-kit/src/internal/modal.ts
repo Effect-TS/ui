@@ -35,10 +35,11 @@ const hide = (inside: Element): () => void => {
   }
 }
 
-// Only the latest layer's walk applies: dialogs are drawn in place, so a later
-// one can sit inside an element an earlier walk hid.
 const refresh = () => {
-  const top = layers.at(-1)
+  const top = layers.reduce<Element | undefined>(
+    (top, layer) => top === undefined || top.contains(layer) || !layer.contains(top) ? layer : top,
+    undefined
+  )
   if (top === marked) return
   unmark?.()
   marked = top

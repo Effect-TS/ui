@@ -66,7 +66,6 @@ describe("Dialog", () => {
     Effect.gen(function*() {
       const s = yield* Scene.make(Dialog, { open: false }, standIn)
       const other = Locator.text("Other", { exact: true })
-      // Closed, the portal isn't drawn, and the triggers say so.
       assert.isUndefined(s.query(portal))
       assert.deepInclude(s.get(trigger).attrs, {
         type: "button",
@@ -185,8 +184,6 @@ describe("Dialog", () => {
 
       s.props({ open: false, holdExit: true })
       s.expectMount(tracked(s))
-      // Closing: still shown, with the closed and ending attributes, and the
-      // layer, backdrop and viewport let presses through.
       assert.strictEqual(s.get(portal).props?.popoverOpen, true)
       assert.strictEqual(partsOf(s).transitionStatus, "ending")
       assert.isTrue(partsOf(s).mounted)

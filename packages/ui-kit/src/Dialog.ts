@@ -525,6 +525,15 @@ const inOtherLayer = (node: HTMLDialogElement, target: Node): boolean => {
   return other != null && other !== node && !other.contains(node) && !node.contains(other)
 }
 
+const focusedBefore = new WeakMap<Element, Element | null>()
+if (typeof document !== "undefined") {
+  document.addEventListener("beforetoggle", (event) => {
+    if (event.target instanceof HTMLDialogElement && (event as ToggleEvent).newState === "open") {
+      focusedBefore.set(event.target, document.activeElement)
+    }
+  }, true)
+}
+
 const finite = (animation: Animation): boolean => {
   const end = animation.effect?.getComputedTiming().endTime
   return typeof end === "number" && Number.isFinite(end)
@@ -576,7 +585,8 @@ const TrackDialog = Mount.makeStream(
             ? document.activeElement
             : document.querySelector<HTMLElement>(controls))
       let trigger = findTrigger()
-      const active = document.activeElement
+      const active = focusedBefore.has(node) ? focusedBefore.get(node)! : document.activeElement
+      focusedBefore.delete(node)
       let focusInside = node.contains(active)
       let lastFocused: HTMLElement | null = focusInside ? active as HTMLElement : null
       const visited: Array<HTMLElement> = active instanceof HTMLElement && !focusInside ? [active] : []
@@ -586,9 +596,16 @@ const TrackDialog = Mount.makeStream(
         return child !== null && !pageBefore.has(child as ChildNode)
       }
 
-      const focusFirst = () => {
+      const focusFirst = (from: Element | null) => {
         const root = popup()
-        if (!current.initialFocus || root.contains(document.activeElement)) return
+        if (root.contains(from)) return
+        if (!current.initialFocus) {
+          const focused = document.activeElement
+          if (focused === null || !node.contains(focused)) return
+          if (from instanceof HTMLElement && from !== document.body && from.isConnected) handOff(from)
+          else (focused as HTMLElement).blur()
+          return
+        }
         const marked = Array.from(node.querySelectorAll<HTMLElement>("[autofocus]")).find((element) =>
           !inNested(node, element)
         )
@@ -682,7 +699,8 @@ const TrackDialog = Mount.makeStream(
       }
       const onPointerEnd = (event: PointerEvent) => {
         touches.delete(event.pointerId)
-        if (event.type === "pointercancel") pressed = undefined
+        const target = event.target as Node | null
+        if (event.type === "pointercancel" || target === null || !outside(target)) pressed = undefined
       }
       const onClick = (event: MouseEvent) => {
         const pointerType = pressed
@@ -717,6 +735,14 @@ const TrackDialog = Mount.makeStream(
       }
       const observer = new MutationObserver(recover)
 
+      const opening = (from: Element | null) =>
+        frame(() => {
+          if (current.open && topmost()) focusFirst(from)
+          focusInside = node.contains(document.activeElement)
+          if (focusInside) lastFocused = document.activeElement as HTMLElement
+          if (current.open && !current.started) frame(() => send(Message.RenderedFirstFrame()))
+        })
+
       let generation = 0
       const settle = (open: boolean) => {
         const mine = ++generation
@@ -743,6 +769,10 @@ const TrackDialog = Mount.makeStream(
         } else if (!previous.open && next.open) {
           hold()
           pageBefore = new Set(Array.from(document.body?.childNodes ?? []))
+          opening(document.activeElement)
+        } else if (next.open && next.modal !== previous.modal) {
+          letGo()
+          hold()
         }
         if (next.open && next.started && !previous.started) settle(true)
         else if (next.open && !previous.open && previous.mounted) settle(true)
@@ -774,12 +804,7 @@ const TrackDialog = Mount.makeStream(
           if (current.open) hold()
           raiseAbove(node)
           if (!current.mounted) send(Message.ShowedPortal())
-          frame(() => {
-            if (current.open && topmost()) focusFirst()
-            focusInside = node.contains(document.activeElement)
-            if (focusInside) lastFocused = document.activeElement as HTMLElement
-            if (!current.started) frame(() => send(Message.RenderedFirstFrame()))
-          })
+          opening(active)
         }).pipe(
           Effect.tap(() => Effect.forkScoped(Stream.runForEach(changes, (next) => Effect.sync(() => onChange(next)))))
         ),
@@ -795,6 +820,7 @@ const TrackDialog = Mount.makeStream(
             const lost = focusInside
             frame(() => {
               const focused = document.activeElement as HTMLElement | null
+              if (focused !== null && showing.some((other) => other.open() && other.node.contains(focused))) return
               if (!finalFocus) {
                 if (lost && focused !== null && focused !== document.body) focused.blur()
                 return

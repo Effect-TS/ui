@@ -160,9 +160,6 @@ export type AlertDialogProps = typeof AlertDialogProps.Type
  */
 export type AlertDialogParts = Component.Headless.Parts<typeof Dialog>
 
-// The portal is the element the dialog is labelled on, so its role goes
-// there. Set with `forward`, so it wins over a `role` the consumer set on
-// the builder or chained after the part.
 const alert = (node: View.ElementBuilder<any, any, any, any>) => node.attr("role", "alertdialog")
 
 /**
