@@ -15,7 +15,7 @@ const scopedPackagePattern = /^@[^/]+(?:\/.*)?$/
 const blankLinePattern = /\r?\n[ \t]*\r?\n/
 
 function getImportGroup(source: string): number {
-  if (source.startsWith(".") || source.startsWith("@/")) {
+  if (source.startsWith(".") || source.startsWith("@/") || source.startsWith("#")) {
     return 2
   }
   if (scopedPackagePattern.test(source)) {

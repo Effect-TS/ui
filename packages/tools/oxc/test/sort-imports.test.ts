@@ -37,10 +37,11 @@ describe("effect/sort-imports", () => {
       "move-and-sort.ts",
       [
         `import { z, A, m } from "./local.ts"`,
+        `import { Note } from "#domain/Note"`,
         `import { make, type Component } from "@effect/ui/Component"`,
         `import { succeed, type Effect, fail } from "effect/Effect"`,
         "",
-        "export const x: [unknown, unknown, unknown, unknown, Component | null, unknown, Effect<never> | null, unknown] = [z, A, m, make, null, succeed, null, fail]",
+        "export const x: [unknown, unknown, unknown, unknown, unknown, Component | null, unknown, Effect<never> | null, unknown] = [Note, z, A, m, make, null, succeed, null, fail]",
         ""
       ].join("\n"),
       async (filePath) => {
@@ -52,9 +53,10 @@ describe("effect/sort-imports", () => {
             "",
             `import { type Component, make } from "@effect/ui/Component"`,
             "",
+            `import { Note } from "#domain/Note"`,
             `import { A, m, z } from "./local.ts"`,
             "",
-            "export const x: [unknown, unknown, unknown, unknown, Component | null, unknown, Effect<never> | null, unknown] = [z, A, m, make, null, succeed, null, fail]",
+            "export const x: [unknown, unknown, unknown, unknown, unknown, Component | null, unknown, Effect<never> | null, unknown] = [Note, z, A, m, make, null, succeed, null, fail]",
             ""
           ].join("\n")
         )
