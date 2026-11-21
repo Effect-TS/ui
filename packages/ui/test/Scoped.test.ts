@@ -1539,10 +1539,13 @@ describe("scoped children across a router restore", () => {
 })
 
 describe("scoped children whose state encodes after the push that left them", () => {
-  let gate = Promise.resolve()
+  let gate: Promise<void> | undefined = Promise.resolve()
   const Slow = Schema.String.pipe(Schema.decode({
     decode: SchemaGetter.passthrough(),
-    encode: SchemaGetter.transformEffect((text: string) => Effect.promise(() => gate.then(() => text)))
+    encode: SchemaGetter.transformEffect((text: string) => {
+      const held = gate
+      return held === undefined ? Effect.succeed(text) : Effect.promise(() => held.then(() => text))
+    })
   }))
   const macrotask = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 0)))
   const note = (name: string, model: Schema.Codec<string, string>) =>
@@ -1580,10 +1583,14 @@ describe("scoped children whose state encodes after the push that left them", ()
         })
       )
   })
-  const Routes = Route.union({ Notes: Route.make("/"), Away: Route.make("/away") })
+  const Routes = Route.union({
+    Notes: Route.make("/", { search: { q: Schema.optional(Schema.String) } }),
+    Away: Route.make("/away")
+  })
   const Message = UiSchema.TaggedEnum({
     Changed: { route: Routes },
     Go: {},
+    Query: {},
     Done: {},
     Show: { hidden: Schema.Boolean, bare: Schema.Boolean }
   })
@@ -1600,6 +1607,8 @@ describe("scoped children whose state encodes after the push that left them", ()
         Message.match(message, {
           Changed: ({ route }) => ({ ...model, route }),
           Go: () => $.run(Router.push(Routes, Routes.Away()).pipe(Command.map(() => Message.Done()))),
+          Query: () =>
+            $.run(Router.push(Routes, Routes.Notes({ search: { q: "q" } })).pipe(Command.map(() => Message.Done()))),
           Done: () => model,
           Show: ({ bare, hidden }) => ({ ...model, bare, hidden })
         }),
@@ -1615,7 +1624,12 @@ describe("scoped children whose state encodes after the push that left them", ()
     })
   const visits = (sibling: boolean) => {
     const App = app(sibling)
-    const history = Router.memoryHistory("/")
+    const memory = Router.memoryHistory("/")
+    const history: Router.History = {
+      ...memory,
+      push: (url, state) => memory.push(url, structuredClone(state)),
+      replace: (url, state) => memory.replace(url, structuredClone(state))
+    }
     const visit = Effect.fnUntraced(
       function*<A, E, R>(effect: (root: TestHost.TestRoot<any, any, any>) => Effect.Effect<A, E, R>) {
         const root = yield* TestHost.mount(App, Router.props(Routes))
@@ -1643,10 +1657,16 @@ describe("scoped children whose state encodes after the push that left them", ()
       history.go(delta)
       yield* TestHost.settle
     })
-    const edit = Effect.fnUntraced(function*(root: TestHost.TestRoot<any, any, any>) {
-      click(root, "a:new")
-      click(root, "b:new")
+    const query = Effect.fnUntraced(function*(root: TestHost.TestRoot<any, any, any>) {
+      root.send(Message.Query())
+      yield* TestHost.settle
+    })
+    const type = Effect.fnUntraced(function*(root: TestHost.TestRoot<any, any, any>, was: string) {
+      click(root, `a:${was}`)
+      click(root, `b:${was}`)
       yield* show(root, { hidden: true, bare: false })
+    })
+    const later = Effect.fnUntraced(function*(root: TestHost.TestRoot<any, any, any>) {
       let open!: () => void
       gate = new Promise((resolve) => open = resolve)
       click(root, "Away")
@@ -1655,7 +1675,11 @@ describe("scoped children whose state encodes after the push that left them", ()
       yield* macrotask
       yield* TestHost.settle
     })
-    return { visit, show, push, go, edit }
+    const edit = Effect.fnUntraced(function*(root: TestHost.TestRoot<any, any, any>) {
+      yield* type(root, "new")
+      yield* later(root)
+    })
+    return { visit, show, push, go, edit, query, type, later }
   }
 
   it.effect("start fresh after a reload, when a sibling's state was written into the entry", () => {
@@ -1690,6 +1714,63 @@ describe("scoped children whose state encodes after the push that left them", ()
         assert.strictEqual(root.text(), "Away a:new b:new ")
       }))
     })
+  })
+
+  it.effect("keep what a push wrote into its entry, after a Back over an entry whose state encoded later", () => {
+    const { go, later, push, query, show, type, visit } = visits(false)
+    return Effect.gen(function*() {
+      gate = undefined
+      yield* visit(Effect.fnUntraced(function*(root) {
+        yield* type(root, "new")
+        yield* query(root)
+        yield* later(root)
+        yield* show(root, { hidden: false, bare: true })
+        yield* go(-1)
+        yield* go(-1)
+        gate = undefined
+        yield* push(root)
+      }))
+      yield* visit(Effect.fnUntraced(function*(root) {
+        yield* go(-1)
+        assert.strictEqual(root.text(), "Away a:new! b:new! ")
+      }))
+    })
+  })
+
+  it.effect("start fresh after a reload, when edited again after a Back and left before that encodes", () => {
+    const { go, later, query, show, type, visit } = visits(false)
+    return Effect.gen(function*() {
+      gate = undefined
+      yield* visit(Effect.fnUntraced(function*(root) {
+        yield* type(root, "new")
+        yield* query(root)
+        yield* go(-1)
+        yield* show(root, { hidden: false, bare: false })
+        yield* type(root, "new!")
+        yield* later(root)
+      }))
+      yield* visit(Effect.fnUntraced(function*(root) {
+        yield* go(-1)
+        assert.strictEqual(root.text(), "Away a:new b:new ")
+      }))
+    })
+  })
+
+  it.effect("start fresh in an entry that never drew them, after a Back from one that did", () => {
+    const { go, push, query, show, type, visit } = visits(false)
+    gate = undefined
+    return visit(Effect.fnUntraced(function*(root) {
+      yield* show(root, { hidden: false, bare: true })
+      yield* query(root)
+      yield* show(root, { hidden: false, bare: false })
+      yield* type(root, "new")
+      yield* push(root)
+      yield* show(root, { hidden: false, bare: true })
+      yield* go(-1)
+      yield* go(-1)
+      yield* show(root, { hidden: false, bare: false })
+      assert.strictEqual(root.text(), "Away a:new b:new ")
+    }))
   })
 })
 

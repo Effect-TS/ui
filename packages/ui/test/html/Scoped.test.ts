@@ -770,6 +770,127 @@ describe("scoped children in a receiver that waits for its Layer", () => {
       }).pipe(Effect.scoped)
   )
 
+  const RowMsg = UiSchema.TaggedEnum({ Add: { text: Schema.String } })
+  const Row = Component.define({
+    name: "Row",
+    scoped: true,
+    model: Schema.String,
+    message: RowMsg,
+    receives: ["Add"],
+    events: Schema.String,
+    elements: Html
+  }).make({
+    init: () => "",
+    update: (row, { text }, $) => $.set(row + text).emit(text),
+    view: (row, h) => h.p(row)
+  })
+  const XRef = Row.ref("x")
+  const YRef = Row.ref("y")
+  const Relist = Component.define({
+    name: "Relist",
+    scoped: false,
+    model: Schema.Null,
+    message: Schema.Never,
+    events: Schema.Null,
+    elements: Html
+  }).make({ init: ($) => $.set(null).emit(null), update: (model) => model, view: (_, h) => h.i() })
+  const RowsMsg = UiSchema.TaggedEnum({
+    Send: { to: Schema.Literals(["x", "y"]), text: Schema.String },
+    End: { text: Schema.String },
+    List: {},
+    Got: { text: Schema.String }
+  })
+  const Rows = Component.define({
+    name: "Rows",
+    scoped: false,
+    model: Schema.Struct({ listed: Schema.Boolean, ended: Schema.Boolean, got: Schema.String }),
+    message: RowsMsg,
+    elements: Html
+  }).make({
+    init: () => ({ listed: true, ended: false, got: "" }),
+    update: (model, message, $) =>
+      RowsMsg.match(message, {
+        Send: ({ text, to }) => $.set(model).send(to === "x" ? XRef : YRef, RowMsg.Add({ text })),
+        End: ({ text }) => $.set({ ...model, listed: false, ended: true }).send(XRef, RowMsg.Add({ text })),
+        List: () => ({ ...model, listed: true }),
+        Got: ({ text }) => ({ ...model, got: model.got + text })
+      }),
+    view: (model, h) => {
+      const onEmit = (text: string) => RowsMsg.Got({ text })
+      return h.main(
+        Gated(h, {
+          key: "g",
+          slots: {
+            body: h.scoped(
+              ($) => $.model.listed,
+              (s) => model.listed ? [Row(s, { ref: XRef, onEmit }), Row(s, { ref: YRef, onEmit })] : []
+            )
+          }
+        }),
+        model.ended ? Relist(h, { key: "r", onEmit: () => RowsMsg.List() }) : null,
+        h.em(model.got)
+      )
+    }
+  })
+
+  it.effect("get no message sent as a flush ended them, when that flush lists them again", () =>
+    Effect.gen(function*() {
+      const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Rows, {}))
+      const root = yield* BrowserHost.mountEffect(Rows, {}, app, { state })
+      root.send(RowsMsg.End({ text: "C" }))
+      yield* tick
+      yield* open
+      yield* root.adopted
+      yield* tick
+      assert.strictEqual(app.querySelector("em")?.textContent, "")
+    }).pipe(Effect.scoped))
+
+  it.effect("get one author's messages in the order sent, when two of them are placed together", () =>
+    Effect.gen(function*() {
+      const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Rows, {}))
+      const root = yield* BrowserHost.mountEffect(Rows, {}, app, { state })
+      for (const [to, text] of [["y", "A"], ["x", "B"], ["y", "C"], ["x", "D"]] as const) {
+        root.send(RowsMsg.Send({ to, text }))
+        yield* tick
+      }
+      yield* open
+      yield* root.adopted
+      yield* tick
+      assert.strictEqual(app.querySelector("em")?.textContent, "ABCD")
+    }).pipe(Effect.scoped))
+
+  it.effect("keep what the user typed, when the one drawn before them leaves the slot", () =>
+    Effect.gen(function*() {
+      const Mixed = Component.define({
+        name: "Mixed",
+        scoped: false,
+        model: Schema.Boolean,
+        message: Schema.Boolean,
+        elements: Html
+      }).make({
+        init: () => false,
+        update: (_, moved) => moved,
+        view: (moved, h) =>
+          h.scoped((s) => {
+            const row = Row(s, { key: "r" })
+            return h.main(
+              Bare(h, { key: "g", slots: { body: [moved ? null : row, Note(s, {})] } }),
+              moved ? h.article(row) : null
+            )
+          })
+      })
+      const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Mixed, {}))
+      const field = app.querySelector("input")!
+      field.value = "typed"
+      const root = yield* BrowserHost.mountEffect(Mixed, {}, app, { state })
+      root.send(true)
+      yield* tick
+      yield* open
+      yield* root.adopted
+      assert.strictEqual(app.querySelector("input"), field)
+      assert.strictEqual(field.value, "typed")
+    }).pipe(Effect.scoped))
+
   const moving = () => {
     let inits = 0
     const DraftMsg = UiSchema.TaggedEnum({ Bump: {} })

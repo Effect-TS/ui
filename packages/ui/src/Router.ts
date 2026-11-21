@@ -1453,7 +1453,7 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
     ) => {
       restoring = saved === undefined ? undefined : new Map(Object.entries(saved))
       // First, so whatever the navigation starts sees the cache with the hydration window closed.
-      for (const root of roots) root.navigated(!mode.quiet)
+      for (const root of roots) root.navigated(!mode.quiet, next.action === "pop")
       const runs = next.action === "push" || (next.action === "replace" && !mode.quiet)
       const checks = runs ? runDeclarations(next, false) : []
       const from = pathnameOf(current.url)
