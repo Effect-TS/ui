@@ -135,7 +135,7 @@ describe("Head", () => {
         readonly entries: ReadonlyArray<string>
         readonly children: ReadonlyArray<Shape>
       }
-      const shape = (tree: Head.Tree<{ readonly _tag: string }, unknown>): Shape => ({
+      const shape = (tree: Head.Tree<{ readonly _tag: string }>): Shape => ({
         path: tree.path,
         entries: tree.entries.map((entry) => entry._tag),
         children: tree.children.map(shape)
@@ -152,7 +152,7 @@ describe("Head", () => {
       const Page = leaf("Page", [Head.title("Page")])
       const Aside = leaf("Aside")
       const Note = leaf("Note")
-      /** No head and no reduceHead of its own. */
+      /** No head of its own. */
       const holding = (name: string, ...children: ReadonlyArray<readonly [string, ReturnType<typeof leaf>]>) =>
         Component.define({ name, model: Schema.Null, message: Schema.Never, elements: Shaped }).make({
           init: () => null,

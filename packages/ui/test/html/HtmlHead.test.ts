@@ -6,14 +6,14 @@ import { Effect, Schema } from "effect"
 
 const node = (
   entries: ReadonlyArray<HtmlHead.Entry>,
-  ...children: ReadonlyArray<Head.Tree<HtmlHead.Entry, HtmlHead.HtmlHead>>
-): Head.Tree<HtmlHead.Entry, HtmlHead.HtmlHead> => ({ entries, children })
+  ...children: ReadonlyArray<Head.Tree<HtmlHead.Entry>>
+): Head.Tree<HtmlHead.Entry> => ({ entries, children })
 
 const at = (
   path: string,
   entries: ReadonlyArray<HtmlHead.Entry>,
-  ...children: ReadonlyArray<Head.Tree<HtmlHead.Entry, HtmlHead.HtmlHead>>
-): Head.Tree<HtmlHead.Entry, HtmlHead.HtmlHead> => ({ path, entries, children })
+  ...children: ReadonlyArray<Head.Tree<HtmlHead.Entry>>
+): Head.Tree<HtmlHead.Entry> => ({ path, entries, children })
 
 describe("HtmlHead", () => {
   it("folds the same head and conflicts whatever the siblings' order", () => {
@@ -40,7 +40,7 @@ describe("HtmlHead", () => {
       HtmlHead.htmlData("data-theme", "dark"),
       HtmlHead.htmlClass("b")
     ])
-    const fold = (children: ReadonlyArray<Head.Tree<HtmlHead.Entry, HtmlHead.HtmlHead>>) => {
+    const fold = (children: ReadonlyArray<Head.Tree<HtmlHead.Entry>>) => {
       const conflicts: Array<Head.Conflict> = []
       const head = HtmlHead.merge(
         at(
@@ -188,12 +188,12 @@ describe("HtmlHead", () => {
         head: () => [
           Head.titleTemplate((title) => `${title} | Foldkit`),
           HtmlHead.meta({ name: "description", content: "A framework" }),
-          HtmlHead.jsonLd({ "@type": "WebSite", name: "Foldkit" })
+          HtmlHead.jsonLd({ "@type": "WebSite", name: "Foldkit" }),
+          HtmlHead.reduce((below) => ({
+            ...below,
+            meta: [...below.meta, HtmlHead.meta({ property: "og:title", content: below.title ?? "Foldkit" })]
+          }))
         ],
-        reduceHead: (_, below) => ({
-          ...below,
-          meta: [...below.meta, HtmlHead.meta({ property: "og:title", content: below.title ?? "Foldkit" })]
-        }),
         view: (model, h) => h.main(Blog(h, { key: "blog", props: { post: model.post } }))
       })
 
@@ -217,10 +217,39 @@ describe("HtmlHead", () => {
       assert.deepStrictEqual(post.jsonLd.map((entry) => JSON.parse(entry.json)["@type"]), ["WebSite", "BlogPosting"])
     }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
 
+  it("runs a node's reduce entries in written order, skipping one that throws", () => {
+    const errors: Array<unknown> = []
+    const head = HtmlHead.merge({
+      entries: [
+        Head.reduce((below) => ({ title: `${below.title}!` })),
+        HtmlHead.lang("en"),
+        HtmlHead.reduce(() => {
+          throw new Error("boom")
+        }),
+        HtmlHead.reduce((below) => ({ ...below, html: { ...below.html, dir: "rtl" } })),
+        Head.title("Own")
+      ],
+      children: [],
+      onError: (error) => errors.push(error)
+    })
+    assert.strictEqual(head.title, "Own!")
+    assert.strictEqual(head.html.lang, "en")
+    assert.strictEqual(head.html.dir, "rtl")
+    assert.strictEqual(errors.length, 1)
+  })
+
+  it("Head.merge ignores HtmlHead.reduce", () => {
+    const head = Head.merge<HtmlHead.Entry>({
+      entries: [Head.title("Own"), HtmlHead.reduce((below) => ({ ...below, title: "Html" }))],
+      children: []
+    })
+    assert.deepStrictEqual(head, { title: "Own" })
+  })
+
   const Neutral = Component.define({ name: "Neutral", model: Schema.Null, message: Schema.Never }).make({
     init: () => null,
     update: (model) => model,
-    reduceHead: () => ({ title: "Neutral" }),
+    head: () => [Head.reduce(() => ({ title: "Neutral" }))],
     view: (_, h) => h.text("neutral")
   })
   const Page = Component.define({ name: "Page", model: Schema.Null, message: Schema.Never, elements: Html }).make({

@@ -803,20 +803,18 @@ const neutralFold: View.HeadFold<Head.Entry, Head.Head> = { merge: Head.merge, t
 
 /** The fold of a component's vocabulary, or the title-only one. */
 const foldOf = (component: Component.Any): View.HeadFold => component.elements()?.head ?? neutralFold
-/** Whether an instance of `component` can add to the head: it has entries of its own, or reduces the ones below it. */
-const declaresHead = (component: Component.Any): boolean =>
-  component.head !== undefined || component.reduceHead !== undefined
+/** Whether an instance of `component` can add to the head. */
+const declaresHead = (component: Component.Any): boolean => component.head !== undefined
 
-/** One instance's part of the head, over its state when it was read: its entries, its reducer and the instances it placed. */
+/** One instance's part of the head, over its state when it was read: its entries and the instances it placed. */
 interface HeadPart {
   readonly inst: Instance
   readonly entries: ReadonlyArray<unknown>
-  readonly reduce: ((below: unknown) => unknown) | undefined
   readonly children: ReadonlyArray<Instance>
 }
 
 /** A tree with no entries, which folds to the vocabulary's empty head. */
-const emptyTree: Head.Tree<any, any> = { entries: [], children: [] }
+const emptyTree: Head.Tree<any> = { entries: [], children: [] }
 
 /** An entry about an instance, without what `record` adds. */
 type Draft = MessageLog.InstanceEntry extends infer E
@@ -1714,7 +1712,7 @@ const setup = (
   }
   /**
    * Renders what's dirty, runs deferred work and folds the head, until none
-   * is left. A `head`, `reduceHead` or title template that throws fails its
+   * is left. A `head`, reduce or title template that throws fails its
    * instance, so the fallback renders and the head is folded again.
    */
   function drain() {
@@ -1783,7 +1781,7 @@ const setup = (
   let viewChanged = false
   // The root vocabulary's fold, or the title-only one.
   const rootFold = foldOf(component)
-  // Under a root fold that folds a subtree with no entries and no `reduce` to nothing, such subtrees
+  // Under a root fold that folds a subtree with no entries to nothing, such subtrees
   // are left out of the tree: most instances, such as a list's rows, have no head. A host-neutral root
   // may hand the fold to a vocabulary that sees every node, so its tree is built whole.
   const skipsEmpty = rootFold !== neutralFold && headFold.skipsEmpty(rootFold.merge)
@@ -1807,8 +1805,7 @@ const setup = (
   let handle: services.RootHandle | undefined
 
   /**
-   * One instance's part of the head, read now: its entries, its `reduceHead` over its Model and the
-   * instances its view placed. A closed or failed instance has none, and nor does one still waiting to
+   * One instance's part of the head, read now: its entries and the instances its view placed. A closed or failed instance has none, and nor does one still waiting to
    * adopt, whose Model isn't there yet, or one whose `head` throws, which `onError` is told. With
    * `below` false the instances it placed aren't looked for: none of them has a part the fold keeps.
    */
@@ -1828,14 +1825,12 @@ const setup = (
         return undefined
       }
     }
-    const reduce = inst.component.reduceHead
-    const model = inst.model
     let children: Array<Instance> = emptyList
     if (below) {
       children = []
       for (const rendered of listOf(inst.rendered)) placed(rendered, children)
     }
-    return { inst, entries, reduce: reduce === undefined ? undefined : (below) => reduce(model, below), children }
+    return { inst, entries, children }
   }
   /** Adds the instances a rendered node places to `out`, in document order: a fallback's content included. */
   const placed = (rendered: Rendered, out: Array<Instance>): void => {
@@ -1864,9 +1859,7 @@ const setup = (
    * throws in the fold is `onError`'s, with the instance that declared it.
    *
    * The fold is the root vocabulary's, or under a host-neutral root, the first vocabulary's in the tree
-   * with a fold of its own, so an Html child keeps its entries. A `reduceHead` of another vocabulary
-   * than the fold's has its value laid over `below`: a host-neutral one sets the title and keeps the Html
-   * fields.
+   * with a fold of its own, so an Html child keeps its entries.
    */
   const foldTree = (
     root: Instance,
@@ -1876,27 +1869,21 @@ const setup = (
   ): { readonly head: unknown; readonly title: string | undefined } => {
     let fold = rootFold
     const skip = skipsEmpty
-    const node = (inst: Instance): Head.Tree<unknown, unknown> | undefined => {
+    const node = (inst: Instance): Head.Tree<unknown> | undefined => {
       const part = partOf(inst)
       if (part === undefined) return skip ? undefined : { path: inst.path, ...emptyTree }
-      const own = foldOf(inst.component)
-      if (fold === neutralFold) fold = own
-      const reduce = part.reduce
+      if (fold === neutralFold) fold = foldOf(inst.component)
       const below = part.children
-      const children: Array<Head.Tree<unknown, unknown>> = []
+      const children: Array<Head.Tree<unknown>> = []
       for (let index = 0; index < below.length; index++) {
         const child = node(below[index]!)
         if (child !== undefined) children.push(child)
       }
-      if (skip && reduce === undefined && part.entries.length === 0 && children.length === 0) return undefined
+      if (skip && part.entries.length === 0 && children.length === 0) return undefined
       return {
         path: inst.path,
         entries: part.entries,
         children,
-        reduce: reduce === undefined ? undefined : (below) => {
-          const value = reduce(below)
-          return own === fold ? value : { ...(below as object), ...(value as object) }
-        },
         onError: (error) => onError(inst, error)
       }
     }
@@ -5381,7 +5368,6 @@ const setup = (
   const outletComponent: Component.Any = {
     definition: { name: "[outlet]", slots: [] },
     head: undefined,
-    reduceHead: undefined,
     subscriptions: undefined,
     layer: undefined,
     "~queries": undefined,

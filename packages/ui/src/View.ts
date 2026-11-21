@@ -1586,7 +1586,7 @@ export const shorthand = <
  * `mount` requires for the root.
  *
  * `Head` is the entry type a component's `head` returns, and `HeadValue`
- * the value the vocabulary's merge folds them into, which `reduceHead` maps.
+ * the value the vocabulary's merge folds them into.
  * A vocabulary that declares neither has `Head`'s host-neutral title
  * entries. Read them with `HeadEntry` and `HeadValue`.
  *
@@ -1615,9 +1615,8 @@ export type HeadEntry<V> = [V] extends [never] ? Head.Entry
   : Head.Entry
 
 /**
- * The folded head of vocabulary `V`, which `reduceHead` receives and
- * returns: the vocabulary's `HeadValue`, or `Head.Head` when `V` is
- * `never` or declares none.
+ * The folded head of vocabulary `V`: the vocabulary's `HeadValue`, or
+ * `Head.Head` when `V` is `never` or declares none.
  *
  * @stability experimental
  * @category utility types
@@ -1637,7 +1636,7 @@ export type HeadValue<V> = [V] extends [never] ? Head.Head
  * @since 0.1.0
  */
 export interface HeadFold<E = any, H = any> {
-  readonly merge: (tree: Head.Tree<E, H>, options?: Head.MergeOptions) => H
+  readonly merge: (tree: Head.Tree<E>, options?: Head.MergeOptions) => H
   readonly title: (head: H) => string | undefined
 }
 

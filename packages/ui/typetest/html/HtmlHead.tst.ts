@@ -36,33 +36,46 @@ describe("Head and HtmlHead", () => {
     })
   })
 
-  it("reduceHead's below is typed by the vocabulary", () => {
+  it("a reduce's below is typed by its vocabulary", () => {
     Neutral.make({
       ...base,
-      reduceHead: (_, below) => {
-        expect(below).type.toBe<Head.Head>()
-        return below
-      },
+      head: () => [
+        Head.reduce((below) => {
+          expect(below).type.toBe<Head.Head>()
+          return below
+        })
+      ],
       view: () => content
     })
     Page.make({
       ...base,
-      reduceHead: (_, below) => {
-        expect(below).type.toBe<HtmlHead.HtmlHead>()
-        return { ...below, meta: [...below.meta, HtmlHead.meta({ property: "og:title", content: below.title ?? "" })] }
-      },
+      head: () => [
+        HtmlHead.reduce((below) => {
+          expect(below).type.toBe<HtmlHead.HtmlHead>()
+          return {
+            ...below,
+            meta: [...below.meta, HtmlHead.meta({ property: "og:title", content: below.title ?? "" })]
+          }
+        }),
+        Head.reduce((below) => {
+          expect(below).type.toBe<Head.Head>()
+          return below
+        })
+      ],
       view: () => content
     })
     expect(Neutral.make).type.not.toBeCallableWith({
       ...base,
-      reduceHead: () => ({ title: 1 }),
+      head: () => [HtmlHead.reduce((below) => below)],
       view: () => content
     })
+    expect(Head.reduce).type.not.toBeCallableWith(() => ({ title: 1 }))
+    expect<Head.Reduce>().type.not.toBeAssignableFrom({ _tag: "Reduce" as const, apply: () => ({ title: "x" }) })
   })
 
   it("Head exports only the neutral API", () => {
     expect(Head).type.not.toHaveProperty("meta")
-    expect<Head.Entry>().type.toBe<Head.Title | Head.TitleTemplate>()
+    expect<Head.Entry>().type.toBe<Head.Title | Head.TitleTemplate | Head.Reduce>()
     expect<Head.Head>().type.toBe<{ readonly title: string | undefined }>()
     expect(HtmlHead).type.not.toHaveProperty("title")
     expect<HtmlHead.HtmlHead>().type.toBeAssignableTo<Head.Head>()
