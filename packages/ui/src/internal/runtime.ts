@@ -1167,6 +1167,7 @@ const serializeTree = (
   const statuses: Record<string, Shipped> = {}
   const kept: Record<string, unknown> = {}
   const drawnScoped: Array<string> = []
+  const drawnUnder: Array<string> = []
   let into = state
   let drawn: Instance | undefined
   /** Ships a status other than `Ready`: the client starts from it. */
@@ -1190,7 +1191,7 @@ const serializeTree = (
         inner = true
       } else {
         into[path] = exit.value.state
-        if (drawn !== undefined && into === state) drawnScoped.push(path)
+        if (drawn !== undefined && into === state) (entry === undefined ? drawnUnder : drawnScoped).push(path)
         // What an owner's reports last sent: the client compares its reports with it.
         if (exit.value.reported !== undefined) collected[path] = exit.value.reported
         if (inst.component.layer !== undefined) ship(path, inst.env.status)
@@ -1272,6 +1273,7 @@ const serializeTree = (
     break
   }
   if (drawnScoped.length > 0) add("~scoped", drawnScoped)
+  if (drawnUnder.length > 0) add("~under", drawnUnder)
   if (isStatic) add("~static", true)
   return state
 }
@@ -1439,10 +1441,12 @@ const setup = (
     readonly state: Renderer.State
     readonly deferred: Set<string>
     readonly drawn: ReadonlySet<string>
+    readonly under: ReadonlySet<string>
   } | undefined = options?.state === undefined || server !== undefined ? undefined : {
     state: options.state,
     deferred: new Set(options.state["~deferred"] ?? []),
-    drawn: new Set(options.state["~scoped"] as ReadonlyArray<string> | undefined)
+    drawn: new Set(options.state["~scoped"] as ReadonlyArray<string> | undefined),
+    under: new Set(options.state["~under"] as ReadonlyArray<string> | undefined)
   }
   let servedIn: Map<string, Served> | undefined
   const noteServed = (node: unknown, stop: unknown, waiter: Instance, served: Array<string>) => {
@@ -1529,11 +1533,13 @@ const setup = (
       if (from?.waiter !== waiter) continue
       unserve(path, from)
       const author = from.author
-      if (author === undefined || author.left) continue
-      const claims = keptTables.get(author)?.writes.get(segment(from.view!))
-      const claim = claims?.[claims.length - 1]
-      settleWrites(claim?.by ?? author, [claim?.view ?? from.view!], from)
-      sendHeld(from, undefined)
+      if (author !== undefined && !author.left) {
+        const claims = keptTables.get(author)?.writes.get(segment(from.view!))
+        const claim = claims?.[claims.length - 1]
+        settleWrites(claim?.by ?? author, [claim?.view ?? from.view!], from)
+        sendHeld(from, undefined)
+      }
+      land(path)
     }
     if (keeping.length > 0 && patching === 0) flushKept()
   }
@@ -1560,6 +1566,7 @@ const setup = (
   const dropWaiting = (path: string) => {
     if (waitingState === undefined || !waitingState.delete(path)) return
     waitingLate?.delete(path)
+    landing.delete(path)
     eachAbove(path, (above) => {
       const under = waitingUnder.get(above)
       if (under !== undefined && under.delete(path) && under.size === 0) waitingUnder.delete(above)
@@ -1573,27 +1580,38 @@ const setup = (
   }
   const holding = new Set<string>()
   const servedAt = (path: string): boolean => holding.has(path) || servedIn?.get(path)?.view !== undefined
-  const servedLive = (path: string): boolean => {
+  const servedLive = (path: string, own?: boolean): boolean => {
     for (let cut = path.length; cut > 0; cut = path.lastIndexOf("/", cut - 1)) {
-      if (servedAt(path.slice(0, cut))) return true
+      const at = path.slice(0, cut)
+      if (servedAt(at)) return true
+      if (own && !hydrating?.under.has(at)) return false
     }
     return false
   }
-  const land = () => {
-    for (const [path, saved] of landing) {
-      if (servedLive(path)) continue
+  const landAt = (path: string) => {
+    if (!landing.has(path) || servedLive(path)) return
+    const saved = landing.get(path)
+    hydrating?.deferred.add(path)
+    if (saved === undefined) dropWaiting(path)
+    else {
       landing.delete(path)
-      dropWaiting(path)
-      hydrating?.deferred.add(path)
-      if (saved !== undefined) setWaiting(path, saved[0], saved[1])
+      setWaiting(path, saved[0], saved[1])
     }
+  }
+  const land = (holder: string) => {
+    if (landing.size === 0) return
+    landAt(holder)
+    const under = waitingUnder.get(holder)
+    if (under !== undefined) { for (const path of under) landAt(path) }
   }
   const addWaiting = (saved: unknown, late?: boolean) => {
     if (saved === null || typeof saved !== "object") return
     for (const path in saved) {
       const state = (saved as Record<string, unknown>)[path]
-      if (servedLive(path)) landing.set(path, [state, late])
-      else setWaiting(path, state, late)
+      if (servedLive(path)) {
+        landing.set(path, [state, late])
+        if (!waitingState?.has(path)) setWaiting(path, undefined)
+      } else setWaiting(path, state, late)
     }
   }
   const restoreKept = () => {
@@ -1604,6 +1622,7 @@ const setup = (
     addWaiting(hydrating.state["~kept"])
     const state = hydrating.state
     for (const path of hydrating.drawn) setWaiting(path, state[path])
+    for (const path of hydrating.under) setWaiting(path, state[path])
   }
   // Slots still waiting for their Layer before they adopt, and whether the first render is done.
   let waiting = 0
@@ -2356,7 +2375,8 @@ const setup = (
       for (const container of inst.parked) unpark(inst, container)
     }
     if (servedIn !== undefined) releaseServed(inst)
-    if (inst.waiting && holding.delete(inst.path)) land()
+    if (inst.waiting && holding.delete(inst.path)) land(inst.path)
+    if (waitingState !== undefined && inst.born > restoredAt) forget(inst.path)
     // Its reports go with it.
     markReports(inst)
     for (const child of inst.children) leave(child)
@@ -2983,7 +3003,6 @@ const setup = (
     // However the instance goes, a removed ancestor and failure included, its owners forget it.
     if (inst.owners !== undefined) { for (const owner of inst.owners.values()) owner.readers?.delete(inst) }
     if (writersLive > 0) endWrites(inst)
-    if (waitingState !== undefined && inst.born > restoredAt) forget(inst.path)
     const waits = stopRuns(inst)
     if (waits.length === 0) {
       unmounted(inst)
@@ -3579,10 +3598,7 @@ const setup = (
         adopted = Option.some({ model: restored.model, results: restoreQueries(inst.component, restored.results) })
       }
     }
-    if (first !== undefined) {
-      dropWaiting(inst.path)
-      if (landing.size > 0) landing.delete(inst.path)
-    }
+    if (first !== undefined) dropWaiting(inst.path)
     return { first, adopted }
   }
 
@@ -3754,7 +3770,7 @@ const setup = (
       if (held !== undefined && adopt && !inst.closed && inst.failure === undefined) applyPlacement(inst, held)
       viewChanged = true
       releaseServed(inst)
-      land()
+      land(inst.path)
       settleWaiting()
     }
     return (adopt: boolean, start: () => void) => defer(() => resume(adopt, start))
@@ -7122,6 +7138,7 @@ const setup = (
     keptLive++
     if (from !== undefined) {
       unserve(named, from)
+      land(named)
       sendHeld(from, inner)
     }
     return inner
@@ -7787,11 +7804,12 @@ const setup = (
     visit(root)
     if (waitingState !== undefined) {
       for (const [path, saved] of waitingState) {
-        if (!live.has(path) && (servedAt(path) || !landing.has(path))) keepState(path, saved, waitingLate?.has(path))
+        if (live.has(path)) continue
+        const entry = landing.get(path)
+        if (saved !== undefined && (!landing.has(path) || servedLive(path, true))) {
+          keepState(path, saved, waitingLate?.has(path))
+        } else if (entry !== undefined) keepState(path, entry[0], entry[1])
       }
-    }
-    for (const [path, saved] of landing) {
-      if (saved !== undefined && !servedAt(path)) keepState(path, saved[0], saved[1])
     }
   }
   if (hooks !== undefined) {
@@ -7810,8 +7828,10 @@ const setup = (
         if (leaves || pops) {
           landing.clear()
           if (waitingState !== undefined) {
-            for (const path of waitingState.keys()) landing.set(path, undefined)
-            land()
+            for (const path of waitingState.keys()) {
+              landing.set(path, undefined)
+              landAt(path)
+            }
           }
           restoredAt = instancesMade
           wake()
