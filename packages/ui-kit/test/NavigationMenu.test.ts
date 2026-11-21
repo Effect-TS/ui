@@ -113,6 +113,17 @@ describe("NavigationMenu", () => {
       assert.strictEqual(focused(), "Home")
     }).pipe(Effect.scoped))
 
+  it.effect("an arrow key passes over a link that can't take focus, and is left alone when no link can", () =>
+    Effect.gen(function*() {
+      const { links } = yield* mount()
+      links[1]!.parentElement!.setAttribute("inert", "")
+      assert.isTrue(press("ArrowRight"))
+      assert.strictEqual(focused(), "Nested")
+      links[0]!.parentElement!.setAttribute("inert", "")
+      assert.isFalse(press("ArrowLeft"))
+      assert.strictEqual(focused(), "Nested")
+    }).pipe(Effect.scoped))
+
   it.effect("an arrow key the consumer's own handler cancelled leaves focus where it is", () =>
     Effect.gen(function*() {
       yield* mount({ claimsRight: true })

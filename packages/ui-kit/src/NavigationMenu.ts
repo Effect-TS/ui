@@ -36,10 +36,11 @@
  * the browser does for any link. The arrow keys also move focus between the
  * links of a list: Right and Left in a horizontal menu, swapped when the
  * list's text direction is right-to-left, and Down and Up in a vertical one.
- * Focus stops at the first and the last link and doesn't wrap. A hidden link
- * and one with `aria-disabled="true"` are skipped. A menu inside another
- * menu's item keeps its links to itself: the outer list's arrow keys pass
- * over them.
+ * Focus stops at the first and the last link and doesn't wrap. A link with
+ * `aria-disabled="true"` is skipped, and so is one the browser won't focus,
+ * such as a hidden or inert link or one without an `href`. A menu inside
+ * another menu's item keeps its links to itself: the outer list's arrow keys
+ * pass over them.
  *
  * An arrow key pressed with Shift, Control, Alt or Meta is left alone, and
  * so is one whose default the consumer's own `onKeyDown` cancelled. The
@@ -132,12 +133,6 @@ export type NavigationMenuProps = typeof NavigationMenuProps.Type
 
 const linkAttribute = "data-navigation-menu-link"
 
-const reachable = (link: HTMLElement): boolean => {
-  const visibility = link.ownerDocument.defaultView?.getComputedStyle(link).visibility
-  return link.getAttribute("aria-disabled") !== "true" && visibility !== "hidden" && visibility !== "collapse" &&
-    link.checkVisibility?.() !== false
-}
-
 const TrackArrowKeys = Mount.makeStream(
   "TrackArrowKeys",
   { args: { scope: Schema.String, vertical: Schema.Boolean } },
@@ -156,10 +151,14 @@ const TrackArrowKeys = Mount.makeStream(
           const from = links.findIndex((link) => link.contains(event.target as Node | null))
           if (from < 0) return
           const ahead = (event.key === forward) !== rtl ? links.slice(from + 1) : links.slice(0, from).reverse()
-          const next = ahead.find(reachable)
-          if (next === undefined) return
-          event.preventDefault()
-          next.focus()
+          const root = node.getRootNode() as Document | ShadowRoot
+          const focused = root.activeElement
+          const moved = ahead.some((link) => {
+            if (link.getAttribute("aria-disabled") === "true") return false
+            link.focus()
+            return root.activeElement !== focused
+          })
+          if (moved) event.preventDefault()
         }
         yield* Effect.acquireRelease(
           Effect.sync(() => node.addEventListener("keydown", onKeyDown)),
