@@ -1,25 +1,27 @@
-/**
- * The fold behind every vocabulary's head merge: children first, then the node's own entries and its
- * children's values, then the node's `reduce`. It tracks which path set each single slot, so a slot
- * two siblings set is reported, and the later sibling keeps it.
- */
 import type * as Head from "../Head.ts"
 
 /** @internal */
 export interface Folding<E, H> {
-  /** The node's value before its `reduce`: its own entries, then its children's values in order. */
-  readonly combine: (node: Head.Tree<E, H>, children: ReadonlyArray<H>) => H
+  readonly combine: (node: Head.Tree<E, H>, children: ReadonlyArray<H>, conflicted: ReadonlySet<string>) => H
   /** The single slots a value holds, each with a signature of its value. */
   readonly slots: (head: H) => ReadonlyMap<string, string>
 }
 
-interface Folded<H> {
-  readonly head: H
-  /** Which path set each single slot of `head`. */
-  readonly from: Map<string, string>
+interface Slot {
+  readonly signature: string | undefined
+  readonly paths: ReadonlyArray<string>
 }
 
-// The merges that are this fold and nothing more: see `skipsEmpty`.
+interface Merging {
+  signature: string | undefined
+  readonly paths: Array<string>
+}
+
+interface Folded<H> {
+  readonly head: H
+  readonly slots: ReadonlyMap<string, Slot>
+}
+
 const plainMerges = new WeakSet<Function>()
 
 /**
@@ -42,49 +44,79 @@ export const plain = <F extends Function>(merge: F): F => {
  */
 export const skipsEmpty = (merge: Function): boolean => plainMerges.has(merge)
 
+const pathOf = (tree: Head.Tree<any, any>): string => tree.path ?? ""
+
+const byPath = (a: Head.Tree<any, any>, b: Head.Tree<any, any>): number => {
+  const x = pathOf(a)
+  const y = pathOf(b)
+  return x < y ? -1 : x > y ? 1 : 0
+}
+
 /** @internal */
 export const fold = <E, H>(
   tree: Head.Tree<E, H>,
   folding: Folding<E, H>,
-  onConflict: ((slot: string, earlier: string, later: string) => void) | undefined
+  onConflict: ((slot: string, paths: ReadonlyArray<string>) => void) | undefined
 ): H => {
-  // What a node with no entries and nothing below it folds to.
-  const nothing: Folded<H> = { head: folding.combine({ entries: [], children: [] }, []), from: new Map() }
+  const nothing: Folded<H> = { head: folding.combine({ entries: [], children: [] }, [], new Set()), slots: new Map() }
   const visit = (node: Head.Tree<E, H>): Folded<H> => {
+    const reduce = node.reduce
+    const below = node.children.length > 1 ? [...node.children].sort(byPath) : node.children
     const children: Array<Folded<H>> = []
-    for (const child of node.children) {
+    let last: string | undefined
+    for (const child of below) {
       const folded = visit(child)
-      if (folded !== nothing) children.push(folded)
+      if (folded === nothing) continue
+      const path = pathOf(child)
+      if (path === last) {
+        throw new Error(
+          `Head: two siblings ${path === "" ? "have no path" : `share the path ${path}`}, ` +
+            "so their order is ambiguous. Give each sibling with head entries its own path"
+        )
+      }
+      last = path
+      children.push(folded)
     }
-    // Most nodes have nothing of their own: such a node passes its only child's value up as it is.
-    if (node.entries.length === 0 && node.reduce === undefined && children.length < 2) return children[0] ?? nothing
-    const path = node.path ?? ""
-    const from = new Map<string, string>()
-    // Two children setting one slot is a conflict.
+    if (node.entries.length === 0 && reduce === undefined && children.length < 2) return children[0] ?? nothing
+    const slots = new Map<string, Merging>()
+    const conflicted = new Set<string>()
     for (const child of children) {
-      for (const [slot, at] of child.from) {
-        const earlier = from.get(slot)
-        if (earlier !== undefined && onConflict !== undefined) onConflict(slot, earlier, at)
-        from.set(slot, at)
+      for (const [slot, set] of child.slots) {
+        let merged = slots.get(slot)
+        if (merged === undefined) slots.set(slot, merged = { signature: set.signature, paths: [...set.paths] })
+        else {
+          if (merged.signature !== set.signature) merged.signature = undefined
+          for (const path of set.paths) merged.paths.push(path)
+        }
+        if (merged.signature === undefined) conflicted.add(slot)
       }
     }
-    let head = folding.combine(node, children.map((child) => child.head))
+    let head = folding.combine(node, children.map((child) => child.head), conflicted)
     const before = folding.slots(head)
-    // A slot no child set is the node's own: a descendant overrides its ancestor's.
-    for (const slot of before.keys()) if (!from.has(slot)) from.set(slot, path)
-    if (node.reduce !== undefined) {
+    let after = before
+    if (reduce !== undefined) {
       try {
-        head = node.reduce(head)
+        head = reduce(head)
       } catch (error) {
         if (node.onError === undefined) throw error
         node.onError(error)
       }
-      const after = folding.slots(head)
-      // What the reduce changed is the reducing node's.
-      for (const [slot, signature] of after) if (before.get(slot) !== signature) from.set(slot, path)
-      for (const slot of from.keys()) if (!after.has(slot)) from.delete(slot)
+      after = folding.slots(head)
     }
-    return { head, from }
+    for (const [slot, set] of slots) if (set.signature !== undefined && !after.has(slot)) slots.delete(slot)
+    const own = [pathOf(node)]
+    for (const [slot, signature] of after) {
+      const kept = before.get(slot) === signature ? slots.get(slot)?.paths : undefined
+      slots.set(slot, { signature, paths: kept ?? own })
+    }
+    return { head, slots }
   }
-  return visit(tree).head
+  const root = visit(tree)
+  if (onConflict !== undefined) {
+    for (const slot of [...root.slots.keys()].sort()) {
+      const set = root.slots.get(slot)!
+      if (set.signature === undefined) onConflict(slot, [...new Set(set.paths)].sort())
+    }
+  }
+  return root.head
 }

@@ -13,16 +13,20 @@
  *
  * **The fold**
  *
- * Each node's value is its own entries followed by its children's values, in
- * document order, so a descendant overrides its ancestors. A component's
- * `reduceHead` then maps that value, and the root's result is final.
+ * Each node's value is its own entries followed by its children's values, so
+ * a descendant overrides its ancestors. Children are taken in the order of
+ * their paths, never in document order, so moving a component in its
+ * parent's view can't change the head. A component's `reduceHead` then maps
+ * that value, and the root's result is final.
  *
  * - **Titles.** A `titleTemplate` applies to a title set by a descendant,
  *   never to its own instance's title, so the title passes through its
  *   ancestors' templates outward, nearest first.
- * - **Conflicts.** When two siblings set one single slot, such as the title,
- *   the later one wins and the merge reports a `Conflict` naming both paths.
- *   The runtime sends it to `Query.Problems`.
+ * - **Conflicts.** Siblings that set one single slot, such as the title, to
+ *   the same value pass it up once. When they set different values, neither
+ *   wins: the slot is left unset until an ancestor's `reduceHead` sets it. A
+ *   conflict no ancestor settles is reported as a `Conflict` naming every
+ *   path that set the slot. The runtime sends it to `Query.Problems`.
  *
  * **Example** (A layout template and a page title)
  *
@@ -121,12 +125,14 @@ export interface Head {
  *
  * **Details**
  *
- * `path` names the node in a `Conflict`. `reduce` maps the node's value,
- * its own entries merged with its children's values, as a component's
- * `reduceHead` does. `onError` is called when one of the node's own title
- * templates or its `reduce` throws: the merge then skips that template, or
- * keeps the value the `reduce` was given. Without `onError` the error is
- * rethrown.
+ * `path` names the node in a `Conflict`, and orders it among its siblings.
+ * Siblings with entries or a `reduce` in their subtree need distinct paths:
+ * a merge throws when two have none or share one, whatever their order.
+ * `reduce` maps the node's value, its own entries merged with its children's
+ * values, as a component's `reduceHead` does. `onError` is called when one
+ * of the node's own title templates or its `reduce` throws: the merge then
+ * skips that template, or keeps the value the `reduce` was given. Without
+ * `onError` the error is rethrown.
  *
  * @stability experimental
  * @category models
@@ -141,8 +147,9 @@ export interface Tree<E = Entry, H = Head> {
 }
 
 /**
- * Two siblings set the same single slot, such as the title. The later one
- * wins. `paths` holds the earlier sibling's path, then the later one's.
+ * Siblings set the same single slot, such as the title, to different values,
+ * and no ancestor's `reduceHead` set it. The slot is left unset. `paths`
+ * holds every path that set it, sorted.
  *
  * @stability experimental
  * @category problems
@@ -151,7 +158,7 @@ export interface Tree<E = Entry, H = Head> {
 export class Conflict extends Data.TaggedClass("HeadConflict")<{
   readonly message: string
   readonly slot: string
-  readonly paths: readonly [string, string]
+  readonly paths: ReadonlyArray<string>
 }> {}
 
 /**
@@ -166,17 +173,18 @@ export interface MergeOptions {
 }
 
 /**
- * Makes the `Conflict` for a slot two siblings set.
+ * Makes the `Conflict` for a slot that the components at `paths` set to
+ * different values.
  *
  * @stability experimental
  * @category constructors
  * @since 0.1.0
  */
-export const conflict = (slot: string, earlier: string, later: string): Conflict =>
+export const conflict = (slot: string, paths: ReadonlyArray<string>): Conflict =>
   new Conflict({
-    message: `Head: ${earlier} and ${later} both set ${slot}, and the later one, ${later}, wins`,
+    message: `Head: ${listOf(paths)} set ${slot} to different values, so it's left unset`,
     slot,
-    paths: [earlier, later]
+    paths
   })
 
 /**
@@ -224,8 +232,9 @@ export const resolveTitle = (
  *
  * **Details**
  *
- * Entries of other vocabularies are ignored. Two siblings that both pass a
- * title up are reported to `onConflict`, and the later one wins.
+ * Entries of other vocabularies are ignored. Siblings that pass different
+ * titles up leave the title unset, and are reported to `onConflict` unless
+ * a `reduce` above them sets it.
  *
  * @stability experimental
  * @category combinators
@@ -236,7 +245,8 @@ export const merge: <E extends { readonly _tag: string } = Entry>(
   options?: MergeOptions
 ) => Head = /* @__PURE__ */ headFold.plain((tree, options) =>
   headFold.fold(tree, {
-    combine: (node, children) => {
+    combine: (node, children, conflicted) => {
+      if (conflicted.has("title")) return { title: undefined }
       let below: string | undefined
       for (const child of children) if (child.title !== undefined) below = child.title
       return { title: resolveTitle(node, below) }
@@ -245,5 +255,8 @@ export const merge: <E extends { readonly _tag: string } = Entry>(
   }, options?.onConflict === undefined ? undefined : reportTo(options.onConflict))
 )
 
-const reportTo = (onConflict: (conflict: Conflict) => void) => (slot: string, earlier: string, later: string) =>
-  onConflict(conflict(slot, earlier, later))
+const listOf = (paths: ReadonlyArray<string>): string =>
+  paths.length < 2 ? paths.join("") : `${paths.slice(0, -1).join(", ")} and ${paths[paths.length - 1]}`
+
+const reportTo = (onConflict: (conflict: Conflict) => void) => (slot: string, paths: ReadonlyArray<string>) =>
+  onConflict(conflict(slot, paths))

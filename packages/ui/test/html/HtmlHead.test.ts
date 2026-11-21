@@ -9,26 +9,78 @@ const node = (
   ...children: ReadonlyArray<Head.Tree<HtmlHead.Entry, HtmlHead.HtmlHead>>
 ): Head.Tree<HtmlHead.Entry, HtmlHead.HtmlHead> => ({ entries, children })
 
+const at = (
+  path: string,
+  entries: ReadonlyArray<HtmlHead.Entry>,
+  ...children: ReadonlyArray<Head.Tree<HtmlHead.Entry, HtmlHead.HtmlHead>>
+): Head.Tree<HtmlHead.Entry, HtmlHead.HtmlHead> => ({ path, entries, children })
+
 describe("HtmlHead", () => {
-  it("lets the later entry win per identity, in document order", () => {
-    const head = HtmlHead.merge(node(
-      [
-        HtmlHead.meta({ name: "description", content: "root" }),
-        HtmlHead.link({ rel: "canonical", href: "/a" }),
-        HtmlHead.lang("en")
-      ],
-      node([HtmlHead.meta({ name: "description", content: "first" }), HtmlHead.link({ rel: "canonical", href: "/b" })]),
-      node([
-        HtmlHead.meta({ name: "description", content: "second" }),
-        HtmlHead.meta({ property: "og:title", content: "Ada" }),
-        HtmlHead.link({ rel: "alternate", href: "/fr", hreflang: "fr" }),
-        HtmlHead.link({ rel: "alternate", href: "/de", hreflang: "de" }),
-        HtmlHead.lang("fr")
-      ])
-    ))
-    assert.deepStrictEqual(head.meta.map((meta) => meta.content), ["second", "Ada"])
-    assert.deepStrictEqual(head.links.map((link) => link.attributes.href), ["/b", "/fr", "/de"])
-    assert.strictEqual(head.html.lang, "fr")
+  it("folds the same head and conflicts whatever the siblings' order", () => {
+    const a = at("/App/A[a]", [
+      HtmlHead.lang("en"),
+      HtmlHead.link({ rel: "canonical", href: "/a" }),
+      HtmlHead.meta({ name: "description", content: "a" }),
+      HtmlHead.meta({ property: "og:site_name", content: "Site" }),
+      HtmlHead.meta({ name: "author", content: "Ada" }),
+      HtmlHead.link({ rel: "stylesheet", href: "/a.css" }),
+      HtmlHead.link({ rel: "preload", href: "/font.woff2", as: "font" }),
+      HtmlHead.jsonLd({ a: 1 }, { key: "page" }),
+      HtmlHead.htmlData("data-theme", "light"),
+      HtmlHead.htmlClass("a")
+    ])
+    const b = at("/App/B[b]", [
+      HtmlHead.lang("fr"),
+      HtmlHead.link({ rel: "canonical", href: "/b" }),
+      HtmlHead.meta({ name: "description", content: "b" }),
+      HtmlHead.meta({ property: "og:site_name", content: "Site" }),
+      HtmlHead.link({ rel: "stylesheet", href: "/b.css" }),
+      HtmlHead.link({ as: "font", href: "/font.woff2", rel: "preload" }),
+      HtmlHead.jsonLd({ b: 1 }, { key: "page" }),
+      HtmlHead.htmlData("data-theme", "dark"),
+      HtmlHead.htmlClass("b")
+    ])
+    const fold = (children: ReadonlyArray<Head.Tree<HtmlHead.Entry, HtmlHead.HtmlHead>>) => {
+      const conflicts: Array<Head.Conflict> = []
+      const head = HtmlHead.merge(
+        at(
+          "/App",
+          [
+            Head.title("App"),
+            HtmlHead.meta({ name: "author", content: "App" }),
+            HtmlHead.link({ rel: "stylesheet", href: "/reset.css" }),
+            HtmlHead.link({ rel: "stylesheet", href: "/app.css" }),
+            HtmlHead.htmlClass("app")
+          ],
+          ...children
+        ),
+        { onConflict: (conflict) => conflicts.push(conflict) }
+      )
+      return { head, conflicts: conflicts.map((conflict) => [conflict.slot, conflict.paths]) }
+    }
+    const folded = fold([a, b])
+    assert.deepStrictEqual(fold([b, a]), folded)
+    assert.strictEqual(folded.head.title, "App")
+    assert.strictEqual(folded.head.html.lang, undefined)
+    assert.deepStrictEqual(folded.head.html.data, {})
+    assert.deepStrictEqual(folded.head.meta.map((meta) => meta.content), ["Ada", "Site"])
+    assert.deepStrictEqual(folded.head.links.map((link) => link.attributes.href), [
+      "/reset.css",
+      "/app.css",
+      "/a.css",
+      "/font.woff2",
+      "/b.css"
+    ])
+    assert.deepStrictEqual(folded.head.jsonLd, [])
+    assert.deepStrictEqual(folded.head.html.class, ["app", "a", "b"])
+    const both = ["/App/A[a]", "/App/B[b]"]
+    assert.deepStrictEqual(folded.conflicts, [
+      ["html data-theme", both],
+      ["jsonld key:page", both],
+      ["lang", both],
+      ["link canonical", both],
+      ["meta name:description", both]
+    ])
   })
 
   it("unions class tokens in order of first contribution and keeps one data attribute per name", () => {
@@ -71,7 +123,11 @@ describe("HtmlHead", () => {
     assert.strictEqual(a.json, "{\"a\":{\"c\":\"\\u003c/script>\",\"d\":[1,\"x\"]},\"b\":1}")
     assert.strictEqual(a.json, b.json)
     const head = HtmlHead.merge(
-      node([a], node([b]), node([HtmlHead.jsonLd({ b: 2 }, { key: "k" }), HtmlHead.jsonLd({ b: 3 }, { key: "k" })]))
+      node(
+        [a],
+        at("/b", [b]),
+        at("/k", [HtmlHead.jsonLd({ b: 2 }, { key: "k" }), HtmlHead.jsonLd({ b: 3 }, { key: "k" })])
+      )
     )
     assert.deepStrictEqual(head.jsonLd.map((entry) => entry.json), [a.json, "{\"b\":3}"])
   })
@@ -80,49 +136,6 @@ describe("HtmlHead", () => {
     assert.throws(() => HtmlHead.jsonLd({ a: { when: new Map() } } as any), /\$\.a\.when is a Map/)
     assert.throws(() => HtmlHead.jsonLd({ list: [1, Number.NaN] }), /\$\.list\[1\] is NaN/)
     assert.throws(() => HtmlHead.jsonLd([1] as any), /not an array/)
-  })
-
-  it("reports siblings that set lang, the canonical link or the same meta tag, and keeps the later one", () => {
-    const conflicts: Array<Head.Conflict> = []
-    const head = HtmlHead.merge(
-      {
-        path: "/App",
-        entries: [HtmlHead.meta({ name: "description", content: "app" })],
-        children: [
-          {
-            path: "/App/A[a]",
-            entries: [
-              HtmlHead.lang("en"),
-              HtmlHead.link({ rel: "canonical", href: "/a" }),
-              HtmlHead.meta({ name: "description", content: "a" }),
-              HtmlHead.jsonLd({ a: 1 })
-            ],
-            children: []
-          },
-          {
-            path: "/App/B[b]",
-            entries: [
-              HtmlHead.lang("fr"),
-              HtmlHead.link({ rel: "canonical", href: "/b" }),
-              HtmlHead.meta({ name: "description", content: "b" }),
-              HtmlHead.jsonLd({ b: 1 })
-            ],
-            children: []
-          }
-        ]
-      },
-      { onConflict: (conflict) => conflicts.push(conflict) }
-    )
-    assert.strictEqual(head.html.lang, "fr")
-    assert.deepStrictEqual(head.links.map((link) => link.attributes.href), ["/b"])
-    assert.deepStrictEqual(head.meta.map((meta) => meta.content), ["b"])
-    // JSON-LD blocks add up: they aren't single slots.
-    assert.strictEqual(head.jsonLd.length, 2)
-    assert.deepStrictEqual(conflicts.map((conflict) => [conflict.slot, conflict.paths]).sort(), [
-      ["lang", ["/App/A[a]", "/App/B[b]"]],
-      ["link canonical", ["/App/A[a]", "/App/B[b]"]],
-      ["meta name:description", ["/App/A[a]", "/App/B[b]"]]
-    ])
   })
 
   it.effect("folds nested layouts: templates chain, a page overrides, a layout reduces, JSON-LD adds up", () =>

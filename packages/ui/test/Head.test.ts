@@ -33,6 +33,19 @@ describe("Head", () => {
     assert.throws(() => Head.merge({ ...tree, onError: undefined }), /bad template/)
   })
 
+  it("rejects siblings without distinct paths, in either order", () => {
+    const at = (path: string | undefined, title: string): Head.Tree => ({ path, ...node([Head.title(title)]) })
+    const pairs = [[undefined, undefined], [undefined, ""], ["/App/Page", "/App/Page"]] as const
+    for (const [first, second] of pairs) {
+      const a = at(first, "A")
+      const b = at(second, "B")
+      const message = first === undefined ? /two siblings have no path/ : /two siblings share the path \/App\/Page/
+      assert.throws(() => Head.merge(node([], a, b)), message)
+      assert.throws(() => Head.merge(node([], b, a)), message)
+    }
+    assert.strictEqual(Head.merge(node([], at(undefined, "A"), node([]))).title, "A")
+  })
+
   it.effect("fails only the instance whose title template throws", () =>
     Effect.gen(function*() {
       const Page = Component.define({
@@ -250,35 +263,45 @@ describe("Head", () => {
       assert.strictEqual(root.head().title, "Unavailable · App")
     }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
 
-  it.effect("reports siblings that set the title to Query.Problems with both paths, and applies the later one", () =>
+  const Titled = Component.define({
+    name: "Titled",
+    props: Schema.Struct({ title: Schema.String }),
+    model: Schema.Null,
+    message: Schema.Never
+  }).make({
+    init: () => null,
+    update: (model) => model,
+    head: (_, props) => [Head.title(props.title)],
+    view: (_, h) => h.text(h.props.title)
+  })
+  const ordered = <A>(swapped: boolean, a: A, b: A): readonly [A, A] => swapped ? [b, a] : [a, b]
+
+  it.effect("siblings that set different titles leave it unset and are reported, in either order", () =>
     Effect.gen(function*() {
-      const Titled = Component.define({
-        name: "Titled",
-        props: Schema.Struct({ title: Schema.String }),
+      const App = Component.define({
+        name: "App",
+        props: Schema.Struct({ swapped: Schema.Boolean }),
         model: Schema.Null,
         message: Schema.Never
       }).make({
-        init: () => null,
-        update: (model) => model,
-        head: (_, props) => [Head.title(props.title)],
-        view: (_, h) => h.text(h.props.title)
-      })
-      const App = Component.define({ name: "App", model: Schema.Null, message: Schema.Never }).make({
         init: () => null,
         update: (model) => model,
         head: () => [Head.title("App")],
         view: (_, h) =>
           h.el(
             "main",
-            Titled(h, { key: "first", props: { title: "First" } }),
-            Titled(h, { key: "second", props: { title: "Second" } })
+            ...ordered(
+              h.props.swapped,
+              Titled(h, { key: "first", props: { title: "First" } }),
+              Titled(h, { key: "second", props: { title: "Second" } })
+            )
           )
       })
-      const root = yield* TestHost.mount(App, {})
-      const [conflict] = yield* TestHost.expectProblem("HeadConflict")
-      assert.deepStrictEqual((conflict as Head.Conflict).paths, ["/App/Titled[first]", "/App/Titled[second]"])
-      assert.strictEqual((conflict as Head.Conflict).slot, "title")
+      const roots = [yield* TestHost.mount(App, { swapped: false }), yield* TestHost.mount(App, { swapped: true })]
+      const conflicts = yield* TestHost.expectProblem("HeadConflict")
+      const paths = ["/App/Titled[first]", "/App/Titled[second]"]
+      assert.deepStrictEqual(conflicts.map((conflict) => (conflict as Head.Conflict).paths), [paths, paths])
       yield* TestHost.settle
-      assert.strictEqual(root.head().title, "Second")
+      assert.deepStrictEqual(roots.map((root) => root.head().title), [undefined, undefined])
     }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
 })

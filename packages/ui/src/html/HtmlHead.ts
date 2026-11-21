@@ -12,16 +12,17 @@
  * **Merge rules**
  *
  * - A node's value is its own entries followed by its children's values, so
- *   a descendant overrides its ancestors and, between siblings, the later one
- *   wins. A component's `reduceHead` then maps the value.
+ *   a descendant overrides its ancestors. Children are taken in the order of
+ *   their paths, never in document order. A component's `reduceHead` then
+ *   maps the value.
  * - The title, `lang`, `dir` and `<link rel="canonical">` each have one entry.
  *   A meta tag is identified by its `key`, else its `name` or `property`; a
  *   link by its `key`, else `rel` plus `href`; a JSON-LD block by its `key`,
- *   else its canonical form.
- * - Two siblings that set the title, `lang`, `dir`, the canonical link or
- *   the same meta tag are reported as a `Head.Conflict`.
- * - `class` tokens are unioned in the order they were first contributed, and
- *   `data-*` attributes have one entry per name.
+ *   else its canonical form. `data-*` attributes have one entry per name.
+ * - Siblings that set one of these to the same value pass it up once. When
+ *   they set different values it's left unset, and reported as a
+ *   `Head.Conflict` unless a `reduceHead` above them sets it.
+ * - `class` tokens are unioned in the order they were first contributed.
  * - Titles follow `Head`'s template rule.
  *
  * **Example** (A layout template and a page)
@@ -478,10 +479,10 @@ export const canonicalJson = (value: object): string => JSON.stringify(canonical
  * **Details**
  *
  * `title` has the templates applied. `meta`, `links` and `jsonLd` hold one
- * entry per identity, in the order each identity was first contributed, with
- * the value of the last entry. `html` and `body` hold the attributes set on
- * those elements; `class` lists tokens in the order they were first
- * contributed.
+ * entry per identity, in the order each identity was first contributed: a
+ * node's own entries as written, then its children's, ordered by path.
+ * `html` and `body` hold the attributes set on those elements; `class`
+ * lists tokens in the same order.
  *
  * @stability experimental
  * @category models
@@ -522,7 +523,7 @@ export const empty: HtmlHead = {
 
 /**
  * The identity of a meta, link or JSON-LD entry: two entries with the same
- * identity are the same entry, and the later one wins.
+ * identity are the same entry. In one node's entries the later one wins.
  *
  * @stability experimental
  * @category utils
@@ -571,21 +572,31 @@ export const attributes = (entry: Meta | Link): ReadonlyArray<readonly [string, 
   return out
 }
 
-/** The single slots a value holds, each with its value's signature. */
+const linkSignature = (entry: Link): string =>
+  headAttributes.normalize(attributes(entry)).map((pair) => JSON.stringify(pair)).sort().join()
+
+const dataSlot = (element: "html" | "body", name: string): string => `${element} ${name}`
+
 const slotsOf = (head: HtmlHead): ReadonlyMap<string, string> => {
   const out = new Map<string, string>()
   if (head.title !== undefined) out.set("title", head.title)
   if (head.html.lang !== undefined) out.set("lang", head.html.lang)
   if (head.html.dir !== undefined) out.set("dir", head.html.dir)
-  for (const entry of head.meta) out.set(identity(entry), entry.content)
-  for (const entry of head.links) {
-    const id = identity(entry)
-    if (id === "link canonical") out.set(id, JSON.stringify(attributes(entry)))
+  for (const entry of head.meta) {
+    out.set(identity(entry), entry.key === undefined ? entry.content : JSON.stringify(attributes(entry)))
   }
+  for (const entry of head.links) out.set(identity(entry), linkSignature(entry))
+  for (const entry of head.jsonLd) out.set(identity(entry), entry.json)
+  for (const name in head.html.data) out.set(dataSlot("html", name), head.html.data[name]!)
+  for (const name in head.body.data) out.set(dataSlot("body", name), head.body.data[name]!)
   return out
 }
 
-const combine = (node: Head.Tree<Entry, HtmlHead>, children: ReadonlyArray<HtmlHead>): HtmlHead => {
+const combine = (
+  node: Head.Tree<Entry, HtmlHead>,
+  children: ReadonlyArray<HtmlHead>,
+  conflicted: ReadonlySet<string>
+): HtmlHead => {
   const meta = new Map<string, Meta>()
   const links = new Map<string, Link>()
   const json = new Map<string, JsonLd>()
@@ -643,8 +654,17 @@ const combine = (node: Head.Tree<Entry, HtmlHead>, children: ReadonlyArray<HtmlH
     for (const [name, value] of Object.entries(child.html.data)) htmlDataMap.set(name, value)
     for (const [name, value] of Object.entries(child.body.data)) bodyDataMap.set(name, value)
   }
+  if (conflicted.has("lang")) lang = undefined
+  if (conflicted.has("dir")) dirValue = undefined
+  for (const slot of conflicted) {
+    meta.delete(slot)
+    links.delete(slot)
+    json.delete(slot)
+  }
+  for (const name of htmlDataMap.keys()) if (conflicted.has(dataSlot("html", name))) htmlDataMap.delete(name)
+  for (const name of bodyDataMap.keys()) if (conflicted.has(dataSlot("body", name))) bodyDataMap.delete(name)
   return {
-    title: Head.resolveTitle(node, below),
+    title: conflicted.has("title") ? undefined : Head.resolveTitle(node, below),
     meta: [...meta.values()],
     links: [...links.values()],
     jsonLd: [...json.values()],
@@ -659,16 +679,17 @@ const combine = (node: Head.Tree<Entry, HtmlHead>, children: ReadonlyArray<HtmlH
  *
  * **Details**
  *
- * A node's value is its own entries, then its children's values in order, so
- * the later entry wins per identity. The winning title passes through the
- * `titleTemplate` of each ancestor of the node that set it, nearest first,
- * as `Head.resolveTitle` says. A template or a `reduce` that throws is
- * reported to its node's `onError` and skipped.
+ * A node's value is its own entries, then its children's values ordered by
+ * path, so a descendant's entry wins over its ancestor's per identity. The
+ * title passes through the `titleTemplate` of each ancestor of the node that
+ * set it, nearest first, as `Head.resolveTitle` says. A template or a
+ * `reduce` that throws is reported to its node's `onError` and skipped.
  *
- * When two siblings set the title, `lang`, `dir`, the canonical link or
- * the same meta tag, the later one wins and `onConflict` gets a
- * `Head.Conflict` with both paths. A `reduce` that changes a slot takes it
- * over, under its own node's path.
+ * When siblings set the title, `lang`, `dir`, a `data-*` attribute or a
+ * meta, link or JSON-LD entry of one identity to different values, it's left
+ * unset. A `reduce` above them that sets it settles it, under its own node's
+ * path. Otherwise `onConflict` gets a `Head.Conflict` with every path that
+ * set it, sorted.
  *
  * @stability experimental
  * @category combinators
@@ -680,6 +701,6 @@ export const merge: (tree: Head.Tree<Entry, HtmlHead>, options?: Head.MergeOptio
     return headFold.fold(
       tree,
       { combine, slots: slotsOf },
-      onConflict === undefined ? undefined : (slot, earlier, later) => onConflict(Head.conflict(slot, earlier, later))
+      onConflict === undefined ? undefined : (slot, paths) => onConflict(Head.conflict(slot, paths))
     )
   })
