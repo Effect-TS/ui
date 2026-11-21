@@ -188,7 +188,7 @@ describe("Field", () => {
   it("fieldValidationProps maps each Validation.Field state to invalid and filled", () => {
     const filled = { value: "ada", empty: false, required: true }
     assert.deepStrictEqual(
-      fieldValidationProps({ _tag: "NotValidated", value: "", empty: true, required: true }),
+      fieldValidationProps({ _tag: "NotValidated", value: " ", empty: true, required: true }),
       { invalid: undefined, filled: false }
     )
     assert.deepStrictEqual(fieldValidationProps({ _tag: "Validating", ...filled }), {
