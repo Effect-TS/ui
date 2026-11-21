@@ -25,6 +25,7 @@ pnpm add https://pkg.pr.new/Effect-TS/ui/@effect/ui@<sha>
 
 ```sh
 pnpm --filter interrupting-commands dev
+pnpm --filter routing dev
 pnpm --filter snake dev
 ```
 
