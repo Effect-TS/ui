@@ -28,7 +28,8 @@
  * app's own Commands), return that component's message directly from the body
  * and handle typed failures inside it with `Effect.match`. A body that leaves
  * a typed error produces an `Unmatched` Command that `$.run` rejects. In a
- * `Story` or `Scene`, resolve such a Command with the message itself.
+ * `Story` or `Scene`, resolve a Command that returns a message with the
+ * message itself.
  *
  * Use `Command.match`, `Command.map` and `Command.asNoop` for a Command that
  * cannot know its caller's messages: one from a library, such as
@@ -1324,17 +1325,18 @@ export const asNoop = <C extends Command<any, any>>(self: C): Mapped<C, Componen
  * Use when issuing a library or shared `Command.Service` that can't know its
  * caller's messages and whose body has a typed error: `$.run` rejects the
  * `Unmatched` Command its `make` returns. When only one component consumes
- * the Command, return that component's message directly from the body with
- * `Effect.match` instead.
+ * the Command, handle typed errors inside its body (for an Effect Command,
+ * with `Effect.match`) and return the component's message directly instead.
  *
  * **Details**
  *
  * `onSuccess` maps the body's success, or each element of a Stream Command,
  * and `onFailure` the typed failure, which ends a Stream Command. A defect or
  * an interrupt isn't mapped. A Command whose body can't fail takes `map`, and
- * `match` on it doesn't compile. In a `Story` or `Scene`, a matched Command
- * resolves with its own success via `s.resolve` or fails with its typed error
- * via `s.fail`, and the mapping runs in the test.
+ * `match` on it doesn't compile. In a `Story` or `Scene`, a matched Effect
+ * Command resolves with its own success via `s.resolve` (a Stream Command
+ * emits elements with `s.next` and completes with `s.end`) or fails with its
+ * typed error via `s.fail`, and the mapping runs in the test.
  *
  * **Example** (Mapping a shared Command that can fail)
  *
