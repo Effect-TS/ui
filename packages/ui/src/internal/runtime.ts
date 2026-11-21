@@ -348,14 +348,17 @@ interface RFallback {
   readonly status: Status
   /** A failed child, not its feature's Layer, put it here: it stays until the key changes. */
   readonly failedChild: boolean
+  readonly scoped?: undefined
 }
 
 /**
  * A scoped child where a view writes it: what it shows, or an empty text node when its scope's
- * predicate is false for it or it's drawn somewhere else now.
+ * predicate is false for it or it's drawn somewhere else now. Tagged as a fallback, which shows
+ * `inner`, so the walks that only need its nodes treat it as one.
  */
 interface RScoped {
-  readonly _tag: "Scoped"
+  readonly _tag: "Fallback"
+  readonly scoped: true
   v: View.Child<any, any>
   inner: RChild | RFallback | RText
 }
@@ -403,7 +406,7 @@ const findChild = (rendered: Packed, key: string): RChild | RFallback | undefine
 }
 const findChildIn = (r: Rendered, key: string): RChild | RFallback | undefined => {
   if (r._tag === "Element") return findChild(r.children, key)
-  if (r._tag === "Scoped") return findChildIn(r.inner, key)
+  if (r._tag === "Fallback" && r.scoped) return findChildIn(r.inner, key)
   if (r._tag === "Child" || r._tag === "Fallback") {
     if (r.v.ref !== undefined && r.v.ref.key === key) return r
     if (r._tag === "Fallback") return findChildIn(r.inner, key)
@@ -1103,6 +1106,7 @@ const serializeTree = (
         return sink.leave(outlet.path)
       }
       case "Fallback": {
+        if (rendered.scoped) return serialize(inst, rendered.inner, under)
         // A failed child: the client builds it fresh. A feature whose Layer isn't ready: the client
         // adopts the fallback while its status is the one shipped.
         const path = `${inst.path}/${segment(rendered.v)}`
@@ -1114,8 +1118,6 @@ const serializeTree = (
         serialize(inst, rendered.inner, true)
         return sink.leave(path)
       }
-      case "Scoped":
-        return serialize(inst, rendered.inner, under)
     }
   }
   instance(root, false)
@@ -1889,8 +1891,6 @@ const setup = (
         return
       }
       case "Fallback":
-        return placed(rendered.inner, out)
-      case "Scoped":
         return placed(rendered.inner, out)
       case "Text":
         return
@@ -4754,7 +4754,6 @@ const setup = (
       case "Outlet":
         return releaseWatches(rendered.inst)
       case "Fallback":
-      case "Scoped":
         return releaseRendered(rendered.inner)
       case "Element": {
         for (const child of listOf(rendered.children)) releaseRendered(child)
@@ -4784,8 +4783,6 @@ const setup = (
         return firstDefined(listOf(rendered.children), (child) => findRef(child, key, who, author))
       }
       case "Fallback":
-        return findRef(rendered.inner, key, who, author)
-      case "Scoped":
         return findRef(rendered.inner, key, who, author)
       case "Child":
         return rendered.inst.owner === undefined
@@ -5023,7 +5020,6 @@ const setup = (
         return
       }
       case "Fallback":
-      case "Scoped":
         return publishAll(inst, rendered.inner)
       case "Text":
         return
@@ -5142,7 +5138,6 @@ const setup = (
       case "Outlet":
         return findElement(item.inst, item.inst.rendered, node, cursor)
       case "Fallback":
-      case "Scoped":
         return findIn(inst, item.inner, node, cursor)
       // Text holds no events.
       default:
@@ -5610,7 +5605,7 @@ const setup = (
 
   const createChild = (inst: Instance, view: View.Child<any, any>, env: Env, range?: Range): Rendered => {
     if (view.alive === undefined) return makeChild(inst, view, env, range)
-    const at: RScoped = { _tag: "Scoped", v: view, inner: undefined! }
+    const at: RScoped = { _tag: "Fallback", scoped: true, v: view, inner: undefined! }
     at.inner = drawScoped(inst, at, view, env, range)
     return at
   }
@@ -5954,7 +5949,7 @@ const setup = (
       case "Element":
         return rendered._tag === "Element" && rendered.v.tag === view.tag && rendered.v.elementKey === view.elementKey
       case "Child":
-        return (rendered._tag === "Child" || rendered._tag === "Fallback" || rendered._tag === "Scoped") &&
+        return (rendered._tag === "Child" || rendered._tag === "Fallback") &&
           rendered.v.component === view.component && rendered.v.key === view.key
       case "Outlet":
         return rendered._tag === "Outlet" && rendered.v.name === view.name
@@ -6374,11 +6369,10 @@ const setup = (
         return rendered
       }
       case "Fallback":
-      case "Child": {
+        if (rendered.scoped) return patchScoped(inst, rendered, view as View.Child<any, any>, env)
         return patchChild(inst, rendered, view as View.Child<any, any>, env)
-      }
-      case "Scoped":
-        return patchScoped(inst, rendered, view as View.Child<any, any>, env)
+      case "Child":
+        return patchChild(inst, rendered, view as View.Child<any, any>, env)
       case "Outlet": {
         const out = rendered.inst
         const outlet = outletOf.get(out)!
@@ -6485,7 +6479,6 @@ const setup = (
         return
       }
       case "Fallback":
-      case "Scoped":
         return collectNodes(rendered.inner, out)
       case "Outlet":
       case "Child": {
@@ -6501,19 +6494,19 @@ const setup = (
   const firstNodeOf = (rendered: Rendered): unknown =>
     rendered._tag === "Child" || rendered._tag === "Outlet"
       ? firstNodeOfList(rendered.inst.rendered)
-      : rendered._tag === "Fallback" || rendered._tag === "Scoped"
+      : rendered._tag === "Fallback"
       ? firstNodeOf(rendered.inner)
       : rendered.node
   const lastNodeOf = (rendered: Rendered): unknown =>
     rendered._tag === "Child" || rendered._tag === "Outlet"
       ? lastNodeOfList(rendered.inst.rendered)
-      : rendered._tag === "Fallback" || rendered._tag === "Scoped"
+      : rendered._tag === "Fallback"
       ? lastNodeOf(rendered.inner)
       : rendered.node
   const hasNodes = (rendered: Rendered): boolean =>
     rendered._tag === "Child" || rendered._tag === "Outlet"
       ? hasNodesIn(rendered.inst.rendered)
-      : rendered._tag === "Fallback" || rendered._tag === "Scoped"
+      : rendered._tag === "Fallback"
       ? hasNodes(rendered.inner)
       : true
   const hasNodesIn = (items: Packed): boolean =>
@@ -6571,7 +6564,7 @@ const setup = (
     let next = ref
     for (let index = items.length - 1; index >= 0; index--) {
       let item = items[index]!
-      while (item._tag === "Fallback" || item._tag === "Scoped") item = item.inner
+      while (item._tag === "Fallback") item = item.inner
       if (item._tag === "Child" || item._tag === "Outlet") {
         next = placeEach(parentNode, item.inst.rendered, next)
         continue
@@ -6590,7 +6583,6 @@ const setup = (
       case "Text":
         return host.insertBefore(parentNode, rendered.node, ref)
       case "Fallback":
-      case "Scoped":
         return insertNodes(parentNode, rendered.inner, ref)
       case "Outlet":
       case "Child": {
@@ -6976,8 +6968,6 @@ const setup = (
         for (const item of listOf(child.rendered)) toggleMounts(child, item, child.env, start)
         return
       }
-      case "Scoped":
-        return toggleMounts(inst, rendered.inner, env, start)
       case "Text":
         return
     }
@@ -6995,19 +6985,15 @@ const setup = (
         closeInstance(inst, rendered.inst)
         return
       }
-      case "Fallback":
-        return closeAll(inst, rendered.inner)
-      case "Scoped": {
+      case "Fallback": {
         const inner = rendered.inner
-        if (inner._tag === "Text") return
-        const entry = entryAt(inst.author, rendered.v)
-        if (entry === undefined || entry.inner !== inner) return closeAll(inst, inner)
-        if (entry.at !== rendered) return
-        if (entry.author.left) {
+        const entry = rendered.scoped ? entryAt(inst.author, rendered.v) : undefined
+        if (entry !== undefined && entry.inner === inner) {
+          if (entry.at !== rendered) return
+          if (!entry.author.left) return keep(entry)
           dropKept(entry)
-          return closeAll(inst, inner)
         }
-        return keep(entry)
+        return closeAll(inst, inner)
       }
       case "Element": {
         // The element's `onMount` work ends with it.
