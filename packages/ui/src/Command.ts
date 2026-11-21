@@ -18,12 +18,24 @@
  *   Layer build and captures the services it uses, so a component's
  *   requirements name the Command service, never what its implementation
  *   uses. Issue one with `DeleteTodo.make({ id })` and fake it with
- *   `Layer.succeed(DeleteTodo, ({ id }) => ...)`. Its body may fail with a
- *   typed error, which the issue site maps to a message with `Command.match`.
+ *   `Layer.succeed(DeleteTodo, ({ id }) => ...)`.
  *
  * A `Command.Service` declares what it does to the query cache:
  * `invalidates`, `optimistic` and `writes` are optional. Omitting
  * `invalidates` means the run invalidates nothing.
+ *
+ * When one component consumes a Command's result, the usual case for an
+ * app's own Commands, the body returns that component's message and handles
+ * a typed failure with `Effect.match`. A body that leaves a typed error
+ * gives an `Unmatched` Command, which `$.run` rejects.
+ *
+ * `Command.match`, `Command.map` and `Command.asNoop` are for a Command that
+ * can't know its caller's messages: one from a library, such as
+ * `Router.replace`, or one that several components issue.
+ *
+ * In a `Story` or `Scene`, `resolve` takes what the body returns: the
+ * message in the first case, and the Command's own value in the second, where
+ * `fail` takes its typed error and the mapping runs in the test.
  *
  * **Example** (A Command service with a captured dependency)
  *
@@ -38,16 +50,16 @@
  *   args: { id: Schema.String },
  * }, Effect.gen(function*() {
  *   const kv = yield* KeyValueStore.KeyValueStore
- *   return ({ id }) => kv.remove(`todo/${id}`)
+ *   return ({ id }) =>
+ *     kv.remove(`todo/${id}`).pipe(
+ *       Effect.match({
+ *         onSuccess: () => Message.SucceededDeleteTodo(),
+ *         onFailure: () => Message.FailedDeleteTodo()
+ *       })
+ *     )
  * })) {}
  *
- * // Maps both channels to messages, once, beside the Message union.
- * // `update` calls it, and the component requires `DeleteTodo`.
- * const deleteTodo = (id: string) =>
- *   DeleteTodo.make({ id }).pipe(Command.match({
- *     onSuccess: () => Message.SucceededDeleteTodo(),
- *     onFailure: () => Message.FailedDeleteTodo()
- *   }))
+ * // `update` issues `DeleteTodo.make({ id })`, and the component requires `DeleteTodo`.
  * // The live wiring provides `DeleteTodo.layer`, which requires `KeyValueStore`.
  * ```
  *
@@ -707,8 +719,9 @@ export interface Service<
   readonly args: Schema.Top
   /**
    * Issues the Command. The component requires `Self`. When the body can
-   * fail (`Err` isn't `never`) the result is `Unmatched`: map both channels
-   * with `Command.match` before running it.
+   * fail (`Err` isn't `never`) the result is `Unmatched`, which `$.run`
+   * rejects: handle the failure in the body, or map both channels with
+   * `Command.match`.
    */
   make(
     ...args: MakeArgs<Args>
@@ -1024,10 +1037,12 @@ export const make: {
  * key is the Command's name in the log and in story tests.
  *
  * The body may use framework services on each call without them appearing in
- * `layer`'s requirements, and it may fail with a typed error. `make` then
- * issues an `Unmatched` Command, and the issue site maps both channels to
- * messages with `Command.match({ onSuccess, onFailure })`. A body that can't
- * fail issues a Command directly, mapped with `Command.map`.
+ * `layer`'s requirements. When one component consumes the result, the body
+ * returns that component's message and handles a typed failure with
+ * `Effect.match`. A library or shared Command returns its own result
+ * instead, and the issue site maps it: `Command.match` when the body can
+ * fail, since `make` then issues an `Unmatched` Command, and `Command.map`
+ * or `Command.asNoop` when it can't.
  *
  * The options declare what a run does to the query cache, from the args:
  * `invalidates` (optional), `optimistic` patches, live from issue, and
@@ -1058,18 +1073,20 @@ export const make: {
  *   group: ["id"],
  * }, Effect.gen(function*() {
  *   const kv = yield* KeyValueStore.KeyValueStore
- *   return ({ id, title }) => kv.set(`todo/${id}`, title)
+ *   return ({ id, title }) =>
+ *     kv.set(`todo/${id}`, title).pipe(
+ *       Effect.match({
+ *         onSuccess: () => Message.SucceededSaveTodo(),
+ *         onFailure: (e) => Message.FailedSaveTodo({ reason: e.message })
+ *       })
+ *     )
  * })) {}
  *
- * // Maps both channels to messages, once, beside the Message union. `update` calls it.
- * const saveTodo = (todo: { readonly id: string; readonly title: string }) =>
- *   SaveTodo.make(todo).pipe(Command.match({
- *     onSuccess: () => Message.SucceededSaveTodo(),
- *     onFailure: (e) => Message.FailedSaveTodo({ reason: e.message })
- *   }))
+ * // Issue: `$.run` takes the Command as is
+ * const command = SaveTodo.make({ id: "1", title: "Buy milk" })
  * // Live: provide `SaveTodo.layer`, which requires `KeyValueStore`
  * // Test: a fake that needs nothing
- * const Fake = Layer.succeed(SaveTodo, () => Effect.void)
+ * const Fake = Layer.succeed(SaveTodo, () => Effect.succeed(Message.SucceededSaveTodo()))
  * ```
  *
  * @stability experimental
@@ -1165,9 +1182,9 @@ export const Service: <Self>() => {
  *
  * **When to use**
  *
- * Use to reuse a Command whose result isn't the component's own message, such
- * as a shared `UploadFile` Command that returns a URL. A Command whose body
- * can fail takes `match` instead.
+ * Use when issuing a Command that can't know its caller's messages, such as
+ * `Router.replace` or a shared `UploadFile` Command that returns a URL. A
+ * Command whose body can fail takes `match` instead.
  *
  * **Details**
  *
@@ -1302,8 +1319,10 @@ export const asNoop = <C extends Command<any, any>>(self: C): Mapped<C, Componen
  *
  * **When to use**
  *
- * Use when issuing a `Command.Service` whose body has a typed error:
- * `$.run` doesn't take the `Unmatched` Command its `make` returns.
+ * Use when issuing a library or shared `Command.Service` whose body has a
+ * typed error: `$.run` rejects the `Unmatched` Command its `make` returns.
+ * A Command that one component consumes handles the error in its body
+ * instead.
  *
  * **Details**
  *
@@ -1312,7 +1331,11 @@ export const asNoop = <C extends Command<any, any>>(self: C): Mapped<C, Componen
  * an interrupt isn't mapped. A Command whose body can't fail takes `map`, and
  * `match` on it doesn't compile.
  *
- * **Example** (Mapping a save that can fail)
+ * In a `Story` or `Scene` the mapping runs in the test: `resolve` takes the
+ * body's success and `fail` its typed error. A Stream Command takes `next`
+ * for each element and `end` when it completes.
+ *
+ * **Example** (Mapping a shared Command that can fail)
  *
  * ```ts import.meta.vitest
  * import { Command, UiSchema } from "@effect/ui"

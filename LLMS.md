@@ -94,18 +94,6 @@ A component with `shares` takes the `Provider` suffix, as in
 `h.shared.provider`. A reader of several owners names each one after its
 owner instead, such as `tooltip` and `theme`.
 
-Map each `Command.Service` to its messages once, beside the Message union,
-and call that function from `update`. A result is mapped where the Command
-is issued, so nothing else ties `SaveNote` to `SucceededSaveNote`:
-
-```ts
-const saveNote = (note: Note) =>
-  SaveNote.make({ note }).pipe(Command.match({
-    onSuccess: (note) => NoteEditorMessage.SucceededSaveNote({ note }),
-    onFailure: (error) => NoteEditorMessage.FailedSaveNote({ reason: error.reason })
-  }))
-```
-
 Never write a no-op message, such as `Noop` or a tag added only so a result
 has something to send. A Command with nothing to report ends in `Component.noop`,
 usually through `Command.asNoop`. It sends nothing, and the log still records
@@ -121,6 +109,50 @@ Effect UI differs from Foldkit in three places:
 - A message listed in `receives` has no prefix of its own. It is named like
   any other message, for the fact it reports.
 - A Command or mount with nothing to report needs no `Completed*` message. `Component.noop` is enough.
+
+### Command results
+
+A Command whose result one component consumes returns that component's
+message from its body. This is the usual form for an app's own Commands,
+which live in the file of the component that runs them. `Effect.match` turns
+a typed failure into a message as well:
+
+```ts
+export class SaveNote extends Command.Service<SaveNote>()(
+  "notes/SaveNote",
+  { args: { note: Note }, mode: "queue", invalidates: () => [NotesTag] },
+  Effect.gen(function*() {
+    const notes = yield* Notes
+    return ({ note }) =>
+      notes.save(note).pipe(
+        Effect.match({
+          onSuccess: (note) => NoteEditorMessage.SucceededSaveNote({ note }),
+          onFailure: (error) => NoteEditorMessage.FailedSaveNote({ reason: error.reason })
+        })
+      )
+  })
+) {}
+```
+
+A body that leaves a typed error gives an unmatched Command, which `$.run`
+rejects.
+
+`Command.map`, `Command.asNoop` and `Command.match` are for a Command that
+can't know its caller's messages: one from a library, such as
+`Router.replace`, or one that two components issue. Map or silence one that
+can't fail with `Command.map` or `Command.asNoop`:
+
+```ts
+Router.replace(AppRoute, route).pipe(Command.map((outcome) => Message.CompletedReplace({ outcome })))
+Router.replace(AppRoute, route).pipe(Command.asNoop)
+```
+
+For one whose body can fail, `Command.match` maps both channels to messages.
+
+In a `Story` or `Scene`, a Command that returns a message resolves with the
+message: `s.resolve(SaveNote, NoteEditorMessage.SucceededSaveNote({ note }))`.
+A mapped Command takes its own value in `s.resolve`, or its typed error in
+`s.fail`, and the mapping runs in the test.
 
 ### Changing the Model
 
