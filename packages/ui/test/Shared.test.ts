@@ -461,6 +461,74 @@ describe("optional owners, reports and onChange", () => {
     })))
 })
 
+describe("shared state in update", () => {
+  const ClockMessage = UiSchema.TaggedEnum({ Ticked: {} })
+  const Clock = Component.define({
+    name: "Clock",
+    model: Schema.Number,
+    message: ClockMessage,
+    receives: ["Ticked"],
+    shares: {
+      value: (ticks) => ({ at: new Date(ticks), "~redacted": false }),
+      schema: Schema.Struct({ at: Schema.Date, "~redacted": Schema.Boolean })
+    }
+  }).make({ init: () => 0, update: (ticks) => ticks + 1, parts: () => ({}) })
+  const WatchMessage = UiSchema.TaggedEnum({ Clicked: {} })
+  const Watch = Component.define({
+    name: "Watch",
+    model: Schema.Array(Schema.Number),
+    message: WatchMessage,
+    shared: { clock: Clock, tips: { owner: TipsProvider, optional: true } }
+  }).make({
+    init: () => [],
+    update: (seen, _, $) =>
+      $.set([
+        ...seen,
+        Object.hasOwn($.shared, "tips") && $.shared.tips === undefined ? $.shared.clock.at.getTime() : -1
+      ])
+        .send(Clock, ClockMessage.Ticked()),
+    view: (seen, h) => h.el("button").on("click", WatchMessage.Clicked()).children(`saw [${seen.join(",")}]`)
+  })
+  const ClockRef = Clock.ref("clock")
+  const Face = Component.define({ name: "Face", model: Schema.Null, message: ClockMessage }).make({
+    init: () => null,
+    update: (model, message, $) => $.set(model).send(ClockRef, message),
+    view: (_, h) => Clock(h, { ref: ClockRef, view: () => Watch(h, { key: "w" }) })
+  })
+
+  it.effect("reads the owner's value as update runs, logs it, and replays it from entries and Wire frames", () =>
+    provideHost(Effect.gen(function*() {
+      const root = yield* TestHost.mount(Face, {})
+      yield* TestHost.settle
+      click(root, "saw []")
+      yield* TestHost.settle
+      root.send(ClockMessage.Ticked())
+      click(root, "saw [0]")
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "saw [0,2]")
+      const log = root.log()
+      assert.deepStrictEqual(updatesAt(log, "/Face/Clock[clock]/Watch[w]").map((entry) => entry.shared), [
+        { clock: { at: new Date(0), "~redacted": false }, tips: undefined },
+        { clock: { at: new Date(2), "~redacted": false }, tips: undefined }
+      ])
+      for (
+        const replay of [Story.fromLog(Watch, log), Story.fromLog(Watch, log.map(MessageLog.makeEncoder().encode))]
+      ) {
+        assert.isUndefined(replay.divergence)
+        assert.deepStrictEqual(replay.model, [0, 2])
+      }
+      assert.throws(
+        () => Story.fromLog(Watch, log.map(MessageLog.makeEncoder({ maxEntryBytes: 30 }).encode)),
+        /entry #\d+ \(\/Face\/Clock\[clock\]\/Watch\[w\]\) has a shared value .* ~truncated placeholder/
+      )
+    })))
+
+  it("throws for an update called with no shared values only when it reads one", () => {
+    assert.isTrue(makeReader(() => false).update(false, ReaderMessage.Clicked(), {}).model)
+    assert.throws(() => Watch.update([], WatchMessage.Clicked(), {}), /render it below a Clock/)
+  })
+})
+
 describe("onChange rounds and declarations", () => {
   it.effect("a reader that changes the owner mid-round leaves the next reader's message pointing at its value's entry", () =>
     provideHost(Effect.gen(function*() {

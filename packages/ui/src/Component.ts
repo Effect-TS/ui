@@ -612,6 +612,19 @@ export type SharedOwner<E> = E extends { readonly owner: infer O } ? O : E
 type IsOptional<E> = E extends { readonly optional: true } ? true : false
 
 /**
+ * Each owner's current value under the local name a reader's `shared`
+ * lists it by, or `undefined` for an optional owner that isn't above.
+ *
+ * @stability experimental
+ * @category utility types
+ * @since 0.1.0
+ */
+export type SharedValues<SR> = {
+  readonly [K in keyof SR]: IsOptional<SR[K]> extends true ? Shared.Value<SharedOwner<SR[K]>> | undefined
+    : Shared.Value<SharedOwner<SR[K]>>
+}
+
+/**
  * What `h` in `view` and `p` in `parts` gain for a component that reads
  * shared state: `shared`, each owner's current value under its local name,
  * or `undefined` for an optional owner that isn't above.
@@ -620,12 +633,7 @@ type IsOptional<E> = E extends { readonly optional: true } ? true : false
  * @category utility types
  * @since 0.1.0
  */
-export type SharedHelpers<SR> = [keyof SR] extends [never] ? {} : {
-  readonly shared: {
-    readonly [K in keyof SR]: IsOptional<SR[K]> extends true ? Shared.Value<SharedOwner<SR[K]>> | undefined
-      : Shared.Value<SharedOwner<SR[K]>>
-  }
-}
+export type SharedHelpers<SR> = [keyof SR] extends [never] ? {} : { readonly shared: SharedValues<SR> }
 
 /**
  * The requirements a component's `shared` option adds: one
@@ -782,30 +790,46 @@ export interface Step<in out Model, in out Msg, in out Events, out R = never, L 
 }
 
 /**
- * `$` in `update`: a step holding the current Model, plus the current props
- * and what the queries hold.
+ * `$` in `update`: a step holding the current Model, plus the current props,
+ * what the queries hold and the shared state the component reads.
  *
  * **Details**
  *
  * `Cur` is the message being handled: the whole message type in an update
  * function, and one tag's member in a slice for that tag. `$.combine` takes
- * functions over it.
+ * functions over it. `SR` is what the component's `shared` lists.
  *
  * `$.props` is what the Models above the instance give it now, whether or
  * not the flush that renders them has run: an ancestor waiting to render
  * renders before a message reaches the instance. One that no longer
  * renders the instance removes it then, and the message is dropped.
  *
+ * `$.shared` follows the same rule: each owner's value from its Model as
+ * this `update` runs, which the reader's view may not have rendered yet. A
+ * reader that sends to its owner still reads the old value in that
+ * `update`, since the send applies after it returns. An `onChange` message
+ * says a value changed, and `$.shared` holds the current one: when another
+ * reader answers the owner within the same round, `$.shared` is already
+ * newer than the `onChange` message being handled.
+ *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface Update<in out Model, in out Msg, in out Events, out Props, L = {}, out Cur = Msg>
-  extends Step<Model, Msg, Events, never, L>
-{
+export interface Update<
+  in out Model,
+  in out Msg,
+  in out Events,
+  out Props,
+  L = {},
+  out Cur = Msg,
+  out SR = {}
+> extends Step<Model, Msg, Events, never, L> {
   readonly props: Props
   /** The queries' results, as `h.queries` shows them for the Model before this `update`. */
   readonly queries: { readonly [K in keyof L]: QueryResultOf<L[K]> }
+  /** Each owner's current value, by the name `shared` lists it under, as `h.shared` reads it. */
+  readonly shared: SharedValues<SR>
   /**
    * Runs update functions one after another, each with the message this
    * `update` received.
@@ -820,8 +844,8 @@ export interface Update<in out Model, in out Msg, in out Events, out Props, L = 
    * It is a left fold. Each function gets the Model the previous one returned
    * and a `$` holding that Model, so a Command it runs sees the earlier
    * changes. The Commands, emitted events, `loadMore` and `reset` of every
-   * function are kept, in call order. `$.props` and `$.queries` are the same
-   * for each, as they were when this `update` started. `R` is the union of
+   * function are kept, in call order. `$.props`, `$.queries` and `$.shared` are
+   * the same for each, as they were when this `update` started. `R` is the union of
    * the functions' requirements.
    */
   combine<
@@ -829,7 +853,7 @@ export interface Update<in out Model, in out Msg, in out Events, out Props, L = 
       (
         model: Model,
         msg: Cur,
-        $: Update<Model, Msg, Events, Props, L, Cur>
+        $: Update<Model, Msg, Events, Props, L, Cur, SR>
       ) => Model | Step<Model, Msg, Events, any, L>
     >
   >(...updates: F): Step<Model, Msg, Events, RawStepRequirements<ReturnType<F[number]>>, L>
@@ -914,7 +938,7 @@ const UpdateProto = {
     const lists = [...this.lists]
     const sends = [...this.sends]
     for (const update of updates) {
-      const next = toNext(update(model, msg, makeUpdate(model, this.props, this.queries, msg)))
+      const next = toNext(update(model, msg, makeUpdate(model, this.props, this.queries, this.shared, msg)))
       model = next.model
       commands.push(...next.commands)
       emitted.push(...next.events)
@@ -926,7 +950,13 @@ const UpdateProto = {
 }
 
 // `$` holds the message being handled, for `combine`.
-const makeUpdate = (model: unknown, props: unknown, queries: unknown, message: unknown): Update<any, any, any, any> =>
+const makeUpdate = (
+  model: unknown,
+  props: unknown,
+  queries: unknown,
+  shared: unknown,
+  message: unknown
+): Update<any, any, any, any> =>
   Object.assign(Object.create(UpdateProto), {
     model,
     commands: [],
@@ -935,6 +965,7 @@ const makeUpdate = (model: unknown, props: unknown, queries: unknown, message: u
     sends: [],
     props,
     queries,
+    shared,
     "~message": message
   })
 
@@ -1024,8 +1055,17 @@ export interface Mountable<in out Props, out Events, out R = never, in Rcv = nev
   readonly message: Schema.Codec<any, any>
   readonly events: Schema.Codec<Events, any>
   readonly init: (props: Props) => Next<any, any, Events, R>
-  /** `queries` is the instance's query results. Without it every result is empty. */
-  readonly update: (model: any, msg: never, props: Props, queries?: Results | undefined) => Next<any, any, Events, R>
+  /**
+   * `queries` is the instance's query results. Without it every result is empty. `shared` is what
+   * `$.shared` holds, by local name. Without it, reading a required owner's value throws.
+   */
+  readonly update: (
+    model: any,
+    msg: never,
+    props: Props,
+    queries?: Results | undefined,
+    shared?: SharedRecord | undefined
+  ) => Next<any, any, Events, R>
   /** `running` answers `h.isRunning` for the instance being rendered. Without it nothing is running. */
   readonly view: (
     model: any,
@@ -1127,7 +1167,13 @@ export interface Component<
   /** A ref for this component's children, so a parent can send them messages. */
   readonly ref: (name: string) => Ref.Of<Rcv>
   readonly init: (props: Props) => Next<Model, Msg, Events, R>
-  readonly update: (model: Model, msg: Msg, props: Props, queries?: Results | undefined) => Next<Model, Msg, Events, R>
+  readonly update: (
+    model: Model,
+    msg: Msg,
+    props: Props,
+    queries?: Results | undefined,
+    shared?: SharedRecord | undefined
+  ) => Next<Model, Msg, Events, R>
   readonly view: (
     model: Model,
     props: Props,
@@ -1324,6 +1370,17 @@ export interface PartsContext {
  * @since 0.1.0
  */
 export type SharedLookup = (owner: Headless.Any, optional?: boolean) => unknown
+
+/**
+ * What a reader's `$.shared` holds: each owner's value by the local name its
+ * `shared` lists it under. The runtime records it on each `Update`, so a
+ * replay hands it back.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type SharedRecord = { readonly [name: string]: unknown }
 
 /**
  * Helper types for `Headless`.
@@ -2072,11 +2129,11 @@ type UnknownTag<T> = `'${T & string}' is not a tag of this component's message` 
 
 // A record `update`: a function for each tag, returning what `UR` holds for it. `UR` is inferred from the
 // record, so a key that is no tag is in it too, and its value is the error.
-type UpdateRecord<Model, Msg, Events, Props, L, UR> = {
+type UpdateRecord<Model, Msg, Events, Props, L, SR, UR> = {
   readonly [T in keyof UR]: T extends TagOf<Msg> ? (
       model: Model,
       msg: Tagged<Msg, T>,
-      $: Update<Model, Msg, Events, Props, L, Tagged<Msg, T>>
+      $: Update<Model, Msg, Events, Props, L, Tagged<Msg, T>, SR>
     ) => UR[T]
     : UnknownTag<T>
 }
@@ -2126,10 +2183,12 @@ export interface Definition<
   readonly elements: View.Vocabulary<V> | undefined
   /** The names of the slots a parent may fill. */
   readonly slots: ReadonlyArray<Sl>
-  /** The owners whose shared state `view` or `parts` reads, by local name. */
+  /** The owners whose shared state the component reads, by local name. */
   readonly shared: SR | undefined
   /** What an owner shares with the components below it, from its Model and props: the `value` of `shares`. */
   readonly shares: ((model: Model, props: Props) => SV) | undefined
+  /** The Schema of what an owner shares: the `schema` of `shares`. */
+  readonly sharesSchema: Schema.Codec<SV, any> | undefined
   /** What an owner collects from the readers below it: the `collects` of `shares`. */
   readonly collects: SharesCollects<Msg, Rp> | undefined
   /**
@@ -2140,12 +2199,16 @@ export interface Definition<
    */
   update<const Tag extends TagOf<Msg>, U extends Model | Step<Model, Msg, Events, any, L>>(
     tag: Tag,
-    update: (model: Model, msg: Tagged<Msg, Tag>, $: Update<Model, Msg, Events, Props, L, Tagged<Msg, Tag>>) => U
-  ): (model: Model, msg: Tagged<Msg, Tag>, $: Update<Model, Msg, Events, Props, L>) => U
+    update: (
+      model: Model,
+      msg: Tagged<Msg, Tag>,
+      $: Update<Model, Msg, Events, Props, L, Tagged<Msg, Tag>, SR>
+    ) => U
+  ): (model: Model, msg: Tagged<Msg, Tag>, $: Update<Model, Msg, Events, Props, L, Msg, SR>) => U
   /** An update function over the whole message type. */
   update<U extends Model | Step<Model, Msg, Events, any, L>>(
-    update: (model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L>) => U
-  ): (model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L>) => U
+    update: (model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L, Msg, SR>) => U
+  ): (model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L, Msg, SR>) => U
   /** A view, to pass as `view` or call from another view. */
   view<UV extends View.Content<Msg, any>>(
     view: (
@@ -2186,8 +2249,8 @@ export interface Definition<
     options: {
       readonly init: ($: Init<Model, Msg, Events, Props>) => UI
       readonly update:
-        | ((model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L>) => U)
-        | UpdateRecord<Model, Msg, Events, Props, L, UR>
+        | ((model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L, Msg, SR>) => U)
+        | UpdateRecord<Model, Msg, Events, Props, L, SR, UR>
       /** A headless component has no view to place slots in, so a definition with slots can't take `parts`. */
       readonly parts: [Sl] extends [never] ?
         (model: Model, p: PartsHelper<Msg, Props, V> & QueryHelpers<L> & SharedHelpers<SR>) => Parts
@@ -2240,8 +2303,8 @@ export interface Definition<
       & {
         readonly init: ($: Init<Model, Msg, Events, Props>) => UI
         readonly update:
-          | ((model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L>) => U)
-          | UpdateRecord<Model, Msg, Events, Props, L, UR>
+          | ((model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L, Msg, SR>) => U)
+          | UpdateRecord<Model, Msg, Events, Props, L, SR, UR>
         readonly view: (
           model: Model,
           h: View.Helper<Msg, Props> & View.Tags<V, Msg> & QueryHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>
@@ -2319,6 +2382,8 @@ export declare namespace Definition {
     readonly shared: SharedReads | undefined
     /** What the component shares as an owner, or `undefined` when it isn't one. */
     readonly shares: ((model: any, props: any) => unknown) | undefined
+    /** The Schema of what the component shares, or `undefined` when its `shares` gives none. */
+    readonly sharesSchema: Schema.Codec<any, any> | undefined
     /** What the component collects from the readers that report to it, or `undefined` when it collects nothing. */
     readonly collects:
       | { readonly schema: Schema.Codec<any, any>; readonly onChange: (collected: ReadonlyArray<never>) => unknown }
@@ -2692,7 +2757,7 @@ export const define = <
     /** The names of the slots a parent may fill, each placed in `view` with `h.slots.<name>`. None by default. */
     readonly slots?: ReadonlyArray<Sl> | undefined
     /**
-     * The owners whose shared state `view` or `parts` reads, by the name `h.shared` and `p.shared` use:
+     * The owners whose shared state the component reads, by the name `h.shared`, `p.shared` and `$.shared` use:
      * each an owner, or `{ owner, optional, report, onChange }`. With `optional`, the read is
      * `undefined` when no owner is above, and a send to it is dropped. `report` is what this
      * component tells an owner whose `shares` has `collects`. `onChange` is its message when the
@@ -2722,16 +2787,20 @@ export const define = <
      * Makes a headless component an owner: what it shares with the components below it, and what
      * it collects from them. A function is short for `{ value }`. Every owner update re-runs the owner's
      * closure, so put normal components directly under it, and every reader re-renders when the
-     * value changes, so keep it small.
+     * value changes, so keep it small. `schema` encodes the value in a reader's `Update` on the
+     * Wire. Without it the value is sent best effort, as `MessageLog.structural` encodes it.
      */
     readonly shares?:
       | ((model: Model, props: Props) => SV)
       | {
         /** What the readers below read, from the owner's Model and props. */
         readonly value: (model: Model, props: Props) => SV
+        /** The Schema of the value. */
+        readonly schema?: Schema.Codec<SV, any> | undefined
       }
       | {
         readonly value: (model: Model, props: Props) => SV
+        readonly schema?: Schema.Codec<SV, any> | undefined
         /** What the owner collects from the readers below it. */
         readonly collects: {
           /** The Schema of what each reader below reports with `report`. */
@@ -2786,6 +2855,7 @@ export const define = <
     slots: options.slots ?? [],
     shared: options.shared as any,
     shares: typeof shares === "function" ? shares : shares?.value,
+    sharesSchema: typeof shares === "function" ? undefined : shares?.schema,
     collects: shares !== undefined && typeof shares !== "function" && "collects" in shares
       ? shares.collects
       : undefined,
@@ -2793,7 +2863,7 @@ export const define = <
     update: ((...args: ReadonlyArray<any>) => {
       const update: AnyUpdate = args[args.length - 1]
       return (model: unknown, msg: unknown, $: Update<any, any, any, any>) =>
-        update(model, msg, makeUpdate(model, $.props, $.queries, msg))
+        update(model, msg, makeUpdate(model, $.props, $.queries, $.shared, msg))
     }) as any,
     view: (view) => view,
     fragment: (fragment) => fragment,
@@ -2867,6 +2937,7 @@ const finish = (
   }
   // Read once the component exists, since an entry for `"self"` names it.
   let reads: ReadonlyArray<sharedReads.Read> = []
+  let unsupplied: SharedRecord = {}
   const component: Any = makeComponent(view === undefined ? HeadlessProto : Proto, {
     definition,
     props: definition.props,
@@ -2875,8 +2946,8 @@ const finish = (
     events: definition.events,
     receives: definition.receives,
     init: (props: unknown) => toNext(options.init(makeInit(props))),
-    update: (model: unknown, msg: unknown, props: unknown, results?: Results) =>
-      toNext(updateFn(model, msg, makeUpdate(model, props, open(model, props, results), msg))),
+    update: (model: unknown, msg: unknown, props: unknown, results?: Results, shared?: SharedRecord) =>
+      toNext(updateFn(model, msg, makeUpdate(model, props, open(model, props, results), shared ?? unsupplied, msg))),
     view: view === undefined
       ? undefined
       : View.readsPathLazily((
@@ -2902,7 +2973,7 @@ const finish = (
           h.previous = context.previous
           h.patched = context.patched
         }
-        if (reads.length > 0) h.shared = readShared(definition.name, reads, shared)
+        if (reads.length > 0) h.shared = sharedReads.values(definition.name, reads, shared)
         const lazies = lazy?.lazy as View.Lazies | undefined
         lazies?.begin()
         try {
@@ -2938,7 +3009,7 @@ const finish = (
           p.previous = opened.previous
           p.patched = opened.patched
         }
-        if (reads.length > 0) p.shared = readShared(definition.name, reads, context.shared)
+        if (reads.length > 0) p.shared = sharedReads.values(definition.name, reads, context.shared)
         return parts(model, p)
       },
     subscriptions: subscriptions === undefined
@@ -2957,29 +3028,8 @@ const finish = (
     "~queries": bound
   })
   reads = sharedReads.readsOf(definition, component)
+  unsupplied = sharedReads.unsupplied(definition.name, reads)
   return component
-}
-
-// `h.shared` and `p.shared`: each listed owner's current value, by local name.
-const readShared = (
-  name: string,
-  reads: ReadonlyArray<sharedReads.Read>,
-  lookup: SharedLookup | undefined
-): { readonly [name: string]: unknown } => {
-  const out: { [name: string]: unknown } = {}
-  for (const read of reads) {
-    if (lookup === undefined) {
-      if (read.optional) {
-        out[read.name] = undefined
-        continue
-      }
-      throw new Error(
-        `${name} reads the shared state of ${read.owner.definition.name}, and nothing supplies it: render it below a ${read.owner.definition.name}`
-      )
-    }
-    out[read.name] = lookup(read.owner, read.optional)
-  }
-  return out
 }
 
 /**
