@@ -35,6 +35,23 @@ const Badge = Component.define({
   view: (text, h) => h.b(text)
 })
 
+const Broken = Component.define({
+  name: "Broken",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+}).make({
+  init: () => null,
+  update: (model) => model,
+  view: (): never => {
+    throw new Error("broken")
+  }
+})
+
+const Pin = Component.define({ name: "Pin", scoped: true, model: Schema.Null, message: Schema.Never, elements: Html })
+  .make({ init: () => null, update: (model) => model, view: (_, h) => h.u("pin") })
+
 const Profile = Component.define({
   name: "Profile",
   scoped: true,
@@ -45,7 +62,13 @@ const Profile = Component.define({
   .make({
     init: () => "draft from the " + side(inits.profile++),
     update: (model) => model,
-    view: (draft, h) => h.form(h.p(draft), Avatar(h, { key: "a" }), h.scoped((s) => Badge(s, { key: "b" })))
+    view: (draft, h) =>
+      h.form(
+        h.p(draft),
+        Avatar(h, { key: "a" }),
+        h.scoped((s) => Badge(s, { key: "b" })),
+        Broken(h, { key: "x", fallback: () => h.s("down") })
+      )
   })
 
 class GetTab extends Query.Service<GetTab>()("GetTab", {
@@ -69,6 +92,7 @@ const Settings = Component.define({
     const billing = AsyncResult.isSuccess(h.queries.tab) && h.queries.tab.value === "billing"
     return h.main(
       h.h1(billing ? "billing" : "profile"),
+      h.scoped((s) => Pin(s, {})),
       shown || !billing ? h.scoped((s) => Profile(s, { key: "p" })) : null
     )
   }
@@ -80,13 +104,14 @@ describe("scoped children on the server", () => {
       inits = { avatar: 0, profile: 0, badge: 0 }
       const result = yield* ssr(Settings, {})
       assert.notInclude(result.html, "draft from")
-      assert.deepStrictEqual(result.adopted, ["/Settings"])
+      assert.deepStrictEqual(result.adopted, ["/Settings", "/Settings/Pin[]"])
 
       result.root.send(true)
       yield* TestHost.settle
       assert.strictEqual(result.container.querySelector("p")!.textContent, "draft from the server")
       assert.strictEqual(result.container.querySelector("i")!.textContent, "avatar from the server")
       assert.strictEqual(result.container.querySelector("b")!.textContent, "badge from the server")
+      assert.strictEqual(result.container.querySelector("s")!.textContent, "down")
     }).pipe(Effect.provide(TestHost.layer())))
 })
 
@@ -307,20 +332,25 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
       assert.strictEqual(field.value, "typed")
     }).pipe(Effect.scoped))
 
-  it.effect("keep what the user typed into a field its author writes again while the receiver waits", () =>
-    Effect.gen(function*() {
-      const Page = fieldPage("bare")
-      const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Page, {}))
-      const field = app.querySelector("input")!
-      field.value = "typed"
-      const root = yield* BrowserHost.mountEffect(Page, {}, app, { state })
-      root.send(null)
-      yield* tick
-      yield* open
-      yield* root.adopted
-      assert.strictEqual(app.querySelector("input"), field)
-      assert.strictEqual(field.value, "typed")
-    }).pipe(Effect.scoped))
+  it.effect.each(
+    ["bare", "in an element"] as const
+  )(
+    "keep what the user typed into a field its author writes again, %s, while the receiver waits",
+    (placed) =>
+      Effect.gen(function*() {
+        const Page = fieldPage(placed)
+        const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Page, {}))
+        const field = app.querySelector("input")!
+        field.value = "typed"
+        const root = yield* BrowserHost.mountEffect(Page, {}, app, { state })
+        root.send(null)
+        yield* tick
+        yield* open
+        yield* root.adopted
+        assert.strictEqual(app.querySelector("input"), field)
+        assert.strictEqual(field.value, "typed")
+      }).pipe(Effect.scoped)
+  )
 
   const NoteMsg = UiSchema.TaggedEnum({ Typed: { text: Schema.String }, Add: { text: Schema.String } })
   const Note = Component.define({

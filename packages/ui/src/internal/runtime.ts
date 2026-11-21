@@ -7145,7 +7145,7 @@ const setup = (
     if (inner._tag === "Fallback") return
     unhook(inner.inst)
     leaveOwners(inner.inst)
-    if (!inner.inst.closed) keeping.push(entry)
+    keeping.push(entry)
   }
   const keeping: Array<Kept> = []
   const flushKept = () => {
@@ -7323,7 +7323,6 @@ const setup = (
         if (rendered.scoped) rendered.gone = true
         const entry = rendered.scoped ? entryAt(inst.author, rendered.v) : undefined
         if (entry !== undefined && entry.inner === inner) {
-          if (entry.at !== rendered) return
           keep(entry)
           if (entry.at === undefined) return
         }
