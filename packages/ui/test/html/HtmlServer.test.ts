@@ -2268,13 +2268,17 @@ describe("HtmlServer", { concurrent: false }, () => {
       }
 
       for (
-        const [order, exact, keepFirstAndLast] of [
-          [() => [["A"], ["B", "p"], ["C"]], true, true],
-          [() => [["A"], ["B", "empty"], ["C"]], true, true],
-          [(isClient: boolean) => isClient ? [["Z"], ["A"], ["B"]] : [["A"], ["B"]], true, false],
-          [(isClient: boolean) => isClient ? [["B"], ["C"]] : [["A"], ["B"], ["C"]], false, false]
+        const [order, exact, identity] of [
+          [() => [["A"], ["B", "p"], ["C"]], true, "neighbors"],
+          [() => [["A"], ["B", "empty"], ["C"]], true, "neighbors"],
+          [(isClient: boolean) => isClient ? [["Z"], ["A"], ["B"]] : [["A"], ["B"]], true, "rebuilt"],
+          [(isClient: boolean) => isClient ? [["B"], ["C"]] : [["A"], ["B"], ["C"]], false, "shifted"]
         ] as ReadonlyArray<
-          readonly [(isClient: boolean) => ReadonlyArray<readonly [string, string?]>, boolean, boolean]
+          readonly [
+            (isClient: boolean) => ReadonlyArray<readonly [string, string?]>,
+            boolean,
+            "neighbors" | "rebuilt" | "shifted"
+          ]
         >
       ) {
         const List = makeList(order)
@@ -2291,10 +2295,15 @@ describe("HtmlServer", { concurrent: false }, () => {
         yield* tick
         if (exact) assert.strictEqual(app.innerHTML, fresh.innerHTML)
         else assertMatchesDeclared(app, fresh)
-        if (keepFirstAndLast) {
-          const hydratedItems = [...app.querySelectorAll("li")]
+        const hydratedItems = [...app.querySelectorAll("li")]
+        if (identity === "neighbors") {
           assert.strictEqual(hydratedItems[0], serverItems[0])
           assert.strictEqual(hydratedItems[1], serverItems[2])
+        } else if (identity === "rebuilt") {
+          for (const item of hydratedItems) assert.notInclude(serverItems, item)
+        } else {
+          assert.strictEqual(hydratedItems[0], serverItems[0])
+          assert.strictEqual(hydratedItems[1], serverItems[1])
         }
       }
     }).pipe(Effect.scoped))
