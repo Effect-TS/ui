@@ -278,14 +278,21 @@ describe("Tooltip in a document", { concurrent: false }, () => {
       assert.strictEqual(style("padding-top"), "")
     }).pipe(Effect.scoped))
 
-  it.effect("re-measures after an initial flip changes the popup's size even with anchor tracking disabled", () =>
+  it.effect("re-measures when a flip changes the popup's size, with anchor tracking disabled", () =>
     Effect.gen(function*() {
-      rects.set("trigger", { x: 400, y: 760, width: 100, height: 40 })
+      rects.set("trigger", { x: 400, y: 300, width: 100, height: 40 })
       heightFor = (node) => node.getAttribute("data-side") === "top" ? 100 : 40
       yield* mountPage(8, true)
+      assert.strictEqual(style("top"), "340px")
+      assert.deepStrictEqual([...resizeObservers].flatMap((observer) => [...observer.observed]), [byId("positioner")])
+
+      rects.set("trigger", { x: 400, y: 760, width: 100, height: 40 })
+      window.dispatchEvent(new Event("resize"))
+      yield* tick
       assert.strictEqual(byId("positioner").getAttribute("data-side"), "top")
+      resize(byId("positioner"))
+      yield* tick
       assert.strictEqual(style("top"), "652px")
-      assert.strictEqual(resizeObservers.size, 0)
     }).pipe(Effect.scoped))
 
   it.effect("follows the trigger on a scroll until the tooltip closes, and reopens on another side", () =>

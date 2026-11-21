@@ -235,8 +235,9 @@ export type TooltipAlign = typeof TooltipAlign.Type
  *   5 by default.
  * - `positionMethod`: `"absolute"`, the default, or `"fixed"`, which
  *   doesn't make the page taller when the popup reaches past its end.
- * - `disableAnchorTracking`: the popup is placed only when it opens and
- *   when the window resizes, not when the page scrolls or the trigger moves.
+ * - `disableAnchorTracking`: the popup is placed only when it opens, when
+ *   the window resizes and when its own size changes, not when the page
+ *   scrolls or the trigger moves or changes size.
  * - `anchor`: the id of an element to place the popup against instead of
  *   the trigger.
  *

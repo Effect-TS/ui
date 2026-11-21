@@ -806,18 +806,21 @@ export const trackPosition = (
       }
     }
 
-    let settled: Size = { width: 0, height: 0 }
     const update = (): void => {
       const before = popupSize()
       pass(before)
       const after = popupSize()
       if (before.width !== after.width || before.height !== after.height) pass(after)
-      settled = popupSize()
     }
 
-    const trackAnchor = (): () => void => {
-      const anchor = document.querySelector(current.anchorSelector)
-      document.addEventListener("scroll", update, { capture: true, passive: true })
+    const observe = (): () => void => {
+      const anchor = current.disableAnchorTracking ? null : document.querySelector(current.anchorSelector)
+      const styles = new view.MutationObserver(restore)
+      styles.observe(node, { attributes: true, attributeFilter: ["style"] })
+      view.addEventListener("resize", update)
+      if (!current.disableAnchorTracking) {
+        document.addEventListener("scroll", update, { capture: true, passive: true })
+      }
       let frame = -1
       const sizes = typeof view.ResizeObserver === "function"
         ? new view.ResizeObserver((entries) => {
@@ -834,22 +837,12 @@ export const trackPosition = (
       sizes?.observe(node)
       const moves = anchor === null ? () => {} : observeMove(anchor, update)
       return () => {
+        styles.disconnect()
+        view.removeEventListener("resize", update)
         document.removeEventListener("scroll", update, { capture: true })
         view.cancelAnimationFrame(frame)
         sizes?.disconnect()
         moves()
-      }
-    }
-
-    const observe = (): () => void => {
-      const styles = new view.MutationObserver(restore)
-      styles.observe(node, { attributes: true, attributeFilter: ["style"] })
-      view.addEventListener("resize", update)
-      const untrack = current.disableAnchorTracking ? () => {} : trackAnchor()
-      return () => {
-        styles.disconnect()
-        view.removeEventListener("resize", update)
-        untrack()
       }
     }
 
@@ -864,12 +857,7 @@ export const trackPosition = (
         Effect.tap(() =>
           Effect.forkScoped(Stream.runForEach(changes, (next) =>
             Effect.sync(() => {
-              if (sameArgs(next, current)) {
-                restore()
-                const size = popupSize()
-                if (size.width !== settled.width || size.height !== settled.height) update()
-                return
-              }
+              if (sameArgs(next, current)) return
               current = next
               start()
             })))
