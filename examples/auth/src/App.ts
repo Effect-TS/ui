@@ -33,8 +33,8 @@ export const appProps = Effect.gen(function*() {
 
 export const AppMessage = UiSchema.TaggedEnum({
   ChangedRoute: { route: AppRoute },
-  SignedInLoggedOut: { session: Session },
-  SignedOutLoggedIn: {},
+  SignedIn: { session: Session },
+  SignedOut: {},
   FailedSaveSession: { error: Schema.String },
   FailedClearSession: { error: Schema.String }
 })
@@ -88,13 +88,13 @@ export const AppNoDeps = Component.define({
       return redirected(next, route) ? $.set(next).run(redirectTo(next.route)) : next
     },
 
-    SignedInLoggedOut: (_model, { session }, $) =>
+    SignedIn: (_model, { session }, $) =>
       $.set(AppModel.LoggedIn({ route: dashboardRoute, session })).run(
         saveSession(session),
         redirectTo(dashboardRoute)
       ),
 
-    SignedOutLoggedIn: (_model, _message, $) =>
+    SignedOut: (_model, _message, $) =>
       $.set(AppModel.LoggedOut({ route: homeRoute })).run(clearSession(), redirectTo(homeRoute)),
 
     FailedSaveSession: (_model, { error }, $) => $.run(LogError({ entries: ["Failed to save session:", error] })),
@@ -114,10 +114,10 @@ export const AppNoDeps = Component.define({
         LoggedOut: ({ route }) =>
           LoggedOut(h, {
             props: { route },
-            onEmit: { SignedIn: ({ session }) => AppMessage.SignedInLoggedOut({ session }) }
+            onEmit: { SignedIn: ({ session }) => AppMessage.SignedIn({ session }) }
           }),
         LoggedIn: ({ route, session }) =>
-          LoggedIn(h, { props: { route, session }, onEmit: { SignedOut: () => AppMessage.SignedOutLoggedIn() } })
+          LoggedIn(h, { props: { route, session }, onEmit: { SignedOut: () => AppMessage.SignedOut() } })
       })
     )
 })
