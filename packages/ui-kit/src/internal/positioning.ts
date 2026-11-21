@@ -263,8 +263,7 @@ const logicalSide = (requested: Side, rendered: Physical, rtl: boolean): Side =>
   return rendered
 }
 
-// Upstream's 1px lean toward the requested side, so a centred popup doesn't flip away from it.
-const bias = 1
+const requestedSideBiasPx = 1
 
 export const place = (input: PlaceInput): Placed => {
   const { anchor, arrow, boundary, anchorClip, options, popup, rtl } = input
@@ -293,10 +292,10 @@ export const place = (input: PlaceInput): Placed => {
   }
 
   const flipPadding: Sides = {
-    top: padding.top + bias + (options.side === "bottom" ? bias : 0),
-    right: padding.right + bias + (options.side === "left" ? bias : 0),
-    bottom: padding.bottom + bias + (options.side === "top" ? bias : 0),
-    left: padding.left + bias + (options.side === "right" ? bias : 0)
+    top: padding.top + requestedSideBiasPx + (options.side === "bottom" ? requestedSideBiasPx : 0),
+    right: padding.right + requestedSideBiasPx + (options.side === "left" ? requestedSideBiasPx : 0),
+    bottom: padding.bottom + requestedSideBiasPx + (options.side === "top" ? requestedSideBiasPx : 0),
+    left: padding.left + requestedSideBiasPx + (options.side === "right" ? requestedSideBiasPx : 0)
   }
   const flipMainAxis = avoidSide === "flip"
   const flipCrossAxis = avoidAlign === "flip"
@@ -599,13 +598,21 @@ const clientRect = (element: Element): Rect => {
   return { x: left, y: top, width, height }
 }
 
+const scaleOf = (element: Element, rect: DOMRect): { readonly x: number; readonly y: number } => {
+  const html = element as HTMLElement
+  const x = html.offsetWidth ? rect.width / html.offsetWidth : 1
+  const y = html.offsetHeight ? rect.height / html.offsetHeight : 1
+  return { x: x || 1, y: y || 1 }
+}
+
 const innerRect = (element: Element): Rect => {
-  const { left, top } = element.getBoundingClientRect()
+  const rect = element.getBoundingClientRect()
+  const scale = scaleOf(element, rect)
   return {
-    x: left + element.clientLeft,
-    y: top + element.clientTop,
-    width: element.clientWidth,
-    height: element.clientHeight
+    x: rect.left + element.clientLeft * scale.x,
+    y: rect.top + element.clientTop * scale.y,
+    width: element.clientWidth * scale.x,
+    height: element.clientHeight * scale.y
   }
 }
 
@@ -681,6 +688,8 @@ const observeMove = (element: Element, onMove: () => void): () => void => {
   }
 }
 
+const written = new WeakMap<HTMLElement, Map<string, string>>()
+
 const sameReport = (a: Reported | null, b: Reported): boolean =>
   a !== null && a.side === b.side && a.align === b.align && a.anchorHidden === b.anchorHidden &&
   a.arrowUncentered === b.arrowUncentered
@@ -695,11 +704,10 @@ export const trackPosition = (
     const view = document.defaultView!
     let current = args
     let reported: Reported | null = null
-    let written = new Map<string, string>()
-    let gap: { readonly side: Physical; readonly size: number } | null = null
+    let owned = written.get(node) ?? new Map<string, string>()
 
     const restore = () => {
-      for (const [name, value] of written) {
+      for (const [name, value] of owned) {
         if (node.style.getPropertyValue(name) !== value) node.style.setProperty(name, value)
       }
     }
@@ -721,14 +729,15 @@ export const trackPosition = (
       return intersect(boundary, viewport)
     }
 
-    const popupSize = (): Size => {
-      const width = node.offsetWidth
-      const height = node.offsetHeight
-      if (gap === null) return { width, height }
-      return gap.side === "top" || gap.side === "bottom"
-        ? { width, height: Math.max(0, height - gap.size) }
-        : { width: Math.max(0, width - gap.size), height }
+    const bridged = (side: Physical): number => {
+      const value = owned.get("padding-" + side)
+      return value !== undefined && node.style.getPropertyValue("padding-" + side) === value ? parseFloat(value) : 0
     }
+
+    const popupSize = (): Size => ({
+      width: Math.max(0, node.offsetWidth - bridged("left") - bridged("right")),
+      height: Math.max(0, node.offsetHeight - bridged("top") - bridged("bottom"))
+    })
 
     const pass = (): void => {
       const anchor = document.querySelector(current.anchorSelector)
@@ -746,29 +755,28 @@ export const trackPosition = (
         options: current.options
       })
       const side = physicalSide(placed.side, rtl)
-      const size = current.options.sideOffset
-      const padded = current.offsetAsPadding
+      const bridge = current.offsetAsPadding ? Math.max(0, current.options.sideOffset) : 0
       const scrolled = current.positionMethod === "absolute"
       const dpr = view.devicePixelRatio || 1
       const snap = (start: number, length: number) =>
         (Math.round((start + length) * dpr) - Math.round(start * dpr)) / dpr
       const next = new Map<string, string>([
-        ["left", (placed.x + (scrolled ? view.scrollX : 0) - (padded && side === "right" ? size : 0)) + "px"],
-        ["top", (placed.y + (scrolled ? view.scrollY : 0) - (padded && side === "bottom" ? size : 0)) + "px"],
+        ["left", (placed.x + (scrolled ? view.scrollX : 0) - (side === "right" ? bridge : 0)) + "px"],
+        ["top", (placed.y + (scrolled ? view.scrollY : 0) - (side === "bottom" ? bridge : 0)) + "px"],
         ["--anchor-width", snap(anchorRect.x, anchorRect.width) + "px"],
         ["--anchor-height", snap(anchorRect.y, anchorRect.height) + "px"],
         ["--available-width", placed.availableWidth + "px"],
         ["--available-height", placed.availableHeight + "px"],
         ["--transform-origin", placed.transformOrigin]
       ])
-      if (padded) next.set("padding-" + opposite[side], size + "px")
+      if (bridge > 0) next.set("padding-" + opposite[side], bridge + "px")
       if (placed.arrow?.x != null) next.set(arrowX, placed.arrow.x + "px")
       if (placed.arrow?.y != null) next.set(arrowY, placed.arrow.y + "px")
-      for (const name of written.keys()) {
+      for (const name of owned.keys()) {
         if (!next.has(name)) node.style.removeProperty(name)
       }
-      written = next
-      gap = padded ? { side: opposite[side], size } : null
+      owned = next
+      written.set(node, owned)
       restore()
       const report: Reported = {
         side: placed.side,
@@ -803,11 +811,13 @@ export const trackPosition = (
       document.addEventListener("scroll", update, { capture: true, passive: true })
       let frame = -1
       const sizes = typeof view.ResizeObserver === "function"
-        ? new view.ResizeObserver(() => {
-          // Skips the size the update itself causes, which the browser would report as a loop.
-          sizes?.unobserve(node)
-          view.cancelAnimationFrame(frame)
-          frame = view.requestAnimationFrame(() => sizes?.observe(node))
+        ? new view.ResizeObserver((entries) => {
+          if (entries[0]?.target === anchor) {
+            // A size the update gives the popup after the anchor resized would be reported as a loop.
+            sizes?.unobserve(node)
+            view.cancelAnimationFrame(frame)
+            frame = view.requestAnimationFrame(() => sizes?.observe(node))
+          }
           update()
         })
         : null
