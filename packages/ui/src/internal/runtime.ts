@@ -530,6 +530,7 @@ type Settled = AsyncResult.Success<any, any> | AsyncResult.Failure<any, any>
 /** @internal */
 export interface Instance {
   readonly path: string
+  readonly key: string
   /** What `h.lazy` built in the last render. */
   lazy: View.Lazies | undefined
   /** Counts the root's instances in creation order: the check after a push skips older ones. */
@@ -5904,6 +5905,13 @@ const setup = (
     // it would cost more than anything else here.
     if (inst.children === noChildren) inst.children = new Set()
     inst.children.add(child)
+    const table = keptLive > 0 && scope === undefined ? keptTables.get(inst) : undefined
+    if (table !== undefined) {
+      for (const keys of table.children.values()) {
+        const entry = keys.get(view.key)
+        if (entry !== undefined && `${inst.path}/${segment(entry.inner.v)}` === child.path) failShared(child, entry)
+      }
+    }
     return new ChildRecord(view, child)
   }
 
@@ -6968,11 +6976,19 @@ const setup = (
     byKey.set(view.key, made)
     if (inner._tag === "Child") keptEntries.set(inner.inst, made)
     keptLive++
+    if (inst !== author) {
+      for (const child of author.children) if (child.key === view.key && child.path === named) failShared(child, made)
+    }
     return inner
   }
 
   const failTwice = (author: Instance, view: View.Child<any, any>) =>
     failLater(author, new Error(`${author.path} writes ${segment(view)} twice in one render`))
+  const failShared = (child: Instance, entry: Kept) =>
+    defer(() => {
+      const view = entry.inner.v
+      if (!child.closed && entryAt(entry.author, view) === entry) failTwice(entry.author, view)
+    })
 
   const tableOf = (author: Instance): KeptTable => {
     let table = keptTables.get(author)

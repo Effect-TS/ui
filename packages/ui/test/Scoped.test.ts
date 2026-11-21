@@ -2031,6 +2031,46 @@ describe("scoped children written into closed slots", () => {
       assert.include(Cause.pretty(failureOf(root)!.cause), "Row[k]")
     })))
 
+  it.effect.each(["its own view", "a slot after it", "a slot before it", "the author's view beside its slot"] as const)(
+    "an ordinary child and a scoped one of the same name and key, the scoped one in %s",
+    (where) =>
+      provideHost(Effect.gen(function*() {
+        const Kept = Component.define({ name: "Row", scoped: true, model: Schema.Null, message: Schema.Never })
+          .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p", "kept") })
+        const Plain = Component.define({
+          name: "Row",
+          scoped: false,
+          model: Schema.Null,
+          message: Schema.Never,
+          slots: ["body"]
+        }).make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p", "plain", h.slots.body) })
+        const Headless = Component.define({ name: "Row", scoped: false, model: Schema.Null, message: Schema.Never })
+          .make({ init: () => null, update: (model) => model, parts: () => ({}) })
+        const Inner = Component.define({ name: "Inner", scoped: false, model: Schema.Null, message: Schema.Never })
+          .make({
+            init: () => null,
+            update: (model) => model,
+            view: (_, h) =>
+              h.scoped((s) => {
+                const kept = Kept(s, { key: "k" })
+                const slot = () => Plain(h, { key: "o", slots: { body: kept } })
+                return where === "its own view"
+                  ? Headless(h, { key: "k", view: () => kept })
+                  : where === "a slot after it"
+                  ? h.el("div", Plain(h, { key: "k" }), slot())
+                  : where === "a slot before it"
+                  ? h.el("div", slot(), Plain(h, { key: "k" }))
+                  : h.el("div", Plain(h, { key: "o", slots: { body: Plain(h, { key: "k" }) } }), kept)
+              })
+          })
+        const root = yield* TestHost.mount(host(Inner), {})
+        yield* TestHost.settle
+        if (where === "the author's view beside its slot") return assert.strictEqual(root.text(), "plainplainkept")
+        assert.strictEqual(root.text(), "down")
+        assert.include(Cause.pretty(failureOf(root)!.cause), "Row[k]")
+      }))
+  )
+
   it.effect("draws a child its author returns again without writing it again", () =>
     provideHost(Effect.gen(function*() {
       let cached: View.Child<any, any> | undefined
