@@ -998,6 +998,26 @@ export const makeHost = (
     host.setProp(node, name, value)
   }
 
+  const scratch = document.createElement("div").style
+
+  const outsideStyle = (element: globalThis.Element, previous: string | undefined): Array<string> | undefined => {
+    if ((element.getAttribute("style") ?? undefined) === previous) return undefined
+    const style = (element as HTMLElement).style
+    if (style === undefined) return undefined
+    scratch.cssText = previous ?? ""
+    const kept: Array<string> = []
+    for (let i = 0, length = style.length; i < length; i++) {
+      const name = style[i]!
+      const value = style.getPropertyValue(name)
+      if (value === "") continue
+      const priority = style.getPropertyPriority(name)
+      if (value !== scratch.getPropertyValue(name) || priority !== scratch.getPropertyPriority(name)) {
+        kept.push(name, value, priority)
+      }
+    }
+    return kept
+  }
+
   const host: Renderer.Host<globalThis.Node> & { readonly dispose: () => void } = {
     createElement: (tag) =>
       elements.svgTags.has(tag) ? document.createElementNS(SVG, tag) : document.createElement(tag),
@@ -1017,13 +1037,18 @@ export const makeHost = (
       }
       return attrs
     },
-    setAttr(node, name, value) {
+    setAttr(node, name, value, previous) {
       const element = node as globalThis.Element
       const normalized = elements.attributeName(name, element.namespaceURI === SVG)
       if (normalized === undefined) return
       name = normalized
+      const kept = name === "style" ? outsideStyle(element, previous) : undefined
       if (value === undefined) element.removeAttribute(name)
       else element.setAttribute(name, value)
+      if (kept !== undefined) {
+        const style = (element as HTMLElement).style
+        for (let i = 0; i < kept.length; i += 3) style.setProperty(kept[i]!, kept[i + 1]!, kept[i + 2])
+      }
     },
     setProp(node, name, value) {
       const element = node as any

@@ -136,7 +136,7 @@ const geometry = Effect.acquireRelease(
   (restore) => Effect.sync(restore)
 )
 
-const Message = UiSchema.TaggedEnum({ Closed: {}, Opened: {} })
+const Message = UiSchema.TaggedEnum({ Closed: {}, Opened: {}, Restyled: {} })
 
 const Page = Component.define({
   name: "Page",
@@ -145,14 +145,15 @@ const Page = Component.define({
     disableAnchorTracking: Schema.Boolean,
     anchor: Schema.optional(Schema.String)
   }),
-  model: Schema.Struct({ open: Schema.Boolean }),
+  model: Schema.Struct({ open: Schema.Boolean, tinted: Schema.Boolean }),
   message: Message,
   elements: Html
 }).make({
-  init: () => ({ open: true }),
+  init: () => ({ open: true, tinted: false }),
   update: {
     Closed: (model) => ({ ...model, open: false }),
-    Opened: (model) => ({ ...model, open: true })
+    Opened: (model) => ({ ...model, open: true }),
+    Restyled: (model) => ({ ...model, tinted: !model.tinted })
   },
   view: (model, h) =>
     Tooltip(h, {
@@ -166,7 +167,7 @@ const Page = Component.define({
       view: (s) =>
         h.div.attr("id", "clip").children(
           h.div.attr("id", "layer").children(s.trigger(h.button.attr("id", "trigger")).children("B")),
-          s.positioner(h.div.attr("id", "positioner")).children(
+          s.positioner(h.div.attr("id", "positioner").style(model.tinted ? { zIndex: "10" } : {})).children(
             s.popup(h.div.attr("id", "popup")).children(s.arrow(h.div), "Bold")
           )
         )
@@ -201,11 +202,12 @@ describe("Tooltip in a document", { concurrent: false }, () => {
       assert.isNull(byId("positioner").getAttribute("data-anchor-hidden"))
     }).pipe(Effect.scoped))
 
-  it.effect("writes the position back when the style attribute is replaced", () =>
+  it.effect("keeps the position when a render changes the positioner's style", () =>
     Effect.gen(function*() {
-      yield* mountPage()
-      byId("positioner").setAttribute("style", "position:absolute")
+      const root = yield* mountPage()
+      root.send(Message.Restyled())
       yield* tick
+      assert.strictEqual(style("z-index"), "10")
       assert.strictEqual(style("left"), "350px")
       assert.strictEqual(style("top"), "592px")
     }).pipe(Effect.scoped))

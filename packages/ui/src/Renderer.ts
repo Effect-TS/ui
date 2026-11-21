@@ -165,7 +165,13 @@ export interface Host<Node> {
   createElement(tag: string): Node
   createText(text: string): Node
   setText(node: Node, text: string): void
-  setAttr(node: Node, name: string, value: string | undefined): void
+  /**
+   * Sets an attribute of `node`, or removes it when `value` is `undefined`.
+   * `previous` is the value the renderer takes the attribute to hold before
+   * the call: the one it last set, or the one hydration read from the node,
+   * and `undefined` when it holds none.
+   */
+  setAttr(node: Node, name: string, value: string | undefined, previous?: string | undefined): void
   setProp(node: Node, name: string, value: unknown): void
   insertBefore(parent: Node, node: Node, ref: Node | undefined): void
   remove(node: Node): void
@@ -184,8 +190,7 @@ export interface Host<Node> {
    * Returns `attrs` keyed by the names `setAttr` stores them under on `node`,
    * the later of two aliases winning, so that updating or removing a losing
    * alias does not change the winning one. May return `attrs` itself. The
-   * names it returns are passed to `setAttr` as they are when two records are
-   * diffed; mounting and hydration pass the original names.
+   * names it returns are passed to `setAttr` as they are.
    */
   readonly normalizeAttrs?:
     | ((node: Node, attrs: Readonly<Record<string, string>>) => Readonly<Record<string, string>>)

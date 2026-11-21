@@ -43,9 +43,9 @@
  * - with `offsetAsPadding`, the side offset as padding on the side that
  *   faces the anchor
  *
- * The mount writes them again when a render replaces the positioner's
- * `style` attribute. They stay after the mount ends, so a closing popup
- * keeps its place through an exit transition.
+ * They survive view-rendered changes to the positioner's `style` attribute,
+ * and stay after the mount ends, so a closing popup keeps its place through
+ * an exit transition.
  *
  * While it runs, the mount places the popup again when the window resizes,
  * when the positioner changes size, and, unless `disableAnchorTracking` is
@@ -1220,12 +1220,6 @@ export const trackPosition = (
     let reported: Placement | null = null
     let owned = written.get(node) ?? new Map<string, string>()
 
-    const restore = () => {
-      for (const [name, value] of owned) {
-        if (node.style.getPropertyValue(name) !== value) node.style.setProperty(name, value)
-      }
-    }
-
     const viewportOf = (): Rect => ({
       x: 0,
       y: 0,
@@ -1245,7 +1239,7 @@ export const trackPosition = (
 
     const bridged = (side: Physical): number => {
       const value = owned.get("padding-" + side)
-      return value !== undefined && node.style.getPropertyValue("padding-" + side) === value ? parseFloat(value) : 0
+      return value !== undefined ? parseFloat(value) : 0
     }
 
     const popupSize = (): Size => ({
@@ -1291,7 +1285,9 @@ export const trackPosition = (
       }
       owned = next
       written.set(node, owned)
-      restore()
+      for (const [name, value] of owned) {
+        if (node.style.getPropertyValue(name) !== value) node.style.setProperty(name, value)
+      }
       const report: Placement = {
         side: placed.side,
         align: placed.align,
@@ -1313,8 +1309,6 @@ export const trackPosition = (
 
     const observe = (): () => void => {
       const anchor = current.disableAnchorTracking ? null : document.querySelector(current.anchorSelector)
-      const styles = new view.MutationObserver(restore)
-      styles.observe(node, { attributes: true, attributeFilter: ["style"] })
       view.addEventListener("resize", update)
       if (!current.disableAnchorTracking) {
         document.addEventListener("scroll", update, { capture: true, passive: true })
@@ -1336,7 +1330,6 @@ export const trackPosition = (
       watch()
       const moves = anchor === null ? () => {} : observeMove(anchor, update)
       return () => {
-        styles.disconnect()
         view.removeEventListener("resize", update)
         document.removeEventListener("scroll", update, { capture: true })
         view.cancelAnimationFrame(frame)

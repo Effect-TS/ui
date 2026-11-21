@@ -2105,4 +2105,128 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(renders).toBe(2)
       }).pipe(Effect.scoped)
   )
+
+  describe("inline style", () => {
+    it.effect(
+      "declarations written by onMount survive when a patch adds, changes, or removes the view's style, winning on shared properties",
+      () =>
+        Effect.gen(function*() {
+          const Position = Mount.make("Position", { args: {} }, (element: HTMLElement) =>
+            Effect.sync(() => {
+              element.style.setProperty("left", "10px")
+              element.style.setProperty("--available-width", "500px")
+              element.style.setProperty("z-index", "9", "important")
+              return Component.noop
+            }))
+          const Page = Component.define({
+            name: "StyledPositioner",
+            model: Schema.Number,
+            message: Schema.Number,
+            elements: Html
+          }).make({
+            init: () => 0,
+            update: (_, next) => next,
+            view: (step, h) => {
+              const div = h.div.onMount(Position())
+              return step === 0
+                ? div
+                : step === 1
+                ? div.style({ inset: "auto", "--available-width": "100vw", color: "red", zIndex: "1" })
+                : step === 2
+                ? div.style({ inset: "auto", "--available-width": "100vw", color: "blue", zIndex: "2" })
+                : div.style({})
+            }
+          })
+          const app = yield* container
+          const root = yield* BrowserHost.mountEffect(Page, {}, app)
+          yield* tick
+          const box = app.firstElementChild as HTMLElement
+          const read = () => ({
+            color: box.style.getPropertyValue("color"),
+            left: box.style.getPropertyValue("left"),
+            availableWidth: box.style.getPropertyValue("--available-width"),
+            zIndex: box.style.getPropertyValue("z-index"),
+            zPriority: box.style.getPropertyPriority("z-index")
+          })
+
+          root.send(1)
+          yield* tick
+          expect(read()).toEqual({
+            color: "red",
+            left: "10px",
+            availableWidth: "500px",
+            zIndex: "9",
+            zPriority: "important"
+          })
+
+          root.send(2)
+          yield* tick
+          expect(read()).toEqual({
+            color: "blue",
+            left: "10px",
+            availableWidth: "500px",
+            zIndex: "9",
+            zPriority: "important"
+          })
+
+          root.send(3)
+          yield* tick
+          expect(read()).toEqual({
+            color: "",
+            left: "10px",
+            availableWidth: "500px",
+            zIndex: "9",
+            zPriority: "important"
+          })
+        }).pipe(Effect.scoped)
+    )
+
+    it.effect("an untouched element lets the later style alias win on mount and keeps the view's exact style text after a patch", () =>
+      Effect.gen(function*() {
+        const Page = Component.define({
+          name: "UntouchedStyle",
+          model: Schema.Boolean,
+          message: Schema.Boolean,
+          elements: Html
+        }).make({
+          init: () => false,
+          update: (_, next) => next,
+          view: (changed, h) =>
+            changed
+              ? h.div.attr("style", "color: blue; margin-top: 8px")
+              : h.div.attr("STYLE", "color: green").attr("style", "color: red; margin-top: 4px")
+        })
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Page, {}, app)
+        yield* tick
+        const box = app.firstElementChild as HTMLElement
+        expect(box.getAttribute("style")).toBe("color: red; margin-top: 4px")
+        root.send(true)
+        yield* tick
+        expect(box.getAttribute("style")).toBe("color: blue; margin-top: 8px")
+      }).pipe(Effect.scoped))
+
+    it.effect("a hydration style mismatch replaces the server's style text", () =>
+      Effect.gen(function*() {
+        const Page = Component.define({
+          name: "HydrateStyle",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) => h.div.attr("style", "color: blue")
+        })
+        const rendered = yield* HtmlServer.renderToHtml(Page, {})
+        const app = yield* container
+        app.innerHTML = rendered.html
+        const box = app.firstElementChild as HTMLElement
+        box.setAttribute("style", "color: red; font-weight: bold")
+        yield* BrowserHost.mountEffect(Page, {}, app, { state: rendered.state })
+        yield* tick
+        expect(box.getAttribute("style")).toBe("color: blue")
+        expect(box.style.getPropertyValue("font-weight")).toBe("")
+      }).pipe(Effect.scoped))
+  })
 })
