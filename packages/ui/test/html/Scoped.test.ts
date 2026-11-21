@@ -408,6 +408,7 @@ describe("scoped children in a receiver that waits for its Layer", () => {
   })
 
   let drafts = 0
+  let start: "slot" | "aside" = "slot"
   const Where = Schema.Literals(["slot", "aside", "none", "ended"])
   const draft = (name: string) =>
     Component.define({ name, scoped: true, model: Schema.String, message: Schema.Never, elements: Html }).make({
@@ -438,7 +439,7 @@ describe("scoped children in a receiver that waits for its Layer", () => {
     message: Where,
     elements: Html
   }).make({
-    init: () => "slot" as const,
+    init: () => start,
     update: (_, where) => where,
     view: (where, h) =>
       h.scoped((s) => {
@@ -481,21 +482,25 @@ describe("scoped children in a receiver that waits for its Layer", () => {
       }).pipe(Effect.scoped)
   )
 
-  it.effect("start again with the server's Model when moved as they wait for their own Layer", () =>
-    Effect.gen(function*() {
-      drafts = 0
-      const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Restarting, {}))
-      const root = yield* BrowserHost.mountEffect(Restarting, {}, app, { state })
-      const served = app.querySelector("input")!
-      root.send("aside")
-      yield* tick
-      yield* open
-      yield* root.adopted
-      const moved = app.querySelector<HTMLInputElement>("aside input")!
-      assert.deepStrictEqual(Array.from(app.querySelectorAll("input")), [moved])
-      assert.notStrictEqual(moved, served)
-      assert.strictEqual(moved.value, "server")
-    }).pipe(Effect.scoped))
+  it.effect.each([["slot", "aside"], ["aside", "slot"], ["slot", "slot"]] as const)(
+    "that wait for their own Layer in the %s keep the server's Model when next placed in the %s",
+    ([from, to]) =>
+      Effect.gen(function*() {
+        drafts = 0
+        start = from
+        const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Restarting, {}))
+        const served = app.querySelector("input")!
+        const root = yield* BrowserHost.mountEffect(Restarting, {}, app, { state })
+        root.send(to)
+        yield* tick
+        yield* open
+        yield* root.adopted
+        const placed = app.querySelector<HTMLInputElement>(to === "slot" ? "p input" : "aside input")!
+        assert.deepStrictEqual(Array.from(app.querySelectorAll("input")), [placed])
+        assert.strictEqual(placed === served, from === to)
+        assert.strictEqual(placed.value, "server")
+      }).pipe(Effect.scoped)
+  )
 
   it.effect("get no message sent as a flush ended them, when that flush lists them again", () =>
     Effect.gen(function*() {

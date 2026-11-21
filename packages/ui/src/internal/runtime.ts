@@ -6099,16 +6099,8 @@ const setup = (
         if (range === undefined) {
           if (view._tag !== "Child" || view.alive === undefined) return undefined
           created++
-          if (kind?._tag !== "Open") {
-            const made = createChild(inst, view, env)
-            adoptedUpTo = node
-            return made
-          }
-          const mark = host.createText("")
-          host.insertBefore(host.parentOf(node), mark, node)
           const made = createChild(inst, view, env)
-          adoptedUpTo = host.nextOf(mark)
-          host.remove(mark)
+          adoptedUpTo = node
           return made
         }
         const next = host.nextOf(range.close)
@@ -6941,9 +6933,7 @@ const setup = (
       entry.alive = alive
       entry.round = table.round
       const inner = entry.inner
-      if (inner._tag === "Fallback" || inner.inst.failure !== undefined || !(inner.inst.closed || inner.inst.waiting)) {
-        return take(entry, inst, at, view, env, range)
-      }
+      if (inner._tag === "Fallback" || !inner.inst.waiting) return take(entry, inst, at, view, env, range)
       endKept(entry)
     }
     const component = view.component as Component.Any
@@ -7259,12 +7249,8 @@ const setup = (
       entry.round = entry.table.round
       const inner = entry.inner
       if (inner._tag === "Child" && inner.inst.closed) {
-        if (inner.inst.failure === undefined) {
-          endKept(entry)
-          return patchScoped(inst, at, view, env)
-        }
         const placeholder = swapOut(inner)
-        const failed = entry.inner = at.inner = failedChild(inst, view, inner.inst.failure, env)
+        const failed = entry.inner = at.inner = failedChild(inst, view, inner.inst.failure!, env)
         const parentNode = host.parentOf(placeholder.node)
         if (parentNode !== undefined) insertNodes(parentNode, failed, placeholder.node)
         host.remove(placeholder.node)
@@ -7273,11 +7259,7 @@ const setup = (
       at.inner = entry.inner = patchChild(inst, inner, view, env)
       return at
     }
-    if (old._tag !== "Text") {
-      at.inner = swapOut(old)
-      if (entry === undefined || entry.inner !== old) closeAll(inst, old)
-    }
-    const placeholder = (at.inner as RText).node
+    const placeholder = (old as RText).node
     const next = at.inner = drawScoped(inst, at, view, env)
     const parentNode = host.parentOf(placeholder)
     if (parentNode !== undefined) insertNodes(parentNode, next, placeholder)
