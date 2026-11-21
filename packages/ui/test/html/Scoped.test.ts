@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, Query } from "@effect/ui"
+import { Component, Query, UiSchema } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
@@ -206,6 +206,79 @@ const SlowPage = Component.define({
   })
 
 describe("scoped children in a receiver that waits for its Layer", () => {
+  it.live("start at once when moved out of the receiver while it waits", () =>
+    Effect.gen(function*() {
+      let inits = 0
+      const DraftMsg = UiSchema.TaggedEnum({ Bump: {} })
+      const Draft = Component.define({
+        name: "Draft",
+        scoped: true,
+        model: Schema.String,
+        message: DraftMsg,
+        receives: ["Bump"],
+        elements: Html
+      }).make({
+        init: () => inits++ === 0 ? "server draft" : "client draft",
+        update: (draft) => draft + "!",
+        view: (draft, h) => h.p(draft)
+      })
+      const DraftRef = Draft.ref("d")
+      const Gate = Component.define({
+        name: "Gate",
+        scoped: false,
+        props: Schema.Struct({ open: Schema.Boolean }),
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html,
+        slots: ["body"]
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => h.article(h.props.open ? h.slots.body : null)
+      })
+      const GatePage = Component.define({
+        name: "GatePage",
+        scoped: false,
+        model: Schema.Literals(["framed", "moved", "open"]),
+        message: Schema.Literals(["move", "bump", "open"]),
+        elements: Html
+      }).make({
+        init: () => "framed" as const,
+        update: (_, message, $) =>
+          message === "bump" ? $.send(DraftRef, DraftMsg.Bump()) : message === "move" ? "moved" : "open",
+        view: (state, h) =>
+          h.scoped((s) =>
+            h.main(
+              SlowFrame(h, {
+                key: "f",
+                slots: { body: state === "framed" ? Draft(s, { ref: DraftRef }) : h.i("slow") }
+              }),
+              Gate(h, {
+                key: "g",
+                props: { open: state === "open" },
+                slots: { body: state === "framed" ? null : Draft(s, { ref: DraftRef }) }
+              })
+            )
+          )
+      })
+      const rendered = yield* HtmlServer.renderToHtml(GatePage, {})
+      const app = yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          const element = document.body.appendChild(document.createElement("div"))
+          element.innerHTML = rendered.html
+          return element
+        }),
+        (element) => Effect.sync(() => element.remove())
+      )
+      const root = yield* BrowserHost.mountEffect(GatePage, {}, app, { state: rendered.state })
+      root.send("move")
+      root.send("bump")
+      yield* root.adopted
+      root.send("open")
+      yield* Effect.sleep("30 millis")
+      assert.strictEqual(app.querySelector("p")?.textContent, "server draft!")
+    }).pipe(Effect.scoped))
+
   it.live("keep the server's nodes once the receiver adopts them", () =>
     Effect.gen(function*() {
       leafInits = 0
@@ -271,6 +344,73 @@ describe("scoped children of a headless child", () => {
         yield* tick
         yield* collectGarbage
         assert.isUndefined(button.deref())
+      }).pipe(Effect.scoped)
+  )
+
+  it.effect.skipIf(process.versions.bun !== undefined || process.versions.deno !== undefined)(
+    "a waiting receiver doesn't keep alive the writes its author replaced",
+    () =>
+      Effect.gen(function*() {
+        let stuck = false
+        let made: Array<WeakRef<object>> = []
+        const Stuck = Component.define({
+          name: "Stuck",
+          scoped: false,
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html,
+          slots: ["body"]
+        }).make({ init: () => null, update: (model) => model, view: (_, h) => h.section(h.slots.body) })
+          .pipe(
+            Component.provide(Layer.effect(Slow, Effect.suspend(() => stuck ? Effect.never : Effect.succeed("ready"))))
+          )
+        const Item = Component.define({
+          name: "Item",
+          scoped: true,
+          props: Schema.Struct({ n: Schema.Number }),
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        }).make({ init: () => null, update: (model) => model, view: (_, h) => h.b(String(h.props.n)) })
+        const Rows = Component.define({
+          name: "Rows",
+          scoped: false,
+          model: Schema.Number,
+          message: Schema.Null,
+          elements: Html
+        }).make({
+          init: () => 0,
+          update: (n) => n + 1,
+          view: (n, h) => {
+            const props = { n }
+            made.push(new WeakRef(props))
+            return h.scoped((s) => h.main(Stuck(h, { key: "f", slots: { body: Item(s, { key: "i", props }) } })))
+          }
+        })
+        const rendered = yield* HtmlServer.renderToHtml(Rows, {})
+        stuck = true
+        made = []
+        const app = yield* Effect.acquireRelease(
+          Effect.sync(() => {
+            const element = document.body.appendChild(document.createElement("div"))
+            element.innerHTML = rendered.html
+            return element
+          }),
+          (element) => Effect.sync(() => element.remove())
+        )
+        const root = yield* BrowserHost.mountEffect(Rows, {}, app, { state: rendered.state })
+        for (let i = 0; i < 6; i++) {
+          root.send(null)
+          yield* tick
+        }
+        yield* collectGarbage
+        assert.deepStrictEqual(made.slice(1, -1).map((ref) => ref.deref()), [
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined
+        ])
       }).pipe(Effect.scoped)
   )
 })

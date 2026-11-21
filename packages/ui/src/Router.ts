@@ -1444,13 +1444,13 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       mode: { readonly quiet: boolean; readonly scroll: boolean; readonly blocks?: ReadonlyArray<string> | undefined },
       saved?: Record<string, unknown> | undefined
     ) => {
+      restoring = saved === undefined ? undefined : new Map(Object.entries(saved))
       // First, so whatever the navigation starts sees the cache with the hydration window closed.
-      for (const root of roots) root.navigated()
+      for (const root of roots) root.navigated(!mode.quiet)
       const runs = next.action === "push" || (next.action === "replace" && !mode.quiet)
       const checks = runs ? runDeclarations(next, false) : []
       const from = pathnameOf(current.url)
       current = next
-      restoring = saved === undefined ? undefined : new Map(Object.entries(saved))
       const previous = pending
       const blocked = [...(previous?.blocks ?? []), ...(mode.blocks ?? [])]
       if (previous !== undefined && !previous.quiet && mode.quiet) {

@@ -1,4 +1,15 @@
-import { Command, Component, Head, type MessageLog, Mount, Renderer, Route, Router, UiSchema } from "@effect/ui"
+import {
+  Command,
+  Component,
+  Head,
+  type MessageLog,
+  Mount,
+  Renderer,
+  Route,
+  Router,
+  UiSchema,
+  type View
+} from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Locator, Scene, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -1174,16 +1185,29 @@ const ShellMsg = UiSchema.TaggedEnum({
   Done: {},
   Hide: { hidden: Schema.Boolean },
   End: { ended: Schema.Boolean },
-  Bare: { bare: Schema.Boolean }
+  Bare: { bare: Schema.Boolean },
+  Omit: { omitted: Schema.Boolean }
 })
+const Aside = Component.define({ name: "Aside", scoped: false, model: Schema.Boolean, message: Schema.Boolean }).make({
+  init: () => false,
+  update: (_, hidden) => hidden,
+  view: (hidden, h) => h.el("aside", h.scoped((s) => hidden ? null : Draft(s, { key: "d" })))
+})
+
 const Shell = Component.define({
   name: "Shell",
   scoped: false,
   props: Schema.Struct({ route: TabsRoute }),
-  model: Schema.Struct({ route: TabsRoute, hidden: Schema.Boolean, ended: Schema.Boolean, bare: Schema.Boolean }),
+  model: Schema.Struct({
+    route: TabsRoute,
+    hidden: Schema.Boolean,
+    ended: Schema.Boolean,
+    bare: Schema.Boolean,
+    omitted: Schema.Boolean
+  }),
   message: ShellMsg
 }).make({
-  init: ($) => ({ route: $.props.route, hidden: false, ended: false, bare: false }),
+  init: ($) => ({ route: $.props.route, hidden: false, ended: false, bare: false, omitted: false }),
   update: (model, message, $) =>
     ShellMsg.match(message, {
       Changed: ({ route }) => ({ ...model, route }),
@@ -1191,7 +1215,8 @@ const Shell = Component.define({
       Done: () => model,
       Hide: ({ hidden }) => ({ ...model, hidden }),
       End: ({ ended }) => ({ ...model, ended }),
-      Bare: ({ bare }) => ({ ...model, bare })
+      Bare: ({ bare }) => ({ ...model, bare }),
+      Omit: ({ omitted }) => ({ ...model, omitted })
     }),
   subscriptions: (model) => [
     Router.subscription(TabsRoute, model.route, (route) => ShellMsg.Changed({ route }))
@@ -1200,16 +1225,12 @@ const Shell = Component.define({
     h.el(
       "div",
       h.el("button").on("click", ShellMsg.Go({ route: TabsRoute.make({ _tag: "Home" }) })).children("Home"),
-      model.route._tag === "Tabs"
-        ? FormPage(h, { key: "/tabs", props: { hidden: model.hidden, ended: model.ended, bare: model.bare } })
-        : h.el("p", "home")
+      model.route._tag !== "Tabs"
+        ? h.el("p", "home")
+        : model.omitted
+        ? model.hidden ? Aside(h, { key: "a" }) : null
+        : FormPage(h, { key: "/tabs", props: { hidden: model.hidden, ended: model.ended, bare: model.bare } })
     )
-})
-
-const Aside = Component.define({ name: "Aside", scoped: false, model: Schema.Boolean, message: Schema.Boolean }).make({
-  init: () => false,
-  update: (_, hidden) => hidden,
-  view: (hidden, h) => h.el("aside", h.scoped((s) => hidden ? null : Draft(s, { key: "d" })))
 })
 
 type History = ReturnType<typeof Router.memoryHistory>
@@ -1342,6 +1363,52 @@ describe("scoped children across a router restore", () => {
         root.send(ShellMsg.Bare({ bare: false }))
         yield* TestHost.settle
         assert.strictEqual(root.text(), "Homedraft:nested:")
+      })
+    ))
+
+  it.effect("keeps a draft whose page a Back left out, for when the page is shown", () =>
+    routed((history) =>
+      Effect.gen(function*() {
+        const root = yield* TestHost.mount(Shell, Router.props(TabsRoute))
+        yield* TestHost.settle
+        click(root, "draft:")
+        yield* TestHost.settle
+        click(root, "Home")
+        yield* TestHost.settle
+        root.send(ShellMsg.Omit({ omitted: true }))
+        history.go(-1)
+        yield* TestHost.settle
+        root.send(ShellMsg.Omit({ omitted: false }))
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "Homedraft:anested:")
+      })
+    ))
+
+  it.effect("starts a fresh push blank after a Back that left the page out, and Back still restores it", () =>
+    routed((history) =>
+      Effect.gen(function*() {
+        const root = yield* TestHost.mount(Shell, Router.props(TabsRoute))
+        yield* TestHost.settle
+        click(root, "draft:")
+        yield* TestHost.settle
+        click(root, "Home")
+        yield* TestHost.settle
+        root.send(ShellMsg.Omit({ omitted: true }))
+        yield* hide(root, true)
+        history.go(-1)
+        yield* TestHost.settle
+        click(root, "Home")
+        yield* TestHost.settle
+        root.send(ShellMsg.Omit({ omitted: false }))
+        yield* hide(root, false)
+        root.send(ShellMsg.Go({ route: TabsRoute.make({ _tag: "Tabs" }) }))
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "Homedraft:nested:")
+        history.go(-1)
+        yield* TestHost.settle
+        history.go(-1)
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "Homedraft:anested:")
       })
     ))
 
@@ -1679,6 +1746,100 @@ describe("scoped children written into closed slots", () => {
         yield* TestHost.settle
       }
       assert.strictEqual(starts, 1)
+    })))
+
+  it.effect("keeps a child one headless writer stopped writing and another writes", () =>
+    provideHost(Effect.gen(function*() {
+      const Writer = Component.define({ name: "Writer", scoped: false, model: Schema.Null, message: Schema.Never })
+        .make({ init: () => null, update: (model) => model, parts: () => ({}) })
+      const Page = Component.define({ name: "Page", scoped: false, model: Schema.Number, message: Schema.Null })
+        .make({
+          init: () => 0,
+          update: (phase) => phase + 1,
+          view: (phase, h) =>
+            h.scoped(({ model }) => model !== 0, (s) =>
+              h.el(
+                "div",
+                Writer(h, { key: "a", view: () => h.el("i", phase === 0 ? Billing(s, { key: "b" }) : null) }),
+                Writer(h, { key: "b", view: () => h.el("i", phase === 2 ? Billing(s, { key: "b" }) : null) })
+              ))
+        })
+      const root = yield* TestHost.mount(Page, {})
+      yield* TestHost.settle
+      root.send(null)
+      yield* TestHost.settle
+      root.send(null)
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "billing")
+    })))
+
+  it.effect("fails the author that writes two components of one name and key", () =>
+    provideHost(Effect.gen(function*() {
+      const define = () =>
+        Component.define({ name: "Row", scoped: true, model: Schema.Null, message: Schema.Never })
+          .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p", "row") })
+      const [First, Second] = [define(), define()]
+      const Inner = Component.define({ name: "Inner", scoped: false, model: Schema.Null, message: Schema.Never })
+        .make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) =>
+            h.scoped((s) =>
+              h.el(
+                "div",
+                Shut(h, { key: "x", slots: { body: First(s, { key: "k" }) } }),
+                Shut(h, { key: "y", slots: { body: Second(s, { key: "k" }) } })
+              )
+            )
+        })
+      const root = yield* TestHost.mount(host(Inner), {})
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "down")
+    })))
+
+  it.effect("draws a child its author returns again without writing it again", () =>
+    provideHost(Effect.gen(function*() {
+      let cached: View.Child<any, any> | undefined
+      const Page = Component.define({ name: "Page", scoped: false, model: Schema.Number, message: Schema.Null })
+        .make({
+          init: () => 0,
+          update: (count) => count + 1,
+          view: (_, h) => h.scoped((s) => h.el("div", cached ??= Billing(s, { key: "b" })))
+        })
+      const root = yield* TestHost.mount(Page, {})
+      yield* TestHost.settle
+      root.send(null)
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "billing")
+    })))
+
+  it.effect("draws a child a failed child's fallback writes", () =>
+    provideHost(Effect.gen(function*() {
+      const Broken = Component.define({ name: "Broken", scoped: false, model: Schema.Null, message: Schema.Never })
+        .make({
+          init: () => null,
+          update: (model) => model,
+          view: () => {
+            throw new Error("broken")
+          }
+        })
+      const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never })
+        .make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) =>
+            h.scoped((s) =>
+              h.el(
+                "div",
+                h.el("p", "before"),
+                Broken(h, { key: "x", fallback: () => Billing(s, { key: "b" }) }),
+                h.el("p", "after")
+              )
+            )
+        })
+      const root = yield* TestHost.mount(Page, {})
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "beforebillingafter")
     })))
 
   it.effect.each(["open", "closed", "false"] as const)(

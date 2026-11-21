@@ -383,7 +383,7 @@ interface Claim {
 interface KeptTable {
   round: number
   readonly children: Map<Component.Any | Feature.Any, Map<string, Kept>>
-  readonly writes: Map<Component.Any | Feature.Any, Map<string, Array<Claim>>>
+  readonly writes: Map<string, Array<Claim>>
   ask: ((alive: (input: Component.Alive<any, any, any>) => boolean, key: string) => boolean) | undefined
 }
 
@@ -1312,13 +1312,33 @@ const setup = (
     deferred: new Set(options.state["~deferred"] ?? []),
     drawn: new Set(options.state["~scoped"] as ReadonlyArray<string> | undefined)
   }
-  let unadopted: Array<readonly [Instance, View.Child<any, any>]> | undefined
+  let unadopted: Map<string, readonly [Instance, View.Child<any, any>]> | undefined
+  const waiters = new Set<Instance>()
+  const writerOf = (inst: Instance) => (inst.parent ?? keptAuthor(inst))?.author
+  const holds = (input: unknown, writer: Instance | undefined, view: View.Child<any, any>): boolean => {
+    if (input === view) return true
+    if (Array.isArray(input)) return input.some((item) => holds(item, writer, view))
+    if (input === null || typeof input !== "object") return false
+    const node = input as View.Node<any, any>
+    if (node._tag === "Element") return holds(node.children, writer, view)
+    if (node._tag === "Child") return node.slots !== undefined && holds(Object.values(node.slots), writer, view)
+    if (node._tag !== "Outlet" || writer === undefined) return false
+    return holds(slottedBy.get(writer)?.values?.[node.name], writerOf(writer), view)
+  }
+  const adoptable = (view: View.Child<any, any>) => {
+    for (const waiter of waiters) {
+      const held = heldPlacement.get(waiter)
+      const values = held === undefined ? slottedBy.get(waiter)?.values : held.slots
+      if (values !== undefined && holds(Object.values(values), writerOf(waiter), view)) return true
+    }
+    return false
+  }
   const settleUnadopted = () => {
     const pending = unadopted
     if (pending === undefined) return
     unadopted = undefined
     defer(() => {
-      for (const [inst, view] of pending) if (!inst.closed) settleWrites(inst, [view])
+      for (const [inst, view] of pending.values()) if (!inst.closed) settleWrites(inst, [view])
       if (keeping.length > 0) flushKept()
     })
   }
@@ -1372,7 +1392,9 @@ const setup = (
    */
   const shippedStatus = (path: string): Shipped | undefined =>
     (hydrating?.state["~status"] as { readonly [path: string]: Shipped } | undefined)?.[path]
-  const settleWaiting = () => {
+  const settleWaiting = (inst: Instance) => {
+    waiters.delete(inst)
+    settleUnadopted()
     // A reader below a held owner may have mounted, or gone.
     if (heldReports.size > 0) {
       for (const owner of heldReports) dueReports(owner)
@@ -1385,7 +1407,6 @@ const setup = (
     if (adoptedDone) return
     adoptedDone = true
     hydrating = undefined
-    settleUnadopted()
     // `adopted` completes at the end of this flush.
     reportPending = true
     // Head sync starts with the flush after adoption.
@@ -2766,6 +2787,9 @@ const setup = (
     if (inst.owners !== undefined) { for (const owner of inst.owners.values()) owner.readers?.delete(inst) }
     if (writersLive > 0) endWrites(inst)
     if (waitingState !== undefined) forget(inst.path)
+    if (unadopted !== undefined) {
+      for (const [path, [by]] of unadopted) if (by === inst) unadopted.delete(path)
+    }
     const waits = stopRuns(inst)
     if (waits.length === 0) {
       unmounted(inst)
@@ -2794,7 +2818,7 @@ const setup = (
     // A child that closes while it waits no longer holds up adoption.
     if (inst.waiting) {
       inst.waiting = false
-      settleWaiting()
+      settleWaiting(inst)
     }
   }
 
@@ -3385,7 +3409,7 @@ const setup = (
     const tree = viewOf(inst)
     const written = takeWrites()
     if (tree === undefined) return
-    if (written !== undefined || keptLive > 0) noteWrites(inst, written)
+    if (written !== undefined || writersLive > 0) noteWrites(inst, written)
     let taken: Rendered | undefined
     let rendered: Rendered
     try {
@@ -3438,6 +3462,7 @@ const setup = (
     })
     layer.logEarly()
     inst.waiting = true
+    waiters.add(inst)
     waiting++
     range.claimed = true
     inst.rendered = packed(rangeNodes(range).map((node) => new TextRecord(emptyText, node)))
@@ -3467,7 +3492,7 @@ const setup = (
       if (adopt) recordAdopted(inst)
       if (held !== undefined && adopt && !inst.closed && inst.failure === undefined) applyPlacement(inst, held)
       viewChanged = true
-      settleWaiting()
+      settleWaiting(inst)
     }
     whenReady(inst.env, () => defer(() => resume(true)), () => {
       if (inst.component.layerFailure !== undefined) defer(() => resume(false))
@@ -5439,7 +5464,7 @@ const setup = (
     const tree = viewOf(inst)
     const written = takeWrites()
     if (tree === undefined) return
-    if (written !== undefined || keptLive > 0) noteWrites(inst, written)
+    if (written !== undefined || writersLive > 0) noteWrites(inst, written)
     guard(inst, "view", () => {
       const parentNode = host.parentOf(firstNodeOfList(inst.rendered))!
       const ref = host.nextOf(lastNodeOfList(inst.rendered))
@@ -6801,11 +6826,10 @@ const setup = (
     if (last === undefined) writersLive++
     lastWrites.set(inst, written)
     for (const view of written) {
-      let byKey = table.writes.get(view.component)
-      if (byKey === undefined) table.writes.set(view.component, byKey = new Map())
-      const claims = byKey.get(view.key)
+      const named = segment(view)
+      const claims = table.writes.get(named)
       if (claims === undefined) {
-        byKey.set(view.key, [{ by: inst, view }])
+        table.writes.set(named, [{ by: inst, view }])
         continue
       }
       if (claims.some((claim) => claim.by === inst)) return failTwice(author, view)
@@ -6819,13 +6843,13 @@ const setup = (
     failLater(author, new Error(`${author.path} writes ${segment(view)} twice in one render`))
   const dropClaims = (inst: Instance, table: KeptTable, written: ReadonlyArray<View.Child<any, any>>) => {
     for (const view of written) {
-      const byKey = table.writes.get(view.component)
-      const claims = byKey?.get(view.key)
+      const named = segment(view)
+      const claims = table.writes.get(named)
       if (claims === undefined) continue
       const at = claims.findIndex((claim) => claim.by === inst)
       if (at === -1) continue
       claims.splice(at, 1)
-      if (claims.length === 0) byKey!.delete(view.key)
+      if (claims.length === 0) table.writes.delete(named)
     }
   }
   const endWrites = (inst: Instance) => {
@@ -6837,14 +6861,15 @@ const setup = (
     writersLive--
   }
   const isCurrent = (table: KeptTable, view: View.Child<any, any>) => {
-    const claims = table.writes.get(view.component)?.get(view.key)
-    return claims !== undefined && claims[claims.length - 1].view === view
+    const claims = table.writes.get(segment(view))
+    return claims === undefined || claims[claims.length - 1].view === view
   }
 
   const settleWrites = (inst: Instance, written: ReadonlyArray<View.Child<any, any>>) => {
     const author = inst.author
     const table = tableOf(author)
     for (const view of written) {
+      if (unadopted !== undefined) unadopted.delete(`${author.path}/${segment(view)}`)
       const entry = entryAt(author, view)
       if (!isCurrent(table, view) || entry?.at?.v === view) continue
       const alive = aliveOf(view)
@@ -6865,8 +6890,8 @@ const setup = (
         continue
       }
       const path = `${author.path}/${segment(view)}`
-      if (hydrating?.drawn.has(path)) {
-        ;(unadopted ??= []).push([inst, view])
+      if (hydrating?.drawn.has(path) && adoptable(view)) {
+        ;(unadopted ??= new Map()).set(path, [inst, view])
         continue
       }
       const inner = makeChild(author, view, author.env, undefined, path, Scope.forkUnsafe(author.scope, "sequential"))
@@ -6906,6 +6931,7 @@ const setup = (
 
   const blankText = (range: Range | undefined): RText => {
     if (range !== undefined && !range.claimed) removeRange(range)
+    created++
     return new TextRecord(emptyText, host.createText(""))
   }
 
@@ -7333,7 +7359,6 @@ const setup = (
   if (waiting === 0 && !adoptedDone) {
     adoptedDone = true
     hydrating = undefined
-    settleUnadopted()
     reportPending = true
   }
   // Mounting drains like a flush, its head fold included. `onMount` work runs after the commit, so its
@@ -7344,20 +7369,12 @@ const setup = (
   if (reportPending) reportAdoption()
   host.commit?.()
 
-  const authorVisited = (path: string, visited: ReadonlySet<string>) => {
-    for (let at = path.indexOf("/", rootPath.length + 1); at !== -1; at = path.indexOf("/", at + 1)) {
-      if (visited.has(path.slice(0, at))) return true
-    }
-    return false
-  }
   const snapshot = (): Record<string, unknown> => {
     const out: Record<string, unknown> = {}
     const kept: Record<string, unknown> = {}
-    const visited = waitingState === undefined ? undefined : new Set<string>()
     let into = out
     let drawn: Instance | undefined
     const visit = (inst: Instance) => {
-      visited?.add(inst.path)
       // A keyed query's pending writes go first, so the result holds only the declared keys. A
       // navigation issued in the `update` that changed them runs in the flush's deferred work, which
       // can come before the drain gets to them.
@@ -7390,7 +7407,7 @@ const setup = (
     visit(root)
     if (waitingState !== undefined) {
       for (const [path, saved] of waitingState) {
-        if (!Object.hasOwn(kept, path) && authorVisited(path, visited!)) kept[path] = saved
+        if (!Object.hasOwn(kept, path)) kept[path] = saved
       }
     }
     for (const _ in kept) {
@@ -7410,7 +7427,13 @@ const setup = (
       flushing: () => rendering,
       snapshot,
       // The first navigation closes the fetch-free window, if adoption hasn't yet.
-      navigated: closeWindow,
+      navigated: (leaves) => {
+        closeWindow()
+        if (leaves && waitingState !== undefined) {
+          for (const path of Array.from(waitingState.keys())) if (!hydrating?.drawn.has(path)) dropWaiting(path)
+        }
+        addWaiting(hooks.restore("~kept" + rootPath))
+      },
       report
     }
     const detach = hooks.attach(handle)
