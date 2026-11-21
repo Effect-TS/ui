@@ -1475,11 +1475,18 @@ const setup = (
       keptTables.get(from.author!)!.served!.delete(from)
     }
   }
-  const rangeOf = (from: Served | undefined): Range | undefined => {
-    if (from === undefined || host.parentOf(from.range.open) === undefined) return undefined
+  const rangeOf = (from: Served | undefined): Range | undefined =>
+    from === undefined || host.parentOf(from.range.open) === undefined ? undefined : from.range
+  const vacate = (from: Served, taken: Rendered, linked: boolean) => {
     const held = from.waiter.rendered as Rendered | undefined
-    if (held?._tag === "Held" && host.parentOf(held.node) !== undefined) held.nodes = emptyList
-    return from.range
+    if (held?._tag !== "Held") return
+    const parentNode = host.parentOf(held.node)
+    if (parentNode === undefined) return
+    for (const node of nodesOf(taken)) {
+      if (host.parentOf(node) !== parentNode) continue
+      if (linked) host.insertBefore(parentNode, node, held.node)
+      else host.remove(node)
+    }
   }
   let late: Map<Instance, Array<Held>> | undefined
   let heldCount = 0
@@ -1562,10 +1569,18 @@ const setup = (
     if (under !== undefined) { for (const saved of Array.from(under)) dropWaiting(saved) }
     dropWaiting(path)
   }
+  const holding = new Set<string>()
+  const servedLive = (path: string): boolean => {
+    for (let cut = path.length; cut > 0; cut = path.lastIndexOf("/", cut - 1)) {
+      const above = path.slice(0, cut)
+      if (holding.has(above) || servedIn?.get(above)?.view !== undefined) return true
+    }
+    return false
+  }
   const addWaiting = (saved: unknown, late?: boolean) => {
     if (saved === null || typeof saved !== "object") return
     for (const path in saved) {
-      if (servedIn?.get(path)?.view === undefined) setWaiting(path, (saved as Record<string, unknown>)[path], late)
+      if (!servedLive(path)) setWaiting(path, (saved as Record<string, unknown>)[path], late)
     }
   }
   const restoreKept = () => {
@@ -2954,6 +2969,7 @@ const setup = (
     // However the instance goes, a removed ancestor and failure included, its owners forget it.
     if (inst.owners !== undefined) { for (const owner of inst.owners.values()) owner.readers?.delete(inst) }
     if (writersLive > 0) endWrites(inst)
+    if (inst.waiting) holding.delete(inst.path)
     if (waitingState !== undefined && inst.born > restoredAt) forget(inst.path)
     const waits = stopRuns(inst)
     if (waits.length === 0) {
@@ -3687,11 +3703,13 @@ const setup = (
         if (served.length > 0) servedBy.set(inst, served)
       }
       range.claimed = true
+      holding.add(inst.path)
       inst.rendered = { _tag: "Held", v: emptyText, node: range.open, range, nodes: emptyList }
     } else inst.rendered = new TextRecord(emptyText, host.createText(""))
     const resume = (adopt: boolean, start: () => void) => {
       if (inst.closed || !inst.waiting) return
       inst.waiting = false
+      holding.delete(inst.path)
       const nodes = nodesOf(inst.rendered as Rendered)
       inst.rendered = undefined
       if (range !== undefined) range.claimed = false
@@ -7067,14 +7085,10 @@ const setup = (
       endKept(entry)
     }
     const component = view.component as Component.Any
-    const inner = makeChild(
-      inst,
-      view,
-      env,
-      range ?? rangeOf(from),
-      named,
-      Scope.forkUnsafe(author.scope, "sequential")
-    )
+    const taken = range === undefined ? rangeOf(from) : undefined
+    const before = holding.size
+    const inner = makeChild(inst, view, env, range ?? taken, named, Scope.forkUnsafe(author.scope, "sequential"))
+    if (taken !== undefined) vacate(from!, inner, holding.size !== before)
     const made: Kept = {
       author,
       table,
@@ -7213,14 +7227,10 @@ const setup = (
         from.round = table.round
         continue
       }
-      const inner = makeChild(
-        author,
-        view,
-        author.env,
-        rangeOf(from),
-        path,
-        Scope.forkUnsafe(author.scope, "sequential")
-      )
+      const taken = rangeOf(from)
+      const before = holding.size
+      const inner = makeChild(author, view, author.env, taken, path, Scope.forkUnsafe(author.scope, "sequential"))
+      if (taken !== undefined) vacate(from!, inner, holding.size !== before)
       if (inner._tag === "Child") {
         unhook(inner.inst)
         leaveOwners(inner.inst)
@@ -7779,7 +7789,7 @@ const setup = (
         closeWindow()
         if ((leaves || pops) && waitingState !== undefined) {
           for (const path of Array.from(waitingState.keys())) {
-            if (servedIn?.get(path)?.view !== undefined) continue
+            if (servedLive(path)) continue
             dropWaiting(path)
             hydrating?.deferred.add(path)
           }
