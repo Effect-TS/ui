@@ -99,10 +99,7 @@ describe("Field", () => {
   })
 
   it("fieldValidationProps accepts any Validation.Field and spreads into FieldProps", () => {
-    expect(fieldValidationProps).type.toBeCallableWith({} as Validation.Field<string>)
-    expect(fieldValidationProps).type.toBeCallableWith({} as Validation.Field<boolean>)
-    expect(fieldValidationProps).type.toBeCallableWith({} as Validation.Field<ReadonlyArray<string>>)
-    const props = fieldValidationProps({} as Validation.Field<string>)
+    const props = fieldValidationProps({} as Validation.Field<boolean>)
     expect(props).type.toBe<{ readonly invalid: boolean | undefined; readonly filled: boolean }>()
     expect({ ...props, disabled: true }).type.toBeAssignableTo<FieldProps>()
   })

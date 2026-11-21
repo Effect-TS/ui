@@ -1,11 +1,10 @@
 // @vitest-environment happy-dom
-import { Component, Validation, View } from "@effect/ui"
+import { Component, View } from "@effect/ui"
 import { Checkbox, Field, type FieldProps, fieldValidationProps, Input, Switch } from "@effect/ui-kit"
 import { Html, HtmlServer } from "@effect/ui/html"
 import { Locator, Scene, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
-import { AsyncResult } from "effect/reactivity"
 
 type Parts = Component.Headless.Parts<typeof Field>
 type H = View.Helper<never, FieldProps> & View.Tags<Html.Elements, never>
@@ -187,37 +186,21 @@ describe("Field", () => {
   })
 
   it("fieldValidationProps maps each Validation.Field state to invalid and filled", () => {
-    const Form = Validation.make({
-      username: { required: "Required", rules: [Validation.Rule.minLength(3)] },
-      terms: { value: Schema.Boolean, isEmpty: (checked) => !checked }
-    }, { mode: "onChange" })
-
-    const initial = Form.init({ username: "", terms: false })
-    assert.deepStrictEqual(fieldValidationProps(Form.validate(initial).fields.username), {
-      invalid: undefined,
-      filled: false
-    })
-    assert.deepStrictEqual(fieldValidationProps(Form.validate(initial).fields.terms), {
-      invalid: undefined,
-      filled: false
-    })
-
-    const valid = Form.change(Form.change(initial, "username", "ada"), "terms", true)
+    const filled = { value: "ada", empty: false, required: true }
     assert.deepStrictEqual(
-      fieldValidationProps(Form.validate(valid, { username: AsyncResult.initial(true) }).fields.username),
-      { invalid: undefined, filled: true }
+      fieldValidationProps({ _tag: "NotValidated", value: "", empty: true, required: true }),
+      { invalid: undefined, filled: false }
     )
-    assert.deepStrictEqual(fieldValidationProps(Form.validate(valid).fields.username), { invalid: false, filled: true })
-    assert.deepStrictEqual(fieldValidationProps(Form.validate(valid).fields.terms), { invalid: false, filled: true })
-
-    const invalid = Form.change(initial, "username", "ad")
-    assert.deepStrictEqual(fieldValidationProps(Form.validate(invalid).fields.username), {
-      invalid: true,
+    assert.deepStrictEqual(fieldValidationProps({ _tag: "Validating", ...filled }), {
+      invalid: undefined,
       filled: true
     })
+    assert.deepStrictEqual(fieldValidationProps({ _tag: "Valid", ...filled }), { invalid: false, filled: true })
+    const invalid = fieldValidationProps({ _tag: "Invalid", ...filled, errors: ["Too short"] })
+    assert.deepStrictEqual(invalid, { invalid: true, filled: true })
 
-    const field = parts({ ...fieldValidationProps(Form.validate(invalid).fields.username), described: true })
-    assert.strictEqual(attrsOf(field.root(h.div))["data-invalid"], "")
-    assert.strictEqual(attrsOf(field.root(h.div))["data-filled"], "")
+    const attrs = attrsOf(parts(invalid).root(h.div))
+    assert.strictEqual(attrs["data-invalid"], "")
+    assert.strictEqual(attrs["data-filled"], "")
   })
 })

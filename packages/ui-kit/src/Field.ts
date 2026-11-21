@@ -230,10 +230,7 @@ export type FieldProps = typeof FieldProps.Type
  * - `invalid`: `true` for `Invalid`, `false` for `Valid`, and `undefined`
  *   for `NotValidated` and `Validating`, so a field that hasn't shown yet or
  *   is waiting on a check shows neither `data-invalid` nor `data-valid`.
- * - `filled`: `!field.empty`, using the field's own `isEmpty`.
- *
- * Spread the result into `Field`'s `props` alongside any other props such as
- * `disabled` or `described`.
+ * - `filled`: `true` unless the field is `empty`.
  *
  * **Example** (Mapping a validated field to `Field` props)
  *

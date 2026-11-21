@@ -761,35 +761,35 @@ export const make = <S, K extends string>(
       const value = state.values[name]
       const empty = spec.isEmpty(value)
       const message = requiredMessage(spec, state.values)
-      const required = message !== undefined
+      const shared = { value, empty, required: message !== undefined }
       const rejected = Object.hasOwn(state.rejected, name) ? state.rejected[name] : undefined
       // The field's result before it shows. An optional empty field is
       // acceptable and has no result to show.
       let result: Field<unknown>
       if (rejected !== undefined) {
-        result = { _tag: "Invalid", value, empty, required, errors: rejected }
+        result = { _tag: "Invalid", ...shared, errors: rejected }
       } else if (empty) {
         result = message === undefined
-          ? { _tag: "NotValidated", value, empty, required }
-          : { _tag: "Invalid", value, empty, required, errors: [message] }
+          ? { _tag: "NotValidated", ...shared }
+          : { _tag: "Invalid", ...shared, errors: [message] }
       } else {
         const errors = ruleErrors(spec, value, state.values, all)
         const check = Object.hasOwn(checks, name) ? checks[name] : undefined
         if (isNonEmpty(errors)) {
-          result = { _tag: "Invalid", value, empty, required, errors }
+          result = { _tag: "Invalid", ...shared, errors }
         } else if (check === undefined) {
-          result = { _tag: "Valid", value, empty, required }
+          result = { _tag: "Valid", ...shared }
         } else if (check._tag === "Success" && !check.waiting) {
           result = isNonEmpty(check.value)
-            ? { _tag: "Invalid", value, empty, required, errors: check.value }
-            : { _tag: "Valid", value, empty, required }
+            ? { _tag: "Invalid", ...shared, errors: check.value }
+            : { _tag: "Valid", ...shared }
         } else {
-          result = { _tag: "Validating", value, empty, required }
+          result = { _tag: "Validating", ...shared }
         }
       }
       acceptable &&= result._tag === "Valid" || result._tag === "NotValidated"
       if (rejected === undefined && !shows(state, name)) {
-        result = { _tag: "NotValidated", value, empty, required }
+        result = { _tag: "NotValidated", ...shared }
       }
       fields.push([name, result])
       invalid ||= result._tag === "Invalid"
