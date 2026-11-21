@@ -86,14 +86,46 @@ function getEntryEnd(
   return nodeEnd + trailing.length
 }
 
-function formatPartition(entries: ReadonlyArray<ImportEntry>): string {
+function sortNamedSpecifiersInEntry(
+  node: ESTree.ImportDeclaration,
+  entryStart: number,
+  entryText: string,
+  text: string
+): string {
+  const named = node.specifiers.filter(
+    (s): s is ESTree.ImportSpecifier => s.type === "ImportSpecifier"
+  )
+  if (named.length < 2) return entryText
+
+  const sorted = [...named].sort((a, b) => a.local.name < b.local.name ? -1 : a.local.name > b.local.name ? 1 : 0)
+
+  let changed = false
+  for (let i = 0; i < named.length; i++) {
+    if (named[i] !== sorted[i]) {
+      changed = true
+      break
+    }
+  }
+  if (!changed) return entryText
+
+  let result = entryText
+  for (let i = named.length - 1; i >= 0; i--) {
+    const targetStart = named[i].range[0] - entryStart
+    const targetEnd = named[i].range[1] - entryStart
+    const replacement = text.slice(sorted[i].range[0], sorted[i].range[1])
+    result = result.slice(0, targetStart) + replacement + result.slice(targetEnd)
+  }
+  return result
+}
+
+function formatPartition(entries: ReadonlyArray<ImportEntry>, text: string): string {
   const sorted = [...entries].sort((a, b) =>
     a.group - b.group || (a.source < b.source ? -1 : a.source > b.source ? 1 : a.index - b.index)
   )
-  let output = sorted[0].text
+  let output = sortNamedSpecifiersInEntry(sorted[0].node, sorted[0].start, sorted[0].text, text)
   for (let i = 1; i < sorted.length; i++) {
     output += sorted[i].group !== sorted[i - 1].group ? "\n\n" : "\n"
-    output += sorted[i].text
+    output += sortNamedSpecifiersInEntry(sorted[i].node, sorted[i].start, sorted[i].text, text)
   }
   return output
 }
@@ -102,7 +134,8 @@ const rule: CreateRule = {
   meta: {
     type: "layout",
     docs: {
-      description: "Group and sort import declarations while preserving side-effect boundaries and file headers"
+      description:
+        "Group and sort import declarations and named imports while preserving side-effect boundaries and file headers"
     },
     fixable: "code"
   },
@@ -111,16 +144,17 @@ const rule: CreateRule = {
     const text = sourceCode.text
 
     function checkPartition(entries: ReadonlyArray<ImportEntry>) {
-      if (entries.length < 2) return
+      if (entries.length === 0) return
       const partitionStart = entries[0].start
       const partitionEnd = entries[entries.length - 1].end
       const original = text.slice(partitionStart, partitionEnd)
-      const formatted = formatPartition(entries)
+      const formatted = formatPartition(entries, text)
       if (formatted === original) return
 
       context.report({
         node: entries[0].node,
-        message: "Imports should be grouped (builtin/external, scoped, local) and sorted alphabetically",
+        message:
+          "Imports should be grouped (builtin/external, scoped, local) with sorted declarations and named specifiers",
         fix: (fixer: Fixer) => fixer.replaceTextRange([partitionStart, partitionEnd], formatted)
       })
     }

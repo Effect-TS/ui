@@ -24,10 +24,6 @@
     "effect/sort-imports": "error",
     // Tune native rules
     // Import rules
-    "eslint/sort-imports": ["error", {
-      "ignoreDeclarationSort": true,
-      "ignoreCase": false
-    }],
     "typescript/consistent-type-imports": ["error", {
       "fixStyle": "inline-type-imports"
     }],

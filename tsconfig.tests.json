@@ -6,7 +6,8 @@
     "**/vitest.*.ts", // All vitest config files across all packages
     "./packages/*/test/**/*.ts",
     "./packages/*/typetest/**/*.ts",
-    "./packages/*/benchmark/**/*.ts"
+    "./packages/*/benchmark/**/*.ts",
+    "./packages/tools/oxc/test/**/*.ts"
   ],
   "exclude": [
     "**/node_modules/**",
