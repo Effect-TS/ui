@@ -1384,7 +1384,14 @@ export const dispatch = <Props, Model, Msg, Events>(
   // `undefined` is a handler's "no message", and `Component.noop` a Command's or a mount's.
   message === undefined || isNoop(message)
     ? story
-    : apply(story, story.component.update(story.model, message, story.props, story.results))
+    : apply(story, story.component.update(story.model, message, story.props, story.results, sharedOf(story)))
+
+const sharedOf = (story: State<any, any, any, any>): Component.SharedRecord | undefined => {
+  const reads = sharedReads.readsOf(story.component.definition)
+  return reads.length === 0
+    ? undefined
+    : sharedReads.values(story.component.definition.name, reads, rootShared(sharedGiven.get(story)))
+}
 
 /** `node` and its ancestors in `root`, innermost first, or `undefined` when `node` isn't in `root`. */
 const pathTo = (root: View.Node<any, any>, node: Locator.Node): Array<View.Node<any, any>> | undefined => {

@@ -17,6 +17,7 @@ export interface Read {
 }
 
 const none: ReadonlyArray<Read> = []
+const noValues: Component.SharedRecord = Object.freeze({})
 const cache = new WeakMap<object, ReadonlyArray<Read>>()
 
 /**
@@ -45,6 +46,45 @@ export const readsOf = (definition: Component.Definition.Any, self?: Component.A
     cache.set(shared, reads)
   }
   return reads
+}
+
+/** @internal */
+export const values = (
+  name: string,
+  reads: ReadonlyArray<Read>,
+  lookup: Component.SharedLookup | undefined
+): Component.SharedRecord => {
+  if (reads.length === 0) return noValues
+  const out: { [name: string]: unknown } = {}
+  for (const read of reads) {
+    if (lookup === undefined) {
+      if (read.optional) {
+        out[read.name] = undefined
+        continue
+      }
+      throw new Error(
+        `${name} reads the shared state of ${read.owner.definition.name}, and nothing supplies it: render it below a ${read.owner.definition.name}`
+      )
+    }
+    out[read.name] = lookup(read.owner, read.optional)
+  }
+  return out
+}
+
+/** @internal */
+export const unsupplied = (name: string, reads: ReadonlyArray<Read>): Component.SharedRecord => {
+  if (reads.length === 0) return noValues
+  const out: { [name: string]: unknown } = {}
+  for (const read of reads) {
+    if (read.optional) out[read.name] = undefined
+    else {
+      Object.defineProperty(out, read.name, {
+        enumerable: true,
+        get: () => values(name, [read], undefined)[read.name]
+      })
+    }
+  }
+  return out
 }
 
 /**

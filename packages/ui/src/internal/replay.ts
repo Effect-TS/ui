@@ -12,6 +12,7 @@ import * as MessageLog from "../MessageLog.ts"
 import type { Divergence, Replay } from "../testing/Story.ts"
 import type * as View from "../View.ts"
 import * as componentQueries from "./queries.ts"
+import * as sharedReads from "./shared.ts"
 import { serverFailure, type SlotResult } from "./slotStatus.ts"
 import * as engine from "./story.ts"
 
@@ -175,10 +176,25 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
       )
     }
   }
+  const reads = sharedReads.readsOf(component.definition)
+  const sharedOf = (wire: Extract<MessageLog.Wire, { _tag: "Update" }>): Component.SharedRecord | undefined => {
+    const encoded = wire.shared as { readonly [name: string]: unknown } | undefined
+    if (encoded === undefined) return undefined
+    const out: { [name: string]: unknown } = {}
+    for (const read of reads) {
+      if (!(read.name in encoded)) continue
+      const schema = read.owner.definition.sharesSchema
+      out[read.name] = schema === undefined
+        ? encoded[read.name]
+        : decodeWith(wire, `shared "${read.name}"`, schema, encoded[read.name])
+    }
+    return out
+  }
   const read = (entry: typeof first) => {
     if (typeof entry.component !== "string") {
       return {
         results: (entry as MessageLog.Update | MessageLog.Mounted).queries,
+        shared: entry._tag === "Update" ? (entry as MessageLog.Update).shared : undefined,
         props: entry.props as Props,
         model: entry.model as Model,
         events: entry.events as ReadonlyArray<Events>,
@@ -193,6 +209,7 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
       results: wire.queries !== undefined && bound !== undefined
         ? decodeWith(entry, "queries", bound.logSchema, wire.queries) as Component.Results
         : undefined,
+      shared: wire._tag === "Update" ? sharedOf(wire) : undefined,
       props: decode(entry, "props", wire.props) as Props,
       model: decode(entry, "model", wire.model) as Model,
       events: wire.events.map((emitted) => decode(entry, "events", emitted)) as ReadonlyArray<Events>,
@@ -307,7 +324,13 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
     state.props = recorded.props
     state.boundary = entry.boundary
     if (recorded.results !== undefined) state.results = recorded.results
-    const next = component.update(state.model, recorded.message as Msg, recorded.props as Props, state.results)
+    const next = component.update(
+      state.model,
+      recorded.message as Msg,
+      recorded.props as Props,
+      state.results,
+      recorded.shared
+    )
     replayed++
     const recomputed = {
       model: next.model,

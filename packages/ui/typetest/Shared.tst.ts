@@ -85,6 +85,38 @@ describe("shared state", () => {
     expect<Component.Requirements<typeof provided>>().type.toBe<TipsShared>()
   })
 
+  it("types $.shared in update by the entries of shared, undefined for an optional owner", () => {
+    const def = Component.define({
+      name: "Reads",
+      model: Schema.Null,
+      message: TipMessage,
+      shared: { provider: TipsProvider, maybe: { owner: TipsProvider, optional: true } }
+    })
+    def.update((model, _msg, $) => {
+      expect($.shared).type.toBe<{
+        readonly provider: { open: string | null }
+        readonly maybe: { open: string | null } | undefined
+      }>()
+      return model
+    })
+    def.update("Enter", (model, _msg, $) => {
+      expect($.shared.maybe).type.toBe<{ open: string | null } | undefined>()
+      return model
+    })
+  })
+
+  it("checks the schema of shares against its value", () => {
+    const options = { name: "Owner", model: Schema.Struct({ n: Schema.Number }), message: TipMessage }
+    expect(Component.define).type.toBeCallableWith({
+      ...options,
+      shares: { value: (model: { readonly n: number }) => model.n, schema: Schema.Number }
+    })
+    expect(Component.define).type.not.toBeCallableWith({
+      ...options,
+      shares: { value: (model: { readonly n: number }) => model.n, schema: Schema.String }
+    })
+  })
+
   it("checks a send against the owner's receives", () => {
     Component.define({ name: "S", model: Schema.Null, message: TipMessage }).update((model, _msg, $) => {
       expect($.send(TipsProvider, { _tag: "Enter", id: "a" })).type.not.toRaiseError()

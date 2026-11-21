@@ -2692,10 +2692,13 @@ const setup = (
       renderAbove(inst)
       if (inst.closed || inst.waiting || frozen) return
       const component = inst.component
+      const reads = sharedReads.readsOf(component.definition)
       let next: ReturnType<typeof component.update>
+      let shared: Component.SharedRecord | undefined
       busy++
       try {
-        next = component.update(inst.model, message as never, inst.props, inst.results)
+        if (reads.length > 0) shared = sharedReads.values(component.definition.name, reads, sharedOf(inst))
+        next = component.update(inst.model, message as never, inst.props, inst.results, shared)
       } catch (error) {
         // No `Update` is logged for it, so the failure carries the message.
         return failInstance(inst, Cause.die(error), "update", undefined, { message, source })
@@ -2715,7 +2718,8 @@ const setup = (
         lists: next.lists ?? [],
         sends: next.sends ?? [],
         // What `update` saw in `$.queries`, so a replay from any surviving entry sees it too.
-        ...(bound === undefined ? undefined : { queries: inst.results ?? bound.empty })
+        ...(bound === undefined ? undefined : { queries: inst.results ?? bound.empty }),
+        ...(shared === undefined ? undefined : { shared })
       })
       apply(inst, next, entrySeq, false)
     })
