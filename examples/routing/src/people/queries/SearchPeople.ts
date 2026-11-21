@@ -19,5 +19,5 @@ export class SearchPeople extends Query.Service<SearchPeople>()(
     error: Schema.Never,
     staleTime: "Infinity"
   },
-  Effect.succeed((args) => runSearchPeople(args))
+  Effect.succeed(runSearchPeople)
 ) {}

@@ -1,6 +1,6 @@
 import { Command, Component, Head, Router, Subscription, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Duration, Effect, Schema, Stream } from "effect"
+import { Effect, Schema, Stream } from "effect"
 import { FilesIndexPage } from "./pages/files/FilesIndexPage.ts"
 import { FilesPage } from "./pages/files/FilesPage.ts"
 import { HomePage } from "./pages/HomePage.ts"
@@ -29,10 +29,9 @@ const routeTitle = (route: AppRoute): string => {
 }
 
 const recordSearch = (history: ReadonlyArray<string>, route: AppRoute): ReadonlyArray<string> =>
-  route._tag === "People" ? addSearchToHistory(history, route.search.searchText ?? "") : history
+  route._tag === "People" ? addSearchToHistory(history, route.search.searchText) : history
 
 const SHORTCUT_PREFIX = "g"
-const SHORTCUT_TIMEOUT = Duration.seconds(1)
 
 const shortcutRoutes: ReadonlyMap<string, AppRoute> = new Map<string, AppRoute>([
   ["h", AppRoute.Home()],
@@ -45,9 +44,13 @@ export const AppMessage = UiSchema.TaggedEnum({
   ChangedRoute: { route: AppRoute },
   PressedShortcutKey: { key: Schema.String },
   ExpiredShortcutPrefix: {},
-  FocusedSearchInput: {},
-  BlurredSearchInput: {}
+  ChangedSearchInputFocus: { focused: Schema.Boolean }
 })
+
+const shortcutTimeout = Subscription.make(
+  "shortcutTimeout",
+  Stream.fromEffect(Effect.as(Effect.sleep("1 second"), AppMessage.ExpiredShortcutPrefix()))
+)
 
 const People = PeoplePage.ref("People")
 
@@ -102,9 +105,8 @@ export const App = AppDef.make({
 
     ExpiredShortcutPrefix: (_model, _message, $) => $.evolve({ shortcutPending: false }),
 
-    FocusedSearchInput: (_model, _message, $) => $.evolve({ searchInputFocused: true, shortcutPending: false }),
-
-    BlurredSearchInput: (_model, _message, $) => $.evolve({ searchInputFocused: false })
+    ChangedSearchInputFocus: (_model, { focused }, $) =>
+      $.evolve({ searchInputFocused: focused, shortcutPending: false })
   },
 
   subscriptions: (model) => [
@@ -119,11 +121,7 @@ export const App = AppDef.make({
         ? AppMessage.PressedShortcutKey({ key: pressed })
         : undefined
     }),
-    model.shortcutPending &&
-    Subscription.make(
-      "shortcutTimeout",
-      Stream.fromEffect(Effect.as(Effect.sleep(SHORTCUT_TIMEOUT), AppMessage.ExpiredShortcutPrefix()))
-    )
+    model.shortcutPending && shortcutTimeout
   ],
 
   head: (model) => [Head.title(routeTitle(model.route))],
@@ -140,7 +138,7 @@ export const App = AppDef.make({
           )
         )
       ),
-      h.main.class("py-8").children(
+      h.main.class("max-w-4xl mx-auto px-4 py-8").children(
         AppRoute.match(route, {
           Home: () => HomePage(h),
           Nested: () => NestedPage(h),
@@ -148,10 +146,7 @@ export const App = AppDef.make({
             PeoplePage(h, {
               ref: People,
               props: { route, searchHistory },
-              onEmit: {
-                FocusedSearchInput: () => AppMessage.FocusedSearchInput(),
-                BlurredSearchInput: () => AppMessage.BlurredSearchInput()
-              }
+              onEmit: { ChangedSearchInputFocus: ({ focused }) => AppMessage.ChangedSearchInputFocus({ focused }) }
             }),
           Person: ({ params }) => PersonPage(h, params.personId),
           FilesIndex: () => FilesIndexPage(h),

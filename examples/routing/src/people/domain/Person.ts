@@ -15,12 +15,11 @@ const people: ReadonlyArray<Person> = [
   { id: 5, name: "Eva Brown", role: "Designer" }
 ]
 
-const matchesQuery = (person: Person, query: string): boolean => {
-  const lowerQuery = query.toLowerCase()
-  return person.name.toLowerCase().includes(lowerQuery) || person.role.toLowerCase().includes(lowerQuery)
+export const searchPeople = (searchText: string): ReadonlyArray<Person> => {
+  const query = searchText.toLowerCase()
+  return people.filter((person) =>
+    person.name.toLowerCase().includes(query) || person.role.toLowerCase().includes(query)
+  )
 }
-
-export const searchPeople = (searchText: string): ReadonlyArray<Person> =>
-  searchText === "" ? people : people.filter((person) => matchesQuery(person, searchText))
 
 export const findPerson = (id: number) => Arr.findFirst(people, (person) => person.id === id)
