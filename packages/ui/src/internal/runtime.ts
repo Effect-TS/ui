@@ -7470,20 +7470,30 @@ const setup = (
       if (inst.closed || inst.failure !== undefined) return
       const was = into
       const entry = keptLive > 0 ? keptEntries.get(inst) : undefined
+      if (entry !== undefined) {
+        if (inst.waiting) return
+        const author = entry.author
+        into = ((keptIn(homes.get(author) ?? out)[author.path] ??= {}) as Saved)[inst.path] = {}
+      }
+      const waits = claims ? waitingOf.get(inst) : undefined
+      if (waits !== undefined) {
+        for (const child in waits) {
+          const saved = waits[child]
+          ;((keptIn(into)[inst.path] ??= {}) as Saved)[child] = saved === hydrating?.state
+            ? subtree(saved, child)
+            : saved
+        }
+      }
       if (inst.waiting) {
-        if (entry !== undefined) return
         const path = inst.path
         const restored = restoring.get(inst)
         if (restored !== undefined) into[path] = restored
         else if (hydrating !== undefined) {
-          const state = hydrating.state
-          for (const key in state) if (key === path || key.startsWith(path + "/")) into[key] = state[key]
+          const { "~kept": kept, "~scoped": _, ...state } = subtree(hydrating.state, path)
+          Object.assign(into, state)
+          if (kept !== undefined) Object.assign(keptIn(into), kept)
         }
         return
-      }
-      if (entry !== undefined) {
-        const author = entry.author
-        into = ((keptIn(homes.get(author) ?? out)[author.path] ??= {}) as Saved)[inst.path] = {}
       }
       // An outlet has no state of its own, only the children of the content it places. An owner of shared
       // state is left out: a reload would reopen what nobody hovers. Its subtree isn't.
@@ -7495,15 +7505,6 @@ const setup = (
         else {
           warnLate(inst, ctx)
           encoded.addObserver((exit) => write(inst, to, path, exit))
-        }
-      }
-      const waits = claims ? waitingOf.get(inst) : undefined
-      if (waits !== undefined) {
-        for (const child in waits) {
-          const saved = waits[child]
-          ;((keptIn(into)[inst.path] ??= {}) as Saved)[child] = saved === hydrating?.state
-            ? subtree(saved, child)
-            : saved
         }
       }
       const table = keptLive > 0 ? keptTables.get(inst) : undefined

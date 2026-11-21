@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
-import { Command, Component, Route, Router, UiSchema } from "@effect/ui"
+import { Command, Component, Query, Route, Router, UiSchema } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Context, Deferred, Effect, Layer, Schema, SchemaGetter } from "effect"
+import { AsyncResult } from "effect/reactivity"
 
 const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 0)))
 
@@ -65,7 +66,41 @@ const Holder = Component.define({
   view: (_, h) => h.scoped((s) => h.div(ScopedForm(s, { key: "d" })))
 })
 
-type Page = "slow form" | "slow side" | "late form" | "scoped form"
+class GetTab extends Query.Service<GetTab>()("GetTab", {
+  args: {},
+  success: Schema.String,
+  error: Schema.Never,
+  staleTime: "30 seconds"
+}, Effect.succeed(() => Effect.succeed("billing"))) {}
+const Draft = Component.define({
+  name: "Draft",
+  scoped: true,
+  model: Schema.String,
+  message: Schema.Never,
+  elements: Html
+}).make({
+  init: () => inits++ === 0 ? "server" : "client",
+  update: (model) => model,
+  view: (text, h) => h.input.value(text)
+})
+const LateSettings = Component.define({
+  name: "LateSettings",
+  scoped: false,
+  model: Late,
+  message: Schema.String,
+  elements: Html,
+  queries: { tab: { query: GetTab, args: () => ({}) } }
+}).make({
+  init: () => "",
+  update: (_, shown) => shown,
+  view: (shown, h) =>
+    h.div(
+      h.button.onClick("shown").children("show"),
+      shown !== "" || !AsyncResult.isSuccess(h.queries.tab) ? h.scoped((s) => Draft(s, { key: "d" })) : null
+    )
+}).pipe(Component.provide(GetTab.layer))
+
+type Page = "slow form" | "slow side" | "late form" | "scoped form" | "late settings"
 const Routes = Route.union({ Home: Route.make("/"), Away: Route.make("/away") })
 const Msg = UiSchema.TaggedEnum({ Changed: { route: Routes }, Go: {}, Went: {} })
 const appOf = (page: Page) =>
@@ -96,11 +131,13 @@ const appOf = (page: Page) =>
           ? LateForm(h, { key: "f" })
           : page === "scoped form"
           ? Holder(h, { key: "f" })
+          : page === "late settings"
+          ? LateSettings(h, { key: "f" })
           : SlowForm(h, { key: "f" })
       )
   })
 
-const visit = Effect.fnUntraced(function*(page: Page) {
+const visit = Effect.fnUntraced(function*(page: Page, ready = false) {
   inits = 0
   gate = Effect.void
   const App = appOf(page)
@@ -109,7 +146,7 @@ const visit = Effect.fnUntraced(function*(page: Page) {
     Effect.provide(Router.make({ routes: Routes, history: Router.memoryHistory("/") }))
   )
   const latch = yield* Deferred.make<void>()
-  gate = Deferred.await(latch)
+  if (!ready) gate = Deferred.await(latch)
   const app = document.body.appendChild(document.createElement("div"))
   yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
   app.innerHTML = html
@@ -134,6 +171,46 @@ describe("history restore of a page whose hydration hasn't settled", () => {
       }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
     }
   )
+
+  it.effect.each([true, false])(
+    "Back restores a scoped child the server kept undrawn (its author's state decoded at first: %s)",
+    (ready) => {
+      const history = Router.memoryHistory("/")
+      return Effect.gen(function*() {
+        const { app, open, root } = yield* visit("late settings", ready)
+        assert.notInclude(app.innerHTML, "input")
+        root.send(Msg.Go())
+        yield* tick
+        yield* open
+        history.go(-1)
+        yield* tick
+        app.querySelector("button")!.click()
+        yield* tick
+        assert.strictEqual(app.querySelector("input")!.value, "server")
+      }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
+    }
+  )
+
+  it.effect("a second Back restores a scoped child the server kept undrawn, after a push closed its author as it waited", () => {
+    const history = Router.memoryHistory("/")
+    return Effect.gen(function*() {
+      const { app, root } = yield* visit("late settings", true)
+      root.send(Msg.Go())
+      yield* tick
+      const latch = yield* Deferred.make<void>()
+      gate = Deferred.await(latch)
+      history.go(-1)
+      yield* tick
+      root.send(Msg.Go())
+      yield* tick
+      yield* Deferred.succeed(latch, undefined)
+      history.go(-1)
+      yield* tick
+      app.querySelector("button")!.click()
+      yield* tick
+      assert.strictEqual(app.querySelector("input")!.value, "server")
+    }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
+  })
 
   it.effect("Back restores what the user typed in a form a push closed as an earlier Back's state decoded", () => {
     const history = Router.memoryHistory("/")
