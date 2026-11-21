@@ -330,7 +330,6 @@ interface Slotted {
   /** The Env at the receiver's child node: the content resolves its services from it. */
   readonly env: Env
   readonly placed: Map<string, Instance>
-  /** Its author's round when the slots were last passed: behind it, the author no longer writes them. */
   round: number
 }
 
@@ -354,11 +353,6 @@ interface RFallback {
   readonly scoped?: undefined
 }
 
-/**
- * A scoped child where a view writes it: what it shows, or an empty text node when its scope's
- * predicate is false for it or it's drawn somewhere else now. Tagged as a fallback, which shows
- * `inner`, so the walks that only need its nodes treat it as one.
- */
 interface RScoped {
   readonly _tag: "Fallback"
   readonly scoped: true
@@ -1081,7 +1075,6 @@ const serializeTree = (
         if (inst.component.layer !== undefined) ship(path, inst.env.status)
       }
     }
-    // A scoped child keeps its markers: the client finds its nodes by them wherever it draws the child.
     const bare = !inner && entry === undefined && inst.parent !== undefined && inst.component.layer === undefined &&
       !Array.isArray(inst.rendered) && inst.rendered?._tag === "Element"
     if (!bare) sink.enter(path)
@@ -1321,52 +1314,51 @@ const setup = (
     deferred: new Set(options.state["~deferred"] ?? []),
     drawn: new Set(options.state["~scoped"] as ReadonlyArray<string> | undefined)
   }
-  let unadopted: Map<string, readonly [Instance, View.Child<any, any>]> | undefined
-  // The waiting receiver whose server nodes hold each scoped child's: only it can adopt them.
+  let unadopted: Map<Instance, Array<View.Child<any, any>>> | undefined
   let servedIn: Map<string, Instance> | undefined
-  const noteServed = (node: unknown, stop: unknown, waiter: Instance) => {
+  const noteServed = (node: unknown, stop: unknown, waiter: Instance, served: Array<string>) => {
     for (; node !== undefined && node !== stop; node = host.nextOf(node)) {
       const kind = hydration!.inspect(node)
-      if (kind._tag === "Element") noteServed(hydration!.firstChild(node), undefined, waiter)
-      else if (kind._tag === "Open" && hydrating!.drawn.has(kind.path)) (servedIn ??= new Map()).set(kind.path, waiter)
+      if (kind._tag === "Element") noteServed(hydration!.firstChild(node), undefined, waiter, served)
+      else if (kind._tag === "Open" && hydrating!.drawn.has(kind.path)) {
+        ;(servedIn ??= new Map()).set(kind.path, waiter)
+        served.push(kind.path)
+      }
     }
   }
   const writerOf = (inst: Instance) => (inst.parent ?? keptAuthor(inst))?.author
-  /** Adds the scoped children in `input`, what a slot was passed, to `into`. */
-  const collectHeld = (input: unknown, writer: Instance | undefined, into: Set<unknown>): void => {
+  const collectHeld = (input: unknown, writer: Instance | undefined, into: Set<unknown>): boolean => {
     if (Array.isArray(input)) {
-      for (const item of input) collectHeld(item, writer, into)
-      return
+      for (const item of input) if (!collectHeld(item, writer, into)) return false
+      return true
     }
-    if (input === null || typeof input !== "object") return
-    const node = input as View.Node<any, any> & { readonly content?: unknown }
+    if (input === null || typeof input !== "object") return true
+    const node = input as View.Node<any, any> & { readonly content?: unknown; readonly hooks?: unknown }
     if (node._tag === "Child") {
       if (node.alive !== undefined) into.add(node)
-      if (node.slots !== undefined) collectHeld(Object.values(node.slots), writer, into)
-    } else if (node._tag === "Outlet") {
-      if (writer !== undefined) collectHeld(slottedBy.get(writer)?.values?.[node.name], writerOf(writer), into)
-      // An element, or the builder of one.
-    } else collectHeld(node._tag === "Element" ? node.children : node.content, writer, into)
+      return node.view === undefined && node.fallback === undefined &&
+        (node.slots === undefined || collectHeld(Object.values(node.slots), writer, into))
+    }
+    if (node._tag === "Outlet") {
+      return writer === undefined || collectHeld(slottedBy.get(writer)?.values?.[node.name], writerOf(writer), into)
+    }
+    return node.hooks === undefined && collectHeld(node._tag === "Element" ? node.children : node.content, writer, into)
   }
-  /** The scoped children `waiter`'s latest placement holds, which it draws once it adopts. */
-  const heldBy = (waiter: Instance): Set<unknown> => {
+  const heldBy = (waiter: Instance): Set<unknown> | null => {
     const into = new Set<unknown>()
     const held = heldPlacement.get(waiter)
     const values = held === undefined ? slottedBy.get(waiter)?.values : held.slots
-    if (values !== undefined) collectHeld(Object.values(values), writerOf(waiter), into)
-    return into
+    return values === undefined || collectHeld(Object.values(values), writerOf(waiter), into) ? into : null
   }
   const settleUnadopted = () => {
     if (unadopted === undefined) return
     defer(() => {
-      // Each writer settles what it still has pending, once: a receiver that still waits holds its own.
-      for (const inst of new Set(Array.from(unadopted ?? [], ([, [inst]]) => inst))) settleWrites(inst, [])
+      for (const inst of Array.from(unadopted?.keys() ?? [])) settleWrites(inst, [])
       if (unadopted?.size === 0) unadopted = undefined
       if (keeping.length > 0) flushKept()
     })
   }
   let waitingState: Map<string, unknown> | undefined
-  // How many instances were made when a navigation last loaded saved state: those close without taking it.
   let restoredAt = 0
   const waitingUnder = new Map<string, Set<string>>()
   const eachAbove = (path: string, f: (above: string) => void) => {
@@ -1847,6 +1839,7 @@ const setup = (
     sendPasses.clear()
     sharedPasses.clear()
     drain()
+    restoredAt = 0
     if (reportPending) reportAdoption()
     host.commit?.()
     afterCommitHooks()
@@ -2812,9 +2805,7 @@ const setup = (
     if (inst.owners !== undefined) { for (const owner of inst.owners.values()) owner.readers?.delete(inst) }
     if (writersLive > 0) endWrites(inst)
     if (waitingState !== undefined && inst.born > restoredAt) forget(inst.path)
-    if (unadopted !== undefined) {
-      for (const [path, [by]] of unadopted) if (by === inst) unadopted.delete(path)
-    }
+    unadopted?.delete(inst)
     const waits = stopRuns(inst)
     if (waits.length === 0) {
       unmounted(inst)
@@ -3494,7 +3485,18 @@ const setup = (
     })
     layer.logEarly()
     inst.waiting = true
-    if (hydrating!.drawn.size > 0) noteServed(host.nextOf(range.open), range.close, inst)
+    if (hydrating!.drawn.size > 0) {
+      const served: Array<string> = []
+      noteServed(host.nextOf(range.open), range.close, inst, served)
+      if (served.length > 0) {
+        addFinalizer(
+          inst.scope,
+          Effect.sync(() => {
+            for (const path of served) if (servedIn?.get(path) === inst) servedIn.delete(path)
+          })
+        )
+      }
+    }
     waiting++
     range.claimed = true
     inst.rendered = packed(rangeNodes(range).map((node) => new TextRecord(emptyText, node)))
@@ -4937,12 +4939,6 @@ const setup = (
       })
   })
 
-  /**
-   * The containers that hold kept children's nodes. A host's handles may be numbers or strings, which a
-   * host may hand out again. Each container belongs to the author of the scope that wrote the child, so it
-   * is unregistered when the child is drawn again or ends, or when that instance leaves, whichever comes
-   * first. The kept child failing doesn't end it: its fallback shows once it's drawn.
-   */
   const parked = new Map<unknown, { readonly owner: Instance; readonly inner: Rendered }>()
   const park = (owner: Instance, container: unknown, inner: Rendered) => {
     parked.set(container, { owner, inner })
@@ -5518,7 +5514,7 @@ const setup = (
     // Its closures render with it, so all it wrote is current. A closure that rendered alone is checked
     // in the drain, after the render that holds it.
     if (inst.owner === undefined) checkRefs(inst)
-    if ((written !== undefined || unadopted !== undefined) && !inst.closed) settleWrites(inst, written ?? [])
+    if ((written !== undefined || unadopted?.has(inst)) && !inst.closed) settleWrites(inst, written ?? [])
     if (keeping.length > 0 && patching === 0) flushKept()
     if (table !== undefined && !inst.closed) askKept(inst, table)
     if (!inst.closed) viewChanged = true
@@ -6008,7 +6004,6 @@ const setup = (
         const path = view._tag === "Child"
           ? `${(view.alive === undefined ? inst : inst.author).path}/${segment(view)}`
           : outletPath(inst.author, view.name)
-        // A scoped child keeps its markers: its nodes are found by them wherever they're drawn.
         const range: Range | undefined = kind?._tag === "Open" && kind.path === path
           ? rangeFrom(node, path, stop)
           : view._tag === "Child" && view.alive === undefined && kind?._tag === "Element" &&
@@ -6827,8 +6822,7 @@ const setup = (
     let byKey = table.children.get(view.component)
     const entry = byKey?.get(view.key)
     const named = `${author.path}/${segment(view)}`
-    // A receiver adopts with the placement the server's nodes were drawn for, and the write it waited with follows.
-    if (!isCurrent(table, view, entry, inst) && (range === undefined || !unadopted?.has(named))) {
+    if (!isCurrent(table, view, entry, inst) && (range === undefined || entry !== undefined || !servedIn?.has(named))) {
       return blankText(range)
     }
     const alive = aliveOf(view)
@@ -6846,7 +6840,6 @@ const setup = (
       endKept(entry)
     }
     const component = view.component as Component.Any
-    // Forked from the author's Scope, not from the parent's: the child outlives the tree that draws it.
     const inner = makeChild(inst, view, env, range, named, Scope.forkUnsafe(author.scope, "sequential"))
     const made: Kept = {
       author,
@@ -6921,21 +6914,14 @@ const setup = (
     lastWrites.delete(inst)
     writersLive--
   }
-  /**
-   * Whether `inst` may draw `view`: it is the last write for its child. One with no claim is a view its
-   * author returned again without writing it. A receiver whose slots the author no longer writes holds an
-   * old one, which draws the child only while it's still the child's last write, and never starts it.
-   */
   const isCurrent = (table: KeptTable, view: View.Child<any, any>, entry: Kept | undefined, inst: Instance) => {
     const claims = table.writes.get(segment(view))
     return claims !== undefined
       ? claims[claims.length - 1].view === view
       : inst.component !== outletComponent || roundAt(inst) === table.round || entry?.inner.v === view
   }
-  /** The author's round that what `inst` renders was written in: an outlet's content keeps its receiver's. */
   const roundAt = (inst: Instance): number =>
     inst.component === outletComponent ? outletOf.get(inst)!.slotted.round : keptTables.get(inst.author)?.round ?? 0
-  /** A false predicate ends the child at `view`: what was saved for it, or served, goes with it. */
   const endWrite = (author: Instance, view: View.Child<any, any>, entry: Kept | undefined) => {
     if (waitingState !== undefined || hydrating !== undefined) {
       const path = `${author.path}/${segment(view)}`
@@ -6949,19 +6935,14 @@ const setup = (
   }
 
   const settleWrites = (inst: Instance, written: ReadonlyArray<View.Child<any, any>>) => {
-    let views = written
-    if (unadopted !== undefined) {
-      // What it wrote into a waiting receiver before settles first: the receiver may no longer hold it.
-      const pending: Array<View.Child<any, any>> = []
-      for (const [by, view] of unadopted.values()) if (by === inst) pending.push(view)
-      views = pending.concat(written)
-    }
+    const pending = unadopted?.get(inst)
+    const views = pending === undefined ? written : pending.concat(written)
     if (views.length === 0) return
+    unadopted?.delete(inst)
     const author = inst.author
     const table = tableOf(author)
-    let held: Map<Instance, Set<unknown>> | undefined
+    let held: Map<Instance, Set<unknown> | null> | undefined
     for (const view of views) {
-      if (unadopted !== undefined) unadopted.delete(`${author.path}/${segment(view)}`)
       const entry = entryAt(author, view)
       if (!isCurrent(table, view, entry, inst) || entry?.at?.v === view) continue
       const alive = aliveOf(view)
@@ -6985,8 +6966,10 @@ const setup = (
       if (waiter !== undefined && waiter.waiting) {
         let holds = (held ??= new Map()).get(waiter)
         if (holds === undefined) held.set(waiter, holds = heldBy(waiter))
-        if (holds.has(view)) {
-          ;(unadopted ??= new Map()).set(path, [inst, view])
+        if (holds === null || holds.has(view)) {
+          const waits = (unadopted ??= new Map()).get(inst)
+          if (waits === undefined) unadopted.set(inst, [view])
+          else waits.push(view)
           continue
         }
       }
@@ -7048,7 +7031,6 @@ const setup = (
     env: Env,
     range: Range | undefined
   ): RChild | RFallback => {
-    // The server drew it here, and the kept instance's nodes are used instead.
     if (range !== undefined && !range.claimed) {
       removeRange(range)
       created++
@@ -7292,7 +7274,6 @@ const setup = (
       if (entry === undefined || entry.inner !== old) closeAll(inst, old)
     }
     const placeholder = (at.inner as RText).node
-    // Held first: an element that fires an event as it goes in finds the child in the tree.
     const next = at.inner = drawScoped(inst, at, view, env)
     const parentNode = host.parentOf(placeholder)
     if (parentNode !== undefined) insertNodes(parentNode, next, placeholder)

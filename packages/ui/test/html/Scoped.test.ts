@@ -300,7 +300,6 @@ describe("scoped children in a receiver that waits for its Layer", () => {
       assert.strictEqual(app.querySelector("p"), field)
     }).pipe(Effect.scoped))
 
-  // The frame's Layer builds once the gate opens. The server renders with it open.
   let gate: Effect.Effect<void> = Effect.void
   const Gated = Component.define({
     name: "Gated",
@@ -334,7 +333,15 @@ describe("scoped children in a receiver that waits for its Layer", () => {
     message: Schema.Never,
     elements: Html
   }).make({ init: () => null, update: (model) => model, view: (_, h) => h.input.value("server") })
-  const fieldPage = (wrapped: boolean) =>
+  const Box = Component.define({
+    name: "Box",
+    scoped: false,
+    model: Schema.Null,
+    message: Schema.Never,
+    elements: Html
+  })
+    .make({ init: () => null, update: (model) => model, parts: () => ({}) })
+  const fieldPage = (placed: "bare" | "in an element" | "by a forwarded builder" | "by a headless child's view") =>
     Component.define({ name: "FieldPage", scoped: false, model: Schema.Number, message: Schema.Null, elements: Html })
       .make({
         init: () => 0,
@@ -342,13 +349,22 @@ describe("scoped children in a receiver that waits for its Layer", () => {
         view: (_, h) =>
           h.scoped((s) => {
             const field = Field(s, { key: "f" })
-            return h.main(Gated(h, { key: "f", slots: { body: wrapped ? h.div(field) : field } }))
+            const body = placed === "bare"
+              ? field
+              : placed === "in an element"
+              ? h.div(field)
+              : placed === "by a forwarded builder"
+              ? h.label.forward((label) => h.div(label, field))
+              : Box(h, { key: "box", view: () => h.div(field) })
+            return h.main(Gated(h, { key: "f", slots: { body } }))
           })
       })
 
-  it.effect("keep what the user typed into a field the slot wraps in an element", () =>
+  it.effect.each(
+    ["in an element", "by a forwarded builder", "by a headless child's view"] as const
+  )("keep what the user typed into a field the slot draws %s", (placed) =>
     Effect.gen(function*() {
-      const Page = fieldPage(true)
+      const Page = fieldPage(placed)
       const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Page, {}))
       const field = app.querySelector("input")!
       field.value = "typed"
@@ -361,7 +377,7 @@ describe("scoped children in a receiver that waits for its Layer", () => {
 
   it.effect("keep what the user typed into a field its author writes again while the receiver waits", () =>
     Effect.gen(function*() {
-      const Page = fieldPage(false)
+      const Page = fieldPage("bare")
       const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Page, {}))
       const field = app.querySelector("input")!
       field.value = "typed"
@@ -485,6 +501,52 @@ describe("scoped children in a receiver that waits for its Layer", () => {
           ),
           [undefined, undefined, undefined]
         )
+      }).pipe(Effect.scoped)
+  )
+
+  it.effect.skipIf(process.versions.bun !== undefined || process.versions.deno !== undefined)(
+    "release a receiver that adopted them and was removed, while another still waits",
+    () =>
+      Effect.gen(function*() {
+        let stuck = false
+        const Stuck = Component.define({
+          name: "Stuck",
+          scoped: false,
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        }).make({ init: () => null, update: (model) => model, view: (_, h) => h.aside("stuck") })
+          .pipe(
+            Component.provide(Layer.effect(Slow, Effect.suspend(() => stuck ? Effect.never : Effect.succeed("ready"))))
+          )
+        let passed: Array<WeakRef<object>> = []
+        const Page = Component.define({
+          name: "Page",
+          scoped: false,
+          model: Schema.Boolean,
+          message: Schema.Boolean,
+          elements: Html
+        }).make({
+          init: () => true,
+          update: (_, shown) => shown,
+          view: (shown, h) =>
+            h.scoped((s) => {
+              const slots = { body: Item(s, { key: "i", props: { n: 0 } }) }
+              passed.push(new WeakRef(slots))
+              return h.main(shown ? Gated(h, { key: "a", slots }) : null, Stuck(h, { key: "b" }))
+            })
+        })
+        const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Page, {}))
+        stuck = true
+        passed = []
+        const root = yield* BrowserHost.mountEffect(Page, {}, app, { state })
+        yield* open
+        yield* tick
+        assert.strictEqual(app.querySelector("section")?.textContent, "0")
+        root.send(false)
+        yield* tick
+        yield* collectGarbage
+        assert.isUndefined(passed[0].deref())
       }).pipe(Effect.scoped)
   )
 

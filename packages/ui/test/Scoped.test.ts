@@ -1429,40 +1429,46 @@ describe("scoped children across a router restore", () => {
       })
     ))
 
+  const twin = (stays: boolean) =>
+    Component.define({
+      name: "Twin",
+      scoped: false,
+      props: Schema.Struct({ route: TabsRoute }),
+      model: Schema.Struct({ route: TabsRoute, hidden: Schema.Boolean }),
+      message: ShellMsg
+    }).make({
+      init: ($) => ({ route: $.props.route, hidden: false }),
+      update: (model, message, $) =>
+        ShellMsg.match(message, {
+          Changed: ({ route }) => ({ ...model, route }),
+          Go: ({ route }) => $.run(Router.push(TabsRoute, route).pipe(Command.map(() => ShellMsg.Done()))),
+          Hide: ({ hidden }) => ({ ...model, hidden }),
+          Done: () => model,
+          End: () => model,
+          Bare: () => model,
+          Omit: () => model
+        }),
+      subscriptions: (model) => [
+        Router.subscription(TabsRoute, model.route, (route) => ShellMsg.Changed({ route }))
+      ],
+      view: (model, h) => {
+        const page = (hidden: boolean) => FormPage(h, { key: "/tabs", props: { hidden, ended: false, bare: true } })
+        return h.el(
+          "div",
+          h.el("button").on("click", ShellMsg.Go({ route: TabsRoute.make({ _tag: "Home" }) })).children("Home"),
+          stays
+            ? model.hidden ? null : page(false)
+            : model.route._tag === "Tabs"
+            ? page(model.hidden)
+            : h.el("aside", page(false))
+        )
+      }
+    })
+
   it.effect("keeps a draft a Back restores when the page it leaves has one at the same path", () =>
     routed((history) =>
       Effect.gen(function*() {
-        const Twin = Component.define({
-          name: "Twin",
-          scoped: false,
-          props: Schema.Struct({ route: TabsRoute }),
-          model: Schema.Struct({ route: TabsRoute, hidden: Schema.Boolean }),
-          message: ShellMsg
-        }).make({
-          init: ($) => ({ route: $.props.route, hidden: false }),
-          update: (model, message, $) =>
-            ShellMsg.match(message, {
-              Changed: ({ route }) => ({ ...model, route }),
-              Go: ({ route }) => $.run(Router.push(TabsRoute, route).pipe(Command.map(() => ShellMsg.Done()))),
-              Hide: ({ hidden }) => ({ ...model, hidden }),
-              Done: () => model,
-              End: () => model,
-              Bare: () => model,
-              Omit: () => model
-            }),
-          subscriptions: (model) => [
-            Router.subscription(TabsRoute, model.route, (route) => ShellMsg.Changed({ route }))
-          ],
-          view: (model, h) => {
-            const page = (hidden: boolean) => FormPage(h, { key: "/tabs", props: { hidden, ended: false, bare: true } })
-            return h.el(
-              "div",
-              h.el("button").on("click", ShellMsg.Go({ route: TabsRoute.make({ _tag: "Home" }) })).children("Home"),
-              model.route._tag === "Tabs" ? page(model.hidden) : h.el("aside", page(false))
-            )
-          }
-        })
-        const root = yield* TestHost.mount(Twin, Router.props(TabsRoute))
+        const root = yield* TestHost.mount(twin(false), Router.props(TabsRoute))
         yield* TestHost.settle
         click(root, "draft:")
         yield* TestHost.settle
@@ -1474,6 +1480,21 @@ describe("scoped children across a router restore", () => {
         yield* TestHost.settle
         yield* hide(root, false)
         assert.strictEqual(root.text(), "Homedraft:a")
+      })
+    ))
+
+  it.effect("drops a draft a Back restores once the page that stayed through it is removed", () =>
+    routed((history) =>
+      Effect.gen(function*() {
+        const root = yield* TestHost.mount(twin(true), Router.props(TabsRoute))
+        yield* TestHost.settle
+        click(root, "draft:")
+        yield* TestHost.settle
+        yield* away(root, history)
+        assert.strictEqual(root.text(), "Homedraft:a")
+        yield* hide(root, true)
+        yield* hide(root, false)
+        assert.strictEqual(root.text(), "Homedraft:")
       })
     ))
 })
