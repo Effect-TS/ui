@@ -1,4 +1,4 @@
-import { Command, Component, Head, UiSchema } from "@effect/ui"
+import { Command, Component, Head, UiSchema, UiStruct } from "@effect/ui"
 import { Duration, Effect, Schema } from "effect"
 
 export const UploadStatus = Schema.Literals(["Uploading", "Done", "Cancelled"])
@@ -20,10 +20,10 @@ export type UploadsModel = typeof UploadsModel.Type
 
 const isUploading = (upload: Upload): boolean => upload.status === "Uploading"
 
-// Sets the status of one upload. `Component.evolve` changes one row, and
+// Sets the status of one upload. `UiStruct.evolve` changes one row, and
 // returning a function lets `$.evolve` pass it the current uploads.
 const withStatus = (uploadId: number, status: UploadStatus) => (uploads: ReadonlyArray<Upload>) =>
-  uploads.map((upload) => upload.id === uploadId ? Component.evolve(upload, { status }) : upload)
+  uploads.map((upload) => upload.id === uploadId ? UiStruct.evolve(upload, { status }) : upload)
 
 export const UploadsMessage = UiSchema.TaggedEnum({
   ClickedStartUpload: {},
@@ -135,7 +135,7 @@ export const UploadsNoDeps = UploadsDef.make({
     ClickedCancelAllUploads: (_model, _message, $) =>
       $.evolve({
         uploads: (uploads) =>
-          uploads.map((upload) => isUploading(upload) ? Component.evolve(upload, { status: "Cancelled" }) : upload)
+          uploads.map((upload) => isUploading(upload) ? UiStruct.evolve(upload, { status: "Cancelled" }) : upload)
       }).run(Command.interrupt(UploadFile)),
 
     ClickedRestartUpload: (model, { uploadId }, $) => {

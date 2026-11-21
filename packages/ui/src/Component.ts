@@ -60,7 +60,6 @@
  * @since 0.1.0
  */
 import type * as Duration from "effect/Duration"
-import { dual } from "effect/Function"
 import * as Layer from "effect/Layer"
 import type * as Option from "effect/Option"
 import * as Pipeable from "effect/Pipeable"
@@ -76,6 +75,7 @@ import * as childRef from "./internal/ref.ts"
 import * as sharedReads from "./internal/shared.ts"
 import type * as Query from "./Query.ts"
 import type * as Subscription from "./Subscription.ts"
+import * as UiStruct from "./UiStruct.ts"
 import * as View from "./View.ts"
 
 /**
@@ -681,7 +681,7 @@ export interface InitStep<in out Model, in out Msg, in out Events, out R = never
   /** Replaces the Model. */
   set(model: Model): InitStep<Model, Msg, Events, R>
   /** Changes some fields of the Model, as `Step.evolve` does. */
-  evolve(fields: EvolveFields<Model>): InitStep<Model, Msg, Events, R>
+  evolve(fields: UiStruct.EvolveFields<Model>): InitStep<Model, Msg, Events, R>
   /** Runs Commands owned by this instance, as `Step.run` does. */
   run<const C extends ReadonlyArray<Command.Command<Msg | Noop, any>>>(
     ...commands: C
@@ -717,10 +717,10 @@ export interface Step<in out Model, in out Msg, in out Events, out R = never, L 
   /**
    * Changes some fields of the Model and keeps the rest. Each field takes
    * its new value, or a function from its old value to the new one, with the
-   * rules of `Component.evolve`: `$.evolve({ submitting: true, attempts: (n) => n + 1 })`.
+   * rules of `UiStruct.evolve`: `$.evolve({ submitting: true, attempts: (n) => n + 1 })`.
    * On a union Model it's a compile error: match the union first.
    */
-  evolve(fields: EvolveFields<Model>): Step<Model, Msg, Events, R, L>
+  evolve(fields: UiStruct.EvolveFields<Model>): Step<Model, Msg, Events, R, L>
   /**
    * Runs Commands owned by this instance: each ends when the instance does,
    * and gets a Scope of its own that closes with it. Their results come back as
@@ -859,132 +859,6 @@ export type StepRequirements<U> = NamedRequirement<RawStepRequirements<U>>
 
 type RawStepRequirements<U> = U extends InitStep<infer _Model, infer _Msg, infer _Events, infer R> ? R : never
 
-/**
- * The fields `evolve` takes for a struct `S`: each one optional, as its new
- * value or a function from its old value to the new one.
- *
- * **Details**
- *
- * A function is always the updater, so a field that may hold a function,
- * an optional callback included, is `never` here and can't be set through
- * `evolve`. A function doesn't belong in a Model anyway, since it can't be
- * encoded for hydration or history.
- *
- * It is an error message instead when `S` is a union, nullable structs and
- * overlapping members included (match the union first, then evolve the
- * member), an array, a primitive or function, or unknown, as for a
- * data-last `evolve` with nowhere to take its type from.
- *
- * @stability experimental
- * @category utility types
- * @since 0.1.0
- */
-export type EvolveFields<S> = unknown extends S ? "evolve needs the struct's type: write evolve<Model>(...)"
-  : Types.IsUnion<S> extends true ? "evolve takes one struct: match the union first"
-  : S extends ReadonlyArray<unknown> ? "evolve takes a struct, not an array"
-  : S extends (...args: any) => any ? "evolve takes a struct"
-  : S extends object ? [keyof S] extends [never] ? "evolve takes a struct with fields"
-    : { readonly [K in keyof S]?: EvolveField<S[K]> }
-  : "evolve takes a struct"
-
-// A field that may hold a function, optional callbacks included, can't be
-// told from an updater.
-type EvolveField<A> = 0 extends 1 & A ? any
-  : [Extract<A, (...args: any) => any>] extends [never] ? A | ((value: A) => A)
-  : never
-
-const applyFields = (self: any, fields: Record<PropertyKey, unknown>) => {
-  let out = self
-  for (const key of Reflect.ownKeys(fields)) {
-    const field = fields[key]
-    const previous = self[key]
-    const value = typeof field === "function" ? field(previous) : field
-    if (!Object.is(value, previous)) {
-      if (out === self) out = { ...self }
-      out[key] = value
-    }
-  }
-  return out
-}
-
-/**
- * Changes some fields of a struct and keeps the rest. Each field takes its
- * new value, or a function from its old value to the new one.
- *
- * **When to use**
- *
- * Use to change a struct inside the Model, such as a row of a list or a
- * nested struct field, or the Model in a handler that returns a bare Model.
- * For the Model itself in a step, `$.evolve` has the same rules.
- *
- * **Details**
- *
- * Unlike `Struct.evolve` from `effect`, a field can't change type: a value
- * or a function's result of the wrong type is an error on that field. A
- * field takes a whole value, so a partial struct isn't merged: write
- * `coupon: Component.evolve({ status: "Idle" })` and not
- * `coupon: { status: "Idle" }`.
- *
- * An unknown key is an error when it's written in the fields literal.
- * TypeScript doesn't check the keys of an object built elsewhere and passed
- * in, so a misspelt key there is copied onto the result. Check fields
- * declared on their own where they're declared, which also types the
- * updaters: `const bump = { count: (n) => n + 1 } satisfies Component.EvolveFields<Model>`.
- *
- * A function is always the updater. A union is an error, nullable structs
- * included: match it first, with `match` on a `UiSchema.TaggedEnum`, then
- * evolve the member. The data-last form takes the struct's type from where
- * it's written, so `Auth.match(model, { LoggedIn: Component.evolve({ name }) })`
- * needs no annotation. Where nothing gives it one, pass the type:
- * `Component.evolve<Coupon>({ status: "Idle" })`.
- *
- * The result is a plain-object shallow copy with the changed fields, or
- * the same struct when every field keeps its value. It is for plain
- * structs, not `Schema.Class` or other class instances: evolving a
- * changed field on a class instance compiles, but drops the prototype so
- * class methods are missing at runtime. For a class Model, use `$.set` with
- * a constructor or method that returns a valid instance.
- *
- * **Example** (A row of a list and a nested struct)
- *
- * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
- * import { Array as Arr, Schema } from "effect"
- *
- * const Line = Schema.Struct({ id: Schema.String, quantity: Schema.Number })
- * const Coupon = Schema.Struct({ code: Schema.String, status: Schema.Literals(["Idle", "Applied"]) })
- * const Message = UiSchema.TaggedEnum({ ClickedIncrement: { id: Schema.String } })
- *
- * const Basket = Component.define({
- *   name: "Basket",
- *   model: Schema.Struct({ lines: Schema.Array(Line), coupon: Coupon, notice: Schema.NullOr(Schema.String) }),
- *   message: Message
- * }).make({
- *   init: ($) => $.set({ lines: [{ id: "a", quantity: 1 }], coupon: { code: "TEN", status: "Applied" }, notice: null }),
- *   update: {
- *     ClickedIncrement: (_model, { id }, $) =>
- *       $.evolve({
- *         // A function of the old value, data-first for one row.
- *         lines: Arr.map((line) => line.id === id ? Component.evolve(line, { quantity: (n) => n + 1 }) : line),
- *         // Data-last: the coupon's type comes from the field.
- *         coupon: Component.evolve({ status: "Idle" }),
- *         // A plain value.
- *         notice: null
- *       })
- *   },
- *   view: (model, h) => h.el("p", `${model.lines.length} lines`)
- * })
- * ```
- *
- * @stability experimental
- * @category combinators
- * @since 0.1.0
- */
-export const evolve: {
-  <S>(fields: NoInfer<EvolveFields<S>>): (self: S) => S
-  <S>(self: S, fields: NoInfer<EvolveFields<S>>): S
-} = dual(2, applyFields)
-
 const StepProto = {
   [StepTypeId]: StepTypeId,
   pipe() {
@@ -994,7 +868,13 @@ const StepProto = {
     return makeStep(model, this.commands, this.emitted, this.lists, this.sends)
   },
   evolve(this: Step<any, any, any, any>, fields: Record<PropertyKey, unknown>) {
-    return makeStep(applyFields(this.model, fields), this.commands, this.emitted, this.lists, this.sends)
+    return makeStep(
+      UiStruct.evolve<any>(this.model, fields as never),
+      this.commands,
+      this.emitted,
+      this.lists,
+      this.sends
+    )
   },
   run(this: Step<any, any, any, any>, ...commands: ReadonlyArray<Command.Command<any, any>>) {
     return makeStep(this.model, [...this.commands, ...commands], this.emitted, this.lists, this.sends)
@@ -2536,7 +2416,7 @@ import { Query } from "@effect/ui"
  * **Example** (A note page whose update is split into slices)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { Component, UiSchema, UiStruct } from "@effect/ui"
  * import { Schema } from "effect"
  *
  * const NotePageMessage = UiSchema.TaggedEnum({ UpdatedBody: { body: Schema.String }, ClickedSave: {} })
@@ -2553,7 +2433,7 @@ import { Query } from "@effect/ui"
  *
  * // `msg` is the UpdatedBody message.
  * const handleUpdatedBody = NotePageDef.update("UpdatedBody", (_model, msg, $) =>
- *   $.combine((model) => Component.evolve(model, { body: msg.body }), touch))
+ *   $.combine((model) => UiStruct.evolve(model, { body: msg.body }), touch))
  *
  * // `h` first, then any other arguments.
  * const counter = NotePageDef.fragment((h, edits: number) => h.el("small", `${edits} edits`))

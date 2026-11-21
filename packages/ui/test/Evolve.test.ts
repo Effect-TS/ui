@@ -1,4 +1,4 @@
-import { Command, Component, UiSchema } from "@effect/ui"
+import { Command, Component, UiSchema, UiStruct } from "@effect/ui"
 import { Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Array as Arr, Effect, Schema } from "effect"
@@ -42,8 +42,8 @@ const Checkout = Component.define({
   update: {
     ClickedIncrement: (_model, { id }, $) =>
       $.evolve({
-        lines: Arr.map((line) => line.id === id ? Component.evolve(line, { quantity: (n) => n + 1 }) : line),
-        coupon: Component.evolve({ status: "Idle" }),
+        lines: Arr.map((line) => line.id === id ? UiStruct.evolve(line, { quantity: (n) => n + 1 }) : line),
+        coupon: UiStruct.evolve({ status: "Idle" }),
         notice: null
       }),
     ClickedRemove: (model, { id }, $) => {
@@ -54,7 +54,7 @@ const Checkout = Component.define({
     SubmittedOrder: (model, _message, $) =>
       $.evolve({ submitting: true, attempts: (n) => n + 1 }).run(PlaceOrder({ lines: model.lines.length })),
     // Keeps every field, so the Model stays the same object.
-    FailedPlaceOrder: (model) => Component.evolve(model, { submitting: false })
+    FailedPlaceOrder: (model) => UiStruct.evolve(model, { submitting: false })
   },
   view: (_model, h) => h.text("checkout")
 })
@@ -91,7 +91,7 @@ describe("evolve", () => {
 
   it("changes a field under a symbol key", () => {
     const key = Symbol("key")
-    assert.deepStrictEqual(Component.evolve({ [key]: 1, label: "a" }, { [key]: (n) => n + 1 }), {
+    assert.deepStrictEqual(UiStruct.evolve({ [key]: 1, label: "a" }, { [key]: (n) => n + 1 }), {
       [key]: 2,
       label: "a"
     })

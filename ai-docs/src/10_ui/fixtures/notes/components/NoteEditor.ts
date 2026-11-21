@@ -1,4 +1,4 @@
-import { Command, Component, Subscription, UiSchema } from "@effect/ui"
+import { Command, Component, Subscription, UiSchema, UiStruct } from "@effect/ui"
 import { Effect, Layer, Schema, Stream } from "effect"
 import { Note, NotesTag } from "../domain/Note.ts"
 import { Notes } from "../services/Notes.ts"
@@ -112,7 +112,7 @@ const save = NoteEditorDef.update("RequestedSave", (model, _message, $) =>
 // the Model, like any other.
 const clickedDiscard = NoteEditorDef.update(
   "ClickedDiscard",
-  (_model, _message, $) => $.combine(closeActions, (model) => Component.evolve(model, { confirming: true }))
+  (_model, _message, $) => $.combine(closeActions, (model) => UiStruct.evolve(model, { confirming: true }))
 )
 
 // A fragment takes `h` first and any other arguments after it, and is
@@ -217,9 +217,9 @@ export const NoteEditorNoDeps = NoteEditorDef.make({
     RequestedSave: save,
     // `$.emit` reports to the parent.
     SucceededSaveNote: (_model, { note }, $) => $.evolve({ saved: note.body }).emit(NoteEditorEvents.Saved({ note })),
-    // A handler that returns a bare Model can use `Component.evolve`, which
+    // A handler that returns a bare Model can use `UiStruct.evolve`, which
     // takes the same fields.
-    FailedSaveNote: (model, { reason }) => Component.evolve(model, { error: reason }),
+    FailedSaveNote: (model, { reason }) => UiStruct.evolve(model, { error: reason }),
     ClickedDiscard: clickedDiscard,
     // An auto popover is followed: the browser opens it from its button and
     // closes it on Escape or a click outside, and the Model keeps up.

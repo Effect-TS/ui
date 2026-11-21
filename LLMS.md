@@ -136,7 +136,7 @@ const submittedOrder = CheckoutDef.update("SubmittedOrder", (model, _message, $)
       .run(placeOrder(model.form.values)))
 ```
 
-`Component.evolve` takes the same fields for a struct inside the Model:
+`UiStruct.evolve` takes the same fields for a struct inside the Model:
 data-first for a row of a list, and data-last for a struct field, where it
 takes the struct's type from the field. It also changes the Model in a
 handler that returns a bare Model, with no `$`:
@@ -144,13 +144,13 @@ handler that returns a bare Model, with no `$`:
 ```ts
 const clickedIncrement = CheckoutDef.update("ClickedIncrement", (_model, { id }, $) =>
   $.evolve({
-    lines: Arr.map((line) => line.id === id ? Component.evolve(line, { quantity: (n) => n + 1 }) : line),
-    coupon: Component.evolve({ status: "Idle" })
+    lines: Arr.map((line) => line.id === id ? UiStruct.evolve(line, { quantity: (n) => n + 1 }) : line),
+    coupon: UiStruct.evolve({ status: "Idle" })
   }))
 
 const failedSaveNote = NoteEditorDef.update(
   "FailedSaveNote",
-  (model, { reason }) => Component.evolve(model, { error: reason })
+  (model, { reason }) => UiStruct.evolve(model, { error: reason })
 )
 ```
 
@@ -161,13 +161,13 @@ a misspelt key there is copied onto the Model. Check fields declared on
 their own where they're declared, which also types the updaters:
 
 ```ts
-const bump = { attempts: (n) => n + 1, notice: null } satisfies Component.EvolveFields<Checkout>
+const bump = { attempts: (n) => n + 1, notice: null } satisfies UiStruct.EvolveFields<Checkout>
 ```
 
 Unlike with `Struct.evolve` from
 `effect`, a field can't change type. A field takes a whole value, so
 `coupon: { status: "Idle" }` is an error: write
-`coupon: Component.evolve({ status: "Idle" })`. A function is always the
+`coupon: UiStruct.evolve({ status: "Idle" })`. A function is always the
 updater, so a field whose type is a function can't be set through
 `evolve`. A Model shouldn't hold a function anyway, since it can't be
 encoded for hydration or history.
@@ -181,14 +181,14 @@ the union first and evolve the member:
 ```ts
 const updatedName = AuthDef.update(
   "UpdatedName",
-  (model, { value }) => Auth.match(model, { LoggedOut: (auth) => auth, LoggedIn: Component.evolve({ name: value }) })
+  (model, { value }) => Auth.match(model, { LoggedOut: (auth) => auth, LoggedIn: UiStruct.evolve({ name: value }) })
 )
 
 // A union field in a struct Model, with `match` data-last.
-$.evolve({ auth: Auth.match({ LoggedOut: (auth) => auth, LoggedIn: Component.evolve({ name: value }) }) })
+$.evolve({ auth: Auth.match({ LoggedOut: (auth) => auth, LoggedIn: UiStruct.evolve({ name: value }) }) })
 
 // A nullable struct.
-$.evolve({ coupon: (coupon) => coupon === null ? null : Component.evolve(coupon, { status: "Idle" }) })
+$.evolve({ coupon: (coupon) => coupon === null ? null : UiStruct.evolve(coupon, { status: "Idle" }) })
 ```
 
 A union Model has no `$.evolve`, so a handler that also runs a Command
