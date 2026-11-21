@@ -90,7 +90,9 @@ describe("Field", () => {
           )
       })
       const state = () => [s.get(wrapper).attrs?.["data-focused"], s.get(wrapper).attrs?.["data-touched"]]
-      s.fire(wrapper, "focusin").fire(wrapper, "focusout", { within: false })
+      s.fire(wrapper, "focusin")
+      assert.deepStrictEqual(state(), [undefined, undefined])
+      s.fire(wrapper, "focusout", { within: false })
       assert.deepStrictEqual(state(), [undefined, undefined])
 
       s.props({}).fire(wrapper, "focusin")
