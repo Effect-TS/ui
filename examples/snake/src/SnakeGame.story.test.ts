@@ -1,8 +1,8 @@
+import * as Snake from "#domain/snake"
 import { Head } from "@effect/ui"
 import { Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect } from "effect"
-import { Snake } from "./domain/index.ts"
 import { GenerateApplePosition, SnakeGame, SnakeGameMessage, type SnakeGameModel } from "./SnakeGame.ts"
 
 const initialSnake = Snake.create({ x: 10, y: 10 })

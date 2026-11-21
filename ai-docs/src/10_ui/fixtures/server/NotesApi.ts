@@ -1,6 +1,6 @@
+import { Note, NoteResults, NoteSort } from "#domain/Note"
 import { Effect, Schema } from "effect"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
-import { Note, NoteResults, NoteSort } from "../notes/domain/Note.ts"
 import { Notes } from "../notes/services/Notes.ts"
 
 const notesJson = HttpServerResponse.schemaJson(Schema.Array(Note))

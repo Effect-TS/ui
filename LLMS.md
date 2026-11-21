@@ -568,19 +568,20 @@ the way.
 The examples below are one notes app. Each example is an entry module, for
 the browser, the server or the tests. It mounts a component and provides the
 platform Layers, and it defines no components. The app is in
-`ai-docs/src/90_ui/fixtures`, laid out as it would be under `src/` in a real
+`ai-docs/src/10_ui/fixtures`, laid out as it would be under `src/` in a real
 app. Read an example, then the files it imports.
 
-Group files by feature, then by kind within each feature:
+Put the types the app shares in one top-level `domain` folder. Group
+everything else by feature, then by kind within each feature:
 
 ```text
 fixtures/
   App.ts                      // root component, imports pages
   routes.ts                   // AppRoute
+  domain/Note.ts              // Schema, errors, NotesTag
   kit/Listbox.ts              // headless components no feature owns
   kit/Collapsible.ts          // a component with slots
   notes/
-    domain/Note.ts            // Schema, errors, NotesTag
     services/Notes.ts         // service and its Layers
     queries/ListNotes.ts
     queries/GetNote.ts
@@ -596,11 +597,41 @@ fixtures/
   server/NotesApi.ts          // the JSON API that Notes calls
 ```
 
-A second feature is a sibling of `notes/`, with its own `domain`, `services`,
-`queries` and `components` folders. Pages import features, but features never
-import pages. Keep `AppRoute` in `routes.ts`, outside `pages/` and separate
-from `App.ts`; pages can then build links without importing the root component
-that imports them.
+`domain` imports packages and other `domain` files, and nothing else from the
+app. It holds Schemas with their types and errors, pure functions over them,
+and `Query.Tag` invalidation tags. Services and their Layers, queries and
+components stay in a feature. Pages import features, features import
+`domain`, and `domain` imports neither. Domain files can then build on each
+other without one feature importing another.
+
+A second feature is a sibling of `notes/`, with its own `services`, `queries`
+and `components` folders, and its types go in `domain` next to `Note.ts`.
+Features never import pages. Keep `AppRoute` in `routes.ts`, outside
+`pages/` and separate from `App.ts`; pages can then build links without
+importing the root component that imports them.
+
+Import `domain` through a subpath import, declared once in the app's
+`package.json`:
+
+```json
+{
+  "imports": {
+    "#domain/*": "./src/domain/*.ts"
+  }
+}
+```
+
+```ts
+import { Note } from "#domain/Note"
+```
+
+Node, TypeScript, Vite and Vitest all read the `imports` field with no other
+config, so a server entry that imports `domain` still runs under plain
+`node`. The mapping adds the `.ts`, so the specifier has none: with
+`rewriteRelativeImportExtensions` set, TypeScript accepts `.ts` only on a
+relative specifier. Every other import stays relative, with its `.ts`
+extension. These docs map `#domain/*` to `./src/10_ui/fixtures/domain/*.ts`
+in `ai-docs/package.json`.
 
 Keep one file per route in `pages/`, in folders that mirror the URL. A page's
 folder is the static segments of its route's path, and its file is named after

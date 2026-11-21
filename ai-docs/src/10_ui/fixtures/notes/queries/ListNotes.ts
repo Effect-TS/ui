@@ -1,6 +1,6 @@
+import { Note, NotesTag } from "#domain/Note"
 import { Query } from "@effect/ui"
 import { Effect, Schema } from "effect"
-import { Note, NotesTag } from "../domain/Note.ts"
 import { Notes } from "../services/Notes.ts"
 
 // A query with no arguments writes `args: {}`, and one that can't fail writes

@@ -1,6 +1,6 @@
+import { Note, NoteNotFound, NotesTag } from "#domain/Note"
 import { Query } from "@effect/ui"
 import { Effect, Schema } from "effect"
-import { Note, NoteNotFound, NotesTag } from "../domain/Note.ts"
 import { Notes } from "../services/Notes.ts"
 
 // A query is data loaded by its arguments and cached, so components watching

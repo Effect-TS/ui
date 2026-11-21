@@ -1,8 +1,11 @@
+import * as Apple from "#domain/apple"
+import * as Direction from "#domain/direction"
+import * as Position from "#domain/position"
+import * as Snake from "#domain/snake"
 import { Command, Component, Head, Subscription, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Array, Duration, Schema, Stream } from "effect"
 import { GAME, GAME_SPEED } from "./constants.ts"
-import { Apple, Direction, Position, Snake } from "./domain/index.ts"
 
 export const GameState = Schema.Literals(["NotStarted", "Playing", "Paused", "GameOver"])
 export type GameState = typeof GameState.Type
