@@ -925,9 +925,60 @@ describe("scoped children in a receiver that waits for its Layer", () => {
       assert.strictEqual(app.querySelector("em")!.textContent, "typed")
     }).pipe(Effect.scoped))
 
-  it.effect.each([[0, "client"], [1, "server"]] as const)(
-    "after a Back while a receiver waits, when first drawn %i entries forward of it, start as the %s's",
-    ([forward, drawn]) =>
+  it.effect("leave the one field drawn after them, which takes an edit once, when a scoped child in their place draws them", () =>
+    Effect.gen(function*() {
+      const Box = Component.define({
+        name: "Box",
+        scoped: true,
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html,
+        slots: ["body"]
+      }).make({ init: () => null, update: (model) => model, view: (_, h) => h.aside(h.slots.body) })
+      const Nest = Component.define({
+        name: "Nest",
+        scoped: false,
+        props: Schema.Struct({ moved: Schema.Boolean }),
+        model: Schema.String,
+        message: Schema.String,
+        elements: Html
+      }).make({
+        init: () => "",
+        update: (text, typed) => text + typed,
+        view: (text, h) =>
+          h.scoped((s) => {
+            const row = Row(s, { key: "r" })
+            const box = Box(s, { key: "b", slots: { body: h.props.moved ? row : null } })
+            return h.main(
+              Gated(h, {
+                key: "g",
+                slots: {
+                  body: [
+                    h.props.moved ? box : row,
+                    h.input.value(text).onInput(({ value }) => value),
+                    h.props.moved ? null : box
+                  ]
+                }
+              }),
+              h.em(text)
+            )
+          })
+      })
+      const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Nest, { moved: false }))
+      const field = app.querySelector("input")!
+      const root = yield* BrowserHost.mountEffect(Nest, { moved: true }, app, { state })
+      yield* open
+      yield* root.adopted
+      field.value = "typed"
+      field.dispatchEvent(new Event("input", { bubbles: true }))
+      yield* tick
+      assert.deepStrictEqual(Array.from(app.querySelectorAll("input")), [field])
+      assert.strictEqual(app.querySelector("em")!.textContent, "typed")
+    }).pipe(Effect.scoped))
+
+  it.effect.each([[0, "after", "client"], [1, "after", "server"], [0, "before", "client"]] as const)(
+    "after a Back while a receiver waits, when first drawn %i entries forward of it and written %s it adopts, start as the %s's",
+    ([forward, written, drawn]) =>
       Effect.gen(function*() {
         let from = "server"
         const Draft = Component.define({
@@ -940,27 +991,31 @@ describe("scoped children in a receiver that waits for its Layer", () => {
         const Routes = Route.union({
           Form: Route.make("/form", { search: { q: Schema.optional(Schema.String) } })
         })
-        const Message = UiSchema.TaggedEnum({ Changed: { route: Routes }, Go: {}, Went: {}, Draw: {} })
+        const Message = UiSchema.TaggedEnum({ Changed: { route: Routes }, Go: {}, Went: {}, Write: {}, Draw: {} })
         const App = Component.define({
           name: "App",
           scoped: false,
           props: Schema.Struct({ route: Routes }),
-          model: Schema.Struct({ route: Routes, draws: Schema.Boolean }),
+          model: Schema.Struct({ route: Routes, writes: Schema.Boolean, draws: Schema.Boolean }),
           message: Message,
           elements: Html
         }).make({
-          init: ($) => ({ route: $.props.route, draws: from === "server" }),
+          init: ($) => ({ route: $.props.route, writes: from === "server", draws: from === "server" }),
           update: (model, message, $) =>
             Message.match(message, {
               Changed: ({ route }) => ({ ...model, route }),
               Go: () =>
                 $.run(Router.push(Routes, Routes.Form({ search: { q: "q" } })).pipe(Command.map(() => Message.Went()))),
               Went: () => model,
-              Draw: () => ({ ...model, draws: true })
+              Write: () => ({ ...model, writes: true }),
+              Draw: () => ({ ...model, writes: true, draws: true })
             }),
           subscriptions: (model) => [Router.subscription(Routes, model.route, (route) => Message.Changed({ route }))],
           view: (model, h) =>
-            h.main(Gated(h, { key: "g", slots: { body: null } }), model.draws ? h.scoped((s) => Draft(s, {})) : null)
+            h.scoped((s) => {
+              const draft = model.writes ? Draft(s, {}) : null
+              return h.main(Gated(h, { key: "g", slots: { body: null } }), model.draws ? draft : null)
+            })
         })
         const history = Router.memoryHistory("/form")
         const routed = Effect.provide(Router.make({ routes: Routes, history }))
@@ -979,10 +1034,14 @@ describe("scoped children in a receiver that waits for its Layer", () => {
         from = "client"
         yield* Effect.gen(function*() {
           const root = yield* BrowserHost.mountEffect(App, Router.props(Routes), app, {
-            state: { ...state, "/App": { ...(state["/App"] as object), draws: false } }
+            state: { ...state, "/App": { ...(state["/App"] as object), writes: false, draws: false } }
           })
           history.go(-1)
           yield* tick
+          if (written === "before") {
+            root.send(Message.Write())
+            yield* tick
+          }
           yield* open
           yield* root.adopted
           history.go(forward)
@@ -990,6 +1049,82 @@ describe("scoped children in a receiver that waits for its Layer", () => {
           root.send(Message.Draw())
           yield* tick
           assert.strictEqual(app.querySelector("em")!.textContent, drawn)
+        }).pipe(routed)
+      }).pipe(Effect.scoped)
+  )
+
+  it.effect.each(["before", "after"] as const)(
+    "keep the server's Model after a reload, over the one a Back restores, when a push leaves %s the receiver adopts",
+    (pushed) =>
+      Effect.gen(function*() {
+        let from = "restored"
+        const Draft = Component.define({
+          name: "Draft",
+          scoped: true,
+          model: Schema.String,
+          message: Schema.Never,
+          elements: Html
+        }).make({ init: () => from, update: (text) => text, view: (text, h) => h.em(text) })
+        const Routes = Route.union({
+          Form: Route.make("/form", { search: { q: Schema.optional(Schema.String) } }),
+          Park: Route.make("/park")
+        })
+        const Message = UiSchema.TaggedEnum({ Changed: { route: Routes }, Go: { route: Routes }, Went: {} })
+        const App = Component.define({
+          name: "App",
+          scoped: false,
+          props: Schema.Struct({ route: Routes }),
+          model: Routes,
+          message: Message,
+          elements: Html
+        }).make({
+          init: ($) => $.props.route,
+          update: (model, message, $) =>
+            Message.match(message, {
+              Changed: ({ route }) => route,
+              Go: ({ route }) => $.run(Router.push(Routes, route).pipe(Command.map(() => Message.Went()))),
+              Went: () => model
+            }),
+          subscriptions: (model) => [Router.subscription(Routes, model, (route) => Message.Changed({ route }))],
+          view: (model, h) =>
+            model._tag === "Park"
+              ? h.main()
+              : h.scoped((s) => h.main(Gated(h, { key: "g", slots: { body: Draft(s, {}) } })))
+        })
+        const history = Router.memoryHistory("/form")
+        const routed = Effect.provide(Router.make({ routes: Routes, history }))
+        gate = Effect.void
+        yield* Effect.gen(function*() {
+          const first = yield* BrowserHost.mountEffect(App, Router.props(Routes), document.createElement("div"))
+          first.send(Message.Go({ route: Routes.Form({ search: { q: "q" } }) }))
+          yield* tick
+        }).pipe(Effect.scoped, routed)
+        from = "server"
+        const { app, open, state } = yield* serve(
+          HtmlServer.renderToHtml(App, Router.props(Routes)).pipe(
+            Effect.provide(Router.make({ routes: Routes, history: Router.memoryHistory("/form?q=q") }))
+          )
+        )
+        from = "client"
+        yield* Effect.gen(function*() {
+          const root = yield* BrowserHost.mountEffect(App, Router.props(Routes), app, { state })
+          history.go(-1)
+          yield* tick
+          if (pushed === "after") {
+            yield* open
+            yield* root.adopted
+          }
+          root.send(Message.Go({ route: Routes.Park() }))
+          yield* tick
+          yield* open
+          yield* root.adopted
+        }).pipe(Effect.scoped, routed)
+        yield* Effect.gen(function*() {
+          const reloaded = document.createElement("div")
+          yield* BrowserHost.mountEffect(App, Router.props(Routes), reloaded)
+          history.go(-1)
+          yield* tick
+          assert.strictEqual(reloaded.querySelector("em")!.textContent, "server")
         }).pipe(routed)
       }).pipe(Effect.scoped)
   )
@@ -1108,6 +1243,82 @@ describe("scoped children in a receiver that waits for its Layer", () => {
         )
       }).pipe(Effect.scoped)
   )
+
+  it.effect.skipIf(process.versions.bun !== undefined || process.versions.deno !== undefined)(
+    "release the server's node of one that left the slot and then ended, while the receiver waits",
+    () =>
+      Effect.gen(function*() {
+        const Rows = Component.define({
+          name: "Rows",
+          scoped: false,
+          model: Schema.Number,
+          message: Schema.Null,
+          elements: Html
+        }).make({
+          init: () => 0,
+          update: (n) => n + 1,
+          view: (n, h) =>
+            h.scoped(({ model }) => model < 2, (s) => {
+              const item = n < 2 ? Item(s, { key: "i", props: { n: 0 } }) : null
+              return h.main(
+                Bare(h, { key: "f", slots: { body: [n === 0 ? item : null, h.p("stays")] } }),
+                h.article(n === 1 ? item : null)
+              )
+            })
+        })
+        const { app, state } = yield* serve(HtmlServer.renderToHtml(Rows, {}))
+        const node = new WeakRef(app.querySelector("b")!)
+        const root = yield* BrowserHost.mountEffect(Rows, {}, app, { state })
+        root.send(null)
+        yield* tick
+        assert.strictEqual(app.querySelector("article b"), node.deref())
+        root.send(null)
+        yield* tick
+        yield* collectGarbage
+        assert.strictEqual(node.deref(), undefined)
+      }).pipe(Effect.scoped)
+  )
+
+  it.effect("keep the server's nodes of a receiver they draw, when taken out of the document and drawn again while it waits", () =>
+    Effect.gen(function*() {
+      const Card = Component.define({
+        name: "Card",
+        scoped: true,
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => Bare(h, { key: "g", slots: { body: [h.p("a"), h.p("b")] } })
+      })
+      const Cards = Component.define({
+        name: "Cards",
+        scoped: false,
+        model: Schema.Boolean,
+        message: Schema.Boolean,
+        elements: Html
+      }).make({
+        init: () => true,
+        update: (_, shown) => shown,
+        view: (shown, h) =>
+          h.scoped((s) => {
+            const card = Card(s, { key: "c" })
+            return h.main(shown ? card : null)
+          })
+      })
+      const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Cards, {}))
+      const served = Array.from(app.querySelectorAll("p"))
+      const root = yield* BrowserHost.mountEffect(Cards, {}, app, { state })
+      root.send(false)
+      yield* tick
+      assert.strictEqual(app.querySelector("p"), null)
+      root.send(true)
+      yield* tick
+      yield* open
+      yield* root.adopted
+      assert.deepStrictEqual(Array.from(app.querySelectorAll("p")), served)
+    }).pipe(Effect.scoped))
 
   it.effect.skipIf(process.versions.bun !== undefined || process.versions.deno !== undefined)(
     "release a receiver that adopted them and was removed, while another still waits",

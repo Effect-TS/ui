@@ -181,7 +181,7 @@ const sameKeys = (a: Keys, b: Keys): boolean =>
 // Rendered tree
 // ---------------------------------------------------------------------------
 
-type Rendered = RElement | RText | RChild | RFallback | ROutlet | RScoped
+type Rendered = RElement | RText | RChild | RFallback | ROutlet | RScoped | RHeld
 
 /**
  * A rendered element. A patch updates it in place, so a node that stays keeps
@@ -275,6 +275,14 @@ interface RText {
   readonly _tag: "Text"
   v: View.Text
   readonly node: unknown
+}
+
+interface RHeld {
+  readonly _tag: "Held"
+  readonly v: View.Text
+  readonly node: unknown
+  readonly range: Range
+  nodes: ReadonlyArray<unknown>
 }
 
 interface RChild {
@@ -1467,34 +1475,10 @@ const setup = (
       keptTables.get(from.author!)!.served!.delete(from)
     }
   }
-  const takenAt = new WeakMap<Array<Rendered>, number>()
-  const heldAt = new WeakMap<Array<Rendered>, Map<unknown, number>>()
   const rangeOf = (from: Served | undefined): Range | undefined => {
     if (from === undefined || host.parentOf(from.range.open) === undefined) return undefined
-    const list = from.waiter.rendered
-    if (from.waiter.waiting && Array.isArray(list)) {
-      const open = from.range.open
-      let at = takenAt.get(list) ?? 0
-      if ((list[at] as RText | undefined)?.node !== open) {
-        let held = heldAt.get(list)
-        if (held === undefined) {
-          heldAt.set(list, held = new Map())
-          for (let index = 0; index < list.length; index++) held.set((list[index] as RText).node, index)
-        }
-        const first = held.get(open) ?? list.length
-        at = 0
-        let end = list.length
-        while (at < end) {
-          const middle = (at + end) >> 1
-          if (held.get((list[middle] as RText).node)! < first) at = middle + 1
-          else end = middle
-        }
-      }
-      if ((list[at] as RText | undefined)?.node === open) {
-        list.splice(at, rangeNodes(from.range).length)
-        takenAt.set(list, at)
-      }
-    }
+    const held = from.waiter.rendered as Rendered | undefined
+    if (held?._tag === "Held" && host.parentOf(held.node) !== undefined) held.nodes = emptyList
     return from.range
   }
   let late: Map<Instance, Array<Held>> | undefined
@@ -1580,7 +1564,9 @@ const setup = (
   }
   const addWaiting = (saved: unknown, late?: boolean) => {
     if (saved === null || typeof saved !== "object") return
-    for (const path in saved) setWaiting(path, (saved as Record<string, unknown>)[path], late)
+    for (const path in saved) {
+      if (servedIn?.get(path)?.view === undefined) setWaiting(path, (saved as Record<string, unknown>)[path], late)
+    }
   }
   const restoreKept = () => {
     addWaiting(hooks!.restore("~kept" + rootPath))
@@ -3701,12 +3687,12 @@ const setup = (
         if (served.length > 0) servedBy.set(inst, served)
       }
       range.claimed = true
-      inst.rendered = packed(rangeNodes(range).map((node) => new TextRecord(emptyText, node)))
+      inst.rendered = { _tag: "Held", v: emptyText, node: range.open, range, nodes: emptyList }
     } else inst.rendered = new TextRecord(emptyText, host.createText(""))
     const resume = (adopt: boolean, start: () => void) => {
       if (inst.closed || !inst.waiting) return
       inst.waiting = false
-      const nodes = listOf(inst.rendered).flatMap(nodesOf)
+      const nodes = nodesOf(inst.rendered as Rendered)
       inst.rendered = undefined
       if (range !== undefined) range.claimed = false
       // Where its nodes go. Read before it renders: adopting removes the markers.
@@ -6218,8 +6204,16 @@ const setup = (
         if (range === undefined) {
           if (view._tag !== "Child" || view.alive === undefined) return undefined
           created++
+          if (kind?._tag !== "Open") {
+            const made = createChild(inst, view, env)
+            adoptedUpTo = node
+            return made
+          }
+          const mark = host.createText("")
+          host.insertBefore(host.parentOf(node), mark, node)
           const made = createChild(inst, view, env)
-          adoptedUpTo = node
+          adoptedUpTo = host.nextOf(mark)
+          host.remove(mark)
           return made
         }
         const next = host.nextOf(range.close)
@@ -6742,6 +6736,8 @@ const setup = (
         if (moved || isStale(out, outlet)) renderOutlet(out)
         return rendered
       }
+      case "Held":
+        return rendered
     }
   }
 
@@ -6849,6 +6845,11 @@ const setup = (
         if (items === undefined) return
         if (!Array.isArray(items)) return collectNodes(items, out)
         for (let index = 0; index < items.length; index++) collectNodes(items[index]!, out)
+        return
+      }
+      case "Held": {
+        if (host.parentOf(rendered.node) !== undefined) rendered.nodes = rangeNodes(rendered.range)
+        for (const node of rendered.nodes) out.push(node)
       }
     }
   }
@@ -6865,6 +6866,8 @@ const setup = (
       ? lastNodeOfList(rendered.inst.rendered)
       : rendered._tag === "Fallback"
       ? lastNodeOf(rendered.inner)
+      : rendered._tag === "Held"
+      ? rendered.range.close
       : rendered.node
   const hasNodes = (rendered: Rendered): boolean =>
     rendered._tag === "Child" || rendered._tag === "Outlet"
@@ -6932,6 +6935,13 @@ const setup = (
         next = placeEach(parentNode, item.inst.rendered, next)
         continue
       }
+      if (item._tag === "Held") {
+        if (host.parentOf(item.node) !== parentNode || host.nextOf(item.range.close) !== next) {
+          insertNodes(parentNode, item, next)
+        }
+        next = item.node
+        continue
+      }
       const node = item.node
       if (host.parentOf(node) !== parentNode || host.nextOf(node) !== next) host.insertBefore(parentNode, node, next)
       next = node
@@ -6953,6 +6963,10 @@ const setup = (
         if (items === undefined) return
         if (!Array.isArray(items)) return insertNodes(parentNode, items, ref)
         for (let index = 0; index < items.length; index++) insertNodes(parentNode, items[index]!, ref)
+        return
+      }
+      case "Held": {
+        for (const node of nodesOf(rendered)) host.insertBefore(parentNode, node, ref)
       }
     }
   }
@@ -7765,7 +7779,9 @@ const setup = (
         closeWindow()
         if ((leaves || pops) && waitingState !== undefined) {
           for (const path of Array.from(waitingState.keys())) {
-            if (servedIn?.get(path)?.view === undefined) dropWaiting(path)
+            if (servedIn?.get(path)?.view !== undefined) continue
+            dropWaiting(path)
+            hydrating?.deferred.add(path)
           }
         }
         if (leaves) {
