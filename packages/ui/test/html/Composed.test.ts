@@ -1,9 +1,11 @@
+// @vitest-environment happy-dom
 import { Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
+import { ssr } from "@effect/ui/html/testing"
 import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Effect, Schema } from "effect"
-import { Dialog, Item, Menu, MenuMessage } from "./html/fixtures/headless.ts"
+import { Dialog, DialogEvents, Item, Menu, MenuMessage } from "./fixtures/headless.ts"
 
 const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(TestHost.layer()))
 
@@ -19,6 +21,19 @@ const failures = (root: TestHost.TestRoot<unknown, never, unknown>) =>
   root.log().flatMap((entry) => entry._tag === "Failed" ? [`${entry.path} ${entry.in}`] : [])
 
 const items: ReadonlyArray<Item> = [{ id: "a", label: "Archive" }, { id: "c", label: "Copy" }]
+
+const WrappedDialog = Component.define({
+  name: "WrappedDialog",
+  props: Schema.Struct({ label: Schema.String }),
+  model: Schema.Null,
+  message: DialogEvents,
+  events: DialogEvents,
+  elements: Html
+}).make({
+  init: () => null,
+  update: (model, event, $) => $.set(model).emit(event),
+  parts: (_, p) => p.child(Dialog, { props: p.props, onEmit: (event) => event, parts: (dialog) => dialog })
+})
 
 const ComboMessage = UiSchema.TaggedEnum({ Picked: { id: Schema.String }, Closed: {}, Toggle: {} })
 const ComboEvents = UiSchema.TaggedEnum({ Picked: { id: Schema.String } })
@@ -42,7 +57,7 @@ const Combo = Component.define({
     }),
   parts: (log, p) => {
     const badge = p.part("output", (b) => b.attr("data-count", String(log.length)))
-    return p.child(Dialog, {
+    return p.child(WrappedDialog, {
       props: { label: "Confirm" },
       onEmit: () => ComboMessage.Closed(),
       parts: (dialog) =>
@@ -169,10 +184,11 @@ describe("p.child", () => {
       Locator.fire(element(root, "Copy"), "click")
       yield* TestHost.settle
       assert.deepStrictEqual(updates(root), [
-        "/App/Combo[combo]/Dialog[]/Menu[menu] DomEvent Pick",
+        "/App/Combo[combo]/WrappedDialog[]/Dialog[]/Menu[menu] DomEvent Pick",
         "/App/Combo[combo] Emit Picked",
         "/App Emit Picked",
-        "/App/Combo[combo]/Dialog[] DomEvent Close",
+        "/App/Combo[combo]/WrappedDialog[]/Dialog[] DomEvent Close",
+        "/App/Combo[combo]/WrappedDialog[] Emit Closed",
         "/App/Combo[combo] Emit Closed",
         "/App DomEvent Clicked"
       ])
@@ -226,6 +242,19 @@ describe("p.child", () => {
     }).pipe(provideHost))
 })
 
+describe("p.child on the server", () => {
+  it.effect("the client adopts the server's render of every owned child", () =>
+    Effect.gen(function*() {
+      const result = yield* ssr(App, {})
+      assert.includeMembers([...result.adopted], [
+        "/App/Combo[combo]",
+        "/App/Combo[combo]/WrappedDialog[]",
+        "/App/Combo[combo]/WrappedDialog[]/Dialog[]",
+        "/App/Combo[combo]/WrappedDialog[]/Dialog[]/Menu[menu]"
+      ])
+    }).pipe(provideHost))
+})
+
 describe("p.child in a Scene", () => {
   it("a scene of the composed component runs its owned children's events through its update", () => {
     const s = Scene.start(Combo, { items }, {
@@ -234,7 +263,7 @@ describe("p.child in a Scene", () => {
     })
     s.childEmit(Menu, MenuRef, { _tag: "Picked", id: "a" })
       .emitted(ComboEvents.Picked({ id: "a" }))
-      .childEmit(Dialog, { _tag: "Closed" })
+      .childEmit(WrappedDialog, { _tag: "Closed" })
       .givenChild(Dialog, { open: true })
       .parts((combo) => {
         assert.deepStrictEqual(combo.log, ["picked a", "closed"])
@@ -248,7 +277,7 @@ describe("p.child in a Scene", () => {
     const s = Scene.start(App, {})
     assert.throws(
       () => s.childEmit(Dialog, { _tag: "Closed" }),
-      /^Scene\.childEmit: \/App\/Combo\[combo\]\/Dialog\[\] is declared with p\.child by \/App\/Combo\[combo\], whose update takes its events\. A scene doesn't run a child's update/
+      /^Scene\.childEmit: \/App\/Combo\[combo\]\/WrappedDialog\[\]\/Dialog\[\] is declared with p\.child by \/App\/Combo\[combo\]\/WrappedDialog\[\], whose update takes its events\. A scene doesn't run a child's update/
     )
     assert.throws(() => s.childFailure(Dialog, Cause.fail("x")), /^Scene\.childFailure: .* is declared with p\.child/)
     assert.throws(() => s.childPending(Dialog), /^Scene\.childPending: .* is declared with p\.child/)
@@ -264,7 +293,7 @@ describe("p.child in a Scene", () => {
     })
     assert.throws(
       () => Scene.start(Twice, {}).givenChild(Dialog, { open: true }),
-      /^Scene\.givenChild: 2 children Dialog without a key, declared with p\.child by \/Twice\/Combo\[a\] and \/Twice\/Combo\[b\]\. A scene can't choose/
+      /^Scene\.givenChild: 2 children Dialog without a key, declared with p\.child by \/Twice\/Combo\[a\]\/WrappedDialog\[\] and \/Twice\/Combo\[b\]\/WrappedDialog\[\]\. A scene can't choose/
     )
   })
 })

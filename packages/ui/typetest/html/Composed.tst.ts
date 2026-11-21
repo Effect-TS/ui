@@ -104,12 +104,44 @@ describe("p.child", () => {
     expect<Component.Headless.Requirements<typeof Combo>>().type.toBe<Clock | Tracker>()
   })
 
-  it("checks the child's props, and that its events map to this component's messages", () => {
+  it("a reader of the child's shared state in the consumer's closure leaves no requirement", () => {
+    const Tips = Component.define({ name: "Tips", model: Schema.Null, message: Msg, shares: () => ({ open: true }) })
+      .make({ init: () => null, update: (model) => model, parts: () => ({}) })
+    const Tip = Component.define({ name: "Tip", model: Schema.Null, message: Msg, shared: { tips: Tips } }).make({
+      init: () => null,
+      update: (model) => model,
+      view: (_, h) => h.el("p")
+    })
+    const Bar = define().make({
+      init: () => 0,
+      update: (count) => count,
+      parts: (_, p) => p.child(Tips, { parts: (tips) => tips })
+    })
+    const App = Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
+      init: () => null,
+      update: (model) => model,
+      view: (_, h) => Bar(h, { props: { items: [] }, view: () => Tip(h, {}) })
+    })
+    expect<Component.Requirements<typeof Tip>>().type.toBe<Component.Shared<"Tips">>()
+    expect<Component.Requirements<typeof App>>().type.toBe<never>()
+  })
+
+  it("checks the child's props, that its events map to this component's messages, and refuses view and fallback", () => {
     define().make({
       init: () => 0,
       update: (count) => count,
       parts: (_, p) => {
         expect(p.child).type.not.toBeCallableWith(Dialog, { parts: (dialog: unknown) => ({ dialog }) })
+        expect(p.child).type.not.toBeCallableWith(Dialog, {
+          props: { label: "Confirm" },
+          fallback: () => "down",
+          parts: (dialog: unknown) => ({ dialog })
+        })
+        expect(p.child).type.not.toBeCallableWith(Dialog, {
+          props: { label: "Confirm" },
+          view: () => "inside",
+          parts: (dialog: unknown) => ({ dialog })
+        })
         expect(p.child).type.not.toBeCallableWith(Dialog, {
           props: { label: "Confirm" },
           onEmit: () => AppMsg.Clicked(),

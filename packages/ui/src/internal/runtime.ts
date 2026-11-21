@@ -402,9 +402,9 @@ const findChildIn = (r: Rendered, key: string): RChild | RFallback | undefined =
 const findOwned = (inst: Instance, key: string): RChild | RFallback | undefined => {
   let r = inst.rendered
   while (
-    r !== undefined && !Array.isArray(r) && (r._tag === "Child" || r._tag === "Fallback") && r.v.owner === inst.owner
+    r !== undefined && !Array.isArray(r) && (r._tag === "Child" || r._tag === "Fallback") && r.v.owner !== undefined
   ) {
-    if (r.v.ref !== undefined && r.v.ref.key === key) return r
+    if (r.v.owner === inst.owner && r.v.ref !== undefined && r.v.ref.key === key) return r
     if (r._tag === "Fallback") return undefined
     r = r.inst.rendered
   }
