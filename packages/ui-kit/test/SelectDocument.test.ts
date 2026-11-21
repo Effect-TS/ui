@@ -290,6 +290,17 @@ describe("Select in a document", { concurrent: false }, () => {
   it.effect("moves focus into the items, and back to the trigger before it hides, so the field isn't touched", () =>
     Effect.gen(function*() {
       const { log } = yield* mountPage()
+      const scrolled: Array<Element> = []
+      const element = window.Element.prototype as any
+      const savedScrollIntoView = element.scrollIntoView
+      element.scrollIntoView = function(this: Element) {
+        scrolled.push(this)
+      }
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          element.scrollIntoView = savedScrollIntoView
+        })
+      )
       byId(byId("trigger").getAttribute("aria-labelledby")!).click()
       yield* tick
       assert.strictEqual(document.activeElement, byId("trigger"))
@@ -298,10 +309,17 @@ describe("Select in a document", { concurrent: false }, () => {
       yield* tick
       assert.strictEqual(document.activeElement, item("light"))
       assert.strictEqual(item("light").tabIndex, 0)
+      scrolled.length = 0
       keydown(item("light"), "ArrowDown")
       yield* tick
       assert.strictEqual(document.activeElement, item("dark"))
-      const escape = keydown(item("dark"), "Escape")
+      assert.deepStrictEqual(scrolled, [item("dark")])
+      scrolled.length = 0
+      item("system").dispatchEvent(new MouseEvent("mouseenter"))
+      yield* tick
+      assert.strictEqual(document.activeElement, item("system"))
+      assert.deepStrictEqual(scrolled, [])
+      const escape = keydown(item("system"), "Escape")
       assert.isTrue(escape.defaultPrevented)
       yield* tick
       assert.strictEqual(document.activeElement, byId("trigger"))
@@ -368,6 +386,7 @@ describe("Select in a document", { concurrent: false }, () => {
       byId("trigger").focus()
       keydown(byId("trigger"), "ArrowDown")
       yield* tick
+      assert.strictEqual(document.body.style.overflowY, "hidden")
       const blocker = byId("positioner").querySelector("[data-select-blocker]")!
       assert.isNotNull(blocker)
       const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 })
@@ -376,6 +395,7 @@ describe("Select in a document", { concurrent: false }, () => {
       press(blocker)
       yield* tick
       assert.isFalse(shown())
+      assert.strictEqual(document.body.style.overflowY, "")
       assert.strictEqual(document.activeElement, byId("trigger"))
       assert.isFalse(touched())
     }).pipe(Effect.scoped))
