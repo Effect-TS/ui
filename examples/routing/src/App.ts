@@ -102,7 +102,7 @@ export const App = AppDef.make({
 
     ExpiredShortcutPrefix: (_model, _message, $) => $.evolve({ shortcutPending: false }),
 
-    FocusedSearchInput: (_model, _message, $) => $.evolve({ searchInputFocused: true }),
+    FocusedSearchInput: (_model, _message, $) => $.evolve({ searchInputFocused: true, shortcutPending: false }),
 
     BlurredSearchInput: (_model, _message, $) => $.evolve({ searchInputFocused: false })
   },
