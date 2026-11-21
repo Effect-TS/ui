@@ -79,8 +79,6 @@ const clearSession = () =>
     onFailure: (error) => AppMessage.FailedClearSession({ error: error.message })
   }))
 
-// The new route comes back through the Router subscription, so a redirect
-// sends nothing of its own.
 const redirectTo = (route: AppRoute) => Router.replace(AppRoute, route).pipe(Command.asNoop)
 
 const AppDef = Component.define({
@@ -94,13 +92,7 @@ const LoggedOutView = AppDef.fragment((h, model: typeof LoggedOut.Type) =>
   h.div.class("py-8").children(
     LoggedOutRoute.match(model.route, {
       Home: () => HomePage(h),
-      // Keyed by its path: leaving `/login` and coming back starts a fresh
-      // form.
-      Login: (route) =>
-        LoginPage(h, {
-          key: AppRoute.printPath(route),
-          onEmit: { SignedIn: ({ session }) => AppMessage.SignedInLogin({ session }) }
-        }),
+      Login: () => LoginPage(h, { onEmit: { SignedIn: ({ session }) => AppMessage.SignedInLogin({ session }) } }),
       NotFound: (route) =>
         NotFound(h, { path: route.params["*"], backHref: AppRoute.print(homeRoute), backText: "Go Home" })
     })
@@ -148,22 +140,30 @@ export const AppNoDeps = AppDef.make({
     const model = guard($.props.route, $.props.session)
     return redirected(model, $.props.route) ? $.set(model).run(redirectTo(model.route)) : model
   },
+
   update: {
     ChangedRoute: (model, { route }, $) => {
       const next = guard(route, model._tag === "LoggedIn" ? Option.some(model.session) : Option.none())
       return redirected(next, route) ? $.set(next).run(redirectTo(next.route)) : next
     },
+
     SignedInLogin: (_model, { session }, $) =>
       $.set(LoggedIn.make({ route: dashboardRoute, session })).run(saveSession(session), redirectTo(dashboardRoute)),
+
     ClickedSignOut: (_model, _message, $) =>
       $.set(LoggedOut.make({ route: homeRoute })).run(clearSession(), redirectTo(homeRoute)),
+
     FailedSaveSession: (_model, { error }, $) => $.run(LogError({ entries: ["Failed to save session:", error] })),
+
     FailedClearSession: (_model, { error }, $) => $.run(LogError({ entries: ["Failed to clear session:", error] }))
   },
+
   subscriptions: (model) => [
     Router.subscription(AppRoute, model.route, (route) => AppMessage.ChangedRoute({ route }))
   ],
+
   head: (model) => [Head.title(model.route._tag === "Home" ? "Auth" : `${model.route._tag} | Auth`)],
+
   view: (model, h) =>
     h.div.class("min-h-screen bg-gray-100").children(
       model._tag === "LoggedOut" ? LoggedOutView(h, model) : LoggedInView(h, model)
