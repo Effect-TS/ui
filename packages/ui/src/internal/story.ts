@@ -1833,22 +1833,35 @@ export const rootParts = <Props, Parts>(
   props: Props,
   lookup: object
 ): Parts => {
-  const shared = rootShared(sharedGiven.get(lookup))
+  const shared = sharedGiven.get(lookup)
   const given = childModels.get(lookup)
-  const resolve = (value: unknown, owner: View.Owner): readonly [unknown, View.Owner] => {
+  const resolve = (
+    value: unknown,
+    owner: View.Owner,
+    owners: Owners
+  ): readonly [unknown, View.Owner, Owners] => {
     while (childOf.isComposed(value)) {
       const child = value.child
       const owned = child.component as unknown as Component.Headless.Any
       const at: View.Owner = { path: owner.path + "/" + segment(child), depth: owner.depth + 1 }
       const ownedModel = given?.has(at.path) ? given.get(at.path) : owned.init(child.props).model
-      const [parts, inner] = resolve(owned.parts(ownedModel, child.props, { owner: at, shared }), at)
+      const [parts, inner, below] = resolve(
+        owned.parts(ownedModel, child.props, { owner: at, shared: sharedLookup(shared, owners) }),
+        at,
+        ownersBelow(owners, owned, ownedModel, child.props)
+      )
       value = value.parts(parts)
       owner = inner
+      owners = below
     }
-    return [value, owner]
+    return [value, owner, owners]
   }
   const owner: View.Owner = { path: "/" + component.definition.name, depth: 0 }
-  return resolve(component.parts(model, props, { owner, shared }), owner)[0] as Parts
+  return resolve(
+    component.parts(model, props, { owner, shared: rootShared(shared) }),
+    owner,
+    ownersBelow(noOwners, component, model, props)
+  )[0] as Parts
 }
 
 /**
