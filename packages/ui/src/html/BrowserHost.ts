@@ -998,47 +998,24 @@ export const makeHost = (
     host.setProp(node, name, value)
   }
 
-  let scratchStyle: CSSStyleDeclaration | undefined
+  const scratch = document.createElement("div").style
 
-  const writeStyle = (element: globalThis.Element, value: string | undefined): void => {
-    if (value === undefined) element.removeAttribute("style")
-    else element.setAttribute("style", value)
-  }
-
-  const setStyle = (
-    element: globalThis.Element,
-    value: string | undefined,
-    previous: string | undefined
-  ): void => {
-    if ((element.getAttribute("style") ?? undefined) === previous) {
-      writeStyle(element, value)
-      return
-    }
+  const outsideStyle = (element: globalThis.Element, previous: string | undefined): Array<string> | undefined => {
+    if ((element.getAttribute("style") ?? undefined) === previous) return undefined
     const style = (element as HTMLElement).style
-    if (style === undefined) {
-      writeStyle(element, value)
-      return
-    }
-    if (scratchStyle === undefined) scratchStyle = document.createElement("div").style
-    scratchStyle.cssText = previous ?? ""
-    const kept: Array<readonly [string, string, string]> = []
-    for (let i = 0; i < style.length; i++) {
-      const prop = style[i]
-      const propValue = style.getPropertyValue(prop)
-      if (propValue === "") continue
-      const propPriority = style.getPropertyPriority(prop)
-      if (
-        propValue !== scratchStyle.getPropertyValue(prop) ||
-        propPriority !== scratchStyle.getPropertyPriority(prop)
-      ) {
-        kept.push([prop, propValue, propPriority])
+    if (style === undefined) return undefined
+    scratch.cssText = previous ?? ""
+    const kept: Array<string> = []
+    for (let i = 0, length = style.length; i < length; i++) {
+      const name = style[i]!
+      const value = style.getPropertyValue(name)
+      if (value === "") continue
+      const priority = style.getPropertyPriority(name)
+      if (value !== scratch.getPropertyValue(name) || priority !== scratch.getPropertyPriority(name)) {
+        kept.push(name, value, priority)
       }
     }
-    writeStyle(element, value)
-    for (let i = 0; i < kept.length; i++) {
-      const [prop, propValue, propPriority] = kept[i]
-      style.setProperty(prop, propValue, propPriority)
-    }
+    return kept
   }
 
   const host: Renderer.Host<globalThis.Node> & { readonly dispose: () => void } = {
@@ -1065,12 +1042,13 @@ export const makeHost = (
       const normalized = elements.attributeName(name, element.namespaceURI === SVG)
       if (normalized === undefined) return
       name = normalized
-      if (name === "style") {
-        setStyle(element, value, previous)
-        return
-      }
+      const kept = name === "style" ? outsideStyle(element, previous) : undefined
       if (value === undefined) element.removeAttribute(name)
       else element.setAttribute(name, value)
+      if (kept !== undefined) {
+        const style = (element as HTMLElement).style
+        for (let i = 0; i < kept.length; i += 3) style.setProperty(kept[i]!, kept[i + 1]!, kept[i + 2])
+      }
     },
     setProp(node, name, value) {
       const element = node as any

@@ -2142,10 +2142,8 @@ const setup = (
     if (view._tag === "Text") return host.createText(view.text)
     if (view._tag === "Child" || view._tag === "Outlet") return host.createText("")
     const node = host.createElement(view.tag)
-    if (view.attrs !== View.noFields) {
-      const attrs = host.normalizeAttrs !== undefined ? host.normalizeAttrs(node, view.attrs) : view.attrs
-      for (const name in attrs) host.setAttr(node, name, attrs[name])
-    }
+    const attrs = normalized(node, view.attrs)
+    for (const name in attrs) host.setAttr(node, name, attrs[name])
     for (const child of view.children) host.insertBefore(node, buildStatic(child), undefined)
     for (const name in view.props) host.setProp(node, name, view.props[name])
     return node
@@ -5346,7 +5344,7 @@ const setup = (
       case "Element": {
         const node = host.createElement(view.tag)
         if (view.attrs !== View.noFields) {
-          const attrs = host.normalizeAttrs !== undefined ? host.normalizeAttrs(node, view.attrs) : view.attrs
+          const attrs = normalized(node, view.attrs)
           for (const name in attrs) host.setAttr(node, name, attrs[name])
         }
         setEvents(inst, node, view)
@@ -5759,12 +5757,10 @@ const setup = (
       case "Element": {
         if (kind?._tag !== "Element" || kind.tag !== view.tag) return undefined
         const next = host.nextOf(node)
-        if (view.attrs !== View.noFields) {
-          const attrs = host.normalizeAttrs !== undefined ? host.normalizeAttrs(node, view.attrs) : view.attrs
-          for (const name in attrs) {
-            const current = hydration!.getAttr(node, name)
-            if (current !== attrs[name]) host.setAttr(node, name, attrs[name], current)
-          }
+        const attrs = normalized(node, view.attrs)
+        for (const name in attrs) {
+          const current = hydration!.getAttr(node, name)
+          if (current !== attrs[name]) host.setAttr(node, name, attrs[name], current)
         }
         setEvents(inst, node, view)
         checkKeys(inst, view.children)
@@ -6169,6 +6165,11 @@ const setup = (
     }
   }
 
+  const normalized = (
+    node: unknown,
+    attrs: Readonly<Record<string, string>>
+  ): Readonly<Record<string, string>> => host.normalizeAttrs === undefined ? attrs : host.normalizeAttrs(node, attrs)
+
   /**
    * Sets what changed between two attribute records: the names that went first, then the values
    * that differ. A record's own values are strings, which nothing it inherits from
@@ -6179,17 +6180,15 @@ const setup = (
     prev: Readonly<Record<string, string>>,
     next: Readonly<Record<string, string>>
   ) => {
-    if (host.normalizeAttrs !== undefined) {
-      prev = host.normalizeAttrs(node, prev)
-      next = host.normalizeAttrs(node, next)
-    }
+    prev = normalized(node, prev)
+    next = normalized(node, next)
     for (const name in prev) {
       if (typeof next[name] !== "string") host.setAttr(node, name, undefined, prev[name])
     }
     for (const name in next) {
       const value = next[name]
-      const previous = typeof prev[name] === "string" ? prev[name] : undefined
-      if (previous !== value) host.setAttr(node, name, value, previous)
+      const previous = prev[name]
+      if (previous !== value) host.setAttr(node, name, value, typeof previous === "string" ? previous : undefined)
     }
   }
 

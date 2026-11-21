@@ -166,10 +166,10 @@ export interface Host<Node> {
   createText(text: string): Node
   setText(node: Node, text: string): void
   /**
-   * Sets or removes an attribute on `node`. `previous` is the value the
-   * renderer last set for `name` when patching, or the value read from the
-   * DOM when hydrating, and `undefined` when mounting or when `name` was not
-   * previously set.
+   * Sets an attribute of `node`, or removes it when `value` is `undefined`.
+   * `previous` is the value the renderer takes the attribute to hold before
+   * the call: the one it last set, or the one hydration read from the node,
+   * and `undefined` when it holds none.
    */
   setAttr(node: Node, name: string, value: string | undefined, previous?: string | undefined): void
   setProp(node: Node, name: string, value: unknown): void
