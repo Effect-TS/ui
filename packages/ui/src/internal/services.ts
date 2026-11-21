@@ -42,6 +42,7 @@ export interface RootHandle {
    * hasn't yet. The Router calls it first in `set`, before the route changes.
    */
   readonly navigated: () => void
+  readonly restored: () => void
   /** The runtime's problems sink. */
   readonly report: (problem: { readonly _tag: string; readonly message: string }) => void
 }

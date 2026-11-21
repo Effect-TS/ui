@@ -1436,28 +1436,36 @@ const setup = (
     readonly state: Renderer.State
     readonly deferred: ReadonlySet<string>
     readonly kept: boolean
+    readonly claimed: Set<string>
   } | undefined = options?.state === undefined || server !== undefined ? undefined : {
     state: options.state,
     deferred: new Set(options.state["~deferred"] ?? []),
-    kept: options.state["~kept"] !== undefined || options.state["~scoped"] !== undefined
+    kept: options.state["~kept"] !== undefined || options.state["~scoped"] !== undefined,
+    claimed: new Set()
   }
   let popped: Saved | undefined
   let replaced: { readonly inst: Instance; readonly by: View.Child<any, any> } | undefined
   let supply: Saved | undefined
   let claims = false
-  const holders: Array<Instance> = []
   const claimSaved = (author: Instance, from: Saved) => {
     const path = author.path
-    const kept = (from["~kept"] as Record<string, Record<string, Saved>> | undefined)?.[path]
+    const all = from["~kept"] as Record<string, Record<string, Saved>> | undefined
+    const kept = all?.[path]
     const drawn = (from["~scoped"] as Record<string, ReadonlyArray<string>> | undefined)?.[path]
     if (kept === undefined && drawn === undefined) return
-    const waits = { ...kept }
-    if (drawn !== undefined) {
-      for (const child of drawn) waits[child] = from
-      if (from === hydrating?.state) holders.push(author)
+    if (from === popped) delete all![path]
+    else if (from === hydrating?.state) {
+      if (hydrating.claimed.has(path)) return
+      hydrating.claimed.add(path)
     }
+    const waits = { ...kept }
+    if (drawn !== undefined) { for (const child of drawn) waits[child] = from }
     waitingOf.set(author, waits)
     claims = true
+  }
+  const waitingAt = (waits: Record<string, Saved> | undefined, child: string): Saved | undefined => {
+    const from = waits?.[child]
+    return from === hydrating?.state || from !== options?.state ? from : waits![child] = subtree(from!, child)
   }
   const subtree = (state: Saved, root: string): Saved => {
     const out: Saved = {}
@@ -1471,21 +1479,13 @@ const setup = (
   }
   const takeSaved = (author: Instance, path: string): Saved | undefined => {
     const waits = waitingOf.get(author)
-    const from = waits?.[path]
+    const from = waitingAt(waits, path)
     delete waits?.[path]
     return from === hydrating?.state ? undefined : from
   }
   const restoreKept = () => {
-    const kept = hooks!.restore("~kept" + rootPath)
-    popped = kept === undefined ? undefined : { "~kept": kept }
-  }
-  const endHydration = () => {
-    const state = hydrating!.state
-    for (const author of holders.splice(0)) {
-      const waits = waitingOf.get(author)!
-      for (const child in waits) if (waits[child] === state) waits[child] = subtree(state, child)
-    }
-    hydrating = undefined
+    const kept = hooks!.restore("~kept" + rootPath) as Saved | undefined
+    popped = kept === undefined ? undefined : { "~kept": { ...kept } }
   }
   // Slots still waiting for their Layer before they adopt, and whether the first render is done.
   let waiting = 0
@@ -1512,7 +1512,7 @@ const setup = (
   const finishAdoption = () => {
     if (adoptedDone) return
     adoptedDone = true
-    endHydration()
+    hydrating = undefined
     // `adopted` completes at the end of this flush.
     reportPending = true
     // Head sync starts with the flush after adoption.
@@ -2201,7 +2201,6 @@ const setup = (
     // A head still to fold belongs to the flush already scheduled, which calls the hook.
     if (hooks !== undefined && handle !== undefined && !viewChanged) {
       hooks.afterFlush(handle, { flush: flushes, title: mergedTitle, buildsPendingSince })
-      popped = undefined
     }
   }
 
@@ -3202,15 +3201,15 @@ const setup = (
       Object.hasOwn(hydrating.state, path!)
     if (popped !== undefined) claimSaved(inst, popped)
     if (from !== undefined && !served) claimSaved(inst, from)
-    const saved = hydrates || restored !== undefined || from === undefined || served ? undefined : from[inst.path]
-    if (!hydrates && restored === undefined && saved === undefined) {
+    const state = hydrates || restored !== undefined || from === undefined || served ? restored : from[inst.path]
+    if (!hydrates && state === undefined) {
       startInstance(inst, parentEnv, range, Option.none(), Option.none())
       return inst
     }
     const decoded = runCodec(
       hydrates
         ? decodeServer(component, path!, hydrating!.state)
-        : decodeRestored(inst, restored ?? saved)
+        : decodeRestored(inst, state)
     )
     const start = (exit: Exit.Exit<ServerStart, SchemaIssue.Issue>) => {
       const { collected, fromServer } = Exit.isSuccess(exit) ? exit.value : fresh
@@ -3218,9 +3217,15 @@ const setup = (
     }
     if (Exit.isExit(decoded)) start(decoded)
     else {
-      const resume = hold(inst, hydrates ? range : undefined, hydrates ? undefined : restored ?? saved)
+      const resume = hold(inst, hydrates ? range : undefined, hydrates ? undefined : state)
+      interruptOnClose(inst.scope, decoded)
       decoded.addObserver((exit) =>
-        resume(Exit.isSuccess(exit) && Option.isSome(exit.value.fromServer), () => start(exit))
+        resume(Exit.isSuccess(exit) && Option.isSome(exit.value.fromServer), () => {
+          const was = supply
+          supply = served ? undefined : from
+          start(exit)
+          supply = was
+        })
       )
     }
     return inst
@@ -6914,14 +6919,16 @@ const setup = (
     const table = tableOf(author)
     let byKey = table.children.get(view.component)
     const entry = byKey?.get(view.key)
-    if (
-      replaced !== undefined && within(inst, replaced.inst) && !within(author, replaced.inst)
-        ? !writesIn([replaced.by], view)
-        : isOld(inst, table) && entry?.inner.v !== view
-    ) return blankText(range)
-    const alive = aliveOf(view)
+    const stale = replaced !== undefined && within(inst, replaced.inst) && !within(author, replaced.inst)
+    const written = stale
+      ? entry !== undefined ? undefined : inst.component === outletComponent ? writeIn([replaced!.by], view) : view
+      : isOld(inst, table) && entry?.inner.v !== view
+      ? undefined
+      : view
+    if (written === undefined) return blankText(range)
+    const alive = aliveOf(written)
     if (alive !== undefined && !askAlive(author, table, alive, view)) {
-      endWrite(author, view, entry)
+      if (!stale) endWrite(author, view, entry)
       return blankText(range)
     }
     if (entry !== undefined) {
@@ -6950,7 +6957,7 @@ const setup = (
     }
     const named = `${author.path}/${segment(view)}`
     const waits = claims ? waitingOf.get(author) : undefined
-    const saved = waits?.[named]
+    const saved = waitingAt(waits, named)
     const was = supply
     supply = saved
     const inner = makeChild(inst, view, env, range, named, Scope.forkUnsafe(author.scope, "sequential"))
@@ -6994,14 +7001,23 @@ const setup = (
     inst.component === outletComponent ? outletOf.get(inst)!.slotted.round : keptTables.get(inst.author)?.round ?? 0
   const isOld = (inst: Instance, table: KeptTable): boolean =>
     inst.component === outletComponent && roundAt(inst) !== table.round
-  const writesIn = (nodes: ReadonlyArray<View.Node<any, any>>, view: View.Child<any, any>): boolean =>
-    nodes.some((node) =>
-      node._tag === "Element"
-        ? writesIn(node.children, view)
-        : node._tag === "Child" &&
-          (node.alive !== undefined && node.component === view.component && node.key === view.key ||
-            node.slots !== undefined && writesIn(View.children(Object.values(node.slots)), view))
-    )
+  const writeIn = (
+    nodes: ReadonlyArray<View.Node<any, any>>,
+    view: View.Child<any, any>
+  ): View.Child<any, any> | undefined => {
+    for (const node of nodes) {
+      const found = node._tag === "Element"
+        ? writeIn(node.children, view)
+        : node._tag !== "Child"
+        ? undefined
+        : node.alive !== undefined && node.component === view.component && node.key === view.key
+        ? node
+        : node.slots !== undefined
+        ? writeIn(View.children(Object.values(node.slots)), view)
+        : undefined
+      if (found !== undefined) return found
+    }
+  }
   const endWrite = (author: Instance, view: View.Child<any, any>, entry: Kept | undefined) => {
     const waits = claims ? waitingOf.get(author) : undefined
     if (waits !== undefined) delete waits[`${author.path}/${segment(view)}`]
@@ -7180,8 +7196,10 @@ const setup = (
   const keepBelow = (inst: Instance, closing: Instance) => {
     for (const child of inst.children) {
       const entry = keptEntries.get(child)
-      if (entry !== undefined && entry.at !== undefined && !within(entry.author, closing)) keep(entry)
-      else keepBelow(child, closing)
+      if (entry !== undefined && entry.at !== undefined && !within(entry.author, closing)) {
+        keep(entry)
+        if (entry.at !== undefined) closeAll(inst, entry.inner)
+      } else keepBelow(child, closing)
     }
   }
   const within = (inst: Instance, top: Instance): boolean => {
@@ -7428,7 +7446,7 @@ const setup = (
   started = true
   if (waiting === 0 && !adoptedDone) {
     adoptedDone = true
-    endHydration()
+    hydrating = undefined
     reportPending = true
   }
   // Mounting drains like a flush, its head fold included. `onMount` work runs after the commit, so its
@@ -7464,7 +7482,7 @@ const setup = (
       if (waits !== undefined) {
         for (const child in waits) {
           const saved = waits[child]
-          ;((keptIn(into)[inst.path] ??= {}) as Saved)[child] = saved === hydrating?.state
+          ;((keptIn(into)[inst.path] ??= {}) as Saved)[child] = saved === options?.state
             ? subtree(saved, child)
             : saved
         }
@@ -7474,9 +7492,19 @@ const setup = (
         const restored = restoring.get(inst)
         if (restored !== undefined) into[path] = restored
         else {
-          const { "~kept": kept, "~scoped": _, ...state } = subtree(hydrating!.state, path)
+          const all = subtree(hydrating!.state, path)
+          const { "~kept": kept, "~scoped": drawn, ...state } = all as {
+            readonly "~kept"?: Record<string, Saved>
+            readonly "~scoped"?: Record<string, ReadonlyArray<string>>
+          }
+          for (const author in kept) keptIn(into)[author] = { ...kept[author] }
+          for (const author in drawn) {
+            for (const child of drawn[author]) {
+              const saved = ((keptIn(into)[author] ??= {}) as Saved)[child] = subtree(all, child)
+              for (const key in saved) delete (state as Saved)[key]
+            }
+          }
           Object.assign(into, state)
-          if (kept !== undefined) Object.assign(keptIn(into), kept)
         }
         return
       }
@@ -7520,6 +7548,9 @@ const setup = (
       navigated: () => {
         closeWindow()
         restoreKept()
+      },
+      restored: () => {
+        popped = undefined
       },
       report
     }

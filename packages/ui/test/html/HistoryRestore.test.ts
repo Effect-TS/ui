@@ -188,12 +188,66 @@ const appOf = (page: Page) =>
       )
   })
 
-const visit = Effect.fnUntraced(function*(page: Page, ready = false) {
+const editor = (name: string) =>
+  Component.define({
+    name,
+    scoped: false,
+    props: Schema.Struct({ open: Schema.Boolean }),
+    model: Schema.NullOr(Schema.String),
+    message: Schema.NullOr(Schema.String),
+    elements: Html
+  }).make({
+    init: () => "subject",
+    update: (_, subject) => subject,
+    view: (subject, h) =>
+      h.section(
+        h.input.value(subject ?? "").onInput(({ value }) => value === "" ? null : value),
+        h.props.open ? h.scoped((s) => Draft(s, { key: "d" })) : null
+      )
+  })
+const Editor = editor("Editor")
+const SlowEditor = editor("SlowEditor").pipe(Component.provide(slow))
+const Shown = Schema.Literals(["none", "closed", "open"])
+const DeskMsg = UiSchema.TaggedEnum({ Changed: { route: Routes }, Go: {}, Went: {}, Show: { editor: Shown } })
+const deskOf = (waits: boolean) =>
+  Component.define({
+    name: "Desk",
+    scoped: false,
+    props: Schema.Struct({ route: Routes }),
+    model: Schema.Struct({ route: Routes, editor: Shown }),
+    message: DeskMsg,
+    elements: Html
+  }).make({
+    init: ($) => ({ route: $.props.route, editor: "open" as const }),
+    update: (desk, message, $) =>
+      DeskMsg.match(message, {
+        Changed: ({ route }) => ({ ...desk, route }),
+        Go: () => $.run(Router.push(Routes, Routes.Away()).pipe(Command.map(() => DeskMsg.Went()))),
+        Went: () => desk,
+        Show: ({ editor }) => ({ ...desk, editor })
+      }),
+    subscriptions: (desk) => [Router.subscription(Routes, desk.route, (route) => DeskMsg.Changed({ route }))],
+    view: (desk, h) => {
+      if (desk.route._tag === "Away") return h.main("away")
+      const props = { open: desk.editor === "open" }
+      return h.main(
+        SlowSide(h, { key: "s" }),
+        desk.editor === "none"
+          ? null
+          : waits
+          ? SlowEditor(h, { key: "e", props })
+          : Editor(h, { key: "e", props })
+      )
+    }
+  })
+
+const serve = Effect.fnUntraced(function*<E, R>(
+  page: Effect.Effect<HtmlServer.Rendered<unknown>, E, R>,
+  ready: boolean
+) {
   inits = 0
   gate = Effect.void
-  const App = appOf(page)
-  const props = Router.props(Routes)
-  const { html, state } = yield* HtmlServer.renderToHtml(App, props).pipe(
+  const { html, state } = yield* page.pipe(
     Effect.provide(Router.make({ routes: Routes, history: Router.memoryHistory("/") }))
   )
   const latch = yield* Deferred.make<void>()
@@ -201,9 +255,43 @@ const visit = Effect.fnUntraced(function*(page: Page, ready = false) {
   const app = document.body.appendChild(document.createElement("div"))
   yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
   app.innerHTML = html
+  return { app, state, open: Deferred.succeed(latch, undefined) }
+})
+const visit = Effect.fnUntraced(function*(page: Page, ready = false) {
+  const App = appOf(page)
+  const props = Router.props(Routes)
+  const { app, open, state } = yield* serve(HtmlServer.renderToHtml(App, props), ready)
   const root = yield* BrowserHost.mountEffect(App, props, app, { state })
   yield* tick
-  return { app, root, open: Deferred.succeed(latch, undefined) }
+  return { app, root, open }
+})
+const sit = Effect.fnUntraced(function*(waits: boolean, ready = false) {
+  const Desk = deskOf(waits)
+  const props = Router.props(Routes)
+  const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Desk, props), ready)
+  const root = yield* BrowserHost.mountEffect(Desk, props, app, { state })
+  yield* tick
+  return { app, root, open, draft: () => app.querySelectorAll("input")[1]?.value }
+})
+const Panel = Component.define({
+  name: "Panel",
+  scoped: false,
+  model: Schema.Boolean,
+  message: Schema.Boolean,
+  elements: Html
+}).make({
+  init: () => true,
+  update: (_, shown) => shown,
+  view: (shown, h) => h.main(SlowSide(h, { key: "s" }), shown ? Editor(h, { key: "e", props: { open: true } }) : null)
+})
+const aside = Effect.fnUntraced(function*(first: Page) {
+  const { app, state } = yield* serve(HtmlServer.renderToHtml(Panel, {}), false)
+  const other = document.body.appendChild(document.createElement("div"))
+  yield* Effect.addFinalizer(() => Effect.sync(() => other.remove()))
+  const primary = yield* BrowserHost.mountEffect(appOf(first), Router.props(Routes), other)
+  const root = yield* BrowserHost.mountEffect(Panel, {}, app, { state })
+  yield* tick
+  return { root, go: () => primary.send(Msg.Go()), draft: () => app.querySelectorAll("input")[1]?.value }
 })
 
 describe("history restore of a page whose hydration hasn't settled", { concurrent: false }, () => {
@@ -333,6 +421,108 @@ describe("history restore of a page whose hydration hasn't settled", { concurren
       history.go(-1)
       yield* tick
       assert.strictEqual(app.querySelector("input")!.value, "typed")
+    }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
+  })
+
+  it.effect("Back restores a Model the user set to null", () => {
+    const history = Router.memoryHistory("/")
+    return Effect.gen(function*() {
+      const { app, root } = yield* sit(false, true)
+      const field = app.querySelector("input")!
+      field.value = ""
+      field.dispatchEvent(new Event("input", { bubbles: true }))
+      yield* tick
+      root.send(DeskMsg.Go())
+      yield* tick
+      history.go(-1)
+      yield* tick
+      assert.strictEqual(app.querySelector("input")!.value, "")
+    }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
+  })
+
+  it.effect("Back restores a scoped child an author drew as a push closed it waiting, drawn again after the Back settles", () => {
+    const history = Router.memoryHistory("/")
+    return Effect.gen(function*() {
+      const { draft, open, root } = yield* sit(true)
+      root.send(DeskMsg.Go())
+      yield* tick
+      yield* open
+      root.send(DeskMsg.Show({ editor: "closed" }))
+      history.go(-1)
+      yield* tick
+      root.send(DeskMsg.Show({ editor: "open" }))
+      yield* tick
+      assert.strictEqual(draft(), "server")
+    }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
+  })
+
+  it.effect("Back restores a scoped child a push closed with its waiting author once: an author made again at its key starts it afresh", () => {
+    const history = Router.memoryHistory("/")
+    return Effect.gen(function*() {
+      const { draft, open, root } = yield* sit(true)
+      root.send(DeskMsg.Go())
+      yield* tick
+      root.send(DeskMsg.Show({ editor: "closed" }))
+      history.go(-1)
+      yield* tick
+      root.send(DeskMsg.Show({ editor: "none" }))
+      yield* tick
+      root.send(DeskMsg.Show({ editor: "open" }))
+      yield* tick
+      yield* open
+      yield* tick
+      assert.strictEqual(draft(), "client")
+    }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
+  })
+
+  it.effect("Back restores a scoped child of an author made before the Back settles", () => {
+    const history = Router.memoryHistory("/")
+    return Effect.gen(function*() {
+      const { draft, root } = yield* sit(false, true)
+      root.send(DeskMsg.Go())
+      yield* tick
+      gate = Effect.never
+      root.send(DeskMsg.Show({ editor: "none" }))
+      history.go(-1)
+      yield* tick
+      root.send(DeskMsg.Show({ editor: "open" }))
+      yield* tick
+      assert.strictEqual(draft(), "server")
+    }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
+  })
+
+  it.effect("Back restores no scoped child of an author made after it settled, in a root that still hydrates", () => {
+    const history = Router.memoryHistory("/")
+    return Effect.gen(function*() {
+      const { draft, go, root } = yield* aside("nested")
+      go()
+      yield* tick
+      root.send(false)
+      history.go(-1)
+      yield* tick
+      root.send(true)
+      yield* tick
+      assert.strictEqual(draft(), "client")
+    }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
+  })
+
+  it.effect("Back restores a scoped child once, in a root that still hydrates: an author made again at its key starts it afresh", () => {
+    const history = Router.memoryHistory("/")
+    return Effect.gen(function*() {
+      const { draft, go, root } = yield* aside("slow form")
+      go()
+      yield* tick
+      root.send(false)
+      history.go(-1)
+      yield* tick
+      root.send(true)
+      yield* tick
+      assert.strictEqual(draft(), "server")
+      root.send(false)
+      yield* tick
+      root.send(true)
+      yield* tick
+      assert.strictEqual(draft(), "client")
     }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
   })
 })

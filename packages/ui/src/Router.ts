@@ -1661,6 +1661,7 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
         const done = pending
         pending = undefined
         restoring = undefined
+        for (const each of roots) each.restored()
         for (const check of done.checks) check.settled()
         const lost = Array.from(new Set(done.blocks)).filter((key) => !blocks.has(key))
         if (lost.length > 0) {
