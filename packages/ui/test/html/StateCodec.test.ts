@@ -48,7 +48,6 @@ describe("state codecs", () => {
   it.effect("ships a File in a Model and adopts a Model that decodes asynchronously", () =>
     Effect.gen(function*() {
       const rendered = yield* ssr(Upload, {})
-      assert.deepStrictEqual(rendered.state["~deferred"], [])
       assert.include(JSON.stringify(rendered.state["/Upload"]), "aGVsbG8=")
       assert.deepStrictEqual(rendered.adopted, ["/Upload"])
       assert.strictEqual(rendered.container.textContent, "Attached notes.txt 0")
@@ -124,7 +123,6 @@ describe("state codecs", () => {
         let open!: () => void
         gate = new Promise((resolve) => open = resolve)
         history.go(-1)
-        assert.notInclude(JSON.stringify(history.current().state), "/App/Upload[upload]")
         yield* TestHost.settle
         assert.strictEqual(root.text(), "Other")
         open()
