@@ -815,12 +815,14 @@ interface HeadPart {
   readonly children: ReadonlyArray<Instance>
 }
 
+const outletPath = (receiver: Instance, name: string): string => receiver.path + "/" + slotSegment(name)
+
 const headChildren = (
   inst: Instance,
   values: ReadonlyMap<string, unknown>
 ): Component.HeadChildren<unknown, string> => ({
   get: (component, key = "") => values.get(inst.path + "/" + segmentOf(component, key)),
-  slot: (name) => values.get(inst.path + "/" + slotSegment(name))
+  slot: (name) => values.get(outletPath(inst, name))
 })
 
 /** A tree with no entries, which folds to the vocabulary's empty head. */
@@ -5457,8 +5459,6 @@ const setup = (
     })
     return out
   }
-
-  const outletPath = (receiver: Instance, name: string): string => receiver.path + "/" + slotSegment(name)
 
   /** What the receiver's parent last passed for the outlet's slot. */
   const contentOf = (outlet: OutletOf): unknown => outlet.slotted.values?.[outlet.view.name]

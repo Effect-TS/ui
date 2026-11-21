@@ -573,18 +573,22 @@ export const attributes = (entry: Meta | Link): ReadonlyArray<readonly [string, 
 }
 
 const linkSignature = (entry: Link): string =>
-  JSON.stringify([...headAttributes.normalize(attributes(entry))].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0))
+  headAttributes.normalize(attributes(entry)).map((pair) => JSON.stringify(pair)).sort().join()
+
+const dataSlot = (element: "html" | "body", name: string): string => `${element} ${name}`
 
 const slotsOf = (head: HtmlHead): ReadonlyMap<string, string> => {
   const out = new Map<string, string>()
   if (head.title !== undefined) out.set("title", head.title)
   if (head.html.lang !== undefined) out.set("lang", head.html.lang)
   if (head.html.dir !== undefined) out.set("dir", head.html.dir)
-  for (const entry of head.meta) out.set(identity(entry), JSON.stringify(attributes(entry)))
+  for (const entry of head.meta) {
+    out.set(identity(entry), entry.key === undefined ? entry.content : JSON.stringify(attributes(entry)))
+  }
   for (const entry of head.links) out.set(identity(entry), linkSignature(entry))
   for (const entry of head.jsonLd) out.set(identity(entry), entry.json)
-  for (const name in head.html.data) out.set(`html ${name}`, head.html.data[name]!)
-  for (const name in head.body.data) out.set(`body ${name}`, head.body.data[name]!)
+  for (const name in head.html.data) out.set(dataSlot("html", name), head.html.data[name]!)
+  for (const name in head.body.data) out.set(dataSlot("body", name), head.body.data[name]!)
   return out
 }
 
@@ -650,17 +654,15 @@ const combine = (
     for (const [name, value] of Object.entries(child.html.data)) htmlDataMap.set(name, value)
     for (const [name, value] of Object.entries(child.body.data)) bodyDataMap.set(name, value)
   }
+  if (conflicted.has("lang")) lang = undefined
+  if (conflicted.has("dir")) dirValue = undefined
   for (const slot of conflicted) {
-    if (slot === "lang") lang = undefined
-    else if (slot === "dir") dirValue = undefined
-    else if (slot.startsWith("html ")) htmlDataMap.delete(slot.slice(5))
-    else if (slot.startsWith("body ")) bodyDataMap.delete(slot.slice(5))
-    else {
-      meta.delete(slot)
-      links.delete(slot)
-      json.delete(slot)
-    }
+    meta.delete(slot)
+    links.delete(slot)
+    json.delete(slot)
   }
+  for (const name of htmlDataMap.keys()) if (conflicted.has(dataSlot("html", name))) htmlDataMap.delete(name)
+  for (const name of bodyDataMap.keys()) if (conflicted.has(dataSlot("body", name))) bodyDataMap.delete(name)
   return {
     title: conflicted.has("title") ? undefined : Head.resolveTitle(node, below),
     meta: [...meta.values()],
