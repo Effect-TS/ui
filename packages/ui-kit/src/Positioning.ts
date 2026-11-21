@@ -517,7 +517,12 @@ const oppositeAlignment = (placement: FloatingPlacement): FloatingPlacement =>
     ? placement.replace("start", "end")
     : placement.replace("end", "start")) as FloatingPlacement
 
-const alignmentSides = (placement: FloatingPlacement, rects: Rects, rtl: boolean): readonly [Physical, Physical] => {
+const alignmentSides = (
+  placement: FloatingPlacement,
+  anchor: Size,
+  popup: Size,
+  rtl: boolean
+): readonly [Physical, Physical] => {
   const alignment = alignmentOf(placement)
   const axis = otherAxis(sideAxisOf(placement))
   const length = lengthOf(axis)
@@ -526,7 +531,7 @@ const alignmentSides = (placement: FloatingPlacement, rects: Rects, rtl: boolean
     : alignment === "start"
     ? "bottom"
     : "top"
-  if (rects.reference[length] > rects.floating[length]) main = opposite[main]
+  if (anchor[length] > popup[length]) main = opposite[main]
   return [main, opposite[main]]
 }
 
@@ -549,24 +554,19 @@ const oppositeAxisPlacements = (
   return list
 }
 
-interface Rects {
-  readonly reference: Rect
-  readonly floating: Rect
-}
-
-const coordsFor = ({ floating, reference }: Rects, placement: FloatingPlacement, rtl: boolean) => {
+const coordsFor = (anchor: Rect, popup: Size, placement: FloatingPlacement, rtl: boolean) => {
   const sideAxis = sideAxisOf(placement)
   const alignAxis = otherAxis(sideAxis)
   const sideLength = lengthOf(sideAxis)
   const alignLength = lengthOf(alignAxis)
   const side = sideOf(placement)
   const alignment = alignmentOf(placement)
-  const common = reference[alignLength] / 2 - floating[alignLength] / 2
+  const common = anchor[alignLength] / 2 - popup[alignLength] / 2
   const coords = { x: 0, y: 0 }
   coords[sideAxis] = isBefore(side)
-    ? reference[sideAxis] - floating[sideLength]
-    : reference[sideAxis] + reference[sideLength]
-  coords[alignAxis] = reference[alignAxis] + common +
+    ? anchor[sideAxis] - popup[sideLength]
+    : anchor[sideAxis] + anchor[sideLength]
+  coords[alignAxis] = anchor[alignAxis] + common +
     (alignment === undefined ? 0 : common * (alignment === "end" ? 1 : -1) * (rtl && sideAxis === "y" ? -1 : 1))
   return coords
 }
@@ -638,7 +638,6 @@ export const place = (input: PlaceInput): PlaceResult => {
   const { side: avoidSide, align: avoidAlign, fallbackAxisSide } = options.collisionAvoidance
   const physical = physicalSide(options.side, rtl)
   const initialPlacement: FloatingPlacement = options.align === "center" ? physical : `${physical}-${options.align}`
-  const rects: Rects = { reference: anchor, floating: { x: 0, y: 0, width: popup.width, height: popup.height } }
   const overflowAt = (at: { readonly x: number; readonly y: number }, within: Sides): Sides =>
     overflowOf({ x: at.x, y: at.y, width: popup.width, height: popup.height }, boundary, within)
 
@@ -692,7 +691,7 @@ export const place = (input: PlaceInput): PlaceResult => {
       const overflows: Array<number> = []
       if (flipMainAxis) overflows.push(overflow[sideOf(placement)])
       if (flipCrossAxis) {
-        const [a, b] = alignmentSides(placement, rects, rtl)
+        const [a, b] = alignmentSides(placement, anchor, popup, rtl)
         overflows.push(overflow[a], overflow[b])
       }
       if (overflows.every((value) => value <= 0)) return {}
@@ -808,7 +807,7 @@ export const place = (input: PlaceInput): PlaceResult => {
   }
   middleware.push(arrowStep)
 
-  let { x, y } = coordsFor(rects, initialPlacement, rtl)
+  let { x, y } = coordsFor(anchor, popup, initialPlacement, rtl)
   let placement = initialPlacement
   let resets = 0
   const steps: Record<string, object> = {}
@@ -822,7 +821,7 @@ export const place = (input: PlaceInput): PlaceResult => {
       resets++
       if (typeof step.reset === "object") {
         placement = step.reset.placement
-        const coords = coordsFor(rects, placement, rtl)
+        const coords = coordsFor(anchor, popup, placement, rtl)
         x = coords.x
         y = coords.y
       }
@@ -1220,6 +1219,9 @@ export const trackPosition = (
     let current = args
     let reported: Placement | null = null
     let owned = written.get(node) ?? new Map<string, string>()
+    let found: Element | null = null
+    const anchorOf = (): Element | null =>
+      found?.isConnected ? found : (found = document.querySelector(current.anchorSelector))
 
     const restore = () => {
       for (const [name, value] of owned) {
@@ -1255,7 +1257,7 @@ export const trackPosition = (
     })
 
     const pass = (popup: Size): void => {
-      const anchor = document.querySelector(current.anchorSelector)
+      const anchor = anchorOf()
       const arrow = current.arrowId === null ? null : document.getElementById(current.arrowId)
       const viewport = viewportOf()
       const anchorRect = anchor === null ? zero : clientRect(anchor)
@@ -1313,7 +1315,7 @@ export const trackPosition = (
     }
 
     const observe = (): () => void => {
-      const anchor = current.disableAnchorTracking ? null : document.querySelector(current.anchorSelector)
+      const anchor = current.disableAnchorTracking ? null : anchorOf()
       const styles = new view.MutationObserver(restore)
       styles.observe(node, { attributes: true, attributeFilter: ["style"] })
       view.addEventListener("resize", update)
@@ -1349,6 +1351,7 @@ export const trackPosition = (
     let stop = () => {}
     const start = (): void => {
       stop()
+      found = null
       stop = observe()
       update()
     }
@@ -1390,7 +1393,7 @@ export const trackPosition = (
  * import { Positioning } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
- * const Message = UiSchema.TaggedEnum({ ChangedPlacement: Positioning.Placement.fields })
+ * const Message = UiSchema.TaggedEnum({ ChangedPlacement: { placement: Positioning.Placement } })
  *
  * const Hint = Component.define({
  *   name: "Hint",
@@ -1401,7 +1404,7 @@ export const trackPosition = (
  * }).make({
  *   init: () => ({ placement: null }),
  *   update: {
- *     ChangedPlacement: (model, { _tag, ...placement }) => ({ ...model, placement })
+ *     ChangedPlacement: (model, { placement }) => ({ ...model, placement })
  *   },
  *   view: (model, h) => {
  *     const anchorId = h.id("anchor")
@@ -1415,7 +1418,7 @@ export const trackPosition = (
  *       h.button.id(anchorId).children("Save"),
  *       h.props.open
  *         ? positioner.onMount(
- *           Positioning.TrackPosition(args).pipe(Mount.map((placement) => Message.ChangedPlacement(placement)))
+ *           Positioning.TrackPosition(args).pipe(Mount.map((placement) => Message.ChangedPlacement({ placement })))
  *         )
  *         : positioner
  *     )

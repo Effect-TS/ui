@@ -4,39 +4,10 @@ import { Dialog, DialogTrigger } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
-import { byId, container, press, tick } from "./utils/document.ts"
+import { byId, container, popovers, press, tick } from "./utils/document.ts"
 
 // The dialog's document work, in a DOM: what a press, a focus move or a
 // close does once the dialog shows.
-
-// happy-dom has no popover API, which the non-modal dialogs use: what they
-// rely on is that showing and hiding one changes `:popover-open`, and that
-// showing a dialog focuses its first field, as a browser does before the
-// dialog's own mount starts.
-const popovers = Effect.acquireRelease(
-  Effect.sync(() => {
-    const showing = new Set<Element>()
-    const proto = window.HTMLElement.prototype as any
-    const elementProto = window.Element.prototype as any
-    const matches = elementProto.matches
-    proto.showPopover = function(this: HTMLElement) {
-      showing.add(this)
-      if (this.localName === "dialog") this.querySelector<HTMLElement>("input, button")?.focus()
-    }
-    proto.hidePopover = function(this: HTMLElement) {
-      showing.delete(this)
-    }
-    elementProto.matches = function(this: Element, selector: string) {
-      return selector === ":popover-open" ? showing.has(this) : matches.call(this, selector)
-    }
-    return () => {
-      delete proto.showPopover
-      delete proto.hidePopover
-      elementProto.matches = matches
-    }
-  }),
-  (restore) => Effect.sync(restore)
-)
 
 const OpenMethod = Schema.NullOr(Schema.Literals(["mouse", "touch", "pen", "keyboard"]))
 

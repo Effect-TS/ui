@@ -4,7 +4,7 @@ import { Tooltip } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
-import { byId, container, tick } from "./utils/document.ts"
+import { byId, container, popovers, tick } from "./utils/document.ts"
 
 const rects = new Map<string, { x: number; y: number; width: number; height: number }>()
 const layouts = new Map<string, { width: number; height: number }>()
@@ -64,7 +64,6 @@ const geometry = Effect.acquireRelease(
     const root = document.documentElement as any
     const saved = {
       rect: element.getBoundingClientRect,
-      matches: element.matches,
       offsetWidth: Object.getOwnPropertyDescriptor(html, "offsetWidth"),
       offsetHeight: Object.getOwnPropertyDescriptor(html, "offsetHeight"),
       clientWidth: Object.getOwnPropertyDescriptor(html, "clientWidth"),
@@ -72,16 +71,6 @@ const geometry = Effect.acquireRelease(
       ResizeObserver: (window as any).ResizeObserver
     }
     ;(window as any).ResizeObserver = FakeResizeObserver
-    const showing = new Set<Element>()
-    html.showPopover = function(this: HTMLElement) {
-      showing.add(this)
-    }
-    html.hidePopover = function(this: HTMLElement) {
-      showing.delete(this)
-    }
-    element.matches = function(this: Element, selector: string) {
-      return selector === ":popover-open" ? showing.has(this) : saved.matches.call(this, selector)
-    }
     element.getBoundingClientRect = function(this: Element) {
       const { height, width, x, y } = rects.get(this.id) ?? { x: 0, y: 0, ...size(this) }
       return { x, y, width, height, left: x, top: y, right: x + width, bottom: y + height }
@@ -126,9 +115,6 @@ const geometry = Effect.acquireRelease(
     Object.defineProperty(root, "clientHeight", { configurable: true, value: 800 })
     return () => {
       element.getBoundingClientRect = saved.rect
-      element.matches = saved.matches
-      delete html.showPopover
-      delete html.hidePopover
       Object.defineProperty(html, "offsetWidth", saved.offsetWidth!)
       Object.defineProperty(html, "offsetHeight", saved.offsetHeight!)
       if (saved.clientWidth === undefined) delete html.clientWidth
@@ -183,6 +169,7 @@ const Page = Component.define({
 })
 
 const mountPage = Effect.fnUntraced(function*(sideOffset = 8, disableAnchorTracking = false) {
+  yield* popovers
   yield* geometry
   rects.set("trigger", rects.get("trigger") ?? { x: 400, y: 700, width: 100, height: 40 })
   const app = yield* container

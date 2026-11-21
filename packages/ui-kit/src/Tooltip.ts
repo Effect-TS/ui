@@ -310,7 +310,7 @@ const Message = UiSchema.TaggedEnum({
   // The provider's shared value changed: the newest turn that shows, and the
   // turn a newly shown tooltip takes.
   ChangedGroup: { newest: Schema.NullOr(Schema.Number), next: Schema.Number },
-  ChangedPlacement: Positioning.Placement.fields
+  ChangedPlacement: { placement: Positioning.Placement }
 })
 
 // Only the pointer and focus, which the consumer would never store.
@@ -546,8 +546,8 @@ export const TooltipProvider = Component.define({
  * builder it passes in: the data attributes on every part, `popover` and
  * `role="presentation"` on the positioner, and `aria-hidden` on the arrow.
  * That includes the ones a state leaves absent, so a `data-open` on the
- * consumer's popup is removed while the tooltip is closed. The trigger's
- * `anchor-name` and the positioner's placement are added after the
+ * consumer's popup is removed while the tooltip is closed. The
+ * positioner's placement and the arrow's offset are added after the
  * consumer's inline style, including one chained after the part. Other
  * attributes the consumer chains after a part are the consumer's. A
  * handler the consumer adds to a part runs after the tooltip's own.
@@ -637,7 +637,7 @@ export const Tooltip = Component.define({
         ? $.set({ ...model, yieldedTo: newest }).run(Command.interrupt(WaitBeforeClosing)).emit(dismissed)
         : model
     },
-    ChangedPlacement: (model, { _tag, ...placement }) => ({ ...model, placement })
+    ChangedPlacement: (model, { placement }) => ({ ...model, placement })
   },
   // Only an open tooltip listens on the document.
   subscriptions: (_model, props) => shownBy(props) ? dismissals : [],
@@ -648,7 +648,6 @@ export const Tooltip = Component.define({
     const arrowId = p.id("arrow")
     const tracked = Positioning.trackArgs(p.props, {
       side: "top",
-      collisionAvoidance: Positioning.popupCollisionAvoidance,
       anchorSelector: `[data-tooltip-trigger="${triggerId}"]`,
       arrowId,
       offsetAsPadding: true
@@ -695,7 +694,7 @@ export const Tooltip = Component.define({
         : decorated.on("mouseenter", Message.EnteredPositioner()).on("mouseleave", Message.LeftPositioner())
       return shown
         ? hoverable.onMount(
-          Positioning.TrackPosition(tracked).pipe(Mount.map((reported) => Message.ChangedPlacement(reported)))
+          Positioning.TrackPosition(tracked).pipe(Mount.map((placement) => Message.ChangedPlacement({ placement })))
         )
         : hoverable
     })
