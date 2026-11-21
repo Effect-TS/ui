@@ -70,6 +70,12 @@ export * from "./Meter.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * from "./NavigationMenu.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * as Positioning from "./Positioning.ts"
 
 /**

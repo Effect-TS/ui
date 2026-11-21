@@ -28,6 +28,7 @@ A component that keeps no state, such as `Switch`, is a plain view function inst
 - [Dialog](src/Dialog.ts): a popup in the top layer whose open state lives in your Model, as a modal, a focus trap or a non-modal panel, with `DialogTrigger` to open it from another component.
 - [Field](src/Field.ts): a label, a description and an error for a form control or a group of them, such as a range slider, with its validity, touched and focused state.
 - [Input](src/Input.ts): a native text input whose value lives in your Model.
+- [NavigationMenu](src/NavigationMenu.ts): a navigation landmark with a list of links, where you say which link is the current page and the arrow keys move focus between the links.
 - [Meter](src/Meter.ts): a measurement within a known range, such as disk usage, whose value lives in your Model, with a label, a value text and an indicator sized to the value.
 - [Progress](src/Progress.ts): a progress bar whose value lives in your Model, with a label, a value text and an indicator sized to the value.
 - [Slider](src/Slider.ts): a controlled slider with one thumb or a range, each thumb a native range input you supply.

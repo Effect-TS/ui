@@ -1,5 +1,6 @@
 import { addSearchToHistory } from "#domain/SearchHistory"
 import { Component, Head, Router, UiSchema } from "@effect/ui"
+import { NavigationMenu } from "@effect/ui-kit"
 import { Schema } from "effect"
 import { FilesIndexPage } from "./pages/files/FilesIndexPage.ts"
 import { FilesPage } from "./pages/files/FilesPage.ts"
@@ -41,14 +42,12 @@ const AppDef = Component.define({
   message: AppMessage
 })
 
-const NavLink = AppDef.fragment((h, label: string, route: AppRoute, active: boolean) =>
-  h.li.children(
-    h.a.attr("href", AppRoute.print(route))
-      .attr("aria-current", active ? "page" : undefined)
-      .class("hover:bg-blue-600 font-medium px-3 py-1 rounded transition", active && "bg-blue-700/50")
-      .children(label)
-  )
-)
+const navLinks = (route: AppRoute) => [
+  { label: "Home", to: AppRoute.Home(), active: route._tag === "Home" },
+  { label: "People", to: AppRoute.People(), active: route._tag === "People" || route._tag === "Person" },
+  { label: "Files", to: AppRoute.FilesIndex(), active: route._tag === "FilesIndex" || route._tag === "Files" },
+  { label: "Nested", to: AppRoute.Nested(), active: route._tag === "Nested" }
+]
 
 export const App = AppDef.make({
   init: ($) => {
@@ -82,14 +81,24 @@ export const App = AppDef.make({
   view: ({ route, searchHistory, searchInput }, h) =>
     h.div.class("min-h-screen bg-gray-100").children(
       h.header.children(
-        h.nav.class("bg-blue-500 text-white p-4 mb-6").children(
-          h.ul.class("max-w-4xl mx-auto flex gap-6 list-none").children(
-            NavLink(h, "Home", AppRoute.Home(), route._tag === "Home"),
-            NavLink(h, "People", AppRoute.People(), route._tag === "People" || route._tag === "Person"),
-            NavLink(h, "Files", AppRoute.FilesIndex(), route._tag === "FilesIndex" || route._tag === "Files"),
-            NavLink(h, "Nested", AppRoute.Nested(), route._tag === "Nested")
-          )
-        )
+        NavigationMenu(h, {
+          view: (navigationMenu) =>
+            navigationMenu.root(h.nav.class("bg-blue-500 text-white p-4 mb-6").attr("aria-label", "Main")).children(
+              navigationMenu.list(h.ul.class("max-w-4xl mx-auto flex gap-6 list-none")).children(
+                ...navLinks(route).map(({ active, label, to }) =>
+                  navigationMenu.item(h.li.key(label)).children(
+                    navigationMenu.link({
+                      element: h.a.attr("href", AppRoute.print(to))
+                        .class(
+                          "hover:bg-blue-600 font-medium px-3 py-1 rounded transition data-active:bg-blue-700/50"
+                        ),
+                      active
+                    }).children(label)
+                  )
+                )
+              )
+            )
+        })
       ),
       h.main.class("max-w-4xl mx-auto px-4 py-8").children(
         AppRoute.match(route, {
