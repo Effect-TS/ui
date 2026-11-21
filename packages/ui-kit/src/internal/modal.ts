@@ -1,4 +1,4 @@
-const layers: Array<Element> = []
+const layers: Array<{ readonly inside: Element; readonly order: number }> = []
 let marked: Element | undefined
 let unmark: (() => void) | undefined
 
@@ -36,21 +36,26 @@ const hide = (inside: Element): () => void => {
 }
 
 const refresh = () => {
-  const top = layers.reduce<Element | undefined>(
-    (top, layer) => top === undefined || top.contains(layer) || !layer.contains(top) ? layer : top,
+  const top = layers.reduce<{ readonly inside: Element; readonly order: number } | undefined>(
+    (top, layer) =>
+      top === undefined || top.inside.contains(layer.inside) ||
+        (!layer.inside.contains(top.inside) && layer.order >= top.order)
+        ? layer
+        : top,
     undefined
-  )
+  )?.inside
   if (top === marked) return
   unmark?.()
   marked = top
   unmark = top === undefined ? undefined : hide(top)
 }
 
-export const hideOthers = (inside: Element): () => void => {
-  layers.push(inside)
+export const hideOthers = (inside: Element, order: number): () => void => {
+  const entry = { inside, order }
+  layers.push(entry)
   refresh()
   return () => {
-    layers.splice(layers.lastIndexOf(inside), 1)
+    layers.splice(layers.indexOf(entry), 1)
     refresh()
   }
 }

@@ -487,7 +487,8 @@ const TrackDialogArgs = {
 
 type TrackDialogArgs = Schema.Struct<typeof TrackDialogArgs>["Type"]
 
-const showing: Array<{ readonly node: HTMLDialogElement; readonly open: () => boolean }> = []
+let nextOrder = 0
+const showing: Array<{ readonly node: HTMLDialogElement; readonly order: number; readonly open: () => boolean }> = []
 const orderOf = (node: Element): number => showing.findIndex((entry) => entry.node === node)
 const onTop = (node: HTMLDialogElement): boolean => {
   const mine = orderOf(node)
@@ -561,7 +562,7 @@ const TrackDialog = Mount.makeStream(
       let current: TrackDialogArgs = args
       const send = (message: Message) => Queue.offerUnsafe(queue, message)
       const popup = (): HTMLElement => (document.getElementById(current.popupId) as HTMLElement | null) ?? node
-      const entry = { node, open: () => current.open }
+      const entry = { node, order: ++nextOrder, open: () => current.open }
       const topmost = () => current.topmost && onTop(node)
       const controls = `[aria-controls="${CSS.escape(args.portalId)}"]`
       const anyTrigger = `${controls},[data-dialog-trigger="${CSS.escape(args.portalId)}"]`
@@ -613,7 +614,7 @@ const TrackDialog = Mount.makeStream(
         release?.()
         release = undefined
         if (!current.open || current.modal === false) return
-        const shown = hideOthers(node)
+        const shown = hideOthers(node, entry.order)
         const unlock = current.modal === true ? lockScroll(document) : undefined
         release = () => {
           shown()
@@ -668,12 +669,8 @@ const TrackDialog = Mount.makeStream(
         }
         return node.contains(target) || inKept(target) || !addedSince(target)
       }
-      const hasBackdrop = (): boolean => {
-        const root = popup()
-        return Array.from(node.querySelectorAll("[role=\"presentation\"]")).some((element) =>
-          !element.contains(root) && element.closest("dialog") === node
-        )
-      }
+      const hasBackdrop = (): boolean =>
+        node.querySelector(`[data-dialog-backdrop="${CSS.escape(args.portalId)}"]`) !== null
       const touches = new Set<number>()
       let pressed: string | undefined
       let ignored: Node | null = null
@@ -976,8 +973,8 @@ export const DialogTrigger = <Msg, R = never>(
  * `type`, `aria-haspopup`, `aria-expanded`, `aria-controls`, `data-popup-open`,
  * and `data-dialog-trigger`, which the dialog tells its triggers by; on the
  * portal `id`, `popover` and `open`; `role` on the backdrop and the viewport; the
- * data attributes on the backdrop, viewport and popup; `id` and `tabindex` on
- * the popup; `type` on the close part; `autofocus` on `initialFocus`; and
+ * data attributes on the backdrop (including `data-dialog-backdrop`), viewport
+ * and popup; `id` and `tabindex` on the popup; `type` on the close part; `autofocus` on `initialFocus`; and
  * `data-final-focus`, which the dialog finds the element by, on `finalFocus`.
  * The title and description keep an `id` the consumer gives them, and get a
  * generated one otherwise. The portal's `aria-labelledby` and `aria-describedby`
@@ -1144,6 +1141,7 @@ export const Dialog = Component.define({
     const backdropPart = p.part("div", (b) =>
       states(b)
         .attr("role", "presentation")
+        .attr("data-dialog-backdrop", portalId)
         .forward((node) =>
           node.attr("style", withStyle(node.attrs.style, open ? noSelect : noSelect + ";" + passThrough))
         ))

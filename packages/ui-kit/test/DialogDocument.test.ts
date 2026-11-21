@@ -449,6 +449,9 @@ describe("Dialog in a document", { concurrent: false }, () => {
     Effect.gen(function*() {
       const { log, send } = yield* mountPage({ modal: "trap-focus" })
       const root = document.body.appendChild(document.createElement("div"))
+      const label = document.createElement("span")
+      label.setAttribute("role", "presentation")
+      document.querySelector(".popup-a")!.appendChild(label)
       yield* Effect.addFinalizer(() => Effect.sync(() => root.remove()))
       send(Message.AddedControl())
       yield* tick
@@ -459,6 +462,16 @@ describe("Dialog in a document", { concurrent: false }, () => {
       send(Message.ShowedToasts())
       yield* tick
       press(byId("toast"))
+      yield* tick
+      assert.deepStrictEqual(dismissals(log()), ["Dismissed a outside-press"])
+    }))
+
+  it.effect("a non-modal dialog takes a click on late toasts as outside", () =>
+    Effect.gen(function*() {
+      const { log, send } = yield* mountPage({ modal: false })
+      send(Message.ShowedToasts())
+      yield* tick
+      click(byId("toast"))
       yield* tick
       assert.deepStrictEqual(dismissals(log()), ["Dismissed a outside-press"])
     }))
@@ -527,6 +540,20 @@ describe("Dialog in a document", { concurrent: false }, () => {
       assert.isNull(popup.getAttribute("data-starting-style"))
       assert.strictEqual(byId("page").getAttribute("aria-hidden"), "true")
       assert.strictEqual(log().filter((line) => line === "Settled a true").length, 2)
+    }))
+
+  it.effect("reopening a lower sibling modal during its exit leaves the upper Escape recipient exposed", () =>
+    Effect.gen(function*() {
+      yield* holdExits
+      const { log } = yield* mountPage({ siblings: true, b: true })
+      byId("shut").click()
+      yield* tick
+      byId("reopen").click()
+      yield* tick
+      assert.isNull(byId("b-field").closest("[aria-hidden=true]"))
+      escape()
+      yield* tick
+      assert.deepStrictEqual(dismissals(log()), ["Dismissed b escape-key"])
     }))
 
   it.effect("a dialog closed before its first frame and reopened during the exit finishes entering", () =>
