@@ -468,17 +468,25 @@ describe("shared state in update", () => {
     model: Schema.Number,
     message: ClockMessage,
     receives: ["Ticked"],
-    shares: { value: (ticks) => new Date(ticks), schema: Schema.Date }
+    shares: {
+      value: (ticks) => ({ at: new Date(ticks), "~redacted": false }),
+      schema: Schema.Struct({ at: Schema.Date, "~redacted": Schema.Boolean })
+    }
   }).make({ init: () => 0, update: (ticks) => ticks + 1, parts: () => ({}) })
   const WatchMessage = UiSchema.TaggedEnum({ Clicked: {} })
   const Watch = Component.define({
     name: "Watch",
     model: Schema.Array(Schema.Number),
     message: WatchMessage,
-    shared: { clock: Clock }
+    shared: { clock: Clock, tips: { owner: TipsProvider, optional: true } }
   }).make({
     init: () => [],
-    update: (seen, _, $) => $.set([...seen, $.shared.clock.getTime()]).send(Clock, ClockMessage.Ticked()),
+    update: (seen, _, $) =>
+      $.set([
+        ...seen,
+        Object.hasOwn($.shared, "tips") && $.shared.tips === undefined ? $.shared.clock.at.getTime() : -1
+      ])
+        .send(Clock, ClockMessage.Ticked()),
     view: (seen, h) => h.el("button").on("click", WatchMessage.Clicked()).children(`saw [${seen.join(",")}]`)
   })
   const ClockRef = Clock.ref("clock")
@@ -500,8 +508,8 @@ describe("shared state in update", () => {
       assert.strictEqual(root.text(), "saw [0,2]")
       const log = root.log()
       assert.deepStrictEqual(updatesAt(log, "/Face/Clock[clock]/Watch[w]").map((entry) => entry.shared), [
-        { clock: new Date(0) },
-        { clock: new Date(2) }
+        { clock: { at: new Date(0), "~redacted": false }, tips: undefined },
+        { clock: { at: new Date(2), "~redacted": false }, tips: undefined }
       ])
       for (
         const replay of [Story.fromLog(Watch, log), Story.fromLog(Watch, log.map(MessageLog.makeEncoder().encode))]
@@ -509,75 +517,10 @@ describe("shared state in update", () => {
         assert.isUndefined(replay.divergence)
         assert.deepStrictEqual(replay.model, [0, 2])
       }
-    })))
-
-  it.effect("rejects a shared record logged as a placeholder, naming the entry", () =>
-    provideHost(Effect.gen(function*() {
-      const root = yield* TestHost.mount(Face, {})
-      yield* TestHost.settle
-      click(root, "saw []")
-      yield* TestHost.settle
-      const encode = MessageLog.makeEncoder({ maxEntryBytes: 30 }).encode
       assert.throws(
-        () => Story.fromLog(Watch, root.log().map(encode)),
+        () => Story.fromLog(Watch, log.map(MessageLog.makeEncoder({ maxEntryBytes: 30 }).encode)),
         /entry #\d+ \(\/Face\/Clock\[clock\]\/Watch\[w\]\) has a shared value .* ~truncated placeholder/
       )
-    })))
-
-  it.effect("replays a shared value with a field named like a placeholder from a Wire frame", () =>
-    provideHost(Effect.gen(function*() {
-      const Marked = Component.define({
-        name: "Marked",
-        model: Schema.Null,
-        message: Schema.Never,
-        shares: {
-          value: () => ({ "~redacted": false, count: 1 }),
-          schema: Schema.Struct({ "~redacted": Schema.Boolean, count: Schema.Number })
-        }
-      }).make({ init: () => null, update: (model) => model, parts: () => ({}) })
-      const Counter = Component.define({
-        name: "Counter",
-        model: Schema.Number,
-        message: WatchMessage,
-        shared: { marked: Marked }
-      }).make({
-        init: () => 0,
-        update: (_, __, $) => $.shared.marked.count,
-        view: (count, h) => h.el("button").on("click", WatchMessage.Clicked()).children(`count ${count}`)
-      })
-      const Host = Component.define({ name: "Host", model: Schema.Null, message: WatchMessage }).make({
-        init: () => null,
-        update: (model) => model,
-        view: (_, h) => Marked(h, { view: () => Counter(h, { key: "c" }) })
-      })
-      const root = yield* TestHost.mount(Host, {})
-      yield* TestHost.settle
-      click(root, "count 0")
-      yield* TestHost.settle
-      const replay = Story.fromLog(Counter, root.log().map(MessageLog.makeEncoder().encode))
-      assert.isUndefined(replay.divergence)
-      assert.strictEqual(replay.model, 1)
-    })))
-
-  it.effect("replays an absent optional owner under its name from a Wire frame", () =>
-    provideHost(Effect.gen(function*() {
-      const Keys = Component.define({
-        name: "Keys",
-        model: Schema.Array(Schema.String),
-        message: WatchMessage,
-        shared: { clock: { owner: Clock, optional: true } }
-      }).make({
-        init: () => [],
-        update: (_, __, $) => Object.keys($.shared),
-        view: (keys, h) => h.el("button").on("click", WatchMessage.Clicked()).children(`keys [${keys.join(",")}]`)
-      })
-      const root = yield* TestHost.mount(Keys, {})
-      yield* TestHost.settle
-      click(root, "keys []")
-      yield* TestHost.settle
-      const replay = Story.fromLog(Keys, root.log().map(MessageLog.makeEncoder().encode))
-      assert.isUndefined(replay.divergence)
-      assert.deepStrictEqual(replay.model, ["clock"])
     })))
 
   it("throws for an update called with no shared values only when it reads one", () => {
