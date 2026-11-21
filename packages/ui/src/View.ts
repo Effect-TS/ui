@@ -385,6 +385,8 @@ export interface Child<out Msg, out R = never> {
   readonly slots: Readonly<Record<string, Input<any, any>>> | undefined
   /** The child's nodes are out of the document, and its instance goes on. */
   readonly detached?: boolean | undefined
+  /** The headless instance that declared the child with `p.child`, which takes its events and failures. */
+  readonly owner?: Owner | undefined
   /** Phantom: the child's requirements surface in its parent's. */
   readonly "~R"?: (_: never) => R
 }

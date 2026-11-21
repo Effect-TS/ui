@@ -1200,6 +1200,12 @@ export type HeadlessTypeId = typeof HeadlessTypeId
  * `update` reaches its own ref, and the mount runs in a Scope of the
  * headless instance while the part stays applied to the element.
  *
+ * A headless component has no children of its own, except the ones its
+ * `parts` declares with `p.child` to build on other headless components.
+ * Those report to it, take its sends, and hold the consumer's closure
+ * inside them: a Drawer built on a Dialog runs its consumer's closure at
+ * `Consumer/Drawer[]/Dialog[]`.
+ *
  * Parts need no runtime: `Story.parts` builds them from a Model and props
  * alone. `p.id` is derived from the instance's path, so ids match on the
  * server and the client and differ between instances, and outside a mount
@@ -1277,8 +1283,12 @@ export interface Headless<
   readonly ref: (name: string) => Ref.Of<Rcv>
   readonly init: (props: Props) => Next<any, any, Events, R>
   readonly update: (model: any, msg: never, props: Props, queries?: Results | undefined) => Next<any, any, Events, R>
-  /** The parts for one render: plain values and decorators stamped with `owner`. */
-  readonly parts: (model: any, props: Props, context: PartsContext) => Parts
+  /**
+   * The parts for one render: plain values and decorators stamped with
+   * `owner`, or, for a component that builds on another with `p.child`, the
+   * child it declares, which a host expands into the parts.
+   */
+  readonly parts: (model: any, props: Props, context: PartsContext) => Parts | Composed<Parts, any, any>
   readonly subscriptions:
     | ((model: any, props: Props, queries?: Results | undefined) => ReadonlyArray<Subscription.Subscription<any, R>>)
     | undefined
@@ -1393,6 +1403,151 @@ export interface PartsHelper<Msg, Props, V extends View.Elements> {
   part<Args extends ReadonlyArray<any>, R2 = never>(
     decorate: (builder: View.ContainerBuilder<Msg>, ...args: Args) => View.ElementBuilder<Msg, R2, any, any, any>
   ): View.Part<string, Args, R2>
+  /**
+   * Declares a headless child that this component owns, and turns the
+   * child's parts into the ones the consumer gets. `parts` returns it in
+   * place of a record.
+   *
+   * **Details**
+   *
+   * The consumer's `view` runs inside the child's: `options.parts` gets the
+   * child's parts and returns what the consumer's `view` gets. It may return
+   * another `p.child(...)`, so a component can build on two others. A throw
+   * in it fails this component with the source `view`.
+   *
+   * The child belongs to this component, not to the consumer. Its `onEmit`
+   * and `onFailure` return this component's messages, which go to its
+   * `update`, and `$.send` from this `update` reaches it by its ref. The
+   * consumer's refs never match it. A failed child stays failed and blank,
+   * and this component hears of it through `onFailure`.
+   *
+   * The child takes no `view`, `slots`, `fallback` or `detached`.
+   *
+   * **Example** (A drawer built on a dialog)
+   *
+   * ```ts
+   * import "@effect/ui/html/register"
+   * import { Component, UiSchema } from "@effect/ui"
+   * import { Schema } from "effect"
+   *
+   * const DialogMessage = UiSchema.TaggedEnum({ Opened: {}, Closed: {} })
+   * const DialogEvents = UiSchema.TaggedEnum({ Dismissed: {} })
+   *
+   * const Dialog = Component.define({
+   *   name: "Dialog",
+   *   model: Schema.Boolean,
+   *   message: DialogMessage,
+   *   events: DialogEvents
+   * }).make({
+   *   init: () => false,
+   *   update: (_, message, $) =>
+   *     DialogMessage.match(message, {
+   *       Opened: () => true,
+   *       Closed: () => $.set(false).emit(DialogEvents.Dismissed())
+   *     }),
+   *   parts: (open, p) => ({
+   *     open,
+   *     trigger: p.part("button", (b) => b.onClick(DialogMessage.Opened())),
+   *     close: p.part("button", (b) => b.onClick(DialogMessage.Closed()))
+   *   })
+   * })
+   *
+   * const DrawerMessage = UiSchema.TaggedEnum({ DismissedDialog: {} })
+   *
+   * const Drawer = Component.define({
+   *   name: "Drawer",
+   *   model: Schema.Number,
+   *   message: DrawerMessage
+   * }).make({
+   *   init: () => 0,
+   *   update: (dismissals) => dismissals + 1,
+   *   parts: (dismissals, p) =>
+   *     p.child(Dialog, {
+   *       onEmit: () => DrawerMessage.DismissedDialog(),
+   *       parts: (dialog) => ({ ...dialog, dismissals })
+   *     })
+   * })
+   * ```
+   */
+  child<P, E, Pt, R2, Rcv, Sh2, Out>(
+    component: Headless<P, E, Pt, R2, Rcv, Sh2, never, never>,
+    options:
+      & View.Child.Options<P, E, Msg, Rcv>
+      & {
+        /** The parts the consumer's `view` gets, from the child's. */
+        readonly parts: (parts: Pt) => Out
+        readonly view?: never
+        readonly slots?: never
+        readonly fallback?: never
+        readonly detached?: never
+      }
+  ): Composed<Composed.Parts<Out>, R2 | Composed.Requirements<Out>, Sh2 | Composed.Shares<Out>>
+}
+
+/**
+ * The type id of what `p.child` returns.
+ *
+ * @stability experimental
+ * @category type ids
+ * @since 0.1.0
+ */
+export const ComposedTypeId: "~@effect/ui/Component/Composed" = child.ComposedTypeId
+
+/**
+ * The type id of what `p.child` returns.
+ *
+ * @stability experimental
+ * @category type ids
+ * @since 0.1.0
+ */
+export type ComposedTypeId = typeof ComposedTypeId
+
+/**
+ * What `p.child` returns: a headless child the component owns, with the
+ * parts the consumer gets inside it. `make` unwraps it, so the component's
+ * parts are `Parts`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Composed<out Parts, out R = never, out Sh = never> {
+  readonly [ComposedTypeId]: {
+    readonly _Parts: Types.Covariant<Parts>
+    readonly _R: Types.Covariant<R>
+    readonly _Sh: Types.Covariant<Sh>
+  }
+}
+
+/**
+ * Helper types for `Composed`.
+ *
+ * @stability experimental
+ * @since 0.1.0
+ */
+export declare namespace Composed {
+  /**
+   * The parts a consumer's `view` gets from what `parts` returned.
+   *
+   * @category utility types
+   * @since 0.1.0
+   */
+  export type Parts<P> = P extends Composed<infer Parts, infer _R, infer _Sh> ? Parts : P
+  /**
+   * The requirements of the children declared with `p.child`.
+   *
+   * @category utility types
+   * @since 0.1.0
+   */
+  export type Requirements<P> = P extends Composed<infer _Parts, infer R, infer _Sh> ? R : never
+  /**
+   * The shared state of the owners declared with `p.child`, which every
+   * reader in the consumer's `view` has above it.
+   *
+   * @category utility types
+   * @since 0.1.0
+   */
+  export type Shares<P> = P extends Composed<infer _Parts, infer _R, infer Sh> ? Sh : never
 }
 
 /**
@@ -2055,17 +2210,18 @@ export interface Definition<
   ): Headless<
     Props,
     Events,
-    Parts,
+    Composed.Parts<Parts>,
     Exclude<
       | OwnStepRequirements<UI | U | UR[keyof UR], SR>
-      | View.PartRequirements<Parts[keyof Parts]>
+      | View.PartRequirements<Composed.Parts<Parts>[keyof Composed.Parts<Parts>]>
+      | Composed.Requirements<Parts>
       | Subscription.Requirements<Sub>
       | QueryServices<L>
       | SharedRequirements<SR>,
       Command.FrameworkService
     >,
     Rcv,
-    [SV] extends [never] ? never : Shared<Name>,
+    ([SV] extends [never] ? never : Shared<Name>) | Composed.Shares<Parts>,
     SV,
     Rp
   >
@@ -2773,7 +2929,9 @@ const finish = (
           part: (...args: ReadonlyArray<any>) =>
             typeof args[0] === "function"
               ? View.makePart(owner, undefined, args[0])
-              : View.makePart(owner, typeof args[0] === "string" ? [args[0]] : args[0], args[1])
+              : View.makePart(owner, typeof args[0] === "string" ? [args[0]] : args[0], args[1]),
+          child: (component: Headless.Any, options: child.Options & { readonly parts: (parts: any) => unknown }) =>
+            child.compose(owner, component, options)
         }
         if (bound !== undefined) {
           const opened = bound.context(model, props, context.queries)

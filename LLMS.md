@@ -343,6 +343,16 @@ nested get a role in front, `outerDialog` and `innerDialog`. Parts built
 outside a closure follow the same rule:
 `const listbox = Story.parts(Listbox, { model, props })`.
 
+A headless component can build on another: `parts` returns
+`p.child(Listbox, { props, onEmit, parts: (listbox) => ({ ...listbox, tags }) })`,
+and the consumer's closure gets what that `parts` returns. The component owns
+the child: the child's events and failures go through its `update`, its
+`$.send` reaches the child by ref, and a consumer's ref of the same key never
+matches it. A child that fails shows nothing, the consumer's closure with it,
+and the failure goes no further than its `onFailure`. A `Scene` of the
+component stands in for the child with `childEmit`, and a `Scene` of a
+consumer refuses to, because it doesn't run the component's `update`.
+
 ### Shared state
 
 A headless component with `shares: (model, props) => value` owns shared
@@ -545,6 +555,12 @@ client, not the services.
   but no markup, and draw it from a consumer that calls it with `h` and a
   `view` closure. This browser entry module mounts the consumer, which is in
   `fixtures/notes/components/NoteLinkPicker.ts`.
+- **[Composing headless components](./ai-docs/src/10_ui/22_headless-composition.ts)**:
+  Build a headless tag picker on top of the headless Listbox with `p.child`.
+  The picker adds the picked tags, their remove buttons and a live
+  announcement, the Listbox keeps its keyboard handling and ARIA, and a
+  consumer draws both from one closure. Then a scene of the picker that runs
+  the Listbox's events through the picker's `update`.
 - **[Shared state](./ai-docs/src/10_ui/23_shared-state.ts)**:
   Share part of a headless component's state with every component below it:
   a tooltip provider that knows which tooltip is open, tooltips that read it
