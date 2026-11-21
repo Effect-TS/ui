@@ -155,7 +155,7 @@ const visit = Effect.fnUntraced(function*(page: Page, ready = false) {
   return { app, root, open: Deferred.succeed(latch, undefined) }
 })
 
-describe("history restore of a page whose hydration hasn't settled", () => {
+describe("history restore of a page whose hydration hasn't settled", { concurrent: false }, () => {
   it.effect.each(["slow form", "scoped form"] as const)(
     "Back restores the server's Model of a %s a push closed as it waited for its Layer",
     (page) => {

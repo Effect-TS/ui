@@ -207,7 +207,7 @@ const SlowPage = Component.define({
     view: (_, h) => h.scoped((s) => h.main(SlowFrame(h, { key: "f", slots: { body: Leaf(s, { key: "l" }) } })))
   })
 
-describe("scoped children in a receiver that waits for its Layer", () => {
+describe("scoped children in a receiver that waits for its Layer", { concurrent: false }, () => {
   it.live("keep the server's nodes once the receiver adopts them", () =>
     Effect.gen(function*() {
       leafInits = 0
