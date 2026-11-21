@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { Component, UiSchema } from "@effect/ui"
-import { Dialog, DialogTrigger } from "@effect/ui-kit"
+import { Dialog, DialogTrigger, ToastProvider } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
@@ -14,6 +14,8 @@ const OpenMethod = Schema.NullOr(Schema.Literals(["mouse", "touch", "pen", "keyb
 const Message = UiSchema.TaggedEnum({
   Closed: {},
   Switched: {},
+  ShowedToasts: {},
+  AddedControl: {},
   Opened: { which: Schema.String, triggerId: Schema.NullOr(Schema.String), method: OpenMethod },
   Dismissed: { which: Schema.String, reason: Schema.String },
   Settled: { which: Schema.String, open: Schema.Boolean }
@@ -68,6 +70,8 @@ const Page = Component.define({
     b: Schema.Boolean,
     triggerId: Schema.NullOr(Schema.String),
     method: OpenMethod,
+    toasts: Schema.Boolean,
+    late: Schema.Boolean,
     log: Schema.Array(Schema.String)
   }),
   message: Message,
@@ -79,10 +83,14 @@ const Page = Component.define({
     b: $.props.b,
     triggerId: $.props.triggers ? "ta" : null,
     method: null,
+    toasts: $.props.toast,
+    late: false,
     log: []
   }),
   update: {
     Closed: (model) => ({ ...model, a: false }),
+    ShowedToasts: (model) => ({ ...model, toasts: true }),
+    AddedControl: (model) => ({ ...model, late: true }),
     Switched: (model) => ({ ...model, config: { ...model.config, modal: model.config.modal === false } }),
     Opened: (model, { method, triggerId, which }) => ({
       ...model,
@@ -106,97 +114,100 @@ const Page = Component.define({
       Dismissed: ({ reason }: { readonly reason: string }) => Message.Dismissed({ which, reason }),
       Settled: ({ open }: { readonly open: boolean }) => Message.Settled({ which, open })
     })
-    return h.div(
-      h.button.attr("id", "page").children("Page"),
-      h.button.attr("id", "shut").onClick(Message.Closed()).children("Shut"),
-      h.button.attr("id", "switch").onClick(Message.Switched()).children("Switch"),
-      h.button.attr("id", "reopen").onClick(Message.Opened({ which: "a", triggerId: null, method: null })).children(
-        "Reopen"
-      ),
-      props.toast
-        ? h.div.attr("id", "toasts").attr("aria-live", "polite").popover("manual", true).children(
-          h.button.attr("id", "toast").children("Undo")
-        )
-        : null,
-      props.detached
-        ? DialogTrigger(h, {
-          element: h.button.attr("id", "detached"),
-          props: { open: model.a, popupId: "settings" },
-          onPress: ({ method, triggerId }) => Message.Opened({ which: "a", triggerId, method })
-        }).children("Settings")
-        : null,
-      Dialog(h, {
-        key: "a",
-        props: {
-          open: model.a,
-          modal: props.modal,
-          id: props.detached ? "settings" : undefined,
-          triggerId: model.triggerId,
-          finalFocus: props.finalFocus,
-          initialFocus: props.initialFocus,
-          openMethod: props.openMethod ?? model.method
-        },
-        onEmit: on("a"),
-        view: (dialog) => {
-          const popup = dialog.popup(h.div.attr("class", "popup-a")).children(
-            props.skips
-              ? [
-                h.fieldset.attr("disabled", "").children(h.input.attr("id", "in-fieldset")),
-                h.input.attr("id", "invisible").attr("style", "visibility:hidden"),
-                h.input.attr("id", "r1").attr("type", "radio").attr("name", "size"),
-                h.input.attr("id", "r2").attr("type", "radio").attr("name", "size").attr("checked", "")
-              ]
-              : null,
-            h.input.attr("id", "first"),
-            props.marked ? dialog.initialFocus(h.input.attr("id", "second")) : h.input.attr("id", "second"),
-            props.siblings
-              ? h.button.attr("id", "open-b").onClick(Message.Opened({ which: "b", triggerId: null, method: null }))
-                .children("Open B")
-              : null,
-            props.nested
-              ? Dialog(h, {
-                key: "b",
-                props: { open: model.b, modal: props.modal },
-                onEmit: on("b"),
-                view: (nestedDialog) =>
-                  h.div(
-                    nestedDialog.trigger(h.button.attr("id", "trigger-b")).children("B"),
-                    nestedDialog.portal(h.dialog)?.children(
-                      nestedDialog.popup(h.div).children(h.input.attr("id", "b-field"))
-                    )
-                  )
-              })
-              : null
-          )
-          return h.div(
-            props.triggers
-              ? h.div(
-                dialog.trigger(h.button.attr("id", "ta")).children("A"),
-                dialog.trigger(h.button.attr("id", "tb")).children("B")
+    return ToastProvider(h, {
+      view: (toastProvider) =>
+        h.div(
+          h.button.attr("id", "page").children("Page"),
+          h.div(model.late ? h.button.attr("id", "late").children("Late") : null),
+          h.button.attr("id", "shut").onClick(Message.Closed()).children("Shut"),
+          h.button.attr("id", "switch").onClick(Message.Switched()).children("Switch"),
+          h.button.attr("id", "reopen").onClick(Message.Opened({ which: "a", triggerId: null, method: null })).children(
+            "Reopen"
+          ),
+          model.toasts
+            ? toastProvider.viewport(h.div.attr("id", "toasts")).children(h.button.attr("id", "toast").children("Undo"))
+            : null,
+          props.detached
+            ? DialogTrigger(h, {
+              element: h.button.attr("id", "detached"),
+              props: { open: model.a, popupId: "settings" },
+              onPress: ({ method, triggerId }) => Message.Opened({ which: "a", triggerId, method })
+            }).children("Settings")
+            : null,
+          Dialog(h, {
+            key: "a",
+            props: {
+              open: model.a,
+              modal: props.modal,
+              id: props.detached ? "settings" : undefined,
+              triggerId: model.triggerId,
+              finalFocus: props.finalFocus,
+              initialFocus: props.initialFocus,
+              openMethod: props.openMethod ?? model.method
+            },
+            onEmit: on("a"),
+            view: (dialog) => {
+              const popup = dialog.popup(h.div.attr("class", "popup-a")).children(
+                props.skips
+                  ? [
+                    h.fieldset.attr("disabled", "").children(h.input.attr("id", "in-fieldset")),
+                    h.input.attr("id", "invisible").attr("style", "visibility:hidden"),
+                    h.input.attr("id", "r1").attr("type", "radio").attr("name", "size"),
+                    h.input.attr("id", "r2").attr("type", "radio").attr("name", "size").attr("checked", "")
+                  ]
+                  : null,
+                h.input.attr("id", "first"),
+                props.marked ? dialog.initialFocus(h.input.attr("id", "second")) : h.input.attr("id", "second"),
+                props.siblings
+                  ? h.button.attr("id", "open-b").onClick(Message.Opened({ which: "b", triggerId: null, method: null }))
+                    .children("Open B")
+                  : null,
+                props.nested
+                  ? Dialog(h, {
+                    key: "b",
+                    props: { open: model.b, modal: props.modal },
+                    onEmit: on("b"),
+                    view: (nestedDialog) =>
+                      h.div(
+                        nestedDialog.trigger(h.button.attr("id", "trigger-b")).children("B"),
+                        nestedDialog.finalFocus(h.button.attr("id", "final-b")).children("Back"),
+                        nestedDialog.portal(h.dialog)?.children(
+                          nestedDialog.popup(h.div).children(h.input.attr("id", "b-field"))
+                        )
+                      )
+                  })
+                  : null
               )
-              : props.detached
-              ? null
-              : dialog.trigger(h.button.attr("id", "trigger")).children("Open"),
-            props.finalMark ? dialog.finalFocus(h.button.attr("id", "final")).children("Final") : null,
-            dialog.portal(h.dialog)?.children(
-              props.viewport ? dialog.viewport(h.div.attr("id", "viewport")).children(popup) : popup
-            )
-          )
-        }
-      }),
-      props.siblings
-        ? Dialog(h, {
-          key: "b",
-          props: { open: model.b, modal: props.modal },
-          onEmit: on("b"),
-          view: (dialog) =>
-            h.div(
-              dialog.trigger(h.button.attr("id", "trigger-b")).children("B"),
-              dialog.portal(h.dialog)?.children(dialog.popup(h.div).children(h.input.attr("id", "b-field")))
-            )
-        })
-        : null
-    )
+              return h.div(
+                props.triggers
+                  ? h.div(
+                    dialog.trigger(h.button.attr("id", "ta")).children("A"),
+                    dialog.trigger(h.button.attr("id", "tb")).children("B")
+                  )
+                  : props.detached
+                  ? null
+                  : dialog.trigger(h.button.attr("id", "trigger")).children("Open"),
+                props.finalMark ? dialog.finalFocus(h.button.attr("id", "final")).children("Final") : null,
+                dialog.portal(h.dialog)?.children(
+                  props.viewport ? dialog.viewport(h.div.attr("id", "viewport")).children(popup) : popup
+                )
+              )
+            }
+          }),
+          props.siblings
+            ? Dialog(h, {
+              key: "b",
+              props: { open: model.b, modal: props.modal },
+              onEmit: on("b"),
+              view: (dialog) =>
+                h.div(
+                  dialog.trigger(h.button.attr("id", "trigger-b")).children("B"),
+                  dialog.portal(h.dialog)?.children(dialog.popup(h.div).children(h.input.attr("id", "b-field")))
+                )
+            })
+            : null
+        )
+    })
   }
 })
 
@@ -205,7 +216,7 @@ const mountPage = Effect.fnUntraced(function*(overrides: Partial<Config>) {
   const app = yield* container
   const root = yield* BrowserHost.mountEffect(Page, config(overrides), app)
   yield* tick
-  return { app, log: () => root.model()!.log }
+  return { app, log: () => root.model()!.log, send: root.send }
 })
 
 const escape = (init: KeyboardEventInit = {}, target: EventTarget = document) =>
@@ -443,15 +454,40 @@ describe("Dialog in a document", { concurrent: false }, () => {
 
   it.effect("the other modes take a press on the toasts as outside, but not one on what the page added since", () =>
     Effect.gen(function*() {
-      const { log } = yield* mountPage({ modal: false, toast: true })
-      const added = document.body.appendChild(document.createElement("div"))
-      yield* Effect.addFinalizer(() => Effect.sync(() => added.remove()))
-      click(added)
-      yield* tick
-      assert.deepStrictEqual(dismissals(log()), [])
-      click(byId("toast"))
-      yield* tick
-      assert.deepStrictEqual(dismissals(log()), ["Dismissed a outside-press"])
+      for (const modal of [false, "trap-focus"] as const) {
+        for (const toast of [true, false]) {
+          yield* Effect.scoped(Effect.gen(function*() {
+            const { log, send } = yield* mountPage({ modal, toast })
+            const root = document.body.appendChild(document.createElement("div"))
+            yield* Effect.addFinalizer(() => Effect.sync(() => root.remove()))
+            send(Message.AddedControl())
+            yield* tick
+            click(root.appendChild(document.createElement("button")))
+            click(byId("late"))
+            yield* tick
+            assert.deepStrictEqual(dismissals(log()), [])
+            if (!toast) send(Message.ShowedToasts())
+            yield* tick
+            click(byId("toast"))
+            yield* tick
+            assert.deepStrictEqual(dismissals(log()), ["Dismissed a outside-press"])
+          }))
+        }
+      }
+    }))
+
+  it.effect("a modal keeps open on a press on toasts drawn before or after it opened", () =>
+    Effect.gen(function*() {
+      for (const toast of [true, false]) {
+        yield* Effect.scoped(Effect.gen(function*() {
+          const { log, send } = yield* mountPage({ toast })
+          if (!toast) send(Message.ShowedToasts())
+          yield* tick
+          click(byId("toast"))
+          yield* tick
+          assert.deepStrictEqual(dismissals(log()), [])
+        }))
+      }
     }))
 
   it.effect("focus skips what Tab doesn't reach, and a focused element removed gives focus to the popup", () =>
@@ -545,7 +581,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
       yield* tick
       yield* tick
       assert.isNull(app.querySelector(".popup-a")!.getAttribute("data-starting-style"))
-      assert.include(log(), "Settled a true")
+      assert.deepStrictEqual(log().filter((line) => line.startsWith("Settled")), ["Settled a true"])
     }))
 
   it.effect("initialFocus: false takes back the focus the browser gives the dialog's first field", () =>
@@ -583,5 +619,34 @@ describe("Dialog in a document", { concurrent: false }, () => {
       byId("switch").click()
       yield* tick
       assert.deepStrictEqual(state(), ["true", "hidden"])
+    }))
+
+  it.effect("a nested dialog's exit ending gives its finalFocus focus from a field in its open parent", () =>
+    Effect.gen(function*() {
+      const { finish } = yield* holdExits
+      const { log } = yield* mountPage({ nested: true, b: true })
+      escape()
+      yield* tick
+      byId("first").focus()
+      finish()
+      yield* tick
+      yield* tick
+      assert.include(log(), "Settled b false")
+      assert.strictEqual(document.activeElement?.id, "final-b")
+    }))
+
+  it.effect("with the trigger gone, focus goes back to what had it before the open, over what had it since", () =>
+    Effect.gen(function*() {
+      yield* mountPage({ detached: true, a: false })
+      byId("page").focus()
+      byId("detached").click()
+      yield* tick
+      byId("detached").remove()
+      byId("shut").focus()
+      byId("first").focus()
+      escape()
+      yield* tick
+      yield* tick
+      assert.strictEqual(document.activeElement?.id, "page")
     }))
 })

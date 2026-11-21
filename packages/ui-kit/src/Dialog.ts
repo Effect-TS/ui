@@ -106,9 +106,11 @@
  * on a scrollbar doesn't count. With `modal: true`, only a press on the
  * kit's layer, the backdrop or the portal around the popup counts, so a press
  * on a toast above it doesn't close it. In the other modes, any press outside
- * counts, a toast's too, except one on an element added to the page since
- * the dialog opened. `disablePointerDismissal` turns that off, and the close
- * on focus leaving with it.
+ * counts, a toast's too, even in a toast viewport drawn after the dialog
+ * opened, except one on an element added to the page since the dialog
+ * opened, in a new root or inside one already there. An element the renderer
+ * reuses for new content counts as already there. `disablePointerDismissal`
+ * turns that off, and the close on focus leaving with it.
  *
  * The modal is the kit's, not the browser's: find-in-page and a script's
  * `focus()` still reach the page behind it, and close requests other than
@@ -200,7 +202,7 @@ import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { flag, withStyle } from "./internal/attributes.ts"
 import { hideOthers, lockScroll } from "./internal/modal.ts"
-import { raiseAbove } from "./internal/topLayer.ts"
+import { inKept, raiseAbove } from "./internal/topLayer.ts"
 
 /**
  * How a dialog limits the page behind it: `true` for a modal, `"trap-focus"`
@@ -555,13 +557,6 @@ const onScrollbar = (target: EventTarget | null, event: MouseEvent): boolean => 
   return onY || (scrollsX && event.offsetY > target.clientHeight)
 }
 
-const pageChildOf = (node: Node): Node | null => {
-  const body = node.ownerDocument?.body
-  let at: Node | null = node
-  while (at !== null && at.parentNode !== body) at = at.parentNode
-  return at
-}
-
 const TrackDialog = Mount.makeStream(
   "TrackDialog",
   { args: TrackDialogArgs },
@@ -589,11 +584,19 @@ const TrackDialog = Mount.makeStream(
       focusedBefore.delete(node)
       let focusInside = node.contains(active)
       let lastFocused: HTMLElement | null = focusInside ? active as HTMLElement : null
-      const visited: Array<HTMLElement> = active instanceof HTMLElement && !focusInside ? [active] : []
-      let pageBefore = new Set(Array.from(document.body?.childNodes ?? []))
+      let before: HTMLElement | null = active instanceof HTMLElement && !focusInside ? active : null
+      const visited: Array<HTMLElement> = []
+      let added = new WeakSet<Node>()
+      const record = (records: ReadonlyArray<MutationRecord>) => {
+        for (const { addedNodes } of records) for (const child of addedNodes) added.add(child)
+      }
+      const page = new MutationObserver(record)
       const addedSince = (target: Node): boolean => {
-        const child = pageChildOf(target)
-        return child !== null && !pageBefore.has(child as ChildNode)
+        record(page.takeRecords())
+        for (let at: Node | null = target; at !== null && at !== document.body; at = at.parentNode) {
+          if (added.has(at)) return true
+        }
+        return false
       }
 
       const focusFirst = (from: Element | null) => {
@@ -673,7 +676,7 @@ const TrackDialog = Mount.makeStream(
             closestOf(target, "dialog") === node &&
             (target.contains(root) || target.getAttribute("role") === "presentation")
         }
-        return node.contains(target) || !addedSince(target)
+        return node.contains(target) || inKept(target) || !addedSince(target)
       }
       const hasBackdrop = (): boolean =>
         current.modal === true ||
@@ -768,15 +771,20 @@ const TrackDialog = Mount.makeStream(
           pressed = undefined
         } else if (!previous.open && next.open) {
           hold()
-          pageBefore = new Set(Array.from(document.body?.childNodes ?? []))
-          opening(document.activeElement)
+          record(page.takeRecords())
+          added = new WeakSet()
+          const focused = document.activeElement
+          if (focused instanceof HTMLElement && !node.contains(focused)) before = focused
+          opening(focused)
         } else if (next.open && next.modal !== previous.modal) {
           letGo()
           hold()
         }
         if (next.open && next.started && !previous.started) settle(true)
-        else if (next.open && !previous.open && previous.mounted) settle(true)
-        else if (!next.open && next.mounted && next.holdExit) generation++
+        else if (next.open && !previous.open && previous.mounted) {
+          if (next.started) settle(true)
+          else generation++
+        } else if (!next.open && next.mounted && next.holdExit) generation++
         else if (!next.open && next.mounted && (previous.open || !previous.mounted || previous.holdExit)) settle(false)
       }
 
@@ -795,6 +803,7 @@ const TrackDialog = Mount.makeStream(
           showing.push(entry)
           for (const [name, listener, capture] of listeners) document.addEventListener(name, listener, capture)
           node.addEventListener("focusout", onFocusOut)
+          if (document.body !== null) page.observe(document.body, { subtree: true, childList: true })
           observer.observe(node, {
             subtree: true,
             childList: true,
@@ -814,13 +823,18 @@ const TrackDialog = Mount.makeStream(
             for (const [name, listener, capture] of listeners) document.removeEventListener(name, listener, capture)
             node.removeEventListener("focusout", onFocusOut)
             observer.disconnect()
+            page.disconnect()
             letGo()
             generation++
             const { closedByFocusOut, closeMethod, finalFocus, portalId } = current
             const lost = focusInside
+            const parents = showing.filter((other) => other.node.contains(node))
             frame(() => {
               const focused = document.activeElement as HTMLElement | null
-              if (focused !== null && showing.some((other) => other.open() && other.node.contains(focused))) return
+              if (
+                focused !== null &&
+                showing.some((other) => other.open() && other.node.contains(focused) && !parents.includes(other))
+              ) return
               if (!finalFocus) {
                 if (lost && focused !== null && focused !== document.body) focused.blur()
                 return
@@ -831,7 +845,7 @@ const TrackDialog = Mount.makeStream(
               )
               if (marked?.isConnected === true) return handOff(marked, visible)
               if (!lost && focused !== null && focused !== document.body) return
-              const back = [trigger, ...visited.reverse()].find((element) =>
+              const back = [trigger, before, ...visited.reverse()].find((element) =>
                 element?.isConnected === true && !node.contains(element)
               )
               handOff(back, visible)

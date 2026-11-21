@@ -15,6 +15,11 @@ export const keepOnTop = (element: HTMLElement): () => void => {
   }
 }
 
+export const inKept = (target: Node): boolean => {
+  for (const element of kept) if (element.contains(target)) return true
+  return false
+}
+
 export const raiseAbove = (shown: Element): void => {
   for (const element of kept) {
     if (element.contains(shown) || shown.contains(element) || !showing(element)) continue
