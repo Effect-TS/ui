@@ -617,19 +617,49 @@ const innerRect = (element: Element): Rect => {
 }
 
 const clipping = /auto|scroll|hidden|clip/
-const containing = /paint|strict|content/
+const painting = /paint|strict|content/
+const containing = /paint|layout|strict|content/
+const transforming = /transform|translate|scale|rotate|perspective|filter/
+
+const containsFixed = (style: CSSStyleDeclaration): boolean =>
+  [style.transform, style.translate, style.scale, style.rotate, style.perspective, style.filter, style.backdropFilter]
+    .some((value) => value !== undefined && value !== "" && value !== "none") ||
+  (style.containerType !== undefined && style.containerType !== "" && style.containerType !== "normal") ||
+  transforming.test(style.willChange) || containing.test(style.contain)
+
+const contains = (style: CSSStyleDeclaration, position: string): boolean =>
+  position === "fixed"
+    ? containsFixed(style)
+    : position === "absolute"
+    ? (style.position !== "" && style.position !== "static") || containsFixed(style)
+    : true
+
+const inTopLayer = (element: Element): boolean =>
+  [":popover-open", ":modal"].some((selector) => {
+    try {
+      return element.matches(selector)
+    } catch {
+      return false
+    }
+  })
 
 const clipOf = (element: Element, viewport: Rect): Rect => {
   const view = element.ownerDocument.defaultView!
   const root = element.ownerDocument.documentElement
   let clip = viewport
-  for (let current = element.parentElement; current !== null && current !== root; current = current.parentElement) {
-    if (current === element.ownerDocument.body) break
+  let position = view.getComputedStyle(element).position
+  for (
+    let current = inTopLayer(element) ? null : element.parentElement;
+    current !== null && current !== root && current !== element.ownerDocument.body;
+    current = current.parentElement
+  ) {
     const style = view.getComputedStyle(current)
-    if (clipping.test(style.overflow + style.overflowX + style.overflowY) || containing.test(style.contain)) {
+    if (!contains(style, position)) continue
+    if (clipping.test(style.overflow + style.overflowX + style.overflowY) || painting.test(style.contain)) {
       clip = intersect(clip, innerRect(current))
     }
-    if (style.position === "fixed") break
+    if (inTopLayer(current)) break
+    position = style.position
   }
   return clip
 }

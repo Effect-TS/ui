@@ -163,7 +163,7 @@ const Page = Component.define({
       props: { open: model.open, side: "bottom", sideOffset: h.props.sideOffset },
       view: (s) =>
         h.div.attr("id", "clip").children(
-          s.trigger(h.button.attr("id", "trigger")).children("B"),
+          h.div.attr("id", "layer").children(s.trigger(h.button.attr("id", "trigger")).children("B")),
           s.positioner(h.div.attr("id", "positioner")).children(
             s.popup(h.div.attr("id", "popup")).children(s.arrow(h.div), "Bold")
           )
@@ -236,6 +236,39 @@ describe("Tooltip in a document", { concurrent: false }, () => {
       byId("popup").dispatchEvent(new Event("scroll"))
       yield* tick
       assert.strictEqual(byId("positioner").getAttribute("data-anchor-hidden"), "")
+    }).pipe(Effect.scoped))
+
+  it.effect("reports the trigger hidden only when an ancestor that contains it clips it", () =>
+    Effect.gen(function*() {
+      rects.set("trigger", { x: 400, y: 300, width: 20, height: 20 })
+      yield* mountPage()
+      const clip = byId("clip")
+      const trigger = byId("trigger")
+      clip.style.overflow = "hidden"
+      rects.set("clip", { x: 100, y: 100, width: 100, height: 100 })
+      layouts.set("clip", { width: 100, height: 100 })
+      const hidden = Effect.gen(function*() {
+        byId("popup").dispatchEvent(new Event("scroll"))
+        yield* tick
+        return byId("positioner").getAttribute("data-anchor-hidden") === ""
+      })
+
+      assert.isTrue(yield* hidden)
+      trigger.style.position = "fixed"
+      assert.isFalse(yield* hidden)
+      clip.style.transform = "translateX(0)"
+      assert.isTrue(yield* hidden)
+
+      clip.style.transform = ""
+      trigger.style.position = "absolute"
+      assert.isFalse(yield* hidden)
+      clip.style.position = "relative"
+      assert.isTrue(yield* hidden)
+
+      clip.style.position = ""
+      trigger.style.position = ""
+      byId("layer").showPopover()
+      assert.isFalse(yield* hidden)
     }).pipe(Effect.scoped))
 
   it.effect("overlaps the trigger by a negative side offset, with no gap to bridge", () =>
