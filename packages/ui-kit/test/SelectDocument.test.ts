@@ -106,7 +106,8 @@ const Config = Schema.Struct({
   required: Schema.Boolean,
   dialog: Schema.Boolean,
   finalFocus: Schema.Boolean,
-  holdExit: Schema.Boolean
+  holdExit: Schema.Boolean,
+  refuseFocusOut: Schema.Boolean
 })
 type Config = typeof Config.Type
 
@@ -131,7 +132,11 @@ const Page = Component.define({
   init: () => ({ open: false, value: null, log: [] }),
   update: {
     Opened: (model, { reason }) => ({ ...model, open: true, log: [...model.log, "Opened " + reason] }),
-    Dismissed: (model, { reason }) => ({ ...model, open: false, log: [...model.log, "Dismissed " + reason] }),
+    Dismissed: (model, { reason }, $) => ({
+      ...model,
+      open: $.props.refuseFocusOut && reason === "focus-out",
+      log: [...model.log, "Dismissed " + reason]
+    }),
     Picked: (model, { value }) => ({ ...model, value, log: [...model.log, "Picked " + value] }),
     DismissedDialog: (model, { reason }) => ({ ...model, log: [...model.log, "DismissedDialog " + reason] })
   },
@@ -202,7 +207,15 @@ const mountPage = Effect.fnUntraced(function*(config: Partial<Config> = {}) {
   const app = yield* container
   const root = yield* BrowserHost.mountEffect(
     Page,
-    { align: false, required: false, dialog: false, finalFocus: false, holdExit: false, ...config },
+    {
+      align: false,
+      required: false,
+      dialog: false,
+      finalFocus: false,
+      holdExit: false,
+      refuseFocusOut: false,
+      ...config
+    },
     app
   )
   yield* tick
@@ -416,7 +429,7 @@ describe("Select in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(log(), ["Opened list-navigation", "Picked light", "Dismissed item-press"])
     }).pipe(Effect.scoped))
 
-  it.effect("a close the consumer makes after a reopen returns focus, whatever the last close did", () =>
+  it.effect("a close the consumer makes returns focus, whatever the last dismissal did, unless focus is still outside", () =>
     Effect.gen(function*() {
       for (const kept of [false, true]) {
         yield* Effect.scoped(Effect.gen(function*() {
@@ -448,6 +461,30 @@ describe("Select in a document", { concurrent: false }, () => {
           yield* tick
           yield* reopenAndClose
           assert.deepStrictEqual(visible, [false, true, false])
+        }))
+        yield* Effect.scoped(Effect.gen(function*() {
+          const { log, root } = yield* mountPage({ finalFocus: kept, refuseFocusOut: true })
+          for (const returned of [false, true]) {
+            keydown(byId("trigger"), "ArrowDown")
+            yield* tick
+            byId("after").focus()
+            yield* tick
+            assert.isTrue(shown())
+            if (returned) item("light").focus()
+            root.send(Message.Dismissed({ reason: "test" }))
+            yield* tick
+            assert.isFalse(shown())
+            const expected = returned ? (kept ? "final" : "trigger") : "after"
+            assert.strictEqual(document.activeElement, byId(expected), kept + " " + returned)
+          }
+          assert.deepStrictEqual(log(), [
+            "Opened list-navigation",
+            "Dismissed focus-out",
+            "Dismissed test",
+            "Opened list-navigation",
+            "Dismissed focus-out",
+            "Dismissed test"
+          ])
         }))
       }
     }))

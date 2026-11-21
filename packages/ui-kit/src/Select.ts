@@ -981,7 +981,7 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
       stopArrow()
       const focused = document.activeElement
       const lost = focused === null || focused === document.body || node.contains(focused)
-      if (current.finalFocus && !current.focusLeft) {
+      if (current.finalFocus && (lost || !current.focusLeft)) {
         const marked = byAttribute(document, "data-final-focus", current.popupId)
         const back = marked ?? trigger()
         if (back !== null && (marked !== null || lost)) {
