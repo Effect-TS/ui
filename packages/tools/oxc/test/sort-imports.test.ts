@@ -144,4 +144,60 @@ describe("effect/sort-imports", () => {
         expect(fs.readFileSync(filePath, "utf8")).toBe(afterPass1)
       }
     ))
+
+  it("moves multiline trailing block comments intact without swallowing neighboring imports", () =>
+    withTempFile(
+      "multiline-trailing-comment.ts",
+      [
+        `import { Local } from "./local.ts"`,
+        `import { succeed } from "effect/Effect" /* Effect note`,
+        "continued */",
+        "",
+        "export const x = [Local, succeed]",
+        ""
+      ].join("\n"),
+      async (filePath) => {
+        await runOxlint(["--fix", filePath])
+        const afterPass1 = fs.readFileSync(filePath, "utf8")
+        expect(afterPass1).toBe(
+          [
+            `import { succeed } from "effect/Effect" /* Effect note`,
+            "continued */",
+            "",
+            `import { Local } from "./local.ts"`,
+            "",
+            "export const x = [Local, succeed]",
+            ""
+          ].join("\n")
+        )
+
+        await runOxlint([filePath])
+        await runOxlint(["--fix", filePath])
+        expect(fs.readFileSync(filePath, "utf8")).toBe(afterPass1)
+      }
+    ))
+
+  it("leaves commented named import lists untouched so comments stay with their bindings", () =>
+    withTempFile(
+      "commented-specifiers.ts",
+      [
+        "import {",
+        "  succeed as Zed, // runtime succeed",
+        "  /* effect type */ type Effect as AType",
+        `} from "effect/Effect"`,
+        "",
+        "export const x: [unknown, AType<never> | null] = [Zed, null]",
+        ""
+      ].join("\n"),
+      async (filePath) => {
+        const original = fs.readFileSync(filePath, "utf8")
+        await runOxlint(["--fix", filePath])
+        const afterPass1 = fs.readFileSync(filePath, "utf8")
+        expect(afterPass1).toBe(original)
+
+        await runOxlint([filePath])
+        await runOxlint(["--fix", filePath])
+        expect(fs.readFileSync(filePath, "utf8")).toBe(original)
+      }
+    ))
 })

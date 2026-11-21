@@ -8,6 +8,7 @@ interface ImportEntry {
   readonly start: number
   readonly end: number
   readonly text: string
+  readonly hasInsideComments: boolean
 }
 
 const scopedPackagePattern = /^@[^/]+(?:\/.*)?$/
@@ -71,31 +72,29 @@ function getEntryStart(
 function getEntryEnd(
   node: ESTree.ImportDeclaration,
   text: string,
+  trailingComments: ReadonlyArray<ESTree.Comment>,
   nextNodeStart: number
 ): number {
-  const nodeEnd = node.range[1]
-  let lineEnd = text.indexOf("\n", nodeEnd)
-  if (lineEnd === -1) {
-    lineEnd = text.length
-  } else if (lineEnd > nodeEnd && text[lineEnd - 1] === "\r") {
-    lineEnd -= 1
+  let end = node.range[1]
+  for (const comment of trailingComments) {
+    if (comment.range[0] >= nextNodeStart) {
+      break
+    }
+    if (text.slice(end, comment.range[0]).includes("\n")) {
+      break
+    }
+    end = comment.range[1]
   }
-
-  const limit = Math.min(lineEnd, nextNodeStart)
-  const trailing = text.slice(nodeEnd, limit).trimEnd()
-  return nodeEnd + trailing.length
+  return end
 }
 
-function sortNamedSpecifiersInEntry(
-  node: ESTree.ImportDeclaration,
-  entryStart: number,
-  entryText: string,
-  text: string
-): string {
-  const named = node.specifiers.filter(
+function sortNamedSpecifiersInEntry(entry: ImportEntry, text: string): string {
+  if (entry.hasInsideComments) return entry.text
+
+  const named = entry.node.specifiers.filter(
     (s): s is ESTree.ImportSpecifier => s.type === "ImportSpecifier"
   )
-  if (named.length < 2) return entryText
+  if (named.length < 2) return entry.text
 
   const sorted = [...named].sort((a, b) => a.local.name < b.local.name ? -1 : a.local.name > b.local.name ? 1 : 0)
 
@@ -106,12 +105,12 @@ function sortNamedSpecifiersInEntry(
       break
     }
   }
-  if (!changed) return entryText
+  if (!changed) return entry.text
 
-  let result = entryText
+  let result = entry.text
   for (let i = named.length - 1; i >= 0; i--) {
-    const targetStart = named[i].range[0] - entryStart
-    const targetEnd = named[i].range[1] - entryStart
+    const targetStart = named[i].range[0] - entry.start
+    const targetEnd = named[i].range[1] - entry.start
     const replacement = text.slice(sorted[i].range[0], sorted[i].range[1])
     result = result.slice(0, targetStart) + replacement + result.slice(targetEnd)
   }
@@ -122,10 +121,10 @@ function formatPartition(entries: ReadonlyArray<ImportEntry>, text: string): str
   const sorted = [...entries].sort((a, b) =>
     a.group - b.group || (a.source < b.source ? -1 : a.source > b.source ? 1 : a.index - b.index)
   )
-  let output = sortNamedSpecifiersInEntry(sorted[0].node, sorted[0].start, sorted[0].text, text)
+  let output = sortNamedSpecifiersInEntry(sorted[0], text)
   for (let i = 1; i < sorted.length; i++) {
     output += sorted[i].group !== sorted[i - 1].group ? "\n\n" : "\n"
-    output += sortNamedSpecifiersInEntry(sorted[i].node, sorted[i].start, sorted[i].text, text)
+    output += sortNamedSpecifiersInEntry(sorted[i], text)
   }
   return output
 }
@@ -174,9 +173,10 @@ const rule: CreateRule = {
           }
 
           const leadingComments = sourceCode.getCommentsBefore(stmt)
+          const trailingComments = sourceCode.getCommentsAfter(stmt)
           const start = getEntryStart(stmt, text, leadingComments, i === 0, prevStmtEnd)
           const nextNodeStart = i + 1 < program.body.length ? program.body[i + 1].range[0] : text.length
-          const end = getEntryEnd(stmt, text, nextNodeStart)
+          const end = getEntryEnd(stmt, text, trailingComments, nextNodeStart)
 
           if (partition.length > 0) {
             const prevEnd = partition[partition.length - 1].end
@@ -194,7 +194,8 @@ const rule: CreateRule = {
             index: partition.length,
             start,
             end,
-            text: text.slice(start, end)
+            text: text.slice(start, end),
+            hasInsideComments: sourceCode.getCommentsInside(stmt).length > 0
           })
           prevStmtEnd = end
         }
