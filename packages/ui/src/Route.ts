@@ -310,7 +310,8 @@ export declare namespace Union {
 
   /**
    * Keys that can't be route tags because they collide with union, schema,
-   * function or object members.
+   * function or object members, plus `then`, which would make the union a
+   * thenable that `await` and `Promise.resolve` call.
    *
    * @stability experimental
    * @category models
@@ -329,6 +330,7 @@ export declare namespace Union {
     | "__defineSetter__"
     | "__lookupGetter__"
     | "__lookupSetter__"
+    | "then"
 }
 
 type WithoutTag<Input> = { readonly [K in keyof Input as K extends "_tag" ? never : K]: Input[K] }
@@ -786,9 +788,9 @@ const build = (
     }
   }
   for (const tag of Object.keys(routes)) {
-    if (tag in union || tag in members) throw new Error(`Route tag "${tag}" is reserved`)
+    if (tag in union || tag in members || tag === "then") throw new Error(`Route tag "${tag}" is reserved`)
     const make = union.cases[tag]!.make
-    members[tag] = (args?: object) => make({ ...args } as any)
+    members[tag] = (args?: object) => make((args ?? {}) as any)
   }
   return Object.assign(union, members)
 }

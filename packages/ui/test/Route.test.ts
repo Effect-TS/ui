@@ -240,6 +240,8 @@ describe("Route", () => {
   it("rejects a tag that names a member of the union", () => {
     assert.throws(() => Route.union({ parse: Route.make("/") } as any), /Route tag "parse" is reserved/)
     assert.throws(() => Route.union({ name: Route.make("/") } as any), /Route tag "name" is reserved/)
+    // oxlint-disable-next-line unicorn/no-thenable
+    assert.throws(() => Route.union({ then: Route.make("/") } as any), /Route tag "then" is reserved/)
   })
 
   it("requires a Schema for every param", () => {

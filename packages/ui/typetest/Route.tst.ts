@@ -71,6 +71,8 @@ describe("Route", () => {
     expect(Route.union).type.not.toBeCallableWith({ Type: Route.make("/") })
     expect(Route.union).type.not.toBeCallableWith({ name: Route.make("/") })
     expect(Route.union).type.not.toBeCallableWith({ valueOf: Route.make("/") })
+    // oxlint-disable-next-line unicorn/no-thenable
+    expect(Route.union).type.not.toBeCallableWith({ then: Route.make("/") })
     expect(Route.union).type.toBeCallableWith({ Parse: Route.make("/") })
   })
 

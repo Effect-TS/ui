@@ -8,9 +8,10 @@ A route union now has a constructor per route, so a route value is built as `App
 
 Route tags now share a namespace with the union's members. A tag in `Route.Union.ReservedTag` is a type error at `Route.union`, and `Route.union` also throws for a tag that names a member the union has at runtime. These tags worked before and are now rejected:
 
-- Schema type members: `Type`, `Encoded`, `Iso`, `Rebuild`, `DecodingServices`, `EncodingServices` and the `~` schema keys. These are type errors only.
+- Schema type members: `Type`, `Encoded`, `Iso`, `Rebuild`, `DecodingServices`, `EncodingServices` and the `~` schema keys. These are type errors only, except `~effect/Schema/Schema`, which is on the schema's prototype and also throws.
 - Route union and schema members: `routes`, `parse`, `resolve`, `print`, `printPath`, `subset`, `base`, `setBase`, `make`, `makeOption`, `makeEffect`, `match`, `matchOrElse`, `cases`, `guards`, `isAnyOf`, `tag`, `ast`, `annotate`, `annotateKey`, `check`, `rebuild`, `pipe`.
 - Function members: `name`, `length`, `prototype`, `apply`, `bind`, `call`, `caller`, `arguments`, `toString`.
 - `Object.prototype` members, such as `constructor`, `valueOf` and `hasOwnProperty`.
+- `then`, which would make the union a thenable, so `await` or `Promise.resolve` would call the route's constructor instead of resolving to the union.
 
 PascalCase tags, the usual style for routes, only collide with the first group.
