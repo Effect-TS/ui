@@ -1,6 +1,6 @@
 import { Command, Component, Router, UiSchema } from "@effect/ui"
 import { Button, Input } from "@effect/ui-kit"
-import { Schema } from "effect"
+import { Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import type { Person } from "../../people/domain/Person.ts"
 import { SearchPeople } from "../../people/queries/SearchPeople.ts"
@@ -17,47 +17,36 @@ const statusText = (searchText: string, people: ReadonlyArray<Person>): string =
 
 export const PeoplePageMessage = UiSchema.TaggedEnum({
   ChangedSearchInput: { value: Schema.String },
-  SubmittedSearch: {},
-  ChangedSearchInputFocus: { focused: Schema.Boolean },
-  ChangedRoute: {}
-})
-
-export const PeoplePageEvents = UiSchema.TaggedEnum({
-  ChangedSearchInputFocus: { focused: Schema.Boolean }
+  SubmittedSearch: {}
 })
 
 const PeoplePageDef = Component.define({
   name: "PeoplePage",
   props: Schema.Struct({ route: PeopleRoute, searchHistory: Schema.Array(Schema.String) }),
-  model: Schema.Struct({ searchInput: Schema.String }),
+  model: Schema.Struct({ unsentSearchText: Schema.Option(Schema.String) }),
   message: PeoplePageMessage,
-  events: PeoplePageEvents,
-  receives: ["ChangedRoute"],
   queries: {
     people: { query: SearchPeople, args: (_model, props) => props.route.search }
   }
 })
 
 export const PeoplePageNoDeps = PeoplePageDef.make({
-  init: ($) => ({ searchInput: $.props.route.search.searchText }),
+  init: () => ({ unsentSearchText: Option.none() }),
 
   update: {
-    ChangedSearchInput: (_model, { value }, $) => $.evolve({ searchInput: value }),
+    ChangedSearchInput: (_model, { value }, $) => $.evolve({ unsentSearchText: Option.some(value) }),
 
-    SubmittedSearch: (model, _message, $) =>
-      $.run(
-        Router.patchSearch(AppRoute, $.props.route, { searchText: model.searchInput }, { history: "push" }).pipe(
-          Command.asNoop
-        )
-      ),
-
-    ChangedSearchInputFocus: (_model, { focused }, $) => $.emit(PeoplePageEvents.ChangedSearchInputFocus({ focused })),
-
-    ChangedRoute: (_model, _message, $) => $.evolve({ searchInput: $.props.route.search.searchText })
+    SubmittedSearch: (model, _message, $) => {
+      const searchText = Option.getOrElse(model.unsentSearchText, () => $.props.route.search.searchText)
+      return $.evolve({ unsentSearchText: Option.none() }).run(
+        Router.patchSearch(AppRoute, $.props.route, { searchText }, { history: "push" }).pipe(Command.asNoop)
+      )
+    }
   },
 
   view: (model, h) => {
     const people = h.queries.people
+    const { searchText } = h.props.route.search
     return h.div.children(
       h.h1.class("text-4xl font-bold text-gray-800 mb-6").children("People"),
       h.search.class("mb-6").children(
@@ -65,15 +54,13 @@ export const PeoplePageNoDeps = PeoplePageDef.make({
           h.div.class("flex-1").children(
             h.label.attr("for", "people-search").class("sr-only").children("Search people"),
             Input(h, {
-              props: { value: model.searchInput },
+              props: { value: Option.getOrElse(model.unsentSearchText, () => searchText) },
               onUpdate: ({ value }) => PeoplePageMessage.ChangedSearchInput({ value })
             })
               .attr("id", "people-search")
               .attr("type", "search")
               .attr("placeholder", "Search by name or role...")
               .attr("autocomplete", "off")
-              .onFocus(PeoplePageMessage.ChangedSearchInputFocus({ focused: true }))
-              .onBlur(PeoplePageMessage.ChangedSearchInputFocus({ focused: false }))
               .class(
                 "w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               )
@@ -91,7 +78,7 @@ export const PeoplePageNoDeps = PeoplePageDef.make({
           )
         ),
       h.p.key("status").attr("aria-live", "polite").class("text-lg text-gray-600 mb-6").children(
-        AsyncResult.isSuccess(people) ? statusText(h.props.route.search.searchText, people.value) : "Searching…"
+        AsyncResult.isSuccess(people) ? statusText(searchText, people.value) : "Searching…"
       ),
       AsyncResult.isSuccess(people) &&
         h.ul.class("space-y-3").children(

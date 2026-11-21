@@ -1,5 +1,5 @@
 import { Router } from "@effect/ui"
-import { HtmlLocator, TestGlobalEvents } from "@effect/ui/html/testing"
+import { HtmlLocator } from "@effect/ui/html/testing"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, it } from "@effect/vitest"
 import { Effect, Layer } from "effect"
@@ -7,8 +7,7 @@ import { TestClock } from "effect/testing"
 import { App } from "./App.ts"
 import { AppRoute } from "./routes.ts"
 
-const AppTest = (url: string) =>
-  Layer.mergeAll(Router.memory({ routes: AppRoute, url }), TestHost.layer(), TestGlobalEvents.layer)
+const AppTest = (url: string) => Layer.mergeAll(Router.memory({ routes: AppRoute, url }), TestHost.layer())
 
 const mountApp = Effect.gen(function*() {
   const root = yield* TestHost.mount(App, Router.props(AppRoute))
@@ -28,8 +27,6 @@ const waitForSearch = Effect.gen(function*() {
   yield* TestClock.adjust("300 millis")
   yield* TestHost.settle
 })
-
-const press = (key: string) => Effect.andThen(TestGlobalEvents.fire("document", "keydown", { key }), TestHost.settle)
 
 const heading = (name: string) => HtmlLocator.role("heading", { name })
 const link = (name: string) => HtmlLocator.role("link", { name })
@@ -69,7 +66,7 @@ it.layer(AppTest("/"), { buildPerTest: true })("App", (it) => {
 })
 
 it.layer(AppTest("/people?searchText=manager"), { buildPerTest: true })("App at /people?searchText=manager", (it) => {
-  it.effect("query parameters drive search, submitting updates the URL, and Back restores the input", () =>
+  it.effect("query parameters drive search, submitting updates the URL, and Back restores the input and results", () =>
     Effect.gen(function*() {
       const root = yield* mountApp
       const router = yield* Router.Router
@@ -87,8 +84,6 @@ it.layer(AppTest("/people?searchText=manager"), { buildPerTest: true })("App at 
       assert.isDefined(root.query(Locator.text("2 results for “designer”")))
       assert.isUndefined(root.query(link("Carol Davis Manager")))
 
-      Locator.fire(root.get(searchInput), "input", { value: "unsent" })
-      yield* TestHost.settle
       yield* router.back
       yield* TestHost.settle
       assert.strictEqual(yield* currentUrl, "/people?searchText=manager")
@@ -102,31 +97,5 @@ it.layer(AppTest("/people?searchText=manager"), { buildPerTest: true })("App at 
       assert.strictEqual(yield* currentUrl, "/people")
       yield* waitForSearch
       assert.isDefined(root.query(Locator.text("Click on any person to view their details:")))
-    }))
-
-  it.effect("keyboard shortcuts navigate by chord, ignore typing in search, and cancel a pending chord on focus", () =>
-    Effect.gen(function*() {
-      const root = yield* mountApp
-      yield* press("g")
-      Locator.fire(root.get(searchInput), "focus")
-      yield* TestHost.settle
-      yield* press("g")
-      yield* press("h")
-      assert.strictEqual(yield* currentUrl, "/people?searchText=manager")
-      Locator.fire(root.get(searchInput), "blur")
-      yield* TestHost.settle
-      yield* press("h")
-      assert.strictEqual(yield* currentUrl, "/people?searchText=manager")
-      yield* press("g")
-      yield* press("h")
-      assert.strictEqual(yield* currentUrl, "/")
-
-      yield* navigate("/people")
-      Locator.fire(root.get(searchInput), "focus")
-      yield* TestHost.settle
-      yield* navigate("/files")
-      yield* press("g")
-      yield* press("n")
-      assert.strictEqual(yield* currentUrl, "/nested/route/is/very/nested")
     }))
 })

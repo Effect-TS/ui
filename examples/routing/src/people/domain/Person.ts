@@ -1,4 +1,4 @@
-import { Array as Arr, Schema } from "effect"
+import { Array, Schema } from "effect"
 
 export const Person = Schema.Struct({
   id: Schema.Number,
@@ -22,4 +22,4 @@ export const searchPeople = (searchText: string): ReadonlyArray<Person> => {
   )
 }
 
-export const findPerson = (id: number) => Arr.findFirst(people, (person) => person.id === id)
+export const findPerson = (id: number) => Array.findFirst(people, (person) => person.id === id)

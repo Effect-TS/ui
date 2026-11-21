@@ -1,42 +1,41 @@
-import { Array as Arr, Option } from "effect"
+import { Array, Data, Option } from "effect"
 
-export interface File {
-  readonly _tag: "File"
-  readonly name: string
-  readonly sizeInBytes: number
-}
+export type FileTreeEntry = Data.TaggedEnum<{
+  File: { readonly name: string; readonly sizeInBytes: number }
+  Directory: { readonly name: string; readonly entries: ReadonlyArray<FileTreeEntry> }
+}>
 
-export interface Directory {
-  readonly _tag: "Directory"
-  readonly name: string
-  readonly entries: ReadonlyArray<FileTreeEntry>
-}
+export const FileTreeEntry = Data.taggedEnum<FileTreeEntry>()
 
-export type FileTreeEntry = File | Directory
-
-const file = (name: string, sizeInBytes: number): File => ({ _tag: "File", name, sizeInBytes })
-
-const directory = (name: string, entries: ReadonlyArray<FileTreeEntry>): Directory => ({
-  _tag: "Directory",
-  name,
-  entries
-})
+const { Directory, File } = FileTreeEntry
 
 export const fileTree: ReadonlyArray<FileTreeEntry> = [
-  directory("documents", [
-    file("resume.pdf", 48_230),
-    directory("taxes", [
-      file("2024.pdf", 182_400),
-      file("2025.pdf", 196_812)
-    ])
-  ]),
-  directory("photos", [
-    directory("vacation", [
-      file("beach.jpg", 2_348_100),
-      file("sunset.jpg", 1_982_450)
-    ])
-  ]),
-  file("notes.txt", 1_204)
+  Directory({
+    name: "documents",
+    entries: [
+      File({ name: "resume.pdf", sizeInBytes: 48_230 }),
+      Directory({
+        name: "taxes",
+        entries: [
+          File({ name: "2024.pdf", sizeInBytes: 182_400 }),
+          File({ name: "2025.pdf", sizeInBytes: 196_812 })
+        ]
+      })
+    ]
+  }),
+  Directory({
+    name: "photos",
+    entries: [
+      Directory({
+        name: "vacation",
+        entries: [
+          File({ name: "beach.jpg", sizeInBytes: 2_348_100 }),
+          File({ name: "sunset.jpg", sizeInBytes: 1_982_450 })
+        ]
+      })
+    ]
+  }),
+  File({ name: "notes.txt", sizeInBytes: 1_204 })
 ]
 
 export const findEntry = (
@@ -44,10 +43,14 @@ export const findEntry = (
   entries: ReadonlyArray<FileTreeEntry> = fileTree
 ): Option.Option<FileTreeEntry> => {
   const [name, ...rest] = path
-  const entry = Arr.findFirst(entries, (entry) => entry.name === name)
+  const entry = Array.findFirst(entries, (entry) => entry.name === name)
   return rest.length === 0
     ? entry
-    : Option.flatMap(entry, (entry) => entry._tag === "Directory" ? findEntry(rest, entry.entries) : Option.none())
+    : Option.flatMap(entry, (entry) =>
+      FileTreeEntry.$match(entry, {
+        File: () => Option.none(),
+        Directory: ({ entries }) => findEntry(rest, entries)
+      }))
 }
 
 const BYTES_PER_KILOBYTE = 1024
