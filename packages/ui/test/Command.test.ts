@@ -158,6 +158,9 @@ describe("Command", () => {
         undefined
       ])
       assert.deepStrictEqual(Effect.runSync(command.effect), { _tag: "Results", items: ["x"] })
+    })
+
+    it("make issues when detached from the definition", () => {
       const { make } = Search
       assert.deepStrictEqual(make({ text: "y" }).args, { text: "y" })
     })

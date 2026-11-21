@@ -429,8 +429,8 @@ export interface Variance<out Msg, in Source, in SourceE = never> {
 export type Kind = "Effect" | "Stream"
 
 /**
- * An issued Command: what a definition's factory or `make` returns, or what
- * `match` makes of an `Unmatched` one.
+ * An issued Command: what a definition's `make` returns, or what `match` makes
+ * of an `Unmatched` one.
  *
  * **Details**
  *
@@ -668,8 +668,8 @@ export declare namespace Definition {
 }
 
 /**
- * What `make` returns: call its `make` method with the Command's args struct to
- * issue it.
+ * What `Command.make` returns: a definition whose `make` issues the Command
+ * from its args struct.
  *
  * @stability experimental
  * @category models
@@ -864,6 +864,43 @@ const makeGroup = (
   }
 }
 
+const define = (
+  name: string,
+  options: Options<ArgsInput, string>,
+  unmatched: boolean,
+  issue: (args: any) => Pick<Fields, "service" | "invalidates" | "optimistic" | "writes" | "work">
+) => {
+  const stream = options.stream === true
+  const mode = options.mode ?? "concurrent"
+  const group = options.group ?? []
+  const argsSchema = argsSchemaOf(options.args)
+  const groupOf = makeGroup(name, argsSchema, group)
+  return {
+    [DefinitionTypeId]: DefinitionTypeId,
+    stream,
+    mode,
+    group,
+    args: argsSchema,
+    "~group": groupOf,
+    make(args: unknown = {}) {
+      const source = groupOf(args)
+      return makeIssued({
+        _tag: stream ? "Stream" : "Effect",
+        name,
+        args,
+        mode,
+        groupKey: source?.key,
+        "~group": source,
+        argsSchema,
+        afterRefetch: undefined,
+        resolve: identity,
+        reject: undefined,
+        ...issue(args)
+      }, unmatched)
+    }
+  }
+}
+
 /**
  * Returns `true` if `u` is a Command.
  *
@@ -925,12 +962,12 @@ export const groupKeyOf = (definition: Definition.Any, group: unknown): string |
  * **Details**
  *
  * Requires an `args` Schema and returns a definition whose `make` method takes
- * the args struct and issues a Command. Story tests can inspect its `args` without running
- * the Effect. The body can't fail. Its requirements may only be framework
- * services, which are removed from `R`. A body that requires anything else
- * doesn't compile, and the error names `FrameworkService` rather than the
- * missing service. With `stream: true` the body returns a `Stream` instead.
- * A `make` Command declares nothing about the query cache.
+ * the args struct and issues a Command. Story tests can inspect its `args`
+ * without running the Effect. The body can't fail. Its requirements may only
+ * be framework services, which are removed from `R`. A body that requires
+ * anything else doesn't compile, and the error names `FrameworkService` rather
+ * than the missing service. With `stream: true` the body returns a `Stream`
+ * instead. A `make` Command declares nothing about the query cache.
  *
  * **Gotchas**
  *
@@ -982,42 +1019,16 @@ export const make: {
   name: string,
   options: Options<ArgsInput, string>,
   run: (args: any) => any
-): any => {
-  const stream = options.stream === true
-  const mode = options.mode ?? "concurrent"
-  const group = options.group ?? []
-  const argsSchema = argsSchemaOf(options.args)
-  const groupOf = makeGroup(name, argsSchema, group)
-  return {
-    [DefinitionTypeId]: DefinitionTypeId,
-    name,
-    stream,
-    mode,
-    group,
-    args: argsSchema,
-    "~group": groupOf,
-    make(args: unknown = {}) {
-      const source = groupOf(args)
-      return makeIssued({
-        _tag: stream ? "Stream" : "Effect",
-        name,
-        args,
-        mode,
-        groupKey: source?.key,
-        "~group": source,
-        argsSchema,
-        service: undefined,
-        invalidates: noTargets,
-        optimistic: noTargets,
-        writes: undefined,
-        afterRefetch: undefined,
-        work: run(args),
-        resolve: identity,
-        reject: undefined
-      })
-    }
-  }
-}
+): any => ({
+  name,
+  ...define(name, options, false, (args) => ({
+    service: undefined,
+    invalidates: noTargets,
+    optimistic: noTargets,
+    writes: undefined,
+    work: run(args)
+  }))
+})
 
 /**
  * Defines a Command whose implementation is a service.
@@ -1138,45 +1149,23 @@ export const Service: <Self>() => {
   implementation: Effect.Effect<(args: any) => any, any, any>
 ): any => {
   const Base = Context.Service<any, any>()(key)
-  const stream = options.stream === true
-  const mode = options.mode ?? "concurrent"
-  const group = options.group ?? []
-  const argsSchema = argsSchemaOf(options.args)
-  const groupOf = makeGroup(key, argsSchema, group)
-  const { invalidates, optimistic, writes } = options
+  const { invalidates, optimistic, stream, writes } = options
   const service = Base as Effect.Effect<(args: unknown) => any, never, any>
   class CommandService extends Base {
-    static readonly [DefinitionTypeId] = DefinitionTypeId
-    static readonly stream = stream
-    static readonly mode = mode
-    static readonly group = group
-    static readonly args = argsSchema
-    static readonly "~group" = groupOf
     static readonly layer = Layer.effect(Base, implementation)
-    static make(args: any = {}) {
-      const source = groupOf(args)
-      return makeIssued({
-        _tag: stream ? "Stream" : "Effect",
-        name: key,
-        args,
-        mode,
-        groupKey: source?.key,
-        "~group": source,
-        argsSchema,
-        service: Base,
-        invalidates: invalidates?.(args) ?? noTargets,
-        optimistic: optimistic?.(args) ?? noTargets,
-        writes: writes === undefined ? undefined : (success) => writes(success, args),
-        afterRefetch: undefined,
-        work: stream
-          ? Stream.unwrap(Effect.map(service, (run) => run(args)))
-          : Effect.flatMap(service, (run) => run(args)),
-        resolve: identity,
-        reject: undefined
-      }, true)
-    }
   }
-  return CommandService
+  return Object.assign(
+    CommandService,
+    define(key, options, true, (args) => ({
+      service: Base,
+      invalidates: invalidates?.(args) ?? noTargets,
+      optimistic: optimistic?.(args) ?? noTargets,
+      writes: writes === undefined ? undefined : (success) => writes(success, args),
+      work: stream
+        ? Stream.unwrap(Effect.map(service, (run) => run(args)))
+        : Effect.flatMap(service, (run) => run(args))
+    }))
+  )
 }
 
 /**

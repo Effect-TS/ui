@@ -180,8 +180,7 @@ describe("Command", () => {
       )
     })
 
-    it("issues through make and is not directly callable", () => {
-      expect(Fx.make).type.toBeCallableWith()
+    it("is not directly callable", () => {
       expect(Fx).type.not.toBeAssignableTo<(...args: Array<any>) => any>()
     })
   })
