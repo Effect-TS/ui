@@ -1453,7 +1453,7 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
     ) => {
       restoring = saved === undefined ? undefined : new Map(Object.entries(saved))
       // First, so whatever the navigation starts sees the cache with the hydration window closed.
-      for (const root of roots) root.navigated(!mode.quiet, next.action === "pop")
+      for (const root of roots) root.navigated()
       const runs = next.action === "push" || (next.action === "replace" && !mode.quiet)
       const checks = runs ? runDeclarations(next, false) : []
       const from = pathnameOf(current.url)
@@ -1503,10 +1503,7 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
         leave()
         // The Model snapshot also goes into the entry itself, so it survives a reload. A copy: the one in
         // memory gains the states that encode later, and a history that keeps its state by reference would too.
-        const saved = snapshots.get(index)!
-        const snapshot: Record<string, unknown> = {}
-        for (const key in saved) if (!key.startsWith(services.memoryOnly)) snapshot[key] = saved[key]
-        writeSnapshot(current.url + current.hash, { index, snapshot })
+        writeSnapshot(current.url + current.hash, { index, snapshot: { ...snapshots.get(index) } })
         index++
         for (const key of snapshots.keys()) if (key >= index) snapshots.delete(key)
         history.push(href, writeState({ index }))

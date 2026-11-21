@@ -38,7 +38,7 @@ export const make = (
     throw new Error("A child takes a key or a ref, not both")
   }
   const { onEmit } = options
-  const made: View.Child<any, any> = {
+  return {
     _tag: "Child",
     component: component as Component.Any,
     // Without a key or a ref, the empty key: the child's segment is `Name[]`.
@@ -53,8 +53,6 @@ export const make = (
     alive,
     owner
   }
-  if (alive !== undefined && writes.on) writes.list.push(made)
-  return made
 }
 
 /** @internal */
@@ -113,6 +111,3 @@ export const expand = (
 }
 
 const ignore = () => undefined
-
-/** @internal */
-export const writes: { on: boolean; readonly list: Array<View.Child<any, any>> } = { on: false, list: [] }

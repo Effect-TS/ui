@@ -367,34 +367,6 @@ describe("scoped paths", () => {
       assert.include(Cause.pretty(failureOf(root)!.cause), "Billing[b]")
     })))
 
-  it.effect("fails the author that writes one child in its tree and in a slot of another, under a false predicate", () =>
-    provideHost(Effect.gen(function*() {
-      const Frame = Component.define({
-        name: "Frame",
-        scoped: false,
-        model: Schema.Null,
-        message: Schema.Never,
-        slots: ["body"]
-      })
-        .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("article", h.slots.body) })
-      const Inner = Component.define({ name: "Inner", scoped: false, model: Schema.Null, message: Schema.Never })
-        .make({
-          init: () => null,
-          update: (model) => model,
-          view: (_, h) =>
-            h.scoped(({ model }) => model !== null, (s) =>
-              h.el(
-                "div",
-                Billing(s, { key: "b" }),
-                Frame(h, { key: "f", slots: { body: Billing(s, { key: "b" }) } })
-              ))
-        })
-      const root = yield* TestHost.mount(host(Inner), {})
-      yield* TestHost.settle
-      assert.strictEqual(root.text(), "down")
-      assert.include(Cause.pretty(failureOf(root)!.cause), "Billing[b]")
-    })))
-
   it.effect("moves a child between the author's tree and a slot of another, as one instance", () =>
     provideHost(Effect.gen(function*() {
       const Frame = Component.define({
@@ -944,50 +916,6 @@ describe("scoped children drawn by other children", () => {
       assert.strictEqual(root.text(), "count:1")
     })))
 
-  it.effect("starts a child written into a slot nobody places, and sends reach it", () =>
-    provideHost(Effect.gen(function*() {
-      const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Literal("inc") })
-        .make({
-          init: () => null,
-          update: (_, __, $) => $.send(CounterRef, CounterMsg.Inc()),
-          view: (_, h) => h.scoped((s) => Shut(h, { key: "c", slots: { body: Counter(s, { ref: CounterRef }) } }))
-        })
-      const root = yield* TestHost.mount(Page, {})
-      yield* TestHost.settle
-      root.send("inc")
-      yield* TestHost.settle
-      click(root, "toggle")
-      yield* TestHost.settle
-      assert.strictEqual(root.text(), "togglecount:1")
-    })))
-
-  it.effect("keeps the draft of a child in a closed slot when a new predicate holds for it", () =>
-    provideHost(Effect.gen(function*() {
-      const Mode = Schema.Literals(["a", "b"])
-      const Page = Component.define({ name: "Page", scoped: false, model: Mode, message: Mode }).make({
-        init: () => "a" as const,
-        update: (_, mode) => mode,
-        view: (mode, h) =>
-          h.scoped(
-            mode === "a" ? ({ model }) => model === "a" : ({ model }) => model === "b",
-            (s) => Shut(h, { key: "c", slots: { body: Counter(s, { key: "k" }) } })
-          )
-      })
-      const root = yield* TestHost.mount(Page, {})
-      yield* TestHost.settle
-      click(root, "toggle")
-      yield* TestHost.settle
-      click(root, "count:0")
-      yield* TestHost.settle
-      click(root, "toggle")
-      yield* TestHost.settle
-      root.send("b")
-      yield* TestHost.settle
-      click(root, "toggle")
-      yield* TestHost.settle
-      assert.strictEqual(root.text(), "togglecount:1")
-    })))
-
   it.effect("a send reaches a child drawn in a kept receiver, and its mounts follow it out", () =>
     Effect.gen(function*() {
       const running = new Set<string>()
@@ -1366,52 +1294,6 @@ describe("scoped children across a router restore", () => {
       })
     ))
 
-  it.effect("keeps a draft whose page a Back left out, for when the page is shown", () =>
-    routed((history) =>
-      Effect.gen(function*() {
-        const root = yield* TestHost.mount(Shell, Router.props(TabsRoute))
-        yield* TestHost.settle
-        click(root, "draft:")
-        yield* TestHost.settle
-        click(root, "Home")
-        yield* TestHost.settle
-        root.send(ShellMsg.Omit({ omitted: true }))
-        history.go(-1)
-        yield* TestHost.settle
-        root.send(ShellMsg.Omit({ omitted: false }))
-        yield* TestHost.settle
-        assert.strictEqual(root.text(), "Homedraft:anested:")
-      })
-    ))
-
-  it.effect("starts a fresh push blank after a Back that left the page out, and Back still restores it", () =>
-    routed((history) =>
-      Effect.gen(function*() {
-        const root = yield* TestHost.mount(Shell, Router.props(TabsRoute))
-        yield* TestHost.settle
-        click(root, "draft:")
-        yield* TestHost.settle
-        click(root, "Home")
-        yield* TestHost.settle
-        root.send(ShellMsg.Omit({ omitted: true }))
-        yield* hide(root, true)
-        history.go(-1)
-        yield* TestHost.settle
-        click(root, "Home")
-        yield* TestHost.settle
-        root.send(ShellMsg.Omit({ omitted: false }))
-        yield* hide(root, false)
-        root.send(ShellMsg.Go({ route: TabsRoute.make({ _tag: "Tabs" }) }))
-        yield* TestHost.settle
-        assert.strictEqual(root.text(), "Homedraft:nested:")
-        history.go(-1)
-        yield* TestHost.settle
-        history.go(-1)
-        yield* TestHost.settle
-        assert.strictEqual(root.text(), "Homedraft:anested:")
-      })
-    ))
-
   it.effect("keeps the kept drafts of each root on one router", () =>
     routed((history) =>
       Effect.gen(function*() {
@@ -1696,47 +1578,6 @@ describe("scoped children whose state encodes after the push that left them", ()
     })
   })
 
-  it.effect("are restored by Back, and start fresh after a reload, once a Back that drew none of them carried their state to the next push", () => {
-    const { edit, go, push, show, visit } = visits(false)
-    return Effect.gen(function*() {
-      yield* visit(Effect.fnUntraced(function*(root) {
-        yield* edit(root)
-        yield* show(root, { hidden: false, bare: true })
-        yield* go(-1)
-        yield* push(root)
-        yield* show(root, { hidden: false, bare: false })
-        yield* go(-1)
-        assert.strictEqual(root.text(), "Away a:new! b:new! ")
-        yield* go(1)
-      }))
-      yield* visit(Effect.fnUntraced(function*(root) {
-        yield* go(-1)
-        assert.strictEqual(root.text(), "Away a:new b:new ")
-      }))
-    })
-  })
-
-  it.effect("keep what a push wrote into its entry, after a Back over an entry whose state encoded later", () => {
-    const { go, later, push, query, show, type, visit } = visits(false)
-    return Effect.gen(function*() {
-      gate = undefined
-      yield* visit(Effect.fnUntraced(function*(root) {
-        yield* type(root, "new")
-        yield* query(root)
-        yield* later(root)
-        yield* show(root, { hidden: false, bare: true })
-        yield* go(-1)
-        yield* go(-1)
-        gate = undefined
-        yield* push(root)
-      }))
-      yield* visit(Effect.fnUntraced(function*(root) {
-        yield* go(-1)
-        assert.strictEqual(root.text(), "Away a:new! b:new! ")
-      }))
-    })
-  })
-
   it.effect("start fresh after a reload, when edited again after a Back and left before that encodes", () => {
     const { go, later, query, show, type, visit } = visits(false)
     return Effect.gen(function*() {
@@ -1773,23 +1614,6 @@ describe("scoped children whose state encodes after the push that left them", ()
     }))
   })
 })
-
-const RowMsg = UiSchema.TaggedEnum({ Ping: {} })
-const RowEvents = UiSchema.TaggedEnum({ Pinged: { label: Schema.String } })
-const Pinger = Component.define({
-  name: "Pinger",
-  scoped: true,
-  props: Schema.Struct({ label: Schema.String }),
-  model: Schema.Null,
-  message: RowMsg,
-  events: RowEvents,
-  receives: ["Ping"]
-}).make({
-  init: () => null,
-  update: (model, _, $) => $.set(model).emit(RowEvents.Pinged({ label: $.props.label })),
-  view: (_, h) => h.el("b", h.props.label)
-})
-const PingerRef = Pinger.ref("R")
 
 describe("scoped children written into closed slots", () => {
   it.effect("run no mounts and report nothing while the slot is closed", () =>
@@ -1852,85 +1676,6 @@ describe("scoped children written into closed slots", () => {
       Effect.provide(Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })),
       provideHost
     ))
-
-  it.effect("take the props and onEmit of the latest write", () =>
-    provideHost(Effect.gen(function*() {
-      const PageMsg = UiSchema.TaggedEnum({ Label: { label: Schema.String }, Ping: {}, Got: { text: Schema.String } })
-      const Page = Component.define({
-        name: "Page",
-        scoped: false,
-        model: Schema.Struct({ label: Schema.String, got: Schema.String }),
-        message: PageMsg
-      }).make({
-        init: () => ({ label: "A", got: "" }),
-        update: (model, message, $) =>
-          PageMsg.match(message, {
-            Label: ({ label }) => ({ ...model, label }),
-            Ping: () => $.send(PingerRef, RowMsg.Ping()),
-            Got: ({ text }) => ({ ...model, got: text })
-          }),
-        view: (model, h) =>
-          h.el(
-            "div",
-            h.el("p", model.got),
-            h.scoped((s) =>
-              Shut(h, {
-                key: "c",
-                slots: {
-                  body: Pinger(s, {
-                    ref: PingerRef,
-                    props: { label: model.label },
-                    onEmit: (event) => PageMsg.Got({ text: event.label + "@" + model.label })
-                  })
-                }
-              })
-            )
-          )
-      })
-      const root = yield* TestHost.mount(Page, {})
-      yield* TestHost.settle
-      root.send(PageMsg.Label({ label: "B" }))
-      yield* TestHost.settle
-      root.send(PageMsg.Ping())
-      yield* TestHost.settle
-      assert.strictEqual(root.text(), "B@Btoggle")
-    })))
-
-  it.effect("keep a draft moved from a kept receiver into a closed slot under a new predicate", () =>
-    provideHost(Effect.gen(function*() {
-      const Mode = Schema.Literals(["box", "shut"])
-      const Page = Component.define({ name: "Page", scoped: false, model: Mode, message: Mode }).make({
-        init: () => "box" as const,
-        update: (_, mode) => mode,
-        view: (mode, h) =>
-          h.el(
-            "main",
-            h.scoped((s) =>
-              mode === "box"
-                ? Box(s, {
-                  key: "b",
-                  slots: { body: h.scoped(({ model }) => model === "box", (t) => Counter(t, { key: "c" })) }
-                })
-                : null
-            ),
-            mode === "shut"
-              ? h.scoped(
-                ({ model }) => model === "shut",
-                (s) => Shut(h, { key: "s", slots: { body: Counter(s, { key: "c" }) } })
-              )
-              : null
-          )
-      })
-      const root = yield* TestHost.mount(Page, {})
-      yield* TestHost.settle
-      click(root, "count:0")
-      yield* TestHost.settle
-      root.send("shut")
-      yield* TestHost.settle
-      click(root, "toggle")
-      yield* TestHost.settle
-      assert.strictEqual(root.text(), "togglecount:1")
-    })))
 
   it.effect("a receiver that redraws an old write leaves the child where the author wrote it last", () =>
     provideHost(Effect.gen(function*() {
@@ -2221,6 +1966,13 @@ describe("scoped children written into closed slots", () => {
         Component.define({ name: "Row", scoped: true, model: Schema.Null, message: Schema.Never })
           .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p", "row") })
       const [First, Second] = [define(), define()]
+      const Open = Component.define({
+        name: "Open",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never,
+        slots: ["body"]
+      }).make({ init: () => null, update: (model) => model, view: (_, h) => h.el("article", h.slots.body) })
       const Inner = Component.define({ name: "Inner", scoped: false, model: Schema.Null, message: Schema.Never })
         .make({
           init: () => null,
@@ -2229,14 +1981,15 @@ describe("scoped children written into closed slots", () => {
             h.scoped((s) =>
               h.el(
                 "div",
-                Shut(h, { key: "x", slots: { body: First(s, { key: "k" }) } }),
-                Shut(h, { key: "y", slots: { body: Second(s, { key: "k" }) } })
+                h.el("p", First(s, { key: "k" })),
+                Open(h, { key: "o", slots: { body: Second(s, { key: "k" }) } })
               )
             )
         })
       const root = yield* TestHost.mount(host(Inner), {})
       yield* TestHost.settle
       assert.strictEqual(root.text(), "down")
+      assert.include(Cause.pretty(failureOf(root)!.cause), "Row[k]")
     })))
 
   it.effect("draws a child its author returns again without writing it again", () =>
@@ -2283,36 +2036,6 @@ describe("scoped children written into closed slots", () => {
       yield* TestHost.settle
       assert.strictEqual(root.text(), "beforebillingafter")
     })))
-
-  it.effect.each(["open", "closed", "false"] as const)(
-    "fails the author whose two closures write one child, the first slot or predicate %s",
-    (first) =>
-      provideHost(Effect.gen(function*() {
-        const Side = Component.define({ name: "Side", scoped: false, model: Schema.Null, message: Schema.Never })
-          .make({ init: () => null, update: (model) => model, parts: () => ({}) })
-        const Inner = Component.define({ name: "Inner", scoped: false, model: Schema.Null, message: Schema.Never })
-          .make({
-            init: () => null,
-            update: (model) => model,
-            view: (_, h) =>
-              h.scoped(({ model }) => first !== "false" || model !== null, (s) =>
-                h.el(
-                  "div",
-                  Side(h, {
-                    key: "a",
-                    view: () =>
-                      first === "open"
-                        ? h.el("p", Billing(s, { key: "b" }))
-                        : Shut(h, { key: "x", slots: { body: Billing(s, { key: "b" }) } })
-                  }),
-                  Side(h, { key: "b", view: () => Shut(h, { key: "y", slots: { body: Billing(s, { key: "b" }) } }) })
-                ))
-          })
-        const root = yield* TestHost.mount(host(Inner), {})
-        yield* TestHost.settle
-        assert.strictEqual(root.text(), "down")
-      }))
-  )
 
   it.each(["closures", "slots"] as const)(
     "a Scene fails the author that writes two components of one name and key, in two %s",
