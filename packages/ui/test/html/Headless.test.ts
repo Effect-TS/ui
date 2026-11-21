@@ -53,18 +53,18 @@ const Picker = Component.define({
       key: "confirm",
       props: { label: "Confirm" },
       onEmit: () => PickerMessage.Closed(),
-      view: (d) =>
+      view: (dialog) =>
         h.div(
-          d.trigger(h.button).children("Open"),
-          d.popup(h.dialog).children(
-            d.title(h.h2).children("Pick one"),
+          dialog.trigger(h.button).children("Open"),
+          dialog.popup(h.dialog).children(
+            dialog.title(h.h2).children("Pick one"),
             Menu(h, {
               key: "actions",
               props: { items },
               onEmit: (event) => PickerMessage.Picked({ id: event.id }),
-              view: (m) =>
-                h.ul.children(m.visible.map((item) =>
-                  d.close(m.item(h.li.key(item.id), item))
+              view: (menu) =>
+                h.ul.children(menu.visible.map((item) =>
+                  dialog.close(menu.item(h.li.key(item.id), item))
                     .onClick(PickerMessage.Clicked({ id: item.id }))
                     .children(item.label)
                 ))
@@ -106,14 +106,14 @@ const Toolbar = Component.define({
       key: "actions",
       props: { items },
       onEmit: (event) => ToolbarMessage.Picked({ id: event.id }),
-      view: (m) =>
+      view: (menu) =>
         h.div.class("toolbar").children(
-          m.trigger(h.button.class("btn")).children("Actions"),
-          m.popup(h.div.class("menu")).children(
+          menu.trigger(h.button.class("btn")).children("Actions"),
+          menu.popup(h.div.class("menu")).children(
             // The Menu's part puts its ref on this input, and so does the Toolbar.
-            m.input(h.input.ref(Mine).attr("aria-label", "Filter actions")),
-            m.visible.length === 0 && h.p("No actions found."),
-            h.ul.children(m.visible.map((item) => m.item(h.li.key(item.id), item).children(item.label)))
+            menu.input(h.input.ref(Mine).attr("aria-label", "Filter actions")),
+            menu.visible.length === 0 && h.p("No actions found."),
+            h.ul.children(menu.visible.map((item) => menu.item(h.li.key(item.id), item).children(item.label)))
           ),
           h.output(log.join(", "))
         )
@@ -162,9 +162,9 @@ const Tip = Component.define({
   view: (on, h) =>
     Anchor(h, {
       key: "anchor",
-      view: (a) => {
+      view: (anchor) => {
         const button = h.button.attr("aria-label", "Target")
-        return h.div((on ? a.anchor(button) : button).children("target"), h.output(String(a.count)))
+        return h.div((on ? anchor.anchor(button) : button).children("target"), h.output(String(anchor.count)))
       }
     })
 })
@@ -191,9 +191,9 @@ const Twin = Component.define({
     Menu(h, {
       ref: TwinActions,
       props: { items },
-      view: (m) =>
+      view: (menu) =>
         h.div(
-          m.trigger(h.button).children("Actions"),
+          menu.trigger(h.button).children("Actions"),
           Menu(h, {
             ...(twin.client ? { ref: TwinActions } : { key: "Actions" }),
             props: { items },
@@ -229,11 +229,11 @@ const Page = Component.define({
       Menu(h, {
         key: "ok",
         props: { items },
-        view: (m) =>
+        view: (menu) =>
           h.div(
-            m.trigger(h.button).children("Actions"),
-            m.popup(h.div).children(
-              h.ul.children(m.visible.map((item) => m.item(h.li.key(item.id), item).children(item.label)))
+            menu.trigger(h.button).children("Actions"),
+            menu.popup(h.div).children(
+              h.ul.children(menu.visible.map((item) => menu.item(h.li.key(item.id), item).children(item.label)))
             )
           )
       }),
@@ -241,9 +241,9 @@ const Page = Component.define({
         key: "flaky",
         props: { items },
         fallback: () => h.p("menu down"),
-        view: (m) => {
+        view: (menu) => {
           if (flaky.throws) throw new Error("the closure threw")
-          return m.trigger(h.button).children("More")
+          return menu.trigger(h.button).children("More")
         }
       })
     )
@@ -281,13 +281,13 @@ const KeysApp = Component.define({
   view: (seen, h) =>
     Keys(h, {
       key: "keys",
-      view: (k) =>
-        k.container(h.div).children(
+      view: (keys) =>
+        keys.container(h.div).children(
           h.input.attr("aria-label", "Bare"),
           // A handler of the consumer's that sends nothing still takes the event from the container.
           h.input.attr("aria-label", "Shadowing").onKeyDown(() => undefined),
-          k.focused(h.input.attr("aria-label", "Composed")).onKeyDown(({ key }) => "consumer " + key),
-          h.output(k.seen.join(", ") + " | " + seen.join(", "))
+          keys.focused(h.input.attr("aria-label", "Composed")).onKeyDown(({ key }) => "consumer " + key),
+          h.output(keys.seen.join(", ") + " | " + seen.join(", "))
         )
     })
 })
@@ -310,10 +310,10 @@ const Confirm = Component.define({
       key: "confirm",
       props: { label: "Confirm" },
       onEmit: () => "closed" as const,
-      view: (d) =>
+      view: (dialog) =>
         h.div(
-          d.trigger(h.button).children("Open"),
-          d.popup(h.dialog).children(d.title(h.h2).children("Sure?")),
+          dialog.trigger(h.button).children("Open"),
+          dialog.popup(h.dialog).children(dialog.title(h.h2).children("Sure?")),
           h.output(String(closed))
         )
     })
@@ -378,11 +378,11 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
               Menu(h, {
                 key: "ok",
                 props: { items },
-                view: (m) =>
+                view: (menu) =>
                   h.div(
-                    m.trigger(h.button).children("Actions"),
-                    m.popup(h.div).children(
-                      h.ul.children(m.visible.map((item) => m.item(h.li.key(item.id), item).children(item.label)))
+                    menu.trigger(h.button).children("Actions"),
+                    menu.popup(h.div).children(
+                      h.ul.children(menu.visible.map((item) => menu.item(h.li.key(item.id), item).children(item.label)))
                     )
                   )
               }),
@@ -390,12 +390,12 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
                 key: "flaky",
                 props: { items },
                 fallback: () => h.p("menu down"),
-                view: (m) => {
+                view: (menu) => {
                   if (flaky.throws) {
                     flaky.throws = false
                     throw new Error("the closure threw")
                   }
-                  return m.trigger(h.button).children("More")
+                  return menu.trigger(h.button).children("More")
                 }
               })
             )
@@ -561,7 +561,7 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
         view: (_, h) =>
           Hit(h, {
             key: "h",
-            view: (p) => p.button(h.button).onClick(() => undefined, { preventDefault: false }).children("hit")
+            view: (hit) => hit.button(h.button).onClick(() => undefined, { preventDefault: false }).children("hit")
           })
       })
       const app = yield* container
@@ -597,7 +597,7 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
           view: (_, h) =>
             Plain(h, {
               key: "p",
-              view: (p) => p.button(h.button).onClick("own", { preventDefault: true }).children("hit")
+              view: (plain) => plain.button(h.button).onClick("own", { preventDefault: true }).children("hit")
             })
         })
       const app = yield* container

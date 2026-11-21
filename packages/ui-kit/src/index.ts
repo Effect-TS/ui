@@ -6,6 +6,9 @@
  * as `Switch(h, { ... })`. Its module, such as `@effect/ui-kit/Switch`,
  * holds the same exports.
  *
+ * A module that isn't a component, such as `Positioning`, is exported as a
+ * namespace: `Positioning.place`.
+ *
  * @stability experimental
  * @since 0.1.0
  */
@@ -62,6 +65,12 @@ export * from "./Input.ts"
  * @since 0.1.0
  */
 export * from "./Meter.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
+export * as Positioning from "./Positioning.ts"
 
 /**
  * @stability experimental

@@ -6,10 +6,12 @@ import { NotesIndex } from "./pages/NotesIndex.ts"
 import { SearchPage } from "./pages/search/SearchPage.ts"
 import { AppRoute } from "./routes.ts"
 
-const indexRoute = AppRoute.make({ _tag: "Index" })
-// `make` fills in the search defaults, and `print` leaves them out, so this
-// prints as `/search`.
-const searchRoute = AppRoute.make({ _tag: "Search", search: {} })
+// The union has a constructor per route, keyed by its tag. A route without
+// fields that need a value takes no argument.
+const indexRoute = AppRoute.Index()
+// The constructor fills in the search defaults, and `print` leaves them out,
+// so this prints as `/search`.
+const searchRoute = AppRoute.Search()
 
 export const AppMessage = UiSchema.TaggedEnum({
   ChangedRoute: { route: AppRoute },

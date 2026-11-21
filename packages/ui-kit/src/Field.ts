@@ -23,23 +23,24 @@
  *
  * Each part takes the consumer's builder and returns it, so the consumer
  * goes on chaining and adds children with `.children(...)`:
- * `f.root(h.div).children(f.label(h.label).children("Name"), f.control(h.input))`.
+ * `field.root(h.div).children(field.label(h.label).children("Name"), field.control(h.input))`.
  * No part adds markup.
  *
  * `control`'s result is still a builder, so it is another kit call's
  * `element`, and both share one element:
- * `Input(h, { element: f.control(h.input), props })` for a text input, and
- * `s.root(f.control(h.button))` for a checkbox or a switch.
+ * `Input(h, { element: field.control(h.input), props })` for a text input,
+ * `checkbox.root(field.control(h.button))` for a checkbox and
+ * `parts.root(field.control(h.button))` for a switch.
  *
  * A field has either one `control` and a `label`, or a `group` of
  * `member`s and a `legend`. The group is for a control made of several
  * focusable elements, such as a range slider's thumbs, or for a set of
  * controls, such as checkboxes. For a range slider, draw the slider's root
- * with `s.root(f.group(h.div))` and each thumb's input with
- * `f.member(h.input)`.
+ * with `slider.root(field.group(h.div))` and each thumb's input with
+ * `field.member(h.input)`.
  *
  * `error` returns `undefined` unless the field is invalid and enabled, so
- * write `f.error(h.div)?.children(message)`. The message is the consumer's:
+ * write `field.error(h.div)?.children(message)`. The message is the consumer's:
  * validate in `update`, pass the outcome as `invalid` and the text as the
  * error's children.
  *
@@ -72,7 +73,7 @@
  * field that can be invalid.
  *
  * A disabled field disables its control, which then submits nothing. A
- * control's own parts don't hear of it: pass `disabled: f.disabled` to a
+ * control's own parts don't hear of it: pass `disabled: field.disabled` to a
  * checkbox whose indicator shows `data-disabled`.
  *
  * In a group, the legend names the group and each member keeps its own
@@ -113,16 +114,16 @@
  *   view: (model, h) =>
  *     Field(h, {
  *       props: { invalid: model.name === "", filled: model.name !== "", described: true },
- *       view: (f) =>
- *         f.root(h.div.class("field")).children(
- *           f.label(h.label).children("Name"),
+ *       view: (field) =>
+ *         field.root(h.div.class("field")).children(
+ *           field.label(h.label).children("Name"),
  *           Input(h, {
- *             element: f.control(h.input),
+ *             element: field.control(h.input),
  *             props: { value: model.name },
  *             onUpdate: ({ value }) => ProfileMessage.UpdatedName({ value })
  *           }).attr("name", "name"),
- *           f.description(h.p).children("Visible on your profile"),
- *           f.error(h.div)?.children("Enter your name")
+ *           field.description(h.p).children("Visible on your profile"),
+ *           field.error(h.div)?.children("Enter your name")
  *         )
  *     })
  * })
@@ -197,7 +198,7 @@ const lostFocus = Subscription.make("lostFocus", Stream.make(Message.BlurredCont
 
 /**
  * A headless field. Call it with the consumer's `h`, the `props`, and a
- * `view` closure that draws the root with `f.root(h.div)` and, inside it,
+ * `view` closure that draws the root with `field.root(h.div)` and, inside it,
  * the label, the control, and the description and error when it has them.
  *
  * **Details**

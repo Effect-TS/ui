@@ -13,17 +13,17 @@ type H = View.Helper<never, SliderProps> & View.Tags<Html.Elements, never>
 // Every part, with a thumb per value, each input named.
 const standIn = {
   elements: Html,
-  view: (s: Parts, h: H) =>
-    s.root(h.div.class("slider")).children(
-      s.value(h.output).children(s.values.join(" - ")),
-      s.control(h.div.class("control")).children(
-        s.track(h.div.class("track")).children(
-          s.indicator(h.div.class("indicator")),
-          ...s.values.map((_, index) =>
-            s.thumb({
+  view: (slider: Parts, h: H) =>
+    slider.root(h.div.class("slider")).children(
+      slider.value(h.output).children(slider.values.join(" - ")),
+      slider.control(h.div.class("control")).children(
+        slider.track(h.div.class("track")).children(
+          slider.indicator(h.div.class("indicator")),
+          ...slider.values.map((_, index) =>
+            slider.thumb({
               element: h.div.class("thumb").key(String(index)),
               input: h.input.attr("aria-label", "Thumb " + index),
-              index: s.values.length > 1 ? index : undefined
+              index: slider.values.length > 1 ? index : undefined
             })
           )
         )
@@ -139,13 +139,13 @@ describe("Slider", () => {
       quiet(s)
       s.mounted(tracked(s), pressed(0, 0.3, true))
       s.mounted(tracked(s), moved(0.71)).emitted({ _tag: "Moved", value: 0.7 })
-      s.parts((p) => assert.isTrue(p.dragging))
+      s.parts((slider) => assert.isTrue(slider.dragging))
       assert.strictEqual(s.get(thumb()).attrs?.["data-dragging"], "")
       assert.strictEqual(s.get(control).attrs?.["data-dragging"], "")
       s.props({ value: 0.7, max: 1, step: 0.1 })
       s.mounted(tracked(s), moved(1.4)).emitted({ _tag: "Moved", value: 1 })
       s.mounted(tracked(s), releasedPointer).emitted({ _tag: "Committed", value: 1 })
-      s.parts((p) => assert.isFalse(p.dragging))
+      s.parts((slider) => assert.isFalse(slider.dragging))
       assert.isUndefined(s.get(thumb()).attrs?.["data-dragging"])
     }))
 
@@ -162,7 +162,7 @@ describe("Slider", () => {
       quiet(s)
       s.mounted(tracked(s), pressed(0, 0.8))
       quiet(s)
-      s.parts((p) => assert.isFalse(p.dragging))
+      s.parts((slider) => assert.isFalse(slider.dragging))
     }))
 
   it.effect("a key lands on the step grid the native input shows, which also measures the gap between thumbs", () =>
@@ -179,7 +179,7 @@ describe("Slider", () => {
       // A value off the grid shows at the step the native input shows, which
       // also bounds its neighbour.
       s.props({ value: [0, 5], max: 12, step: 3 })
-      s.parts((p) => assert.deepStrictEqual(p.values, [0, 6]))
+      s.parts((slider) => assert.deepStrictEqual(slider.values, [0, 6]))
       assert.strictEqual(s.get(input(1)).attrs?.["aria-valuenow"], "6")
       s.keydown(input(0), "End").emitted(...both([6, 6]))
       // Decimal steps keep exactly the gap.
@@ -192,7 +192,7 @@ describe("Slider", () => {
     Effect.gen(function*() {
       const s = yield* scene({ value: [70, 20], minStepsBetweenValues: 5 })
       // The values are sorted.
-      s.parts((p) => assert.deepStrictEqual(p.values, [20, 70]))
+      s.parts((slider) => assert.deepStrictEqual(slider.values, [20, 70]))
       assert.strictEqual(s.get(input(0)).attrs?.["aria-valuetext"], "20 start range")
       assert.strictEqual(s.get(input(1)).attrs?.["aria-valuetext"], "70 end range")
       assert.strictEqual(s.get(input(1)).props?.value, "70")
@@ -202,8 +202,8 @@ describe("Slider", () => {
       s.props({ value: [65, 70], minStepsBetweenValues: 5 })
       s.keydown(input(0), "ArrowRight")
       quiet(s)
-      s.focus(input(0)).parts((p) => assert.strictEqual(p.activeThumbIndex, 0))
-      s.blur(input(0)).parts((p) => assert.strictEqual(p.activeThumbIndex, -1))
+      s.focus(input(0)).parts((slider) => assert.strictEqual(slider.activeThumbIndex, 0))
+      s.blur(input(0)).parts((slider) => assert.strictEqual(slider.activeThumbIndex, -1))
     }))
 
   it.effect("a track press drags the selected thumb and a pushed neighbour stays put on reversal", () =>
@@ -277,9 +277,12 @@ describe("Slider", () => {
   })
 
   it("the input is a native input, the value an output and the control a div", () => {
-    const p = parts({ value: 10 })
-    assert.throws(() => p.thumb({ element: h.div, input: h.button as any }), /a part for <input> was given <button>/)
-    assert.throws(() => p.value(h.div as any), /a part for <output> was given <div>/)
-    assert.throws(() => p.control(h.span as any), /a part for <div> was given <span>/)
+    const slider = parts({ value: 10 })
+    assert.throws(
+      () => slider.thumb({ element: h.div, input: h.button as any }),
+      /a part for <input> was given <button>/
+    )
+    assert.throws(() => slider.value(h.div as any), /a part for <output> was given <div>/)
+    assert.throws(() => slider.control(h.span as any), /a part for <div> was given <span>/)
   })
 })

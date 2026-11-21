@@ -182,10 +182,10 @@ export const App = Component.define({
       "div",
       h.el(
         "nav",
-        go("Home", AppRoute.make({ _tag: "Home" })),
-        go("Person 1", AppRoute.make({ _tag: "Person", params: { id: 1 } })),
-        go("Person 2", AppRoute.make({ _tag: "Person", params: { id: 2 } })),
-        go("Slow", AppRoute.make({ _tag: "Slow" })),
+        go("Home", AppRoute.Home()),
+        go("Person 1", AppRoute.Person({ params: { id: 1 } })),
+        go("Person 2", AppRoute.Person({ params: { id: 2 } })),
+        go("Slow", AppRoute.Slow()),
         h.el("button").on("click", AppMessage.Back()).children("Back"),
         h.el("button").on("click", AppMessage.Block()).children("Block"),
         h.el("button").on("click", AppMessage.Unblock()).children("Unblock")

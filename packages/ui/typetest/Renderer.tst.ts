@@ -86,10 +86,10 @@ describe("Effect props", () => {
   })
 
   it("plain props still infer and add nothing", () => {
-    expect(Renderer.mount(App, { route: AppRoute.make({ _tag: "Home" }) }, null)).type.toBe<
+    expect(Renderer.mount(App, { route: AppRoute.Home() }, null)).type.toBe<
       Effect.Effect<Renderer.Root<AppRoute, never>, never, Renderer.Renderer | Scope.Scope>
     >()
-    expect(TestHost.mount(App, { route: AppRoute.make({ _tag: "Home" }) })).type.toBe<
+    expect(TestHost.mount(App, { route: AppRoute.Home() })).type.toBe<
       Effect.Effect<TestHost.TestRoot<AppRoute, never, never>, never, TestHost.TestHost | Scope.Scope>
     >()
   })

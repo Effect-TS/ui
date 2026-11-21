@@ -25,7 +25,7 @@
  * visually hidden range input and puts it inside `element`, before the
  * children you chain afterward. Because you hand over the input's builder,
  * what you set on it stays: its `name`, its `aria-label`, or a
- * `Field`'s `f.control` or `f.member`. `index` picks the value the thumb shows, and is
+ * `Field`'s `field.control` or `field.member`. `index` picks the value the thumb shows, and is
  * required when `value` is an array.
  *
  * The kit sets no layout. `thumb` gets `--slider-thumb-position` and
@@ -39,16 +39,16 @@
  *
  * Naming each thumb is the consumer's job, on its input. A `Field` names a
  * single thumb and adds a description, an error and the validity state:
- * draw its input with `f.control(h.input)`. A disabled field disables the
+ * draw its input with `field.control(h.input)`. A disabled field disables the
  * input, but the slider's other parts follow the `disabled` prop, so pass
- * `disabled: f.disabled` as well.
+ * `disabled: field.disabled` as well.
  *
  * In a `Field`, a range slider is the field's group. Draw the root with
- * `s.root(f.group(h.div))`, the field's `f.legend` to name it, and each
- * thumb's input with `f.member(h.input)` and an `aria-label` of its own,
+ * `slider.root(field.group(h.div))`, the field's `field.legend` to name it, and each
+ * thumb's input with `field.member(h.input)` and an `aria-label` of its own,
  * such as "Minimum". Each input then points at the description and the
  * error. The field is focused while either thumb has focus, and touched
- * once focus leaves the slider. Don't pass `f.control` to more than one
+ * once focus leaves the slider. Don't pass `field.control` to more than one
  * input, since that gives two elements one `id`. Two thumbs get
  * `aria-valuetext` saying which end each one is, unless you set one.
  *
@@ -63,7 +63,7 @@
  *
  * `thumb` also gets `data-index`. A `Field`'s data attributes, such as
  * `data-invalid` and `data-touched`, go on its parts and on the input
- * `f.control` or `f.member` decorates.
+ * `field.control` or `field.member` decorates.
  *
  * **Keyboard**
  *
@@ -128,21 +128,24 @@
  *   },
  *   view: (model, h) =>
  *     Field(h, {
- *       view: (f) =>
- *         f.root(h.div).children(
- *           f.label(h.label).children("Volume"),
+ *       view: (field) =>
+ *         field.root(h.div).children(
+ *           field.label(h.label).children("Volume"),
  *           Slider(h, {
- *             props: { value: model.volume, disabled: f.disabled },
+ *             props: { value: model.volume, disabled: field.disabled },
  *             onEmit: {
  *               Moved: ({ value }) => PlayerMessage.MovedVolume({ value: value as number }),
  *               Committed: () => undefined
  *             },
- *             view: (s) =>
- *               s.root(h.div.class("slider")).children(
- *                 s.control(h.div.class("control")).children(
- *                   s.track(h.div.class("track")).children(
- *                     s.indicator(h.div.class("indicator")),
- *                     s.thumb({ element: h.div.class("thumb"), input: f.control(h.input).attr("name", "volume") })
+ *             view: (slider) =>
+ *               slider.root(h.div.class("slider")).children(
+ *                 slider.control(h.div.class("control")).children(
+ *                   slider.track(h.div.class("track")).children(
+ *                     slider.indicator(h.div.class("indicator")),
+ *                     slider.thumb({
+ *                       element: h.div.class("thumb"),
+ *                       input: field.control(h.input).attr("name", "volume")
+ *                     })
  *                   )
  *                 )
  *               )

@@ -13,12 +13,12 @@ type H = View.Helper<never, FieldProps> & View.Tags<Html.Elements, never>
 // of the consumer's own.
 const standIn = {
   elements: Html,
-  view: (f: Parts, h: H) =>
-    f.root(h.div).children(
-      f.label(h.label).children("Name"),
-      f.control(h.input.attr("aria-describedby", "hint")),
-      f.description(h.p).children("Visible on your profile"),
-      f.error(h.span)?.children("Enter your name")
+  view: (field: Parts, h: H) =>
+    field.root(h.div).children(
+      field.label(h.label).children("Name"),
+      field.control(h.input.attr("aria-describedby", "hint")),
+      field.description(h.p).children("Visible on your profile"),
+      field.error(h.span)?.children("Enter your name")
     )
 }
 
@@ -65,24 +65,24 @@ describe("Field", () => {
     }))
 
   it("a group is a group unless its element says otherwise, and a disabled field disables its members", () => {
-    const f = parts({})
-    assert.strictEqual(attrsOf(f.group(h.div)).role, "group")
-    assert.strictEqual(attrsOf(f.group(h.div).attr("role", "radiogroup")).role, "radiogroup")
-    assert.isUndefined(attrsOf(f.group(h.fieldset)).role)
+    const field = parts({})
+    assert.strictEqual(attrsOf(field.group(h.div)).role, "group")
+    assert.strictEqual(attrsOf(field.group(h.div).attr("role", "radiogroup")).role, "radiogroup")
+    assert.isUndefined(attrsOf(field.group(h.fieldset)).role)
     const member = attrsOf(parts({ disabled: true }).member(h.input).disabled(false))
     assert.strictEqual(member.disabled, "")
     assert.strictEqual(member["data-disabled"], "")
   })
 
   it("field state overrides stale attributes without replacing consumer attributes", () => {
-    const f = parts({ invalid: false, dirty: true, filled: true })
-    assert.deepStrictEqual(attrsOf(f.root(h.div.class("mine").attr("data-invalid", "stale"))), {
+    const field = parts({ invalid: false, dirty: true, filled: true })
+    assert.deepStrictEqual(attrsOf(field.root(h.div.class("mine").attr("data-invalid", "stale"))), {
       class: "mine",
       "data-valid": "",
       "data-dirty": "",
       "data-filled": ""
     })
-    const own = attrsOf(f.control(h.input.disabled(true).attr("data-disabled", "")))
+    const own = attrsOf(field.control(h.input.disabled(true).attr("data-disabled", "")))
     assert.strictEqual(own.disabled, "")
     assert.strictEqual(own["data-disabled"], "")
     const disabled = parts({ disabled: true, invalid: true })
@@ -106,22 +106,24 @@ describe("Field", () => {
         init: () => ({}),
         update: (model) => model,
         view: (_model, h) => {
-          const field = (
-            key: string,
-            draw: (f: Component.Headless.Parts<typeof Field>) => View.Content<never>
-          ) => Field(h, { key, props: { disabled: h.props.disabled }, view: draw })
+          const formField = (key: string, draw: (field: Parts) => View.Content<never>) =>
+            Field(h, { key, props: { disabled: h.props.disabled }, view: draw })
           const props = { checked: true, name: "terms" }
           return h.form(
-            field(
+            formField(
               "name",
-              (f) =>
-                Input(h, { element: f.control(h.input), props: { value: "Ada" }, onUpdate: () => undefined })
+              (field) =>
+                Input(h, { element: field.control(h.input), props: { value: "Ada" }, onUpdate: () => undefined })
                   .attr("name", "name")
             ),
-            field("terms", (f) => Checkbox(h, { props, view: (s) => s.root(f.control(h.button)) })),
-            field(
+            formField(
+              "terms",
+              (field) => Checkbox(h, { props, view: (checkbox) => checkbox.root(field.control(h.button)) })
+            ),
+            formField(
               "news",
-              (f) => Switch(h, { props: { ...props, name: "news" }, view: (s) => s.root(f.control(h.button)) })
+              (field) =>
+                Switch(h, { props: { ...props, name: "news" }, view: (parts) => parts.root(field.control(h.button)) })
             )
           )
         }
@@ -137,17 +139,17 @@ describe("Field", () => {
     }))
 
   it("the label and the control take only their own tags, and a description needs the described prop", () => {
-    const f = parts({})
-    assert.throws(() => f.label(h.span as any), /a part for <label> was given <span>/)
+    const field = parts({})
+    assert.throws(() => field.label(h.span as any), /a part for <label> was given <span>/)
     assert.throws(
-      () => f.control(h.div as any),
+      () => field.control(h.div as any),
       /a part for <input> or <textarea> or <select> or <button> was given <div>/
     )
     assert.throws(
-      () => f.member(h.div as any),
+      () => field.member(h.div as any),
       /a part for <input> or <textarea> or <select> or <button> was given <div>/
     )
-    assert.throws(() => f.description(h.p), /Field: the description was drawn without the described prop/)
-    assert.isUndefined(attrsOf(f.control(h.select))["aria-describedby"])
+    assert.throws(() => field.description(h.p), /Field: the description was drawn without the described prop/)
+    assert.isUndefined(attrsOf(field.control(h.select))["aria-describedby"])
   })
 })

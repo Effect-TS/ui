@@ -24,16 +24,16 @@ describe("ToastProvider", () => {
       update: (model) => model,
       view: (_, h) =>
         ToastProvider(h, {
-          view: (t) => {
-            expect(t.toasts).type.toBe<ReadonlyArray<ToastItem>>()
-            expect(t.viewport(h.div.onClick(Msg.Clicked()))).type.toBe<Div>()
-            expect(t.root({ element: h.div, toast })).type.toBe<Div>()
-            expect(t.content({ element: h.div, toast })).type.toBe<Div>()
-            expect(t.title({ element: h.strong, toast })).type.toBe<Strong>()
-            expect(t.description({ element: h.strong, toast })).type.toBe<Strong>()
-            expect(t.action({ element: h.button, toast })).type.toBe<Button>()
-            expect(t.close({ element: h.button, toast })).type.toBe<Button>()
-            return t.viewport(h.div)
+          view: (toastProvider) => {
+            expect(toastProvider.toasts).type.toBe<ReadonlyArray<ToastItem>>()
+            expect(toastProvider.viewport(h.div.onClick(Msg.Clicked()))).type.toBe<Div>()
+            expect(toastProvider.root({ element: h.div, toast })).type.toBe<Div>()
+            expect(toastProvider.content({ element: h.div, toast })).type.toBe<Div>()
+            expect(toastProvider.title({ element: h.strong, toast })).type.toBe<Strong>()
+            expect(toastProvider.description({ element: h.strong, toast })).type.toBe<Strong>()
+            expect(toastProvider.action({ element: h.button, toast })).type.toBe<Button>()
+            expect(toastProvider.close({ element: h.button, toast })).type.toBe<Button>()
+            return toastProvider.viewport(h.div)
           }
         })
     })
@@ -45,13 +45,13 @@ describe("ToastProvider", () => {
       update: (model) => model,
       view: (_, h) =>
         ToastProvider(h, {
-          view: (t) => {
-            expect(t.viewport).type.not.toBeCallableWith(h.section)
-            expect(t.root).type.not.toBeCallableWith({ element: h.li, toast })
-            expect(t.content).type.not.toBeCallableWith({ element: h.span, toast })
-            expect(t.action).type.not.toBeCallableWith({ element: h.a, toast })
-            expect(t.close).type.not.toBeCallableWith({ element: h.a, toast })
-            return t.viewport(h.div)
+          view: (toastProvider) => {
+            expect(toastProvider.viewport).type.not.toBeCallableWith(h.section)
+            expect(toastProvider.root).type.not.toBeCallableWith({ element: h.li, toast })
+            expect(toastProvider.content).type.not.toBeCallableWith({ element: h.span, toast })
+            expect(toastProvider.action).type.not.toBeCallableWith({ element: h.a, toast })
+            expect(toastProvider.close).type.not.toBeCallableWith({ element: h.a, toast })
+            return toastProvider.viewport(h.div)
           }
         })
     })

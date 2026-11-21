@@ -90,9 +90,9 @@ export const Listbox = Component.define({
       // and closes it on Escape or a click outside, and the Model follows.
       // Focus moves into the popup and back to the trigger with it.
       ToggledPopup: ({ open }) =>
-        $.set({ ...model, open, query: "", active: open ? $.props.selected : null })
+        $.evolve({ open, query: "", active: open ? $.props.selected : null })
           .run(open ? Html.focus(Input, silent) : Html.focus(Trigger, silent)),
-      UpdatedQuery: ({ value }) => ({ ...model, query: value, active: step(filter($.props.options, value), null, 1) }),
+      UpdatedQuery: ({ value }) => $.evolve({ query: value, active: step(filter($.props.options, value), null, 1) }),
       PressedKey: ({ key }) => {
         const shown = filter($.props.options, model.query)
         const active = activeIn(shown, model.active)
@@ -103,16 +103,16 @@ export const Listbox = Component.define({
             // `aria-activedescendant` leaves focus in the input, so the
             // browser doesn't scroll the active row into view by itself.
             return next === null
-              ? { ...model, open: true }
-              : $.set({ ...model, open: true, active: next })
+              ? $.evolve({ open: true })
+              : $.evolve({ open: true, active: next })
                 .run(Html.scrollIntoView(Row.at(next), silent, { block: "nearest" }))
           }
           case "Enter":
             return active === null
               ? model
-              : $.set({ ...model, open: false }).emit(ListboxEvents.Picked({ id: active }))
+              : $.evolve({ open: false }).emit(ListboxEvents.Picked({ id: active }))
           case "Escape":
-            return { ...model, open: false }
+            return $.evolve({ open: false })
           default: {
             // Typeahead: the first label starting with what was typed. A key
             // no label continues with starts over from that key, so `typed`
@@ -123,12 +123,12 @@ export const Listbox = Component.define({
             const typed = find(extended) !== undefined ? extended : key.toLowerCase()
             const hit = find(typed)
             return hit === undefined
-              ? { ...model, typed: "" }
-              : $.set({ ...model, typed }).emit(ListboxEvents.Picked({ id: hit.id }))
+              ? $.evolve({ typed: "" })
+              : $.evolve({ typed }).emit(ListboxEvents.Picked({ id: hit.id }))
           }
         }
       },
-      ClickedOption: ({ id }) => $.set({ ...model, open: false }).emit(ListboxEvents.Picked({ id }))
+      ClickedOption: ({ id }) => $.evolve({ open: false }).emit(ListboxEvents.Picked({ id }))
     }),
   // `parts` returns plain values for the consumer to read, and parts to
   // apply to its elements. `p.part(tag, decorate)` takes only a builder of

@@ -14,7 +14,7 @@
  * | `thumb` | `<span>` inside the root                        |
  *
  * Each part takes the consumer's builder and returns it, so the consumer
- * goes on chaining: `s.root(h.button.class("switch")).children(...)`.
+ * goes on chaining: `parts.root(h.button.class("switch")).children(...)`.
  * `root` adds the hidden `<input>` that carries the form value as the
  * button's first child, before the consumer's children, so a switch with a
  * `name` can't be drawn without it. A part's result is also another kit
@@ -24,9 +24,9 @@
  * one pointing at its `id`, an `aria-label` or `aria-labelledby` on the
  * button, or text inside it. A `Field` does it, and adds a description,
  * an error and the validity state: draw the root on its control,
- * `s.root(f.control(h.button))`. A disabled field disables the button, but
+ * `parts.root(field.control(h.button))`. A disabled field disables the button, but
  * the switch's other parts follow the `disabled` prop, so pass
- * `disabled: f.disabled` as well.
+ * `disabled: field.disabled` as well.
  *
  * **Data attributes**
  *
@@ -73,9 +73,9 @@
  *     Switch(h, {
  *       props: { checked: model.notify, name: "notify" },
  *       onToggle: ({ checked }) => SettingsMessage.ToggledNotify({ checked }),
- *       view: (s) =>
+ *       view: (parts) =>
  *         h.label.class("setting").children(
- *           s.root(h.button.class("switch")).children(s.thumb(h.span.class("thumb"))),
+ *           parts.root(h.button.class("switch")).children(parts.thumb(h.span.class("thumb"))),
  *           "Notifications"
  *         )
  *     })
@@ -189,8 +189,8 @@ const state = <B extends { readonly attr: (name: string, value: string | undefin
 
 /**
  * A switch. Call it with the consumer's `h`, the `props`, and a `view`
- * closure that draws the root with `s.root(h.button)`, usually with
- * `s.thumb(h.span.class("thumb"))` as a child. It returns what `view`
+ * closure that draws the root with `parts.root(h.button)`, usually with
+ * `parts.thumb(h.span.class("thumb"))` as a child. It returns what `view`
  * returns.
  *
  * **Details**

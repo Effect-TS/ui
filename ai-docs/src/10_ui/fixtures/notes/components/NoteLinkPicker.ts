@@ -59,26 +59,27 @@ export const NoteLinkPickerNoDeps = Component.define({
           //
           // `Router.prefetch` doesn't walk into closures, so it never
           // prefetches the queries of a child placed in one.
-          view: (m) =>
+          view: (listbox) =>
             h.div.class("link-picker").children(
-              m.trigger(h.button).children(
+              listbox.trigger(h.button).children(
                 model.linked === null
                   ? "Link to a note…"
                   : `Linked: ${notes.get(model.linked)?.title ?? "a removed note"}`
               ),
-              m.popup(h.div.attr("aria-label", "Link to a note")).children(
-                m.input(h.input.attr("aria-label", "Filter notes").attr("placeholder", "Filter notes")),
-                m.list(h.ul.attr("aria-label", "Notes")).children(
+              listbox.popup(h.div.attr("aria-label", "Link to a note")).children(
+                listbox.input(h.input.attr("aria-label", "Filter notes").attr("placeholder", "Filter notes")),
+                listbox.list(h.ul.attr("aria-label", "Notes")).children(
                   // Each row is drawn here, with the excerpt the Listbox never
                   // sees, looked up by the row's id.
-                  m.shown.map((option) =>
-                    m.option(h.li.key(option.id).class(m.active === option.id && "active"), option).children(
-                      h.strong(option.label),
-                      h.span(excerpt(notes.get(option.id)?.body ?? ""))
-                    )
+                  listbox.shown.map((option) =>
+                    listbox.option(h.li.key(option.id).class(listbox.active === option.id && "active"), option)
+                      .children(
+                        h.strong(option.label),
+                        h.span(excerpt(notes.get(option.id)?.body ?? ""))
+                      )
                   )
                 ),
-                m.shown.length === 0 && h.p("No notes match.")
+                listbox.shown.length === 0 && h.p("No notes match.")
               )
             )
         })

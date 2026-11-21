@@ -101,11 +101,13 @@ describe("children", () => {
       const stacked = (order: "checkbox inside" | "described inside") =>
         render((h) =>
           Described(h, {
-            view: (d) =>
+            view: (described) =>
               Checkbox(h, {
                 props: { name: "terms" },
-                view: (s) =>
-                  (order === "checkbox inside" ? d.control(s.root(h.button.class("box"))) : s.root(d.control(h.button)))
+                view: (checkbox) =>
+                  (order === "checkbox inside"
+                    ? described.control(checkbox.root(h.button.class("box")))
+                    : checkbox.root(described.control(h.button)))
                     .children("Terms")
               })
           })
@@ -144,15 +146,15 @@ describe("forward", () => {
         yield* render((h) =>
           Checkbox(h, {
             props: { name: "terms" },
-            view: (s) => s.root(framed(h.button, "amount")).children("Terms")
+            view: (checkbox) => checkbox.root(framed(h.button, "amount")).children("Terms")
           })
         ),
         `<div class="frame"><button role="checkbox" type="button"><input type="hidden" name="terms" value="on">Terms</button>` +
           `<input type="hidden" name="amount" value="on"></div>`
       )
-      const parts = Story.parts(Checkbox, { model: {}, props: { name: "terms" } })
+      const checkbox = Story.parts(Checkbox, { model: {}, props: { name: "terms" } })
       assert.throws(
-        () => parts.root(h.span.forward((node) => node) as never),
+        () => checkbox.root(h.span.forward((node) => node) as never),
         /a part for <button> was given <span>/
       )
     }))

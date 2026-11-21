@@ -1,4 +1,4 @@
-import { Command, Component, Subscription, UiSchema } from "@effect/ui"
+import { Command, Component, Subscription, UiSchema, UiStruct } from "@effect/ui"
 import { Effect, Layer, Schema, Stream } from "effect"
 import { Note, NotesTag } from "../domain/Note.ts"
 import { Notes } from "../services/Notes.ts"
@@ -92,8 +92,8 @@ const NoteEditorDef = Component.define({
 // An update function without a tag takes every message, so `$.combine` in
 // any slice can run it. `$.combine` in a slice also runs slices for the
 // same tag and functions written inline, each with the slice's message.
-const closeActions = NoteEditorDef.update((model) => ({ ...model, actionsOpen: false }))
-const clearError = NoteEditorDef.update((model) => ({ ...model, error: null }))
+const closeActions = NoteEditorDef.update((_model, _message, $) => $.evolve({ actionsOpen: false }))
+const clearError = NoteEditorDef.update((_model, _message, $) => $.evolve({ error: null }))
 
 // A slice for one tag: `message` is the RequestedSave message, and the Model, props
 // and `$` come from the definition. `init`, `update` and `view` are pure.
@@ -113,7 +113,7 @@ const save = NoteEditorDef.update("RequestedSave", (model, _message, $) =>
 // the Model, like any other.
 const clickedDiscard = NoteEditorDef.update(
   "ClickedDiscard",
-  (_model, _message, $) => $.combine(closeActions, (model) => ({ ...model, confirming: true }))
+  (_model, _message, $) => $.combine(closeActions, (model) => UiStruct.evolve(model, { confirming: true }))
 )
 
 // A fragment takes `h` first and any other arguments after it, and is
@@ -210,22 +210,26 @@ export const NoteEditorNoDeps = NoteEditorDef.make({
   // added to the Schema doesn't compile until it is handled. A function
   // written inline gets the narrowed message too.
   update: {
-    UpdatedBody: (model, { body }) => ({ ...model, draft: body, edits: model.edits + 1 }),
+    // `$.evolve` changes the fields it's given and keeps the rest. A field
+    // takes its new value, or a function of its old value. It returns a step,
+    // so `.run`, `.emit` and another `.evolve` chain after it. `$.set`
+    // replaces the whole Model instead.
+    UpdatedBody: (_model, { body }, $) => $.evolve({ draft: body, edits: (edits) => edits + 1 }),
     RequestedSave: save,
-    // `$.set` replaces the Model and doesn't merge. `$.emit` reports to the
-    // parent.
-    SucceededSaveNote: (model, { note }, $) =>
-      $.set({ ...model, saved: note.body }).emit(NoteEditorEvents.Saved({ note })),
-    FailedSaveNote: (model, { reason }) => ({ ...model, error: reason }),
+    // `$.emit` reports to the parent.
+    SucceededSaveNote: (_model, { note }, $) => $.evolve({ saved: note.body }).emit(NoteEditorEvents.Saved({ note })),
+    // A handler that returns a bare Model can use `UiStruct.evolve`, which
+    // takes the same fields.
+    FailedSaveNote: (model, { reason }) => UiStruct.evolve(model, { error: reason }),
     ClickedDiscard: clickedDiscard,
     // An auto popover is followed: the browser opens it from its button and
     // closes it on Escape or a click outside, and the Model keeps up.
-    ToggledActions: (model, { open }) => ({ ...model, actionsOpen: open }),
-    SubmittedDiscardForm: (model, { choice }) =>
+    ToggledActions: (_model, { open }, $) => $.evolve({ actionsOpen: open }),
+    SubmittedDiscardForm: (model, { choice }, $) =>
       choice === "discard"
-        ? { ...model, draft: model.saved, confirming: false }
-        : { ...model, confirming: false },
-    CancelledDiscardDialog: (model) => ({ ...model, confirming: false })
+        ? $.evolve({ draft: model.saved, confirming: false })
+        : $.evolve({ confirming: false }),
+    CancelledDiscardDialog: (_model, _message, $) => $.evolve({ confirming: false })
   },
   // A Subscription is a keyed Stream that runs while it is listed. Use one
   // when you can say "while ...", and a Command for a single event. This one

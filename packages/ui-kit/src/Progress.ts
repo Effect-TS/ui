@@ -43,7 +43,7 @@
  * consumer's inline style, so its width wins and the consumer's other
  * declarations stay. While indeterminate it adds nothing. To draw the
  * bar another way, such as vertically or as a ring, skip `indicator` and
- * use `s.percentage`.
+ * use `progress.percentage`.
  *
  * **Example** (A labelled upload bar)
  *
@@ -65,11 +65,11 @@
  *   view: (model, h) =>
  *     Progress(h, {
  *       props: { value: model.sent },
- *       view: (s) =>
- *         s.root(h.div.class("progress")).children(
- *           s.label(h.span).children("Uploading"),
- *           s.value(h.span),
- *           s.track(h.div.class("track")).children(s.indicator(h.div.class("fill")))
+ *       view: (progress) =>
+ *         progress.root(h.div.class("progress")).children(
+ *           progress.label(h.span).children("Uploading"),
+ *           progress.value(h.span),
+ *           progress.track(h.div.class("track")).children(progress.indicator(h.div.class("fill")))
  *         )
  *     })
  * })
@@ -154,7 +154,7 @@ const resolve = (props: ProgressProps) => {
 
 /**
  * A headless progress bar. Call it with the consumer's `h`, the `props`,
- * and a `view` closure that draws the root with `s.root(h.div)`, usually
+ * and a `view` closure that draws the root with `progress.root(h.div)`, usually
  * with a label, the value and a track holding the indicator inside it.
  *
  * **Details**

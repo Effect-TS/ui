@@ -17,7 +17,7 @@ the components that already follow it.
   Switch(h, {
     props: { checked: model.notify },
     onToggle: ({ checked }) => Message.ToggledNotify({ checked }),
-    view: (s) => h.label(s.root(h.button).children(s.thumb(h.span.class("thumb"))), "Notify")
+    view: (parts) => h.label(parts.root(h.button).children(parts.thumb(h.span.class("thumb"))), "Notify")
   })
   ```
 
@@ -36,6 +36,9 @@ the components that already follow it.
   - any other type the API needs (`SwitchButton`, `ListboxOption`)
 
   A component's message Schema stays private.
+- A public module that isn't a component, such as `Positioning`, has
+  unprefixed exports (`Positioning.place`), so the barrel exports it as a
+  namespace: `export * as Positioning from "./Positioning.ts"`.
 - Code that several components share goes in `src/internal/<topic>.ts`,
   once a second component needs it.
 - In `src`, import from module paths (`@effect/ui/Component`,
@@ -68,31 +71,31 @@ form submission both need an instance. A context that may or may not be
 above the component, such as Field, doesn't count: a view function has
 no instance to read shared state with, and one way to reach a control
 has to work for both kinds. So an optional context reaches the control
-through a part on the consumer's builder, `s.root(f.control(h.button))`,
+through a part on the consumer's builder, `checkbox.root(field.control(h.button))`,
 and the control's source doesn't change. `Field` is the worked example:
 its `control` writes what another kit call on the element also writes,
 such as `disabled`, in `forward`. The part reaches only the element it is
 applied to. What the control's other parts depend on is passed as the
-control's own prop, from the context's parts: `disabled: f.disabled`. To
+control's own prop, from the context's parts: `disabled: field.disabled`. To
 undo markup the control added to that element, such as the hidden input,
 keep the helper beside the one that adds it (`internal/field.ts`).
 
 A group control, one with several focusable elements such as a range
 slider, a checkbox group or a radio group, reaches a Field through
-`f.group` and `f.member` instead of `f.control`. Its root takes
-`f.group`, `s.root(f.group(h.div))`, which names it with
-`aria-labelledby` from `f.legend` and tracks focus with `focusin` and
-`focusout`. Each focusable element takes `f.member`, which writes
+`field.group` and `field.member` instead of `field.control`. Its root takes
+`field.group`, `slider.root(field.group(h.div))`, which names it with
+`aria-labelledby` from `field.legend` and tracks focus with `focusin` and
+`focusout`. Each focusable element takes `field.member`, which writes
 `aria-describedby`, `aria-invalid` and the data attributes, but no id and
-no focus handlers. Each member keeps its own name. Don't apply `f.control`
+no focus handlers. Each member keeps its own name. Don't apply `field.control`
 to more than one element, since that gives two elements one id, and don't
 handle `focusin` or `focusout` on an element between the group and its
 members, since that hides them from the field.
 
 ARIA allows `aria-invalid` on `radiogroup` and not on `radio`, the reverse
-of a checkbox or a slider. So RadioGroup takes `invalid: f.invalid` and
+of a checkbox or a slider. So RadioGroup takes `invalid: field.invalid` and
 writes `aria-invalid` on its root, and the radio's root removes the one
-`f.member` wrote. The radio's part is applied after `f.member`, so it
+`field.member` wrote. The radio's part is applied after `field.member`, so it
 writes last.
 
 When a view function with `view` needs state, keep its call. Wrap the
@@ -119,14 +122,14 @@ Button(h, {
 Switch(h, {
   props: { checked: model.notify },
   onToggle: ({ checked }) => Message.ToggledNotify({ checked }),
-  view: (s) => s.root(h.button).children(s.thumb(h.span.class("thumb")))
+  view: (parts) => parts.root(h.button).children(parts.thumb(h.span.class("thumb")))
 })
 
 // A component: core's `onEmit`, and a `key` when it needs one.
 Checkbox(h, {
   props: { checked: model.terms },
   onEmit: ({ checked }) => Message.ToggledTerms({ checked }),
-  view: (s) => s.root(h.button).children(s.indicator(h.span))
+  view: (checkbox) => checkbox.root(h.button).children(checkbox.indicator(h.span))
 })
 ```
 
@@ -144,6 +147,10 @@ Checkbox(h, {
   call does. Don't take a builder per part
   (`elements: { root, thumb }`): it stops working once a part has
   children of its own or repeats.
+- Name the parts argument as "Headless components" in
+  `ai-docs/src/10_ui/index.md` says, in the JSDoc, the README and the
+  tests: `view: (checkbox) => checkbox.root(h.button)`, and `parts` for
+  `Switch`, whose name is a reserved word.
 - `on<Event>` is a view function's event, one option per event. Name it
   as the present tense of the event a component would emit: `onPress`
   for `Pressed`, `onToggle` for `Toggled`. An event with no payload takes
@@ -212,14 +219,14 @@ model.advanced
   (`internal/attributes.ts`), after the consumer's inline style, so its
   own win and the consumer's other declarations stay. The look is the
   consumer's. When the element can be drawn another way, the parts also
-  carry the value behind the declaration, such as `s.percentage`, so
+  carry the value behind the declaration, such as `progress.percentage`, so
   the consumer can skip the part.
 - **Call shape.** A part takes the consumer's builder as its one argument
   and returns it, with the part applied. The consumer goes on chaining,
   and adds children with `.children(...)`:
 
   ```ts
-  s.root(h.button.class("switch")).children(s.thumb(h.span.class("thumb")))
+  checkbox.root(h.button.class("checkbox")).children(checkbox.indicator(h.span.class("tick")))
   ```
 
   A part takes an options object only when it has more than one argument,
@@ -227,12 +234,12 @@ model.advanced
   never a field of it:
 
   ```ts
-  s.tab({ element: h.button, value: "a" }).children("Account")
+  tabs.tab({ element: h.button, value: "a" }).children("Account")
   ```
 
   Each part has one form, with no overloads. A part that may not show
   returns `undefined`, and the consumer writes
-  `s.fallback(h.span)?.children("AL")`. Apply the part before deciding, so
+  `avatar.fallback(h.span)?.children("AL")`. Apply the part before deciding, so
   a wrong tag throws in every state.
 
   Use the same field names across components: `element` for the
@@ -242,7 +249,7 @@ model.advanced
   as `SwitchParts` does.
 
   `Listbox.ts` in `ai-docs` shows the core API, where a part takes the
-  builder and extra arguments positionally (`m.option(h.li, option)`).
+  builder and extra arguments positionally (`listbox.option(h.li, option)`).
   ui-kit wraps `p.part` to take the options object, with `View.wrapPart`.
   A part with only the builder is the `p.part` itself.
 - **Stacking.** A part's result is a builder, so it is also another kit
@@ -251,7 +258,7 @@ model.advanced
 
   ```ts
   Button(h, {
-    element: t.trigger(h.button),
+    element: tooltip.trigger(h.button),
     onPress: Message.PressedBold()
   }).class("tool").children("B")
   ```
@@ -343,11 +350,11 @@ model.advanced
   what it is, and decorates and places it:
 
   ```ts
-  s.thumb({ element: h.div.class("thumb"), input: f.control(h.input) })
+  slider.thumb({ element: h.div.class("thumb"), input: field.control(h.input) })
   ```
 
   The consumer must name that element and reach it with other kit calls,
-  such as `Field`'s `f.control`, so the kit doesn't build it the way it
+  such as `Field`'s `field.control`, so the kit doesn't build it the way it
   builds a hidden form field. What the consumer set on it stays, and the
   field is required, so it can't be left out. `Slider` is the worked
   example.
@@ -358,7 +365,7 @@ model.advanced
   mount, use the workaround in EFF-3914, and check the requirement in the
   component's typetest with `Component.Headless.Requirements`.
 - The parts also carry plain values for markup that depends on state, in
-  place of Base UI's `className(state)` functions: `s.checked`, `m.open`.
+  place of Base UI's `className(state)` functions: `checkbox.checked`, `menu.open`.
 
 ## Messages and events
 
@@ -425,6 +432,11 @@ portal. The details are in the JSDoc of `popover` and `modal` in
   popup that doesn't track the pointer, or that moves focus in the same
   handler, still uses a stream mount on the popover. The popup stays open
   until the consumer passes `open: false`, so a consumer can refuse.
+- A popup that sits next to an anchor is placed by `Positioning`
+  (`packages/ui-kit/src/Positioning.ts`), as `Tooltip` does: spread
+  `PositionerFields` into the props, keep the reported `Placement` in the
+  Model, and issue `TrackPosition` on the positioner while the popup
+  shows. Don't use CSS anchor positioning.
 - `.popover("auto", open)` with `onToggle` follows the browser: it closes
   on Escape, an outside click, or another auto popover opening, and the
   Model stores what `onToggle` reports. Use it only when `open` is the
@@ -442,7 +454,7 @@ portal. The details are in the JSDoc of `popover` and `modal` in
 - A data attribute is present with an empty value, or absent:
   `.attr("data-checked", on ? "" : undefined)`.
 - Attributes only a Field has, such as `data-invalid` and
-  `data-touched`, reach the control through `f.control` or `f.member`,
+  `data-touched`, reach the control through `field.control` or `field.member`,
   so the control doesn't set them. One both write, such as `disabled`, is the field's
   while the field is disabled. Attributes that come from a Form context
   wait for that component.

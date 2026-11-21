@@ -140,7 +140,8 @@ export const RootHooks = Context.Service<RootHooks, RootHooks>("@effect/ui/inter
 /**
  * What a server render writes its frozen tree to, in document order: an
  * element's content between its `open` and `close`, and an instance's, or a
- * child's `fallback`, between `enter` and `leave` of its path.
+ * child's `fallback`, between `enter` and `leave` of its path. A child that
+ * is written as its one element gets neither.
  *
  * @internal
  */

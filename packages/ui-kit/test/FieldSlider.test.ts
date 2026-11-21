@@ -22,24 +22,28 @@ it.effect("a range slider in a field is named by the legend, described, and focu
           h.div(
             Field(h, {
               props: { invalid: true, described: true },
-              view: (f) =>
-                f.root(h.div.class("field")).children(
-                  f.legend(h.div).children("Price"),
+              view: (field) =>
+                field.root(h.div.class("field")).children(
+                  field.legend(h.div).children("Price"),
                   Slider(h, {
-                    props: { value: [20, 80], disabled: f.disabled },
-                    view: (s) =>
-                      s.root(f.group(h.div)).children(
-                        s.control(h.div).children(
-                          s.track(h.div).children(
+                    props: { value: [20, 80], disabled: field.disabled },
+                    view: (slider) =>
+                      slider.root(field.group(h.div)).children(
+                        slider.control(h.div).children(
+                          slider.track(h.div).children(
                             ...["Minimum", "Maximum"].map((name, index) =>
-                              s.thumb({ element: h.div, index, input: f.member(h.input).attr("aria-label", name) })
+                              slider.thumb({
+                                element: h.div,
+                                index,
+                                input: field.member(h.input).attr("aria-label", name)
+                              })
                             )
                           )
                         )
                       )
                   }),
-                  f.description(h.p).children("In dollars"),
-                  f.error(h.span)?.children("Enter a range")
+                  field.description(h.p).children("In dollars"),
+                  field.error(h.span)?.children("Enter a range")
                 )
             }),
             h.button("After")

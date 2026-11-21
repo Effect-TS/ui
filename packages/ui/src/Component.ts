@@ -76,6 +76,7 @@ import * as childRef from "./internal/ref.ts"
 import * as sharedReads from "./internal/shared.ts"
 import type * as Query from "./Query.ts"
 import type * as Subscription from "./Subscription.ts"
+import * as UiStruct from "./UiStruct.ts"
 import * as View from "./View.ts"
 
 /**
@@ -699,8 +700,8 @@ export interface InitStep<in out Model, in out Msg, in out Events, out R = never
   readonly emitted: ReadonlyArray<Events>
   /** Replaces the Model. */
   set(model: Model): InitStep<Model, Msg, Events, R>
-  /** Changes the Model with a function of the current one. */
-  modify(f: (model: Model) => Model): InitStep<Model, Msg, Events, R>
+  /** Changes some fields of the Model, as `Step.evolve` does. */
+  evolve(fields: UiStruct.EvolveFields<Model>): InitStep<Model, Msg, Events, R>
   /** Runs Commands owned by this instance, as `Step.run` does. */
   run<const C extends ReadonlyArray<Command.Command<Msg | Noop, any>>>(
     ...commands: C
@@ -733,8 +734,13 @@ export interface Step<in out Model, in out Msg, in out Events, out R = never, L 
   readonly sends: ReadonlyArray<Send>
   /** Replaces the Model. */
   set(model: Model): Step<Model, Msg, Events, R, L>
-  /** Changes the Model with a function of the current one. */
-  modify(f: (model: Model) => Model): Step<Model, Msg, Events, R, L>
+  /**
+   * Changes some fields of the Model and keeps the rest. Each field takes
+   * its new value, or a function from its old value to the new one, with the
+   * rules of `UiStruct.evolve`: `$.evolve({ submitting: true, attempts: (n) => n + 1 })`.
+   * On a union Model it's a compile error: match the union first.
+   */
+  evolve(fields: UiStruct.EvolveFields<Model>): Step<Model, Msg, Events, R, L>
   /**
    * Runs Commands owned by this instance: each ends when the instance does,
    * and gets a Scope of its own that closes with it. Their results come back as
@@ -881,8 +887,14 @@ const StepProto = {
   set(this: Step<any, any, any, any>, model: unknown) {
     return makeStep(model, this.commands, this.emitted, this.lists, this.sends)
   },
-  modify(this: Step<any, any, any, any>, f: (model: any) => any) {
-    return makeStep(f(this.model), this.commands, this.emitted, this.lists, this.sends)
+  evolve(this: Step<any, any, any, any>, fields: Record<PropertyKey, unknown>) {
+    return makeStep(
+      UiStruct.evolve<any>(this.model, fields as never),
+      this.commands,
+      this.emitted,
+      this.lists,
+      this.sends
+    )
   },
   run(this: Step<any, any, any, any>, ...commands: ReadonlyArray<Command.Command<any, any>>) {
     return makeStep(this.model, [...this.commands, ...commands], this.emitted, this.lists, this.sends)
@@ -2650,7 +2662,7 @@ import { Query } from "@effect/ui"
  * **Example** (A note page whose update is split into slices)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { Component, UiSchema, UiStruct } from "@effect/ui"
  * import { Schema } from "effect"
  *
  * const NotePageMessage = UiSchema.TaggedEnum({ UpdatedBody: { body: Schema.String }, ClickedSave: {} })
@@ -2663,12 +2675,12 @@ import { Query } from "@effect/ui"
  * })
  *
  * // Over the whole message type, so `$.combine` takes them.
- * const touch = NotePageDef.update((model) => ({ ...model, edits: model.edits + 1 }))
- * const validate = NotePageDef.update((model) => ({ ...model, error: model.body === "" ? "Empty" : null }))
+ * const touch = NotePageDef.update((_model, _msg, $) => $.evolve({ edits: (edits) => edits + 1 }))
+ * const validate = NotePageDef.update((model, _msg, $) => $.evolve({ error: model.body === "" ? "Empty" : null }))
  *
  * // `msg` is the UpdatedBody message.
- * const handleUpdatedBody = NotePageDef.update("UpdatedBody", (model, msg, $) =>
- *   $.combine(() => ({ ...model, body: msg.body }), touch))
+ * const handleUpdatedBody = NotePageDef.update("UpdatedBody", (_model, msg, $) =>
+ *   $.combine((model) => UiStruct.evolve(model, { body: msg.body }), touch))
  *
  * // `h` first, then any other arguments.
  * const counter = NotePageDef.fragment((h, edits: number) => h.el("small", `${edits} edits`))
@@ -3498,11 +3510,11 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F } ? "onFailure" ext
  *   message: RoomMessage
  * }).make({
  *   init: ($) => $.set({ room: "lobby", joined: "" }).run(JoinRoom.make()),
- *   update: (model, message, $) =>
+ *   update: (_model, message, $) =>
  *     RoomMessage.match(message, {
  *       // Selects the new room's Layer: JoinRoom runs against it.
- *       SelectedRoom: ({ room }) => $.set({ ...model, room }).run(JoinRoom.make()),
- *       CompletedJoinRoom: ({ room }) => ({ ...model, joined: room })
+ *       SelectedRoom: ({ room }) => $.evolve({ room }).run(JoinRoom.make()),
+ *       CompletedJoinRoom: ({ room }) => $.evolve({ joined: room })
  *     }),
  *   view: (model, h) => h.el("p", model.joined)
  * })

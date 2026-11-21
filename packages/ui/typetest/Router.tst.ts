@@ -13,7 +13,7 @@ const AppRoute = Route.union({
   NotFound: Route.make("/*")
 })
 const SearchRoute = AppRoute.subset(["Search"])
-const search = SearchRoute.make({ _tag: "Search" })
+const search = SearchRoute.Search()
 
 describe("Router.patchSearch", () => {
   it("types the patch by the held route's search fields", () => {
@@ -37,7 +37,7 @@ describe("Router.patchSearch", () => {
     expect(Router.patchSearch).type.toBeCallableWith(SearchRoute, search, { q: "a" })
     expect(Router.patchSearch).type.not.toBeCallableWith(AppRoute.subset(["Home"]), search, { q: "a" })
     expect(Router.patchSearch).type.not.toBeCallableWith(AppRoute, { _tag: "Search" }, { q: "a" })
-    expect(Router.patchSearch).type.not.toBeCallableWith(AppRoute, Other.make({ _tag: "Search", search: { q: 1 } }), {})
+    expect(Router.patchSearch).type.not.toBeCallableWith(AppRoute, Other.Search({ search: { q: 1 } }), {})
   })
 
   it("adds stale to the outcome, and PatchSearch to the requirements", () => {

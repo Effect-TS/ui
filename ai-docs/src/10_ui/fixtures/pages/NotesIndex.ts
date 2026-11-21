@@ -6,7 +6,7 @@ import { ListNotes } from "../notes/queries/ListNotes.ts"
 import { Notes } from "../notes/services/Notes.ts"
 import { AppRoute } from "../routes.ts"
 
-const noteUrl = (id: string) => AppRoute.print(AppRoute.make({ _tag: "Note", params: { id } }))
+const noteUrl = (id: string) => AppRoute.print(AppRoute.Note({ params: { id } }))
 
 export const NotesIndexMessage = UiSchema.TaggedEnum({
   // The Pin button and a drop both send it, so it names what they share.
@@ -30,11 +30,11 @@ export const NotesIndexNoDeps = Component.define({
   queries: { notes: { query: ListNotes, args: () => ({}) } }
 }).make({
   init: () => ({ pinned: [], over: false }),
-  update: (model, message) =>
+  update: (_model, message, $) =>
     Match.valueTags(message, {
-      PinnedNote: ({ id }) => ({ ...model, pinned: model.pinned.includes(id) ? model.pinned : [...model.pinned, id] }),
-      DraggedIntoPins: () => ({ ...model, over: true }),
-      DraggedOutOfPins: () => ({ ...model, over: false })
+      PinnedNote: ({ id }) => $.evolve({ pinned: (pinned) => pinned.includes(id) ? pinned : [...pinned, id] }),
+      DraggedIntoPins: () => $.evolve({ over: true }),
+      DraggedOutOfPins: () => $.evolve({ over: false })
     }),
   // Every mounted instance contributes head entries. They merge in document
   // order, and the later entry wins.

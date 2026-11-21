@@ -4,39 +4,10 @@ import { Dialog, DialogTrigger } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
-import { byId, container, press, tick } from "./utils/document.ts"
+import { byId, container, popovers, press, tick } from "./utils/document.ts"
 
 // The dialog's document work, in a DOM: what a press, a focus move or a
 // close does once the dialog shows.
-
-// happy-dom has no popover API, which the non-modal dialogs use: what they
-// rely on is that showing and hiding one changes `:popover-open`, and that
-// showing a dialog focuses its first field, as a browser does before the
-// dialog's own mount starts.
-const popovers = Effect.acquireRelease(
-  Effect.sync(() => {
-    const showing = new Set<Element>()
-    const proto = window.HTMLElement.prototype as any
-    const elementProto = window.Element.prototype as any
-    const matches = elementProto.matches
-    proto.showPopover = function(this: HTMLElement) {
-      showing.add(this)
-      if (this.localName === "dialog") this.querySelector<HTMLElement>("input, button")?.focus()
-    }
-    proto.hidePopover = function(this: HTMLElement) {
-      showing.delete(this)
-    }
-    elementProto.matches = function(this: Element, selector: string) {
-      return selector === ":popover-open" ? showing.has(this) : matches.call(this, selector)
-    }
-    return () => {
-      delete proto.showPopover
-      delete proto.hidePopover
-      elementProto.matches = matches
-    }
-  }),
-  (restore) => Effect.sync(restore)
-)
 
 const OpenMethod = Schema.NullOr(Schema.Literals(["mouse", "touch", "pen", "keyboard"]))
 
@@ -141,20 +112,20 @@ const Page = Component.define({
           openMethod: props.openMethod ?? model.method
         },
         onEmit: on("a"),
-        view: (s) =>
+        view: (dialog) =>
           h.div(
             props.triggers
               ? h.div(
-                s.trigger(h.button.attr("id", "ta")).children("A"),
-                s.trigger(h.button.attr("id", "tb")).children("B")
+                dialog.trigger(h.button.attr("id", "ta")).children("A"),
+                dialog.trigger(h.button.attr("id", "tb")).children("B")
               )
               : props.detached
               ? null
-              : s.trigger(h.button.attr("id", "trigger")).children("Open"),
-            s.portal(h.dialog)?.children(
-              s.popup(h.div.attr("class", "popup-a")).children(
+              : dialog.trigger(h.button.attr("id", "trigger")).children("Open"),
+            dialog.portal(h.dialog)?.children(
+              dialog.popup(h.div.attr("class", "popup-a")).children(
                 h.input.attr("id", "first"),
-                props.marked ? s.initialFocus(h.input.attr("id", "second")) : h.input.attr("id", "second"),
+                props.marked ? dialog.initialFocus(h.input.attr("id", "second")) : h.input.attr("id", "second"),
                 props.siblings
                   ? h.button.attr("id", "open-b").onClick(Message.Opened({ which: "b", triggerId: null, method: null }))
                     .children("Open B")
@@ -168,10 +139,10 @@ const Page = Component.define({
           key: "b",
           props: { open: model.b, modal: props.modal },
           onEmit: on("b"),
-          view: (s) =>
+          view: (dialog) =>
             h.div(
-              s.trigger(h.button.attr("id", "trigger-b")).children("B"),
-              s.portal(h.dialog)?.children(s.popup(h.div).children(h.input.attr("id", "b-field")))
+              dialog.trigger(h.button.attr("id", "trigger-b")).children("B"),
+              dialog.portal(h.dialog)?.children(dialog.popup(h.div).children(h.input.attr("id", "b-field")))
             )
         })
         : null

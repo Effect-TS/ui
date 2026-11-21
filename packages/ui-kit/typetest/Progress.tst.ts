@@ -22,15 +22,15 @@ describe("Progress", () => {
       view: (_, h) =>
         Progress(h, {
           props: { value: null },
-          view: (s) => {
-            expect(s.status).type.toBe<ProgressStatus>()
-            expect(s.percentage).type.toBe<number | null>()
-            expect(s.valueText).type.toBe<string | undefined>()
-            expect(s.label(h.span)).type.toBe<Span<never>>()
-            expect(s.value(h.span.class("pct")).children(needsClock)).type.toBe<Span<Clock>>()
-            expect(s.track(h.div)).type.toBe<Div<never>>()
-            const root = s.root(h.div.onClick(Msg.Clicked()))
-              .children(s.track(h.div).children(s.indicator(h.div)), needsClock)
+          view: (progress) => {
+            expect(progress.status).type.toBe<ProgressStatus>()
+            expect(progress.percentage).type.toBe<number | null>()
+            expect(progress.valueText).type.toBe<string | undefined>()
+            expect(progress.label(h.span)).type.toBe<Span<never>>()
+            expect(progress.value(h.span.class("pct")).children(needsClock)).type.toBe<Span<Clock>>()
+            expect(progress.track(h.div)).type.toBe<Div<never>>()
+            const root = progress.root(h.div.onClick(Msg.Clicked()))
+              .children(progress.track(h.div).children(progress.indicator(h.div)), needsClock)
             expect(root).type.toBe<Div<Clock>>()
             return root
           }
@@ -45,14 +45,14 @@ describe("Progress", () => {
       view: (_, h) =>
         Progress(h, {
           props: { value: 40 },
-          view: (s) => {
-            expect(s.root).type.not.toBeCallableWith(h.span)
-            expect(s.root).type.not.toBeCallableWith({ element: h.div })
-            expect(s.track).type.not.toBeCallableWith(h.span)
-            expect(s.indicator).type.not.toBeCallableWith(h.span)
-            expect(s.label).type.not.toBeCallableWith(h.label)
-            expect(s.value).type.not.toBeCallableWith(h.div)
-            return s.root(h.div)
+          view: (progress) => {
+            expect(progress.root).type.not.toBeCallableWith(h.span)
+            expect(progress.root).type.not.toBeCallableWith({ element: h.div })
+            expect(progress.track).type.not.toBeCallableWith(h.span)
+            expect(progress.indicator).type.not.toBeCallableWith(h.span)
+            expect(progress.label).type.not.toBeCallableWith(h.label)
+            expect(progress.value).type.not.toBeCallableWith(h.div)
+            return progress.root(h.div)
           }
         })
     })

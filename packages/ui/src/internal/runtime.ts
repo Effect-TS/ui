@@ -864,7 +864,10 @@ let sessions = 0
 /** Each runtime's interrupter id for the Layer builds it ends: negative, so never a fiber's. */
 let buildInterrupters = 0
 
-/** The server's nodes for one instance: between its two markers. */
+/**
+ * The server's nodes for one instance: between its two markers, or the one element of a child written
+ * without them, which is then both `open` and `close`.
+ */
 interface Range {
   readonly open: unknown
   readonly close: unknown
@@ -1048,7 +1051,8 @@ const serializeTree = (
   const instance = (inst: Instance, under: boolean) => {
     const path = inst.path
     let inner = under
-    if (drawn === undefined && into === state && keptLive > 0 && keptEntries.get(inst)?.at !== undefined) drawn = inst
+    const entry = keptLive > 0 ? keptEntries.get(inst) : undefined
+    if (drawn === undefined && into === state && entry?.at !== undefined) drawn = inst
     if (!under) {
       const codec = stateCodecOf(inst.component)
       // A failed instance, and one kept off the server, are built fresh. One whose Layer is pending
@@ -1077,11 +1081,14 @@ const serializeTree = (
         if (inst.component.layer !== undefined) ship(path, inst.env.status)
       }
     }
-    sink.enter(path)
+    // A scoped child keeps its markers: the client finds its nodes by them wherever it draws the child.
+    const bare = !inner && entry === undefined && inst.parent !== undefined && inst.component.layer === undefined &&
+      !Array.isArray(inst.rendered) && inst.rendered?._tag === "Element"
+    if (!bare) sink.enter(path)
     if (inst.failure === undefined) {
       for (const rendered of listOf(inst.rendered)) serialize(inst, rendered, inner)
     }
-    sink.leave(path)
+    if (!bare) sink.leave(path)
     if (drawn === inst) drawn = undefined
     const table = keptLive > 0 ? keptTables.get(inst) : undefined
     if (table !== undefined) serializeKept(table, inner)
@@ -2283,7 +2290,8 @@ const setup = (
     if (view._tag === "Text") return host.createText(view.text)
     if (view._tag === "Child" || view._tag === "Outlet") return host.createText("")
     const node = host.createElement(view.tag)
-    for (const name in view.attrs) host.setAttr(node, name, view.attrs[name])
+    const attrs = normalized(node, view.attrs)
+    for (const name in attrs) host.setAttr(node, name, attrs[name])
     for (const child of view.children) host.insertBefore(node, buildStatic(child), undefined)
     for (const name in view.props) host.setProp(node, name, view.props[name])
     return node
@@ -3438,7 +3446,7 @@ const setup = (
     let rendered: Rendered
     try {
       if (range !== undefined && Option.isSome(serverModel)) {
-        taken = adoptNode(inst, tree, host.nextOf(range.open), range.close, inst.env)
+        taken = adoptNode(inst, tree, firstOf(range), stopOf(range), inst.env)
       }
       rendered = taken ?? create(inst, tree, inst.env)
       throwClash(inst)
@@ -5545,8 +5553,10 @@ const setup = (
         return new TextRecord(view, host.createText(view.text))
       case "Element": {
         const node = host.createElement(view.tag)
-        const attrs = view.attrs
-        if (attrs !== View.noFields) { for (const name in attrs) host.setAttr(node, name, attrs[name]) }
+        if (view.attrs !== View.noFields) {
+          const attrs = normalized(node, view.attrs)
+          for (const name in attrs) host.setAttr(node, name, attrs[name])
+        }
         setEvents(inst, node, view)
         const views = view.children
         let children: Packed
@@ -5882,7 +5892,7 @@ const setup = (
     let inner: Rendered | undefined
     if (range !== undefined) {
       if (shippedStatus(`${inst.path}/${segment(view)}`) === status._tag) {
-        inner = adoptNode(inst, shown, host.nextOf(range.open), range.close, settled(env))
+        inner = adoptNode(inst, shown, firstOf(range), stopOf(range), settled(env))
       }
       if (inner !== undefined) claim(range)
       else removeRange(range)
@@ -5899,6 +5909,9 @@ const setup = (
     }
     return undefined
   }
+
+  const firstOf = (range: Range): unknown => range.open === range.close ? range.open : host.nextOf(range.open)
+  const stopOf = (range: Range): unknown => range.open === range.close ? host.nextOf(range.open) : range.close
 
   /** A range's nodes, its markers included. */
   const rangeNodes = (range: Range): Array<unknown> => {
@@ -5928,6 +5941,10 @@ const setup = (
   /** Adopted: what's left of the server's nodes in the range goes, with its markers. */
   const claim = (range: Range) => {
     range.claimed = true
+    if (range.open === range.close) {
+      if (adoptedUpTo === range.open) host.remove(range.open)
+      return
+    }
     removeUpTo(adoptedUpTo, range.close)
     host.remove(range.open)
     host.remove(range.close)
@@ -5936,8 +5953,9 @@ const setup = (
   /**
    * Adopts the server's node `node` for `view`, with everything under it, in one pass: nothing is
    * matched ahead. `undefined` when `node`, which is `stop` or missing once the server's nodes run out,
-   * isn't what the view renders: nothing was adopted then. A child matches by its marker range, which it
-   * adopts itself. A server never writes an empty text node, so an empty text takes no node and is created.
+   * isn't what the view renders: nothing was adopted then. A child matches by its marker range, or by an
+   * element when the state has its path, and adopts it itself. A server never writes an empty text node, so
+   * an empty text takes no node and is created.
    */
   const adoptNode = (
     inst: Instance,
@@ -5962,8 +5980,10 @@ const setup = (
       case "Element": {
         if (kind?._tag !== "Element" || kind.tag !== view.tag) return undefined
         const next = host.nextOf(node)
-        for (const name in view.attrs) {
-          if (hydration!.getAttr(node, name) !== view.attrs[name]) host.setAttr(node, name, view.attrs[name])
+        const attrs = normalized(node, view.attrs)
+        for (const name in attrs) {
+          const current = hydration!.getAttr(node, name)
+          if (current !== attrs[name]) host.setAttr(node, name, attrs[name], current)
         }
         setEvents(inst, node, view)
         checkKeys(inst, view.children)
@@ -5988,8 +6008,13 @@ const setup = (
         const path = view._tag === "Child"
           ? `${(view.alive === undefined ? inst : inst.author).path}/${segment(view)}`
           : outletPath(inst.author, view.name)
-        if (kind?._tag !== "Open" || kind.path !== path) return undefined
-        const range = rangeFrom(node, path, stop)
+        // A scoped child keeps its markers: its nodes are found by them wherever they're drawn.
+        const range: Range | undefined = kind?._tag === "Open" && kind.path === path
+          ? rangeFrom(node, path, stop)
+          : view._tag === "Child" && view.alive === undefined && kind?._tag === "Element" &&
+              hydrating !== undefined && Object.hasOwn(hydrating.state, path)
+          ? { open: node, close: node, claimed: false }
+          : undefined
         if (range === undefined) return undefined
         const next = host.nextOf(range.close)
         // A child's content matches itself against the range, as an outlet's does, and builds fresh what doesn't.
@@ -6370,6 +6395,11 @@ const setup = (
     }
   }
 
+  const normalized = (
+    node: unknown,
+    attrs: Readonly<Record<string, string>>
+  ): Readonly<Record<string, string>> => host.normalizeAttrs === undefined ? attrs : host.normalizeAttrs(node, attrs)
+
   /**
    * Sets what changed between two attribute records: the names that went first, then the values
    * that differ. A record's own values are strings, which nothing it inherits from
@@ -6380,16 +6410,15 @@ const setup = (
     prev: Readonly<Record<string, string>>,
     next: Readonly<Record<string, string>>
   ) => {
-    if (host.normalizeAttrs !== undefined) {
-      prev = host.normalizeAttrs(node, prev)
-      next = host.normalizeAttrs(node, next)
-    }
+    prev = normalized(node, prev)
+    next = normalized(node, next)
     for (const name in prev) {
-      if (typeof next[name] !== "string") host.setAttr(node, name, undefined)
+      if (typeof next[name] !== "string") host.setAttr(node, name, undefined, prev[name])
     }
     for (const name in next) {
       const value = next[name]
-      if (prev[name] !== value) host.setAttr(node, name, value)
+      const previous = prev[name]
+      if (previous !== value) host.setAttr(node, name, value, typeof previous === "string" ? previous : undefined)
     }
   }
 

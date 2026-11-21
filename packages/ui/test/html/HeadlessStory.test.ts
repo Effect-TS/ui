@@ -29,14 +29,14 @@ const Toolbar = Component.define({
         key: "actions",
         props: { items },
         onEmit: (event) => ToolbarMessage.Picked({ id: event.id }),
-        view: (m) =>
+        view: (menu) =>
           h.div(
-            m.trigger(h.button).children("Actions"),
-            m.popup(h.div).children(
-              m.input(h.input.attr("aria-label", "Filter actions")),
-              m.visible.length === 0 && h.p("No actions found."),
-              h.ul.children(m.visible.map((item) =>
-                m.item(h.li.key(item.id), item)
+            menu.trigger(h.button).children("Actions"),
+            menu.popup(h.div).children(
+              menu.input(h.input.attr("aria-label", "Filter actions")),
+              menu.visible.length === 0 && h.p("No actions found."),
+              h.ul.children(menu.visible.map((item) =>
+                menu.item(h.li.key(item.id), item)
                   .onClick(ToolbarMessage.Clicked({ id: item.id }))
                   .children(item.label)
               ))
@@ -57,14 +57,14 @@ const trigger = Locator.text("Actions")
 const standIn = {
   elements: Html,
   view: (
-    m: Component.Headless.Parts<typeof Menu>,
+    menu: Component.Headless.Parts<typeof Menu>,
     h: View.Helper<never, { readonly items: ReadonlyArray<Item> }> & View.Tags<Html.Elements, never>
   ) =>
     h.div(
-      m.trigger(h.button).children("Actions"),
-      m.popup(h.div).children(
-        m.input(h.input.attr("aria-label", "Filter actions")),
-        h.ul.children(m.visible.map((item) => m.item(h.li.key(item.id), item).children(item.label)))
+      menu.trigger(h.button).children("Actions"),
+      menu.popup(h.div).children(
+        menu.input(h.input.attr("aria-label", "Filter actions")),
+        h.ul.children(menu.visible.map((item) => menu.item(h.li.key(item.id), item).children(item.label)))
       )
     )
 }
@@ -128,8 +128,8 @@ describe("headless components in a story", () => {
 
   it("parts need no runtime, and an id outside a mount is under the component's own name", () => {
     // No story and no host: the Model from init, the props, and nothing else.
-    const m = Story.parts(Menu, { model: Menu.init({ items }).model, props: { items } })
-    assert.deepStrictEqual(m.visible, items)
+    const menu = Story.parts(Menu, { model: Menu.init({ items }).model, props: { items } })
+    assert.deepStrictEqual(menu.visible, items)
     const Bare = Component.define({
       name: "Bare",
       scoped: false,
@@ -139,7 +139,7 @@ describe("headless components in a story", () => {
     }).make({
       init: () => null,
       update: (model) => model,
-      view: (_, h) => h.div(m.trigger(h.button).children("Actions"), h.span.id(h.id("label")).children("label"))
+      view: (_, h) => h.div(menu.trigger(h.button).children("Actions"), h.span.id(h.id("label")).children("label"))
     })
     const view = Bare.view(null, {}) as View.Element<never>
     const [button, span] = view.children as ReadonlyArray<View.Element<never>>
@@ -148,11 +148,11 @@ describe("headless components in a story", () => {
   })
 
   it("a part checks the tag name it's given, as its type does", () => {
-    const d = Story.parts(Dialog, { model: { open: false }, props: { label: "Confirm" } })
+    const dialog = Story.parts(Dialog, { model: { open: false }, props: { label: "Confirm" } })
     const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
-    assert.strictEqual(d.title(h.h2).tag, "h2")
+    assert.strictEqual(dialog.title(h.h2).tag, "h2")
     // Both are HTMLHeadingElement, but the part was declared for <h2>.
-    assert.throws(() => d.title(h.h3 as any), /a part for <h2> was given <h3>/)
+    assert.throws(() => dialog.title(h.h3 as any), /a part for <h2> was given <h3>/)
   })
 
   it.effect("ids of one instance differ whenever the name or the key does", () =>
@@ -167,21 +167,21 @@ describe("headless components in a story", () => {
       // The stand-in view is written in place here, where its parameters need no annotation.
       const s = yield* Scene.make(Menu, { items }, {
         elements: Html,
-        view: (m, h) =>
+        view: (menu, h) =>
           h.div(
-            m.trigger(h.button).children("Actions"),
-            m.popup(h.div).children(
-              m.input(h.input.attr("aria-label", "Filter actions")),
-              h.ul.children(m.visible.map((item) => m.item(h.li.key(item.id), item).children(item.label)))
+            menu.trigger(h.button).children("Actions"),
+            menu.popup(h.div).children(
+              menu.input(h.input.attr("aria-label", "Filter actions")),
+              h.ul.children(menu.visible.map((item) => menu.item(h.li.key(item.id), item).children(item.label)))
             )
           )
       })
       s.click("Actions")
       assert.strictEqual(s.get(Locator.text("Actions")).attrs?.["aria-expanded"], "true")
       s.fire(filter, "input", { value: "co", checked: false })
-      const m = Story.parts(Menu, s.current)
-      assert.deepStrictEqual(m.visible.map((item) => item.label), ["Copy"])
-      assert.strictEqual(m.active, "c")
+      const menu = Story.parts(Menu, s.current)
+      assert.deepStrictEqual(menu.visible.map((item) => item.label), ["Copy"])
+      assert.strictEqual(menu.active, "c")
       assert.deepStrictEqual(labels(s), ["Copy"])
       s.fire(filter, "keydown", { key: "Enter" })
       assert.isTrue(s.defaultPrevented)
@@ -214,7 +214,10 @@ describe("headless components in a story", () => {
           update: (model) => model,
           parts: (_, p) => ({ root: p.part((b) => b.attr("role", "button")) })
         })
-      const s = yield* Scene.make(Neutral, {}, { elements: Html, view: (p, h) => p.root(h.button).children("neutral") })
+      const s = yield* Scene.make(Neutral, {}, {
+        elements: Html,
+        view: (neutral, h) => neutral.root(h.button).children("neutral")
+      })
       assert.strictEqual(s.get(Locator.text("neutral")).tag, "button")
     }))
 
@@ -237,9 +240,10 @@ describe("headless components in a story", () => {
       })
       const s = yield* Scene.make(Dual, {}, {
         elements: Html,
-        view: (p, h) => p.ten(p.one(h.button)).onClick(() => undefined, { preventDefault: false }).children("both")
+        view: (dual, h) =>
+          dual.ten(dual.one(h.button)).onClick(() => undefined, { preventDefault: false }).children("both")
       })
-      s.click("both").parts((p) => assert.strictEqual(p.count, 11))
+      s.click("both").parts((dual) => assert.strictEqual(dual.count, 11))
       assert.isTrue(s.defaultPrevented)
     }))
 
@@ -271,7 +275,7 @@ describe("headless components in a story", () => {
         view: (_, h) =>
           Guard(
             h,
-            { key: "g", view: (p) => p.link(h.a).onClick(Clicked.Clicked()).children("go") }
+            { key: "g", view: (guard) => guard.link(h.a).onClick(Clicked.Clicked()).children("go") }
           )
       })
       const s = yield* Scene.make(Page, {})
@@ -305,17 +309,17 @@ describe("headless components in a story", () => {
       })
       const s = yield* Scene.make(Outer, {}, {
         elements: Html,
-        view: (p, h) =>
-          p.ten(p.one(h.div)).children(
+        view: (outer, h) =>
+          outer.ten(outer.one(h.div)).children(
             h.button("hit"),
-            Inner(h, { key: "inner", view: () => p.hundred(h.button).children("inside") })
+            Inner(h, { key: "inner", view: () => outer.hundred(h.button).children("inside") })
           )
       })
       s.click("hit")
-      s.parts((p) => assert.strictEqual(p.count, 11))
+      s.parts((outer) => assert.strictEqual(outer.count, 11))
       assert.isTrue(s.defaultPrevented)
       s.click("inside")
-      s.parts((p) => assert.strictEqual(p.count, 111))
+      s.parts((outer) => assert.strictEqual(outer.count, 111))
     }))
 
   it.effect("an author's story drops on a part's drop target", () =>
@@ -335,9 +339,12 @@ describe("headless components in a story", () => {
             zone: p.part("div", (b) => b.onDrop((payload) => payload.data["text/plain"], { accepts: ["text/plain"] }))
           })
         })
-      const s = yield* HtmlScene.make(Zone, {}, { elements: Html, view: (p, h) => p.zone(h.div).children("zone") })
+      const s = yield* HtmlScene.make(Zone, {}, {
+        elements: Html,
+        view: (zone, h) => zone.zone(h.div).children("zone")
+      })
       s.drop(Locator.text("zone"), { data: { "text/plain": "milk" } })
-        .parts((p) => assert.strictEqual(p.dropped, "milk"))
+        .parts((zone) => assert.strictEqual(zone.dropped, "milk"))
       assert.isTrue(s.defaultPrevented)
     }))
 })

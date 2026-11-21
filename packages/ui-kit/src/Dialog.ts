@@ -26,7 +26,7 @@
  *
  * Each part takes the consumer's builder and returns it with the part
  * applied, and the consumer adds the children:
- * `s.portal(h.dialog)?.children(s.popup(h.div).children(s.title(h.h2).children("Settings")))`.
+ * `dialog.portal(h.dialog)?.children(dialog.popup(h.div).children(dialog.title(h.h2).children("Settings")))`.
  * The portal returns `undefined` while the dialog is closed, unless
  * `keepMounted`, and the backdrop returns `undefined` in a nested dialog, unless
  * `forceRenderBackdrop`. `backdrop` and `viewport` are optional. A part's result
@@ -145,14 +145,14 @@
  *         Dismissed: () => ToolbarMessage.DismissedSettings(),
  *         Settled: () => undefined
  *       },
- *       view: (s) =>
+ *       view: (dialog) =>
  *         h.div(
- *           s.trigger(h.button.class("button")).children("Settings"),
- *           s.portal(h.dialog)?.children(
- *             s.viewport(h.div.class("viewport")).children(
- *               s.popup(h.div.class("popup")).children(
- *                 s.title(h.h2).children("Settings"),
- *                 s.close(h.button.class("button")).children("Close")
+ *           dialog.trigger(h.button.class("button")).children("Settings"),
+ *           dialog.portal(h.dialog)?.children(
+ *             dialog.viewport(h.div.class("viewport")).children(
+ *               dialog.popup(h.div.class("popup")).children(
+ *                 dialog.title(h.h2).children("Settings"),
+ *                 dialog.close(h.button.class("button")).children("Close")
  *               )
  *             )
  *           )
@@ -846,7 +846,7 @@ export const DialogTrigger = <Msg, R = never>(
 
 /**
  * A headless dialog. Call it with the consumer's `h` and a `view` closure that
- * draws the trigger with `s.trigger` and the dialog with `s.portal` and the
+ * draws the trigger with `dialog.trigger` and the dialog with `dialog.portal` and the
  * parts inside it.
  *
  * **Details**
@@ -855,10 +855,10 @@ export const DialogTrigger = <Msg, R = never>(
  * `open`, `mounted` (the dialog shows, through its exit transition),
  * `transitionStatus`, `nested`, `nestedDialogs`, and `openMethod` and
  * `closeMethod`, how the user last opened and closed it. Draw `initialFocus` on
- * a field only for some ways of opening by branching on `s.openMethod`.
+ * a field only for some ways of opening by branching on `dialog.openMethod`.
  *
  * A trigger reports its `id` in `Opened`: set it on the builder before the
- * part, `s.trigger(h.button.attr("id", "edit-" + row.id))`. Pressing the
+ * part, `dialog.trigger(h.button.attr("id", "edit-" + row.id))`. Pressing the
  * trigger the dialog is open for asks it to close, and pressing another one
  * asks it to open for that one.
  *

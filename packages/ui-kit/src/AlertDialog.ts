@@ -95,14 +95,14 @@
  *         Dismissed: () => EditorMessage.Kept(),
  *         Settled: () => undefined
  *       },
- *       view: (s) =>
+ *       view: (alertDialog) =>
  *         h.div(
- *           s.trigger(h.button).children("Discard draft"),
- *           s.portal(h.dialog)?.children(
- *             s.popup(h.div.class("popup")).children(
- *               s.title(h.h2).children("Discard draft?"),
- *               s.description(h.p).children("You can't undo this."),
- *               s.initialFocus(s.close(h.button)).children("Cancel"),
+ *           alertDialog.trigger(h.button).children("Discard draft"),
+ *           alertDialog.portal(h.dialog)?.children(
+ *             alertDialog.popup(h.div.class("popup")).children(
+ *               alertDialog.title(h.h2).children("Discard draft?"),
+ *               alertDialog.description(h.p).children("You can't undo this."),
+ *               alertDialog.initialFocus(alertDialog.close(h.button)).children("Cancel"),
  *               h.button.onClick(EditorMessage.Discarded()).children("Discard")
  *             )
  *           )
@@ -172,7 +172,7 @@ const alert = (node: View.ElementBuilder<any, any, any, any>) =>
 /**
  * A headless alert dialog. Call it as a `Dialog`, with the consumer's `h`, a
  * `key` when it needs one, `props`, `onEmit` and a `view` closure that draws
- * the trigger with `s.trigger` and the alert dialog with `s.portal` and the
+ * the trigger with `alertDialog.trigger` and the alert dialog with `alertDialog.portal` and the
  * parts inside it.
  *
  * **Details**
@@ -206,5 +206,5 @@ export const AlertDialog = <Msg, RV = never, RF = never>(
   Dialog<Msg, RV, RF>(h, {
     ...options,
     props: { ...options.props, modal: true, disablePointerDismissal: true },
-    view: (s) => options.view({ ...s, portal: (element) => s.portal(element)?.forward(alert) })
+    view: (dialog) => options.view({ ...dialog, portal: (element) => dialog.portal(element)?.forward(alert) })
   })

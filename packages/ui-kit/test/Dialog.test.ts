@@ -13,22 +13,24 @@ type H = View.Helper<never, DialogProps> & View.Tags<Html.Elements, never>
 // a test sees the dialog's win.
 const standIn = {
   elements: Html,
-  view: (s: Parts, h: H) =>
+  view: (dialog: Parts, h: H) =>
     h.div(
-      s.trigger(h.button.class("open").attr("aria-expanded", "mixed").attr("data-popup-open", "")).children("Open"),
-      s.trigger(h.button.attr("id", "other")).children("Other"),
-      s.portal(h.dialog.attr("id", "mine").attr("aria-describedby", "extra").attr("style", "z-index:2"))?.children(
-        s.backdrop(h.div.class("backdrop").attr("role", "none").attr("data-closed", "")),
-        s.viewport(h.div.class("viewport").attr("data-nested", "")).children(
-          s.popup(h.div.class("popup").attr("data-open", "").attr("tabindex", "0")).children(
-            s.title(h.h2.attr("id", "heading")).children("Settings"),
-            s.description(h.p).children("For this workspace."),
-            s.initialFocus(h.input),
-            s.close(h.button.class("shut")).children("Close")
+      dialog.trigger(h.button.class("open").attr("aria-expanded", "mixed").attr("data-popup-open", "")).children(
+        "Open"
+      ),
+      dialog.trigger(h.button.attr("id", "other")).children("Other"),
+      dialog.portal(h.dialog.attr("id", "mine").attr("aria-describedby", "extra").attr("style", "z-index:2"))?.children(
+        dialog.backdrop(h.div.class("backdrop").attr("role", "none").attr("data-closed", "")),
+        dialog.viewport(h.div.class("viewport").attr("data-nested", "")).children(
+          dialog.popup(h.div.class("popup").attr("data-open", "").attr("tabindex", "0")).children(
+            dialog.title(h.h2.attr("id", "heading")).children("Settings"),
+            dialog.description(h.p).children("For this workspace."),
+            dialog.initialFocus(h.input),
+            dialog.close(h.button.class("shut")).children("Close")
           )
         )
       ),
-      s.finalFocus(h.button.class("next")).children("Next")
+      dialog.finalFocus(h.button.class("next")).children("Next")
     )
 }
 
@@ -49,10 +51,10 @@ const tracked = (s: Rendered): TrackDialog =>
 const sent = (tag: string, fields: object = {}) => ({ _tag: tag, ...fields }) as never
 
 // The plain values the parts carry now.
-const partsOf = (s: { readonly parts: (f: (parts: Parts) => void) => unknown }): Parts => {
+const partsOf = (s: { readonly parts: (f: (dialog: Parts) => void) => unknown }): Parts => {
   let parts: Parts | undefined
-  s.parts((current) => {
-    parts = current
+  s.parts((dialog) => {
+    parts = dialog
   })
   return parts!
 }
@@ -222,11 +224,11 @@ const Nested = Component.define({
     Dialog(h, {
       key: "outer",
       props: { open: true },
-      view: (outer) =>
+      view: (outerDialog) =>
         h.div(
-          outer.portal(h.dialog)?.children(
-            outer.backdrop(h.div.class("outer-backdrop")),
-            outer.popup(h.div.class("outer")).children(
+          outerDialog.portal(h.dialog)?.children(
+            outerDialog.backdrop(h.div.class("outer-backdrop")),
+            outerDialog.popup(h.div.class("outer")).children(
               Dialog(h, {
                 key: "inner",
                 props: { open: model.inner },
@@ -235,12 +237,12 @@ const Nested = Component.define({
                   Dismissed: () => NestedMessage.DismissedInner(),
                   Settled: () => undefined
                 },
-                view: (inner) =>
+                view: (innerDialog) =>
                   h.div(
-                    inner.trigger(h.button).children("Confirm"),
-                    inner.portal(h.dialog)?.children(
-                      inner.backdrop(h.div.class("inner-backdrop")),
-                      inner.popup(h.div.class("inner")).children(inner.close(h.button).children("Keep"))
+                    innerDialog.trigger(h.button).children("Confirm"),
+                    innerDialog.portal(h.dialog)?.children(
+                      innerDialog.backdrop(h.div.class("inner-backdrop")),
+                      innerDialog.popup(h.div.class("inner")).children(innerDialog.close(h.button).children("Keep"))
                     )
                   )
               })

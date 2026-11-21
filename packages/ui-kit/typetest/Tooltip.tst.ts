@@ -24,13 +24,16 @@ describe("Tooltip", () => {
         Tooltip(h, {
           key: "t",
           props: { open: false },
-          view: (s) => {
-            const trigger = s.trigger(h.button.class("tool").onClick(Msg.Clicked()))
+          view: (tooltip) => {
+            const trigger = tooltip.trigger(h.button.class("tool").onClick(Msg.Clicked()))
             expect(trigger).type.toBe<Button>()
-            expect(s.positioner(h.div)).type.toBe<Div>()
-            expect(s.popup(h.div)).type.toBe<Div>()
-            expect(s.arrow(h.div)).type.toBe<Div>()
-            return h.span(trigger.children("B"), s.positioner(h.div).children(s.popup(h.div).children("Bold")))
+            expect(tooltip.positioner(h.div)).type.toBe<Div>()
+            expect(tooltip.popup(h.div)).type.toBe<Div>()
+            expect(tooltip.arrow(h.div)).type.toBe<Div>()
+            return h.span(
+              trigger.children("B"),
+              tooltip.positioner(h.div).children(tooltip.popup(h.div).children("Bold"))
+            )
           }
         })
     })
@@ -44,12 +47,12 @@ describe("Tooltip", () => {
         Tooltip(h, {
           key: "t",
           props: { open: false },
-          view: (s) => {
-            expect(s.trigger).type.not.toBeCallableWith(h.a)
-            expect(s.positioner).type.not.toBeCallableWith(h.span)
-            expect(s.popup).type.not.toBeCallableWith(h.span)
-            expect(s.arrow).type.not.toBeCallableWith(h.span)
-            return s.trigger(h.button)
+          view: (tooltip) => {
+            expect(tooltip.trigger).type.not.toBeCallableWith(h.a)
+            expect(tooltip.positioner).type.not.toBeCallableWith(h.span)
+            expect(tooltip.popup).type.not.toBeCallableWith(h.span)
+            expect(tooltip.arrow).type.not.toBeCallableWith(h.span)
+            return tooltip.trigger(h.button)
           }
         })
     })

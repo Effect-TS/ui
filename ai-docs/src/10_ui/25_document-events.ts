@@ -43,9 +43,9 @@ export const Snake = Component.define({
 }).make({
   init: () => ({ running: false, heading: "right" as const }),
   update: {
-    ClickedStart: (model) => ({ ...model, running: true }),
-    PressedArrow: (model, { direction }) => ({ ...model, heading: direction }),
-    PressedEscape: (model) => ({ ...model, running: false })
+    ClickedStart: (_model, _message, $) => $.evolve({ running: true }),
+    PressedArrow: (_model, { direction }, $) => $.evolve({ heading: direction }),
+    PressedEscape: (_model, _message, $) => $.evolve({ running: false })
   },
   view: (model, h) =>
     model.running

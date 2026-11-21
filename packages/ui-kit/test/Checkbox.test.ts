@@ -11,9 +11,9 @@ import { Effect } from "effect"
 const standIn = {
   elements: Html,
   view: (
-    s: Component.Headless.Parts<typeof Checkbox>,
+    checkbox: Component.Headless.Parts<typeof Checkbox>,
     h: View.Helper<never, CheckboxProps> & View.Tags<Html.Elements, never>
-  ) => h.label(s.root(h.button).children(s.indicator(h.span)), "Accept the terms")
+  ) => h.label(checkbox.root(h.button).children(checkbox.indicator(h.span)), "Accept the terms")
 }
 
 const root = Locator.attr("role", "checkbox")
@@ -84,9 +84,9 @@ describe("Checkbox", () => {
     }))
 
   it("the root takes only a native button, which toggles on Space by itself", () => {
-    const s = parts({ checked: false })
-    assert.strictEqual(View.build(s.root(h.button), []).tag, "button")
-    assert.throws(() => s.root(h.span as any), /a part for <button> was given <span>/)
+    const checkbox = parts({ checked: false })
+    assert.strictEqual(View.build(checkbox.root(h.button), []).tag, "button")
+    assert.throws(() => checkbox.root(h.span as any), /a part for <button> was given <span>/)
   })
 
   it("the root keeps the consumer's attributes, but the checkbox's own win, present or absent", () => {

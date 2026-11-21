@@ -72,7 +72,7 @@ const ListPage = Component.define({
         ListMessage.Typed({ value })
       ),
       h.button.onClick(ListMessage.Next()).children("Next"),
-      h.a.attr("href", ListRoute.print(ListRoute.make({ _tag: "List", search: { page: 2 } }))).children("Page 2"),
+      h.a.attr("href", ListRoute.print(ListRoute.List({ search: { page: 2 } }))).children("Page 2"),
       h.a.attr("href", "#results").children("Results")
     )
 })
@@ -164,7 +164,7 @@ const clickReporting = (element: Element, init?: MouseEventInit) => {
   return prevented
 }
 
-const homeRoute = AppRoute.make({ _tag: "Home" })
+const homeRoute = AppRoute.Home()
 
 /** Prerenders `component` at Home as a hash-routing shell. The `#` base lasts for the Scope. */
 const hashShell = Effect.fnUntraced(function*(component: typeof App) {
@@ -233,7 +233,7 @@ describe("BrowserRouter", { concurrent: false }, () => {
 
   it.effect("exempts roots hydrated from a static render when only the search differs", () => {
     const problems: Array<Query.Problem.Any> = []
-    const search = SearchRoute.make({ _tag: "Search", search: {} })
+    const search = SearchRoute.Search({ search: {} })
     const prerender = (url: string, route: typeof SearchRoute.Type, isStatic: boolean) =>
       HtmlServer.renderToHtml(SearchApp, { route }, { static: isStatic }).pipe(
         Effect.provide(Router.static({ routes: SearchRoute, url }))
@@ -255,23 +255,23 @@ describe("BrowserRouter", { concurrent: false }, () => {
     return Effect.gen(function*() {
       const prerendered = yield* prerender("/search", search, true)
       const dynamic = yield* prerender("/search", search, false)
-      const other = yield* prerender("/other", SearchRoute.make({ _tag: "Other" }), true)
+      const other = yield* prerender("/other", SearchRoute.Other(), true)
       window.history.replaceState(null, "", "/search?q=x")
       const context = yield* Layer.build(BrowserRouter.layer({ routes: SearchRoute }))
 
       // Static, search only: no report, and the route is delivered.
       const root = yield* hydrate(context, prerendered)
-      assert.deepStrictEqual(root.model(), SearchRoute.make({ _tag: "Search", search: { q: "x" } }))
+      assert.deepStrictEqual(root.model(), SearchRoute.Search({ search: { q: "x" } }))
       assert.strictEqual(mismatches(), 0)
 
       // A dynamic render with another search is the bug the check exists for.
       const fromDynamic = yield* hydrate(context, dynamic)
-      assert.deepStrictEqual(fromDynamic.model(), SearchRoute.make({ _tag: "Search", search: { q: "x" } }))
+      assert.deepStrictEqual(fromDynamic.model(), SearchRoute.Search({ search: { q: "x" } }))
       assert.strictEqual(mismatches(), 1)
 
       // A static render of another path still reports.
       const fromOther = yield* hydrate(context, other)
-      assert.deepStrictEqual(fromOther.model(), SearchRoute.make({ _tag: "Search", search: { q: "x" } }))
+      assert.deepStrictEqual(fromOther.model(), SearchRoute.Search({ search: { q: "x" } }))
       assert.strictEqual(mismatches(), 2)
     }).pipe(Effect.provideService(Query.Problems, (problem) => problems.push(problem)))
   })
@@ -378,7 +378,7 @@ describe("BrowserRouter", { concurrent: false }, () => {
   it.effect("a redirect reusing its route object announces only after the new visit settles", () =>
     Effect.gen(function*() {
       const frames = manualFrames()
-      const slow = AppRoute.make({ _tag: "Slow" })
+      const slow = AppRoute.Slow()
       const routes = Route.union(AppRoute.routes, Route.redirect("/old-slow", () => slow))
       const { app, router } = yield* start("/", { routes, window: frames.window })
 
@@ -682,7 +682,7 @@ describe("BrowserRouter", { concurrent: false }, () => {
         yield* Effect.gen(function*() {
           const context = yield* Layer.build(BrowserRouter.layer({ routes: ListRoute, window: recording }))
           const router = Context.get(context, Router.Router)
-          const held = ListOnly.make({ _tag: "List" })
+          const held = ListOnly.List()
           yield* router.patchSearch(held, { q: "a" })
           yield* router.patchSearch(held, { q: "ab" })
           expect(url()).toBe("/list?q=a")
@@ -727,7 +727,7 @@ describe("BrowserRouter", { concurrent: false }, () => {
       const router = Context.get(context, Router.Router)
       expect(window.location.hash).toBe("#/")
       expect(router.location().route._tag).toBe("Home")
-      expect(yield* router.push(AppRoute.make({ _tag: "Person", params: { id: 3 } }))).toBe("navigated")
+      expect(yield* router.push(AppRoute.Person({ params: { id: 3 } }))).toBe("navigated")
       expect(window.location.pathname + window.location.hash).toBe("/#/people/3")
       expect(Option.getOrThrow(AppRoute.parse("#/people/3"))._tag).toBe("Person")
     }).pipe(Effect.scoped, Effect.ensuring(Effect.sync(() => AppRoute.setBase("")))))
