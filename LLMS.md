@@ -60,11 +60,12 @@ A view writes scoped children inside `h.scoped`, calling them with the `s`
 it passes instead of `h`. A scoped child belongs to the component whose
 view called `h.scoped`, its author, and its path is `Name[key]` under the
 author wherever the view puts it. Moving it to another element, or into
-another child's slot, keeps the instance. Writing one `Name[key]` twice in
-a render fails the author.
+another child's slot, keeps the instance. One written into a slot that its
+receiver doesn't place starts kept, and sends reach it. Writing one
+`Name[key]` twice in a render fails the author.
 
 ```ts
-view: (model, h) =>
+const view = (model: Model, h: H) =>
   model.tab === "profile"
     ? h.scoped((s) => Profile(s, { key: "profile" }))
     : h.scoped((s) => Billing(s, { key: "billing" }))
@@ -80,15 +81,19 @@ props, write it inside a `hidden` element instead. Subscriptions keep
 running while it's kept, so gate those on the Model.
 
 Without a predicate, a scope's children live as long as the author, and
-their keys must be literals. A list needs a predicate, `h.scoped(alive,
+their keys must be literals. So must the keys of their refs: a ref made
+from a string, or with `at` given one, needs a predicate. A function that
+forwards a ref to such a scope takes `Component.Ref.Within<Rcv, false>`. A list needs a predicate, `h.scoped(alive,
 content)`, which the runtime asks about each live child on every render of
 the author, whether that render wrote the child or not. It ends the child
 once the predicate returns false. Destructure the Model from the argument
 and look the key up:
 
 ```ts
-h.scoped(({ key, model }) => key in model.notes, (s) =>
-  visible.map((id) => NoteRow(s, { key: id, props: { note: model.notes[id] } })))
+h.scoped(
+  ({ key, model }) => key in model.notes,
+  (s) => visible.map((id) => NoteRow(s, { key: id, props: { note: model.notes[id] } }))
+)
 ```
 
 Read `model`, `props` or `queries` from the argument, never from the

@@ -347,9 +347,9 @@ export interface Ref<in out Rcv, out Dynamic extends boolean = boolean> {
   readonly at: <const K extends string | number>(key: K) => Ref<Rcv, Dynamic | DynamicKey<K>>
 }
 
-type DynamicKey<K extends string | number> = IsLiteral<`${K}`> extends true ? false : true
+type DynamicKey<K extends string | number> = true extends WideKey<`${K}`> ? true : false
 
-type IsLiteral<K> = [K] extends [never] ? true : {} extends Record<K & string, 1> ? false : true
+type WideKey<K extends string> = K extends unknown ? {} extends Record<K, 1> ? true : false : never
 
 /**
  * Types for refs: the erased form, and the ref a component or feature hands
@@ -399,8 +399,10 @@ export declare namespace Ref {
    * @category models
    * @since 0.1.0
    */
-  export interface Within<out Rcv> extends Any {
+  export interface Within<out Rcv, out Dynamic extends boolean = boolean> extends Any {
     readonly [RefTypeId]: { readonly _Rcv: (_: never) => Rcv }
+    /** Phantom: as `Ref`'s. `Within<Rcv, false>` keeps the refs a scope with no predicate takes. */
+    readonly "~dynamicKey"?: Dynamic
   }
 
   /**
@@ -426,7 +428,7 @@ export declare namespace Ref {
    * @category utility types
    * @since 0.1.0
    */
-  export type Of<Rcv> = 0 extends 1 & Rcv ? Any : Ref<Rcv, false>
+  export type Of<Rcv, Dynamic extends boolean = false> = 0 extends 1 & Rcv ? Any : Ref<Rcv, Dynamic>
 }
 
 /**
@@ -1187,7 +1189,7 @@ export interface Members<
   /** The Schema of the messages a parent may send: the cases of `message` listed in `receives`. */
   readonly receives: Schema.Codec<Rcv, any>
   /** A ref for this component's children, so a parent can send them messages. */
-  readonly ref: (name: string) => Ref.Of<Rcv>
+  readonly ref: <const N extends string>(name: N) => Ref.Of<Rcv, DynamicKey<N>>
   readonly init: (props: Props) => Next<Model, Msg, Events, R>
   readonly update: (model: Model, msg: Msg, props: Props, queries?: Results | undefined) => Next<Model, Msg, Events, R>
   readonly view: (
@@ -1337,7 +1339,7 @@ export interface Headless<
   /** The Schema of the messages a parent may send: the cases of `message` listed in `receives`. */
   readonly receives: Schema.Codec<Rcv, any>
   /** A ref for a child of this component, which a parent renders it with to send it messages. */
-  readonly ref: (name: string) => Ref.Of<Rcv>
+  readonly ref: <const N extends string>(name: N) => Ref.Of<Rcv, DynamicKey<N>>
   readonly init: (props: Props) => Next<any, any, Events, R>
   readonly update: (model: any, msg: never, props: Props, queries?: Results | undefined) => Next<any, any, Events, R>
   /** The parts for one render: plain values and decorators stamped with `owner`. */
@@ -2285,8 +2287,8 @@ type ComponentOf<
   L,
   Rcv,
   Sl extends string
-> = [Sc] extends [true] ? ScopedComponent<Name, Props, Model, Msg, Events, R, V, L, Rcv, Sl>
-  : Component<Name, Props, Model, Msg, Events, R, V, L, Rcv, Sl>
+> = [Sc] extends [false] ? Component<Name, Props, Model, Msg, Events, R, V, L, Rcv, Sl>
+  : ScopedComponent<Name, Props, Model, Msg, Events, R, V, L, Rcv, Sl>
 
 /**
  * Types for definitions: what a component keeps of the one it was made from.

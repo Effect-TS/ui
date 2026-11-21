@@ -1,13 +1,12 @@
 // @vitest-environment happy-dom
 import { Component, Query } from "@effect/ui"
-import { Html } from "@effect/ui/html"
+import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 
-// The first init of each runs on the server: a Model the client built with its own init would say so.
 let inits = { avatar: 0, profile: 0 }
 const side = (count: number) => count === 0 ? "server" : "client"
 
@@ -53,7 +52,6 @@ const Settings = Component.define({
 }).make({
   init: () => false,
   update: (_, shown) => shown,
-  // Written while the tab loads, then kept once it says billing: the server holds a kept child.
   view: (shown, h) => {
     const billing = AsyncResult.isSuccess(h.queries.tab) && h.queries.tab.value === "billing"
     return h.main(
@@ -76,4 +74,81 @@ describe("scoped children on the server", () => {
       assert.strictEqual(result.container.querySelector("p")!.textContent, "draft from the server")
       assert.strictEqual(result.container.querySelector("i")!.textContent, "avatar from the server")
     }).pipe(Effect.provide(TestHost.layer())))
+})
+
+let leafInits = 0
+const Leaf = Component.define({
+  name: "Leaf",
+  scoped: true,
+  model: Schema.String,
+  message: Schema.Never,
+  elements: Html
+})
+  .make({
+    init: () => leafInits++ === 0 ? "server-draft" : "client-initial",
+    update: (model) => model,
+    view: (draft, h) => h.p(draft)
+  })
+
+const Frame = Component.define({
+  name: "Frame",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html,
+  slots: ["body"]
+}).make({ init: () => null, update: (model) => model, view: (_, h) => h.section(h.slots.body) })
+
+const Page = Component.define({
+  name: "Page",
+  scoped: false,
+  props: Schema.Struct({ where: Schema.String }),
+  model: Schema.NullOr(Schema.String),
+  message: Schema.String,
+  elements: Html
+}).make({
+  init: () => null,
+  update: (_, where) => where,
+  view: (moved, h) => {
+    const where = moved ?? h.props.where
+    return h.scoped((s) =>
+      h.main(
+        where === "a" ? Frame(h, { key: "a", slots: { body: Leaf(s, { key: "l" }) } }) : null,
+        where === "b" ? Frame(h, { key: "b", slots: { body: Leaf(s, { key: "l" }) } }) : null
+      )
+    )
+  }
+})
+
+const hydrateAt = Effect.fnUntraced(function*(where: string) {
+  leafInits = 0
+  const rendered = yield* HtmlServer.renderToHtml(Page, { where: "a" })
+  const app = yield* Effect.acquireRelease(
+    Effect.sync(() => {
+      const element = document.body.appendChild(document.createElement("div"))
+      element.innerHTML = rendered.html
+      return element
+    }),
+    (element) => Effect.sync(() => element.remove())
+  )
+  const root = yield* BrowserHost.mountEffect(Page, { where }, app, { state: rendered.state })
+  yield* root.adopted
+  return { app, root }
+})
+
+describe("scoped children on the client after hydration", () => {
+  it.effect("keep the server's Model when the client draws them somewhere new", () =>
+    Effect.gen(function*() {
+      const { app } = yield* hydrateAt("b")
+      assert.strictEqual(app.querySelector("p")?.textContent, "server-draft")
+    }).pipe(Effect.scoped))
+
+  it.effect("keep the server's Model when the client first hides them", () =>
+    Effect.gen(function*() {
+      const { app, root } = yield* hydrateAt("none")
+      assert.strictEqual(app.querySelector("p"), null)
+      root.send("a")
+      yield* Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))
+      assert.strictEqual(app.querySelector("p")?.textContent, "server-draft")
+    }).pipe(Effect.scoped))
 })

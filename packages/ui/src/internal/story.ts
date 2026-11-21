@@ -418,7 +418,8 @@ const expandRoot = <Msg>(
   shared: Owners | undefined,
   root: Owners,
   status: ReadonlyMap<string, SlotResult> | undefined,
-  slotStatus: SlotResult | undefined
+  slotStatus: SlotResult | undefined,
+  author: Pick<Fields<any, any, any, any>, "model" | "props" | "results">
 ): View.Node<Msg, any> => {
   const replaced: Array<View.Child<any, any>> = []
   const placed: Array<Occurrence> = []
@@ -480,6 +481,10 @@ const expandRoot = <Msg>(
       case "Child": {
         const component = node.component as unknown as Component.Headless.Any
         const childPath = path + "/" + segment(node)
+        if (
+          own && typeof node.alive === "function" &&
+          !node.alive({ key: node.key, model: author.model, props: author.props, queries: author.results })
+        ) return emptyText
         placed.push({ child: node, path: childPath, scope })
         const result = status?.get(childPath) ??
           (reads !== undefined && Feature.isService(node.component) ? reads : undefined)
@@ -668,7 +673,8 @@ export const expandedView = (fields: Fields<any, any, any, any>): View.Node<any,
     fields.shared,
     ownersBelow(noOwners, fields.component, fields.model, fields.props),
     fields.childStatus,
-    fields.slotStatus
+    fields.slotStatus,
+    fields
   )
 
 /** The story's component's own view, before its headless children are expanded. */

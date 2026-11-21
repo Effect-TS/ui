@@ -512,9 +512,10 @@ export declare namespace Child {
 }
 
 type ScopedKey<K, Ends extends boolean> = [Ends] extends [true] ? K
-  : [K] extends [never] ? K
-  : {} extends Record<K & string, 1> ? ScopedKeyHint
+  : true extends WideKey<K> ? ScopedKeyHint
   : K
+
+type WideKey<K> = K extends string ? {} extends Record<K, 1> ? true : false : false
 
 type ScopedRef<Ends extends boolean> = [Ends] extends [true] ? unknown : { readonly "~dynamicKey"?: false }
 

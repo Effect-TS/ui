@@ -148,6 +148,19 @@ describe("scoped", () => {
     h.scoped((s) => NoteEditor(s, { ref: Editors.at(id), props: { noteId: id } }))
     // @ts-expect-error "~dynamicKey"
     h.scoped((s) => NoteEditor(s, { ref: Editors.at(model.order.length), props: { noteId: id } }))
+    // @ts-expect-error "~dynamicKey"
+    h.scoped((s) => NoteEditor(s, { ref: Editors.at(id as "pinned" | `row-${string}`), props: { noteId: id } }))
+    // @ts-expect-error "~dynamicKey"
+    h.scoped((s) => NoteEditor(s, { ref: NoteEditor.ref(id), props: { noteId: id } }))
+    type Focus = Extract<typeof EditorMessage.Type, { readonly _tag: "Focus" }>
+    const forwarded = (ref: Component.Ref.Within<Focus>) =>
+      // @ts-expect-error "~dynamicKey"
+      h.scoped((s) => NoteEditor(s, { ref, props: { noteId: id } }))
+    const bounded = (ref: Component.Ref.Within<Focus, false>) =>
+      h.scoped((s) => NoteEditor(s, { ref, props: { noteId: id } }))
+    expect(bounded).type.toBeCallableWith(Editors.at("main"))
+    expect(bounded).type.not.toBeCallableWith(Editors.at(id))
+    expect(forwarded).type.toBeCallableWith(Editors.at(id))
   })
 
   it("rejects a scoped component called with h", () => {
@@ -165,6 +178,8 @@ describe("scoped", () => {
     const mixed = id as "a" | (string & {})
     // @ts-expect-error A scoped child whose key isn't a literal needs a predicate
     h.scoped((s) => NoteEditor(s, { key: mixed, props: { noteId: id } }))
+    // @ts-expect-error A scoped child whose key isn't a literal needs a predicate
+    h.scoped((s) => NoteEditor(s, { key: id as "pinned" | `row-${string}`, props: { noteId: id } }))
     const literal = id as "a" | "b"
     expect(h.scoped((s) => NoteEditor(s, { key: literal, props: { noteId: id } }))).type.not.toRaiseError()
   })
@@ -201,6 +216,21 @@ describe("scoped", () => {
   it("mounts a scoped component as a root, in a Scene or as a route's page", () => {
     expect(Scene.start(ProfileForm, {})).type.not.toRaiseError()
     expect(Router.page(NoteEditor, { noteId: "a" })).type.not.toRaiseError()
+  })
+
+  it("types a component whose scoped flag isn't known to be false as scoped", () => {
+    const options = { name: "Wide" as const, scoped: true, model: Schema.Null, message: Schema.Never }
+    const Wide = Component.define(options).make({
+      init: () => null,
+      update: (model) => model,
+      view: (_, h) => h.el("p")
+    })
+    // @ts-expect-error "written inside h.scoped((s) => ...)"
+    Wide(h, {})
+    expect(h.scoped((s) => Wide(s, {}))).type.not.toRaiseError()
+    class Notes extends Feature.Service<Notes>()("Notes", { props: Schema.Struct({}) }) {}
+    // @ts-expect-error "written inside h.scoped((s) => ...)"
+    Notes.toLayer(Wide)
   })
 
   it("rejects scoped: true on a headless component", () => {
