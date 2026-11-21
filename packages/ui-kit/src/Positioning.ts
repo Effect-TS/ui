@@ -39,8 +39,7 @@
  * - `--available-width`, `--available-height`: the space between the
  *   anchor and the edge of the boundary, for a `max-height`
  * - `--transform-origin`: the point on the anchor the popup grows from
- * - `--ui-kit-arrow-x` or `--ui-kit-arrow-y`: the arrow's offset, which
- *   `arrowStyle` reads
+ * - the arrow's offset, in a variable that `arrowStyle` reads
  * - with `offsetAsPadding`, the side offset as padding on the side that
  *   faces the anchor
  *
@@ -61,7 +60,8 @@
  * - The positioner has to be laid out while the mount runs, so issue the
  *   mount only while the popup shows.
  * - The anchor is the first element in the document that matches
- *   `anchorSelector`. While nothing matches, the mount reports
+ *   `anchorSelector`, so build the selector from `h.id` to keep two
+ *   instances apart. While nothing matches, the mount reports
  *   `anchorHidden`.
  * - An arrow needs an id, passed as `arrowId`, and a size of its own.
  * - There are no virtual anchors, no placing against one line of an inline
@@ -1404,14 +1404,15 @@ export const trackPosition = (
  *     ChangedPlacement: (model, { _tag, ...placement }) => ({ ...model, placement })
  *   },
  *   view: (model, h) => {
- *     const args = Positioning.trackArgs(h.props, { side: "bottom", anchorSelector: "#save" })
+ *     const anchorId = h.id("anchor")
+ *     const args = Positioning.trackArgs(h.props, { side: "bottom", anchorSelector: `[id="${anchorId}"]` })
  *     const positioner = h.div
  *       .popover("manual", h.props.open)
  *       .attr("style", Positioning.positionerStyle(args.positionMethod))
  *       .attr("data-side", model.placement?.side ?? args.options.side)
  *       .children("Saved")
  *     return h.span(
- *       h.button.id("save").children("Save"),
+ *       h.button.id(anchorId).children("Save"),
  *       h.props.open
  *         ? positioner.onMount(
  *           Positioning.TrackPosition(args).pipe(Mount.map((placement) => Message.ChangedPlacement(placement)))

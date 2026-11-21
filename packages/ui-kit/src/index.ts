@@ -16,8 +16,7 @@
 // Not a generated barrel: `pnpm codegen` would export each module as a
 // namespace, and a namespace can't be called. Add each new module here with
 // `export *`, in alphabetical order. Its exports carry the component's name,
-// such as `SwitchProps`, so they never collide. A module that isn't a
-// component is exported with `export * as`, since its exports have no prefix.
+// such as `SwitchProps`, so they never collide.
 
 /**
  * @stability experimental
