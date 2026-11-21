@@ -68,6 +68,7 @@ import type * as Component from "../Component.ts"
 import * as internal from "../internal/play.ts"
 import type * as View from "../View.ts"
 import type * as Locator from "./Locator.ts"
+import type * as Scene from "./Scene.ts"
 import type * as TestHost from "./TestHost.ts"
 import type * as TestQuery from "./TestQuery.ts"
 
@@ -90,19 +91,7 @@ export type StepError = TestHost.SettleError | TestHost.RootCrashed | TestQuery.
  * @category models
  * @since 0.1.0
  */
-export interface Expect {
-  /** Asserts that at least one element matches. */
-  toExist(): Effect.Effect<void, StepError>
-  /** Asserts that nothing matches. */
-  toBeAbsent(): Effect.Effect<void, StepError>
-  /**
-   * Asserts that exactly one element matches and that its text, with
-   * whitespace collapsed and trimmed, is `text`, or matches it.
-   */
-  toHaveText(text: string | RegExp): Effect.Effect<void, StepError>
-  /** Asserts that exactly `count` elements match. */
-  toHaveCount(count: number): Effect.Effect<void, StepError>
-}
+export type Expect = Scene.Expect<Effect.Effect<void, StepError>>
 
 /**
  * A cursor over a tree mounted on `TestHost`.

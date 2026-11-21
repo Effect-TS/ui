@@ -3,14 +3,11 @@ import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
 import type * as Scope from "effect/Scope"
 import * as Locator from "../testing/Locator.ts"
+import type { StepError } from "../testing/Play.ts"
 import * as TestHost from "../testing/TestHost.ts"
-import type * as TestQuery from "../testing/TestQuery.ts"
-import { domEventMessageCount } from "./runtime.ts"
 import * as scene from "./scene.ts"
+import { atSite, callSite } from "./steps.ts"
 import * as engine from "./story.ts"
-
-/** @internal */
-export type StepError = TestHost.SettleError | TestHost.RootCrashed | TestQuery.ProblemsError
 
 /** @internal */
 export interface PlannedEvent {
@@ -18,26 +15,8 @@ export interface PlannedEvent {
   readonly description: string
   readonly event: string
   readonly payload: () => unknown
-  readonly optional?: boolean | undefined
   readonly isDefault?: boolean | undefined
   readonly edit?: (() => void) | undefined
-}
-
-const callSite = (fn: Function): Error => {
-  const site = new Error()
-  ;(Error as { captureStackTrace?: (target: object, fn: Function) => void }).captureStackTrace?.(site, fn)
-  return site
-}
-
-const atSite = (site: Error, f: () => void): void => {
-  try {
-    f()
-  } catch (error) {
-    if (error instanceof Error && site.stack !== undefined) {
-      error.stack = `${error.name}: ${error.message}\n${site.stack.split("\n").slice(1).join("\n")}`
-    }
-    throw error
-  }
 }
 
 /** @internal */
@@ -48,7 +27,7 @@ export const ancestors = (node: TestHost.TestNode): ReadonlyArray<TestHost.TestE
 }
 
 const handlerOn = (node: TestHost.TestNode, event: string): TestHost.TestElement | undefined =>
-  ancestors(node).find((at) => Object.hasOwn(at.handlers, event) && at.dispatch !== undefined)
+  ancestors(node).find((at) => Object.hasOwn(at.handlers, event))
 
 /** @internal */
 export class PlayCursor {
@@ -68,28 +47,20 @@ export class PlayCursor {
     return `${this.module}.${step}`
   }
 
+  private listed(): Locator.Node {
+    return { children: this.root.container.children }
+  }
+
   protected findOne(locator: Locator.Locator, step: string): TestHost.TestElement {
-    const found = this.root.all(locator)
-    if (found.length !== 1) {
-      throw new Error(
-        `${this.name(step)}: ${
-          found.length === 0 ? "nothing matches" : `${found.length} elements match`
-        } ${locator.description}${found.length === 0 ? "; " + this.candidates() : ""}`
-      )
-    }
-    return found[0] as TestHost.TestElement
+    return engine.findOne(
+      { all: this.root.all, root: this.listed() },
+      locator,
+      this.name(step)
+    ) as TestHost.TestElement
   }
 
-  private candidates(): string {
-    return engine.describeCandidates({ children: this.root.container.children })
-  }
-
-  protected interact(
-    step: string,
-    method: Function,
-    plan: () => ReadonlyArray<PlannedEvent>
-  ): Effect.Effect<void, StepError> {
-    const site = callSite(method)
+  protected interact(step: string, plan: () => ReadonlyArray<PlannedEvent>): Effect.Effect<void, StepError> {
+    const site = callSite(this[step as keyof this] as Function)
     return Effect.andThen(
       this.settle,
       Effect.andThen(Effect.sync(() => atSite(site, () => this.run(step, plan))), this.settle)
@@ -105,19 +76,15 @@ export class PlayCursor {
     let handled = false
     let cancelled = false
     const events = plan()
-    for (const { description, edit, event, isDefault, node, optional, payload } of events) {
+    for (const { edit, event, isDefault, node, payload } of events) {
       if (isDefault === true && cancelled) continue
       edit?.()
       const target = handlerOn(node, event)
-      if (target === undefined) {
-        if (optional === true) continue
-        throw new Error(`${name}: nothing handles "${event}" at ${description}`)
-      }
+      if (target === undefined) continue
       reached = true
       const preventDefault = target.eventOptions[event]?.preventDefault
       let prevented = event === "submit" || preventDefault === "always"
-      const before = domEventMessageCount()
-      target.dispatch!(
+      const sent = target.dispatch!(
         event,
         target.handlers[event]!,
         payload(),
@@ -127,7 +94,7 @@ export class PlayCursor {
           } :
           undefined
       )
-      handled ||= domEventMessageCount() > before
+      handled ||= sent
       if (isDefault !== true) cancelled ||= prevented
     }
     if (!reached) throw new Error(`${name}: nothing handles "${events[0]?.event}" at ${events[0]?.description}`)
@@ -135,15 +102,14 @@ export class PlayCursor {
     this.ignored = handled ? undefined : step
   }
 
-  protected one(
+  protected one<P>(
     step: string,
-    method: Function,
     locator: Locator.Locator,
     event: string,
-    payload: (node: TestHost.TestElement) => unknown,
-    edit?: (node: TestHost.TestElement, payload: unknown) => void
+    payload: (node: TestHost.TestElement) => P,
+    edit?: (node: TestHost.TestElement, payload: P) => void
   ): Effect.Effect<void, StepError> {
-    return this.interact(step, method, () => {
+    return this.interact(step, () => {
       const node = this.findOne(locator, step)
       const value = payload(node)
       return [{
@@ -157,16 +123,10 @@ export class PlayCursor {
   }
 
   click(target: string | Locator.Locator): Effect.Effect<void, StepError> {
-    return this.one(
-      "click",
-      this.click,
-      typeof target === "string" ? Locator.text(target) : target,
-      "click",
-      () => scene.pointer
-    )
+    return this.one("click", typeof target === "string" ? Locator.text(target) : target, "click", () => scene.pointer)
   }
   fire(locator: Locator.Locator, event: string, payload: unknown = {}): Effect.Effect<void, StepError> {
-    return this.one("fire", this.fire, locator, event, () => payload)
+    return this.one("fire", locator, event, () => payload)
   }
 
   expect(locator: Locator.Locator): object {
@@ -176,29 +136,13 @@ export class PlayCursor {
     locator: Locator.Locator,
     matchers: { readonly [name: string]: (...args: Array<any>) => scene.Matcher }
   ): object {
-    const out: { [name: string]: (...args: Array<any>) => Effect.Effect<void, StepError> } = {}
-    for (const [name, make] of Object.entries(matchers)) {
-      const matcher = (...args: Array<any>) => {
-        const site = callSite(matcher)
-        return Effect.andThen(
-          this.settle,
-          Effect.sync(() =>
-            atSite(site, () => {
-              const failure = make(...args)(this.root.all(locator), this.root.container)
-              if (failure !== undefined) {
-                throw new Error(
-                  `${this.name("expect")}(${locator.description}).${name}(${
-                    args.map(scene.describeExpected).join(", ")
-                  }): ${failure}; ${this.candidates()}`
-                )
-              }
-            })
-          )
-        )
-      }
-      out[name] = matcher
-    }
-    return out
+    return scene.makeExpectation(this.name("expect"), locator, matchers, (check, method) => {
+      const site = callSite(method)
+      return Effect.andThen(
+        this.settle,
+        Effect.sync(() => atSite(site, () => check(this.root.all(locator), this.root.container, this.listed())))
+      )
+    })
   }
 
   expectIgnored(): Effect.Effect<void> {

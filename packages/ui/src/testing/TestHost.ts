@@ -144,7 +144,7 @@ const pathFrom = (node: TestNode): Array<TestNode> => {
   return path
 }
 
-const fireFrom = (along: EventsAlong, node: TestNode, event: string, payload: unknown): void => {
+const fireFrom = (along: EventsAlong, node: TestNode, event: string, payload: unknown): boolean => {
   for (const entry of along(pathFrom(node))) {
     const handler = entry?.handlers[event]
     if (entry !== undefined && handler !== undefined) return entry.dispatch(event, handler, payload)

@@ -151,6 +151,21 @@ const popoverToggle = (button: Locator.Node, popover: Locator.Node): Html.Popove
 export const formOf = (path: ReadonlyArray<Locator.Node>, root: Locator.Node): Locator.Node | undefined =>
   path[0]?.tag === "form" ? path[0] : ownerOf(root, path)
 
+/** The radio buttons `radio` unchecks when it is checked: the others with its name and form owner. */
+const radioGroup = (
+  root: Locator.Node,
+  radio: Locator.Node,
+  path: ReadonlyArray<Locator.Node>
+): ReadonlyArray<Locator.Node> => {
+  const name = radio.attrs?.name
+  if (name === undefined) return []
+  const form = ownerOf(root, path)
+  return Locator.elements(root).filter((other) =>
+    other !== radio && other.tag === "input" && inputType(other) === "radio" && other.attrs?.name === name &&
+    ownerOf(root, [...(pathIn(root, other) ?? [])].reverse()) === form
+  )
+}
+
 /** @internal */
 export interface ClickEvent {
   readonly node: Locator.Node
@@ -158,6 +173,8 @@ export interface ClickEvent {
   readonly event: string
   readonly payload: (root: Locator.Node, at: (node: Locator.Node, description: string) => Locator.Node) => unknown
   readonly isDefault: boolean
+  /** The `checked` the browser gives each node before this event, for a tree that keeps what the user entered. */
+  readonly checks?: (() => ReadonlyArray<readonly [node: Locator.Node, checked: boolean]>) | undefined
 }
 
 /** @internal */
@@ -184,7 +201,17 @@ export const planClick = (
       value: HtmlLocator.value(node) ?? "on",
       checked: type === "radio" ? true : HtmlLocator.checked(node) !== true
     }
-    later(node, description, "input", () => payload)
+    events.push({
+      node,
+      description,
+      event: "input",
+      payload: () => payload,
+      isDefault: true,
+      checks: () => [
+        ...(type === "radio" ? radioGroup(root, node, path) : []).map((other) => [other, false] as const),
+        [node, payload.checked]
+      ]
+    })
     later(node, description, "change", () => payload)
   } else if (submitter !== undefined) {
     const form = formOf(path.slice(path.indexOf(submitter)), root)
@@ -218,8 +245,73 @@ const pathIn = (root: Locator.Node, node: Locator.Node): ReadonlyArray<Locator.N
   return undefined
 }
 
-/** @internal */
-export const fieldMatchers = {
+/**
+ * The payload of the `input` typing `value` into `node` sends.
+ *
+ * @internal
+ */
+export const inputPayload = (node: Locator.Node, value: string): Partial<Html.InputPayload> =>
+  node.tag === "input" ? { value, checked: HtmlLocator.checked(node) === true } : { value }
+
+/**
+ * The payload of the `change` `node` sends, with what `given` leaves out read from the node.
+ *
+ * @internal
+ */
+export const changePayload = (
+  node: Locator.Node,
+  given: string | Partial<Html.InputPayload>
+): Partial<Html.InputPayload> => {
+  const { checked, value = HtmlLocator.value(node) ?? "" } = typeof given === "string" ? { value: given } : given
+  return node.tag === "input" ? { value, checked: checked ?? HtmlLocator.checked(node) === true } : { value }
+}
+
+/**
+ * The payload of a `keydown` of `key`, each modifier key `false` unless given.
+ *
+ * @internal
+ */
+export const keyPayload = (key: string, modifiers: Partial<Html.KeyPayload> | undefined): Html.KeyPayload => ({
+  key,
+  shift: modifiers?.shift === true,
+  ctrl: modifiers?.ctrl === true,
+  alt: modifiers?.alt === true,
+  meta: modifiers?.meta === true,
+  composing: false
+})
+
+/**
+ * A drop of `given`: its payload, whether a target with `options` for `drop` accepts one of its types,
+ * and the error of a step when no target does.
+ *
+ * @internal
+ */
+export const drop = (given: Partial<Html.DropPayload> | undefined) => {
+  const payload: Html.DropPayload = { data: {}, files: [], x: 0, y: 0, width: 0, height: 0, ...given }
+  const types = Object.keys(payload.data).concat(payload.files.length > 0 ? ["Files"] : [])
+  const lowered = types.map((type) => type.toLowerCase())
+  return {
+    payload,
+    accepts: (options: unknown): boolean =>
+      ((options as Html.DropTargetOptions | undefined)?.accepts ?? []).some((type) =>
+        lowered.includes(type.toLowerCase())
+      ),
+    noTarget: (step: string, description: string): Error =>
+      new Error(
+        `${step}: nothing at ${description} accepts ${
+          types.length === 0 ? "a drag with no types" : types.map((type) => JSON.stringify(type)).join(", ")
+        }`
+      )
+  }
+}
+
+/**
+ * The matchers of an HTML cursor's `expect`: the scene's, plus checks on fields.
+ *
+ * @internal
+ */
+export const matchers = {
+  ...scene.matchers,
   toHaveValue: (expected: string) =>
     scene.single((node) => {
       const value = HtmlLocator.value(node)

@@ -54,9 +54,42 @@ export const matchers = {
     })
 }
 
-/** @internal */
-export const describeExpected = (expected: unknown): string =>
+const describeExpected = (expected: unknown): string =>
   expected instanceof RegExp ? String(expected) : JSON.stringify(expected)
+
+/**
+ * An expectation over `locator`: one method per matcher. Each returns what `run` does with the method
+ * and its `check`, which throws what the matcher found on `nodes` of `root`, listing the elements of
+ * `listed`.
+ *
+ * @internal
+ */
+export const makeExpectation = <A>(
+  step: string,
+  locator: Locator.Locator,
+  matchers: { readonly [name: string]: (...args: Array<any>) => Matcher },
+  run: (
+    check: (nodes: ReadonlyArray<Locator.Node>, root: Locator.Node, listed?: Locator.Node) => void,
+    method: Function
+  ) => A
+): object => {
+  const out: { [name: string]: (...args: Array<any>) => A } = {}
+  for (const [name, make] of Object.entries(matchers)) {
+    const method = (...args: Array<any>): A =>
+      run((nodes, root, listed = root) => {
+        const failure = make(...args)(nodes, root)
+        if (failure !== undefined) {
+          throw new Error(
+            `${step}(${locator.description}).${name}(${args.map(describeExpected).join(", ")}): ${failure}; ${
+              engine.describeCandidates(listed)
+            }`
+          )
+        }
+      }, method)
+    out[name] = method
+  }
+  return out
+}
 
 /** A child a scene step names. */
 type ChildTarget = Component.Any | Component.Headless.Any | Feature.Any
@@ -436,22 +469,10 @@ export class SceneCursor extends Cursor {
     locator: Locator.Locator,
     matchers: { readonly [name: string]: (...args: Array<any>) => Matcher }
   ): object {
-    const out: { [name: string]: (...args: Array<any>) => unknown } = {}
-    for (const [name, make] of Object.entries(matchers)) {
-      out[name] = (...args) => {
-        const root = this.state.root
-        const failure = make(...args)(this.state.all(locator), root)
-        if (failure !== undefined) {
-          throw new Error(
-            `${this.name("expect")}(${locator.description}).${name}(${
-              args.map(describeExpected).join(", ")
-            }): ${failure}; ${engine.describeCandidates(root)}`
-          )
-        }
-        return this
-      }
-    }
-    return out
+    return makeExpectation(this.name("expect"), locator, matchers, (check) => {
+      check(this.state.all(locator), this.state.root)
+      return this
+    })
   }
   expectHandled(): this {
     if (this.state.ack.interaction !== "handled") {

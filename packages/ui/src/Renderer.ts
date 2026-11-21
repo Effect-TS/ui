@@ -45,7 +45,8 @@ import type * as View from "./View.ts"
  * `onMessage` runs before the message is sent, while the host's event is
  * still being handled, so the host can cancel the event's default there. It
  * doesn't run when the handler returns `undefined` or fails, or when the
- * instance is gone or not yet started.
+ * instance is gone or not yet started. The result is whether a handler
+ * produced a message.
  *
  * @stability experimental
  * @category models
@@ -56,7 +57,7 @@ export type Dispatch = (
   handler: View.Handler<unknown, any>,
   payload: unknown,
   onMessage?: (() => void) | undefined
-) => void
+) => boolean
 
 /**
  * An element's events as a host reads them: its handlers, the dispatch that

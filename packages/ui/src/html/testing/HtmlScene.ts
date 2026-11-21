@@ -82,7 +82,6 @@ import type * as Html from "../Html.ts"
 import * as defaults from "../internal/defaults.ts"
 import * as fireGlobal from "../internal/fireGlobal.ts"
 import * as globalEvents from "../internal/globalEvents.ts"
-import * as HtmlLocator from "./HtmlLocator.ts"
 
 /**
  * The assertions `expect(locator)` offers in an `HtmlScene`: the scene's,
@@ -280,33 +279,13 @@ class StepsImpl extends internal.SceneCursor {
     })
   }
   type(locator: Locator.Locator, value: string): this {
-    return this.one(
-      "type",
-      locator,
-      "input",
-      (node) => node.tag === "input" ? { value, checked: HtmlLocator.checked(node) === true } : { value }
-    )
+    return this.one("type", locator, "input", (node) => defaults.inputPayload(node, value))
   }
   change(locator: Locator.Locator, value: string | Partial<Html.InputPayload>): this {
-    const given = typeof value === "string" ? { value } : value
-    return this.one("change", locator, "change", (node) =>
-      node.tag === "input"
-        ? {
-          value: given.value ?? HtmlLocator.value(node) ?? "",
-          checked: given.checked ?? HtmlLocator.checked(node) === true
-        }
-        : { value: given.value ?? HtmlLocator.value(node) ?? "" })
+    return this.one("change", locator, "change", (node) => defaults.changePayload(node, value))
   }
   keydown(locator: Locator.Locator, key: string, modifiers?: Modifiers): this {
-    const payload: Html.KeyPayload = {
-      key,
-      shift: modifiers?.shift === true,
-      ctrl: modifiers?.ctrl === true,
-      alt: modifiers?.alt === true,
-      meta: modifiers?.meta === true,
-      composing: false
-    }
-    return this.one("keydown", locator, "keydown", () => payload)
+    return this.one("keydown", locator, "keydown", () => defaults.keyPayload(key, modifiers))
   }
   submit(locator: Locator.Locator): this {
     return this.interact("submit", (state) => {
@@ -329,9 +308,7 @@ class StepsImpl extends internal.SceneCursor {
     return this.one("blur", locator, "blur", () => ({}))
   }
   drop(locator: Locator.Locator, payload?: Partial<Html.DropPayload>): this {
-    const full: Html.DropPayload = { data: {}, files: [], x: 0, y: 0, width: 0, height: 0, ...payload }
-    const types = Object.keys(full.data).concat(full.files.length > 0 ? ["Files"] : [])
-    const lowered = types.map((type) => type.toLowerCase())
+    const drop = defaults.drop(payload)
     return this.interact("drop", (state) => {
       const step = this.name("drop")
       const node = engine.findOne(state, locator, step)
@@ -339,24 +316,15 @@ class StepsImpl extends internal.SceneCursor {
       const target = engine.ancestry(state, node).find((at): at is View.Element<any, any> =>
         at._tag === "Element" &&
         [at, ...(at.owned ?? [])].some((layer) =>
-          Object.hasOwn(layer.handlers, "drop") &&
-          ((layer.eventOptions.drop as Html.DropTargetOptions | undefined)?.accepts ?? []).some((type) =>
-            lowered.includes(type.toLowerCase())
-          )
+          Object.hasOwn(layer.handlers, "drop") && drop.accepts(layer.eventOptions.drop)
         )
       )
-      if (target === undefined) {
-        throw new Error(
-          `${step}: nothing at ${locator.description} accepts ${
-            types.length === 0 ? "a drag with no types" : types.map((type) => JSON.stringify(type)).join(", ")
-          }`
-        )
-      }
+      if (target === undefined) throw drop.noTarget(step, locator.description)
       return [{
         node: () => target as unknown as Locator.Node,
         description: `the drop target at ${locator.description}`,
         event: "drop",
-        payload: () => full
+        payload: () => drop.payload
       }]
     }).markPrevented()
   }
@@ -406,7 +374,7 @@ class StepsImpl extends internal.SceneCursor {
     }, () => ({ interaction: handled ? "handled" : "ignored", defaultPrevented: cancelled }))
   }
   override expect(locator: Locator.Locator): object {
-    return this.expectation(locator, { ...internal.matchers, ...defaults.fieldMatchers })
+    return this.expectation(locator, defaults.matchers)
   }
 }
 

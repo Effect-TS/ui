@@ -250,11 +250,6 @@ interface EventCursor {
   items: Packed
 }
 
-let domEventMessages = 0
-
-/** @internal */
-export const domEventMessageCount = (): number => domEventMessages
-
 /**
  * For each event a part handles, the paths of the instances that get it, deepest owner first and the
  * view's author last. An event only the author handles isn't listed. What `TestElement.owners` shows.
@@ -2614,17 +2609,17 @@ const setup = (
     handler?: unknown,
     payload?: unknown,
     onMessage?: (() => void) | undefined
-  ): Effect.Effect<void> | undefined {
+  ): Effect.Effect<void> | boolean {
     if (typeof event !== "string") return this.finalize()
-    if (this.closed || this.waiting) return
+    if (this.closed || this.waiting) return false
     const message = typeof handler === "function"
       ? guard(this, "domEvent", () => (handler as (payload: unknown) => unknown)(payload), event)
       : handler
-    if (message === undefined) return
-    domEventMessages++
+    if (message === undefined) return false
     // Before the message is sent, so the host can still act on its event.
     onMessage?.()
     this.dispatch(message, { _tag: "DomEvent", name: event })
+    return true
   }
 
   /**
@@ -2876,7 +2871,9 @@ const setup = (
       else dispatchTo(this, message, source)
     }
     get fire(): Renderer.Dispatch {
-      return this.component === outletComponent ? this.author.fire : (this.fired ??= fireOn.bind(this))
+      return this.component === outletComponent
+        ? this.author.fire
+        : (this.fired ??= fireOn.bind(this)) as Renderer.Dispatch
     }
     /** What the Scope that holds the instance's finalizer calls. */
     private bound(): (exit: Exit.Exit<unknown, unknown>) => Effect.Effect<void> {
@@ -4994,7 +4991,7 @@ const setup = (
       if (!found && out[at] === undefined && made.includes(path[at])) out[at] = noEvents
     }
   }
-  const noEvents: Renderer.Events = { handlers: View.noFields, dispatch: () => {}, options: View.noFields }
+  const noEvents: Renderer.Events = { handlers: View.noFields, dispatch: () => false, options: View.noFields }
   /**
    * Writes to `out` the events of each node of `path`, from index `from` inwards, that `items` hold. A loop
    * along the path, so an event far down a tree takes no more stack than one at its top.
@@ -5049,6 +5046,7 @@ const setup = (
 
   const fireLayered: Renderer.Dispatch = (event, handler, payload, onMessage) => {
     let told = false
+    let sent = false
     for (const layer of (handler as unknown as Layered).layers) {
       const target = layer.inst
       if (target.closed || target.waiting) continue
@@ -5057,13 +5055,14 @@ const setup = (
         ? guard(target, "domEvent", () => (own as (payload: unknown) => unknown)(payload), event)
         : own
       if (message === undefined) continue
-      domEventMessages++
+      sent = true
       if (layer.prevents && !told) {
         told = true
         onMessage?.()
       }
       target.dispatch(message, { _tag: "DomEvent", name: event })
     }
+    return sent
   }
 
   const startOwnedMounts = (

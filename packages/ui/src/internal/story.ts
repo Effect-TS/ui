@@ -1406,7 +1406,11 @@ const pathTo = (root: View.Node<any, any>, node: Locator.Node): Array<View.Node<
  *
  * @internal
  */
-export const findOne = (story: State<any, any, any, any>, locator: Locator.Locator, step: string): Locator.Node => {
+export const findOne = <N extends Locator.Node>(
+  story: { readonly all: (locator: Locator.Locator) => ReadonlyArray<N>; readonly root: Locator.Node },
+  locator: Locator.Locator,
+  step: string
+): N => {
   const found = story.all(locator)
   if (found.length !== 1) {
     throw new Error(
