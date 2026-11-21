@@ -31,6 +31,7 @@ const Config = Schema.Struct({
   triggers: Schema.Boolean,
   detached: Schema.Boolean,
   marked: Schema.Boolean,
+  keepMounted: Schema.optional(Schema.Boolean),
   finalFocus: Schema.optional(Schema.Boolean),
   openMethod: OpenMethod,
   refuse: Schema.Boolean,
@@ -141,6 +142,7 @@ const Page = Component.define({
               open: model.a,
               modal: props.modal,
               id: props.detached ? "settings" : undefined,
+              keepMounted: props.keepMounted,
               triggerId: model.triggerId,
               finalFocus: props.finalFocus,
               initialFocus: props.initialFocus,
@@ -525,6 +527,24 @@ describe("Dialog in a document", { concurrent: false }, () => {
       byId("second").remove()
       yield* tick
       assert.strictEqual(document.activeElement, app.querySelector(".popup-a"))
+    }))
+
+  it.effect("a kept-mounted modal keeps its popup element as it opens, closes and reopens", () =>
+    Effect.gen(function*() {
+      const { app, log } = yield* mountPage({ a: false, keepMounted: true })
+      const popup = app.querySelector(".popup-a")
+      assert.isNotNull(popup)
+      byId("trigger").click()
+      yield* tick
+      assert.strictEqual(app.querySelector(".popup-a"), popup)
+      click(layerOf(app.querySelector("dialog")!))
+      yield* tick
+      yield* tick
+      assert.include(log(), "Settled a false")
+      assert.strictEqual(app.querySelector(".popup-a"), popup)
+      byId("reopen").click()
+      yield* tick
+      assert.strictEqual(app.querySelector(".popup-a"), popup)
     }))
 
   it.effect("a close before the first frame still exits and settles", () =>
