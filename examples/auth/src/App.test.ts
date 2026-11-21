@@ -1,3 +1,4 @@
+import type { Session } from "#domain/Session"
 import { Router } from "@effect/ui"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { Locator, TestHost } from "@effect/ui/testing"
@@ -6,7 +7,7 @@ import { Effect, Layer, Option } from "effect"
 import { KeyValueStore } from "effect/persistence"
 import { TestClock } from "effect/testing"
 import { App, appProps } from "./App.ts"
-import { type Session, SessionStore } from "./auth/domain/Session.ts"
+import { SessionStore } from "./auth/services/SessionStore.ts"
 import { AppRoute } from "./routes.ts"
 
 const alice: Session = { userId: "1", email: "alice@example.com", name: "alice" }

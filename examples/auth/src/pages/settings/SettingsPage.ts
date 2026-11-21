@@ -1,6 +1,6 @@
+import type { Session } from "#domain/Session"
 import type { View } from "@effect/ui"
 import { Button } from "@effect/ui-kit"
-import type { Session } from "../../auth/domain/Session.ts"
 
 const InfoRow = <M>(h: View.H<M>, label: string, value: string) =>
   h.div.class("flex justify-between items-center py-2 border-b border-gray-100").children(

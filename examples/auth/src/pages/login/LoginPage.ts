@@ -1,8 +1,8 @@
+import { Session } from "#domain/Session"
 import { Command, Component, UiSchema, Validation, type View } from "@effect/ui"
 import { Button, Field, Input } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Duration, Effect, Option, Schema } from "effect"
-import { Session } from "../../auth/domain/Session.ts"
 import { AppRoute, LoggedOutRoute } from "../../routes.ts"
 
 const Rule = Validation.Rule

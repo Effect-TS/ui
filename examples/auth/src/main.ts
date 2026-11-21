@@ -4,7 +4,7 @@ import "@effect/ui/html/register"
 import { Effect, Layer } from "effect"
 import { KeyValueStore } from "effect/persistence"
 import { App, appProps } from "./App.ts"
-import { SessionStore } from "./auth/domain/Session.ts"
+import { SessionStore } from "./auth/services/SessionStore.ts"
 import { AppRoute } from "./routes.ts"
 
 const Main = BrowserHost.mount(App, appProps, document.getElementById("root")!).pipe(
