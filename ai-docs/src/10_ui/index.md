@@ -394,8 +394,9 @@ read the Model. An instance has one listener per target, event and phase.
 `BrowserHost.layer` provides the source; elsewhere nothing fires. A
 `Story` delivers one with `s.subscription(key, message)`, an `HtmlScene`
 fires one with `s.fireDocument("keydown", { key: "Escape" })`, and a
-`TestHost` test adds `TestGlobalEvents.layer` and calls
-`TestGlobalEvents.fire("document", "keydown", { key: "Escape" })`.
+`Play` adds `TestGlobalEvents.layer` and calls
+`TestGlobalEvents.fire("document", "keydown", { key: "Escape" })`, which
+its next step settles.
 
 ### Forms
 

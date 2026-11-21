@@ -1496,7 +1496,7 @@ export const fireNode = <Props, Model, Msg, Events>(
     const owners = owned.filter((layer) => Object.hasOwn(layer.handlers, event)).map((layer) => layer.owner.path)
     throw new Error(
       `${step}: only ${owners.join(" and ")} handles "${event}" at ${description}. ` +
-        "A scene doesn't run a child's update: use givenChild for its Model, or a TestHost test."
+        "A scene doesn't run a child's update: use givenChild for its Model, or a Play."
     )
   }
   // `"always"` from any layer cancels, a child's included. Then each layer runs once, in the runtime's

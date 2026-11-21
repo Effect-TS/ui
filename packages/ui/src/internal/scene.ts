@@ -54,7 +54,8 @@ export const matchers = {
     })
 }
 
-const describeExpected = (expected: unknown): string =>
+/** @internal */
+export const describeExpected = (expected: unknown): string =>
   expected instanceof RegExp ? String(expected) : JSON.stringify(expected)
 
 /** A child a scene step names. */

@@ -12,7 +12,7 @@
  * and every step follows the acknowledgement rule described in `Steps`. An
  * interaction that no handler turned into a message must be followed by
  * `expectIgnored()`. A child is a leaf: `childEmit` stands in for what it
- * emits, and anything that crosses into one is a runtime test. A child step
+ * emits, and anything that crosses into one is a `Play`. A child step
  * names the child by its component, then by its key or ref when it has one:
  * `childEmit(Listbox, event)`, `childEmit(TodoItem, "t1", event)`.
  *

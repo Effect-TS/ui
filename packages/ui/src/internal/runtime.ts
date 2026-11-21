@@ -250,6 +250,11 @@ interface EventCursor {
   items: Packed
 }
 
+let domEventMessages = 0
+
+/** @internal */
+export const domEventMessageCount = (): number => domEventMessages
+
 /**
  * For each event a part handles, the paths of the instances that get it, deepest owner first and the
  * view's author last. An event only the author handles isn't listed. What `TestElement.owners` shows.
@@ -2616,6 +2621,7 @@ const setup = (
       ? guard(this, "domEvent", () => (handler as (payload: unknown) => unknown)(payload), event)
       : handler
     if (message === undefined) return
+    domEventMessages++
     // Before the message is sent, so the host can still act on its event.
     onMessage?.()
     this.dispatch(message, { _tag: "DomEvent", name: event })
@@ -5051,6 +5057,7 @@ const setup = (
         ? guard(target, "domEvent", () => (own as (payload: unknown) => unknown)(payload), event)
         : own
       if (message === undefined) continue
+      domEventMessages++
       if (layer.prevents && !told) {
         told = true
         onMessage?.()

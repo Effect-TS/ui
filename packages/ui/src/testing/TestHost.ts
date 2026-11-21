@@ -9,8 +9,10 @@
  * and the render flush all go through, so `settle` can drain everything, and
  * provides `MessageLog.memory`, so `root.log()` reads back what happened.
  *
- * Runtime tests are plain scoped Effects. Anything that crosses into a child
- * is tested here; one instance on its own is a `Story`.
+ * Runtime tests are plain scoped Effects. An app's tests drive a tree on
+ * `TestHost` through `Play` and `HtmlPlay`, which act as a user does and
+ * settle on their own. Use `TestHost` directly to assert on what happens
+ * between settles. One instance on its own is a `Story` or a `Scene`.
  *
  * **Example** (Counting on a TestHost)
  *
@@ -1067,7 +1069,7 @@ export interface Stub<Self, Props, Events, Receives = never> {
 }
 
 /**
- * Stands in for a feature in a runtime test: it renders a `<stub>` element
+ * Stands in for a feature in a `Play` or a runtime test: it renders a `<stub>` element
  * with a `data-stub` attribute naming the feature, records the props it gets
  * and the messages a parent sends it, and emits what the test sends.
  *

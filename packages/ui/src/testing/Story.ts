@@ -328,7 +328,7 @@ export const parts = <Props, Events, Parts, R, Rcv>(
  * One instance's head entries for a Model and props, or for the Model,
  * props and queries of a story's or a scene's record: what its `head` option returns, or none without one.
  * The entries are typed by the component's vocabulary. The fold across the
- * tree is a runtime test's.
+ * tree is a `Play`'s.
  *
  * **Details**
  *
