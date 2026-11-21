@@ -70,6 +70,9 @@ describe("Head and HtmlHead", () => {
       view: () => content
     })
     expect(Head.reduce).type.not.toBeCallableWith(() => ({ title: 1 }))
+    const untitled = Head.reduce(() => ({ title: undefined }))
+    expect(untitled.apply({ title: "x" as const }).title).type.toBe<string | undefined>()
+    expect(untitled.apply(HtmlHead.empty).meta).type.toBe<ReadonlyArray<HtmlHead.Meta>>()
     expect<Head.Reduce>().type.not.toBeAssignableFrom({ _tag: "Reduce" as const, apply: () => ({ title: "x" }) })
   })
 

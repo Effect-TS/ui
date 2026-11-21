@@ -221,7 +221,7 @@ describe("HtmlHead", () => {
     const errors: Array<unknown> = []
     const head = HtmlHead.merge({
       entries: [
-        Head.reduce((below) => ({ title: `${below.title}!` })),
+        Head.reduce((below) => ({ ...HtmlHead.empty, title: `${below.title}!` })),
         HtmlHead.lang("en"),
         HtmlHead.reduce(() => {
           throw new Error("boom")

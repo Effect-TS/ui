@@ -803,10 +803,8 @@ const neutralFold: View.HeadFold<Head.Entry, Head.Head> = { merge: Head.merge, t
 
 /** The fold of a component's vocabulary, or the title-only one. */
 const foldOf = (component: Component.Any): View.HeadFold => component.elements()?.head ?? neutralFold
-/** Whether an instance of `component` can add to the head. */
 const declaresHead = (component: Component.Any): boolean => component.head !== undefined
 
-/** One instance's part of the head, over its state when it was read: its entries and the instances it placed. */
 interface HeadPart {
   readonly inst: Instance
   readonly entries: ReadonlyArray<unknown>
@@ -1710,11 +1708,6 @@ const setup = (
     runCommitted()
     checkIdle()
   }
-  /**
-   * Renders what's dirty, runs deferred work and folds the head, until none
-   * is left. A `head`, reduce or title template that throws fails its
-   * instance, so the fallback renders and the head is folded again.
-   */
   function drain() {
     draining = true
     try {
@@ -1781,9 +1774,6 @@ const setup = (
   let viewChanged = false
   // The root vocabulary's fold, or the title-only one.
   const rootFold = foldOf(component)
-  // Under a root fold that folds a subtree with no entries to nothing, such subtrees
-  // are left out of the tree: most instances, such as a list's rows, have no head. A host-neutral root
-  // may hand the fold to a vocabulary that sees every node, so its tree is built whole.
   const skipsEmpty = rootFold !== neutralFold && headFold.skipsEmpty(rootFold.merge)
   const emptyHead: unknown = rootFold.merge(emptyTree)
   let merged: unknown = emptyHead
@@ -1804,11 +1794,6 @@ const setup = (
   let rootInstance: Instance | undefined
   let handle: services.RootHandle | undefined
 
-  /**
-   * One instance's part of the head, read now: its entries and the instances its view placed. A closed or failed instance has none, and nor does one still waiting to
-   * adopt, whose Model isn't there yet, or one whose `head` throws, which `onError` is told. With
-   * `below` false the instances it placed aren't looked for: none of them has a part the fold keeps.
-   */
   const headPart = (
     inst: Instance,
     onError: (inst: Instance, error: unknown) => void,
@@ -1854,13 +1839,6 @@ const setup = (
         return
     }
   }
-  /**
-   * Folds the head of the tree under `root`, one node per instance that `partOf` has a part for. What
-   * throws in the fold is `onError`'s, with the instance that declared it.
-   *
-   * The fold is the root vocabulary's, or under a host-neutral root, the first vocabulary's in the tree
-   * with a fold of its own, so an Html child keeps its entries.
-   */
   const foldTree = (
     root: Instance,
     partOf: (inst: Instance) => HeadPart | undefined,

@@ -94,7 +94,7 @@ export interface TitleTemplate {
  */
 export interface Reduce {
   readonly _tag: "Reduce"
-  readonly apply: <H extends Head>(below: H) => H
+  readonly apply: <H extends Head>(below: H) => Omit<H, "title"> & Head
 }
 
 /**
@@ -123,9 +123,9 @@ export const titleTemplate = (apply: (title: string) => string): TitleTemplate =
 
 /**
  * Maps the folded head of the instance and everything its view placed.
- * `below` holds the title, and `f`'s result is laid over the full value,
- * so under the HTML vocabulary the meta, links and `<html>` and `<body>`
- * attributes are kept.
+ * Only the title of `f`'s result is used: every other field of the full
+ * value is kept, so under the HTML vocabulary the meta, links and
+ * `<html>` and `<body>` attributes stay as they were.
  *
  * **Details**
  *
@@ -158,8 +158,8 @@ export const titleTemplate = (apply: (title: string) => string): TitleTemplate =
 export const reduce = (f: (below: Head) => Head): Reduce => ({
   _tag: "Reduce",
   apply: (below) => {
-    const next = f(below)
-    return next === below ? below : { ...below, ...next }
+    const title = f(below).title
+    return title === below.title ? below : { ...below, title }
   }
 })
 
