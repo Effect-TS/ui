@@ -60,7 +60,7 @@
  * )
  *
  * Option.getOrThrow(AppRoute.parse("/people/1?tab=posts")).search // => { tab: "posts" }
- * AppRoute.print(AppRoute.make({ _tag: "Person", params: { id: 2 } })) // => "/people/2"
+ * AppRoute.print(AppRoute.Person({ params: { id: 2 } })) // => "/people/2"
  * Option.getOrThrow(AppRoute.parse("/old/3")).params // => { id: 3 }
  * Option.getOrThrow(AppRoute.parse("/nope"))._tag // => "NotFound"
  * ```
@@ -71,6 +71,7 @@
 import * as Effect from "effect/Effect"
 import * as Option from "effect/Option"
 import * as Schema from "effect/Schema"
+import type * as Command from "./Command.ts"
 
 /**
  * Marks a route definition.
@@ -213,48 +214,127 @@ export interface Resolved<A> {
 }
 
 /**
- * A route union: a `Schema.TaggedUnion` of route values, with a parser and a
- * printer.
+ * A route union: a `Schema.TaggedUnion` of route values, with a parser, a
+ * printer and one constructor per route.
+ *
+ * **Details**
+ *
+ * The schema members come from {@link Union.Base} and the constructors from
+ * {@link Union.Constructors}.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface Union<Routes extends Record<string, Any>> extends
-  Schema.TaggedUnion<
-    {
-      readonly [K in keyof Routes & string]: Schema.TaggedStruct<K, {
-        readonly params: FieldsSchema<ParamFields<Routes[K]>>
-        readonly search: FieldsSchema<SearchFields<Routes[K]>>
-      }>
-    }
-  >
-{
-  /** The route definitions, by tag. */
-  readonly routes: Routes
-  /** Parses a URL path, with its search, into a route value, resolving redirects. */
-  readonly parse: (url: string) => Option.Option<this["Type"]>
-  /** Like `parse`, and also reports whether the URL was redirected or normalised. */
-  readonly resolve: (url: string) => Option.Option<Resolved<this["Type"]>>
+export type Union<Routes extends Record<string, Any>> = Union.Base<Routes> & Union.Constructors<Routes>
+
+/**
+ * Types that make up a {@link Union}.
+ *
+ * @stability experimental
+ * @since 0.1.0
+ */
+export declare namespace Union {
   /**
-   * Prints a route value as an absolute URL path under the base, with its
-   * search. A param equal to its field's decoding default is left out.
+   * The `Schema.TaggedStruct` of each route value, by tag.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
    */
-  readonly print: (route: this["Type"]) => string
+  export type Cases<Routes extends Record<string, Any>> = {
+    readonly [K in keyof Routes & string]: Schema.TaggedStruct<K, {
+      readonly params: FieldsSchema<ParamFields<Routes[K]>>
+      readonly search: FieldsSchema<SearchFields<Routes[K]>>
+    }>
+  }
+
   /**
-   * Prints a route value's path under the base, without its search: the key
-   * of a page that updates in place when only the search changes.
+   * The schema members of a {@link Union}, without the constructors.
+   *
+   * **Details**
+   *
+   * Everything `Schema.TaggedUnion` has, including `make`, `cases` and
+   * `match`, plus the parser, the printer and `subset`. `annotate`, `check`
+   * and `rebuild` return a plain `Schema.TaggedUnion`.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
    */
-  readonly printPath: (route: this["Type"]) => string
-  /** A union of some of the routes, for a section's props. It shares the base path. */
-  readonly subset: <const Tags extends keyof Routes & string>(
-    tags: ReadonlyArray<Tags>
-  ) => Union<{ readonly [K in Tags]: Routes[K] }>
-  /** The base path, `""` or a path such as `"/en"`. */
-  readonly base: () => string
-  /** Sets the base path. Router Layers call it at startup. */
-  readonly setBase: (base: string) => void
+  export interface Base<Routes extends Record<string, Any>> extends Schema.TaggedUnion<Cases<Routes>> {
+    /** The route definitions, by tag. */
+    readonly routes: Routes
+    /** Parses a URL path, with its search, into a route value, resolving redirects. */
+    readonly parse: (url: string) => Option.Option<this["Type"]>
+    /** Like `parse`, and also reports whether the URL was redirected or normalised. */
+    readonly resolve: (url: string) => Option.Option<Resolved<this["Type"]>>
+    /**
+     * Prints a route value as an absolute URL path under the base, with its
+     * search. A param equal to its field's decoding default is left out.
+     */
+    readonly print: (route: this["Type"]) => string
+    /**
+     * Prints a route value's path under the base, without its search: the key
+     * of a page that updates in place when only the search changes.
+     */
+    readonly printPath: (route: this["Type"]) => string
+    /** A union of some of the routes, for a section's props. It shares the base path. */
+    readonly subset: <const Tags extends keyof Routes & string>(
+      tags: ReadonlyArray<Tags>
+    ) => Union<{ readonly [K in Tags]: Routes[K] }>
+    /** The base path, `""` or a path such as `"/en"`. */
+    readonly base: () => string
+    /** Sets the base path. Router Layers call it at startup. */
+    readonly setBase: (base: string) => void
+  }
+
+  /**
+   * One constructor per route, keyed by tag.
+   *
+   * **Details**
+   *
+   * A constructor takes what `make` takes, without `_tag`: `{ params, search }`.
+   * The argument is optional when the route has no field that needs a value.
+   * It fills in `params`, `search` and decoding defaults, and validates, as
+   * `make` does.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  export type Constructors<Routes extends Record<string, Any>> = {
+    readonly [K in keyof Routes & string]: (
+      ...args: Command.MakeArgs<WithoutTag<Cases<Routes>[K]["~type.make.in"]>>
+    ) => Cases<Routes>[K]["Type"]
+  }
+
+  /**
+   * Keys that can't be route tags because they collide with union, schema,
+   * function or object members, plus `then`, which would make the union a
+   * thenable that `await` and `Promise.resolve` call.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  export type ReservedTag =
+    | Extract<keyof Base<{}> | keyof Function, string>
+    | "constructor"
+    | "hasOwnProperty"
+    | "isPrototypeOf"
+    | "propertyIsEnumerable"
+    | "toLocaleString"
+    | "valueOf"
+    | "__proto__"
+    | "__defineGetter__"
+    | "__defineSetter__"
+    | "__lookupGetter__"
+    | "__lookupSetter__"
+    | "then"
 }
+
+type WithoutTag<Input> = { readonly [K in keyof Input as K extends "_tag" ? never : K]: Input[K] }
 
 /**
  * Any route union.
@@ -692,7 +772,7 @@ const build = (
     return Option.none()
   }
 
-  return Object.assign(union, {
+  const result: Record<string, any> = Object.assign(union, {
     routes,
     resolve,
     parse: (url: string) => Option.map(resolve(url), (resolved) => resolved.route),
@@ -706,6 +786,12 @@ const build = (
       baseRef.value = normaliseBase(base)
     }
   })
+  for (const tag of Object.keys(routes)) {
+    if (tag in result || tag === "then") throw new Error(`Route tag "${tag}" is reserved`)
+    const make = union.cases[tag]!.make
+    result[tag] = (args?: object) => make((args ?? {}) as any)
+  }
+  return result
 }
 
 /**
@@ -715,8 +801,11 @@ const build = (
  *
  * The result is a `Schema.TaggedUnion` whose values are
  * `{ _tag, params, search }`, with `make`, `match`, `guards` and `isAnyOf`,
- * plus `parse`, `resolve`, `print`, `printPath` and `subset`. `make` fills
- * in `params` and `search` when no field needs a value, and a field's decoding
+ * plus `parse`, `resolve`, `print`, `printPath` and `subset`, and one
+ * constructor per route: `AppRoute.Home()`,
+ * `AppRoute.Person({ params: { id: 1 } })`. A constructor is `make` with the
+ * tag filled in, and `make` stays for a tag held in a variable. Both fill in
+ * `params` and `search` when no field needs a value, and a field's decoding
  * default when it's left out.
  *
  * Declare a catch-all `"/*"` route, conventionally `NotFound`: it ranks
@@ -724,11 +813,17 @@ const build = (
  * a route for every URL under the base and the Model never holds an
  * `Option`. Without one, `parse` returns `Option.none()` for such URLs.
  *
+ * **Gotchas**
+ *
+ * - A tag in {@link Union.ReservedTag} (`parse`, `print`, `make`, `match`,
+ *   `name`, `Type`, ...) is a type error, and throws when the union is built
+ *   if it names a member the union has at runtime.
+ *
  * @stability experimental
  * @category constructors
  * @since 0.1.0
  */
 export const union = <const Routes extends Record<string, Any>>(
-  routes: Routes,
+  routes: Routes & { readonly [K in keyof Routes]: K extends Union.ReservedTag ? never : Any },
   ...redirects: ReadonlyArray<Redirect>
 ): Union<Routes> => build(routes, redirects, { value: "" })

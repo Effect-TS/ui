@@ -6,7 +6,7 @@ import { ListNotes } from "../notes/queries/ListNotes.ts"
 import { Notes } from "../notes/services/Notes.ts"
 import { AppRoute } from "../routes.ts"
 
-const noteUrl = (id: string) => AppRoute.print(AppRoute.make({ _tag: "Note", params: { id } }))
+const noteUrl = (id: string) => AppRoute.print(AppRoute.Note({ params: { id } }))
 
 export const NotesIndexMessage = UiSchema.TaggedEnum({
   // The Pin button and a drop both send it, so it names what they share.

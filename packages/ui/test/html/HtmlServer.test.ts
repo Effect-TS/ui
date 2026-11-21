@@ -540,10 +540,10 @@ describe("HtmlServer", { concurrent: false }, () => {
       init: () => 0,
       update: (model) => model,
       subscriptions: () => [
-        Router.subscription(AppRoute, AppRoute.make({ _tag: "Home" }), () => {
+        Router.subscription(AppRoute, AppRoute.Home(), () => {
           throw new Error("Stream ran")
         }),
-        Router.subscription(AppRoute, AppRoute.make({ _tag: "Slow" }), () => {
+        Router.subscription(AppRoute, AppRoute.Slow(), () => {
           throw new Error("Stream ran")
         })
       ],

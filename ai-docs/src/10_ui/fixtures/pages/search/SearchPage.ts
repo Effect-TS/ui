@@ -11,7 +11,7 @@ import { AppRoute } from "../../routes.ts"
 // `patchSearch`.
 const SearchRoute = AppRoute.subset(["Search"])
 
-const noteUrl = (id: string) => AppRoute.print(AppRoute.make({ _tag: "Note", params: { id } }))
+const noteUrl = (id: string) => AppRoute.print(AppRoute.Note({ params: { id } }))
 
 export const SearchPageMessage = UiSchema.TaggedEnum({
   UpdatedSearch: { text: Schema.String },

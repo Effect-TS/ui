@@ -105,13 +105,13 @@ export const App = Component.define({
   view: ({ route }, h) =>
     h.div(
       h.nav(
-        h.a.attr("href", AppRoute.print(AppRoute.make({ _tag: "Home" }))).children("Home"),
-        h.a.attr("href", AppRoute.print(AppRoute.make({ _tag: "Person", params: { id: 1 } }))).children("Person 1"),
-        h.a.attr("href", `${AppRoute.print(AppRoute.make({ _tag: "Person", params: { id: 2 } }))}#bio`).children(
+        h.a.attr("href", AppRoute.print(AppRoute.Home())).children("Home"),
+        h.a.attr("href", AppRoute.print(AppRoute.Person({ params: { id: 1 } }))).children("Person 1"),
+        h.a.attr("href", `${AppRoute.print(AppRoute.Person({ params: { id: 2 } }))}#bio`).children(
           "Person 2 bio"
         ),
         h.a.attr("href", "https://example.com/").children("Elsewhere"),
-        h.a.attr("href", AppRoute.print(AppRoute.make({ _tag: "Slow" }))).children("Slow"),
+        h.a.attr("href", AppRoute.print(AppRoute.Slow())).children("Slow"),
         h.button.onClick(Message.Block()).children("Block"),
         h.form
           .attr("method", "get")

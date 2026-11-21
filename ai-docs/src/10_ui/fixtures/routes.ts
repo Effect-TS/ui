@@ -5,7 +5,8 @@ import { NoteSort } from "./notes/domain/Note.ts"
 // A route union is a `Schema.TaggedUnion` with a parser and a printer that
 // agree. Params and search are decoded through their Schemas, and `/*` is the
 // catch-all. Always build URLs with `print`, never by hand. `printPath`
-// prints the path alone, without the search.
+// prints the path alone, without the search. Build a route value with the
+// union's constructor for its tag, as `AppRoute.Note({ params: { id } })`.
 //
 // The routes have their own file. Pages build links from them and `App`
 // imports the pages, so routes kept in `App.ts` would be an import cycle.
@@ -18,7 +19,7 @@ export const AppRoute = Route.union({
   // fails, such as `?page=abc`, is treated as absent and the Router removes
   // it from the URL. A field with `Schema.withDecodingDefaultKey` has a plain
   // type, so `page` is a `number` that is 1 when the URL leaves it out.
-  // `make` fills in the defaults, and `print` leaves out a param that holds
+  // The constructors fill in the defaults, and `print` leaves out a param that holds
   // its default, so a URL never carries `?page=1`.
   Search: Route.make("/search", {
     search: {

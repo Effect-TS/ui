@@ -492,7 +492,7 @@ describe("Story", () => {
         Message.match(message, {
           Go: () =>
             $.run(
-              Router.push(AppRoute, AppRoute.make({ _tag: "About" })).pipe(
+              Router.push(AppRoute, AppRoute.About()).pipe(
                 Command.map((outcome) => Message.Navigated({ outcome }))
               )
             ),
@@ -536,7 +536,7 @@ describe("Story", () => {
             }),
           view: (model, h) => h.el("p", model.outcome)
         })
-        const route = Routes.make({ _tag: "Search" })
+        const route = Routes.Search()
         const s = yield* Story.make(Box, { route })
         s.send(BoxMessage.Typed({ value: "ada" }))
           .expectExact(Router.patchSearch(Routes, route, { q: "ada" }))

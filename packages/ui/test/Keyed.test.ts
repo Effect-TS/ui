@@ -1105,7 +1105,7 @@ describe("Keyed history restore", () => {
         Message.match(message, {
           ShowAndGo: ({ ids }) =>
             $.set({ ...model, ids }).run(
-              Router.push(PageRoute, PageRoute.make({ _tag: "Next" })).pipe(
+              Router.push(PageRoute, PageRoute.Next()).pipe(
                 Command.map(() => Message.Navigated())
               )
             ),
@@ -1182,7 +1182,7 @@ describe("Keyed history restore", () => {
           "div",
           h.el("button").on(
             "click",
-            ShellMessage.Go({ route: ShellRoute.make({ _tag: "Home" }) })
+            ShellMessage.Go({ route: ShellRoute.Home() })
           ).children("Home"),
           model._tag === "Board"
             ? app.Board(h, { key: "board", props: { tag: "a", ids: ["1", "2"] } })
