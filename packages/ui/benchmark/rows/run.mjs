@@ -1,3 +1,4 @@
+import { build } from "esbuild"
 // The keyed-table benchmark (js-framework-benchmark's operations) for @effect/ui, and the same table
 // on React as a baseline, in headless Chromium: rendering times and JS heap sizes.
 //
@@ -55,7 +56,6 @@ import { execSync } from "node:child_process"
 import * as fs from "node:fs"
 import * as path from "node:path"
 import { parseArgs } from "node:util"
-import { build } from "esbuild"
 import { chromium } from "playwright"
 
 const { values: args } = parseArgs({

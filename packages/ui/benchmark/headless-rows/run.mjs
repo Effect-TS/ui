@@ -1,3 +1,4 @@
+import { build } from "esbuild"
 // 1k-row benchmark for @effect/ui headless components, in headless Chromium.
 //
 // Run from the repository root:
@@ -59,7 +60,6 @@
 // the same command across revisions; absolute figures depend on the machine and browser.
 import { execSync } from "node:child_process"
 import * as path from "node:path"
-import { build } from "esbuild"
 import { chromium } from "playwright"
 
 

@@ -1,6 +1,7 @@
+import { Schema, pipe } from "effect"
+
 import { UiSchema } from "@effect/ui"
 import { assert, describe, it } from "@effect/vitest"
-import { pipe, Schema } from "effect"
 
 describe("UiSchema", () => {
   describe("TaggedEnum", () => {

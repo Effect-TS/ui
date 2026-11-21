@@ -1,10 +1,11 @@
+import { Effect, Schema } from "effect"
+
 // @vitest-environment happy-dom
 import { Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Schema } from "effect"
 
 // The first init of each runs on the server: a Model the client built with its own init would say so.
 let inits = { avatar: 0, profile: 0 }

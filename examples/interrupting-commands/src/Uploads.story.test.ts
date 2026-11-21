@@ -1,6 +1,8 @@
+import { Effect } from "effect"
+
 import { Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect } from "effect"
+
 import { FAKE_FILES, UploadFile, Uploads, UploadsMessage, type UploadsModel } from "./Uploads.ts"
 
 const [firstFile, secondFile, thirdFile] = FAKE_FILES

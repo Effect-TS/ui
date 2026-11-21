@@ -1,3 +1,6 @@
+import { Context, Effect, Layer, Schema } from "effect"
+import { AsyncResult } from "effect/reactivity"
+
 /**
  * A two-page app on the Router: a root that holds the route, a home page, a
  * person page that reads its name through a query, counts its visits (a
@@ -6,8 +9,6 @@
  */
 import { Command, Component, Head, Query, Route, Router, UiSchema } from "@effect/ui"
 import { Html, HtmlHead } from "@effect/ui/html"
-import { Context, Effect, Layer, Schema } from "effect"
-import { AsyncResult } from "effect/reactivity"
 
 export const AppRoute = Route.union(
   {

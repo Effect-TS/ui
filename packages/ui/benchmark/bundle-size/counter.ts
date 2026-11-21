@@ -1,6 +1,7 @@
+import { Effect, Layer, Schema } from "effect"
+
 import { Component, UiSchema } from "@effect/ui"
 import { BrowserHost, Html } from "@effect/ui/html"
-import { Effect, Layer, Schema } from "effect"
 
 const Message = UiSchema.TaggedEnum({ Increment: {}, Decrement: {} })
 

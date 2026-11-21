@@ -1,6 +1,8 @@
+import { Effect, Exit, Schema, Scope } from "effect"
+
 import { Component, Head, UiSchema } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
-import { Effect, Exit, Schema, Scope } from "effect"
+
 import { init, install, update } from "./harness.ts"
 import type { Model as TableModel } from "./harness.ts"
 

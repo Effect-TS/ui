@@ -1,3 +1,5 @@
+import { Effect } from "effect"
+
 import type { Component, Mount } from "@effect/ui"
 import { View } from "@effect/ui"
 import { Slider, type SliderEvents, type SliderProps } from "@effect/ui-kit"
@@ -5,7 +7,6 @@ import { Html } from "@effect/ui/html"
 import { HtmlScene } from "@effect/ui/html/testing"
 import { Locator, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect } from "effect"
 
 type Parts = Component.Headless.Parts<typeof Slider>
 type H = View.Helper<never, SliderProps> & View.Tags<Html.Elements, never>

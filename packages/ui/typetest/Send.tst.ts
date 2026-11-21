@@ -1,8 +1,9 @@
-import { Component, Feature, UiSchema, type View } from "@effect/ui"
-import { Scene, Story, TestHost } from "@effect/ui/testing"
 import { Context, Effect, Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { describe, expect, it } from "tstyche"
+
+import { Component, Feature, UiSchema, type View } from "@effect/ui"
+import { Scene, Story, TestHost } from "@effect/ui/testing"
 
 const EditorMessage = UiSchema.TaggedEnum({ Clear: {}, Focus: {}, Typed: { text: Schema.String } })
 type EditorMessage = typeof EditorMessage.Type

@@ -9,6 +9,7 @@ import type * as Redacted from "effect/Redacted"
 import * as Schema from "effect/Schema"
 import * as SchemaAST from "effect/SchemaAST"
 import * as SchemaGetter from "effect/SchemaGetter"
+
 import * as AST from "./schemaAST.ts"
 
 const isRedactedAST = (ast: SchemaAST.AST): boolean =>

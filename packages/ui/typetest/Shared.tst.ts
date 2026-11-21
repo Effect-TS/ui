@@ -1,8 +1,9 @@
+import { Layer, Schema } from "effect"
+import { describe, expect, it } from "tstyche"
+
 import { Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Scene } from "@effect/ui/testing"
-import { Layer, Schema } from "effect"
-import { describe, expect, it } from "tstyche"
 
 const TipsMessage = UiSchema.TaggedEnum({ Enter: { id: Schema.String }, Elapsed: {} })
 

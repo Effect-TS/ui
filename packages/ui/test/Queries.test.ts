@@ -1,12 +1,13 @@
+import { Effect, Layer, Schema } from "effect"
+import { AsyncResult } from "effect/reactivity"
+import { TestClock } from "effect/testing"
+
 // @vitest-environment happy-dom
 import { Command, Component, Head, MessageLog, Query, Route, Router, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
 import { Locator, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Layer, Schema } from "effect"
-import { AsyncResult } from "effect/reactivity"
-import { TestClock } from "effect/testing"
 
 /**
  * A component with one query and no `onChange`: the runtime writes the

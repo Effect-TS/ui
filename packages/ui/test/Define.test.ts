@@ -1,7 +1,8 @@
+import { Effect, Schema } from "effect"
+
 import { Command, Component, UiSchema } from "@effect/ui"
 import { Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Schema } from "effect"
 
 const Message = UiSchema.TaggedEnum({ Step: {}, Logged: { n: Schema.Number } })
 const Events = UiSchema.TaggedEnum({ Stepped: { n: Schema.Number } })

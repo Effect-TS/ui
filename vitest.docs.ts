@@ -1,5 +1,6 @@
-import * as Doctest from "@effect/doctest/Plugin"
 import { defineConfig } from "vitest/config"
+
+import * as Doctest from "@effect/doctest/Plugin"
 
 export default defineConfig({
   plugins: [Doctest.plugin()],

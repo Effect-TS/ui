@@ -1,3 +1,9 @@
+import * as Duration from "effect/Duration"
+import * as Effect from "effect/Effect"
+import * as Queue from "effect/Queue"
+import * as Schema from "effect/Schema"
+import * as Stream from "effect/Stream"
+
 /**
  * A stack of short notifications that the app posts to and that leave on
  * their own after a timeout.
@@ -161,11 +167,7 @@ import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as View from "@effect/ui/View"
-import * as Duration from "effect/Duration"
-import * as Effect from "effect/Effect"
-import * as Queue from "effect/Queue"
-import * as Schema from "effect/Schema"
-import * as Stream from "effect/Stream"
+
 import { flag, visuallyHidden, withStyle } from "./internal/attributes.ts"
 import { keepOnTop } from "./internal/topLayer.ts"
 

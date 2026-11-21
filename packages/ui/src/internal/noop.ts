@@ -1,4 +1,5 @@
 import * as Predicate from "effect/Predicate"
+
 import type { Noop, NoopTypeId } from "../Component.ts"
 
 // The same string as `Component.NoopTypeId`, which the annotation checks. Declared here too so this module

@@ -1,6 +1,7 @@
+import { afterEach, describe, expect, it, vi } from "vitest"
+
 // @vitest-environment happy-dom
 import type * as HtmlHeadModule from "@effect/ui/html/HtmlHead"
-import { afterEach, describe, expect, it, vi } from "vitest"
 
 const hosts: Array<{ readonly dispose: () => void }> = []
 

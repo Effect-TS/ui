@@ -1,11 +1,12 @@
+import { Effect, Layer, Schema } from "effect"
+import { TestClock } from "effect/testing"
+
 import { Component, UiSchema, View } from "@effect/ui"
 import { Positioning, Tooltip, type TooltipProps, TooltipProvider } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { HtmlScene, TestGlobalEvents } from "@effect/ui/html/testing"
 import { Locator, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Layer, Schema } from "effect"
-import { TestClock } from "effect/testing"
 
 const standIn = {
   elements: Html,

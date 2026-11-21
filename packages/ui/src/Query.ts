@@ -69,9 +69,10 @@ import * as SchemaTransformation from "effect/SchemaTransformation"
 import * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
 import type * as Types from "effect/Types"
+
 import * as componentQueries from "./internal/queries.ts"
 import * as queryCore from "./internal/queryCore.ts"
-import { addListener, NonJsonLeaf } from "./internal/queryCore.ts"
+import { NonJsonLeaf, addListener } from "./internal/queryCore.ts"
 import { holdsRedacted, redactAST } from "./internal/schemaRedact.ts"
 
 /**

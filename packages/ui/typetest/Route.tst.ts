@@ -1,8 +1,9 @@
-import { Command, Component, Feature, Head, Query, Route, Router, type Subscription, UiSchema } from "@effect/ui"
-import { TestHost } from "@effect/ui/testing"
 import { Effect, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { describe, expect, it } from "tstyche"
+
+import { Command, Component, Feature, Head, Query, Route, Router, type Subscription, UiSchema } from "@effect/ui"
+import { TestHost } from "@effect/ui/testing"
 
 const AppRoute = Route.union({
   Home: Route.make("/"),

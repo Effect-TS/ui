@@ -1,8 +1,9 @@
-import { Validation } from "@effect/ui"
 import type { Option } from "effect"
 import { Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { describe, expect, it } from "tstyche"
+
+import { Validation } from "@effect/ui"
 
 const Rule = Validation.Rule
 

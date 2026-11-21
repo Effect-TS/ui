@@ -1,10 +1,11 @@
-import { Query } from "@effect/ui"
-import { TestQuery } from "@effect/ui/testing"
-import { assert, describe, it } from "@effect/vitest"
 import { Cause, Deferred, Effect, Equal, Exit, Fiber, Hash, Latch, Layer, Option, Schema, Scope } from "effect"
 import type { Duration } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { TestClock } from "effect/testing"
+
+import { Query } from "@effect/ui"
+import { TestQuery } from "@effect/ui/testing"
+import { assert, describe, it } from "@effect/vitest"
 
 const User = Schema.Struct({ id: Schema.String, name: Schema.String })
 type User = typeof User.Type

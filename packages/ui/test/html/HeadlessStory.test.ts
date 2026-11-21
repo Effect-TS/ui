@@ -1,9 +1,11 @@
+import { Effect, Schema } from "effect"
+
 import { Component, UiSchema, View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { HtmlScene } from "@effect/ui/html/testing"
 import { Locator, Scene, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Schema } from "effect"
+
 import { Dialog, type Item, Menu } from "./fixtures/headless.ts"
 
 const items: ReadonlyArray<Item> = [

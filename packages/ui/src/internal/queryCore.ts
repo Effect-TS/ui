@@ -9,6 +9,7 @@
 import * as Context from "effect/Context"
 import * as Duration from "effect/Duration"
 import type * as Effect from "effect/Effect"
+
 import type * as Query from "../Query.ts"
 import type * as componentQueries from "./queries.ts"
 

@@ -1,3 +1,6 @@
+import { Effect, Layer } from "effect"
+import { FetchHttpClient } from "effect/http"
+
 /**
  * @title Routing and the document head
  *
@@ -10,10 +13,9 @@
  */
 import { Router } from "@effect/ui"
 import { BrowserHost, BrowserRouter } from "@effect/ui/html"
-import { Effect, Layer } from "effect"
-import { FetchHttpClient } from "effect/http"
 // oxlint-disable-next-line no-unassigned-import
 import "@effect/ui/html/register"
+
 // The routed app:
 //
 // - `fixtures/routes.ts`: the route union, in its own file

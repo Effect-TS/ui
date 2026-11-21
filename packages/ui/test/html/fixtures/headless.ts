@@ -1,6 +1,7 @@
+import { Schema } from "effect"
+
 import { Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Schema } from "effect"
 
 export const Item = Schema.Struct({
   id: Schema.String,

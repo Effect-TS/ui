@@ -1,3 +1,6 @@
+import { Effect, Layer } from "effect"
+import { FetchHttpClient } from "effect/http"
+
 /**
  * @title Headless components
  *
@@ -7,10 +10,9 @@
  * `fixtures/notes/components/NoteLinkPicker.ts`.
  */
 import { BrowserHost } from "@effect/ui/html"
-import { Effect, Layer } from "effect"
-import { FetchHttpClient } from "effect/http"
 // oxlint-disable-next-line no-unassigned-import
 import "@effect/ui/html/register"
+
 // Read them in this order:
 //
 // - `fixtures/kit/Listbox.ts`: the headless component. `Component.define`

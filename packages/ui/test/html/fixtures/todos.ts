@@ -1,3 +1,5 @@
+import { Schema } from "effect"
+
 /**
  * A todo app in HTML: a controlled new-todo field that rejects titles over 20
  * characters, a keyed list of rows with a controlled checkbox each, and a
@@ -5,7 +7,6 @@
  */
 import { Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Schema } from "effect"
 
 export const maxTitle = 20
 

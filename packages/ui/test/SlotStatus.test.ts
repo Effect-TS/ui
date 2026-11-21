@@ -1,9 +1,10 @@
+import { Cause, Deferred, Effect, Exit, Layer, Schema } from "effect"
+import { AsyncResult } from "effect/reactivity"
+
 import { Command, Component, Feature, MessageLog, UiSchema, type View } from "@effect/ui"
 import * as replay from "@effect/ui/internal/replay"
 import { Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Cause, Deferred, Effect, Exit, Layer, Schema } from "effect"
-import { AsyncResult } from "effect/reactivity"
 
 const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(TestHost.layer()))
 

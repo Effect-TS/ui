@@ -47,6 +47,7 @@ import * as Predicate from "effect/Predicate"
 import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Schema from "effect/Schema"
 import * as Scope from "effect/Scope"
+
 import type * as Component from "./Component.ts"
 import * as child from "./internal/child.ts"
 import * as childRef from "./internal/ref.ts"

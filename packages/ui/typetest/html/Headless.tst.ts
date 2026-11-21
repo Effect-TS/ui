@@ -1,8 +1,10 @@
+import { Context, type Effect, Schema } from "effect"
+import { describe, expect, it } from "tstyche"
+
 import { Component, Mount, UiSchema, View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { TestHost } from "@effect/ui/testing"
-import { Context, type Effect, Schema } from "effect"
-import { describe, expect, it } from "tstyche"
+
 import { Dialog, type Item, Menu, type MenuEvents } from "../../test/html/fixtures/headless.ts"
 
 class Clock extends Context.Service<Clock, { readonly now: Effect.Effect<number> }>()("Clock") {}

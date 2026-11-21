@@ -1,5 +1,6 @@
-import type { Component, View } from "@effect/ui"
 import { expect, it } from "tstyche"
+
+import type { Component, View } from "@effect/ui"
 
 type Renamed = { readonly _tag: "Renamed"; readonly name: string }
 type Discarded = { readonly _tag: "Discarded" }

@@ -1,3 +1,6 @@
+import { Context, Effect, Option, Schema } from "effect"
+import { AsyncResult } from "effect/reactivity"
+
 /**
  * @title Validating forms
  *
@@ -9,8 +12,6 @@ import { Command, Component, Query, UiSchema, Validation } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
 import { Story } from "@effect/ui/testing"
-import { Context, Effect, Option, Schema } from "effect"
-import { AsyncResult } from "effect/reactivity"
 
 // ---------------------------------------------------------------------------
 // The service the form calls

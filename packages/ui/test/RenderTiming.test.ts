@@ -1,8 +1,9 @@
+import { ConfigProvider, Deferred, Effect, Layer, Schema } from "effect"
+import { TestClock } from "effect/testing"
+
 import { Command, Component, type MessageLog, Query } from "@effect/ui"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { ConfigProvider, Deferred, Effect, Layer, Schema } from "effect"
-import { TestClock } from "effect/testing"
 
 const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(TestHost.layer()))
 

@@ -1,9 +1,10 @@
-import type { View } from "@effect/ui"
-import { Command, Component, Query, UiSchema } from "@effect/ui"
-import { Html } from "@effect/ui/html"
 import { Effect, Schema } from "effect"
 import type { AsyncResult } from "effect/reactivity"
 import { describe, expect, it } from "tstyche"
+
+import type { View } from "@effect/ui"
+import { Command, Component, Query, UiSchema } from "@effect/ui"
+import { Html } from "@effect/ui/html"
 
 const User = Schema.Struct({ id: Schema.String, name: Schema.String })
 

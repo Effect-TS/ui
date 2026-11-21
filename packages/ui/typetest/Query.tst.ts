@@ -1,7 +1,8 @@
-import { Query } from "@effect/ui"
 import { Context, Effect, Layer, Option, Schema, type Stream } from "effect"
 import type { AsyncResult } from "effect/reactivity"
 import { describe, expect, it } from "tstyche"
+
+import { Query } from "@effect/ui"
 
 class Api extends Context.Service<Api, { readonly name: (id: string) => Effect.Effect<string> }>()("Api") {}
 

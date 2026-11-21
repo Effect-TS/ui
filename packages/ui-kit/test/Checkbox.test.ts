@@ -1,10 +1,11 @@
+import { Effect } from "effect"
+
 import type { Component } from "@effect/ui"
 import { View } from "@effect/ui"
 import { Checkbox, type CheckboxProps } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Locator, Scene, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect } from "effect"
 
 // The least markup the parts need: a labelled root with an indicator. The
 // form field comes with the root.

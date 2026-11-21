@@ -1,8 +1,9 @@
+import { Schema } from "effect"
+import { describe, expect, it } from "tstyche"
+
 import { Component, Head, type View } from "@effect/ui"
 import { Html, HtmlHead } from "@effect/ui/html"
 import * as HtmlHeadModule from "@effect/ui/html/HtmlHead"
-import { Schema } from "effect"
-import { describe, expect, it } from "tstyche"
 
 const Neutral = Component.define({ name: "Neutral", model: Schema.Null, message: Schema.Never })
 const Page = Component.define({ name: "Page", model: Schema.Null, message: Schema.Never, elements: Html })

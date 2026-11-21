@@ -1,8 +1,9 @@
+import { Context, Effect } from "effect"
+import { describe, expect, it } from "tstyche"
+
 import { Component, Mount, UiSchema, View } from "@effect/ui"
 import { Field, Slider } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
-import { Context, Effect } from "effect"
-import { describe, expect, it } from "tstyche"
 
 class Clock extends Context.Service<Clock, {}>()("Clock") {}
 

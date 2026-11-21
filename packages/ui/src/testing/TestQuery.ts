@@ -38,6 +38,7 @@ import type * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import type * as AsyncResult from "effect/reactivity/AsyncResult"
+
 import * as Query from "../Query.ts"
 
 /**

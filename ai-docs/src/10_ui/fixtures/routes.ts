@@ -1,5 +1,7 @@
-import { Route } from "@effect/ui"
 import { Effect, Schema } from "effect"
+
+import { Route } from "@effect/ui"
+
 import { NoteSort } from "./notes/domain/Note.ts"
 
 // A route union is a `Schema.TaggedUnion` with a parser and a printer that

@@ -1,7 +1,8 @@
-import { Component, Feature, UiSchema, type View } from "@effect/ui"
-import { Html } from "@effect/ui/html"
 import { Context, Effect, Layer, Schema } from "effect"
 import { describe, expect, it } from "tstyche"
+
+import { Component, Feature, UiSchema, type View } from "@effect/ui"
+import { Html } from "@effect/ui/html"
 
 class Clock extends Context.Service<Clock, { readonly now: number }>()("typetest/slots/Clock") {}
 class Store extends Context.Service<Store, { readonly draft: string }>()("typetest/slots/Store") {}

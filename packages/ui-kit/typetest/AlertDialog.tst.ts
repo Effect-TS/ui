@@ -1,7 +1,8 @@
+import { expect, it } from "tstyche"
+
 import { UiSchema, type View } from "@effect/ui"
 import { AlertDialog } from "@effect/ui-kit"
 import type { Html } from "@effect/ui/html"
-import { expect, it } from "tstyche"
 
 const Msg = UiSchema.TaggedEnum({ Clicked: {} })
 type Msg = typeof Msg.Type

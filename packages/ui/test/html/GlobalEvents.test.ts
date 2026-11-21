@@ -1,10 +1,11 @@
+import { Effect, Exit, Layer, Schema } from "effect"
+
 // @vitest-environment happy-dom
 import { Component, UiSchema } from "@effect/ui"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { HtmlScene, TestGlobalEvents } from "@effect/ui/html/testing"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Exit, Layer, Schema } from "effect"
 
 const Message = UiSchema.TaggedEnum({
   Pressed: { key: Schema.String },

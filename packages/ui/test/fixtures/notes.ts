@@ -1,3 +1,5 @@
+import { Effect, Schema, Stream } from "effect"
+
 /**
  * A note editor for the acknowledgement rule: a Command per mode, a stream
  * Command, an event, a send to a child, a query, and a handler that can
@@ -5,7 +7,7 @@
  */
 import { Command, Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Effect, Schema, Stream } from "effect"
+
 import * as users from "./users.ts"
 
 export const BadgeMessage = UiSchema.TaggedEnum({ Clear: {} })

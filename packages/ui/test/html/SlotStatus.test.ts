@@ -1,13 +1,14 @@
+import { Cause, type Duration, Effect, Fiber, Layer, Schema } from "effect"
+import { AsyncResult } from "effect/reactivity"
+import { TestClock } from "effect/testing"
+import { describe } from "vitest"
+
 // @vitest-environment happy-dom
 import { Component, Feature, MessageLog, UiSchema, type View } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import * as replay from "@effect/ui/internal/replay"
 import { Story } from "@effect/ui/testing"
 import { expect, it } from "@effect/vitest"
-import { Cause, type Duration, Effect, Fiber, Layer, Schema } from "effect"
-import { AsyncResult } from "effect/reactivity"
-import { TestClock } from "effect/testing"
-import { describe } from "vitest"
 
 class Editor extends Feature.Service<Editor>()("SlotStatus/HtmlEditor", { props: Schema.Struct({}) }) {}
 const EditorView = Component.define({ name: "EditorView", model: Schema.Null, message: Schema.Never, elements: Html })

@@ -1,5 +1,6 @@
 import * as Html from "@effect/ui/html/Html"
 import * as View from "@effect/ui/View"
+
 import { visuallyHidden } from "./attributes.ts"
 
 const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max)

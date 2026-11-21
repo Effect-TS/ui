@@ -1,3 +1,5 @@
+import { Effect, Schema } from "effect"
+
 /**
  * @title Composing headless components
  *
@@ -11,7 +13,7 @@ import { Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { Locator, Scene } from "@effect/ui/testing"
-import { Effect, Schema } from "effect"
+
 import { Listbox, ListboxOption } from "./fixtures/kit/Listbox.ts"
 
 // ---------------------------------------------------------------------------

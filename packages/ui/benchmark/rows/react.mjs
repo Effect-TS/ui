@@ -19,6 +19,7 @@
 import { createElement as e, memo, useReducer } from "react"
 import { flushSync } from "react-dom"
 import { createRoot } from "react-dom/client"
+
 import { init, install, update } from "./harness.ts"
 
 const Cells = ({ row, dispatch }) => [

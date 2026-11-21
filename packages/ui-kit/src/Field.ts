@@ -1,3 +1,6 @@
+import * as Schema from "effect/Schema"
+import * as Stream from "effect/Stream"
+
 /**
  * Groups a form control, or a group of them, with its label, description
  * and error message, and reports whether the control is invalid, touched
@@ -158,8 +161,7 @@ import * as Html from "@effect/ui/html/Html"
 import * as Subscription from "@effect/ui/Subscription"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as View from "@effect/ui/View"
-import * as Schema from "effect/Schema"
-import * as Stream from "effect/Stream"
+
 import { flag } from "./internal/attributes.ts"
 import { withoutField } from "./internal/field.ts"
 

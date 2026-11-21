@@ -1,3 +1,5 @@
+import { Effect, Schema } from "effect"
+
 /**
  * @title Shared state
  *
@@ -10,7 +12,6 @@
 import { Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Locator, Scene, Story } from "@effect/ui/testing"
-import { Effect, Schema } from "effect"
 
 // ---------------------------------------------------------------------------
 // The owner: a headless component with `shares`

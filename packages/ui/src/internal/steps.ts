@@ -10,6 +10,7 @@ import * as Exit from "effect/Exit"
 import { pipeArguments } from "effect/Pipeable"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
 import type * as Scope from "effect/Scope"
+
 import type * as Component from "../Component.ts"
 import type * as Steps from "../testing/Steps.ts"
 import { isWatchKey } from "./queries.ts"

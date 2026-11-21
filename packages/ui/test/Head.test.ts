@@ -1,7 +1,9 @@
+import { Effect, Schema } from "effect"
+
 import { Component, Head, type MessageLog } from "@effect/ui"
 import { TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Schema } from "effect"
+
 import { Tiny } from "./fixtures/vocabulary.ts"
 
 const node = (

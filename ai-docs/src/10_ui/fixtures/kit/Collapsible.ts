@@ -1,6 +1,7 @@
+import { Schema } from "effect"
+
 import { Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Schema } from "effect"
 
 // A kit component with a view of its own and named slots. It owns the markup
 // around its content and whether the body is open. What goes inside is the

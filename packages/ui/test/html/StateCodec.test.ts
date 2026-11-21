@@ -1,10 +1,11 @@
+import { Effect, Logger, Option, Schema, SchemaGetter } from "effect"
+
 // @vitest-environment happy-dom
 import { Command, Component, Renderer, Route, Router, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Logger, Option, Schema, SchemaGetter } from "effect"
 
 let gate = Promise.resolve()
 const Label = Schema.String.pipe(Schema.decode({

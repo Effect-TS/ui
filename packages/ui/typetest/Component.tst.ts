@@ -1,8 +1,10 @@
-import { Command, Component, Feature, type Query, UiSchema, type View } from "@effect/ui"
 import { Context, Effect, Layer, Schema, Scope } from "effect"
 import type { KeyValueStore } from "effect/persistence"
 import type { AsyncResult } from "effect/reactivity"
 import { describe, expect, it } from "tstyche"
+
+import { Command, Component, Feature, type Query, UiSchema, type View } from "@effect/ui"
+
 import { Counter, SaveTodo, Todo, TodoItem, TodoItemEvents, TodoItemMessage } from "../test/fixtures/components.ts"
 
 const Message = UiSchema.TaggedEnum({ X: {}, Y: {}, Done: {} })

@@ -79,6 +79,7 @@ import * as Schema from "effect/Schema"
 import type * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
 import type * as Types from "effect/Types"
+
 import type * as Component from "./Component.ts"
 import * as internalNoop from "./internal/noop.ts"
 import { canonical } from "./internal/queryCore.ts"

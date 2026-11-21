@@ -1,7 +1,8 @@
+import { Effect, Schema } from "effect"
+
 import { Component, UiSchema, View } from "@effect/ui"
 import { Html, HtmlServer } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Schema } from "effect"
 
 const button = () => new Html.Element("button")
 

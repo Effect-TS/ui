@@ -1,10 +1,12 @@
+import { Cause, Effect, Schema } from "effect"
+
 // @vitest-environment happy-dom
 import { Component, Mount, UiSchema } from "@effect/ui"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Cause, Effect, Schema } from "effect"
+
 import { Settings } from "./fixtures/settings.ts"
 
 const Board = Component.define({

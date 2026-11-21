@@ -1,10 +1,11 @@
+import { Effect, Layer, Schema } from "effect"
+
 import { Component, UiSchema, View } from "@effect/ui"
 import { Avatar, type AvatarProps } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { TestImages } from "@effect/ui/html/testing"
 import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Layer, Schema } from "effect"
 
 const standIn = {
   elements: Html,

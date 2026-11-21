@@ -1,6 +1,7 @@
-import { UiSchema } from "@effect/ui"
-import { Effect, hole, pipe, Schema } from "effect"
+import { Effect, Schema, hole, pipe } from "effect"
 import { describe, expect, it } from "tstyche"
+
+import { UiSchema } from "@effect/ui"
 
 describe("UiSchema.TaggedEnum", () => {
   const Shape = UiSchema.TaggedEnum({

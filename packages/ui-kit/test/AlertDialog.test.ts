@@ -1,9 +1,11 @@
+import { Effect, Schema } from "effect"
+
 // @vitest-environment happy-dom
 import { Component, UiSchema } from "@effect/ui"
 import { AlertDialog } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, it } from "@effect/vitest"
-import { Effect, Schema } from "effect"
+
 import { click, container, popovers, tick } from "./utils/document.ts"
 
 const Message = UiSchema.TaggedEnum({ Dismissed: {} })

@@ -23,6 +23,7 @@ import * as SchemaIssue from "effect/SchemaIssue"
 import * as SchemaParser from "effect/SchemaParser"
 import * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
+
 import * as Command from "../Command.ts"
 import type * as Component from "../Component.ts"
 import * as Feature from "../Feature.ts"
@@ -42,12 +43,12 @@ import * as messageLog from "./messageLog.ts"
 import type * as mountArgs from "./mountArgs.ts"
 import { isNoop } from "./noop.ts"
 import {
+  type ChildPaths,
   checkAuthorPlacements,
   checkAuthorRefs,
   checkChildPaths,
   checkContentPaths,
   checkFallbackPaths,
-  type ChildPaths,
   segment,
   segmentOf,
   settledPaths,
@@ -62,7 +63,7 @@ import { scopeAddFinalizerUnsafe, scopeRemoveFinalizerUnsafe } from "./scope.ts"
 import * as serverHost from "./serverHost.ts"
 import * as services from "./services.ts"
 import * as sharedReads from "./shared.ts"
-import { serverFailure, type SlotResult } from "./slotStatus.ts"
+import { type SlotResult, serverFailure } from "./slotStatus.ts"
 import * as subscriptionKeys from "./subscriptions.ts"
 
 // ---------------------------------------------------------------------------

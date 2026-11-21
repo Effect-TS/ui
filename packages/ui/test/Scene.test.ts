@@ -1,10 +1,12 @@
+import { Cause, Effect, Redacted, Schema } from "effect"
+import { AsyncResult } from "effect/reactivity"
+
 import { Component, Feature, Mount, UiSchema, View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { Locator, Scene } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Cause, Effect, Redacted, Schema } from "effect"
-import { AsyncResult } from "effect/reactivity"
+
 import { Badge, BadgeRef, Note, NoteEvents, NoteMessage, SaveNote } from "./fixtures/notes.ts"
 import { defect } from "./utils/scoped.ts"
 

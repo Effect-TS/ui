@@ -1,9 +1,11 @@
+import { Effect, Layer, Schema } from "effect"
+import { HttpRouter } from "effect/http"
+
 import { Component, Route } from "@effect/ui"
 import { Html, type HtmlServer } from "@effect/ui/html"
 import { layerHttp } from "@effect/ui/html/HtmlServerHttp"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Layer, Schema } from "effect"
-import { HttpRouter } from "effect/http"
+
 import { App, AppRoute, People } from "./fixtures/routed.ts"
 
 describe("HtmlServerHttp.layerHttp", () => {

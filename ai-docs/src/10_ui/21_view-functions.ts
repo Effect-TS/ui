@@ -1,3 +1,5 @@
+import { Schema } from "effect"
+
 /**
  * @title Reusing view functions with children
  *
@@ -8,7 +10,6 @@
  * or return the inner builder with `forward`.
  */
 import { Component, type View } from "@effect/ui"
-import { Schema } from "effect"
 // View.H uses the app's registered vocabulary, not one definition.
 // oxlint-disable-next-line no-unassigned-import
 import "@effect/ui/html/register"

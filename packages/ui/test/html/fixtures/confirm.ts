@@ -1,6 +1,7 @@
+import { Schema } from "effect"
+
 import { Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Schema } from "effect"
 
 const State = Schema.Literals(["closed", "open", "modal"])
 

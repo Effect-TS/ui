@@ -60,6 +60,7 @@
  */
 import type * as Effect from "effect/Effect"
 import type * as Scope from "effect/Scope"
+
 import type * as Component from "../Component.ts"
 import * as replay from "../internal/replay.ts"
 import * as cursor from "../internal/steps.ts"

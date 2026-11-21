@@ -1,8 +1,10 @@
+import { Data, Effect, Exit, Layer, Schema, Stream } from "effect"
+import { KeyValueStore } from "effect/persistence"
+
 import { Command, Component, Query, UiSchema } from "@effect/ui"
 import * as schedule from "@effect/ui/internal/schedule"
 import { assert, describe, it } from "@effect/vitest"
-import { Data, Effect, Exit, Layer, Schema, Stream } from "effect"
-import { KeyValueStore } from "effect/persistence"
+
 import { SaveTodo, Search, TodoItemMessage, Upload } from "./fixtures/components.ts"
 
 const todo = { id: "t1", title: "buy milk", done: false }

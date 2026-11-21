@@ -1,8 +1,10 @@
+import { Cause, Effect, Schema } from "effect"
+
 import { Component, MessageLog, UiSchema } from "@effect/ui"
 import * as services from "@effect/ui/internal/services"
 import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Cause, Effect, Schema } from "effect"
+
 import { defect } from "./utils/scoped.ts"
 
 const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) =>

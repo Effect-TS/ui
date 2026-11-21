@@ -1,3 +1,4 @@
+import { Window } from "happy-dom"
 // Size of a minimal counter client bundled with Vite against the packed @effect/ui.
 //
 // Run from the repository root, after `pnpm build`:
@@ -16,7 +17,6 @@ import { tmpdir } from "node:os"
 import * as path from "node:path"
 import { parseArgs } from "node:util"
 import { gzipSync } from "node:zlib"
-import { Window } from "happy-dom"
 import { build, version as vite } from "vite"
 
 const { values: { base, json, vocabulary } } = parseArgs({

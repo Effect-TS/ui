@@ -1,3 +1,5 @@
+import * as Schema from "effect/Schema"
+
 /**
  * A controlled checkbox. Pass the current value as `checked` and update
  * it when the checkbox emits `Toggled`. Your view supplies the markup;
@@ -108,7 +110,7 @@
 import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as UiSchema from "@effect/ui/UiSchema"
-import * as Schema from "effect/Schema"
+
 import { flag } from "./internal/attributes.ts"
 import { field } from "./internal/field.ts"
 

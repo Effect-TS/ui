@@ -1,9 +1,11 @@
+import { Effect, Schema } from "effect"
+import type { TestContext, TestError } from "vitest"
+
 import { Component, Mount } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Scene, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Schema } from "effect"
-import type { TestContext, TestError } from "vitest"
+
 import { SaveTodo, TodoItem, TodoItemMessage } from "./fixtures/components.ts"
 
 const todo = { id: "t1", title: "buy milk", done: false }

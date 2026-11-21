@@ -1,7 +1,8 @@
+import { Cause, Deferred, Effect, Option, Schema } from "effect"
+
 import { Command, Component, Head, type MessageLog, Mount, Renderer, UiSchema } from "@effect/ui"
 import { Locator, Scene, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Cause, Deferred, Effect, Option, Schema } from "effect"
 
 const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(TestHost.layer()))
 const click = (root: TestHost.TestRoot<any, any, any>, text: string) =>

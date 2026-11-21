@@ -3,6 +3,7 @@
  * from here, so an app that provides no log doesn't ship that module's wire schema and encoder.
  */
 import * as Context from "effect/Context"
+
 import type * as Log from "../MessageLog.ts"
 
 /** @internal */

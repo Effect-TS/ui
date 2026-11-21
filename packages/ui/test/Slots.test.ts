@@ -1,8 +1,10 @@
+import { Effect, Option, Schema } from "effect"
+
 import { Command, Component, Feature, type MessageLog, Renderer, Route, Router, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Option, Schema } from "effect"
+
 import { Tiny } from "./fixtures/vocabulary.ts"
 
 const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(TestHost.layer()))

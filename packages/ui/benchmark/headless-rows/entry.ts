@@ -1,6 +1,7 @@
+import { Effect, Exit, Schema, Scope } from "effect"
+
 import { Component, UiSchema, type View } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
-import { Effect, Exit, Schema, Scope } from "effect"
 
 const Row = Schema.Struct({ id: Schema.String, label: Schema.String, done: Schema.Boolean })
 type Row = typeof Row.Type

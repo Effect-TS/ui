@@ -1,6 +1,7 @@
+import { Effect, Stream } from "effect"
+
 import { Subscription } from "@effect/ui"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Stream } from "effect"
 
 describe("Subscription", () => {
   it("a Subscription without deps is keyed by its name", () => {

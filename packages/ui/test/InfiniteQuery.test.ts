@@ -1,10 +1,11 @@
-import { Query } from "@effect/ui"
-import { TestQuery } from "@effect/ui/testing"
-import { assert, describe, it } from "@effect/vitest"
 import { Cause, Effect, Exit, Fiber, Layer, Option, Schema, Scope, Stream } from "effect"
 import type { Context, Duration } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { TestClock } from "effect/testing"
+
+import { Query } from "@effect/ui"
+import { TestQuery } from "@effect/ui/testing"
+import { assert, describe, it } from "@effect/vitest"
 
 // A few macrotasks: lets every fiber the cache forked run, and whatever those fork in turn.
 const flush = Effect.promise(async () => {

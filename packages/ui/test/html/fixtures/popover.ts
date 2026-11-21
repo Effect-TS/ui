@@ -1,6 +1,7 @@
+import { Effect, Schema } from "effect"
+
 import { Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Effect, Schema } from "effect"
 
 /**
  * A stand-in for the popover API, which happy-dom doesn't have. It emulates what the host relies on, as

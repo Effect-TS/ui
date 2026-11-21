@@ -1,6 +1,7 @@
-import { Command, Component, Route, Router, UiSchema } from "@effect/ui"
 import { Effect, Schema } from "effect"
 import { describe, expect, it } from "tstyche"
+
+import { Command, Component, Route, Router, UiSchema } from "@effect/ui"
 
 const AppRoute = Route.union({
   Home: Route.make("/"),

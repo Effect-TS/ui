@@ -12,6 +12,7 @@ import * as Equal from "effect/Equal"
 import * as Option from "effect/Option"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Schema from "effect/Schema"
+
 import * as Command from "../Command.ts"
 import type * as Component from "../Component.ts"
 import * as Feature from "../Feature.ts"
@@ -25,12 +26,12 @@ import * as childOf from "./child.ts"
 import { sharedEqual } from "./equal.ts"
 import { isNoop } from "./noop.ts"
 import {
+  type ChildPaths,
   checkAuthorPlacements,
   checkAuthorRefs,
   checkChildPaths,
   checkContentPaths,
   childName,
-  type ChildPaths,
   segment,
   slotSegment
 } from "./paths.ts"

@@ -1,8 +1,9 @@
+import { Effect, Schema } from "effect"
+import { describe, expect, it } from "tstyche"
+
 import { Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Scene } from "@effect/ui/testing"
-import { Effect, Schema } from "effect"
-import { describe, expect, it } from "tstyche"
 
 const ProviderMessage = UiSchema.TaggedEnum({
   ChangedOpen: { open: Schema.Boolean },

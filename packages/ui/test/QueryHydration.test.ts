@@ -1,7 +1,3 @@
-import { Query } from "@effect/ui"
-import { redactAST } from "@effect/ui/internal/schemaRedact"
-import { TestQuery } from "@effect/ui/testing"
-import { assert, describe, it } from "@effect/vitest"
 import {
   Cause,
   type Context,
@@ -18,6 +14,11 @@ import {
 } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { TestClock } from "effect/testing"
+
+import { Query } from "@effect/ui"
+import { redactAST } from "@effect/ui/internal/schemaRedact"
+import { TestQuery } from "@effect/ui/testing"
+import { assert, describe, it } from "@effect/vitest"
 
 const User = Schema.Struct({ id: Schema.String, name: Schema.String })
 type User = typeof User.Type

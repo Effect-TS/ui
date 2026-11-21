@@ -1,9 +1,10 @@
 // oxlint-disable-next-line no-unassigned-import
 import "@effect/ui/html/register"
-import { Component, type View } from "@effect/ui"
-import { Html } from "@effect/ui/html"
 import { Context, Schema } from "effect"
 import { describe, expect, it } from "tstyche"
+
+import { Component, type View } from "@effect/ui"
+import { Html } from "@effect/ui/html"
 
 describe("@effect/ui/html/register", () => {
   it("types reusable pure views with View.H", () => {

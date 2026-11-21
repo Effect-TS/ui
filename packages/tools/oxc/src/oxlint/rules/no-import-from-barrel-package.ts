@@ -1,6 +1,7 @@
-import type { CreateRule, ESTree, Visitor } from "@oxlint/plugins"
 import * as fs from "node:fs"
 import * as path from "node:path"
+
+import type { CreateRule, ESTree, Visitor } from "@oxlint/plugins"
 
 interface RuleOptions {
   checkPatterns?: Array<string>

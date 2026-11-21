@@ -1,6 +1,8 @@
+import { Schema } from "effect"
+
 import { Command, Component, Head, Router, UiSchema } from "@effect/ui"
 import { HtmlHead } from "@effect/ui/html"
-import { Schema } from "effect"
+
 import { NotePage } from "./pages/notes/NotePage.ts"
 import { NotesIndex } from "./pages/NotesIndex.ts"
 import { SearchPage } from "./pages/search/SearchPage.ts"

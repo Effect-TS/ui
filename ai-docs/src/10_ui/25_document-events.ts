@@ -1,3 +1,5 @@
+import { Effect, Layer, Schema } from "effect"
+
 /**
  * @title Document and window events
  *
@@ -8,7 +10,6 @@ import { Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { HtmlScene, TestGlobalEvents } from "@effect/ui/html/testing"
 import { Locator, TestHost } from "@effect/ui/testing"
-import { Effect, Layer, Schema } from "effect"
 
 const Direction = Schema.Literals(["up", "down", "left", "right"])
 const directions: Record<string, typeof Direction.Type> = {

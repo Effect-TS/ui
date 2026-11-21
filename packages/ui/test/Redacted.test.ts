@@ -1,10 +1,11 @@
+import { Effect, Exit, Logger, Redacted, Schema } from "effect"
+
 import { Component, Query, Renderer } from "@effect/ui"
 import * as componentQueries from "@effect/ui/internal/queries"
 import * as runtime from "@effect/ui/internal/runtime"
 import * as services from "@effect/ui/internal/services"
 import { TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Exit, Logger, Redacted, Schema } from "effect"
 
 /**
  * A `Schema.Redacted` in a component's state keeps that state out of JSON:

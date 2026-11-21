@@ -1,7 +1,8 @@
-import type { CreateRule, ESTree, Visitor } from "@oxlint/plugins"
 import * as fs from "node:fs"
 import * as path from "node:path"
 import ts from "typescript"
+
+import type { CreateRule, ESTree, Visitor } from "@oxlint/plugins"
 
 interface InternalExport {
   readonly fileName: string

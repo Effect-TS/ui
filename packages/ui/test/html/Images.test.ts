@@ -1,8 +1,9 @@
+import { Effect, Fiber, Layer } from "effect"
+
 // @vitest-environment happy-dom
 import { BrowserHost, Html } from "@effect/ui/html"
 import { TestImages } from "@effect/ui/html/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Fiber, Layer } from "effect"
 
 describe("Html.Images", () => {
   it.effect("BrowserHost's loads in its document, and an image without pixels is an error", () =>

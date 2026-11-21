@@ -1,3 +1,7 @@
+import { Effect, Layer } from "effect"
+import { FetchHttpClient, HttpClient, HttpClientRequest, HttpRouter } from "effect/http"
+import { createServer } from "node:http"
+
 /**
  * @title Rendering on the server
  *
@@ -8,16 +12,14 @@
  */
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node"
 import { HtmlServer } from "@effect/ui/html"
-import { Effect, Layer } from "effect"
-import { FetchHttpClient, HttpClient, HttpClientRequest, HttpRouter } from "effect/http"
-// `layerHttp` has its own entry point, outside `@effect/ui/html`, so a
-// browser bundle never takes in the HTTP server modules.
-import { layerHttp } from "@effect/ui/html/HtmlServerHttp"
 // The server renders views too, so it registers the HTML elements as well.
 // The import reads no DOM global.
 // oxlint-disable-next-line no-unassigned-import
 import "@effect/ui/html/register"
-import { createServer } from "node:http"
+// `layerHttp` has its own entry point, outside `@effect/ui/html`, so a
+// browser bundle never takes in the HTTP server modules.
+import { layerHttp } from "@effect/ui/html/HtmlServerHttp"
+
 import { App } from "./fixtures/App.ts"
 import { AppRoute } from "./fixtures/routes.ts"
 import { NotesApi } from "./fixtures/server/NotesApi.ts"

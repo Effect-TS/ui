@@ -1,6 +1,7 @@
-import { Command, Component, Renderer, UiSchema } from "@effect/ui"
 import { Context, Data, Effect, Schema, Stream } from "effect"
 import { describe, expect, it } from "tstyche"
+
+import { Command, Component, Renderer, UiSchema } from "@effect/ui"
 
 const Message = UiSchema.TaggedEnum({ Got: { n: Schema.Number } })
 

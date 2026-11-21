@@ -1,3 +1,6 @@
+import { Cause, Context, Deferred, Effect, Exit, Layer, Option, Schema, Scope, Stream } from "effect"
+import { describe, vi } from "vitest"
+
 // @vitest-environment happy-dom
 import {
   Command,
@@ -17,12 +20,11 @@ import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
 import { assert, expect, it } from "@effect/vitest"
-import { Cause, Context, Deferred, Effect, Exit, Layer, Option, Schema, Scope, Stream } from "effect"
-import { describe, vi } from "vitest"
+
 import { collectGarbage } from "../utils/gc.ts"
 import { Confirm, ConfirmMessage, Nested } from "./fixtures/confirm.ts"
-import { Menu, MenuMessage, ModalMenu, popoverStub, Rows } from "./fixtures/popover.ts"
-import { maxTitle, TodoApp } from "./fixtures/todos.ts"
+import { Menu, MenuMessage, ModalMenu, Rows, popoverStub } from "./fixtures/popover.ts"
+import { TodoApp, maxTitle } from "./fixtures/todos.ts"
 
 /** Lets the render flush, Commands and the controlled-property restore run. */
 const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))

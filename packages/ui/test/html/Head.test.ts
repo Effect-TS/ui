@@ -1,9 +1,10 @@
+import { Effect, Schema } from "effect"
+import { afterEach, describe, expect, it } from "vitest"
+
 // @vitest-environment happy-dom
 import { Component, Head, UiSchema } from "@effect/ui"
 import { BrowserHost, Html, HtmlHead, HtmlServer } from "@effect/ui/html"
 import type * as runtime from "@effect/ui/internal/runtime"
-import { Effect, Schema } from "effect"
-import { afterEach, describe, expect, it } from "vitest"
 
 const head = (...entries: ReadonlyArray<HtmlHead.Entry>) => HtmlHead.merge({ entries, children: [] })
 

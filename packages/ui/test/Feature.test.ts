@@ -1,6 +1,8 @@
+import { Context, Effect, Layer, Option, Schema, Scope } from "effect"
+
 import { Feature } from "@effect/ui"
 import { assert, describe, it } from "@effect/vitest"
-import { Context, Effect, Layer, Option, Schema, Scope } from "effect"
+
 import { SaveTodo, Todo, TodoItem, TodoItemEvents, TodoItemMessage } from "./fixtures/components.ts"
 
 class Todos extends Feature.Service<Todos>()("Todos", {

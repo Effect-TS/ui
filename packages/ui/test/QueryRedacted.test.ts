@@ -1,10 +1,11 @@
+import { Effect, Layer, Redacted, Schema } from "effect"
+
 // @vitest-environment happy-dom
 import { Component, Query } from "@effect/ui"
 import { Html, HtmlServer } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
 import { assert, it } from "@effect/vitest"
-import { Effect, Layer, Redacted, Schema } from "effect"
 
 it.effect("omits reads with Redacted args, success or error schemas from the server cache", () => {
   class Args extends Query.Service<Args>()("secret/Args", {

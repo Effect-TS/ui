@@ -1,8 +1,10 @@
+import { Data, Effect, Schema, type Scope, Stream } from "effect"
+import { describe, expect, it } from "tstyche"
+
 import { Command, Component, type Query, UiSchema, type View } from "@effect/ui"
 import type { Steps } from "@effect/ui/testing"
 import { Scene, Story } from "@effect/ui/testing"
-import { Data, Effect, Schema, type Scope, Stream } from "effect"
-import { describe, expect, it } from "tstyche"
+
 import type { SearchBox } from "../test/fixtures/components.ts"
 import {
   Counter,

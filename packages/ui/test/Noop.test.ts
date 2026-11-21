@@ -1,8 +1,9 @@
+import { Effect, Schema, Stream } from "effect"
+import { TestClock } from "effect/testing"
+
 import { Command, Component, MessageLog, UiSchema } from "@effect/ui"
 import { Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Schema, Stream } from "effect"
-import { TestClock } from "effect/testing"
 
 const Message = UiSchema.TaggedEnum({
   Fire: { command: Schema.String },

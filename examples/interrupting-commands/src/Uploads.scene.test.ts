@@ -1,7 +1,9 @@
+import { Effect } from "effect"
+
 import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
 import { describe, it } from "@effect/vitest"
-import { Effect } from "effect"
+
 import { FAKE_FILES, UploadFile, Uploads, UploadsMessage } from "./Uploads.ts"
 
 const [firstFile] = FAKE_FILES

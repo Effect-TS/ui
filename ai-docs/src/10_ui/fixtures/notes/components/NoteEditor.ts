@@ -1,5 +1,7 @@
-import { Command, Component, Subscription, UiSchema, UiStruct } from "@effect/ui"
 import { Effect, Layer, Schema, Stream } from "effect"
+
+import { Command, Component, Subscription, UiSchema, UiStruct } from "@effect/ui"
+
 import { Note, NotesTag } from "../domain/Note.ts"
 import { Notes } from "../services/Notes.ts"
 

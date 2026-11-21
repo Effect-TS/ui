@@ -1,9 +1,10 @@
+import { Context, Effect, type Layer, Schema, type Scope, Stream } from "effect"
+import { describe, expect, it } from "tstyche"
+
 import { Component, Mount, Renderer, Route, Router, UiSchema, type View } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { type Locator, Scene } from "@effect/ui/testing"
-import { Context, Effect, type Layer, Schema, type Scope, Stream } from "effect"
-import { describe, expect, it } from "tstyche"
 
 const Msg = UiSchema.TaggedEnum({
   Typed: { value: Schema.String },

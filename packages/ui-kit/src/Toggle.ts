@@ -69,6 +69,7 @@
  * @since 0.1.0
  */
 import type * as Html from "@effect/ui/html/Html"
+
 import { flag } from "./internal/attributes.ts"
 
 /**

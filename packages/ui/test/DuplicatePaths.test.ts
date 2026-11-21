@@ -1,8 +1,9 @@
+import { Cause, Effect, Schema } from "effect"
+import { AsyncResult } from "effect/reactivity"
+
 import { Component, type MessageLog, UiSchema } from "@effect/ui"
 import { Locator, Scene, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Cause, Effect, Schema } from "effect"
-import { AsyncResult } from "effect/reactivity"
 
 const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(TestHost.layer()))
 

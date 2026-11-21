@@ -1,6 +1,8 @@
-import { Component, Head, UiSchema } from "@effect/ui"
 import { Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
+
+import { Component, Head, UiSchema } from "@effect/ui"
+
 import { Collapsible } from "../../kit/Collapsible.ts"
 import { ActivityLog } from "../../notes/components/ActivityLog.ts"
 import { NoteActivity } from "../../notes/components/NoteActivity.ts"

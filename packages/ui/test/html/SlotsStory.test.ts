@@ -1,8 +1,9 @@
+import { Effect, Schema } from "effect"
+
 import { Component, UiSchema, View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Locator, Scene } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Schema } from "effect"
 
 const Note = Component.define({
   name: "Note",

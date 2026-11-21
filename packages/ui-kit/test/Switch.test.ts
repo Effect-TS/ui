@@ -1,9 +1,10 @@
+import { Effect, Schema } from "effect"
+
 import { Component, UiSchema, View } from "@effect/ui"
 import { Switch, type SwitchButton, type SwitchProps, type SwitchSpan } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Locator, Scene } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Schema } from "effect"
 
 const SettingsMessage = UiSchema.TaggedEnum({ ToggledNotify: { checked: Schema.Boolean }, ClickedRow: {} })
 

@@ -1,3 +1,5 @@
+import * as Schema from "effect/Schema"
+
 /**
  * A meter that shows a measurement within a known range, such as disk
  * usage or a battery level, whose value lives in the consumer's Model. It
@@ -84,7 +86,7 @@
  */
 import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
-import * as Schema from "effect/Schema"
+
 import { withStyle } from "./internal/attributes.ts"
 import { fillValue, indicatorSize, nvdaLabel, percentText, placeInRange } from "./internal/range.ts"
 

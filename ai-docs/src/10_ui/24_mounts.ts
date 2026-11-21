@@ -1,3 +1,5 @@
+import { Effect, Queue, Schema, Stream } from "effect"
+
 /**
  * @title Mounts
  *
@@ -8,7 +10,6 @@
 import { Component, Mount, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Scene } from "@effect/ui/testing"
-import { Effect, Queue, Schema, Stream } from "effect"
 
 // A third-party widget, such as a code editor.
 interface Editor {

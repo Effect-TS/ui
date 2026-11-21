@@ -1,9 +1,10 @@
+import { Effect, Schema } from "effect"
+
 // @vitest-environment happy-dom
 import { Component, Mount, UiSchema, View } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Schema } from "effect"
 
 const Message = UiSchema.TaggedEnum({
   Clicked: {},

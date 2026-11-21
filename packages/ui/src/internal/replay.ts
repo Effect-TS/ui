@@ -7,12 +7,13 @@
 import * as Cause from "effect/Cause"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Schema from "effect/Schema"
+
 import type * as Component from "../Component.ts"
 import * as MessageLog from "../MessageLog.ts"
 import type { Divergence, Replay } from "../testing/Story.ts"
 import type * as View from "../View.ts"
 import * as componentQueries from "./queries.ts"
-import { serverFailure, type SlotResult } from "./slotStatus.ts"
+import { type SlotResult, serverFailure } from "./slotStatus.ts"
 import * as engine from "./story.ts"
 
 /**

@@ -1,5 +1,6 @@
-import { Command, Component, Head, UiSchema, UiStruct } from "@effect/ui"
 import { Duration, Effect, Schema } from "effect"
+
+import { Command, Component, Head, UiSchema, UiStruct } from "@effect/ui"
 
 export const UploadStatus = Schema.Literals(["Uploading", "Done", "Cancelled"])
 export type UploadStatus = typeof UploadStatus.Type

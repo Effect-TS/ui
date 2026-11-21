@@ -1,9 +1,11 @@
+import { Effect, Schema } from "effect"
+
 // @vitest-environment happy-dom
 import { Component } from "@effect/ui"
 import { Field, Slider } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, it } from "@effect/vitest"
-import { Effect, Schema } from "effect"
+
 import { container, tick } from "./utils/document.ts"
 
 it.effect("a range slider in a field is named by the legend, described, and focused and touched as a whole", () =>

@@ -1,7 +1,8 @@
+import { Array as Arr, Effect, Schema } from "effect"
+
 import { Command, Component, UiSchema, UiStruct } from "@effect/ui"
 import { Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Array as Arr, Effect, Schema } from "effect"
 
 const Line = Schema.Struct({ id: Schema.String, quantity: Schema.Number })
 const Coupon = Schema.Struct({ code: Schema.String, status: Schema.Literals(["Idle", "Applied"]) })

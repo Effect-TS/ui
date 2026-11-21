@@ -1,8 +1,9 @@
+import { Effect, Schema } from "effect"
+
 import { Component, Head, UiSchema } from "@effect/ui"
 import { Html, HtmlHead, HtmlServer } from "@effect/ui/html"
 import { TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Schema } from "effect"
 
 const node = (
   entries: ReadonlyArray<HtmlHead.Entry>,

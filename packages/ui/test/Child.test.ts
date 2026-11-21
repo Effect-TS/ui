@@ -1,6 +1,7 @@
+import { Layer, Schema } from "effect"
+
 import { Component, Feature, UiSchema, View } from "@effect/ui"
 import { assert, describe, it } from "@effect/vitest"
-import { Layer, Schema } from "effect"
 
 const RowMessage = UiSchema.TaggedEnum({ Clear: {}, Typed: { text: Schema.String } })
 const RowEvents = UiSchema.TaggedEnum({ Changed: { text: Schema.String } })

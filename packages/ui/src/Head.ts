@@ -48,6 +48,7 @@
  * @since 0.1.0
  */
 import * as Data from "effect/Data"
+
 import * as headFold from "./internal/headFold.ts"
 
 /**

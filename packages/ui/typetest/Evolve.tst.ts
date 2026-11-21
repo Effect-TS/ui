@@ -1,6 +1,7 @@
-import { Component, UiSchema, UiStruct } from "@effect/ui"
 import { Schema } from "effect"
 import { describe, expect, it } from "tstyche"
+
+import { Component, UiSchema, UiStruct } from "@effect/ui"
 
 const Coupon = Schema.Struct({ code: Schema.String, status: Schema.Literals(["Idle", "Applied"]) })
 type Coupon = typeof Coupon.Type

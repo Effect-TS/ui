@@ -105,6 +105,7 @@ import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import type * as Scope from "effect/Scope"
+
 import type * as Component from "../Component.ts"
 import * as hostEvents from "../internal/hostEvents.ts"
 import * as queryCore from "../internal/queryCore.ts"

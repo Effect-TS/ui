@@ -1,3 +1,5 @@
+import { Schema } from "effect"
+
 /**
  * @title Who owns the state
  *
@@ -10,7 +12,6 @@
 // enforce.
 import { Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Schema } from "effect"
 
 // ---------------------------------------------------------------------------
 // A controlled dialog: the caller decides `open`, and closing is a request

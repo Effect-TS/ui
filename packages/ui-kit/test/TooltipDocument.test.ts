@@ -1,9 +1,11 @@
+import { Effect, Schema } from "effect"
+
 // @vitest-environment happy-dom
 import { Component, UiSchema } from "@effect/ui"
 import { Tooltip } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Schema } from "effect"
+
 import { byId, container, popovers, tick } from "./utils/document.ts"
 
 const rects = new Map<string, { x: number; y: number; width: number; height: number }>()

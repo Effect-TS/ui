@@ -64,6 +64,7 @@
 import type * as Context from "effect/Context"
 import type * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
+
 import type * as Component from "../Component.ts"
 import * as runtime from "../internal/runtime.ts"
 import type * as Renderer from "../Renderer.ts"

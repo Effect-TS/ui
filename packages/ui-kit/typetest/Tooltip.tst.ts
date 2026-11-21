@@ -1,8 +1,9 @@
+import { Schema } from "effect"
+import { describe, expect, it } from "tstyche"
+
 import { Component, UiSchema } from "@effect/ui"
 import { Tooltip, type TooltipProvider } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
-import { Schema } from "effect"
-import { describe, expect, it } from "tstyche"
 
 const Msg = UiSchema.TaggedEnum({ Clicked: {} })
 type Msg = typeof Msg.Type

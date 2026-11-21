@@ -1,7 +1,9 @@
+import { Effect } from "effect"
+
 import { Head } from "@effect/ui"
 import { Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect } from "effect"
+
 import { Snake } from "./domain/index.ts"
 import { GenerateApplePosition, SnakeGame, SnakeGameMessage, type SnakeGameModel } from "./SnakeGame.ts"
 

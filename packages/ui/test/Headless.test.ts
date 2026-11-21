@@ -1,8 +1,10 @@
+import { Cause, Deferred, Effect, Layer, Schema } from "effect"
+
 import { Command, Component, Feature, type MessageLog, UiSchema, type View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Locator, Scene, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Cause, Deferred, Effect, Layer, Schema } from "effect"
+
 import { Dialog, type Item, Menu } from "./html/fixtures/headless.ts"
 
 const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(TestHost.layer()))

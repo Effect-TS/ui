@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import * as path from "node:path"
+
 import { computeJSDocInputHash, extractJSDocsSync, loadJSDocConfig, readJSDocModel, writeJSDocModel } from "./Jsdocs.ts"
 
 function reportDiagnostics(model: ReturnType<typeof extractJSDocsSync>, check: boolean) {

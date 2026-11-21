@@ -1,20 +1,4 @@
 import {
-  Command,
-  Component,
-  Feature,
-  MessageLog,
-  Mount,
-  Query,
-  Renderer,
-  Subscription,
-  UiSchema,
-  View
-} from "@effect/ui"
-import { Html } from "@effect/ui/html"
-import * as runtime from "@effect/ui/internal/runtime"
-import { Locator, Story, TestHost } from "@effect/ui/testing"
-import { assert, describe, it } from "@effect/vitest"
-import {
   Cause,
   Context,
   Deferred,
@@ -35,6 +19,24 @@ import {
 } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { TestClock } from "effect/testing"
+
+import {
+  Command,
+  Component,
+  Feature,
+  MessageLog,
+  Mount,
+  Query,
+  Renderer,
+  Subscription,
+  UiSchema,
+  View
+} from "@effect/ui"
+import { Html } from "@effect/ui/html"
+import * as runtime from "@effect/ui/internal/runtime"
+import { Locator, Story, TestHost } from "@effect/ui/testing"
+import { assert, describe, it } from "@effect/vitest"
+
 import { Counter, CounterMessage } from "./fixtures/components.ts"
 import { Tiny, type TinyField } from "./fixtures/vocabulary.ts"
 

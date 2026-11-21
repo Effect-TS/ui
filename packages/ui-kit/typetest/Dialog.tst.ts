@@ -1,7 +1,8 @@
+import { describe, expect, it } from "tstyche"
+
 import { type Component, UiSchema, type View } from "@effect/ui"
 import { Dialog, DialogTrigger, type DialogTriggerPress } from "@effect/ui-kit"
 import type { Html } from "@effect/ui/html"
-import { describe, expect, it } from "tstyche"
 
 const Msg = UiSchema.TaggedEnum({ Clicked: {} })
 type Msg = typeof Msg.Type

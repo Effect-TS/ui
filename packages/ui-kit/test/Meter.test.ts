@@ -1,10 +1,11 @@
+import { Effect } from "effect"
+
 import type { Component } from "@effect/ui"
 import { View } from "@effect/ui"
 import { Meter, type MeterProps } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Locator, Scene, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect } from "effect"
 
 // Every part, as the docs draw them.
 const standIn = {

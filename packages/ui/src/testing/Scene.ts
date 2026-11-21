@@ -67,6 +67,7 @@ import type * as Cause from "effect/Cause"
 import type * as Effect from "effect/Effect"
 import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import type * as Scope from "effect/Scope"
+
 import type * as Component from "../Component.ts"
 import type * as Feature from "../Feature.ts"
 import { checkChildPaths, checkFallbackPaths } from "../internal/paths.ts"

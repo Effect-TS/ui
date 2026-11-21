@@ -1,9 +1,4 @@
 #!/usr/bin/env node
-/**
- * @since 4.0.0
- */
-import * as NodeRuntime from "@effect/platform-node/NodeRuntime"
-import * as NodeServices from "@effect/platform-node/NodeServices"
 import * as Array from "effect/Array"
 import * as Argument from "effect/cli/Argument"
 import * as Command from "effect/cli/Command"
@@ -15,6 +10,12 @@ import * as Path from "effect/Path"
 import type * as PlatformError from "effect/PlatformError"
 import * as Stream from "effect/Stream"
 import * as String from "effect/String"
+
+/**
+ * @since 4.0.0
+ */
+import * as NodeRuntime from "@effect/platform-node/NodeRuntime"
+import * as NodeServices from "@effect/platform-node/NodeServices"
 
 const directory = Argument.Directory("directory", { mustExist: true })
 

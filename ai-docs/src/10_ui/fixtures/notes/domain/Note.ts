@@ -1,5 +1,6 @@
-import { Query } from "@effect/ui"
 import { Schema } from "effect"
+
+import { Query } from "@effect/ui"
 
 export const Note = Schema.Struct({
   id: Schema.String,

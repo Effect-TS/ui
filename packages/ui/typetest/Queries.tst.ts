@@ -1,9 +1,10 @@
-import { Component, Head, Query, UiSchema } from "@effect/ui"
-import { Html } from "@effect/ui/html"
-import { Story } from "@effect/ui/testing"
 import { Context, Effect, Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { describe, expect, it } from "tstyche"
+
+import { Component, Head, Query, UiSchema } from "@effect/ui"
+import { Html } from "@effect/ui/html"
+import { Story } from "@effect/ui/testing"
 
 const User = Schema.Struct({ id: Schema.String, name: Schema.String, teamId: Schema.String })
 const Team = Schema.Struct({ id: Schema.String, title: Schema.String })

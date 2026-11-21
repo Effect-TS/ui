@@ -1,7 +1,9 @@
-import { Component, type Head, Mount, Renderer, Route, Router, UiSchema, type View } from "@effect/ui"
-import { TestHost } from "@effect/ui/testing"
 import { Effect, Schema, type Scope } from "effect"
 import { describe, expect, it } from "tstyche"
+
+import { Component, type Head, Mount, Renderer, Route, Router, UiSchema, type View } from "@effect/ui"
+import { TestHost } from "@effect/ui/testing"
+
 import { Counter } from "../test/fixtures/components.ts"
 import { Tiny, type TinyField, type TinyHost } from "../test/fixtures/vocabulary.ts"
 

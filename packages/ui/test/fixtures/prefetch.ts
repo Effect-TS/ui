@@ -1,3 +1,5 @@
+import { Context, Effect, Layer, Schema } from "effect"
+
 /**
  * An app that declares its routes' queries with `Router.prefetch`: a sidebar
  * mounted on every route, a detail page, a page whose walk reaches a component
@@ -5,7 +7,7 @@
  * see, a page whose view throws, and a page whose Layer fails.
  */
 import { Component, Feature, Query, Route, Router, UiSchema } from "@effect/ui"
-import { Context, Effect, Layer, Schema } from "effect"
+
 import { GetPerson } from "./router.ts"
 
 export const Routes = Route.union({

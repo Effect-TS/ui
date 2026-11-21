@@ -1,8 +1,9 @@
-// @vitest-environment happy-dom
-import { assert, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { describe, vi } from "vitest"
+
+// @vitest-environment happy-dom
+import { assert, it } from "@effect/vitest"
 
 /** Lets the render flush and the fetch settle. */
 const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))

@@ -8,10 +8,11 @@
  * `fixtures/notes/components/NoteEditor.ts`.
  */
 import { Effect, Layer } from "effect"
+import { FetchHttpClient } from "effect/http"
+
 // Only the `@effect/ui/html` paths need the DOM lib types. `@effect/ui` and
 // `@effect/ui/testing` are host-neutral.
 import { BrowserHost } from "@effect/ui/html"
-import { FetchHttpClient } from "effect/http"
 // Registers the HTML elements once for the app, so every `view` has
 // `h.form`, `h.button` and so on. Importing `@effect/ui/html` alone doesn't
 // do it. The import has to run before the first render, so each entry module
@@ -19,6 +20,7 @@ import { FetchHttpClient } from "effect/http"
 // on it sets `elements: Html` instead.
 // oxlint-disable-next-line no-unassigned-import
 import "@effect/ui/html/register"
+
 // An entry module defines no components. The editor and its `SaveNote`
 // command are in the notes feature, next to the domain and the service they
 // use. Read them in this order:

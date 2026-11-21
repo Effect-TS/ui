@@ -1,5 +1,7 @@
-import { Component } from "@effect/ui"
 import { Schema } from "effect"
+
+import { Component } from "@effect/ui"
+
 import { NoteActivity } from "./NoteActivity.ts"
 
 // One implementation of the feature. Its props must fit the contract.

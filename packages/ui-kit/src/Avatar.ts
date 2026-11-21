@@ -1,3 +1,7 @@
+import * as Effect from "effect/Effect"
+import * as Schema from "effect/Schema"
+import * as Stream from "effect/Stream"
+
 /**
  * A user's picture with a fallback, such as initials or an icon, while the
  * picture loads or if it fails.
@@ -73,9 +77,6 @@ import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Subscription from "@effect/ui/Subscription"
 import * as UiSchema from "@effect/ui/UiSchema"
-import * as Effect from "effect/Effect"
-import * as Schema from "effect/Schema"
-import * as Stream from "effect/Stream"
 
 // What the avatar loads and the image draws. Two images with the same
 // fields are the same load.

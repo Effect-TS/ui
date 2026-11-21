@@ -1,6 +1,7 @@
+import { Schema } from "effect"
+
 import { Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Schema } from "effect"
 
 // `kit/` holds components that belong to no feature: a design system's
 // behaviour, shared by every feature. A headless one owns the state, the

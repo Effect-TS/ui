@@ -1,8 +1,9 @@
+import { Cause, Effect, Layer, Schema } from "effect"
+import { AsyncResult } from "effect/reactivity"
+
 import { Component, Feature, MessageLog, UiSchema } from "@effect/ui"
 import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Cause, Effect, Layer, Schema } from "effect"
-import { AsyncResult } from "effect/reactivity"
 
 const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(TestHost.layer()))
 const click = (root: TestHost.TestRoot<any, any, any>, text: string) =>

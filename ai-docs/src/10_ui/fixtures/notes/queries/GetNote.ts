@@ -1,5 +1,7 @@
-import { Query } from "@effect/ui"
 import { Effect, Schema } from "effect"
+
+import { Query } from "@effect/ui"
+
 import { Note, NoteNotFound, NotesTag } from "../domain/Note.ts"
 import { Notes } from "../services/Notes.ts"
 

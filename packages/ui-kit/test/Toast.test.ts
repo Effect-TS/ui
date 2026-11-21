@@ -1,3 +1,6 @@
+import { Effect, Layer, Schema } from "effect"
+import { TestClock } from "effect/testing"
+
 // @vitest-environment happy-dom
 import { Component, UiSchema } from "@effect/ui"
 import { Dialog, ToastProvider } from "@effect/ui-kit"
@@ -5,8 +8,7 @@ import { BrowserHost, Html } from "@effect/ui/html"
 import { TestGlobalEvents } from "@effect/ui/html/testing"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Layer, Schema } from "effect"
-import { TestClock } from "effect/testing"
+
 import { popovers } from "./utils/document.ts"
 
 // The first post is a loading toast; Complete turns it into a timed success.

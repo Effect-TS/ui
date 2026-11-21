@@ -1,6 +1,8 @@
-import { assert } from "@effect/vitest"
 import { applyTransform } from "jscodeshift/src/testUtils.js"
 import { describe, it } from "vitest"
+
+import { assert } from "@effect/vitest"
+
 import transformer from "./jsdoc.ts"
 
 const doc = "/** Repeats a value. */"

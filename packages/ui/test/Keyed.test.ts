@@ -1,9 +1,10 @@
-import { Command, Component, MessageLog, Query, Route, Router, UiSchema } from "@effect/ui"
-import { Locator, Scene, type Steps, Story, TestHost } from "@effect/ui/testing"
-import { assert, describe, it } from "@effect/vitest"
 import { Effect, Exit, Layer, Option, Redacted, Request, RequestResolver, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { TestClock } from "effect/testing"
+
+import { Command, Component, MessageLog, Query, Route, Router, UiSchema } from "@effect/ui"
+import { Locator, Scene, type Steps, Story, TestHost } from "@effect/ui/testing"
+import { assert, describe, it } from "@effect/vitest"
 
 const User = Schema.Struct({ id: Schema.String, name: Schema.String })
 

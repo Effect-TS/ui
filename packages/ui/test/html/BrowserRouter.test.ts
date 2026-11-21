@@ -1,11 +1,13 @@
+import { Context, Effect, Exit, Layer, Option, Schema, Scope } from "effect"
+import { TestClock } from "effect/testing"
+import { describe } from "vitest"
+
 // @vitest-environment happy-dom
 import { Command, Component, MessageLog, Query, Route, Router, UiSchema } from "@effect/ui"
 import { BrowserHost, BrowserRouter, Html, HtmlServer } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, expect, it } from "@effect/vitest"
-import { Context, Effect, Exit, Layer, Option, Schema, Scope } from "effect"
-import { TestClock } from "effect/testing"
-import { describe } from "vitest"
+
 import { App, AppRoute, Message, People } from "./fixtures/routed.ts"
 
 const SearchRoute = Route.union({

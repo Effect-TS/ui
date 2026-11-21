@@ -1,12 +1,14 @@
+import { Effect, Exit, type Layer, Option, Schema, type Scope, Stream } from "effect"
+import { AsyncResult } from "effect/reactivity"
+import { TestClock } from "effect/testing"
+
 import { Command, Component, Head, type MessageLog, Query, type Renderer, Route, Router, UiSchema } from "@effect/ui"
 import type { HtmlHead } from "@effect/ui/html"
 import * as componentQueries from "@effect/ui/internal/queries"
 import * as runtime from "@effect/ui/internal/runtime"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Exit, type Layer, Option, Schema, type Scope, Stream } from "effect"
-import { AsyncResult } from "effect/reactivity"
-import { TestClock } from "effect/testing"
+
 import * as Prefetching from "./fixtures/prefetch.ts"
 import { App, AppRoute, GetPerson, personFetches } from "./fixtures/router.ts"
 

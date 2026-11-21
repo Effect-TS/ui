@@ -1,5 +1,5 @@
 import * as path from "node:path"
-import { defineConfig, mergeConfig, type ViteUserConfig } from "vitest/config"
+import { type ViteUserConfig, defineConfig, mergeConfig } from "vitest/config"
 
 const isDeno = process.versions.deno !== undefined
 const isBun = process.versions.bun !== undefined

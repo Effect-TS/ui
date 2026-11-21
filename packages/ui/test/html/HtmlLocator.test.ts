@@ -1,8 +1,10 @@
+import { Effect } from "effect"
+
 // @vitest-environment happy-dom
 import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
 import { Locator, Scene, TestHost } from "@effect/ui/testing"
 import { describe, expect, it } from "@effect/vitest"
-import { Effect } from "effect"
+
 import { Confirm } from "./fixtures/confirm.ts"
 import { Menu } from "./fixtures/popover.ts"
 import { TodoApp, TodoAppMessage, TodoItem } from "./fixtures/todos.ts"

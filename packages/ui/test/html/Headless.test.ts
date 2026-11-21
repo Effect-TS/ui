@@ -1,10 +1,12 @@
+import { Effect, Schema } from "effect"
+
 // @vitest-environment happy-dom
 import { Component, Mount, UiSchema } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { HtmlLocator, ssr } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Schema } from "effect"
+
 import { Dialog, type Item, Menu } from "./fixtures/headless.ts"
 import { popoverStub } from "./fixtures/popover.ts"
 

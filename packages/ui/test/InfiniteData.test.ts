@@ -1,10 +1,12 @@
+import { Cause, Effect, Layer, Option, Schema } from "effect"
+import { AsyncResult } from "effect/reactivity"
+import { TestClock } from "effect/testing"
+
 import { Command, Component, MessageLog, Query, Route, Router, UiSchema } from "@effect/ui"
 import { Html, HtmlServer } from "@effect/ui/html"
 import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Cause, Effect, Layer, Option, Schema } from "effect"
-import { AsyncResult } from "effect/reactivity"
-import { TestClock } from "effect/testing"
+
 import { defect } from "./utils/scoped.ts"
 
 const Message = Schema.Struct({ id: Schema.String, text: Schema.String })

@@ -1,3 +1,5 @@
+import * as Schema from "effect/Schema"
+
 /**
  * A progress bar for a task that takes a while, whose value lives in the
  * consumer's Model. It is a headless component: the label needs an id for
@@ -86,7 +88,7 @@
  */
 import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
-import * as Schema from "effect/Schema"
+
 import { flag, withStyle } from "./internal/attributes.ts"
 import { fillValue, indicatorSize, nvdaLabel, percentText, placeInRange } from "./internal/range.ts"
 

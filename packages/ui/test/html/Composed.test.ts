@@ -1,10 +1,12 @@
+import { Cause, Effect, Schema } from "effect"
+
 // @vitest-environment happy-dom
 import { Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
 import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Cause, Effect, Schema } from "effect"
+
 import { Dialog, DialogEvents, Item, Menu, MenuMessage } from "./fixtures/headless.ts"
 
 const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(TestHost.layer()))

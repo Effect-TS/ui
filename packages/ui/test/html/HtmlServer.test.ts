@@ -1,3 +1,8 @@
+import { Clock, Context, Duration, Effect, Exit, Fiber, Layer, Option, Schema, type Scope, Stream } from "effect"
+import { AsyncResult } from "effect/reactivity"
+import { TestClock } from "effect/testing"
+import { describe, vi } from "vitest"
+
 // @vitest-environment happy-dom
 import {
   Command,
@@ -17,10 +22,7 @@ import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
 import { assert, expect, it } from "@effect/vitest"
-import { Clock, Context, Duration, Effect, Exit, Fiber, Layer, Option, Schema, type Scope, Stream } from "effect"
-import { AsyncResult } from "effect/reactivity"
-import { TestClock } from "effect/testing"
-import { describe, vi } from "vitest"
+
 import { Confirm, ConfirmMessage } from "./fixtures/confirm.ts"
 import { Menu, popoverStub } from "./fixtures/popover.ts"
 import { App, AppRoute, People } from "./fixtures/routed.ts"

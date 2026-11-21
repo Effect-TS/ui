@@ -1,6 +1,7 @@
+import { Schema } from "effect"
+
 import { Component } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Schema } from "effect"
 
 /** A form whose every event is logged, as `event:detail`. */
 export const Settings = Component.define({

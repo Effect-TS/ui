@@ -1,6 +1,7 @@
+import { Effect, Option, Schema } from "effect"
+
 import { Route } from "@effect/ui"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Option, Schema } from "effect"
 
 const makeRoutes = () =>
   Route.union(

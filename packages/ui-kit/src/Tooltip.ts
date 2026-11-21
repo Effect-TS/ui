@@ -1,3 +1,7 @@
+import * as Duration from "effect/Duration"
+import * as Effect from "effect/Effect"
+import * as Schema from "effect/Schema"
+
 /**
  * A popup that shows a short visual label for an element while it's hovered
  * or focused.
@@ -156,9 +160,7 @@ import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
-import * as Duration from "effect/Duration"
-import * as Effect from "effect/Effect"
-import * as Schema from "effect/Schema"
+
 import { flag, withStyle } from "./internal/attributes.ts"
 import * as Positioning from "./Positioning.ts"
 

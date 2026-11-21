@@ -1,13 +1,14 @@
+import * as fc from "fast-check"
+
 import {
   type CollisionAvoidance,
-  place,
   type PlaceInput,
   type PositionerOptions,
+  place,
   resolveOptions,
   trackArgs
 } from "@effect/ui-kit/Positioning"
 import { assert, describe, it } from "@effect/vitest"
-import * as fc from "fast-check"
 
 const viewport = { x: 0, y: 0, width: 1000, height: 800 }
 

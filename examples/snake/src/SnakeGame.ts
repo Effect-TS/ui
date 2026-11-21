@@ -1,6 +1,8 @@
+import { Array, Duration, Schema, Stream } from "effect"
+
 import { Command, Component, Head, Subscription, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Array, Duration, Schema, Stream } from "effect"
+
 import { GAME, GAME_SPEED } from "./constants.ts"
 import { Apple, Direction, Position, Snake } from "./domain/index.ts"
 

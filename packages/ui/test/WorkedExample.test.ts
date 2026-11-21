@@ -1,3 +1,6 @@
+import { Effect, Layer, Schema } from "effect"
+import { TestClock } from "effect/testing"
+
 /**
  * The experiments of the query spec's worked example (§5.7), run on the app
  * in `fixtures/users.ts`.
@@ -6,8 +9,7 @@ import { Component, Router } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Locator, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Layer, Schema } from "effect"
-import { TestClock } from "effect/testing"
+
 import * as users from "./fixtures/users.ts"
 
 const setup = (url: string) => {

@@ -1,5 +1,6 @@
 import { Context, Effect, Layer, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
+
 import { Note, NoteNotFound, NoteResults, NoteSaveError, type NoteSort } from "../domain/Note.ts"
 
 // What a search asks for. `page` starts at 1.

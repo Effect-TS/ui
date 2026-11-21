@@ -1,3 +1,7 @@
+import { Effect, Layer } from "effect"
+import { HttpClient, HttpClientResponse } from "effect/http"
+import { TestClock } from "effect/testing"
+
 /**
  * @title Testing @effect/ui components
  *
@@ -8,15 +12,13 @@
 // @vitest-environment happy-dom
 import { Component, Router } from "@effect/ui"
 import { HtmlLocator, HtmlScene, ssr } from "@effect/ui/html/testing"
-import { assert, describe, it } from "@effect/vitest"
-import { Effect, Layer } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/http"
-import { TestClock } from "effect/testing"
+import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 // Tests render views, so they register the HTML elements too. An app with
 // many test files does it once, in a Vitest setup file.
 // oxlint-disable-next-line no-unassigned-import
 import "@effect/ui/html/register"
-import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
+import { assert, describe, it } from "@effect/vitest"
+
 // One file here, to read top to bottom. In an app each `describe` sits next
 // to what it tests: `notes/components/NoteEditor.test.ts` and `App.test.ts`.
 import { App } from "./fixtures/App.ts"

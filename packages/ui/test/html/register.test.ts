@@ -1,7 +1,8 @@
+import { Effect, Schema } from "effect"
+
 import { Component, View } from "@effect/ui"
 import { Html, HtmlServer } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Schema } from "effect"
 
 // The registration is module state, and Node reuses a worker across test files: it's cleared when the test
 // ends, so a later file's components without `elements` stay host-neutral.

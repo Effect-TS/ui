@@ -1,10 +1,11 @@
+import { Effect, Schema } from "effect"
+
 // @vitest-environment happy-dom
 import { Component, View } from "@effect/ui"
 import { Checkbox, Field, type FieldProps, Input, Switch } from "@effect/ui-kit"
 import { Html, HtmlServer } from "@effect/ui/html"
 import { Locator, Scene, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Schema } from "effect"
 
 type Parts = Component.Headless.Parts<typeof Field>
 type H = View.Helper<never, FieldProps> & View.Tags<Html.Elements, never>
