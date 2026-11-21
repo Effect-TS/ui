@@ -307,6 +307,10 @@ export const start = <C extends AnyComponent>(component: C, props: Component.Pro
  * `shared` steps gave, or else each owner's default, as the scene's view
  * does.
  *
+ * For a component that builds on another with `p.child`, the parts are the
+ * ones the consumer gets. Each child it declares gives the parts of its
+ * `init` Model, or, given a Scene's record, of the Model `givenChild` set.
+ *
  * @stability experimental
  * @category queries
  * @since 0.1.0
@@ -317,11 +321,7 @@ export const parts = <Props, Events, Parts, R, Rcv>(
 ): Parts => {
   const state = cursor.stateOf.get(record)
   const model = state !== undefined ? state.model : (record as { readonly model: unknown }).model
-  const lookup = state ?? record
-  return component.parts(model, record.props, {
-    owner: { path: "/" + component.definition.name, depth: 0 },
-    shared: engine.rootShared(engine.sharedGiven.get(lookup))
-  })
+  return engine.rootParts(component, model, record.props, state ?? record)
 }
 
 /**

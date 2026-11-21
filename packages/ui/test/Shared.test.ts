@@ -190,7 +190,9 @@ describe("shared state", () => {
       }
       yield* TestHost.mount(App, {}).pipe(Effect.provideService(services.RootHooks, hooks))
       yield* TestHost.settle
-      const snapshot = Object.keys(handle!.snapshot())
+      const out: Record<string, unknown> = {}
+      handle!.snapshot(out)
+      const snapshot = Object.keys(out)
       assert.notInclude(snapshot, "/App/TipsProvider[tips]")
       assert.include(snapshot, "/App/TipsProvider[tips]/Tip[a]")
       assert.notInclude(restored, "/App/TipsProvider[tips]")
@@ -233,8 +235,18 @@ describe("shared state in a Scene", () => {
       assert.strictEqual(Locator.textOf(s.root), "placed")
     }))
 
-  it("gives the parts of a headless reader the shared value", () => {
+  it("gives the parts of a headless reader the shared value, from an owner declared with p.child too", () => {
     assert.deepStrictEqual(Story.parts(Trigger, { model: null, props: {} }), { open: null, label: "" })
+    const Tagged = Component.define({ name: "Tagged", model: Schema.Null, message: TipMessage }).make({
+      init: () => null,
+      update: (model) => model,
+      parts: (_, p) =>
+        p.child(TipsProvider, {
+          props: { label: "inside" },
+          parts: () => p.child(Trigger, { parts: (trigger) => trigger })
+        })
+    })
+    assert.strictEqual(Story.parts(Tagged, { model: null, props: {} }).label, "inside")
   })
 
   it.effect(

@@ -58,3 +58,41 @@ export const popovers = Effect.acquireRelease(
   }),
   (restore) => Effect.sync(restore)
 )
+
+class FakeVisualViewport extends EventTarget {
+  height = 800
+  offsetTop = 0
+  scale = 1
+  move(changes: Partial<Pick<FakeVisualViewport, "height" | "offsetTop">>, type: "resize" | "scroll" = "resize") {
+    Object.assign(this, changes)
+    this.dispatchEvent(new Event(type))
+  }
+}
+
+// happy-dom drops `100svh`, so the hidden element that measures it is stubbed.
+export const isViewportProbe = (element: Element) =>
+  element.parentElement === document.body && (element as HTMLElement).style.visibility === "hidden" &&
+  (element as HTMLElement).style.position === "fixed"
+
+export const visualViewport = Effect.acquireRelease(
+  Effect.sync(() => {
+    const html = window.HTMLElement.prototype
+    const offsetHeight = Object.getOwnPropertyDescriptor(html, "offsetHeight")!
+    const visual = new FakeVisualViewport()
+    Object.defineProperty(window, "visualViewport", { configurable: true, value: visual })
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 800 })
+    Object.defineProperty(html, "offsetHeight", {
+      configurable: true,
+      get(this: HTMLElement) {
+        return isViewportProbe(this) ? 800 : offsetHeight.get!.call(this)
+      }
+    })
+    return { visual, offsetHeight }
+  }),
+  ({ offsetHeight }) =>
+    Effect.sync(() => {
+      Object.defineProperty(window.HTMLElement.prototype, "offsetHeight", offsetHeight)
+      delete (window as { visualViewport?: unknown }).visualViewport
+      delete (window as { innerHeight?: unknown }).innerHeight
+    })
+)

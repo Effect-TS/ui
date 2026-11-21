@@ -4,7 +4,7 @@ import * as runtime from "@effect/ui/internal/runtime"
 import * as services from "@effect/ui/internal/services"
 import { TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Logger, Option, Redacted, Schema } from "effect"
+import { Effect, Exit, Logger, Redacted, Schema } from "effect"
 
 /**
  * A `Schema.Redacted` in a component's state keeps that state out of JSON:
@@ -152,7 +152,14 @@ const historyHooks = (stored: Record<string, unknown> = {}) => {
     restore: (path) => stored[path],
     prefetch: () => () => {}
   }
-  return { hooks, snapshot: () => handle!.snapshot() }
+  return {
+    hooks,
+    snapshot: () => {
+      const out: Record<string, unknown> = {}
+      handle!.snapshot(out)
+      return out
+    }
+  }
 }
 
 const mountWith = (hooks: services.RootHooks) =>
@@ -185,8 +192,8 @@ describe("Redacted state", () => {
       yield* TestHost.settle
       // Only the plain component adopts its stored Model.
       assert.strictEqual(root.text(), "007")
-      assert.isTrue(Option.isNone(runtime.stateCodecOf(Secret).decode({ token: "plain", n: 1 })))
-      assert.isTrue(Option.isNone(runtime.stateCodecOf(Loaded).decode(loaded)))
+      assert.isTrue(Exit.isFailure(Effect.runSyncExit(runtime.stateCodecOf(Secret).decode({ token: "plain", n: 1 }))))
+      assert.isTrue(Exit.isFailure(Effect.runSyncExit(runtime.stateCodecOf(Loaded).decode(loaded))))
     }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
 
   it.effect("defers an instance whose state holds a Redacted on the server, and warns once per component", () =>

@@ -31,8 +31,8 @@ A parent passes a child state through props, and a child answers through
 `events`. A one-shot instruction, such as "save now" or "clear your draft",
 is a send: the child lists the tags it accepts in `receives`, the parent
 renders the child with a ref from `Child.ref("Name")`, and its `update` calls
-`$.send(ref, message)`. Don't send what the child shows: that belongs in its
-props.
+`$.send(ref, message)`. Don't send a current value that the parent
+controls: pass it as a prop. See **Who owns the state** below.
 
 A child the view stops declaring unmounts and loses its Model. To hide a tab
 or a wizard step the user will come back to, keep declaring it with
@@ -81,18 +81,6 @@ A component with `shares` takes the `Provider` suffix, as in
 `h.shared.provider`. A reader of several owners names each one after its
 owner instead, such as `tooltip` and `theme`.
 
-Map each `Command.Service` to its messages once, beside the Message union,
-and call that function from `update`. A result is mapped where the Command
-is issued, so nothing else ties `SaveNote` to `SucceededSaveNote`:
-
-```ts
-const saveNote = (note: Note) =>
-  SaveNote.make({ note }).pipe(Command.match({
-    onSuccess: (note) => NoteEditorMessage.SucceededSaveNote({ note }),
-    onFailure: (error) => NoteEditorMessage.FailedSaveNote({ reason: error.reason })
-  }))
-```
-
 Never write a no-op message, such as `Noop` or a tag added only so a result
 has something to send. A Command with nothing to report ends in `Component.noop`,
 usually through `Command.asNoop`. It sends nothing, and the log still records
@@ -100,14 +88,60 @@ its `CommandEnded` with `silent: true`. A mount that returns `Component.noop`
 likewise sends no message and logs `MountEnded` with `silent: true`. A
 component with no messages takes `message: Schema.Never`.
 
-Effect UI differs from Foldkit in three places:
+Effect UI differs from Foldkit in four places:
 
+- A child declares what it tells its parent in `events`. Foldkit calls these
+  OutMessages.
 - There is no `Got*`. A parent never wraps a child's messages: it maps the
   child's events in `onEmit`, so its message is the event's verb and its
   name for the child.
 - A message listed in `receives` has no prefix of its own. It is named like
   any other message, for the fact it reports.
 - A Command or mount with nothing to report needs no `Completed*` message. `Component.noop` is enough.
+
+### Command results
+
+A Command whose result one component consumes returns that component's
+message from its body. This is the usual form for an app's own Commands,
+which live in the file of the component that runs them. `Effect.match` turns
+a typed failure into a message as well:
+
+```ts
+export class SaveNote extends Command.Service<SaveNote>()(
+  "notes/SaveNote",
+  { args: { note: Note }, mode: "queue", invalidates: () => [NotesTag] },
+  Effect.gen(function*() {
+    const notes = yield* Notes
+    return ({ note }) =>
+      notes.save(note).pipe(
+        Effect.match({
+          onSuccess: (note) => NoteEditorMessage.SucceededSaveNote({ note }),
+          onFailure: (error) => NoteEditorMessage.FailedSaveNote({ reason: error.reason })
+        })
+      )
+  })
+) {}
+```
+
+A body that leaves a typed error gives an unmatched Command, which `$.run`
+rejects.
+
+`Command.map`, `Command.asNoop` and `Command.match` are for a Command that
+can't know its caller's messages: one from a library, such as
+`Router.replace`, or one that two components issue. Map or silence one that
+can't fail with `Command.map` or `Command.asNoop`:
+
+```ts
+Router.replace(AppRoute, route).pipe(Command.map((outcome) => Message.CompletedReplace({ outcome })))
+Router.replace(AppRoute, route).pipe(Command.asNoop)
+```
+
+For one whose body can fail, `Command.match` maps both channels to messages.
+
+In a `Story` or `Scene`, a Command that returns a message resolves with the
+message: `s.resolve(SaveNote, NoteEditorMessage.SucceededSaveNote({ note }))`.
+A mapped Command takes its own value in `s.resolve`, or its typed error in
+`s.fail`, and the mapping runs in the test.
 
 ### Changing the Model
 
@@ -330,21 +364,42 @@ nested get a role in front, `outerDialog` and `innerDialog`. Parts built
 outside a closure follow the same rule:
 `const listbox = Story.parts(Listbox, { model, props })`.
 
+A headless component can build on another: `parts` returns
+`p.child(Listbox, { props, onEmit, parts: (listbox) => ({ ...listbox, tags }) })`,
+and the consumer's closure gets what that `parts` returns. The component owns
+the child: the child's events and failures go through its `update`, its
+`$.send` reaches the child by ref, and a consumer's ref of the same key never
+matches it. A child that fails shows nothing, the consumer's closure with it,
+and the failure goes no further than its `onFailure`. A `Scene` of the
+component stands in for the child with `childEmit`, and a `Scene` of a
+consumer refuses to, because it doesn't run the component's `update`.
+
 ### Shared state
 
 A headless component with `shares: (model, props) => value` owns shared
 state: every component in its `view` closure, at any depth, can read the
 value. A reader lists the owners it reads in
 `shared: { provider: TooltipProvider }` and reads `h.shared.provider` or
-`p.shared.provider` in `view` or `parts`. Any `update` below the owner can
-call `$.send(TooltipProvider, message)` with one of the messages the owner
-`receives`. Reads and sends put `Component.Shared<"TooltipProvider">`
-in a component's requirements, and the owner's closure removes it, so a
-reader with no owner of that name above it doesn't compile. Use distinct owner
-names: a different definition with the same name satisfies the type, but a
-required read still fails at mount. To name the requirement from the component,
-use `Component.Shared.Of<typeof TooltipProvider>`. The state is the owner's
-Model, so the log records every change. In a `Scene`,
+`p.shared.provider` in `view` or `parts`. The long form of an entry,
+`{ owner: TooltipProvider, ... }`, adds three options. `optional: true` lets
+the reader work with no owner above it, where the value reads as `undefined`.
+`report` is what the reader tells an owner whose `shares` has `collects`.
+`onChange` is the reader's message when the shared value changes.
+
+A descendant's `update` can call `$.send(TooltipProvider, message)` without a
+`shared` entry. One `receives` list serves both the parent's ref and every
+descendant, so the owner can't tell which sent a message. A read or a send
+puts `Component.Shared<"TooltipProvider">` in a component's requirements,
+unless the owner's entry is optional, and the owner's closure removes it. The
+component compiles on its own: with no owner of that name above it, the type
+error appears where the tree's mount effect is run, as a missing service.
+Use distinct owner names: a different definition with the same name
+satisfies the type, but a required read still fails at mount. To name the
+requirement from the component, use
+`Component.Shared.Of<typeof TooltipProvider>`.
+
+The state is the owner's Model, so the log records every change, but an
+owner's Model isn't restored from history. In a `Scene`,
 `s.shared(TooltipProvider, value)` or
 `s.given(model, {}, [[TooltipProvider, value]])` gives readers a value, and
 each send to the owner is acknowledged with
@@ -362,15 +417,74 @@ re-render each time, so put normal components directly under an owner.
 Every reader re-renders when the shared value changes, so keep readers few
 and the shared value small.
 
+### Who owns the state
+
+As a convention, give each value one authoritative source:
+
+- If the caller sets the value or can refuse a change, pass a controlled prop.
+- If nobody outside decides the value, keep it in the component's Model.
+- Observing a value doesn't move ownership. Part values, shared reads,
+  reports and event payloads let other components observe it.
+- A prop read only in `init` is a seed, not a mirror: later changes to it
+  don't reach the Model. Name it `initial*`.
+
+| Direction            | A current value                | A request or something that happened          |
+| -------------------- | ------------------------------ | --------------------------------------------- |
+| Parent to child      | props                          | `receives` and `$.send(ref)`                  |
+| Child to parent      | a headless child's part values | `events`                                      |
+| Owner to descendants | `shares`                       | `shared.onChange`, or a payload from the view |
+| Descendant to owner  | `report` and `collects`        | `receives` and `$.send(Owner)`                |
+
+The columns differ in how long they last. A send happens once. If its target
+is absent, the log records `SendDropped` and nothing is queued, and `init`
+can't send. Unmounting the sender doesn't withdraw a send, while a report
+goes away with the reader that made it. So if a fact should stop being true
+when the sender unmounts, or would need sending again when the receiver
+remounts, use the current-value column. "Open the import wizard" can be a
+send if the wizard decides what happens next. "The dialog must stay open" is
+a value, even if it rarely changes.
+
+A component with a controlled value reads it from props and emits what the
+user asked for, instead of updating a second copy. Its Model holds only
+interaction state the caller would never store, such as a typeahead buffer.
+A disabled or read-only control reports nothing: guard its `update`, or omit
+the DOM event handler in a view function. `@effect/ui-kit` goes further for
+its own components and takes no seed props.
+
+Choose a popup by who decides when it closes:
+
+- With an `open` prop, use `.popover("manual", open)`. Report Escape and an
+  outside press as dismissal requests, which the caller can refuse.
+- Use `.popover("auto", open)` with `onToggle` only if the component owns
+  `open` in its Model and nobody can refuse a browser dismissal.
+- For a controlled modal, use a dialog with `.modal(open)`. `onCancel` is a
+  dismissal request. `onClose` reports a close, the caller's own included,
+  so treat it as a dismissal only while `$.props.open` is still true: a
+  browser can force a modal closed, and the host reopens it while the prop
+  stays true. TestHost doesn't model the forced close.
+
+Nothing is dispatched when a prop changes: the log records `PropsChanged`,
+and the next `update` reads the new value from `$.props`. To act on the
+change itself, re-key the child if the new value should start a fresh
+instance. If work should restart without resetting the Model, key a
+Subscription on the prop with `Subscription.make(name, deps, build)`. If the
+work needs a host node, pass the prop as a mount argument and observe
+argument changes in the mount.
+
+The **Who owns the state** example has a controlled modal, a workflow started
+by a send, a provider that owns visibility, a seed, and three patterns that
+compile but shouldn't be written.
+
 ### Mounts
 
 Work that needs an element's host node, such as measuring it or hosting a
 chart, map or editor, is a mount. Define it once at module level, like a
 Command: `Mount.make(name, { args }, (node, args, changes) => effect)` for
 work that ends with one result, or `Mount.makeStream` for work that sends a
-result per event for as long as the element lives. Annotate `node` with the
-node the body needs. A view issues it with its args and maps the result to a
-message: `h.canvas.onMount(DrawChart({ points }).pipe(Mount.map(toMessage)))`.
+result per stream emission, such as a DOM event, for as long as the element
+lives. Annotate `node` with the node the body needs. A view issues it with
+its args and maps the result to a message:
+`h.canvas.onMount(DrawChart({ points }).pipe(Mount.map(toMessage)))`.
 If the body has nothing to report, end it with `Effect.as(Component.noop)`. An element takes one mount. Args with no real Schema, such as a
 callback, need `Schema.declare`. Mounts never run on the server or in
 `TestHost`. A `Scene` tracks the mounts in its view:

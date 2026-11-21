@@ -111,6 +111,19 @@ need to add a `key`. A one-element view function returns a builder, but a
 component returns a `View.Child`. Consumers can no longer chain on the
 result, so ship that swap as a breaking change.
 
+When Base UI builds a component on another one, such as Drawer on Dialog,
+the kind follows the outer component's own state. If it keeps a Model,
+make it a headless component whose `parts` returns
+`p.child(Dialog, { props, onEmit, parts: (dialog) => ({ ...dialog, ...own }) })`.
+The inner component's events then go through the outer one's `update`, so
+the outer one can react to them and re-emit what its consumer needs. The
+consumer sees one component and one set of parts. Don't wrap the inner
+component in a function and link prototypes to pass it off as the outer
+one. If the outer component keeps no state of its own, as with
+`AlertDialog`, keep it a plain function that calls the inner component and
+passes its options through: forwarding every event through an `update`
+adds code and gains nothing.
+
 ## Call shape
 
 Both kinds take `h` and one options object, with the same field names, so

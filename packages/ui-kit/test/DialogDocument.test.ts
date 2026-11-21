@@ -31,6 +31,7 @@ const Config = Schema.Struct({
   triggers: Schema.Boolean,
   detached: Schema.Boolean,
   marked: Schema.Boolean,
+  keepMounted: Schema.optional(Schema.Boolean),
   finalFocus: Schema.optional(Schema.Boolean),
   openMethod: OpenMethod,
   refuse: Schema.Boolean,
@@ -140,6 +141,7 @@ const Page = Component.define({
               open: model.a,
               modal: props.modal,
               id: props.detached ? "settings" : undefined,
+              keepMounted: props.keepMounted,
               triggerId: model.triggerId,
               finalFocus: props.finalFocus,
               initialFocus: props.initialFocus,
@@ -188,6 +190,7 @@ const Page = Component.define({
                   ? null
                   : dialog.trigger(h.button.attr("id", "trigger")).children("Open"),
                 props.finalMark ? dialog.finalFocus(h.button.attr("id", "final")).children("Final") : null,
+                h.output.attr("id", "close-method").children(String(dialog.closeMethod)),
                 dialog.portal(h.dialog)?.children(
                   props.viewport ? dialog.viewport(h.div.attr("id", "viewport")).children(popup) : popup
                 )
@@ -526,6 +529,44 @@ describe("Dialog in a document", { concurrent: false }, () => {
       assert.strictEqual(document.activeElement, app.querySelector(".popup-a"))
     }))
 
+  it.effect("a kept-mounted modal keeps its popup element as it opens, closes and reopens", () =>
+    Effect.gen(function*() {
+      const { app, log } = yield* mountPage({ a: false, keepMounted: true })
+      const popup = app.querySelector(".popup-a")
+      assert.isNotNull(popup)
+      byId("trigger").click()
+      yield* tick
+      assert.strictEqual(app.querySelector(".popup-a"), popup)
+      click(layerOf(app.querySelector("dialog")!))
+      yield* tick
+      yield* tick
+      assert.include(log(), "Settled a false")
+      assert.strictEqual(app.querySelector(".popup-a"), popup)
+      byId("reopen").click()
+      yield* tick
+      assert.strictEqual(app.querySelector(".popup-a"), popup)
+    }))
+
+  it.effect("a touch outside dismisses on its press, and its click doesn't reach the page", () =>
+    Effect.gen(function*() {
+      for (const modal of [true, false] as const) {
+        yield* Effect.scoped(Effect.gen(function*() {
+          const { log } = yield* mountPage({ modal })
+          const page = byId("page")
+          let clicks = 0
+          page.addEventListener("click", () => clicks++)
+          press(modal ? layerOf(document.querySelector("dialog")!) : page, "touch")
+          yield* tick
+          assert.deepStrictEqual(dismissals(log()), ["Dismissed a outside-press"], String(modal))
+          page.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerType: "touch" }))
+          page.dispatchEvent(new PointerEvent("click", { bubbles: true, detail: 1, pointerType: "touch" }))
+          assert.strictEqual(clicks, 0, String(modal))
+          click(page)
+          assert.strictEqual(clicks, 1, String(modal))
+        }))
+      }
+    }))
+
   it.effect("a close before the first frame still exits and settles", () =>
     Effect.gen(function*() {
       const { app, log } = yield* mountPage({ a: false })
@@ -697,6 +738,30 @@ describe("Dialog in a document", { concurrent: false }, () => {
       byId("late").focus()
       yield* tick
       assert.deepStrictEqual(dismissals(log()), ["Dismissed a focus-out"])
+    }))
+
+  it.effect("a close the dialog didn't ask for, after a reopen, has no close method from the last close", () =>
+    Effect.gen(function*() {
+      for (const held of [false, true]) {
+        yield* Effect.scoped(Effect.gen(function*() {
+          if (held) yield* holdExits
+          const { log } = yield* mountPage({})
+          const closeMethod = () => byId("close-method").textContent
+          escape()
+          yield* tick
+          yield* tick
+          assert.deepStrictEqual(dismissals(log()), ["Dismissed a escape-key"], String(held))
+          assert.strictEqual(closeMethod(), "keyboard", String(held))
+          byId("reopen").click()
+          yield* tick
+          yield* tick
+          assert.strictEqual(closeMethod(), "null", String(held))
+          byId("shut").click()
+          yield* tick
+          yield* tick
+          assert.strictEqual(closeMethod(), "null", String(held))
+        }))
+      }
     }))
 
   it.effect("on Android, back asks the dialog to close, and a refused close keeps listening until it closes", () =>
