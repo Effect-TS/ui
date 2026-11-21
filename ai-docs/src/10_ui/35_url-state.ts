@@ -1,6 +1,3 @@
-import { Effect, Layer } from "effect"
-import { FetchHttpClient } from "effect/http"
-
 /**
  * @title Search, filters and pagination in the URL
  *
@@ -10,11 +7,13 @@ import { FetchHttpClient } from "effect/http"
  * This entry module mounts the routed app. The page is in
  * `fixtures/pages/search/SearchPage.ts`.
  */
+import { Effect, Layer } from "effect"
+import { FetchHttpClient } from "effect/http"
+
 import { Router } from "@effect/ui"
 import { BrowserHost, BrowserRouter } from "@effect/ui/html"
 // oxlint-disable-next-line no-unassigned-import
 import "@effect/ui/html/register"
-
 // The URL is the only copy of the search. Read the files in this order:
 //
 // - `fixtures/routes.ts`: the `Search` route, whose search fields have

@@ -1,5 +1,5 @@
-import * as Html from "@effect/ui/html/Html"
 import * as View from "@effect/ui/View"
+import * as Html from "@effect/ui/html/Html"
 
 import { visuallyHidden } from "./attributes.ts"
 

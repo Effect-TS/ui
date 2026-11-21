@@ -1,5 +1,3 @@
-import { Schema } from "effect"
-
 /**
  * @title Who owns the state
  *
@@ -7,6 +5,8 @@ import { Schema } from "effect"
  * that owns visibility. Contrast an initial prop with a live prop and see
  * how competing routes for the same value or request can still compile.
  */
+import { Schema } from "effect"
+
 // "Guaranteed" in a comment means the types or the runtime hold it whatever
 // you write. "Convention" means this file's choice, which the API doesn't
 // enforce.

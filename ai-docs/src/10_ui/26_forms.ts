@@ -1,6 +1,3 @@
-import { Context, Effect, Option, Schema } from "effect"
-import { AsyncResult } from "effect/reactivity"
-
 /**
  * @title Validating forms
  *
@@ -8,6 +5,9 @@ import { AsyncResult } from "effect/reactivity"
  * that reads another field, a username check run by a debounced query, and
  * an error from the server. A story and a scene read each field's state.
  */
+import { Context, Effect, Option, Schema } from "effect"
+import { AsyncResult } from "effect/reactivity"
+
 import { Command, Component, Query, UiSchema, Validation } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"

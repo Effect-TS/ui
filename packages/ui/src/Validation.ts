@@ -41,8 +41,8 @@
 import type * as Arr from "effect/Array"
 import { dual } from "effect/Function"
 import * as Option from "effect/Option"
-import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Schema from "effect/Schema"
+import type * as AsyncResult from "effect/reactivity/AsyncResult"
 
 /**
  * A rule's message: a string, or a function of the field's value.

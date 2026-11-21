@@ -1,7 +1,3 @@
-import { Effect, Layer } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/http"
-import { TestClock } from "effect/testing"
-
 /**
  * @title Testing @effect/ui components
  *
@@ -9,15 +5,19 @@ import { TestClock } from "effect/testing"
  * against a fake Layer, and a whole tree on `TestHost`. The last test renders on the server and hydrates
  * with `ssr`.
  */
+import { Effect, Layer } from "effect"
+import { HttpClient, HttpClientResponse } from "effect/http"
+import { TestClock } from "effect/testing"
+
 // @vitest-environment happy-dom
 import { Component, Router } from "@effect/ui"
 import { HtmlLocator, HtmlScene, ssr } from "@effect/ui/html/testing"
-import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
+import { assert, describe, it } from "@effect/vitest"
 // Tests render views, so they register the HTML elements too. An app with
 // many test files does it once, in a Vitest setup file.
 // oxlint-disable-next-line no-unassigned-import
 import "@effect/ui/html/register"
-import { assert, describe, it } from "@effect/vitest"
+import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 
 // One file here, to read top to bottom. In an app each `describe` sits next
 // to what it tests: `notes/components/NoteEditor.test.ts` and `App.test.ts`.
@@ -32,8 +32,8 @@ import {
 } from "./fixtures/notes/components/NoteEditor.ts"
 import type { Note } from "./fixtures/notes/domain/Note.ts"
 import { Notes } from "./fixtures/notes/services/Notes.ts"
-import { NotePageNoDeps } from "./fixtures/pages/notes/NotePage.ts"
 import { NotesIndexNoDeps } from "./fixtures/pages/NotesIndex.ts"
+import { NotePageNoDeps } from "./fixtures/pages/notes/NotePage.ts"
 import { AppRoute } from "./fixtures/routes.ts"
 
 const note: Note = { id: "n1", title: "Shopping", body: "Milk" }

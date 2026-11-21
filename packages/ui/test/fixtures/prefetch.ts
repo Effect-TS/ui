@@ -1,11 +1,11 @@
-import { Context, Effect, Layer, Schema } from "effect"
-
 /**
  * An app that declares its routes' queries with `Router.prefetch`: a sidebar
  * mounted on every route, a detail page, a page whose walk reaches a component
  * child through another's slot, a feature child and two components whose query the declarer can't
  * see, a page whose view throws, and a page whose Layer fails.
  */
+import { Context, Effect, Layer, Schema } from "effect"
+
 import { Component, Feature, Query, Route, Router, UiSchema } from "@effect/ui"
 
 import { GetPerson } from "./router.ts"

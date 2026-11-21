@@ -1,8 +1,8 @@
 #!/usr/bin/env node
+/**
+ * @since 4.0.0
+ */
 import * as Array from "effect/Array"
-import * as Argument from "effect/cli/Argument"
-import * as Command from "effect/cli/Command"
-import * as Flag from "effect/cli/Flag"
 import * as Effect from "effect/Effect"
 import * as FileSystem from "effect/FileSystem"
 import { pipe } from "effect/Function"
@@ -10,10 +10,10 @@ import * as Path from "effect/Path"
 import type * as PlatformError from "effect/PlatformError"
 import * as Stream from "effect/Stream"
 import * as String from "effect/String"
+import * as Argument from "effect/cli/Argument"
+import * as Command from "effect/cli/Command"
+import * as Flag from "effect/cli/Flag"
 
-/**
- * @since 4.0.0
- */
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime"
 import * as NodeServices from "@effect/platform-node/NodeServices"
 

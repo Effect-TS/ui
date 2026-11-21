@@ -1,5 +1,3 @@
-import * as Schema from "effect/Schema"
-
 /**
  * A progress bar for a task that takes a while, whose value lives in the
  * consumer's Model. It is a headless component: the label needs an id for
@@ -86,6 +84,8 @@ import * as Schema from "effect/Schema"
  * @stability experimental
  * @since 0.1.0
  */
+import * as Schema from "effect/Schema"
+
 import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 

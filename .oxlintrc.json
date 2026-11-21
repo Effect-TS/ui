@@ -20,32 +20,7 @@
     "!.vscode",
     "!.vscode/**/*"
   ],
-  "jsPlugins": [
-    "@effect/oxc/oxlint",
-    "eslint-plugin-perfectionist"
-  ],
-  "rules": {
-    "eslint/sort-imports": ["error", {
-      "ignoreDeclarationSort": true,
-      "ignoreCase": false
-    }],
-    "perfectionist/sort-imports": ["error", {
-      "type": "alphabetical",
-      "order": "asc",
-      "ignoreCase": false,
-      "newlinesBetween": 1,
-      "customGroups": [{
-        "groupName": "scoped",
-        "elementNamePattern": ["^@[^/]+(?:/.*)?$"]
-      }],
-      "groups": [
-        ["builtin", "external"],
-        "scoped",
-        ["internal", "parent", "sibling", "index"],
-        "unknown"
-      ]
-    }]
-  },
+  "jsPlugins": ["@effect/oxc/oxlint"],
   "overrides": [{
     "files": ["**/{test,typetest,examples,ai-docs,benchmark,bundle,scripts,scratchpad}/**"],
     "rules": {

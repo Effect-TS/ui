@@ -1,5 +1,5 @@
-import * as Html from "@effect/ui/html/Html"
 import * as View from "@effect/ui/View"
+import * as Html from "@effect/ui/html/Html"
 
 // The props of a control that submits one value when on and another, or
 // nothing, when off.

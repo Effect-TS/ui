@@ -88,8 +88,8 @@
  * @stability experimental
  * @since 0.1.0
  */
-import type * as Html from "@effect/ui/html/Html"
 import type * as View from "@effect/ui/View"
+import type * as Html from "@effect/ui/html/Html"
 
 import { flag } from "./internal/attributes.ts"
 import { field } from "./internal/field.ts"

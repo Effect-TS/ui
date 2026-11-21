@@ -1,5 +1,3 @@
-import { Effect, Schema } from "effect"
-
 /**
  * @title Composing headless components
  *
@@ -9,6 +7,8 @@ import { Effect, Schema } from "effect"
  * consumer draws both from one closure. Then a scene of the picker that runs
  * the Listbox's events through the picker's `update`.
  */
+import { Effect, Schema } from "effect"
+
 import { Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"

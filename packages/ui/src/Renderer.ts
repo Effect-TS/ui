@@ -26,15 +26,15 @@ import type * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import type * as Option from "effect/Option"
 import * as Predicate from "effect/Predicate"
-import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Schema from "effect/Schema"
 import * as SchemaTransformation from "effect/SchemaTransformation"
 import type * as Scope from "effect/Scope"
+import type * as AsyncResult from "effect/reactivity/AsyncResult"
 
 import type * as Component from "./Component.ts"
+import type * as View from "./View.ts"
 import * as runtime from "./internal/runtime.ts"
 import * as services from "./internal/services.ts"
-import type * as View from "./View.ts"
 
 /**
  * How a host reports an event: the event's name, the handler it found on the

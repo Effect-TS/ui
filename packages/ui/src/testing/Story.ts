@@ -62,11 +62,11 @@ import type * as Effect from "effect/Effect"
 import type * as Scope from "effect/Scope"
 
 import type * as Component from "../Component.ts"
+import type * as MessageLog from "../MessageLog.ts"
+import type * as View from "../View.ts"
 import * as replay from "../internal/replay.ts"
 import * as cursor from "../internal/steps.ts"
 import * as engine from "../internal/story.ts"
-import type * as MessageLog from "../MessageLog.ts"
-import type * as View from "../View.ts"
 import type * as Shared from "./Steps.ts"
 
 export type {

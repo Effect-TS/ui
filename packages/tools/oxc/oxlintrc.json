@@ -21,8 +21,13 @@
     "effect/no-js-extension-imports": "error",
     "effect/no-opaque-instance-fields": "error",
     "effect/no-unused-internal": "error",
+    "effect/sort-imports": "error",
     // Tune native rules
     // Import rules
+    "eslint/sort-imports": ["error", {
+      "ignoreDeclarationSort": true,
+      "ignoreCase": false
+    }],
     "typescript/consistent-type-imports": ["error", {
       "fixStyle": "inline-type-imports"
     }],

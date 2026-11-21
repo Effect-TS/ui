@@ -1,11 +1,11 @@
-import { Context, Effect, Layer, Option, Schema } from "effect"
-import { AsyncResult } from "effect/reactivity"
-
 /**
  * The worked example of the query spec (§5.7): a paged list and a detail page
  * with an edit, over an in-memory users API whose calls take time on the
  * clock.
  */
+import { Context, Effect, Layer, Option, Schema } from "effect"
+import { AsyncResult } from "effect/reactivity"
+
 import { Command, Component, Query, Route, Router, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 

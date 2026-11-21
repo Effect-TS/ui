@@ -1,6 +1,3 @@
-import { Effect, Layer } from "effect"
-import { FetchHttpClient } from "effect/http"
-
 /**
  * @title Composing components, data and Layers
  *
@@ -10,10 +7,12 @@ import { FetchHttpClient } from "effect/http"
  * into another component's slot. This entry module
  * mounts the page, which is in `fixtures/pages/notes/NotePage.ts`.
  */
+import { Effect, Layer } from "effect"
+import { FetchHttpClient } from "effect/http"
+
 import { BrowserHost } from "@effect/ui/html"
 // oxlint-disable-next-line no-unassigned-import
 import "@effect/ui/html/register"
-
 // A page is one file under `pages/`, in the folder for its URL. It imports
 // what it is composed from out of the features:
 //

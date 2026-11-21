@@ -81,10 +81,10 @@ import * as Stream from "effect/Stream"
 import type * as Types from "effect/Types"
 
 import type * as Component from "./Component.ts"
-import * as internalNoop from "./internal/noop.ts"
-import { canonical } from "./internal/queryCore.ts"
 import type * as Query from "./Query.ts"
 import type * as Renderer from "./Renderer.ts"
+import * as internalNoop from "./internal/noop.ts"
+import { canonical } from "./internal/queryCore.ts"
 
 /**
  * Identifies a Command value.

@@ -1,8 +1,3 @@
-import * as Effect from "effect/Effect"
-import * as Queue from "effect/Queue"
-import * as Schema from "effect/Schema"
-import * as Stream from "effect/Stream"
-
 /**
  * A controlled slider with one thumb or several. Pass the current value as
  * `value`, a number or an array of numbers, and update it when the slider
@@ -168,11 +163,16 @@ import * as Stream from "effect/Stream"
  * @stability experimental
  * @since 0.1.0
  */
+import * as Effect from "effect/Effect"
+import * as Queue from "effect/Queue"
+import * as Schema from "effect/Schema"
+import * as Stream from "effect/Stream"
+
 import * as Component from "@effect/ui/Component"
-import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as View from "@effect/ui/View"
+import * as Html from "@effect/ui/html/Html"
 
 import { flag, withStyle } from "./internal/attributes.ts"
 

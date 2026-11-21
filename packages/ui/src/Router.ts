@@ -99,13 +99,13 @@ import type * as Types from "effect/Types"
 
 import * as Command from "./Command.ts"
 import type * as Component from "./Component.ts"
+import type * as Query from "./Query.ts"
+import type * as Route from "./Route.ts"
+import * as Subscription from "./Subscription.ts"
 import * as prefetchWalk from "./internal/prefetch.ts"
 import * as queryCore from "./internal/queryCore.ts"
 import * as services from "./internal/services.ts"
 import { canonical, pairsWithout, withPairs } from "./internal/url.ts"
-import type * as Query from "./Query.ts"
-import type * as Route from "./Route.ts"
-import * as Subscription from "./Subscription.ts"
 
 /**
  * Where the Router is: the route, its printed URL (path and search, under the

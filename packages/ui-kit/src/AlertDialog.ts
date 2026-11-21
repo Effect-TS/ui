@@ -1,6 +1,3 @@
-import type * as AsyncResult from "effect/reactivity/AsyncResult"
-import * as Struct from "effect/Struct"
-
 /**
  * A modal dialog that interrupts the user with something they must answer
  * before going on, such as confirming that a draft is discarded.
@@ -123,6 +120,9 @@ import * as Struct from "effect/Struct"
  * @stability experimental
  * @since 0.1.0
  */
+import * as Struct from "effect/Struct"
+import type * as AsyncResult from "effect/reactivity/AsyncResult"
+
 import type * as Component from "@effect/ui/Component"
 import type * as View from "@effect/ui/View"
 

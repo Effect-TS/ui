@@ -1,5 +1,3 @@
-import { Schema } from "effect"
-
 /**
  * @title Reusing view functions with children
  *
@@ -9,6 +7,8 @@ import { Schema } from "effect"
  * For a nested hole, take an options object with a generic children field,
  * or return the inner builder with `forward`.
  */
+import { Schema } from "effect"
+
 import { Component, type View } from "@effect/ui"
 // View.H uses the app's registered vocabulary, not one definition.
 // oxlint-disable-next-line no-unassigned-import

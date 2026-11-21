@@ -1,11 +1,11 @@
-import { Context, Effect, Layer, Schema } from "effect"
-import { AsyncResult } from "effect/reactivity"
-
 /**
  * The routed example: a root that holds the route, a home page, a person
  * page that reads its bio through a query, a search route and a slow page
  * whose provided Layer takes a second to build.
  */
+import { Context, Effect, Layer, Schema } from "effect"
+import { AsyncResult } from "effect/reactivity"
+
 import { Component, Head, Query, Route, Router, UiSchema } from "@effect/ui"
 import { Html, HtmlHead } from "@effect/ui/html"
 

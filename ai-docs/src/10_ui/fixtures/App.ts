@@ -3,8 +3,8 @@ import { Schema } from "effect"
 import { Command, Component, Head, Router, UiSchema } from "@effect/ui"
 import { HtmlHead } from "@effect/ui/html"
 
-import { NotePage } from "./pages/notes/NotePage.ts"
 import { NotesIndex } from "./pages/NotesIndex.ts"
+import { NotePage } from "./pages/notes/NotePage.ts"
 import { SearchPage } from "./pages/search/SearchPage.ts"
 import { AppRoute } from "./routes.ts"
 

@@ -1,6 +1,3 @@
-import { Effect, Layer } from "effect"
-import { FetchHttpClient } from "effect/http"
-
 /**
  * @title Routing and the document head
  *
@@ -11,11 +8,13 @@ import { FetchHttpClient } from "effect/http"
  * module mounts it with `BrowserRouter`. The routes are in
  * `fixtures/routes.ts` and the root component is in `fixtures/App.ts`.
  */
+import { Effect, Layer } from "effect"
+import { FetchHttpClient } from "effect/http"
+
 import { Router } from "@effect/ui"
 import { BrowserHost, BrowserRouter } from "@effect/ui/html"
 // oxlint-disable-next-line no-unassigned-import
 import "@effect/ui/html/register"
-
 // The routed app:
 //
 // - `fixtures/routes.ts`: the route union, in its own file

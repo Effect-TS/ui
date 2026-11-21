@@ -1,5 +1,3 @@
-import { Effect, Queue, Schema, Stream } from "effect"
-
 /**
  * @title Mounts
  *
@@ -7,6 +5,8 @@ import { Effect, Queue, Schema, Stream } from "effect"
  * a mount that attaches a third-party editor and reports each change, and a
  * scene that names both by their definitions.
  */
+import { Effect, Queue, Schema, Stream } from "effect"
+
 import { Component, Mount, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Scene } from "@effect/ui/testing"

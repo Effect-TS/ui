@@ -1,6 +1,3 @@
-import { Effect, Layer } from "effect"
-import { FetchHttpClient } from "effect/http"
-
 /**
  * @title Headless components
  *
@@ -9,10 +6,12 @@ import { FetchHttpClient } from "effect/http"
  * `view` closure. This browser entry module mounts the consumer, which is in
  * `fixtures/notes/components/NoteLinkPicker.ts`.
  */
+import { Effect, Layer } from "effect"
+import { FetchHttpClient } from "effect/http"
+
 import { BrowserHost } from "@effect/ui/html"
 // oxlint-disable-next-line no-unassigned-import
 import "@effect/ui/html/register"
-
 // Read them in this order:
 //
 // - `fixtures/kit/Listbox.ts`: the headless component. `Component.define`

@@ -5,13 +5,13 @@
  * @internal
  */
 import * as Cause from "effect/Cause"
-import * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Schema from "effect/Schema"
+import * as AsyncResult from "effect/reactivity/AsyncResult"
 
 import type * as Component from "../Component.ts"
 import * as MessageLog from "../MessageLog.ts"
-import type { Divergence, Replay } from "../testing/Story.ts"
 import type * as View from "../View.ts"
+import type { Divergence, Replay } from "../testing/Story.ts"
 import * as componentQueries from "./queries.ts"
 import { type SlotResult, serverFailure } from "./slotStatus.ts"
 import * as engine from "./story.ts"

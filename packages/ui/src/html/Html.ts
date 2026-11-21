@@ -114,11 +114,11 @@ import * as Stream from "effect/Stream"
 
 import * as Command from "../Command.ts"
 import type * as Component from "../Component.ts"
-import * as services from "../internal/services.ts"
 import type * as Mount from "../Mount.ts"
 import * as Renderer from "../Renderer.ts"
 import * as Subscription from "../Subscription.ts"
 import * as View from "../View.ts"
+import * as services from "../internal/services.ts"
 import * as HtmlHead from "./HtmlHead.ts"
 import * as globalEvents from "./internal/globalEvents.ts"
 

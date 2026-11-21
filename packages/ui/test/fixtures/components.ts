@@ -1,10 +1,10 @@
-import { Effect, Schema, Stream } from "effect"
-import { KeyValueStore } from "effect/persistence"
-
 /**
  * The components the tests drive: a counter, a todo row that saves through a
  * Command service and reports to its parent, and the list that reacts to it.
  */
+import { Effect, Schema, Stream } from "effect"
+import { KeyValueStore } from "effect/persistence"
+
 import { Command, Component, Subscription, UiSchema } from "@effect/ui"
 
 // ---------------------------------------------------------------------------

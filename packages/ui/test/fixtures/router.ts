@@ -1,12 +1,12 @@
-import { Context, Effect, Layer, Schema } from "effect"
-import { AsyncResult } from "effect/reactivity"
-
 /**
  * A two-page app on the Router: a root that holds the route, a home page, a
  * person page that reads its name through a query, counts its visits (a
  * Command) and counts clicks, and a slow page whose provided Layer takes a
  * second to build.
  */
+import { Context, Effect, Layer, Schema } from "effect"
+import { AsyncResult } from "effect/reactivity"
+
 import { Command, Component, Head, Query, Route, Router, UiSchema } from "@effect/ui"
 import { Html, HtmlHead } from "@effect/ui/html"
 

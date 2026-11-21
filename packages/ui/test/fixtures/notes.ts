@@ -1,10 +1,10 @@
-import { Effect, Schema, Stream } from "effect"
-
 /**
  * A note editor for the acknowledgement rule: a Command per mode, a stream
  * Command, an event, a send to a child, a query, and a handler that can
  * produce no message.
  */
+import { Effect, Schema, Stream } from "effect"
+
 import { Command, Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 

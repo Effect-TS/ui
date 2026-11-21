@@ -1,5 +1,3 @@
-import { Effect, Schema } from "effect"
-
 /**
  * @title Shared state
  *
@@ -9,6 +7,8 @@ import { Effect, Schema } from "effect"
  * provider mounted. Then an optional owner, the reports readers give it, a
  * reader's `onChange`, and a component that reads its own kind.
  */
+import { Effect, Schema } from "effect"
+
 import { Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Locator, Scene, Story } from "@effect/ui/testing"

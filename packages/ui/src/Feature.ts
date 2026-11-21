@@ -44,14 +44,14 @@ import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as Predicate from "effect/Predicate"
-import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Schema from "effect/Schema"
 import * as Scope from "effect/Scope"
+import type * as AsyncResult from "effect/reactivity/AsyncResult"
 
 import type * as Component from "./Component.ts"
+import type * as View from "./View.ts"
 import * as child from "./internal/child.ts"
 import * as childRef from "./internal/ref.ts"
-import type * as View from "./View.ts"
 
 /**
  * Identifies a feature service.

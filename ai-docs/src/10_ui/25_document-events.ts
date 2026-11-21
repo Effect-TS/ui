@@ -1,11 +1,11 @@
-import { Effect, Layer, Schema } from "effect"
-
 /**
  * @title Document and window events
  *
  * Listen for keys on the document while a game runs, test it in a scene,
  * and press a key in a whole-app test.
  */
+import { Effect, Layer, Schema } from "effect"
+
 import { Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { HtmlScene, TestGlobalEvents } from "@effect/ui/html/testing"

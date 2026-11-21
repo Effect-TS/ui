@@ -4,8 +4,8 @@ import { Head } from "@effect/ui"
 import { Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 
-import { Snake } from "./domain/index.ts"
 import { GenerateApplePosition, SnakeGame, SnakeGameMessage, type SnakeGameModel } from "./SnakeGame.ts"
+import { Snake } from "./domain/index.ts"
 
 const initialSnake = Snake.create({ x: 10, y: 10 })
 

@@ -1,5 +1,3 @@
-import * as Schema from "effect/Schema"
-
 /**
  * A meter that shows a measurement within a known range, such as disk
  * usage or a battery level, whose value lives in the consumer's Model. It
@@ -84,6 +82,8 @@ import * as Schema from "effect/Schema"
  * @stability experimental
  * @since 0.1.0
  */
+import * as Schema from "effect/Schema"
+
 import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 

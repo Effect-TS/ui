@@ -1,8 +1,3 @@
-import * as Effect from "effect/Effect"
-import * as Queue from "effect/Queue"
-import * as Schema from "effect/Schema"
-import * as Stream from "effect/Stream"
-
 /**
  * A popup that opens on top of the page and asks for the user's attention,
  * such as a form, a confirmation or a detail view.
@@ -204,11 +199,16 @@ import * as Stream from "effect/Stream"
  * @stability experimental
  * @since 0.1.0
  */
+import * as Effect from "effect/Effect"
+import * as Queue from "effect/Queue"
+import * as Schema from "effect/Schema"
+import * as Stream from "effect/Stream"
+
 import * as Component from "@effect/ui/Component"
-import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as View from "@effect/ui/View"
+import * as Html from "@effect/ui/html/Html"
 
 import { flag, withStyle } from "./internal/attributes.ts"
 import { hideOthers, lockScroll } from "./internal/modal.ts"

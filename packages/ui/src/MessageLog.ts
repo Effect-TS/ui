@@ -38,13 +38,13 @@ import * as Socket from "effect/socket/Socket"
 
 import type * as Command from "./Command.ts"
 import type * as Component from "./Component.ts"
+import type * as Query from "./Query.ts"
+import type * as Subscription from "./Subscription.ts"
 import * as messageLog from "./internal/messageLog.ts"
 import type * as componentQueries from "./internal/queries.ts"
 import { canonical } from "./internal/queryCore.ts"
 import { getIndexSignatureKeys } from "./internal/schemaAST.ts"
 import { holdsRedacted, redactAST } from "./internal/schemaRedact.ts"
-import type * as Query from "./Query.ts"
-import type * as Subscription from "./Subscription.ts"
 
 /**
  * The service the runtime records entries to.

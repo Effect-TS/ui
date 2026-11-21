@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import * as Command from "effect/cli/Command"
 import * as Effect from "effect/Effect"
+import * as Command from "effect/cli/Command"
 
 import * as NodeServices from "@effect/platform-node/NodeServices"
 

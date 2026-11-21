@@ -11,9 +11,9 @@
 import * as Duration from "effect/Duration"
 import * as Option from "effect/Option"
 import * as Predicate from "effect/Predicate"
-import * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
+import * as AsyncResult from "effect/reactivity/AsyncResult"
 
 import type * as Query from "../Query.ts"
 import * as Subscription from "../Subscription.ts"

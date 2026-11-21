@@ -20,7 +20,6 @@ import { BrowserHost } from "@effect/ui/html"
 // on it sets `elements: Html` instead.
 // oxlint-disable-next-line no-unassigned-import
 import "@effect/ui/html/register"
-
 // An entry module defines no components. The editor and its `SaveNote`
 // command are in the notes feature, next to the domain and the service they
 // use. Read them in this order:

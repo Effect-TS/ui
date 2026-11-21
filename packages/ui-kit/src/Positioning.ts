@@ -1,8 +1,3 @@
-import * as Effect from "effect/Effect"
-import * as Queue from "effect/Queue"
-import * as Schema from "effect/Schema"
-import * as Stream from "effect/Stream"
-
 /**
  * Places a popup against an anchor element, keeps it inside a boundary, and
  * reports where it ended up.
@@ -106,6 +101,11 @@ import * as Stream from "effect/Stream"
  * @stability experimental
  * @since 0.1.0
  */
+import * as Effect from "effect/Effect"
+import * as Queue from "effect/Queue"
+import * as Schema from "effect/Schema"
+import * as Stream from "effect/Stream"
+
 import * as Mount from "@effect/ui/Mount"
 
 /**

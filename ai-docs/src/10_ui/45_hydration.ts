@@ -1,17 +1,16 @@
-import { Effect } from "effect"
-import { FetchHttpClient } from "effect/http"
-
 /**
  * @title Hydrating in the browser
  *
  * Hydrate what the server rendered with `BrowserHost`. This is the browser
  * entry module of the server-rendered app, served as `/client.js`.
  */
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/http"
+
 import { Router } from "@effect/ui"
 import { BrowserHost, BrowserRouter } from "@effect/ui/html"
 // oxlint-disable-next-line no-unassigned-import
 import "@effect/ui/html/register"
-
 import { App } from "./fixtures/App.ts"
 import { AppRoute } from "./fixtures/routes.ts"
 

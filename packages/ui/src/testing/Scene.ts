@@ -65,17 +65,17 @@
  */
 import type * as Cause from "effect/Cause"
 import type * as Effect from "effect/Effect"
-import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import type * as Scope from "effect/Scope"
+import type * as AsyncResult from "effect/reactivity/AsyncResult"
 
 import type * as Component from "../Component.ts"
 import type * as Feature from "../Feature.ts"
+import type * as Mount from "../Mount.ts"
+import * as View from "../View.ts"
 import { checkChildPaths, checkFallbackPaths } from "../internal/paths.ts"
 import * as internal from "../internal/scene.ts"
 import * as cursor from "../internal/steps.ts"
 import * as engine from "../internal/story.ts"
-import type * as Mount from "../Mount.ts"
-import * as View from "../View.ts"
 import type * as Locator from "./Locator.ts"
 import type * as Shared from "./Steps.ts"
 
