@@ -4,7 +4,7 @@ import { Drawer, DrawerProvider } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
-import { container, popovers, tick } from "./utils/document.ts"
+import { container, popovers, tick, visualViewport } from "./utils/document.ts"
 
 const Config = Schema.Struct({
   open: Schema.Boolean,
@@ -167,44 +167,6 @@ const swipeTouch = (target: Element, from: [number, number], to: [number, number
 
 const movement = () => popup().style.getPropertyValue("--drawer-swipe-movement-y")
 
-class FakeVisualViewport extends EventTarget {
-  height = 800
-  offsetTop = 0
-  scale = 1
-  move(changes: Partial<Pick<FakeVisualViewport, "height" | "offsetTop">>) {
-    Object.assign(this, changes)
-    this.dispatchEvent(new Event("resize"))
-  }
-}
-
-// happy-dom drops `100svh`, so the hidden element that measures it is stubbed.
-const isProbe = (element: Element) =>
-  element.parentElement === document.body && (element as HTMLElement).style.visibility === "hidden" &&
-  (element as HTMLElement).style.position === "fixed"
-
-const visualViewport = Effect.acquireRelease(
-  Effect.sync(() => {
-    const html = window.HTMLElement.prototype
-    const offsetHeight = Object.getOwnPropertyDescriptor(html, "offsetHeight")!
-    const visual = new FakeVisualViewport()
-    Object.defineProperty(window, "visualViewport", { configurable: true, value: visual })
-    Object.defineProperty(window, "innerHeight", { configurable: true, value: 800 })
-    Object.defineProperty(html, "offsetHeight", {
-      configurable: true,
-      get(this: HTMLElement) {
-        return isProbe(this) ? 800 : offsetHeight.get!.call(this)
-      }
-    })
-    return { visual, offsetHeight }
-  }),
-  ({ offsetHeight }) =>
-    Effect.sync(() => {
-      Object.defineProperty(window.HTMLElement.prototype, "offsetHeight", offsetHeight)
-      delete (window as { visualViewport?: unknown }).visualViewport
-      delete (window as { innerHeight?: unknown }).innerHeight
-    })
-)
-
 const mount = Effect.fnUntraced(function*(overrides: Partial<Config>) {
   yield* popovers
   const app = yield* container
@@ -216,11 +178,28 @@ const mount = Effect.fnUntraced(function*(overrides: Partial<Config>) {
 const popup = () => document.querySelector<HTMLElement>("[data-drawer-popup]")!
 
 describe("Drawer in a document", { concurrent: false }, () => {
-  it.effect("writes the movement while a drag runs and dismisses on a long release", () =>
+  it.effect("writes movement during a drag, settles on a short or reversed release, and dismisses on a long release", () =>
     Effect.gen(function*() {
       const root = yield* mount({})
       sized(popup(), 300, 200)
-      drag(document.getElementById("handle")!, [10, 10], [10, 150])
+      const handle = document.getElementById("handle")!
+
+      drag(handle, [10, 10], [10, 30], 20)
+      pointer(document, "pointerup", 10, 30, 0)
+      yield* tick
+      assert.notInclude(root.model()!.events, "Dismissed:swipe")
+      assert.strictEqual(movement(), "0px")
+      assert.strictEqual(popup().style.getPropertyValue("transition"), "")
+      assert.isUndefined(popup().getAttributeNode("data-swiping") ?? undefined)
+
+      drag(handle, [10, 10], [10, 90], 2)
+      pointer(document, "pointermove", 10, 60)
+      pointer(document, "pointerup", 10, 60, 0)
+      yield* tick
+      assert.notInclude(root.model()!.events, "Dismissed:swipe")
+      assert.isTrue(root.model()!.open)
+
+      drag(handle, [10, 10], [10, 150])
       assert.strictEqual(popup().style.getPropertyValue("--drawer-swipe-movement-y"), "140px")
       assert.strictEqual(popup().style.getPropertyValue("transition"), "none")
       yield* tick
@@ -230,31 +209,6 @@ describe("Drawer in a document", { concurrent: false }, () => {
       assert.include(root.model()!.events, "Dismissed:swipe")
       assert.strictEqual(popup()?.getAttribute("data-swipe-dismiss") ?? "", "")
       assert.isFalse(root.model()!.open)
-    }))
-
-  it.effect("settles back on a short release and leaves the resting values", () =>
-    Effect.gen(function*() {
-      const root = yield* mount({})
-      sized(popup(), 300, 200)
-      drag(document.getElementById("handle")!, [10, 10], [10, 30], 20)
-      pointer(document, "pointerup", 10, 30, 0)
-      yield* tick
-      assert.notInclude(root.model()!.events, "Dismissed:swipe")
-      assert.strictEqual(movement(), "0px")
-      assert.strictEqual(popup().style.getPropertyValue("transition"), "")
-      assert.isUndefined(popup().getAttributeNode("data-swiping") ?? undefined)
-    }))
-
-  it.effect("settles a fast swipe that turned back before the release", () =>
-    Effect.gen(function*() {
-      const root = yield* mount({})
-      sized(popup(), 300, 200)
-      drag(document.getElementById("handle")!, [10, 10], [10, 90], 2)
-      pointer(document, "pointermove", 10, 60)
-      pointer(document, "pointerup", 10, 60, 0)
-      yield* tick
-      assert.notInclude(root.model()!.events, "Dismissed:swipe")
-      assert.isTrue(root.model()!.open)
     }))
 
   it.effect("starts nothing from the content, a button or an ignored element", () =>
@@ -288,19 +242,7 @@ describe("Drawer in a document", { concurrent: false }, () => {
       assert.isNull(popup().getAttribute("data-swipe-dismiss"))
     }))
 
-  it.effect("claims a touch with nothing to scroll and prevents the page's scroll", () =>
-    Effect.gen(function*() {
-      const root = yield* mount({})
-      sized(popup(), 300, 200)
-      const moves = swipeTouch(document.getElementById("handle")!, [10, 10], [10, 150])
-      assert.isTrue(moves.every((event) => event.defaultPrevented))
-      assert.strictEqual(movement(), "140px")
-      touch(document.getElementById("handle")!, "touchend", 10, 150)
-      yield* tick
-      assert.include(root.model()!.events, "Dismissed:swipe")
-    }))
-
-  it.effect("lets a scrolled list scroll, and hands off to the swipe at its top edge", () =>
+  it.effect("claims a touch with nothing to scroll, lets a scrolled list scroll, and hands off at its top edge", () =>
     Effect.gen(function*() {
       const root = yield* mount({ scroll: true })
       sized(popup(), 300, 400)
@@ -312,6 +254,13 @@ describe("Drawer in a document", { concurrent: false }, () => {
       assert.isFalse(scrolling.some((event) => event.defaultPrevented))
       touch(scroller, "touchend", 10, 150)
       assert.strictEqual(movement(), "0px")
+
+      const handle = document.getElementById("handle")!
+      const claimed = swipeTouch(handle, [10, 10], [10, 50], 10)
+      assert.isTrue(claimed.every((event) => event.defaultPrevented))
+      assert.strictEqual(movement(), "40px")
+      touch(handle, "touchend", 10, 50)
+      yield* tick
       scroller.scrollTop = 0
       const swiping = swipeTouch(scroller, [10, 10], [10, 250])
       assert.isTrue(swiping.every((event) => event.defaultPrevented))
@@ -321,12 +270,24 @@ describe("Drawer in a document", { concurrent: false }, () => {
       assert.include(root.model()!.events, "Dismissed:swipe")
     }))
 
-  it.effect("opens from a swipe area, follows the finger once open, and its click doesn't dismiss", () =>
+  it.effect("opens from a swipe area, closes if released short, and stays open on a long swipe without its click dismissing", () =>
     Effect.gen(function*() {
       const root = yield* mount({ open: false, area: true })
       const area = document.getElementById("area")!
       assert.strictEqual(area.getAttribute("data-swipe-direction"), "up")
       assert.include(area.getAttribute("style") ?? "", "touch-action:pan-x")
+      pointer(area, "pointerdown", 10, 500)
+      pointer(document, "pointermove", 10, 495)
+      yield* tick
+      sized(popup(), 300, 200)
+      time += 200
+      pointer(document, "pointermove", 10, 480)
+      time += 200
+      pointer(document, "pointerup", 10, 480, 0)
+      yield* tick
+      assert.include(root.model()!.events, "Dismissed:swipe")
+      assert.isFalse(root.model()!.open)
+
       pointer(area, "pointerdown", 10, 500)
       pointer(document, "pointermove", 10, 495)
       yield* tick
@@ -342,23 +303,6 @@ describe("Drawer in a document", { concurrent: false }, () => {
       assert.notInclude(root.model()!.events, "Dismissed:outside-press")
       assert.strictEqual(movement(), "0px")
       assert.strictEqual(popup().style.getPropertyValue("transition"), "")
-    }))
-
-  it.effect("closes again when a swipe area's swipe stops short", () =>
-    Effect.gen(function*() {
-      const root = yield* mount({ open: false, area: true })
-      const area = document.getElementById("area")!
-      pointer(area, "pointerdown", 10, 500)
-      pointer(document, "pointermove", 10, 495)
-      yield* tick
-      sized(popup(), 300, 200)
-      time += 200
-      pointer(document, "pointermove", 10, 480)
-      time += 200
-      pointer(document, "pointerup", 10, 480, 0)
-      yield* tick
-      assert.include(root.model()!.events, "Dismissed:swipe")
-      assert.isFalse(root.model()!.open)
     }))
 
   it.effect("scales the indent while a swipe runs and puts it back to 0", () =>

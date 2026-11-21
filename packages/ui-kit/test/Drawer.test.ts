@@ -70,46 +70,26 @@ const openedByArea = Effect.gen(function*() {
 })
 
 describe("Drawer", () => {
-  it.effect("a long release dismisses", () =>
+  it.effect("decides from a release's distance, speed, direction and reversal whether to dismiss or settle", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(Drawer, { open: true }, standIn)
       s.expectMount(tracked(s)).expectMount(trackedArea(s))
         .mounted(tracked(s), sent("StartedSwipe"))
       assert.strictEqual(s.get(popup).attrs?.["data-swiping"], "")
+      for (
+        const settled of [
+          release({ deltaY: 50, velocityY: 0.1, releaseVelocityY: 0.1 }),
+          release({ deltaY: 30, velocityY: 1, releaseVelocityY: 1, reversed: true }),
+          release({ direction: null, deltaY: -12, velocityY: -1 })
+        ]
+      ) {
+        s.mounted(tracked(s), settled)
+        assert.deepStrictEqual(s.current.emitted, [])
+      }
+      s.mounted(tracked(s), release({ deltaY: 30, velocityY: 0.5 })).emitted(swiped)
+      s.mounted(tracked(s), sent("StartedSwipe"))
       s.mounted(tracked(s), release({ deltaY: 150, velocityY: 0.3 })).emitted(swiped)
       assert.isUndefined(s.get(popup).attrs?.["data-swiping"])
-    }))
-
-  it.effect("a short slow release settles", () =>
-    Effect.gen(function*() {
-      const s = yield* Scene.make(Drawer, { open: true }, standIn)
-      s.expectMount(tracked(s)).expectMount(trackedArea(s))
-        .mounted(tracked(s), release({ deltaY: 50, velocityY: 0.1, releaseVelocityY: 0.1 }))
-      assert.deepStrictEqual(s.current.emitted, [])
-    }))
-
-  it.effect("a fast short flick dismisses", () =>
-    Effect.gen(function*() {
-      const s = yield* Scene.make(Drawer, { open: true }, standIn)
-      s.expectMount(tracked(s)).expectMount(trackedArea(s))
-        .mounted(tracked(s), release({ deltaY: 30, velocityY: 0.5 }))
-        .emitted(swiped)
-    }))
-
-  it.effect("a fast release that turned back settles", () =>
-    Effect.gen(function*() {
-      const s = yield* Scene.make(Drawer, { open: true }, standIn)
-      s.expectMount(tracked(s)).expectMount(trackedArea(s))
-        .mounted(tracked(s), release({ deltaY: 30, velocityY: 1, releaseVelocityY: 1, reversed: true }))
-      assert.deepStrictEqual(s.current.emitted, [])
-    }))
-
-  it.effect("a release in the wrong direction settles", () =>
-    Effect.gen(function*() {
-      const s = yield* Scene.make(Drawer, { open: true }, standIn)
-      s.expectMount(tracked(s)).expectMount(trackedArea(s))
-        .mounted(tracked(s), release({ direction: null, deltaY: -12, velocityY: -1 }))
-      assert.deepStrictEqual(s.current.emitted, [])
     }))
 
   it.effect("dismisses to the left, the right and up", () =>
@@ -129,31 +109,22 @@ describe("Drawer", () => {
       }
     }))
 
-  it.effect("a drag between snap points snaps, and a strong flick down dismisses", () =>
+  it.effect("snaps between snap points, obeys snapToSequentialPoints, and dismisses on a strong flick down", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Drawer, { open: true, snapPoints: [0.5, 1] }, standIn)
-      s.expectMount(tracked(s)).expectMount(trackedArea(s)).mounted(tracked(s), measured)
-      assert.match(s.get(popup).attrs?.style ?? "", /--drawer-height:800px;.*--drawer-snap-point-offset:400px;/)
-      s.expectMount(tracked(s))
-        .mounted(tracked(s), release({ direction: "up", deltaY: -300, height: 800 }))
-        .emitted(snapped(1))
-        .expectMount(tracked(s))
-        .mounted(tracked(s), release({ deltaY: 50, velocityY: 1, releaseVelocityY: 2, height: 800 }))
-        .emitted(swiped)
-    }))
-
-  it.effect("snapToSequentialPoints moves at most one snap point", () =>
-    Effect.gen(function*() {
-      const flick = release({ direction: "up", deltaY: -100, velocityY: -1, releaseVelocityY: -3, height: 800 })
+      const flickUp = release({ direction: "up", deltaY: -100, velocityY: -1, releaseVelocityY: -3, height: 800 })
       const s = yield* Scene.make(Drawer, { open: true, snapPoints: [0.25, 0.5, 1] }, standIn)
       s.expectMount(tracked(s)).expectMount(trackedArea(s)).mounted(tracked(s), measured)
-        .expectMount(tracked(s))
-        .mounted(tracked(s), flick)
+      assert.match(s.get(popup).attrs?.style ?? "", /--drawer-height:800px;.*--drawer-snap-point-offset:600px;/)
+      s.expectMount(tracked(s))
+        .mounted(tracked(s), flickUp)
         .emitted(snapped(1))
         .props({ open: true, snapPoints: [0.25, 0.5, 1], snapToSequentialPoints: true })
         .expectMount(tracked(s))
-        .mounted(tracked(s), flick)
+        .mounted(tracked(s), flickUp)
         .emitted(snapped(0.5))
+        .expectMount(tracked(s))
+        .mounted(tracked(s), release({ deltaY: 50, velocityY: 1, releaseVelocityY: 2, height: 800 }))
+        .emitted(swiped)
     }))
 
   it.effect("a refused dismiss puts the drawer back", () =>
@@ -209,7 +180,7 @@ describe("Drawer", () => {
       })
     }))
 
-  it.effect("a swipe on the area opens a closed drawer", () =>
+  it.effect("a swipe on the area opens the drawer, and release distance or speed decides whether it stays open", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(Drawer, { open: false }, standIn)
       s.expectMount(tracked(s)).expectMount(trackedArea(s))
@@ -218,25 +189,18 @@ describe("Drawer", () => {
         .emitted(opened)
       assert.deepInclude(s.get(area).attrs, { "data-swiping": "" })
       assert.strictEqual(s.get(popup).attrs?.["data-swiping"], "")
-      s.expectMount(tracked(s)).expectMount(trackedArea(s))
-    }))
-
-  it.effect("a short release on the area dismisses the drawer it opened", () =>
-    Effect.gen(function*() {
-      const s = yield* openedByArea
-      s.mounted(trackedArea(s), sent("ReleasedAreaSwipe", { displacement: 100, velocity: 0.05, size: 400 }))
+      s.props({ open: true }).expectMount(tracked(s)).expectMount(trackedArea(s))
+        .mounted(trackedArea(s), sent("ReleasedAreaSwipe", { displacement: 100, velocity: 0.05, size: 400 }))
         .emitted(swiped)
-    }))
 
-  it.effect("a long or fast release on the area leaves the drawer open", () =>
-    Effect.gen(function*() {
       const long = yield* openedByArea
       long.mounted(trackedArea(long), sent("ReleasedAreaSwipe", { displacement: 200, velocity: 0, size: 400 }))
       assert.deepStrictEqual(long.current.emitted, [])
+      long.expectMount(tracked(long)).expectMount(trackedArea(long))
+
       const fast = yield* openedByArea
       fast.mounted(trackedArea(fast), sent("ReleasedAreaSwipe", { displacement: 10, velocity: 0.1, size: null }))
       assert.deepStrictEqual(fast.current.emitted, [])
-      long.expectMount(tracked(long)).expectMount(trackedArea(long))
       fast.expectMount(tracked(fast)).expectMount(trackedArea(fast))
     }))
 

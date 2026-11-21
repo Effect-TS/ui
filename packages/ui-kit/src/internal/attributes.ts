@@ -7,7 +7,6 @@ export const flag = (on: boolean | undefined): string | undefined => on === true
 export const withStyle = (consumer: string | undefined, own: string): string =>
   consumer === undefined || consumer.trim() === "" ? own : consumer.replace(/;\s*$/, "") + ";" + own
 
-// The id the consumer gave an element, if it gave one.
 export const idOf = (builder: unknown): string | null => {
   const id = (builder as { readonly attrs?: Readonly<Record<string, string>> | undefined }).attrs?.id
   return id === undefined || id === "" ? null : id

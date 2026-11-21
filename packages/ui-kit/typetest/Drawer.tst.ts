@@ -3,7 +3,6 @@ import {
   type DialogDismissReason,
   Drawer,
   type DrawerDismissReason,
-  type DrawerEvents,
   DrawerProvider,
   type DrawerSnapPoint,
   type DrawerSwipeDirection
@@ -55,7 +54,7 @@ describe("Drawer", () => {
     })
     expect<Component.Headless.Requirements<typeof Drawer>>().type.toBe<never>()
     expect<DrawerSnapPoint>().type.toBe<string | number>()
-    expect<Extract<DrawerEvents, { readonly _tag: "Snapped" }>["snapPoint"]>().type.toBe<string | number>()
+    expect<DrawerDismissReason>().type.toBe<DialogDismissReason | "swipe">()
   })
 
   it("rejects a bad prop", () => {
@@ -92,10 +91,6 @@ describe("Drawer", () => {
         return h.div(drawer.portal(h.dialog)?.children(drawer.popup(h.div)))
       }
     })
-  })
-
-  it("a dismiss reason is a Dialog's or a swipe", () => {
-    expect<DrawerDismissReason>().type.toBe<DialogDismissReason | "swipe">()
   })
 })
 

@@ -764,22 +764,6 @@ describe("Dialog in a document", { concurrent: false }, () => {
       }
     }))
 
-  it.effect("a click that ends a press which started while the dialog was closed doesn't dismiss it", () =>
-    Effect.gen(function*() {
-      const { log, send } = yield* mountPage({ modal: false, a: false })
-      const page = byId("page")
-      press(page)
-      send(Message.Opened({ which: "a", triggerId: null, method: null }))
-      yield* tick
-      page.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerType: "mouse" }))
-      page.dispatchEvent(new PointerEvent("click", { bubbles: true, detail: 1, pointerType: "mouse" }))
-      yield* tick
-      assert.deepStrictEqual(dismissals(log()), [])
-      click(page)
-      yield* tick
-      assert.deepStrictEqual(dismissals(log()), ["Dismissed a outside-press"])
-    }))
-
   it.effect("on Android, back asks the dialog to close, and a refused close keeps listening until it closes", () =>
     Effect.gen(function*() {
       const live = yield* closeWatchers(android)

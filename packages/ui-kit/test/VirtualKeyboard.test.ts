@@ -4,7 +4,7 @@ import * as VirtualKeyboard from "@effect/ui-kit/VirtualKeyboard"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
-import { byId, container, tick } from "./utils/document.ts"
+import { byId, container, isViewportProbe, tick, visualViewport } from "./utils/document.ts"
 
 const closed: VirtualKeyboard.Sample = {
   layoutWidth: 400,
@@ -108,50 +108,12 @@ const Sheet = Component.define({
       .children(h.input.id("field"), h.button.id("done").children("Done"))
 })
 
-class FakeVisualViewport extends EventTarget {
-  height = 800
-  offsetTop = 0
-  scale = 1
-  move(changes: Partial<Pick<FakeVisualViewport, "height" | "offsetTop">>, type: "resize" | "scroll") {
-    Object.assign(this, changes)
-    this.dispatchEvent(new Event(type))
-  }
-}
-
-// happy-dom drops `100svh`, so the hidden element that measures it is stubbed.
-const isProbe = (element: Element) =>
-  element.parentElement === document.body && (element as HTMLElement).style.visibility === "hidden" &&
-  (element as HTMLElement).style.position === "fixed"
-
-const viewport = Effect.acquireRelease(
-  Effect.sync(() => {
-    const html = window.HTMLElement.prototype
-    const offsetHeight = Object.getOwnPropertyDescriptor(html, "offsetHeight")!
-    const visual = new FakeVisualViewport()
-    Object.defineProperty(window, "visualViewport", { configurable: true, value: visual })
-    Object.defineProperty(window, "innerHeight", { configurable: true, value: 800 })
-    Object.defineProperty(html, "offsetHeight", {
-      configurable: true,
-      get(this: HTMLElement) {
-        return isProbe(this) ? 800 : offsetHeight.get!.call(this)
-      }
-    })
-    return { visual, offsetHeight }
-  }),
-  ({ offsetHeight }) =>
-    Effect.sync(() => {
-      Object.defineProperty(window.HTMLElement.prototype, "offsetHeight", offsetHeight)
-      delete (window as { visualViewport?: unknown }).visualViewport
-      delete (window as { innerHeight?: unknown }).innerHeight
-    })
-)
-
-const probes = () => Array.from(document.body.children).filter(isProbe).length
+const probes = () => Array.from(document.body.children).filter(isViewportProbe).length
 
 describe("VirtualKeyboard.TrackKeyboard", { concurrent: false }, () => {
   it.effect("writes the inset while a focused field has the keyboard up, and removes it when it goes", () =>
     Effect.gen(function*() {
-      const { visual } = yield* viewport
+      const { visual } = yield* visualViewport
       const sheet = yield* Effect.scoped(Effect.gen(function*() {
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Sheet, {}, app)

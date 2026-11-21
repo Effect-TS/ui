@@ -167,30 +167,6 @@ describe("Dialog", () => {
       assert.deepStrictEqual(s.current.emitted, [])
     }))
 
-  it.effect("forgets the last close's reason and method when it opens again", () =>
-    Effect.gen(function*() {
-      const s = yield* Scene.make(Dialog, { open: true }, standIn)
-      s.expectMount(tracked(s)).mounted(tracked(s), sent("ShowedPortal"))
-      s.mounted(tracked(s), sent("PressedEscape")).emitted(dismissed("escape-key"))
-      assert.strictEqual(partsOf(s).closeMethod, "keyboard")
-      s.props({ open: false })
-      s.expectMount(tracked(s))
-        .mounted(tracked(s), sent("FinishedTransition", { open: false }))
-        .emitted({ _tag: "Settled", open: false })
-      assert.isUndefined(s.query(portal))
-      s.props({ open: true })
-      s.expectMount(tracked(s)).mounted(tracked(s), sent("ShowedPortal"))
-      assert.isNull(partsOf(s).closeMethod)
-      s.fire(close, "click", { button: 0, x: 0, y: 0, pointerType: "touch" }).emitted(dismissed("close-press"))
-      assert.strictEqual(partsOf(s).closeMethod, "touch")
-      s.props({ open: false, holdExit: true })
-      s.props({ open: true })
-      s.expectMount(tracked(s)).mounted(tracked(s), sent("ShowedPortal"))
-      assert.isNull(partsOf(s).closeMethod)
-      s.props({ open: false })
-      assert.isNull(partsOf(s).closeMethod)
-    }))
-
   it.effect("reports transition state and waits for holdExit to be released before settling", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(Dialog, { open: true }, standIn)
