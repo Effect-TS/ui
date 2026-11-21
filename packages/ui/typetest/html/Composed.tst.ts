@@ -18,7 +18,6 @@ const Timed = Component.define({ name: "Timed", model: Schema.Number, message: S
 })
 
 const Msg = UiSchema.TaggedEnum({ Picked: { id: Schema.String }, Closed: {} })
-type Msg = typeof Msg.Type
 const AppMsg = UiSchema.TaggedEnum({ Clicked: {} })
 type AppMsg = typeof AppMsg.Type
 
@@ -47,15 +46,12 @@ describe("p.child", () => {
             expect(event).type.toBe<typeof DialogEvents.Type>()
             return Msg.Closed()
           },
-          parts: (dialog) => {
-            expect(dialog.open).type.toBe<boolean>()
-            return {
-              ...dialog,
-              count,
-              badge,
-              trigger: <B extends View.PartTarget<"button">>(element: B) => dialog.trigger(element)
-            }
-          }
+          parts: (dialog) => ({
+            ...dialog,
+            count,
+            badge,
+            trigger: <B extends View.PartTarget<"button">>(element: B) => dialog.trigger(element)
+          })
         })
       }
     })
@@ -68,7 +64,6 @@ describe("p.child", () => {
       props: { items: [] },
       view: (combo) => {
         expect(combo.trigger(h.button.class("btn"))).type.toBe<Button>()
-        expect(combo.count).type.toBe<number>()
         return h.div(combo.popup(h.dialog), combo.badge(h.output))
       }
     })

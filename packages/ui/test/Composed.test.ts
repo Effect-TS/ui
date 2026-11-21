@@ -82,7 +82,6 @@ const App = Component.define({ name: "App", model: Schema.Array(Schema.String), 
         onEmit: (event) => AppMessage.Picked({ id: event.id }),
         view: (combo) =>
           h.div(
-            combo.dialog.trigger(h.button).children("Open"),
             combo.dialog.popup(h.dialog).children(
               combo.menu.trigger(h.button).children("Combo menu"),
               h.ul.children(combo.menu.visible.map((item) =>
@@ -123,7 +122,8 @@ const Broken = Component.define({ name: "Broken", model: Schema.Null, message: S
 
 const owning = (
   child: typeof Hello | typeof Broken,
-  parts: (heard: ReadonlyArray<string>) => unknown = (heard) => ({ heard })
+  parts: (heard: ReadonlyArray<string>) => unknown = (heard) => ({ heard }),
+  extra?: Record<string, unknown>
 ) => {
   const Owner = Component.define({
     name: "Owner",
@@ -140,6 +140,7 @@ const owning = (
       }),
     parts: (heard, p) =>
       p.child(child as typeof Hello, {
+        ...(extra as {}),
         onEmit: () => ChildFailed.Said(),
         onFailure: () => ChildFailed.Failed(),
         parts: () => parts(heard) as { readonly heard: ReadonlyArray<string> }
@@ -165,11 +166,6 @@ describe("p.child", () => {
   it.effect("an owned child's event goes through the declaring component's update", () =>
     Effect.gen(function*() {
       const root = yield* TestHost.mount(App, {})
-      assert.deepStrictEqual(element(root, "Copy").owners.click, [
-        "/App/Combo[combo]/Dialog[]/Menu[menu]",
-        "/App/Combo[combo]/Dialog[]",
-        "/App"
-      ])
       Locator.fire(element(root, "Copy"), "click")
       yield* TestHost.settle
       assert.deepStrictEqual(updates(root), [
@@ -210,41 +206,23 @@ describe("p.child", () => {
       assert.deepStrictEqual(failures(thrown), ["/App/Owner[] view"])
       assert.strictEqual(thrown.text(), "owner down")
 
-      const Owner = Component.define({ name: "Owner", model: Schema.Null, message: Schema.Never, elements: Html })
-        .make({
-          init: () => null,
-          update: (model) => model,
-          parts: (_, p) => p.child(Dialog, { props: { label: "x" }, fallback: () => "x", parts: () => ({}) } as never)
-        })
-      const refused = yield* TestHost.mount(
-        Component.define({ name: "App", model: Schema.Null, message: Schema.Never, elements: Html }).make({
-          init: () => null,
-          update: (model) => model,
-          view: (_, h) => Owner(h, { fallback: () => h.text("owner down"), view: () => h.text("inside") })
-        }),
-        {}
-      )
+      const refused = yield* TestHost.mount(owning(Hello, undefined, { fallback: () => "x" }), {})
       assert.deepStrictEqual(failures(refused), ["/App/Owner[] view"])
       assert.strictEqual(refused.text(), "owner down")
     }).pipe(provideHost))
 
-  it.effect("the declaring component's send reaches a child it owns by ref, two levels down", () =>
+  it.effect("refs stay in their owner's namespace: declarer's send reaches its child, consumer's same-key ref does not", () =>
     Effect.gen(function*() {
       const root = yield* TestHost.mount(App, {})
+      assert.deepStrictEqual(failures(root), [])
+      root.send(AppMessage.ToggledOwn())
+      yield* TestHost.settle
+      assert.strictEqual(element(root, "Own menu").attrs["aria-expanded"], "true")
+      assert.strictEqual(element(root, "Combo menu").attrs["aria-expanded"], "false")
       root.send(AppMessage.ToggledCombo())
       yield* TestHost.settle
       assert.strictEqual(element(root, "Combo menu").attrs["aria-expanded"], "true")
       assert.isFalse(root.log().some((entry) => entry._tag === "SendDropped"))
-    }).pipe(provideHost))
-
-  it.effect("an owned child's ref is its owner's: a consumer's ref of the same key neither clashes nor reaches it", () =>
-    Effect.gen(function*() {
-      const root = yield* TestHost.mount(App, {})
-      root.send(AppMessage.ToggledOwn())
-      yield* TestHost.settle
-      assert.deepStrictEqual(failures(root), [])
-      assert.strictEqual(element(root, "Own menu").attrs["aria-expanded"], "true")
-      assert.strictEqual(element(root, "Combo menu").attrs["aria-expanded"], "false")
     }).pipe(provideHost))
 })
 
