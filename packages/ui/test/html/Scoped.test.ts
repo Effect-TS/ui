@@ -663,6 +663,98 @@ describe("scoped children in a receiver that waits for its Layer", () => {
       }).pipe(Effect.scoped)
   )
 
+  const NoteMsg = UiSchema.TaggedEnum({ Typed: { text: Schema.String }, Add: { text: Schema.String } })
+  const Note = Component.define({
+    name: "Note",
+    scoped: true,
+    model: Schema.String,
+    message: NoteMsg,
+    receives: ["Add"],
+    elements: Html
+  }).make({
+    init: () => "server",
+    update: (note, message) => message._tag === "Typed" ? message.text : note + message.text,
+    view: (note, h) => h.input.value(note).onInput(({ value }) => NoteMsg.Typed({ text: value }))
+  })
+  const NoteRef = Note.ref("n")
+  const Bare = Component.define({
+    name: "Bare",
+    scoped: false,
+    model: Schema.Null,
+    message: Schema.Never,
+    elements: Html,
+    slots: ["body"]
+  }).make({ init: () => null, update: (model) => model, view: (_, h) => h.slots.body })
+    .pipe(Component.provide(Layer.effect(Slow, Effect.suspend(() => Effect.as(gate, "ready")))))
+  const NotePage = Component.define({
+    name: "NotePage",
+    scoped: false,
+    model: Schema.Literals(["in the slot", "in an article", "in an article, the receiver gone"]),
+    message: Schema.Struct({
+      at: Schema.Literals(["in the slot", "in an article", "in an article, the receiver gone"]),
+      add: Schema.String
+    }),
+    elements: Html
+  }).make({
+    init: () => "in the slot" as const,
+    update: (_, { add, at }, $) => $.set(at).send(NoteRef, NoteMsg.Add({ text: add })),
+    view: (at, h) =>
+      h.scoped((s) => {
+        const note = Note(s, { ref: NoteRef })
+        return h.main(
+          at === "in an article, the receiver gone"
+            ? null
+            : Bare(h, { key: "g", slots: { body: at === "in the slot" ? note : null } }),
+          at === "in the slot" ? null : h.article(note)
+        )
+      })
+  })
+
+  it.effect.each(["in an article", "in an article, the receiver gone"] as const)(
+    "get their messages in the order sent, the last sent as they're drawn %s",
+    (at) =>
+      Effect.gen(function*() {
+        const { app, state } = yield* serve(HtmlServer.renderToHtml(NotePage, {}))
+        const root = yield* BrowserHost.mountEffect(NotePage, {}, app, { state })
+        root.send({ at: "in the slot", add: "A" })
+        yield* tick
+        root.send({ at: "in the slot", add: "B" })
+        yield* tick
+        root.send({ at, add: "C" })
+        yield* tick
+        assert.strictEqual(app.querySelector("input")?.value, "serverABC")
+      }).pipe(Effect.scoped)
+  )
+
+  it.effect("get a message after the edit the user made before they adopted", () =>
+    Effect.gen(function*() {
+      const { app, open, state } = yield* serve(HtmlServer.renderToHtml(NotePage, {}))
+      const field = app.querySelector("input")!
+      field.value = "typed"
+      const root = yield* BrowserHost.mountEffect(NotePage, {}, app, { state })
+      root.send({ at: "in the slot", add: "!" })
+      yield* tick
+      yield* open
+      yield* root.adopted
+      yield* tick
+      assert.strictEqual(field.value, "typed!")
+    }).pipe(Effect.scoped))
+
+  it.effect.each(["in an article", "in an article, the receiver gone"] as const)(
+    "keep what the user typed, and get a message after it, when drawn %s before adoption",
+    (at) =>
+      Effect.gen(function*() {
+        const { app, state } = yield* serve(HtmlServer.renderToHtml(NotePage, {}))
+        const field = app.querySelector("input")!
+        field.value = "typed"
+        const root = yield* BrowserHost.mountEffect(NotePage, {}, app, { state })
+        root.send({ at, add: "!" })
+        yield* tick
+        assert.strictEqual(app.querySelector("input"), field)
+        assert.strictEqual(field.value, "typed!")
+      }).pipe(Effect.scoped)
+  )
+
   const moving = () => {
     let inits = 0
     const DraftMsg = UiSchema.TaggedEnum({ Bump: {} })
@@ -710,6 +802,7 @@ describe("scoped children in a receiver that waits for its Layer", () => {
       yield* tick
       yield* open
       yield* root.adopted
+      yield* tick
       assert.strictEqual(app.querySelector("p")?.textContent, "server draft!")
     }).pipe(Effect.scoped))
 

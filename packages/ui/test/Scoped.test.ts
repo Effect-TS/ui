@@ -13,7 +13,7 @@ import {
 import { Html } from "@effect/ui/html"
 import { Locator, Scene, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Cause, Deferred, Effect, Redacted, Schema } from "effect"
+import { Cause, Deferred, Effect, Redacted, Schema, SchemaGetter } from "effect"
 
 const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(TestHost.layer()))
 const click = (root: Pick<TestHost.TestRoot<any, any, any>, "get">, text: string) =>
@@ -1536,6 +1536,161 @@ describe("scoped children across a router restore", () => {
         assert.strictEqual(side.text(), "draft:")
       })
     ))
+})
+
+describe("scoped children whose state encodes after the push that left them", () => {
+  let gate = Promise.resolve()
+  const Slow = Schema.String.pipe(Schema.decode({
+    decode: SchemaGetter.passthrough(),
+    encode: SchemaGetter.transformEffect((text: string) => Effect.promise(() => gate.then(() => text)))
+  }))
+  const macrotask = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 0)))
+  const note = (name: string, model: Schema.Codec<string, string>) =>
+    Component.define({
+      name,
+      scoped: true,
+      props: Schema.Struct({ label: Schema.String }),
+      model,
+      message: Schema.Null
+    })
+      .make({
+        init: () => "new",
+        update: (text) => text + "!",
+        view: (text, h) => h.el("button").on("click", null).children(`${h.props.label}:${text} `)
+      })
+  const SlowNote = note("SlowNote", Slow)
+  const Note = note("Note", Schema.String)
+  const Notes = Component.define({
+    name: "Notes",
+    scoped: false,
+    props: Schema.Struct({ hidden: Schema.Boolean, sibling: Schema.Boolean }),
+    model: Schema.Null,
+    message: Schema.Never
+  }).make({
+    init: () => null,
+    update: (model) => model,
+    view: (_, h) =>
+      h.el(
+        "section",
+        h.scoped((s) => {
+          const first = SlowNote(s, { key: "a", props: { label: "a" } })
+          const second = SlowNote(s, { key: "b", props: { label: "b" } })
+          const sibling = h.props.sibling ? Note(s, { key: "c", props: { label: "c" } }) : null
+          return [first, h.props.hidden ? null : second, sibling]
+        })
+      )
+  })
+  const Routes = Route.union({ Notes: Route.make("/"), Away: Route.make("/away") })
+  const Message = UiSchema.TaggedEnum({
+    Changed: { route: Routes },
+    Go: {},
+    Done: {},
+    Show: { hidden: Schema.Boolean, bare: Schema.Boolean }
+  })
+  const app = (sibling: boolean) =>
+    Component.define({
+      name: "NotesApp",
+      scoped: false,
+      props: Schema.Struct({ route: Routes }),
+      model: Schema.Struct({ route: Routes, hidden: Schema.Boolean, bare: Schema.Boolean }),
+      message: Message
+    }).make({
+      init: ($) => ({ route: $.props.route, hidden: false, bare: false }),
+      update: (model, message, $) =>
+        Message.match(message, {
+          Changed: ({ route }) => ({ ...model, route }),
+          Go: () => $.run(Router.push(Routes, Routes.Away()).pipe(Command.map(() => Message.Done()))),
+          Done: () => model,
+          Show: ({ bare, hidden }) => ({ ...model, bare, hidden })
+        }),
+      subscriptions: (model) => [Router.subscription(Routes, model.route, (route) => Message.Changed({ route }))],
+      view: (model, h) =>
+        h.el(
+          "div",
+          h.el("a").on("click", Message.Go()).children("Away "),
+          model.route._tag !== "Notes" || model.bare
+            ? null
+            : Notes(h, { key: "notes", props: { hidden: model.hidden, sibling } })
+        )
+    })
+  const visits = (sibling: boolean) => {
+    const App = app(sibling)
+    const history = Router.memoryHistory("/")
+    const visit = Effect.fnUntraced(
+      function*<A, E, R>(effect: (root: TestHost.TestRoot<any, any, any>) => Effect.Effect<A, E, R>) {
+        const root = yield* TestHost.mount(App, Router.props(Routes))
+        yield* TestHost.settle
+        return yield* effect(root)
+      },
+      Effect.scoped,
+      Effect.provide(Router.make({ routes: Routes, history })),
+      Effect.provide(TestHost.layer())
+    )
+    const show = Effect.fnUntraced(function*(
+      root: TestHost.TestRoot<any, any, any>,
+      shown: { readonly hidden: boolean; readonly bare: boolean }
+    ) {
+      root.send(Message.Show(shown))
+      yield* TestHost.settle
+    })
+    const push = Effect.fnUntraced(function*(root: TestHost.TestRoot<any, any, any>) {
+      click(root, "Away")
+      yield* TestHost.settle
+      yield* macrotask
+      yield* TestHost.settle
+    })
+    const go = Effect.fnUntraced(function*(delta: number) {
+      history.go(delta)
+      yield* TestHost.settle
+    })
+    const edit = Effect.fnUntraced(function*(root: TestHost.TestRoot<any, any, any>) {
+      click(root, "a:new")
+      click(root, "b:new")
+      yield* show(root, { hidden: true, bare: false })
+      let open!: () => void
+      gate = new Promise((resolve) => open = resolve)
+      click(root, "Away")
+      yield* TestHost.settle
+      open()
+      yield* macrotask
+      yield* TestHost.settle
+    })
+    return { visit, show, push, go, edit }
+  }
+
+  it.effect("start fresh after a reload, when a sibling's state was written into the entry", () => {
+    const { edit, go, visit } = visits(true)
+    return Effect.gen(function*() {
+      yield* visit(Effect.fnUntraced(function*(root) {
+        click(root, "c:new")
+        yield* edit(root)
+      }))
+      yield* visit(Effect.fnUntraced(function*(root) {
+        yield* go(-1)
+        assert.strictEqual(root.text(), "Away a:new b:new c:new! ")
+      }))
+    })
+  })
+
+  it.effect("are restored by Back, and start fresh after a reload, once a Back that drew none of them carried their state to the next push", () => {
+    const { edit, go, push, show, visit } = visits(false)
+    return Effect.gen(function*() {
+      yield* visit(Effect.fnUntraced(function*(root) {
+        yield* edit(root)
+        yield* show(root, { hidden: false, bare: true })
+        yield* go(-1)
+        yield* push(root)
+        yield* show(root, { hidden: false, bare: false })
+        yield* go(-1)
+        assert.strictEqual(root.text(), "Away a:new! b:new! ")
+        yield* go(1)
+      }))
+      yield* visit(Effect.fnUntraced(function*(root) {
+        yield* go(-1)
+        assert.strictEqual(root.text(), "Away a:new b:new ")
+      }))
+    })
+  })
 })
 
 const RowMsg = UiSchema.TaggedEnum({ Ping: {} })

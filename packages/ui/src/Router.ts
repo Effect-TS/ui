@@ -1503,7 +1503,10 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
         leave()
         // The Model snapshot also goes into the entry itself, so it survives a reload. A copy: the one in
         // memory gains the states that encode later, and a history that keeps its state by reference would too.
-        writeSnapshot(current.url + current.hash, { index, snapshot: { ...snapshots.get(index) } })
+        const saved = snapshots.get(index)!
+        const snapshot: Record<string, unknown> = {}
+        for (const key in saved) if (!key.startsWith(services.memoryOnly)) snapshot[key] = saved[key]
+        writeSnapshot(current.url + current.hash, { index, snapshot })
         index++
         for (const key of snapshots.keys()) if (key >= index) snapshots.delete(key)
         history.push(href, writeState({ index }))

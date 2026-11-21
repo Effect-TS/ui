@@ -60,6 +60,14 @@ export interface FlushInfo {
 }
 
 /**
+ * The prefix of a snapshot's keys that history keeps in memory only: the
+ * Router leaves them out of the entry it writes.
+ *
+ * @internal
+ */
+export const memoryOnly = "~late"
+
+/**
  * The router's side of the runtime: one post-flush hook, called after the
  * nodes commit and head sync, and the history restore of a new instance's
  * Model. Router Layers provide it; without one the runtime skips both.

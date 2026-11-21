@@ -392,6 +392,7 @@ interface KeptTable {
   round: number
   readonly children: Map<Component.Any | Feature.Any, Map<string, Kept>>
   readonly writes: Map<string, Array<Claim>>
+  served: Set<Served> | undefined
   ask: ((alive: (input: Component.Alive<any, any, any>) => boolean, key: string) => boolean) | undefined
 }
 
@@ -1459,20 +1460,45 @@ const setup = (
   }
   const servedBy = new WeakMap<Instance, Array<string>>()
   const unserve = (path: string, from: Served) => {
-    if (servedIn?.delete(path) && from.view !== undefined) keptLive--
+    if (servedIn?.delete(path) && from.view !== undefined) {
+      keptLive--
+      keptTables.get(from.author!)!.served!.delete(from)
+    }
+  }
+  const rangeOf = (from: Served | undefined): Range | undefined => {
+    if (from === undefined || host.parentOf(from.range.open) === undefined) return undefined
+    const waiter = from.waiter
+    if (waiter.waiting) {
+      const taken = new Set(rangeNodes(from.range))
+      waiter.rendered = packed(listOf(waiter.rendered).filter((placed) => !taken.has((placed as RText).node)))
+    }
+    return from.range
+  }
+  type Late = readonly [to: RChild | RFallback | null | undefined, sends: Instance["outbox"]]
+  let late: Map<Instance, Array<Late>> | undefined
+  const sendLate = (author: Instance, to: Late[0], sends: Instance["outbox"]) => {
+    const first = late === undefined
+    const queue = (late ??= new Map()).get(author)
+    if (queue === undefined) late.set(author, [[to, sends]])
+    else queue.push([to, sends])
+    if (first) {
+      afterCommit(() => {
+        const due = late!
+        late = undefined
+        for (const [author, queue] of due) {
+          for (const [to, sends] of queue) sendEach(author, sends, to)
+        }
+      })
+    }
   }
   const sendHeld = (from: Served, child: RChild | RFallback | undefined) => {
-    const sends = from.sends
-    if (sends === undefined) return
+    if (from.author === undefined) return
+    sendLate(from.author, child, from.sends ?? emptyList)
     from.sends = undefined
-    const author = from.author!
-    defer(() => {
-      for (const { issued, send } of sends) sendTo(author, child, issued, send)
-    })
   }
   const holdSend = (author: Instance, held: Instance["outbox"][number]): boolean => {
-    for (const from of servedIn!.values()) {
-      if (from.author !== author || from.view!.ref?.key !== held.send.ref.key) continue
+    for (const from of keptTables.get(author)?.served ?? emptyList) {
+      if (from.view!.ref?.key !== held.send.ref.key) continue
       ;(from.sends ??= []).push(held)
       return true
     }
@@ -1496,12 +1522,13 @@ const setup = (
     if (keeping.length > 0 && patching === 0) flushKept()
   }
   let waitingState: Map<string, unknown> | undefined
+  let waitingLate: Set<string> | undefined
   let restoredAt = 0
   const waitingUnder = new Map<string, Set<string>>()
   const eachAbove = (path: string, f: (above: string) => void) => {
     for (let cut = path.lastIndexOf("/"); cut > 0; cut = path.lastIndexOf("/", cut - 1)) f(path.slice(0, cut))
   }
-  const setWaiting = (path: string, saved: unknown) => {
+  const setWaiting = (path: string, saved: unknown, late?: boolean) => {
     if (!(waitingState ??= new Map()).has(path)) {
       eachAbove(path, (above) => {
         let under = waitingUnder.get(above)
@@ -1510,9 +1537,11 @@ const setup = (
       })
     }
     waitingState.set(path, saved)
+    if (late) (waitingLate ??= new Set()).add(path)
   }
   const dropWaiting = (path: string) => {
     if (waitingState === undefined || !waitingState.delete(path)) return
+    waitingLate?.delete(path)
     eachAbove(path, (above) => {
       const under = waitingUnder.get(above)
       if (under !== undefined && under.delete(path) && under.size === 0) waitingUnder.delete(above)
@@ -1524,9 +1553,13 @@ const setup = (
     if (under !== undefined) { for (const saved of Array.from(under)) dropWaiting(saved) }
     dropWaiting(path)
   }
-  const addWaiting = (saved: unknown) => {
+  const addWaiting = (saved: unknown, late?: boolean) => {
     if (saved === null || typeof saved !== "object") return
-    for (const path in saved) setWaiting(path, (saved as Record<string, unknown>)[path])
+    for (const path in saved) setWaiting(path, (saved as Record<string, unknown>)[path], late)
+  }
+  const restoreKept = () => {
+    addWaiting(hooks!.restore("~kept" + rootPath))
+    addWaiting(hooks!.restore(services.memoryOnly + rootPath), true)
   }
   if (hydrating !== undefined) {
     addWaiting(hydrating.state["~kept"])
@@ -3244,7 +3277,7 @@ const setup = (
     const restored = !hydrates && hooks !== undefined && component.definition.shares === undefined
       ? hooks.restore(inst.path)
       : undefined
-    if (hooks !== undefined) addWaiting(hooks.restore("~kept" + rootPath))
+    if (hooks !== undefined) restoreKept()
     const saved = hydrates || restored !== undefined ? undefined : waitingState?.get(inst.path)
     if (!hydrates && restored === undefined && saved === undefined) {
       startInstance(inst, parentEnv, range, Option.none(), Option.none())
@@ -4022,14 +4055,20 @@ const setup = (
     const outbox = inst.outbox
     inst.outbox = emptyList
     if (!countSends(inst, "its children")) return
+    if (late?.has(inst)) sendLate(inst, null, outbox)
+    else sendEach(inst, outbox, null)
+  }
+  const sendEach = (inst: Instance, outbox: Instance["outbox"], to: RChild | RFallback | null | undefined) => {
     for (const held of outbox) {
       if (inst.closed) return
       const { issued, send } = held
       // A headless instance wrote none of the tree it renders, so it has no children to send to.
-      const child = inst.owner === undefined
+      const child = to !== null
+        ? to
+        : inst.owner === undefined
         ? findChild(inst.rendered, send.ref.key) ?? (keptLive > 0 ? findKept(inst, send.ref.key) : undefined)
         : undefined
-      if (child === undefined && servedIn !== undefined && holdSend(inst, held)) continue
+      if (child === undefined && to === null && servedIn !== undefined && holdSend(inst, held)) continue
       sendTo(inst, child, issued, send)
     }
   }
@@ -6987,7 +7026,14 @@ const setup = (
       endKept(entry)
     }
     const component = view.component as Component.Any
-    const inner = makeChild(inst, view, env, range, named, Scope.forkUnsafe(author.scope, "sequential"))
+    const inner = makeChild(
+      inst,
+      view,
+      env,
+      range ?? rangeOf(from),
+      named,
+      Scope.forkUnsafe(author.scope, "sequential")
+    )
     const made: Kept = {
       author,
       table,
@@ -7012,7 +7058,10 @@ const setup = (
   const tableOf = (author: Instance): KeptTable => {
     let table = keptTables.get(author)
     if (table === undefined) {
-      keptTables.set(author, table = { round: 0, children: new Map(), writes: new Map(), ask: undefined })
+      keptTables.set(
+        author,
+        table = { round: 0, children: new Map(), writes: new Map(), served: undefined, ask: undefined }
+      )
     }
     return table
   }
@@ -7114,14 +7163,23 @@ const setup = (
       const path = `${author.path}/${segment(view)}`
       const from = released ?? servedIn?.get(path)
       if (from !== undefined && from !== released) {
-        if (from.view === undefined) keptLive++
+        if (from.view === undefined) {
+          keptLive++
+          ;(table.served ??= new Set()).add(from)
+        }
         from.author = author
         from.view = view
         from.round = table.round
         continue
       }
-      const range = from !== undefined && host.parentOf(from.range.open) !== undefined ? from.range : undefined
-      const inner = makeChild(author, view, author.env, range, path, Scope.forkUnsafe(author.scope, "sequential"))
+      const inner = makeChild(
+        author,
+        view,
+        author.env,
+        rangeOf(from),
+        path,
+        Scope.forkUnsafe(author.scope, "sequential")
+      )
       if (inner._tag === "Child") {
         unhook(inner.inst)
         leaveOwners(inner.inst)
@@ -7364,13 +7422,9 @@ const setup = (
   }
 
   const askKept = (author: Instance, table: KeptTable) => {
-    if (servedIn !== undefined) {
-      for (const from of servedIn.values()) {
-        const view = from.view
-        if (view === undefined || from.author !== author || from.round === table.round) continue
-        const alive = aliveOf(view)
-        if (alive !== undefined && !askAlive(author, table, alive, view)) endWrite(author, view, undefined)
-      }
+    for (const from of table.served ?? emptyList) {
+      const alive = from.round === table.round ? undefined : aliveOf(from.view!)
+      if (alive !== undefined && !askAlive(author, table, alive, from.view!)) endWrite(author, from.view!, undefined)
     }
     for (const byKey of table.children.values()) {
       for (const entry of byKey.values()) {
@@ -7607,20 +7661,24 @@ const setup = (
     const kept: Record<string, unknown> = {}
     let into = out
     let drawn: Instance | undefined
-    const keepState = (path: string, state: unknown) => {
-      kept[path] = state
-      out["~kept" + rootPath] = kept
+    const keepState = (path: string, state: unknown, late?: boolean) => {
+      if (late) ((out[services.memoryOnly + rootPath] ??= {}) as Record<string, unknown>)[path] = state
+      else {
+        kept[path] = state
+        out["~kept" + rootPath] = kept
+      }
     }
     const write = (
       inst: Instance,
       path: string,
       exit: Exit.Exit<unknown, SchemaIssue.Issue>,
       shown: boolean,
-      scoped: boolean
+      scoped: boolean,
+      late?: boolean
     ) => {
       if (Exit.isFailure(exit)) return warnUnencoded(inst, ctx, exit.cause)
       if (shown) out[path] = exit.value
-      if (scoped) keepState(path, exit.value)
+      if (scoped) keepState(path, exit.value, late)
     }
     const visit = (inst: Instance) => {
       // A keyed query's pending writes go first, so the result holds only the declared keys. A
@@ -7639,7 +7697,7 @@ const setup = (
         if (Exit.isExit(encoded)) write(inst, path, encoded, shown, scoped)
         else {
           warnLate(inst, ctx)
-          encoded.addObserver((exit) => write(inst, path, exit, shown, scoped))
+          encoded.addObserver((exit) => write(inst, path, exit, shown, scoped, true))
         }
       }
       for (const child of inst.children) visit(child)
@@ -7659,7 +7717,7 @@ const setup = (
     visit(root)
     if (waitingState !== undefined) {
       for (const [path, saved] of waitingState) {
-        if (!Object.hasOwn(kept, path)) keepState(path, saved)
+        if (!Object.hasOwn(kept, path)) keepState(path, saved, waitingLate?.has(path))
       }
     }
   }
@@ -7683,7 +7741,7 @@ const setup = (
           restoredAt = instancesMade
           wake()
         }
-        addWaiting(hooks.restore("~kept" + rootPath))
+        restoreKept()
       },
       report
     }
