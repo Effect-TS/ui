@@ -60,7 +60,8 @@
  * - `data-invalid` / `data-valid`, neither while `invalid` is left out
  * - `data-touched`: the control, the group or the `focusWithin` wrapper has
  *   lost focus at least once
- * - `data-focused`: the control, a member of the group, or an element inside `focusWithin` has focus
+ * - `data-focused`: the control, or an element inside the group or the
+ *   `focusWithin` wrapper, has focus
  * - `data-dirty`
  * - `data-filled`
  *
@@ -242,8 +243,7 @@ const lostFocus = Subscription.make("lostFocus", Stream.make(Message.BlurredCont
  * `group` sets `role="group"` when the element is built, unless it is a
  * `<fieldset>` or has a role of its own by then, such as one chained
  * after the part or another kit call's. `aria-invalid` isn't allowed on a
- * group, so it goes on the members only. `focusWithin` writes neither
- * `role` nor `aria-labelledby`.
+ * group, so it goes on the members only.
  *
  * A disabled field writes `disabled` and `data-disabled` on the control,
  * and on each member, when the element is built, so they win over what
@@ -311,6 +311,7 @@ export const Field = Component.define({
       flags(builder).attr("data-disabled", flag(disabled))
     const describedBy = [described && descriptionId, showsError && errorId].filter((id) => id !== false).join(" ")
     const error = p.part((b) => state(b).attr("id", errorId))
+    // The parts that use it take any element, so the payload isn't typed.
     const trackFocus = (b: View.ContainerBuilder<typeof Message.Type>) =>
       state(b)
         .on("focusin", Message.FocusedControl())
@@ -351,6 +352,8 @@ export const Field = Component.define({
       group: p.part((b) =>
         trackFocus(b)
           .attr("aria-labelledby", legendId)
+          // Read when the element is built, so a role chained after the
+          // part, or another kit call's, is kept.
           .forward((node) =>
             node.attrs.role === undefined && node.tag !== "fieldset" ? node.attr("role", "group") : node
           )
