@@ -11,7 +11,6 @@ class Tracker extends Context.Service<Tracker, { readonly seen: Effect.Effect<vo
 const Tick = Mount.make("Tick", { args: {} }, () => Clock.use((clock) => clock.now))
 const MarkSeen = Mount.make("MarkSeen", { args: {} }, () => Tracker.use((tracker) => tracker.seen))
 
-// A child whose part needs a service.
 const Timed = Component.define({ name: "Timed", model: Schema.Number, message: Schema.Number, elements: Html }).make({
   init: () => 0,
   update: (_, now) => now,
