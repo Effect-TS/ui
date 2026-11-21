@@ -1723,21 +1723,6 @@ export type DrawerComponent =
   ) => ReturnType<typeof DrawerCore<Msg, RV, RF>>)
   & Omit<typeof DrawerCore, never>
 
-// The call is the drawer's own, and the fields are the core component's, so
-// a Scene, a ref or a provided copy treats the two as one component.
-const asComponent = (call: (h: View.Helper<any, unknown>, options: any) => unknown): DrawerComponent => {
-  Object.setPrototypeOf(call, Object.getPrototypeOf(DrawerCore))
-  for (const key of Object.keys(DrawerCore)) {
-    Object.defineProperty(call, key, {
-      value: (DrawerCore as unknown as Record<string, unknown>)[key],
-      enumerable: true,
-      writable: true,
-      configurable: true
-    })
-  }
-  return call as DrawerComponent
-}
-
 /**
  * A headless drawer: a `Dialog` that slides in from an edge of the screen
  * and is swiped away. Call it as a `Dialog`, with the consumer's `h`, a `key`
@@ -1760,25 +1745,29 @@ const asComponent = (call: (h: View.Helper<any, unknown>, options: any) => unkno
  * @category components
  * @since 0.1.0
  */
-export const Drawer: DrawerComponent = asComponent((h, options) =>
-  DrawerCore(h, {
-    ...options,
-    view: (drawer: CoreParts) =>
-      Dialog(h, {
-        key: options.key ?? options.ref?.key,
-        props: dialogPropsOf(options.props),
-        onEmit: (event: DialogEvents) => handle(options.onEmit, fromDialog(event)),
-        view: (dialog) =>
-          options.view({
-            ...dialog,
-            ...drawer,
-            backdrop: <B extends View.PartTarget<"div">>(element: B) => {
-              const out = dialog.backdrop(element)
-              return out === undefined ? undefined : drawer.backdrop(out)
-            },
-            popup: <B extends View.PartTarget<"div">>(element: B) => drawer.popup(dialog.popup(element)),
-            viewport: <B extends View.PartTarget<"div">>(element: B) => drawer.viewport(dialog.viewport(element))
-          })
-      })
-  })
+export const Drawer: DrawerComponent = Object.setPrototypeOf(
+  // The call inherits the core component's fields, so a Scene or a ref
+  // names the instance it declares.
+  (h: View.Helper<any, unknown>, options: any) =>
+    DrawerCore(h, {
+      ...options,
+      view: (drawer: CoreParts) =>
+        Dialog(h, {
+          key: options.key ?? options.ref?.key,
+          props: dialogPropsOf(options.props),
+          onEmit: (event: DialogEvents) => handle(options.onEmit, fromDialog(event)),
+          view: (dialog) =>
+            options.view({
+              ...dialog,
+              ...drawer,
+              backdrop: <B extends View.PartTarget<"div">>(element: B) => {
+                const out = dialog.backdrop(element)
+                return out === undefined ? undefined : drawer.backdrop(out)
+              },
+              popup: <B extends View.PartTarget<"div">>(element: B) => drawer.popup(dialog.popup(element)),
+              viewport: <B extends View.PartTarget<"div">>(element: B) => drawer.viewport(dialog.viewport(element))
+            })
+        })
+    }),
+  DrawerCore
 )
