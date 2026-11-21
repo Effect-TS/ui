@@ -59,12 +59,6 @@ export interface FlushInfo {
   readonly buildsPendingSince: (flush: number) => number
 }
 
-/**
- * The prefix of a snapshot's keys that history keeps in memory only: the
- * Router leaves them out of the entry it writes.
- *
- * @internal
- */
 export const memoryOnly = "~late"
 
 /**
