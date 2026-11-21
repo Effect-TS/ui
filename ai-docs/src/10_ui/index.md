@@ -145,6 +145,7 @@ the current Model. `Set*`, `Update*` and bare imperatives such as `Save` or
 | Message from a child's event                  | The event's verb, then the parent's name for the child    | `ToggledNotify`, `SavedNote`, `PickedLink`                      |
 | Message from a child's failure                | `Failed`, then the parent's name for the child            | `FailedEditor`                                                  |
 | Message with more than one cause              | The fact the causes share                                 | `RequestedSave`                                                 |
+| Two events a payload could tell apart         | One message each, named for its own cause                 | `FocusedSearchInput`, `BlurredSearchInput`                      |
 | Event                                         | What the user did, past tense, with no cause              | `Toggled`, `Picked`, `Saved`                                    |
 | Command                                       | Imperative, for what its body does                        | `SaveNote`, `WaitBeforeDismissal`                               |
 | Mount                                         | Imperative, for what it does to the element               | `DrawChart`, `Measure`, `TrackPointer`                          |
@@ -156,6 +157,18 @@ what `update` does with its result: a timer that waits before a toast is
 dismissed is `WaitBeforeDismissal`, not `DismissAfter`. `RequestedSave` in
 `NoteEditor` comes from the form, Ctrl+S, the autosave Subscription and a
 parent's send, so it names what all four report.
+
+A message is one fact. The tag says which fact, and the payload holds what the
+event reported. Two events get two messages, even when their handlers differ
+only by a constant. Focus and blur are `FocusedSearchInput` and
+`BlurredSearchInput`, not `ChangedSearchInputFocus({ focused })` sent with
+`true` from `onFocus` and `false` from `onBlur`. A payload the view writes as
+a literal is choosing between two facts, which is the tag's job. Keep one
+message when one event reports a value, as in `UpdatedBody({ body })` or
+`ToggledActions({ open })`, or when the payload says which of many, as in
+`UpdatedField({ name, value })` and `PressedKey({ key })`. Events and `onEmit`
+follow the same rule, so a child's `Opened` and `Dismissed` become
+`OpenedSettings` and `DismissedSettings`.
 
 A definition's binding and its name string match:
 `const DrawChart = Mount.make("DrawChart", ...)`. A `Command.Service` keeps
