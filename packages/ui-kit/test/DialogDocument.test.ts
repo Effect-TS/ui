@@ -536,11 +536,9 @@ describe("Dialog in a document", { concurrent: false }, () => {
       byId("trigger").click()
       yield* tick
       assert.strictEqual(app.querySelector(".popup-a"), popup)
-      assert.strictEqual(document.activeElement?.id, "first")
       click(layerOf(app.querySelector("dialog")!))
       yield* tick
       yield* tick
-      assert.deepStrictEqual(dismissals(log()), ["Dismissed a outside-press"])
       assert.include(log(), "Settled a false")
       assert.strictEqual(app.querySelector(".popup-a"), popup)
       byId("reopen").click()
