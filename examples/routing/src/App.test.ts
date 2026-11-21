@@ -84,6 +84,8 @@ it.layer(AppTest("/people?searchText=manager"), { buildPerTest: true })("App at 
       assert.isDefined(root.query(Locator.text("2 results for “designer”")))
       assert.isUndefined(root.query(link("Carol Davis Manager")))
 
+      Locator.fire(root.get(searchInput), "input", { value: "unsent" })
+      yield* TestHost.settle
       yield* router.back
       yield* TestHost.settle
       assert.strictEqual(yield* currentUrl, "/people?searchText=manager")

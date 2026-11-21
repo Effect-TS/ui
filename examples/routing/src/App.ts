@@ -23,11 +23,11 @@ const routeTitle = (route: AppRoute): string =>
     NotFound: () => "NotFound | Routing"
   })
 
-const recordSearch = (history: ReadonlyArray<string>, route: AppRoute): ReadonlyArray<string> =>
-  route._tag === "People" ? addSearchToHistory(history, route.search.searchText) : history
+const searchTextOf = (route: AppRoute): string => route._tag === "People" ? route.search.searchText : ""
 
 export const AppMessage = UiSchema.TaggedEnum({
-  ChangedRoute: { route: AppRoute }
+  ChangedRoute: { route: AppRoute },
+  ChangedSearchInput: { value: Schema.String }
 })
 
 const AppDef = Component.define({
@@ -35,6 +35,7 @@ const AppDef = Component.define({
   props: Schema.Struct({ route: AppRoute }),
   model: Schema.Struct({
     route: AppRoute,
+    searchInput: Schema.String,
     searchHistory: Schema.Array(Schema.String)
   }),
   message: AppMessage
@@ -50,14 +51,26 @@ const NavLink = AppDef.fragment((h, label: string, route: AppRoute, active: bool
 )
 
 export const App = AppDef.make({
-  init: ($) => ({
-    route: $.props.route,
-    searchHistory: recordSearch([], $.props.route)
-  }),
+  init: ($) => {
+    const searchText = searchTextOf($.props.route)
+    return {
+      route: $.props.route,
+      searchInput: searchText,
+      searchHistory: addSearchToHistory([], searchText)
+    }
+  },
 
   update: {
-    ChangedRoute: (_model, { route }, $) =>
-      $.evolve({ route, searchHistory: (history) => recordSearch(history, route) })
+    ChangedRoute: (_model, { route }, $) => {
+      const searchText = searchTextOf(route)
+      return $.evolve({
+        route,
+        searchInput: searchText,
+        searchHistory: (history) => addSearchToHistory(history, searchText)
+      })
+    },
+
+    ChangedSearchInput: (_model, { value }, $) => $.evolve({ searchInput: value })
   },
 
   subscriptions: (model) => [
@@ -66,7 +79,7 @@ export const App = AppDef.make({
 
   head: (model) => [Head.title(routeTitle(model.route))],
 
-  view: ({ route, searchHistory }, h) =>
+  view: ({ route, searchHistory, searchInput }, h) =>
     h.div.class("min-h-screen bg-gray-100").children(
       h.header.children(
         h.nav.class("bg-blue-500 text-white p-4 mb-6").children(
@@ -82,7 +95,11 @@ export const App = AppDef.make({
         AppRoute.match(route, {
           Home: () => HomePage(h),
           Nested: () => NestedPage(h),
-          People: (route) => PeoplePage(h, { props: { route, searchHistory } }),
+          People: (route) =>
+            PeoplePage(h, {
+              props: { route, searchInput, searchHistory },
+              onEmit: { ChangedSearchInput: ({ value }) => AppMessage.ChangedSearchInput({ value }) }
+            }),
           Person: ({ params }) => PersonPage(h, params.personId),
           FilesIndex: () => FilesIndexPage(h),
           Files: (route) => FilesPage(h, filesPathOf(route)),

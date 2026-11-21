@@ -1,6 +1,6 @@
 import { Command, Component, Router, UiSchema } from "@effect/ui"
 import { Button, Input } from "@effect/ui-kit"
-import { Option, Schema } from "effect"
+import { Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import type { Person } from "../../people/domain/Person.ts"
 import { SearchPeople } from "../../people/queries/SearchPeople.ts"
@@ -20,31 +20,40 @@ export const PeoplePageMessage = UiSchema.TaggedEnum({
   SubmittedSearch: {}
 })
 
+export const PeoplePageEvents = UiSchema.TaggedEnum({
+  ChangedSearchInput: { value: Schema.String }
+})
+
 const PeoplePageDef = Component.define({
   name: "PeoplePage",
-  props: Schema.Struct({ route: PeopleRoute, searchHistory: Schema.Array(Schema.String) }),
-  model: Schema.Struct({ unsentSearchText: Schema.Option(Schema.String) }),
+  props: Schema.Struct({
+    route: PeopleRoute,
+    searchInput: Schema.String,
+    searchHistory: Schema.Array(Schema.String)
+  }),
+  model: Schema.Struct({}),
   message: PeoplePageMessage,
+  events: PeoplePageEvents,
   queries: {
     people: { query: SearchPeople, args: (_model, props) => props.route.search }
   }
 })
 
 export const PeoplePageNoDeps = PeoplePageDef.make({
-  init: () => ({ unsentSearchText: Option.none() }),
+  init: () => ({}),
 
   update: {
-    ChangedSearchInput: (_model, { value }, $) => $.evolve({ unsentSearchText: Option.some(value) }),
+    ChangedSearchInput: (_model, { value }, $) => $.emit(PeoplePageEvents.ChangedSearchInput({ value })),
 
-    SubmittedSearch: (model, _message, $) => {
-      const searchText = Option.getOrElse(model.unsentSearchText, () => $.props.route.search.searchText)
-      return $.evolve({ unsentSearchText: Option.none() }).run(
-        Router.patchSearch(AppRoute, $.props.route, { searchText }, { history: "push" }).pipe(Command.asNoop)
+    SubmittedSearch: (_model, _message, $) =>
+      $.run(
+        Router.patchSearch(AppRoute, $.props.route, { searchText: $.props.searchInput }, { history: "push" }).pipe(
+          Command.asNoop
+        )
       )
-    }
   },
 
-  view: (model, h) => {
+  view: (_model, h) => {
     const people = h.queries.people
     const { searchText } = h.props.route.search
     return h.div.children(
@@ -54,7 +63,7 @@ export const PeoplePageNoDeps = PeoplePageDef.make({
           h.div.class("flex-1").children(
             h.label.attr("for", "people-search").class("sr-only").children("Search people"),
             Input(h, {
-              props: { value: Option.getOrElse(model.unsentSearchText, () => searchText) },
+              props: { value: h.props.searchInput },
               onUpdate: ({ value }) => PeoplePageMessage.ChangedSearchInput({ value })
             })
               .attr("id", "people-search")
