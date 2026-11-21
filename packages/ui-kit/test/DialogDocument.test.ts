@@ -244,6 +244,46 @@ const holdExits = Effect.acquireRelease(
   ({ original }) => Effect.sync(() => (Element.prototype.getAnimations = original))
 )
 
+const closeWatchers = (platform: { readonly android: boolean; readonly closeWatcher: boolean }) =>
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      const made: Array<{ destroyed: boolean; request: (cancelable: boolean) => boolean }> = []
+      class Watcher extends EventTarget {
+        destroyed = false
+        constructor() {
+          super()
+          made.push(this)
+        }
+        destroy() {
+          this.destroyed = true
+        }
+        request(cancelable: boolean) {
+          const cancel = new Event("cancel", { cancelable })
+          this.dispatchEvent(cancel)
+          if (cancel.defaultPrevented) return true
+          this.destroyed = true
+          this.dispatchEvent(new Event("close"))
+          return false
+        }
+      }
+      const userAgent = platform.android ? "Mozilla/5.0 (Linux; Android 14) Chrome/130.0" : navigator.userAgent
+      Object.defineProperty(navigator, "userAgent", { value: userAgent, configurable: true })
+      if (platform.closeWatcher) Object.assign(window, { CloseWatcher: Watcher })
+      return () => made.filter((watcher) => !watcher.destroyed)
+    }),
+    () =>
+      Effect.sync(() => {
+        delete (navigator as { userAgent?: string }).userAgent
+        delete (window as { CloseWatcher?: unknown }).CloseWatcher
+      })
+  )
+const android = { android: true, closeWatcher: true }
+const back = (live: () => ReadonlyArray<{ request: (cancelable: boolean) => boolean }>, cancelable = true) => {
+  const watchers = live()
+  assert.strictEqual(watchers.length, 1)
+  return watchers[0]!.request(cancelable)
+}
+
 const dismissals = (log: ReadonlyArray<string>) => log.filter((line) => line.startsWith("Dismissed"))
 const opens = (log: ReadonlyArray<string>) => log.filter((line) => line.startsWith("Opened"))
 
@@ -658,5 +698,59 @@ describe("Dialog in a document", { concurrent: false }, () => {
       byId("late").focus()
       yield* tick
       assert.deepStrictEqual(dismissals(log()), ["Dismissed a focus-out"])
+    }))
+
+  it.effect("on Android, back asks the dialog to close, and a refused close keeps listening until it closes", () =>
+    Effect.gen(function*() {
+      const live = yield* closeWatchers(android)
+      const { log } = yield* mountPage({ refuse: true })
+      assert.isTrue(back(live))
+      yield* tick
+      assert.deepStrictEqual(dismissals(log()), ["Dismissed a close-watcher"])
+      back(live, false)
+      yield* tick
+      back(live)
+      yield* tick
+      assert.deepStrictEqual(dismissals(log()), Array(3).fill("Dismissed a close-watcher"))
+      click(byId("shut"))
+      yield* tick
+      assert.strictEqual(live().length, 0)
+    }))
+
+  it.effect("on Android, only the upper of two dialogs, nested or side by side, hears back", () =>
+    Effect.gen(function*() {
+      for (const layout of [{ nested: true }, { siblings: true }]) {
+        yield* Effect.scoped(Effect.gen(function*() {
+          const live = yield* closeWatchers(android)
+          yield* holdExits
+          const { log } = yield* mountPage({ ...layout, b: true })
+          back(live)
+          yield* tick
+          back(live)
+          yield* tick
+          assert.deepStrictEqual(dismissals(log()), ["Dismissed b close-watcher", "Dismissed a close-watcher"])
+        }))
+      }
+    }))
+
+  it.effect("on Android, an open dialog stops listening for back once it unmounts", () =>
+    Effect.gen(function*() {
+      const live = yield* closeWatchers(android)
+      yield* Effect.scoped(mountPage({}))
+      assert.strictEqual(live().length, 0)
+    }))
+
+  it.effect("off Android, or without CloseWatcher, the dialog makes no watcher and still hears Escape", () =>
+    Effect.gen(function*() {
+      for (const platform of [{ android: false, closeWatcher: true }, { android: true, closeWatcher: false }]) {
+        yield* Effect.scoped(Effect.gen(function*() {
+          const live = yield* closeWatchers(platform)
+          const { log } = yield* mountPage({})
+          assert.strictEqual(live().length, 0)
+          escape()
+          yield* tick
+          assert.deepStrictEqual(dismissals(log()), ["Dismissed a escape-key"])
+        }))
+      }
     }))
 })
