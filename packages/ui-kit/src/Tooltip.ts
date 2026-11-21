@@ -642,11 +642,17 @@ export const Tooltip = Component.define({
   parts: (model, p) => {
     const shown = shownBy(p.props)
     const placement = model.placement
-    const side = placement?.side ?? p.props.side ?? "top"
-    const align = placement?.align ?? p.props.align ?? "center"
     const triggerId = p.id("trigger")
     const arrowId = p.id("arrow")
-    const vertical = side === "top" || side === "bottom"
+    const tracked = Positioning.trackArgs(p.props, {
+      side: "top",
+      collisionAvoidance: Positioning.popupCollisionAvoidance,
+      anchorSelector: `[data-tooltip-trigger="${triggerId}"]`,
+      arrowId,
+      offsetAsPadding: true
+    })
+    const side = placement?.side ?? tracked.options.side
+    const align = placement?.align ?? tracked.options.align
     // An attribute a part sets to `undefined` is removed from the
     // consumer's builder too, so a consumer's `data-open` can't report a
     // state the tooltip isn't in.
@@ -674,15 +680,8 @@ export const Tooltip = Component.define({
           .onBlur(Message.BlurredTrigger())
           .attr("data-tooltip-trigger", triggerId)
     )
-    const positionMethod = p.props.positionMethod ?? "absolute"
-    const style = [
-      `position:${positionMethod}`,
-      "inset:auto",
-      "margin:0",
-      "--available-width:100vw",
-      "--available-height:100vh",
-      p.props.disableHoverablePopup === true ? "pointer-events:none" : undefined
-    ].filter((declaration) => declaration !== undefined).join(";")
+    const style = Positioning.positionerStyle(tracked.positionMethod) +
+      (p.props.disableHoverablePopup === true ? ";pointer-events:none" : "")
     const positioner = p.part("div", (b) => {
       const decorated = placed(b)
         .attr("role", "presentation")
@@ -694,27 +693,12 @@ export const Tooltip = Component.define({
         : decorated.on("mouseenter", Message.EnteredPositioner()).on("mouseleave", Message.LeftPositioner())
       return shown
         ? hoverable.onMount(
-          Positioning.TrackPosition({
-            options: Positioning.resolveOptions(p.props, {
-              side: "top",
-              collisionAvoidance: Positioning.popupCollisionAvoidance
-            }),
-            positionMethod,
-            collisionBoundary: p.props.collisionBoundary ?? "clipping-ancestors",
-            disableAnchorTracking: p.props.disableAnchorTracking === true,
-            anchorSelector: p.props.anchor === undefined
-              ? `[data-tooltip-trigger="${triggerId}"]`
-              : Positioning.idSelector(p.props.anchor),
-            arrowId,
-            offsetAsPadding: true
-          }).pipe(Mount.map((reported) => Message.ChangedPlacement(reported)))
+          Positioning.TrackPosition(tracked).pipe(Mount.map((reported) => Message.ChangedPlacement(reported)))
         )
         : hoverable
     })
     const popup = p.part("div", instant)
-    const arrowStyle = vertical
-      ? `position:absolute;left:var(${Positioning.arrowX})`
-      : `position:absolute;top:var(${Positioning.arrowY})`
+    const arrowStyle = Positioning.arrowStyle(side)
     const arrow = p.part("div", (b) =>
       instant(b)
         .attr("id", arrowId)
