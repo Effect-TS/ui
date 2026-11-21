@@ -114,24 +114,11 @@ import * as Html from "./Html.ts"
 import * as elements from "./internal/elements.ts"
 import * as headSync from "./internal/head.ts"
 import * as markers from "./internal/markers.ts"
+import { ownEvents } from "./internal/ownEvents.ts"
 import * as server from "./internal/server.ts"
 import * as submit from "./internal/submit.ts"
 
 const SVG = "http://www.w3.org/2000/svg"
-
-/** Events that don't bubble: only the element they happen on gets them. */
-const ownEvents: ReadonlySet<string> = new Set([
-  "focus",
-  "blur",
-  "mouseenter",
-  "mouseleave",
-  "scroll",
-  "toggle",
-  "load",
-  "error",
-  "close",
-  "cancel"
-])
 
 /** Events after which a controlled property may differ from what the Model says. */
 const changeEvents: ReadonlyArray<string> = ["input", "change", "toggle", "close", "reset"]

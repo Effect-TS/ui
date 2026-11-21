@@ -5,6 +5,7 @@ import type * as Scope from "effect/Scope"
 import * as Locator from "../testing/Locator.ts"
 import type { StepError } from "../testing/Play.ts"
 import * as TestHost from "../testing/TestHost.ts"
+import * as controlled from "./controlled.ts"
 import * as scene from "./scene.ts"
 import { atSite, callSite } from "./steps.ts"
 import * as engine from "./story.ts"
@@ -16,7 +17,7 @@ export interface PlannedEvent {
   readonly event: string
   readonly payload: () => unknown
   readonly isDefault?: boolean | undefined
-  readonly edit?: (() => void) | undefined
+  readonly edit?: (() => ReadonlyArray<TestHost.TestElement>) | undefined
 }
 
 /** @internal */
@@ -25,9 +26,6 @@ export const ancestors = (node: TestHost.TestNode): ReadonlyArray<TestHost.TestE
   for (let at = node._tag === "Element" ? node : node.parent; at !== undefined; at = at.parent) out.push(at)
   return out
 }
-
-const handlerOn = (node: TestHost.TestNode, event: string): TestHost.TestElement | undefined =>
-  ancestors(node).find((at) => Object.hasOwn(at.handlers, event))
 
 /** @internal */
 export class PlayCursor {
@@ -41,6 +39,15 @@ export class PlayCursor {
     this.module = module
     this.root = root
     this.settle = Effect.provideService(TestHost.settle, TestHost.TestHost, testHost)
+  }
+
+  protected bubbles(_event: string): boolean {
+    return true
+  }
+
+  private handlerOn(node: TestHost.TestNode, event: string): TestHost.TestElement | undefined {
+    const path = ancestors(node)
+    return (this.bubbles(event) ? path : path.slice(0, 1)).find((at) => Object.hasOwn(at.handlers, event))
   }
 
   protected name(step: string): string {
@@ -61,13 +68,17 @@ export class PlayCursor {
 
   protected interact(step: string, plan: () => ReadonlyArray<PlannedEvent>): Effect.Effect<void, StepError> {
     const site = callSite(this[step as keyof this] as Function)
-    return Effect.andThen(
-      this.settle,
-      Effect.andThen(Effect.sync(() => atSite(site, () => this.run(step, plan))), this.settle)
-    )
+    return Effect.gen({ self: this }, function*() {
+      yield* this.settle
+      const edited = yield* Effect.sync(() => atSite(site, () => this.run(step, plan)))
+      yield* this.settle
+      for (const node of edited) {
+        for (const [name, value] of controlled.wantedOf(node) ?? []) node.props[name] = value
+      }
+    })
   }
 
-  private run(step: string, plan: () => ReadonlyArray<PlannedEvent>): void {
+  private run(step: string, plan: () => ReadonlyArray<PlannedEvent>): ReadonlyArray<TestHost.TestElement> {
     const name = this.name(step)
     if (this.ignored !== undefined) {
       throw new Error(`${name}: the ${this.ignored} before it produced no message: acknowledge it with expectIgnored()`)
@@ -75,11 +86,12 @@ export class PlayCursor {
     let reached = false
     let handled = false
     let cancelled = false
+    const edited: Array<TestHost.TestElement> = []
     const events = plan()
     for (const { edit, event, isDefault, node, payload } of events) {
       if (isDefault === true && cancelled) continue
-      edit?.()
-      const target = handlerOn(node, event)
+      if (edit !== undefined) edited.push(...edit())
+      const target = this.handlerOn(node, event)
       if (target === undefined) continue
       reached = true
       const preventDefault = target.eventOptions[event]?.preventDefault
@@ -100,6 +112,7 @@ export class PlayCursor {
     if (!reached) throw new Error(`${name}: nothing handles "${events[0]?.event}" at ${events[0]?.description}`)
     this.interaction = handled ? "handled" : "ignored"
     this.ignored = handled ? undefined : step
+    return edited
   }
 
   protected one<P>(
@@ -117,7 +130,10 @@ export class PlayCursor {
         description: locator.description,
         event,
         payload: () => value,
-        edit: edit === undefined ? undefined : () => edit(node, value)
+        edit: edit === undefined ? undefined : () => {
+          edit(node, value)
+          return [node]
+        }
       }]
     })
   }

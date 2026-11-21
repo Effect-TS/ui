@@ -376,9 +376,9 @@ export const callSite = (fn: Function): Error => {
 }
 
 /** @internal */
-export const atSite = (site: Error, f: () => void): void => {
+export const atSite = <A>(site: Error, f: () => A): A => {
   try {
-    f()
+    return f()
   } catch (error) {
     if (error instanceof Error && site.stack !== undefined) {
       error.stack = `${error.name}: ${error.message}\n${site.stack.split("\n").slice(1).join("\n")}`

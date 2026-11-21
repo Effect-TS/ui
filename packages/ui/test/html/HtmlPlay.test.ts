@@ -18,9 +18,11 @@ const Checkout = Component.define({
   update: (model, message) => ({ log: [...model.log, message], zip: message === "fill" ? "new" : model.zip }),
   view: (model, h) =>
     h.div(
-      h.form.onSubmit(({ entries }) => `submit:${entries.map(([name, value]) => `${name}=${value}`).join("&")}`)
+      h.form.onFocus("form focus").onSubmit(({ entries }) =>
+        `submit:${entries.map(([name, value]) => `${name}=${value}`).join("&")}`
+      )
         .children(
-          h.input.attr("name", "zip").attr("aria-label", "Zip").value(model.zip),
+          h.input.attr("name", "zip").attr("aria-label", "Zip").value(model.zip).onInput(() => undefined),
           h.input.attr("name", "note").attr("aria-label", "Note").onInput(({ value }) => `note:${value}`),
           h.input.attr("type", "radio").attr("name", "size").attr("value", "s").attr("aria-label", "S").attr(
             "checked",
@@ -37,14 +39,19 @@ const Checkout = Component.define({
 
 const log = Locator.tag("output")
 
-const inBrowser = Effect.fnUntraced(function*(component: Component.Any, act: (app: HTMLElement) => void) {
+const frame = () => new Promise<void>((resolve) => setTimeout(resolve, 30))
+
+const inBrowser = Effect.fnUntraced(function*(
+  component: Component.Any,
+  act: (app: HTMLElement) => void | Promise<void>
+) {
   const app = yield* Effect.acquireRelease(
     Effect.sync(() => document.body.appendChild(document.createElement("div"))),
     (element) => Effect.sync(() => element.remove())
   )
   yield* BrowserHost.mountEffect(component as typeof Settings, {}, app)
-  act(app)
-  yield* Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))
+  yield* Effect.promise(async () => act(app))
+  yield* Effect.promise(frame)
   return app.querySelector("output")!.textContent
 }, Effect.scoped)
 
@@ -69,20 +76,34 @@ describe("HtmlPlay", () => {
         yield* settings.expect(HtmlLocator.label("Agree")).toBeChecked()
         yield* settings.click(HtmlLocator.role("button", { name: "Go" }))
         yield* settings.expect(log).toHaveText(browser!)
+        yield* settings.click("Menu")
+        yield* settings.click("Menu")
+        yield* settings.expect(log).toHaveText(`${browser}|toggle:open|toggle:closed`)
       }))
       assert.strictEqual(browser, "zip:10001|key:Enter+shift|agree:true|submit:zip=10001&agree=on&via=go")
     }))
 
   it.effect("a submit reads the fields as they were before the click's own message, and keeps what was entered", () =>
     Effect.gen(function*() {
-      const browser = yield* inBrowser(Checkout, (app) => {
-        HtmlLocator.type(HtmlLocator.getByRole(app, "textbox", { name: "Note" }) as HTMLInputElement, "hi")
+      const browser = yield* inBrowser(Checkout, async (app) => {
+        const zip = HtmlLocator.getByRole(app, "textbox", { name: "Zip" }) as HTMLInputElement
+        HtmlLocator.type(zip, "rejected")
+        const note = HtmlLocator.getByRole(app, "textbox", { name: "Note" }) as HTMLInputElement
+        note.focus()
+        await frame()
+        assert.strictEqual(zip.value, "old")
+        HtmlLocator.type(note, "hi")
         HtmlLocator.click(HtmlLocator.getByRole(app, "radio", { name: "M" }))
         HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name: "Stop" }))
         HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name: "Fill" }))
       })
       yield* play(Effect.gen(function*() {
         const checkout = yield* HtmlPlay.make(Checkout, {})
+        yield* checkout.type(HtmlLocator.label("Zip"), "rejected")
+        yield* checkout.expectIgnored()
+        yield* checkout.expect(HtmlLocator.label("Zip")).toHaveValue("old")
+        const focus = yield* Effect.exit(checkout.focus(HtmlLocator.label("Note")))
+        assert.match(Exit.isFailure(focus) ? Cause.pretty(focus.cause) : "", /nothing handles "focus"/)
         yield* checkout.type(HtmlLocator.label("Note"), "hi")
         yield* checkout.click(HtmlLocator.role("radio", { name: "M" }))
         yield* checkout.click("Stop")

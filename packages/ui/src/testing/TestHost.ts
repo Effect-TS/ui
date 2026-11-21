@@ -62,6 +62,7 @@ import * as Stream from "effect/Stream"
 import * as Component from "../Component.ts"
 import * as Feature from "../Feature.ts"
 import type * as Head from "../Head.ts"
+import * as controlled from "../internal/controlled.ts"
 import * as Executor from "../internal/executor.ts"
 import * as hostEvents from "../internal/hostEvents.ts"
 import * as runtime from "../internal/runtime.ts"
@@ -136,6 +137,8 @@ export type TestNode = TestElement | TestText
 type EventsAlong = (path: ReadonlyArray<TestNode>) => ReadonlyArray<Renderer.Events | undefined>
 
 const noLookup: EventsAlong = () => []
+
+const controlledProps: ReadonlySet<string> = new Set(["value", "checked", "selected", "open"])
 
 /** `node` and its ancestors. */
 const pathFrom = (node: TestNode): Array<TestNode> => {
@@ -254,6 +257,7 @@ export const makeHost = (): Renderer.Host<TestNode> & {
     },
     setProp(node, name, value) {
       const element = node as TestElement
+      if (controlledProps.has(name)) controlled.want(element, name, value)
       // A no-op is skipped, as the browser host does for controlled properties.
       if (element.props[name] === value && name in element.props) return
       operations.push(`prop ${describe(node)} ${name}`)
@@ -282,7 +286,7 @@ export const makeHost = (): Renderer.Host<TestNode> & {
     },
     events: { connect, listen() {} },
     elements: "any",
-    controlled: new Set(["value", "checked", "selected", "open"]),
+    controlled: controlledProps,
     runsMounts: false,
     commit: () => {
       commits++

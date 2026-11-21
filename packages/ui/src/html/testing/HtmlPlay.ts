@@ -9,12 +9,16 @@
  * with the fields read from the tree, a checkbox or radio button fires
  * `input` and `change`, and a `popovertarget` button toggles its popover.
  *
- * Two things differ from a Scene, as they do in a browser. `type` and
+ * Some things differ from a Scene, as they do in a browser. `type` and
  * `change` write the field's `value`, and a click on a checkbox or radio
  * button its `checked`, unchecking the rest of a radio group, before the
- * event, so an uncontrolled field keeps what the user entered.
- * And the events of one click run with no render between them, so a submit
- * reads the fields as they were before the click's own message.
+ * event, so an uncontrolled field keeps what the user entered. A controlled
+ * field goes back to what the view set once the step settles, unless the
+ * Model took the edit. A `popovertarget` click opens or closes the popover,
+ * so the next click sees it. The events of one click run with no render
+ * between them, so a submit reads the fields as they were before the
+ * click's own message. And `focus`, `blur` and the browser's other events
+ * that don't bubble go to the matched element only.
  *
  * **Example** (Signing in)
  *
@@ -73,6 +77,7 @@ import type * as TestHost from "../../testing/TestHost.ts"
 import type * as View from "../../View.ts"
 import type * as Html from "../Html.ts"
 import * as defaults from "../internal/defaults.ts"
+import { ownEvents } from "../internal/ownEvents.ts"
 import type * as HtmlScene from "./HtmlScene.ts"
 
 /**
@@ -123,9 +128,9 @@ export interface HtmlPlay<Model, Msg, Events> extends Play.Play<Model, Msg, Even
    * fields read from the tree. No button counts as the submitter.
    */
   submit(locator: Locator.Locator): Effect.Effect<void, Play.StepError>
-  /** Sends `focus`. */
+  /** Sends `focus` to the element `locator` matches, which must handle it. */
   focus(locator: Locator.Locator): Effect.Effect<void, Play.StepError>
-  /** Sends `blur`. */
+  /** Sends `blur` to the element `locator` matches, which must handle it. */
   blur(locator: Locator.Locator): Effect.Effect<void, Play.StepError>
   /**
    * Drops `payload` on the element `locator` matches, as `HtmlScene.drop`
@@ -139,6 +144,9 @@ export interface HtmlPlay<Model, Msg, Events> extends Play.Play<Model, Msg, Even
 }
 
 class HtmlPlayCursor extends internal.PlayCursor {
+  protected override bubbles(event: string): boolean {
+    return !ownEvents.has(event)
+  }
   override click(target: string | Locator.Locator): Effect.Effect<void, Play.StepError> {
     const locator = typeof target === "string" ? Locator.text(target) : target
     return this.interact("click", () => {
@@ -151,9 +159,20 @@ class HtmlPlayCursor extends internal.PlayCursor {
           event,
           payload: () => payload(container, (node) => node),
           isDefault,
-          edit: checks && (() => {
-            for (const [node, checked] of checks()) (node as TestHost.TestElement).props.checked = checked
-          })
+          edit: checks
+            ? () =>
+              checks().map(([node, checked]) => {
+                const element = node as TestHost.TestElement
+                element.props.checked = checked
+                return element
+              })
+            : event === "toggle"
+            ? () => {
+              const element = node as TestHost.TestElement
+              element.props.popoverOpen = (payload(container, (node) => node) as Html.PopoverTogglePayload).open
+              return [element]
+            }
+            : undefined
         }))
     })
   }
