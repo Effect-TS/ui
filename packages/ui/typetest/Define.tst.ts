@@ -54,7 +54,6 @@ const shared = { Saved: touch, Deleted: touch }
 
 describe("Component.define", () => {
   it("H supports pure views without a registered vocabulary", () => {
-    expect<View.H>().type.toBe<View.H<never>>()
     expect<View.H<Message>>().type.toBe<View.Helper<Message, unknown>>()
     const Row = <Msg>(h: View.H<Msg>, label: string) => h.el("li", label)
     NoteDef.view((model, h) => h.ul(Row(h, model.body)))

@@ -7,7 +7,7 @@ import { describe, expect, it } from "tstyche"
 
 describe("@effect/ui/html/register", () => {
   it("types reusable pure views with View.H", () => {
-    expect<View.H>().type.toBe<View.H<never>>()
+    expect<View.H>().type.toRaiseError(2314)
     const Button = <Msg>(h: View.H<Msg>, message: Msg) => {
       expect(h.props).type.toBe<unknown>()
       expect(h.button).type.toBe<Html.Tags<Msg>["button"]>()
@@ -29,7 +29,7 @@ describe("@effect/ui/html/register", () => {
   })
 
   it("gives a component without `elements` the HTML tags", () => {
-    const Label = (h: View.H, text: string) => {
+    const Label = (h: View.H<never>, text: string) => {
       expect(h.span).type.toBe<Html.Tags<never>["span"]>()
       return h.span(text)
     }
