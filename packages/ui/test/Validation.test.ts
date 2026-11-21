@@ -40,13 +40,19 @@ describe("Validation", () => {
     }))
     const { fields, value, invalid } = Signup.validate(state)
     assert.deepStrictEqual(fields, {
-      email: { _tag: "Invalid", value: "ada@x", required: true, errors: ["Invalid email address"] },
-      password: { _tag: "Invalid", value: "short", required: true, errors: ["Must be at least 8 characters"] },
+      email: { _tag: "Invalid", value: "ada@x", empty: false, required: true, errors: ["Invalid email address"] },
+      password: {
+        _tag: "Invalid",
+        value: "short",
+        empty: false,
+        required: true,
+        errors: ["Must be at least 8 characters"]
+      },
       // A rule over two fields runs whether or not the other field passes.
-      confirm: { _tag: "Valid", value: "short", required: true },
-      account: { _tag: "Valid", value: "Business", required: false },
-      company: { _tag: "Invalid", value: "", required: true, errors: ["Required for business accounts"] },
-      birthday: { _tag: "Invalid", value: "soon", required: false, errors: ["soon isn't a date"] }
+      confirm: { _tag: "Valid", value: "short", empty: false, required: true },
+      account: { _tag: "Valid", value: "Business", empty: false, required: false },
+      company: { _tag: "Invalid", value: "", empty: true, required: true, errors: ["Required for business accounts"] },
+      birthday: { _tag: "Invalid", value: "soon", empty: false, required: false, errors: ["soon isn't a date"] }
     })
     assert.isTrue(invalid)
     assert.isTrue(Option.isNone(value))
@@ -56,20 +62,23 @@ describe("Validation", () => {
     assert.deepStrictEqual(password, {
       _tag: "Invalid",
       value: "longenough",
+      empty: false,
       required: true,
       errors: ["Include a number"]
     })
     assert.deepStrictEqual(confirm, {
       _tag: "Invalid",
       value: "short",
+      empty: false,
       required: true,
       errors: ["Passwords must match"]
     })
     // Optional and empty: acceptable, and nothing to show.
-    assert.deepStrictEqual(company, { _tag: "NotValidated", value: "", required: false })
+    assert.deepStrictEqual(company, { _tag: "NotValidated", value: "", empty: true, required: false })
     assert.deepStrictEqual(Signup.validate(Signup.change(changed, "birthday", null)).fields.birthday, {
       _tag: "NotValidated",
       value: null,
+      empty: true,
       required: false
     })
 
@@ -78,6 +87,7 @@ describe("Validation", () => {
     assert.deepStrictEqual(All.validate(all).fields.password, {
       _tag: "Invalid",
       value: "abc",
+      empty: false,
       required: false,
       errors: ["Must be at least 8 characters", "Must contain 1"]
     })
@@ -150,8 +160,8 @@ describe("Validation", () => {
     const rejected = Login.reject({ password: ["Invalid credentials"] })(filled)
     assert.deepStrictEqual(Login.validate(rejected), {
       fields: {
-        email: { _tag: "NotValidated", value: "ada@example.com", required: true },
-        password: { _tag: "Invalid", value: "secret", required: false, errors: ["Invalid credentials"] }
+        email: { _tag: "NotValidated", value: "ada@example.com", empty: false, required: true },
+        password: { _tag: "Invalid", value: "secret", empty: false, required: false, errors: ["Invalid credentials"] }
       },
       value: Option.none(),
       invalid: true,
@@ -194,9 +204,9 @@ describe("Validation", () => {
     const first = Form.validate(state)
     assert.deepStrictEqual(Form.validate(state), first)
     assert.deepStrictEqual(first.fields, {
-      code: { _tag: "Valid", value: "a", required: false },
+      code: { _tag: "Valid", value: "a", empty: false, required: false },
       // A sticky pattern matches from the start only.
-      sticky: { _tag: "Invalid", value: "ba", required: false, errors: ["Invalid format"] }
+      sticky: { _tag: "Invalid", value: "ba", empty: false, required: false, errors: ["Invalid format"] }
     })
   })
 
@@ -219,6 +229,7 @@ describe("Validation", () => {
     assert.deepStrictEqual(Object.getOwnPropertyDescriptor(derived, "__proto__")?.value, {
       _tag: "Invalid",
       value: "x",
+      empty: false,
       required: true,
       errors: ["Taken"]
     })
@@ -284,6 +295,7 @@ describe("Validation", () => {
         assert.deepStrictEqual(username(), {
           _tag: "Invalid",
           value: "ada",
+          empty: false,
           required: true,
           errors: ["That username is taken"]
         })

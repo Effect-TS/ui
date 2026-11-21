@@ -112,6 +112,13 @@
  * `touched` and `focused` are the field's own. Give the field another
  * `key` to start over, such as after the form is reset.
  *
+ * **With `Validation`**
+ *
+ * When a form validates with `Validation` from `@effect/ui`, spread
+ * {@link fieldValidationProps} into `props` to map a `Validation.Field` to
+ * `invalid` and `filled`:
+ * `Field(h, { props: { ...fieldValidationProps(state), disabled }, view })`.
+ *
  * **Example** (A labelled, described name field)
  *
  * ```ts import.meta.vitest
@@ -164,6 +171,7 @@ import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Subscription from "@effect/ui/Subscription"
 import * as UiSchema from "@effect/ui/UiSchema"
+import type * as Validation from "@effect/ui/Validation"
 import * as View from "@effect/ui/View"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
@@ -212,6 +220,51 @@ export const FieldProps = Schema.Struct({
  * @since 0.1.0
  */
 export type FieldProps = typeof FieldProps.Type
+
+/**
+ * Maps a `Validation.Field` from `@effect/ui` to `Field`'s `invalid` and
+ * `filled` props.
+ *
+ * **Details**
+ *
+ * - `invalid`: `true` for `Invalid`, `false` for `Valid`, and `undefined`
+ *   for `NotValidated` and `Validating`, so a field that hasn't shown yet or
+ *   is waiting on a check shows neither `data-invalid` nor `data-valid`.
+ * - `filled`: `!field.empty`, using the field's own `isEmpty`.
+ *
+ * Spread the result into `Field`'s `props` alongside any other props such as
+ * `disabled` or `described`.
+ *
+ * **Example** (Mapping a validated field to `Field` props)
+ *
+ * ```ts import.meta.vitest
+ * import { Validation } from "@effect/ui"
+ * import { fieldValidationProps } from "@effect/ui-kit"
+ *
+ * const Login = Validation.make({
+ *   email: { required: "Email is required", rules: [Validation.Rule.email()] }
+ * })
+ *
+ * let state = Login.init({ email: "" })
+ * fieldValidationProps(Login.validate(state).fields.email) // => { invalid: undefined, filled: false }
+ *
+ * state = Login.submit(state)
+ * fieldValidationProps(Login.validate(state).fields.email) // => { invalid: true, filled: false }
+ *
+ * state = Login.change(state, "email", "ada@example.com")
+ * fieldValidationProps(Login.validate(state).fields.email) // => { invalid: false, filled: true }
+ * ```
+ *
+ * @stability experimental
+ * @category helpers
+ * @since 0.1.0
+ */
+export const fieldValidationProps = (
+  field: Validation.Field<unknown>
+): { readonly invalid: boolean | undefined; readonly filled: boolean } => ({
+  invalid: field._tag === "Invalid" ? true : field._tag === "Valid" ? false : undefined,
+  filled: !field.empty
+})
 
 const FieldMessage = UiSchema.TaggedEnum({
   FocusedControl: {},

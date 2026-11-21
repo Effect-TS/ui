@@ -202,9 +202,9 @@ export const SignupForm = Component.define({
   view: (model, h) => {
     const { fields } = validateSignup(model.form, h.queries.usernameTaken)
 
-    // One field's markup, by its derived state. A ui-kit `Field` takes the
-    // same facts: pass `invalid: true` for `Invalid`, `false` for `Valid`,
-    // and leave it out otherwise, so a pending check doesn't show as valid.
+    // One field's markup, by its derived state. With ui-kit's `Field`,
+    // spread `fieldValidationProps(field)` into `props` for `invalid` and
+    // `filled`.
     const row = (
       field: Validation.Field<unknown>,
       label: string,
