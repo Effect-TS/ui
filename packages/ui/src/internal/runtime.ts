@@ -1553,7 +1553,6 @@ const setup = (
         settleWrites(claim?.by ?? author, [claim?.view ?? from.view!], from)
         sendHeld(from, undefined)
       }
-      land(path)
     }
     if (keeping.length > 0 && patching === 0) flushKept()
   }
