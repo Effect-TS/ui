@@ -266,8 +266,26 @@ describe("Tooltip in a document", { concurrent: false }, () => {
       assert.isTrue(yield* hidden)
 
       clip.style.position = ""
+      trigger.style.position = "fixed"
+      for (
+        const [name, value, clipped] of [
+          ["container-type", "inline-size", false],
+          ["content-visibility", "auto", true],
+          ["transform-style", "preserve-3d", true],
+          ["will-change", "contain", true],
+          ["offset-path", "path('M0 0')", true]
+        ] as const
+      ) {
+        clip.style.setProperty(name, value)
+        assert.strictEqual(yield* hidden, clipped, `${name}: ${value}`)
+        clip.style.removeProperty(name)
+      }
+
       trigger.style.position = ""
       byId("layer").showPopover()
+      assert.isFalse(yield* hidden)
+      trigger.style.position = "fixed"
+      clip.style.transform = "translateX(0)"
       assert.isFalse(yield* hidden)
     }).pipe(Effect.scoped))
 
