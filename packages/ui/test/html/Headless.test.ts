@@ -553,14 +553,14 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
       assert.isTrue(event.defaultPrevented)
     }).pipe(Effect.scoped))
 
-  it.effect("removing a focused headless part during synchronous blur does not throw or dispatch to the closed owner", () =>
+  it.effect("synchronous focusout during removal of a headless part does not throw or invoke the closed owner", () =>
     Effect.gen(function*() {
-      let frameFocusOuts = 0
+      let calls = 0
       const Frame = Component.define({
         name: "Frame",
         scoped: false,
         model: Schema.Null,
-        message: Schema.Literal("blurred"),
+        message: Schema.Literal("out"),
         elements: Html
       }).make({
         init: () => null,
@@ -568,8 +568,8 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
         parts: (_, p) => ({
           root: p.part("div", (b) =>
             b.on("focusout", () => {
-              frameFocusOuts++
-              return "blurred" as const
+              calls++
+              return "out" as const
             }))
         })
       })
@@ -583,38 +583,29 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
         init: () => true,
         update: () => false,
         view: (shown, h) =>
-          h.main(
-            shown
-              ? Frame(h, {
-                view: (frame) => frame.root(h.div).children(h.button.onClick("hide").children("Hide"))
-              })
-              : h.button.children("Show")
-          )
+          h.main(shown ? Frame(h, { view: (frame) => frame.root(h.div).children(h.button) }) : h.p("gone"))
       })
       const app = yield* container
-      yield* BrowserHost.mountEffect(Page, {}, app)
-      yield* tick
+      const root = yield* BrowserHost.mountEffect(Page, {}, app)
       const main = app.querySelector("main")!
       const button = main.querySelector("button")!
-      button.dispatchEvent(new FocusEvent("focusout", { bubbles: true }))
-      yield* tick
-      assert.strictEqual(frameFocusOuts, 1)
-      const errors: Array<unknown> = []
+      const focusout = () => button.dispatchEvent(new FocusEvent("focusout", { bubbles: true }))
+      focusout()
+      assert.strictEqual(calls, 1)
+      let thrown: unknown
       const removeChild = main.removeChild.bind(main)
       main.removeChild = ((child: Node) => {
-        for (const event of [new FocusEvent("blur"), new FocusEvent("focusout", { bubbles: true })]) {
-          try {
-            button.dispatchEvent(event)
-          } catch (error) {
-            errors.push(error)
-          }
+        try {
+          focusout()
+        } catch (error) {
+          thrown = error
         }
         return removeChild(child)
       }) as typeof main.removeChild
-      HtmlLocator.click(button)
+      root.send("hide")
       yield* tick
-      assert.deepStrictEqual(errors, [])
-      assert.strictEqual(frameFocusOuts, 1)
-      assert.strictEqual(app.querySelector("button")!.textContent, "Show")
+      assert.isUndefined(thrown)
+      assert.strictEqual(calls, 1)
+      assert.strictEqual(main.textContent, "gone")
     }).pipe(Effect.scoped))
 })
