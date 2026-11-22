@@ -213,6 +213,21 @@ describe("VirtualList", () => {
       assert.deepStrictEqual(indices(s), [100])
     }))
 
+  it.effect("goes back to an applied request that a waiting one replaced", () =>
+    Effect.gen(function*() {
+      const applied = { target: VirtualListScrollTarget.Index({ index: 500 }) }
+      const waiting = { target: VirtualListScrollTarget.Key({ key: "missing" }) }
+      const s = yield* Scene.make(VirtualList, { ...base, overscan: 0, scrollTo: applied }, makeStandIn())
+      s.mounted(tracked(s), moved(10000, 100, { scrolled: applied })).emitted(scrolled(500, 504))
+
+      s.props({ ...base, overscan: 0, scrollTo: waiting })
+      s.mounted(tracked(s), sent("RequestedScroll", { scrollTo: waiting }))
+      assert.strictEqual(argsOf(s).waiting, true)
+
+      s.props({ ...base, overscan: 0, scrollTo: applied })
+      assert.deepStrictEqual(argsOf(s).request, { scrollTo: applied, index: 500, offset: null })
+    }))
+
   it.effect("drops a waiting request when the user scrolls", () =>
     Effect.gen(function*() {
       const scrollTo = { target: VirtualListScrollTarget.Index({ index: 500 }) }

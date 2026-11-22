@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { Component, UiSchema } from "@effect/ui"
-import { VirtualList, type VirtualListProps, VirtualListScrollTarget, VirtualListScrollTo } from "@effect/ui-kit"
+import { VirtualList, type VirtualListProps, VirtualListScrollTarget, type VirtualListScrollTo } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
@@ -16,31 +16,34 @@ const rect = (top: number, height: number, width = 300) => DOMRect.fromRect({ x:
 const layout = Effect.acquireRelease(
   Effect.sync(() => {
     const original = Element.prototype.getBoundingClientRect
-    let scrollTop = 0
+    let stored = 0
     const scroller = () => document.querySelector<HTMLElement>(".viewport")!
     const list = () => document.querySelector<HTMLElement>(".list")!
     const listHeight = () =>
       padding(list(), "start") + list().querySelectorAll(".item").length * itemSize + padding(list(), "end")
+    const top = () => (stored = Math.max(0, Math.min(stored, listHeight() - 100)))
     Element.prototype.getBoundingClientRect = function(this: Element) {
       if (this.classList.contains("viewport")) return rect(0, 100)
-      if (this.classList.contains("list")) return rect(-scrollTop, listHeight())
+      if (this.classList.contains("list")) return rect(-top(), listHeight())
       if (this.classList.contains("item")) {
-        return rect(-scrollTop + Number(this.getAttribute("data-index")) * itemSize, itemSize)
+        return rect(-top() + Number(this.getAttribute("data-index")) * itemSize, itemSize)
       }
       return original.call(this)
     }
     const install = () => {
       const element = scroller()
       Object.defineProperty(element, "clientHeight", { configurable: true, value: 100 })
+      Object.defineProperty(element, "scrollHeight", { configurable: true, get: listHeight })
       Object.defineProperty(element, "scrollTop", {
         configurable: true,
-        get: () => scrollTop,
+        get: top,
         set: (value: number) => {
-          scrollTop = Math.max(0, Math.min(value, listHeight() - 100))
+          stored = value
+          top()
         }
       })
       element.scrollTo = ((options: ScrollToOptions) => {
-        element.scrollTop = options.top ?? scrollTop
+        element.scrollTop = options.top ?? top()
         setTimeout(() => element.dispatchEvent(new Event("scroll")), 0)
       }) as typeof element.scrollTo
     }
@@ -48,7 +51,8 @@ const layout = Effect.acquireRelease(
       scroller().scrollTop = top
       scroller().dispatchEvent(new Event("scroll"))
     }
-    return { install, scrollTo, scrollTop: () => scrollTop, original }
+    const relayout = () => scroller().dispatchEvent(new Event("scroll"))
+    return { install, scrollTo, relayout, scrollTop: top, original }
   }),
   ({ original }) => Effect.sync(() => (Element.prototype.getBoundingClientRect = original))
 )
@@ -88,30 +92,23 @@ const mountList = Effect.fnUntraced(function*(props: Partial<VirtualListProps> =
   return { ...geometry, indices, item, list: app.querySelector<HTMLElement>(".list")! }
 })
 
-const Loader = Effect.fnUntraced(function*(scrollTo: VirtualListScrollTo) {
+const Steps = Effect.fnUntraced(function*(steps: ReadonlyArray<Partial<VirtualListProps>>) {
   const geometry = yield* layout
-  const Message = UiSchema.TaggedEnum({ Loaded: {}, Retargeted: {} })
+  const Message = UiSchema.TaggedEnum({ Advanced: {} })
   const Demo = Component.define({
     name: "Demo",
     scoped: false,
-    model: Schema.Struct({ count: Schema.Number, scrollTo: Schema.optional(VirtualListScrollTo) }),
+    model: Schema.Struct({ step: Schema.Number }),
     message: Message,
     elements: Html
   }).make({
-    init: () => ({ count: 0, scrollTo }),
-    update: {
-      Loaded: () => ({ count: 1000 }),
-      Retargeted: (model) => ({
-        ...model,
-        scrollTo: { target: VirtualListScrollTarget.Index({ index: 100 }) }
-      })
-    },
+    init: () => ({ step: 0 }),
+    update: { Advanced: (model) => ({ step: model.step + 1 }) },
     view: (model, h) =>
       h.div.children(
-        h.button.class("load").onClick(Message.Loaded()).children("Load"),
-        h.button.class("retarget").onClick(Message.Retargeted()).children("Retarget"),
+        h.button.class("next").onClick(Message.Advanced()).children("Next"),
         VirtualList(h, {
-          props: { count: model.count, itemSize, scrollTo: model.scrollTo },
+          props: { count: 1000, itemSize, ...steps[model.step] },
           view: (virtualList) =>
             virtualList.viewport(h.div.class("viewport")).children(
               virtualList.list(h.ul.class("list")).children(
@@ -127,7 +124,21 @@ const Loader = Effect.fnUntraced(function*(scrollTo: VirtualListScrollTo) {
   yield* BrowserHost.mountEffect(Demo, {}, app)
   geometry.install()
   yield* tick
-  return { ...geometry, press: (name: string) => click(app.querySelector(".".concat(name))!) }
+  yield* tick
+  const next = Effect.gen(function*() {
+    click(app.querySelector(".next")!)
+    yield* tick
+    yield* tick
+  })
+  return { ...geometry, next }
+})
+
+const keysWith = (count: number, index: number, key: string) =>
+  Array.from({ length: count }, (_, i) => (i === index ? key : "k" + i))
+
+const toKey = (key: string, id?: string): VirtualListScrollTo => ({
+  target: VirtualListScrollTarget.Key({ key }),
+  ...(id === undefined ? {} : { id })
 })
 
 const span = (start: number, end: number) => Array.from({ length: end - start + 1 }, (_, i) => start + i)
@@ -179,21 +190,95 @@ describe("VirtualList in a document", { concurrent: false }, () => {
 
   it.effect("scrolls to the first request once the items load, after the parent drops it", () =>
     Effect.gen(function*() {
-      const { press, scrollTop } = yield* Loader({ target: VirtualListScrollTarget.Index({ index: 500 }) })
-      press("load")
-      yield* tick
-      yield* tick
+      const { next, scrollTop } = yield* Steps([
+        { count: 0, scrollTo: { target: VirtualListScrollTarget.Index({ index: 500 }) } },
+        {}
+      ])
+      yield* next
       assert.strictEqual(scrollTop(), 500 * itemSize)
     }))
 
   it.effect("scrolls to a newer request that replaced the first while the list was empty", () =>
     Effect.gen(function*() {
-      const { press, scrollTop } = yield* Loader({ target: VirtualListScrollTarget.Index({ index: 500 }) })
-      press("retarget")
+      const { next, scrollTop } = yield* Steps([
+        { count: 0, scrollTo: { target: VirtualListScrollTarget.Index({ index: 500 }) } },
+        { count: 0, scrollTo: { target: VirtualListScrollTarget.Index({ index: 100 }) } },
+        {}
+      ])
+      yield* next
+      yield* next
+      assert.strictEqual(scrollTop(), 100 * itemSize)
+    }))
+
+  it.effect("keeps waiting for a key when shrinking the list clamps the scroll position", () =>
+    Effect.gen(function*() {
+      const { next, relayout, scrollTop } = yield* Steps([
+        { scrollTo: { target: VirtualListScrollTarget.End() } },
+        { scrollTo: toKey("wanted") },
+        { count: 500 },
+        { count: 500, keys: keysWith(500, 100, "wanted") }
+      ])
+      assert.strictEqual(scrollTop(), 1000 * itemSize - 100)
+      yield* next
+      yield* next
+      assert.strictEqual(scrollTop(), 500 * itemSize - 100)
+      relayout()
       yield* tick
-      press("load")
+      yield* next
+      assert.strictEqual(scrollTop(), 100 * itemSize)
+    }))
+
+  it.effect("drops a waiting key when the user scrolls", () =>
+    Effect.gen(function*() {
+      const { next, scrollTo, scrollTop } = yield* Steps([
+        { scrollTo: { target: VirtualListScrollTarget.End() } },
+        { scrollTo: toKey("wanted") },
+        { count: 500 },
+        { count: 500, keys: keysWith(500, 100, "wanted") }
+      ])
+      yield* next
+      yield* next
+      scrollTo(4000)
       yield* tick
+      yield* next
+      assert.strictEqual(scrollTop(), 4000)
+    }))
+
+  it.effect("scrolls to a key requested again after another request replaced it", () =>
+    Effect.gen(function*() {
+      const { next, scrollTop } = yield* Steps([
+        {},
+        { scrollTo: toKey("wanted") },
+        { scrollTo: { target: VirtualListScrollTarget.Index({ index: 200 }) } },
+        { scrollTo: toKey("wanted") },
+        {},
+        { keys: keysWith(1000, 100, "wanted") }
+      ])
+      yield* next
+      yield* next
+      assert.strictEqual(scrollTop(), 200 * itemSize)
+      yield* next
+      yield* next
+      yield* next
+      assert.strictEqual(scrollTop(), 100 * itemSize)
+    }))
+
+  it.effect("ignores a key passed again unchanged, and follows it again with a new id", () =>
+    Effect.gen(function*() {
+      const keys = keysWith(1000, 100, "wanted")
+      const { next, scrollTo, scrollTop } = yield* Steps([
+        { keys, scrollTo: toKey("wanted") },
+        { keys },
+        { keys, scrollTo: toKey("wanted") },
+        { keys, scrollTo: toKey("wanted", "again") }
+      ])
+      assert.strictEqual(scrollTop(), 100 * itemSize)
+      scrollTo(6000)
       yield* tick
+      yield* next
+      yield* next
+      assert.strictEqual(scrollTop(), 6000)
+      yield* next
       assert.strictEqual(scrollTop(), 100 * itemSize)
     }))
 })

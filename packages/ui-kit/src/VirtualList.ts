@@ -194,7 +194,7 @@ export type VirtualListAlign = typeof VirtualListAlign.Type
 
 /**
  * A scroll request. The list scrolls once for each request that differs from
- * the last one it applied, so change `id` to go to the same target again.
+ * the last one it received, so change `id` to go to the same target again.
  *
  * @stability experimental
  * @category models
@@ -446,11 +446,10 @@ interface Pending {
 const sameRequest = (a: VirtualListScrollTo | undefined, b: VirtualListScrollTo | null): boolean =>
   a !== undefined && b !== null && sameScrollTo(a, b)
 
+const latestOf = (model: Model): VirtualListScrollTo | null => model.requested ?? model.handled
+
 const freshOf = (model: Model, props: VirtualListProps): VirtualListScrollTo | null =>
-  props.scrollTo === undefined || sameRequest(props.scrollTo, model.handled) ||
-    sameRequest(props.scrollTo, model.requested)
-    ? null
-    : props.scrollTo
+  props.scrollTo === undefined || sameRequest(props.scrollTo, latestOf(model)) ? null : props.scrollTo
 
 const pendingOf = (scrollTo: VirtualListScrollTo | null, props: VirtualListProps, layout: Layout): Pending | null => {
   if (scrollTo === null || layout.count === 0) return null
@@ -662,7 +661,7 @@ const TrackVirtualList = Mount.makeStream(
         let applied: VirtualListScrollTo | null = null
         let noted: VirtualListScrollTo | null = null
         let pinned: typeof ScrollRequest.Type | null = null
-        let scrolledTo: number | null = null
+        let seen = 0
         let focused: string | null = null
         let focusTimer: ReturnType<typeof setTimeout> | undefined
         let sentEpoch = args.epoch
@@ -689,7 +688,16 @@ const TrackVirtualList = Mount.makeStream(
           const top = scrollTop() + delta
           if (viewport === null) window.scrollTo({ top, behavior: "instant" })
           else viewport.scrollTo({ top, behavior: "instant" })
-          scrolledTo = scrollTop()
+          seen = scrollTop()
+        }
+        const scroller = () => viewport ?? document.scrollingElement ?? document.documentElement
+        const movedByUser = () => {
+          const top = scrollTop()
+          const element = scroller()
+          const clamped = top < seen && top >= element.scrollHeight - element.clientHeight - 1
+          const moved = !same(top, seen) && !clamped
+          seen = top
+          return moved
         }
         const toEnd = () => {
           if (list === viewport) return list.scrollHeight - list.clientHeight - list.scrollTop
@@ -782,11 +790,10 @@ const TrackVirtualList = Mount.makeStream(
         }
 
         const onScroll = () => {
-          if (scrolledTo === null || !same(scrollTop(), scrolledTo)) {
+          if (movedByUser()) {
             pinned = null
             if (args.waiting) send(Message.ScrolledByUser())
           }
-          scrolledTo = null
           capture()
           report(null)
         }
@@ -797,6 +804,7 @@ const TrackVirtualList = Mount.makeStream(
             listening?.abort()
             if (viewport !== null && viewport !== list) resizeObserver?.unobserve(viewport)
             viewport = next
+            seen = scrollTop()
             listening = new AbortController()
             const options = { signal: listening.signal, passive: true }
             const target = viewport ?? window
@@ -831,6 +839,8 @@ const TrackVirtualList = Mount.makeStream(
           bind()
           const request = args.request
           const fresh = args.fresh
+          if (request === null) applied = null
+          if (fresh === null) noted = null
           if (
             fresh !== null && (noted === null || !sameScrollTo(noted, fresh)) &&
             (request === null || !sameScrollTo(request.scrollTo, fresh))
@@ -1013,7 +1023,7 @@ export const VirtualList = Component.define({
       })
     },
     RequestedScroll: (model, { scrollTo }) =>
-      sameRequest(scrollTo, model.handled) ? model : { ...model, requested: scrollTo },
+      sameRequest(scrollTo, latestOf(model)) ? model : { ...model, requested: scrollTo },
     ScrolledByUser: (model) =>
       model.requested === null ? model : { ...model, handled: model.requested, requested: null },
     MeasuredItems: (stored, message, $) => {
