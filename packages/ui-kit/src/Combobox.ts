@@ -6,10 +6,10 @@
  * filtering, focus, placement, the data attributes and the form inputs, and
  * the consumer draws the markup. The consumer owns whether the popup is
  * open, what's selected and the input's text, passes them as `open`,
- * `value` and `inputValue`, and stores what the `Opened`, `Dismissed`,
- * `Picked` and `EditedInput` events report. Values are strings, and
- * `items` lists every option with its label. The combobox filters them and
- * hands back `combobox.items`, the ones to draw.
+ * `value` and `inputValue`, and stores what the `RequestedOpen`,
+ * `RequestedClose`, `Picked` and `RequestedInputValue` events ask for.
+ * Values are strings, and `items` lists every option with its label. The
+ * combobox filters them and hands back `combobox.items`, the ones to draw.
  *
  * **Anatomy**
  *
@@ -167,9 +167,10 @@
  * ]
  *
  * const PickerMessage = UiSchema.TaggedEnum({
- *   ToggledFruits: { open: Schema.Boolean },
+ *   RequestedOpenFruit: {},
+ *   RequestedCloseFruit: {},
  *   PickedFruit: { fruit: Schema.NullOr(Schema.String) },
- *   EditedText: { text: Schema.String }
+ *   RequestedInputValueFruit: { text: Schema.String }
  * })
  *
  * const Picker = Component.define({
@@ -181,9 +182,10 @@
  * }).make({
  *   init: () => ({ open: false, fruit: "banana", text: "Banana" }),
  *   update: {
- *     ToggledFruits: (model, { open }) => ({ ...model, open }),
+ *     RequestedOpenFruit: (model) => ({ ...model, open: true }),
+ *     RequestedCloseFruit: (model) => ({ ...model, open: false }),
  *     PickedFruit: (model, { fruit }) => ({ ...model, fruit }),
- *     EditedText: (model, { text }) => ({ ...model, text })
+ *     RequestedInputValueFruit: (model, { text }) => ({ ...model, text })
  *   },
  *   view: (model, h) =>
  *     Field(h, {
@@ -192,10 +194,10 @@
  *         Combobox(h, {
  *           props: { open: model.open, value: model.fruit, inputValue: model.text, items: fruits, name: "fruit" },
  *           onEmit: {
- *             Opened: () => PickerMessage.ToggledFruits({ open: true }),
- *             Dismissed: () => PickerMessage.ToggledFruits({ open: false }),
+ *             RequestedOpen: () => PickerMessage.RequestedOpenFruit(),
+ *             RequestedClose: () => PickerMessage.RequestedCloseFruit(),
  *             Picked: ({ value }) => PickerMessage.PickedFruit({ fruit: typeof value === "string" ? value : null }),
- *             EditedInput: ({ inputValue }) => PickerMessage.EditedText({ text: inputValue }),
+ *             RequestedInputValue: ({ inputValue }) => PickerMessage.RequestedInputValueFruit({ text: inputValue }),
  *             Highlighted: () => undefined,
  *             Settled: () => undefined
  *           },
@@ -403,9 +405,9 @@ export type ComboboxFilterMode = typeof ComboboxFilterMode.Type
  * **Details**
  *
  * - `open`: whether the popup shows. The combobox only asks, with
- *   `Opened` and `Dismissed`.
+ *   `RequestedOpen` and `RequestedClose`.
  * - `inputValue`: the input's text. The combobox only asks, with
- *   `EditedInput`.
+ *   `RequestedInputValue`.
  * - `items`: every option, in the order they're drawn.
  * - `value`: the selected value, or values with `multiple`. `null` when
  *   left out. The combobox only asks, with `Picked`.
@@ -501,37 +503,38 @@ export const ComboboxProps = Schema.Struct({
 export type ComboboxProps = typeof ComboboxProps.Type
 
 /**
- * What a `Combobox` asks of its parent.
+ * What a `Combobox` emits.
  *
  * **Details**
  *
- * - `Opened`: set `open` to true.
- * - `Dismissed`: set `open` to false.
- * - `Picked`: set `value` to `value`, the whole new selection.
- * - `EditedInput`: set `inputValue` to `inputValue`. A single pick
- *   reports the picked label, and after the popup closes the combobox puts
- *   the selected label back, or clears the text with `multiple` or
- *   `inputInPopup`.
- * - `Highlighted`: the highlighted item changed, to `value` at `index` in
- *   `combobox.items`, or to none with `null` and `-1`. For a virtualized
- *   list to scroll to it.
- * - `Settled`: the popup's transitions ended, after it opened or closed.
+ * - `RequestedOpen`: asks for `open` to be true.
+ * - `RequestedClose`: asks for `open` to be false.
+ * - `Picked`: asks for `value` to be `value`, the whole new selection.
+ * - `RequestedInputValue`: asks for `inputValue` to be `inputValue`. A
+ *   single pick asks for the picked label, and after the popup closes the
+ *   combobox asks for the selected label back, or for empty text with
+ *   `multiple` or `inputInPopup`.
+ * - `Highlighted`: reports that the highlighted item changed, to `value` at
+ *   `index` in `combobox.items`, or to none with `null` and `-1`. For a
+ *   virtualized list to scroll to it.
+ * - `Settled`: reports that the popup's transitions ended, after it
+ *   opened or closed.
  *
  * @stability experimental
  * @category schemas
  * @since 0.1.0
  */
 export const ComboboxEvents = UiSchema.TaggedEnum({
-  Opened: { reason: ComboboxChangeReason },
-  Dismissed: { reason: ComboboxChangeReason },
+  RequestedOpen: { reason: ComboboxChangeReason },
+  RequestedClose: { reason: ComboboxChangeReason },
   Picked: { value: ComboboxValue, reason: ComboboxChangeReason },
-  EditedInput: { inputValue: Schema.String, reason: ComboboxChangeReason },
+  RequestedInputValue: { inputValue: Schema.String, reason: ComboboxChangeReason },
   Highlighted: { value: Schema.NullOr(Schema.String), index: Schema.Number, reason: ComboboxHighlightReason },
   Settled: { open: Schema.Boolean }
 })
 
 /**
- * What a `Combobox` asks of its parent.
+ * What a `Combobox` emits.
  *
  * @stability experimental
  * @category models
@@ -595,10 +598,10 @@ export interface ComboboxFilter extends TextFilter {}
 export const makeComboboxFilter = (locale?: string | undefined): ComboboxFilter => textFilter(locale)
 
 const emits: Engine.Emits<ComboboxEvents> = {
-  opened: (reason) => ComboboxEvents.Opened({ reason }),
-  dismissed: (reason) => ComboboxEvents.Dismissed({ reason }),
+  requestedOpen: (reason) => ComboboxEvents.RequestedOpen({ reason }),
+  requestedClose: (reason) => ComboboxEvents.RequestedClose({ reason }),
   picked: (value, reason) => ComboboxEvents.Picked({ value, reason }),
-  edited: (inputValue, reason) => ComboboxEvents.EditedInput({ inputValue, reason }),
+  edited: (inputValue, reason) => ComboboxEvents.RequestedInputValue({ inputValue, reason }),
   highlighted: (value, index, reason) => ComboboxEvents.Highlighted({ value, index, reason }),
   settled: (open) => ComboboxEvents.Settled({ open })
 }

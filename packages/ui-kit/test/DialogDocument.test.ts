@@ -18,8 +18,8 @@ const Message = UiSchema.TaggedEnum({
   AddedControl: {},
   AllowedFocus: {},
   Removed: {},
-  Opened: { which: Schema.String, triggerId: Schema.NullOr(Schema.String), method: OpenMethod },
-  Dismissed: { which: Schema.String, reason: Schema.String },
+  RequestedOpen: { which: Schema.String, triggerId: Schema.NullOr(Schema.String), method: OpenMethod },
+  RequestedClose: { which: Schema.String, reason: Schema.String },
   Settled: { which: Schema.String, open: Schema.Boolean }
 })
 
@@ -100,26 +100,26 @@ const Page = Component.define({
     Switched: (model) => ({ ...model, config: { ...model.config, modal: model.config.modal === false } }),
     Removed: (model) => ({ ...model, removed: true }),
     AllowedFocus: (model) => ({ ...model, config: { ...model.config, initialFocus: true } }),
-    Opened: (model, { method, triggerId, which }) => ({
+    RequestedOpen: (model, { method, triggerId, which }) => ({
       ...model,
       [which]: true,
       triggerId,
       method,
-      log: [...model.log, `Opened ${which} ${triggerId} ${method}`]
+      log: [...model.log, `RequestedOpen ${which} ${triggerId} ${method}`]
     }),
-    Dismissed: (model, { reason, which }) => ({
+    RequestedClose: (model, { reason, which }) => ({
       ...model,
       [which]: model.config.refuse ? model[which as "a" | "b"] : false,
-      log: [...model.log, `Dismissed ${which} ${reason}`]
+      log: [...model.log, `RequestedClose ${which} ${reason}`]
     }),
     Settled: (model, { open, which }) => ({ ...model, log: [...model.log, `Settled ${which} ${open}`] })
   },
   view: (model, h) => {
     const props = model.config
     const on = (which: string) => ({
-      Opened: ({ triggerId }: { readonly triggerId: string | null }) =>
-        Message.Opened({ which, triggerId, method: null }),
-      Dismissed: ({ reason }: { readonly reason: string }) => Message.Dismissed({ which, reason }),
+      RequestedOpen: ({ triggerId }: { readonly triggerId: string | null }) =>
+        Message.RequestedOpen({ which, triggerId, method: null }),
+      RequestedClose: ({ reason }: { readonly reason: string }) => Message.RequestedClose({ which, reason }),
       Settled: ({ open }: { readonly open: boolean }) => Message.Settled({ which, open })
     })
     return ToastProvider(h, {
@@ -129,9 +129,10 @@ const Page = Component.define({
           h.div(model.late ? h.button.attr("id", "late").children("Late") : null),
           h.button.attr("id", "shut").onClick(Message.Closed()).children("Shut"),
           h.button.attr("id", "switch").onClick(Message.Switched()).children("Switch"),
-          h.button.attr("id", "reopen").onClick(Message.Opened({ which: "a", triggerId: null, method: null })).children(
-            "Reopen"
-          ),
+          h.button.attr("id", "reopen").onClick(Message.RequestedOpen({ which: "a", triggerId: null, method: null }))
+            .children(
+              "Reopen"
+            ),
           model.toasts
             ? toastProvider.viewport(h.div.attr("id", "toasts")).children(h.button.attr("id", "toast").children("Undo"))
             : null,
@@ -139,7 +140,7 @@ const Page = Component.define({
             ? DialogTrigger(h, {
               element: h.button.attr("id", "detached"),
               props: { open: model.a, popupId: "settings" },
-              onPress: ({ method, triggerId }) => Message.Opened({ which: "a", triggerId, method })
+              onPress: ({ method, triggerId }) => Message.RequestedOpen({ which: "a", triggerId, method })
             }).children("Settings")
             : null,
           model.removed && !props.nested ? null : Dialog(h, {
@@ -168,7 +169,9 @@ const Page = Component.define({
                 h.input.attr("id", "first"),
                 props.marked ? dialog.initialFocus(h.input.attr("id", "second")) : h.input.attr("id", "second"),
                 props.siblings
-                  ? h.button.attr("id", "open-b").onClick(Message.Opened({ which: "b", triggerId: null, method: null }))
+                  ? h.button.attr("id", "open-b").onClick(
+                    Message.RequestedOpen({ which: "b", triggerId: null, method: null })
+                  )
                     .children("Open B")
                   : null,
                 props.nested
@@ -278,8 +281,8 @@ const back = (live: () => ReadonlyArray<{ request: (cancelable: boolean) => bool
   return watchers[0]!.request(cancelable)
 }
 
-const dismissals = (log: ReadonlyArray<string>) => log.filter((line) => line.startsWith("Dismissed"))
-const opens = (log: ReadonlyArray<string>) => log.filter((line) => line.startsWith("Opened"))
+const dismissals = (log: ReadonlyArray<string>) => log.filter((line) => line.startsWith("RequestedClose"))
+const opens = (log: ReadonlyArray<string>) => log.filter((line) => line.startsWith("RequestedOpen"))
 
 // The tests share one document, and move focus.
 describe("Dialog in a document", { concurrent: false }, () => {
@@ -294,7 +297,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
           // A press outside both is the upper dialog's alone.
           click(modal === true ? layerOf(document.querySelectorAll("dialog")[1]!) : byId("page"))
           yield* tick
-          assert.deepStrictEqual(dismissals(log()), ["Dismissed b outside-press"], String(modal))
+          assert.deepStrictEqual(dismissals(log()), ["RequestedClose b outside-press"], String(modal))
         }))
       }
     }))
@@ -312,13 +315,13 @@ describe("Dialog in a document", { concurrent: false }, () => {
       escape()
       yield* tick
       yield* tick
-      assert.deepStrictEqual(dismissals(log()), ["Dismissed b escape-key"])
+      assert.deepStrictEqual(dismissals(log()), ["RequestedClose b escape-key"])
       assert.strictEqual(document.activeElement?.id, "trigger-b")
       assert.strictEqual(app.querySelectorAll("dialog").length, 1)
       // Focus the user moves out of A still closes it.
       byId("page").focus()
       yield* tick
-      assert.deepStrictEqual(dismissals(log()), ["Dismissed b escape-key", "Dismissed a focus-out"])
+      assert.deepStrictEqual(dismissals(log()), ["RequestedClose b escape-key", "RequestedClose a focus-out"])
     }))
 
   it.effect("of two dialogs open from the start, the upper one takes focus, and neither closes", () =>
@@ -341,7 +344,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
       press(byId("tb"))
       byId("tb").click()
       yield* tick
-      assert.deepStrictEqual(opens(log()), ["Opened a tb null"])
+      assert.deepStrictEqual(opens(log()), ["RequestedOpen a tb null"])
       assert.deepStrictEqual(dismissals(log()), [])
       byId("first").focus()
       escape()
@@ -377,7 +380,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
       byId("second").dispatchEvent(new CompositionEvent("compositionend", { bubbles: true }))
       escape()
       yield* tick
-      assert.deepStrictEqual(dismissals(log()), Array(4).fill("Dismissed a escape-key"))
+      assert.deepStrictEqual(dismissals(log()), Array(4).fill("RequestedClose a escape-key"))
       assert.isTrue(dialog.matches(":popover-open"))
       assert.strictEqual(document.activeElement?.id, "second")
     }))
@@ -395,7 +398,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
       byId("page").focus()
       yield* tick
       yield* tick
-      assert.deepStrictEqual(dismissals(log()), ["Dismissed a focus-out"])
+      assert.deepStrictEqual(dismissals(log()), ["RequestedClose a focus-out"])
       assert.isNull(app.querySelector("dialog"))
       assert.include(log(), "Settled a false")
     }))
@@ -409,7 +412,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
       trigger.dispatchEvent(new PointerEvent("click", { bubbles: true, detail: 1, pointerType: "touch" }))
       yield* tick
       yield* tick
-      assert.deepStrictEqual(opens(log()), ["Opened a detached touch"])
+      assert.deepStrictEqual(opens(log()), ["RequestedOpen a detached touch"])
       assert.strictEqual(trigger.getAttribute("aria-controls"), "settings")
       assert.strictEqual(document.querySelector("dialog")?.id, "settings")
       assert.strictEqual(document.activeElement, document.querySelector(".popup-a"))
@@ -420,7 +423,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
       escape()
       yield* tick
       yield* tick
-      assert.deepStrictEqual(dismissals(log()), ["Dismissed a escape-key"])
+      assert.deepStrictEqual(dismissals(log()), ["RequestedClose a escape-key"])
       assert.strictEqual(document.activeElement?.id, "detached")
     }))
 
@@ -438,7 +441,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
       assert.isNull(layerOf(dialog).getAttribute("inert"))
       escape()
       yield* tick
-      assert.deepStrictEqual(dismissals(log()), ["Dismissed a escape-key"])
+      assert.deepStrictEqual(dismissals(log()), ["RequestedClose a escape-key"])
       assert.deepStrictEqual(hidden(), ["true", "true", "true"])
       byId("shut").click()
       yield* tick
@@ -482,7 +485,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(dismissals(log()), [])
       click(layer)
       yield* tick
-      assert.deepStrictEqual(dismissals(log()), ["Dismissed a outside-press"])
+      assert.deepStrictEqual(dismissals(log()), ["RequestedClose a outside-press"])
     }))
 
   it.effect("trap-focus takes a press on late toasts as outside, but not one on what the page added since", () =>
@@ -503,7 +506,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
       yield* tick
       press(byId("toast"))
       yield* tick
-      assert.deepStrictEqual(dismissals(log()), ["Dismissed a outside-press"])
+      assert.deepStrictEqual(dismissals(log()), ["RequestedClose a outside-press"])
     }))
 
   it.effect("a non-modal dialog takes a click on late toasts as outside", () =>
@@ -513,7 +516,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
       yield* tick
       click(byId("toast"))
       yield* tick
-      assert.deepStrictEqual(dismissals(log()), ["Dismissed a outside-press"])
+      assert.deepStrictEqual(dismissals(log()), ["RequestedClose a outside-press"])
     }))
 
   it.effect("focus skips what Tab doesn't reach, and a focused element removed gives focus to the popup", () =>
@@ -554,7 +557,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
           page.addEventListener("click", () => clicks++)
           press(modal ? layerOf(document.querySelector("dialog")!) : page, "touch")
           yield* tick
-          assert.deepStrictEqual(dismissals(log()), ["Dismissed a outside-press"], String(modal))
+          assert.deepStrictEqual(dismissals(log()), ["RequestedClose a outside-press"], String(modal))
           page.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerType: "touch" }))
           page.dispatchEvent(new PointerEvent("click", { bubbles: true, detail: 1, pointerType: "touch" }))
           assert.strictEqual(clicks, 0, String(modal))
@@ -633,7 +636,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
       assert.isNull(byId("b-field").closest("[aria-hidden=true]"))
       escape()
       yield* tick
-      assert.deepStrictEqual(dismissals(log()), ["Dismissed b escape-key"])
+      assert.deepStrictEqual(dismissals(log()), ["RequestedClose b escape-key"])
     }))
 
   it.effect("a dialog closed before its first frame and reopened during the exit finishes entering", () =>
@@ -685,7 +688,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(dismissals(log()), [])
       click(viewport)
       yield* tick
-      assert.deepStrictEqual(dismissals(log()), ["Dismissed a outside-press"])
+      assert.deepStrictEqual(dismissals(log()), ["RequestedClose a outside-press"])
     }))
 
   it.effect("switching modes while open takes and gives back the scroll lock and the hidden page", () =>
@@ -747,7 +750,9 @@ describe("Dialog in a document", { concurrent: false }, () => {
           }
           yield* tick
           yield* tick
-          assert.deepStrictEqual(dismissals(log()), [modal ? "Dismissed a outside-press" : "Dismissed a focus-out"])
+          assert.deepStrictEqual(dismissals(log()), [
+            modal ? "RequestedClose a outside-press" : "RequestedClose a focus-out"
+          ])
           assert.strictEqual(document.activeElement?.id, "page", String(modal))
         }))
       }
@@ -762,7 +767,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
           const page = byId("page")
           press(page, "touch")
           yield* tick
-          assert.deepStrictEqual(dismissals(log()), ["Dismissed a outside-press"])
+          assert.deepStrictEqual(dismissals(log()), ["RequestedClose a outside-press"])
           assert.notStrictEqual(document.activeElement?.id, "trigger", String(focuses))
           if (focuses) page.focus()
           page.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerType: "touch" }))
@@ -779,8 +784,8 @@ describe("Dialog in a document", { concurrent: false }, () => {
       click(byId("trigger-b"))
       yield* tick
       yield* tick
-      assert.deepStrictEqual(dismissals(log()), ["Dismissed a outside-press"])
-      assert.deepStrictEqual(opens(log()), ["Opened b trigger-b null"])
+      assert.deepStrictEqual(dismissals(log()), ["RequestedClose a outside-press"])
+      assert.deepStrictEqual(opens(log()), ["RequestedOpen b trigger-b null"])
       assert.strictEqual(document.activeElement?.id, "b-field")
     }))
 
@@ -845,7 +850,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
       byId("first").focus()
       byId("late").focus()
       yield* tick
-      assert.deepStrictEqual(dismissals(log()), ["Dismissed a focus-out"])
+      assert.deepStrictEqual(dismissals(log()), ["RequestedClose a focus-out"])
     }))
 
   it.effect("a close the dialog didn't ask for, after a reopen, has no close method from the last close", () =>
@@ -858,7 +863,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
           escape()
           yield* tick
           yield* tick
-          assert.deepStrictEqual(dismissals(log()), ["Dismissed a escape-key"], String(held))
+          assert.deepStrictEqual(dismissals(log()), ["RequestedClose a escape-key"], String(held))
           assert.strictEqual(closeMethod(), "keyboard", String(held))
           byId("reopen").click()
           yield* tick
@@ -878,12 +883,12 @@ describe("Dialog in a document", { concurrent: false }, () => {
       const { log } = yield* mountPage({ refuse: true })
       assert.isTrue(back(live))
       yield* tick
-      assert.deepStrictEqual(dismissals(log()), ["Dismissed a close-watcher"])
+      assert.deepStrictEqual(dismissals(log()), ["RequestedClose a close-watcher"])
       back(live, false)
       yield* tick
       back(live)
       yield* tick
-      assert.deepStrictEqual(dismissals(log()), Array(3).fill("Dismissed a close-watcher"))
+      assert.deepStrictEqual(dismissals(log()), Array(3).fill("RequestedClose a close-watcher"))
       click(byId("shut"))
       yield* tick
       assert.strictEqual(live().length, 0)
@@ -900,7 +905,10 @@ describe("Dialog in a document", { concurrent: false }, () => {
           yield* tick
           back(live)
           yield* tick
-          assert.deepStrictEqual(dismissals(log()), ["Dismissed b close-watcher", "Dismissed a close-watcher"])
+          assert.deepStrictEqual(dismissals(log()), [
+            "RequestedClose b close-watcher",
+            "RequestedClose a close-watcher"
+          ])
         }))
       }
     }))
@@ -921,7 +929,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
           assert.strictEqual(live().length, 0)
           escape()
           yield* tick
-          assert.deepStrictEqual(dismissals(log()), ["Dismissed a escape-key"])
+          assert.deepStrictEqual(dismissals(log()), ["RequestedClose a escape-key"])
         }))
       }
     }))

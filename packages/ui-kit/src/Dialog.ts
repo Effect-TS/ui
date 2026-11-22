@@ -5,9 +5,9 @@
  * `Dialog` is headless: it owns the ids, the ARIA, the data attributes, focus,
  * dismissal and the popup's place in the top layer, and the consumer draws
  * the markup. The consumer owns whether the dialog is open, passes it as
- * `open`, and stores what the `Opened` and `Dismissed` events report. The dialog
- * stays as it is until `open` changes, so a consumer can refuse a close, such
- * as an editor with unsaved changes asking first.
+ * `open`, and stores what the `RequestedOpen` and `RequestedClose` events
+ * ask for. The dialog stays as it is until `open` changes, so a consumer can
+ * refuse a close, such as an editor with unsaved changes asking first.
  *
  * **Anatomy**
  *
@@ -158,7 +158,7 @@
  * import { Dialog } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
- * const ToolbarMessage = UiSchema.TaggedEnum({ OpenedSettings: {}, DismissedSettings: {} })
+ * const ToolbarMessage = UiSchema.TaggedEnum({ RequestedOpenSettings: {}, RequestedCloseSettings: {} })
  *
  * const Toolbar = Component.define({
  *   name: "Toolbar",
@@ -169,15 +169,15 @@
  * }).make({
  *   init: () => ({ settings: true }),
  *   update: {
- *     OpenedSettings: (model) => ({ ...model, settings: true }),
- *     DismissedSettings: (model) => ({ ...model, settings: false })
+ *     RequestedOpenSettings: (model) => ({ ...model, settings: true }),
+ *     RequestedCloseSettings: (model) => ({ ...model, settings: false })
  *   },
  *   view: (model, h) =>
  *     Dialog(h, {
  *       props: { open: model.settings },
  *       onEmit: {
- *         Opened: () => ToolbarMessage.OpenedSettings(),
- *         Dismissed: () => ToolbarMessage.DismissedSettings(),
+ *         RequestedOpen: () => ToolbarMessage.RequestedOpenSettings(),
+ *         RequestedClose: () => ToolbarMessage.RequestedCloseSettings(),
  *         Settled: () => undefined
  *       },
  *       view: (dialog) =>
@@ -353,18 +353,18 @@ export const DialogDismissReason = Schema.Literals([
 export type DialogDismissReason = typeof DialogDismissReason.Type
 
 /**
- * `Opened` requests that the dialog open, from a press on a trigger, with the
- * trigger's `id` if it has one. `Dismissed` requests that it close, with the
- * reason. The consumer decides whether to change `open`. `Settled` reports that
- * the transitions and animations of an open or a close finished.
+ * `RequestedOpen` asks for the dialog to open, from a press on a trigger, with
+ * the trigger's `id` if it has one. `RequestedClose` asks for it to close,
+ * with the reason. The consumer decides whether to change `open`. `Settled`
+ * reports that the transitions and animations of an open or a close finished.
  *
  * @stability experimental
  * @category schemas
  * @since 0.1.0
  */
 export const DialogEvents = UiSchema.TaggedEnum({
-  Opened: { triggerId: Schema.NullOr(Schema.String) },
-  Dismissed: { reason: DialogDismissReason },
+  RequestedOpen: { triggerId: Schema.NullOr(Schema.String) },
+  RequestedClose: { reason: DialogDismissReason },
   Settled: { open: Schema.Boolean }
 })
 
@@ -393,7 +393,7 @@ const DialogMessage = UiSchema.TaggedEnum({
   PressedEscape: {},
   PressedOutside: { pointerType: Schema.String },
   FocusedOutside: {},
-  RequestedClose: {},
+  CancelledCloseWatcher: {},
   ShowedPortal: {},
   RenderedFirstFrame: {},
   FinishedTransition: { open: Schema.Boolean },
@@ -423,7 +423,7 @@ const dismiss = (
   $: DialogUpdate,
   reason: DialogDismissReason,
   closeMethod: DialogInteraction | null
-) => $.set({ ...model, reason, closeMethod }).emit(DialogEvents.Dismissed({ reason }))
+) => $.set({ ...model, reason, closeMethod }).emit(DialogEvents.RequestedClose({ reason }))
 
 const blocker = new Html.Element<never>("div").attrs({
   role: "presentation",
@@ -576,7 +576,7 @@ const TrackDialog = Mount.makeStream(
           const watcher = new Watcher()
           watcher.addEventListener("cancel", (event) => {
             if (event.cancelable) event.preventDefault()
-            send(DialogMessage.RequestedClose())
+            send(DialogMessage.CancelledCloseWatcher())
           })
           watcher.addEventListener("close", () => {
             if (watched?.watcher !== watcher) return
@@ -1005,12 +1005,13 @@ export const DialogTrigger = <Msg, R = never>(
  * Draw `initialFocus` on a field only for some ways of opening by branching
  * on `dialog.openMethod`, which is `null` once the dialog closes.
  *
- * A trigger reports the `id` the consumer gave it in `Opened`: set it on the
- * builder before the part, `dialog.trigger(h.button.attr("id", "edit-" + row.id))`. A
- * trigger without one gets a generated `id`. The dialog remembers the trigger
- * that opened it: only that one reports it open, and focus goes back to it.
- * Pressing it asks the dialog to close, and pressing another one while it is
- * open asks it to open for that one, which it then remembers.
+ * A trigger reports the `id` the consumer gave it in `RequestedOpen`: set it
+ * on the builder before the part,
+ * `dialog.trigger(h.button.attr("id", "edit-" + row.id))`. A trigger without
+ * one gets a generated `id`. The dialog remembers the trigger that opened
+ * it: only that one reports it open, and focus goes back to it. Pressing it
+ * asks the dialog to close, and pressing another one while it is open asks
+ * it to open for that one, which it then remembers.
  *
  * Each part's attributes win over the ones the consumer set on the builder
  * it passes in, including the ones a state leaves absent: on the trigger
@@ -1080,7 +1081,7 @@ export const Dialog = Component.define({
         return dismiss(model, $, "trigger-press", method)
       }
       return $.set({ ...model, trigger: key, reason: null, openMethod: method }).emit(
-        DialogEvents.Opened({ triggerId })
+        DialogEvents.RequestedOpen({ triggerId })
       )
     },
     ClickedClose: (model, { pointerType }, $) =>
@@ -1091,7 +1092,7 @@ export const Dialog = Component.define({
       $.props.open && topmost(model) && $.props.disablePointerDismissal !== true
         ? dismiss(model, $, "outside-press", methodOf(pointerType))
         : model,
-    RequestedClose: (model, _message, $) =>
+    CancelledCloseWatcher: (model, _message, $) =>
       $.props.open && topmost(model) ? dismiss(model, $, "close-watcher", null) : model,
     FocusedOutside: (model, _message, $) =>
       $.props.open && topmost(model) && $.props.modal === false && $.props.disablePointerDismissal !== true

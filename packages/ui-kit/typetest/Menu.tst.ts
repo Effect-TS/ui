@@ -19,11 +19,11 @@ declare const h: View.Helper<Msg, unknown> & View.Tags<Html.Elements, Msg>
 const items = [{ value: "copy", label: "Copy" }]
 
 const onEmit = {
-  Opened: () => Msg.Clicked(),
-  Dismissed: () => undefined,
+  RequestedOpen: () => Msg.Clicked(),
+  RequestedClose: () => undefined,
   Picked: ({ value }: Picked) => Msg.Picked({ value }),
   Highlighted: () => undefined,
-  ChangedQuery: () => undefined,
+  RequestedQuery: () => undefined,
   Settled: () => undefined
 }
 

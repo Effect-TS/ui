@@ -56,9 +56,9 @@ const release = (fields: object) =>
     ...fields
   })
 
-const swiped = { _tag: "Dismissed", reason: "swipe" } as DrawerEvents
+const swiped = { _tag: "RequestedClose", reason: "swipe" } as DrawerEvents
 
-const opened = { _tag: "Opened", triggerId: null, reason: "swipe" } as DrawerEvents
+const opened = { _tag: "RequestedOpen", triggerId: null, reason: "swipe" } as DrawerEvents
 const snapped = (snapPoint: number) => ({ _tag: "Snapped", snapPoint }) as DrawerEvents
 const measured = sent("Measured", { height: 800, viewport: 800, fontSize: 16 })
 
@@ -158,10 +158,10 @@ describe("Drawer", () => {
     Effect.gen(function*() {
       const s = yield* Scene.make(Drawer, { open: true }, standIn)
       s.expectMount(tracked(s)).expectMount(trackedArea(s))
-        .childEmit(Dialog, { _tag: "Opened", triggerId: "menu" })
-        .emitted({ _tag: "Opened", triggerId: "menu", reason: "trigger-press" })
-        .childEmit(Dialog, { _tag: "Dismissed", reason: "escape-key" })
-        .emitted({ _tag: "Dismissed", reason: "escape-key" })
+        .childEmit(Dialog, { _tag: "RequestedOpen", triggerId: "menu" })
+        .emitted({ _tag: "RequestedOpen", triggerId: "menu", reason: "trigger-press" })
+        .childEmit(Dialog, { _tag: "RequestedClose", reason: "escape-key" })
+        .emitted({ _tag: "RequestedClose", reason: "escape-key" })
         .childEmit(Dialog, { _tag: "Settled", open: false })
         .emitted({ _tag: "Settled", open: false })
     }))
@@ -262,8 +262,8 @@ const Page = Component.define({
           Drawer(h, {
             props: { open: model.open },
             onEmit: {
-              Opened: () => PageMessage.Toggled({ open: true }),
-              Dismissed: () => PageMessage.Toggled({ open: false }),
+              RequestedOpen: () => PageMessage.Toggled({ open: true }),
+              RequestedClose: () => PageMessage.Toggled({ open: false }),
               Settled: () => undefined,
               Snapped: () => undefined
             },

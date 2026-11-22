@@ -112,10 +112,10 @@ const Config = Schema.Struct({
 type Config = typeof Config.Type
 
 const Message = UiSchema.TaggedEnum({
-  Opened: { reason: Schema.String },
-  Dismissed: { reason: Schema.String },
+  RequestedOpen: { reason: Schema.String },
+  RequestedClose: { reason: Schema.String },
   Picked: { value: Schema.NullOr(Schema.String) },
-  DismissedDialog: { reason: Schema.String }
+  RequestedCloseDialog: { reason: Schema.String }
 })
 
 const Page = Component.define({
@@ -132,14 +132,14 @@ const Page = Component.define({
 }).make({
   init: () => ({ open: false, value: null, log: [] }),
   update: {
-    Opened: (model, { reason }) => ({ ...model, open: true, log: [...model.log, "Opened " + reason] }),
-    Dismissed: (model, { reason }, $) => ({
+    RequestedOpen: (model, { reason }) => ({ ...model, open: true, log: [...model.log, "RequestedOpen " + reason] }),
+    RequestedClose: (model, { reason }, $) => ({
       ...model,
       open: $.props.refuseFocusOut && reason === "focus-out",
-      log: [...model.log, "Dismissed " + reason]
+      log: [...model.log, "RequestedClose " + reason]
     }),
     Picked: (model, { value }) => ({ ...model, value, log: [...model.log, "Picked " + value] }),
-    DismissedDialog: (model, { reason }) => ({ ...model, log: [...model.log, "DismissedDialog " + reason] })
+    RequestedCloseDialog: (model, { reason }) => ({ ...model, log: [...model.log, "RequestedCloseDialog " + reason] })
   },
   view: (model, h) => {
     const select = Field(h, {
@@ -157,8 +157,8 @@ const Page = Component.define({
             holdExit: h.props.holdExit
           },
           onEmit: {
-            Opened: ({ reason }) => Message.Opened({ reason }),
-            Dismissed: ({ reason }) => Message.Dismissed({ reason }),
+            RequestedOpen: ({ reason }) => Message.RequestedOpen({ reason }),
+            RequestedClose: ({ reason }) => Message.RequestedClose({ reason }),
             Picked: ({ value }) => Message.Picked({ value: typeof value === "string" ? value : null }),
             Settled: () => undefined
           },
@@ -190,8 +190,8 @@ const Page = Component.define({
       ? Dialog(h, {
         props: { open: true },
         onEmit: {
-          Opened: () => undefined,
-          Dismissed: ({ reason }) => Message.DismissedDialog({ reason }),
+          RequestedOpen: () => undefined,
+          RequestedClose: ({ reason }) => Message.RequestedCloseDialog({ reason }),
           Settled: () => undefined
         },
         view: (dialog) => h.div(dialog.portal(h.dialog)?.children(dialog.popup(h.div).children(form)))
@@ -270,7 +270,7 @@ describe("Select in a document", { concurrent: false }, () => {
       assert.strictEqual(style("--anchor-width"), "120px")
       assert.strictEqual(byId("positioner").getAttribute("data-side"), "bottom")
       assert.strictEqual(byId("trigger").getAttribute("data-popup-side"), "bottom")
-      root.send(Message.Dismissed({ reason: "test" }))
+      root.send(Message.RequestedClose({ reason: "test" }))
       yield* tick
       rects.set("trigger", { x: 100, y: 700, width: 120, height: 30 })
       keydown(byId("trigger"), "ArrowDown")
@@ -308,7 +308,7 @@ describe("Select in a document", { concurrent: false }, () => {
           ["margin-top: 30px; margin-bottom: 0", "235px", "30px", "0px"]
         ]
       ) {
-        root.send(Message.Dismissed({ reason: "test" }))
+        root.send(Message.RequestedClose({ reason: "test" }))
         yield* tick
         margins.textContent = "#positioner { " + css + " }"
         mousedown(byId("trigger"))
@@ -344,7 +344,7 @@ describe("Select in a document", { concurrent: false }, () => {
       mousedown(byId("trigger"))
       yield* until(() => style("top") !== "")
       assert.strictEqual(style("top"), "40px")
-      root.send(Message.Dismissed({ reason: "test" }))
+      root.send(Message.RequestedClose({ reason: "test" }))
       yield* tick
       rects.set("trigger", { x: 100, y: 300, width: 120, height: 30 })
       const html = window.HTMLElement.prototype as any
@@ -408,11 +408,11 @@ describe("Select in a document", { concurrent: false }, () => {
       assert.strictEqual(byId("trigger").textContent, "Dark")
       assert.isFalse(touched())
       assert.deepStrictEqual(log(), [
-        "Opened list-navigation",
-        "Dismissed escape-key",
-        "Opened list-navigation",
+        "RequestedOpen list-navigation",
+        "RequestedClose escape-key",
+        "RequestedOpen list-navigation",
         "Picked dark",
-        "Dismissed item-press"
+        "RequestedClose item-press"
       ])
     }).pipe(Effect.scoped))
 
@@ -441,7 +441,7 @@ describe("Select in a document", { concurrent: false }, () => {
       assert.strictEqual(document.activeElement, byId("trigger"))
       keyup(byId("trigger"), " ")
       yield* tick
-      assert.deepStrictEqual(log(), ["Opened list-navigation", "Picked light", "Dismissed item-press"])
+      assert.deepStrictEqual(log(), ["RequestedOpen list-navigation", "Picked light", "RequestedClose item-press"])
     }).pipe(Effect.scoped))
 
   it.effect("a close the consumer makes returns focus, whatever the last dismissal did, unless focus is still outside", () =>
@@ -457,10 +457,10 @@ describe("Select in a document", { concurrent: false }, () => {
             focus.call(back, options)
           }
           const reopenAndClose = Effect.gen(function*() {
-            root.send(Message.Opened({ reason: "test" }))
+            root.send(Message.RequestedOpen({ reason: "test" }))
             yield* tick
             assert.strictEqual(document.activeElement, item("light"))
-            root.send(Message.Dismissed({ reason: "test" }))
+            root.send(Message.RequestedClose({ reason: "test" }))
             yield* tick
             assert.strictEqual(document.activeElement, back, String(kept))
           })
@@ -486,19 +486,19 @@ describe("Select in a document", { concurrent: false }, () => {
             yield* tick
             assert.isTrue(shown())
             if (returned) item("light").focus()
-            root.send(Message.Dismissed({ reason: "test" }))
+            root.send(Message.RequestedClose({ reason: "test" }))
             yield* tick
             assert.isFalse(shown())
             const expected = returned ? (kept ? "final" : "trigger") : "after"
             assert.strictEqual(document.activeElement, byId(expected), kept + " " + returned)
           }
           assert.deepStrictEqual(log(), [
-            "Opened list-navigation",
-            "Dismissed focus-out",
-            "Dismissed test",
-            "Opened list-navigation",
-            "Dismissed focus-out",
-            "Dismissed test"
+            "RequestedOpen list-navigation",
+            "RequestedClose focus-out",
+            "RequestedClose test",
+            "RequestedOpen list-navigation",
+            "RequestedClose focus-out",
+            "RequestedClose test"
           ])
         }))
       }
@@ -536,10 +536,10 @@ describe("Select in a document", { concurrent: false }, () => {
       yield* tick
       assert.isFalse(shown())
       assert.deepStrictEqual(log(), [
-        "Opened list-navigation",
-        "Dismissed focus-out",
-        "Opened list-navigation",
-        "Dismissed outside-press"
+        "RequestedOpen list-navigation",
+        "RequestedClose focus-out",
+        "RequestedOpen list-navigation",
+        "RequestedClose outside-press"
       ])
     }).pipe(Effect.scoped))
 
@@ -574,7 +574,7 @@ describe("Select in a document", { concurrent: false }, () => {
       yield* tick
       press(item("dark"))
       yield* tick
-      assert.deepStrictEqual(log(), ["Opened list-navigation", "Dismissed escape-key"])
+      assert.deepStrictEqual(log(), ["RequestedOpen list-navigation", "RequestedClose escape-key"])
       assert.strictEqual(document.activeElement, byId("trigger"))
     }).pipe(Effect.scoped))
 

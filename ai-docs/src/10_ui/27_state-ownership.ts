@@ -16,7 +16,7 @@ import { Schema } from "effect"
 // A controlled dialog: the caller decides `open`, and closing is a request
 // ---------------------------------------------------------------------------
 const ConfirmDialogMessage = UiSchema.TaggedEnum({ CancelledDialog: {}, ClosedDialog: {}, ClickedConfirm: {} })
-export const ConfirmDialogEvents = UiSchema.TaggedEnum({ Dismissed: {}, Confirmed: {} })
+export const ConfirmDialogEvents = UiSchema.TaggedEnum({ RequestedClose: {}, Confirmed: {} })
 
 export const ConfirmDialog = Component.define({
   name: "ConfirmDialog",
@@ -31,10 +31,10 @@ export const ConfirmDialog = Component.define({
   init: () => null,
   update: (model, message, $) =>
     ConfirmDialogMessage.match(message, {
-      CancelledDialog: () => $.emit(ConfirmDialogEvents.Dismissed()),
+      CancelledDialog: () => $.emit(ConfirmDialogEvents.RequestedClose()),
       // A close while `open` is still true is the browser's. One after the
       // caller set `open` to false only confirms the caller's decision.
-      ClosedDialog: () => $.props.open ? $.emit(ConfirmDialogEvents.Dismissed()) : model,
+      ClosedDialog: () => $.props.open ? $.emit(ConfirmDialogEvents.RequestedClose()) : model,
       ClickedConfirm: () => $.emit(ConfirmDialogEvents.Confirmed())
     }),
   view: (_, h) =>
@@ -47,7 +47,7 @@ export const ConfirmDialog = Component.define({
 // ---------------------------------------------------------------------------
 // A parent opening a child modal: the parent decides `open`
 // ---------------------------------------------------------------------------
-const PageMessage = UiSchema.TaggedEnum({ ClickedDelete: {}, DismissedConfirm: {}, ConfirmedDelete: {} })
+const PageMessage = UiSchema.TaggedEnum({ ClickedDelete: {}, RequestedCloseConfirm: {}, ConfirmedDelete: {} })
 
 export const Page = Component.define({
   name: "Page",
@@ -61,7 +61,7 @@ export const Page = Component.define({
     PageMessage.match(message, {
       ClickedDelete: () => $.evolve({ confirming: true }),
       // The page decides: returning `model` here refuses the dismissal.
-      DismissedConfirm: () => $.evolve({ confirming: false }),
+      RequestedCloseConfirm: () => $.evolve({ confirming: false }),
       ConfirmedDelete: () => ({ confirming: false, deleted: true })
     }),
   view: (model, h) =>
@@ -73,7 +73,7 @@ export const Page = Component.define({
         // Guaranteed: the record needs a handler for every event, so a third
         // event on ConfirmDialog is a type error here until it has one.
         onEmit: {
-          Dismissed: () => PageMessage.DismissedConfirm(),
+          RequestedClose: () => PageMessage.RequestedCloseConfirm(),
           Confirmed: () => PageMessage.ConfirmedDelete()
         }
       })
@@ -201,7 +201,7 @@ export const OpenButton = Component.define({
 })
 
 // One message for both events: this host does the same thing for each.
-const ModalHostMessage = UiSchema.TaggedEnum({ ClosedDialog: {} })
+const ModalHostMessage = UiSchema.TaggedEnum({ RequestedCloseDialog: {} })
 
 // Convention: the reader is the dialog's parent, so the dialog still has one
 // source for `open`, its prop, and knows nothing about the provider.
@@ -216,14 +216,14 @@ export const ModalHost = Component.define({
   init: () => null,
   update: (_model, message, $) =>
     ModalHostMessage.match(message, {
-      ClosedDialog: () => $.send(ModalProvider, ModalProviderMessage.RequestedClose())
+      RequestedCloseDialog: () => $.send(ModalProvider, ModalProviderMessage.RequestedClose())
     }),
   view: (_, h) =>
     ConfirmDialog(h, {
       props: { open: h.shared.modal.open },
       onEmit: {
-        Dismissed: () => ModalHostMessage.ClosedDialog(),
-        Confirmed: () => ModalHostMessage.ClosedDialog()
+        RequestedClose: () => ModalHostMessage.RequestedCloseDialog(),
+        Confirmed: () => ModalHostMessage.RequestedCloseDialog()
       }
     })
 })
@@ -317,7 +317,7 @@ export const Around = Component.define({
           OpenButton(h, {}),
           ConfirmDialog(h, {
             props: { open: modalProvider.open },
-            onEmit: { Dismissed: () => undefined, Confirmed: () => undefined }
+            onEmit: { RequestedClose: () => undefined, Confirmed: () => undefined }
           })
         )
     })

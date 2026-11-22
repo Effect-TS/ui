@@ -6,7 +6,7 @@ import { assert, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 import { click, container, popovers, tick } from "./utils/document.ts"
 
-const Message = UiSchema.TaggedEnum({ Dismissed: {} })
+const Message = UiSchema.TaggedEnum({ RequestedClose: {} })
 
 const Page = Component.define({
   name: "Page",
@@ -17,11 +17,15 @@ const Page = Component.define({
   elements: Html
 }).make({
   init: () => ({ open: true }),
-  update: { Dismissed: () => ({ open: false }) },
+  update: { RequestedClose: () => ({ open: false }) },
   view: (model, h) =>
     AlertDialog(h, {
       props: { open: model.open },
-      onEmit: { Opened: () => undefined, Dismissed: () => Message.Dismissed(), Settled: () => undefined },
+      onEmit: {
+        RequestedOpen: () => undefined,
+        RequestedClose: () => Message.RequestedClose(),
+        Settled: () => undefined
+      },
       view: (alertDialog) =>
         h.div(
           alertDialog.portal(h.dialog.attr("role", "dialog"))?.attr("role", "region").children(alertDialog.popup(h.div))

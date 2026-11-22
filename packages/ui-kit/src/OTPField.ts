@@ -321,7 +321,7 @@ export type OTPFieldEntryReason = typeof OTPFieldEntryReason.Type
  *
  * **Details**
  *
- * - `Updated`: the code the user asked for. Store `value` and pass it back
+ * - `Updated`: asks for the code in `value`. Store `value` and pass it back
  *   as the `value` prop, changed if need be, such as in upper case. Until
  *   then the slots go on showing the old code.
  * - `Completed`: the consumer answered text the user typed or pasted by

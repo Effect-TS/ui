@@ -229,9 +229,9 @@ export const SliderProps = Schema.Struct({
 export type SliderProps = typeof SliderProps.Type
 
 /**
- * What a slider emits. `Moved` reports each value the user moves to, and
- * `Committed` the value once a drag or a key press is done. `value` is a
- * number when the `value` prop is, and an array otherwise.
+ * What a slider emits. `Moved` asks for each value the user moves to, and
+ * `Committed` reports the value once a drag or a key press is done. `value` is
+ * a number when the `value` prop is, and an array otherwise.
  *
  * @stability experimental
  * @category schemas

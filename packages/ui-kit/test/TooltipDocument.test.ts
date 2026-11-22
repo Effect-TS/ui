@@ -136,7 +136,7 @@ const geometry = Effect.acquireRelease(
   (restore) => Effect.sync(restore)
 )
 
-const Message = UiSchema.TaggedEnum({ Closed: {}, Opened: {}, Restyled: {} })
+const Message = UiSchema.TaggedEnum({ Closed: {}, RequestedOpen: {}, Restyled: {} })
 
 const Page = Component.define({
   name: "Page",
@@ -153,7 +153,7 @@ const Page = Component.define({
   init: () => ({ open: true, tinted: false }),
   update: {
     Closed: (model) => ({ ...model, open: false }),
-    Opened: (model) => ({ ...model, open: true }),
+    RequestedOpen: (model) => ({ ...model, open: true }),
     Restyled: (model) => ({ ...model, tinted: !model.tinted })
   },
   view: (model, h) =>
@@ -337,7 +337,7 @@ describe("Tooltip in a document", { concurrent: false }, () => {
       assert.strictEqual(style("top"), "340px")
 
       rects.set("trigger", { x: 400, y: 700, width: 100, height: 40 })
-      root.send(Message.Opened())
+      root.send(Message.RequestedOpen())
       yield* tick
       assert.strictEqual(style("padding-top"), "")
       assert.strictEqual(style("padding-bottom"), "8px")

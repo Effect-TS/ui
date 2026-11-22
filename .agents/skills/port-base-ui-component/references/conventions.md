@@ -402,6 +402,8 @@ model.advanced
   `ai-docs/src/10_ui/index.md`, which `LLMS.md` includes. Base UI's
   callback names are never event names: Switch has `onToggle` and a
   Checkbox emits `Toggled`, not `CheckedChange`.
+- Decide for each event whether it reports or requests, by the rule under
+  the naming table. A Dialog emits `RequestedOpen`, not `Opened`.
 - `update` is a record with one function per message tag, even for a
   union with one member. A reader sees every message handled, and a new
   message is a type error until it has a key. Use the function form only
@@ -417,7 +419,7 @@ model.advanced
 ## State
 
 - The value is controlled. It comes in through props (`checked`, `value`,
-  `open`), and the component reports the value the user asked for, in
+  `open`), and the component asks for the value the user wants, in
   place of Base UI's `on<Value>Change`. There are no `default*` props:
   the consumer keeps the value in its Model.
 - A component's Model holds only interaction state the consumer would
@@ -426,10 +428,10 @@ model.advanced
   toasts. Its items outlive the app's interest in them: a closing toast
   keeps its content on screen until its exit transition ends, and the
   limit, timers and focus hand-off all read the list. So the owner keeps
-  the list in its Model, and the components inside its closure post facts
-  to it with `$.send(Owner, message)` through `receives` (`AddedToast`,
-  `UpdatedToast`, `ClosedToast`), each naming an item by an id the sender
-  picks. The owner emits an event for what the user did, such as
+  the list in its Model, and the components inside its closure post requests
+  to it with `$.send(Owner, message)` through `receives` (`RequestedAdd`,
+  `RequestedUpdate`, `RequestedClose`), each naming an item by an id the
+  sender picks. The owner emits an event for what the user did, such as
   `Dismissed`, and nothing for what a sender asked. Its settings, such as
   `timeout` and `limit`, are still props.
 - A disabled or read-only control reports nothing. A component's `update`
@@ -446,7 +448,7 @@ portal. The details are in the JSDoc of `popover` and `modal` in
 - `.popover("manual", open)` is controlled: the host shows and hides the
   popup as `open` says, and restores it if anything else changes it. Use
   it when `open` is a prop. Dismissal is then the kit's job: Escape and a
-  press outside each emit `Dismissed`. Blur and pointer-leave don't stand
+  press outside each emit `RequestedClose`. Blur and pointer-leave don't stand
   in for the outside press: it must also close a popup that focus, a close
   delay or the consumer keeps open. A popup that opens with focus inside
   handles Escape on the focused part. One that opens without focus, such
@@ -474,8 +476,9 @@ portal. The details are in the JSDoc of `popover` and `modal` in
   popup while the props still say open.
 - `<dialog>` with `.modal(open)` and `onCancel` is a controlled modal: the
   host cancels Escape and backdrop clicks and reports them as `onCancel`,
-  which emits `Dismissed`. Browsers may still force a close after repeated
-  cancels, so handle `onClose` too and emit `Dismissed` from it.
+  which emits `RequestedClose`. Browsers may still force a close after
+  repeated cancels, so handle `onClose` too and emit `RequestedClose` from
+  it.
 
 ## Data attributes and ARIA
 

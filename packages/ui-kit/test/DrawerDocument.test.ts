@@ -32,8 +32,8 @@ const config = (overrides: Partial<Config>): Config => ({
 })
 
 const Message = UiSchema.TaggedEnum({
-  Opened: { reason: Schema.String },
-  Dismissed: { reason: Schema.String },
+  RequestedOpen: { reason: Schema.String },
+  RequestedClose: { reason: Schema.String },
   Snapped: { snapPoint: Schema.Union([Schema.Number, Schema.String]) },
   Settled: { open: Schema.Boolean }
 })
@@ -53,15 +53,15 @@ const Page = Component.define({
 }).make({
   init: ({ props }) => ({ open: props.open, snapPoint: null, events: [], config: props }),
   update: {
-    Opened: (model, { reason }) => ({
+    RequestedOpen: (model, { reason }) => ({
       ...model,
       open: !model.config.refuse,
-      events: [...model.events, "Opened:" + reason]
+      events: [...model.events, "RequestedOpen:" + reason]
     }),
-    Dismissed: (model, { reason }) => ({
+    RequestedClose: (model, { reason }) => ({
       ...model,
       open: model.config.refuse,
-      events: [...model.events, "Dismissed:" + reason]
+      events: [...model.events, "RequestedClose:" + reason]
     }),
     Snapped: (model, { snapPoint }) => ({ ...model, snapPoint, events: [...model.events, "Snapped:" + snapPoint] }),
     Settled: (model, { open }) => ({ ...model, events: [...model.events, "Settled:" + open] })
@@ -78,8 +78,8 @@ const Page = Component.define({
         virtualKeyboard: props.keyboard
       },
       onEmit: {
-        Opened: ({ reason }) => Message.Opened({ reason }),
-        Dismissed: ({ reason }) => Message.Dismissed({ reason }),
+        RequestedOpen: ({ reason }) => Message.RequestedOpen({ reason }),
+        RequestedClose: ({ reason }) => Message.RequestedClose({ reason }),
         Snapped: ({ snapPoint }) => Message.Snapped({ snapPoint }),
         Settled: ({ open }) => Message.Settled({ open })
       },
@@ -191,7 +191,7 @@ describe("Drawer in a document", { concurrent: false }, () => {
       drag(handle, [10, 10], [10, 30], 20)
       pointer(document, "pointerup", 10, 30, 0)
       yield* tick
-      assert.notInclude(root.model()!.events, "Dismissed:swipe")
+      assert.notInclude(root.model()!.events, "RequestedClose:swipe")
       assert.strictEqual(movement(), "0px")
       assert.strictEqual(popup().style.getPropertyValue("transition"), "")
       assert.isUndefined(popup().getAttributeNode("data-swiping") ?? undefined)
@@ -200,7 +200,7 @@ describe("Drawer in a document", { concurrent: false }, () => {
       pointer(document, "pointermove", 10, 60)
       pointer(document, "pointerup", 10, 60, 0)
       yield* tick
-      assert.notInclude(root.model()!.events, "Dismissed:swipe")
+      assert.notInclude(root.model()!.events, "RequestedClose:swipe")
       assert.isTrue(root.model()!.open)
 
       drag(handle, [10, 10], [10, 150])
@@ -210,7 +210,7 @@ describe("Drawer in a document", { concurrent: false }, () => {
       assert.strictEqual(popup().getAttribute("data-swiping"), "")
       pointer(document, "pointerup", 10, 150, 0)
       yield* tick
-      assert.include(root.model()!.events, "Dismissed:swipe")
+      assert.include(root.model()!.events, "RequestedClose:swipe")
       assert.strictEqual(popup()?.getAttribute("data-swipe-dismiss") ?? "", "")
       assert.isFalse(root.model()!.open)
     }))
@@ -226,7 +226,7 @@ describe("Drawer in a document", { concurrent: false }, () => {
       assert.strictEqual(popup().getAttribute("data-swiping"), "")
       document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }))
       yield* tick
-      assert.include(root.model()!.events, "Dismissed:escape-key")
+      assert.include(root.model()!.events, "RequestedClose:escape-key")
       assert.notInclude(root.model()!.events, "Settled:false")
       assert.isNull(popup().getAttribute("data-swiping"))
       assert.strictEqual(movement(), "0px")
@@ -247,7 +247,7 @@ describe("Drawer in a document", { concurrent: false }, () => {
       pointer(document, "pointerup", 10, 150, 0)
       yield* tick
       assert.isTrue(root.model()!.open)
-      assert.notInclude(root.model()!.events, "Dismissed:swipe")
+      assert.notInclude(root.model()!.events, "RequestedClose:swipe")
       assert.strictEqual(movement(), "0px")
     }))
 
@@ -259,7 +259,7 @@ describe("Drawer in a document", { concurrent: false }, () => {
       pointer(document, "pointerup", 10, 150, 0)
       yield* tick
       yield* tick
-      assert.include(root.model()!.events, "Dismissed:swipe")
+      assert.include(root.model()!.events, "RequestedClose:swipe")
       assert.isTrue(root.model()!.open)
       assert.strictEqual(movement(), "0px")
       assert.isNull(popup().getAttribute("data-swipe-dismiss"))
@@ -290,7 +290,7 @@ describe("Drawer in a document", { concurrent: false }, () => {
       assert.strictEqual(movement(), "180px")
       touch(scroller, "touchend", 10, 250)
       yield* tick
-      assert.include(root.model()!.events, "Dismissed:swipe")
+      assert.include(root.model()!.events, "RequestedClose:swipe")
     }))
 
   it.effect("opens from a swipe area, closes if released short, and stays open on a long swipe without its click dismissing", () =>
@@ -308,13 +308,13 @@ describe("Drawer in a document", { concurrent: false }, () => {
       time += 200
       pointer(document, "pointerup", 10, 480, 0)
       yield* tick
-      assert.include(root.model()!.events, "Dismissed:swipe")
+      assert.include(root.model()!.events, "RequestedClose:swipe")
       assert.isFalse(root.model()!.open)
 
       pointer(area, "pointerdown", 10, 500)
       pointer(document, "pointermove", 10, 495)
       yield* tick
-      assert.deepStrictEqual(root.model()!.events.slice(0, 1), ["Opened:swipe"])
+      assert.deepStrictEqual(root.model()!.events.slice(0, 1), ["RequestedOpen:swipe"])
       sized(popup(), 300, 200)
       pointer(document, "pointermove", 10, 400)
       assert.strictEqual(movement(), "100px")
@@ -323,14 +323,14 @@ describe("Drawer in a document", { concurrent: false }, () => {
       area.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }))
       yield* tick
       assert.isTrue(root.model()!.open)
-      assert.notInclude(root.model()!.events, "Dismissed:outside-press")
+      assert.notInclude(root.model()!.events, "RequestedClose:outside-press")
       assert.strictEqual(movement(), "0px")
       assert.strictEqual(popup().style.getPropertyValue("transition"), "")
       pointer(area, "pointerdown", 10, 500)
       pointer(area, "pointerup", 10, 500, 0)
       area.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }))
       yield* tick
-      assert.include(root.model()!.events, "Dismissed:outside-press")
+      assert.include(root.model()!.events, "RequestedClose:outside-press")
       assert.isFalse(root.model()!.open)
     }))
 

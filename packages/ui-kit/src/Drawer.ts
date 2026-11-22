@@ -5,9 +5,9 @@
  * `Drawer` is a headless component over a `Dialog`: the `Dialog` keeps the
  * `<dialog>`, focus, dismissal, transitions and nesting, and the drawer adds
  * the swipe. The consumer owns whether the drawer is open and where it
- * rests, passes them as `open` and `snapPoint`, and stores what `Opened`,
- * `Dismissed` and `Snapped` report. A refused close keeps the drawer open,
- * and a swipe that asked for it slides back.
+ * rests, passes them as `open` and `snapPoint`, and stores what
+ * `RequestedOpen`, `RequestedClose` and `Snapped` ask for. A refused close
+ * keeps the drawer open, and a swipe that asked for it slides back.
  *
  * **Anatomy**
  *
@@ -49,10 +49,10 @@
  * on the nearest snap point, pushed further by a fast release, and emits
  * `Snapped` for a new one. Past the lowest, it dismisses.
  *
- * A swipe on a swipe area emits `Opened` with the reason `"swipe"` once it
- * moves, so the drawer opens as the swipe starts. Once `open` is true the
+ * A swipe on a swipe area emits `RequestedOpen` with the reason `"swipe"` once
+ * it moves, so the drawer opens as the swipe starts. Once `open` is true the
  * popup follows the finger. A release past half the popup's size, or faster
- * than 0.1 px per ms, keeps it open, and a shorter one emits `Dismissed`
+ * than 0.1 px per ms, keeps it open, and a shorter one emits `RequestedClose`
  * with the reason `"swipe"`. A consumer that refuses or delays the open sees
  * nothing follow the finger.
  *
@@ -107,7 +107,7 @@
  * import { Drawer } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
- * const PageMessage = UiSchema.TaggedEnum({ Opened: {}, Dismissed: {} })
+ * const PageMessage = UiSchema.TaggedEnum({ RequestedOpenFilters: {}, RequestedCloseFilters: {} })
  *
  * const Page = Component.define({
  *   name: "Page",
@@ -118,15 +118,15 @@
  * }).make({
  *   init: () => ({ open: true }),
  *   update: {
- *     Opened: () => ({ open: true }),
- *     Dismissed: () => ({ open: false })
+ *     RequestedOpenFilters: () => ({ open: true }),
+ *     RequestedCloseFilters: () => ({ open: false })
  *   },
  *   view: (model, h) =>
  *     Drawer(h, {
  *       props: { open: model.open },
  *       onEmit: {
- *         Opened: () => PageMessage.Opened(),
- *         Dismissed: () => PageMessage.Dismissed(),
+ *         RequestedOpen: () => PageMessage.RequestedOpenFilters(),
+ *         RequestedClose: () => PageMessage.RequestedCloseFilters(),
  *         Settled: () => undefined,
  *         Snapped: () => undefined
  *       },
@@ -292,11 +292,11 @@ export const DrawerOpenReason = Schema.Literals(["trigger-press", "swipe"])
 export type DrawerOpenReason = typeof DrawerOpenReason.Type
 
 /**
- * `Opened` requests that the drawer open, with the trigger's `id` and the
- * reason. A swipe on a swipe area has no trigger, so its `triggerId` is
- * `null`. `Dismissed` requests that it close, with the reason. `Settled`
- * reports that the transitions of an open or a close finished, as a
- * `Dialog`'s does. `Snapped` requests that the drawer rest at another snap
+ * `RequestedOpen` asks for the drawer to open, with the trigger's `id` and
+ * the reason. A swipe on a swipe area has no trigger, so its `triggerId` is
+ * `null`. `RequestedClose` asks for it to close, with the reason.
+ * `Settled` reports that the transitions of an open or a close finished, as
+ * a `Dialog`'s does. `Snapped` asks for the drawer to rest at another snap
  * point, after a swipe. The consumer decides whether to change `open` and
  * `snapPoint`.
  *
@@ -305,8 +305,8 @@ export type DrawerOpenReason = typeof DrawerOpenReason.Type
  * @since 0.1.0
  */
 export const DrawerEvents = UiSchema.TaggedEnum({
-  Opened: { triggerId: Schema.NullOr(Schema.String), reason: DrawerOpenReason },
-  Dismissed: { reason: DrawerDismissReason },
+  RequestedOpen: { triggerId: Schema.NullOr(Schema.String), reason: DrawerOpenReason },
+  RequestedClose: { reason: DrawerDismissReason },
   Settled: { open: Schema.Boolean },
   Snapped: { snapPoint: DrawerSnapPoint }
 })
@@ -582,8 +582,8 @@ const DrawerMessage = UiSchema.TaggedEnum({
   ReleasedAreaSwipe: { displacement: Schema.Number, velocity: Schema.Number, size: Schema.NullOr(Schema.Number) },
   CancelledAreaSwipe: {},
   ChangedNested: NestedReport.fields,
-  OpenedDialog: { triggerId: Schema.NullOr(Schema.String) },
-  DismissedDialog: { reason: DialogDismissReason },
+  RequestedOpenDialog: { triggerId: Schema.NullOr(Schema.String) },
+  RequestedCloseDialog: { reason: DialogDismissReason },
   SettledDialog: { open: Schema.Boolean }
 })
 
@@ -1536,7 +1536,7 @@ export const Drawer = Component.define({
       switch (decision._tag) {
         case "Dismiss":
           return $.set({ ...next, dismissed: true, strength: decision.strength }).emit(
-            DrawerEvents.Dismissed({ reason: "swipe" })
+            DrawerEvents.RequestedClose({ reason: "swipe" })
           )
         case "Snap":
           return $.set(next).emit(DrawerEvents.Snapped({ snapPoint: decision.snapPoint }))
@@ -1553,12 +1553,12 @@ export const Drawer = Component.define({
       $.props.open || model.area !== null
         ? model
         : $.set({ ...model, area: key, dismissed: false, strength: null }).emit(
-          DrawerEvents.Opened({ triggerId: null, reason: "swipe" })
+          DrawerEvents.RequestedOpen({ triggerId: null, reason: "swipe" })
         ),
     ReleasedAreaSwipe: (model, { displacement: moved, size, velocity: speed }, $) => {
       const next = { ...model, area: null }
       if (!$.props.open || opensOnRelease(moved, speed, size) || model.area === null) return next
-      return $.set({ ...next, dismissed: true, strength: null }).emit(DrawerEvents.Dismissed({ reason: "swipe" }))
+      return $.set({ ...next, dismissed: true, strength: null }).emit(DrawerEvents.RequestedClose({ reason: "swipe" }))
     },
     CancelledAreaSwipe: (model) => ({ ...model, area: null }),
     ChangedNested: (model, { count, height, swiping }) => ({
@@ -1567,9 +1567,9 @@ export const Drawer = Component.define({
       nestedSwiping: swiping,
       nestedHeight: height
     }),
-    OpenedDialog: (model, { triggerId }, $) =>
-      $.set(model).emit(DrawerEvents.Opened({ triggerId, reason: "trigger-press" })),
-    DismissedDialog: (model, { reason }, $) => $.set(model).emit(DrawerEvents.Dismissed({ reason })),
+    RequestedOpenDialog: (model, { triggerId }, $) =>
+      $.set(model).emit(DrawerEvents.RequestedOpen({ triggerId, reason: "trigger-press" })),
+    RequestedCloseDialog: (model, { reason }, $) => $.set(model).emit(DrawerEvents.RequestedClose({ reason })),
     SettledDialog: (model, { open }, $) => $.set(model).emit(DrawerEvents.Settled({ open }))
   },
   parts: (model, p) => {
@@ -1707,8 +1707,8 @@ export const Drawer = Component.define({
     return p.child(Dialog, {
       props: dialogPropsOf(props),
       onEmit: {
-        Opened: ({ triggerId }) => DrawerMessage.OpenedDialog({ triggerId }),
-        Dismissed: ({ reason }) => DrawerMessage.DismissedDialog({ reason }),
+        RequestedOpen: ({ triggerId }) => DrawerMessage.RequestedOpenDialog({ triggerId }),
+        RequestedClose: ({ reason }) => DrawerMessage.RequestedCloseDialog({ reason }),
         Settled: ({ open }) => DrawerMessage.SettledDialog({ open })
       },
       parts: (dialog) => ({

@@ -59,8 +59,8 @@ const partsOf = (s: { readonly parts: (f: (previewCard: Parts) => void) => unkno
 }
 
 const opened = (triggerId: string, reason: "trigger-hover" | "trigger-focus") =>
-  ({ _tag: "Opened", triggerId, reason }) as PreviewCardEvents
-const dismissed = (reason: string) => ({ _tag: "Dismissed", reason }) as PreviewCardEvents
+  ({ _tag: "RequestedOpen", triggerId, reason }) as PreviewCardEvents
+const dismissed = (reason: string) => ({ _tag: "RequestedClose", reason }) as PreviewCardEvents
 
 const scene = Effect.fnUntraced(function*(props: PreviewCardProps) {
   const s = yield* HtmlScene.make(PreviewCard, props, standIn)

@@ -100,8 +100,8 @@ const partsOf = (s: { readonly parts: (f: (menu: Parts) => void) => unknown }): 
   return parts!
 }
 
-const opened = (reason: string) => ({ _tag: "Opened", reason, triggerId: "edit" }) as MenuEvents
-const dismissed = (reason: string) => ({ _tag: "Dismissed", reason }) as MenuEvents
+const opened = (reason: string) => ({ _tag: "RequestedOpen", reason, triggerId: "edit" }) as MenuEvents
+const dismissed = (reason: string) => ({ _tag: "RequestedClose", reason }) as MenuEvents
 const picked = (value: string, checked?: boolean) =>
   (checked === undefined ? { _tag: "Picked", value } : { _tag: "Picked", value, checked }) as MenuEvents
 const highlighted = (value: string | null, reason: string) => ({ _tag: "Highlighted", value, reason }) as MenuEvents
@@ -131,7 +131,12 @@ const open = Effect.fnUntraced(function*(props: Partial<MenuProps> = {}) {
 })
 
 const PageRoute = Route.union({ Edit: Route.make("/"), Away: Route.make("/away") })
-const PageMessage = UiSchema.TaggedEnum({ ChangedRoute: { route: PageRoute }, Opened: {}, Left: {}, Navigated: {} })
+const PageMessage = UiSchema.TaggedEnum({
+  ChangedRoute: { route: PageRoute },
+  RequestedOpen: {},
+  Left: {},
+  Navigated: {}
+})
 
 const Page = Component.define({
   name: "Page",
@@ -144,7 +149,7 @@ const Page = Component.define({
   init: ($) => ({ route: $.props.route, open: false }),
   update: {
     ChangedRoute: (model, { route }) => ({ ...model, route }),
-    Opened: (model) => ({ ...model, open: true }),
+    RequestedOpen: (model) => ({ ...model, open: true }),
     Left: (model, _message, $) =>
       $.set(model).run(Router.push(PageRoute, PageRoute.Away()).pipe(Command.map(() => PageMessage.Navigated()))),
     Navigated: (model) => model
@@ -159,7 +164,7 @@ const Page = Component.define({
         ? Menu(h, {
           key: "menu",
           props: { open: model.open, items },
-          onEmit: (event) => event._tag === "Opened" ? PageMessage.Opened() : undefined,
+          onEmit: (event) => event._tag === "RequestedOpen" ? PageMessage.RequestedOpen() : undefined,
           view: (menu) => menu.trigger(h.button.class("trigger")).children("Edit")
         })
         : null
@@ -457,7 +462,7 @@ describe("Menu", () => {
       assert.isUndefined(s.query(empty))
       s.fire(input, "input", { value: "co", checked: false }).emitted(
         highlighted("copy", "none"),
-        { _tag: "ChangedQuery", query: "co", reason: "input-change" }
+        { _tag: "RequestedQuery", query: "co", reason: "input-change" }
       )
       s.props({ open: true, items, query: "co", autoHighlight: true })
       assert.strictEqual(s.get(input).attrs?.["aria-activedescendant"], s.get(item("copy")).attrs?.id)
@@ -465,7 +470,7 @@ describe("Menu", () => {
       assert.deepInclude(s.get(item("cut")).attrs, { hidden: "" })
       assert.isUndefined(s.query(empty))
       assert.isFalse(partsOf(s).nothingMatches)
-      s.click(clear).emitted(highlighted(null, "none"), { _tag: "ChangedQuery", query: "", reason: "clear-press" })
+      s.click(clear).emitted(highlighted(null, "none"), { _tag: "RequestedQuery", query: "", reason: "clear-press" })
       s.props({ open: true, items, query: "zzz", autoHighlight: true })
       assert.isTrue(partsOf(s).nothingMatches)
       assert.deepInclude(s.get(empty).attrs, { role: "status" })

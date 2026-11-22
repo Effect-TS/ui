@@ -9,20 +9,20 @@
  * transition ends, after the app has stopped caring about it.
  *
  * Any `update` below the provider adds, updates and closes toasts by
- * sending facts to it with `$.send(ToastProvider, message)`:
+ * sending requests to it with `$.send(ToastProvider, message)`:
  *
- * - `{ _tag: "AddedToast", toast }` shows `toast`. The sender picks its `id`,
+ * - `{ _tag: "RequestedAdd", toast }` shows `toast`. The sender picks its `id`,
  *   so it can update or close it later. A toast with an `id` that already
  *   shows is replaced, and its timer starts again.
- * - `{ _tag: "UpdatedToast", id, ...changes }` changes the fields it names on
- *   a toast that shows. A toast that has closed stays closed.
- * - `{ _tag: "ClosedToast", id }` closes a toast.
+ * - `{ _tag: "RequestedUpdate", id, ...changes }` changes the fields it names
+ *   on a toast that shows. A toast that has closed stays closed.
+ * - `{ _tag: "RequestedClose", id }` closes a toast.
  *
  * When the user closes a toast, with the close part, Escape or its timeout,
  * the provider emits `Dismissed` with its `id`.
  *
- * A toast that is loading, then done, is an `AddedToast` with
- * `type: "loading"` when the work starts, and an `UpdatedToast` with the
+ * A toast that is loading, then done, is a `RequestedAdd` with
+ * `type: "loading"` when the work starts, and a `RequestedUpdate` with the
  * same `id` when its result arrives. A loading toast never times out.
  *
  * **Anatomy**
@@ -120,7 +120,7 @@
  *   update: {
  *     ClickedSave: (model, _message, $) =>
  *       $.set(model).send(ToastProvider, {
- *         _tag: "AddedToast",
+ *         _tag: "RequestedAdd",
  *         toast: { id: "saved", title: "Saved", type: "success" }
  *       })
  *   },
@@ -171,12 +171,12 @@ import { flag, visuallyHidden, withStyle } from "./internal/attributes.ts"
 import { keepOnTop } from "./internal/topLayer.ts"
 
 /**
- * The content of a toast, as a sender posts it in `AddedToast`.
+ * The content of a toast, as a sender posts it in `RequestedAdd`.
  *
  * **Details**
  *
- * - `id`: required, and picked by the sender, so a later `UpdatedToast`
- *   or `ClosedToast` can name the toast. Build it from domain data, such
+ * - `id`: required, and picked by the sender, so a later `RequestedUpdate`
+ *   or `RequestedClose` can name the toast. Build it from domain data, such
  *   as `save-${note.id}`.
  * - `title` and `description`: the text the consumer draws, and the
  *   toast's accessible name and description.
@@ -202,7 +202,7 @@ export const ToastData = Schema.Struct({
 })
 
 /**
- * The content of a toast, as a sender posts it in `AddedToast`.
+ * The content of a toast, as a sender posts it in `RequestedAdd`.
  *
  * @stability experimental
  * @category models
@@ -260,7 +260,7 @@ export type ToastProviderProps = typeof ToastProviderProps.Type
 
 /**
  * `Dismissed` reports that the user closed the toast `id`, with its close
- * part or Escape, or that its timeout ran out. A `ClosedToast` sent to the
+ * part or Escape, or that its timeout ran out. A `RequestedClose` sent to the
  * provider emits nothing. Handling it is optional.
  *
  * @stability experimental
@@ -283,10 +283,10 @@ export type ToastProviderEvents = typeof ToastProviderEvents.Type
 // The first three are what senders post. The rest are facts from the parts,
 // the viewport's and the toasts' mounts, and the timers.
 const ToastProviderMessage = UiSchema.TaggedEnum({
-  AddedToast: { toast: ToastData },
+  RequestedAdd: { toast: ToastData },
   // Every field but `id` is optional, so a toast's fields are also a change's.
-  UpdatedToast: ToastData.fields,
-  ClosedToast: { id: Schema.String },
+  RequestedUpdate: ToastData.fields,
+  RequestedClose: { id: Schema.String },
   ClickedClose: { id: Schema.String },
   PressedEscape: { id: Schema.String },
   EnteredViewport: {},
@@ -615,8 +615,8 @@ const withToast = <Tag extends string, R>(part: View.Part<Tag, [toast: ToastItem
  * **Details**
  *
  * The provider shares state with the components in its closure, so any
- * `update` below it can `$.send(ToastProvider, ...)` an `AddedToast`,
- * `UpdatedToast` or `ClosedToast`. A component that sends to it needs it
+ * `update` below it can `$.send(ToastProvider, ...)` a `RequestedAdd`,
+ * `RequestedUpdate` or `RequestedClose`. A component that sends to it needs it
  * above: rendered outside the closure, it doesn't compile. The component
  * that renders the provider reaches it the same way, from a component
  * inside the closure.
@@ -653,7 +653,7 @@ export const ToastProvider = Component.define({
   message: ToastProviderMessage,
   events: ToastProviderEvents,
   // Senders only post, so there's nothing for them to read.
-  shares: { value: () => ({}), receives: ["AddedToast", "UpdatedToast", "ClosedToast"] },
+  shares: { value: () => ({}), receives: ["RequestedAdd", "RequestedUpdate", "RequestedClose"] },
   restore: false,
   elements: Html
 }).make({
@@ -661,7 +661,7 @@ export const ToastProvider = Component.define({
   update: {
     // A toast that shows is replaced in place. One that is closing is added
     // again, as new.
-    AddedToast: (model, { toast }, $) => {
+    RequestedAdd: (model, { toast }, $) => {
       const existing = shown(model, toast.id)
       const entry: Entry = { ...toast, transition: existing?.transition ?? "starting", height: existing?.height ?? 0 }
       const toasts = existing === undefined
@@ -672,7 +672,7 @@ export const ToastProvider = Component.define({
     // A running timer goes on, unless the update sets a timeout. One starts
     // when the update makes the toast timed, as when a loading toast gets
     // its result.
-    UpdatedToast: (model, { _tag, id, ...changes }, $) => {
+    RequestedUpdate: (model, { _tag, id, ...changes }, $) => {
       const entry = shown(model, id)
       if (entry === undefined) return model
       const next: Entry = { ...entry, ...changes }
@@ -680,7 +680,7 @@ export const ToastProvider = Component.define({
       const running = timed(entry, $.props) && timed(next, $.props) && changes.timeout === undefined
       return running ? step : step.run(...timer(model, $, next))
     },
-    ClosedToast: (model, { id }, $) => close(model, $, id, false),
+    RequestedClose: (model, { id }, $) => close(model, $, id, false),
     ClickedClose: dismiss,
     PressedEscape: dismiss,
     CompletedWaitBeforeDismissal: (model, message, $) => (pausedBy(model) ? model : dismiss(model, message, $)),

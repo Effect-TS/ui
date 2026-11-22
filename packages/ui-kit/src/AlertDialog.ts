@@ -7,7 +7,7 @@
  * modal, and a press outside the popup doesn't ask it to close. Everything
  * else is the `Dialog`'s: the parts, the events, focus, transitions and
  * nesting. The consumer owns whether it is open, passes it as `open`, and
- * stores what the `Opened` and `Dismissed` events report.
+ * stores what the `RequestedOpen` and `RequestedClose` events ask for.
  *
  * **Anatomy**
  *
@@ -73,7 +73,7 @@
  * import { AlertDialog } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
- * const EditorMessage = UiSchema.TaggedEnum({ AskedDiscard: {}, Kept: {}, Discarded: {} })
+ * const EditorMessage = UiSchema.TaggedEnum({ RequestedOpenConfirm: {}, RequestedCloseConfirm: {}, ClickedDiscard: {} })
  *
  * const Editor = Component.define({
  *   name: "Editor",
@@ -84,16 +84,16 @@
  * }).make({
  *   init: () => ({ confirming: true }),
  *   update: {
- *     AskedDiscard: (model) => ({ ...model, confirming: true }),
- *     Kept: (model) => ({ ...model, confirming: false }),
- *     Discarded: (model) => ({ ...model, confirming: false })
+ *     RequestedOpenConfirm: (model) => ({ ...model, confirming: true }),
+ *     RequestedCloseConfirm: (model) => ({ ...model, confirming: false }),
+ *     ClickedDiscard: (model) => ({ ...model, confirming: false })
  *   },
  *   view: (model, h) =>
  *     AlertDialog(h, {
  *       props: { open: model.confirming },
  *       onEmit: {
- *         Opened: () => EditorMessage.AskedDiscard(),
- *         Dismissed: () => EditorMessage.Kept(),
+ *         RequestedOpen: () => EditorMessage.RequestedOpenConfirm(),
+ *         RequestedClose: () => EditorMessage.RequestedCloseConfirm(),
  *         Settled: () => undefined
  *       },
  *       view: (alertDialog) =>
@@ -104,7 +104,7 @@
  *               alertDialog.title(h.h2).children("Discard draft?"),
  *               alertDialog.description(h.p).children("You can't undo this."),
  *               alertDialog.initialFocus(alertDialog.close(h.button)).children("Cancel"),
- *               h.button.onClick(EditorMessage.Discarded()).children("Discard")
+ *               h.button.onClick(EditorMessage.ClickedDiscard()).children("Discard")
  *             )
  *           )
  *         )
@@ -174,7 +174,7 @@ const alert = (node: View.ElementBuilder<any, any, any, any>) => node.attr("role
  * **Details**
  *
  * It declares a `Dialog` with `modal: true` and `disablePointerDismissal:
- * true`, so it emits the `Dialog`'s events. `Dismissed` carries
+ * true`, so it emits the `Dialog`'s events. `RequestedClose` carries
  * `trigger-press`, `escape-key`, `close-press` or `close-watcher`, never
  * `outside-press` or `focus-out`.
  *

@@ -6,7 +6,7 @@
  * the filtering, focus, placement and the data attributes, and the consumer
  * draws the markup. The consumer owns whether the popup is open and the
  * input's text, passes them as `open` and `value`, and stores what the
- * `Opened`, `Dismissed` and `Updated` events report. Unlike a
+ * `RequestedOpen`, `RequestedClose` and `Updated` events ask for. Unlike a
  * `Combobox` it selects nothing: the text is the value, and picking an
  * item puts its label in the input and closes the popup. `items` lists
  * every suggestion with its label. The autocomplete filters them and hands
@@ -152,8 +152,9 @@
  * ]
  *
  * const SearchMessage = UiSchema.TaggedEnum({
- *   ToggledSuggestions: { open: Schema.Boolean },
- *   EditedQuery: { query: Schema.String }
+ *   RequestedOpenSuggestions: {},
+ *   RequestedCloseSuggestions: {},
+ *   UpdatedQuery: { query: Schema.String }
  * })
  *
  * const Search = Component.define({
@@ -165,17 +166,18 @@
  * }).make({
  *   init: () => ({ open: false, query: "str" }),
  *   update: {
- *     ToggledSuggestions: (model, { open }) => ({ ...model, open }),
- *     EditedQuery: (model, { query }) => ({ ...model, query })
+ *     RequestedOpenSuggestions: (model) => ({ ...model, open: true }),
+ *     RequestedCloseSuggestions: (model) => ({ ...model, open: false }),
+ *     UpdatedQuery: (model, { query }) => ({ ...model, query })
  *   },
  *   view: (model, h) =>
  *     h.form(
  *       Autocomplete(h, {
  *         props: { open: model.open, value: model.query, items: tags, name: "q" },
  *         onEmit: {
- *           Opened: () => SearchMessage.ToggledSuggestions({ open: true }),
- *           Dismissed: () => SearchMessage.ToggledSuggestions({ open: false }),
- *           Updated: ({ value }) => SearchMessage.EditedQuery({ query: value }),
+ *           RequestedOpen: () => SearchMessage.RequestedOpenSuggestions(),
+ *           RequestedClose: () => SearchMessage.RequestedCloseSuggestions(),
+ *           Updated: ({ value }) => SearchMessage.UpdatedQuery({ query: value }),
  *           Highlighted: () => undefined,
  *           Settled: () => undefined
  *         },
@@ -364,7 +366,7 @@ export type AutocompleteMode = typeof AutocompleteMode.Type
  * **Details**
  *
  * - `open`: whether the popup shows. The autocomplete only asks, with
- *   `Opened` and `Dismissed`.
+ *   `RequestedOpen` and `RequestedClose`.
  * - `value`: the input's text. The autocomplete only asks, with
  *   `Updated`.
  * - `items`: every suggestion, in the order they're drawn.
@@ -461,26 +463,27 @@ export const AutocompleteProps = Schema.Struct({
 export type AutocompleteProps = typeof AutocompleteProps.Type
 
 /**
- * What an `Autocomplete` asks of its parent.
+ * What an `Autocomplete` emits.
  *
  * **Details**
  *
- * - `Opened`: set `open` to true.
- * - `Dismissed`: set `open` to false.
- * - `Updated`: set `value` to `value`, the new text. A pick reports the
- *   picked label.
- * - `Highlighted`: the highlighted item changed, to `value` at `index`
- *   in `autocomplete.items`, or to none with `null` and `-1`. For a
+ * - `RequestedOpen`: asks for `open` to be true.
+ * - `RequestedClose`: asks for `open` to be false.
+ * - `Updated`: asks for `value` to be `value`, the new text. A pick asks
+ *   for the picked label.
+ * - `Highlighted`: reports that the highlighted item changed, to `value` at
+ *   `index` in `autocomplete.items`, or to none with `null` and `-1`. For a
  *   virtualized list to scroll to it.
- * - `Settled`: the popup's transitions ended, after it opened or closed.
+ * - `Settled`: reports that the popup's transitions ended, after it
+ *   opened or closed.
  *
  * @stability experimental
  * @category schemas
  * @since 0.1.0
  */
 export const AutocompleteEvents = UiSchema.TaggedEnum({
-  Opened: { reason: AutocompleteChangeReason },
-  Dismissed: { reason: AutocompleteChangeReason },
+  RequestedOpen: { reason: AutocompleteChangeReason },
+  RequestedClose: { reason: AutocompleteChangeReason },
   Updated: { value: Schema.String, reason: AutocompleteChangeReason },
   Highlighted: {
     value: Schema.NullOr(Schema.String),
@@ -491,7 +494,7 @@ export const AutocompleteEvents = UiSchema.TaggedEnum({
 })
 
 /**
- * What an `Autocomplete` asks of its parent.
+ * What an `Autocomplete` emits.
  *
  * @stability experimental
  * @category models
@@ -556,8 +559,8 @@ export interface AutocompleteFilter extends TextFilter {}
 export const makeAutocompleteFilter = (locale?: string | undefined): AutocompleteFilter => textFilter(locale)
 
 const emits: Engine.Emits<AutocompleteEvents> = {
-  opened: (reason) => AutocompleteEvents.Opened({ reason }),
-  dismissed: (reason) => AutocompleteEvents.Dismissed({ reason }),
+  requestedOpen: (reason) => AutocompleteEvents.RequestedOpen({ reason }),
+  requestedClose: (reason) => AutocompleteEvents.RequestedClose({ reason }),
   edited: (value, reason) => AutocompleteEvents.Updated({ value, reason }),
   highlighted: (value, index, reason) => AutocompleteEvents.Highlighted({ value, index, reason }),
   settled: (open) => AutocompleteEvents.Settled({ open })

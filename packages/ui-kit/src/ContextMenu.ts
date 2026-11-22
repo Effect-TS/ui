@@ -6,7 +6,7 @@
  * events, the items, submenus, focus and transitions are the `Menu`'s.
  * Its `trigger` is the area that opens it, and it is always modal. The
  * consumer owns whether it is open, passes it as `open`, and stores what
- * `Opened` and `Dismissed` ask for.
+ * `RequestedOpen` and `RequestedClose` ask for.
  *
  * **Anatomy**
  *
@@ -76,8 +76,9 @@
  * ]
  *
  * const FileMessage = UiSchema.TaggedEnum({
- *   ToggledMenu: { open: Schema.Boolean },
- *   Picked: { value: Schema.String }
+ *   RequestedOpenMenu: {},
+ *   RequestedCloseMenu: {},
+ *   PickedAction: { value: Schema.String }
  * })
  *
  * const File = Component.define({
@@ -89,16 +90,17 @@
  * }).make({
  *   init: () => ({ open: false }),
  *   update: {
- *     ToggledMenu: (model, { open }) => ({ ...model, open }),
- *     Picked: (model) => model
+ *     RequestedOpenMenu: (model) => ({ ...model, open: true }),
+ *     RequestedCloseMenu: (model) => ({ ...model, open: false }),
+ *     PickedAction: (model) => model
  *   },
  *   view: (model, h) =>
  *     ContextMenu(h, {
  *       props: { open: model.open, items: actions },
  *       onEmit: {
- *         Opened: () => FileMessage.ToggledMenu({ open: true }),
- *         Dismissed: () => FileMessage.ToggledMenu({ open: false }),
- *         Picked: ({ value }) => FileMessage.Picked({ value }),
+ *         RequestedOpen: () => FileMessage.RequestedOpenMenu(),
+ *         RequestedClose: () => FileMessage.RequestedCloseMenu(),
+ *         Picked: ({ value }) => FileMessage.PickedAction({ value }),
  *         Highlighted: () => undefined,
  *         Settled: () => undefined
  *       },
@@ -178,15 +180,15 @@ export const ContextMenuProps = MenuProps.mapFields(
 export type ContextMenuProps = typeof ContextMenuProps.Type
 
 /**
- * What a `ContextMenu` asks of its parent: a `Menu`'s events without
- * `ChangedQuery`, since it has no filter. `Opened` carries the `id` the
- * consumer gave the trigger as `triggerId`, or `null`.
+ * What a `ContextMenu` emits: a `Menu`'s events without `RequestedQuery`, since
+ * it has no filter. `RequestedOpen` carries the `id` the consumer gave the
+ * trigger as `triggerId`, or `null`.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export type ContextMenuEvents = Exclude<MenuEvents, { readonly _tag: "ChangedQuery" }>
+export type ContextMenuEvents = Exclude<MenuEvents, { readonly _tag: "RequestedQuery" }>
 
 type MenuParts = Component.Headless.Parts<typeof Menu>
 
@@ -238,8 +240,8 @@ const handlers = <Msg>(
   onEmit === undefined
     ? undefined
     : typeof onEmit === "function"
-    ? (event) => event._tag === "ChangedQuery" ? undefined : onEmit(event)
-    : { ...onEmit, ChangedQuery: () => undefined }
+    ? (event) => event._tag === "RequestedQuery" ? undefined : onEmit(event)
+    : { ...onEmit, RequestedQuery: () => undefined }
 
 /**
  * A headless context menu. Call it as a `Menu`, with the consumer's `h`, a
@@ -250,14 +252,14 @@ const handlers = <Msg>(
  * **Details**
  *
  * It renders a `Menu` whose `contextTrigger` part is the `trigger`. Every
- * open is `trigger-press`, and `Dismissed` carries `item-press`,
+ * open is `trigger-press`, and `RequestedClose` carries `item-press`,
  * `outside-press`, `escape-key`, `focus-out` or `cancel-open`.
  *
  * Several triggers can open one context menu, such as one per row of a
- * list: give each an `id`, and `Opened` reports which one as `triggerId`.
- * A right click on another trigger while it's open opens it there. A
- * context menu drawn inside another one's trigger takes the right clicks
- * on its own trigger.
+ * list: give each an `id`, and `RequestedOpen` reports which one as
+ * `triggerId`. A right click on another trigger while it's open opens it
+ * there. A context menu drawn inside another one's trigger takes the right
+ * clicks on its own trigger.
  *
  * @stability experimental
  * @category components

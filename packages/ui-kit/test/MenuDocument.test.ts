@@ -59,10 +59,10 @@ const Config = Schema.Struct({
 type Config = typeof Config.Type
 
 const Message = UiSchema.TaggedEnum({
-  Opened: { menu: Schema.String, reason: Schema.String, triggerId: Schema.NullOr(Schema.String) },
-  Dismissed: { menu: Schema.String, reason: Schema.String },
+  RequestedOpen: { menu: Schema.String, reason: Schema.String, triggerId: Schema.NullOr(Schema.String) },
+  RequestedClose: { menu: Schema.String, reason: Schema.String },
   Picked: { menu: Schema.String, value: Schema.String },
-  ChangedQuery: { query: Schema.String }
+  RequestedQuery: { query: Schema.String }
 })
 
 const Page = Component.define({
@@ -81,25 +81,25 @@ const Page = Component.define({
 }).make({
   init: () => ({ open: false, triggerId: null, share: false, query: "", log: [] }),
   update: {
-    Opened: (model, { menu, reason, triggerId }) => ({
+    RequestedOpen: (model, { menu, reason, triggerId }) => ({
       ...model,
       [menu === "root" ? "open" : "share"]: true,
       triggerId: menu === "root" ? triggerId : model.triggerId,
       log: [
         ...model.log,
-        menu + " Opened " + reason + (triggerId !== null && triggerId !== "trigger" ? " from " + triggerId : "")
+        menu + " RequestedOpen " + reason + (triggerId !== null && triggerId !== "trigger" ? " from " + triggerId : "")
       ]
     }),
-    Dismissed: (model, { menu, reason }) => ({
+    RequestedClose: (model, { menu, reason }) => ({
       ...model,
       [menu === "root" ? "open" : "share"]: false,
-      log: [...model.log, menu + " Dismissed " + reason]
+      log: [...model.log, menu + " RequestedClose " + reason]
     }),
     Picked: (model, { menu, value }) => ({
       ...model,
       log: [...model.log, menu + " Picked " + value]
     }),
-    ChangedQuery: (model, { query }) => ({ ...model, query })
+    RequestedQuery: (model, { query }) => ({ ...model, query })
   },
   view: (model, h) =>
     Menu(h, {
@@ -111,11 +111,11 @@ const Page = Component.define({
         ...(h.props.filter ? { query: model.query } : {})
       },
       onEmit: {
-        Opened: ({ reason, triggerId }) => Message.Opened({ menu: "root", reason, triggerId }),
-        Dismissed: ({ reason }) => Message.Dismissed({ menu: "root", reason }),
+        RequestedOpen: ({ reason, triggerId }) => Message.RequestedOpen({ menu: "root", reason, triggerId }),
+        RequestedClose: ({ reason }) => Message.RequestedClose({ menu: "root", reason }),
         Picked: ({ value }) => Message.Picked({ menu: "root", value }),
         Highlighted: () => undefined,
-        ChangedQuery: ({ query }) => Message.ChangedQuery({ query }),
+        RequestedQuery: ({ query }) => Message.RequestedQuery({ query }),
         Settled: () => undefined
       },
       view: (menu) =>
@@ -145,11 +145,11 @@ const Page = Component.define({
                   closeParentOnEsc: h.props.closeParentOnEsc
                 },
                 onEmit: {
-                  Opened: ({ reason }) => Message.Opened({ menu: "share", reason, triggerId: null }),
-                  Dismissed: ({ reason }) => Message.Dismissed({ menu: "share", reason }),
+                  RequestedOpen: ({ reason }) => Message.RequestedOpen({ menu: "share", reason, triggerId: null }),
+                  RequestedClose: ({ reason }) => Message.RequestedClose({ menu: "share", reason }),
                   Picked: ({ value }) => Message.Picked({ menu: "share", value }),
                   Highlighted: () => undefined,
-                  ChangedQuery: () => undefined,
+                  RequestedQuery: () => undefined,
                   Settled: () => undefined
                 },
                 view: (share) =>
@@ -222,7 +222,11 @@ describe("Menu in a document", { concurrent: false }, () => {
       yield* tick
       keydown(item("paste"), "Enter")
       yield* tick
-      assert.deepStrictEqual(log(), ["root Opened list-navigation", "root Picked paste", "root Dismissed item-press"])
+      assert.deepStrictEqual(log(), [
+        "root RequestedOpen list-navigation",
+        "root Picked paste",
+        "root RequestedClose item-press"
+      ])
       assert.strictEqual(document.activeElement, trigger)
     }))
 
@@ -261,12 +265,12 @@ describe("Menu in a document", { concurrent: false }, () => {
       keydown(item("copy"), "Tab")
       yield* tick
       assert.deepStrictEqual(log(), [
-        "root Opened list-navigation",
-        "root Dismissed escape-key",
-        "root Opened trigger-press",
-        "root Dismissed outside-press",
-        "root Opened list-navigation",
-        "root Dismissed focus-out"
+        "root RequestedOpen list-navigation",
+        "root RequestedClose escape-key",
+        "root RequestedOpen trigger-press",
+        "root RequestedClose outside-press",
+        "root RequestedOpen list-navigation",
+        "root RequestedClose focus-out"
       ])
     }))
 
@@ -305,15 +309,15 @@ describe("Menu in a document", { concurrent: false }, () => {
       assert.isFalse(shown("share-positioner"))
       assert.isFalse(shown("positioner"))
       assert.deepStrictEqual(log(), [
-        "root Opened list-navigation",
-        "share Opened list-navigation",
-        "share Dismissed list-navigation",
-        "share Opened list-navigation",
-        "share Dismissed sibling-open",
-        "share Opened trigger-press",
-        "root Dismissed item-press",
+        "root RequestedOpen list-navigation",
+        "share RequestedOpen list-navigation",
+        "share RequestedClose list-navigation",
+        "share RequestedOpen list-navigation",
+        "share RequestedClose sibling-open",
+        "share RequestedOpen trigger-press",
+        "root RequestedClose item-press",
         "share Picked email",
-        "share Dismissed item-press"
+        "share RequestedClose item-press"
       ])
     }))
 
@@ -331,7 +335,7 @@ describe("Menu in a document", { concurrent: false }, () => {
       assert.isFalse(shown("share-positioner"))
       assert.isFalse(shown("positioner"))
       assert.strictEqual(document.activeElement, byId("trigger"))
-      assert.deepStrictEqual(log().slice(-2), ["root Dismissed escape-key", "share Dismissed escape-key"])
+      assert.deepStrictEqual(log().slice(-2), ["root RequestedClose escape-key", "share RequestedClose escape-key"])
     }))
 
   it.effect("filtering keeps focus in the input, hides what doesn't match, and Enter picks the highlighted item", () =>
@@ -362,7 +366,11 @@ describe("Menu in a document", { concurrent: false }, () => {
       yield* tick
       keydown(input, "Enter")
       yield* tick
-      assert.deepStrictEqual(log(), ["root Opened trigger-press", "root Picked paste", "root Dismissed item-press"])
+      assert.deepStrictEqual(log(), [
+        "root RequestedOpen trigger-press",
+        "root Picked paste",
+        "root RequestedClose item-press"
+      ])
     }))
 
   it.effect("releasing an opening press outside cancels it, and releasing over an item picks it after 200ms", () =>
@@ -386,13 +394,13 @@ describe("Menu in a document", { concurrent: false }, () => {
       yield* tick
       assert.isFalse(shown("positioner"))
       assert.deepStrictEqual(log(), [
-        "root Opened trigger-press",
-        "root Dismissed cancel-open",
-        "root Opened trigger-press",
-        "root Dismissed trigger-press",
-        "root Opened trigger-press",
+        "root RequestedOpen trigger-press",
+        "root RequestedClose cancel-open",
+        "root RequestedOpen trigger-press",
+        "root RequestedClose trigger-press",
+        "root RequestedOpen trigger-press",
         "root Picked paste",
-        "root Dismissed item-press"
+        "root RequestedClose item-press"
       ])
     }))
 
@@ -421,7 +429,10 @@ describe("Menu in a document", { concurrent: false }, () => {
       assert.isTrue(viewport.children[0]!.hasAttribute("data-current"))
       mousedown(byId("trigger-2"))
       yield* tick
-      assert.deepStrictEqual(log(), ["root Opened trigger-press", "root Opened trigger-press from trigger-2"])
+      assert.deepStrictEqual(log(), [
+        "root RequestedOpen trigger-press",
+        "root RequestedOpen trigger-press from trigger-2"
+      ])
       assert.strictEqual(byId("trigger-2").getAttribute("aria-expanded"), "true")
       assert.strictEqual(byId("trigger").getAttribute("aria-expanded"), "false")
       assert.strictEqual(viewport.getAttribute("data-activation-direction"), "right ")
@@ -458,9 +469,9 @@ describe("Menu in a document", { concurrent: false }, () => {
       yield* tick
       assert.isFalse(shown("positioner"))
       assert.deepStrictEqual(log(), [
-        "root Opened trigger-press",
-        "root Opened trigger-hover from trigger-2",
-        "root Dismissed trigger-hover"
+        "root RequestedOpen trigger-press",
+        "root RequestedOpen trigger-hover from trigger-2",
+        "root RequestedClose trigger-hover"
       ])
     }))
 
@@ -496,9 +507,9 @@ describe("Menu in a document", { concurrent: false }, () => {
       assert.isFalse(shown("share-positioner"))
       assert.isTrue(shown("positioner"))
       assert.deepStrictEqual(log(), [
-        "root Opened trigger-press",
-        "share Opened trigger-hover",
-        "share Dismissed trigger-hover"
+        "root RequestedOpen trigger-press",
+        "share RequestedOpen trigger-hover",
+        "share RequestedClose trigger-hover"
       ])
     }))
 })

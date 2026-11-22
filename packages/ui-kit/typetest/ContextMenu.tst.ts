@@ -10,11 +10,11 @@ declare const h: View.Helper<Msg, unknown> & View.Tags<Html.Elements, Msg>
 
 const items = [{ value: "copy", label: "Copy" }]
 
-it("omits button, hover, submenu and filter props and requires no ChangedQuery", () => {
+it("omits button, hover, submenu and filter props and requires no RequestedQuery", () => {
   const view = () => h.div
   const onEmit = {
-    Opened: () => undefined,
-    Dismissed: () => undefined,
+    RequestedOpen: () => undefined,
+    RequestedClose: () => undefined,
     Picked: () => undefined,
     Highlighted: () => undefined,
     Settled: () => undefined

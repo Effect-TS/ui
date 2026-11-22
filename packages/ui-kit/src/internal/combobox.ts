@@ -77,8 +77,8 @@ export const FilterMode = Schema.Literals(["contains", "startsWith", "endsWith",
 export type FilterMode = typeof FilterMode.Type
 
 export interface Emits<E> {
-  readonly opened: (reason: TextReason) => E
-  readonly dismissed: (reason: TextReason) => E
+  readonly requestedOpen: (reason: TextReason) => E
+  readonly requestedClose: (reason: TextReason) => E
   readonly picked?: ((value: string | ReadonlyArray<string> | null, reason: ChangeReason) => E) | undefined
   readonly edited: (inputValue: string, reason: TextReason) => E
   readonly highlighted: (value: string | null, index: number, reason: HighlightReason) => E
@@ -139,8 +139,8 @@ export const Message = UiSchema.TaggedEnum({
   FocusedFormInput: {},
   Autofilled: { value: Schema.String },
   PressedClear: {},
-  RemovedChip: { value: Schema.String, reason: ChangeReason },
-  OpenedFromChip: { key: Schema.String },
+  RequestedChipRemoval: { value: Schema.String, reason: ChangeReason },
+  PressedChipArrow: { key: Schema.String },
   EnteredItem: { value: Schema.String },
   LeftItem: {},
   PressedItem: { value: Schema.String },
@@ -386,7 +386,7 @@ const open = <E>(
     pressedItem: null,
     typed: "",
     pressing: reason === "trigger-press" && props.inputInPopup === true && (method === "mouse" || method === "pen")
-  }).emit(props.emits.opened(reason))
+  }).emit(props.emits.requestedOpen(reason))
   const opened = { ...props, open: true, inputValue }
   const shown = shownOf(next.model, opened, true)
   let target: string | null = null
@@ -430,7 +430,7 @@ const dismiss = <E>(
     }
   }
   return next.evolve({ closeMethod: method, focusLeft, pressing: false, completion: null })
-    .emit(props.emits.dismissed(reason))
+    .emit(props.emits.requestedClose(reason))
 }
 
 const toggle = <E>(step: Step<E>, props: Settings<E>, method: Interaction): Step<E> =>
@@ -833,13 +833,13 @@ const TrackChips = Mount.makeStream(
         } else if (key === "Backspace" || key === "Delete") {
           event.preventDefault()
           move(index >= all.length - 1 ? all[index - 1] : all[index + 1])
-          send(Message.RemovedChip({ value: chip.getAttribute("data-combobox-chip") ?? "", reason: "none" }))
+          send(Message.RequestedChipRemoval({ value: chip.getAttribute("data-combobox-chip") ?? "", reason: "none" }))
         } else if (key === "Enter" || key === " ") {
           event.preventDefault()
           move(undefined)
         } else if (key === "ArrowDown" || key === "ArrowUp") {
           event.preventDefault()
-          send(Message.OpenedFromChip({ key }))
+          send(Message.PressedChipArrow({ key }))
           move(undefined)
         } else if (printable(key, event.altKey, event.ctrlKey, event.metaKey)) {
           move(undefined)
@@ -940,8 +940,8 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
       const props = s($)
       return lockedOf(props) ? model : focus(clear(unhighlight($, props, "pointer"), props, "clear-press"), Input)
     },
-    RemovedChip: (_model, { reason, value }, $) => removeChip($, s($), value, reason),
-    OpenedFromChip: (_model, { key }, $) => open($, s($), "list-navigation", "keyboard", key),
+    RequestedChipRemoval: (_model, { reason, value }, $) => removeChip($, s($), value, reason),
+    PressedChipArrow: (_model, { key }, $) => open($, s($), "list-navigation", "keyboard", key),
     EnteredItem: (_model, { value }, $) => hover($, s($), value),
     LeftItem: (_model, _message, $) => hover($, s($), null),
     PressedItem: (_model, { value }, $) => $.evolve({ pressedItem: value }),
@@ -1289,7 +1289,7 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         })
         .disabled(disabled)
         .on("mousedown", () => undefined, { preventDefault: "always" })
-        .onClick(Message.RemovedChip({ value, reason: "chip-remove-press" })))
+        .onClick(Message.RequestedChipRemoval({ value, reason: "chip-remove-press" })))
 
     const backdrop = p.part("div", (b) =>
       states(b)

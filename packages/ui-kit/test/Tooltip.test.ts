@@ -33,7 +33,7 @@ const Button = <Msg, R>(
 }
 
 // A parent that opens the tooltip on a styled Button and counts what it hears.
-const ToolbarMessage = UiSchema.TaggedEnum({ PressedBold: {}, OpenedBoldTip: {}, DismissedBoldTip: {} })
+const ToolbarMessage = UiSchema.TaggedEnum({ PressedBold: {}, RequestedOpenBoldTip: {}, RequestedCloseBoldTip: {} })
 
 const Toolbar = Component.define({
   name: "Toolbar",
@@ -45,15 +45,18 @@ const Toolbar = Component.define({
   init: () => ({ open: true, pressed: 0, dismissed: 0 }),
   update: {
     PressedBold: (model) => ({ ...model, pressed: model.pressed + 1 }),
-    OpenedBoldTip: (model) => ({ ...model, open: true }),
-    DismissedBoldTip: (model) => ({ ...model, open: false, dismissed: model.dismissed + 1 })
+    RequestedOpenBoldTip: (model) => ({ ...model, open: true }),
+    RequestedCloseBoldTip: (model) => ({ ...model, open: false, dismissed: model.dismissed + 1 })
   },
   view: (model, h) =>
     h.div(
       Tooltip(h, {
         key: "bold",
         props: { open: model.open },
-        onEmit: (event) => event._tag === "Opened" ? ToolbarMessage.OpenedBoldTip() : ToolbarMessage.DismissedBoldTip(),
+        onEmit: (event) =>
+          event._tag === "RequestedOpen"
+            ? ToolbarMessage.RequestedOpenBoldTip()
+            : ToolbarMessage.RequestedCloseBoldTip(),
         view: (tooltip) =>
           h.span(
             Button(h, {
@@ -69,7 +72,7 @@ const Toolbar = Component.define({
 
 // Two tooltips under a provider, and one Model field for which one shows.
 const Tip = Schema.Literals(["bold", "italic"])
-const GroupedMessage = UiSchema.TaggedEnum({ OpenedTip: { tip: Tip }, DismissedTip: { tip: Tip } })
+const GroupedMessage = UiSchema.TaggedEnum({ RequestedOpenTip: { tip: Tip }, RequestedCloseTip: { tip: Tip } })
 
 const Grouped = Component.define({
   name: "Grouped",
@@ -80,8 +83,8 @@ const Grouped = Component.define({
 }).make({
   init: () => ({ tip: null }),
   update: {
-    OpenedTip: (_model, { tip }) => ({ tip }),
-    DismissedTip: (model, { tip }) => (model.tip === tip ? { tip: null } : model)
+    RequestedOpenTip: (_model, { tip }) => ({ tip }),
+    RequestedCloseTip: (model, { tip }) => (model.tip === tip ? { tip: null } : model)
   },
   view: (model, h) =>
     TooltipProvider(h, {
@@ -93,7 +96,9 @@ const Grouped = Component.define({
               key: tip,
               props: { open: model.tip === tip },
               onEmit: (event) =>
-                event._tag === "Opened" ? GroupedMessage.OpenedTip({ tip }) : GroupedMessage.DismissedTip({ tip }),
+                event._tag === "RequestedOpen"
+                  ? GroupedMessage.RequestedOpenTip({ tip })
+                  : GroupedMessage.RequestedCloseTip({ tip }),
               view: (tooltip) =>
                 h.span(
                   tooltip.trigger(h.button.attr("aria-label", tip)).children(tip),
@@ -132,8 +137,8 @@ const Pages = Component.define({
 })
 
 // Two tooltips under a provider, each with its own field. `keep` refuses
-// bold's `Dismissed`, and `bold` counts bold's requests to close.
-const IndependentMessage = UiSchema.TaggedEnum({ OpenedTip: { tip: Tip }, DismissedTip: { tip: Tip } })
+// bold's `RequestedClose`, and `bold` counts bold's requests to close.
+const IndependentMessage = UiSchema.TaggedEnum({ RequestedOpenTip: { tip: Tip }, RequestedCloseTip: { tip: Tip } })
 
 const Independent = Component.define({
   name: "Independent",
@@ -145,8 +150,8 @@ const Independent = Component.define({
 }).make({
   init: () => ({ bold: false, italic: false, requests: 0 }),
   update: {
-    OpenedTip: (model, { tip }) => ({ ...model, [tip]: true }),
-    DismissedTip: (model, { tip }, $) =>
+    RequestedOpenTip: (model, { tip }) => ({ ...model, [tip]: true }),
+    RequestedCloseTip: (model, { tip }, $) =>
       tip === "bold"
         ? { ...model, bold: $.props.keep, requests: model.requests + 1 }
         : { ...model, italic: false }
@@ -162,9 +167,9 @@ const Independent = Component.define({
                 key: tip,
                 props: { open: model[tip], closeDelay: tip === "bold" ? h.props.closeDelay : 0 },
                 onEmit: (event) =>
-                  event._tag === "Opened"
-                    ? IndependentMessage.OpenedTip({ tip })
-                    : IndependentMessage.DismissedTip({ tip }),
+                  event._tag === "RequestedOpen"
+                    ? IndependentMessage.RequestedOpenTip({ tip })
+                    : IndependentMessage.RequestedCloseTip({ tip }),
                 view: (tooltip) =>
                   h.span(
                     tooltip.trigger(h.button.attr("aria-label", tip)).children(tip),
@@ -221,7 +226,7 @@ const Deferred = Component.define({
                 key: tip,
                 props: { open: model[tip] },
                 onEmit: (event) =>
-                  event._tag === "Opened"
+                  event._tag === "RequestedOpen"
                     ? DeferredMessage.RequestedOpen({ tip })
                     : DeferredMessage.RequestedClose({ tip }),
                 view: (tooltip) =>
@@ -257,7 +262,7 @@ describe("Tooltip", () => {
       const [opening] = s.current.pending
       assert.deepStrictEqual(opening?.command.args, { delay: 600 })
       s.resolve(opening!.command, completed("CompletedWaitBeforeOpening"))
-        .emitted({ _tag: "Opened" })
+        .emitted({ _tag: "RequestedOpen" })
       assert.isFalse(s.get(positioner).props?.popoverOpen)
       s.props({ open: true, side: "bottom", sideOffset: 8 }).mounted(Positioning.TrackPosition, top)
 
@@ -272,7 +277,7 @@ describe("Tooltip", () => {
       assert.deepStrictEqual(s.current.interrupted.map((c) => c.name), ["WaitBeforeClosing"])
       s.fire(positioner, "mouseleave")
       s.resolve(s.current.pending[0]!.command, completed("CompletedWaitBeforeClosing"))
-        .emitted({ _tag: "Dismissed" })
+        .emitted({ _tag: "RequestedClose" })
     }))
 
   it.effect("listens on the document only while it shows", () =>
@@ -304,14 +309,14 @@ describe("Tooltip", () => {
       s.props({ open: true }).mounted(Positioning.TrackPosition, top)
         .fire(trigger, "mouseleave")
       s.resolve(s.current.pending[0]!.command, completed("CompletedWaitBeforeClosing"))
-        .emitted({ _tag: "Dismissed" })
+        .emitted({ _tag: "RequestedClose" })
     }))
 
   it.effect("activation dismisses on click rather than mousedown unless closeOnClick is false", () =>
     Effect.gen(function*() {
       const s = yield* opened({ open: true })
       s.fire(trigger, "click")
-        .emitted({ _tag: "Dismissed" })
+        .emitted({ _tag: "RequestedClose" })
       s.fire(trigger, "mousedown")
       assert.deepStrictEqual(s.current.emitted, [])
       s.props({ open: true, closeOnClick: false })
@@ -323,7 +328,7 @@ describe("Tooltip", () => {
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Tooltip, { open: false, closeDelay: 300 }, standIn)
       s.fire(trigger, "focus")
-        .emitted({ _tag: "Opened" })
+        .emitted({ _tag: "RequestedOpen" })
         .props({ open: true, closeDelay: 300 })
         .mounted(Positioning.TrackPosition, top)
       // A press with the pointer on the trigger or the positioner is inside.
@@ -336,7 +341,7 @@ describe("Tooltip", () => {
       s.fire(positioner, "mouseleave")
       assert.deepStrictEqual(s.current.pending, [])
       s.fireDocument("mousedown")
-        .emitted({ _tag: "Dismissed" })
+        .emitted({ _tag: "RequestedClose" })
 
       // Without focus, the close delay holds it open, and a press ends the wait.
       s.fire(trigger, "mouseenter")
@@ -344,7 +349,7 @@ describe("Tooltip", () => {
         .fire(trigger, "mouseleave")
       assert.deepStrictEqual(s.current.pending.map((run) => run.command.args), [{ delay: 300 }])
       s.fireDocument("mousedown")
-        .emitted({ _tag: "Dismissed" })
+        .emitted({ _tag: "RequestedClose" })
       assert.deepStrictEqual(s.current.pending, [])
     }))
 

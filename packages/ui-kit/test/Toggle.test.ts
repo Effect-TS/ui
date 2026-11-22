@@ -5,7 +5,7 @@ import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 
-const ToolbarMessage = UiSchema.TaggedEnum({ ToggledBold: { pressed: Schema.Boolean }, DismissedTip: {} })
+const ToolbarMessage = UiSchema.TaggedEnum({ ToggledBold: { pressed: Schema.Boolean }, RequestedCloseTip: {} })
 
 // The toggle stacked on a tooltip trigger: the tooltip's part has its own
 // handler layer, so both hear the click.
@@ -19,13 +19,13 @@ const Toolbar = Component.define({
   init: () => ({ bold: false, open: true }),
   update: {
     ToggledBold: (model, { pressed }) => ({ ...model, bold: pressed }),
-    DismissedTip: (model) => ({ ...model, open: false })
+    RequestedCloseTip: (model) => ({ ...model, open: false })
   },
   view: (model, h) =>
     Tooltip(h, {
       key: "bold",
       props: { open: model.open },
-      onEmit: (event) => event._tag === "Dismissed" ? ToolbarMessage.DismissedTip() : undefined,
+      onEmit: (event) => event._tag === "RequestedClose" ? ToolbarMessage.RequestedCloseTip() : undefined,
       view: (tooltip) =>
         Toggle(h, {
           element: tooltip.trigger(h.button),
@@ -94,7 +94,7 @@ describe("Toggle", () => {
       disabled: ""
     })
 
-    const clicked = ToolbarMessage.DismissedTip()
+    const clicked = ToolbarMessage.RequestedCloseTip()
     assert.deepStrictEqual(
       View.build(Toggle(h, { element: h.button.onClick(clicked), props: { pressed: false } }), []).handlers,
       { click: clicked }

@@ -5,9 +5,9 @@
  * `Menu` is headless: it owns the keyboard and pointer behaviour, focus,
  * placement and the data attributes, and the consumer draws the markup.
  * The consumer owns whether the popup is open, passes it as `open`, and
- * stores what `Opened` and `Dismissed` ask for. `Picked` reports the item
- * the user chose. `items` lists every item with its label, in the order
- * they're drawn, for navigation, typeahead and filtering.
+ * stores what `RequestedOpen` and `RequestedClose` ask for. `Picked` reports
+ * the item the user chose. `items` lists every item with its label, in the
+ * order they're drawn, for navigation, typeahead and filtering.
  *
  * **Anatomy**
  *
@@ -139,7 +139,7 @@
  * **Limits**
  *
  * The menu doesn't read its items from the rendered elements, so `items`
- * lists them. A trigger carries no payload: `Opened` reports its
+ * lists them. A trigger carries no payload: `RequestedOpen` reports its
  * `triggerId`, so draw the content for that trigger. `filter` picks a
  * built-in match; for another, pass `filter: null` and draw only the
  * items that match. `MenuTrigger` draws a trigger outside the view. The
@@ -161,9 +161,11 @@
  * const targets = [{ value: "email", label: "Email" }]
  *
  * const EditorMessage = UiSchema.TaggedEnum({
- *   ToggledMenu: { open: Schema.Boolean },
- *   ToggledShare: { open: Schema.Boolean },
- *   Picked: { value: Schema.String, checked: Schema.optional(Schema.Boolean) }
+ *   RequestedOpenMenu: {},
+ *   RequestedCloseMenu: {},
+ *   RequestedOpenShare: {},
+ *   RequestedCloseShare: {},
+ *   PickedAction: { value: Schema.String, checked: Schema.optional(Schema.Boolean) }
  * })
  *
  * const Editor = Component.define({
@@ -175,24 +177,26 @@
  * }).make({
  *   init: () => ({ open: false, share: false, wrap: true }),
  *   update: {
- *     ToggledMenu: (model, { open }) => ({ ...model, open }),
- *     ToggledShare: (model, { open }) => ({ ...model, share: open }),
- *     Picked: (model, { checked, value }) => value === "wrap" ? { ...model, wrap: checked === true } : model
+ *     RequestedOpenMenu: (model) => ({ ...model, open: true }),
+ *     RequestedCloseMenu: (model) => ({ ...model, open: false }),
+ *     RequestedOpenShare: (model) => ({ ...model, share: true }),
+ *     RequestedCloseShare: (model) => ({ ...model, share: false }),
+ *     PickedAction: (model, { checked, value }) => value === "wrap" ? { ...model, wrap: checked === true } : model
  *   },
  *   view: (model, h) => {
  *     const events = {
  *       Picked: ({ checked, value }: { readonly value: string; readonly checked?: boolean | undefined }) =>
- *         EditorMessage.Picked({ value, checked }),
+ *         EditorMessage.PickedAction({ value, checked }),
  *       Highlighted: () => undefined,
- *       ChangedQuery: () => undefined,
+ *       RequestedQuery: () => undefined,
  *       Settled: () => undefined
  *     }
  *     return Menu(h, {
  *       props: { open: model.open, items: actions },
  *       onEmit: {
  *         ...events,
- *         Opened: () => EditorMessage.ToggledMenu({ open: true }),
- *         Dismissed: () => EditorMessage.ToggledMenu({ open: false })
+ *         RequestedOpen: () => EditorMessage.RequestedOpenMenu(),
+ *         RequestedClose: () => EditorMessage.RequestedCloseMenu()
  *       },
  *       view: (menu) =>
  *         h.div(
@@ -209,8 +213,8 @@
  *                 props: { open: model.share, items: targets, parentItem: "share" },
  *                 onEmit: {
  *                   ...events,
- *                   Opened: () => EditorMessage.ToggledShare({ open: true }),
- *                   Dismissed: () => EditorMessage.ToggledShare({ open: false })
+ *                   RequestedOpen: () => EditorMessage.RequestedOpenShare(),
+ *                   RequestedClose: () => EditorMessage.RequestedCloseShare()
  *                 },
  *                 view: (share) =>
  *                   h.div(
@@ -432,8 +436,8 @@ const Orientation = Schema.Literals(["vertical", "horizontal"])
  *
  * **Details**
  *
- * - `open`: whether the popup shows. The menu only asks, with `Opened`
- *   and `Dismissed`.
+ * - `open`: whether the popup shows. The menu only asks, with `RequestedOpen`
+ *   and `RequestedClose`.
  * - `items`: every item, link, checkbox, radio and submenu trigger, in the
  *   order they're drawn. Navigation, typeahead and filtering read them.
  * - `disabled`: the trigger and the items ignore the user.
@@ -470,7 +474,7 @@ const Orientation = Schema.Literals(["vertical", "horizontal"])
  *   consumer ends by clearing it.
  * - `query`: the filter's text. Given, the menu filters its items by it,
  *   and focus stays in the `input` part. The menu only asks, with
- *   `ChangedQuery`.
+ *   `RequestedQuery`.
  * - `filter`: how items match, `"contains"` when left out. `null` hides
  *   none: list and draw only the items that match.
  * - `locale`: the locale the filter compares text in.
@@ -520,36 +524,40 @@ export const MenuProps = Schema.Struct({
 export type MenuProps = typeof MenuProps.Type
 
 /**
- * What a `Menu` asks of its parent.
+ * What a `Menu` emits.
  *
  * **Details**
  *
- * - `Opened`: set `open` to true. `triggerId` is the `id` of the trigger
- *   pressed, for `triggerId`. A right click on a context trigger of an open
- *   menu sends it again, for the new point.
- * - `Dismissed`: set `open` to false.
- * - `Picked`: an item was picked. `checked` is the new state of a
+ * - `RequestedOpen`: asks for `open` to be true. `triggerId` is the `id` of the
+ *   trigger pressed, for `triggerId`. A right click on a context trigger of an
+ *   open menu sends it again, for the new point.
+ * - `RequestedClose`: asks for `open` to be false.
+ * - `Picked`: reports that an item was picked. `checked` is the new state of a
  *   checkbox item, and true for a radio item. It stands for the item's
  *   click, for every kind of item.
- * - `Highlighted`: the highlighted item changed, to `value` or to none.
- * - `ChangedQuery`: set `query` to `query`.
- * - `Settled`: the popup's transitions ended, after it opened or closed.
+ * - `Highlighted`: reports that the highlighted item changed, to `value` or to
+ *   none.
+ * - `RequestedQuery`: asks for `query` to be `query`. The menu also
+ *   emits it, with `reason: "none"`, to clear the query after the popup
+ *   closes.
+ * - `Settled`: reports that the popup's transitions ended, after it
+ *   opened or closed.
  *
  * @stability experimental
  * @category schemas
  * @since 0.1.0
  */
 export const MenuEvents = UiSchema.TaggedEnum({
-  Opened: { reason: MenuChangeReason, triggerId: Schema.NullOr(Schema.String) },
-  Dismissed: { reason: MenuChangeReason },
+  RequestedOpen: { reason: MenuChangeReason, triggerId: Schema.NullOr(Schema.String) },
+  RequestedClose: { reason: MenuChangeReason },
   Picked: { value: Schema.String, checked: Schema.optional(Schema.Boolean) },
   Highlighted: { value: Schema.NullOr(Schema.String), reason: MenuHighlightReason },
-  ChangedQuery: { query: Schema.String, reason: MenuQueryReason },
+  RequestedQuery: { query: Schema.String, reason: MenuQueryReason },
   Settled: { open: Schema.Boolean }
 })
 
 /**
- * What a `Menu` asks of its parent.
+ * What a `Menu` emits.
  *
  * @stability experimental
  * @category models
@@ -663,7 +671,7 @@ const MenuMessage = UiSchema.TaggedEnum({
   AllowedRelease: {},
   ChangedSubmenus: { submenus: Schema.Array(Submenu) },
   ChangedParent: { parent: ParentState },
-  ClosedByChild: { reason: MenuChangeReason },
+  RequestedCloseByChild: { reason: MenuChangeReason },
   MovedViewport: { direction: Schema.String },
   SettledViewport: {},
   SettledTriggerChange: {},
@@ -724,7 +732,7 @@ type MenuModel = typeof MenuModel.Type
 type Base = Component.Step<MenuModel, MenuMessage, MenuEvents, never>
 type MenuUpdate = Component.Update<MenuModel, MenuMessage, MenuEvents, MenuProps> & {
   readonly shared: { readonly parent?: ParentState | undefined }
-  send(owner: "self", message: Extract<MenuMessage, { readonly _tag: "ClosedByChild" }>): Base
+  send(owner: "self", message: Extract<MenuMessage, { readonly _tag: "RequestedCloseByChild" }>): Base
 }
 
 const wait = (name: string, completed: () => MenuMessage) =>
@@ -824,7 +832,7 @@ const open = (
     releaseArmed: context?.release ?? false,
     longPress: null
   }
-  const opened = commit($, model, next, "none").emit(MenuEvents.Opened({ reason, triggerId }))
+  const opened = commit($, model, next, "none").emit(MenuEvents.RequestedOpen({ reason, triggerId }))
   return reason === "trigger-hover" ? opened.run(WaitBeforeStickExpires.make({ delay: 500 })) : opened
 }
 
@@ -852,7 +860,7 @@ const dismiss = (
     hovering: false,
     stick: false,
     instant
-  }).emit(MenuEvents.Dismissed({ reason }))
+  }).emit(MenuEvents.RequestedClose({ reason }))
 }
 
 const closeTree = (
@@ -862,7 +870,7 @@ const closeTree = (
   method: MenuInteraction | null,
   first?: MenuEvents
 ) => {
-  const base: Base = parentOf($) === undefined ? $ : $.send("self", MenuMessage.ClosedByChild({ reason }))
+  const base: Base = parentOf($) === undefined ? $ : $.send("self", MenuMessage.RequestedCloseByChild({ reason }))
   return dismiss(model, $, reason, method, false, first === undefined ? base : base.emit(first))
 }
 
@@ -1807,11 +1815,11 @@ export const menuFilter = (
  * `transitioning` and `activationDirection` for the viewport, and
  * `nothingMatches`, whether a filter matches no item.
  *
- * A trigger reports the `id` the consumer gave it in `Opened`: set it on the
- * builder before the part. One without gets a generated `id`. The menu
- * remembers the trigger that opened it, or follows `triggerId`: only that
- * one reports it open and anchors the popup. Pressing another one while the
- * menu is open asks it to open for that one.
+ * A trigger reports the `id` the consumer gave it in `RequestedOpen`: set it
+ * on the builder before the part. One without gets a generated `id`. The
+ * menu remembers the trigger that opened it, or follows `triggerId`: only
+ * that one reports it open and anchors the popup. Pressing another one while
+ * the menu is open asks it to open for that one.
  *
  * The popup, the list, the items, the group labels and the arrow set their
  * own `id`s, over any on the builder, for the ARIA attributes that point at
@@ -1833,7 +1841,7 @@ export const Menu = Component.define({
   events: MenuEvents,
   shares: {
     value: shares,
-    receives: ["ClosedByChild"],
+    receives: ["RequestedCloseByChild"],
     collects: {
       schema: Submenu,
       onChange: (submenus) =>
@@ -1992,7 +2000,7 @@ export const Menu = Component.define({
         ? closed
         : closed.emit(MenuEvents.Highlighted({ value: null, reason: "none" }))
       return $.props.query !== undefined && $.props.query !== ""
-        ? highlighted.emit(MenuEvents.ChangedQuery({ query: "", reason: "none" }))
+        ? highlighted.emit(MenuEvents.RequestedQuery({ query: "", reason: "none" }))
         : highlighted
     },
     ChangedPlacement: (_model, { placement }, $) => $.evolve({ placement }),
@@ -2021,7 +2029,7 @@ export const Menu = Component.define({
       }
       return next
     },
-    ClosedByChild: (model, { reason }, $) =>
+    RequestedCloseByChild: (model, { reason }, $) =>
       $.props.open ? closeTree(model, $, reason, reason === "escape-key" ? "keyboard" : null) : model,
     MovedViewport: (_model, { direction }, $) => $.evolve({ transitioning: true, direction, instant: null }),
     SettledViewport: (_model, _message, $) => $.evolve({ transitioning: false }),
@@ -2031,7 +2039,7 @@ export const Menu = Component.define({
       if (!props.open) return model
       const reason = value === "" ? "input-clear" : "input-change"
       const next = { ...model, active: autoHighlighted(props, value), activeByKey: false }
-      return commit($, model, next, "none").emit(MenuEvents.ChangedQuery({ query: value, reason }))
+      return commit($, model, next, "none").emit(MenuEvents.RequestedQuery({ query: value, reason }))
     },
     PressedInputKey: (model, { key, modified }, $) => {
       const props = $.props
@@ -2056,7 +2064,7 @@ export const Menu = Component.define({
       const props = $.props
       if (!props.open || (props.query ?? "") === "") return model
       const next = { ...model, active: autoHighlighted(props, ""), activeByKey: false }
-      return commit($, model, next, "none").emit(MenuEvents.ChangedQuery({ query: "", reason: "clear-press" }))
+      return commit($, model, next, "none").emit(MenuEvents.RequestedQuery({ query: "", reason: "clear-press" }))
     }
   },
   parts: (model, p) => {

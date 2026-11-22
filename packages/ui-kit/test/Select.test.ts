@@ -100,8 +100,8 @@ const partsOf = (s: { readonly parts: (f: (select: Parts) => void) => unknown })
   return parts!
 }
 
-const opened = (reason: string) => ({ _tag: "Opened", reason }) as SelectEvents
-const dismissed = (reason: string) => ({ _tag: "Dismissed", reason }) as SelectEvents
+const opened = (reason: string) => ({ _tag: "RequestedOpen", reason }) as SelectEvents
+const dismissed = (reason: string) => ({ _tag: "RequestedClose", reason }) as SelectEvents
 const picked = (value: string | ReadonlyArray<string>, reason = "item-press") =>
   ({ _tag: "Picked", value, reason }) as SelectEvents
 

@@ -8,8 +8,8 @@ import { TestClock } from "effect/testing"
 import { byId, container, focusVisibility, holdExits, popovers, press, tick } from "./utils/document.ts"
 
 const Message = UiSchema.TaggedEnum({
-  Opened: { triggerId: Schema.NullOr(Schema.String), reason: Schema.String },
-  Dismissed: { reason: Schema.String },
+  RequestedOpen: { triggerId: Schema.NullOr(Schema.String), reason: Schema.String },
+  RequestedClose: { reason: Schema.String },
   RemovedB: {}
 })
 
@@ -27,13 +27,13 @@ const Page = Component.define({
 }).make({
   init: () => ({ open: false, triggerId: null, showB: true, log: [] }),
   update: {
-    Opened: (model, { reason, triggerId }) => ({
+    RequestedOpen: (model, { reason, triggerId }) => ({
       ...model,
       open: true,
       triggerId,
-      log: [...model.log, `Opened ${triggerId} ${reason}`]
+      log: [...model.log, `RequestedOpen ${triggerId} ${reason}`]
     }),
-    Dismissed: (model, { reason }) => ({ ...model, open: false, log: [...model.log, `Dismissed ${reason}`] }),
+    RequestedClose: (model, { reason }) => ({ ...model, open: false, log: [...model.log, `RequestedClose ${reason}`] }),
     RemovedB: (model) => ({ ...model, showB: false })
   },
   view: (model, h) =>
@@ -42,8 +42,8 @@ const Page = Component.define({
       PreviewCard(h, {
         props: { open: model.open, triggerId: model.triggerId, id: "card", sideOffset: 8 },
         onEmit: {
-          Opened: ({ reason, triggerId }) => Message.Opened({ triggerId, reason }),
-          Dismissed: ({ reason }) => Message.Dismissed({ reason }),
+          RequestedOpen: ({ reason, triggerId }) => Message.RequestedOpen({ triggerId, reason }),
+          RequestedClose: ({ reason }) => Message.RequestedClose({ reason }),
           Settled: () => undefined
         },
         view: (previewCard) =>
@@ -97,18 +97,18 @@ describe("PreviewCard in a document", { concurrent: false }, () => {
       box(a, 100, 100, 40, 20)
       mouse(a, "mouseenter", 130, 110)
       yield* tick
-      assert.deepStrictEqual(log(), ["Opened a trigger-hover"])
+      assert.deepStrictEqual(log(), ["RequestedOpen a trigger-hover"])
       box(part("positioner"), 0, 120, 400, 200)
       mouse(a, "mouseleave", 141, 118)
       mouse(document.body, "mousemove", 145, 119.5)
       yield* tick
-      assert.deepStrictEqual(log(), ["Opened a trigger-hover"])
+      assert.deepStrictEqual(log(), ["RequestedOpen a trigger-hover"])
       mouse(part("popup"), "mousemove", 300, 200)
       yield* tick
-      assert.deepStrictEqual(log(), ["Opened a trigger-hover"])
+      assert.deepStrictEqual(log(), ["RequestedOpen a trigger-hover"])
       mouse(document.body, "mousemove", 600, 50)
       yield* tick
-      assert.deepStrictEqual(log(), ["Opened a trigger-hover", "Dismissed trigger-hover"])
+      assert.deepStrictEqual(log(), ["RequestedOpen a trigger-hover", "RequestedClose trigger-hover"])
 
       mouse(a, "mouseenter", 130, 110)
       yield* tick
@@ -117,7 +117,7 @@ describe("PreviewCard in a document", { concurrent: false }, () => {
       mouse(a, "mouseleave", 120, 99)
       mouse(document.body, "mousemove", 120, 90)
       yield* tick
-      assert.deepStrictEqual(log().slice(2), ["Opened a trigger-hover", "Dismissed trigger-hover"])
+      assert.deepStrictEqual(log().slice(2), ["RequestedOpen a trigger-hover", "RequestedClose trigger-hover"])
     }))
 
   it.effect("keyboard focus opens it, moving focus inside holds it, and moving outside or pressing Escape closes it", () =>
@@ -125,21 +125,21 @@ describe("PreviewCard in a document", { concurrent: false }, () => {
       const { log } = yield* mountPage()
       byId("a").focus()
       yield* tick
-      assert.deepStrictEqual(log(), ["Opened a trigger-focus"])
+      assert.deepStrictEqual(log(), ["RequestedOpen a trigger-focus"])
       assert.strictEqual(part("popup").getAttribute("data-instant"), "focus")
       assert.strictEqual(part("popup").getAttribute("tabindex"), "-1")
       assert.notStrictEqual(document.activeElement, part("popup"))
       byId("inner").focus()
       yield* tick
-      assert.deepStrictEqual(log(), ["Opened a trigger-focus"])
+      assert.deepStrictEqual(log(), ["RequestedOpen a trigger-focus"])
       byId("outside").focus()
       yield* tick
-      assert.deepStrictEqual(log(), ["Opened a trigger-focus", "Dismissed trigger-focus"])
+      assert.deepStrictEqual(log(), ["RequestedOpen a trigger-focus", "RequestedClose trigger-focus"])
       byId("a").focus()
       yield* tick
       document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
       yield* tick
-      assert.deepStrictEqual(log().slice(2), ["Opened a trigger-focus", "Dismissed escape-key"])
+      assert.deepStrictEqual(log().slice(2), ["RequestedOpen a trigger-focus", "RequestedClose escape-key"])
     }))
 
   it.effect("Escape with focus in the card gives it back to the link without opening the card, and the card is inert", () =>
@@ -155,7 +155,7 @@ describe("PreviewCard in a document", { concurrent: false }, () => {
       byId("inner").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
       yield* tick
       yield* tick
-      assert.deepStrictEqual(log(), ["Opened a trigger-focus", "Dismissed escape-key"])
+      assert.deepStrictEqual(log(), ["RequestedOpen a trigger-focus", "RequestedClose escape-key"])
       assert.strictEqual(document.activeElement?.id, "a")
       assert.deepStrictEqual(calls.at(-1), ["a", true])
       assert.isTrue(byId("card").isConnected)
@@ -169,10 +169,10 @@ describe("PreviewCard in a document", { concurrent: false }, () => {
       yield* tick
       press(byId("a"))
       yield* tick
-      assert.deepStrictEqual(log(), ["Opened a trigger-hover"])
+      assert.deepStrictEqual(log(), ["RequestedOpen a trigger-hover"])
       press(byId("outside"))
       yield* tick
-      assert.deepStrictEqual(log(), ["Opened a trigger-hover", "Dismissed outside-press"])
+      assert.deepStrictEqual(log(), ["RequestedOpen a trigger-hover", "RequestedClose outside-press"])
     }))
 
   it.effect("asks to close when the link it is open for leaves the page", () =>
@@ -184,7 +184,7 @@ describe("PreviewCard in a document", { concurrent: false }, () => {
       byId("outside").click()
       yield* tick
       yield* tick
-      assert.deepStrictEqual(log(), ["Opened b trigger-hover", "Dismissed trigger-removed"])
+      assert.deepStrictEqual(log(), ["RequestedOpen b trigger-hover", "RequestedClose trigger-removed"])
     }))
 
   it.effect("a link drawn elsewhere opens the card it names", () =>
@@ -193,13 +193,13 @@ describe("PreviewCard in a document", { concurrent: false }, () => {
       const detached = byId("detached")
       mouse(detached, "mouseenter", 1, 1)
       yield* tick
-      assert.deepStrictEqual(log(), ["Opened detached trigger-hover"])
+      assert.deepStrictEqual(log(), ["RequestedOpen detached trigger-hover"])
       assert.strictEqual(detached.getAttribute("data-popup-open"), "")
       assert.strictEqual(part("popup").textContent, "More on detached")
       mouse(detached, "mouseleave", 1, -5)
       mouse(document.body, "mousemove", 1, -10)
       yield* tick
-      assert.deepStrictEqual(log(), ["Opened detached trigger-hover", "Dismissed trigger-hover"])
+      assert.deepStrictEqual(log(), ["RequestedOpen detached trigger-hover", "RequestedClose trigger-hover"])
     }))
 
   it.effect("a wrapped link places the card against the line the pointer moved to before it opened", () =>
@@ -215,7 +215,7 @@ describe("PreviewCard in a document", { concurrent: false }, () => {
       yield* tick
       yield* TestClock.adjust("100 millis")
       yield* tick
-      assert.deepStrictEqual(log(), ["Opened wrapped trigger-hover"])
+      assert.deepStrictEqual(log(), ["RequestedOpen wrapped trigger-hover"])
       const positioner = part("positioner") as HTMLElement
       assert.strictEqual(positioner.style.getPropertyValue("--anchor-width"), "100px")
       assert.strictEqual(positioner.style.getPropertyValue("--anchor-height"), "20px")
@@ -232,7 +232,7 @@ describe("PreviewCard in a document", { concurrent: false }, () => {
       lines = [new DOMRect(300, 120, 200, 20), new DOMRect(0, 140, 100, 20)]
       yield* TestClock.adjust("100 millis")
       yield* tick
-      assert.deepStrictEqual(log(), ["Opened wrapped trigger-hover"])
+      assert.deepStrictEqual(log(), ["RequestedOpen wrapped trigger-hover"])
       const positioner = part("positioner") as HTMLElement
       assert.strictEqual(positioner.style.getPropertyValue("--anchor-width"), "200px")
       assert.strictEqual(positioner.style.getPropertyValue("--anchor-height"), "20px")

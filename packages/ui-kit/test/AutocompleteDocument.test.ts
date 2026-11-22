@@ -13,8 +13,8 @@ const items = [
 ]
 
 const Message = UiSchema.TaggedEnum({
-  Opened: { reason: Schema.String },
-  Dismissed: { reason: Schema.String },
+  RequestedOpen: { reason: Schema.String },
+  RequestedClose: { reason: Schema.String },
   Updated: { value: Schema.String, reason: Schema.String },
   Submitted: { query: Schema.String }
 })
@@ -23,15 +23,15 @@ const FormModel = Schema.Struct({ open: Schema.Boolean, value: Schema.String, lo
 type FormModel = typeof FormModel.Type
 
 const formUpdate = {
-  Opened: (model: FormModel, { reason }: { readonly reason: string }) => ({
+  RequestedOpen: (model: FormModel, { reason }: { readonly reason: string }) => ({
     ...model,
     open: true,
-    log: [...model.log, "Opened " + reason]
+    log: [...model.log, "RequestedOpen " + reason]
   }),
-  Dismissed: (model: FormModel, { reason }: { readonly reason: string }) => ({
+  RequestedClose: (model: FormModel, { reason }: { readonly reason: string }) => ({
     ...model,
     open: false,
-    log: [...model.log, "Dismissed " + reason]
+    log: [...model.log, "RequestedClose " + reason]
   }),
   Updated: (model: FormModel, { reason, value }: { readonly reason: string; readonly value: string }) => ({
     ...model,
@@ -61,8 +61,8 @@ const Page = Component.define({
           Autocomplete(h, {
             props: { open: model.open, value: model.value, items, name: "q", submitOnItemClick: true },
             onEmit: {
-              Opened: ({ reason }) => Message.Opened({ reason }),
-              Dismissed: ({ reason }) => Message.Dismissed({ reason }),
+              RequestedOpen: ({ reason }) => Message.RequestedOpen({ reason }),
+              RequestedClose: ({ reason }) => Message.RequestedClose({ reason }),
               Updated: ({ reason, value }) => Message.Updated({ value, reason }),
               Highlighted: () => undefined,
               Settled: () => undefined
@@ -109,8 +109,8 @@ const InPopup = Component.define({
           submitOnItemClick: true
         },
         onEmit: {
-          Opened: ({ reason }) => Message.Opened({ reason }),
-          Dismissed: ({ reason }) => Message.Dismissed({ reason }),
+          RequestedOpen: ({ reason }) => Message.RequestedOpen({ reason }),
+          RequestedClose: ({ reason }) => Message.RequestedClose({ reason }),
           Updated: ({ reason, value }) => Message.Updated({ value, reason }),
           Highlighted: () => undefined,
           Settled: () => undefined
@@ -154,17 +154,17 @@ const Nested = Component.define({
     Toggled: (model, { open, reason, which }) => ({
       ...model,
       [which]: open,
-      log: [...model.log, which + (open ? " Opened " : " Dismissed ") + reason]
+      log: [...model.log, which + (open ? " RequestedOpen " : " RequestedClose ") + reason]
     })
   },
   view: (model, h) =>
     Combobox(h, {
       props: { open: model.outer, value: null, inputValue: "", items },
       onEmit: {
-        Opened: ({ reason }) => NestedMessage.Toggled({ which: "outer", open: true, reason }),
-        Dismissed: ({ reason }) => NestedMessage.Toggled({ which: "outer", open: false, reason }),
+        RequestedOpen: ({ reason }) => NestedMessage.Toggled({ which: "outer", open: true, reason }),
+        RequestedClose: ({ reason }) => NestedMessage.Toggled({ which: "outer", open: false, reason }),
         Picked: () => undefined,
-        EditedInput: () => undefined,
+        RequestedInputValue: () => undefined,
         Highlighted: () => undefined,
         Settled: () => undefined
       },
@@ -178,8 +178,8 @@ const Nested = Component.define({
                   key: "inner",
                   props: { open: model.inner, value: "", items, modal: true },
                   onEmit: {
-                    Opened: ({ reason }) => NestedMessage.Toggled({ which: "inner", open: true, reason }),
-                    Dismissed: ({ reason }) => NestedMessage.Toggled({ which: "inner", open: false, reason }),
+                    RequestedOpen: ({ reason }) => NestedMessage.Toggled({ which: "inner", open: true, reason }),
+                    RequestedClose: ({ reason }) => NestedMessage.Toggled({ which: "inner", open: false, reason }),
                     Updated: () => undefined,
                     Highlighted: () => undefined,
                     Settled: () => undefined
@@ -202,8 +202,8 @@ const Nested = Component.define({
                   key: "picker",
                   props: { open: model.picker, value: "", items, inputInPopup: true },
                   onEmit: {
-                    Opened: ({ reason }) => NestedMessage.Toggled({ which: "picker", open: true, reason }),
-                    Dismissed: ({ reason }) => NestedMessage.Toggled({ which: "picker", open: false, reason }),
+                    RequestedOpen: ({ reason }) => NestedMessage.Toggled({ which: "picker", open: true, reason }),
+                    RequestedClose: ({ reason }) => NestedMessage.Toggled({ which: "picker", open: false, reason }),
                     Updated: () => undefined,
                     Highlighted: () => undefined,
                     Settled: () => undefined
@@ -258,14 +258,14 @@ describe("Autocomplete in a document", { concurrent: false }, () => {
       assert.strictEqual(input().value, "Banana")
       assert.deepStrictEqual(root.model()?.log, [
         "Updated \"ap\" input-change",
-        "Opened input-change",
+        "RequestedOpen input-change",
         "Updated \"Apple\" item-press",
-        "Dismissed item-press",
+        "RequestedClose item-press",
         "Submitted \"Apple\"",
         "Updated \"ba\" input-change",
-        "Opened input-change",
+        "RequestedOpen input-change",
         "Updated \"Banana\" item-press",
-        "Dismissed item-press",
+        "RequestedClose item-press",
         "Submitted \"Banana\""
       ])
     }).pipe(Effect.scoped))
@@ -288,10 +288,10 @@ describe("Autocomplete in a document", { concurrent: false }, () => {
       assert.strictEqual(named[0].value, "Banana")
       assert.strictEqual(named[0].form, document.getElementById("search"))
       assert.deepStrictEqual(root.model()?.log, [
-        "Opened list-navigation",
+        "RequestedOpen list-navigation",
         "Updated \"ba\" input-change",
         "Updated \"Banana\" item-press",
-        "Dismissed item-press",
+        "RequestedClose item-press",
         "Submitted \"Banana\""
       ])
     }).pipe(Effect.scoped))
@@ -307,14 +307,17 @@ describe("Autocomplete in a document", { concurrent: false }, () => {
       assert.strictEqual(document.activeElement, inner)
       press(document.querySelector("#inner > [data-combobox-blocker]")!)
       yield* tick
-      assert.deepStrictEqual(root.model()?.log, ["inner Dismissed outside-press"])
+      assert.deepStrictEqual(root.model()?.log, ["inner RequestedClose outside-press"])
       const picker = document.querySelector<HTMLButtonElement>(".picker")!
       picker.focus()
       yield* tick
       assert.strictEqual(document.activeElement, picker)
       picker.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }))
       yield* tick
-      assert.deepStrictEqual(root.model()?.log, ["inner Dismissed outside-press", "picker Opened list-navigation"])
+      assert.deepStrictEqual(root.model()?.log, [
+        "inner RequestedClose outside-press",
+        "picker RequestedOpen list-navigation"
+      ])
       assert.isTrue(document.getElementById("picker")!.matches(":popover-open"))
       assert.strictEqual(document.activeElement, document.querySelector(".picker-input"))
     }).pipe(Effect.scoped))

@@ -181,7 +181,7 @@ export const CollapsibleToggleReason = Schema.Literals(["trigger-press", "find-i
 export type CollapsibleToggleReason = typeof CollapsibleToggleReason.Type
 
 /**
- * `Toggled` requests the value in `open`, with the reason. Store it and pass it
+ * `Toggled` asks for the value in `open`, with the reason. Store it and pass it
  * back as the `open` prop. `Settled` reports that the transitions and
  * animations of an open or a close finished.
  *

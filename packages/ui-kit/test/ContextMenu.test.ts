@@ -45,8 +45,8 @@ const trackedArgs = (s: Rendered) => tracked(s).args as any
 const sent = (tag: string, fields: object = {}) => ({ _tag: tag, ...fields }) as never
 const touch = (tag: "Started" | "Cancelled", fields: object = {}) => ({ _tag: tag, ...fields }) as never
 
-const opened = (triggerId: string) => ({ _tag: "Opened", reason: "trigger-press", triggerId }) as MenuEvents
-const dismissed = (reason: string) => ({ _tag: "Dismissed", reason }) as MenuEvents
+const opened = (triggerId: string) => ({ _tag: "RequestedOpen", reason: "trigger-press", triggerId }) as MenuEvents
+const dismissed = (reason: string) => ({ _tag: "RequestedClose", reason }) as MenuEvents
 const rightClick = (x: number, y: number, pointerType = "mouse") => ({ button: 2, x, y, pointerType })
 
 type Pending = { readonly current: { readonly pending: ReadonlyArray<{ readonly command: any }> } }
