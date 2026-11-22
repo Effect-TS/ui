@@ -26,5 +26,14 @@ export interface Attributed<B> {
   readonly attr: (name: string, value: string | undefined) => B
 }
 
+export const defaults = <B extends Attributed<B> & { readonly attrs: Readonly<Record<string, string>> }>(
+  node: B,
+  attrs: Readonly<Record<string, string>>
+): B =>
+  Object.entries(attrs).reduce(
+    (out, [name, value]) => node.attrs[name] === undefined ? out.attr(name, value) : out,
+    node
+  )
+
 export const separatorAttrs = <B extends Attributed<B>>(builder: B, orientation: "horizontal" | "vertical"): B =>
   builder.attr("role", "separator").attr("aria-orientation", orientation).attr("data-orientation", orientation)

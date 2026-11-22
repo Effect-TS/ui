@@ -80,6 +80,7 @@
  *
  * const Signup = Component.define({
  *   name: "Signup",
+ *   scoped: false,
  *   model: Schema.Struct({ submitted: Schema.Boolean }),
  *   message: SignupMessage,
  *   elements: Html
