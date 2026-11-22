@@ -13,7 +13,7 @@ const items = [
   { value: "tape" }
 ]
 
-const Message = UiSchema.TaggedEnum({
+const RadioGroupHostMessage = UiSchema.TaggedEnum({
   SetValue: { value: Schema.NullOr(Schema.String) },
   SetReadOnly: { readOnly: Schema.Boolean },
   SetShowIndicators: { show: Schema.Boolean }
@@ -31,7 +31,7 @@ const Host = Component.define({
     readOnly: Schema.Boolean,
     showIndicators: Schema.Boolean
   }),
-  message: Message,
+  message: RadioGroupHostMessage,
   elements: Html
 }).make({
   init: ({ props }) => ({ value: "ssd", readOnly: false, showIndicators: props.showIndicators ?? true }),
@@ -44,7 +44,7 @@ const Host = Component.define({
     h.div(
       RadioGroup(h, {
         props: { value: model.value, items, readOnly: model.readOnly },
-        onEmit: { Picked: ({ value }) => Message.SetValue({ value }) },
+        onEmit: { Picked: ({ value }) => RadioGroupHostMessage.SetValue({ value }) },
         view: (radioGroup) =>
           radioGroup.root(h.div).children(
             ...items.map(({ value }) =>
@@ -61,13 +61,13 @@ const Host = Component.define({
           )
       }),
       ...items.map(({ value }) =>
-        h.button.attr("type", "button").attr("data-set", value).onClick(Message.SetValue({ value }))
+        h.button.attrs({ type: "button", "data-set": value }).onClick(RadioGroupHostMessage.SetValue({ value }))
       ),
-      h.button.attr("type", "button").attr("data-readonly-toggle", "").onClick(
-        Message.SetReadOnly({ readOnly: !model.readOnly })
+      h.button.attrs({ type: "button", "data-readonly-toggle": "" }).onClick(
+        RadioGroupHostMessage.SetReadOnly({ readOnly: !model.readOnly })
       ),
-      h.button.attr("type", "button").attr("data-indicators-toggle", "").onClick(
-        Message.SetShowIndicators({ show: !model.showIndicators })
+      h.button.attrs({ type: "button", "data-indicators-toggle": "" }).onClick(
+        RadioGroupHostMessage.SetShowIndicators({ show: !model.showIndicators })
       )
     )
 })

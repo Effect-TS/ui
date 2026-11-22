@@ -218,7 +218,7 @@ export const RadioGroupEvents = UiSchema.TaggedEnum({
  */
 export type RadioGroupEvents = typeof RadioGroupEvents.Type
 
-const Model = Schema.Struct({
+const RadioGroupModel = Schema.Struct({
   highlighted: Schema.NullOr(Schema.String),
   current: Schema.NullOr(Schema.String),
   settled: Schema.NullOr(Schema.String),
@@ -226,7 +226,7 @@ const Model = Schema.Struct({
   leaving: Schema.Array(Schema.String)
 })
 
-const Message = UiSchema.TaggedEnum({
+const RadioGroupMessage = UiSchema.TaggedEnum({
   ClickedRadio: { value: Schema.String },
   FocusedRadio: { value: Schema.String },
   PressedArrow: { value: Schema.String, direction: Schema.Literals([1, -1]) },
@@ -238,16 +238,16 @@ const Message = UiSchema.TaggedEnum({
   EndedIndicator: { value: Schema.String }
 })
 
-type Message = typeof Message.Type
+type RadioGroupMessage = typeof RadioGroupMessage.Type
 
-type Model = typeof Model.Type
+type RadioGroupModel = typeof RadioGroupModel.Type
 
 const Radio = Html.ref("RadioGroupRadio", "button")
 
 const focusRadio = (value: string) => DomCommand.Focus.make({ ref: Radio.at(value) }).pipe(Command.asNoop)
 
 const synced = (value: string | null) =>
-  Subscription.make("synced", [value], () => Stream.make(Message.SyncedValue({ value })))
+  Subscription.make("synced", [value], () => Stream.make(RadioGroupMessage.SyncedValue({ value })))
 
 const TrackIndicatorArgs = Schema.Struct({
   value: Schema.String,
@@ -256,13 +256,13 @@ const TrackIndicatorArgs = Schema.Struct({
   ending: Schema.Boolean
 })
 
-const groupSend = new WeakMap<HTMLElement, (message: Message) => void>()
+const groupSend = new WeakMap<HTMLElement, (message: RadioGroupMessage) => void>()
 
 const TrackGroup = Mount.makeStream(
   "TrackGroup",
   { args: {} },
   (node: HTMLDivElement) =>
-    Stream.callback<Message>((queue) =>
+    Stream.callback<RadioGroupMessage>((queue) =>
       Effect.acquireRelease(
         Effect.sync(() => {
           groupSend.set(node, (message) => Queue.offerUnsafe(queue, message))
@@ -279,9 +279,9 @@ const TrackIndicator = Mount.makeStream(
   "TrackIndicator",
   { args: TrackIndicatorArgs },
   (node: HTMLSpanElement, args, changes) =>
-    Stream.callback<Message>((queue) => {
+    Stream.callback<RadioGroupMessage>((queue) => {
       const frame = frameOf(node.ownerDocument.defaultView)
-      const send = (message: Message) => Queue.offerUnsafe(queue, message)
+      const send = (message: RadioGroupMessage) => Queue.offerUnsafe(queue, message)
       const group = node.closest<HTMLElement>("[role=radiogroup]")
       let current = args
       let generation = 0
@@ -289,7 +289,7 @@ const TrackIndicator = Mount.makeStream(
         const mine = ++generation
         frame(() => {
           if (mine === generation && node.isConnected && current.checked && current.starting) {
-            send(Message.StartedIndicator({ value: current.value }))
+            send(RadioGroupMessage.StartedIndicator({ value: current.value }))
           }
         })
       }
@@ -300,7 +300,7 @@ const TrackIndicator = Mount.makeStream(
             () => [node],
             frame,
             () => mine === generation && node.isConnected,
-            () => send(Message.EndedIndicator({ value: current.value }))
+            () => send(RadioGroupMessage.EndedIndicator({ value: current.value }))
           )
         )
       }
@@ -313,7 +313,7 @@ const TrackIndicator = Mount.makeStream(
       }
       return Effect.acquireRelease(
         Effect.sync(() => {
-          send(Message.MountedIndicator({ value: current.value }))
+          send(RadioGroupMessage.MountedIndicator({ value: current.value }))
           if (current.checked && current.starting) start()
           else if (!current.checked && current.ending) leave()
         }).pipe(
@@ -322,7 +322,7 @@ const TrackIndicator = Mount.makeStream(
         () =>
           Effect.sync(() => {
             generation++
-            if (group !== null) groupSend.get(group)?.(Message.UnmountedIndicator({ value: current.value }))
+            if (group !== null) groupSend.get(group)?.(RadioGroupMessage.UnmountedIndicator({ value: current.value }))
           })
       )
     })
@@ -335,17 +335,18 @@ interface ItemState {
 }
 
 const itemState = <B extends Attributed<B>>(builder: B, state: ItemState, required: boolean): B =>
-  builder
-    .attr("data-checked", flag(state.checked))
-    .attr("data-unchecked", flag(!state.checked))
-    .attr("data-disabled", flag(state.disabled))
-    .attr("data-readonly", flag(state.readOnly))
-    .attr("data-required", flag(required))
+  builder.attrs({
+    "data-checked": flag(state.checked),
+    "data-unchecked": flag(!state.checked),
+    "data-disabled": flag(state.disabled),
+    "data-readonly": flag(state.readOnly),
+    "data-required": flag(required)
+  })
 
 const itemOf = (items: ReadonlyArray<RadioGroupItem>, value: string): RadioGroupItem | undefined =>
   items.find((item) => item.value === value)
 
-const highlight = (model: Model, value: string): Model =>
+const highlight = (model: RadioGroupModel, value: string): RadioGroupModel =>
   model.highlighted === value ? model : { ...model, highlighted: value }
 
 const picks = (props: RadioGroupProps, item: RadioGroupItem): boolean =>
@@ -393,8 +394,8 @@ export const RadioGroup = Component.define({
   name: "RadioGroup",
   scoped: false,
   props: RadioGroupProps,
-  model: Model,
-  message: Message,
+  model: RadioGroupModel,
+  message: RadioGroupMessage,
   events: RadioGroupEvents,
   shared: {
     provider: { owner: DirectionProvider, optional: true }
@@ -502,23 +503,25 @@ export const RadioGroup = Component.define({
       const state = stateOf(value)
       return itemState(b, state, required)
         .ref(Radio.at(value))
-        .attr("type", "button")
-        .attr("role", "radio")
-        .attr("aria-checked", String(state.checked))
-        .attr("aria-disabled", undefined)
-        .attr("aria-invalid", undefined)
-        .attr("tabindex", value === tabStop ? "0" : "-1")
+        .attrs({
+          type: "button",
+          role: "radio",
+          "aria-checked": String(state.checked),
+          "aria-disabled": undefined,
+          "aria-invalid": undefined,
+          tabindex: value === tabStop ? "0" : "-1"
+        })
         .disabled(state.disabled)
-        .onClick(Message.ClickedRadio({ value }))
-        .onFocus(Message.FocusedRadio({ value }))
+        .onClick(RadioGroupMessage.ClickedRadio({ value }))
+        .onFocus(RadioGroupMessage.FocusedRadio({ value }))
         .onKeyDown(
           ({ alt, ctrl, key, meta }) => {
-            if (key === "Enter") return Message.PressedEnter()
+            if (key === "Enter") return RadioGroupMessage.PressedEnter()
             if (ctrl || alt || meta) return undefined
-            if (key === "ArrowDown") return Message.PressedArrow({ value, direction: 1 })
-            if (key === "ArrowUp") return Message.PressedArrow({ value, direction: -1 })
-            if (key === "ArrowRight") return Message.PressedArrow({ value, direction: rtl ? -1 : 1 })
-            if (key === "ArrowLeft") return Message.PressedArrow({ value, direction: rtl ? 1 : -1 })
+            if (key === "ArrowDown") return RadioGroupMessage.PressedArrow({ value, direction: 1 })
+            if (key === "ArrowUp") return RadioGroupMessage.PressedArrow({ value, direction: -1 })
+            if (key === "ArrowRight") return RadioGroupMessage.PressedArrow({ value, direction: rtl ? -1 : 1 })
+            if (key === "ArrowLeft") return RadioGroupMessage.PressedArrow({ value, direction: rtl ? 1 : -1 })
             return undefined
           },
           { preventDefault: true }
@@ -528,8 +531,10 @@ export const RadioGroup = Component.define({
     const indicatorPart = p.part("span", (b, value: string) => {
       const { checked, ending, starting, ...state } = stateOf(value)
       return itemState(b, { checked, ...state }, required)
-        .attr("data-starting-style", flag(starting))
-        .attr("data-ending-style", flag(ending))
+        .attrs({
+          "data-starting-style": flag(starting),
+          "data-ending-style": flag(ending)
+        })
         .onMount(TrackIndicator({ value, checked, starting, ending }))
     })
 
@@ -541,14 +546,16 @@ export const RadioGroup = Component.define({
       invalid,
       root: p.part("div", (b) =>
         b
-          .attr("role", "radiogroup")
-          .attr("aria-required", required ? "true" : undefined)
-          .attr("aria-disabled", disabled ? "true" : undefined)
-          .attr("aria-readonly", readOnly ? "true" : undefined)
-          .attr("aria-invalid", invalid ? "true" : undefined)
-          .attr("data-disabled", flag(disabled))
-          .attr("data-readonly", flag(readOnly))
-          .attr("data-required", flag(required))
+          .attrs({
+            role: "radiogroup",
+            "aria-required": required ? "true" : undefined,
+            "aria-disabled": disabled ? "true" : undefined,
+            "aria-readonly": readOnly ? "true" : undefined,
+            "aria-invalid": invalid ? "true" : undefined,
+            "data-disabled": flag(disabled),
+            "data-readonly": flag(readOnly),
+            "data-required": flag(required)
+          })
           .children(hidden)
           .onMount(TrackGroup())),
       radio: View.wrapPart(

@@ -181,15 +181,17 @@ describe("RadioGroup", () => {
         group.root(
           h.div
             .class("group")
-            .attr("aria-label", "Storage")
-            .attr("role", "group")
-            .attr("aria-disabled", "true")
-            .attr("aria-readonly", "true")
-            .attr("aria-required", "true")
-            .attr("aria-invalid", "true")
-            .attr("data-disabled", "")
-            .attr("data-readonly", "")
-            .attr("data-required", "")
+            .attrs({
+              "aria-label": "Storage",
+              role: "group",
+              "aria-disabled": "true",
+              "aria-readonly": "true",
+              "aria-required": "true",
+              "aria-invalid": "true",
+              "data-disabled": "",
+              "data-readonly": "",
+              "data-required": ""
+            })
         ),
         []
       ).attrs,
@@ -201,16 +203,18 @@ describe("RadioGroup", () => {
         group.radio({
           element: h.button
             .class("radio")
-            .attr("type", "submit")
-            .attr("role", "checkbox")
-            .attr("aria-checked", "true")
-            .attr("aria-disabled", "true")
-            .attr("aria-invalid", "true")
-            .attr("tabindex", "-1")
-            .attr("data-checked", "")
-            .attr("data-disabled", "")
-            .attr("data-readonly", "")
-            .attr("data-required", "")
+            .attrs({
+              type: "submit",
+              role: "checkbox",
+              "aria-checked": "true",
+              "aria-disabled": "true",
+              "aria-invalid": "true",
+              tabindex: "-1",
+              "data-checked": "",
+              "data-disabled": "",
+              "data-readonly": "",
+              "data-required": ""
+            })
             .disabled(true),
           value: "ssd"
         }),
