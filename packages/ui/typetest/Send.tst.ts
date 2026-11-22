@@ -88,12 +88,10 @@ describe("$.send", () => {
     ParentDef.update((model, _msg, $) => {
       expect($.send(Editor, { _tag: "Clear" })).type.not.toRaiseError()
       expect($.send(Editor, EditorMessage.Focus())).type.not.toRaiseError()
-      // A case constructor returns just its case, so it fits an owner that receives that case.
       expect($.send(Editor, EditorMessage.Clear())).type.not.toRaiseError()
       expect($.send).type.not.toBeCallableWith(Editor, EditorMessage.Typed({ text: "x" }))
       // `make` returns the whole Message, which includes a case Editor doesn't receive.
       expect($.send).type.not.toBeCallableWith(Editor, EditorMessage.make({ _tag: "Clear" }))
-      // Wider than the owner's Message: nothing says the value is one.
       expect($.send).type.not.toBeCallableWith(Editor, untrusted)
       expect($.send).type.not.toBeCallableWith(Editor, arbitraryObject)
       expect($.send).type.not.toBeCallableWith(Editor, { _tag: "Clear" } as { readonly _tag: string })
