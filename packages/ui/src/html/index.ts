@@ -25,6 +25,12 @@ export * as BrowserRouter from "./BrowserRouter.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * as Canvas from "./Canvas.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * as DomCommand from "./DomCommand.ts"
 
 /**

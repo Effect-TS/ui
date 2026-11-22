@@ -704,6 +704,25 @@ fires one with `s.fireDocument("keydown", { key: "Escape" })`, and a
 `TestGlobalEvents.fire("document", "keydown", { key: "Escape" })`, which
 its next step settles.
 
+### Drawing on a canvas
+
+`Canvas.view(h, { width, height, shapes, pixelRatio, onPointerDown, onPointerMove, onPointerUp })`,
+from `@effect/ui/html`, draws a scene of plain shapes: `Canvas.Rect`,
+`Circle`, `Path`, `Text` and a nestable `Group`. Build the scene from the
+Model in `view`. The canvas repaints only when the scene differs. It
+returns the `h.canvas` builder, so classes, attributes and fallback
+children chain on it, and it takes the element's mount. Pointer handlers
+get `x` and `y` in scene units. `pixelRatio: "auto"` draws sharply on a
+HiDPI screen; chain `.style({ width: "100%" })` for a canvas that fills
+its container. For motion, add
+`model.running && DomSubscription.onAnimationFrame((delta) => ...)` to
+`subscriptions`, and cap the delta, which is long after a hidden tab
+returns. A `Scene` asserts on the shapes with
+`expectMount(Canvas.Paint({ ... }))`, and an `HtmlScene` fires a frame
+with `s.frame(16)`; a `Play` adds `TestAnimationFrames.layer` and calls
+`TestAnimationFrames.fire(16)`. `Canvas.paint(context, { width, height, shapes })`
+draws a scene on any 2D context, such as an `OffscreenCanvas`'s.
+
 ### Forms
 
 Validate a form with `Validation.make`. It takes each field's rules: a
@@ -958,6 +977,9 @@ client, not the services.
 - **[Document and window events](./ai-docs/src/10_ui/25_document-events.ts)**:
   Listen for keys on the document while a game runs, test it in a scene,
   and press a key in a whole-app test.
+- **[Drawing on a canvas](./ai-docs/src/10_ui/25_drawing-on-canvas.ts)**:
+  Draw a scene from the Model, move it every animation frame, turn presses
+  into scene points, and test it in a scene and a whole-app test.
 - **[Validating forms](./ai-docs/src/10_ui/26_forms.ts)**:
   Validate a sign-up form with `Validation`: rules on each field, a rule
   that reads another field, a username check run by a debounced query, and

@@ -4,6 +4,7 @@
   "include": [],
   "references": [
     { "path": "examples/auth" },
+    { "path": "examples/canvas-art" },
     { "path": "examples/counter" },
     { "path": "examples/counters" },
     { "path": "examples/file-preview" },

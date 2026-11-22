@@ -46,6 +46,12 @@ export * as Ssr from "./Ssr.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * as TestAnimationFrames from "./TestAnimationFrames.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * as TestFiles from "./TestFiles.ts"
 
 /**

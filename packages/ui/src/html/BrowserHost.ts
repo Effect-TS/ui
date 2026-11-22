@@ -1547,6 +1547,22 @@ const globalEventsOf = (document: Document): DomSubscription.GlobalEvents => ({
   }
 })
 
+const framesOf = (document: Document): DomSubscription.AnimationFrames => {
+  const view = document.defaultView
+  return {
+    now: () => view?.performance.now() ?? 0,
+    listen: (listener) => {
+      if (view === null || typeof view.requestAnimationFrame !== "function") return () => {}
+      const frame = (time: number) => {
+        id = view.requestAnimationFrame(frame)
+        listener(time)
+      }
+      let id = view.requestAnimationFrame(frame)
+      return () => view.cancelAnimationFrame(id)
+    }
+  }
+}
+
 // Loads in a detached <img>. A cached image may already be complete.
 const imagesOf = (document: Document): DomImages.Images => ({
   load: (source) =>
@@ -1590,15 +1606,16 @@ const filesOf = (document: Document): DomFile.Files => ({
 /**
  * Provides the DOM host as the `Renderer`, `Html.Host`, the document's
  * `Query.Visibility` and `Query.Connectivity`, its events as
- * `DomSubscription.GlobalEvents`, and a `DomImages.Images` and
+ * `DomSubscription.GlobalEvents`, its window's frames as
+ * `DomSubscription.AnimationFrames`, and a `DomImages.Images` and
  * `DomFile.Files` over it, for the life of the Layer.
  *
  * **Details**
  *
  * `document` defaults to the global `document`. Closing the Layer removes the
  * host's listeners. The signals, `DomSubscription.GlobalEvents`,
- * `DomImages.Images` and `DomFile.Files` use the document and its
- * `defaultView`, never globals.
+ * `DomSubscription.AnimationFrames`, `DomImages.Images` and `DomFile.Files`
+ * use the document and its `defaultView`, never globals.
  *
  * @stability experimental
  * @category layers
@@ -1618,6 +1635,7 @@ export const layer = (options?: {
       Context.add(queryCore.Visibility, signal.visibility),
       Context.add(queryCore.Connectivity, signal.connectivity),
       Context.add(DomSubscription.GlobalEvents, globalEventsOf(document)),
+      Context.add(DomSubscription.AnimationFrames, framesOf(document)),
       Context.add(DomImages.Images, imagesOf(document)),
       Context.add(DomFile.Files, filesOf(document))
     )
