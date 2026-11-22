@@ -22,7 +22,10 @@ const Message = UiSchema.TaggedEnum({
 const Host = Component.define({
   name: "RadioGroupHost",
   scoped: false,
-  props: Schema.Struct({ showIndicators: Schema.optional(Schema.Boolean) }),
+  props: Schema.Struct({
+    showIndicators: Schema.optional(Schema.Boolean),
+    keepMounted: Schema.optional(Schema.Boolean)
+  }),
   model: Schema.Struct({
     value: Schema.NullOr(Schema.String),
     readOnly: Schema.Boolean,
@@ -47,7 +50,11 @@ const Host = Component.define({
             ...items.map(({ value }) =>
               radioGroup.radio({ element: h.button.attr("data-value", value), value }).children(
                 model.showIndicators
-                  ? radioGroup.indicator({ element: h.span.attr("data-dot", value), value })
+                  ? radioGroup.indicator({
+                    element: h.span.attr("data-dot", value),
+                    value,
+                    keepMounted: h.props.keepMounted
+                  })
                   : undefined
               )
             )
@@ -168,7 +175,7 @@ describe("RadioGroup in a document", { concurrent: false }, () => {
       assert.strictEqual(btn("nvme").getAttribute("tabindex"), "-1")
     }).pipe(Effect.scoped))
 
-  it.effect("does not animate an exit for a value whose indicator was never mounted", () =>
+  it.effect("does not animate an exit for an indicator that was unmounted when the value changed", () =>
     Effect.gen(function*() {
       yield* holdExits
       const app = yield* container
@@ -176,6 +183,7 @@ describe("RadioGroup in a document", { concurrent: false }, () => {
       yield* tick
 
       const dot = (value: string) => app.querySelector(`[data-dot="${value}"]`)
+      const toggle = () => app.querySelector<HTMLButtonElement>("[data-indicators-toggle]")!.click()
       assert.isNull(dot("ssd"))
 
       app.querySelector<HTMLButtonElement>("[data-set=\"nvme\"]")!.click()
@@ -183,10 +191,53 @@ describe("RadioGroup in a document", { concurrent: false }, () => {
       assert.isNull(dot("ssd"))
       assert.isNull(dot("nvme"))
 
-      app.querySelector<HTMLButtonElement>("[data-indicators-toggle]")!.click()
+      toggle()
       yield* tick
       assert.isNull(dot("ssd"))
       assert.isNotNull(dot("nvme"))
       assert.isNull(dot("nvme")!.getAttribute("data-ending-style"))
+
+      toggle()
+      yield* tick
+      assert.isNull(dot("nvme"))
+
+      app.querySelector<HTMLButtonElement>("[data-set=\"tape\"]")!.click()
+      yield* tick
+      toggle()
+      yield* tick
+      assert.isNull(dot("nvme"))
+      assert.isNotNull(dot("tape"))
+    }).pipe(Effect.scoped))
+
+  it.effect("animates repeated exits when keepMounted keeps indicators in the document", () =>
+    Effect.gen(function*() {
+      const exits = yield* holdExits
+      const app = yield* container
+      yield* BrowserHost.mountEffect(Host, { keepMounted: true }, app)
+      yield* tick
+
+      const dot = (value: string) => app.querySelector(`[data-dot="${value}"]`)!
+      const set = (value: string) => app.querySelector<HTMLButtonElement>(`[data-set="${value}"]`)!.click()
+
+      set("nvme")
+      yield* tick
+      assert.strictEqual(dot("ssd").getAttribute("data-ending-style"), "")
+      exits.finishAll()
+      yield* tick
+      assert.isNull(dot("ssd").getAttribute("data-ending-style"))
+
+      set("ssd")
+      yield* tick
+      assert.strictEqual(dot("nvme").getAttribute("data-ending-style"), "")
+      exits.finishAll()
+      yield* tick
+      assert.isNull(dot("nvme").getAttribute("data-ending-style"))
+
+      set("nvme")
+      yield* tick
+      assert.strictEqual(dot("ssd").getAttribute("data-ending-style"), "")
+      exits.finishAll()
+      yield* tick
+      assert.isNull(dot("ssd").getAttribute("data-ending-style"))
     }).pipe(Effect.scoped))
 })

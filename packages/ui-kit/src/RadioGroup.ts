@@ -233,6 +233,7 @@ const Message = UiSchema.TaggedEnum({
   PressedEnter: {},
   SyncedValue: { value: Schema.NullOr(Schema.String) },
   MountedIndicator: { value: Schema.String },
+  UnmountedIndicator: { value: Schema.String },
   StartedIndicator: { value: Schema.String },
   EndedIndicator: { value: Schema.String }
 })
@@ -255,6 +256,25 @@ const TrackIndicatorArgs = Schema.Struct({
   ending: Schema.Boolean
 })
 
+const groupSend = new WeakMap<HTMLElement, (message: Message) => void>()
+
+const TrackGroup = Mount.makeStream(
+  "TrackGroup",
+  { args: {} },
+  (node: HTMLDivElement) =>
+    Stream.callback<Message>((queue) =>
+      Effect.acquireRelease(
+        Effect.sync(() => {
+          groupSend.set(node, (message) => Queue.offerUnsafe(queue, message))
+        }),
+        () =>
+          Effect.sync(() => {
+            groupSend.delete(node)
+          })
+      )
+    )
+)
+
 const TrackIndicator = Mount.makeStream(
   "TrackIndicator",
   { args: TrackIndicatorArgs },
@@ -262,6 +282,7 @@ const TrackIndicator = Mount.makeStream(
     Stream.callback<Message>((queue) => {
       const frame = frameOf(node.ownerDocument.defaultView)
       const send = (message: Message) => Queue.offerUnsafe(queue, message)
+      const group = node.closest<HTMLElement>("[role=radiogroup]")
       let current = args
       let generation = 0
       const start = () => {
@@ -301,6 +322,7 @@ const TrackIndicator = Mount.makeStream(
         () =>
           Effect.sync(() => {
             generation++
+            if (group !== null) groupSend.get(group)?.(Message.UnmountedIndicator({ value: current.value }))
           })
       )
     })
@@ -418,6 +440,14 @@ export const RadioGroup = Component.define({
       const mounted = withValue(model.mounted, value)
       return mounted === model.mounted ? model : { ...model, mounted }
     },
+    UnmountedIndicator: (model, { value }) => {
+      const mounted = without(model.mounted, value)
+      const leaving = without(model.leaving, value)
+      const settled = model.settled === value ? null : model.settled
+      return mounted === model.mounted && leaving === model.leaving && settled === model.settled
+        ? model
+        : { ...model, settled, mounted, leaving }
+    },
     StartedIndicator: (model, { value }, $) => {
       if ($.props.value !== value) return model
       const leaving = without(model.leaving, value)
@@ -426,11 +456,8 @@ export const RadioGroup = Component.define({
     EndedIndicator: (model, { value }, $) => {
       if ($.props.value === value) return model
       const leaving = without(model.leaving, value)
-      const mounted = without(model.mounted, value)
       const settled = model.settled === value ? null : model.settled
-      return leaving === model.leaving && mounted === model.mounted && settled === model.settled
-        ? model
-        : { ...model, settled, mounted, leaving }
+      return leaving === model.leaving && settled === model.settled ? model : { ...model, settled, leaving }
     }
   },
   subscriptions: (_model, props) => [synced(props.value)],
@@ -522,7 +549,8 @@ export const RadioGroup = Component.define({
           .attr("data-disabled", flag(disabled))
           .attr("data-readonly", flag(readOnly))
           .attr("data-required", flag(required))
-          .children(hidden)),
+          .children(hidden)
+          .onMount(TrackGroup())),
       radio: View.wrapPart(
         radioPart,
         <B extends KeyedButton>({ element, value }: { readonly element: B; readonly value: string }) =>

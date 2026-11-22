@@ -49,6 +49,7 @@ const openScene = (props: RadioGroupProps = { value: "ssd", items }) =>
   HtmlScene.make(RadioGroup, props, standIn).pipe(
     Effect.tap((s) =>
       Effect.sync(() => {
+        s.expectMount(mountOf(s, root))
         if (props.value !== null) s.expectMount(mountOf(s, indicator(props.value)))
       })
     )
