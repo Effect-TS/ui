@@ -1057,6 +1057,108 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(root.model()).toEqual(["key Enter shift"])
       }).pipe(Effect.scoped))
 
+    describe("input methods and selections", () => {
+      const Seen = UiSchema.TaggedEnum({ Saw: { entry: Schema.String } })
+      const Typing = Component.define({
+        name: "Typing",
+        model: Schema.Array(Schema.String),
+        message: Seen,
+        elements: Html
+      }).make({
+        init: (): ReadonlyArray<string> => [],
+        update: (log, { entry }) => [...log, entry],
+        view: (_, h) => {
+          const saw = (label: string) => (payload: object) => Seen.Saw({ entry: `${label} ${JSON.stringify(payload)}` })
+          return h.div(
+            h.input.attr("aria-label", "Text").on("input", saw("input")).on("change", saw("change"))
+              .onCompositionEnd(saw("compositionend")).onKeyDown(saw("key")),
+            h.textarea.attr("aria-label", "Area").onInput(saw("input")).onCompositionEnd(saw("compositionend")),
+            h.input.attr("type", "checkbox").attr("aria-label", "Box").onKeyDown(saw("key")),
+            h.button.onKeyDown(saw("key")).children("Button")
+          )
+        }
+      })
+
+      it.effect("input and change say how the edit was made, and compositionend sends the composed value", () =>
+        Effect.gen(function*() {
+          const app = yield* container
+          const root = yield* BrowserHost.mountEffect(Typing, {}, app)
+          const text = HtmlLocator.getByRole(app, "textbox", { name: "Text" }) as HTMLInputElement
+          const area = HtmlLocator.getByRole(app, "textbox", { name: "Area" }) as HTMLTextAreaElement
+          text.value = "ka"
+          text.dispatchEvent(
+            new InputEvent("input", { bubbles: true, isComposing: true, inputType: "insertCompositionText" })
+          )
+          text.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true, data: "ka" }))
+          text.dispatchEvent(new Event("change", { bubbles: true }))
+          area.value = "auto"
+          area.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertReplacementText" }))
+          area.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true }))
+          yield* tick
+          expect(root.model()).toEqual([
+            `input {"value":"ka","checked":false,"composing":true,"inputType":"insertCompositionText"}`,
+            `compositionend {"value":"ka"}`,
+            `change {"value":"ka","checked":false,"composing":false,"inputType":""}`,
+            `input {"value":"auto","composing":false,"inputType":"insertReplacementText"}`,
+            `compositionend {"value":"auto"}`
+          ])
+        }).pipe(Effect.scoped))
+
+      it.effect("a key reports the selection of a text field, and none for a button or a checkbox", () =>
+        Effect.gen(function*() {
+          const app = yield* container
+          const root = yield* BrowserHost.mountEffect(Typing, {}, app)
+          const text = HtmlLocator.getByRole(app, "textbox", { name: "Text" }) as HTMLInputElement
+          text.value = "hello"
+          text.setSelectionRange(1, 4)
+          HtmlLocator.keydown(text, "ArrowLeft")
+          HtmlLocator.keydown(HtmlLocator.getByRole(app, "checkbox", { name: "Box" }), " ")
+          HtmlLocator.keydown(HtmlLocator.getByRole(app, "button", { name: "Button" }), "Enter")
+          yield* tick
+          const selections = root.model()!.map((entry) => {
+            const { selectionEnd, selectionStart } = JSON.parse(entry.slice(4))
+            return [selectionStart, selectionEnd]
+          })
+          expect(selections).toEqual([[1, 4], [null, null], [null, null]])
+        }).pipe(Effect.scoped))
+
+      it.effect("a composing field's value isn't written until compositionend, then the Model's is put back", () =>
+        Effect.gen(function*() {
+          const Typed = UiSchema.TaggedEnum({ Typed: { value: Schema.String } })
+          const Upper = Component.define({
+            name: "Upper",
+            model: Schema.String,
+            message: Typed,
+            elements: Html
+          }).make({
+            init: () => "",
+            update: (_, { value }) => value.toUpperCase(),
+            view: (text, h) =>
+              h.div(
+                h.input.attr("aria-label", "Upper").value(text).onInput(({ value }) => Typed.Typed({ value })),
+                h.input.attr("aria-label", "Fixed").value("fixed").onInput(() => undefined)
+              )
+          })
+          const app = yield* container
+          yield* BrowserHost.mountEffect(Upper, {}, app)
+          const compose = (field: HTMLInputElement, value: string) => {
+            field.value = value
+            field.dispatchEvent(new InputEvent("input", { bubbles: true, isComposing: true }))
+          }
+          const upper = HtmlLocator.getByRole(app, "textbox", { name: "Upper" }) as HTMLInputElement
+          const fixed = HtmlLocator.getByRole(app, "textbox", { name: "Fixed" }) as HTMLInputElement
+          HtmlLocator.type(fixed, "x")
+          fixed.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }))
+          compose(upper, "ka")
+          yield* tick
+          expect([upper.value, fixed.value]).toEqual(["ka", "x"])
+          upper.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true }))
+          fixed.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true }))
+          yield* tick
+          expect([upper.value, fixed.value]).toEqual(["KA", "fixed"])
+        }).pipe(Effect.scoped))
+    })
+
     it.effect("submit sends the form's fields and prevents the browser's submission", () =>
       Effect.gen(function*() {
         const app = yield* container

@@ -10,7 +10,7 @@ import * as scene from "../../internal/scene.ts"
 export type Listener = (payload: unknown, preventDefault: () => void) => void
 
 const { alt, ctrl, meta, shift } = scene.pointer
-const key = { key: "", shift, ctrl, alt, meta, composing: false }
+const key = { key: "", shift, ctrl, alt, meta, composing: false, selectionStart: null, selectionEnd: null }
 
 /**
  * Fires `event` at the capture listeners, then at the bubble ones, and

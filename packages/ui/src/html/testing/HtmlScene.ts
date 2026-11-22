@@ -109,8 +109,11 @@ type AnyComponent =
   | Component.Component<any, any, any, any, any, any, any, any, never>
   | Component.Component<any, any, any, never, any, any, any, any, never>
 
-/** The modifier keys of a key or pointer payload, each `false` unless given. */
-type Modifiers = Partial<Pick<Html.KeyPayload, "shift" | "ctrl" | "alt" | "meta">>
+/** What a key payload has besides its key, defaulted unless given. */
+type KeyDetails = Partial<Omit<Html.KeyPayload, "key">>
+
+/** How an `input` payload says its edit was made, defaulted unless given. */
+type EditDetails = Partial<Pick<Html.InputPayload, "composing" | "inputType">>
 
 /**
  * A cursor over one HTML scene: the scene's steps, plus a step per user
@@ -147,16 +150,28 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Scene.Step
   click(target: string | Locator.Locator): this
   /**
    * Sets a field's value as typing does: sends `input` with `value`. An
-   * `input` also sends its current `checked`.
+   * `input` also sends its current `checked`. `details` sets `composing`,
+   * `false` otherwise, and `inputType`, `"insertText"` otherwise, so an
+   * input method's text or an autofill's `"insertReplacementText"` can be
+   * sent too.
    */
-  type(locator: Locator.Locator, value: string): this
+  type(locator: Locator.Locator, value: string, details?: EditDetails): this
   /**
    * Sends `change`, as a field does once its edit is committed. A string is
-   * the new value; an object also sets `checked` on an `input`.
+   * the new value; an object also sets `checked` on an `input`, and
+   * `composing` and `inputType`, `false` and `""` otherwise.
    */
   change(locator: Locator.Locator, value: string | Partial<Html.InputPayload>): this
-  /** Presses `key`: sends `keydown` with the modifier keys given, each `false` otherwise. */
-  keydown(locator: Locator.Locator, key: string, modifiers?: Modifiers): this
+  /**
+   * Ends an input method's composition: sends `compositionend` with
+   * `value`, or the field's current value when it's left out.
+   */
+  compositionEnd(locator: Locator.Locator, value?: string): this
+  /**
+   * Presses `key`: sends `keydown` with the modifier keys, `composing` and
+   * selection given, each `false` or `null` otherwise.
+   */
+  keydown(locator: Locator.Locator, key: string, details?: KeyDetails): this
   /**
    * Submits the form `locator` matches, or the one the matched element is
    * in, as pressing Enter in it would: `submit` goes to the form with the
@@ -443,7 +458,9 @@ class StepsImpl extends internal.SceneCursor {
       if (type === "checkbox" || (type === "radio" && HtmlLocator.checked(node) !== true)) {
         const payload: Html.InputPayload = {
           value: HtmlLocator.value(node) ?? "on",
-          checked: type === "radio" ? true : HtmlLocator.checked(node) !== true
+          checked: type === "radio" ? true : HtmlLocator.checked(node) !== true,
+          composing: false,
+          inputType: ""
         }
         later(node, locator.description, "input", () => payload)
         later(node, locator.description, "change", () => payload)
@@ -470,32 +487,44 @@ class StepsImpl extends internal.SceneCursor {
       return events
     })
   }
-  type(locator: Locator.Locator, value: string): this {
+  type(locator: Locator.Locator, value: string, details?: EditDetails): this {
+    const edit = { composing: details?.composing ?? false, inputType: details?.inputType ?? "insertText" }
     return this.one(
       "type",
       locator,
       "input",
-      (node) => node.tag === "input" ? { value, checked: HtmlLocator.checked(node) === true } : { value }
+      (node): Html.ValuePayload | Html.InputPayload =>
+        node.tag === "input" ? { value, checked: HtmlLocator.checked(node) === true, ...edit } : { value, ...edit }
     )
   }
   change(locator: Locator.Locator, value: string | Partial<Html.InputPayload>): this {
     const given = typeof value === "string" ? { value } : value
-    return this.one("change", locator, "change", (node) =>
-      node.tag === "input"
-        ? {
-          value: given.value ?? HtmlLocator.value(node) ?? "",
-          checked: given.checked ?? HtmlLocator.checked(node) === true
-        }
-        : { value: given.value ?? HtmlLocator.value(node) ?? "" })
+    const edit = { composing: given.composing ?? false, inputType: given.inputType ?? "" }
+    return this.one("change", locator, "change", (node): Html.ValuePayload | Html.InputPayload => {
+      const value = given.value ?? HtmlLocator.value(node) ?? ""
+      return node.tag === "input"
+        ? { value, checked: given.checked ?? HtmlLocator.checked(node) === true, ...edit }
+        : { value, ...edit }
+    })
   }
-  keydown(locator: Locator.Locator, key: string, modifiers?: Modifiers): this {
+  compositionEnd(locator: Locator.Locator, value?: string): this {
+    return this.one(
+      "compositionEnd",
+      locator,
+      "compositionend",
+      (node): Html.CompositionPayload => ({ value: value ?? HtmlLocator.value(node) ?? "" })
+    )
+  }
+  keydown(locator: Locator.Locator, key: string, details?: KeyDetails): this {
     const payload: Html.KeyPayload = {
       key,
-      shift: modifiers?.shift === true,
-      ctrl: modifiers?.ctrl === true,
-      alt: modifiers?.alt === true,
-      meta: modifiers?.meta === true,
-      composing: false
+      shift: details?.shift === true,
+      ctrl: details?.ctrl === true,
+      alt: details?.alt === true,
+      meta: details?.meta === true,
+      composing: details?.composing === true,
+      selectionStart: details?.selectionStart ?? null,
+      selectionEnd: details?.selectionEnd ?? null
     }
     return this.one("keydown", locator, "keydown", () => payload)
   }

@@ -62,6 +62,10 @@
  * after the element's children exist, skips a no-op so the caret doesn't jump,
  * and puts the Model's value back after the user changes it and the Model
  * didn't follow, whether `update` rejected the change or nothing handled it.
+ * A field's `value` isn't written while an input method composes text in it,
+ * from `compositionstart`, or an `input` that says it's composing, to
+ * `compositionend`, so a patch or a rejected `input` can't replace the text
+ * being composed; it's put back after `compositionend` instead.
  *
  * A server-rendered control the user changed before its instance adopted
  * keeps what it shows, and the host sends its state to the element's
@@ -134,7 +138,7 @@ const ownEvents: ReadonlySet<string> = new Set([
 ])
 
 /** Events after which a controlled property may differ from what the Model says. */
-const changeEvents: ReadonlyArray<string> = ["input", "change", "toggle", "close", "reset"]
+const changeEvents: ReadonlyArray<string> = ["input", "change", "compositionend", "toggle", "close", "reset"]
 
 const isDialog = (node: globalThis.Node): node is HTMLDialogElement =>
   node.nodeType === 1 && (node as globalThis.Element).localName === "dialog"
@@ -146,7 +150,7 @@ const dropTargetEvents: ReadonlySet<string> = new Set(["dragenter", "dragleave",
 const dragSourceEvents: ReadonlyArray<string> = ["dragstart", "dragend"]
 
 /** Events the host listens to whether or not a handler wants them. */
-const alwaysEvents: ReadonlyArray<string> = [...changeEvents, "submit"]
+const alwaysEvents: ReadonlyArray<string> = [...changeEvents, "submit", "compositionstart"]
 
 const controlled: ReadonlySet<string> = new Set(["value", "checked", "selected", "open", "popoverOpen"])
 
@@ -302,11 +306,32 @@ const fieldsOf = (form: HTMLFormElement, submitter: HTMLElement | null) => {
 }
 
 /** The payload of `input` and `change` from `source`, the control that changed. */
-const controlPayload = (source: globalThis.Element): unknown => {
+const controlPayload = (source: globalThis.Element, event: Event | undefined): unknown => {
   const control = source as HTMLInputElement
+  const e = event as Partial<InputEvent> | undefined
+  const composing = e?.isComposing === true
+  const inputType = typeof e?.inputType === "string" ? e.inputType : ""
   return control.localName === "input"
-    ? { value: control.value, checked: control.checked === true }
-    : { value: String(control.value ?? "") }
+    ? { value: control.value, checked: control.checked === true, composing, inputType }
+    : { value: String(control.value ?? ""), composing, inputType }
+}
+
+const noSelection = { selectionStart: null, selectionEnd: null }
+
+const selectionOf = (target: EventTarget | null) => {
+  const field = target as HTMLInputElement | null
+  const tag = (field as globalThis.Element | null)?.localName
+  if (tag !== "input" && tag !== "textarea") return noSelection
+  try {
+    const start = field!.selectionStart
+    const end = field!.selectionEnd
+    return typeof start === "number" && typeof end === "number"
+      ? { selectionStart: start, selectionEnd: end }
+      : noSelection
+  } catch {
+    // Older browsers throw, rather than return `null`, for an input type without a selection.
+    return noSelection
+  }
 }
 
 /**
@@ -360,11 +385,18 @@ const payloadOf = (
       const e = event as KeyboardEvent
       // Safari reports the key that ends a composition with `isComposing` false and `keyCode` 229.
       const composing = e.isComposing === true || (e as { readonly keyCode?: number }).keyCode === 229
-      return { key: e.key ?? "", ...modifiers(event), composing }
+      return { key: e.key ?? "", ...modifiers(event), composing, ...selectionOf(target) }
     }
     case "input":
     case "change":
-      return controlPayload((target !== null && "value" in (target as object) ? target : element) as globalThis.Element)
+      return controlPayload(
+        (target !== null && "value" in (target as object) ? target : element) as globalThis.Element,
+        event
+      )
+    case "compositionend": {
+      const field = (target !== null && "value" in (target as object) ? target : element) as HTMLInputElement
+      return { value: String(field.value ?? "") }
+    }
     case "submit": {
       const form = (element.localName === "form" ? element : target) as HTMLFormElement
       return fieldsOf(form, (event as SubmitEvent).submitter ?? null)
@@ -448,6 +480,7 @@ export const makeHost = (
   const eventsOf = (node: globalThis.Node): Renderer.Events | undefined => eventsAlong(pathFrom(node))[0]
   // The last value the renderer set for each controlled property: what the element must show.
   const wanted = new WeakMap<globalThis.Node, Map<string, unknown>>()
+  const composing = new WeakSet<globalThis.Node>()
   const listening = new Map<string, (event: Event) => void>()
   // The pointer of the last `pointerdown`, which the click-like events that follow it report.
   let lastPointer: Html.PointerType | undefined
@@ -631,6 +664,7 @@ export const makeHost = (
     if (values === undefined) return
     const element = node as any
     for (const [name, value] of values) {
+      if (name === "value" && composing.has(node)) continue
       if (name === "open" && isDialog(node)) {
         // A dialog that left the document can't be shown; a later commit shows it if it comes back.
         if (node.isConnected) showDialog(node, value as boolean | "modal")
@@ -714,7 +748,9 @@ export const makeHost = (
   const report = (control: globalThis.Element, name: string) => {
     for (const entry of eventsAlong(pathFrom(control))) {
       const handler = entry?.handlers[name]
-      if (entry !== undefined && handler !== undefined) return entry.dispatch(name, handler, controlPayload(control))
+      if (entry !== undefined && handler !== undefined) {
+        return entry.dispatch(name, handler, controlPayload(control, undefined))
+      }
     }
   }
 
@@ -916,6 +952,14 @@ export const makeHost = (
 
   const listener = (name: string) => (event: Event) => {
     if (dropTargetEvents.has(name)) return onDropTarget(name, event as DragEvent)
+    if (
+      (name === "compositionstart" || name === "compositionend" || name === "input") &&
+      event.target !== null && "nodeType" in event.target
+    ) {
+      const field = event.target as globalThis.Node
+      if (name === "compositionstart" || (event as Partial<InputEvent>).isComposing === true) composing.add(field)
+      else composing.delete(field)
+    }
     if ((name === "cancel" || name === "close") && event.target !== null && isDialog(event.target as globalThis.Node)) {
       const dialog = event.target as HTMLDialogElement
       if (name === "cancel") {
@@ -1114,6 +1158,7 @@ export const makeHost = (
         }
         // A control changed before it adopted shows the change until the commit reports it.
         if (edited.size > 0 && edited.has(controlOf(node)) && name === userProp(node)) return
+        if (name === "value" && composing.has(node)) return
         // Skip a no-op, so a caret in the middle of the text stays where it is.
         if (element[name] !== value) element[name] = value
         return
