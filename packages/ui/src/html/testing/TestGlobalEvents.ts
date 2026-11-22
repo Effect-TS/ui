@@ -87,6 +87,15 @@ export interface TestGlobalEvents {
     event: K,
     payload?: Partial<DomSubscription.GlobalPayload<Targets[T][K]>>
   ) => boolean
+  /**
+   * Fires a custom `event` on the document, as `fire` does for built-in
+   * document events. `detail` defaults to `null` and `defaultPrevented` to
+   * `false`.
+   */
+  readonly fireCustomEvent: (
+    event: string,
+    payload?: Partial<DomSubscription.GlobalPayload<{ readonly detail: unknown }>>
+  ) => boolean
 }
 
 /**
@@ -133,6 +142,14 @@ export const make = (): DomSubscription.GlobalEvents & TestGlobalEvents => {
             yield entry.listener
           }
         }
+      }),
+    fireCustomEvent: (event, payload) =>
+      fireGlobal.fire(event, { detail: null, ...payload }, function*(capture) {
+        for (const entry of Array.from(entries)) {
+          if (entry.target === "document" && entry.event === event && entry.capture === capture && entries.has(entry)) {
+            yield entry.listener
+          }
+        }
       })
   }
 }
@@ -166,3 +183,17 @@ export const fire = <T extends keyof Targets, K extends keyof Targets[T]>(
   payload?: Partial<DomSubscription.GlobalPayload<Targets[T][K]>>
 ): Effect.Effect<boolean, never, TestGlobalEvents> =>
   TestGlobalEvents.useSync((events) => events.fire(target, event, payload))
+
+/**
+ * Fires a custom `event` on the document through the fake, and returns
+ * whether a listener cancelled the default.
+ *
+ * @stability experimental
+ * @category testing
+ * @since 0.1.0
+ */
+export const fireCustomEvent = (
+  event: string,
+  payload?: Partial<DomSubscription.GlobalPayload<{ readonly detail: unknown }>>
+): Effect.Effect<boolean, never, TestGlobalEvents> =>
+  TestGlobalEvents.useSync((events) => events.fireCustomEvent(event, payload))

@@ -300,3 +300,60 @@ describe("HtmlScene.fireDocument and fireWindow", () => {
       )
     }))
 })
+
+describe("DomSubscription.onCustomEvent", { concurrent: false }, () => {
+  const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))
+  const container = Effect.acquireRelease(
+    Effect.sync(() => document.body.appendChild(document.createElement("div"))),
+    (element) => Effect.sync(() => element.remove())
+  )
+  const Custom = Component.define({
+    name: "Custom",
+    scoped: false,
+    model: Schema.Array(Schema.String),
+    message: PhaseMessage,
+    elements: Html
+  }).make({
+    init: (): ReadonlyArray<string> => [],
+    update: (log, { what }) => [...log, what],
+    view: (log, h) => h.output(log.join(",")),
+    subscriptions: () => [
+      DomSubscription.onCustomEvent(
+        "app:ping",
+        ({ defaultPrevented, detail }) =>
+          typeof detail === "string"
+            ? PhaseMessage.Heard({ what: `${detail}${defaultPrevented ? "!" : ""}` })
+            : detail === null
+            ? PhaseMessage.Heard({ what: "empty" })
+            : undefined,
+        { preventDefault: true }
+      )
+    ]
+  })
+
+  it.effect("delivers CustomEvent detail on BrowserHost, TestGlobalEvents and HtmlScene", () =>
+    Effect.gen(function*() {
+      const browser = yield* BrowserHost.mountEffect(Custom, {}, yield* container)
+      yield* tick
+      const cancelled = new CustomEvent("app:ping", { detail: "hello", cancelable: true })
+      document.dispatchEvent(cancelled)
+      document.dispatchEvent(new CustomEvent("app:ping"))
+      document.dispatchEvent(new CustomEvent("app:ping", { detail: 123 }))
+      yield* tick
+      assert.isTrue(cancelled.defaultPrevented)
+      assert.deepStrictEqual(browser.model(), ["hello", "empty"])
+
+      const root = yield* TestHost.mount(Custom, {})
+      yield* TestHost.settle
+      assert.isTrue(yield* TestGlobalEvents.fireCustomEvent("app:ping", { detail: "test" }))
+      assert.isFalse(yield* TestGlobalEvents.fireCustomEvent("app:ping", { detail: 42 }))
+      yield* TestHost.settle
+      assert.deepStrictEqual(root.model(), ["test"])
+
+      const s = yield* HtmlScene.make(Custom, {})
+      s.fireCustomEvent("app:ping", { detail: "scene", defaultPrevented: true }).expectDefaultPrevented()
+        .fireCustomEvent("app:ping")
+        .fireCustomEvent("app:ping", { detail: 0 }).expectIgnored()
+        .expect(Locator.tag("output")).toHaveText("scene!,empty")
+    }).pipe(Effect.provide(testLayer), Effect.scoped))
+})

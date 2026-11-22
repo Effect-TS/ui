@@ -460,7 +460,7 @@ const payloadOf = (
         disabled: isDisabled(target)
       }
     default:
-      return {}
+      return "detail" in event ? { detail: (event as CustomEvent).detail } : {}
   }
 }
 

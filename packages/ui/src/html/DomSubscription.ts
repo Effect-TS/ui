@@ -1,7 +1,8 @@
 /**
  * Subscriptions to the host's document and window: `onDocument` for a
- * keyboard shortcut or a press outside a popup, and `onWindow` for the
- * window's focus.
+ * keyboard shortcut or a press outside a popup, `onCustomEvent` for a
+ * `CustomEvent` dispatched on the document, and `onWindow` for the window's
+ * focus.
  *
  * Their source is the `GlobalEvents` service, which `BrowserHost.layer`
  * provides. Nothing listens on the server, and a test fires events with
@@ -289,3 +290,58 @@ export const onWindow = <K extends keyof WindowEvents, Msg>(
   handler: View.Handler<Msg, GlobalPayload<WindowEvents[K]>>,
   options?: GlobalEventOptions | undefined
 ): Subscription.Subscription<Msg> => listenFor("window", event, handler, options)
+
+/**
+ * A Subscription that listens for a `CustomEvent` on the host's document.
+ *
+ * **Details**
+ *
+ * It works as `onDocument` does, with the key `@effect/ui/html/document`, for
+ * an event type outside `DocumentEvents`. The payload carries the event's
+ * `detail` (as `unknown`) and `defaultPrevented`. A test fires it with
+ * `HtmlScene`'s `fireCustomEvent` or `TestGlobalEvents.fireCustomEvent`.
+ *
+ * **Example** (Listening for a custom document event)
+ *
+ * ```ts import.meta.vitest
+ * import { Component, UiSchema } from "@effect/ui"
+ * import { DomSubscription, Html } from "@effect/ui/html"
+ * import { HtmlScene } from "@effect/ui/html/testing"
+ * import { Locator } from "@effect/ui/testing"
+ * import { Effect, Schema } from "effect"
+ *
+ * const Message = UiSchema.TaggedEnum({ Received: { text: Schema.String } })
+ *
+ * const Banner = Component.define({
+ *   name: "Banner",
+ *   scoped: false,
+ *   model: Schema.String,
+ *   message: Message,
+ *   elements: Html
+ * }).make({
+ *   init: () => "",
+ *   update: { Received: (_model, { text }) => text },
+ *   view: (text, h) => h.p(text),
+ *   subscriptions: () => [
+ *     DomSubscription.onCustomEvent("app:notice", ({ detail }) =>
+ *       typeof detail === "string" ? Message.Received({ text: detail }) : undefined
+ *     )
+ *   ]
+ * })
+ *
+ * Effect.gen(function*() {
+ *   const s = yield* HtmlScene.make(Banner, {})
+ *   s.fireCustomEvent("app:notice", { detail: "saved" })
+ *     .expect(Locator.text("saved")).toExist()
+ * }).pipe(Effect.scoped, Effect.runSync)
+ * ```
+ *
+ * @stability experimental
+ * @category subscriptions
+ * @since 0.1.0
+ */
+export const onCustomEvent = <Msg>(
+  event: string,
+  handler: View.Handler<Msg, GlobalPayload<{ readonly detail: unknown }>>,
+  options?: GlobalEventOptions | undefined
+): Subscription.Subscription<Msg> => listenFor("document", event, handler, options)
