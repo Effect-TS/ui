@@ -145,7 +145,7 @@ describe("PreviewCard in a document", { concurrent: false }, () => {
   it.effect("Escape with focus in the card gives it back to the link without opening the card, and the card is inert", () =>
     Effect.gen(function*() {
       yield* holdExits
-      const calls = yield* focusVisibility
+      const { calls } = yield* focusVisibility
       const { log } = yield* mountPage()
       byId("a").focus()
       yield* tick

@@ -715,7 +715,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
   it.effect("Escape gives focus back to the trigger with a focus ring as the close starts, and the popup is inert", () =>
     Effect.gen(function*() {
       yield* holdExits
-      const calls = yield* focusVisibility
+      const { calls } = yield* focusVisibility
       const { app, log } = yield* mountPage({})
       const popup = app.querySelector(".popup-a")!
       assert.isNull(popup.getAttribute("inert"))
@@ -756,6 +756,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
           else {
             press(byId("page"))
             byId("page").focus()
+            byId("page").dispatchEvent(new PointerEvent("pointerup", { bubbles: true }))
           }
           yield* tick
           yield* tick

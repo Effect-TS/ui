@@ -214,7 +214,7 @@ import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { type Attributed, flag, idOf, noSelect, withStyle, withTokens } from "./internal/attributes.ts"
-import { radioGroup } from "./internal/dom.ts"
+import { byAttribute, radioGroup } from "./internal/dom.ts"
 import { methodOf, onScrollbar } from "./internal/interaction.ts"
 import { hideOthers, lockScroll, nextLayerOrder } from "./internal/modal.ts"
 import { isAndroid } from "./internal/platform.ts"
@@ -780,20 +780,16 @@ const TrackDialog = Mount.makeStream(
         const { closedByFocusOut, closeMethod, finalFocus, portalId } = current
         const focused = document.activeElement as HTMLElement | null
         const away = focused !== null && focused !== document.body && !node.contains(focused)
-        const lost = focusInside && !away
-        const parents = showing.filter((other) => other.node.contains(node))
         if (
           focused !== null &&
-          showing.some((other) => other.open() && other.node.contains(focused) && !parents.includes(other))
+          showing.some((other) => other.open() && other.node.contains(focused) && !other.node.contains(node))
         ) return
         if (!finalFocus) {
-          if (lost && focused !== null && focused !== document.body) focused.blur()
+          if (focusInside && node.contains(focused)) focused?.blur()
           return
         }
         const visible = closeMethod === "keyboard"
-        const marked = closedByFocusOut ? null : document.querySelector<HTMLElement>(
-          `[data-final-focus="${CSS.escape(portalId)}"]`
-        )
+        const marked = closedByFocusOut ? null : byAttribute(document, "data-final-focus", portalId)
         if (marked?.isConnected === true) return handOff(marked, visible)
         if (away) return
         const back = [trigger, before, ...[...visited].reverse()].find((element) =>
@@ -801,23 +797,22 @@ const TrackDialog = Mount.makeStream(
         )
         handOff(back, visible)
       }
-      let closes = 0
+      const restore = () =>
+        frame(() => {
+          if (!current.open) restoreFocus()
+        })
       const closing = () => {
-        const at = ++closes
-        const restore = () =>
-          frame(() => {
-            if (at === closes) restoreFocus()
-          })
         const press = dismissing
         if (press === undefined) return restore()
         const done = new AbortController()
+        const options = { capture: true, signal: done.signal }
         const end = (event: PointerEvent) => {
           if (event.pointerId !== press) return
           done.abort()
           restore()
         }
-        document.addEventListener("pointerup", end, { capture: true, signal: done.signal })
-        document.addEventListener("pointercancel", end, { capture: true, signal: done.signal })
+        document.addEventListener("pointerup", end, options)
+        document.addEventListener("pointercancel", end, options)
       }
 
       const transition = settling(node, popup, frame, (open) => send(DialogMessage.FinishedTransition({ open })))
@@ -832,8 +827,6 @@ const TrackDialog = Mount.makeStream(
           pressed = undefined
           closing()
         } else if (!previous.open && next.open) {
-          closes++
-          dismissing = undefined
           send(DialogMessage.ShowedPortal())
           page.takeRecords()
           added = new WeakSet()
@@ -1206,13 +1199,8 @@ export const Dialog = Component.define({
         .forward((node) => open ? node : node.attr("style", withStyle(node.elementAttrs.style, passThrough))))
     const popup = p.part("div", (b) =>
       nesting(b)
-        .attrs({ id: popupId, tabindex: "-1" })
-        .forward((node) =>
-          node.attrs({
-            inert: flag(!open),
-            style: withStyle(node.elementAttrs.style, `--nested-dialogs:${nestedDialogs}`)
-          })
-        ))
+        .attrs({ id: popupId, tabindex: "-1", inert: flag(!open) })
+        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, `--nested-dialogs:${nestedDialogs}`))))
 
     const titlePart = p.part(
       ["h1", "h2", "h3", "h4", "h5", "h6"],

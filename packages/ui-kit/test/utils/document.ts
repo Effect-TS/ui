@@ -36,10 +36,10 @@ export const focusVisibility = Effect.acquireRelease(
       calls.push([this.id, (options as { readonly focusVisible?: boolean } | undefined)?.focusVisible === true])
       focus.call(this, options)
     }
-    return { calls, restore: () => (proto.focus = focus) }
+    return { calls, focus }
   }),
-  ({ restore }) => Effect.sync(restore)
-).pipe(Effect.map(({ calls }) => calls))
+  ({ focus }) => Effect.sync(() => (window.HTMLElement.prototype.focus = focus))
+)
 
 /** A primary-button `pointerdown`, which is what an outside press listens for. */
 export const press = (target: Element, pointerType = "mouse") =>
