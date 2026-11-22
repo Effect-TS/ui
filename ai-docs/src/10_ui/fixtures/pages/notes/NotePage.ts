@@ -1,3 +1,4 @@
+import { GetNote } from "#queries/GetNote"
 import { Component, Head, UiSchema } from "@effect/ui"
 import { Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
@@ -5,7 +6,6 @@ import { Collapsible } from "../../kit/Collapsible.ts"
 import { ActivityLog } from "../../notes/components/ActivityLog.ts"
 import { NoteActivity } from "../../notes/components/NoteActivity.ts"
 import { NoteEditor } from "../../notes/components/NoteEditor.ts"
-import { GetNote } from "../../notes/queries/GetNote.ts"
 import { Notes } from "../../notes/services/Notes.ts"
 
 export const NotePageMessage = UiSchema.TaggedEnum({

@@ -20,6 +20,7 @@ import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 // One file here, to read top to bottom. In an app each `describe` sits next
 // to what it tests: `notes/components/NoteEditor.story.test.ts` and
 // `App.play.test.ts`.
+import type { Note } from "#domain/Note"
 import { App } from "./fixtures/App.ts"
 import { Collapsible } from "./fixtures/kit/Collapsible.ts"
 import {
@@ -29,7 +30,6 @@ import {
   NoteEditorNoDeps,
   SaveNote
 } from "./fixtures/notes/components/NoteEditor.ts"
-import type { Note } from "./fixtures/notes/domain/Note.ts"
 import { Notes } from "./fixtures/notes/services/Notes.ts"
 import { NotePageNoDeps } from "./fixtures/pages/notes/NotePage.ts"
 import { NotesIndexNoDeps } from "./fixtures/pages/NotesIndex.ts"

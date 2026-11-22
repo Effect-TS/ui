@@ -1,7 +1,7 @@
+import { NoteResults, NoteSort, NotesTag } from "#domain/Note"
 import { Query } from "@effect/ui"
 import { Effect, Schema } from "effect"
-import { NoteResults, NoteSort, NotesTag } from "../domain/Note.ts"
-import { Notes } from "../services/Notes.ts"
+import { Notes } from "../notes/services/Notes.ts"
 
 // A query keyed by the whole search, so each page and order is cached on its
 // own and going back to an earlier page shows it at once.

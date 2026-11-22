@@ -1,8 +1,11 @@
+import * as Apple from "#domain/apple"
+import * as Direction from "#domain/direction"
+import * as Position from "#domain/position"
+import * as Snake from "#domain/snake"
 import { Command, Component, Head, Subscription, UiSchema } from "@effect/ui"
 import { DomSubscription } from "@effect/ui/html"
 import { Array, Duration, Schema, Stream } from "effect"
 import { GAME, GAME_SPEED } from "./constants.ts"
-import { Apple, Direction, Position, Snake } from "./domain/index.ts"
 
 export const GameState = Schema.Literals(["NotStarted", "Playing", "Paused", "GameOver"])
 export type GameState = typeof GameState.Type
@@ -158,9 +161,9 @@ export const SnakeGame = Component.define({
       ),
       h.p.class("text-lg mb-4").children(GAME_STATE_TEXT[model.gameState]),
       h.div.class("inline-block border-2 border-gray-600").children(
-        Array.makeBy(GAME.GRID_SIZE, (y) =>
+        Array.makeBy(Position.GRID_SIZE, (y) =>
           h.div.class("flex").children(
-            Array.makeBy(GAME.GRID_SIZE, (x) => h.div.class("w-6 h-6", cellClass(x, y, model)))
+            Array.makeBy(Position.GRID_SIZE, (x) => h.div.class("w-6 h-6", cellClass(x, y, model)))
           ))
       ),
       h.div.class("mt-4 text-sm text-gray-400").children(

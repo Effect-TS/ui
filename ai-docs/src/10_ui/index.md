@@ -741,23 +741,27 @@ after Back clears that field in its own `restore`.
 The examples below are one notes app. Each example is an entry module, for
 the browser, the server or the tests. It mounts a component and provides the
 platform Layers, and it defines no components. The app is in
-`ai-docs/src/90_ui/fixtures`, laid out as it would be under `src/` in a real
+`ai-docs/src/10_ui/fixtures`, laid out as it would be under `src/` in a real
 app. Read an example, then the files it imports.
 
-Group files by feature, then by kind within each feature:
+Put shared types in one top-level `domain` folder, queries in a top-level
+`queries` folder, and app components shared across features or pages in a
+top-level `components` folder. Group services and feature-only components by
+feature, then by kind within each feature:
 
 ```text
 fixtures/
   App.ts                      // root component, imports pages
   routes.ts                   // AppRoute
+  domain/Note.ts              // Schema, errors, NotesTag
+  queries/
+    ListNotes.ts
+    GetNote.ts
+    SearchNotes.ts
   kit/Listbox.ts              // headless components no feature owns
   kit/Collapsible.ts          // a component with slots
   notes/
-    domain/Note.ts            // Schema, errors, NotesTag
     services/Notes.ts         // service and its Layers
-    queries/ListNotes.ts
-    queries/GetNote.ts
-    queries/SearchNotes.ts
     components/NoteEditor.ts  // NoteEditor and its SaveNote command
     components/NoteActivity.ts
     components/ActivityLog.ts
@@ -769,11 +773,49 @@ fixtures/
   server/NotesApi.ts          // the JSON API that Notes calls
 ```
 
-A second feature is a sibling of `notes/`, with its own `domain`, `services`,
-`queries` and `components` folders. Pages import features, but features never
-import pages. Keep `AppRoute` in `routes.ts`, outside `pages/` and separate
-from `App.ts`; pages can then build links without importing the root component
-that imports them.
+`domain` holds Schemas with their types and errors, pure functions over them,
+and `Query.Tag` invalidation tags. `domain` imports packages and other
+`domain` files, and nothing else from the app, so domain files can build on
+each other without one feature importing another.
+
+`queries` starts flat (such as `queries/SearchPeople.ts`) and can grow into
+feature subfolders (such as `queries/people/SearchPeople.ts`) as the folder
+grows. Queries import `domain` and services; pages and components import them.
+
+App components used by more than one feature or page go in a top-level
+`components/` folder (unlike `kit/`, which holds unstyled headless primitives
+no feature owns). Services and their Layers, and components only one feature
+uses, stay in that feature. A second feature is a sibling of `notes/`, with
+its types in `domain` next to `Note.ts`. Pages import features, shared
+components and queries, and none of them imports pages. Keep `AppRoute` in
+`routes.ts`, outside `pages/` and separate from `App.ts`; pages can then
+build links without importing the root component that imports them.
+
+From outside `domain` or `queries`, import them through subpath imports
+declared once in the app's `package.json`. You can map `#components/*` the
+same way for a top-level `components` folder:
+
+```json
+{
+  "imports": {
+    "#components/*": "./src/components/*.ts",
+    "#domain/*": "./src/domain/*.ts",
+    "#queries/*": "./src/queries/*.ts"
+  }
+}
+```
+
+```ts
+import { Note } from "#domain/Note"
+import { ListNotes } from "#queries/ListNotes"
+```
+
+Node, TypeScript, Vite and Vitest all read the `imports` field with no other
+config, so a server entry that imports `domain` or `queries` still runs under
+plain `node`. The mapping adds the `.ts`, so the specifier has none: with
+`rewriteRelativeImportExtensions` set, TypeScript accepts `.ts` only on a
+relative specifier. Within `domain`, and everywhere else, imports stay
+relative, with their `.ts` extension.
 
 Keep one file per route in `pages/`, in folders that mirror the URL. A page's
 folder is the static segments of its route's path, and its file is named after
@@ -784,8 +826,8 @@ folder follows the URL, not the feature the page uses.
 
 A command belongs in the file of the component that runs it, not in a shared
 `commands/` folder. When two components need the same write, share the service
-method and give each component its own command. Queries have their own folder
-because pages, multiple components and server rendering all read them.
+method and give each component its own command. Queries have their own
+top-level folder because pages, multiple components and server rendering all read them.
 
 A component provides the domain Layers it needs in its own file, with
 `Component.provide`: its commands, its queries and the services they capture.

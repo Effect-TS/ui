@@ -16,7 +16,7 @@ import "@effect/ui/html/register"
 // what it is composed from out of the features:
 //
 // - `fixtures/pages/notes/NotePage.ts`: the page, its query and its Layers
-// - `fixtures/notes/queries/GetNote.ts`: the `Query` the page shows
+// - `fixtures/queries/GetNote.ts`: the `Query` the page shows
 // - `fixtures/notes/components/NoteEditor.ts`: a child by value
 // - `fixtures/notes/components/NoteActivity.ts`: a child by service
 // - `fixtures/notes/components/ActivityLog.ts`: that service's implementation

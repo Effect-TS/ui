@@ -1,6 +1,6 @@
+import { NoteSort } from "#domain/Note"
 import { Route } from "@effect/ui"
 import { Effect, Schema } from "effect"
-import { NoteSort } from "./notes/domain/Note.ts"
 
 // A route union is a `Schema.TaggedUnion` with a parser and a printer that
 // agree. Params and search are decoded through their Schemas, and `/*` is the

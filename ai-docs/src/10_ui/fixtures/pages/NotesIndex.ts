@@ -1,8 +1,8 @@
+import { ListNotes } from "#queries/ListNotes"
 import { Component, Head, UiSchema } from "@effect/ui"
 import { HtmlHead } from "@effect/ui/html"
 import { Layer, Match, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
-import { ListNotes } from "../notes/queries/ListNotes.ts"
 import { Notes } from "../notes/services/Notes.ts"
 import { AppRoute } from "../routes.ts"
 

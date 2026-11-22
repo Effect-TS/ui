@@ -1,8 +1,8 @@
+import { type NoteResults, NoteSort } from "#domain/Note"
+import { SearchNotes } from "#queries/SearchNotes"
 import { Command, Component, Head, Router, UiSchema } from "@effect/ui"
 import { Layer, Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
-import { type NoteResults, NoteSort } from "../../notes/domain/Note.ts"
-import { SearchNotes } from "../../notes/queries/SearchNotes.ts"
 import { Notes } from "../../notes/services/Notes.ts"
 import { AppRoute } from "../../routes.ts"
 

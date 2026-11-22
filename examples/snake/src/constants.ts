@@ -1,5 +1,4 @@
 export const GAME = {
-  GRID_SIZE: 20,
   INITIAL_POSITION: { x: 10, y: 10 },
   INITIAL_DIRECTION: "Right",
   POINTS_PER_APPLE: 10

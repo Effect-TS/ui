@@ -1,8 +1,8 @@
+import * as Snake from "#domain/snake"
 import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
 import { describe, it } from "@effect/vitest"
 import { Effect } from "effect"
-import { Snake } from "./domain/index.ts"
 import { GenerateApplePosition, SnakeGame, SnakeGameMessage, type SnakeGameModel } from "./SnakeGame.ts"
 
 const baseModel: SnakeGameModel = {
