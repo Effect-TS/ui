@@ -54,7 +54,8 @@ const shareItems: ReadonlyArray<MenuItem> = [
 const Config = Schema.Struct({
   filter: Schema.Boolean,
   viewport: Schema.Boolean,
-  closeParentOnEsc: Schema.Boolean
+  closeParentOnEsc: Schema.Boolean,
+  refuseClose: Schema.Boolean
 })
 type Config = typeof Config.Type
 
@@ -90,9 +91,9 @@ const Page = Component.define({
         menu + " RequestedOpen " + reason + (triggerId !== null && triggerId !== "trigger" ? " from " + triggerId : "")
       ]
     }),
-    RequestedClose: (model, { menu, reason }) => ({
+    RequestedClose: (model, { menu, reason }, $) => ({
       ...model,
-      [menu === "root" ? "open" : "share"]: false,
+      [menu === "root" ? "open" : "share"]: menu === "root" && $.props.refuseClose && model.open,
       log: [...model.log, menu + " RequestedClose " + reason]
     }),
     Picked: (model, { menu, value }) => ({
@@ -180,6 +181,7 @@ const mountPage = Effect.fnUntraced(function*(config: Partial<Config> = {}) {
     filter: false,
     viewport: false,
     closeParentOnEsc: false,
+    refuseClose: false,
     ...config
   }, app)
   yield* tick
@@ -274,6 +276,46 @@ describe("Menu in a document", { concurrent: false }, () => {
       ])
     }))
 
+  it.effect("Escape and Tab ask once to close, and a refused close leaves the popup open and interactive", () =>
+    Effect.gen(function*() {
+      const { log } = yield* mountPage({ refuseClose: true, filter: true })
+      keydown(byId("trigger"), "ArrowDown")
+      yield* tick
+      assert.isTrue(keydown(item("input"), "Escape").defaultPrevented)
+      yield* tick
+      keydown(item("input"), "Tab")
+      yield* tick
+      assert.deepStrictEqual(log(), [
+        "root RequestedOpen list-navigation",
+        "root RequestedClose escape-key",
+        "root RequestedClose focus-out"
+      ])
+      assert.isTrue(shown("positioner"))
+      assert.isNull(popupOf("positioner").closest("[inert]"))
+    }))
+
+  it.effect("Escape on the page closes a menu that hovering opened, unless something already handled it", () =>
+    Effect.gen(function*() {
+      const { log } = yield* mountPage({ viewport: true })
+      byId("trigger-2").dispatchEvent(new MouseEvent("mouseenter"))
+      yield* TestClock.adjust("1 millis")
+      yield* tick
+      assert.isTrue(shown("positioner"))
+      assert.strictEqual(document.activeElement, document.body)
+      const handled = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })
+      document.body.addEventListener("keydown", (event) => event.preventDefault(), { once: true })
+      document.body.dispatchEvent(handled)
+      yield* tick
+      assert.isTrue(shown("positioner"))
+      assert.isTrue(keydown(document.body, "Escape").defaultPrevented)
+      yield* tick
+      assert.isFalse(shown("positioner"))
+      assert.deepStrictEqual(log(), [
+        "root RequestedOpen trigger-hover from trigger-2",
+        "root RequestedClose escape-key"
+      ])
+    }))
+
   it.effect("a submenu opens with ArrowRight, closes with ArrowLeft or sibling hover, and a pick closes both", () =>
     Effect.gen(function*() {
       const { log } = yield* mountPage()
@@ -304,6 +346,12 @@ describe("Menu in a document", { concurrent: false }, () => {
       keydown(share, "Enter")
       yield* tick
       assert.strictEqual(document.activeElement, item("email"))
+      keydown(item("email"), "Escape")
+      yield* tick
+      assert.isFalse(shown("share-positioner"))
+      assert.isTrue(shown("positioner"))
+      keydown(share, "Enter")
+      yield* tick
       keydown(item("email"), "Enter")
       yield* tick
       assert.isFalse(shown("share-positioner"))
@@ -314,6 +362,8 @@ describe("Menu in a document", { concurrent: false }, () => {
         "share RequestedClose list-navigation",
         "share RequestedOpen list-navigation",
         "share RequestedClose sibling-open",
+        "share RequestedOpen trigger-press",
+        "share RequestedClose escape-key",
         "share RequestedOpen trigger-press",
         "root RequestedClose item-press",
         "share Picked email",

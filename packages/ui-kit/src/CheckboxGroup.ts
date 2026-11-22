@@ -276,11 +276,13 @@ export const CheckboxGroup = Component.define({
 }).make({
   init: ($) => ({ remembered: $.props.value, items: [] }),
   update: {
-    ToggledItem: (_model, { value }, $) => {
+    ToggledItem: (model, { value }, $) => {
+      if ($.props.disabled === true) return model
       const next = toggled($.props.value, value)
       return $.evolve({ remembered: next }).emit(CheckboxGroupEvents.Updated({ value: next }))
     },
     ToggledParent: (model, _message, $) => {
+      if ($.props.disabled === true) return model
       const next = cycle(model, $.props)
       return next === undefined
         ? model

@@ -389,6 +389,8 @@ describe("Select", () => {
       })
       assert.deepInclude(s.get(trigger).attrs, { "aria-required": "true", "data-required": "" })
       s.fire(Locator.tag("input"), "change", { value: "System", checked: false }).emitted(picked("system", "none"))
+      s.fire(Locator.tag("input"), "change", { value: "Dim", checked: false })
+      assert.deepStrictEqual(s.current.emitted, [])
       s.fire(Locator.tag("input"), "change", { value: "nope", checked: false })
     }))
 

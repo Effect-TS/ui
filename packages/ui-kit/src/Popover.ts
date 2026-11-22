@@ -209,11 +209,13 @@ import * as Command from "@effect/ui/Command"
 import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
+import * as Renderer from "@effect/ui/Renderer"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as UiStruct from "@effect/ui/UiStruct"
 import * as View from "@effect/ui/View"
 import * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
+import * as Option from "effect/Option"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
@@ -425,9 +427,15 @@ const PopoverMessage = UiSchema.TaggedEnum({
   RequestedOpenDialog: { triggerId: Schema.NullOr(Schema.String) },
   RequestedCloseDialog: { reason: DialogDismissReason },
   SettledDialog: { open: Schema.Boolean },
-  EnteredTrigger: { triggerId: Schema.NullOr(Schema.String), ...Hover.fields, at: Schema.NullOr(Point) },
+  EnteredTrigger: {
+    triggerId: Schema.NullOr(Schema.String),
+    ...Hover.fields,
+    at: Schema.NullOr(Point),
+    drawn: Schema.Boolean
+  },
   LeftTrigger: { triggerId: Schema.NullOr(Schema.String), at: Schema.NullOr(Point) },
   PressedDetachedTrigger: { triggerId: Schema.NullOr(Schema.String), pointerType: Schema.String },
+  LostTrigger: { triggerId: Schema.NullOr(Schema.String) },
   EnteredPositioner: {},
   LeftPositioner: {},
   CompletedWaitBeforeOpening: {},
@@ -476,10 +484,27 @@ const hoverOf = (options: {
     ? { delay: options.delay ?? 300, closeDelay: options.closeDelay ?? 0 }
     : null
 
+const Trigger = Html.ref("PopoverTrigger", "button")
+
+// A trigger the popover draws is checked once the wait is over: one removed or disabled meanwhile
+// sent no `mouseleave`.
 const WaitBeforeOpening = Command.make(
   "WaitBeforeOpening",
-  { args: { delay: Schema.Number }, mode: "switch" },
-  ({ delay }) => Effect.as(Effect.sleep(Duration.millis(delay)), PopoverMessage.CompletedWaitBeforeOpening())
+  { args: { delay: Schema.Number, drawn: Schema.NullOr(Schema.String) }, mode: "switch" },
+  ({ delay, drawn }) =>
+    Effect.sleep(Duration.millis(delay)).pipe(
+      Effect.andThen(
+        drawn === null
+          ? Effect.succeed(true)
+          : Effect.map(
+            Renderer.Refs.use((refs) => refs.lookup(Trigger.at(drawn))),
+            Option.exists((node) => !node.disabled)
+          )
+      ),
+      Effect.map((usable) =>
+        usable ? PopoverMessage.CompletedWaitBeforeOpening() : PopoverMessage.LostTrigger({ triggerId: drawn })
+      )
+    )
 )
 
 const WaitBeforeClosing = Command.make(
@@ -549,24 +574,27 @@ const TrackDetachedTrigger = Mount.makeStream(
   (node: HTMLButtonElement, args, changes) =>
     Stream.callback<never>(() => {
       let current = args
-      const send = (message: PopoverMessage) => detached.send(current.popupId, message)
+      const send = (message: PopoverMessage) => detached.send(node.ownerDocument, current.popupId, message)
       const triggerId = () => node.id === "" ? null : node.id
+      const lost = () => send(PopoverMessage.LostTrigger({ triggerId: triggerId() }))
       const controller = new AbortController()
       const { signal } = controller
       return Effect.acquireRelease(
         Effect.sync(() => {
           node.addEventListener("click", (event) => {
+            if (node.disabled) return
             send(PopoverMessage.PressedDetachedTrigger({
               triggerId: triggerId(),
               pointerType: (event as PointerEvent).pointerType ?? (event.detail === 0 ? "" : "mouse")
             }))
           }, { signal })
           node.addEventListener("pointerenter", (event) => {
-            if (current.hover === null || event.pointerType !== "mouse") return
+            if (current.hover === null || node.disabled || event.pointerType !== "mouse") return
             send(PopoverMessage.EnteredTrigger({
               triggerId: triggerId(),
               ...current.hover,
-              at: { x: event.clientX, y: event.clientY }
+              at: { x: event.clientX, y: event.clientY },
+              drawn: false
             }))
           }, { signal })
           node.addEventListener("pointerleave", (event) => {
@@ -577,11 +605,16 @@ const TrackDetachedTrigger = Mount.makeStream(
           Effect.tap(() =>
             Effect.forkScoped(Stream.runForEach(changes, (next) =>
               Effect.sync(() => {
+                if (current.hover !== null && next.hover === null) lost()
                 current = next
               })))
           )
         ),
-        () => Effect.sync(() => controller.abort())
+        () =>
+          Effect.sync(() => {
+            controller.abort()
+            lost()
+          })
       )
     })
 )
@@ -776,13 +809,17 @@ export const Popover = Component.define({
     },
     SettledDialog: (_model, { open }, $) =>
       $.evolve(open ? {} : { switched: false, transition: null }).emit(PopoverEvents.Settled({ open })),
-    EnteredTrigger: (model, { at, closeDelay, delay, triggerId }, $) => {
+    EnteredTrigger: (model, { at, closeDelay, delay, drawn, triggerId }, $) => {
       // A layer drawn over the trigger takes the pointer off it, and gives it back where it was once
       // it is gone. The pointer didn't move, so that is no hover.
       const uncovered = at !== null && model.rest !== null && model.rest.triggerId === triggerId &&
         at.x === model.rest.x && at.y === model.rest.y
       const next = UiStruct.evolve(model, { onTrigger: true, hoverTrigger: triggerId, closeDelay, rest: null })
-      if (!$.props.open) return uncovered ? next : $.set(next).run(WaitBeforeOpening.make({ delay }))
+      if (!$.props.open) {
+        return uncovered
+          ? next
+          : $.set(next).run(WaitBeforeOpening.make({ delay, drawn: drawn ? triggerId : null }))
+      }
       const active = activeOf(model, $.props)
       return uncovered || active === null || active === triggerId
         ? $.set(next).run(Command.interrupt(WaitBeforeClosing))
@@ -797,6 +834,10 @@ export const Popover = Component.define({
         }),
         $
       ),
+    LostTrigger: (model, { triggerId }, $) =>
+      model.onTrigger && model.hoverTrigger === triggerId
+        ? left(UiStruct.evolve(model, { onTrigger: false, hoverTrigger: null, rest: null }), $)
+        : model,
     PressedDetachedTrigger: (model, { pointerType, triggerId }, $) => {
       const active = activeOf(model, $.props)
       return $.props.open && (active === null || active === triggerId)
@@ -857,11 +898,12 @@ export const Popover = Component.define({
             "aria-disabled": undefined
           })
           .disabled(disabled)
+          .ref(Trigger.at(key))
         return hover === null ? button : button
           .on(
             "mouseenter",
             (payload: Partial<Html.HoverPayload>) =>
-              PopoverMessage.EnteredTrigger({ triggerId: key, ...hover, at: pointOf(payload) })
+              PopoverMessage.EnteredTrigger({ triggerId: key, ...hover, at: pointOf(payload), drawn: true })
           )
           .on(
             "mouseleave",
@@ -999,8 +1041,9 @@ export const Popover = Component.define({
             }): ReturnType<B["attr"]> => {
               const key = idOf(options.element) ?? p.id("trigger", triggers++)
               const disabled = options.disabled === true
+              const element = options.element.attr("id", key)
               return triggerPart(
-                dialog.trigger(options.element.attr("id", key)),
+                dialog.trigger(disabled ? element.disabled(true) : element),
                 key,
                 hoverOf(options),
                 disabled

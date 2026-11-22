@@ -384,14 +384,16 @@ describe("Menu", () => {
         picked("minimap", true)
       )
       s.fire(item("large"), "click", pointer("mouse")).emitted(highlighted("large", "none"), picked("large", true))
-      s.fire(item("docs"), "click", pointer("mouse")).emitted(highlighted("docs", "none"), picked("docs"))
+      s.fire(item("docs"), "click", pointer("mouse"))
+        .expectDefaultPrevented(false)
+        .emitted(highlighted("docs", "none"), picked("docs"))
       s.fire(item("undo"), "click", pointer("mouse"))
       s.fire(item("wrap"), "click", pointer("mouse")).emitted(picked("wrap", false), dismissed("item-press"))
       s.props({ open: true, items })
       s.fire(item("copy"), "keydown", key("Enter")).emitted(picked("copy"), dismissed("item-press"))
     }))
 
-  it.effect("disabled ignores presses on the trigger and the items", () =>
+  it.effect("disabled ignores presses on the trigger, the items and the filter, and a link doesn't navigate", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Menu, { open: false, items, disabled: true }, standIn)
       assert.deepInclude(s.get(trigger).attrs, { disabled: "", "data-disabled": "" })
@@ -400,6 +402,10 @@ describe("Menu", () => {
       s.props({ open: true, items, disabled: true }).mounted(tracked(s), sent("ShowedPopup"))
       assert.deepInclude(s.get(item("copy")).attrs, { "aria-disabled": "true", "data-disabled": "" })
       s.fire(item("copy"), "click", pointer("mouse"))
+      s.fire(item("docs"), "click", pointer("mouse")).expectDefaultPrevented()
+      s.props({ open: true, items, disabled: true, query: "co" })
+      s.fire(input, "input", { value: "c", checked: false }).expectNone()
+      s.fire(clear, "click", pointer("mouse")).expectNone()
     }))
 
   it.effect("typing moves to the next item starting with the typed text, skipping disabled ones, until it resets", () =>

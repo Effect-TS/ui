@@ -1177,7 +1177,7 @@ export const Select = Component.define({
       const props = $.props
       if (props.disabled === true || props.readOnly === true || props.multiple === true) return model
       const item = autofillMatch(props.items, value)
-      return item === undefined || valuesOf(props).includes(item.value)
+      return !available(item) || valuesOf(props).includes(item.value)
         ? model
         : $.emit(SelectEvents.Picked({ value: item.value, reason: "none" }))
     },

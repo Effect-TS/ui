@@ -592,7 +592,7 @@ const TrackDetachedPreviewCardTrigger = Mount.makeStream(
   (node: HTMLElement, args, changes) =>
     Stream.callback<never>(() => {
       let current = args
-      const send = (message: PreviewCardMessage) => detached.send(current.popupId, message)
+      const send = (message: PreviewCardMessage) => detached.send(node.ownerDocument, current.popupId, message)
       const triggerId = () => node.id === "" ? null : node.id
       const delays = () => ({ delay: current.delay, closeDelay: current.closeDelay })
       const controller = new AbortController()

@@ -466,6 +466,7 @@ const pick = <E>(step: Step<E>, props: Settings<E>, value: string, method: Inter
 }
 
 const clear = <E>(step: Step<E>, props: Settings<E>, reason: TextReason): Step<E> => {
+  if (lockedOf(props)) return step
   const cleared = rewrite(step, props, "", reason)
   return filledOf(props) ? picked(cleared, props, props.multiple === true ? [] : null, reason) : cleared
 }
@@ -913,6 +914,7 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         const opened = open($, props, "list-navigation", "keyboard", key)
         return props.inputInPopup === true ? opened : focus(opened, Input)
       }
+      if (props.readOnly === true) return model
       const values = valuesOf(props)
       const { index, next } = typeahead(
         model,
@@ -933,7 +935,7 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
       if (lockedOf(props) || props.multiple === true) return model
       if (!selectableOf(props)) return rewrite($, props, value, "none")
       const item = autofillMatch(props.items, value)
-      if (item === undefined || valuesOf(props).includes(item.value)) return model
+      if (!available(item) || valuesOf(props).includes(item.value)) return model
       const chosen = picked($, props, item.value, "none")
       return props.inputInPopup === true ? chosen : rewrite(chosen, props, item.label, "none")
     },
@@ -1361,6 +1363,11 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
           "data-anchor-hidden": flag(shown && model.placement?.anchorHidden),
           "data-empty": flag(listEmpty)
         })
+        .onKeyDown(
+          ({ composing, key }) =>
+            key === "Escape" && open && !composing ? Message.PressedInputKey({ key, chips: chipsDrawn }) : undefined,
+          { preventDefault: true }
+        )
         .forward((node) =>
           inPopup && labelled
             ? node.attr("aria-labelledby", node.elementAttrs["aria-labelledby"] ?? labelId)

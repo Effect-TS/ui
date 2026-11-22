@@ -6,9 +6,24 @@ interface Layer {
   readonly order: number
 }
 
-const layers: Array<Layer> = []
-let marked: Layer | undefined
-let unmark: (() => void) | undefined
+interface Stack {
+  readonly layers: Array<Layer>
+  marked: Layer | undefined
+  unmark: (() => void) | undefined
+  locks: number
+  unlock: (() => void) | undefined
+}
+
+const stacks = new WeakMap<Document, Stack>()
+
+const stackOf = (document: Document): Stack => {
+  let stack = stacks.get(document)
+  if (stack === undefined) {
+    stack = { layers: [], marked: undefined, unmark: undefined, locks: 0, unlock: undefined }
+    stacks.set(document, stack)
+  }
+  return stack
+}
 
 const hide = ({ also, inside }: Layer): () => void => {
   const body = inside.ownerDocument.body
@@ -43,8 +58,8 @@ const hide = ({ also, inside }: Layer): () => void => {
   }
 }
 
-const refresh = () => {
-  const top = layers.reduce<Layer | undefined>(
+const refresh = (stack: Stack) => {
+  const top = stack.layers.reduce<Layer | undefined>(
     (top, layer) =>
       top === undefined || top.inside.contains(layer.inside) ||
         (!layer.inside.contains(top.inside) && layer.order >= top.order)
@@ -52,10 +67,10 @@ const refresh = () => {
         : top,
     undefined
   )
-  if (top === marked) return
-  unmark?.()
-  marked = top
-  unmark = top === undefined ? undefined : hide(top)
+  if (top === stack.marked) return
+  stack.unmark?.()
+  stack.marked = top
+  stack.unmark = top === undefined ? undefined : hide(top)
 }
 
 let lastOrder = 0
@@ -63,17 +78,15 @@ let lastOrder = 0
 export const nextLayerOrder = (): number => ++lastOrder
 
 export const hideOthers = (inside: Element, order: number, also: ReadonlyArray<Element> = []): () => void => {
+  const stack = stackOf(inside.ownerDocument)
   const entry = { inside, also, order }
-  layers.push(entry)
-  refresh()
+  stack.layers.push(entry)
+  refresh(stack)
   return () => {
-    layers.splice(layers.indexOf(entry), 1)
-    refresh()
+    stack.layers.splice(stack.layers.indexOf(entry), 1)
+    refresh(stack)
   }
 }
-
-let locks = 0
-let unlock: (() => void) | undefined
 
 const overflows = (style: CSSStyleDeclaration): boolean =>
   /auto|scroll|overlay|hidden|clip/.test(style.overflow + style.overflowY + style.overflowX) &&
@@ -151,10 +164,11 @@ export const holdScroll = (node: HTMLElement, touch: boolean): () => void => {
 }
 
 export const lockScroll = (document: Document): () => void => {
-  if (locks++ === 0) unlock = lock(document)
+  const stack = stackOf(document)
+  if (stack.locks++ === 0) stack.unlock = lock(document)
   return () => {
-    if (--locks > 0) return
-    unlock?.()
-    unlock = undefined
+    if (--stack.locks > 0) return
+    stack.unlock?.()
+    stack.unlock = undefined
   }
 }
