@@ -5,7 +5,8 @@ export interface Labelled {
   readonly disabled?: boolean | undefined
 }
 
-export const available = (item: Labelled | undefined): boolean => item !== undefined && item.disabled !== true
+export const available = <A extends { readonly disabled?: boolean | undefined }>(item: A | undefined): item is A =>
+  item !== undefined && item.disabled !== true
 
 export const keyed = <Tag extends string, Rest extends ReadonlyArray<unknown>, R>(
   part: View.Part<Tag, [value: string, ...Rest], R>
