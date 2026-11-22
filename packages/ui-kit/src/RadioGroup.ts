@@ -198,8 +198,8 @@ export const RadioGroupProps = Schema.Struct({
 export type RadioGroupProps = typeof RadioGroupProps.Type
 
 /**
- * `Picked` reports the radio the user chose. Store `value` and pass it back
- * as the `value` prop to update the group.
+ * `Picked` asks for the radio the user chose. Store `value` and pass it
+ * back as the `value` prop to update the group.
  *
  * @stability experimental
  * @category schemas

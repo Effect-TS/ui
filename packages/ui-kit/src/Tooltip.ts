@@ -3,9 +3,9 @@
  * or focused.
  *
  * `Tooltip` is headless: it owns the hover and focus timing, the data
- * attributes and the popup's place in the top layer, and the consumer draws
- * the markup. The consumer owns whether the tooltip is open, passes it as
- * `open`, and stores what the `Opened` and `Dismissed` events report.
+ * attributes and the popup's place in the top layer, and the consumer draws the
+ * markup. The consumer owns whether the tooltip is open, passes it as `open`,
+ * and stores what the `RequestedOpen` and `RequestedClose` events ask for.
  *
  * The tooltip asks to close when the pointer leaves, focus moves away, the
  * trigger is activated, Escape is pressed, or the mouse is pressed outside
@@ -25,12 +25,12 @@
  * | `popup`      | `<div>` inside the positioner                  |
  * | `arrow`      | `<div>` inside the popup                       |
  *
- * Each part takes the consumer's builder and returns it with the part
- * applied, and the consumer adds the children:
+ * Each part takes the consumer's builder and returns it with the part applied,
+ * and the consumer adds the children:
  * `tooltip.positioner(h.div).children(tooltip.popup(h.div).children("Bold"))`.
- * A part's result is a builder, so it can also be another kit call's
- * `element`. That puts a tooltip on a ui-kit Button:
- * `Button(h, { element: tooltip.trigger(h.button) }).class("tool").children("B")`.
+ * A part's result is a builder, so it can also be another kit call's `element`.
+ * That puts a tooltip on a ui-kit Button: `Button(h, { element:
+ * tooltip.trigger(h.button) }).class("tool").children("B")`.
  *
  * The positioner is a manual popover, so it renders in the top layer and
  * needs no portal. While it shows, the tooltip measures the trigger and
@@ -95,12 +95,13 @@
  * `@starting-style` and `transition-behavior: allow-discrete`. The
  * `Positioning` module does the placing, and a popup of your own can use it.
  *
- * Each tooltip has one trigger. On its own it waits its own `delay` on
- * every hover. Below a `TooltipProvider`, once one tooltip of the group
- * has been open, hovering another opens it at once, until `timeout` after
- * the last one closed. One tooltip of the group shows at a time: when another is
- * shown, the previous one asks to close. Wrap the group, with nothing to add to each
- * tooltip: `TooltipProvider(h, { props: {}, view: () => h.div(Tooltip(h, ...), Tooltip(h, ...)) })`.
+ * Each tooltip has one trigger. On its own it waits its own `delay` on every
+ * hover. Below a `TooltipProvider`, once one tooltip of the group has been
+ * open, hovering another opens it at once, until `timeout` after the last one
+ * closed. One tooltip of the group shows at a time: when another is shown, the
+ * previous one asks to close. Wrap the group, with nothing to add to each
+ * tooltip: `TooltipProvider(h, { props: {}, view: () => h.div(Tooltip(h, ...),
+ * Tooltip(h, ...)) })`.
  *
  * Set `closeDelay` to give the pointer time to reach the popup when its
  * path takes it outside both the trigger and the positioner.
@@ -113,7 +114,7 @@
  * import { Tooltip } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
- * const ToolbarMessage = UiSchema.TaggedEnum({ OpenedBoldTip: {}, DismissedBoldTip: {} })
+ * const ToolbarMessage = UiSchema.TaggedEnum({ RequestedOpenBoldTip: {}, RequestedCloseBoldTip: {} })
  *
  * const Toolbar = Component.define({
  *   name: "Toolbar",
@@ -124,16 +125,16 @@
  * }).make({
  *   init: () => ({ boldTip: false }),
  *   update: {
- *     OpenedBoldTip: (model) => ({ ...model, boldTip: true }),
- *     DismissedBoldTip: (model) => ({ ...model, boldTip: false })
+ *     RequestedOpenBoldTip: (model) => ({ ...model, boldTip: true }),
+ *     RequestedCloseBoldTip: (model) => ({ ...model, boldTip: false })
  *   },
  *   view: (model, h) =>
  *     Tooltip(h, {
  *       key: "bold",
  *       props: { open: model.boldTip, sideOffset: 8 },
  *       onEmit: {
- *         Opened: () => ToolbarMessage.OpenedBoldTip(),
- *         Dismissed: () => ToolbarMessage.DismissedBoldTip()
+ *         RequestedOpen: () => ToolbarMessage.RequestedOpenBoldTip(),
+ *         RequestedClose: () => ToolbarMessage.RequestedCloseBoldTip()
  *       },
  *       view: (tooltip) =>
  *         h.span(
@@ -269,19 +270,19 @@ export const TooltipProps = Schema.Struct({
 export type TooltipProps = typeof TooltipProps.Type
 
 /**
- * `Opened` requests that the tooltip open after the hover delay or when the
- * trigger receives keyboard focus. `Dismissed` requests that it close when
- * the pointer leaves, focus moves away, or the user activates the trigger,
- * presses Escape or presses outside the tooltip. The consumer decides
- * whether to update `open` in response.
+ * `RequestedOpen` asks for the tooltip to open after the hover delay or when
+ * the trigger receives keyboard focus. `RequestedClose` asks for it to close
+ * when the pointer leaves, focus moves away, or the user activates the
+ * trigger, presses Escape or presses outside the tooltip. The consumer
+ * decides whether to change `open`.
  *
  * @stability experimental
  * @category schemas
  * @since 0.1.0
  */
 export const TooltipEvents = UiSchema.TaggedEnum({
-  Opened: {},
-  Dismissed: {}
+  RequestedOpen: {},
+  RequestedClose: {}
 })
 
 /**
@@ -365,8 +366,8 @@ const dismissals = [
   DomSubscription.onDocument("mousedown", TooltipMessage.PressedDocument(), { capture: true })
 ]
 
-const opened = TooltipEvents.Opened()
-const dismissed = TooltipEvents.Dismissed()
+const opened = TooltipEvents.RequestedOpen()
+const dismissed = TooltipEvents.RequestedClose()
 
 // The newest turn that shows in a provider's group: the highest, as turns
 // are taken in order. 0 is a tooltip that hasn't taken one yet.
@@ -447,18 +448,18 @@ const WaitBeforeCooling = Command.make(
  * extra: each `Tooltip` reads the nearest provider if there is one, and
  * behaves as on its own if there isn't.
  *
- * Each tooltip reports whether it shows, from its `open` prop. So the
- * group follows the tooltips the consumer actually shows, not the
- * `Opened` and `Dismissed` requests: a refused close keeps the group open,
- * and a close the consumer makes on its own starts the window. While any
- * tooltip shows, and for `timeout` milliseconds after the last one closes,
- * a hover on another trigger opens it with no delay, and its popup and
- * arrow get `data-instant="delay"`. A tooltip that closes while another in
- * the group shows gets it too, so the swap skips both transitions. After
- * the window, the next hover waits the tooltip's `delay` again.
+ * Each tooltip reports whether it shows, from its `open` prop. So the group
+ * follows the tooltips the consumer actually shows, not the `RequestedOpen` and
+ * `RequestedClose` requests: a refused close keeps the group open, and a close
+ * the consumer makes on its own starts the window. While any tooltip shows, and
+ * for `timeout` milliseconds after the last one closes, a hover on another
+ * trigger opens it with no delay, and its popup and arrow get
+ * `data-instant="delay"`. A tooltip that closes while another in the group
+ * shows gets it too, so the swap skips both transitions. After the window, the
+ * next hover waits the tooltip's `delay` again.
  *
  * Only one tooltip of the group shows at a time. When a tooltip is shown,
- * every other one that still shows asks to close with one `Dismissed`,
+ * every other one that still shows asks to close with one `RequestedClose`,
  * even if keyboard focus or `closeDelay` would hold it open. A consumer
  * that refuses keeps it on screen, and the request isn't repeated until yet
  * another tooltip takes over. A tooltip knows it was replaced by its turn:
@@ -474,11 +475,10 @@ const WaitBeforeCooling = Command.make(
  * tooltip takes over, when its last tooltip closes and when the window
  * ends. Wrap a toolbar or a row group, not a whole table.
  *
- * One Model field for which tooltip is open, such as
- * `tip: "bold" | "italic" | null` with `open: model.tip === "bold"`, closes
- * the previous tooltip in the same update that accepts the next one's
- * `Opened`. With a field per tooltip, the previous one's `Dismissed` closes
- * it.
+ * One Model field for which tooltip is open, such as `tip: "bold" | "italic" |
+ * null` with `open: model.tip === "bold"`, closes the previous tooltip in the
+ * same update that accepts the next one's `RequestedOpen`. With a field per
+ * tooltip, the previous one's `RequestedClose` closes it.
  *
  * History restore saves nothing of it: after Back, forward or a reload it
  * starts from `init`.
@@ -534,9 +534,10 @@ export const TooltipProvider = Component.define({
 })
 
 /**
- * A headless tooltip. Call it with the consumer's `h` and a `view` closure
- * that draws the button the tooltip describes with `tooltip.trigger`, and the
- * popup's markup with `tooltip.positioner`, `tooltip.popup` and `tooltip.arrow`.
+ * A headless tooltip. Call it with the consumer's `h` and a `view` closure that
+ * draws the button the tooltip describes with `tooltip.trigger`, and the
+ * popup's markup with `tooltip.positioner`, `tooltip.popup` and
+ * `tooltip.arrow`.
  *
  * **Details**
  *

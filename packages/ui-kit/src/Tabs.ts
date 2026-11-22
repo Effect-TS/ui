@@ -86,7 +86,7 @@
  * import { Tabs } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
- * const SettingsMessage = UiSchema.TaggedEnum({ ChangedTab: { value: Schema.String } })
+ * const SettingsMessage = UiSchema.TaggedEnum({ SelectedTab: { value: Schema.String } })
  *
  * const Settings = Component.define({
  *   name: "Settings",
@@ -97,7 +97,7 @@
  * }).make({
  *   init: () => ({ tab: "overview" }),
  *   update: {
- *     ChangedTab: (model, { value }) => ({ ...model, tab: value })
+ *     SelectedTab: (model, { value }) => ({ ...model, tab: value })
  *   },
  *   view: (model, h) =>
  *     Tabs(h, {
@@ -105,7 +105,7 @@
  *         value: model.tab,
  *         tabs: [{ value: "overview" }, { value: "projects" }, { value: "account", disabled: true }]
  *       },
- *       onEmit: { Selected: ({ value }) => SettingsMessage.ChangedTab({ value }) },
+ *       onEmit: { Selected: ({ value }) => SettingsMessage.SelectedTab({ value }) },
  *       view: (tabs) =>
  *         tabs.root(h.div.class("tabs")).children(
  *           tabs.list(h.div.class("list")).children(
@@ -260,10 +260,10 @@ export const TabsProps = Schema.Struct({
 export type TabsProps = typeof TabsProps.Type
 
 /**
- * `Selected` reports the tab the user activated, by a click, Enter or Space, or
- * focus with `activateOnFocus`, and where it sits relative to the active one.
- * Store `value` and pass it back as the `value` prop. A disabled tab, or the
- * one already active, emits nothing.
+ * `Selected` asks for the tab the user activated, by a click, Enter or Space,
+ * or focus with `activateOnFocus`, and where it sits relative to the active
+ * one. Store `value` and pass it back as the `value` prop. A disabled tab, or
+ * the one already active, emits nothing.
  *
  * @stability experimental
  * @category schemas
@@ -686,8 +686,8 @@ type TabOf<B extends View.PartTarget<"button" | "a">> = ReturnType<B["attr"]>
  * - `list`: `role="tablist"`, and `aria-orientation`, written only for a
  *   vertical list
  * - `tab`: `role="tab"`, `id`, `aria-selected`, `aria-controls`, added only
- *   while the view draws its panel, `aria-disabled`, `tabindex`, `disabled`, which it
- *   never sets so a disabled tab keeps its focus, `type="button"` on a
+ *   while the view draws its panel, `aria-disabled`, `tabindex`, `disabled`,
+ *   which it never sets so a disabled tab keeps its focus, `type="button"` on a
  *   `<button>`, `data-active` and `data-disabled`
  * - `panel`: `role="tabpanel"`, `id`, `aria-labelledby`, `hidden`, `inert` on
  *   a panel that isn't active, `tabindex`, `data-index`, `data-hidden`,

@@ -50,9 +50,9 @@ const running = <S extends Rendered & { readonly expectMount: (mount: Track) => 
 
 const completed = (tag: string) => ({ _tag: tag }) as never
 const opened = (triggerId: string, reason: "trigger-press" | "trigger-hover") =>
-  ({ _tag: "Opened", triggerId, reason }) as PopoverEvents
-const dismissed = (reason: string) => ({ _tag: "Dismissed", reason }) as PopoverEvents
-const pressedTrigger = { _tag: "Dismissed", reason: "trigger-press" } as const
+  ({ _tag: "RequestedOpen", triggerId, reason }) as PopoverEvents
+const dismissed = (reason: string) => ({ _tag: "RequestedClose", reason }) as PopoverEvents
+const pressedTrigger = { _tag: "RequestedClose", reason: "trigger-press" } as const
 
 describe("Popover", () => {
   it.effect("is a dialog that isn't modal, at the document's origin, placed under the trigger it is open for", () =>
@@ -61,7 +61,7 @@ describe("Popover", () => {
       assert.isUndefined(s.query(portal))
       assert.deepInclude(s.get(off).attrs, { "data-disabled": "", disabled: "" })
       assert.isUndefined(s.get(press).attrs?.["data-pressed"])
-      s.childEmit(Dialog, { _tag: "Opened", triggerId: "press" }).emitted(opened("press", "trigger-press"))
+      s.childEmit(Dialog, { _tag: "RequestedOpen", triggerId: "press" }).emitted(opened("press", "trigger-press"))
       s.props({ open: true, sideOffset: 8 })
       assert.deepInclude(s.get(press).attrs, { "aria-expanded": "true", "data-pressed": "" })
       assert.strictEqual(s.get(hover).attrs?.["aria-expanded"], "false")
@@ -103,7 +103,7 @@ describe("Popover", () => {
       s.props({ open: true, modal: true })
       assert.isUndefined(s.get(hover).attrs?.["data-pressed"])
       assert.include(s.get(backdrop).attrs?.style, "pointer-events:none")
-      running(s).childEmit(Dialog, { _tag: "Dismissed", reason: "focus-out" })
+      running(s).childEmit(Dialog, { _tag: "RequestedClose", reason: "focus-out" })
       assert.deepStrictEqual(s.current.emitted, [])
 
       s.fire(hover, "mouseleave")
@@ -155,8 +155,10 @@ describe("Popover", () => {
       running(s).fire(hover, "mouseenter").emitted(opened("hover", "trigger-hover"))
       s.props({ open: true, triggerId: "hover" })
       assert.strictEqual(s.get(hover).attrs?.["aria-expanded"], "true")
-      running(s).childEmit(Dialog, { _tag: "Opened", triggerId: "press" }).emitted(opened("press", "trigger-press"))
-      s.childEmit(Dialog, { _tag: "Dismissed", reason: "escape-key" }).emitted(dismissed("escape-key"))
+      running(s).childEmit(Dialog, { _tag: "RequestedOpen", triggerId: "press" }).emitted(
+        opened("press", "trigger-press")
+      )
+      s.childEmit(Dialog, { _tag: "RequestedClose", reason: "escape-key" }).emitted(dismissed("escape-key"))
       s.props({ open: false, keepMounted: true })
       assert.strictEqual(s.get(popup).attrs?.["data-instant"], "dismiss")
       s.childEmit(Dialog, { _tag: "Settled", open: false }).emitted({ _tag: "Settled", open: false })

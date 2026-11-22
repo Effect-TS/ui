@@ -3,11 +3,10 @@
  *
  * `Select` is headless: it owns the keyboard and pointer behaviour, focus,
  * placement, the data attributes and the form inputs, and the consumer draws
- * the markup. The consumer owns whether the popup is open and what's
- * selected, passes them as `open` and `value`, and stores what the
- * `Opened`, `Dismissed` and `Picked` events report. Values are strings,
- * and `items` lists every option with its label, in the order they're
- * drawn.
+ * the markup. The consumer owns whether the popup is open and what's selected,
+ * passes them as `open` and `value`, and stores what the `RequestedOpen`,
+ * `RequestedClose` and `Picked` events ask for. Values are strings, and `items`
+ * lists every option with its label, in the order they're drawn.
  *
  * **Anatomy**
  *
@@ -135,7 +134,8 @@
  * ]
  *
  * const SettingsMessage = UiSchema.TaggedEnum({
- *   ToggledThemes: { open: Schema.Boolean },
+ *   RequestedOpenTheme: {},
+ *   RequestedCloseTheme: {},
  *   PickedTheme: { theme: Schema.String }
  * })
  *
@@ -148,7 +148,8 @@
  * }).make({
  *   init: () => ({ open: false, theme: "system" }),
  *   update: {
- *     ToggledThemes: (model, { open }) => ({ ...model, open }),
+ *     RequestedOpenTheme: (model) => ({ ...model, open: true }),
+ *     RequestedCloseTheme: (model) => ({ ...model, open: false }),
  *     PickedTheme: (model, { theme }) => ({ ...model, theme })
  *   },
  *   view: (model, h) =>
@@ -158,8 +159,8 @@
  *         Select(h, {
  *           props: { open: model.open, value: model.theme, items: themes, name: "theme" },
  *           onEmit: {
- *             Opened: () => SettingsMessage.ToggledThemes({ open: true }),
- *             Dismissed: () => SettingsMessage.ToggledThemes({ open: false }),
+ *             RequestedOpen: () => SettingsMessage.RequestedOpenTheme(),
+ *             RequestedClose: () => SettingsMessage.RequestedCloseTheme(),
  *             Picked: ({ value }) => SettingsMessage.PickedTheme({ theme: String(value) }),
  *             Settled: () => undefined
  *           },
@@ -330,8 +331,8 @@ export type SelectChangeReason = typeof SelectChangeReason.Type
  *
  * **Details**
  *
- * - `open`: whether the popup shows. The select only asks, with `Opened`
- *   and `Dismissed`.
+ * - `open`: whether the popup shows. The select only asks, with `RequestedOpen`
+ *   and `RequestedClose`.
  * - `items`: every option, in the order they're drawn. Navigation,
  *   typeahead and the trigger's text read them, so list each item drawn.
  * - `value`: the selected value, or values with `multiple`. `null` when
@@ -393,28 +394,29 @@ export const SelectProps = Schema.Struct({
 export type SelectProps = typeof SelectProps.Type
 
 /**
- * What a `Select` asks of its parent.
+ * What a `Select` emits.
  *
  * **Details**
  *
- * - `Opened`: set `open` to true.
- * - `Dismissed`: set `open` to false.
- * - `Picked`: set `value` to `value`, the whole new selection.
- * - `Settled`: the popup's transitions ended, after it opened or closed.
+ * - `RequestedOpen`: asks for `open` to be true.
+ * - `RequestedClose`: asks for `open` to be false.
+ * - `Picked`: asks for `value` to be `value`, the whole new selection.
+ * - `Settled`: reports that the popup's transitions ended, after it
+ *   opened or closed.
  *
  * @stability experimental
  * @category schemas
  * @since 0.1.0
  */
 export const SelectEvents = UiSchema.TaggedEnum({
-  Opened: { reason: SelectChangeReason },
-  Dismissed: { reason: SelectChangeReason },
+  RequestedOpen: { reason: SelectChangeReason },
+  RequestedClose: { reason: SelectChangeReason },
   Picked: { value: SelectValue, reason: SelectChangeReason },
   Settled: { open: Schema.Boolean }
 })
 
 /**
- * What a `Select` asks of its parent.
+ * What a `Select` emits.
  *
  * @stability experimental
  * @category models
@@ -548,7 +550,7 @@ const open = (
     pressedItem: false,
     releaseSelected: false,
     releaseUnselected: false
-  }).emit(SelectEvents.Opened({ reason }))
+  }).emit(SelectEvents.RequestedOpen({ reason }))
 }
 
 const dismiss = (
@@ -560,7 +562,7 @@ const dismiss = (
 ) =>
   $.props.open
     ? $.set({ ...model, closeMethod: method, focusLeft, pressing: false, spaceDown: false }).emit(
-      SelectEvents.Dismissed({ reason })
+      SelectEvents.RequestedClose({ reason })
     )
     : model
 
@@ -581,7 +583,7 @@ const pick = (model: SelectModel, $: SelectUpdate, value: string, method: Select
   }
   return $.set({ ...next, closeMethod: method, focusLeft: false, pressing: false })
     .emit(SelectEvents.Picked({ value, reason: "item-press" }))
-    .emit(SelectEvents.Dismissed({ reason: "item-press" }))
+    .emit(SelectEvents.RequestedClose({ reason: "item-press" }))
 }
 
 const highlight = (model: SelectModel, props: SelectProps, index: number): SelectModel => {

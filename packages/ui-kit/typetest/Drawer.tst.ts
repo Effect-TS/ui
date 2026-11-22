@@ -32,12 +32,12 @@ describe("Drawer", () => {
         virtualKeyboard: true
       },
       onEmit: {
-        Opened: ({ reason, triggerId }) => {
+        RequestedOpen: ({ reason, triggerId }) => {
           expect(triggerId).type.toBe<string | null>()
           expect(reason).type.toBe<"trigger-press" | "swipe">()
           return Msg.Clicked()
         },
-        Dismissed: ({ reason }) => {
+        RequestedClose: ({ reason }) => {
           expect(reason).type.toBe<DrawerDismissReason>()
           return undefined
         },

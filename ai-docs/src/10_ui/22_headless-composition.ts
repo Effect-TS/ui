@@ -24,8 +24,8 @@ const TagPickerMessage = UiSchema.TaggedEnum({
 })
 
 // The consumer owns the tags, as it owns a Listbox's `selected`, so the
-// picker reports every change as the whole new list.
-export const TagPickerEvents = UiSchema.TaggedEnum({ Changed: { tags: Schema.Array(Schema.String) } })
+// picker asks for every change as the whole new list.
+export const TagPickerEvents = UiSchema.TaggedEnum({ Updated: { tags: Schema.Array(Schema.String) } })
 
 export const TagPicker = Component.define({
   name: "TagPicker",
@@ -44,10 +44,10 @@ export const TagPicker = Component.define({
     return TagPickerMessage.match(message, {
       PickedTag: ({ id }) =>
         $.set({ announced: `Added ${label(id)}` })
-          .emit(TagPickerEvents.Changed({ tags: [...$.props.tags, id] })),
+          .emit(TagPickerEvents.Updated({ tags: [...$.props.tags, id] })),
       ClickedRemove: ({ id }) =>
         $.set({ announced: `Removed ${label(id)}` })
-          .emit(TagPickerEvents.Changed({ tags: $.props.tags.filter((tag) => tag !== id) }))
+          .emit(TagPickerEvents.Updated({ tags: $.props.tags.filter((tag) => tag !== id) }))
     })
   },
   // `p.child(Listbox, ...)` declares a Listbox that this component owns. It
@@ -91,7 +91,7 @@ export const TagPicker = Component.define({
 // A consumer: one closure draws the picker's parts and the Listbox's
 // ---------------------------------------------------------------------------
 
-const NoteTagsMessage = UiSchema.TaggedEnum({ ChangedTags: { tags: Schema.Array(Schema.String) } })
+const NoteTagsMessage = UiSchema.TaggedEnum({ UpdatedTags: { tags: Schema.Array(Schema.String) } })
 
 const options: ReadonlyArray<ListboxOption> = [
   { id: "work", label: "Work" },
@@ -110,11 +110,11 @@ export const NoteTags = Component.define({
   update: (_model, { tags }) => ({ tags }),
   // A consumer places a composed component as it places any headless one.
   // It doesn't know a Listbox is inside: it sees one set of parts, and hears
-  // only the picker's `Changed`.
+  // only the picker's `Updated`.
   view: (model, h) =>
     TagPicker(h, {
       props: { options, tags: model.tags },
-      onEmit: { Changed: ({ tags }) => NoteTagsMessage.ChangedTags({ tags }) },
+      onEmit: { Updated: ({ tags }) => NoteTagsMessage.UpdatedTags({ tags }) },
       view: (tagPicker) =>
         h.div.class("note-tags").children(
           h.ul.attr("aria-label", "Tags").children(
@@ -158,11 +158,11 @@ export const pickedAndRemoved = Effect.gen(function*() {
       )
   })
   s.childEmit(Listbox, { _tag: "Picked", id: "work" })
-    .emitted(TagPickerEvents.Changed({ tags: ["work"] }))
+    .emitted(TagPickerEvents.Updated({ tags: ["work"] }))
     .expect(Locator.text("Added Work")).toExist()
     // The consumer owns the tags: it passes the new list back as props.
     .props({ options, tags: ["work"] })
     .click(HtmlLocator.role("button", { name: "Remove Work" }))
-    .emitted(TagPickerEvents.Changed({ tags: [] }))
+    .emitted(TagPickerEvents.Updated({ tags: [] }))
     .expect(Locator.text("Removed Work")).toExist()
 })

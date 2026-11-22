@@ -61,11 +61,11 @@ describe("ToastProvider", () => {
     Component.define({ name: "Sender", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
       update: (model, _message, $) => {
-        expect($.send).type.toBeCallableWith(ToastProvider, { _tag: "AddedToast", toast: { id: "a", title: "A" } })
-        expect($.send).type.toBeCallableWith(ToastProvider, { _tag: "UpdatedToast", id: "a", type: "success" })
-        expect($.send).type.toBeCallableWith(ToastProvider, { _tag: "ClosedToast", id: "a" })
+        expect($.send).type.toBeCallableWith(ToastProvider, { _tag: "RequestedAdd", toast: { id: "a", title: "A" } })
+        expect($.send).type.toBeCallableWith(ToastProvider, { _tag: "RequestedUpdate", id: "a", type: "success" })
+        expect($.send).type.toBeCallableWith(ToastProvider, { _tag: "RequestedClose", id: "a" })
         expect($.send).type.not.toBeCallableWith(ToastProvider, { _tag: "ClickedClose", id: "a" })
-        expect($.send).type.not.toBeCallableWith(ToastProvider, { _tag: "AddedToast", toast: { title: "A" } })
+        expect($.send).type.not.toBeCallableWith(ToastProvider, { _tag: "RequestedAdd", toast: { title: "A" } })
         return model
       },
       view: (_, h) => h.div

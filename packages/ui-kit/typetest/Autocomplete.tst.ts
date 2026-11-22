@@ -21,7 +21,9 @@ describe("Autocomplete", () => {
 
   it("reports the text and never a selection", () => {
     expect<Extract<AutocompleteEvents, { readonly _tag: "Updated" }>["value"]>().type.toBe<string>()
-    expect<AutocompleteEvents["_tag"]>().type.toBe<"Opened" | "Dismissed" | "Updated" | "Highlighted" | "Settled">()
+    expect<AutocompleteEvents["_tag"]>().type.toBe<
+      "RequestedOpen" | "RequestedClose" | "Updated" | "Highlighted" | "Settled"
+    >()
     expect<Extract<AutocompleteEvents, { readonly _tag: "Updated" }>["reason"]>().type.not.toBeAssignableFrom<
       "chip-remove-press"
     >()

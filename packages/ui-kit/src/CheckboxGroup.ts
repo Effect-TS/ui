@@ -62,7 +62,7 @@
  *
  * const fruits = ["apple", "pear", "plum"]
  *
- * const BasketMessage = UiSchema.TaggedEnum({ ChangedFruits: { value: Schema.Array(Schema.String) } })
+ * const BasketMessage = UiSchema.TaggedEnum({ UpdatedFruits: { value: Schema.Array(Schema.String) } })
  *
  * const Basket = Component.define({
  *   name: "Basket",
@@ -73,12 +73,12 @@
  * }).make({
  *   init: () => ({ fruits: ["apple"] }),
  *   update: {
- *     ChangedFruits: (model, { value }) => ({ ...model, fruits: value })
+ *     UpdatedFruits: (model, { value }) => ({ ...model, fruits: value })
  *   },
  *   view: (model, h) =>
  *     CheckboxGroup(h, {
  *       props: { value: model.fruits, allValues: fruits, name: "fruit" },
- *       onEmit: { Updated: ({ value }) => BasketMessage.ChangedFruits({ value }) },
+ *       onEmit: { Updated: ({ value }) => BasketMessage.UpdatedFruits({ value }) },
  *       view: (checkboxGroup) =>
  *         checkboxGroup.root(h.div.class("fruits").attr("aria-label", "Fruit")).children(
  *           h.label.children(
@@ -148,8 +148,8 @@ export const CheckboxGroupProps = Schema.Struct({
 export type CheckboxGroupProps = typeof CheckboxGroupProps.Type
 
 /**
- * `Updated` reports the ticked values the user asked for, after a member or
- * the parent was clicked. Store them and pass them back as `value`.
+ * `Updated` asks for the ticked values in `value`, after a member or the
+ * parent was clicked. Store them and pass them back as `value`.
  *
  * @stability experimental
  * @category schemas

@@ -82,8 +82,8 @@ const partsOf = (s: { readonly parts: (f: (autocomplete: Parts) => void) => unkn
   return parts!
 }
 
-const opened = (reason: string) => ({ _tag: "Opened", reason }) as AutocompleteEvents
-const dismissed = (reason: string) => ({ _tag: "Dismissed", reason }) as AutocompleteEvents
+const opened = (reason: string) => ({ _tag: "RequestedOpen", reason }) as AutocompleteEvents
+const dismissed = (reason: string) => ({ _tag: "RequestedClose", reason }) as AutocompleteEvents
 const updated = (value: string, reason = "input-change") => ({ _tag: "Updated", value, reason }) as AutocompleteEvents
 const highlighted = (value: string | null, index: number, reason = "keyboard") =>
   ({ _tag: "Highlighted", value, index, reason }) as AutocompleteEvents

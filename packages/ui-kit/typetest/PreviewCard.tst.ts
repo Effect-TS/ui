@@ -58,12 +58,12 @@ describe("PreviewCard", () => {
           key: "p",
           props: { open: false },
           onEmit: {
-            Opened: ({ reason, triggerId }) => {
+            RequestedOpen: ({ reason, triggerId }) => {
               expect(reason).type.toBe<PreviewCardOpenReason>()
               expect(triggerId).type.toBe<string | null>()
               return Msg.Clicked()
             },
-            Dismissed: ({ reason }) => {
+            RequestedClose: ({ reason }) => {
               expect(reason).type.toBe<PreviewCardDismissReason>()
               return Msg.Clicked()
             },

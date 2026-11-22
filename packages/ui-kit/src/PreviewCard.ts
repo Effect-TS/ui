@@ -5,8 +5,8 @@
  * `PreviewCard` is headless: it owns the hover and focus timing, the data
  * attributes, the popup's place in the top layer and its position, and the
  * consumer draws the markup. The consumer owns whether the card is open,
- * passes it as `open`, and stores what the `Opened` and `Dismissed`
- * events report. The card stays as it is until `open` changes, so a
+ * passes it as `open`, and stores what the `RequestedOpen` and `RequestedClose`
+ * events ask for. The card stays as it is until `open` changes, so a
  * consumer can refuse a close.
  *
  * The link stays the only way in for assistive technology: the trigger
@@ -26,13 +26,13 @@
  * | `viewport`   | `<div>` around content that changes with the trigger |
  * | `arrow`      | `<div>` that points at the trigger                   |
  *
- * Each part takes the consumer's builder and returns it with the part
- * applied, and the consumer adds the children:
+ * Each part takes the consumer's builder and returns it with the part applied,
+ * and the consumer adds the children:
  * `previewCard.portal(h.div)?.children(previewCard.positioner(h.div).children(previewCard.popup(h.div).children("…")))`.
  * The trigger takes an options object, `previewCard.trigger({ element: h.a })`,
- * since each trigger has its own delays. The portal returns `undefined`
- * while the card is closed, unless `keepMounted`. `backdrop`, `viewport`
- * and `arrow` are optional.
+ * since each trigger has its own delays. The portal returns `undefined` while
+ * the card is closed, unless `keepMounted`. `backdrop`, `viewport` and `arrow`
+ * are optional.
  *
  * The portal is shown as a manual popover, so the card sits in the top layer.
  * The kit resets its box inline to an empty one with nothing visible of its
@@ -105,21 +105,21 @@
  *
  * **Several triggers**
  *
- * Every trigger reports its `id` in `Opened`, the consumer's or a generated
- * one. Store it and pass it as `triggerId`: the popup is placed against that
- * trigger, and the consumer draws the content for it. Hovering another
- * trigger while the card is open moves it there at once.
+ * Every trigger reports its `id` in `RequestedOpen`, the consumer's or a
+ * generated one. Store it and pass it as `triggerId`: the popup is placed
+ * against that trigger, and the consumer draws the content for it. Hovering
+ * another trigger while the card is open moves it there at once.
  *
- * To animate the content as the card moves from one trigger to another,
- * draw it inside `previewCard.viewport(h.div)`, in the popup. The viewport puts its
+ * To animate the content as the card moves from one trigger to another, draw it
+ * inside `previewCard.viewport(h.div)`, in the popup. The viewport puts its
  * children in a `<div data-current>`. While the card moves, it keeps what the
  * last trigger showed in a `<div data-previous>` before it, inert and out of
  * the flow, has `data-transitioning`, and names where the new trigger is from
- * the last one in `data-activation-direction`: `left` or `right`, a space,
- * then `up` or `down`, each left out within 5 pixels. The new content has
- * `data-starting-style` for the first frame and the old one
- * `data-ending-style` after it, and the old content is removed once the new
- * content's transitions finish.
+ * the last one in `data-activation-direction`: `left` or `right`, a space, then
+ * `up` or `down`, each left out within 5 pixels. The new content has
+ * `data-starting-style` for the first frame and the old one `data-ending-style`
+ * after it, and the old content is removed once the new content's transitions
+ * finish.
  *
  * With a viewport, the positioner's inline style also carries
  * `--positioner-width` and `--positioner-height`, the popup's size for the
@@ -130,9 +130,9 @@
  * animates the resize.
  *
  * A `PreviewCardTrigger` opens a card from another part of the page. Give the
- * card an `id` and the trigger the same `popupId`. Its hovers and focus
- * reach the card by themselves, so they arrive as the card's own `Opened`
- * and `Dismissed`.
+ * card an `id` and the trigger the same `popupId`. Its hovers and focus reach
+ * the card by themselves, so they arrive as the card's own `RequestedOpen` and
+ * `RequestedClose`.
  *
  * **Limits**
  *
@@ -149,7 +149,7 @@
  * import { PreviewCard } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
- * const ArticleMessage = UiSchema.TaggedEnum({ OpenedPreview: {}, DismissedPreview: {} })
+ * const ArticleMessage = UiSchema.TaggedEnum({ RequestedOpenPreview: {}, RequestedClosePreview: {} })
  *
  * const Article = Component.define({
  *   name: "Article",
@@ -160,15 +160,15 @@
  * }).make({
  *   init: () => ({ preview: true }),
  *   update: {
- *     OpenedPreview: (model) => ({ ...model, preview: true }),
- *     DismissedPreview: (model) => ({ ...model, preview: false })
+ *     RequestedOpenPreview: (model) => ({ ...model, preview: true }),
+ *     RequestedClosePreview: (model) => ({ ...model, preview: false })
  *   },
  *   view: (model, h) =>
  *     PreviewCard(h, {
  *       props: { open: model.preview, sideOffset: 8 },
  *       onEmit: {
- *         Opened: () => ArticleMessage.OpenedPreview(),
- *         Dismissed: () => ArticleMessage.DismissedPreview(),
+ *         RequestedOpen: () => ArticleMessage.RequestedOpenPreview(),
+ *         RequestedClose: () => ArticleMessage.RequestedClosePreview(),
  *         Settled: () => undefined
  *       },
  *       view: (previewCard) =>
@@ -268,7 +268,7 @@ export type PreviewCardAlign = typeof PreviewCardAlign.Type
  *
  * - `open`: whether the card shows. Required: the consumer owns it.
  * - `triggerId`: the `id` of the trigger the card is open for, from
- *   `Opened`. The popup is placed against it, and only it gets
+ *   `RequestedOpen`. The popup is placed against it, and only it gets
  *   `data-popup-open`. With none, the card remembers the trigger that last
  *   asked to open it.
  * - `keepMounted`: the portal stays in the page while the card is closed,
@@ -358,9 +358,9 @@ export const PreviewCardDismissReason = Schema.Literals([
 export type PreviewCardDismissReason = typeof PreviewCardDismissReason.Type
 
 /**
- * `Opened` requests that the card open, with the `id` of the trigger and
+ * `RequestedOpen` asks for the card to open, with the `id` of the trigger and
  * the reason. It is also emitted while the card is open, when another
- * trigger asks for it. `Dismissed` requests that it close, with the reason.
+ * trigger asks for it. `RequestedClose` asks for it to close, with the reason.
  * The consumer decides whether to change `open`. `Settled` reports that the
  * transitions and animations of an open or a close finished.
  *
@@ -369,8 +369,8 @@ export type PreviewCardDismissReason = typeof PreviewCardDismissReason.Type
  * @since 0.1.0
  */
 export const PreviewCardEvents = UiSchema.TaggedEnum({
-  Opened: { triggerId: Schema.NullOr(Schema.String), reason: PreviewCardOpenReason },
-  Dismissed: { reason: PreviewCardDismissReason },
+  RequestedOpen: { triggerId: Schema.NullOr(Schema.String), reason: PreviewCardOpenReason },
+  RequestedClose: { reason: PreviewCardDismissReason },
   Settled: { open: Schema.Boolean }
 })
 
@@ -524,13 +524,13 @@ const openFor = (
     closeReason: null,
     transition: $.props.open ? model.transition : null
   }).run(Command.interrupt(WaitBeforeOpening), Command.interrupt(WaitBeforeClosing)).emit(
-    PreviewCardEvents.Opened({ triggerId, reason })
+    PreviewCardEvents.RequestedOpen({ triggerId, reason })
   )
 
 const dismiss = (model: PreviewCardModel, $: PreviewCardUpdate, reason: PreviewCardDismissReason) =>
   $.props.open
     ? $.set({ ...model, closeReason: reason }).run(Command.interrupt(WaitBeforeClosing)).emit(
-      PreviewCardEvents.Dismissed({ reason })
+      PreviewCardEvents.RequestedClose({ reason })
     )
     : model
 
@@ -862,11 +862,11 @@ export interface PreviewCardTriggerProps {
  *
  * **Details**
  *
- * Its hovers and focus reach the card with that `id` by themselves, so the
- * card emits `Opened` and `Dismissed` for them as for its own `trigger`
+ * Its hovers and focus reach the card with that `id` by themselves, so the card
+ * emits `RequestedOpen` and `RequestedClose` for them as for its own `trigger`
  * part, with this link's `id`. Give the link an `id` and pass the one
- * `Opened` reports as the card's `triggerId`, so the popup is placed against
- * it. Nothing happens while no card with that `id` is drawn.
+ * `RequestedOpen` reports as the card's `triggerId`, so the popup is placed
+ * against it. Nothing happens while no card with that `id` is drawn.
  *
  * It sets `data-popup-open` and the attribute the card finds its triggers by,
  * in `forward`, so they win over the caller's. It takes the element's mount,
@@ -905,7 +905,7 @@ export const PreviewCardTrigger = <Msg, R = never>(
  * and `instant`.
  *
  * The `trigger` part takes `{ element, delay, closeDelay }`. It reports the
- * `id` the consumer gave the element in `Opened`, and gives a trigger
+ * `id` the consumer gave the element in `RequestedOpen`, and gives a trigger
  * without one a generated `id`.
  *
  * Each part's attributes win over the ones the consumer set on the builder
@@ -920,7 +920,7 @@ export const PreviewCardTrigger = <Msg, R = never>(
  * to a part runs after the card's own. The trigger takes the element's
  * mount.
  *
- * It emits `Opened`, `Dismissed` and `Settled`.
+ * It emits `RequestedOpen`, `RequestedClose` and `Settled`.
  *
  * On the server and on a host that doesn't run mounts, the card renders
  * closed and isn't placed.

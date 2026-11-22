@@ -2,12 +2,12 @@
  * A popup anchored to a trigger, for content the user asks for and can act
  * on, such as a filter form, a profile card or a list of notifications.
  *
- * `Popover` is headless: it is a non-modal `Dialog` placed next to its trigger by
- * `Positioning`. It owns the ids, the ARIA, the data attributes, focus,
+ * `Popover` is headless: it is a non-modal `Dialog` placed next to its trigger
+ * by `Positioning`. It owns the ids, the ARIA, the data attributes, focus,
  * dismissal and the popup's position, and the consumer draws the markup. The
  * consumer owns whether the popover is open, passes it as `open`, and stores
- * what the `Opened` and `Dismissed` events report. The popover stays as it
- * is until `open` changes, so a consumer can refuse a close.
+ * what the `RequestedOpen` and `RequestedClose` events ask for. The popover
+ * stays as it is until `open` changes, so a consumer can refuse a close.
  *
  * **Anatomy**
  *
@@ -26,13 +26,13 @@
  * | `initialFocus` | any element, focused when the popover opens               |
  * | `finalFocus`   | any element, focused when the popover closes              |
  *
- * Each part takes the consumer's builder and returns it with the part
- * applied, and the consumer adds the children:
+ * Each part takes the consumer's builder and returns it with the part applied,
+ * and the consumer adds the children:
  * `popover.portal(h.dialog)?.children(popover.positioner(h.div).children(popover.popup(h.div).children("Saved")))`.
- * The trigger takes an options object, `popover.trigger({ element: h.button })`,
- * since each trigger has its own hover options. The portal returns `undefined`
- * while the popover is closed, unless `keepMounted`. `backdrop`, `viewport`
- * and `arrow` are optional.
+ * The trigger takes an options object, `popover.trigger({ element: h.button
+ * })`, since each trigger has its own hover options. The portal returns
+ * `undefined` while the popover is closed, unless `keepMounted`. `backdrop`,
+ * `viewport` and `arrow` are optional.
  *
  * The portal is a `<dialog>` shown as a manual popover, so the popup sits in
  * the top layer and needs no portal to another place in the document. The kit
@@ -108,10 +108,10 @@
  *
  * **Several triggers**
  *
- * Every trigger reports its `id` in `Opened`, the consumer's or a generated
- * one. Store it and pass it as `triggerId`: the popup is placed against that
- * trigger, and the consumer draws the content for it. `popover.triggerId` is the
- * one the popover is open for.
+ * Every trigger reports its `id` in `RequestedOpen`, the consumer's or a
+ * generated one. Store it and pass it as `triggerId`: the popup is placed
+ * against that trigger, and the consumer draws the content for it.
+ * `popover.triggerId` is the one the popover is open for.
  *
  * To animate the content as the popover moves from one trigger to another,
  * draw it inside `popover.viewport(h.div)`, in the popup. The viewport puts
@@ -136,7 +136,7 @@
  * A `PopoverTrigger` opens a popover from another part of the page. Give the
  * popover an `id` and the trigger the same `popupId`. Its presses and hovers
  * reach the popover by themselves, so they arrive as the popover's own
- * `Opened` and `Dismissed`.
+ * `RequestedOpen` and `RequestedClose`.
  *
  * **Inside a dialog**
  *
@@ -159,7 +159,7 @@
  * import { Popover } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
- * const InboxMessage = UiSchema.TaggedEnum({ OpenedNotifications: {}, DismissedNotifications: {} })
+ * const InboxMessage = UiSchema.TaggedEnum({ RequestedOpenNotifications: {}, RequestedCloseNotifications: {} })
  *
  * const Inbox = Component.define({
  *   name: "Inbox",
@@ -170,15 +170,15 @@
  * }).make({
  *   init: () => ({ notifications: true }),
  *   update: {
- *     OpenedNotifications: (model) => ({ ...model, notifications: true }),
- *     DismissedNotifications: (model) => ({ ...model, notifications: false })
+ *     RequestedOpenNotifications: (model) => ({ ...model, notifications: true }),
+ *     RequestedCloseNotifications: (model) => ({ ...model, notifications: false })
  *   },
  *   view: (model, h) =>
  *     Popover(h, {
  *       props: { open: model.notifications, sideOffset: 8 },
  *       onEmit: {
- *         Opened: () => InboxMessage.OpenedNotifications(),
- *         Dismissed: () => InboxMessage.DismissedNotifications(),
+ *         RequestedOpen: () => InboxMessage.RequestedOpenNotifications(),
+ *         RequestedClose: () => InboxMessage.RequestedCloseNotifications(),
  *         Settled: () => undefined
  *       },
  *       view: (popover) =>
@@ -286,9 +286,9 @@ export type PopoverAlign = typeof PopoverAlign.Type
  * - `modal`: `false` by default, `"trap-focus"` or `true`, as the module
  *   describes. A popover opened by hover is never modal.
  * - `triggerId`: the `id` of the trigger the popover is open for, from
- *   `Opened`. The popup is placed against it, only it gets `aria-expanded` and
- *   `data-popup-open`, and focus goes back to it. With none, the popover
- *   remembers the trigger that last asked to open it.
+ *   `RequestedOpen`. The popup is placed against it, only it gets
+ *   `aria-expanded` and `data-popup-open`, and focus goes back to it. With
+ *   none, the popover remembers the trigger that last asked to open it.
  * - `keepMounted`: the portal stays in the page while the popover is closed,
  *   hidden.
  * - `initialFocus`: `false` leaves focus where it is when the popover opens.
@@ -381,11 +381,11 @@ export const PopoverDismissReason = Schema.Literals([...DialogDismissReason.lite
 export type PopoverDismissReason = typeof PopoverDismissReason.Type
 
 /**
- * `Opened` requests that the popover open, with the `id` of the trigger and
- * the reason. It is also emitted while the popover is open, when another
+ * `RequestedOpen` asks for the popover to open, with the `id` of the trigger
+ * and the reason. It is also emitted while the popover is open, when another
  * trigger asks for it, or when a press keeps a popover that hover opened.
- * `Dismissed` requests that it close, with the reason. The consumer decides
- * whether to change `open`. `Settled` reports that the transitions and
+ * `RequestedClose` asks for it to close, with the reason. The consumer
+ * decides whether to change `open`. `Settled` reports that the transitions and
  * animations of an open or a close finished.
  *
  * @stability experimental
@@ -393,8 +393,8 @@ export type PopoverDismissReason = typeof PopoverDismissReason.Type
  * @since 0.1.0
  */
 export const PopoverEvents = UiSchema.TaggedEnum({
-  Opened: { triggerId: Schema.NullOr(Schema.String), reason: PopoverOpenReason },
-  Dismissed: { reason: PopoverDismissReason },
+  RequestedOpen: { triggerId: Schema.NullOr(Schema.String), reason: PopoverOpenReason },
+  RequestedClose: { reason: PopoverDismissReason },
   Settled: { open: Schema.Boolean }
 })
 
@@ -421,8 +421,8 @@ const Hover = Schema.Struct({ delay: Schema.Number, closeDelay: Schema.Number })
 type Hover = typeof Hover.Type
 
 const PopoverMessage = UiSchema.TaggedEnum({
-  OpenedDialog: { triggerId: Schema.NullOr(Schema.String) },
-  DismissedDialog: { reason: DialogDismissReason },
+  RequestedOpenDialog: { triggerId: Schema.NullOr(Schema.String) },
+  RequestedCloseDialog: { reason: DialogDismissReason },
   SettledDialog: { open: Schema.Boolean },
   EnteredTrigger: { triggerId: Schema.NullOr(Schema.String), ...Hover.fields, at: Schema.NullOr(Point) },
   LeftTrigger: { triggerId: Schema.NullOr(Schema.String), at: Schema.NullOr(Point) },
@@ -522,11 +522,11 @@ const openFor = (
     Command.interrupt(WaitBeforeOpening),
     Command.interrupt(WaitBeforeClosing),
     reason === "trigger-hover" ? WaitBeforeClosingOnPress.make({}) : Command.interrupt(WaitBeforeClosingOnPress)
-  ).emit(PopoverEvents.Opened({ triggerId, reason }))
+  ).emit(PopoverEvents.RequestedOpen({ triggerId, reason }))
 
 const dismiss = (model: PopoverModel, $: PopoverUpdate, reason: PopoverDismissReason) =>
   $.set({ ...model, closeReason: reason }).run(Command.interrupt(WaitBeforeClosing)).emit(
-    PopoverEvents.Dismissed({ reason })
+    PopoverEvents.RequestedClose({ reason })
   )
 
 const pressed = (model: PopoverModel, $: PopoverUpdate) =>
@@ -633,7 +633,7 @@ const TrackSwitch = Mount.makeStream(
  *
  * - `open`: whether the popover is open for this trigger.
  * - `popupId`: the popover's `id`.
- * - `pressed`: whether the popover is open by a press, from `Opened`'s
+ * - `pressed`: whether the popover is open by a press, from `RequestedOpen`'s
  *   reason, for `data-pressed`.
  * - `disabled`: the trigger takes no press and no hover.
  * - `openOnHover`, `delay`, `closeDelay`: as on the `trigger` part.
@@ -659,12 +659,11 @@ export interface PopoverTriggerProps {
  *
  * **Details**
  *
- * Its presses and hovers reach the popover with that `id` by themselves, so
- * the popover emits `Opened` and `Dismissed` for them as for its own
+ * Its presses and hovers reach the popover with that `id` by themselves, so the
+ * popover emits `RequestedOpen` and `RequestedClose` for them as for its own
  * `trigger` part, with this trigger's `id`. Give the trigger an `id` and pass
- * the one `Opened` reports as the popover's `triggerId`, so the popup is
- * placed against it. Nothing happens while no popover with that `id` is
- * drawn.
+ * the one `RequestedOpen` reports as the popover's `triggerId`, so the popup is
+ * placed against it. Nothing happens while no popover with that `id` is drawn.
  *
  * It sets the trigger's `type`, `aria-haspopup="dialog"`, `aria-expanded`,
  * `data-popup-open`, `aria-controls` while the popover is open,
@@ -707,11 +706,11 @@ export const PopoverTrigger = <Msg, R = never>(
  * open for or last was, `openReason`, `openMethod` and `closeMethod`, `side`
  * and `align`, where the popup is, and `instant`.
  *
- * The `trigger` part takes `{ element, openOnHover, delay, closeDelay, disabled }`.
- * It reports the `id` the consumer gave the element in `Opened`, and gives a
- * trigger without one a generated `id`. Pressing the trigger the popover is
- * open for asks it to close, and pressing another one asks it to open for
- * that one.
+ * The `trigger` part takes `{ element, openOnHover, delay, closeDelay, disabled
+ * }`. It reports the `id` the consumer gave the element in `RequestedOpen`, and
+ * gives a trigger without one a generated `id`. Pressing the trigger the
+ * popover is open for asks it to close, and pressing another one asks it to
+ * open for that one.
  *
  * Each part's attributes win over the ones the consumer set on the builder
  * it passes in, including the ones a state leaves absent: on the trigger
@@ -726,7 +725,7 @@ export const PopoverTrigger = <Msg, R = never>(
  * backdrop's `pointer-events` are added after the consumer's inline style. A
  * handler the consumer adds to a part runs after the popover's own.
  *
- * It emits `Opened`, `Dismissed` and `Settled`.
+ * It emits `RequestedOpen`, `RequestedClose` and `Settled`.
  *
  * On the server and on a host that doesn't run mounts, the popover renders
  * closed, isn't placed and doesn't open on hover from a `PopoverTrigger`.
@@ -761,8 +760,8 @@ export const Popover = Component.define({
     placement: null
   }),
   update: {
-    OpenedDialog: (model, { triggerId }, $) => openFor(model, $, triggerId, "trigger-press"),
-    DismissedDialog: (model, { reason }, $) => {
+    RequestedOpenDialog: (model, { triggerId }, $) => openFor(model, $, triggerId, "trigger-press"),
+    RequestedCloseDialog: (model, { reason }, $) => {
       if (reason === "trigger-press") return pressed(model, $)
       if (reason === "focus-out" && hoverOpened(model, $.props.open)) return model
       return dismiss(model, $, reason)
@@ -911,8 +910,8 @@ export const Popover = Component.define({
         holdExit: props.holdExit
       },
       onEmit: {
-        Opened: ({ triggerId }) => PopoverMessage.OpenedDialog({ triggerId }),
-        Dismissed: ({ reason }) => PopoverMessage.DismissedDialog({ reason }),
+        RequestedOpen: ({ triggerId }) => PopoverMessage.RequestedOpenDialog({ triggerId }),
+        RequestedClose: ({ reason }) => PopoverMessage.RequestedCloseDialog({ reason }),
         Settled: ({ open }) => PopoverMessage.SettledDialog({ open })
       },
       parts: (dialog) => {

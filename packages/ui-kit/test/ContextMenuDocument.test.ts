@@ -9,8 +9,8 @@ import { byId, container, popovers, press, tick } from "./utils/document.ts"
 const items = [{ value: "copy", label: "Copy" }]
 
 const PageMessage = UiSchema.TaggedEnum({
-  Opened: { menu: Schema.String, reason: Schema.String },
-  Dismissed: { menu: Schema.String, reason: Schema.String },
+  RequestedOpen: { menu: Schema.String, reason: Schema.String },
+  RequestedClose: { menu: Schema.String, reason: Schema.String },
   Picked: { menu: Schema.String, value: Schema.String }
 })
 
@@ -24,11 +24,15 @@ const Page = Component.define({
 }).make({
   init: () => ({ outer: false, inner: false, log: [] }),
   update: {
-    Opened: (model, { menu, reason }) => ({ ...model, [menu]: true, log: [...model.log, menu + " Opened " + reason] }),
-    Dismissed: (model, { menu, reason }) => ({
+    RequestedOpen: (model, { menu, reason }) => ({
+      ...model,
+      [menu]: true,
+      log: [...model.log, menu + " RequestedOpen " + reason]
+    }),
+    RequestedClose: (model, { menu, reason }) => ({
       ...model,
       [menu]: false,
-      log: [...model.log, menu + " Dismissed " + reason]
+      log: [...model.log, menu + " RequestedClose " + reason]
     }),
     Picked: (model, { menu, value }) => ({ ...model, log: [...model.log, menu + " Picked " + value] })
   },
@@ -38,8 +42,8 @@ const Page = Component.define({
         key: name,
         props: { open: model[name], items, disabled: h.props.disabled },
         onEmit: {
-          Opened: ({ reason }) => PageMessage.Opened({ menu: name, reason }),
-          Dismissed: ({ reason }) => PageMessage.Dismissed({ menu: name, reason }),
+          RequestedOpen: ({ reason }) => PageMessage.RequestedOpen({ menu: name, reason }),
+          RequestedClose: ({ reason }) => PageMessage.RequestedClose({ menu: name, reason }),
           Picked: ({ value }) => PageMessage.Picked({ menu: name, value }),
           Highlighted: () => undefined,
           Settled: () => undefined
@@ -62,7 +66,7 @@ const Page = Component.define({
   }
 })
 
-const HybridMessage = UiSchema.TaggedEnum({ Opened: {}, Dismissed: {} })
+const HybridMessage = UiSchema.TaggedEnum({ RequestedOpen: {}, RequestedClose: {} })
 
 const Hybrid = Component.define({
   name: "Hybrid",
@@ -74,18 +78,18 @@ const Hybrid = Component.define({
 }).make({
   init: () => ({ open: false }),
   update: {
-    Opened: () => ({ open: true }),
-    Dismissed: () => ({ open: false })
+    RequestedOpen: () => ({ open: true }),
+    RequestedClose: () => ({ open: false })
   },
   view: (model, h) =>
     Menu(h, {
       props: { open: model.open, items },
       onEmit: {
-        Opened: () => HybridMessage.Opened(),
-        Dismissed: () => HybridMessage.Dismissed(),
+        RequestedOpen: () => HybridMessage.RequestedOpen(),
+        RequestedClose: () => HybridMessage.RequestedClose(),
         Picked: () => undefined,
         Highlighted: () => undefined,
-        ChangedQuery: () => undefined,
+        RequestedQuery: () => undefined,
         Settled: () => undefined
       },
       view: (menu) =>
@@ -180,7 +184,7 @@ describe("ContextMenu in a document", { concurrent: false }, () => {
       yield* tick
       assert.isFalse(shown("outer-positioner"))
       assert.strictEqual(document.activeElement, byId("before"))
-      assert.deepStrictEqual(log(), ["outer Opened trigger-press", "outer Dismissed focus-out"])
+      assert.deepStrictEqual(log(), ["outer RequestedOpen trigger-press", "outer RequestedClose focus-out"])
     }))
 
   it.effect("a context menu inside another's trigger takes the right clicks on its own trigger", () =>
@@ -198,9 +202,9 @@ describe("ContextMenu in a document", { concurrent: false }, () => {
       assert.isTrue(shown("outer-positioner"))
       assert.isFalse(shown("inner-positioner"))
       assert.deepStrictEqual(log(), [
-        "inner Opened trigger-press",
-        "inner Dismissed outside-press",
-        "outer Opened trigger-press"
+        "inner RequestedOpen trigger-press",
+        "inner RequestedClose outside-press",
+        "outer RequestedOpen trigger-press"
       ])
     }))
 
@@ -248,11 +252,11 @@ describe("ContextMenu in a document", { concurrent: false }, () => {
           })
         )
       })
-      assert.deepStrictEqual(yield* release("Linux x86_64"), ["outer Opened trigger-press"])
+      assert.deepStrictEqual(yield* release("Linux x86_64"), ["outer RequestedOpen trigger-press"])
       assert.deepStrictEqual(yield* release("MacIntel"), [
-        "outer Opened trigger-press",
+        "outer RequestedOpen trigger-press",
         "outer Picked copy",
-        "outer Dismissed item-press"
+        "outer RequestedClose item-press"
       ])
     }))
 })

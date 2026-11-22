@@ -184,8 +184,8 @@ export const CheckboxProps = Schema.Struct({
 export type CheckboxProps = typeof CheckboxProps.Type
 
 /**
- * `Toggled` reports the requested value in `checked`. Store that value
- * and pass it back as the `checked` prop to update the checkbox. Inside a
+ * `Toggled` asks for the value in `checked`. Store that value and pass it
+ * back as the `checked` prop to update the checkbox. Inside a
  * `CheckboxGroup`, a member and the parent emit it too, and the group's
  * `Updated` carries the list to store.
  *

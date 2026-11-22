@@ -425,14 +425,14 @@ const Direction = Schema.Literals([-1, 1])
 type Direction = typeof Direction.Type
 
 /**
- * What a `NumberField` asks of its parent.
+ * What a `NumberField` emits.
  *
  * **Details**
  *
- * - `Updated`: set `value` to `value`. A step also carries its
+ * - `Updated`: asks for `value` to be `value`. A step also carries its
  *   `direction`, `1` up or `-1` down.
- * - `Committed`: the user is done changing the value, and `value` is the
- *   one they left.
+ * - `Committed`: reports that the user is done changing the value, and `value`
+ *   is the one they left.
  *
  * @stability experimental
  * @category schemas
@@ -448,7 +448,7 @@ export const NumberFieldEvents = UiSchema.TaggedEnum({
 })
 
 /**
- * What a `NumberField` asks of its parent.
+ * What a `NumberField` emits.
  *
  * @stability experimental
  * @category models

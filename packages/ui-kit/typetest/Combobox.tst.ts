@@ -22,7 +22,7 @@ describe("Combobox", () => {
   it("picks a string, the strings of a multiple combobox, or nothing, and reports the text", () => {
     expect<Extract<ComboboxEvents, { readonly _tag: "Picked" }>["value"]>().type.toBe<ComboboxValue>()
     expect<ComboboxValue>().type.toBe<string | ReadonlyArray<string> | null>()
-    expect<Extract<ComboboxEvents, { readonly _tag: "EditedInput" }>["inputValue"]>().type.toBe<string>()
+    expect<Extract<ComboboxEvents, { readonly _tag: "RequestedInputValue" }>["inputValue"]>().type.toBe<string>()
   })
 
   it("each part returns the builder it was given, and the parts that can hide return undefined too", () => {

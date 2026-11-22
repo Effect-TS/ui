@@ -24,7 +24,7 @@ const Poster = Component.define({
     update: {
       ClickedPost: (model, _message, $) =>
         $.set(model + 1).send(ToastProvider, {
-          _tag: "AddedToast",
+          _tag: "RequestedAdd",
           toast: {
             id: "t" + (model + 1),
             title: "Toast",
@@ -33,8 +33,8 @@ const Poster = Component.define({
           }
         }),
       CompletedUpload: (model, _message, $) =>
-        $.set(model).send(ToastProvider, { _tag: "UpdatedToast", id: "t1", type: "success" }),
-      ClickedDrop: (model, _message, $) => $.set(model).send(ToastProvider, { _tag: "ClosedToast", id: "t" + model })
+        $.set(model).send(ToastProvider, { _tag: "RequestedUpdate", id: "t1", type: "success" }),
+      ClickedDrop: (model, _message, $) => $.set(model).send(ToastProvider, { _tag: "RequestedClose", id: "t" + model })
     },
     view: (_, h) =>
       h.div(

@@ -3,11 +3,11 @@
  * such as a form, a confirmation or a detail view.
  *
  * `Dialog` is headless: it owns the ids, the ARIA, the data attributes, focus,
- * dismissal and the popup's place in the top layer, and the consumer draws
- * the markup. The consumer owns whether the dialog is open, passes it as
- * `open`, and stores what the `Opened` and `Dismissed` events report. The dialog
- * stays as it is until `open` changes, so a consumer can refuse a close, such
- * as an editor with unsaved changes asking first.
+ * dismissal and the popup's place in the top layer, and the consumer draws the
+ * markup. The consumer owns whether the dialog is open, passes it as `open`,
+ * and stores what the `RequestedOpen` and `RequestedClose` events ask for. The
+ * dialog stays as it is until `open` changes, so a consumer can refuse a close,
+ * such as an editor with unsaved changes asking first.
  *
  * **Anatomy**
  *
@@ -24,26 +24,25 @@
  * | `initialFocus` | any element, focused when the dialog opens           |
  * | `finalFocus`   | any element, focused when the dialog closes          |
  *
- * Each part takes the consumer's builder and returns it with the part
- * applied, and the consumer adds the children:
+ * Each part takes the consumer's builder and returns it with the part applied,
+ * and the consumer adds the children:
  * `dialog.portal(h.dialog)?.children(dialog.popup(h.div).children(dialog.title(h.h2).children("Settings")))`.
  * The portal returns `undefined` while the dialog is closed, unless
- * `keepMounted`, and the backdrop returns `undefined` in a nested dialog, unless
- * `forceRenderBackdrop`. `backdrop` and `viewport` are optional. A part's result
- * is a builder, so it can also be another kit call's `element`, such as a
- * ui-kit Button's.
+ * `keepMounted`, and the backdrop returns `undefined` in a nested dialog,
+ * unless `forceRenderBackdrop`. `backdrop` and `viewport` are optional. A
+ * part's result is a builder, so it can also be another kit call's `element`,
+ * such as a ui-kit Button's.
  *
  * The portal is a `<dialog>` shown as a manual popover, in every mode, so it
  * sits in the top layer and needs no portal to another place in the document.
- * The kit resets its box inline to an empty one at the viewport's corner,
- * with nothing visible of its own, so style the backdrop, viewport and popup
- * as fixed-position layers:
- * `.viewport { position: fixed; inset: 0; display: grid; place-items: center }`.
- * With `modal: true`, the kit draws a transparent layer over the whole
- * viewport as the portal's first child, before the consumer's children. It
- * takes the presses meant for the page behind. A closed `keepMounted` portal
- * keeps it, inert, so the children after it keep their elements when the
- * dialog opens.
+ * The kit resets its box inline to an empty one at the viewport's corner, with
+ * nothing visible of its own, so style the backdrop, viewport and popup as
+ * fixed-position layers: `.viewport { position: fixed; inset: 0; display: grid;
+ * place-items: center }`. With `modal: true`, the kit draws a transparent layer
+ * over the whole viewport as the portal's first child, before the consumer's
+ * children. It takes the presses meant for the page behind. A closed
+ * `keepMounted` portal keeps it, inert, so the children after it keep their
+ * elements when the dialog opens.
  *
  * **Data attributes**
  *
@@ -158,7 +157,7 @@
  * import { Dialog } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
- * const ToolbarMessage = UiSchema.TaggedEnum({ OpenedSettings: {}, DismissedSettings: {} })
+ * const ToolbarMessage = UiSchema.TaggedEnum({ RequestedOpenSettings: {}, RequestedCloseSettings: {} })
  *
  * const Toolbar = Component.define({
  *   name: "Toolbar",
@@ -169,15 +168,15 @@
  * }).make({
  *   init: () => ({ settings: true }),
  *   update: {
- *     OpenedSettings: (model) => ({ ...model, settings: true }),
- *     DismissedSettings: (model) => ({ ...model, settings: false })
+ *     RequestedOpenSettings: (model) => ({ ...model, settings: true }),
+ *     RequestedCloseSettings: (model) => ({ ...model, settings: false })
  *   },
  *   view: (model, h) =>
  *     Dialog(h, {
  *       props: { open: model.settings },
  *       onEmit: {
- *         Opened: () => ToolbarMessage.OpenedSettings(),
- *         Dismissed: () => ToolbarMessage.DismissedSettings(),
+ *         RequestedOpen: () => ToolbarMessage.RequestedOpenSettings(),
+ *         RequestedClose: () => ToolbarMessage.RequestedCloseSettings(),
  *         Settled: () => undefined
  *       },
  *       view: (dialog) =>
@@ -353,18 +352,18 @@ export const DialogDismissReason = Schema.Literals([
 export type DialogDismissReason = typeof DialogDismissReason.Type
 
 /**
- * `Opened` requests that the dialog open, from a press on a trigger, with the
- * trigger's `id` if it has one. `Dismissed` requests that it close, with the
- * reason. The consumer decides whether to change `open`. `Settled` reports that
- * the transitions and animations of an open or a close finished.
+ * `RequestedOpen` asks for the dialog to open, from a press on a trigger, with
+ * the trigger's `id` if it has one. `RequestedClose` asks for it to close,
+ * with the reason. The consumer decides whether to change `open`. `Settled`
+ * reports that the transitions and animations of an open or a close finished.
  *
  * @stability experimental
  * @category schemas
  * @since 0.1.0
  */
 export const DialogEvents = UiSchema.TaggedEnum({
-  Opened: { triggerId: Schema.NullOr(Schema.String) },
-  Dismissed: { reason: DialogDismissReason },
+  RequestedOpen: { triggerId: Schema.NullOr(Schema.String) },
+  RequestedClose: { reason: DialogDismissReason },
   Settled: { open: Schema.Boolean }
 })
 
@@ -393,7 +392,7 @@ const DialogMessage = UiSchema.TaggedEnum({
   PressedEscape: {},
   PressedOutside: { pointerType: Schema.String },
   FocusedOutside: {},
-  RequestedClose: {},
+  CancelledCloseWatcher: {},
   ShowedPortal: {},
   RenderedFirstFrame: {},
   FinishedTransition: { open: Schema.Boolean },
@@ -423,7 +422,7 @@ const dismiss = (
   $: DialogUpdate,
   reason: DialogDismissReason,
   closeMethod: DialogInteraction | null
-) => $.set({ ...model, reason, closeMethod }).emit(DialogEvents.Dismissed({ reason }))
+) => $.set({ ...model, reason, closeMethod }).emit(DialogEvents.RequestedClose({ reason }))
 
 const blocker = new Html.Element<never>("div").attrs({
   role: "presentation",
@@ -576,7 +575,7 @@ const TrackDialog = Mount.makeStream(
           const watcher = new Watcher()
           watcher.addEventListener("cancel", (event) => {
             if (event.cancelable) event.preventDefault()
-            send(DialogMessage.RequestedClose())
+            send(DialogMessage.CancelledCloseWatcher())
           })
           watcher.addEventListener("close", () => {
             if (watched?.watcher !== watcher) return
@@ -992,8 +991,8 @@ export const DialogTrigger = <Msg, R = never>(
 
 /**
  * A headless dialog. Call it with the consumer's `h` and a `view` closure that
- * draws the trigger with `dialog.trigger` and the dialog with `dialog.portal` and the
- * parts inside it.
+ * draws the trigger with `dialog.trigger` and the dialog with `dialog.portal`
+ * and the parts inside it.
  *
  * **Details**
  *
@@ -1005,28 +1004,28 @@ export const DialogTrigger = <Msg, R = never>(
  * Draw `initialFocus` on a field only for some ways of opening by branching
  * on `dialog.openMethod`, which is `null` once the dialog closes.
  *
- * A trigger reports the `id` the consumer gave it in `Opened`: set it on the
- * builder before the part, `dialog.trigger(h.button.attr("id", "edit-" + row.id))`. A
- * trigger without one gets a generated `id`. The dialog remembers the trigger
- * that opened it: only that one reports it open, and focus goes back to it.
- * Pressing it asks the dialog to close, and pressing another one while it is
- * open asks it to open for that one, which it then remembers.
+ * A trigger reports the `id` the consumer gave it in `RequestedOpen`: set it on
+ * the builder before the part, `dialog.trigger(h.button.attr("id", "edit-" +
+ * row.id))`. A trigger without one gets a generated `id`. The dialog remembers
+ * the trigger that opened it: only that one reports it open, and focus goes
+ * back to it. Pressing it asks the dialog to close, and pressing another one
+ * while it is open asks it to open for that one, which it then remembers.
  *
- * Each part's attributes win over the ones the consumer set on the builder
- * it passes in, including the ones a state leaves absent: on the trigger
- * `type`, `aria-haspopup`, `aria-expanded`, `aria-controls`, `data-popup-open`,
- * and `data-dialog-trigger`, which the dialog tells its triggers by; on the
- * portal `id`, `popover` and `open`; `role` on the backdrop and the viewport; the
- * data attributes on the backdrop (including `data-dialog-backdrop`), viewport
- * and popup; `id`, `tabindex` and `inert` on the popup; `type` on the close part; `autofocus` on `initialFocus`; and
- * `data-final-focus`, which the dialog finds the element by, on `finalFocus`.
- * The title and description keep an `id` the consumer gives them, and get a
- * generated one otherwise. The portal's `aria-labelledby` and `aria-describedby`
- * point at the title and description that are drawn, after the consumer's
- * own. The portal's box, the backdrop's `user-select`, the `pointer-events` of
- * the closing backdrop and viewport, and the popup's `--nested-dialogs` are added
- * after the consumer's inline style. A handler the consumer adds to a part
- * runs after the dialog's own.
+ * Each part's attributes win over the ones the consumer set on the builder it
+ * passes in, including the ones a state leaves absent: on the trigger `type`,
+ * `aria-haspopup`, `aria-expanded`, `aria-controls`, `data-popup-open`, and
+ * `data-dialog-trigger`, which the dialog tells its triggers by; on the portal
+ * `id`, `popover` and `open`; `role` on the backdrop and the viewport; the data
+ * attributes on the backdrop (including `data-dialog-backdrop`), viewport and
+ * popup; `id`, `tabindex` and `inert` on the popup; `type` on the close part;
+ * `autofocus` on `initialFocus`; and `data-final-focus`, which the dialog finds
+ * the element by, on `finalFocus`. The title and description keep an `id` the
+ * consumer gives them, and get a generated one otherwise. The portal's
+ * `aria-labelledby` and `aria-describedby` point at the title and description
+ * that are drawn, after the consumer's own. The portal's box, the backdrop's
+ * `user-select`, the `pointer-events` of the closing backdrop and viewport, and
+ * the popup's `--nested-dialogs` are added after the consumer's inline style. A
+ * handler the consumer adds to a part runs after the dialog's own.
  *
  * On the server and on a host that doesn't run mounts, the dialog renders
  * closed, stays at `data-starting-style` and closes without waiting for a
@@ -1080,7 +1079,7 @@ export const Dialog = Component.define({
         return dismiss(model, $, "trigger-press", method)
       }
       return $.set({ ...model, trigger: key, reason: null, openMethod: method }).emit(
-        DialogEvents.Opened({ triggerId })
+        DialogEvents.RequestedOpen({ triggerId })
       )
     },
     ClickedClose: (model, { pointerType }, $) =>
@@ -1091,7 +1090,7 @@ export const Dialog = Component.define({
       $.props.open && topmost(model) && $.props.disablePointerDismissal !== true
         ? dismiss(model, $, "outside-press", methodOf(pointerType))
         : model,
-    RequestedClose: (model, _message, $) =>
+    CancelledCloseWatcher: (model, _message, $) =>
       $.props.open && topmost(model) ? dismiss(model, $, "close-watcher", null) : model,
     FocusedOutside: (model, _message, $) =>
       $.props.open && topmost(model) && $.props.modal === false && $.props.disablePointerDismissal !== true

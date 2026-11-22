@@ -196,7 +196,7 @@ export type ToggleGroupProps = typeof ToggleGroupProps.Type
  *
  * **Details**
  *
- * - `Toggled`: the group's value the user asked for. Pressing an item
+ * - `Toggled`: asks for the group's value in `value`. Pressing an item
  *   gives `[value]` and pressing the pressed one gives `[]`. With
  *   `multiple`, the item's value is added at the end or removed. Store it
  *   and pass it back as the `value` prop. A disabled group or item emits

@@ -156,12 +156,12 @@ const partsOf = (s: { readonly parts: (f: (combobox: Parts) => void) => unknown 
   return parts!
 }
 
-const opened = (reason: string) => ({ _tag: "Opened", reason }) as ComboboxEvents
-const dismissed = (reason: string) => ({ _tag: "Dismissed", reason }) as ComboboxEvents
+const opened = (reason: string) => ({ _tag: "RequestedOpen", reason }) as ComboboxEvents
+const dismissed = (reason: string) => ({ _tag: "RequestedClose", reason }) as ComboboxEvents
 const picked = (value: string | ReadonlyArray<string> | null, reason = "item-press") =>
   ({ _tag: "Picked", value, reason }) as ComboboxEvents
 const edited = (inputValue: string, reason = "input-change") =>
-  ({ _tag: "EditedInput", inputValue, reason }) as ComboboxEvents
+  ({ _tag: "RequestedInputValue", inputValue, reason }) as ComboboxEvents
 const highlighted = (value: string | null, index: number, reason = "keyboard") =>
   ({ _tag: "Highlighted", value, index, reason }) as ComboboxEvents
 const settled = (open: boolean) => ({ _tag: "Settled", open }) as ComboboxEvents

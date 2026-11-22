@@ -149,7 +149,8 @@ the current Model. `Set*`, `Update*` and bare imperatives such as `Save` or
 | Message from a child's failure                | `Failed`, then the parent's name for the child            | `FailedEditor`                                                  |
 | Message with more than one cause              | The fact the causes share                                 | `RequestedSave`                                                 |
 | Two events a payload could tell apart         | One message each, named for its own cause                 | `FocusedSearchInput`, `BlurredSearchInput`                      |
-| Event                                         | What the user did, past tense, with no cause              | `Toggled`, `Picked`, `Saved`                                    |
+| Event that reports                            | What is already so, past tense, with no cause             | `Settled`, `Highlighted`, `Submitted`                           |
+| Event that requests                           | `Requested` plus the change, or the user's act            | `RequestedOpen`, `RequestedClose`, `Toggled`, `Picked`          |
 | Command                                       | Imperative, for what its body does                        | `SaveNote`, `WaitBeforeDismissal`                               |
 | Mount                                         | Imperative, for what it does to the element               | `DrawChart`, `Measure`, `TrackPointer`                          |
 | Parts argument of a headless component        | The component's name in camel case, in full               | `listbox`, `tooltipProvider`                                    |
@@ -161,6 +162,23 @@ dismissed is `WaitBeforeDismissal`, not `DismissAfter`. `RequestedSave` in
 `NoteEditor` comes from the form, Ctrl+S and the autosave Subscription, so
 it names what all three report.
 
+An event reports or requests. Suppose the parent maps it to `undefined`. If
+what the name says is still so, because it describes the component's own
+Model, the DOM or a gesture that ended, the event reports, and takes a
+past-tense fact: `Settled`, `Highlighted`, `Submitted`. If it carries or
+implies a new value for a prop, it requests, and its name is `Requested` plus
+the change: `RequestedOpen`, `RequestedClose`, `RequestedQuery`.
+
+A request may take the name of the user's act instead, as
+`Toggled({ checked })` and `Picked({ value })` do, only when both hold: every
+message that leads to the emit is a user gesture on one of the component's
+parts, not a Command result, a timer, shared state or another component, and
+the payload carries the value asked for. The parent then has to read the payload, so nobody takes
+the tag for news. `Opened` fails both: a hover timer can emit it, and with
+nothing in its payload the tag reads as the state. Keep `Opened`, `Closed`
+and `Dismissed` for a component that owns that state, as `ToastProvider`
+owns its toasts.
+
 A message is one fact. The tag says which fact, and the payload holds what the
 event reported. Two events get two messages, even when their handlers differ
 only by a constant. Focus and blur are `FocusedSearchInput` and
@@ -170,8 +188,8 @@ a literal is choosing between two facts, which is the tag's job. Keep one
 message when one event reports a value, as in `UpdatedBody({ body })` or
 `ToggledActions({ open })`, or when the payload says which of many, as in
 `UpdatedField({ name, value })` and `PressedKey({ key })`. Events and `onEmit`
-follow the same rule, so a child's `Opened` and `Dismissed` become
-`OpenedSettings` and `DismissedSettings`.
+follow the same rule, so a child's `RequestedOpen` and `RequestedClose`
+become `RequestedOpenSettings` and `RequestedCloseSettings`.
 
 A definition's binding and its name string match:
 `const DrawChart = Mount.make("DrawChart", ...)`. A `Command.Service` keeps

@@ -59,7 +59,7 @@ const partsOf = (s: { readonly parts: (f: (dialog: Parts) => void) => unknown })
   return parts!
 }
 
-const dismissed = (reason: string) => ({ _tag: "Dismissed", reason }) as DialogEvents
+const dismissed = (reason: string) => ({ _tag: "RequestedClose", reason }) as DialogEvents
 
 describe("Dialog", () => {
   it.effect("remembers the trigger that opened it, and only that one asks to close it", () =>
@@ -77,7 +77,7 @@ describe("Dialog", () => {
       assert.isUndefined(s.get(trigger).attrs?.["data-popup-open"])
       assert.isString(s.get(trigger).attrs?.id)
       assert.strictEqual(s.get(other).attrs?.id, "other")
-      s.click(trigger).emitted({ _tag: "Opened", triggerId: null })
+      s.click(trigger).emitted({ _tag: "RequestedOpen", triggerId: null })
       assert.isNull(partsOf(s).openMethod)
       s.props({ open: true })
       s.expectMount(tracked(s))
@@ -86,7 +86,7 @@ describe("Dialog", () => {
       assert.notStrictEqual(id, "mine")
       assert.deepInclude(s.get(trigger).attrs, { "aria-expanded": "true", "aria-controls": id, "data-popup-open": "" })
       assert.deepInclude(s.get(other).attrs, { "aria-expanded": "false" })
-      s.click(other).emitted({ _tag: "Opened", triggerId: "other" })
+      s.click(other).emitted({ _tag: "RequestedOpen", triggerId: "other" })
       assert.deepInclude(s.get(other).attrs, { "aria-expanded": "true", "aria-controls": id })
       assert.strictEqual(partsOf(s).triggerId, "other")
       assert.strictEqual(s.get(trigger).attrs?.["aria-expanded"], "false")
@@ -259,7 +259,7 @@ describe("Dialog", () => {
 })
 
 // Two dialogs, one in the other's popup, open from the start.
-const NestedMessage = UiSchema.TaggedEnum({ DismissedInner: {} })
+const NestedMessage = UiSchema.TaggedEnum({ RequestedCloseInner: {} })
 const Nested = Component.define({
   name: "Nested",
   scoped: false,
@@ -269,7 +269,7 @@ const Nested = Component.define({
 }).make({
   init: () => ({ inner: true }),
   update: {
-    DismissedInner: (model) => ({ ...model, inner: false })
+    RequestedCloseInner: (model) => ({ ...model, inner: false })
   },
   view: (model, h) =>
     Dialog(h, {
@@ -284,8 +284,8 @@ const Nested = Component.define({
                 key: "inner",
                 props: { open: model.inner },
                 onEmit: {
-                  Opened: () => undefined,
-                  Dismissed: () => NestedMessage.DismissedInner(),
+                  RequestedOpen: () => undefined,
+                  RequestedClose: () => NestedMessage.RequestedCloseInner(),
                   Settled: () => undefined
                 },
                 view: (innerDialog) =>

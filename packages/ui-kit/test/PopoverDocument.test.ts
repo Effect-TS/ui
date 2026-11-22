@@ -8,8 +8,8 @@ import { byId, click, container, popovers, tick } from "./utils/document.ts"
 
 const Message = UiSchema.TaggedEnum({
   Shown: {},
-  Opened: { triggerId: Schema.NullOr(Schema.String), reason: Schema.String },
-  Dismissed: { reason: Schema.String },
+  RequestedOpen: { triggerId: Schema.NullOr(Schema.String), reason: Schema.String },
+  RequestedClose: { reason: Schema.String },
   Settled: { open: Schema.Boolean }
 })
 
@@ -33,13 +33,13 @@ const Page = Component.define({
   init: () => ({ open: false, triggerId: null, hovered: false, log: [] }),
   update: {
     Shown: (model) => ({ ...model, open: true, hovered: false }),
-    Opened: (model, { reason, triggerId }) => ({
+    RequestedOpen: (model, { reason, triggerId }) => ({
       open: true,
       triggerId,
       hovered: reason === "trigger-hover",
-      log: [...model.log, `Opened ${triggerId} ${reason}`]
+      log: [...model.log, `RequestedOpen ${triggerId} ${reason}`]
     }),
-    Dismissed: (model, { reason }) => ({ ...model, open: false, log: [...model.log, `Dismissed ${reason}`] }),
+    RequestedClose: (model, { reason }) => ({ ...model, open: false, log: [...model.log, `RequestedClose ${reason}`] }),
     Settled: (model) => model
   },
   view: (model, h) =>
@@ -56,8 +56,8 @@ const Page = Component.define({
           id: "popover"
         },
         onEmit: {
-          Opened: ({ reason, triggerId }) => Message.Opened({ triggerId, reason }),
-          Dismissed: ({ reason }) => Message.Dismissed({ reason }),
+          RequestedOpen: ({ reason, triggerId }) => Message.RequestedOpen({ triggerId, reason }),
+          RequestedClose: ({ reason }) => Message.RequestedClose({ reason }),
           Settled: ({ open }) => Message.Settled({ open })
         },
         view: (popover) =>
@@ -108,12 +108,12 @@ describe("Popover in a document", { concurrent: false }, () => {
       click(trigger)
       yield* tick
       yield* tick
-      assert.deepStrictEqual(log(), ["Opened detached trigger-press"])
+      assert.deepStrictEqual(log(), ["RequestedOpen detached trigger-press"])
       assert.strictEqual(trigger.getAttribute("aria-controls"), "popover")
       assert.deepStrictEqual(containers(), ["current: For detached"])
       click(trigger)
       yield* tick
-      assert.deepStrictEqual(log(), ["Opened detached trigger-press", "Dismissed trigger-press"])
+      assert.deepStrictEqual(log(), ["RequestedOpen detached trigger-press", "RequestedClose trigger-press"])
     }))
 
   it.effect("the viewport sizes the positioner, and shows the last trigger's content while it moves to another", () =>
@@ -149,19 +149,19 @@ describe("Popover in a document", { concurrent: false }, () => {
       show.focus()
       mouse(byId("a"), "mouseenter", 10, 10)
       yield* tick
-      assert.deepStrictEqual(log(), ["Opened a trigger-hover"])
+      assert.deepStrictEqual(log(), ["RequestedOpen a trigger-hover"])
       assert.strictEqual(document.activeElement, show)
       mouse(byId("a"), "mouseleave", 20, 10)
       mouse(byId("b"), "mouseenter", 20, 10)
       yield* tick
-      assert.deepStrictEqual(log().slice(1), ["Opened b trigger-hover"])
+      assert.deepStrictEqual(log().slice(1), ["RequestedOpen b trigger-hover"])
       mouse(byId("b"), "mouseleave", 20, 30)
       mouse(positioner(), "mouseenter", 20, 30)
       yield* tick
       assert.deepStrictEqual(log().slice(2), [])
       click(byId("b"))
       yield* tick
-      assert.deepStrictEqual(log().slice(2), ["Opened b trigger-press"])
+      assert.deepStrictEqual(log().slice(2), ["RequestedOpen b trigger-press"])
       assert.isTrue(focusedInside())
       click(byId("b"))
       yield* tick
@@ -175,7 +175,7 @@ describe("Popover in a document", { concurrent: false }, () => {
       mouse(positioner(), "mouseleave", 10, 60)
       yield* tick
       yield* tick
-      assert.deepStrictEqual(log().slice(4), ["Opened a trigger-hover", "Dismissed trigger-hover"])
+      assert.deepStrictEqual(log().slice(4), ["RequestedOpen a trigger-hover", "RequestedClose trigger-hover"])
       assert.strictEqual(document.activeElement, show)
       click(show)
       yield* tick

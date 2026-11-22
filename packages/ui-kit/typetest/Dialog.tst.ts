@@ -58,11 +58,11 @@ describe("Dialog", () => {
     Dialog(h, {
       props: { open: true, modal: "trap-focus", id: "settings", openMethod: "touch", holdExit: false },
       onEmit: {
-        Opened: ({ triggerId }) => {
+        RequestedOpen: ({ triggerId }) => {
           expect(triggerId).type.toBe<string | null>()
           return Msg.Clicked()
         },
-        Dismissed: ({ reason }) => {
+        RequestedClose: ({ reason }) => {
           expect(reason).type.toBe<
             "trigger-press" | "outside-press" | "escape-key" | "close-press" | "focus-out" | "close-watcher"
           >()

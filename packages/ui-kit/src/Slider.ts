@@ -17,16 +17,16 @@
  * | `indicator` | any element inside the track, the filled range |
  * | `thumb`     | any element, with the `<input type="range">` inside |
  *
- * Each part takes the consumer's builder and returns it, so the consumer
- * goes on chaining and adds children with `.children(...)`. `thumb` takes
- * two builders, `{ element, input, index }`: `element` is the thumb you
- * see and drag, and `input` is the `<input>` that takes focus, the keys,
- * the screen reader and the form value. The thumb sets the input up as a
- * visually hidden range input and puts it inside `element`, before the
- * children you chain afterward. Because you hand over the input's builder,
- * what you set on it stays: its `name`, its `aria-label`, or a
- * `Field`'s `field.control` or `field.member`. `index` picks the value the thumb shows, and is
- * required when `value` is an array.
+ * Each part takes the consumer's builder and returns it, so the consumer goes
+ * on chaining and adds children with `.children(...)`. `thumb` takes two
+ * builders, `{ element, input, index }`: `element` is the thumb you see and
+ * drag, and `input` is the `<input>` that takes focus, the keys, the screen
+ * reader and the form value. The thumb sets the input up as a visually hidden
+ * range input and puts it inside `element`, before the children you chain
+ * afterward. Because you hand over the input's builder, what you set on it
+ * stays: its `name`, its `aria-label`, or a `Field`'s `field.control` or
+ * `field.member`. `index` picks the value the thumb shows, and is required when
+ * `value` is an array.
  *
  * The kit sets no layout. `thumb` gets `--slider-thumb-position` and
  * `indicator` gets `--slider-indicator-start` and
@@ -44,13 +44,13 @@
  * `disabled: field.disabled` as well.
  *
  * In a `Field`, a range slider is the field's group. Draw the root with
- * `slider.root(field.group(h.div))`, the field's `field.legend` to name it, and each
- * thumb's input with `field.member(h.input)` and an `aria-label` of its own,
- * such as "Minimum". Each input then points at the description and the
- * error. The field is focused while either thumb has focus, and touched
- * once focus leaves the slider. Don't pass `field.control` to more than one
- * input, since that gives two elements one `id`. Two thumbs get
- * `aria-valuetext` saying which end each one is, unless you set one.
+ * `slider.root(field.group(h.div))`, the field's `field.legend` to name it, and
+ * each thumb's input with `field.member(h.input)` and an `aria-label` of its
+ * own, such as "Minimum". Each input then points at the description and the
+ * error. The field is focused while either thumb has focus, and touched once
+ * focus leaves the slider. Don't pass `field.control` to more than one input,
+ * since that gives two elements one `id`. Two thumbs get `aria-valuetext`
+ * saying which end each one is, unless you set one.
  *
  * **Data attributes**
  *
@@ -229,9 +229,9 @@ export const SliderProps = Schema.Struct({
 export type SliderProps = typeof SliderProps.Type
 
 /**
- * What a slider emits. `Moved` reports each value the user moves to, and
- * `Committed` the value once a drag or a key press is done. `value` is a
- * number when the `value` prop is, and an array otherwise.
+ * What a slider emits. `Moved` asks for each value the user moves to, and
+ * `Committed` reports the value once a drag or a key press is done. `value` is
+ * a number when the `value` prop is, and an array otherwise.
  *
  * @stability experimental
  * @category schemas

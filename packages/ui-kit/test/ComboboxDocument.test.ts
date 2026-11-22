@@ -54,11 +54,11 @@ const Config = Schema.Struct({
 type Config = typeof Config.Type
 
 const Message = UiSchema.TaggedEnum({
-  Opened: { reason: Schema.String },
-  Dismissed: { reason: Schema.String },
+  RequestedOpen: { reason: Schema.String },
+  RequestedClose: { reason: Schema.String },
   Picked: { value: Schema.Array(Schema.String) },
-  EditedInput: { inputValue: Schema.String, reason: Schema.String },
-  DismissedDialog: { reason: Schema.String }
+  RequestedInputValue: { inputValue: Schema.String, reason: Schema.String },
+  RequestedCloseDialog: { reason: Schema.String }
 })
 
 const Page = Component.define({
@@ -76,15 +76,15 @@ const Page = Component.define({
 }).make({
   init: () => ({ open: false, value: [], inputValue: "", log: [] }),
   update: {
-    Opened: (model, { reason }) => ({ ...model, open: true, log: [...model.log, "Opened " + reason] }),
-    Dismissed: (model, { reason }) => ({ ...model, open: false, log: [...model.log, "Dismissed " + reason] }),
+    RequestedOpen: (model, { reason }) => ({ ...model, open: true, log: [...model.log, "RequestedOpen " + reason] }),
+    RequestedClose: (model, { reason }) => ({ ...model, open: false, log: [...model.log, "RequestedClose " + reason] }),
     Picked: (model, { value }) => ({ ...model, value, log: [...model.log, "Picked " + value.join(",")] }),
-    EditedInput: (model, { inputValue, reason }) => ({
+    RequestedInputValue: (model, { inputValue, reason }) => ({
       ...model,
       inputValue,
-      log: [...model.log, "EditedInput " + JSON.stringify(inputValue) + " " + reason]
+      log: [...model.log, "RequestedInputValue " + JSON.stringify(inputValue) + " " + reason]
     }),
-    DismissedDialog: (model, { reason }) => ({ ...model, log: [...model.log, "DismissedDialog " + reason] })
+    RequestedCloseDialog: (model, { reason }) => ({ ...model, log: [...model.log, "RequestedCloseDialog " + reason] })
   },
   view: (model, h) => {
     const multiple = h.props.multiple
@@ -104,13 +104,13 @@ const Page = Component.define({
             required: h.props.required
           },
           onEmit: {
-            Opened: ({ reason }) => Message.Opened({ reason }),
-            Dismissed: ({ reason }) => Message.Dismissed({ reason }),
+            RequestedOpen: ({ reason }) => Message.RequestedOpen({ reason }),
+            RequestedClose: ({ reason }) => Message.RequestedClose({ reason }),
             Picked: ({ reason, value }) =>
               reason === "none" && value === null ? undefined : Message.Picked({
                 value: value === null ? [] : typeof value === "string" ? [value] : value
               }),
-            EditedInput: ({ inputValue, reason }) => Message.EditedInput({ inputValue, reason }),
+            RequestedInputValue: ({ inputValue, reason }) => Message.RequestedInputValue({ inputValue, reason }),
             Highlighted: () => undefined,
             Settled: () => undefined
           },
@@ -156,8 +156,8 @@ const Page = Component.define({
       ? Dialog(h, {
         props: { open: true },
         onEmit: {
-          Opened: () => undefined,
-          Dismissed: ({ reason }) => Message.DismissedDialog({ reason }),
+          RequestedOpen: () => undefined,
+          RequestedClose: ({ reason }) => Message.RequestedCloseDialog({ reason }),
           Settled: () => undefined
         },
         view: (dialog) => h.div(dialog.portal(h.dialog)?.children(dialog.popup(h.div).children(form)))
@@ -233,15 +233,15 @@ describe("Combobox in a document", { concurrent: false }, () => {
       assert.strictEqual(input().value, "Banana")
       assert.strictEqual(document.activeElement, input())
       assert.deepStrictEqual(log(), [
-        "EditedInput \"ap\" input-change",
-        "Opened input-change",
+        "RequestedInputValue \"ap\" input-change",
+        "RequestedOpen input-change",
         "Picked apricot",
-        "EditedInput \"Apricot\" item-press",
-        "Dismissed item-press",
-        "Opened trigger-press",
+        "RequestedInputValue \"Apricot\" item-press",
+        "RequestedClose item-press",
+        "RequestedOpen trigger-press",
         "Picked banana",
-        "EditedInput \"Banana\" item-press",
-        "Dismissed item-press"
+        "RequestedInputValue \"Banana\" item-press",
+        "RequestedClose item-press"
       ])
     }).pipe(Effect.scoped))
 
@@ -249,7 +249,7 @@ describe("Combobox in a document", { concurrent: false }, () => {
     Effect.gen(function*() {
       const { log, root } = yield* mountPage()
       root.send(Message.Picked({ value: ["banana"] }))
-      root.send(Message.EditedInput({ inputValue: "Banana", reason: "test" }))
+      root.send(Message.RequestedInputValue({ inputValue: "Banana", reason: "test" }))
       type("gr")
       yield* tick
       assert.deepStrictEqual(drawn(), ["Grape"])
@@ -267,12 +267,15 @@ describe("Combobox in a document", { concurrent: false }, () => {
       byId("after").focus()
       yield* tick
       assert.isFalse(shown())
-      assert.deepStrictEqual(log().filter((line) => !line.startsWith("EditedInput") && !line.startsWith("Picked")), [
-        "Opened input-change",
-        "Dismissed outside-press",
-        "Opened input-press",
-        "Dismissed focus-out"
-      ])
+      assert.deepStrictEqual(
+        log().filter((line) => !line.startsWith("RequestedInputValue") && !line.startsWith("Picked")),
+        [
+          "RequestedOpen input-change",
+          "RequestedClose outside-press",
+          "RequestedOpen input-press",
+          "RequestedClose focus-out"
+        ]
+      )
     }).pipe(Effect.scoped))
 
   it.effect("the field's label names the input, and a required combobox blocks its form until it has a value", () =>
@@ -335,11 +338,11 @@ describe("Combobox in a document", { concurrent: false }, () => {
       assert.strictEqual(byId("trigger").textContent, "Banana")
       assert.strictEqual(input().value, "")
       assert.deepStrictEqual(log(), [
-        "Opened list-navigation",
-        "EditedInput \"ban\" input-change",
+        "RequestedOpen list-navigation",
+        "RequestedInputValue \"ban\" input-change",
         "Picked banana",
-        "Dismissed item-press",
-        "EditedInput \"\" input-clear"
+        "RequestedClose item-press",
+        "RequestedInputValue \"\" input-clear"
       ])
     }).pipe(Effect.scoped))
 
@@ -370,10 +373,10 @@ describe("Combobox in a document", { concurrent: false }, () => {
       yield* tick
       assert.isFalse(shown())
       assert.deepStrictEqual(log(), [
-        "EditedInput \"a\" input-change",
-        "Opened input-change",
-        "Dismissed escape-key",
-        "EditedInput \"\" input-clear"
+        "RequestedInputValue \"a\" input-change",
+        "RequestedOpen input-change",
+        "RequestedClose escape-key",
+        "RequestedInputValue \"\" input-clear"
       ])
     }).pipe(Effect.scoped))
 })
