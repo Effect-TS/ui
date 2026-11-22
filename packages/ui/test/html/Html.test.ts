@@ -170,6 +170,15 @@ describe("Html", () => {
         Object.defineProperty(withProto, "__proto__", { value: "a", enumerable: true })
         withProto.id = "x"
         assert.deepStrictEqual(Object.entries(h.div.attrs(withProto).elementAttrs), [["__proto__", "a"], ["id", "x"]])
+        class TrimmedId extends View.ElementBuilder<TodoMessage> {
+          override attr(name: string, value: string | undefined): this {
+            return super.attr(name, name === "id" && value !== undefined ? value.trim() : value)
+          }
+        }
+        assert.deepStrictEqual(new TrimmedId("nav").attrs({ id: " menu ", role: "navigation" }).elementAttrs, {
+          id: "menu",
+          role: "navigation"
+        })
         const Trigger = Component.define({
           name: "Trigger",
           scoped: false,

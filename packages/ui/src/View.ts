@@ -1377,25 +1377,12 @@ export class ElementBuilder<
    * @since 0.1.0
    */
   attrs(attributes: Readonly<Record<string, string | undefined>>): this {
-    const out = copyBuilder(this) as Mutable<this>
-    let elementAttrs = this.elementAttrs
-    let removals: Array<string> | undefined
+    let out: this | undefined
     for (const name in attributes) {
       if (!Object.hasOwn(attributes, name)) continue
-      const value = attributes[name]
-      if (value === undefined && this.removals !== undefined) {
-        removals ??= this.removals.slice()
-        removals.push(name)
-      }
-      if (elementAttrs === noFields) {
-        if (value !== undefined) elementAttrs = assoc(elementAttrs, name, value)
-      } else if (value !== undefined || Object.hasOwn(elementAttrs, name)) {
-        elementAttrs = withEntry(elementAttrs, name, value)
-      }
+      out = (out ?? this).attr(name, attributes[name])
     }
-    out.elementAttrs = elementAttrs
-    if (removals !== undefined) out.removals = removals
-    return out
+    return out ?? copyBuilder(this)
   }
   /**
    * Sets a property. The host decides what it means.
