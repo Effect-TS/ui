@@ -1107,19 +1107,33 @@ describe("BrowserHost", { concurrent: false }, () => {
       it.effect("a key reports the selection of a text field, and none for a button or a checkbox", () =>
         Effect.gen(function*() {
           const app = yield* container
+          const shadowHost = yield* container
+          const shadow = shadowHost.attachShadow({ mode: "open" })
           const root = yield* BrowserHost.mountEffect(Typing, {}, app)
+          const shadowRoot = yield* BrowserHost.mountEffect(Typing, {}, shadow as unknown as Element)
           const text = HtmlLocator.getByRole(app, "textbox", { name: "Text" }) as HTMLInputElement
+          const shadowText = shadow.querySelector<HTMLInputElement>("[aria-label=Text]")!
           text.value = "hello"
           text.setSelectionRange(1, 4)
+          shadowText.value = "hello"
+          shadowText.setSelectionRange(0, 0)
           HtmlLocator.keydown(text, "ArrowLeft")
           HtmlLocator.keydown(HtmlLocator.getByRole(app, "checkbox", { name: "Box" }), " ")
           HtmlLocator.keydown(HtmlLocator.getByRole(app, "button", { name: "Button" }), "Enter")
-          yield* tick
-          const selections = root.model()!.map((entry) => {
-            const { selectionEnd, selectionStart } = JSON.parse(entry.slice(4))
-            return [selectionStart, selectionEnd]
+          const keyEvent = new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true, composed: true })
+          Object.defineProperty(keyEvent, "composedPath", {
+            value: () => [shadowText, shadowText.parentNode!, shadow, shadowHost, document.body, document, window]
           })
+          shadowHost.dispatchEvent(keyEvent)
+          yield* tick
+          const selectionOf = (entries: ReadonlyArray<string>) =>
+            entries.map((entry) => {
+              const { selectionEnd, selectionStart } = JSON.parse(entry.slice(4))
+              return [selectionStart, selectionEnd]
+            })
+          const selections = selectionOf(root.model()!)
           expect(selections).toEqual([[1, 4], [null, null], [null, null]])
+          expect(selectionOf(shadowRoot.model()!)).toEqual([[0, 0]])
         }).pipe(Effect.scoped))
 
       it.effect("a composing field's value isn't written until compositionend, including inside shadow DOM", () =>
@@ -1144,6 +1158,12 @@ describe("BrowserHost", { concurrent: false }, () => {
           const shadow = shadowHost.attachShadow({ mode: "open" })
           yield* BrowserHost.mountEffect(Upper, {}, app)
           yield* BrowserHost.mountEffect(Upper, {}, shadow as unknown as Element)
+          const retarget = (inner: HTMLElement, event: Event) => {
+            Object.defineProperty(event, "composedPath", {
+              value: () => [inner, inner.parentNode!, shadow, shadowHost, document.body, document, window]
+            })
+            shadowHost.dispatchEvent(event)
+          }
           const compose = (field: HTMLInputElement, value: string) => {
             field.value = value
             field.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true, isComposing: true }))
@@ -1154,12 +1174,13 @@ describe("BrowserHost", { concurrent: false }, () => {
           HtmlLocator.type(fixed, "x")
           fixed.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }))
           compose(upper, "ka")
-          compose(shadowUpper, "ka")
+          shadowUpper.value = "ka"
+          retarget(shadowUpper, new InputEvent("input", { bubbles: true, composed: true, isComposing: true }))
           yield* tick
           expect([upper.value, fixed.value, shadowUpper.value]).toEqual(["ka", "x", "ka"])
           upper.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true }))
           fixed.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true }))
-          shadowUpper.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true, composed: true }))
+          retarget(shadowUpper, new CompositionEvent("compositionend", { bubbles: true, composed: true }))
           yield* tick
           expect([upper.value, fixed.value, shadowUpper.value]).toEqual(["KA", "fixed", "KA"])
         }).pipe(Effect.scoped))

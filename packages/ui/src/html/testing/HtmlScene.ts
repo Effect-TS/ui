@@ -109,10 +109,8 @@ type AnyComponent =
   | Component.Component<any, any, any, any, any, any, any, any, never>
   | Component.Component<any, any, any, never, any, any, any, any, never>
 
-/** What a key payload has besides its key, defaulted unless given. */
 type KeyDetails = Partial<Omit<Html.KeyPayload, "key">>
 
-/** How an `input` payload says its edit was made, defaulted unless given. */
 type EditDetails = Partial<Pick<Html.InputPayload, "composing" | "inputType">>
 
 /**

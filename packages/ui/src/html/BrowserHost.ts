@@ -1001,7 +1001,7 @@ export const makeHost = (
           handler,
           name === "dragend"
             ? dragEndPayload(event as DragEvent)
-            : payloadOf(name, event, event.target, node as globalThis.Element, lastPointer),
+            : payloadOf(name, event, target, node as globalThis.Element, lastPointer),
           preventDefault === true ? () => event.preventDefault() : undefined
         )
         break
