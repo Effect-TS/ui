@@ -12,6 +12,25 @@ const inputType = (node: Locator.Node): string => lower(node.attrs?.type) ?? "te
 const flag = (node: Locator.Node, name: string): boolean =>
   node.props?.[name] === true || (node.props?.[name] === undefined && node.attrs?.[name] !== undefined)
 
+const nonEditableInputTypes: ReadonlySet<string> = new Set([
+  "button",
+  "checkbox",
+  "color",
+  "file",
+  "image",
+  "radio",
+  "range",
+  "reset",
+  "submit"
+])
+
+const isEditable = (node: Locator.Node): boolean => {
+  if (node.tag === "textarea" || node.tag === "select") return true
+  if (node.tag === "input") return !nonEditableInputTypes.has(inputType(node))
+  const contentEditable = lower(node.attrs?.contenteditable)
+  return contentEditable === "" || contentEditable === "true" || contentEditable === "plaintext-only"
+}
+
 const controls: ReadonlySet<string> = new Set([
   "button",
   "input",
@@ -271,7 +290,8 @@ export const changePayload = (
 /** @internal */
 export const keyPayload = (
   key: string,
-  details: Partial<Omit<Html.KeyPayload, "key">> | undefined
+  details: Partial<Omit<Html.KeyPayload, "key">> | undefined,
+  node?: Locator.Node | undefined
 ): Html.KeyPayload => ({
   key,
   shift: details?.shift === true,
@@ -279,6 +299,8 @@ export const keyPayload = (
   alt: details?.alt === true,
   meta: details?.meta === true,
   composing: details?.composing === true,
+  repeat: details?.repeat === true,
+  editable: details?.editable ?? (node !== undefined && isEditable(node)),
   selectionStart: details?.selectionStart ?? null,
   selectionEnd: details?.selectionEnd ?? null
 })

@@ -317,6 +317,30 @@ const controlPayload = (source: globalThis.Element, event: Event | undefined): u
 
 const noSelection = { selectionStart: null, selectionEnd: null }
 
+const nonEditableInputTypes: ReadonlySet<string> = new Set([
+  "button",
+  "checkbox",
+  "color",
+  "file",
+  "image",
+  "radio",
+  "range",
+  "reset",
+  "submit"
+])
+
+const isEditableTarget = (event: Event, fallback: EventTarget | null): boolean => {
+  const raw = (typeof event.composedPath === "function" ? event.composedPath()[0] : undefined) ?? fallback
+  if (raw === null || raw === undefined) return false
+  const node = raw as globalThis.Node
+  const element = (node.nodeType === 3 ? node.parentElement : raw) as HTMLElement | null
+  if (element === null || element.nodeType !== 1) return false
+  const tag = element.localName
+  if (tag === "textarea" || tag === "select") return true
+  if (tag === "input") return !nonEditableInputTypes.has((element as HTMLInputElement).type.toLowerCase())
+  return element.isContentEditable === true
+}
+
 const selectionOf = (target: EventTarget | null) => {
   const field = target as HTMLInputElement | null
   const tag = (field as globalThis.Element | null)?.localName
@@ -413,7 +437,14 @@ const payloadOf = (
       const e = event as KeyboardEvent
       // Safari reports the key that ends a composition with `isComposing` false and `keyCode` 229.
       const composing = e.isComposing === true || (e as { readonly keyCode?: number }).keyCode === 229
-      return { key: e.key ?? "", ...modifiers(event), composing, ...selectionOf(target) }
+      return {
+        key: e.key ?? "",
+        ...modifiers(event),
+        composing,
+        repeat: e.repeat === true,
+        editable: isEditableTarget(event, target),
+        ...selectionOf(target)
+      }
     }
     case "input":
     case "change":

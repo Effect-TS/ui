@@ -213,6 +213,8 @@ describe("Html", () => {
             selectionStart === selectionEnd ? undefined : Msg.Mounted()
         )
         expect<Html.KeyPayload["selectionStart"]>().type.toBe<number | null>()
+        expect<Html.KeyPayload["repeat"]>().type.toBe<boolean>()
+        expect<Html.KeyPayload["editable"]>().type.toBe<boolean>()
         expect(h.input.onPaste).type.toBeCallableWith(
           ({ text }: Html.PastePayload) => Msg.Typed({ value: text }),
           { preventDefault: true }

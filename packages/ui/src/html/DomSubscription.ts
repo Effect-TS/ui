@@ -245,6 +245,45 @@ const listenFor = (
  * }).pipe(Effect.scoped, Effect.runSync)
  * ```
  *
+ * **Example** (Ignoring shortcuts while typing, while still hearing Escape)
+ *
+ * ```ts import.meta.vitest
+ * import { Component, UiSchema } from "@effect/ui"
+ * import { DomSubscription, Html } from "@effect/ui/html"
+ * import { HtmlScene } from "@effect/ui/html/testing"
+ * import { Locator } from "@effect/ui/testing"
+ * import { Effect, Schema } from "effect"
+ *
+ * const Message = UiSchema.TaggedEnum({ OpenedHelp: {}, ClosedHelp: {} })
+ *
+ * const Shortcuts = Component.define({
+ *   name: "Shortcuts",
+ *   scoped: false,
+ *   model: Schema.Boolean,
+ *   message: Message,
+ *   elements: Html
+ * }).make({
+ *   init: () => false,
+ *   update: { OpenedHelp: () => true, ClosedHelp: () => false },
+ *   view: (open, h) => h.p(open ? "help open" : "help closed"),
+ *   subscriptions: () => [
+ *     DomSubscription.onDocument("keydown", ({ alt, composing, ctrl, defaultPrevented, editable, key, meta, repeat }) => {
+ *       if (defaultPrevented || composing || repeat) return undefined
+ *       if (key === "Escape") return Message.ClosedHelp()
+ *       if (editable || ctrl || meta || alt) return undefined
+ *       return key === "?" ? Message.OpenedHelp() : undefined
+ *     }, { preventDefault: true })
+ *   ]
+ * })
+ *
+ * Effect.gen(function*() {
+ *   const s = yield* HtmlScene.make(Shortcuts, {})
+ *   s.fireDocument("keydown", { key: "?", editable: true }).expectIgnored()
+ *     .fireDocument("keydown", { key: "?" }).expect(Locator.text("help open")).toExist()
+ *     .fireDocument("keydown", { key: "Escape", editable: true }).expect(Locator.text("help closed")).toExist()
+ * }).pipe(Effect.scoped, Effect.runSync)
+ * ```
+ *
  * @stability experimental
  * @category subscriptions
  * @since 0.1.0

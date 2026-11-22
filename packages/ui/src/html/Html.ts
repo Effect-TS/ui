@@ -261,6 +261,15 @@ export interface HoverPayload {
  *
  * **Details**
  *
+ * `repeat` is true while a key is held down and firing auto-repeats.
+ *
+ * `editable` is true when the event's innermost target (through open shadow
+ * roots) takes typed characters: a `textarea`, a `select`, an `input` other
+ * than `button`, `checkbox`, `color`, `file`, `image`, `radio`, `range`,
+ * `reset` or `submit`, or an element with `isContentEditable` true. A
+ * `readonly` field still counts. On element handlers `editable` describes the
+ * event's target, not the element holding the handler.
+ *
  * `selectionStart` and `selectionEnd` are the caret or selection of the
  * event's target, as the key finds it, when the target is a `textarea` or
  * an `input` whose type has a selection, such as `text` or `search`. They
@@ -278,6 +287,8 @@ export interface KeyPayload {
   readonly alt: boolean
   readonly meta: boolean
   readonly composing: boolean
+  readonly repeat: boolean
+  readonly editable: boolean
   readonly selectionStart: number | null
   readonly selectionEnd: number | null
 }

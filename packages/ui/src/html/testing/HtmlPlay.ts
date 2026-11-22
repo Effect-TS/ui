@@ -187,7 +187,7 @@ class HtmlPlayCursor extends internal.PlayCursor {
     })
   }
   keydown(locator: Locator.Locator, key: string, modifiers?: Modifiers): Effect.Effect<void, Play.StepError> {
-    return this.one("keydown", locator, "keydown", () => defaults.keyPayload(key, modifiers))
+    return this.one("keydown", locator, "keydown", (node) => defaults.keyPayload(key, modifiers, node))
   }
   submit(locator: Locator.Locator): Effect.Effect<void, Play.StepError> {
     return this.interact("submit", () => {

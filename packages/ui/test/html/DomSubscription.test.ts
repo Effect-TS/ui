@@ -291,6 +291,34 @@ describe("HtmlScene.fireDocument and fireWindow", () => {
         .expect(Locator.tag("output")).toHaveText("ax,by!")
     }))
 
+  it.effect("default editable and repeat to false on document keys and accept overrides", () =>
+    Effect.gen(function*() {
+      const Shortcut = Component.define({
+        name: "Shortcut",
+        scoped: false,
+        model: Schema.Array(Schema.String),
+        message: Schema.String,
+        elements: Html
+      }).make({
+        init: (): ReadonlyArray<string> => [],
+        update: (log, entry) => [...log, entry],
+        view: (log, h) => h.output(log.join(",")),
+        subscriptions: () => [
+          DomSubscription.onDocument("keydown", ({ editable, key, repeat }) => `${key}:${editable}:${repeat}`)
+        ]
+      })
+      const s = yield* HtmlScene.make(Shortcut, {})
+      s.fireDocument("keydown", { key: "g" })
+        .fireDocument("keydown", { key: "g", editable: true, repeat: true })
+        .expect(Locator.tag("output")).toHaveText("g:false:false,g:true:true")
+      const root = yield* TestHost.mount(Shortcut, {})
+      yield* TestHost.settle
+      yield* TestGlobalEvents.fire("document", "keydown", { key: "g" })
+      yield* TestGlobalEvents.fire("document", "keydown", { key: "g", editable: true, repeat: true })
+      yield* TestHost.settle
+      assert.deepStrictEqual(root.model(), ["g:false:false", "g:true:true"])
+    }).pipe(Effect.provide(testLayer)))
+
   it.effect("throw when nothing listens, listing the active keys", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Keys, {})

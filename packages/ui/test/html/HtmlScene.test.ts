@@ -138,11 +138,13 @@ describe("HtmlScene", () => {
         return h.div(
           h.input.attr("aria-label", "Name").value("Ada").onInput(saw("input")).onChange(saw("change"))
             .onCompositionEnd(saw("compositionend")).onKeyDown(saw("keydown")),
+          h.input.attr("type", "checkbox").attr("aria-label", "Active").onKeyDown(saw("keydown")),
           h.output(log.join("\n"))
         )
       }
     })
     const name = HtmlLocator.label("Name")
+    const active = HtmlLocator.label("Active")
     const s = HtmlScene.start(Field, {})
       .type(name, "A")
       .type(name, "Ad", { composing: true, inputType: "insertCompositionText" })
@@ -151,7 +153,8 @@ describe("HtmlScene", () => {
       .change(name, "Ada")
       .change(name, { inputType: "insertReplacementText" })
       .keydown(name, "a")
-      .keydown(name, "a", { composing: true, selectionStart: 1, selectionEnd: 3 })
+      .keydown(name, "a", { composing: true, repeat: true, editable: false, selectionStart: 1, selectionEnd: 3 })
+      .keydown(active, " ")
     assert.deepStrictEqual(s.get(log).children?.map((child) => child.text).join("").split("\n"), [
       `input {"value":"A","checked":false,"composing":false,"inputType":"insertText"}`,
       `input {"value":"Ad","checked":false,"composing":true,"inputType":"insertCompositionText"}`,
@@ -159,8 +162,9 @@ describe("HtmlScene", () => {
       `compositionend {"value":"Ada"}`,
       `change {"value":"Ada","checked":false,"composing":false,"inputType":""}`,
       `change {"value":"Ada","checked":false,"composing":false,"inputType":"insertReplacementText"}`,
-      `keydown {"key":"a","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"selectionStart":null,"selectionEnd":null}`,
-      `keydown {"key":"a","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":true,"selectionStart":1,"selectionEnd":3}`
+      `keydown {"key":"a","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":true,"selectionStart":null,"selectionEnd":null}`,
+      `keydown {"key":"a","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":true,"repeat":true,"editable":false,"selectionStart":1,"selectionEnd":3}`,
+      `keydown {"key":" ","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":false,"selectionStart":null,"selectionEnd":null}`
     ])
   })
 

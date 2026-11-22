@@ -170,7 +170,8 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Scene.Step
   compositionEnd(locator: Locator.Locator, value?: string): this
   /**
    * Presses `key`: sends `keydown` with the modifier keys, `composing` and
-   * selection given, each `false` or `null` otherwise.
+   * selection given, each `false` or `null` otherwise. `editable` defaults
+   * from the matched element unless given.
    */
   keydown(locator: Locator.Locator, key: string, details?: KeyDetails): this
   /**
@@ -312,7 +313,7 @@ class StepsImpl extends internal.SceneCursor {
     )
   }
   keydown(locator: Locator.Locator, key: string, details?: KeyDetails): this {
-    return this.one("keydown", locator, "keydown", () => defaults.keyPayload(key, details))
+    return this.one("keydown", locator, "keydown", (node) => defaults.keyPayload(key, details, node))
   }
   submit(locator: Locator.Locator): this {
     return this.interact("submit", (state) => {
