@@ -1,5 +1,5 @@
 import type { Component, Mount, View } from "@effect/ui"
-import { VirtualList, type VirtualListProps, VirtualListScrollTarget } from "@effect/ui-kit"
+import { VirtualList, VirtualListEvents, type VirtualListProps, VirtualListScrollTarget } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Locator, Scene } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -20,7 +20,9 @@ const tracked = (s: Rendered): Track =>
 const argsOf = (s: Rendered) => tracked(s).args as Record<string, unknown>
 const sent = (tag: string, fields: object = {}) => ({ _tag: tag, ...fields }) as never
 const moved = (start: number, height = 100, fields: object = {}) =>
-  sent("MovedViewport", { start, height, anchor: null, atEnd: false, scrolled: null, ...fields })
+  sent("MovedViewport", { start, height, anchor: null, atStart: start <= 0, atEnd: false, scrolled: null, ...fields })
+const scrolled = (first: number, last: number, edges: { readonly atStart?: boolean; readonly atEnd?: boolean } = {}) =>
+  VirtualListEvents.Scrolled({ first, last, atStart: edges.atStart ?? first === 0, atEnd: edges.atEnd ?? false })
 
 type Scene = { readonly all: (locator: Locator.Locator) => ReadonlyArray<Locator.Node> }
 const indices = (s: Scene) => s.all(itemLoc).map((node) => Number(node.attrs?.["data-index"]))
@@ -86,10 +88,10 @@ describe("VirtualList", () => {
     Effect.gen(function*() {
       const s = yield* Scene.make(VirtualList, base, makeStandIn())
 
-      s.mounted(tracked(s), moved(0)).emitted({ _tag: "Scrolled", first: 0, last: 4 })
+      s.mounted(tracked(s), moved(0)).emitted(scrolled(0, 4))
       assert.deepStrictEqual(indices(s), span(0, 7))
 
-      s.mounted(tracked(s), moved(1000)).emitted({ _tag: "Scrolled", first: 50, last: 54 })
+      s.mounted(tracked(s), moved(1000)).emitted(scrolled(50, 54))
       assert.deepStrictEqual(indices(s), span(47, 57))
       assert.strictEqual(
         s.get(listLoc).attrs?.style,
@@ -105,7 +107,7 @@ describe("VirtualList", () => {
   it.effect("keeps measured sizes and estimates the rest from their average", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(VirtualList, { ...base, overscan: 0 }, makeStandIn())
-      s.mounted(tracked(s), moved(0)).emitted({ _tag: "Scrolled", first: 0, last: 4 })
+      s.mounted(tracked(s), moved(0)).emitted(scrolled(0, 4))
       s.mounted(
         tracked(s),
         sent("MeasuredItems", {
@@ -113,7 +115,7 @@ describe("VirtualList", () => {
           width: 300,
           items: span(0, 4).map((index) => ({ index, key: null, top: index * 40, left: 0, size: 40 }))
         })
-      ).emitted({ _tag: "Scrolled", first: 0, last: 2 })
+      ).emitted(scrolled(0, 2))
       assert.deepStrictEqual(indices(s), span(0, 2))
       assert.include(s.get(listLoc).attrs?.style ?? "", "padding-block-end:39880px")
     }))
@@ -121,7 +123,7 @@ describe("VirtualList", () => {
   it.effect("reads the lanes and the gap of a grid from the rendered items", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(VirtualList, { ...base, overscan: 0, measure: false }, makeStandIn())
-      s.mounted(tracked(s), moved(0)).emitted({ _tag: "Scrolled", first: 0, last: 4 })
+      s.mounted(tracked(s), moved(0)).emitted(scrolled(0, 4))
       const cell = (index: number) => ({
         index,
         key: null,
@@ -130,12 +132,12 @@ describe("VirtualList", () => {
         size: 20
       })
       s.mounted(tracked(s), sent("MeasuredItems", { epoch: 0, width: 300, items: span(0, 4).map(cell) }))
-        .emitted({ _tag: "Scrolled", first: 0, last: 14 })
+        .emitted(scrolled(0, 14))
       assert.strictEqual(argsOf(s).epoch, 1)
       assert.deepStrictEqual(indices(s), span(0, 14))
 
       s.mounted(tracked(s), sent("MeasuredItems", { epoch: 1, width: 300, items: span(0, 14).map(cell) }))
-        .emitted({ _tag: "Scrolled", first: 0, last: 11 })
+        .emitted(scrolled(0, 11))
       assert.deepStrictEqual(indices(s), span(0, 11))
       assert.include(s.get(listLoc).attrs?.style ?? "", "padding-block-end:9900px")
 
@@ -146,9 +148,9 @@ describe("VirtualList", () => {
   it.effect("keeps the focused item rendered apart from the visible rows", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(VirtualList, { ...base, overscan: 0 }, makeStandIn())
-      s.mounted(tracked(s), moved(0)).emitted({ _tag: "Scrolled", first: 0, last: 4 })
+      s.mounted(tracked(s), moved(0)).emitted(scrolled(0, 4))
       s.mounted(tracked(s), sent("FocusedItem", { index: 2, key: null }))
-      s.mounted(tracked(s), moved(1000)).emitted({ _tag: "Scrolled", first: 50, last: 54 })
+      s.mounted(tracked(s), moved(1000)).emitted(scrolled(50, 54))
 
       assert.deepStrictEqual(indices(s), [...span(1, 3), ...span(50, 54)])
       assert.include(s.get(listLoc).attrs?.style ?? "", "padding-block-start:20px")
@@ -167,7 +169,7 @@ describe("VirtualList", () => {
       assert.deepStrictEqual(indices(s), [500])
 
       s.mounted(tracked(s), moved(9960, 100, { scrolled: scrollTo }))
-        .emitted({ _tag: "Scrolled", first: 498, last: 502 })
+        .emitted(scrolled(498, 502))
       assert.strictEqual(argsOf(s).request, null)
       assert.deepStrictEqual(indices(s), span(498, 502))
 
@@ -175,6 +177,87 @@ describe("VirtualList", () => {
       s.props({ ...base, overscan: 0, scrollTo: again })
       assert.deepStrictEqual(argsOf(s).request, { scrollTo: again, index: 500, offset: null })
       assert.deepStrictEqual(indices(s), span(498, 502))
+    }))
+
+  it.effect("keeps the first request until the items arrive, after the prop is dropped", () =>
+    Effect.gen(function*() {
+      const scrollTo = { target: VirtualListScrollTarget.Index({ index: 500 }) }
+      const s = yield* Scene.make(VirtualList, { ...base, count: 0, overscan: 0, scrollTo }, makeStandIn())
+      s.expectMount(tracked(s))
+      assert.strictEqual(argsOf(s).request, null)
+      assert.strictEqual(argsOf(s).waiting, true)
+
+      s.props({ ...base, overscan: 0 })
+      assert.deepStrictEqual(argsOf(s).request, { scrollTo, index: 500, offset: null })
+      assert.deepStrictEqual(indices(s), [500])
+
+      s.mounted(tracked(s), moved(10000, 100, { scrolled: scrollTo })).emitted(scrolled(500, 504))
+      assert.strictEqual(argsOf(s).request, null)
+      assert.strictEqual(argsOf(s).waiting, false)
+    }))
+
+  it.effect("drops a waiting request for a newer one", () =>
+    Effect.gen(function*() {
+      const first = { target: VirtualListScrollTarget.Index({ index: 500 }) }
+      const newer = { target: VirtualListScrollTarget.Index({ index: 100 }) }
+      const s = yield* Scene.make(VirtualList, { ...base, count: 0, overscan: 0, scrollTo: first }, makeStandIn())
+      s.expectMount(tracked(s))
+
+      s.props({ ...base, count: 0, overscan: 0, scrollTo: newer })
+      assert.deepStrictEqual(argsOf(s).fresh, newer)
+      s.mounted(tracked(s), sent("RequestedScroll", { scrollTo: newer }))
+      assert.strictEqual(argsOf(s).fresh, null)
+
+      s.props({ ...base, overscan: 0 })
+      assert.deepStrictEqual(argsOf(s).request, { scrollTo: newer, index: 100, offset: null })
+      assert.deepStrictEqual(indices(s), [100])
+    }))
+
+  it.effect("drops a waiting request when the user scrolls", () =>
+    Effect.gen(function*() {
+      const scrollTo = { target: VirtualListScrollTarget.Index({ index: 500 }) }
+      const s = yield* Scene.make(VirtualList, { ...base, count: 0, overscan: 0, scrollTo }, makeStandIn())
+      s.expectMount(tracked(s))
+      s.mounted(tracked(s), sent("ScrolledByUser"))
+      assert.strictEqual(argsOf(s).waiting, false)
+
+      s.props({ ...base, overscan: 0, scrollTo })
+      assert.strictEqual(argsOf(s).request, null)
+      assert.deepStrictEqual(indices(s), [0])
+    }))
+
+  it.effect("waits for the key a request names", () =>
+    Effect.gen(function*() {
+      const scrollTo = { target: VirtualListScrollTarget.Key({ key: "k40" }) }
+      const s = yield* Scene.make(VirtualList, { ...base, count: 100, overscan: 0, scrollTo }, makeStandIn())
+      s.expectMount(tracked(s))
+      assert.strictEqual(argsOf(s).request, null)
+      assert.deepStrictEqual(indices(s), [0])
+
+      const keys = span(0, 99).map((i) => "k" + i)
+      s.props({ ...base, count: 100, keys, overscan: 0 })
+      assert.deepStrictEqual(argsOf(s).request, { scrollTo, index: 40, offset: null })
+      assert.deepStrictEqual(indices(s), [40])
+    }))
+
+  it.effect("reports reaching and leaving either edge while the rows stay", () =>
+    Effect.gen(function*() {
+      let latest!: Parts
+      const s = yield* Scene.make(VirtualList, { ...base, overscan: 0 }, makeStandIn((p) => (latest = p)))
+      s.mounted(tracked(s), moved(19908, 90)).emitted(scrolled(995, 999))
+      s.mounted(tracked(s), moved(19910, 90, { atEnd: true })).emitted(scrolled(995, 999, { atEnd: true }))
+      assert.strictEqual(latest.atEnd, true)
+      assert.deepStrictEqual(indices(s), span(995, 999))
+      s.mounted(tracked(s), moved(19909.5, 90, { atEnd: true }))
+      assert.deepStrictEqual(s.current.emitted, [])
+      s.mounted(tracked(s), moved(19900, 90)).emitted(scrolled(995, 999))
+      assert.strictEqual(latest.atEnd, false)
+
+      s.mounted(tracked(s), moved(0, 90)).emitted(scrolled(0, 4))
+      assert.strictEqual(latest.atStart, true)
+      s.mounted(tracked(s), moved(2, 90, { atStart: false })).emitted(scrolled(0, 4, { atStart: false }))
+      assert.strictEqual(latest.atStart, false)
+      assert.deepStrictEqual(indices(s), span(0, 4))
     }))
 
   it.effect("finds an item by key and keeps the position on it when items are added before it", () =>
@@ -188,7 +271,7 @@ describe("VirtualList", () => {
       s.mounted(
         tracked(s),
         moved(800, 100, { anchor: { index: 40, key: "k40", offset: 0 }, scrolled: scrollTo })
-      ).emitted({ _tag: "Scrolled", first: 40, last: 44 })
+      ).emitted(scrolled(40, 44))
       s.props({ ...base, count: 110, keys: [...span(0, 9).map((i) => "n" + i), ...keys], overscan: 0, scrollTo })
       assert.deepStrictEqual(indices(s), span(50, 54))
       assert.strictEqual(s.all(itemLoc)[0]!.attrs?.["data-key"], "k40")
@@ -201,7 +284,7 @@ describe("VirtualList", () => {
       let latest!: Parts
       const s = yield* Scene.make(VirtualList, props, makeStandIn((p) => (latest = p)))
       assert.strictEqual(argsOf(s).threshold, 1)
-      s.mounted(tracked(s), moved(1900, 100, { atEnd: true })).emitted({ _tag: "Scrolled", first: 95, last: 99 })
+      s.mounted(tracked(s), moved(1900, 100, { atEnd: true })).emitted(scrolled(95, 99, { atEnd: true }))
       assert.strictEqual(latest.atEnd, true)
 
       s.props({ ...props, count: 103 })
@@ -212,7 +295,7 @@ describe("VirtualList", () => {
   it.effect("places a short list at the end of its viewport", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(VirtualList, { ...base, count: 2, contentAlignment: "end" }, makeStandIn())
-      s.mounted(tracked(s), moved(0, 100)).emitted({ _tag: "Scrolled", first: 0, last: 1 })
+      s.mounted(tracked(s), moved(0, 100)).emitted(scrolled(0, 1))
       assert.include(s.get(listLoc).attrs?.style ?? "", "padding-block-start:60px")
       assert.strictEqual(argsOf(s).inset, 60)
     }))
@@ -226,7 +309,7 @@ describe("VirtualList", () => {
         makeStandIn()
       )
       assert.strictEqual(argsOf(s).measure, false)
-      s.mounted(tracked(s), moved(60, 60)).emitted({ _tag: "Scrolled", first: 1, last: 3 })
+      s.mounted(tracked(s), moved(60, 60)).emitted(scrolled(1, 3))
       assert.include(s.get(listLoc).attrs?.style ?? "", "padding-block-start:50px;padding-block-end:40px")
     }))
 
@@ -234,7 +317,7 @@ describe("VirtualList", () => {
     Effect.gen(function*() {
       const props = { ...base, overscan: 0, dataset: "a" }
       const s = yield* Scene.make(VirtualList, props, makeStandIn())
-      s.mounted(tracked(s), moved(0)).emitted({ _tag: "Scrolled", first: 0, last: 4 })
+      s.mounted(tracked(s), moved(0)).emitted(scrolled(0, 4))
       s.mounted(
         tracked(s),
         sent("MeasuredItems", {
@@ -242,7 +325,7 @@ describe("VirtualList", () => {
           width: 300,
           items: span(0, 4).map((index) => ({ index, key: null, top: index * 40, left: 0, size: 40 }))
         })
-      ).emitted({ _tag: "Scrolled", first: 0, last: 2 })
+      ).emitted(scrolled(0, 2))
       s.props({ ...props, dataset: "b" })
       assert.strictEqual(argsOf(s).epoch, 1)
       assert.deepStrictEqual(indices(s), span(0, 4))

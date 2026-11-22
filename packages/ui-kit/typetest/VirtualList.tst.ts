@@ -24,10 +24,22 @@ describe("VirtualList", () => {
     expect<Component.Headless.Requirements<typeof VirtualList>>().type.toBe<never>()
     const child = VirtualList(h, {
       props: { count: 100, itemSize: 32, keys: [], followEnd: { threshold: 8 }, contentAlignment: "end" },
-      onEmit: { Scrolled: ({ first, last }) => Msg.Scrolled({ first, last }) },
+      onEmit: {
+        Scrolled: (event) => {
+          expect(event).type.toBe<{
+            readonly _tag: "Scrolled"
+            readonly first: number
+            readonly last: number
+            readonly atStart: boolean
+            readonly atEnd: boolean
+          }>()
+          return Msg.Scrolled({ first: event.first, last: event.last })
+        }
+      },
       view: (virtualList) => {
         expect(virtualList.items).type.toBe<Array<number>>()
         expect(virtualList.count).type.toBe<number>()
+        expect(virtualList.atStart).type.toBe<boolean>()
         expect(virtualList.atEnd).type.toBe<boolean>()
 
         expect(virtualList.viewport(h.div).children(needsClock)).type.toBe<Div<Clock>>()

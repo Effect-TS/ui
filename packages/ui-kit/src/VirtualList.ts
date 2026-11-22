@@ -47,7 +47,10 @@
  * before them, the mount scrolls by the difference before the browser paints,
  * so what the user sees stays in place. `scrollTo` scrolls to an index, a
  * key, an offset or the end once it's rendered, and keeps it there as the
- * items around it are measured, until anything else scrolls the list.
+ * items around it are measured, until anything else scrolls the list. A
+ * request waits for its target, such as the items of a list that is still
+ * empty or the item with its key, even when the prop is dropped meanwhile,
+ * until it's applied, a newer request replaces it, or the user scrolls.
  * `followEnd` keeps the end in
  * view while the user is there, and `contentAlignment: "end"` places a list
  * shorter than its viewport at the bottom, as a chat does. Neither reverses
@@ -242,7 +245,11 @@ export const VirtualListProps = Schema.Struct({
   initialCount: Schema.optional(Schema.Number),
   /** A name for the items, such as the search they answer. The list drops what it measured when it changes. */
   dataset: Schema.optional(Schema.String),
-  /** Scrolls to a target once it's rendered, and again for each request that differs from the last. */
+  /**
+   * Scrolls to a target once it's rendered, and again for each request that
+   * differs from the last. A request waits for its target until a newer one
+   * replaces it or the user scrolls.
+   */
   scrollTo: Schema.optional(VirtualListScrollTo),
   /**
    * Keeps the end of the list in view as it grows or resizes while the user
@@ -266,14 +273,16 @@ export type VirtualListProps = typeof VirtualListProps.Type
 
 /**
  * The events of a {@link VirtualList}. `Scrolled` reports the first and last
- * visible items when the user's scrolling or a resize changes them.
+ * visible items, and whether the list is scrolled to its start and to its
+ * end, when any of them changes as the user scrolls or the viewport resizes.
+ * The end counts within the `followEnd` threshold, and 1px otherwise.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
 export const VirtualListEvents = UiSchema.TaggedEnum({
-  Scrolled: { first: Schema.Number, last: Schema.Number }
+  Scrolled: { first: Schema.Number, last: Schema.Number, atStart: Schema.Boolean, atEnd: Schema.Boolean }
 })
 
 /**
@@ -294,6 +303,7 @@ type Position = typeof Position.Type
 const Model = Schema.Struct({
   position: Schema.NullOr(Position),
   height: Schema.Number,
+  atStart: Schema.Boolean,
   atEnd: Schema.Boolean,
   lanes: Schema.Number,
   gap: Schema.Number,
@@ -302,8 +312,11 @@ const Model = Schema.Struct({
   dataset: Schema.NullOr(Schema.String),
   epoch: Schema.Number,
   focused: Schema.NullOr(ItemRef),
-  scrolled: Schema.NullOr(VirtualListScrollTo),
-  visible: Schema.NullOr(Schema.Tuple([Schema.Number, Schema.Number]))
+  handled: Schema.NullOr(VirtualListScrollTo),
+  requested: Schema.NullOr(VirtualListScrollTo),
+  announced: Schema.NullOr(
+    Schema.Struct({ first: Schema.Number, last: Schema.Number, atStart: Schema.Boolean, atEnd: Schema.Boolean })
+  )
 })
 
 type Model = typeof Model.Type
@@ -322,9 +335,12 @@ const Message = UiSchema.TaggedEnum({
     start: Schema.Number,
     height: Schema.Number,
     anchor: Schema.NullOr(Position),
+    atStart: Schema.Boolean,
     atEnd: Schema.Boolean,
     scrolled: Schema.NullOr(VirtualListScrollTo)
   },
+  RequestedScroll: { scrollTo: VirtualListScrollTo },
+  ScrolledByUser: {},
   MeasuredItems: { epoch: Schema.Number, width: Schema.Number, items: Schema.Array(MeasuredItem) },
   FocusedItem: ItemRef.fields,
   BlurredItems: {}
@@ -356,8 +372,8 @@ const current = (model: Model, props: VirtualListProps): Model =>
 
 const resolve = (props: VirtualListProps, ref: typeof ItemRef.Type, fallback: boolean): number | null => {
   const count = countOf(props)
-  if (ref.key !== null && props.keys !== undefined) {
-    const at = props.keys.indexOf(ref.key)
+  if (ref.key !== null) {
+    const at = props.keys?.indexOf(ref.key) ?? -1
     if (at >= 0 && at < count) return at
     if (!fallback) return null
   }
@@ -427,10 +443,17 @@ interface Pending {
   readonly offset: number | null
 }
 
-const pendingOf = (model: Model, props: VirtualListProps, layout: Layout): Pending | null => {
-  const scrollTo = props.scrollTo
-  if (scrollTo === undefined || layout.count === 0) return null
-  if (model.scrolled !== null && sameScrollTo(scrollTo, model.scrolled)) return null
+const sameRequest = (a: VirtualListScrollTo | undefined, b: VirtualListScrollTo | null): boolean =>
+  a !== undefined && b !== null && sameScrollTo(a, b)
+
+const freshOf = (model: Model, props: VirtualListProps): VirtualListScrollTo | null =>
+  props.scrollTo === undefined || sameRequest(props.scrollTo, model.handled) ||
+    sameRequest(props.scrollTo, model.requested)
+    ? null
+    : props.scrollTo
+
+const pendingOf = (scrollTo: VirtualListScrollTo | null, props: VirtualListProps, layout: Layout): Pending | null => {
+  if (scrollTo === null || layout.count === 0) return null
   const target = scrollTo.target
   switch (target._tag) {
     case "Index":
@@ -604,7 +627,9 @@ const TrackVirtualListArgs = {
   first: Bounds,
   last: Bounds,
   threshold: Schema.NullOr(Schema.Number),
-  request: Schema.NullOr(ScrollRequest)
+  request: Schema.NullOr(ScrollRequest),
+  fresh: Schema.NullOr(VirtualListScrollTo),
+  waiting: Schema.Boolean
 }
 
 type TrackVirtualListArgs = Schema.Struct<typeof TrackVirtualListArgs>["Type"]
@@ -628,8 +653,14 @@ const TrackVirtualList = Mount.makeStream(
         let disposed = false
         let anchor: { readonly id: string; readonly top: number } | null = null
         let atEnd = false
-        let reported: { readonly start: number; readonly height: number; readonly atEnd: boolean } | null = null
+        let reported: {
+          readonly start: number
+          readonly height: number
+          readonly atStart: boolean
+          readonly atEnd: boolean
+        } | null = null
         let applied: VirtualListScrollTo | null = null
+        let noted: VirtualListScrollTo | null = null
         let pinned: typeof ScrollRequest.Type | null = null
         let scrolledTo: number | null = null
         let focused: string | null = null
@@ -703,14 +734,16 @@ const TrackVirtualList = Mount.makeStream(
           if (hidden()) return
           const { height, top } = box()
           const start = top - origin()
+          const atStart = start <= defaultEndThreshold
           atEnd = toEnd() <= (args.threshold ?? defaultEndThreshold)
-          const unchanged = reported !== null && same(height, reported.height) && atEnd === reported.atEnd
+          const unchanged = reported !== null && same(height, reported.height) && atStart === reported.atStart &&
+            atEnd === reported.atEnd
           if (
             scrolled === null && unchanged &&
             (same(start, reported!.start) || (within(args.first, start) && within(args.last, start + height)))
           ) return
-          reported = { start, height, atEnd }
-          send(Message.MovedViewport({ start, height, atEnd, anchor: anchorAt(start), scrolled }))
+          reported = { start, height, atStart, atEnd }
+          send(Message.MovedViewport({ start, height, atStart, atEnd, anchor: anchorAt(start), scrolled }))
         }
 
         const measure = () => {
@@ -749,7 +782,10 @@ const TrackVirtualList = Mount.makeStream(
         }
 
         const onScroll = () => {
-          if (scrolledTo === null || !same(scrollTop(), scrolledTo)) pinned = null
+          if (scrolledTo === null || !same(scrollTop(), scrolledTo)) {
+            pinned = null
+            if (args.waiting) send(Message.ScrolledByUser())
+          }
           scrolledTo = null
           capture()
           report(null)
@@ -794,6 +830,14 @@ const TrackVirtualList = Mount.makeStream(
           if (disposed) return
           bind()
           const request = args.request
+          const fresh = args.fresh
+          if (
+            fresh !== null && (noted === null || !sameScrollTo(noted, fresh)) &&
+            (request === null || !sameScrollTo(request.scrollTo, fresh))
+          ) {
+            noted = fresh
+            send(Message.RequestedScroll({ scrollTo: fresh }))
+          }
           if (request !== null && (applied === null || !sameScrollTo(applied, request.scrollTo))) {
             applied = request.scrollTo
             pinned = request
@@ -880,9 +924,13 @@ type ListUpdate = Component.Update<Model, Message, VirtualListEvents, VirtualLis
 const reported = ($: ListUpdate, next: Model) => {
   const layout = layoutOf(next, $.props)
   const visible = visibleItems(layout, restingBand(next, $.props, layout))
-  return visible === null || (next.visible !== null && next.visible[0] === visible[0] && next.visible[1] === visible[1])
+  if (visible === null) return $.set(next)
+  const announced = { first: visible[0], last: visible[1], atStart: next.atStart, atEnd: next.atEnd }
+  const previous = next.announced
+  return previous !== null && previous.first === announced.first && previous.last === announced.last &&
+      previous.atStart === announced.atStart && previous.atEnd === announced.atEnd
     ? $.set(next)
-    : $.set({ ...next, visible }).emit(VirtualListEvents.Scrolled({ first: visible[0], last: visible[1] }))
+    : $.set({ ...next, announced }).emit(VirtualListEvents.Scrolled(announced))
 }
 
 type ItemOf<B extends View.PartTarget<"div" | "li">> = ReturnType<B["attr"]>
@@ -897,8 +945,8 @@ type Div = Html.Element<Message, never, Html.EventsOf<"div">, HTMLDivElement, "d
  * **Details**
  *
  * The parts object also carries `items`, the indices to render in order,
- * `count`, and `atEnd`, whether the end of the list is in view, for a
- * button that jumps back to it.
+ * `count`, and `atStart` and `atEnd`, whether the list is scrolled to its
+ * start and to its end, for a button that jumps back to the end.
  *
  * `item({ element, index })` returns `element`. `list` and `item` write
  * `role` only when no other role is set on the element, so a `role="feed"`
@@ -906,9 +954,9 @@ type Div = Html.Element<Message, never, Html.EventsOf<"div">, HTMLDivElement, "d
  * `aria-setsize`, `data-index` and `data-key`. The list's padding and an
  * item's top margin are added after the consumer's inline style.
  *
- * It emits `Scrolled` with the first and last visible items when they change
- * as the user scrolls or the viewport resizes, so a parent can load more items
- * near either end.
+ * It emits `Scrolled` with the first and last visible items and the two edge
+ * flags when any of them changes as the user scrolls or the viewport resizes,
+ * so a parent can load more items near either end, or when it reaches one.
  *
  * History restore keeps the measured sizes and the position, so the list is
  * as tall as before when the page's scroll position comes back, and not the
@@ -931,6 +979,7 @@ export const VirtualList = Component.define({
   init: ($) => ({
     position: null,
     height: 0,
+    atStart: false,
     atEnd: false,
     lanes: 1,
     gap: 0,
@@ -939,11 +988,12 @@ export const VirtualList = Component.define({
     dataset: $.props.dataset ?? null,
     epoch: 0,
     focused: null,
-    scrolled: null,
-    visible: null
+    handled: null,
+    requested: $.props.scrollTo ?? null,
+    announced: null
   }),
   update: {
-    MovedViewport: (stored, { anchor, atEnd, height, scrolled, start }, $) => {
+    MovedViewport: (stored, { anchor, atEnd, atStart, height, scrolled, start }, $) => {
       const model = current(stored, $.props)
       const layout = layoutOf(model, $.props)
       const row = rowAt(layout, start)
@@ -952,8 +1002,20 @@ export const VirtualList = Component.define({
         key: keyOf($.props, row * layout.lanes),
         offset: start - (layout.offsets[row] ?? 0)
       }
-      return reported($, { ...model, position, height, atEnd, scrolled: scrolled ?? model.scrolled })
+      return reported($, {
+        ...model,
+        position,
+        height,
+        atStart,
+        atEnd,
+        handled: scrolled ?? model.handled,
+        requested: scrolled === null ? model.requested : null
+      })
     },
+    RequestedScroll: (model, { scrollTo }) =>
+      sameRequest(scrollTo, model.handled) ? model : { ...model, requested: scrollTo },
+    ScrolledByUser: (model) =>
+      model.requested === null ? model : { ...model, handled: model.requested, requested: null },
     MeasuredItems: (stored, message, $) => {
       const model = current(stored, $.props)
       const next = measured(model, $.props, message)
@@ -968,7 +1030,8 @@ export const VirtualList = Component.define({
     const id = p.id("virtual-list")
     const layout = layoutOf(model, props)
     const resting = restingBand(model, props, layout)
-    const pending = pendingOf(model, props, layout)
+    const fresh = freshOf(model, props)
+    const pending = pendingOf(fresh ?? model.requested, props, layout)
     const band = pending === null ? resting : pendingBand(model, layout, pending, resting)
     const { after, before, between, ranges, visible } = windowOf(model, props, layout, band)
     const inset = props.contentAlignment === "end" && model.position !== null && model.height > layout.total
@@ -993,6 +1056,7 @@ export const VirtualList = Component.define({
     return {
       items: ranges.flatMap(([start, end]) => Array.from({ length: end - start }, (_, i) => start + i)),
       count: layout.count,
+      atStart: model.position !== null && model.atStart,
       atEnd: model.position !== null && model.atEnd,
       viewport: p.part(["div", "ul", "ol"], (b) => b.attr(viewportAttr, id)),
       list: p.part(["div", "ul", "ol"], (b) =>
@@ -1005,7 +1069,9 @@ export const VirtualList = Component.define({
             first: visible === null ? null : boundsOf(layout, visible[0]),
             last: visible === null ? null : boundsOf(layout, visible[1]),
             threshold: endThreshold(props),
-            request: pending
+            request: pending,
+            fresh,
+            waiting: model.requested !== null || fresh !== null
           }))
           .forward((node) =>
             ownStyle(

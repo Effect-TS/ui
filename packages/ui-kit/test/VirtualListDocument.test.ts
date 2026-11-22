@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
-import { Component } from "@effect/ui"
-import { VirtualList, type VirtualListProps, VirtualListScrollTarget } from "@effect/ui-kit"
+import { Component, UiSchema } from "@effect/ui"
+import { VirtualList, type VirtualListProps, VirtualListScrollTarget, VirtualListScrollTo } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
-import { container, tick } from "./utils/document.ts"
+import { click, container, tick } from "./utils/document.ts"
 
 const itemSize = 20
 
@@ -88,6 +88,48 @@ const mountList = Effect.fnUntraced(function*(props: Partial<VirtualListProps> =
   return { ...geometry, indices, item, list: app.querySelector<HTMLElement>(".list")! }
 })
 
+const Loader = Effect.fnUntraced(function*(scrollTo: VirtualListScrollTo) {
+  const geometry = yield* layout
+  const Message = UiSchema.TaggedEnum({ Loaded: {}, Retargeted: {} })
+  const Demo = Component.define({
+    name: "Demo",
+    scoped: false,
+    model: Schema.Struct({ count: Schema.Number, scrollTo: Schema.optional(VirtualListScrollTo) }),
+    message: Message,
+    elements: Html
+  }).make({
+    init: () => ({ count: 0, scrollTo }),
+    update: {
+      Loaded: () => ({ count: 1000 }),
+      Retargeted: (model) => ({
+        ...model,
+        scrollTo: { target: VirtualListScrollTarget.Index({ index: 100 }) }
+      })
+    },
+    view: (model, h) =>
+      h.div.children(
+        h.button.class("load").onClick(Message.Loaded()).children("Load"),
+        h.button.class("retarget").onClick(Message.Retargeted()).children("Retarget"),
+        VirtualList(h, {
+          props: { count: model.count, itemSize, scrollTo: model.scrollTo },
+          view: (virtualList) =>
+            virtualList.viewport(h.div.class("viewport")).children(
+              virtualList.list(h.ul.class("list")).children(
+                virtualList.items.map((index) =>
+                  virtualList.item({ element: h.li.class("item").key(String(index)), index })
+                )
+              )
+            )
+        })
+      )
+  })
+  const app = yield* container
+  yield* BrowserHost.mountEffect(Demo, {}, app)
+  geometry.install()
+  yield* tick
+  return { ...geometry, press: (name: string) => click(app.querySelector(".".concat(name))!) }
+})
+
 const span = (start: number, end: number) => Array.from({ length: end - start + 1 }, (_, i) => start + i)
 
 describe("VirtualList in a document", { concurrent: false }, () => {
@@ -133,5 +175,25 @@ describe("VirtualList in a document", { concurrent: false }, () => {
       yield* tick
       assert.strictEqual(scrollTop(), 500 * itemSize + itemSize - 100)
       assert.deepStrictEqual(indices(), span(493, 503))
+    }))
+
+  it.effect("scrolls to the first request once the items load, after the parent drops it", () =>
+    Effect.gen(function*() {
+      const { press, scrollTop } = yield* Loader({ target: VirtualListScrollTarget.Index({ index: 500 }) })
+      press("load")
+      yield* tick
+      yield* tick
+      assert.strictEqual(scrollTop(), 500 * itemSize)
+    }))
+
+  it.effect("scrolls to a newer request that replaced the first while the list was empty", () =>
+    Effect.gen(function*() {
+      const { press, scrollTop } = yield* Loader({ target: VirtualListScrollTarget.Index({ index: 500 }) })
+      press("retarget")
+      yield* tick
+      press("load")
+      yield* tick
+      yield* tick
+      assert.strictEqual(scrollTop(), 100 * itemSize)
     }))
 })
