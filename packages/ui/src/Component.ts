@@ -2136,7 +2136,7 @@ export type OnChange<S, M, Msg> = M extends Query.Query.Any
  * @category guards
  * @since 0.1.0
  */
-export const isComponent = (u: unknown): u is Any | Scoped<any, any, any, never> => Predicate.hasProperty(u, TypeId)
+export const isComponent = (u: unknown): u is AnyRoot => Predicate.hasProperty(u, TypeId)
 
 // A component is a function, so the prototypes keep `call`, `apply` and `bind`.
 const Proto = Object.assign(Object.create(Function.prototype), {

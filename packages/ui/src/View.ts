@@ -2036,10 +2036,10 @@ class HelperImpl<Msg, Props> implements Helper<Msg, Props> {
     lazies.used++
     return node
   }
-  scoped(this: any, ...args: Array<any>): unknown {
+  scoped(this: any, alive: any, content?: any): unknown {
     const s = Object.create(this)
-    s["~alive"] = args.length === 1 ? true : args[0]
-    return args[args.length - 1](s)
+    s["~alive"] = content ? alive : true
+    return (content ?? alive)(s)
   }
   isRunning(command: Command.Definition.Any, group?: unknown): boolean {
     return this.runningFn(Command.nameOf(command), Command.groupKeyOf(command, group))

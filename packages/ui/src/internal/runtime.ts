@@ -380,7 +380,7 @@ type Saved = Record<string, unknown>
 
 interface KeptTable {
   round: number
-  readonly children: Map<Component.Any | Feature.Any, Map<string, Kept>>
+  readonly children: Map<string, Kept>
   ask: ((alive: (input: Component.Alive<any, any, any>) => boolean, key: string) => boolean) | undefined
 }
 
@@ -1090,10 +1090,8 @@ const encodeTree = (root: Instance): Effect.Effect<Map<Instance, Exit.Exit<PageS
     for (const child of inst.children) visit(child)
     const table = keptLive > 0 ? keptTables.get(inst) : undefined
     if (table === undefined) return
-    for (const byKey of table.children.values()) {
-      for (const entry of byKey.values()) {
-        if (entry.inner._tag === "Child" && entry.at === undefined) visit(entry.inner.inst)
-      }
+    for (const entry of table.children.values()) {
+      if (entry.inner._tag === "Child" && entry.at === undefined) visit(entry.inner.inst)
     }
   }
   visit(root)
@@ -1207,10 +1205,8 @@ const serializeTree = (
     if (table !== undefined) {
       const shown = sink
       sink = noSink
-      for (const byKey of table.children.values()) {
-        for (const kept of byKey.values()) {
-          if (kept.inner._tag === "Child" && kept.at === undefined) instance(kept.inner.inst, inner)
-        }
+      for (const kept of table.children.values()) {
+        if (kept.inner._tag === "Child" && kept.at === undefined) instance(kept.inner.inst, inner)
       }
       sink = shown
     }
@@ -1262,14 +1258,8 @@ const serializeTree = (
   if (Object.keys(statuses).length > 0) add("~status", statuses)
   add("~query", query)
   if (Object.keys(collected).length > 0) add("~reported", collected)
-  for (const _ in kept) {
-    add("~kept", kept)
-    break
-  }
-  for (const _ in drawnScoped) {
-    add("~scoped", drawnScoped)
-    break
-  }
+  if (Object.keys(kept).length > 0) add("~kept", kept)
+  if (Object.keys(drawnScoped).length > 0) add("~scoped", drawnScoped)
   if (isStatic) add("~static", true)
   return state
 }
@@ -1448,11 +1438,11 @@ const setup = (
   let supply: Saved | undefined
   let late: RScoped | undefined
   const claimSaved = (author: Instance, from: Saved) => {
-    const path = author.path
     const all = from["~kept"] as Record<string, Record<string, Saved>> | undefined
-    const kept = all?.[path]
-    const drawn = (from["~scoped"] as Record<string, ReadonlyArray<string>> | undefined)?.[path]
+    const kept = all?.[author.path]
+    const drawn = (from["~scoped"] as Record<string, ReadonlyArray<string>> | undefined)?.[author.path]
     if (kept === undefined && drawn === undefined) return
+    const path = author.path
     if (from === popped) delete all![path]
     else if (from === hydrating?.state) {
       if (hydrating.claimed.has(path) && !author.component.definition.scoped) return
@@ -2237,7 +2227,7 @@ const setup = (
     }
     // Its reports go with it.
     markReports(inst)
-    if (hydrating !== undefined) claimSaved(inst, hydrating.state)
+    hydrating?.claimed.add(inst.path)
     for (const child of inst.children) leave(child)
     if (keptLive > 0) leaveKept(inst)
     // An outlet is a place in its receiver's view, not an instance the log knows.
@@ -2254,7 +2244,7 @@ const setup = (
     const at = nodes[0]
     const parentNode = at === undefined ? undefined : host.parentOf(at)
     if (parentNode !== undefined) host.insertBefore(parentNode, placeholder, at)
-    else if (inst.parent === undefined && !keptEntries.has(inst)) host.insertBefore(container, placeholder, undefined)
+    else if (inst.depth === 0) host.insertBefore(container, placeholder, undefined)
     release()
     for (const node of nodes) host.remove(node)
     inst.rendered = new TextRecord(emptyText, placeholder)
@@ -5719,8 +5709,7 @@ const setup = (
       }
     } catch (error) {
       failLater(out.author, error)
-      created++
-      out.rendered = new TextRecord(emptyText, host.createText(""))
+      out.rendered = blankText(undefined)
     }
     failClash(out)
     if (inst.children === noChildren) inst.children = new Set()
@@ -5845,7 +5834,7 @@ const setup = (
   const createChild = (inst: Instance, view: View.Child<any, any>, env: Env, range?: Range): Rendered => {
     if (view.alive === undefined) return makeChild(inst, view, env, range)
     const at: RScoped = { _tag: "Fallback", scoped: true, v: view, inner: undefined! }
-    at.inner = drawScoped(inst, at, view, env, range)
+    at.inner = drawScoped(inst, at, view, env, range) ?? blankText(range)
     return at
   }
 
@@ -5924,13 +5913,8 @@ const setup = (
     // it would cost more than anything else here.
     if (inst.children === noChildren) inst.children = new Set()
     inst.children.add(child)
-    const table = keptLive > 0 && scope === undefined ? keptTables.get(inst) : undefined
-    if (table !== undefined) {
-      for (const keys of table.children.values()) {
-        const entry = keys.get(view.key)
-        if (entry !== undefined && `${inst.path}/${segment(entry.inner.v)}` === child.path) failShared(child, entry)
-      }
-    }
+    const entry = keptLive > 0 && scope === undefined ? entryAt(inst, view) : undefined
+    if (entry !== undefined) failShared(child, entry)
     return new ChildRecord(view, child)
   }
 
@@ -6883,20 +6867,24 @@ const setup = (
   }
 
   const entryAt = (author: Instance, view: View.Child<any, any>): Kept | undefined =>
-    keptTables.get(author)?.children.get(view.component)?.get(view.key)
+    keptTables.get(author)?.children.get(segment(view))
 
   const askAlive = (
     author: Instance,
     table: KeptTable,
     alive: (input: Component.Alive<any, any, any>) => boolean,
-    view: View.Child<any, any>
+    view: View.Child<any, any>,
+    entry: Kept | undefined
   ): boolean => {
     try {
-      return (table.ask ??= asker(author))(alive, view.key)
+      if ((table.ask ??= asker(author))(alive, view.key)) return true
     } catch (error) {
       failLater(author, error)
-      return false
     }
+    const waits = waitingOf.get(author)
+    if (waits !== undefined) delete waits[`${author.path}/${segment(view)}`]
+    if (entry !== undefined) endKept(entry)
+    return false
   }
   const asker = (author: Instance): NonNullable<KeptTable["ask"]> => {
     let read = false
@@ -6934,18 +6922,16 @@ const setup = (
     view: View.Child<any, any>,
     env: Env,
     range?: Range
-  ): RChild | RFallback | RText => {
+  ): RChild | RFallback | undefined => {
     const author = inst.author
     const table = tableOf(author)
-    let byKey = table.children.get(view.component)
-    const entry = byKey?.get(view.key)
+    const named = segment(view)
+    const found = table.children.get(named)
+    const entry = found?.inner.v.component === view.component ? found : undefined
     const stale = replaced !== undefined && within(inst, replaced) && !within(author, replaced)
-    if (stale ? entry !== undefined : isOld(inst, table) && entry?.inner.v !== view) return blankText(range)
+    if (stale ? entry !== undefined : isOld(inst, table) && entry?.inner.v !== view) return
     const alive = aliveOf(view)
-    if (!stale && alive !== undefined && !askAlive(author, table, alive, view)) {
-      endWrite(author, view, entry)
-      return blankText(range)
-    }
+    if (!stale && alive !== undefined && !askAlive(author, table, alive, view, entry)) return
     if (entry !== undefined) {
       const from = entry.at
       const drawer = entry.drawer
@@ -6963,23 +6949,20 @@ const setup = (
       if (inner._tag === "Fallback" || !inner.inst.waiting) return take(entry, inst, at, view, env, range)
       endKept(entry)
     }
-    const component = view.component as Component.Any
-    for (const [other, keys] of table.children) {
-      if ((other as Component.Any).definition.name === component.definition.name && keys.has(view.key)) {
-        failTwice(author, view)
-        return blankText(range)
-      }
+    if (found !== entry) {
+      failTwice(author, view)
+      return
     }
-    const named = `${author.path}/${segment(view)}`
+    const path = `${author.path}/${named}`
     const waits = waitingOf.get(author)
-    const saved = waitingAt(waits, named)
+    const saved = waitingAt(waits, path)
     const was = supply
     supply = saved
     if (stale) late = at
-    const inner = makeChild(inst, view, env, range, named, Scope.forkUnsafe(author.scope, "sequential"))
+    const inner = makeChild(inst, view, env, range, path, Scope.forkUnsafe(author.scope, "sequential"))
     supply = was
     late = undefined
-    if (saved !== undefined && !(inner._tag === "Child" && inner.inst.waiting)) delete waits![named]
+    if (saved !== undefined && !(inner._tag === "Child" && inner.inst.waiting)) delete waits![path]
     const made: Kept = {
       author,
       table,
@@ -6990,12 +6973,11 @@ const setup = (
       container: undefined,
       round: table.round
     }
-    if (byKey === undefined) table.children.set(component, byKey = new Map())
-    byKey.set(view.key, made)
+    table.children.set(named, made)
     if (inner._tag === "Child") keptEntries.set(inner.inst, made)
     keptLive++
     if (inst !== author) {
-      for (const child of author.children) if (child.key === view.key && child.path === named) failShared(child, made)
+      for (const child of author.children) if (child.key === view.key && child.path === path) failShared(child, made)
     }
     if (stale) {
       lates.push(() => {
@@ -7023,11 +7005,6 @@ const setup = (
     inst.component === outletComponent ? outletOf.get(inst)!.slotted.round : keptTables.get(inst.author)?.round ?? 0
   const isOld = (inst: Instance, table: KeptTable): boolean =>
     inst.component === outletComponent && roundAt(inst) !== table.round
-  const endWrite = (author: Instance, view: View.Child<any, any>, entry: Kept | undefined) => {
-    takeSaved(author, `${author.path}/${segment(view)}`)
-    if (entry !== undefined) endKept(entry)
-  }
-
   const aliveOf = (view: View.Child<any, any>) => view.alive === true ? undefined : view.alive
 
   const pull = (entry: Kept) => {
@@ -7074,13 +7051,13 @@ const setup = (
     }
     pull(entry)
     entry.at = at
+    const drawer = entry.drawer
+    entry.drawer = inst
     if (failure !== undefined) {
-      if (inner._tag === "Fallback" && from !== undefined) closeAll(entry.drawer, inner)
-      entry.drawer = inst
+      if (inner._tag === "Fallback" && from !== undefined) closeAll(drawer, inner)
       return entry.inner = failedChild(inst, view, failure, env)
     }
     const child = (inner as RChild).inst
-    entry.drawer = inst
     hook(child, inst)
     if (wasKept) {
       toggleMounts(child, inner, child.env, true)
@@ -7098,8 +7075,7 @@ const setup = (
     ;(child as { parent: Instance | undefined }).parent = to
     if (to.children === noChildren) to.children = new Set()
     to.children.add(child)
-    const heads = child.heads
-    if (heads > 0) { for (let at: Instance | undefined = to; at !== undefined; at = at.parent) at.heads += heads }
+    addHeads(to, child.heads)
     setDepth(child, to.depth + 1)
     rebind(child)
   }
@@ -7107,9 +7083,11 @@ const setup = (
     const from = child.parent
     if (from === undefined) return
     from.children.delete(child)
-    const heads = child.heads
-    if (heads > 0) { for (let at: Instance | undefined = from; at !== undefined; at = at.parent) at.heads -= heads }
+    addHeads(from, -child.heads)
     ;(child as { parent: Instance | undefined }).parent = undefined
+  }
+  const addHeads = (from: Instance | undefined, by: number) => {
+    for (let at = from; at !== undefined; at = at.parent) at.heads += by
   }
   const setDepth = (inst: Instance, depth: number) => {
     if (inst.depth === depth) return
@@ -7133,10 +7111,12 @@ const setup = (
       }
       if (found === undefined) {
         if (!read.optional) {
-          const error = new Error(
-            `${inst.path} reads the shared state of ${definition.name}, ${ownerAbsent(inst.parent, definition)}`
+          failLater(
+            inst,
+            new Error(
+              `${inst.path} reads the shared state of ${definition.name}, ${ownerAbsent(inst.parent, definition)}`
+            )
           )
-          defer(() => failInstance(inst, Cause.die(error), "view"))
         }
         continue
       }
@@ -7160,9 +7140,9 @@ const setup = (
     const inner = entry.inner
     if (inner._tag === "Child" && inner.inst.waiting) return dropKept(entry)
     entry.at = undefined
-    if (inner._tag === "Fallback") closeAll(entry.drawer, inner)
+    const drawer = entry.drawer
     entry.drawer = entry.author
-    if (inner._tag === "Fallback") return
+    if (inner._tag === "Fallback") return closeAll(drawer, inner)
     unhook(inner.inst)
     leaveOwners(inner.inst)
     endWaiting(inner.inst, inner.inst)
@@ -7233,8 +7213,7 @@ const setup = (
     unhook(child)
   }
   const dropKept = (entry: Kept) => {
-    const view = entry.inner.v
-    entry.table.children.get(view.component)?.delete(view.key)
+    entry.table.children.delete(segment(entry.inner.v))
     if (entry.inner._tag === "Child") keptEntries.delete(entry.inner.inst)
     keptLive--
   }
@@ -7243,33 +7222,25 @@ const setup = (
     const table = keptTables.get(inst)
     if (table === undefined) return
     keptTables.delete(inst)
-    for (const byKey of table.children.values()) {
-      for (const entry of byKey.values()) {
-        keptLive--
-        if (entry.inner._tag !== "Child") continue
-        const child = entry.inner.inst
-        keptEntries.delete(child)
-        if (entry.at !== undefined) continue
-        releaseWatches(child)
-        leave(child)
-      }
+    for (const entry of table.children.values()) {
+      dropKept(entry)
+      if (entry.inner._tag !== "Child" || entry.at !== undefined) continue
+      releaseWatches(entry.inner.inst)
+      leave(entry.inner.inst)
     }
   }
 
   const askKept = (author: Instance, table: KeptTable) => {
-    for (const byKey of table.children.values()) {
-      for (const entry of byKey.values()) {
-        if (entry.round === table.round || entry.alive === undefined) continue
-        if (!askAlive(author, table, entry.alive, entry.inner.v)) endWrite(author, entry.inner.v, entry)
+    for (const entry of table.children.values()) {
+      if (entry.round !== table.round && entry.alive !== undefined) {
+        askAlive(author, table, entry.alive, entry.inner.v, entry)
       }
     }
   }
 
   const findKept = (inst: Instance, key: string): RChild | RFallback | undefined => {
-    for (const byKey of keptTables.get(inst)?.children.values() ?? []) {
-      for (const entry of byKey.values()) {
-        if (entry.inner.v.ref?.key === key) return entry.inner
-      }
+    for (const entry of keptTables.get(inst)?.children.values() ?? []) {
+      if (entry.inner.v.ref?.key === key) return entry.inner
     }
     return undefined
   }
@@ -7280,29 +7251,28 @@ const setup = (
     at.late = undefined
     const old = at.inner
     const entry = old._tag === "Text" ? undefined : entryAt(inst.author, view)
+    let placeholder: unknown
+    let next: Rendered
     if (entry !== undefined && entry.at === at) {
       const alive = aliveOf(view)
-      if (alive !== undefined && !askAlive(entry.author, entry.table, alive, view)) {
-        endWrite(entry.author, view, entry)
-        return at
-      }
+      if (alive !== undefined && !askAlive(entry.author, entry.table, alive, view, entry)) return at
       entry.alive = alive
       entry.round = entry.table.round
       const inner = entry.inner
-      if (inner._tag === "Child" && inner.inst.closed) {
-        const placeholder = swapOut(inner)
-        const failed = entry.inner = at.inner = failedChild(inst, view, inner.inst.failure!, env)
-        const parentNode = host.parentOf(placeholder.node)
-        if (parentNode !== undefined) insertNodes(parentNode, failed, placeholder.node)
-        host.remove(placeholder.node)
+      if (inner._tag !== "Child" || !inner.inst.closed) {
+        at.inner = entry.inner = patchChild(inst, inner, view, env)
+        late?.()
         return at
       }
-      at.inner = entry.inner = patchChild(inst, inner, view, env)
-      late?.()
-      return at
+      placeholder = swapOut(inner).node
+      next = entry.inner = failedChild(inst, view, inner.inst.failure!, env)
+    } else {
+      const drawn = drawScoped(inst, at, view, env)
+      if (drawn === undefined) return at
+      placeholder = (old as RText).node
+      next = drawn
     }
-    const placeholder = (old as RText).node
-    const next = at.inner = drawScoped(inst, at, view, env)
+    at.inner = next
     const parentNode = host.parentOf(placeholder)
     if (parentNode !== undefined) insertNodes(parentNode, next, placeholder)
     host.remove(placeholder)
@@ -7353,11 +7323,13 @@ const setup = (
       }
       case "Fallback": {
         const inner = rendered.inner
-        if (rendered.scoped) rendered.gone = true
-        const entry = rendered.scoped ? entryAt(inst.author, rendered.v) : undefined
-        if (entry !== undefined && entry.inner === inner) {
-          keep(entry)
-          if (entry.at === undefined) return
+        if (rendered.scoped) {
+          rendered.gone = true
+          const entry = entryAt(inst.author, rendered.v)
+          if (entry !== undefined && entry.inner === inner) {
+            keep(entry)
+            if (entry.at === undefined) return
+          }
         }
         return closeAll(inst, inner)
       }
@@ -7537,10 +7509,8 @@ const setup = (
       if (table !== undefined) homes.set(inst, into)
       for (const child of inst.children) visit(child)
       if (table !== undefined) {
-        for (const byKey of table.children.values()) {
-          for (const kept of byKey.values()) {
-            if (kept.inner._tag === "Child" && kept.at === undefined) visit(kept.inner.inst)
-          }
+        for (const kept of table.children.values()) {
+          if (kept.inner._tag === "Child" && kept.at === undefined) visit(kept.inner.inst)
         }
       }
       into = was
