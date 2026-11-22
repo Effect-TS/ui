@@ -2183,10 +2183,12 @@ export const Menu = Component.define({
     const contextTriggerPart = p.part("div", (b, key: string, triggerId: string | null) => {
       const active = context && (activeTrigger === key || (triggerId !== null && activeTrigger === triggerId))
       const marked = b
-        .attr("data-menu-context", popupId)
-        .attr("data-menu-active", flag(shown && active))
-        .attr("data-popup-open", flag(open && active))
-        .attr("data-pressed", flag(open && active))
+        .attrs({
+          "data-menu-context": popupId,
+          "data-menu-active": flag(shown && active),
+          "data-popup-open": flag(open && active),
+          "data-pressed": flag(open && active)
+        })
         .forward(ownStyle("-webkit-touch-callout:none"))
       if (disabled) return marked
       return marked

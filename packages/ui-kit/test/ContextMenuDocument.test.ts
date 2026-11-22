@@ -8,7 +8,7 @@ import { byId, container, popovers, press, tick } from "./utils/document.ts"
 
 const items = [{ value: "copy", label: "Copy" }]
 
-const Message = UiSchema.TaggedEnum({
+const PageMessage = UiSchema.TaggedEnum({
   Opened: { menu: Schema.String, reason: Schema.String },
   Dismissed: { menu: Schema.String, reason: Schema.String },
   Picked: { menu: Schema.String, value: Schema.String }
@@ -19,7 +19,7 @@ const Page = Component.define({
   scoped: false,
   props: Schema.Struct({ disabled: Schema.Boolean }),
   model: Schema.Struct({ outer: Schema.Boolean, inner: Schema.Boolean, log: Schema.Array(Schema.String) }),
-  message: Message,
+  message: PageMessage,
   elements: Html
 }).make({
   init: () => ({ outer: false, inner: false, log: [] }),
@@ -33,14 +33,14 @@ const Page = Component.define({
     Picked: (model, { menu, value }) => ({ ...model, log: [...model.log, menu + " Picked " + value] })
   },
   view: (model, h) => {
-    const menu = (name: "outer" | "inner", inside?: View.Content<typeof Message.Type, any>) =>
+    const menu = (name: "outer" | "inner", inside?: View.Content<typeof PageMessage.Type, any>) =>
       ContextMenu(h, {
         key: name,
         props: { open: model[name], items, disabled: h.props.disabled },
         onEmit: {
-          Opened: ({ reason }) => Message.Opened({ menu: name, reason }),
-          Dismissed: ({ reason }) => Message.Dismissed({ menu: name, reason }),
-          Picked: ({ value }) => Message.Picked({ menu: name, value }),
+          Opened: ({ reason }) => PageMessage.Opened({ menu: name, reason }),
+          Dismissed: ({ reason }) => PageMessage.Dismissed({ menu: name, reason }),
+          Picked: ({ value }) => PageMessage.Picked({ menu: name, value }),
           Highlighted: () => undefined,
           Settled: () => undefined
         },
@@ -62,12 +62,14 @@ const Page = Component.define({
   }
 })
 
+const HybridMessage = UiSchema.TaggedEnum({ Opened: {}, Dismissed: {} })
+
 const Hybrid = Component.define({
   name: "Hybrid",
   scoped: false,
   props: Schema.Struct({}),
   model: Schema.Struct({ open: Schema.Boolean }),
-  message: UiSchema.TaggedEnum({ Opened: {}, Dismissed: {} }),
+  message: HybridMessage,
   elements: Html
 }).make({
   init: () => ({ open: false }),
@@ -79,8 +81,8 @@ const Hybrid = Component.define({
     Menu(h, {
       props: { open: model.open, items },
       onEmit: {
-        Opened: () => ({ _tag: "Opened" }),
-        Dismissed: () => ({ _tag: "Dismissed" }),
+        Opened: () => HybridMessage.Opened(),
+        Dismissed: () => HybridMessage.Dismissed(),
         Picked: () => undefined,
         Highlighted: () => undefined,
         ChangedQuery: () => undefined,
