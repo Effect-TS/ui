@@ -1,10 +1,12 @@
+// @vitest-environment happy-dom
 import { Command, Component, Route, Router, UiSchema } from "@effect/ui"
 import { Autocomplete, Combobox, NumberField, OTPField, Popover, ScrollArea, Select, Slider } from "@effect/ui-kit"
-import { Html } from "@effect/ui/html"
+import { BrowserHost, Html } from "@effect/ui/html"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Layer, Schema } from "effect"
 import { TestClock } from "effect/testing"
+import { container, tick } from "./utils/document.ts"
 
 const items = [
   { value: "apple", label: "Apple" },
@@ -83,7 +85,7 @@ const Page = Component.define({
   ],
   view: (model, h) =>
     h.div(
-      h.a.attr("data-testid", "away").onClick(PageMessage.Left()).children("Away"),
+      h.button.attr("data-testid", "away").onClick(PageMessage.Left()).children("Away"),
       model.route._tag === "Edit"
         ? h.div(
           Popover(h, {
@@ -193,11 +195,13 @@ const Page = Component.define({
             view: (slider) =>
               slider.root(h.div.attrs({ "data-testid": "slider-root", "data-active": String(slider.activeThumbIndex) }))
                 .children(
-                  slider.track(h.div.attr("data-testid", "slider-track")).children(
-                    slider.thumb({
-                      element: h.div.attr("data-testid", "slider-thumb"),
-                      input: h.input.attr("data-testid", "slider-input")
-                    })
+                  slider.control(h.div.attr("data-testid", "slider-control")).children(
+                    slider.track(h.div.attr("data-testid", "slider-track")).children(
+                      slider.thumb({
+                        element: h.div.attr("data-testid", "slider-thumb"),
+                        input: h.input.attr("data-testid", "slider-input")
+                      })
+                    )
                   )
                 )
           }),
@@ -214,7 +218,7 @@ const Page = Component.define({
     )
 })
 
-describe("History restore", () => {
+describe("History restore", { concurrent: false }, () => {
   it.effect("clears transient interaction state on Back while keeping parent-controlled values", () => {
     const history = Router.memoryHistory("/")
     return Effect.gen(function*() {
@@ -227,14 +231,22 @@ describe("History restore", () => {
       yield* TestHost.settle
       assert.strictEqual(root.get(Locator.testId("popover-trigger")).attrs?.["aria-expanded"], "true")
 
-      Locator.fire(root.get(Locator.testId("ac-item-apple")), "mousedown")
-      Locator.fire(root.get(Locator.testId("cb-item-apple")), "mousedown")
+      Locator.fire(root.get(Locator.testId("ac-input")), "input", { value: "b" })
+      yield* TestHost.settle
+      Locator.fire(root.get(Locator.testId("ac-item-banana")), "mouseenter")
+      Locator.fire(root.get(Locator.testId("cb-input")), "input", { value: "b" })
+      yield* TestHost.settle
+      Locator.fire(root.get(Locator.testId("cb-item-banana")), "mouseenter")
       Locator.fire(root.get(Locator.testId("select-trigger")), "keydown", { key: "b" })
       Locator.fire(root.get(Locator.testId("nf-input")), "input", { value: "12." })
       Locator.fire(root.get(Locator.testId("otp-slot-0")), "focus")
       Locator.fire(root.get(Locator.testId("slider-input")), "focus")
       yield* TestHost.settle
 
+      assert.strictEqual(root.get(Locator.testId("ac-input")).props?.value, "b")
+      assert.strictEqual(root.get(Locator.testId("ac-item-banana")).attrs?.["data-highlighted"], "")
+      assert.strictEqual(root.get(Locator.testId("cb-input")).props?.value, "b")
+      assert.strictEqual(root.get(Locator.testId("cb-item-banana")).attrs?.["data-highlighted"], "")
       assert.strictEqual(Locator.textOf(root.get(Locator.testId("select-trigger"))), "banana")
       assert.strictEqual(root.get(Locator.testId("nf-input")).props?.value, "12.")
       assert.strictEqual(root.get(Locator.testId("otp-slot-0")).attrs?.["data-focused"], "")
@@ -263,6 +275,10 @@ describe("History restore", () => {
       }
 
       assert.strictEqual(root.get(Locator.testId("popover-trigger")).attrs?.["aria-expanded"], "true")
+      assert.strictEqual(root.get(Locator.testId("ac-input")).props?.value, "b")
+      assert.isUndefined(root.get(Locator.testId("ac-item-banana")).attrs?.["data-highlighted"])
+      assert.strictEqual(root.get(Locator.testId("cb-input")).props?.value, "b")
+      assert.isUndefined(root.get(Locator.testId("cb-item-banana")).attrs?.["data-highlighted"])
       assert.strictEqual(Locator.textOf(root.get(Locator.testId("select-trigger"))), "banana")
       assert.strictEqual(root.get(Locator.testId("nf-input")).props?.value, "12")
       assert.strictEqual(root.get(Locator.testId("otp-slot-0")).props?.value, "1")
@@ -294,5 +310,42 @@ describe("History restore", () => {
         )
       )
     )
+  })
+
+  it.effect("clears Slider drag state on Back while keeping the moved value", () => {
+    const history = Router.memoryHistory("/")
+    return Effect.gen(function*() {
+      const app = yield* container
+      yield* BrowserHost.mountEffect(Page, Router.props(PageRoute), app)
+      yield* tick
+
+      const control = app.querySelector<HTMLElement>("[data-testid=\"slider-control\"]")!
+      const thumb = app.querySelector<HTMLElement>("[data-testid=\"slider-thumb\"]")!
+      control.getBoundingClientRect = () =>
+        ({ left: 0, right: 100, width: 100, top: 0, bottom: 20, height: 20, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect
+      thumb.getBoundingClientRect = () =>
+        ({ left: 20, right: 30, width: 10, top: 0, bottom: 20, height: 20, x: 20, y: 0, toJSON: () => ({}) }) as DOMRect
+
+      thumb.dispatchEvent(new PointerEvent("pointerdown", { button: 0, pointerId: 1, clientX: 25, bubbles: true }))
+      document.dispatchEvent(
+        new PointerEvent("pointermove", { pointerId: 1, buttons: 1, clientX: 60, bubbles: true })
+      )
+      yield* tick
+
+      assert.isTrue(app.querySelector<HTMLElement>("[data-testid=\"slider-root\"]")!.hasAttribute("data-dragging"))
+      assert.strictEqual(app.querySelector<HTMLInputElement>("[data-testid=\"slider-input\"]")!.value, "60")
+
+      app.querySelector<HTMLElement>("[data-testid=\"away\"]")!.click()
+      yield* tick
+      yield* tick
+      assert.isNull(app.querySelector("[data-testid=\"slider-root\"]"))
+
+      history.go(-1)
+      yield* tick
+      yield* tick
+
+      assert.isFalse(app.querySelector<HTMLElement>("[data-testid=\"slider-root\"]")!.hasAttribute("data-dragging"))
+      assert.strictEqual(app.querySelector<HTMLInputElement>("[data-testid=\"slider-input\"]")!.value, "60")
+    }).pipe(Effect.provide(Router.make({ routes: PageRoute, history })))
   })
 })
