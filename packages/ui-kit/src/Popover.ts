@@ -18,6 +18,7 @@
  * | `backdrop`     | `<div>` that covers the page                              |
  * | `positioner`   | `<div>` placed next to the trigger                        |
  * | `popup`        | `<div>` with the popover's content                        |
+ * | `viewport`     | `<div>` around content that changes with the trigger      |
  * | `arrow`        | `<div>` that points at the trigger                        |
  * | `title`        | a heading, `<h1>` to `<h6>`, that labels the popover        |
  * | `description`  | `<p>` that describes the popover                          |
@@ -30,8 +31,8 @@
  * `popover.portal(h.dialog)?.children(popover.positioner(h.div).children(popover.popup(h.div).children("Saved")))`.
  * The trigger takes an options object, `popover.trigger({ element: h.button })`,
  * since each trigger has its own hover options. The portal returns `undefined`
- * while the popover is closed, unless `keepMounted`. `backdrop` and `arrow`
- * are optional.
+ * while the popover is closed, unless `keepMounted`. `backdrop`, `viewport`
+ * and `arrow` are optional.
  *
  * The portal is a `<dialog>` shown as a manual popover, so the popup sits in
  * the top layer and needs no portal to another place in the document. The kit
@@ -58,6 +59,8 @@
  * - `positioner`: `data-open` / `data-closed`, `data-side`, `data-align`,
  *   `data-anchor-hidden`, `data-instant`
  * - `popup`: the backdrop's, and `data-side`, `data-align`, `data-instant`
+ * - `viewport`: `data-transitioning`, `data-activation-direction`,
+ *   `data-instant`
  * - `arrow`: `data-open` / `data-closed`, `data-side`, `data-align`,
  *   `data-uncentered`
  *
@@ -108,6 +111,26 @@
  * one. Store it and pass it as `triggerId`: the popup is placed against that
  * trigger, and the consumer draws the content for it. `popover.triggerId` is the
  * one the popover is open for.
+ *
+ * To animate the content as the popover moves from one trigger to another,
+ * draw it inside `popover.viewport(h.div)`, in the popup. The viewport puts
+ * its children in a `<div data-current>`. While the popover moves, it keeps
+ * what the last trigger showed in a `<div data-previous>` before it, inert and
+ * out of the flow, has `data-transitioning`, and names where the new trigger
+ * is from the last one in `data-activation-direction`: `left` or `right`, a
+ * space, then `up` or `down`, each left out within 5 pixels. The new content
+ * has `data-starting-style` for the first frame and the old one
+ * `data-ending-style` after it, and the old content is removed once the new
+ * content's transitions finish.
+ *
+ * With a viewport, the positioner's inline style also carries
+ * `--positioner-width` and `--positioner-height`, the popup's size for the
+ * current content, and the popup's `--popup-width` and `--popup-height`.
+ * Those two are `auto`, except while the popover moves: they then go from the
+ * old content's size to the new one's, so
+ * `.popup { width: var(--popup-width, auto); transition: width 200ms }`
+ * animates the resize. The `data-previous` container carries the old size in
+ * the same two variables.
  *
  * A `PopoverTrigger` opens a popover from another part of the page. Give the
  * popover an `id` and the trigger the same `popupId`. Its presses and hovers
@@ -401,6 +424,9 @@ const Message = UiSchema.TaggedEnum({
   CompletedWaitBeforeClosingOnPress: {},
   SwitchedTrigger: {},
   SettledSwitch: {},
+  StartedTransition: { direction: Schema.NullOr(Schema.String) },
+  AdvancedTransition: {},
+  EndedTransition: {},
   ChangedPlacement: { placement: Positioning.Placement }
 })
 
@@ -418,6 +444,7 @@ const Model = Schema.Struct({
   method: Schema.NullOr(DialogInteraction),
   closeReason: Schema.NullOr(PopoverDismissReason),
   switched: Schema.Boolean,
+  transition: Schema.NullOr(Schema.Struct({ direction: Schema.NullOr(Schema.String), entered: Schema.Boolean })),
   placement: Schema.NullOr(Positioning.Placement)
 })
 
@@ -467,7 +494,8 @@ const openFor = (
     method,
     closeReason: null,
     onPositioner: $.props.open && model.onPositioner,
-    switched: $.props.open && model.switched && triggerId === activeOf(model, $.props)
+    switched: $.props.open && model.switched && triggerId === activeOf(model, $.props),
+    transition: $.props.open ? model.transition : null
   }).run(
     Command.interrupt(WaitBeforeOpening),
     Command.interrupt(WaitBeforeClosing),
@@ -607,6 +635,230 @@ const TrackSwitch = Mount.makeStream(
     })
 )
 
+interface Size {
+  readonly width: number
+  readonly height: number
+}
+
+const sizeOf = (element: HTMLElement): Size => {
+  const style = element.ownerDocument.defaultView?.getComputedStyle(element)
+  const width = parseFloat(style?.width ?? "")
+  const height = parseFloat(style?.height ?? "")
+  return {
+    width: Number.isFinite(width) ? width : element.offsetWidth,
+    height: Number.isFinite(height) ? height : element.offsetHeight
+  }
+}
+
+const override = (element: HTMLElement, name: string, value: string): () => void => {
+  const before = element.style.getPropertyValue(name)
+  element.style.setProperty(name, value)
+  return () => {
+    if (before === "") element.style.removeProperty(name)
+    else element.style.setProperty(name, before)
+  }
+}
+
+const sized = (element: HTMLElement, prefix: string, size: Size | string): void => {
+  element.style.setProperty(prefix + "-width", typeof size === "string" ? size : size.width + "px")
+  element.style.setProperty(prefix + "-height", typeof size === "string" ? size : size.height + "px")
+}
+
+const unsized = (element: HTMLElement | null, prefix: string): void => {
+  element?.style.removeProperty(prefix + "-width")
+  element?.style.removeProperty(prefix + "-height")
+}
+
+const toward = (offset: number, after: string, before: string): string => offset > 5 ? after : offset < -5 ? before : ""
+
+const directionOf = (from: Element | null, to: Element | null): string | null => {
+  if (from === null || to === null) return null
+  const a = from.getBoundingClientRect()
+  const b = to.getBoundingClientRect()
+  const x = b.left + b.width / 2 - (a.left + a.width / 2)
+  const y = b.top + b.height / 2 - (a.top + a.height / 2)
+  return toward(x, "right", "left") + " " + toward(y, "down", "up")
+}
+
+const containerOf = (viewport: HTMLElement, name: string): HTMLElement | null => {
+  for (const child of viewport.children) {
+    if (child.hasAttribute(name)) return child as HTMLElement
+  }
+  return null
+}
+
+const container = new Html.Element<never>("div")
+const previousContainer = container.key("previous").attr("data-previous", "").attr("inert", "").attr(
+  "style",
+  "position:absolute"
+)
+const previousNode = View.toNode(previousContainer)
+const endingNode = View.toNode(previousContainer.attr("data-ending-style", ""))
+
+const TrackViewport = Mount.makeStream(
+  "TrackViewport",
+  {
+    args: {
+      mounted: Schema.Boolean,
+      open: Schema.Boolean,
+      anchor: Schema.String,
+      side: Schema.String,
+      positionerId: Schema.String,
+      transitioning: Schema.Boolean,
+      entered: Schema.Boolean
+    }
+  },
+  (node: HTMLElement, args, changes) =>
+    Stream.callback<Message>((queue) => {
+      const document = node.ownerDocument
+      const frame = frameOf(document.defaultView)
+      const send = (message: Message) => {
+        Queue.offerUnsafe(queue, message)
+      }
+      let current = args
+      let content = containerOf(node, "data-current")
+      let outgoing: HTMLElement | null = null
+      let committed: Size | null = null
+      let outgoingSize: Size | null = null
+      let anchored = (): void => {}
+      let resizing = 0
+      let transition = 0
+      let released = false
+
+      const positionerOf = () => document.getElementById(current.positionerId)
+      const popupOf = (positioner: HTMLElement): HTMLElement | null => {
+        let element: HTMLElement | null = node
+        while (element !== null && element.parentElement !== positioner) element = element.parentElement
+        return element
+      }
+      const finished = (elements: ReadonlyArray<HTMLElement | null>, mine: () => boolean, then: () => void): void => {
+        const running = elements.flatMap((element) => element?.getAnimations?.() ?? []).filter(finite)
+        Promise.all(running.map((animation) => animation.finished)).then(
+          () => {
+            if (mine()) then()
+          },
+          () => {
+            if (mine()) frame(() => finished(elements, mine, then))
+          }
+        )
+      }
+
+      const anchoring = (popup: HTMLElement): () => void => {
+        const rtl = document.defaultView?.getComputedStyle(popup).direction === "rtl"
+        const top = current.side === "top"
+        const left = current.side === "left" || current.side === (rtl ? "inline-end" : "inline-start")
+        if (!top && !left) return () => {}
+        const restores = [
+          override(popup, "position", "absolute"),
+          override(popup, top ? "bottom" : "top", "0"),
+          override(popup, left ? "right" : "left", "0")
+        ]
+        return () => restores.forEach((restore) => restore())
+      }
+
+      const resize = (): void => {
+        const positioner = positionerOf()
+        const popup = positioner === null ? null : popupOf(positioner)
+        if (positioner === null || popup === null) return
+        const mine = ++resizing
+        anchored()
+        anchored = anchoring(popup)
+        sized(popup, "--popup", "auto")
+        const previous = containerOf(node, "data-previous")
+        const restores = [
+          override(popup, "position", "static"),
+          override(popup, "transform", "none"),
+          override(popup, "scale", "1"),
+          override(positioner, "--available-width", "max-content"),
+          override(positioner, "--available-height", "max-content"),
+          ...(content === null
+            ? []
+            : [override(content, "animation", "none"), override(content, "transition", "none")]),
+          ...(previous === null ? [] : [override(previous, "display", "none")])
+        ]
+        sized(positioner, "--positioner", "max-content")
+        const before = committed
+        const next = sizeOf(popup)
+        committed = next
+        if (before !== null) sized(popup, "--popup", before)
+        restores.reverse().forEach((restore) => restore())
+        sized(positioner, "--positioner", next)
+        if (before === null) return
+        outgoingSize = before
+        frame(() => {
+          if (mine !== resizing || released) return
+          sized(popup, "--popup", next)
+          finished([popup], () => mine === resizing && !released, () => sized(popup, "--popup", "auto"))
+        })
+      }
+
+      const fill = (): void => {
+        const previous = containerOf(node, "data-previous")
+        if (previous === null || outgoing === null) return
+        previous.replaceChildren(...outgoing.childNodes)
+        if (outgoingSize !== null) sized(previous, "--popup", outgoingSize)
+        outgoing = null
+        // The new content's style was computed when it was measured, so reaching the starting style would
+        // itself transition. This computes it with no transition, for the frame below to transition out of.
+        const restore = content === null ? undefined : override(content, "transition", "none")
+        void node.offsetWidth
+        restore?.()
+        const mine = ++transition
+        const live = () => mine === transition && !released
+        frame(() => {
+          if (!live()) return
+          send(Message.AdvancedTransition())
+          frame(() => {
+            if (live()) finished([content, previous], live, () => send(Message.EndedTransition()))
+          })
+        })
+      }
+
+      const onChange = (next: typeof args): void => {
+        const previous = current
+        current = next
+        const leaving = content
+        content = containerOf(node, "data-current")
+        if (!next.mounted) {
+          committed = null
+          resizing++
+          anchored()
+          anchored = () => {}
+        }
+        if (!next.open) {
+          outgoing = null
+          transition++
+          if (previous.transitioning) send(Message.EndedTransition())
+          return
+        }
+        const switched = previous.open && previous.anchor !== next.anchor && leaving !== content
+        if (switched) outgoing = leaving
+        if (switched || !previous.mounted || previous.side !== next.side) resize()
+        if (switched) {
+          send(Message.StartedTransition({
+            direction: directionOf(document.querySelector(previous.anchor), document.querySelector(next.anchor))
+          }))
+        } else if (next.transitioning) fill()
+      }
+
+      return Effect.acquireRelease(
+        Effect.sync(() => {
+          if (current.mounted) resize()
+        }).pipe(
+          Effect.tap(() => Effect.forkScoped(Stream.runForEach(changes, (next) => Effect.sync(() => onChange(next)))))
+        ),
+        () =>
+          Effect.sync(() => {
+            released = true
+            anchored()
+            const positioner = positionerOf()
+            unsized(positioner, "--positioner")
+            unsized(positioner === null ? null : popupOf(positioner), "--popup")
+          })
+      )
+    })
+)
+
 /**
  * The options of a `PopoverTrigger`.
  *
@@ -706,8 +958,9 @@ export const PopoverTrigger = <Msg, R = never>(
  * `data-popup-open`, `data-pressed`, `data-disabled` and `data-dialog-trigger`;
  * on the portal `id`, `popover` and `open`; `role` and `id` on the
  * positioner; `id` and `aria-hidden` on the arrow; the data attributes on the
- * backdrop, positioner, popup and arrow; and what a `Dialog` owns on the
- * popup, title, description, close, `initialFocus` and `finalFocus` parts.
+ * backdrop, positioner, popup, viewport and arrow; and what a `Dialog` owns on
+ * the popup, title, description, close, `initialFocus` and `finalFocus` parts.
+ * The viewport's children are drawn inside its `data-current` container.
  * The portal's box, the positioner's and the arrow's position and the
  * backdrop's `pointer-events` are added after the consumer's inline style. A
  * handler the consumer adds to a part runs after the popover's own.
@@ -741,6 +994,7 @@ export const Popover = Component.define({
     method: null,
     closeReason: null,
     switched: false,
+    transition: null,
     placement: null
   }),
   update: {
@@ -751,7 +1005,7 @@ export const Popover = Component.define({
       return dismiss(model, $, reason)
     },
     SettledDialog: (model, { open }, $) =>
-      $.set(open ? model : { ...model, switched: false }).emit(PopoverEvents.Settled({ open })),
+      $.set(open ? model : { ...model, switched: false, transition: null }).emit(PopoverEvents.Settled({ open })),
     EnteredTrigger: (model, { at, closeDelay, delay, triggerId }, $) => {
       // A layer drawn over the trigger takes the pointer off it, and gives it back where it was once
       // it is gone. The pointer didn't move, so that is no hover.
@@ -782,6 +1036,11 @@ export const Popover = Component.define({
     CompletedWaitBeforeClosingOnPress: (model) => ({ ...model, patient: false }),
     SwitchedTrigger: (model) => ({ ...model, switched: false }),
     SettledSwitch: (model, _message, $) => $.props.open ? { ...model, switched: true } : model,
+    StartedTransition: (model, { direction }, $) =>
+      $.props.open ? { ...model, transition: { direction, entered: false } } : model,
+    AdvancedTransition: (model) =>
+      model.transition === null ? model : { ...model, transition: { ...model.transition, entered: true } },
+    EndedTransition: (model) => ({ ...model, transition: null }),
     ChangedPlacement: (model, { placement }) => ({ ...model, placement })
   },
   subscriptions: (_model, props) => props.id === undefined ? [] : [fromDetached(props.id)],
@@ -892,6 +1151,41 @@ export const Popover = Component.define({
           ? "click"
           : undefined
         const transitionStatus: DialogTransitionStatus = dialog.transitionStatus
+        const transition = open ? model.transition : null
+        const viewportPart = p.part("div", (b) => {
+          const viewport = b
+            .attr("data-activation-direction", transition?.direction ?? undefined)
+            .attr("data-transitioning", flag(transition !== null))
+            .attr("data-instant", instant)
+            .forward((node) => {
+              const built = View.build(node, [])
+              const current = {
+                ...View.build(
+                  container
+                    .key("current:" + (active ?? ""))
+                    .attr("data-current", "")
+                    .attr("data-starting-style", flag(transition !== null && !transition.entered)),
+                  []
+                ),
+                children: built.children
+              }
+              return {
+                ...built,
+                children: transition === null ? [current] : [transition.entered ? endingNode : previousNode, current]
+              }
+            })
+          return dialog.mounted
+            ? viewport.onMount(TrackViewport({
+              mounted: dialog.mounted,
+              open,
+              anchor: tracked.anchorSelector,
+              side,
+              positionerId,
+              transitioning: transition !== null,
+              entered: transition?.entered === true
+            }))
+            : viewport
+        })
         const popupPart = p.part("div", (b) => {
           const popup = placed(b).attr("data-instant", instant)
           return dialog.mounted
@@ -947,6 +1241,7 @@ export const Popover = Component.define({
           ),
           popup: <B extends View.PartTarget<"div">>(element: B) => popupPart(dialog.popup(element)),
           arrow,
+          viewport: viewportPart,
           title: dialog.title,
           description: dialog.description,
           close: dialog.close,

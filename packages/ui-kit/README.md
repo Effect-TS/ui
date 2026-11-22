@@ -38,7 +38,7 @@ A component that keeps no state, such as `Switch`, is a plain view function inst
 - [Meter](src/Meter.ts): a measurement within a known range, such as disk usage, whose value lives in your Model, with a label, a value text and an indicator sized to the value.
 - [NumberField](src/NumberField.ts): a controlled input for a number, formatted and parsed for a locale, with stepper buttons that repeat while held, an area to drag across, and a hidden input for a form.
 - [OTPField](src/OTPField.ts): a one-time code field, a row of one-character inputs whose code lives in your Model. It moves focus as the user types, takes a pasted or autofilled code whole, and submits it as one form value.
-- [Popover](src/Popover.ts): a `Dialog` anchored to its trigger, opened by a press or by hover. It has several triggers, with `PopoverTrigger` for one drawn elsewhere.
+- [Popover](src/Popover.ts): a `Dialog` anchored to its trigger, opened by a press or by hover. It has several triggers, with `PopoverTrigger` for one drawn elsewhere, and a `viewport` part that animates the content and the popup's size as it moves between them.
 - [Progress](src/Progress.ts): a progress bar whose value lives in your Model, with a label, a value text and an indicator sized to the value.
 - [ScrollArea](src/ScrollArea.ts): a native scroll container with custom scrollbars, overflow state, and edge-fade CSS variables.
 - [Select](src/Select.ts): a button that opens a list of options, whose open state and value live in your Model, with typeahead, the popup laid over the trigger with the selected option on its text, and inputs for a form.

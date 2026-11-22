@@ -48,7 +48,9 @@ const Page = Component.define({
             popover.portal(h.dialog)?.children(
               popover.positioner(h.div.attr("data-positioner", "")).children(
                 popover.popup(h.div).children(
-                  popover.title(h.h2.attr("id", "title")).children(`For ${popover.triggerId}`)
+                  popover.viewport(h.div.attr("id", "viewport")).children(
+                    popover.title(h.h2).children(`For ${popover.triggerId}`)
+                  )
                 )
               )
             )
@@ -69,6 +71,12 @@ const mountPage = Effect.gen(function*() {
   return { log: () => root.model()!.log }
 })
 
+const containers = () =>
+  Array.from(
+    byId("viewport").children,
+    (child) => `${child.hasAttribute("data-previous") ? "previous" : "current"}: ${child.textContent}`
+  )
+
 describe("Popover in a document", { concurrent: false }, () => {
   it.effect("a trigger drawn elsewhere opens the popover it names, is its anchor, and closes it", () =>
     Effect.gen(function*() {
@@ -79,9 +87,33 @@ describe("Popover in a document", { concurrent: false }, () => {
       yield* tick
       assert.deepStrictEqual(log(), ["Opened detached trigger-press"])
       assert.strictEqual(trigger.getAttribute("aria-controls"), "popover")
-      assert.strictEqual(byId("title").textContent, "For detached")
+      assert.deepStrictEqual(containers(), ["current: For detached"])
       click(trigger)
       yield* tick
       assert.deepStrictEqual(log(), ["Opened detached trigger-press", "Dismissed trigger-press"])
+    }))
+
+  it.effect("the viewport sizes the positioner, and shows the last trigger's content while it moves to another", () =>
+    Effect.gen(function*() {
+      yield* mountPage
+      byId("b").getBoundingClientRect = () => new DOMRect(100, 0, 10, 10)
+      click(byId("a"))
+      yield* tick
+      yield* tick
+      const positioner = document.querySelector<HTMLElement>("[data-positioner]")!
+      assert.notStrictEqual(positioner.style.getPropertyValue("--positioner-width"), "")
+      const viewport = byId("viewport")
+      const seen: Array<string> = []
+      const observer = new MutationObserver(() => {
+        seen.push(`${viewport.getAttribute("data-activation-direction")}: ${containers().join(", ")}`)
+      })
+      observer.observe(viewport, { attributes: true, childList: true, subtree: true })
+      click(byId("b"))
+      yield* tick
+      yield* tick
+      observer.disconnect()
+      assert.include(seen, "right : previous: For a, current: For b")
+      assert.deepStrictEqual(containers(), ["current: For b"])
+      assert.isFalse(viewport.hasAttribute("data-transitioning"))
     }))
 })

@@ -25,6 +25,7 @@ describe("Popover", () => {
             expect(popover.backdrop(h.div)).type.toBe<Div | undefined>()
             expect(popover.positioner(h.div)).type.toBe<Div>()
             expect(popover.popup(h.div)).type.toBe<Div>()
+            expect(popover.viewport(h.div)).type.toBe<Div>()
             expect(popover.arrow(h.div)).type.toBe<Div>()
             expect(popover.triggerId).type.toBe<string | null>()
             expect(popover.openReason).type.toBe<PopoverOpenReason | null>()
