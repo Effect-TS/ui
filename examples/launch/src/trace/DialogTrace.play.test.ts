@@ -1,7 +1,4 @@
-// @vitest-environment happy-dom
 import { HtmlPlay } from "@effect/ui/html/testing"
-// oxlint-disable-next-line no-unassigned-import
-import "@effect/ui/html/register"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, it } from "@effect/vitest"
 import { Effect } from "effect"
@@ -25,7 +22,7 @@ it.layer(TestHost.layer(), { buildPerTest: true })("DialogTrace", (it) => {
         "message page RequestedCloseConfirm",
         "props dialog open: false"
       ])
-      assert.deepStrictEqual(steps.map((step) => step.starts), [true, false, false, false, false, false, false, false])
+      assert.deepStrictEqual(steps.filter((step) => step.starts).map((step) => step.name), ["ClickedTrigger"])
       assert.deepStrictEqual(steps[2]?.page, ["confirm: true"])
       assert.deepStrictEqual(steps[6]?.page, ["confirm: false"])
       assert.strictEqual(steps[0]?.where, "/DialogPage/Dialog")

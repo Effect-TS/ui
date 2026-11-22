@@ -1,7 +1,4 @@
-// @vitest-environment happy-dom
 import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
-// oxlint-disable-next-line no-unassigned-import
-import "@effect/ui/html/register"
 import { Locator } from "@effect/ui/testing"
 import { describe, it } from "@effect/vitest"
 import { Effect } from "effect"

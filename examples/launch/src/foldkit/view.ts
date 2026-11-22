@@ -14,7 +14,7 @@ const confirmView = (h: HtmlBuilder<Message>) =>
   isVisible
 }: Dialog.RenderInfo) =>
   h.dialog(
-    [...dialog, h.Class("dialog")],
+    [...dialog],
     isVisible
       ? [
         h.div([...backdrop, h.Class("backdrop")]),

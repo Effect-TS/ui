@@ -4,17 +4,19 @@ import { Component, Head, type View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 import { DialogPage } from "./demo/DialogPage.ts"
-import { foldkitSteps } from "./foldkitFlow.ts"
-
-export const LaunchPageProps = Schema.Struct({
-  effect: Snippet,
-  foldkit: Schema.Array(Snippet)
-})
-export type LaunchPageProps = typeof LaunchPageProps.Type
-
-const Section = <M>(h: View.H<M>, label: string) => h.section.class("section").attr("aria-label", label)
+import { foldkitInitial, foldkitSteps } from "./foldkitFlow.ts"
 
 const Label = <M>(h: View.H<M>, text: string) => h.p.class("label").children(`// ${text}`)
+
+const Section = <M>(h: View.H<M>, label: string) =>
+  h.section.class("section").attr("aria-label", label).children(Label(h, label))
+
+const Terms = <M>(h: View.H<M>, name: string, items: ReadonlyArray<readonly [term: string, description: string]>) =>
+  h.dl.class(name).children(
+    ...items.map(([term, description]) =>
+      h.div.key(term).class("term").children(h.dt.children(term), h.dd.children(description))
+    )
+  )
 
 const names = [
   ["Foldkit 0.x", "The frontend framework on npm today, foldkit@0.171."],
@@ -43,7 +45,7 @@ const totals = [
 export const LaunchPage = Component.define({
   name: "LaunchPage",
   scoped: false,
-  props: LaunchPageProps,
+  props: Schema.Struct({ effect: Snippet, foldkit: Schema.Array(Snippet) }),
   model: Schema.Struct({}),
   message: Schema.Never,
   elements: Html
@@ -59,26 +61,16 @@ export const LaunchPage = Component.define({
         h.p.class("lede").children(
           "Foldkit 0.x was a frontend framework. Its frontend work continues as Effect UI, and Foldkit becomes the full-stack framework built on it. If you've built with Foldkit 0.x, most of what you know carries over. This page shows the one thing that changed the most, and why."
         ),
-        h.dl.class("names").children(
-          ...names.map(([name, description]) =>
-            h.div.key(name).class("name").children(h.dt.children(name), h.dd.children(description))
-          )
-        )
+        Terms(h, "names", names)
       ),
       Section(h, "Where state lives").children(
-        Label(h, "Where state lives"),
         h.h2.children("One Model you could read top to bottom"),
         h.p.class("prose").children(
           "In Foldkit 0.x the whole app is one Schema Model, and every Message goes through one update. You could start at the Model, follow a Message, and see exactly what changed and why. That made apps easy to reason about and easy to test. Effect UI keeps what made that work:"
         ),
-        h.dl.class("kept").children(
-          ...kept.map(([term, description]) =>
-            h.div.key(term).class("kept-item").children(h.dt.children(term), h.dd.children(description))
-          )
-        )
+        Terms(h, "kept", kept)
       ),
       Section(h, "Where it got heavy").children(
-        Label(h, "Where it got heavy"),
         h.h2.children("Every child's state went through its parent"),
         h.div.class("split").children(
           h.div.class("prose").children(
@@ -102,7 +94,6 @@ export const LaunchPage = Component.define({
         )
       ),
       Section(h, "What changes").children(
-        Label(h, "What changes"),
         h.h2.children("Each component holds its own state"),
         h.p.class("prose").children(
           "In Effect UI every component instance has its own Schema Model, changed only by its own update. A parent passes props down and handles the events its children emit. It no longer stores a child's state or forwards its messages. Your Models, Messages and update functions are written the same way, and the MessageLog still records every step under the instance's path."
@@ -117,12 +108,7 @@ export const LaunchPage = Component.define({
               title: "Foldkit 0.x",
               files: h.props.foldkit,
               steps: foldkitSteps,
-              live: false,
-              page: {
-                name: "Page",
-                note: "Stores the dialog's Model",
-                state: ["confirm.isOpen: false", "confirm.animation: Idle"]
-              },
+              page: { name: "Page", note: "Stores the dialog's Model", state: foldkitInitial },
               dialog: { name: "Dialog.update", note: "Runs on the Model the page passes in", state: [] },
               empty: "Press Step to follow one open and one close."
             }
@@ -132,8 +118,6 @@ export const LaunchPage = Component.define({
             props: {
               title: "Effect UI",
               files: [h.props.effect],
-              steps: [],
-              live: true,
               page: { name: "DialogPage", note: "Owns whether the dialog is open", state: ["confirm: false"] },
               dialog: {
                 name: "Dialog",
@@ -166,14 +150,12 @@ export const LaunchPage = Component.define({
         )
       ),
       Section(h, "Lifetime").children(
-        Label(h, "Lifetime"),
         h.h2.children("By default, state lasts as long as the component is rendered"),
         h.p.class("prose").children(
           "Stop rendering a component and its Model goes with it. That's the trade for not storing every child's state yourself, and we think it's the right one. When state has to survive being off screen, like a draft on a tab the reader switched away from, the parent renders that child with h.scoped, and its Model is kept while it's hidden."
         )
       ),
       Section(h, "What's next").children(
-        Label(h, "What's next"),
         h.h2.children("Moving from Foldkit 0.x"),
         h.p.class("prose").children(
           "The upgrade guide isn't published yet. When it is, it will cover the API changes step by step. It's a migration, not a rewrite: your Models, Messages and update functions move across mostly as they are. Foldkit, the full-stack framework, builds on Effect UI from here."
