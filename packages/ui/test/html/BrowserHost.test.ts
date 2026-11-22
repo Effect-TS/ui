@@ -1104,6 +1104,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       const Seen = UiSchema.TaggedEnum({ Saw: { entry: Schema.String } })
       const Typing = Component.define({
         name: "Typing",
+        scoped: false,
         model: Schema.Array(Schema.String),
         message: Seen,
         elements: Html
@@ -1184,6 +1185,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           const Typed = UiSchema.TaggedEnum({ Typed: { value: Schema.String } })
           const Upper = Component.define({
             name: "Upper",
+            scoped: false,
             model: Schema.String,
             message: Typed,
             elements: Html

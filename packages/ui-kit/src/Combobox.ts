@@ -174,6 +174,7 @@
  *
  * const Picker = Component.define({
  *   name: "Picker",
+ *   scoped: false,
  *   model: Schema.Struct({ open: Schema.Boolean, fruit: Schema.NullOr(Schema.String), text: Schema.String }),
  *   message: PickerMessage,
  *   elements: Html
@@ -812,7 +813,7 @@ const groupsOf = (items: ReadonlyArray<ComboboxItem>): ReadonlyArray<ComboboxGro
 type ComboboxStep = Component.Step<Model, Message, ComboboxEvents>
 
 const focus = (step: ComboboxStep, ref: typeof Input | typeof Trigger | typeof Chip): ComboboxStep =>
-  step.run(Html.Focus({ ref }).pipe(Command.asNoop))
+  step.run(Html.Focus.make({ ref }).pipe(Command.asNoop))
 
 const focusInput = (_model: Model, _message: unknown, $: ComboboxUpdate) =>
   focus($, $.props.inputInPopup === true && !$.props.open ? Trigger : Input)
@@ -1370,6 +1371,7 @@ const TrackChips = Mount.makeStream(
  */
 export const Combobox = Component.define({
   name: "Combobox",
+  scoped: false,
   props: ComboboxProps,
   model: Model,
   message: Message,
@@ -1435,7 +1437,7 @@ export const Combobox = Component.define({
         props.items.findIndex((item) => values.includes(item.value))
       )
       const item = props.items[index]
-      const typed = $.evolve(next).run(WaitBeforeResetTyping({}))
+      const typed = $.evolve(next).run(WaitBeforeResetTyping.make({}))
       return item === undefined || values.includes(item.value)
         ? typed
         : typed.emit(ComboboxEvents.Picked({ value: item.value, reason: "none" }))

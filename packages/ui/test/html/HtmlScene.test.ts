@@ -126,6 +126,7 @@ describe("HtmlScene", () => {
   it("type, change, compositionEnd and keydown default the edit, the composition and the selection, and take them", () => {
     const Field = Component.define({
       name: "Field",
+      scoped: false,
       model: Schema.Array(Schema.String),
       message: Schema.String,
       elements: Html
