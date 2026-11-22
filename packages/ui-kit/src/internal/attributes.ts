@@ -9,8 +9,8 @@ export const withStyle = (consumer: string | undefined, own: string): string =>
 
 export const ownStyle =
   (own: string) =>
-  <N extends Attributed<N> & { readonly attrs: { readonly style?: string | undefined } }>(node: N): N =>
-    node.attr("style", withStyle(node.attrs.style, own))
+  <N extends Attributed<N> & { readonly elementAttrs: { readonly style?: string | undefined } }>(node: N): N =>
+    node.attr("style", withStyle(node.elementAttrs.style, own))
 
 export const idOf = (builder: unknown): string | null => {
   const id = (builder as { readonly elementAttrs?: Readonly<Record<string, string>> | undefined }).elementAttrs?.id
