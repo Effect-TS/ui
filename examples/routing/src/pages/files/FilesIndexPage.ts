@@ -1,6 +1,6 @@
+import { EntryList } from "#components/EntryList"
 import { fileTree } from "#domain/FileTree"
 import type { View } from "@effect/ui"
-import { EntryList } from "../../files/components/EntryList.ts"
 
 export const FilesIndexPage = <M>(h: View.H<M>) =>
   h.div.children(

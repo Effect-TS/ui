@@ -1,7 +1,7 @@
+import { EntryList, filesUrl } from "#components/EntryList"
 import { FileTreeEntry, findEntry, formatFileSize } from "#domain/FileTree"
 import type { View } from "@effect/ui"
 import { type Array, Option } from "effect"
-import { EntryList, filesUrl } from "../../files/components/EntryList.ts"
 import { AppRoute } from "../../routes.ts"
 
 const filesIndexUrl = AppRoute.print(AppRoute.FilesIndex())

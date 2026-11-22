@@ -4,7 +4,9 @@
   "type": "module",
   "version": "0.0.0",
   "imports": {
-    "#domain/*": "./src/domain/*.ts"
+    "#components/*": "./src/components/*.ts",
+    "#domain/*": "./src/domain/*.ts",
+    "#queries/*": "./src/queries/*.ts"
   },
   "scripts": {
     "dev": "vite"
