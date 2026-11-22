@@ -266,6 +266,18 @@ const measure = (panel: HTMLElement): Size => {
   return size
 }
 
+const relinkTrigger = <N extends View.Node<any, any>>(node: N, from: string, to: string): N => {
+  if (node._tag !== "Element") return node
+  if (node.attrs["aria-controls"] === from) return { ...node, attrs: { ...node.attrs, "aria-controls": to } }
+  let changed = false
+  const children = node.children.map((child) => {
+    const next = relinkTrigger(child, from, to)
+    changed ||= next !== child
+    return next
+  })
+  return changed ? { ...node, children } : node
+}
+
 const TrackPanelArgs = {
   open: Schema.Boolean,
   mounted: Schema.Boolean,
@@ -384,7 +396,10 @@ const TrackPanel = Mount.makeStream(
  * every part; on the trigger `type`, `disabled`, `aria-disabled`, which it
  * removes, `aria-expanded` and `aria-controls`, which it sets only while the
  * panel is open; on the panel `hidden`. The panel keeps an `id` the consumer
- * gives it, and gets a generated one otherwise. The panel's CSS variables, and
+ * gives it, and gets a generated one otherwise. A trigger inside another
+ * element, such as a heading, is built before the panel's `id` is known, so
+ * the root points its `aria-controls` at the consumer's `id`: draw the root
+ * around both when the panel has an `id` of its own. The panel's CSS variables, and
  * the `animation-name` and durations it overrides to skip an animation, are
  * added after the consumer's inline style. A handler the consumer adds to a
  * part runs after the collapsible's own.
@@ -457,11 +472,18 @@ export const Collapsible = Component.define({
       { mounted: model.ending, started: model.started },
       props
     )
-    let panelId = p.id("panel")
+    const generatedPanelId = p.id("panel")
+    let panelId = generatedPanelId
     const states = <B extends Attributed<B>>(builder: B): B =>
       transitionAttrs(builder, open, transitionStatus).attr("data-disabled", flag(disabled))
 
-    const root = p.part("div", (b) => states(b))
+    const root = p.part(
+      "div",
+      (b) =>
+        states(b).forward((node) =>
+          !open || panelId === generatedPanelId ? node : relinkTrigger(View.build(node, []), generatedPanelId, panelId)
+        )
+    )
 
     const trigger = p.part("button", (b) =>
       b

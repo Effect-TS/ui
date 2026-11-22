@@ -70,6 +70,19 @@ describe("Collapsible", () => {
       assert.deepInclude(untilFound.get(panel).attrs, { hidden: "until-found", "data-starting-style": "" })
     }))
 
+  it("the root points a trigger built before the panel at the consumer's panel id", () => {
+    const collapsible = parts({ open: true })
+    const node = View.build(
+      collapsible.root(h.div).children(
+        h.h3.children(collapsible.trigger(h.button)),
+        collapsible.panel(h.div.attr("id", "shipping"))
+      ),
+      []
+    )
+    const heading = node.children[0] as View.Element<never>
+    assert.strictEqual((heading.children[0] as View.Element<never>).attrs["aria-controls"], "shipping")
+  })
+
   it("each part rejects another tag", () => {
     const collapsible = parts({ open: true })
     assert.strictEqual(View.build(collapsible.root(h.div), []).tag, "div")

@@ -22,6 +22,12 @@
  * @stability experimental
  * @since 0.1.0
  */
+export * from "./Accordion.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./AlertDialog.ts"
 
 /**
