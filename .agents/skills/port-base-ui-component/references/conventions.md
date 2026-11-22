@@ -35,9 +35,8 @@ the components that already follow it.
   - `<Name>Parts` for a view function that takes `view`
   - any other type the API needs (`SwitchButton`, `ListboxOption`)
 
-  The `<Name>Model` and `<Name>Message` Schemas a component defines, and their type
-  aliases, stay private and still take the component's name. Never import a
-  component's module as a namespace.
+  A component's `<Name>Model` and `<Name>Message` Schemas and their types
+  stay private, named the same way.
 - A public module that isn't a component, such as `Positioning`, has
   unprefixed exports (`Positioning.place`), so the barrel exports it as a
   namespace: `export * as Positioning from "./Positioning.ts"`.
