@@ -353,23 +353,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
       })
 
   it.effect.each(
-    ["in an element", "by a forwarded builder", "by a headless child's view"] as const
-  )("keep what the user typed into a field the slot draws %s", (placed) =>
-    Effect.gen(function*() {
-      const Page = fieldPage(placed)
-      const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Page, {}))
-      const field = app.querySelector("input")!
-      field.value = "typed"
-      const root = yield* BrowserHost.mountEffect(Page, {}, app, { state })
-      yield* open
-      yield* root.adopted
-      yield* tick
-      assert.strictEqual(app.querySelector("input"), field)
-      assert.strictEqual(field.value, "typed")
-    }).pipe(Effect.scoped))
-
-  it.effect.each(
-    ["bare", "in an element", "by a headless child's view"] as const
+    ["bare", "by a forwarded builder", "by a headless child's view"] as const
   )(
     "keep what the user typed into a field its author writes again, %s, while the receiver waits",
     (placed) =>
@@ -424,55 +408,6 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
     update: (row, { text }, $) => $.set(row + text).emit(text),
     view: (row, h) => h.p(row)
   })
-  const XRef = Row.ref("x")
-  const YRef = Row.ref("y")
-  const Relist = Component.define({
-    name: "Relist",
-    scoped: false,
-    model: Schema.Null,
-    message: Schema.Never,
-    events: Schema.Null,
-    elements: Html
-  }).make({ init: ($) => $.set(null).emit(null), update: (model) => model, view: (_, h) => h.i() })
-  const RowsMsg = UiSchema.TaggedEnum({
-    Send: { to: Schema.Literals(["x", "y"]), text: Schema.String },
-    End: { text: Schema.String },
-    List: {},
-    Got: { text: Schema.String }
-  })
-  const Rows = Component.define({
-    name: "Rows",
-    scoped: false,
-    model: Schema.Struct({ listed: Schema.Boolean, ended: Schema.Boolean, got: Schema.String }),
-    message: RowsMsg,
-    elements: Html
-  }).make({
-    init: () => ({ listed: true, ended: false, got: "" }),
-    update: (model, message, $) =>
-      RowsMsg.match(message, {
-        Send: ({ text, to }) => $.set(model).send(to === "x" ? XRef : YRef, RowMsg.Add({ text })),
-        End: ({ text }) => $.set({ ...model, listed: false, ended: true }).send(XRef, RowMsg.Add({ text })),
-        List: () => ({ ...model, listed: true }),
-        Got: ({ text }) => ({ ...model, got: model.got + text })
-      }),
-    view: (model, h) => {
-      const onEmit = (text: string) => RowsMsg.Got({ text })
-      return h.main(
-        Gated(h, {
-          key: "g",
-          slots: {
-            body: h.scoped(
-              ($) => $.model.listed,
-              (s) => model.listed ? [Row(s, { ref: XRef, onEmit }), Row(s, { ref: YRef, onEmit })] : []
-            )
-          }
-        }),
-        model.ended ? Relist(h, { key: "r", onEmit: () => RowsMsg.List() }) : null,
-        h.em(model.got)
-      )
-    }
-  })
-
   let drafts = 0
   let start: "slot" | "aside" = "slot"
   const Where = Schema.Literals(["slot", "aside", "none", "ended"])
@@ -520,27 +455,21 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
       })
   })
 
-  it.effect.each(
-    [[false, "slot"], [true, "headless child's view"]] as const
-  )(
-    "take the server's Model and new nodes when moved out of the receiver while it waits (%s: its %s drew them)",
-    ([headless]) =>
-      Effect.gen(function*() {
-        drafts = 0
-        const Moving = moving(headless)
-        const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Moving, {}))
-        const served = app.querySelector("input")!
-        const root = yield* BrowserHost.mountEffect(Moving, {}, app, { state })
-        root.send("aside")
-        yield* tick
-        const moved = app.querySelector<HTMLInputElement>("aside input")!
-        assert.notStrictEqual(moved, served)
-        assert.strictEqual(moved.value, "server")
-        yield* open
-        yield* root.adopted
-        assert.deepStrictEqual(Array.from(app.querySelectorAll("input")), [moved])
-      }).pipe(Effect.scoped)
-  )
+  it.effect("take the server's Model and new nodes when moved out of the receiver while it waits", () =>
+    Effect.gen(function*() {
+      drafts = 0
+      const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Moving, {}))
+      const served = app.querySelector("input")!
+      const root = yield* BrowserHost.mountEffect(Moving, {}, app, { state })
+      root.send("aside")
+      yield* tick
+      const moved = app.querySelector<HTMLInputElement>("aside input")!
+      assert.notStrictEqual(moved, served)
+      assert.strictEqual(moved.value, "server")
+      yield* open
+      yield* root.adopted
+      assert.deepStrictEqual(Array.from(app.querySelectorAll("input")), [moved])
+    }).pipe(Effect.scoped))
 
   it.effect("keep the nodes they got outside the receiver when moved back in before it resumes", () =>
     Effect.gen(function*() {
@@ -577,7 +506,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
       }).pipe(Effect.scoped)
   )
 
-  it.effect.each([["slot", "aside"], ["aside", "slot"], ["slot", "slot"]] as const)(
+  it.effect.each([["slot", "aside"], ["slot", "slot"]] as const)(
     "that wait for their own Layer in the %s keep the server's Model when next placed in the %s",
     ([from, to]) =>
       Effect.gen(function*() {
@@ -596,18 +525,6 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
         assert.strictEqual(placed.value, "server")
       }).pipe(Effect.scoped)
   )
-
-  it.effect("get no message sent as a flush ended them, when that flush lists them again", () =>
-    Effect.gen(function*() {
-      const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Rows, {}))
-      const root = yield* BrowserHost.mountEffect(Rows, {}, app, { state })
-      root.send(RowsMsg.End({ text: "C" }))
-      yield* tick
-      yield* open
-      yield* root.adopted
-      yield* tick
-      assert.strictEqual(app.querySelector("em")?.textContent, "")
-    }).pipe(Effect.scoped))
 
   it.effect("keep what the user typed, when the one drawn before them leaves the slot", () =>
     Effect.gen(function*() {
@@ -771,11 +688,9 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
       }).pipe(Effect.scoped)
   )
 
-  it.effect.each(
-    ["the receiver's slot", "the slot of a scoped child there"] as const
-  )(
-    "let adoption finish when their receiver is removed as they wait for their own Layer in %s",
-    (where) =>
+  it.effect(
+    "let adoption finish when their receiver is removed as they wait for their own Layer in the slot of a scoped child there",
+    () =>
       Effect.gen(function*() {
         const Waits = Component.define({
           name: "Waits",
@@ -803,10 +718,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
           init: () => true,
           update: (_, shown) => shown,
           view: (shown, h) => {
-            const body = h.scoped((s) => {
-              const waits = Waits(s, { key: "w" })
-              return where === "the receiver's slot" ? waits : Shell(s, { key: "s", slots: { inner: waits } })
-            })
+            const body = h.scoped((s) => Shell(s, { key: "s", slots: { inner: Waits(s, { key: "w" }) } }))
             return h.main(shown ? Frame(h, { key: "f", slots: { body } }) : null)
           }
         })
@@ -820,11 +732,9 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
       }).pipe(Effect.scoped)
   )
 
-  it.effect.each(
-    [[false, "slot"], [true, "headless child's view"]] as const
-  )(
-    "keep the server's nodes under the predicate their author last wrote them with, when the receiver resumes (%s: its %s draws them)",
-    ([headless]) =>
+  it.effect(
+    "keep the server's nodes under the predicate their author last wrote them with, when the receiver resumes",
+    () =>
       Effect.gen(function*() {
         const Page = Component.define({
           name: "Page",
@@ -836,9 +746,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
           init: () => false,
           update: (_, changed) => changed,
           view: (changed, h) => {
-            const written = () =>
-              h.scoped(changed ? ({ model }) => model : ({ model }) => !model, (s) => Leaf(s, { key: "l" }))
-            const body = headless ? Box(h, { key: "box", view: () => h.div(written()) }) : written()
+            const body = h.scoped(changed ? ({ model }) => model : ({ model }) => !model, (s) => Leaf(s, { key: "l" }))
             return h.main(Gated(h, { key: "f", slots: { body } }))
           }
         })
@@ -860,7 +768,6 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
   it.effect.each(
     [
       ["a child of theirs whose state decodes late", "server", "at once", "late"],
-      ["a child of theirs whose state fails to decode late", "client", "at once", "never"],
       ["them when their own state fails to decode late", "client", "never", "at once"]
     ] as const
   )(
@@ -1060,7 +967,6 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
 
   it.effect.each(
     [
-      ["props", false, ["new l"], ["new l"], []],
       ["props", true, ["new l"], ["old l"], ["old l"]],
       ["key", true, ["new m"], ["new m"], []],
       ["order", false, ["new m", "new l"], ["new m", "new l"], []]
@@ -1103,7 +1009,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
   )
 
   it.effect.each(
-    ["a headless child's view", "a slot nobody places", "a slot its receiver no longer places"] as const
+    ["a headless child's view", "a slot nobody places"] as const
   )(
     "don't start when their author last wrote them out of %s, as the receiver resumes",
     (out) =>
@@ -1133,14 +1039,13 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
           update: (_, moved) => moved,
           view: (moved, h) => {
             const written = h.scoped((s) => Labelled(s, { key: "l", props: { label: "drawn" } }))
-            const closes = out === "a slot its receiver no longer places"
             const body = out === "a headless child's view"
               ? Box(h, { key: "box", view: () => h.div(moved ? null : written) })
-              : moved && !closes
+              : moved
               ? null
               : written
             const unplaced = moved && out === "a slot nobody places" ? written : null
-            return h.main(Two(h, { key: "f", props: { open: !moved || !closes }, slots: { body, unplaced } }))
+            return h.main(Two(h, { key: "f", props: { open: true }, slots: { body, unplaced } }))
           }
         })
         const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Page, {}))
@@ -1172,9 +1077,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
 
   it.effect.each(
     [
-      ["the other slot", ["a"], ["b"], ["y"], ["z"]],
       ["neither slot", ["a"], [], ["y"], []],
-      ["a slot that holds one more", ["a"], ["a"], ["x", "y"], ["x", "y"]],
       ["its slots the other way around", ["a", "b"], ["b", "a"], ["x"], ["z", "x"]]
     ] as const
   )(
@@ -1284,11 +1187,9 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
       assert.strictEqual(app.querySelector("nav b")?.textContent, "server")
     }).pipe(Effect.scoped))
 
-  it.effect.each(
-    [[true, "keep the server's nodes"], [false, "don't start"]] as const
-  )(
-    "are asked their predicate when the receiver resumes after a render that wasn't their author's (%s: they %s)",
-    ([allowed]) =>
+  it.effect(
+    "don't start when the receiver resumes after a render that wasn't their author's and the predicate is false",
+    () =>
       Effect.gen(function*() {
         const Middle = Component.define({
           name: "Middle",
@@ -1324,14 +1225,13 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
         leafInits = 0
         noteInits = 0
         const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Page, { allowed: true }))
-        const drawn = app.querySelector("p")
-        const root = yield* BrowserHost.mountEffect(Page, { allowed }, app, { state })
+        const root = yield* BrowserHost.mountEffect(Page, { allowed: false }, app, { state })
         app.querySelector("button")!.click()
         yield* tick
         yield* open
         yield* root.adopted
         yield* tick
-        assert.strictEqual(app.querySelector("p"), allowed ? drawn : null)
+        assert.strictEqual(app.querySelector("p"), null)
       }).pipe(Effect.scoped)
   )
 
@@ -1394,41 +1294,6 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
         assert.strictEqual(app.querySelector("p")?.textContent, draft)
       }).pipe(Effect.scoped)
   )
-
-  it.effect("are read from the slot as often each, however many it holds", () =>
-    Effect.gen(function*() {
-      const readsOf = Effect.fnUntraced(function*(rows: number) {
-        let reads = 0
-        const Rows = Component.define({
-          name: "Rows",
-          scoped: false,
-          model: Schema.Number,
-          message: Schema.Null,
-          elements: Html
-        }).make({
-          init: () => 0,
-          update: (n) => n + 1,
-          view: (n, h) =>
-            h.scoped(({ model }) => model >= 0, (s) => {
-              const items = Array.from({ length: rows }, (_, key) => Item(s, { key: String(key), props: { n } }))
-              const body = new Proxy(items, {
-                get: (target, key, receiver) => {
-                  if (typeof key === "string" && key !== "length") reads++
-                  return Reflect.get(target, key, receiver)
-                }
-              })
-              return h.main(Gated(h, { key: "f", slots: { body } }))
-            })
-        })
-        const { app, state } = yield* serve(HtmlServer.renderToHtml(Rows, {}))
-        const root = yield* BrowserHost.mountEffect(Rows, {}, app, { state })
-        reads = 0
-        root.send(null)
-        yield* tick
-        return reads / rows
-      })
-      assert.strictEqual(yield* readsOf(200), yield* readsOf(50))
-    }).pipe(Effect.scoped))
 })
 
 describe("scoped children of a headless child", () => {

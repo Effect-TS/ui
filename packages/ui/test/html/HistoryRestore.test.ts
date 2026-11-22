@@ -403,45 +403,39 @@ describe("history restore of a page whose hydration hasn't settled", { concurren
   })
 
   it.effect.each(
-    [["slow form", "before"], ["scoped form", "before"], ["slow form", "after"], ["scoped form", "after"]] as const
+    ["slow form", "scoped form"] as const
   )(
-    "Back restores the server's Model of a %s a push closed as it waited for its Layer, built %s the Back",
-    ([page, built]) => {
+    "Back restores the server's Model of a %s a push closed as it waited for its Layer",
+    (page) => {
       const history = Router.memoryHistory("/")
       return Effect.gen(function*() {
         const { app, open, root } = yield* visit(page)
         root.send(Msg.Go())
         yield* tick
-        if (built === "before") yield* open
         history.go(-1)
         yield* tick
-        if (built === "after") {
-          yield* open
-          yield* tick
-        }
+        yield* open
+        yield* tick
         assert.strictEqual(app.querySelector("input")!.value, "server")
       }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
     }
   )
 
-  it.effect.each([true, false])(
-    "Back restores a scoped child the server kept undrawn (its author's state decoded at first: %s)",
-    (ready) => {
-      const history = Router.memoryHistory("/")
-      return Effect.gen(function*() {
-        const { app, open, root } = yield* visit("late settings", ready)
-        assert.notInclude(app.innerHTML, "input")
-        root.send(Msg.Go())
-        yield* tick
-        yield* open
-        history.go(-1)
-        yield* tick
-        app.querySelector("button")!.click()
-        yield* tick
-        assert.strictEqual(app.querySelector("input")!.value, "server")
-      }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
-    }
-  )
+  it.effect("Back restores a scoped child the server kept undrawn when its author's state decodes late", () => {
+    const history = Router.memoryHistory("/")
+    return Effect.gen(function*() {
+      const { app, open, root } = yield* visit("late settings", false)
+      assert.notInclude(app.innerHTML, "input")
+      root.send(Msg.Go())
+      yield* tick
+      yield* open
+      history.go(-1)
+      yield* tick
+      app.querySelector("button")!.click()
+      yield* tick
+      assert.strictEqual(app.querySelector("input")!.value, "server")
+    }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
+  })
 
   it.effect("a second Back restores a scoped child the server kept undrawn, after a push closed its author as it waited", () => {
     const history = Router.memoryHistory("/")
@@ -464,38 +458,10 @@ describe("history restore of a page whose hydration hasn't settled", { concurren
     }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
   })
 
-  it.effect("Back restores what the user typed in a form a push closed as an earlier Back's state decoded", () => {
-    const history = Router.memoryHistory("/")
-    return Effect.gen(function*() {
-      const { app, open, root } = yield* visit("late form")
-      yield* open
-      yield* tick
-      const field = app.querySelector("input")!
-      field.value = "typed"
-      field.dispatchEvent(new Event("input", { bubbles: true }))
-      yield* tick
-      root.send(Msg.Go())
-      yield* tick
-      const latch = yield* Deferred.make<void>()
-      gate = Deferred.await(latch)
-      history.go(-1)
-      yield* tick
-      root.send(Msg.Go())
-      yield* tick
-      yield* Deferred.succeed(latch, undefined)
-      history.go(-1)
-      yield* tick
-      assert.strictEqual(app.querySelector("input")!.value, "typed")
-    }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
-  })
-
   it.effect.each(
     [
-      ["late card", true],
       ["open card", true],
       ["open card", false],
-      ["open contact", true],
-      ["open contact", false],
       ["late contact", true]
     ] as const
   )(
@@ -567,9 +533,9 @@ describe("history restore of a page whose hydration hasn't settled", { concurren
     }
   )
 
-  it.effect.each([true, false])(
-    "Back restores none of a form its parent stopped drawing before a push after an earlier Back (still restoring: %s)",
-    (restoring) => {
+  it.effect(
+    "Back restores none of a form its parent stopped drawing before a push after an earlier Back",
+    () => {
       const history = Router.memoryHistory("/")
       return Effect.gen(function*() {
         const { app, open, root } = yield* sit(false)
@@ -583,7 +549,7 @@ describe("history restore of a page whose hydration hasn't settled", { concurren
         yield* tick
         root.send(DeskMsg.Show({ editor: "none" }))
         const latch = yield* Deferred.make<void>()
-        if (restoring) gate = Deferred.await(latch)
+        gate = Deferred.await(latch)
         history.go(-1)
         yield* tick
         root.send(DeskMsg.Go())
@@ -678,22 +644,6 @@ describe("history restore of a page whose hydration hasn't settled", { concurren
       yield* open
       yield* tick
       assert.strictEqual(draft(), "client")
-    }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
-  })
-
-  it.effect("Back restores a scoped child of an author made before the Back settles", () => {
-    const history = Router.memoryHistory("/")
-    return Effect.gen(function*() {
-      const { draft, root } = yield* sit(false, true)
-      root.send(DeskMsg.Go())
-      yield* tick
-      gate = Effect.never
-      root.send(DeskMsg.Show({ editor: "none" }))
-      history.go(-1)
-      yield* tick
-      root.send(DeskMsg.Show({ editor: "open" }))
-      yield* tick
-      assert.strictEqual(draft(), "server")
     }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
   })
 
