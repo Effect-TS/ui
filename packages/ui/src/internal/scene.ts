@@ -367,7 +367,7 @@ export class SceneCursor extends Cursor {
       return out
     }, () => ({ interaction: handled ? "handled" : "ignored", defaultPrevented: prevented }))
   }
-  /** An interaction of one event, on the one element `locator` matches in the view of `state`. */
+  /** An interaction of one event, on the one element `locator` matches. */
   protected one(
     step: string,
     locator: Locator.Locator,
