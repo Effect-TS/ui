@@ -1,0 +1,287 @@
+// @vitest-environment happy-dom
+import { Component, UiSchema } from "@effect/ui"
+import { Menu, Select, ToggleGroup, Toolbar } from "@effect/ui-kit"
+import { BrowserHost, Html } from "@effect/ui/html"
+import { assert, describe, it } from "@effect/vitest"
+import { Effect, Schema } from "effect"
+import { byId, click, container, popovers, tick } from "./utils/document.ts"
+
+const Message = UiSchema.TaggedEnum({
+  Toggled: { value: Schema.Array(Schema.String) },
+  OpenedMenu: {},
+  DismissedMenu: {},
+  OpenedSelect: {},
+  DismissedSelect: {},
+  Picked: { value: Schema.String }
+})
+
+const Config = Schema.Struct({
+  disabled: Schema.Boolean,
+  orientation: Schema.Literals(["horizontal", "vertical"])
+})
+
+const Page = Component.define({
+  name: "Page",
+  scoped: false,
+  props: Config,
+  model: Schema.Struct({
+    align: Schema.Array(Schema.String),
+    menu: Schema.Boolean,
+    select: Schema.Boolean,
+    zoom: Schema.String
+  }),
+  message: Message,
+  elements: Html
+}).make({
+  init: () => ({ align: [], menu: false, select: false, zoom: "100" }),
+  update: {
+    Toggled: (model, { value }) => ({ ...model, align: value }),
+    OpenedMenu: (model) => ({ ...model, menu: true }),
+    DismissedMenu: (model) => ({ ...model, menu: false }),
+    OpenedSelect: (model) => ({ ...model, select: true }),
+    DismissedSelect: (model) => ({ ...model, select: false }),
+    Picked: (model, { value }) => ({ ...model, zoom: value, select: false })
+  },
+  view: (model, h) =>
+    h.div(
+      h.button.attrs({ id: "before", type: "button" }).children("Before"),
+      Toolbar(h, {
+        props: {
+          disabled: h.props.disabled,
+          orientation: h.props.orientation,
+          groups: [{ value: "align" }],
+          items: [
+            { value: "bold" },
+            { value: "left", group: "align" },
+            { value: "right", group: "align" },
+            { value: "off", disabled: true, focusableWhenDisabled: false },
+            { value: "dim", disabled: true },
+            { value: "menu" },
+            { value: "zoom" },
+            { value: "help" },
+            { value: "search" }
+          ]
+        },
+        view: (toolbar) =>
+          toolbar.root(h.div.attr("id", "toolbar")).children(
+            toolbar.button({ element: h.button.attr("id", "bold"), value: "bold" }).children("Bold"),
+            toolbar.group({ element: h.div, value: "align" }).children(
+              ToggleGroup(h, {
+                props: { value: model.align, items: [{ value: "left" }, { value: "right" }] },
+                onEmit: { Toggled: ({ value }) => Message.Toggled({ value }) },
+                view: (group) =>
+                  group.root(h.div.attr("id", "align")).children(
+                    toolbar.button({
+                      element: group.item({ element: h.button.attr("id", "left"), value: "left" }),
+                      value: "left"
+                    })
+                      .children("Left"),
+                    toolbar.button({
+                      element: group.item({ element: h.button.attr("id", "right"), value: "right" }),
+                      value: "right"
+                    })
+                      .children("Right")
+                  )
+              })
+            ),
+            toolbar.separator(h.div),
+            toolbar.button({ element: h.button.attr("id", "off"), value: "off" }).children("Off"),
+            toolbar.button({ element: h.button.attr("id", "dim"), value: "dim" }).children("Dim"),
+            Menu(h, {
+              props: {
+                open: model.menu,
+                items: [{ value: "copy", label: "Copy" }, { value: "paste", label: "Paste" }]
+              },
+              onEmit: {
+                Opened: () => Message.OpenedMenu(),
+                Dismissed: () => Message.DismissedMenu(),
+                Picked: () => undefined,
+                Highlighted: () => undefined,
+                ChangedQuery: () => undefined,
+                Settled: () => undefined
+              },
+              view: (menu) =>
+                h.div(
+                  toolbar.button({
+                    element: menu.trigger(h.button.attr("id", "menu"), { disabled: toolbar.isDisabled("menu") }),
+                    value: "menu"
+                  }).children("Edit"),
+                  menu.positioner(h.div.attr("id", "menu-positioner")).children(
+                    menu.popup(h.div).children(
+                      menu.item(h.div.attr("id", "copy"), "copy").children("Copy"),
+                      menu.item(h.div.attr("id", "paste"), "paste").children("Paste")
+                    )
+                  )
+                )
+            }),
+            Select(h, {
+              props: {
+                open: model.select,
+                id: "zoom",
+                disabled: toolbar.isDisabled("zoom"),
+                value: model.zoom,
+                items: [{ value: "100", label: "100%" }, { value: "200", label: "200%" }]
+              },
+              onEmit: {
+                Opened: () => Message.OpenedSelect(),
+                Dismissed: () => Message.DismissedSelect(),
+                Picked: ({ value }) => typeof value === "string" ? Message.Picked({ value }) : undefined,
+                Settled: () => undefined
+              },
+              view: (select) =>
+                h.div(
+                  toolbar.button({ element: select.trigger(h.button.attr("id", "zoom")), value: "zoom" }).children(
+                    select.value(h.span)
+                  ),
+                  select.positioner(h.div.attr("id", "select-positioner")).children(
+                    select.popup(h.div).children(
+                      select.item(h.div.attr("id", "zoom-100"), "100").children("100%"),
+                      select.item(h.div.attr("id", "zoom-200"), "200").children("200%")
+                    )
+                  )
+                )
+            }),
+            toolbar.link({ element: h.a.attrs({ id: "help", href: "#help" }), value: "help" }).children("Help"),
+            toolbar.input({ element: h.input.attrs({ id: "search", value: "abc" }), value: "search" })
+          )
+      }),
+      h.button.attrs({ id: "after", type: "button" }).children("After")
+    )
+})
+
+const key = (target: Element, key: string, init: KeyboardEventInit = {}) => {
+  const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init })
+  target.dispatchEvent(event)
+  return event
+}
+
+const focused = () => document.activeElement?.id
+
+const mount = Effect.fnUntraced(function*(props: Partial<typeof Config.Type> = {}) {
+  yield* popovers
+  const app = yield* container
+  yield* BrowserHost.mountEffect(Page, { disabled: false, orientation: "horizontal", ...props }, app)
+  yield* tick
+})
+
+const walk = Effect.fnUntraced(function*(pressed: string, count: number) {
+  const visited: Array<string | undefined> = []
+  for (let i = 0; i < count; i++) {
+    key(document.activeElement!, pressed)
+    yield* tick
+    visited.push(focused())
+  }
+  return visited
+})
+
+const ids = ["bold", "left", "right", "off", "dim", "menu", "zoom", "help", "search"]
+const tabStops = () => ids.filter((id) => byId(id).getAttribute("tabindex") === "0")
+
+describe("Toolbar in a document", { concurrent: false }, () => {
+  it.effect("the arrow keys move focus across the buttons, the toggle group, the triggers, the link and the input", () =>
+    Effect.gen(function*() {
+      yield* mount()
+      assert.deepStrictEqual(tabStops(), ["bold"])
+      assert.strictEqual(byId("align").getAttribute("role"), "group")
+      assert.strictEqual(byId("zoom").getAttribute("role"), "combobox")
+      byId("bold").focus()
+      yield* tick
+      assert.deepStrictEqual(yield* walk("ArrowRight", 8), [
+        "left",
+        "right",
+        "dim",
+        "menu",
+        "zoom",
+        "help",
+        "search",
+        "search"
+      ])
+      const search = byId("search") as HTMLInputElement
+      assert.deepStrictEqual([search.selectionStart, search.selectionEnd], [0, 3])
+      search.setSelectionRange(1, 1)
+      assert.isFalse(key(search, "ArrowRight").defaultPrevented)
+      yield* tick
+      assert.strictEqual(focused(), "search")
+      search.setSelectionRange(3, 3)
+      assert.deepStrictEqual(yield* walk("ArrowRight", 1), ["bold"])
+      assert.deepStrictEqual(tabStops(), ["bold"])
+      assert.deepStrictEqual(yield* walk("ArrowLeft", 1), ["search"])
+      search.setSelectionRange(1, 1)
+      assert.isFalse(key(search, "ArrowLeft").defaultPrevented)
+      yield* tick
+      assert.strictEqual(focused(), "search")
+      search.setSelectionRange(0, 0)
+      assert.deepStrictEqual(yield* walk("ArrowLeft", 2), ["help", "zoom"])
+      assert.deepStrictEqual(yield* walk("Home", 1), ["bold"])
+      assert.deepStrictEqual(yield* walk("End", 1), ["search"])
+      byId("left").focus()
+      yield* tick
+      assert.deepStrictEqual(tabStops(), ["left"])
+    }).pipe(Effect.scoped))
+
+  it.effect("a disabled toolbar keeps its items focusable but inert, the toggle group included", () =>
+    Effect.gen(function*() {
+      yield* mount({ disabled: true })
+      for (const id of ["bold", "left", "dim", "menu", "zoom"]) {
+        assert.strictEqual(byId(id).getAttribute("aria-disabled"), "true", id)
+        assert.isFalse(byId(id).hasAttribute("disabled"), id)
+      }
+      assert.isTrue(byId("off").hasAttribute("disabled"))
+      assert.strictEqual(byId("align").getAttribute("data-disabled"), "")
+      byId("bold").focus()
+      yield* tick
+      assert.deepStrictEqual(yield* walk("ArrowRight", 3), ["left", "right", "dim"])
+      for (const id of ["left", "dim", "menu", "zoom"]) {
+        click(byId(id))
+        key(byId(id), "Enter")
+        key(byId(id), "ArrowDown")
+      }
+      yield* tick
+      assert.strictEqual(byId("left").getAttribute("aria-pressed"), "false")
+      assert.strictEqual(byId("menu").getAttribute("aria-expanded"), "false")
+      assert.strictEqual(byId("zoom").getAttribute("aria-expanded"), "false")
+    }).pipe(Effect.scoped))
+
+  it.effect("a vertical toolbar moves with Down and Up, and Right and Left are left alone", () =>
+    Effect.gen(function*() {
+      yield* mount({ orientation: "vertical" })
+      byId("bold").focus()
+      yield* tick
+      assert.deepStrictEqual(yield* walk("ArrowDown", 2), ["left", "right"])
+      assert.isFalse(key(byId("right"), "ArrowRight").defaultPrevented)
+      yield* tick
+      assert.strictEqual(focused(), "right")
+      assert.deepStrictEqual(yield* walk("ArrowUp", 2), ["left", "bold"])
+    }).pipe(Effect.scoped))
+
+  it.effect("in a vertical toolbar, Down on a Menu or Select trigger opens it, and its item ends up with focus", () =>
+    Effect.gen(function*() {
+      yield* mount({ orientation: "vertical" })
+      for (const id of ["menu", "zoom"]) {
+        byId(id).focus()
+        yield* tick
+        key(byId(id), "ArrowDown")
+        yield* tick
+        assert.strictEqual(byId(id).getAttribute("aria-expanded"), "true", id)
+        assert.isFalse(ids.includes(focused()!), id)
+      }
+    }).pipe(Effect.scoped))
+
+  it.effect("the keys in an open menu stay with the menu", () =>
+    Effect.gen(function*() {
+      yield* mount()
+      byId("menu").focus()
+      yield* tick
+      key(byId("menu"), "ArrowDown")
+      yield* tick
+      assert.strictEqual(byId("menu").getAttribute("aria-expanded"), "true")
+      const inMenu = focused()
+      key(document.activeElement!, "ArrowRight")
+      key(document.activeElement!, "End")
+      yield* tick
+      assert.notStrictEqual(focused(), "zoom")
+      assert.notStrictEqual(focused(), "search")
+      assert.isDefined(inMenu)
+      assert.deepStrictEqual(tabStops(), ["menu"])
+    }).pipe(Effect.scoped))
+})

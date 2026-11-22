@@ -56,6 +56,10 @@
  * group can move focus without reading the page. Draw one `item` for each
  * entry.
  *
+ * Inside a `Toolbar`, the group leaves the tab stop and the arrow keys to
+ * the toolbar, and is disabled with it. Stack each item inside a toolbar
+ * button: `toolbar.button({ element: toggleGroup.item({ element: h.button, value }), value })`.
+ *
  * **Example** (Text alignment, one choice at a time)
  *
  * ```ts import.meta.vitest
@@ -111,6 +115,7 @@ import * as Schema from "effect/Schema"
 import { DirectionProvider } from "./DirectionProvider.ts"
 import { flag, pressedAttrs } from "./internal/attributes.ts"
 import { arrowKeys, available, stepped } from "./internal/list.ts"
+import { Toolbar } from "./Toolbar.ts"
 
 /**
  * The direction a toggle group's items run in, which picks its arrow keys.
@@ -231,11 +236,18 @@ type ToggleGroupModel = typeof ToggleGroupModel.Type
 
 const Item = Html.ref("ToggleGroupItem", "button")
 
-const enabledOf = (props: ToggleGroupProps): ReadonlyArray<ToggleGroupItem> =>
-  props.disabled === true ? [] : props.items.filter(available)
+interface InToolbar {
+  readonly disabled: boolean
+}
 
-const enabled = (props: ToggleGroupProps, value: string): boolean =>
-  enabledOf(props).some((item) => item.value === value)
+const disabledOf = (props: ToggleGroupProps, toolbar: InToolbar | undefined): boolean =>
+  props.disabled === true || toolbar?.disabled === true
+
+const enabledOf = (props: ToggleGroupProps, toolbar: InToolbar | undefined): ReadonlyArray<ToggleGroupItem> =>
+  disabledOf(props, toolbar) ? [] : props.items.filter(available)
+
+const enabled = (props: ToggleGroupProps, toolbar: InToolbar | undefined, value: string): boolean =>
+  enabledOf(props, toolbar).some((item) => item.value === value)
 
 const toggled = (props: ToggleGroupProps, value: string): ReadonlyArray<string> => {
   const pressed = props.value.includes(value)
@@ -244,7 +256,7 @@ const toggled = (props: ToggleGroupProps, value: string): ReadonlyArray<string> 
 }
 
 const tabStopOf = (model: ToggleGroupModel, props: ToggleGroupProps): string | null => {
-  const items = enabledOf(props)
+  const items = enabledOf(props, undefined)
   return (items.find((item) => item.value === model.active) ?? items[0])?.value ?? null
 }
 
@@ -275,7 +287,9 @@ const tabStopOf = (model: ToggleGroupModel, props: ToggleGroupProps): string | n
  * it moves focus with.
  *
  * The group reads the nearest `DirectionProvider` above it, if there is
- * one, and swaps Left and Right in a right-to-left layout.
+ * one, and swaps Left and Right in a right-to-left layout. Inside a
+ * `Toolbar`, an item writes no `tabindex` and handles no `focus` or
+ * `keydown`, and the toolbar's `disabled` disables the group.
  *
  * @stability experimental
  * @category components
@@ -290,17 +304,20 @@ export const ToggleGroup = Component.define({
   events: ToggleGroupEvents,
   restore: false,
   shared: {
-    provider: { owner: DirectionProvider, optional: true }
+    provider: { owner: DirectionProvider, optional: true },
+    toolbar: { owner: Toolbar, optional: true }
   },
   elements: Html
 }).make({
   init: () => ({ active: null }),
   update: {
     ClickedItem: (model, { value }, $) =>
-      enabled($.props, value) ? $.emit(ToggleGroupEvents.Toggled({ value: toggled($.props, value) })) : model,
+      enabled($.props, $.shared.toolbar, value)
+        ? $.emit(ToggleGroupEvents.Toggled({ value: toggled($.props, value) }))
+        : model,
     FocusedItem: (_model, { value }, $) => $.evolve({ active: value }),
     PressedKey: (model, { key, value }, $) => {
-      const items = enabledOf($.props)
+      const items = enabledOf($.props, $.shared.toolbar)
       const last = items.length - 1
       const { next } = arrowKeys($.props.orientation ?? "horizontal", $.shared.provider?.direction === "rtl")
       const target = items[
@@ -323,7 +340,8 @@ export const ToggleGroup = Component.define({
   },
   parts: (model, p) => {
     const props = p.props
-    const disabled = props.disabled === true
+    const toolbar = p.shared.toolbar
+    const disabled = disabledOf(props, toolbar)
     const multiple = props.multiple === true
     const orientation = props.orientation ?? "horizontal"
     const tabStop = tabStopOf(model, props)
@@ -331,10 +349,12 @@ export const ToggleGroup = Component.define({
     const item = p.part("button", (b, value: string) => {
       const entry = props.items.find((item) => item.value === value)
       if (entry === undefined) throw new Error("ToggleGroup: no item with value \"" + value + "\" in items")
-      return pressedAttrs(b, props.value.includes(value), disabled || entry.disabled === true)
+      const pressed = pressedAttrs(b, props.value.includes(value), disabled || entry.disabled === true)
+        .onClick(ToggleGroupMessage.ClickedItem({ value }))
+      if (toolbar !== undefined) return pressed
+      return pressed
         .attr("tabindex", value === tabStop ? "0" : "-1")
         .ref(Item.at(value))
-        .onClick(ToggleGroupMessage.ClickedItem({ value }))
         .onFocus(ToggleGroupMessage.FocusedItem({ value }))
         .onKeyDown(
           ({ alt, ctrl, key, meta, shift }) =>
