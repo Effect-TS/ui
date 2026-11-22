@@ -959,7 +959,7 @@ const StepProto = {
   reset(this: Step<any, any, any, any>, name: string) {
     return makeStep(this.model, this.commands, this.emitted, [...this.lists, { name, op: "reset" }], this.sends)
   },
-  send(this: Step<any, any, any, any>, target: Ref.Any | Headless.Any | "self", message: unknown) {
+  send(this: Step<any, any, any, any>, target: Ref.Any | Headless.Any, message: unknown) {
     const send: Send = isRef(target) ? { ref: target, message } : { owner: target as Headless.Any, message }
     return makeStep(this.model, this.commands, this.emitted, this.lists, [...this.sends, send])
   }
@@ -975,9 +975,14 @@ const makeStep = (
 
 type AnyUpdate = (model: unknown, msg: unknown, $: Update<any, any, any, any>) => unknown
 
+type AnyUpdate$ = Update<any, any, any, any> & { readonly "~message": unknown; readonly "~self": Any }
+
 const UpdateProto = {
   ...StepProto,
-  combine(this: Update<any, any, any, any> & { readonly "~message": unknown }, ...updates: ReadonlyArray<AnyUpdate>) {
+  send(this: AnyUpdate$, target: Ref.Any | Headless.Any | "self", message: unknown) {
+    return StepProto.send.call(this, target === "self" ? this["~self"] as unknown as Headless.Any : target, message)
+  },
+  combine(this: AnyUpdate$, ...updates: ReadonlyArray<AnyUpdate>) {
     const msg = this["~message"]
     let model = this.model
     const commands: Array<Command.Command<any, any>> = [...this.commands]
@@ -985,7 +990,9 @@ const UpdateProto = {
     const lists = [...this.lists]
     const sends = [...this.sends]
     for (const update of updates) {
-      const next = toNext(update(model, msg, makeUpdate(model, this.props, this.queries, this.shared, msg)))
+      const next = toNext(
+        update(model, msg, makeUpdate(model, this.props, this.queries, this.shared, msg, this["~self"]))
+      )
       model = next.model
       commands.push(...next.commands)
       emitted.push(...next.events)
@@ -996,13 +1003,14 @@ const UpdateProto = {
   }
 }
 
-// `$` holds the message being handled, for `combine`.
+// `$` holds the message being handled, for `combine`, and the component, for `send("self", message)`.
 const makeUpdate = (
   model: unknown,
   props: unknown,
   queries: unknown,
   shared: unknown,
-  message: unknown
+  message: unknown,
+  self: Any
 ): Update<any, any, any, any> =>
   Object.assign(Object.create(UpdateProto), {
     model,
@@ -1013,7 +1021,8 @@ const makeUpdate = (
     props,
     queries,
     shared,
-    "~message": message
+    "~message": message,
+    "~self": self
   })
 
 const initSet = (model: unknown) => makeStep(model, [], [], [], []) as Step<any, any, any, never>
@@ -3158,7 +3167,7 @@ export const define = <
     update: ((...args: ReadonlyArray<any>) => {
       const update: AnyUpdate = args[args.length - 1]
       return (model: unknown, msg: unknown, $: Update<any, any, any, any>) =>
-        update(model, msg, makeUpdate(model, $.props, $.queries, $.shared, msg))
+        update(model, msg, makeUpdate(model, $.props, $.queries, $.shared, msg, ($ as AnyUpdate$)["~self"]))
     }) as any,
     view: (view) => view,
     fragment: (fragment) => fragment,
@@ -3188,20 +3197,6 @@ const bindQueries = (component: string, queries: unknown): ReturnType<queryCore.
   if (typeof queries === "object" && queries !== null && Object.keys(queries).length === 0) return undefined
   throw new Error(`${component}: queries must be a record of { query, args } or { queryMany, args } entries.`)
 }
-
-// A step keeps the target of `$.send("self", message)` as written, since the component doesn't exist when
-// `update` is written: here it becomes the component.
-const sentToSelf = (next: Next<any, any, any, any>, component: Any): Next<any, any, any, any> =>
-  next.sends === undefined || !next.sends.some((send) => (send.owner as unknown) === "self")
-    ? next
-    : {
-      ...next,
-      sends: next.sends.map((send) =>
-        (send.owner as unknown) === "self"
-          ? { owner: component as unknown as Headless.Any, message: send.message }
-          : send
-      )
-    }
 
 const finish = (
   definition: Definition.Any,
@@ -3256,9 +3251,12 @@ const finish = (
     receives: definition.receives,
     init: (props: unknown) => toNext(options.init(makeInit(props))),
     update: (model: unknown, msg: unknown, props: unknown, results?: Results, shared?: SharedRecord) =>
-      sentToSelf(
-        toNext(updateFn(model, msg, makeUpdate(model, props, open(model, props, results), shared ?? unsupplied, msg))),
-        component
+      toNext(
+        updateFn(
+          model,
+          msg,
+          makeUpdate(model, props, open(model, props, results), shared ?? unsupplied, msg, component)
+        )
       ),
     view: view === undefined
       ? undefined
