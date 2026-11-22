@@ -243,13 +243,22 @@ export type FieldProps = typeof FieldProps.Type
  * })
  *
  * let state = Login.init({ email: "" })
- * fieldValidationProps(Login.validate(state).fields.email) // => { invalid: undefined, filled: false }
+ * const initial = fieldValidationProps(Login.validate(state).fields.email)
+ * if (initial.invalid !== undefined || initial.filled !== false) {
+ *   throw new Error("expected unvalidated empty field")
+ * }
  *
  * state = Login.submit(state)
- * fieldValidationProps(Login.validate(state).fields.email) // => { invalid: true, filled: false }
+ * const submitted = fieldValidationProps(Login.validate(state).fields.email)
+ * if (submitted.invalid !== true || submitted.filled !== false) {
+ *   throw new Error("expected invalid empty field after submit")
+ * }
  *
  * state = Login.change(state, "email", "ada@example.com")
- * fieldValidationProps(Login.validate(state).fields.email) // => { invalid: false, filled: true }
+ * const valid = fieldValidationProps(Login.validate(state).fields.email)
+ * if (valid.invalid !== false || valid.filled !== true) {
+ *   throw new Error("expected valid filled field")
+ * }
  * ```
  *
  * @stability experimental

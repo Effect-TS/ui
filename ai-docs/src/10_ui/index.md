@@ -197,9 +197,12 @@ A definition's binding and its name string match:
 its feature prefix, as in `"notes/SaveNote"`, and the rule applies to the
 last segment.
 
-A component with `shares` takes the `Provider` suffix, as in
-`TooltipProvider`. A reader names it `provider` in `shared`, so it reads
-`h.shared.provider`. A reader of several owners names each one after its
+Reserve the `Provider` suffix (such as `TooltipProvider`, `ToastProvider`
+or `DrawerProvider`) and `shared.provider` for dedicated providers. Named
+controls or enclosing instances that also share state (such as
+`CheckboxGroup`, `Fieldset`, `Dialog`, `Drawer` and `Menu`) keep their own
+names, and readers name their `shared` entry after that role (`group`,
+`fieldset`, `parent`). A reader of several owners names each one after its
 owner instead, such as `tooltip` and `theme`.
 
 The Schemas a component defines are `<Component>Props`, `<Component>Model`,
@@ -212,7 +215,9 @@ has something to send. A Command with nothing to report ends in `Component.noop`
 usually through `Command.asNoop`. It sends nothing, and the log still records
 its `CommandEnded` with `silent: true`. A mount that returns `Component.noop`
 likewise sends no message and logs `MountEnded` with `silent: true`. A
-component with no messages takes `message: Schema.Never`.
+component with no messages takes `message: Schema.Never`. Distinguish a
+fabricated completion or no-op tag from a real key fact such as
+`PressedEnter` (used by `Checkbox` and `RadioGroup` for selective handling).
 
 Effect UI differs from Foldkit in five places:
 
@@ -357,9 +362,12 @@ returns a valid instance.
 
 Name view functions in CapitalCase, like components (for example, `Card` and `Field`).
 
-Use `View.H<M>` with `@effect/ui/html/register` for shared HTML view
-functions. No separate HTML helper type is needed. When the root is the hole,
-return its builder and let the caller add children: `Card(h).children(...)`.
+Use `View.H<M>` with `@effect/ui/html/register` for application HTML view
+functions. No separate HTML helper type is needed. Published library view
+functions (such as `@effect/ui-kit`'s `Input`) instead type `h` with the
+minimal helper capabilities they need (`{ readonly input: ... }` or
+`View.Helper<Msg, unknown>`), so callers need not register the full HTML
+vocabulary. When the root is the hole, return its builder and let the caller add children: `Card(h).children(...)`.
 This needs no children generic. `children` returns the builder and a second
 call adds after the first, so the function can add children of its own and
 still return the builder. For a nested hole, use an options object
@@ -444,6 +452,8 @@ each one in `view` with `h.slots.body`, once per render. The parent passes
 the content when it declares the child, written with its own `h`:
 
 ```ts
+// Local slotted Collapsible fixture (ai-docs/src/10_ui/fixtures/kit/Collapsible.ts),
+// distinct from @effect/ui-kit's headless Collapsible.
 Collapsible(h, {
   key: "note",
   slots: {
@@ -566,7 +576,11 @@ As a convention, give each value one authoritative source:
 - Observing a value doesn't move ownership. Part values, shared reads,
   reports and event payloads let other components observe it.
 - A prop read only in `init` is a seed, not a mirror: later changes to it
-  don't reach the Model. Name it `initial*`.
+  don't reach the Model. Name it `initial*`. This does not apply to the
+  standard root `route` prop supplied by `Router.props` (as in
+  `examples/routing/src/App.ts`), which is a live route prop rather than a
+  kit seed, or to `VirtualList`'s `initialCount`, which is read in layout
+  before measurements arrive rather than only in `init`.
 
 | Direction            | A current value                | A request or something that happened |
 | -------------------- | ------------------------------ | ------------------------------------ |
@@ -588,19 +602,24 @@ mount. "Open the import wizard" renders the wizard
 emits `Finished` or `Cancelled` for the parent to stop rendering it. "The
 dialog must stay open" is an `open` prop, even if it rarely changes.
 
-Not supported yet: a parent asking a child to act on state only the child
-holds, such as scrolling to a row or saving a private draft. Lifting that
-state into the parent works for a draft, not for scroll position or
-selection inside a widget. A counter prop that the child watches replays
-when the child remounts, so don't use one. The child's own controls,
-Subscriptions or parts have to trigger the work.
+There is no generic child-send API for a parent to trigger imperative work on
+state only a child holds (such as saving a private draft). Lifting that state
+into the parent works for a draft, and a counter prop that replays on remount
+is still an anti-pattern. A widget may, however, accept a mount-consumed
+target prop (such as `VirtualList`'s `scrollTo` with an optional `id`) when
+its repeat, deduplication, replacement and fresh-mount semantics are explicit.
+Otherwise the child's own controls, Subscriptions or parts trigger the work.
 
 A component with a controlled value reads it from props and emits what the
 user asked for, instead of updating a second copy. Its Model holds only
 interaction state the caller would never store, such as a typeahead buffer.
-A disabled or read-only control reports nothing: guard its `update`, or omit
-the DOM event handler in a view function. `@effect/ui-kit` goes further for
-its own components and takes no seed props.
+Disabled controls suppress interaction and value-changing requests: guard
+their `update`, or omit the DOM event handler in a view function (or cancel
+clicks when `focusableWhenDisabled` is set). Read-only controls suppress
+value-changing requests while still allowing non-mutating interaction such as
+focus, navigation, lifecycle, dismissal and read-only browsing (such as
+opening a `Combobox` popup without picking). `@effect/ui-kit` goes further
+for its own components and takes no seed props.
 
 Choose a popup by who decides when it closes:
 
@@ -608,11 +627,17 @@ Choose a popup by who decides when it closes:
   outside press as dismissal requests, which the caller can refuse.
 - Use `.popover("auto", open)` with `onToggle` only if the component owns
   `open` in its Model and nobody can refuse a browser dismissal.
-- For a controlled modal, use a dialog with `.modal(open)`. `onCancel` is a
-  dismissal request. `onClose` reports a close, the caller's own included,
-  so treat it as a dismissal only while `$.props.open` is still true: a
-  browser can force a modal closed, and the host reopens it while the prop
-  stays true. TestHost doesn't model the forced close.
+- For a controlled modal where the browser should own modality, use a dialog
+  with `.modal(open)`. `onCancel` is a dismissal request. `onClose` reports a
+  close, the caller's own included, so treat it as a dismissal only while
+  `$.props.open` is still true: a browser can force a modal closed, and the
+  host reopens it while the prop stays true. TestHost doesn't model the forced
+  close.
+- When other top-layer surfaces (such as toasts or nested popups) must stay
+  interactive, use a kit-managed manual popover (`.popover("manual", open)`,
+  as in `Dialog`, `AlertDialog`, `Drawer` and modal `Popover`), where the
+  component owns focus, outside-interaction blocking, close requests and exit
+  presence.
 
 Nothing is dispatched when a prop changes: the log records `PropsChanged`,
 and the next `update` reads the new value from `$.props`. To act on the
@@ -744,11 +769,14 @@ rendered starts from it, not from the saved one.
 
 Leave a field out when it depends on a Command an `update` started, such as
 a timer or a request, or on something only the DOM knew, such as hover, focus
-or a measurement. Restore runs `init`'s Commands and no others, so after Back
-`submitting: true` would wait for a request that isn't running. A secret goes
-too. Use `Schema.Redacted` when a value must never be serialised, the
-server's page state included, and `restore` when only history is the
-concern.
+or a measurement. Measured estimates needed for scroll restoration (such as
+`VirtualList`'s anchor and measured item sizes) are an explicit exception
+when they are invalidated against the new layout or dataset; do not extend
+this exception to focus, hover or in-flight work. Restore runs `init`'s
+Commands and no others, so after Back `submitting: true` would wait for a
+request that isn't running. A secret goes too. Use `Schema.Redacted` when a
+value must never be serialised, the server's page state included, and
+`restore` when only history is the concern.
 
 In `@effect/ui-kit`, `Tooltip`, `TooltipProvider`, `ToastProvider`,
 `Dialog`, `Drawer`, `DrawerProvider` and `Tabs` set `restore: false`, and

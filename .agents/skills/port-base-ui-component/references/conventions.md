@@ -7,7 +7,9 @@ the components that already follow it.
 ## Files and exports
 
 - One module per component, `packages/ui-kit/src/<Name>.ts`, named as in
-  Base UI (`Switch`, `ToggleGroup`).
+  Base UI (`Switch`, `ToggleGroup`). A family module may colocate its
+  provider companion (`DrawerProvider` in `Drawer.ts`, `TooltipProvider` in
+  `Tooltip.ts`, `ToastProvider` in `Toast.ts`).
 - Consumers import the component by name and call it with their `h`:
 
   ```ts
@@ -24,24 +26,35 @@ the components that already follow it.
   So `src/index.ts` is written by hand, not generated: `pnpm codegen`
   would export each module as a namespace, which can't be called. Add
   `export * from "./<Name>.ts"` to it in alphabetical order.
-- Every export starts with the component's name, so the flat barrel never
-  has two exports with one name:
+- Every export has an unambiguous name in the flat barrel. Components,
+  view functions, schemas and types start with the component's name:
   - the view function or component (`Switch`)
   - `<Name>Props`: a type for a view function, a Schema and its type for
     a component. The name is the same in both kinds, so it survives a
     view function becoming a component.
-  - `<Name>Events`, a Schema and its type, for a component. A view
-    function has `on<Event>` options instead.
+  - `<Name>Events`, a Schema and its type, for a component that emits
+    events. A view function has `on<Event>` options instead. Eventless
+    components (such as `DirectionProvider`) omit it, components that
+    adapt another component's contract (such as `ContextMenu` forwarding
+    `Menu`) may reuse that contract, and components sharing an engine
+    (such as `Combobox`) may share an internal schema.
   - `<Name>Parts` for a view function that takes `view`
-  - any other type the API needs (`SwitchButton`, `ListboxOption`)
+  - any other type the API needs (`SwitchButton`, `ListboxOption`,
+    companion prop types such as `DialogTriggerProps`, and payload-reason
+    types such as `DialogDismissReason`, which name the domain of causes
+    and need not repeat the event verb)
+  - helper functions may use lower-camel names that identify their
+    component (`makeAutocompleteFilter`, `makeComboboxFilter`,
+    `fieldValidationProps`, `menuFilter`)
 
   A component's `<Name>Model` and `<Name>Message` Schemas and their types
   stay private, named the same way.
 - A public module that isn't a component, such as `Positioning`, has
   unprefixed exports (`Positioning.place`), so the barrel exports it as a
   namespace: `export * as Positioning from "./Positioning.ts"`.
-- Code that several components share goes in `src/internal/<topic>.ts`,
-  once a second component needs it.
+- Shared helpers go in `src/internal/<topic>.ts` once a second component
+  needs them, and a substantial private adapter (such as
+  `internal/drawerKeyboard.ts`) may live there even with one consumer.
 - In `src`, import from module paths (`@effect/ui/Component`,
   `@effect/ui/html/Html`, `effect/Schema`), because the lint rejects barrel
   imports there. Tests may use the barrels.
@@ -53,6 +66,12 @@ the components that already follow it.
   `update`. Use it when the component keeps no state: every attribute
   follows from its props, and every handler can send the consumer's
   message. `Switch` and `Button` are view functions.
+  Detached trigger helpers (`DialogTrigger`, `MenuTrigger`,
+  `PopoverTrigger`, `PreviewCardTrigger`) are chainable builder functions
+  rather than component instances, even when they attach a gesture or
+  listener mount. Document which handler and mount slots a detached
+  trigger reserves across states, and name its companion props type
+  (`<Name>TriggerProps`) rather than leaving it inline.
 - A **headless component** (`Component.define(...).make({ parts })`) is
   for a component that keeps interaction state, generates an id, runs a
   Command, a mount or a Subscription (focus, a timer, measuring), or
@@ -93,20 +112,26 @@ to more than one element, since that gives two elements one id, and don't
 handle `focusin` or `focusout` on an element between the group and its
 members, since that hides them from the field.
 
-A single control whose focus moves into a popup, such as a select or a
-combobox, reaches a Field through `field.focusWithin` around the trigger and
-the popup's positioner, and `field.member` on the trigger. `focusWithin`
-tracks focus as `field.group` does and writes no `role` and no
-`aria-labelledby`, so the control's own label part names the trigger. The
-same rule about `focusin` and `focusout` applies.
+Choose a popup control's Field recipe by where focus actually goes:
+
+- When focus stays on the input (as in `Autocomplete` or an input-focused
+  `Combobox`), use `field.control` directly on the input.
+- When focus crosses into the popup (as in `Select` or a popup-focused
+  combobox), wrap the trigger and the popup's positioner in
+  `field.focusWithin` and apply `field.member` on the trigger. `focusWithin`
+  tracks focus as `field.group` does and writes no `role` and no
+  `aria-labelledby`, so the control's own label part names the trigger. The
+  same rule about `focusin` and `focusout` applies.
 
 A context that wraps several fields, as `Fieldset` does, reaches `Field`
 through shared state: `Fieldset` has `shares`, and `Field` reads it with an
 optional `shared` entry, so a field with no fieldset above needs nothing.
 The chain stops at the field. A control still takes `disabled` from its
-field's parts, and never reads the fieldset. A component can't share what it
-read from its own kind, so a nested `Fieldset` takes the outer one's state as
-a prop, `disabled: outer.disabled || own`.
+field's parts, and never reads the fieldset. A component can read an
+enclosing instance of its own kind with `owner: "self"` (as `Dialog`,
+`Drawer` and `Menu` do); passing an outer fieldset's disabled state as a
+prop (`disabled: outer.disabled || own`) is `Fieldset`'s own contract, not
+a runtime limitation.
 
 ARIA allows `aria-invalid` on `radiogroup` and not on `radio`, the reverse
 of a checkbox or a slider. So RadioGroup takes `invalid: field.invalid` and
@@ -185,17 +210,21 @@ Checkbox(h, {
   for `Pressed`, `onToggle` for `Toggled`. An event with no payload takes
   the message, like `.onClick(msg)`. One with a payload takes a function
   of the object a component's event would carry,
-  `onToggle: ({ checked }) => msg`. Type the message `NoInfer<Msg>`, so
-  `Msg` comes from `h`. Omitting `onPress` means Button sends no press
+  `onToggle: ({ checked }) => msg`. A detached trigger helper whose
+  handler payload is often ignored (such as `DialogTrigger`'s `onPress` or
+  `MenuTrigger`'s `onPress`/`onHover`) may also accept a constant message
+  shorthand alongside the payload function. Type the message `NoInfer<Msg>`,
+  so `Msg` comes from `h`. Omitting `onPress` means Button sends no press
   message. The consumer keeps its click handler only if no option reserves
   the event. With `focusableWhenDisabled: true`, Button rejects a consumer
   click handler even while enabled. When disabled, it installs a handler
   that cancels the click without sending a message. A component keeps
   core's `onEmit`.
-- Type `h` by what the function needs from it: the tags it draws
-  (`{ readonly button: ... }`), or `View.Helper<Msg, unknown>` when it
-  only needs the message type. Not `View.H`, which needs the app to
-  register a vocabulary.
+- For published kit functions, type `h` by the minimal capabilities the
+  function needs: the tags it draws (`{ readonly button: ... }`,
+  `{ readonly input: ... }`), or `View.Helper<Msg, unknown>` when it only
+  needs the message type. Reserve `View.H` for application helpers where
+  the app registers the HTML vocabulary.
 
 ## Identity
 
@@ -247,9 +276,12 @@ model.advanced
   resets those need to work. It adds them in `forward` with `withStyle`
   (`internal/attributes.ts`), after the consumer's inline style, so its
   own win and the consumer's other declarations stay. The look is the
-  consumer's. When the element can be drawn another way, the parts also
-  carry the value behind the declaration, such as `progress.percentage`, so
-  the consumer can skip the part.
+  consumer's. Measured CSS properties that come from DOM observation
+  (such as `ScrollArea` scrollbar geometry or `VirtualKeyboard` viewport
+  metrics) may be written by a mount instead, with scoped cleanup when the
+  mount stops or its target changes. When the element can be drawn another
+  way, the parts also carry the value behind the declaration, such as
+  `progress.percentage`, so the consumer can skip the part.
 - **Call shape.** A part takes the consumer's builder as its one argument
   and returns it, with the part applied. The consumer goes on chaining,
   and adds children with `.children(...)`:
@@ -292,14 +324,20 @@ model.advanced
   }).class("tool").children("B")
   ```
 - **The kit's attributes win** over the consumer's. A part or view
-  function writes every attribute it owns in every state, with `undefined`
-  where the state leaves it absent: `disabled`, `aria-readonly`, the data
-  attributes.
+  function writes every authoritative state attribute it owns in every
+  state, with `undefined` where the state leaves it absent: `disabled`,
+  `aria-readonly`, the data attributes.
   `.attr(name, undefined)` and `.disabled(false)` remove the consumer's
   value, in a headless part too. That includes an attribute the kit
   never sets but mustn't leave to the consumer, such as `aria-disabled`
   on a part that uses the native `disabled`. Otherwise a consumer's
   `disabled` or `data-checked` reports a state the props don't have.
+  Distinguish authoritative state from fallback labels or roles that only
+  fill in when the consumer didn't supply one (such as `Slider`'s
+  `aria-valuetext` fallback or `VirtualList`'s default `role`), so caller
+  labels aren't overwritten. Always use canonical HTML attribute names
+  when matching or clearing attributes (for example, `readonly`, not
+  `readOnly`).
   - A part returns the builder, so the consumer can chain on it after the
     part. A view function's part does its writes in `forward`, whose
     function gets the builder as the consumer finished it, when the
@@ -343,13 +381,15 @@ model.advanced
     disabled one: the browser gives it no click.
 - **Cancelling.** `on<Event>` and `onEmit` say what to send. They never
   cancel the native event, and the consumer gets no option to. The kit
-  cancels only when the props rule the native action out, with
-  `preventDefault: "always"` on the handler, as a disabled button that
-  stays focusable does for its click. Cancelling doesn't silence a handler
-  on a headless part's separate layer. Sending a message cancels nothing:
-  a `type: "reset"` button resets its form with or without `onPress`. A
-  consumer who wants the press without the native action changes the
-  props (`type: "button"`, `disabled`).
+  cancels a browser default only when the props rule the native action out
+  (with `preventDefault: "always"` on the handler, as a disabled button
+  that stays focusable does for its click), or when the kit performs that
+  action itself (such as `ScrollArea` wheel scrolling or `Toast` keyboard
+  focus movement), leaving unhandled events alone. Cancelling doesn't
+  silence a handler on a headless part's separate layer. Sending a message
+  cancels nothing: a `type: "reset"` button resets its form with or
+  without `onPress`. A consumer who wants the press without the native
+  action changes the props (`type: "button"`, `disabled`).
 - **Markup the component needs to work**, such as a form field, must not be
   a part the consumer can forget to draw. The part it belongs to adds it
   with `.children(...)` and returns the builder, so it comes before the
@@ -374,9 +414,9 @@ model.advanced
     the consumer can't style through the chain. When a wrapper is needed
     and the consumer should style it, take its builder as an argument.
 - **A focusable element the kit places**, such as a slider thumb's
-  `<input type="range">`, is the consumer's builder too. The part that
-  places it takes it as a second field next to `element`, named for
-  what it is, and decorates and places it:
+  `<input type="range">`, is the consumer's builder when the user operates
+  or names it. The part that places it takes it as a second field next to
+  `element`, named for what it is, and decorates and places it:
 
   ```ts
   slider.thumb({ element: h.div.class("thumb"), input: field.control(h.input) })
@@ -386,7 +426,9 @@ model.advanced
   such as `Field`'s `field.control`, so the kit doesn't build it the way it
   builds a hidden form field. What the consumer set on it stays, and the
   field is required, so it can't be left out. `Slider` is the worked
-  example.
+  example. By contrast, a non-tab-stop form proxy input that the user does
+  not operate or name directly (such as the visually hidden form inputs in
+  `NumberField` and `OTPField`) may be supplied by the kit.
 - **A wrapped part drops its mount's requirements** (EFF-3914). A headless
   component's requirements come from the parts it returns, and a plain
   function around `p.part` hides them, so a consumer can forget to
@@ -403,7 +445,10 @@ model.advanced
   callback names are never event names: Switch has `onToggle` and a
   Checkbox emits `Toggled`, not `CheckedChange`.
 - Decide for each event whether it reports or requests, by the rule under
-  the naming table. A Dialog emits `RequestedOpen`, not `Opened`.
+  the naming table. A Dialog emits `RequestedOpen`, not `Opened`. Name a
+  payload-reason type after the domain of causes it describes rather than
+  repeating the event verb (for example, `DialogDismissReason` for
+  `RequestedClose`).
 - `update` is a record with one function per message tag, even for a
   union with one member. A reader sees every message handled, and a new
   message is a type error until it has a key. Use the function form only
@@ -433,10 +478,23 @@ model.advanced
   `RequestedUpdate`, `RequestedClose`), each naming an item by an id the
   sender picks. The owner emits an event for what the user did, such as
   `Dismissed`, and nothing for what a sender asked. Its settings, such as
-  `timeout` and `limit`, are still props.
-- A disabled or read-only control reports nothing. A component's `update`
-  checks `disabled` and `readOnly`, so no message gets through even if an
-  event fires. A view function sets no handler in those states.
+  `timeout` and `limit`, are still props. Document whether each setting
+  prop is a sampled default or live: `ToastProvider`'s `timeout` is a
+  default sampled when a timer starts, so changing it does not reconcile
+  timers that are already running.
+- Suppress value-changing requests in disabled and read-only controls,
+  while keeping disabled behavior separately testable:
+  - A **disabled** control suppresses interaction and value-changing
+    requests. A component's `update` guards against `disabled`; a view
+    function omits interaction handlers (or cancels clicks when
+    `focusableWhenDisabled` is set).
+  - A **read-only** control suppresses value-changing requests (picking,
+    toggling, editing), while still allowing non-mutating interaction such
+    as focus, navigation, lifecycle, dismissal, and read-only browsing
+    (such as opening a `Combobox` popup and highlighting options without
+    picking). For a thin wrapper like `Input` that leaves `readonly` on
+    the caller's builder, silence on `readonly` is native browser behavior
+    rather than a kit-enforced guard.
 
 ## Popups and the top layer
 
@@ -466,25 +524,38 @@ portal. The details are in the JSDoc of `popover` and `modal` in
 - A popup that sits next to an anchor is placed by `Positioning`
   (`packages/ui-kit/src/Positioning.ts`), as `Tooltip` does: spread
   `PositionerFields` into the props, keep the reported `Placement` in the
-  Model, and issue `TrackPosition` on the positioner while the popup
-  shows. Don't use CSS anchor positioning.
+  Model, and either issue `TrackPosition` on the positioner while the
+  popup shows or compose `Positioning.trackPosition` inside the
+  positioner's single mount when that mount also manages dismissal or
+  focus (as `Menu`, `Select`, `PreviewCard` and `internal/combobox.ts`
+  do). Don't use CSS anchor positioning.
 - `.popover("auto", open)` with `onToggle` follows the browser: it closes
   on Escape, an outside click, or another auto popover opening, and the
   Model stores what `onToggle` reports. Use it only when `open` is the
   component's own Model state and nobody can refuse a close, as in
   `Listbox`. Never use it for an `open` prop: the browser would close the
   popup while the props still say open.
-- `<dialog>` with `.modal(open)` and `onCancel` is a controlled modal: the
-  host cancels Escape and backdrop clicks and reports them as `onCancel`,
-  which emits `RequestedClose`. Browsers may still force a close after
-  repeated cancels, so handle `onClose` too and emit `RequestedClose` from
-  it.
+- Choose between a native modal and a kit-managed modal by who owns
+  modality:
+  - **Native modal**: `<dialog>` with `.modal(open)` and `onCancel` when
+    the browser should own modality. The host cancels Escape and backdrop
+    clicks and reports them as `onCancel`, which emits `RequestedClose`.
+    Browsers may still force a close after repeated cancels, so handle
+    `onClose` too and emit `RequestedClose` from it.
+  - **Kit-managed modal**: a manual popover (`.popover("manual", open)`),
+    used by `Dialog`, `AlertDialog`, `Drawer` and modal `Popover` so
+    other top-layer surfaces (such as toasts) stay interactive. A
+    kit-managed modal owns focus management, outside-interaction blocking,
+    close requests and exit presence.
 
 ## Data attributes and ARIA
 
 - Use Base UI's names, on the parts Base UI puts them on.
-- A data attribute is present with an empty value, or absent:
-  `.attr("data-checked", on ? "" : undefined)`.
+- Boolean flag data attributes are present with an empty value, or absent:
+  `.attr("data-checked", on ? "" : undefined)`. Data attributes that carry
+  an enum, ID, index or other documented value (such as `data-orientation`,
+  `data-activation-direction` in `Tabs`, or `data-index` in `Slider`)
+  retain their values.
 - Attributes only a Field has, such as `data-invalid` and
   `data-touched`, reach the control through `field.control` or `field.member`,
   so the control doesn't set them. One both write, such as `disabled`, is the field's
@@ -505,8 +576,11 @@ The module JSDoc has, in order:
 3. **Data attributes**
 4. **Keyboard**
 5. any usage limits or form behavior the consumer needs to know
-6. one `**Example**` that runs as a doctest and checks the rendered HTML
+6. one executable module `**Example**` (`ts import.meta.vitest`): check
+   the rendered HTML for a component, or an observable result for a
+   utility (`Positioning`, `VirtualKeyboard`). Additional export examples
+   are allowed.
 
 The JSDoc of the view function or component lists the attributes and
-events it owns. Each export has `@stability experimental`, `@category`
-and `@since`.
+events it owns. Each public declaration (not `index.ts` re-exports) has
+`@stability experimental`, `@category` and `@since`.
