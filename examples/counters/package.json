@@ -1,0 +1,20 @@
+{
+  "name": "counters",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "vite"
+  },
+  "dependencies": {
+    "@effect/ui": "workspace:*",
+    "@effect/ui-kit": "workspace:*",
+    "effect": "^4.1.4"
+  },
+  "devDependencies": {
+    "@effect/vitest": "^4.1.4",
+    "@tailwindcss/vite": "^4.3.5",
+    "tailwindcss": "^4.3.5",
+    "vite": "^8.3.6"
+  }
+}
