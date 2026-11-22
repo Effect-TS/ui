@@ -458,7 +458,9 @@ const pick = <E>(step: Step<E>, props: Settings<E>, value: string, method: Inter
     method
   )
   return props.submitOnItemClick === true
-    ? closed.run(Html.RequestSubmit.make({ ref: props.inputInPopup === true ? Trigger : Input }).pipe(Command.asNoop))
+    ? closed.run(
+      DomCommand.RequestSubmit.make({ ref: props.inputInPopup === true ? Trigger : Input }).pipe(Command.asNoop)
+    )
     : closed
 }
 

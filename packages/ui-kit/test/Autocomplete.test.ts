@@ -6,7 +6,7 @@ import {
   type AutocompleteProps,
   makeAutocompleteFilter
 } from "@effect/ui-kit"
-import { Html } from "@effect/ui/html"
+import { DomCommand, Html } from "@effect/ui/html"
 import { HtmlScene } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -120,7 +120,7 @@ describe("Autocomplete", () => {
       assert.strictEqual(Locator.textOf(s.get(Locator.attr("class", "value"))), "Ban")
       assert.deepInclude(s.get(clearButton).attrs, { "data-visible": "" })
       s.fire(clearButton, "click", pointer("mouse")).emitted(updated("", "clear-press"))
-      s.resolve(Html.Focus, { found: true })
+      s.resolve(DomCommand.Focus, { found: true })
       s.props({ ...base, name: "q" })
       assert.isUndefined(s.query(clearButton))
     }))
@@ -163,8 +163,8 @@ describe("Autocomplete", () => {
       s.props({ ...props, submitOnItemClick: true })
       s.fire(item("grape"), "click", pointer("mouse"))
         .emitted(updated("Grape", "item-press"), dismissed("item-press"))
-        .expectExact(Html.RequestSubmit)
-      s.resolve(Html.RequestSubmit, { found: true })
+        .expectExact(DomCommand.RequestSubmit)
+      s.resolve(DomCommand.RequestSubmit, { found: true, submitted: true })
     }))
 
   it.effect("autoHighlight always follows open and value without previewing, and keepHighlight outlasts the pointer", () =>
