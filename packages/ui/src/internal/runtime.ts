@@ -1435,17 +1435,16 @@ const setup = (
   let hydrating: {
     readonly state: Renderer.State
     readonly deferred: ReadonlySet<string>
-    readonly kept: boolean
     readonly claimed: Set<string>
   } | undefined = options?.state === undefined || server !== undefined ? undefined : {
     state: options.state,
     deferred: new Set(options.state["~deferred"] ?? []),
-    kept: options.state["~kept"] !== undefined || options.state["~scoped"] !== undefined,
     claimed: new Set()
   }
   let popped: Saved | undefined
-  let replaced: { readonly inst: Instance; readonly by: View.Child<any, any> } | undefined
+  let replaced: { readonly inst: Instance; readonly late: Array<() => void> } | undefined
   let supply: Saved | undefined
+  let late: true | (() => void) | undefined
   let claims = false
   const claimSaved = (author: Instance, from: Saved) => {
     const path = author.path
@@ -1454,10 +1453,7 @@ const setup = (
     const drawn = (from["~scoped"] as Record<string, ReadonlyArray<string>> | undefined)?.[path]
     if (kept === undefined && drawn === undefined) return
     if (from === popped) delete all![path]
-    else if (from === hydrating?.state) {
-      if (hydrating.claimed.has(path)) return
-      hydrating.claimed.add(path)
-    }
+    else if (from === hydrating?.state && hydrating.claimed.has(path) && !author.component.definition.scoped) return
     const waits = { ...kept }
     if (drawn !== undefined) { for (const child of drawn) waits[child] = from }
     waitingOf.set(author, waits)
@@ -1467,13 +1463,13 @@ const setup = (
     const from = waits?.[child]
     return from === hydrating?.state || from !== options?.state ? from : waits![child] = subtree(from!, child)
   }
+  const below = (path: string, root: string) => (path + "/").startsWith(root + "/")
   const subtree = (state: Saved, root: string): Saved => {
     const out: Saved = {}
-    const under = (path: string) => path === root || path.startsWith(root + "/")
-    for (const path in state) if (under(path)) out[path] = state[path]
+    for (const path in state) if (below(path, root)) out[path] = state[path]
     for (const key of ["~kept", "~scoped"]) {
       const all = state[key] as Saved | undefined
-      for (const author in all) if (under(author)) ((out[key] ??= {}) as Saved)[author] = all[author]
+      for (const author in all) if (below(author, root)) ((out[key] ??= {}) as Saved)[author] = all[author]
     }
     return out
   }
@@ -2238,6 +2234,7 @@ const setup = (
     }
     // Its reports go with it.
     markReports(inst)
+    hydrating?.claimed.add(inst.path)
     for (const child of inst.children) leave(child)
     if (keptLive > 0) leaveKept(inst)
     // An outlet is a place in its receiver's view, not an instance the log knows.
@@ -3203,9 +3200,9 @@ const setup = (
       !hydrating.deferred.has(path!) &&
       Object.hasOwn(hydrating.state, path!)
     if (popped !== undefined) claimSaved(inst, popped)
-    if (from !== undefined && !served) claimSaved(inst, from)
     const state = hydrates || restored !== undefined || from === undefined || served ? restored : from[inst.path]
     if (!hydrates && state === undefined) {
+      if (supply !== undefined) claimSaved(inst, supply)
       startInstance(inst, parentEnv, range, Option.none(), Option.none())
       return inst
     }
@@ -3216,19 +3213,22 @@ const setup = (
     )
     const start = (exit: Exit.Exit<ServerStart, SchemaIssue.Issue>) => {
       const { collected, fromServer } = Exit.isSuccess(exit) ? exit.value : fresh
+      const was = supply
+      supply = served || Exit.isFailure(exit) ? undefined : from
+      if (supply !== undefined) claimSaved(inst, supply)
       startInstance(inst, parentEnv, range, fromServer, collected)
+      supply = was
     }
     if (Exit.isExit(decoded)) start(decoded)
     else {
-      const resume = hold(inst, hydrates ? range : undefined, hydrates ? undefined : state)
+      const resume = hold(
+        inst,
+        hydrates ? range : undefined,
+        hydrates ? undefined : restored === undefined ? from : { [inst.path]: restored }
+      )
       interruptOnClose(inst.scope, decoded)
       decoded.addObserver((exit) =>
-        resume(Exit.isSuccess(exit) && Option.isSome(exit.value.fromServer), () => {
-          const was = supply
-          supply = served ? undefined : from
-          start(exit)
-          supply = was
-        })
+        resume(Exit.isSuccess(exit) && Option.isSome(exit.value.fromServer), () => start(exit))
       )
     }
     return inst
@@ -3268,6 +3268,12 @@ const setup = (
     fromServer: Adopted,
     collectedOnServer: Option.Option<unknown>
   ): void => {
+    if (late === true) {
+      const resume = hold(inst, range)
+      late = () =>
+        resume(Option.isSome(fromServer), () => startInstance(inst, parentEnv, range, fromServer, collectedOnServer))
+      return
+    }
     const component = inst.component
     // No closure is made here: an instance without a Layer, most of them, starts without one.
     let layer: LayerStart | undefined
@@ -3491,7 +3497,7 @@ const setup = (
       inst.model = Option.isSome(adopted) ? adopted.value.model : first.model
       inst.results = Option.isSome(adopted) ? adopted.value.results : undefined
       inst.adoptsChildren = Option.isSome(serverModel)
-      if (inst.adoptsChildren && hydrating?.kept) claimSaved(inst, hydrating.state)
+      if (inst.adoptsChildren && hydrating !== undefined) claimSaved(inst, hydrating.state)
       if (Option.isSome(serverModel) && Option.isSome(collectedOnServer)) {
         inst.owning!.collected = { message: collectedOnServer.value }
         inst.owning!.restored = true
@@ -3595,8 +3601,8 @@ const setup = (
     })
   }
 
-  const restoring = new WeakMap<Instance, unknown>()
-  const hold = (inst: Instance, range: Range | undefined, restored?: unknown) => {
+  const restoring = new WeakMap<Instance, Saved>()
+  const hold = (inst: Instance, range: Range | undefined, restored?: Saved) => {
     inst.waiting = true
     if (restored !== undefined) restoring.set(inst, restored)
     waiting++
@@ -3624,7 +3630,8 @@ const setup = (
         setPlacement(inst, held)
       }
       const was = replaced
-      if (held !== undefined && adopt) replaced = { inst, by: held }
+      const late: Array<() => void> = []
+      if (held !== undefined && adopt) replaced = { inst, late }
       start()
       replaced = was
       if (inst.waiting) {
@@ -3637,6 +3644,7 @@ const setup = (
       if (inst.failure === undefined && parentNode !== undefined) placeEach(parentNode, inst.rendered, after)
       if (adopt) recordAdopted(inst)
       if (held !== undefined && adopt && !inst.closed && inst.failure === undefined) applyPlacement(inst, held)
+      for (const draw of late) draw()
       viewChanged = true
       settleWaiting()
     }
@@ -6923,15 +6931,10 @@ const setup = (
     let byKey = table.children.get(view.component)
     const entry = byKey?.get(view.key)
     const stale = replaced !== undefined && within(inst, replaced.inst) && !within(author, replaced.inst)
-    const written = stale
-      ? entry !== undefined ? undefined : inst.component === outletComponent ? writeIn([replaced!.by], view) : view
-      : isOld(inst, table) && entry?.inner.v !== view
-      ? undefined
-      : view
-    if (written === undefined) return blankText(range)
-    const alive = aliveOf(written)
-    if (alive !== undefined && !askAlive(author, table, alive, view)) {
-      if (!stale) endWrite(author, view, entry)
+    if (stale ? entry !== undefined : isOld(inst, table) && entry?.inner.v !== view) return blankText(range)
+    const alive = aliveOf(view)
+    if (!stale && alive !== undefined && !askAlive(author, table, alive, view)) {
+      endWrite(author, view, entry)
       return blankText(range)
     }
     if (entry !== undefined) {
@@ -6963,8 +6966,11 @@ const setup = (
     const saved = waitingAt(waits, named)
     const was = supply
     supply = saved
+    if (stale) late = true
     const inner = makeChild(inst, view, env, range, named, Scope.forkUnsafe(author.scope, "sequential"))
     supply = was
+    const start = late
+    late = undefined
     if (saved !== undefined && !(inner._tag === "Child" && inner.inst.waiting)) delete waits![named]
     const made: Kept = {
       author,
@@ -6982,6 +6988,12 @@ const setup = (
     keptLive++
     if (inst !== author) {
       for (const child of author.children) if (child.key === view.key && child.path === named) failShared(child, made)
+    }
+    if (stale) {
+      replaced!.late.push(() => {
+        if (!at.gone && !inst.closed) patchScoped(inst, at, at.v, env)
+        if (start !== true) start!()
+      })
     }
     return inner
   }
@@ -7004,23 +7016,6 @@ const setup = (
     inst.component === outletComponent ? outletOf.get(inst)!.slotted.round : keptTables.get(inst.author)?.round ?? 0
   const isOld = (inst: Instance, table: KeptTable): boolean =>
     inst.component === outletComponent && roundAt(inst) !== table.round
-  const writeIn = (
-    nodes: ReadonlyArray<View.Node<any, any>>,
-    view: View.Child<any, any>
-  ): View.Child<any, any> | undefined => {
-    for (const node of nodes) {
-      const found = node._tag === "Element"
-        ? writeIn(node.children, view)
-        : node._tag !== "Child"
-        ? undefined
-        : node.alive !== undefined && node.component === view.component && node.key === view.key
-        ? node
-        : node.slots !== undefined
-        ? writeIn(View.children(Object.values(node.slots)), view)
-        : undefined
-      if (found !== undefined) return found
-    }
-  }
   const endWrite = (author: Instance, view: View.Child<any, any>, entry: Kept | undefined) => {
     const waits = claims ? waitingOf.get(author) : undefined
     if (waits !== undefined) delete waits[`${author.path}/${segment(view)}`]
@@ -7164,7 +7159,15 @@ const setup = (
     if (inner._tag === "Fallback") return
     unhook(inner.inst)
     leaveOwners(inner.inst)
+    endWaiting(inner.inst, inner.inst)
     keeping.push(entry)
+  }
+  const endWaiting = (inst: Instance, top: Instance) => {
+    for (const child of inst.children) {
+      const entry = keptEntries.get(child)
+      if (entry !== undefined && child.waiting && !within(entry.author, top)) endKept(entry)
+      else endWaiting(child, top)
+    }
   }
   const keeping: Array<Kept> = []
   const flushKept = () => {
@@ -7491,24 +7494,22 @@ const setup = (
         }
       }
       if (inst.waiting) {
-        const path = inst.path
-        const restored = restoring.get(inst)
-        if (restored !== undefined) into[path] = restored
-        else {
-          const all = subtree(hydrating!.state, path)
-          const { "~kept": kept, "~scoped": drawn, ...state } = all as {
-            readonly "~kept"?: Record<string, Saved>
-            readonly "~scoped"?: Record<string, ReadonlyArray<string>>
-          }
-          for (const author in kept) keptIn(into)[author] = { ...kept[author] }
-          for (const author in drawn) {
-            for (const child of drawn[author]) {
-              const saved = ((keptIn(into)[author] ??= {}) as Saved)[child] = subtree(all, child)
-              for (const key in saved) delete (state as Saved)[key]
-            }
-          }
-          Object.assign(into, state)
+        const all = subtree(restoring.get(inst) ?? hydrating!.state, inst.path)
+        const { "~kept": kept, "~scoped": drawn, ...state } = all as {
+          readonly "~kept"?: Record<string, Saved>
+          readonly "~scoped"?: Record<string, ReadonlyArray<string>>
         }
+        const cut = Object.values(drawn ?? {}).flat()
+        const home = (author: string) =>
+          (cut.some((child) => below(author, child)) ? {} : keptIn(into)[author] ??= {}) as Saved
+        for (const author in kept) Object.assign(home(author), kept[author])
+        for (const author in drawn) {
+          for (const child of drawn[author]) {
+            const saved = home(author)[child] = subtree(all, child)
+            for (const key in saved) delete (state as Saved)[key]
+          }
+        }
+        Object.assign(into, state)
         return
       }
       // An outlet has no state of its own, only the children of the content it places. An owner of shared

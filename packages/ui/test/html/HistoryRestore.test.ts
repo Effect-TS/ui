@@ -123,6 +123,31 @@ const LateHolder = Component.define({
   update: (model) => model,
   view: (_, h) => h.scoped((s) => h.div(LateScoped(s, { key: "d" })))
 })
+const LateCard = Component.define({
+  name: "LateCard",
+  scoped: false,
+  model: Late,
+  message: Schema.Never,
+  elements: Html
+}).make({ init: () => "client", update: (model) => model, view: (_, h) => h.div(Form(h, { key: "c" })) })
+const Card = Component.define({
+  name: "Card",
+  scoped: true,
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+}).make({ init: () => null, update: (model) => model, view: (_, h) => h.div(LateCard(h, { key: "l" })) })
+const CardHolder = Component.define({
+  name: "CardHolder",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+}).make({
+  init: () => null,
+  update: (model) => model,
+  view: (_, h) => h.scoped((s) => h.div(Card(s, { key: "d" })))
+})
 const Outer = Component.define({
   name: "Outer",
   scoped: true,
@@ -147,7 +172,15 @@ const Nesting = Component.define({
   view: (_, h) => h.scoped((s) => h.div(Outer(s, { key: "o" })))
 })
 
-type Page = "slow form" | "slow side" | "late form" | "scoped form" | "late settings" | "nested" | "late scoped"
+type Page =
+  | "slow form"
+  | "slow side"
+  | "late form"
+  | "scoped form"
+  | "late settings"
+  | "nested"
+  | "late scoped"
+  | "late card"
 const Routes = Route.union({ Home: Route.make("/"), Away: Route.make("/away") })
 const Msg = UiSchema.TaggedEnum({ Changed: { route: Routes }, Go: {}, Went: {} })
 const appOf = (page: Page) =>
@@ -184,6 +217,8 @@ const appOf = (page: Page) =>
           ? Nesting(h, { key: "f" })
           : page === "late scoped"
           ? LateHolder(h, { key: "f" })
+          : page === "late card"
+          ? CardHolder(h, { key: "f" })
           : SlowForm(h, { key: "f" })
       )
   })
@@ -207,9 +242,21 @@ const editor = (name: string) =>
   })
 const Editor = editor("Editor")
 const SlowEditor = editor("SlowEditor").pipe(Component.provide(slow))
+const SlowNesting = Component.define({
+  name: "SlowNesting",
+  scoped: false,
+  props: Schema.Struct({ open: Schema.Boolean }),
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+}).make({
+  init: () => null,
+  update: (model) => model,
+  view: (_, h) => h.section(h.scoped(({ props }) => props.open, (s) => Outer(s, { key: "o" })))
+}).pipe(Component.provide(slow))
 const Shown = Schema.Literals(["none", "closed", "open"])
 const DeskMsg = UiSchema.TaggedEnum({ Changed: { route: Routes }, Go: {}, Went: {}, Show: { editor: Shown } })
-const deskOf = (waits: boolean) =>
+const deskOf = (waits: boolean, nested: boolean) =>
   Component.define({
     name: "Desk",
     scoped: false,
@@ -234,6 +281,8 @@ const deskOf = (waits: boolean) =>
         SlowSide(h, { key: "s" }),
         desk.editor === "none"
           ? null
+          : nested
+          ? SlowNesting(h, { key: "e", props })
           : waits
           ? SlowEditor(h, { key: "e", props })
           : Editor(h, { key: "e", props })
@@ -265,8 +314,8 @@ const visit = Effect.fnUntraced(function*(page: Page, ready = false) {
   yield* tick
   return { app, root, open }
 })
-const sit = Effect.fnUntraced(function*(waits: boolean, ready = false) {
-  const Desk = deskOf(waits)
+const sit = Effect.fnUntraced(function*(waits: boolean, ready = false, nested = false) {
+  const Desk = deskOf(waits, nested)
   const props = Router.props(Routes)
   const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Desk, props), ready)
   const root = yield* BrowserHost.mountEffect(Desk, props, app, { state })
@@ -405,6 +454,48 @@ describe("history restore of a page whose hydration hasn't settled", { concurren
       history.go(-1)
       yield* tick
       assert.strictEqual(app.querySelector("input")!.value, "typed")
+    }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
+  })
+
+  it.effect("Back restores what the user typed below a form a push closed as an earlier Back's state decoded", () => {
+    const history = Router.memoryHistory("/")
+    return Effect.gen(function*() {
+      const { app, open, root } = yield* visit("late card")
+      yield* open
+      yield* tick
+      const field = app.querySelector("input")!
+      field.value = "typed"
+      field.dispatchEvent(new Event("input", { bubbles: true }))
+      yield* tick
+      root.send(Msg.Go())
+      yield* tick
+      const latch = yield* Deferred.make<void>()
+      gate = Deferred.await(latch)
+      history.go(-1)
+      yield* tick
+      root.send(Msg.Go())
+      yield* tick
+      yield* Deferred.succeed(latch, undefined)
+      history.go(-1)
+      yield* tick
+      assert.strictEqual(app.querySelector("input")!.value, "typed")
+    }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
+  })
+
+  it.effect("Back restores none of a scoped child a push closed with its waiting author, when its predicate is false at that Back", () => {
+    const history = Router.memoryHistory("/")
+    return Effect.gen(function*() {
+      const { app, open, root } = yield* sit(true, false, true)
+      root.send(DeskMsg.Go())
+      yield* tick
+      root.send(DeskMsg.Show({ editor: "closed" }))
+      history.go(-1)
+      yield* tick
+      root.send(DeskMsg.Show({ editor: "open" }))
+      yield* tick
+      yield* open
+      yield* tick
+      assert.strictEqual(app.querySelector("input")!.value, "client")
     }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
   })
 
