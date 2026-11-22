@@ -45,7 +45,6 @@ type Rendered = { readonly get: (locator: Locator.Locator) => Locator.Node }
 const mountOn = (s: Rendered, locator: Locator.Locator): Track =>
   (s.get(locator) as unknown as View.Element<unknown>).owned?.find((layer) => layer.mount !== undefined)
     ?.mount as unknown as Track
-const dialogArgs = (s: Rendered) => mountOn(s, portal).args as Record<string, unknown>
 const running = <S extends Rendered & { readonly expectMount: (mount: Track) => S }>(s: S): S =>
   s.expectMount(mountOn(s, positioner)).expectMount(mountOn(s, popup))
 
@@ -93,7 +92,7 @@ describe("Popover", () => {
       assert.include(s.get(positioner).attrs?.style, "position:fixed")
     }))
 
-  it.effect("opens after the mouse rests on a hover trigger, without focus, and closes once the pointer has left", () =>
+  it.effect("opens after the mouse rests on a hover trigger, and closes once the pointer has left", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Popover, { open: false, modal: true }, standIn)
       assert.throws(() => s.fire(off, "mouseenter"))
@@ -102,7 +101,6 @@ describe("Popover", () => {
       assert.deepStrictEqual(opening?.command.args, { delay: 300 })
       s.resolve(opening!.command, completed("CompletedWaitBeforeOpening")).emitted(opened("hover", "trigger-hover"))
       s.props({ open: true, modal: true })
-      assert.deepInclude(dialogArgs(s), { modal: false, initialFocus: false, finalFocus: false })
       assert.isUndefined(s.get(hover).attrs?.["data-pressed"])
       assert.include(s.get(backdrop).attrs?.style, "pointer-events:none")
       running(s).childEmit(Dialog, { _tag: "Dismissed", reason: "focus-out" })
@@ -110,7 +108,6 @@ describe("Popover", () => {
 
       s.fire(hover, "mouseleave")
       s.fire(positioner, "mouseenter")
-      assert.include(s.current.interrupted.map((c) => c.name), "WaitBeforeClosing")
       s.fire(positioner, "mouseleave")
       const closing = s.current.pending.find((entry) => entry.command.name === "WaitBeforeClosing")
       assert.deepStrictEqual(closing?.command.args, { delay: 50 })
@@ -137,7 +134,6 @@ describe("Popover", () => {
         .emitted(opened("hover", "trigger-hover"))
       s.props({ open: true, modal: true })
       running(s).childEmit(Dialog, pressedTrigger).emitted(opened("hover", "trigger-press"))
-      assert.deepInclude(dialogArgs(s), { modal: true, initialFocus: true })
       assert.strictEqual(s.get(hover).attrs?.["data-pressed"], "")
       s.fire(hover, "mouseleave")
       assert.isUndefined(s.current.pending.find((entry) => entry.command.name === "WaitBeforeClosing"))

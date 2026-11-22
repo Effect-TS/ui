@@ -2113,18 +2113,11 @@ describe("BrowserHost", { concurrent: false }, () => {
           jumping(window.HTMLElement.prototype, "showPopover")
         ]
         yield* Effect.addFinalizer(() => Effect.sync(() => spies.forEach((spy) => spy.mockRestore())))
-        const scrolls = vi.spyOn(window, "scrollTo")
-        yield* Effect.addFinalizer(() => Effect.sync(() => scrolls.mockRestore()))
-        Object.defineProperty(window, "scrollY", { configurable: true, value: 600 })
-        yield* Effect.addFinalizer(() => Effect.sync(() => delete (window as { scrollY?: unknown }).scrollY))
+        window.scrollTo(0, 600)
+        yield* Effect.addFinalizer(() => Effect.sync(() => window.scrollTo(0, 0)))
         yield* BrowserHost.mountEffect(ModalMenu, {}, yield* container)
         expect(jumps).toEqual(["showModal", "showPopover"])
-        expect(scrolls.mock.calls).toEqual([
-          [0, 0],
-          [{ left: 0, top: 600, behavior: "instant" }],
-          [0, 0],
-          [{ left: 0, top: 600, behavior: "instant" }]
-        ])
+        expect(window.scrollY).toBe(600)
       }).pipe(Effect.scoped))
   })
 

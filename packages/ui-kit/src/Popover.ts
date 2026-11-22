@@ -418,7 +418,7 @@ const Message = UiSchema.TaggedEnum({
   DismissedDialog: { reason: DialogDismissReason },
   SettledDialog: { open: Schema.Boolean },
   EnteredTrigger: { triggerId: Schema.NullOr(Schema.String), ...Hover.fields, at: Schema.NullOr(Point) },
-  LeftTrigger: { at: Schema.NullOr(Point) },
+  LeftTrigger: { triggerId: Schema.NullOr(Schema.String), at: Schema.NullOr(Point) },
   PressedDetachedTrigger: { triggerId: Schema.NullOr(Schema.String), pointerType: Schema.String },
   EnteredPositioner: {},
   LeftPositioner: {},
@@ -439,7 +439,7 @@ const Model = Schema.Struct({
   onTrigger: Schema.Boolean,
   onPositioner: Schema.Boolean,
   hoverTrigger: Schema.NullOr(Schema.String),
-  rest: Schema.NullOr(Point),
+  rest: Schema.NullOr(Schema.Struct({ triggerId: Schema.NullOr(Schema.String), ...Point.fields })),
   closeDelay: Schema.Number,
   reason: Schema.NullOr(PopoverOpenReason),
   patient: Schema.Boolean,
@@ -582,7 +582,7 @@ const TrackDetachedTrigger = Mount.makeStream(
           }, { signal })
           node.addEventListener("pointerleave", (event) => {
             if (current.hover === null || event.pointerType !== "mouse") return
-            send(Message.LeftTrigger({ at: { x: event.clientX, y: event.clientY } }))
+            send(Message.LeftTrigger({ triggerId: triggerId(), at: { x: event.clientX, y: event.clientY } }))
           }, { signal })
         }).pipe(
           Effect.tap(() =>
@@ -687,7 +687,7 @@ const TrackViewport = Mount.makeStream(
   {
     args: {
       open: Schema.Boolean,
-      anchor: Schema.String,
+      trigger: Schema.String,
       side: Schema.String,
       positionerId: Schema.String,
       transitioning: Schema.Boolean
@@ -789,12 +789,12 @@ const TrackViewport = Mount.makeStream(
           if (previous.transitioning) send(Message.EndedTransition())
           return
         }
-        const switched = previous.open && previous.anchor !== next.anchor && leaving !== content
+        const switched = previous.open && previous.trigger !== next.trigger && leaving !== content
         if (switched) outgoing = leaving
         if (switched || previous.side !== next.side) resize()
         if (switched) {
           send(Message.StartedTransition({
-            direction: directionOf(document.querySelector(previous.anchor), document.querySelector(next.anchor))
+            direction: directionOf(document.querySelector(previous.trigger), document.querySelector(next.trigger))
           }))
         } else if (next.transitioning) fill()
       }
@@ -956,11 +956,13 @@ export const Popover = Component.define({
       return dismiss(model, $, reason)
     },
     SettledDialog: (model, { open }, $) =>
-      $.set(open ? model : { ...model, switched: false, transition: null }).emit(PopoverEvents.Settled({ open })),
+      $.set(open ? model : { ...model, reason: null, patient: false, method: null, switched: false, transition: null })
+        .emit(PopoverEvents.Settled({ open })),
     EnteredTrigger: (model, { at, closeDelay, delay, triggerId }, $) => {
       // A layer drawn over the trigger takes the pointer off it, and gives it back where it was once
       // it is gone. The pointer didn't move, so that is no hover.
-      const uncovered = at !== null && model.rest !== null && at.x === model.rest.x && at.y === model.rest.y
+      const uncovered = at !== null && model.rest !== null && model.rest.triggerId === triggerId &&
+        at.x === model.rest.x && at.y === model.rest.y
       const next = { ...model, onTrigger: true, hoverTrigger: triggerId, closeDelay, rest: null }
       if (!$.props.open) return uncovered ? next : $.set(next).run(WaitBeforeOpening.make({ delay }))
       const active = activeOf(model, $.props)
@@ -968,7 +970,8 @@ export const Popover = Component.define({
         ? $.set(next).run(Command.interrupt(WaitBeforeClosing))
         : openFor(next, $, triggerId, "trigger-hover")
     },
-    LeftTrigger: (model, { at }, $) => left({ ...model, onTrigger: false, hoverTrigger: null, rest: at }, $),
+    LeftTrigger: (model, { at, triggerId }, $) =>
+      left({ ...model, onTrigger: false, hoverTrigger: null, rest: at === null ? null : { triggerId, ...at } }, $),
     PressedDetachedTrigger: (model, { pointerType, triggerId }, $) => {
       const active = activeOf(model, $.props)
       return $.props.open && (active === null || active === triggerId)
@@ -1005,9 +1008,10 @@ export const Popover = Component.define({
     const backdropKey = p.id("backdrop")
     const active = activeOf(model, props)
     const placement = model.placement
+    const triggerSelector = active === null ? attrSelector("aria-controls", portalId) : idSelector(active)
     const tracked = Positioning.trackArgs(props, {
       side: "bottom",
-      anchorSelector: active === null ? attrSelector("aria-controls", portalId) : idSelector(active),
+      anchorSelector: triggerSelector,
       arrowId,
       offsetAsPadding: true
     })
@@ -1032,7 +1036,10 @@ export const Popover = Component.define({
             (payload: Partial<Html.HoverPayload>) =>
               Message.EnteredTrigger({ triggerId: key, ...hover, at: pointOf(payload) })
           )
-          .on("mouseleave", (payload: Partial<Html.HoverPayload>) => Message.LeftTrigger({ at: pointOf(payload) }))
+          .on(
+            "mouseleave",
+            (payload: Partial<Html.HoverPayload>) => Message.LeftTrigger({ triggerId: key, at: pointOf(payload) })
+          )
       }
     )
     const portalPart = p.part("dialog", (b) =>
@@ -1128,7 +1135,7 @@ export const Popover = Component.define({
           return dialog.mounted
             ? viewport.onMount(TrackViewport({
               open,
-              anchor: tracked.anchorSelector,
+              trigger: triggerSelector,
               side,
               positionerId,
               transitioning: transition !== null
