@@ -1,0 +1,87 @@
+// @vitest-environment happy-dom
+import { Component, UiSchema } from "@effect/ui"
+import { Popover, PopoverTrigger } from "@effect/ui-kit"
+import { BrowserHost, Html } from "@effect/ui/html"
+import { assert, describe, it } from "@effect/vitest"
+import { Effect, Schema } from "effect"
+import { byId, click, container, popovers, tick } from "./utils/document.ts"
+
+const Message = UiSchema.TaggedEnum({
+  Opened: { triggerId: Schema.NullOr(Schema.String), reason: Schema.String },
+  Dismissed: { reason: Schema.String },
+  Settled: { open: Schema.Boolean }
+})
+
+const Page = Component.define({
+  name: "Page",
+  model: Schema.Struct({
+    open: Schema.Boolean,
+    triggerId: Schema.NullOr(Schema.String),
+    log: Schema.Array(Schema.String)
+  }),
+  message: Message,
+  elements: Html
+}).make({
+  init: () => ({ open: false, triggerId: null, log: [] }),
+  update: {
+    Opened: (model, { reason, triggerId }) => ({
+      open: true,
+      triggerId,
+      log: [...model.log, `Opened ${triggerId} ${reason}`]
+    }),
+    Dismissed: (model, { reason }) => ({ ...model, open: false, log: [...model.log, `Dismissed ${reason}`] }),
+    Settled: (model) => model
+  },
+  view: (model, h) =>
+    h.div(
+      Popover(h, {
+        props: { open: model.open, triggerId: model.triggerId, id: "popover" },
+        onEmit: {
+          Opened: ({ reason, triggerId }) => Message.Opened({ triggerId, reason }),
+          Dismissed: ({ reason }) => Message.Dismissed({ reason }),
+          Settled: ({ open }) => Message.Settled({ open })
+        },
+        view: (popover) =>
+          h.div(
+            popover.trigger({ element: h.button.attr("id", "a") }).children("A"),
+            popover.trigger({ element: h.button.attr("id", "b") }).children("B"),
+            popover.portal(h.dialog)?.children(
+              popover.positioner(h.div.attr("data-positioner", "")).children(
+                popover.popup(h.div).children(
+                  popover.title(h.h2.attr("id", "title")).children(`For ${popover.triggerId}`)
+                )
+              )
+            )
+          )
+      }),
+      PopoverTrigger(h, {
+        element: h.button.attr("id", "detached"),
+        props: { open: model.open && model.triggerId === "detached", popupId: "popover" }
+      }).children("Detached")
+    )
+})
+
+const mountPage = Effect.gen(function*() {
+  yield* popovers
+  const app = yield* container
+  const root = yield* BrowserHost.mountEffect(Page, {}, app)
+  yield* tick
+  return { log: () => root.model()!.log }
+})
+
+describe("Popover in a document", { concurrent: false }, () => {
+  it.effect("a trigger drawn elsewhere opens the popover it names, is its anchor, and closes it", () =>
+    Effect.gen(function*() {
+      const { log } = yield* mountPage
+      const trigger = byId("detached")
+      click(trigger)
+      yield* tick
+      yield* tick
+      assert.deepStrictEqual(log(), ["Opened detached trigger-press"])
+      assert.strictEqual(trigger.getAttribute("aria-controls"), "popover")
+      assert.strictEqual(byId("title").textContent, "For detached")
+      click(trigger)
+      yield* tick
+      assert.deepStrictEqual(log(), ["Opened detached trigger-press", "Dismissed trigger-press"])
+    }))
+})
