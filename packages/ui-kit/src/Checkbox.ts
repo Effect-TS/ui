@@ -147,8 +147,9 @@ import { field } from "./internal/field.ts"
  *   checkbox submits `value`, `"on"` by default. An unticked one submits
  *   `uncheckedValue`, or nothing when it is unset. A disabled checkbox, or
  *   one without a `name`, submits nothing. Inside a `CheckboxGroup`, `value`
- *   makes the checkbox a member: a member without a `name` takes the
- *   group's, and an unticked one submits nothing.
+ *   makes the checkbox a member, and a member without a `name` takes the
+ *   group's. An unticked checkbox inside a group submits nothing, even
+ *   with `uncheckedValue`.
  * - `parent`: makes the checkbox the parent of the `CheckboxGroup` around
  *   it. It submits nothing.
  * - `id`: the root's `id`, for a `<label for>` beside it. A member
@@ -257,7 +258,7 @@ const resolve = (props: CheckboxProps, group: GroupShared | undefined) => {
       disabled,
       name: props.parent === true ? undefined : props.name,
       value: props.value,
-      uncheckedValue: props.uncheckedValue
+      uncheckedValue: group === undefined ? props.uncheckedValue : undefined
     }
   }
 }

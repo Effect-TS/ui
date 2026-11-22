@@ -15,7 +15,7 @@
  *
  * The root takes the consumer's builder and returns it, so the consumer goes
  * on chaining and adds the checkboxes with `.children(...)`:
- * `group.root(h.div).children(...)`. It adds no markup.
+ * `checkboxGroup.root(h.div).children(...)`. It adds no markup.
  *
  * A `Checkbox` with a `value` prop inside the group is a member: it is
  * ticked while the group's `value` holds its value, and a click adds or
@@ -24,7 +24,7 @@
  * are, and points at the members with `aria-controls`.
  *
  * Name the group with `aria-labelledby` on the root, or draw it as a field's
- * group: `group.root(field.group(h.div))` with `field.legend` as the name and
+ * group: `checkboxGroup.root(field.group(h.div))` with `field.legend` as the name and
  * `field.member` on each checkbox's root.
  *
  * **Data attributes**
@@ -79,8 +79,8 @@
  *     CheckboxGroup(h, {
  *       props: { value: model.fruits, allValues: fruits, name: "fruit" },
  *       onEmit: { Updated: ({ value }) => BasketMessage.ChangedFruits({ value }) },
- *       view: (group) =>
- *         group.root(h.div.class("fruits").attr("aria-label", "Fruit")).children(
+ *       view: (checkboxGroup) =>
+ *         checkboxGroup.root(h.div.class("fruits").attr("aria-label", "Fruit")).children(
  *           h.label.children(
  *             Checkbox(h, { props: { parent: true }, view: (checkbox) => checkbox.root(h.button) }),
  *             "All fruit"
@@ -227,7 +227,7 @@ const cycle = (model: CheckboxGroupModel, props: CheckboxGroupProps) => {
 
 /**
  * A headless checkbox group. Call it with the consumer's `h`, the `props`,
- * and a `view` closure that draws the root with `group.root(h.div)` and the
+ * and a `view` closure that draws the root with `checkboxGroup.root(h.div)` and the
  * checkboxes inside it.
  *
  * **Details**

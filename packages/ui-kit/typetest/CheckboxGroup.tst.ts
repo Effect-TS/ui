@@ -27,11 +27,11 @@ describe("CheckboxGroup", () => {
       view: (_, h) =>
         CheckboxGroup(h, {
           props: { value: ["a"], allValues: ["a", "b"] },
-          view: (group) => {
-            expect(group.value).type.toBe<ReadonlyArray<string>>()
-            expect(group.disabled).type.toBe<boolean>()
-            expect(group.root(h.fieldset)).type.toBe<Element<"fieldset">>()
-            const root = group.root(h.div.onClick(Msg.Clicked())).children(
+          view: (checkboxGroup) => {
+            expect(checkboxGroup.value).type.toBe<ReadonlyArray<string>>()
+            expect(checkboxGroup.disabled).type.toBe<boolean>()
+            expect(checkboxGroup.root(h.fieldset)).type.toBe<Element<"fieldset">>()
+            const root = checkboxGroup.root(h.div.onClick(Msg.Clicked())).children(
               Checkbox(h, { props: { parent: true }, view: (checkbox) => checkbox.root(h.button) }),
               Checkbox(h, { key: "a", props: { value: "a" }, view: (checkbox) => checkbox.root(h.button) }),
               needsClock

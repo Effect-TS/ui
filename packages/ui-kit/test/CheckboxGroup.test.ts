@@ -11,7 +11,8 @@ const fruits = ["apple", "pear", "plum", "fig"]
 const BasketMessage = UiSchema.TaggedEnum({
   ChangedFruits: { value: Schema.Array(Schema.String) },
   ToggledPear: { checked: Schema.Boolean },
-  ToggledLock: {}
+  ToggledLock: {},
+  ToggledFreeze: {}
 })
 
 const Basket = Component.define({
@@ -20,16 +21,18 @@ const Basket = Component.define({
   model: Schema.Struct({
     fruits: Schema.Array(Schema.String),
     pearToggled: Schema.NullOr(Schema.Boolean),
-    locked: Schema.Boolean
+    locked: Schema.Boolean,
+    frozen: Schema.Boolean
   }),
   message: BasketMessage,
   elements: Html
 }).make({
-  init: () => ({ fruits: ["apple", "fig"], pearToggled: null, locked: false }),
+  init: () => ({ fruits: ["apple", "fig"], pearToggled: null, locked: false, frozen: false }),
   update: {
     ChangedFruits: (model, { value }) => ({ ...model, fruits: value }),
     ToggledPear: (model, { checked }) => ({ ...model, pearToggled: checked }),
-    ToggledLock: (model) => ({ ...model, locked: !model.locked })
+    ToggledLock: (model) => ({ ...model, locked: !model.locked }),
+    ToggledFreeze: (model) => ({ ...model, frozen: !model.frozen })
   },
   view: (model, h) =>
     h.form.attr("data-pear-toggled", model.pearToggled === null ? undefined : String(model.pearToggled)).children(
@@ -41,44 +44,54 @@ const Basket = Component.define({
             CheckboxGroup(h, {
               props: { value: model.fruits, allValues: fruits, name: "fruit", disabled: field.disabled },
               onEmit: { Updated: ({ value }) => BasketMessage.ChangedFruits({ value }) },
-              view: (group) =>
-                group.root(field.group(h.div.class("group").attrs({ role: "list", "data-disabled": "" }))).children(
-                  h.label.children(
-                    Checkbox(h, {
-                      props: { parent: true, name: "all" },
-                      view: (checkbox) =>
-                        checkbox.root(
-                          field.member(h.button.class("parent").attrs({ id: "all-fruit", "aria-controls": "panel" }))
-                        )
-                    }),
-                    "All"
-                  ),
-                  ...fruits.map((fruit) =>
+              view: (checkboxGroup) =>
+                checkboxGroup.root(field.group(h.div.class("group").attrs({ role: "list", "data-disabled": "" })))
+                  .children(
                     h.label.children(
                       Checkbox(h, {
-                        key: fruit,
-                        props: {
-                          value: fruit,
-                          id: fruit === "apple" ? "apple-id" : undefined,
-                          disabled: fruit === "fig",
-                          uncheckedValue: fruit === "pear" ? "no" : undefined
-                        },
-                        onEmit: fruit === "pear"
-                          ? { Toggled: ({ checked }) => BasketMessage.ToggledPear({ checked }) }
-                          : undefined,
+                        props: { parent: true, name: "all" },
                         view: (checkbox) =>
-                          checkbox.root(field.member(
-                            fruit === "pear" ? h.button.class(fruit).attr("data-parent", "") : h.button.class(fruit)
-                          ))
+                          checkbox.root(
+                            field.member(h.button.class("parent").attrs({ id: "all-fruit", "aria-controls": "panel" }))
+                          )
                       }),
-                      fruit
+                      "All"
+                    ),
+                    h.label.children(
+                      Checkbox(h, {
+                        key: "extra",
+                        props: { name: "extra", uncheckedValue: "no" },
+                        view: (checkbox) => checkbox.root(h.button.class("extra"))
+                      }),
+                      "Extra"
+                    ),
+                    ...fruits.map((fruit) =>
+                      h.label.children(
+                        Checkbox(h, {
+                          key: fruit,
+                          props: {
+                            value: fruit,
+                            id: fruit === "apple" ? "apple-id" : undefined,
+                            disabled: fruit === "fig" || (fruit === "plum" && model.frozen),
+                            uncheckedValue: fruit === "pear" ? "no" : undefined
+                          },
+                          onEmit: fruit === "pear"
+                            ? { Toggled: ({ checked }) => BasketMessage.ToggledPear({ checked }) }
+                            : undefined,
+                          view: (checkbox) =>
+                            checkbox.root(field.member(
+                              fruit === "pear" ? h.button.class(fruit).attr("data-parent", "") : h.button.class(fruit)
+                            ))
+                        }),
+                        fruit
+                      )
                     )
                   )
-                )
             })
           )
       }),
-      h.button.class("lock").attr("type", "button").onClick(BasketMessage.ToggledLock()).children("Lock")
+      h.button.class("lock").attr("type", "button").onClick(BasketMessage.ToggledLock()).children("Lock"),
+      h.button.class("freeze").attr("type", "button").onClick(BasketMessage.ToggledFreeze()).children("Freeze plum")
     )
 })
 
@@ -114,7 +127,7 @@ describe("CheckboxGroup", { concurrent: false }, () => {
       assert.strictEqual(new Set(ids.filter((id) => id !== "")).size, fruits.length)
       assert.strictEqual(parent.getAttribute("aria-controls"), `panel ${ids.join(" ")}`)
       assert.deepStrictEqual(submitted(), ["apple"])
-      assert.deepStrictEqual(submitted("all"), [])
+      assert.deepStrictEqual(submitted("extra"), [])
 
       yield* click("pear")
       assert.deepStrictEqual(ticked(), ["apple", "pear", "fig"])
@@ -123,6 +136,7 @@ describe("CheckboxGroup", { concurrent: false }, () => {
       assert.deepStrictEqual(ticked(), fruits)
       assert.strictEqual(parent.getAttribute("aria-checked"), "true")
       assert.deepStrictEqual(submitted(), ["apple", "pear", "plum"])
+      assert.deepStrictEqual(submitted("all"), [])
       yield* click("parent")
       assert.deepStrictEqual(ticked(), ["fig"])
       yield* click("parent")
@@ -131,8 +145,13 @@ describe("CheckboxGroup", { concurrent: false }, () => {
       yield* click("apple")
       yield* click("pear")
       assert.deepStrictEqual(ticked(), ["fig"])
+      yield* click("freeze")
       yield* click("parent")
-      assert.deepStrictEqual(ticked(), fruits)
+      assert.deepStrictEqual(ticked(), ["apple", "pear", "fig"])
+      assert.strictEqual(parent.getAttribute("aria-checked"), "mixed")
+      yield* click("pear")
+      yield* click("parent")
+      assert.deepStrictEqual(ticked(), ["apple", "pear", "fig"])
     }).pipe(Effect.scoped))
 
   it.effect("a disabled group disables every checkbox, submits nothing and ignores clicks", () =>
