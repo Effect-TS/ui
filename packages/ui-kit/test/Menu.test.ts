@@ -1,10 +1,10 @@
-import type { Component, Mount, View } from "@effect/ui"
+import { Command, Component, type Mount, Route, Router, UiSchema, type View } from "@effect/ui"
 import { Menu, type MenuEvents, menuFilter, type MenuProps } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { HtmlScene } from "@effect/ui/html/testing"
-import { Locator } from "@effect/ui/testing"
+import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Fiber } from "effect"
+import { Effect, Fiber, Schema } from "effect"
 import { TestClock } from "effect/testing"
 
 type Parts = Component.Headless.Parts<typeof Menu>
@@ -130,7 +130,60 @@ const open = Effect.fnUntraced(function*(props: Partial<MenuProps> = {}) {
   return s
 })
 
+const PageRoute = Route.union({ Edit: Route.make("/"), Away: Route.make("/away") })
+const PageMessage = UiSchema.TaggedEnum({ ChangedRoute: { route: PageRoute }, Opened: {}, Left: {}, Navigated: {} })
+
+const Page = Component.define({
+  name: "Page",
+  scoped: false,
+  props: Schema.Struct({ route: PageRoute }),
+  model: Schema.Struct({ route: PageRoute, open: Schema.Boolean }),
+  message: PageMessage,
+  elements: Html
+}).make({
+  init: ($) => ({ route: $.props.route, open: false }),
+  update: {
+    ChangedRoute: (model, { route }) => ({ ...model, route }),
+    Opened: (model) => ({ ...model, open: true }),
+    Left: (model, _message, $) =>
+      $.set(model).run(Router.push(PageRoute, PageRoute.Away()).pipe(Command.map(() => PageMessage.Navigated()))),
+    Navigated: (model) => model
+  },
+  subscriptions: (model) => [
+    Router.subscription(PageRoute, model.route, (route) => PageMessage.ChangedRoute({ route }))
+  ],
+  view: (model, h) =>
+    h.div(
+      h.a.onClick(PageMessage.Left()).children("Away"),
+      model.route._tag === "Edit"
+        ? Menu(h, {
+          key: "menu",
+          props: { open: model.open, items },
+          onEmit: (event) => event._tag === "Opened" ? PageMessage.Opened() : undefined,
+          view: (menu) => menu.trigger(h.button.class("trigger")).children("Edit")
+        })
+        : null
+    )
+})
+
 describe("Menu", () => {
+  it.effect("history restore saves nothing of an open menu", () => {
+    const history = Router.memoryHistory("/")
+    return Effect.gen(function*() {
+      const root = yield* TestHost.mount(Page, Router.props(PageRoute))
+      yield* TestHost.settle
+      Locator.fire(root.get(trigger), "mousedown", pointer("mouse"))
+      yield* TestHost.settle
+      assert.strictEqual(root.get(trigger).attrs?.["aria-expanded"], "true")
+      Locator.fire(root.get(Locator.tag("a")), "click")
+      yield* TestHost.settle
+      history.go(-1)
+      const entry = JSON.stringify(history.current().state)
+      assert.include(entry, "/Page")
+      assert.notInclude(entry, "/Page/Menu[menu]")
+    }).pipe(Effect.provide(Router.make({ routes: PageRoute, history })), Effect.provide(TestHost.layer()))
+  })
+
   it.effect("draws a closed menu button, and a mouse press opens it with its parts and ARIA semantics", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Menu, { open: false, items }, standIn)

@@ -1661,6 +1661,9 @@ export const menuFilter = (
  * own `id`s, over any on the builder, for the ARIA attributes that point at
  * them.
  *
+ * History restore saves nothing of it: after Back, forward or a reload it
+ * starts from `init`.
+ *
  * @stability experimental
  * @category components
  * @since 0.1.0
@@ -1688,6 +1691,7 @@ export const Menu = Component.define({
       onChange: (parent) => Message.ChangedParent({ parent })
     }
   },
+  restore: false,
   elements: Html
 }).make({
   init: () => ({
