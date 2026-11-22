@@ -226,6 +226,9 @@ const disabledBy = (props: FieldProps, fieldset: { readonly disabled: boolean } 
 // show again once the field is enabled.
 const lostFocus = Subscription.make("lostFocus", Stream.make(Message.BlurredControl({ disabled: true })))
 
+// A host other than the browser may leave `disabled` out of the payload.
+const blurred = ({ disabled }: Partial<Html.BlurPayload>) => Message.BlurredControl({ disabled: disabled === true })
+
 /**
  * A headless field. Call it with the consumer's `h`, the `props`, and a
  * `view` closure that draws the root with `field.root(h.div)` and, inside it,
@@ -349,20 +352,16 @@ export const Field = Component.define({
     const trackFocus = (b: View.ContainerBuilder<typeof Message.Type>) =>
       state(b)
         .on("focusin", Message.FocusedControl())
-        .on(
-          "focusout",
-          (payload) => {
-            const { disabled, within } = payload as Html.FocusOutPayload
-            return within ? undefined : Message.BlurredControl({ disabled: disabled === true })
-          }
-        )
+        .on("focusout", (payload) => {
+          const left = payload as Html.FocusOutPayload
+          return left.within ? undefined : blurred(left)
+        })
     // `control`, with the id and the focus handlers, or `member`, with
     // neither.
     const formControl = (own: boolean) =>
       p.part(["input", "textarea", "select", "button"], (b) => {
         const control = (own
-          ? flags(b).attr("id", controlId).onFocus(Message.FocusedControl())
-            .onBlur(({ disabled }) => Message.BlurredControl({ disabled: disabled === true }))
+          ? flags(b).attr("id", controlId).onFocus(Message.FocusedControl()).onBlur(blurred)
           : flags(b))
           .attr("aria-invalid", showsError ? "true" : undefined)
           // A token list: added to the consumer's own.

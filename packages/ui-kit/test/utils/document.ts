@@ -22,11 +22,27 @@ export const click = (target: Element, pointerType = "mouse") => {
   target.dispatchEvent(new PointerEvent("click", { bubbles: true, composed: true, detail: 1, pointerType }))
 }
 
+/** happy-dom's `:disabled` misses a control in a disabled fieldset. */
+export const fieldsetDisabled = Effect.acquireRelease(
+  Effect.sync(() => {
+    const proto = window.Element.prototype as any
+    const matches = proto.matches
+    proto.matches = function(this: Element, selector: string) {
+      return matches.call(this, selector) || (selector === ":disabled" &&
+        matches.call(this, "button,input,select,textarea") && this.closest("fieldset[disabled]") !== null)
+    }
+    return () => {
+      proto.matches = matches
+    }
+  }),
+  (restore) => Effect.sync(restore)
+)
+
 /**
  * happy-dom has no popover API. Showing one sends `beforetoggle`, and focuses
  * an `autofocus` element in it, or in a `<dialog>` the first field, as a
- * browser does before the dialog's own mount starts. Its `:disabled` also
- * misses a control in a disabled fieldset.
+ * browser does before the dialog's own mount starts. Comes with
+ * `fieldsetDisabled`.
  */
 export const popovers = Effect.acquireRelease(
   Effect.sync(() => {
@@ -46,9 +62,7 @@ export const popovers = Effect.acquireRelease(
       showing.delete(this)
     }
     elementProto.matches = function(this: Element, selector: string) {
-      if (selector === ":popover-open") return showing.has(this)
-      return matches.call(this, selector) || (selector === ":disabled" &&
-        matches.call(this, "button,input,select,textarea") && this.closest("fieldset[disabled]") !== null)
+      return selector === ":popover-open" ? showing.has(this) : matches.call(this, selector)
     }
     return () => {
       delete proto.showPopover
@@ -57,7 +71,7 @@ export const popovers = Effect.acquireRelease(
     }
   }),
   (restore) => Effect.sync(restore)
-)
+).pipe(Effect.andThen(fieldsetDisabled))
 
 class FakeVisualViewport extends EventTarget {
   height = 800

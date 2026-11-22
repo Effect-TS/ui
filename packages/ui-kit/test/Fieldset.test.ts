@@ -5,7 +5,7 @@ import { BrowserHost, Html } from "@effect/ui/html"
 import { Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
-import { container, tick } from "./utils/document.ts"
+import { container, fieldsetDisabled, tick } from "./utils/document.ts"
 
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
@@ -58,19 +58,17 @@ const Billing = Component.define({
   }
 })
 
+const toggleLock = (app: Element) =>
+  Effect.sync(() => app.querySelector<HTMLButtonElement>(".lock")!.click()).pipe(Effect.andThen(tick))
+
 // Chromium blurs the focused control as a fieldset around it is disabled, before the render that disables
-// it has finished, and the control matches `:disabled` by then. happy-dom does neither.
+// it has finished. happy-dom doesn't.
 const blurOnDisable = (fieldset: HTMLFieldSetElement) => {
   const setAttribute = fieldset.setAttribute
   fieldset.setAttribute = function(name, value) {
     setAttribute.call(this, name, value)
     const focused = document.activeElement as HTMLElement | null
-    if (name !== "disabled" || focused === null || !fieldset.contains(focused)) return
-    const matches = focused.matches
-    focused.matches =
-      ((selector: string) => selector === ":disabled" || matches.call(focused, selector)) as typeof matches
-    focused.blur()
-    focused.matches = matches
+    if (name === "disabled" && focused !== null && fieldset.contains(focused)) focused.blur()
   }
 }
 
@@ -111,10 +109,6 @@ describe("Fieldset", { concurrent: false }, () => {
       yield* tick
       const form = app.querySelector("form")!
       const company = app.querySelector<HTMLInputElement>("input[name=company]")!
-      const toggleLock = Effect.gen(function*() {
-        app.querySelector<HTMLButtonElement>(".lock")!.click()
-        yield* tick
-      })
       const state = (name: string) =>
         ["data-disabled", "data-focused", "data-touched"].filter((attr) =>
           app.querySelector(`.${name}`)!.hasAttribute(attr)
@@ -127,7 +121,7 @@ describe("Fieldset", { concurrent: false }, () => {
       assert.deepStrictEqual(submitted(), ["company", "city"])
       assert.strictEqual(app.querySelectorAll("span").length, 2)
 
-      yield* toggleLock
+      yield* toggleLock(app)
       assert.isTrue(app.querySelector<HTMLFieldSetElement>(".billing")!.disabled)
       assert.isTrue(app.querySelector<HTMLFieldSetElement>(".address")!.disabled)
       assert.isTrue(app.querySelector(".address-legend")!.hasAttribute("data-disabled"))
@@ -141,12 +135,12 @@ describe("Fieldset", { concurrent: false }, () => {
       assert.strictEqual(app.querySelectorAll("span").length, 0)
       assert.deepStrictEqual(submitted(), [])
 
-      yield* toggleLock
+      yield* toggleLock(app)
       assert.deepStrictEqual(state("company"), [])
 
-      yield* toggleLock
+      yield* toggleLock(app)
       company.dispatchEvent(new FocusEvent("blur"))
-      yield* toggleLock
+      yield* toggleLock(app)
       assert.deepStrictEqual(state("company"), [])
     }).pipe(Effect.scoped))
 
@@ -160,13 +154,12 @@ describe("Fieldset", { concurrent: false }, () => {
       const lockWhileFocused = Effect.gen(function*() {
         city.focus()
         yield* tick
-        app.querySelector<HTMLButtonElement>(".lock")!.click()
-        yield* tick
+        yield* toggleLock(app)
         assert.notStrictEqual(document.activeElement, city)
-        app.querySelector<HTMLButtonElement>(".lock")!.click()
-        yield* tick
+        yield* toggleLock(app)
         assert.isFalse(field.hasAttribute("data-focused"))
       })
+      yield* fieldsetDisabled
       blurOnDisable(app.querySelector<HTMLFieldSetElement>(".billing")!)
 
       yield* lockWhileFocused
