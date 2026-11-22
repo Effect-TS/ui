@@ -217,7 +217,7 @@ const Size = Schema.Struct({ height: Schema.Number, width: Schema.Number })
 
 type Size = typeof Size.Type
 
-const Message = UiSchema.TaggedEnum({
+const CollapsibleMessage = UiSchema.TaggedEnum({
   ClickedTrigger: {},
   MeasuredPanel: { size: Size },
   RenderedFirstFrame: {},
@@ -227,9 +227,9 @@ const Message = UiSchema.TaggedEnum({
   StayedHidden: {}
 })
 
-type Message = typeof Message.Type
+type CollapsibleMessage = typeof CollapsibleMessage.Type
 
-const Model = Schema.Struct({
+const CollapsibleModel = Schema.Struct({
   mounted: Schema.Boolean,
   started: Schema.Boolean,
   ending: Schema.Boolean,
@@ -238,11 +238,11 @@ const Model = Schema.Struct({
   openOnLoad: Schema.Boolean
 })
 
-type Model = typeof Model.Type
+type CollapsibleModel = typeof CollapsibleModel.Type
 
 const px = (value: number | undefined): string => value === undefined ? "auto" : value + "px"
 
-const panelStyle = (model: Model, open: boolean): string =>
+const panelStyle = (model: CollapsibleModel, open: boolean): string =>
   [
     "--collapsible-panel-height:" + px(model.size?.height),
     "--collapsible-panel-width:" + px(model.size?.width),
@@ -280,7 +280,7 @@ const TrackPanel = Mount.makeStream(
   "TrackPanel",
   { args: TrackPanelArgs },
   (node: HTMLElement, args, changes) =>
-    Stream.callback<Message>((queue) => {
+    Stream.callback<CollapsibleMessage>((queue) => {
       const frame = frameOf(node.ownerDocument.defaultView)
       let step = 0
       const twoFrames = (f: () => void) => {
@@ -292,18 +292,18 @@ const TrackPanel = Mount.makeStream(
         )
       }
       let current: TrackPanelArgs = args
-      const send = (message: Message) => Queue.offerUnsafe(queue, message)
+      const send = (message: CollapsibleMessage) => Queue.offerUnsafe(queue, message)
 
       const opened = () => {
-        send(Message.MeasuredPanel({ size: measure(node) }))
+        send(CollapsibleMessage.MeasuredPanel({ size: measure(node) }))
         twoFrames(() => {
-          if (current.open && !current.started) send(Message.RenderedFirstFrame())
+          if (current.open && !current.started) send(CollapsibleMessage.RenderedFirstFrame())
         })
       }
       const closed = () => {
-        send(Message.MeasuredPanel({ size: measure(node) }))
+        send(CollapsibleMessage.MeasuredPanel({ size: measure(node) }))
         twoFrames(() => {
-          if (!current.open) send(Message.RenderedSize())
+          if (!current.open) send(CollapsibleMessage.RenderedSize())
         })
       }
 
@@ -319,7 +319,7 @@ const TrackPanel = Mount.makeStream(
       const onBeforeMatch = (event: Event) => {
         if (event.target !== node) return
         node.removeAttribute("data-starting-style")
-        send(Message.MatchedFind())
+        send(CollapsibleMessage.MatchedFind())
         cancelReveal()
         const id = reveal
         revealTimer = setTimeout(() =>
@@ -329,11 +329,16 @@ const TrackPanel = Mount.makeStream(
               node.setAttribute("data-starting-style", "")
               node.setAttribute("hidden", "until-found")
             }
-            send(Message.StayedHidden())
+            send(CollapsibleMessage.StayedHidden())
           }), 0)
       }
 
-      const transition = settling(node, () => node, frame, (open) => send(Message.FinishedTransition({ open })))
+      const transition = settling(
+        node,
+        () => node,
+        frame,
+        (open) => send(CollapsibleMessage.FinishedTransition({ open }))
+      )
       const onChange = (next: TrackPanelArgs) => {
         const previous = current
         current = next
@@ -398,8 +403,8 @@ export const Collapsible = Component.define({
   name: "Collapsible",
   scoped: false,
   props: CollapsibleProps,
-  model: Model,
-  message: Message,
+  model: CollapsibleModel,
+  message: CollapsibleMessage,
   events: CollapsibleEvents,
   restore: false,
   elements: Html
@@ -468,7 +473,7 @@ export const Collapsible = Component.define({
           "aria-disabled": undefined
         })
         .disabled(disabled)
-        .onClick(Message.ClickedTrigger())
+        .onClick(CollapsibleMessage.ClickedTrigger())
         .forward((node) => node.attr("aria-controls", open ? panelId : undefined)))
 
     const panelPart = p.part("div", (b, id: string) =>

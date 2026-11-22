@@ -6,7 +6,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 import { byId, container, tick } from "./utils/document.ts"
 
-const Config = Schema.Struct({
+const PageProps = Schema.Struct({
   initialOpen: Schema.Boolean,
   hiddenUntilFound: Schema.Boolean,
   refuse: Schema.Boolean,
@@ -14,9 +14,9 @@ const Config = Schema.Struct({
   holdExit: Schema.Boolean,
   style: Schema.optional(Schema.String)
 })
-type Config = typeof Config.Type
+type PageProps = typeof PageProps.Type
 
-const Message = UiSchema.TaggedEnum({
+const PageMessage = UiSchema.TaggedEnum({
   Toggled: { open: Schema.Boolean, reason: Schema.String },
   Settled: { open: Schema.Boolean },
   ReleaseHold: {}
@@ -25,14 +25,14 @@ const Message = UiSchema.TaggedEnum({
 const Page = Component.define({
   name: "Page",
   scoped: false,
-  props: Config,
+  props: PageProps,
   model: Schema.Struct({
-    config: Config,
+    config: PageProps,
     open: Schema.Boolean,
     holdExit: Schema.Boolean,
     log: Schema.Array(Schema.String)
   }),
-  message: Message,
+  message: PageMessage,
   elements: Html
 }).make({
   init: ($) => ({ config: $.props, open: $.props.initialOpen, holdExit: $.props.holdExit, log: [] }),
@@ -54,13 +54,13 @@ const Page = Component.define({
         holdExit: model.holdExit
       },
       onEmit: {
-        Toggled: ({ open, reason }) => Message.Toggled({ open, reason }),
-        Settled: ({ open }) => Message.Settled({ open })
+        Toggled: ({ open, reason }) => PageMessage.Toggled({ open, reason }),
+        Settled: ({ open }) => PageMessage.Settled({ open })
       },
       view: (collapsible) =>
         collapsible.root(h.div.attr("id", "root")).children(
           collapsible.trigger(h.button.attr("id", "trigger")).children("Details"),
-          h.button.attr("id", "release").onClick(Message.ReleaseHold()).children("Release"),
+          h.button.attr("id", "release").onClick(PageMessage.ReleaseHold()).children("Release"),
           collapsible.panel(h.div.attr("id", "panel").attr("style", model.config.style))?.children(
             "Content",
             h.div.attr("id", "child")
@@ -151,7 +151,7 @@ const record = (target: () => Element | null) => {
   return { seen, stop: () => observer.disconnect() }
 }
 
-const mountPage = Effect.fnUntraced(function*(overrides: Partial<Config> = {}) {
+const mountPage = Effect.fnUntraced(function*(overrides: Partial<PageProps> = {}) {
   yield* layout
   const app = yield* container
   const root = yield* BrowserHost.mountEffect(
