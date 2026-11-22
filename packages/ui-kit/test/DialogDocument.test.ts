@@ -16,6 +16,7 @@ const Message = UiSchema.TaggedEnum({
   Switched: {},
   ShowedToasts: {},
   AddedControl: {},
+  AllowedFocus: {},
   Opened: { which: Schema.String, triggerId: Schema.NullOr(Schema.String), method: OpenMethod },
   Dismissed: { which: Schema.String, reason: Schema.String },
   Settled: { which: Schema.String, open: Schema.Boolean }
@@ -94,6 +95,7 @@ const Page = Component.define({
     ShowedToasts: (model) => ({ ...model, toasts: true }),
     AddedControl: (model) => ({ ...model, late: true }),
     Switched: (model) => ({ ...model, config: { ...model.config, modal: model.config.modal === false } }),
+    AllowedFocus: (model) => ({ ...model, config: { ...model.config, initialFocus: true } }),
     Opened: (model, { method, triggerId, which }) => ({
       ...model,
       [which]: true,
@@ -661,6 +663,19 @@ describe("Dialog in a document", { concurrent: false }, () => {
       yield* tick
       yield* tick
       assert.strictEqual(document.activeElement?.id, "trigger")
+    }))
+
+  it.effect("a dialog open without initial focus takes focus once initialFocus allows it", () =>
+    Effect.gen(function*() {
+      const { send } = yield* mountPage({ a: false, initialFocus: false })
+      byId("trigger").focus()
+      byId("trigger").click()
+      yield* tick
+      yield* tick
+      send(Message.AllowedFocus())
+      yield* tick
+      yield* tick
+      assert.strictEqual(document.activeElement?.id, "first")
     }))
 
   it.effect("a press that ends inside the popup isn't outside, though its click lands around it", () =>

@@ -235,6 +235,26 @@ export interface PointerPayload {
 }
 
 /**
+ * The payload of `mouseenter` and `mouseleave`: where the pointer is in the
+ * viewport.
+ *
+ * **Details**
+ *
+ * An element drawn over another takes the pointer off the one below without
+ * a move, and gives it back once it is gone. The `mouseleave` and the
+ * `mouseenter` then report the same position, which tells them from the
+ * pointer leaving and coming back.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface HoverPayload {
+  readonly x: number
+  readonly y: number
+}
+
+/**
  * The payload of `keydown` and `keyup`. `composing` is true while an input
  * method composes text, including for the key that ends the composition, so
  * a handler for Enter can leave it to the input method.
@@ -578,8 +598,8 @@ export interface Events {
   readonly contextmenu: PointerPayload
   readonly mousedown: PointerPayload
   readonly mouseup: PointerPayload
-  readonly mouseenter: {}
-  readonly mouseleave: {}
+  readonly mouseenter: HoverPayload
+  readonly mouseleave: HoverPayload
   readonly keydown: KeyPayload
   readonly keyup: KeyPayload
   readonly focus: {}

@@ -272,7 +272,13 @@ export type DialogInteraction = typeof DialogInteraction.Type
  * - `keepMounted`: the portal stays in the page while the dialog is closed,
  *   hidden.
  * - `forceRenderBackdrop`: a nested dialog draws its backdrop too.
+ * - `nested`: `false` keeps a dialog drawn inside another one out of the
+ *   nesting: the outer popup doesn't count it, neither gets the nesting
+ *   attributes, and its backdrop draws. It is still on top, so only it hears
+ *   Escape and outside presses. For a popup that isn't a second dialog to
+ *   the user, such as a date picker in a form.
  * - `initialFocus`: `false` leaves focus where it is when the dialog opens.
+ *   Clearing it while the dialog is open moves focus in as an open does.
  * - `finalFocus`: `false` leaves focus where it is when the dialog closes.
  * - `id`: the portal's `id`, generated when left out. Set it to pair the
  *   dialog with a `DialogTrigger` drawn somewhere else, as its `popupId`.
@@ -295,6 +301,7 @@ export const DialogProps = Schema.Struct({
   triggerId: Schema.optional(Schema.NullOr(Schema.String)),
   keepMounted: Schema.optional(Schema.Boolean),
   forceRenderBackdrop: Schema.optional(Schema.Boolean),
+  nested: Schema.optional(Schema.Boolean),
   initialFocus: Schema.optional(Schema.Boolean),
   finalFocus: Schema.optional(Schema.Boolean),
   id: Schema.optional(Schema.String),
@@ -782,6 +789,7 @@ const TrackDialog = Mount.makeStream(
         const previous = current
         current = next
         if (next.open && next.triggerId !== previous.triggerId) trigger = findTrigger() ?? trigger
+        if (next.open && previous.open && next.initialFocus && !previous.initialFocus) opening(document.activeElement)
         if (next.open !== previous.open || next.modal !== previous.modal) hold()
         if (next.open !== previous.open || next.topmost !== previous.topmost) rewatch()
         if (previous.open && !next.open) {
@@ -972,7 +980,8 @@ export const DialogTrigger = <Msg, R = never>(
  *
  * The parts also return plain values for markup that depends on them:
  * `open`, `mounted` (the dialog shows, through its exit transition),
- * `transitionStatus`, `nested`, `nestedDialogs`, and `openMethod` and
+ * `transitionStatus`, `nested`, `nestedDialogs`, `triggerId`, the `id` of the
+ * trigger the dialog is open for or last was, and `openMethod` and
  * `closeMethod`, how the user opened the open dialog and last closed it.
  * Draw `initialFocus` on a field only for some ways of opening by branching
  * on `dialog.openMethod`, which is `null` once the dialog closes.
@@ -1029,7 +1038,7 @@ export const Dialog = Component.define({
     parent: {
       owner: "self",
       optional: true,
-      report: (model, props) => (props.open ? 1 + model.nestedOpen : 0)
+      report: (model, props) => (props.open && props.nested !== false ? 1 + model.nestedOpen : 0)
     }
   },
   restore: false,
@@ -1091,7 +1100,7 @@ export const Dialog = Component.define({
     const open = props.open
     const shown = open || model.mounted
     const transitionStatus: DialogTransitionStatus = statusOf(model, props)
-    const nested = p.shared.parent !== undefined
+    const nested = p.shared.parent !== undefined && props.nested !== false
     const nestedDialogs = model.nestedOpen
     const portalId = props.id ?? p.id("portal")
     const openMethod = open ? props.openMethod ?? model.openMethod : null
@@ -1227,6 +1236,7 @@ export const Dialog = Component.define({
       nestedDialogs,
       openMethod,
       closeMethod: model.closeMethod,
+      triggerId: activeTrigger,
       trigger,
       portal,
       backdrop,

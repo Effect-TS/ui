@@ -727,6 +727,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       Clicked: { where: Schema.String },
       PointerClicked: { pointerType: Schema.String },
       Key: { key: Schema.String, shift: Schema.Boolean },
+      Hovered: { x: Schema.Number, y: Schema.Number },
       Submitted: { title: Schema.String, tags: Schema.Array(Schema.String) },
       Focused: { where: Schema.String },
       FocusMoved: { event: Schema.String, within: Schema.Boolean }
@@ -744,6 +745,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           Clicked: ({ where }) => [...log, `click ${where}`],
           PointerClicked: ({ pointerType }) => [...log, pointerType],
           Key: ({ key, shift }) => [...log, `key ${key}${shift ? " shift" : ""}`],
+          Hovered: ({ x, y }) => [...log, `hover ${x},${y}`],
           Submitted: ({ tags, title }) => [...log, `submit ${title} [${tags.join(",")}]`],
           Focused: ({ where }) => [...log, `focus ${where}`],
           FocusMoved: ({ event, within }) => [...log, `${event}${within ? " within" : ""}`]
@@ -765,6 +767,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           h.button.onClick(({ pointerType }) => Message.PointerClicked({ pointerType })).children("Pointer"),
           h.input.attr("aria-label", "Keys")
             .onKeyDown(({ key, shift }) => Message.Key({ key, shift }))
+            .on("mouseenter", ({ x, y }) => Message.Hovered({ x, y }))
             .onFocus(Message.Focused({ where: "keys" })),
           h.form.onSubmit(({ entries, fields }) =>
             Message.Submitted({
@@ -1118,9 +1121,11 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Events, {}, app)
-        HtmlLocator.keydown(HtmlLocator.getByRole(app, "textbox", { name: "Keys" }), "Enter", { shift: true })
+        const keys = HtmlLocator.getByRole(app, "textbox", { name: "Keys" })
+        HtmlLocator.keydown(keys, "Enter", { shift: true })
+        keys.dispatchEvent(new MouseEvent("mouseenter", { clientX: 3, clientY: 4 }))
         yield* tick
-        expect(root.model()).toEqual(["key Enter shift"])
+        expect(root.model()).toEqual(["key Enter shift", "hover 3,4"])
       }).pipe(Effect.scoped))
 
     describe("input methods and selections", () => {
@@ -2087,6 +2092,32 @@ describe("BrowserHost", { concurrent: false }, () => {
         yield* BrowserHost.mountEffect(ModalMenu, {}, yield* container)
         // A modal opening closes the auto popovers showing, so the popover in it opens after it.
         expect(stub.calls).toEqual(["showModal Settings", "showPopover Menu"])
+      }).pipe(Effect.scoped))
+
+    it.effect("showing a modal dialog or a popover that takes focus leaves the page's scroll where it was", () =>
+      Effect.gen(function*() {
+        yield* popoverStub
+        const jumps: Array<string> = []
+        const jumping = (proto: any, name: "showModal" | "showPopover") => {
+          const show = proto[name]
+          return vi.spyOn(proto, name).mockImplementation(function(this: HTMLElement) {
+            show.call(this)
+            jumps.push(name)
+            this.tabIndex = -1
+            this.focus()
+            window.scrollTo(0, 0)
+          })
+        }
+        const spies = [
+          jumping(window.HTMLDialogElement.prototype, "showModal"),
+          jumping(window.HTMLElement.prototype, "showPopover")
+        ]
+        yield* Effect.addFinalizer(() => Effect.sync(() => spies.forEach((spy) => spy.mockRestore())))
+        window.scrollTo(0, 600)
+        yield* Effect.addFinalizer(() => Effect.sync(() => window.scrollTo(0, 0)))
+        yield* BrowserHost.mountEffect(ModalMenu, {}, yield* container)
+        expect(jumps).toEqual(["showModal", "showPopover"])
+        expect(window.scrollY).toBe(600)
       }).pipe(Effect.scoped))
   })
 

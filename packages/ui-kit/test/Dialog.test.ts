@@ -88,6 +88,7 @@ describe("Dialog", () => {
       assert.deepInclude(s.get(other).attrs, { "aria-expanded": "false" })
       s.click(other).emitted({ _tag: "Opened", triggerId: "other" })
       assert.deepInclude(s.get(other).attrs, { "aria-expanded": "true", "aria-controls": id })
+      assert.strictEqual(partsOf(s).triggerId, "other")
       assert.strictEqual(s.get(trigger).attrs?.["aria-expanded"], "false")
       // Enter or Space on the trigger is a click with no pointer.
       s.fire(other, "click", { button: 0, x: 0, y: 0, pointerType: "" })
@@ -242,7 +243,12 @@ describe("Dialog", () => {
       s.expectMount(tracked(s))
       s.shared(Dialog, { open: true })
       assert.isTrue(partsOf(s).nested)
+      assert.isUndefined(s.query(backdrop))
+      s.props({ open: true, nested: false })
+      assert.isFalse(partsOf(s).nested)
+      assert.isDefined(s.query(backdrop))
       s.props({ open: true, forceRenderBackdrop: true })
+      assert.isTrue(partsOf(s).nested)
       assert.isDefined(s.query(backdrop))
       // One dialog open inside this one, and one inside that.
       s.collected([2, 0])
