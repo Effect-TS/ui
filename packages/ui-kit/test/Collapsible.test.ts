@@ -83,6 +83,22 @@ describe("Collapsible", () => {
     assert.strictEqual((heading.children[0] as View.Element<never>).attrs["aria-controls"], "shipping")
   })
 
+  it("the root repoints only its own trigger, not another element controlling the generated id", () => {
+    const generated = View.build(parts({ open: true }).panel(h.div)!, []).attrs.id!
+    const collapsible = parts({ open: true })
+    const node = View.build(
+      collapsible.root(h.div).children(
+        h.h3.children(collapsible.trigger(h.button)),
+        h.button.attr("aria-controls", generated),
+        collapsible.panel(h.div.attr("id", "shipping"))
+      ),
+      []
+    )
+    const heading = node.children[0] as View.Element<never>
+    assert.strictEqual((heading.children[0] as View.Element<never>).attrs["aria-controls"], "shipping")
+    assert.strictEqual((node.children[1] as View.Element<never>).attrs["aria-controls"], generated)
+  })
+
   it("each part rejects another tag", () => {
     const collapsible = parts({ open: true })
     assert.strictEqual(View.build(collapsible.root(h.div), []).tag, "div")

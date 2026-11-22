@@ -14,7 +14,8 @@ const PageProps = Schema.Struct({
 
 const PageMessage = UiSchema.TaggedEnum({
   Toggled: { value: Schema.Array(Schema.String), reason: Schema.String },
-  ToggledItem: { item: Schema.String, open: Schema.Boolean }
+  ToggledItem: { item: Schema.String, open: Schema.Boolean },
+  Reversed: {}
 })
 
 const items = ["a", "b", "c"]
@@ -23,43 +24,52 @@ const Page = Component.define({
   name: "Page",
   scoped: false,
   props: PageProps,
-  model: Schema.Struct({ open: Schema.Array(Schema.String), log: Schema.Array(Schema.String) }),
+  model: Schema.Struct({
+    open: Schema.Array(Schema.String),
+    order: Schema.Array(Schema.String),
+    log: Schema.Array(Schema.String)
+  }),
   message: PageMessage,
   elements: Html
 }).make({
-  init: ($) => ({ open: $.props.initial, log: [] }),
+  init: ($) => ({ open: $.props.initial, order: items, log: [] }),
   update: {
     Toggled: (model, { value, reason }) => ({
+      ...model,
       open: value,
       log: [...model.log, `Toggled [${value.join(",")}] ${reason}`]
     }),
-    ToggledItem: (model, { item, open }) => ({ ...model, log: [...model.log, `ToggledItem ${item} ${open}`] })
+    ToggledItem: (model, { item, open }) => ({ ...model, log: [...model.log, `ToggledItem ${item} ${open}`] }),
+    Reversed: (model) => ({ ...model, order: [...model.order].reverse() })
   },
   view: (model, h) =>
-    Accordion(h, {
-      props: { value: model.open, multiple: h.props.multiple, disabled: h.props.disabled },
-      onEmit: { Toggled: ({ value, reason }) => PageMessage.Toggled({ value, reason }) },
-      view: (accordion) =>
-        accordion.root(h.div.attr("id", "root")).children(
-          items.map((value, index) =>
-            AccordionItem(h, {
-              key: value,
-              props: { value, index, disabled: value === "c" },
-              onEmit: {
-                Toggled: ({ open }) => PageMessage.ToggledItem({ item: value, open }),
-                Settled: () => undefined
-              },
-              view: (item) =>
-                item.root(h.div.attr("id", "item-" + value)).children(
-                  item.header(h.h3).children(
-                    item.trigger(h.button.attr("id", "trigger-" + value)).children(value)
-                  ),
-                  item.panel(h.div.attr("id", "panel-" + value))?.children("Answer " + value)
-                )
-            })
-          )
-        )
-    })
+    h.main.children(
+      h.button.attr("id", "reverse").onClick(PageMessage.Reversed()).children("Reverse"),
+      Accordion(h, {
+        props: { value: model.open, multiple: h.props.multiple, disabled: h.props.disabled },
+        onEmit: { Toggled: ({ value, reason }) => PageMessage.Toggled({ value, reason }) },
+        view: (accordion) =>
+          accordion.root(h.div.attr("id", "root")).children(h.section.children(
+            model.order.map((value) =>
+              AccordionItem(h, {
+                key: value,
+                props: { value, disabled: value === "c" },
+                onEmit: {
+                  Toggled: ({ open }) => PageMessage.ToggledItem({ item: value, open }),
+                  Settled: () => undefined
+                },
+                view: (item) =>
+                  item.root(h.div.attr("id", "item-" + value)).children(
+                    item.header(h.h3).children(
+                      item.trigger(h.button.attr("id", "trigger-" + value)).children(value)
+                    ),
+                    item.panel(h.div.attr("id", "panel-" + value))?.children("Answer " + value)
+                  )
+              })
+            )
+          ))
+      })
+    )
 })
 
 const open = () => items.filter((value) => document.getElementById("panel-" + value) !== null)
@@ -118,5 +128,29 @@ describe("AccordionDocument", { concurrent: false }, () => {
       assert.isTrue(byId("root").hasAttribute("data-disabled"))
       assert.strictEqual(byId("trigger-a").getAttribute("aria-expanded"), "false")
       assert.deepStrictEqual(handle.model()!.log, [])
+    }).pipe(Effect.scoped))
+
+  it.effect("numbers items in the order they're drawn, and renumbers them after a reorder", () =>
+    Effect.gen(function*() {
+      const app = yield* container
+      yield* BrowserHost.mountEffect(Page, { multiple: false, initial: ["b"] }, app)
+      yield* tick
+      const indexes = () =>
+        Array.from(app.querySelectorAll("[id^=item-]"), (item) => {
+          const value = item.id.slice("item-".length)
+          return [
+            value,
+            item.getAttribute("data-index"),
+            byId("trigger-" + value).getAttribute("data-index")
+          ]
+        })
+      assert.deepStrictEqual(indexes(), [["a", "0", "0"], ["b", "1", "1"], ["c", "2", "2"]])
+      assert.strictEqual(byId("panel-b").getAttribute("data-index"), "1")
+
+      byId("reverse").click()
+      yield* tick
+      assert.deepStrictEqual(indexes(), [["c", "0", "0"], ["b", "1", "1"], ["a", "2", "2"]])
+      assert.strictEqual(byId("panel-b").getAttribute("data-index"), "1")
+      assert.strictEqual(byId("panel-b").getAttribute("aria-labelledby"), "trigger-b")
     }).pipe(Effect.scoped))
 })

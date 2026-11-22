@@ -127,6 +127,7 @@ import * as View from "@effect/ui/View"
 import * as Schema from "effect/Schema"
 import { Collapsible, CollapsibleToggleReason, type CollapsibleTransitionStatus } from "./Collapsible.ts"
 import { type Attributed, flag, idOf, ownStyle } from "./internal/attributes.ts"
+import { find, rewrite, withAttr } from "./internal/tree.ts"
 
 /**
  * The axis an accordion's items are laid out along.
@@ -231,6 +232,17 @@ const toggled = (props: AccordionProps, item: string, open: boolean): ReadonlyAr
   return props.value.includes(item) ? props.value : [...props.value, item]
 }
 
+const numbered = <N extends View.Node<any, any>>(node: N): N => {
+  let index = 0
+  return rewrite(node, (child) => {
+    if (child._tag !== "Child") return undefined
+    if ((child.component as unknown) !== AccordionItem) return child
+    const at = index++
+    const props = child.props as AccordionItemProps
+    return props.index === undefined ? { ...child, props: { ...props, index: at } } : child
+  })
+}
+
 /**
  * A headless accordion. Call it with the consumer's `h`, the `props`, an
  * `onEmit` for `Toggled`, and a `view` closure that draws the root with
@@ -240,6 +252,11 @@ const toggled = (props: AccordionProps, item: string, open: boolean): ReadonlyAr
  *
  * The parts also return `value`, `disabled`, `multiple` and `orientation`,
  * resolved, for markup that depends on them.
+ *
+ * The root numbers the `AccordionItem`s it holds in the order it draws them,
+ * and passes each its position as `index` unless the item has one. An item
+ * the root can't see, such as one drawn by another component's view, keeps
+ * the `index` its caller gives it.
  *
  * The root's `data-orientation` and `data-disabled` win over the consumer's,
  * including when `disabled` leaves the attribute absent. A part writes them
@@ -291,7 +308,13 @@ export const Accordion = Component.define({
       disabled,
       multiple: props.multiple === true,
       orientation,
-      root: p.part("div", (b) => b.attrs({ "data-orientation": orientation, "data-disabled": flag(disabled) }))
+      root: p.part(
+        "div",
+        (b) =>
+          b.attrs({ "data-orientation": orientation, "data-disabled": flag(disabled) }).forward((node) =>
+            numbered(View.build(node, []))
+          )
+      )
     }
   }
 })
@@ -304,8 +327,10 @@ export const Accordion = Component.define({
  * - `value`: the item's value, which the accordion's `value` lists while the
  *   item is open. Required, and unique within its accordion.
  * - `index`: the item's position among the accordion's items, written as
- *   `data-index` on every part of the item. Left out, the parts have no
- *   `data-index`.
+ *   `data-index` on every part of the item. Left out, the accordion's root
+ *   gives the item its position in the order the root draws its items, so a
+ *   reordered list renumbers itself. Give it only for an item the root can't
+ *   see, such as one drawn by another component's view.
  * - `disabled`: disables this item. A disabled accordion disables every item.
  * - `keepMounted` and `hiddenUntilFound`: as the accordion's, for this item's
  *   panel. Left out, the item follows the accordion.
@@ -391,7 +416,9 @@ const headings = ["h1", "h2", "h3", "h4", "h5", "h6"] as const
  * every part; on the trigger `id`, `type`, `disabled`, `aria-disabled`,
  * which it removes, `aria-expanded` and `aria-controls`, which it sets only
  * while the panel is open; on the panel `role="region"`, `aria-labelledby`,
- * which names it by the trigger, and `hidden`. The trigger and the panel keep
+ * which names it by the trigger, and `hidden`. The item's root names the
+ * panel by the trigger it holds, whichever of the two was built first, and
+ * leaves `aria-labelledby` off when it holds no trigger. The trigger and the panel keep
  * an `id` the consumer gives them, and get a generated one otherwise. The
  * panel's CSS variables are added after the consumer's inline style. A
  * handler the consumer adds to a part runs after the item's own.
@@ -431,13 +458,25 @@ export const AccordionItem = Component.define({
     const orientation = accordion.orientation
     const index = props.index
     let triggerId: string | null = null
+    const triggers = new Set<string>()
+    const panels = new Set<Readonly<Record<string, string>>>()
     const states = <B extends Attributed<B>>(builder: B): B =>
       builder.attrs({
         "data-orientation": orientation,
         "data-index": index === undefined ? undefined : String(index)
       })
 
-    const rootPart = p.part("div", (b) => states(b))
+    const rootPart = p.part("div", (b) =>
+      states(b).forward((node) => {
+        if (panels.size === 0) return node
+        const root = View.build(node, [])
+        const labelledBy = find(root, (element) => element.attrs.id !== undefined && triggers.has(element.attrs.id))
+          ?.attrs.id
+        return rewrite(root, (element) =>
+          element._tag === "Element" && panels.has(element.attrs)
+            ? withAttr(element, "aria-labelledby", labelledBy)
+            : undefined)
+      }))
     const header = p.part(headings, (b) =>
       states(b).attrs({
         "data-open": flag(open),
@@ -448,17 +487,24 @@ export const AccordionItem = Component.define({
       states(b)
         .attr("id", id)
         .forward((node) => {
-          triggerId = node.elementAttrs.id ?? id
-          return node
+          const element = View.build(node, [])
+          triggerId = element.attrs.id ?? id
+          triggers.add(triggerId)
+          return element
         }))
     const panelPart = p.part("div", (b) =>
       states(b)
         .attr("role", "region")
-        .forward((node) =>
-          ownStyle(
-            "--accordion-panel-height:var(--collapsible-panel-height);--accordion-panel-width:var(--collapsible-panel-width)"
-          )(node.attr("aria-labelledby", triggerId ?? undefined))
-        ))
+        .forward((node) => {
+          const element = View.build(
+            ownStyle(
+              "--accordion-panel-height:var(--collapsible-panel-height);--accordion-panel-width:var(--collapsible-panel-width)"
+            )(node.attr("aria-labelledby", triggerId ?? undefined)),
+            []
+          )
+          panels.add(element.attrs)
+          return element
+        }))
 
     return p.child(Collapsible, {
       props: {

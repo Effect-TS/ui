@@ -194,5 +194,29 @@ describe("AccordionItem", () => {
       s.parts((item) => {
         assert.isUndefined(View.build(item.panel(h.div)!, []).attrs["aria-labelledby"])
       })
+      s.parts((item) => {
+        item.trigger(h.button.attr("id", "unused"))
+        const node = View.build(item.root(h.div).children(item.panel(h.div.class("panel"))), [])
+        assert.isUndefined((node.children[0] as View.Element<never>).attrs["aria-labelledby"])
+      })
+    }))
+
+  it.effect("the root names the panel by its trigger when the panel is built first", () =>
+    Effect.gen(function*() {
+      const s = yield* itemScene({ value: "a" }, { value: ["a"] })
+      s.parts((item) => {
+        const body = h.section.children(item.panel(h.div.attr("id", "panel-a")))
+        const node = View.build(
+          item.root(h.div).children(
+            item.header(h.h3).children(item.trigger(h.button.attr("id", "trigger-a"))),
+            body
+          ),
+          []
+        )
+        const trigger = ((node.children[0] as View.Element<never>).children[0] as View.Element<never>).attrs
+        const panel = ((node.children[1] as View.Element<never>).children[0] as View.Element<never>).attrs
+        assert.strictEqual(panel["aria-labelledby"], "trigger-a")
+        assert.strictEqual(trigger["aria-controls"], "panel-a")
+      })
     }))
 })
