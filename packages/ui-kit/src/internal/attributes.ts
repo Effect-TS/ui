@@ -18,7 +18,9 @@ export const visuallyHidden =
 
 export const noSelect = "user-select:none;-webkit-user-select:none"
 
-export const idSelector = (id: string): string => `[id="${id.replace(/["\\]/g, "\\$&")}"]`
+export const attrSelector = (name: string, value: string): string => `[${name}="${value.replace(/["\\]/g, "\\$&")}"]`
+
+export const idSelector = (id: string): string => attrSelector("id", id)
 
 export interface Attributed<B> {
   readonly attr: (name: string, value: string | undefined) => B

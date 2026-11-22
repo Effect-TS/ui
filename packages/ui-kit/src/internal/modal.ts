@@ -58,6 +58,10 @@ const refresh = () => {
   unmark = top === undefined ? undefined : hide(top)
 }
 
+let lastOrder = 0
+
+export const nextLayerOrder = (): number => ++lastOrder
+
 export const hideOthers = (inside: Element, order: number, also: ReadonlyArray<Element> = []): () => void => {
   const entry = { inside, also, order }
   layers.push(entry)
