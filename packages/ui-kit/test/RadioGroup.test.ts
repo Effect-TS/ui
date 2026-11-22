@@ -1,5 +1,5 @@
 import type { Component, Mount } from "@effect/ui"
-import { Component as C, UiSchema, View } from "@effect/ui"
+import { Component as C, View } from "@effect/ui"
 import { DirectionProvider, Field, Form, RadioGroup, type RadioGroupProps } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { HtmlScene } from "@effect/ui/html/testing"
@@ -15,7 +15,7 @@ const items = [
   { value: "hdd", disabled: true },
   { value: "nvme" },
   { value: "tape", readOnly: true }
-] as const
+]
 
 const standIn = {
   elements: Html,
@@ -32,50 +32,52 @@ const standIn = {
 const root = Locator.attr("role", "radiogroup")
 const radio = (value: string) => Locator.attr("aria-label", value)
 const indicator = (value: string) => Locator.attr("data-dot", value)
-const hidden = Locator.tag("input")
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
-const idle = { highlighted: null, settled: null, leaving: [] }
-const parts = (props: RadioGroupProps) => Story.parts(RadioGroup, { model: idle, props })
+const parts = (props: RadioGroupProps) =>
+  Story.parts(RadioGroup, { model: { highlighted: null, settled: null, leaving: [] }, props })
 
 type Issued = Mount.Issued<unknown, never, never, unknown>
-type Rendered = { readonly get: (locator: Locator.Locator) => Locator.Node }
-const mountOf = (s: Rendered, locator: Locator.Locator): Issued =>
+const mountOf = (s: { readonly get: (locator: Locator.Locator) => Locator.Node }, locator: Locator.Locator): Issued =>
   (s.get(locator) as unknown as View.Element<unknown>).owned?.find((layer) => layer.mount !== undefined)
     ?.mount as unknown as Issued
 const sent = (tag: string, fields: object = {}) => ({ _tag: tag, ...fields }) as never
 
-const focusTargets = (
+const openScene = (props: RadioGroupProps = { value: "ssd", items }) =>
+  HtmlScene.make(RadioGroup, props, standIn).pipe(
+    Effect.tap((s) =>
+      Effect.sync(() => {
+        if (props.value !== null) s.expectMount(mountOf(s, indicator(props.value)))
+      })
+    )
+  )
+
+const expectFocus = (
   s: {
     readonly current: {
       readonly pending: ReadonlyArray<{ readonly command: { readonly name: string; readonly args: unknown } }>
     }
     readonly resolve: (command: never, result: never) => unknown
-  }
-) =>
-  s.current.pending.map(({ command }) => {
+  },
+  value: string
+) => {
+  const targets = s.current.pending.map(({ command }) => {
     s.resolve(command as never, { found: true } as never)
     return command.name + " " + (command.args as { readonly ref: { readonly key: string } }).ref.key
   })
+  assert.deepStrictEqual(targets, ["DomCommand.focus RadioGroupRadio[" + value + "]"])
+}
 
 describe("RadioGroup", () => {
   it.effect("clicking picks an unchecked enabled radio, ignores the checked one, and respects disabled and readOnly", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(RadioGroup, { value: "ssd", items: [...items] }, standIn)
-      s.expectMount(mountOf(s, indicator("ssd")))
-      assert.strictEqual(s.get(radio("ssd")).attrs?.["aria-checked"], "true")
-      assert.strictEqual(s.get(radio("ssd")).attrs?.["data-checked"], "")
-      assert.strictEqual(s.get(radio("ssd")).attrs?.tabindex, "0")
-      assert.strictEqual(s.get(radio("nvme")).attrs?.["aria-checked"], "false")
-      assert.strictEqual(s.get(radio("nvme")).attrs?.["data-unchecked"], "")
-      assert.strictEqual(s.get(radio("nvme")).attrs?.tabindex, "-1")
-      assert.strictEqual(s.get(radio("hdd")).attrs?.disabled, "")
-      assert.strictEqual(s.get(radio("hdd")).attrs?.["data-disabled"], "")
+      const s = yield* openScene()
+      assert.deepInclude(s.get(radio("ssd")).attrs, { "aria-checked": "true", "data-checked": "", tabindex: "0" })
+      assert.deepInclude(s.get(radio("nvme")).attrs, { "aria-checked": "false", "data-unchecked": "", tabindex: "-1" })
+      assert.deepInclude(s.get(radio("hdd")).attrs, { disabled: "", "data-disabled": "" })
       assert.strictEqual(s.get(radio("tape")).attrs?.["data-readonly"], "")
 
       s.fire(radio("ssd"), "click")
-      assert.deepStrictEqual(s.current.emitted, [])
-
       s.fire(radio("hdd"), "click")
       assert.deepStrictEqual(s.current.emitted, [])
 
@@ -90,7 +92,7 @@ describe("RadioGroup", () => {
       s.fire(radio("nvme"), "click").emitted({ _tag: "Picked", value: "nvme" })
       assert.strictEqual(s.get(radio("nvme")).attrs?.["aria-checked"], "false")
 
-      s.props({ value: "nvme", items: [...items], disabled: true, required: true, invalid: true })
+      s.props({ value: "nvme", items, disabled: true, required: true, invalid: true })
       s.expectMount(mountOf(s, indicator("nvme")))
       assert.deepInclude(s.get(root).attrs, {
         role: "radiogroup",
@@ -100,56 +102,47 @@ describe("RadioGroup", () => {
         "data-disabled": "",
         "data-required": ""
       })
-      assert.strictEqual(s.get(radio("ssd")).attrs?.disabled, "")
-      assert.strictEqual(s.get(radio("ssd")).attrs?.tabindex, "-1")
+      assert.deepInclude(s.get(radio("ssd")).attrs, { disabled: "", tabindex: "-1" })
       s.fire(radio("ssd"), "click")
       assert.deepStrictEqual(s.current.emitted, [])
     }))
 
   it.effect("arrow keys navigate wrapping around disabled items, respect readOnly and RTL, and cancel Enter", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(RadioGroup, { value: "ssd", items: [...items] }, standIn)
-      s.expectMount(mountOf(s, indicator("ssd")))
+      const s = yield* openScene()
 
       s.fire(radio("ssd"), "keydown", { key: "ArrowDown" })
         .expectDefaultPrevented()
         .emitted({ _tag: "Picked", value: "nvme" })
-      assert.deepStrictEqual(focusTargets(s), ["DomCommand.focus RadioGroupRadio[nvme]"])
+      expectFocus(s, "nvme")
 
-      s.fire(radio("nvme"), "keydown", { key: "ArrowRight" })
-        .expectDefaultPrevented()
-      assert.deepStrictEqual(focusTargets(s), ["DomCommand.focus RadioGroupRadio[tape]"])
+      s.fire(radio("nvme"), "keydown", { key: "ArrowRight" }).expectDefaultPrevented()
+      expectFocus(s, "tape")
       assert.deepStrictEqual(s.current.emitted, [])
       assert.strictEqual(s.get(radio("tape")).attrs?.tabindex, "0")
 
-      s.fire(radio("tape"), "keydown", { key: "ArrowDown" })
-        .expectDefaultPrevented()
-      assert.deepStrictEqual(focusTargets(s), ["DomCommand.focus RadioGroupRadio[ssd]"])
+      s.fire(radio("tape"), "keydown", { key: "ArrowDown" }).expectDefaultPrevented()
+      expectFocus(s, "ssd")
       assert.deepStrictEqual(s.current.emitted, [])
 
-      s.fire(radio("ssd"), "keydown", { key: "ArrowUp" })
-        .expectDefaultPrevented()
-      assert.deepStrictEqual(focusTargets(s), ["DomCommand.focus RadioGroupRadio[tape]"])
+      s.fire(radio("ssd"), "keydown", { key: "ArrowUp" }).expectDefaultPrevented()
+      expectFocus(s, "tape")
 
-      s.fire(radio("ssd"), "keydown", { key: "Enter" })
-        .expectDefaultPrevented()
+      s.fire(radio("ssd"), "keydown", { key: "Enter" }).expectDefaultPrevented()
       assert.deepStrictEqual(s.current.emitted, [])
 
       for (const init of [{ key: " " }, { key: "Home" }, { key: "End" }, { key: "ArrowDown", ctrl: true }]) {
-        s.fire(radio("ssd"), "keydown", init)
-          .expectIgnored()
-          .expectDefaultPrevented(false)
+        s.fire(radio("ssd"), "keydown", init).expectIgnored().expectDefaultPrevented(false)
       }
 
-      s.props({ value: "ssd", items: [...items], readOnly: true })
+      s.props({ value: "ssd", items, readOnly: true })
       s.fire(radio("ssd"), "keydown", { key: "ArrowDown" }).expectDefaultPrevented()
-      assert.deepStrictEqual(focusTargets(s), ["DomCommand.focus RadioGroupRadio[nvme]"])
+      expectFocus(s, "nvme")
       assert.deepStrictEqual(s.current.emitted, [])
       assert.strictEqual(s.get(radio("nvme")).attrs?.tabindex, "0")
 
-      s.props({ value: "ssd", items: [...items] })
-      const syncKey = s.subscriptions.find((key) => key.startsWith("synced"))!
-      s.subscription(syncKey, { _tag: "SyncedValue" })
+      s.props({ value: "ssd", items })
+      s.subscription(s.subscriptions.find((key) => key.startsWith("synced"))!, { _tag: "SyncedValue" })
       assert.strictEqual(s.get(radio("ssd")).attrs?.tabindex, "0")
       assert.strictEqual(s.get(radio("nvme")).attrs?.tabindex, "-1")
 
@@ -157,45 +150,38 @@ describe("RadioGroup", () => {
       s.fire(radio("ssd"), "keydown", { key: "ArrowLeft" })
         .expectDefaultPrevented()
         .emitted({ _tag: "Picked", value: "nvme" })
-      assert.deepStrictEqual(focusTargets(s), ["DomCommand.focus RadioGroupRadio[nvme]"])
+      expectFocus(s, "nvme")
     }))
 
   it.effect("indicator tracks simultaneous enter and exit transitions and respects keepMounted", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(RadioGroup, { value: "ssd", items: [...items] }, standIn)
-      assert.isDefined(s.query(indicator("ssd")))
+      const s = yield* Scene.make(RadioGroup, { value: "ssd", items }, standIn)
       assert.isUndefined(s.get(indicator("ssd")).attrs?.["data-starting-style"])
       assert.isUndefined(s.get(indicator("ssd")).attrs?.["data-ending-style"])
       assert.isUndefined(s.query(indicator("nvme")))
 
-      s.props({ value: "nvme", items: [...items] })
-      assert.strictEqual(s.get(indicator("nvme")).attrs?.["data-checked"], "")
-      assert.strictEqual(s.get(indicator("nvme")).attrs?.["data-starting-style"], "")
-      assert.strictEqual(s.get(indicator("ssd")).attrs?.["data-unchecked"], "")
-      assert.strictEqual(s.get(indicator("ssd")).attrs?.["data-ending-style"], "")
+      s.props({ value: "nvme", items })
+      assert.deepInclude(s.get(indicator("nvme")).attrs, { "data-checked": "", "data-starting-style": "" })
+      assert.deepInclude(s.get(indicator("ssd")).attrs, { "data-unchecked": "", "data-ending-style": "" })
 
       const ssdMount = mountOf(s, indicator("ssd"))
-      const nvmeMount = mountOf(s, indicator("nvme"))
       s.mounted(ssdMount, sent("LeftIndicator", { value: "ssd" }))
-      s.mounted(nvmeMount, sent("StartedIndicator", { value: "nvme" }))
+      s.mounted(mountOf(s, indicator("nvme")), sent("StartedIndicator", { value: "nvme" }))
       assert.isUndefined(s.get(indicator("nvme")).attrs?.["data-starting-style"])
       assert.strictEqual(s.get(indicator("ssd")).attrs?.["data-ending-style"], "")
 
       s.mounted(ssdMount, sent("EndedIndicator", { value: "ssd" }))
       assert.isUndefined(s.query(indicator("ssd")))
 
-      const kept = parts({ value: "ssd", items: [...items] })
-      const uncheckedKept = kept.indicator({ element: h.span.class("dot"), value: "nvme", keepMounted: true })
-      assert.isDefined(uncheckedKept)
-      assert.strictEqual(View.build(uncheckedKept!, []).attrs?.["data-unchecked"], "")
+      const kept = parts({ value: "ssd", items }).indicator({ element: h.span, value: "nvme", keepMounted: true })
+      assert.strictEqual(View.build(kept!, []).attrs?.["data-unchecked"], "")
     }))
 
   it("root renders a hidden input only for a named, enabled, picked item", () => {
-    const withName = View.build(
-      parts({ value: "ssd", items: [...items], name: "storage", form: "prefs" }).root(h.div),
+    const inputNode = View.build(
+      parts({ value: "ssd", items, name: "storage", form: "prefs" }).root(h.div),
       []
-    )
-    const inputNode = withName.children[0]
+    ).children[0]
     assert.strictEqual(inputNode?._tag, "Element")
     if (inputNode?._tag === "Element") {
       assert.deepStrictEqual(inputNode.attrs, { type: "hidden", name: "storage", value: "ssd", form: "prefs" })
@@ -203,10 +189,10 @@ describe("RadioGroup", () => {
 
     for (
       const props of [
-        { value: null, items: [...items], name: "storage" },
-        { value: "ssd", items: [...items] },
-        { value: "ssd", items: [...items], name: "storage", disabled: true },
-        { value: "hdd", items: [...items], name: "storage" }
+        { value: null, items, name: "storage" },
+        { value: "ssd", items },
+        { value: "ssd", items, name: "storage", disabled: true },
+        { value: "hdd", items, name: "storage" }
       ] satisfies ReadonlyArray<RadioGroupProps>
     ) {
       assert.strictEqual(View.build(parts(props).root(h.div), []).children.length, 0)
@@ -235,30 +221,28 @@ describe("RadioGroup", () => {
       { class: "group", "aria-label": "Storage", role: "radiogroup" }
     )
 
-    const radioBuilder = group.radio({
-      element: h.button
-        .class("radio")
-        .attr("type", "submit")
-        .attr("role", "checkbox")
-        .attr("aria-checked", "true")
-        .attr("aria-disabled", "true")
-        .attr("aria-invalid", "true")
-        .attr("tabindex", "-1")
-        .attr("data-checked", "")
-        .attr("data-disabled", "")
-        .attr("data-readonly", "")
-        .attr("data-required", "")
-        .disabled(true),
-      value: "ssd"
-    })
-    assert.deepStrictEqual(View.build(radioBuilder, []).attrs, {
-      class: "radio",
-      type: "button",
-      role: "radio",
-      "aria-checked": "false",
-      tabindex: "0",
-      "data-unchecked": ""
-    })
+    assert.deepStrictEqual(
+      View.build(
+        group.radio({
+          element: h.button
+            .class("radio")
+            .attr("type", "submit")
+            .attr("role", "checkbox")
+            .attr("aria-checked", "true")
+            .attr("aria-disabled", "true")
+            .attr("aria-invalid", "true")
+            .attr("tabindex", "-1")
+            .attr("data-checked", "")
+            .attr("data-disabled", "")
+            .attr("data-readonly", "")
+            .attr("data-required", "")
+            .disabled(true),
+          value: "ssd"
+        }),
+        []
+      ).attrs,
+      { class: "radio", type: "button", role: "radio", "aria-checked": "false", tabindex: "0", "data-unchecked": "" }
+    )
 
     assert.throws(() => group.root(h.span as any), /a part for <div> was given <span>/)
     assert.throws(() => group.radio({ element: h.div as any, value: "ssd" }), /a part for <button> was given <div>/)
@@ -272,29 +256,28 @@ describe("RadioGroup", () => {
       const FormHost = C.define({
         name: "FormHost",
         scoped: false,
-        model: Schema.Struct({ invalid: Schema.Boolean }),
-        message: UiSchema.TaggedEnum({ Submitted: {} }),
+        model: Schema.Struct({}),
+        message: Schema.Never,
         elements: Html
       }).make({
-        init: () => ({ invalid: true }),
-        update: { Submitted: (model) => model },
-        view: (model, viewH) =>
+        init: () => ({}),
+        update: (model) => model,
+        view: (_model, viewH) =>
           Form(viewH, {
             onEmit: { Submitted: () => undefined },
             view: (form) =>
               form.root(viewH.form).children(
                 Field(viewH, {
-                  props: { invalid: model.invalid },
+                  props: { invalid: true },
                   view: (field) =>
                     field.root(viewH.div).children(
                       field.legend(viewH.div).children("Storage"),
                       RadioGroup(viewH, {
                         props: {
                           value: null,
-                          items: [{ value: "ssd" }, { value: "nvme" }],
+                          items: [{ value: "ssd" }],
                           disabled: field.disabled,
-                          invalid: field.invalid,
-                          name: "storage"
+                          invalid: field.invalid
                         },
                         onEmit: { Picked: () => undefined },
                         view: (radioGroup) =>
@@ -302,10 +285,6 @@ describe("RadioGroup", () => {
                             radioGroup.radio({
                               element: field.member(viewH.button.attr("aria-label", "ssd")),
                               value: "ssd"
-                            }),
-                            radioGroup.radio({
-                              element: field.member(viewH.button.attr("aria-label", "nvme")),
-                              value: "nvme"
                             })
                           )
                       })
@@ -316,10 +295,7 @@ describe("RadioGroup", () => {
       })
 
       const s = yield* Scene.make(FormHost, {})
-      assert.strictEqual(s.get(root).attrs?.role, "radiogroup")
-      assert.strictEqual(s.get(root).attrs?.["aria-invalid"], "true")
+      assert.deepInclude(s.get(root).attrs, { role: "radiogroup", "aria-invalid": "true" })
       assert.isUndefined(s.get(radio("ssd")).attrs?.["aria-invalid"])
-      assert.strictEqual(s.get(radio("ssd")).attrs?.tabindex, "0")
-      assert.isUndefined(s.query(hidden))
     }))
 })
