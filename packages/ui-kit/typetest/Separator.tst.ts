@@ -12,7 +12,7 @@ declare const needsClock: View.Child<never, Clock>
 
 describe("Separator", () => {
   it("returns a div of the caller's message type, whose chained children keep their requirements", () => {
-    Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
+    Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
       update: (model) => model,
       view: (_, h) => {

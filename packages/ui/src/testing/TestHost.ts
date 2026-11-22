@@ -23,6 +23,7 @@
  *
  * const Counter = Component.define({
  *   name: "Counter",
+ *   scoped: false,
  *   model: Schema.Number,
  *   message: Msg
  * }).make({
@@ -235,7 +236,6 @@ export const makeHost = (): Renderer.Host<TestNode> & {
       operations.push(`create ${JSON.stringify(text)}`)
       return makeText(text, along)
     },
-    // A detached child's nodes go in an element that is never inserted, so no query reaches them.
     createContainer() {
       operations.push("create container")
       return makeElement("#container", along)
@@ -662,7 +662,7 @@ export const mount = <
   RP = never,
   Rcv = never
 >(
-  component: Component.Component<Name, Props, Model, Msg, Events, R, V, any, Rcv>,
+  component: Component.Members<Name, Props, Model, Msg, Events, R, V, any, Rcv>,
   props: Props | Effect.Effect<Props, never, RP>,
   options?: {
     readonly fallback?:
@@ -689,7 +689,7 @@ export const mount = <
     }
     const offCommit = testHost.host.onCommit(frame)
     yield* Effect.addFinalizer(() => Effect.sync(offCommit))
-    const root = yield* runtime.mount(component, props, container, options as any).pipe(
+    const root = yield* runtime.mount(component as any, props, container, options as any).pipe(
       Effect.provideService(Clock.Clock, testHost.drainingClock(Context.get(outer, Clock.Clock), outer)),
       Effect.provideService(Query.Visibility, testHost.visibility),
       Effect.provideService(Query.Connectivity, testHost.connectivity),
@@ -1088,6 +1088,7 @@ export const stub = <Self, Props, Events, Receives = never>(
   const Message = Schema.Union([Emit, feature.receives])
   const component = Component.define({
     name,
+    scoped: false,
     props: feature.props,
     model: Schema.Number,
     message: Message,

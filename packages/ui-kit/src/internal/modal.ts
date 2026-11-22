@@ -1,14 +1,20 @@
 import { saved } from "./dom.ts"
 
-const layers: Array<{ readonly inside: Element; readonly order: number }> = []
-let marked: Element | undefined
+interface Layer {
+  readonly inside: Element
+  readonly also: ReadonlyArray<Element>
+  readonly order: number
+}
+
+const layers: Array<Layer> = []
+let marked: Layer | undefined
 let unmark: (() => void) | undefined
 
-const hide = (inside: Element): () => void => {
+const hide = ({ also, inside }: Layer): () => void => {
   const body = inside.ownerDocument.body
   if (body === null) return () => {}
   const live = Array.from(body.querySelectorAll("[aria-live]"))
-  const stops = new Set<Node>([inside, ...live])
+  const stops = new Set<Node>([inside, ...also, ...live])
   const keep = new Set<Node>()
   for (const element of stops) {
     for (let node: Node | null = element; node !== null && !keep.has(node); node = node.parentNode) keep.add(node)
@@ -38,22 +44,26 @@ const hide = (inside: Element): () => void => {
 }
 
 const refresh = () => {
-  const top = layers.reduce<{ readonly inside: Element; readonly order: number } | undefined>(
+  const top = layers.reduce<Layer | undefined>(
     (top, layer) =>
       top === undefined || top.inside.contains(layer.inside) ||
         (!layer.inside.contains(top.inside) && layer.order >= top.order)
         ? layer
         : top,
     undefined
-  )?.inside
+  )
   if (top === marked) return
   unmark?.()
   marked = top
   unmark = top === undefined ? undefined : hide(top)
 }
 
-export const hideOthers = (inside: Element, order: number): () => void => {
-  const entry = { inside, order }
+let lastOrder = 0
+
+export const nextLayerOrder = (): number => ++lastOrder
+
+export const hideOthers = (inside: Element, order: number, also: ReadonlyArray<Element> = []): () => void => {
+  const entry = { inside, also, order }
   layers.push(entry)
   refresh()
   return () => {
@@ -132,6 +142,12 @@ const lock = (document: Document): (() => void) | undefined => {
     html.scrollTop = top
     html.scrollLeft = left
   }
+}
+
+export const holdScroll = (node: HTMLElement, touch: boolean): () => void => {
+  const html = node.ownerDocument.documentElement
+  const wide = !touch || (html.clientWidth > 0 && node.offsetWidth >= html.clientWidth - 20)
+  return wide ? lockScroll(node.ownerDocument) : () => {}
 }
 
 export const lockScroll = (document: Document): () => void => {

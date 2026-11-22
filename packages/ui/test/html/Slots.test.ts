@@ -17,6 +17,7 @@ const container = Effect.acquireRelease(
 const CounterMsg = UiSchema.TaggedEnum({ Add: {} })
 const Counter = Component.define({
   name: "Counter",
+  scoped: false,
   model: Schema.Number,
   message: CounterMsg,
   events: UiSchema.TaggedEnum({ Added: { count: Schema.Number } }),
@@ -29,6 +30,7 @@ const Counter = Component.define({
 
 const Card = Component.define({
   name: "Card",
+  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html,
@@ -44,6 +46,7 @@ const where = { server: true }
 const PageMsg = UiSchema.TaggedEnum({ Added: { count: Schema.Number } })
 const Page = Component.define({
   name: "Page",
+  scoped: false,
   model: Schema.Number,
   message: PageMsg,
   elements: Html
@@ -112,7 +115,13 @@ describe("slots on the server", () => {
     Effect.gen(function*() {
       // The view reads `where` on each side: the server's render, then the client's.
       let renders = 0
-      const Flip = Component.define({ name: "Flip", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+      const Flip = Component.define({
+        name: "Flip",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
         init: () => null,
         update: (model) => model,
         view: (_, h) => Card(h, { key: "c", slots: { body: h.p(renders++ === 0 ? "server" : "client") } })

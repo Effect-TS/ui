@@ -82,6 +82,7 @@ const GAME_STATE_TEXT: Record<GameState, string> = {
 
 export const SnakeGame = Component.define({
   name: "SnakeGame",
+  scoped: false,
   model: SnakeGameModel,
   message: SnakeGameMessage
 }).make({

@@ -38,6 +38,21 @@ export const fieldsetDisabled = Effect.acquireRelease(
   (restore) => Effect.sync(restore)
 )
 
+/** happy-dom focuses any element, such as a `<div>` with no `tabindex`. */
+export const focusability = Effect.acquireRelease(
+  Effect.sync(() => {
+    const proto = window.HTMLElement.prototype
+    const focus = proto.focus
+    proto.focus = function(this: HTMLElement, options) {
+      if (this.tabIndex >= 0 || this.hasAttribute("tabindex")) focus.call(this, options)
+    }
+    return () => {
+      proto.focus = focus
+    }
+  }),
+  (restore) => Effect.sync(restore)
+)
+
 /**
  * happy-dom has no popover API. Showing one sends `beforetoggle`, and focuses
  * an `autofocus` element in it, or in a `<dialog>` the first field, as a

@@ -16,6 +16,7 @@ const Message = UiSchema.TaggedEnum({ ToggledLock: {} })
 
 const Billing = Component.define({
   name: "Billing",
+  scoped: false,
   model: Schema.Struct({ locked: Schema.Boolean }),
   message: Message,
   elements: Html

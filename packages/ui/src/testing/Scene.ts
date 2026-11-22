@@ -33,6 +33,7 @@
  *
  * const TodoItem = Component.define({
  *   name: "TodoItem",
+ *   scoped: false,
  *   props: Schema.Struct({ id: Schema.String }),
  *   model: Schema.Struct({ saved: Schema.Boolean }),
  *   message: Message
@@ -168,10 +169,10 @@ type EventsOf<Child> = Child extends Feature.Service<any, any, infer E, any> ? E
 
 // The same union as `Steps.ts`'s, so `Scene.Steps.Any` extends `Steps.Steps.Any`.
 type AnyComponent =
-  | Component.Component<any, any, any, any, any, any, any, any, any>
-  | Component.Component<any, any, any, never, any, any, any, any, any>
-  | Component.Component<any, any, any, any, any, any, any, any, never>
-  | Component.Component<any, any, any, never, any, any, any, any, never>
+  | Component.Members<any, any, any, any, any, any, any, any, any>
+  | Component.Members<any, any, any, never, any, any, any, any, any>
+  | Component.Members<any, any, any, any, any, any, any, any, never>
+  | Component.Members<any, any, any, never, any, any, any, any, never>
 
 /**
  * A cursor over one scene. It has the steps every kind of test shares, from
@@ -245,7 +246,7 @@ export interface Steps<C extends AnyComponent, Parts = never, Report = never> ex
    * child, or several, as two unkeyed children in different headless
    * closures would be.
    */
-  childEmit<Child extends Component.Any | Component.Headless.Any | Feature.Any>(
+  childEmit<Child extends Component.AnyRoot | Component.Headless.Any | Feature.Any>(
     child: Child,
     event: EventsOf<Child>
   ): this
@@ -254,7 +255,7 @@ export interface Steps<C extends AnyComponent, Parts = never, Report = never> ex
    * `child` at `key` to, if any. A string finds the child rendered with that
    * key, and a ref the child rendered with it. A message step.
    */
-  childEmit<Child extends Component.Any | Component.Headless.Any | Feature.Any>(
+  childEmit<Child extends Component.AnyRoot | Component.Headless.Any | Feature.Any>(
     child: Child,
     key: string | Component.Ref.Any,
     event: EventsOf<Child>
@@ -504,7 +505,7 @@ export const fallback: {
   ): View.Node<Msg, any> | undefined
 } = <Msg>(
   view: View.Node<Msg, any>,
-  component: Component.Any | Component.Headless.Any | Feature.Any,
+  component: Component.AnyRoot | Component.Headless.Any | Feature.Any,
   ...args: ReadonlyArray<any>
 ): View.Node<Msg, any> | undefined => {
   const [key, result] = args.length === 1 ? [undefined, args[0]] : args

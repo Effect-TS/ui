@@ -24,6 +24,7 @@ const items: ReadonlyArray<Item> = [{ id: "a", label: "Archive" }, { id: "c", la
 
 const WrappedDialog = Component.define({
   name: "WrappedDialog",
+  scoped: false,
   props: Schema.Struct({ label: Schema.String }),
   model: Schema.Null,
   message: DialogEvents,
@@ -41,6 +42,7 @@ const MenuRef = Menu.ref("menu")
 
 const Combo = Component.define({
   name: "Combo",
+  scoped: false,
   props: Schema.Struct({ items: Schema.Array(Item) }),
   model: Schema.Array(Schema.String),
   message: ComboMessage,
@@ -80,7 +82,13 @@ const AppMessage = UiSchema.TaggedEnum({
 const ComboRef = Combo.ref("combo")
 const OwnMenuRef = Menu.ref("menu")
 
-const App = Component.define({ name: "App", model: Schema.Array(Schema.String), message: AppMessage, elements: Html })
+const App = Component.define({
+  name: "App",
+  scoped: false,
+  model: Schema.Array(Schema.String),
+  message: AppMessage,
+  elements: Html
+})
   .make({
     init: () => [],
     update: (log, message, $) =>
@@ -118,6 +126,7 @@ const App = Component.define({ name: "App", model: Schema.Array(Schema.String), 
 const ChildFailed = UiSchema.TaggedEnum({ Said: {}, Failed: {} })
 const Hello = Component.define({
   name: "Hello",
+  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   events: UiSchema.TaggedEnum({ Said: {} }),
@@ -127,7 +136,13 @@ const Hello = Component.define({
   update: (model) => model,
   parts: () => ({})
 })
-const Broken = Component.define({ name: "Broken", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+const Broken = Component.define({
+  name: "Broken",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+}).make({
   init: () => null,
   update: (model) => model,
   parts: (): {} => {
@@ -142,6 +157,7 @@ const owning = (
 ) => {
   const Owner = Component.define({
     name: "Owner",
+    scoped: false,
     model: Schema.Array(Schema.String),
     message: ChildFailed,
     events: UiSchema.TaggedEnum({ Lost: {} }),
@@ -161,7 +177,13 @@ const owning = (
         parts: () => parts(heard) as { readonly heard: ReadonlyArray<string> }
       })
   })
-  return Component.define({ name: "App", model: Schema.Array(Schema.String), message: Schema.String, elements: Html })
+  return Component.define({
+    name: "App",
+    scoped: false,
+    model: Schema.Array(Schema.String),
+    message: Schema.String,
+    elements: Html
+  })
     .make({
       init: () => [],
       update: (log, message) => [...log, message],
@@ -289,7 +311,13 @@ describe("p.child in a Scene", () => {
     assert.throws(() => s.childPending(Dialog), /^Scene\.childPending: .* is declared with p\.child/)
     s.givenChild(Dialog, { open: true }).expect(Locator.tag("dialog")).toExist()
 
-    const Twice = Component.define({ name: "Twice", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+    const Twice = Component.define({
+      name: "Twice",
+      scoped: false,
+      model: Schema.Null,
+      message: Schema.Never,
+      elements: Html
+    }).make({
       init: () => null,
       update: (model) => model,
       view: (_, h) =>

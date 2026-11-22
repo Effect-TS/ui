@@ -12,6 +12,7 @@ describe("Renderer", () => {
   it("mount requires the root vocabulary's host marker", () => {
     const Form = Component.define({
       name: "Form",
+      scoped: false,
       model: Schema.String,
       message: Msg,
       elements: Tiny
@@ -38,6 +39,7 @@ describe("Renderer", () => {
   it("TestHost mounts any vocabulary", () => {
     const Form = Component.define({
       name: "Form",
+      scoped: false,
       model: Schema.String,
       message: Msg,
       elements: Tiny
@@ -57,6 +59,7 @@ describe("Effect props", () => {
   type AppRoute = typeof AppRoute.Type
   const App = Component.define({
     name: "App",
+    scoped: false,
     props: Schema.Struct({ route: AppRoute }),
     model: AppRoute,
     message: Schema.Never
@@ -101,6 +104,7 @@ describe("View elements", () => {
   it("refs are typed by the node they reach", () => {
     Component.define({
       name: "Refs",
+      scoped: false,
       model: Schema.String,
       message: Msg,
       elements: Tiny
@@ -132,6 +136,7 @@ describe("View elements", () => {
     })
     Component.define({
       name: "Mounts",
+      scoped: false,
       model: Schema.String,
       message: Msg,
       elements: Tiny
@@ -149,6 +154,7 @@ describe("View elements", () => {
   it("handlers get the vocabulary's payload and return the component's messages", () => {
     Component.define({
       name: "Events",
+      scoped: false,
       model: Schema.String,
       message: Msg,
       elements: Tiny
@@ -170,6 +176,7 @@ describe("View elements", () => {
   it("h.el takes attributes first, with children as a terminal call or shorthand", () => {
     Component.define({
       name: "El",
+      scoped: false,
       model: Schema.String,
       message: Msg
     }).make({
@@ -194,6 +201,7 @@ describe("View elements", () => {
   it("a vocabulary's void element has no children", () => {
     Component.define({
       name: "Void",
+      scoped: false,
       model: Schema.String,
       message: Msg,
       elements: Tiny

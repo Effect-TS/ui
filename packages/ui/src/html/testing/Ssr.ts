@@ -32,6 +32,7 @@
  *
  * const App = Component.define({
  *   name: "App",
+ *   scoped: false,
  *   model: Schema.Struct({}),
  *   message: Schema.Never
  * }).make({
@@ -285,7 +286,7 @@ export const ssr = <
   RP = never,
   Rcv = never
 >(
-  component: Component.Component<Name, Props, Model, Msg, Events, R, V, any, Rcv> & BrowserHost.HtmlRoot<V>,
+  component: Component.Members<Name, Props, Model, Msg, Events, R, V, any, Rcv> & BrowserHost.HtmlRoot<V>,
   props: Props | Effect.Effect<Props, never, RP>,
   options?: {
     readonly budget?: Duration.Input | undefined
@@ -358,7 +359,7 @@ export const ssr = <
     let serverCache: ReturnType<typeof Query.internals> | undefined
     let misses: ReadonlyArray<{ readonly query: string; readonly logKey: string }> = []
     const writer = server.makeWriter()
-    const serverFiber = yield* runtime.prerender(component, props, {
+    const serverFiber = yield* runtime.prerender(component as any, props, {
       budget,
       elements: [Html.name],
       static: isStatic,
@@ -441,7 +442,7 @@ export const ssr = <
         frame()
       }
     }
-    const mounted = yield* runtime.mount(component, props, container, {
+    const mounted = yield* runtime.mount(component as any, props, container, {
       state,
       query: options?.query,
       adoptionHead: true

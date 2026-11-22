@@ -21,6 +21,7 @@ const PlaceOrder = Command.make(
 
 const Checkout = Component.define({
   name: "Checkout",
+  scoped: false,
   model: Schema.Struct({
     lines: Schema.Array(Line),
     coupon: Coupon,

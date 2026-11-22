@@ -13,6 +13,7 @@ export const BadgeEvents = UiSchema.TaggedEnum({ Opened: { count: Schema.Number 
 
 export const Badge = Component.define({
   name: "Badge",
+  scoped: false,
   model: Schema.Number,
   message: BadgeMessage,
   events: BadgeEvents,
@@ -67,6 +68,7 @@ export const FollowNotes = Command.make(
 
 export const Note = Component.define({
   name: "Note",
+  scoped: false,
   props: Schema.Struct({ author: Schema.optional(Schema.String) }),
   model: Schema.Struct({
     text: Schema.String,

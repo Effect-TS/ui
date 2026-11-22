@@ -13,6 +13,7 @@ const ItemMessage = UiSchema.TaggedEnum({ Clear: {}, Boom: {} })
 /** Counts the `Clear`s it receives, and shows the label it had at the last one. */
 const Item = Component.define({
   name: "Item",
+  scoped: false,
   props: Schema.Struct({ label: Schema.String }),
   model: Schema.Struct({ clears: Schema.Number, label: Schema.String }),
   message: ItemMessage,
@@ -39,6 +40,7 @@ const ListMessage = UiSchema.TaggedEnum({
 
 const List = Component.define({
   name: "List",
+  scoped: false,
   props: Schema.Struct({ ids: Schema.Array(Schema.String) }),
   model: Schema.Array(Schema.String),
   message: ListMessage
@@ -121,7 +123,7 @@ describe("$.send", () => {
     provideHost(Effect.gen(function*() {
       const Message = UiSchema.TaggedEnum({ Boom: {}, Clear: {} })
       const Draft = Item.ref("Draft")
-      const Page = Component.define({ name: "Page", model: Schema.Null, message: Message }).make({
+      const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Message }).make({
         init: () => null,
         update: (model, message, $) => message._tag === "Clear" ? $.send(Draft, { _tag: "Clear" }) : model,
         view: (_, h) =>
@@ -153,7 +155,7 @@ describe("$.send", () => {
       }) {}
       const Main = Editor.ref("Main")
       const Message = UiSchema.TaggedEnum({ Clear: {} })
-      const Page = Component.define({ name: "Page", model: Schema.Null, message: Message }).make({
+      const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Message }).make({
         init: () => null,
         update: (_, __, $) => $.send(Main, { _tag: "Clear" }),
         view: (_, h) => Editor.render(h, { ref: Main, props: { label: "m" }, fallback: () => h.text("loading") })
@@ -179,7 +181,7 @@ describe("$.send", () => {
       const Draft = Item.ref("Draft")
       const Provided = Component.provide(Item, Layer.empty)
       const Message = UiSchema.TaggedEnum({ Clear: {} })
-      const Page = Component.define({ name: "Page", model: Schema.Null, message: Message }).make({
+      const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Message }).make({
         init: () => null,
         update: (_, __, $) => $.send(Main, { _tag: "Clear" }).send(Draft, { _tag: "Clear" }),
         view: (_, h) =>
@@ -202,6 +204,7 @@ describe("$.send", () => {
       const PingMessage = UiSchema.TaggedEnum({ Ping: {} })
       const Echo = Component.define({
         name: "Echo",
+        scoped: false,
         model: Schema.Null,
         message: PingMessage,
         events: PingMessage,
@@ -212,7 +215,7 @@ describe("$.send", () => {
         view: (_, h) => h.text("echo")
       })
       const Other = Echo.ref("Other")
-      const Loop = Component.define({ name: "Loop", model: Schema.Null, message: PingMessage }).make({
+      const Loop = Component.define({ name: "Loop", scoped: false, model: Schema.Null, message: PingMessage }).make({
         init: () => null,
         update: (_, message, $) => $.send(Other, message),
         view: (_, h) =>
@@ -220,7 +223,7 @@ describe("$.send", () => {
             Echo(h, { ref: Other, onEmit: (ping) => ping })
           )
       })
-      const Page = Component.define({ name: "Page", model: Schema.Null, message: PingMessage }).make({
+      const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: PingMessage }).make({
         init: () => null,
         update: (model) => model,
         view: (_, h) => Loop(h, { key: "l", fallback: () => h.text("looped") })
@@ -240,21 +243,33 @@ describe("$.send", () => {
   it.effect("doesn't count independent sends against each other", () =>
     provideHost(Effect.gen(function*() {
       const GoMessage = UiSchema.TaggedEnum({ Go: {} })
-      const Leaf = Component.define({ name: "Leaf", model: Schema.Number, message: GoMessage, receives: ["Go"] }).make({
+      const Leaf = Component.define({
+        name: "Leaf",
+        scoped: false,
+        model: Schema.Number,
+        message: GoMessage,
+        receives: ["Go"]
+      }).make({
         init: () => 0,
         update: (n) => n + 1,
         view: (n, h) => h.text(String(n))
       })
       const LeafRef = Leaf.ref("Leaf")
       // Each row forwards the send it gets to its own leaf.
-      const Row = Component.define({ name: "Row", model: Schema.Null, message: GoMessage, receives: ["Go"] }).make({
+      const Row = Component.define({
+        name: "Row",
+        scoped: false,
+        model: Schema.Null,
+        message: GoMessage,
+        receives: ["Go"]
+      }).make({
         init: () => null,
         update: (_, __, $) => $.send(LeafRef, { _tag: "Go" }),
         view: (_, h) => Leaf(h, { ref: LeafRef })
       })
       const Rows = Row.ref("Rows")
       const keys = Array.from({ length: 150 }, (_, i) => i)
-      const List = Component.define({ name: "List", model: Schema.Null, message: GoMessage }).make({
+      const List = Component.define({ name: "List", scoped: false, model: Schema.Null, message: GoMessage }).make({
         init: () => null,
         update: (_, __, $) => keys.reduce((step, i) => step.send(Rows.at(i), { _tag: "Go" }), $.set(null)),
         view: (_, h) => h.el("div", keys.map((i) => Row(h, { ref: Rows.at(i) })))
@@ -298,12 +313,18 @@ describe("Story and sends", () => {
       const EchoMessage = UiSchema.TaggedEnum({ Said: {} })
       const Echo = Component.define({
         name: "Echo",
+        scoped: false,
         model: Schema.Null,
         message: EchoMessage,
         events: EchoMessage
       }).make({ init: () => null, update: (model) => model, view: (_, h) => h.text("echo") })
       const Mine = Echo.ref("Mine")
-      const Page = Component.define({ name: "Page", model: Schema.Array(Schema.String), message: Message }).make({
+      const Page = Component.define({
+        name: "Page",
+        scoped: false,
+        model: Schema.Array(Schema.String),
+        message: Message
+      }).make({
         init: () => [],
         update: (seen, message) => [...seen, message.what],
         view: (seen, h) =>
@@ -344,6 +365,7 @@ describe("Story and sends", () => {
       // Sends to the first row, whatever the message says.
       const Changed = Component.define({
         name: "List",
+        scoped: false,
         props: Schema.Struct({ ids: Schema.Array(Schema.String) }),
         model: Schema.Array(Schema.String),
         message: ListMessage
@@ -370,7 +392,7 @@ describe("Story and sends", () => {
       }) {}
       const Main = Editor.ref("Main")
       const Message = UiSchema.TaggedEnum({ Go: {} })
-      const Page = Component.define({ name: "Page", model: Schema.Null, message: Message }).make({
+      const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Message }).make({
         init: () => null,
         update: (_, __, $) => $.send(Main, { _tag: "Focus" }).send(Main, { _tag: "Clear" }),
         view: (_, h) => Editor.render(h, { ref: Main, fallback: () => h.text("loading") })

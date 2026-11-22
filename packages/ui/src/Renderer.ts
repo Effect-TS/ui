@@ -144,9 +144,9 @@ export interface HostEvents<Node> {
  * `hydration` lets the renderer read nodes a server rendered, so `mount` with
  * a server `state` adopts them. A host without it builds every node fresh.
  *
- * `createContainer` makes a node that holds the nodes of a `detached` child
- * out of the document, such as a `DocumentFragment`. It is never inserted.
- * A host without it fails the parent of a child declared `detached`.
+ * `createContainer` makes a node that holds the nodes of a kept scoped
+ * child out of the document, such as a `DocumentFragment`. It is never
+ * inserted. A host without it fails the author of a child it keeps.
  *
  * `events`, if given, has the host read an element's events from the
  * renderer when an event fires, so the host stores nothing per element and
@@ -560,7 +560,7 @@ export const mount: <
   RP = never,
   Rcv = never
 >(
-  component: Component.Component<Name, Props, Model, Msg, Events, R, V, any, Rcv>,
+  component: Component.Members<Name, Props, Model, Msg, Events, R, V, any, Rcv>,
   props: Props | Effect.Effect<Props, never, RP>,
   container: unknown,
   options?: {
@@ -641,7 +641,7 @@ export const prerender: <
   RP = never,
   Rcv = never
 >(
-  component: Component.Component<Name, Props, Model, Msg, Events, R, V, any, Rcv>,
+  component: Component.Members<Name, Props, Model, Msg, Events, R, V, any, Rcv>,
   props: Props | Effect.Effect<Props, never, RP>,
   options?: {
     readonly budget?: Duration.Input | undefined

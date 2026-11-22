@@ -46,6 +46,12 @@ export * from "./Checkbox.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * from "./Combobox.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./Dialog.ts"
 
 /**
@@ -65,6 +71,12 @@ export * from "./Field.ts"
  * @since 0.1.0
  */
 export * from "./Fieldset.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
+export * from "./Form.ts"
 
 /**
  * @stability experimental

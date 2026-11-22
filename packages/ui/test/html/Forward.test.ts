@@ -31,6 +31,7 @@ const framed = <Msg, R>(element: Button<Msg, R>, name: string): Button<Msg, R> =
 // A headless part that adds a child of its own, and a second one to stack on it.
 const Checkbox = Component.define({
   name: "Checkbox",
+  scoped: false,
   props: Schema.Struct({ name: Schema.String }),
   model: Schema.Struct({}),
   message: Schema.Never,
@@ -44,6 +45,7 @@ const Checkbox = Component.define({
 })
 const Described = Component.define({
   name: "Described",
+  scoped: false,
   model: Schema.Struct({}),
   message: Schema.Never,
   elements: Html
@@ -63,7 +65,13 @@ let count = 0
 const render = Effect.fnUntraced(function*(
   view: (h: View.Helper<Message, {}> & View.Tags<Html.Elements, Message>) => View.Content<Message, never>
 ) {
-  const App = Component.define({ name: `App${count++}`, model: Schema.Null, message: Message, elements: Html }).make({
+  const App = Component.define({
+    name: `App${count++}`,
+    scoped: false,
+    model: Schema.Null,
+    message: Message,
+    elements: Html
+  }).make({
     init: () => null,
     update: (model) => model,
     view: (_model, h) => view(h)
@@ -208,6 +216,7 @@ describe("forward on BrowserHost", { concurrent: false }, () => {
   const ReadTag = Mount.make("ReadTag", { args: {} }, (element: HTMLElement) => Effect.succeed(element.localName))
   const Rows = Component.define({
     name: "Rows",
+    scoped: false,
     model: Schema.Struct({ ids: Schema.Array(Schema.String), log: Schema.Array(Schema.String) }),
     message: Message,
     elements: Html

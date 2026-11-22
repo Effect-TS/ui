@@ -12,6 +12,7 @@ const makeApp = () => {
   const ChildMessage = Schema.TaggedUnion({ Read: {} })
   const Child = Component.define({
     name: "Child",
+    scoped: false,
     props: Schema.Struct({ n: Schema.Number }),
     model: Schema.Struct({ seen: Schema.Number }),
     message: ChildMessage
@@ -26,6 +27,7 @@ const makeApp = () => {
   const ParentMessage = Schema.TaggedUnion({ Inc: {}, Hide: {} })
   const Parent = Component.define({
     name: "Parent",
+    scoped: false,
     model: Schema.Struct({ n: Schema.Number, shown: Schema.Boolean }),
     message: ParentMessage
   }).make({
@@ -51,6 +53,7 @@ describe("render timing", () => {
       const ReaderMessage = Schema.TaggedUnion({ Named: {} })
       const Reader = Component.define({
         name: "Reader",
+        scoped: false,
         props: Schema.Struct({ n: Schema.Number }),
         model: Schema.Number,
         message: ReaderMessage,
@@ -60,11 +63,12 @@ describe("render timing", () => {
         update: (_model, _message, $) => $.props.n,
         view: (model, h) => h.el("i").children(`${h.props.n}/${model}`)
       })
-      const Holder = Component.define({ name: "Holder", model: Schema.Number, message: Schema.Null }).make({
-        init: () => 0,
-        update: (model) => model + 1,
-        view: (model, h) => h.el("div").children(Reader(h, { key: "reader", props: { n: model } }))
-      })
+      const Holder = Component.define({ name: "Holder", scoped: false, model: Schema.Number, message: Schema.Null })
+        .make({
+          init: () => 0,
+          update: (model) => model + 1,
+          view: (model, h) => h.el("div").children(Reader(h, { key: "reader", props: { n: model } }))
+        })
       return Effect.gen(function*() {
         const root = yield* TestHost.mount(Holder, {})
         yield* TestHost.settle
@@ -86,6 +90,7 @@ describe("render timing", () => {
     const Again = Command.make("Again", { args: {} }, () => Effect.succeed("again" as const))
     const Counter = Component.define({
       name: "Counter",
+      scoped: false,
       model: Schema.Number,
       message: Schema.Literals(["click", "again"]),
       queries: { number: { query: GetNumber, args: (model: number) => ({ n: model }) } }
@@ -170,7 +175,7 @@ describe("causedBy", () => {
       const Load = Command.make("test/Load", { args: {} }, () => Deferred.await(gate))
       const Hang = Command.make("test/Hang", { args: {}, mode: "switch" }, () => Effect.never)
       const Message = Schema.TaggedUnion({ Start: {}, Loaded: { value: Schema.String }, Stop: {} })
-      const App = Component.define({ name: "App", model: Schema.String, message: Message }).make({
+      const App = Component.define({ name: "App", scoped: false, model: Schema.String, message: Message }).make({
         init: () => "",
         update: (model, message, $) => {
           switch (message._tag) {
@@ -255,6 +260,7 @@ describe("TestHost.layer flush", () => {
     const Again = Command.make("Again", { args: {} }, () => Effect.succeed("again" as const))
     const Counter = Component.define({
       name: "Counter",
+      scoped: false,
       model: Schema.Number,
       message: Schema.Literals(["click", "again"])
     }).make({

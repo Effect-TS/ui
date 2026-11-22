@@ -165,6 +165,7 @@ describe("BrowserHost", { concurrent: false }, () => {
     const Message = UiSchema.TaggedEnum({ Typed: { value: Schema.String }, Checked: { checked: Schema.Boolean } })
     const Form = Component.define({
       name: "Form",
+      scoped: false,
       model: Schema.Struct({ text: Schema.String, checked: Schema.Boolean, open: Schema.Boolean }),
       message: Message,
       elements: Html
@@ -220,6 +221,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         const Resettable = Component.define({
           name: "Resettable",
+          scoped: false,
           model: Schema.Null,
           message: Schema.Never,
           elements: Html
@@ -276,6 +278,7 @@ describe("BrowserHost", { concurrent: false }, () => {
     // The search is the only copy of the text: the page's Model holds none. Digits are rejected.
     const SearchPage = Component.define({
       name: "SearchPage",
+      scoped: false,
       props: Schema.Struct({ route: SearchRoute.subset(["Search"]) }),
       model: Schema.Struct({}),
       message: SearchMessage,
@@ -302,6 +305,7 @@ describe("BrowserHost", { concurrent: false }, () => {
     const AppMessage = UiSchema.TaggedEnum({ ChangedRoute: { route: SearchRoute } })
     const SearchApp = Component.define({
       name: "SearchApp",
+      scoped: false,
       props: Schema.Struct({ route: SearchRoute }),
       model: Schema.Struct({ route: SearchRoute }),
       message: AppMessage,
@@ -423,6 +427,7 @@ describe("BrowserHost", { concurrent: false }, () => {
     // A child's nodes are a list of their own, among the parent's other nodes.
     const Shown = Component.define({
       name: "Shown",
+      scoped: false,
       props: Schema.Struct({ rows: Schema.Array(Schema.String) }),
       model: Schema.Null,
       message: Schema.Never,
@@ -434,6 +439,7 @@ describe("BrowserHost", { concurrent: false }, () => {
     })
     const Lists = Component.define({
       name: "Lists",
+      scoped: false,
       model: Schema.Array(Schema.String),
       message: ListMessage,
       elements: Html
@@ -477,6 +483,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         // The rows are the child's tag, its key and its text.
         const Only = Component.define({
           name: "Only",
+          scoped: false,
           model: Schema.Array(Schema.String),
           message: ListMessage,
           elements: Html
@@ -516,6 +523,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         if (customElements.get("x-classed") === undefined) customElements.define("x-classed", Classed)
         const Page = Component.define({
           name: "Classed",
+          scoped: false,
           model: Schema.Array(Schema.String),
           message: ListMessage,
           elements: Html
@@ -544,6 +552,7 @@ describe("BrowserHost", { concurrent: false }, () => {
     })
     const ItemsDef = Component.define({
       name: "Items",
+      scoped: false,
       model: Schema.Struct({ items: Schema.Array(Item), selected: Schema.Number, ticks: Schema.Number }),
       message: LazyMessage,
       elements: Html
@@ -614,6 +623,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           class Leaf extends Feature.Service<Leaf>()("Leaf", { props: Schema.Struct({}) }) {}
           const LeafImpl = Component.define({
             name: "LeafImpl",
+            scoped: false,
             model: Schema.Null,
             message: Schema.Never,
             elements: Html
@@ -622,6 +632,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           const ready = yield* Deferred.make<void>()
           const FrameDef = Component.define({
             name: "Frame",
+            scoped: false,
             model: Schema.Null,
             message: Schema.Never,
             elements: Html
@@ -650,6 +661,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         const FieldsDef = Component.define({
           name: "Fields",
+          scoped: false,
           model: Schema.Number,
           message: LazyMessage,
           elements: Html
@@ -721,6 +733,7 @@ describe("BrowserHost", { concurrent: false }, () => {
     })
     const Events = Component.define({
       name: "Events",
+      scoped: false,
       model: Schema.Array(Schema.String),
       message: Message,
       elements: Html
@@ -793,7 +806,12 @@ describe("BrowserHost", { concurrent: false }, () => {
       }).pipe(Effect.scoped))
 
     clicksWhenConnected("x-clicks-on-connect")
-    const LogPage = Component.define({ name: "Page", model: Schema.Array(Schema.String), message: Schema.String })
+    const LogPage = Component.define({
+      name: "Page",
+      scoped: false,
+      model: Schema.Array(Schema.String),
+      message: Schema.String
+    })
     const logPage = (view: Parameters<typeof LogPage.make>[0]["view"]) =>
       LogPage.make({
         init: (): ReadonlyArray<string> => [],
@@ -825,23 +843,45 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(root.model()).toEqual(["start", "inserted", "new"])
       }).pipe(Effect.scoped))
 
-    it.effect("a detached child gets the events it fires as it is attached", () =>
+    it.effect("a kept scoped child gets the events it fires as it is drawn again", () =>
       Effect.gen(function*() {
-        const Counter = Component.define({ name: "Counter", model: Schema.Number, message: Schema.String }).make({
+        const Counter = Component.define({
+          name: "Counter",
+          scoped: true,
+          model: Schema.Number,
+          message: Schema.String
+        }).make({
           init: () => 0,
           update: (count) => count + 1,
           view: (count, h) => h.el("x-clicks-on-connect", h.el("button").on("click", "hit").children(`Hit ${count}`))
         })
-        const Shell = Component.define({ name: "Shell", model: Schema.Boolean, message: Schema.String }).make({
-          init: () => true,
-          update: () => false,
-          view: (detached, h) => h.el("div", Counter(h, { key: "c", detached }))
+        const Outer = Component.define({ name: "Outer", scoped: true, model: Schema.Null, message: Schema.Never })
+          .make({
+            init: () => null,
+            update: (model) => model,
+            view: (_, h) => h.scoped((s) => h.el("section", Counter(s, { key: "c" })))
+          })
+        const Shell = Component.define({
+          name: "Shell",
+          scoped: false,
+          model: Schema.Boolean,
+          message: Schema.Boolean
         })
+          .make({
+            init: () => true,
+            update: (_, shown) => shown,
+            view: (shown, h) => h.el("div", h.scoped((s) => shown ? Outer(s, { key: "o" }) : null))
+          })
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Shell, {}, app)
-        root.send("attach")
         yield* tick
         assert.strictEqual(HtmlLocator.getByRole(app, "button").textContent, "Hit 1")
+        root.send(false)
+        yield* tick
+        assert.strictEqual(app.querySelector("button"), null)
+        root.send(true)
+        yield* tick
+        assert.strictEqual(HtmlLocator.getByRole(app, "button").textContent, "Hit 2")
       }).pipe(Effect.scoped))
 
     it.effect("an element hydration rebuilds gets the events it fires as it goes in", () =>
@@ -899,16 +939,17 @@ describe("BrowserHost", { concurrent: false }, () => {
         const testHost = yield* TestHost.TestHost
         // Renders what the scheduler holds, here a child's patch, before it clicks.
         clicksWhenConnected("x-flushes-then-clicks", () => testHost.drain(testHost.budget))
-        const Rows = Component.define({ name: "Rows", model: Schema.Number, message: Schema.String }).make({
-          init: () => 0,
-          update: (count) => count + 1,
-          view: (count, h) =>
-            h.el(
-              "div",
-              h.el("button").on("click", "more").children("More"),
-              ...Array.from({ length: count }, (_, index) => h.el("p", `${index}`))
-            )
-        })
+        const Rows = Component.define({ name: "Rows", scoped: false, model: Schema.Number, message: Schema.String })
+          .make({
+            init: () => 0,
+            update: (count) => count + 1,
+            view: (count, h) =>
+              h.el(
+                "div",
+                h.el("button").on("click", "more").children("More"),
+                ...Array.from({ length: count }, (_, index) => h.el("p", `${index}`))
+              )
+          })
         const Page = logPage((log, h) =>
           h.el(
             "div",
@@ -955,6 +996,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         const Toggle = Component.define({
           name: "Toggle",
+          scoped: false,
           model: Schema.Array(Schema.String),
           message: Message,
           elements: Html
@@ -1016,6 +1058,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         const Left = UiSchema.TaggedEnum({ Left: { event: Schema.String, disabled: Schema.Boolean } })
         const Leaving = Component.define({
           name: "Leaving",
+          scoped: false,
           model: Schema.Array(Schema.String),
           message: Left,
           elements: Html
@@ -1057,6 +1100,137 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(root.model()).toEqual(["key Enter shift"])
       }).pipe(Effect.scoped))
 
+    describe("input methods and selections", () => {
+      const Seen = UiSchema.TaggedEnum({ Saw: { entry: Schema.String } })
+      const Typing = Component.define({
+        name: "Typing",
+        scoped: false,
+        model: Schema.Array(Schema.String),
+        message: Seen,
+        elements: Html
+      }).make({
+        init: (): ReadonlyArray<string> => [],
+        update: (log, { entry }) => [...log, entry],
+        view: (_, h) => {
+          const saw = (label: string) => (payload: object) => Seen.Saw({ entry: `${label} ${JSON.stringify(payload)}` })
+          return h.div(
+            h.input.attr("aria-label", "Text").on("input", saw("input")).on("change", saw("change"))
+              .onCompositionEnd(saw("compositionend")).onKeyDown(saw("key")),
+            h.textarea.attr("aria-label", "Area").onInput(saw("input")).onCompositionEnd(saw("compositionend")),
+            h.input.attr("type", "checkbox").attr("aria-label", "Box").onKeyDown(saw("key")),
+            h.button.onKeyDown(saw("key")).children("Button")
+          )
+        }
+      })
+
+      it.effect("input and change say how the edit was made, and compositionend sends the composed value", () =>
+        Effect.gen(function*() {
+          const app = yield* container
+          const root = yield* BrowserHost.mountEffect(Typing, {}, app)
+          const text = HtmlLocator.getByRole(app, "textbox", { name: "Text" }) as HTMLInputElement
+          const area = HtmlLocator.getByRole(app, "textbox", { name: "Area" }) as HTMLTextAreaElement
+          text.value = "ka"
+          text.dispatchEvent(
+            new InputEvent("input", { bubbles: true, isComposing: true, inputType: "insertCompositionText" })
+          )
+          text.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true, data: "ka" }))
+          text.dispatchEvent(new Event("change", { bubbles: true }))
+          area.value = "auto"
+          area.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertReplacementText" }))
+          area.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true }))
+          yield* tick
+          expect(root.model()).toEqual([
+            `input {"value":"ka","checked":false,"composing":true,"inputType":"insertCompositionText"}`,
+            `compositionend {"value":"ka"}`,
+            `change {"value":"ka","checked":false,"composing":false,"inputType":""}`,
+            `input {"value":"auto","composing":false,"inputType":"insertReplacementText"}`,
+            `compositionend {"value":"auto"}`
+          ])
+        }).pipe(Effect.scoped))
+
+      it.effect("a key reports the selection of a text field, and none for a button or a checkbox", () =>
+        Effect.gen(function*() {
+          const app = yield* container
+          const shadowHost = yield* container
+          const shadow = shadowHost.attachShadow({ mode: "open" })
+          const root = yield* BrowserHost.mountEffect(Typing, {}, app)
+          const shadowRoot = yield* BrowserHost.mountEffect(Typing, {}, shadow as unknown as Element)
+          const text = HtmlLocator.getByRole(app, "textbox", { name: "Text" }) as HTMLInputElement
+          const shadowText = shadow.querySelector<HTMLInputElement>("[aria-label=Text]")!
+          text.value = "hello"
+          text.setSelectionRange(1, 4)
+          shadowText.value = "hello"
+          shadowText.setSelectionRange(0, 0)
+          HtmlLocator.keydown(text, "ArrowLeft")
+          HtmlLocator.keydown(HtmlLocator.getByRole(app, "checkbox", { name: "Box" }), " ")
+          HtmlLocator.keydown(HtmlLocator.getByRole(app, "button", { name: "Button" }), "Enter")
+          const keyEvent = new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true, composed: true })
+          Object.defineProperty(keyEvent, "composedPath", {
+            value: () => [shadowText, shadowText.parentNode!, shadow, shadowHost, document.body, document, window]
+          })
+          shadowHost.dispatchEvent(keyEvent)
+          yield* tick
+          const selectionOf = (entries: ReadonlyArray<string>) =>
+            entries.map((entry) => {
+              const { selectionEnd, selectionStart } = JSON.parse(entry.slice(4))
+              return [selectionStart, selectionEnd]
+            })
+          const selections = selectionOf(root.model()!)
+          expect(selections).toEqual([[1, 4], [null, null], [null, null]])
+          expect(selectionOf(shadowRoot.model()!)).toEqual([[0, 0]])
+        }).pipe(Effect.scoped))
+
+      it.effect("a composing field's value isn't written until compositionend, including inside shadow DOM", () =>
+        Effect.gen(function*() {
+          const Typed = UiSchema.TaggedEnum({ Typed: { value: Schema.String } })
+          const Upper = Component.define({
+            name: "Upper",
+            scoped: false,
+            model: Schema.String,
+            message: Typed,
+            elements: Html
+          }).make({
+            init: () => "",
+            update: (_, { value }) => value.toUpperCase(),
+            view: (text, h) =>
+              h.div(
+                h.input.attr("aria-label", "Upper").value(text).onInput(({ value }) => Typed.Typed({ value })),
+                h.input.attr("aria-label", "Fixed").value("fixed").onInput(() => undefined)
+              )
+          })
+          const app = yield* container
+          const shadowHost = yield* container
+          const shadow = shadowHost.attachShadow({ mode: "open" })
+          yield* BrowserHost.mountEffect(Upper, {}, app)
+          yield* BrowserHost.mountEffect(Upper, {}, shadow as unknown as Element)
+          const retarget = (inner: HTMLElement, event: Event) => {
+            Object.defineProperty(event, "composedPath", {
+              value: () => [inner, inner.parentNode!, shadow, shadowHost, document.body, document, window]
+            })
+            shadowHost.dispatchEvent(event)
+          }
+          const compose = (field: HTMLInputElement, value: string) => {
+            field.value = value
+            field.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true, isComposing: true }))
+          }
+          const upper = HtmlLocator.getByRole(app, "textbox", { name: "Upper" }) as HTMLInputElement
+          const fixed = HtmlLocator.getByRole(app, "textbox", { name: "Fixed" }) as HTMLInputElement
+          const shadowUpper = shadow.querySelector<HTMLInputElement>("[aria-label=Upper]")!
+          HtmlLocator.type(fixed, "x")
+          fixed.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }))
+          compose(upper, "ka")
+          shadowUpper.value = "ka"
+          retarget(shadowUpper, new InputEvent("input", { bubbles: true, composed: true, isComposing: true }))
+          yield* tick
+          expect([upper.value, fixed.value, shadowUpper.value]).toEqual(["ka", "x", "ka"])
+          upper.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true }))
+          fixed.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true }))
+          retarget(shadowUpper, new CompositionEvent("compositionend", { bubbles: true, composed: true }))
+          yield* tick
+          expect([upper.value, fixed.value, shadowUpper.value]).toEqual(["KA", "fixed", "KA"])
+        }).pipe(Effect.scoped))
+    })
+
     it.effect("submit sends the form's fields and prevents the browser's submission", () =>
       Effect.gen(function*() {
         const app = yield* container
@@ -1078,6 +1252,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         yield* BrowserHost.mountEffect(Events, {}, app)
         const Bare = Component.define({
           name: "Bare",
+          scoped: false,
           model: Schema.Null,
           message: Schema.Never,
           elements: Html
@@ -1096,7 +1271,13 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(submitted(bare.querySelector("form")!)).toBe(true)
         expect(submitted(outside.querySelector("form")!)).toBe(false)
         // The tag as the author wrote it isn't what makes it a form.
-        const Upper = Component.define({ name: "Upper", model: Schema.Null, message: Schema.Never, elements: Html })
+        const Upper = Component.define({
+          name: "Upper",
+          scoped: false,
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        })
           .make({
             init: () => null,
             update: (model) => model,
@@ -1113,6 +1294,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         const seen: Array<string> = []
         const Composer = Component.define({
           name: "Composer",
+          scoped: false,
           model: Schema.Number,
           message: Schema.Literals(["Send", "Menu"]),
           elements: Html
@@ -1154,6 +1336,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         const seen: Array<Html.SubmitPayload> = []
         const Prototype = Component.define({
           name: "Prototype",
+          scoped: false,
           model: Schema.Null,
           message: Schema.Never,
           elements: Html
@@ -1217,6 +1400,7 @@ describe("BrowserHost", { concurrent: false }, () => {
 
     const Board = Component.define({
       name: "Board",
+      scoped: false,
       model: Schema.Array(Schema.String),
       message: Schema.String,
       elements: Html
@@ -1302,6 +1486,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         const Message = UiSchema.TaggedEnum({ Dropped: { files: Schema.Array(Schema.instanceOf(File)) } })
         const Uploader = Component.define({
           name: "Uploader",
+          scoped: false,
           model: Schema.Array(Schema.String),
           message: Message,
           elements: Html
@@ -1672,6 +1857,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         const DrawerMessage = UiSchema.TaggedEnum({ Close: {} })
         const Drawer = Component.define({
           name: "Drawer",
+          scoped: false,
           model: Schema.Boolean,
           message: DrawerMessage,
           elements: Html
@@ -1694,6 +1880,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         calls.length = 0
         const Stack = Component.define({
           name: "Stack",
+          scoped: false,
           model: Schema.Number,
           message: Schema.Number,
           elements: Html
@@ -1895,6 +2082,7 @@ describe("BrowserHost", { concurrent: false }, () => {
     const refs = (elements: View.Vocabulary<Html.Elements>) =>
       Component.define({
         name: "Refs",
+        scoped: false,
         model: Schema.Array(Schema.String),
         message: Message,
         elements
@@ -1945,6 +2133,7 @@ describe("BrowserHost", { concurrent: false }, () => {
     }
     const NativeBox = Component.define({
       name: "NativeBox",
+      scoped: false,
       model: Schema.Null,
       message: Schema.Never,
       elements: Native
@@ -1955,6 +2144,7 @@ describe("BrowserHost", { concurrent: false }, () => {
     })
     const Page = Component.define({
       name: "Page",
+      scoped: false,
       model: Schema.Null,
       message: Schema.Never,
       elements: Html
@@ -2019,20 +2209,22 @@ describe("BrowserHost", { concurrent: false }, () => {
       () =>
         Effect.gen(function*() {
           let model: WeakRef<object> | undefined
-          const Item = Component.define({ name: "Item", model: Schema.Struct({}), message: Schema.Null }).make({
-            init: () => {
-              const value = {}
-              model = new WeakRef(value)
-              return value
-            },
-            update: (value) => value,
-            view: (_, h) => h.el("button").on("click", null).children("Item")
-          })
-          const Page = Component.define({ name: "Page", model: Schema.Boolean, message: Schema.Null }).make({
-            init: () => true,
-            update: () => false,
-            view: (shown, h) => h.el("div", h.text("Remove"), shown ? Item(h, { key: "i" }) : null)
-          })
+          const Item = Component.define({ name: "Item", scoped: false, model: Schema.Struct({}), message: Schema.Null })
+            .make({
+              init: () => {
+                const value = {}
+                model = new WeakRef(value)
+                return value
+              },
+              update: (value) => value,
+              view: (_, h) => h.el("button").on("click", null).children("Item")
+            })
+          const Page = Component.define({ name: "Page", scoped: false, model: Schema.Boolean, message: Schema.Null })
+            .make({
+              init: () => true,
+              update: () => false,
+              view: (shown, h) => h.el("div", h.text("Remove"), shown ? Item(h, { key: "i" }) : null)
+            })
           const app = yield* container
           const root = yield* BrowserHost.mountEffect(Page, {}, app)
           HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name: "Item" }))
@@ -2053,21 +2245,23 @@ describe("BrowserHost", { concurrent: false }, () => {
           let props: WeakRef<object> | undefined
           const Item = Component.define({
             name: "Item",
+            scoped: false,
             props: Schema.Struct({}),
             model: Schema.Null,
             message: Schema.Never
           })
             .make({ init: () => null, update: (model) => model, view: (_, h) => h.text("item") })
-          const Broken = Component.define({ name: "Broken", model: Schema.Null, message: Schema.Never }).make({
-            init: () => null,
-            update: (model) => model,
-            view: (_, h) => {
-              const value = {}
-              props = new WeakRef(value)
-              // Two elements with one key: the render fails once its child paths are checked.
-              return h.el("div", Item(h, { key: "i", props: value }), h.el("p").key("k"), h.el("p").key("k"))
-            }
-          })
+          const Broken = Component.define({ name: "Broken", scoped: false, model: Schema.Null, message: Schema.Never })
+            .make({
+              init: () => null,
+              update: (model) => model,
+              view: (_, h) => {
+                const value = {}
+                props = new WeakRef(value)
+                // Two elements with one key: the render fails once its child paths are checked.
+                return h.el("div", Item(h, { key: "i", props: value }), h.el("p").key("k"), h.el("p").key("k"))
+              }
+            })
           const app = yield* container
           yield* BrowserHost.mountEffect(Broken, {}, app, { fallback: (_, h) => h.text("failed") })
           yield* tick
@@ -2101,7 +2295,13 @@ describe("BrowserHost", { concurrent: false }, () => {
           if (Exit.isFailure(exit)) interruptors.push([...Cause.interruptors(exit.cause)])
         })
       const Held = Mount.make("Held", { args: {} }, () => Effect.onExit(Effect.never, record))
-      const Page = Component.define({ name: "Page", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+      const Page = Component.define({
+        name: "Page",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
         init: () => null,
         update: (model) => model,
         subscriptions: () => [Subscription.make("held", Stream.onExit(Stream.never, record))],
@@ -2127,7 +2327,13 @@ describe("BrowserHost", { concurrent: false }, () => {
           Effect.succeed(() => Effect.succeed(Message.Loaded()))
         ) {}
         let renders = 0
-        const Page = Component.define({ name: "Page", model: Schema.Number, message: Message, elements: Html }).make({
+        const Page = Component.define({
+          name: "Page",
+          scoped: false,
+          model: Schema.Number,
+          message: Message,
+          elements: Html
+        }).make({
           init: ($) => $.set(0).run(Load.make({ id: 1 }), Load.make({ id: 2 }), Load.make({ id: 3 })),
           update: (loaded) => loaded + 1,
           view: (loaded, h) => {
@@ -2157,6 +2363,7 @@ describe("BrowserHost", { concurrent: false }, () => {
             }))
           const Page = Component.define({
             name: "StyledPositioner",
+            scoped: false,
             model: Schema.Number,
             message: Schema.Number,
             elements: Html
@@ -2222,6 +2429,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         const Page = Component.define({
           name: "UntouchedStyle",
+          scoped: false,
           model: Schema.Boolean,
           message: Schema.Boolean,
           elements: Html
@@ -2247,6 +2455,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         const Page = Component.define({
           name: "HydrateStyle",
+          scoped: false,
           model: Schema.Null,
           message: Schema.Never,
           elements: Html

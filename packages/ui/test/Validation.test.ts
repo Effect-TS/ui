@@ -248,6 +248,7 @@ describe("Validation", () => {
       AsyncResult.map(result, (taken) => taken ? ["That username is taken"] : [])
     const SignupPage = Component.define({
       name: "SignupPage",
+      scoped: false,
       model: Schema.Struct({ form: Account.State }),
       message: Message,
       queries: {

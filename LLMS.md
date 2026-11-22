@@ -47,14 +47,103 @@ renders the child with a ref from `Child.ref("Name")`, and its `update` calls
 `$.send(ref, message)`. Don't send a current value that the parent
 controls: pass it as a prop. See **Who owns the state** below.
 
-A child the view stops declaring unmounts and loses its Model. To hide a tab
-or a wizard step the user will come back to, keep declaring it with
-`detached: tab !== "profile"`: its nodes leave the document, and its Model,
-Commands in flight and typed input stay. It still gets props, sends and query
-results, and emits through the latest `onEmit`. Its element mounts stop
-until it's attached again, and its Subscriptions keep running, so gate those
-on the Model. Declare a wizard step once it has been visited, not every step
-up front.
+### Scoped children
+
+Every `Component.define` says whether the component is `scoped`. Most set
+`scoped: false`, and a child of theirs that the view stops declaring
+unmounts and loses its Model. Set `scoped: true` when the user should find
+the component as they left it after it goes out of view: a tab with a
+half-filled form, a wizard step, a list row that a filter hides. A headless
+component can't be scoped.
+
+A view writes scoped children inside `h.scoped`, calling them with the `s`
+it passes instead of `h`. A scoped child belongs to the component whose
+view called `h.scoped`, its author, and its path is `Name[key]` under the
+author wherever the view puts it. Moving it to another element, or into
+another child's slot, keeps the instance. Placing one `Name[key]` twice in
+a render fails the author. So do an ordinary child and a scoped child of
+the same name and key that resolve to one path.
+
+```ts
+const view = (model: Model, h: H) =>
+  model.tab === "profile"
+    ? h.scoped((s) => Profile(s, { key: "profile" }))
+    : h.scoped((s) => Billing(s, { key: "billing" }))
+```
+
+A scoped child that no view writes is kept. Its nodes leave the document,
+and its Model, Commands in flight, Subscriptions and typed input stay. Its
+element mounts stop, and it adds nothing to the head or to an owner's
+`collects`, until a view writes it again. It keeps the props and `onEmit`
+of the last render that placed it, and its events reach the author's `update`, with
+the current Model, through that `onEmit`. When a kept child needs fresh
+props, write it inside a `hidden` element instead. Subscriptions keep
+running while it's kept, so gate those on the Model.
+
+Without a predicate, a scope's children live as long as the author, and
+their keys must be literals. So must the keys of their refs: a ref made
+from a string, or with `at` given one, needs a predicate. A function that
+forwards a ref to such a scope takes `Component.Ref.Within<Rcv, false>`. A list needs a predicate, `h.scoped(alive,
+content)`, which the runtime asks about each live child on every render of
+the author, whether that render wrote the child or not. It ends the child
+once the predicate returns false. Destructure the Model from the argument
+and look the key up:
+
+```ts
+h.scoped(
+  ({ key, model }) => key in model.notes,
+  (s) => visible.map((id) => NoteRow(s, { key: id, props: { note: model.notes[id] } }))
+)
+```
+
+Read `model`, `props` or `queries` from the argument, never from the
+view's closure, which is stale on the renders that don't write the child. A
+predicate that reads none of them fails the author, so `() => model.open`
+and `($) => model.notes[$.key] !== undefined` fail on their first call.
+The predicate runs once per live child per render, so look the key up in a
+record or a `Map`: scanning an array makes the render quadratic. All the
+children of one `h.scoped` share its predicate, so children with different
+lifetimes go in different scopes.
+
+There is no call that ends a child. To start one over, change its key and
+have the predicate reject the old one: with
+`({ key, model }) => key === model.draftId`, a new `draftId` ends the old
+draft and the next render writes a fresh one.
+
+A scoped child starts the first time it's placed in the tree while its
+predicate holds. One written into a slot that nothing places, such as a
+closed Collapsible's, or into the slot of a component still waiting for its
+Layer, hasn't started: it runs nothing, and a `$.send` to it is dropped and
+logged as `SendDropped`.
+
+A scoped component mounted as the root needs no scope and behaves like any
+other. Saved state from the server or from a history entry holds the Model
+of a child that hasn't started, with everything below it. The state belongs
+to the author it arrived with, the child takes it when it starts, and it's
+dropped when the author ends or the predicate is false as the child is
+placed. On the client a child adopts the server's nodes only where the
+server drew it. Placed anywhere else, it keeps the state and builds new
+nodes.
+
+Known limits:
+
+- The guard also fails a predicate that returns from `key` alone, and it
+  misses one that reads `$.model` and also the view's `model`.
+- A kept child has stale props and `onEmit`.
+- Saved state for a child that hasn't started has no predicate to end it, so
+  a later child at that key takes it. That includes a row deleted before its
+  child ever started.
+- A child the server rendered runs nothing on the client until it's placed.
+  Its Subscriptions don't run and its predicate isn't asked.
+- What the user typed into a server-rendered field before hydration is lost
+  when the field's child is built again: moved out of a component that's
+  still waiting for its Layer, or moved while it waits for its own.
+- While a moved child's server-rendered copy sits in a waiting component, the
+  form shows twice, with the same ids and field names.
+- A child moved while it waits for its own Layer builds that Layer again.
+- After Back, saved state for a part of the page the view doesn't draw again
+  is gone once a push leaves the entry. Only a push made while a component
+  still waits to start carries what the entry saved below it.
 
 ### Naming
 

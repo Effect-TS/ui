@@ -42,6 +42,7 @@ export interface RootHandle {
    * hasn't yet. The Router calls it first in `set`, before the route changes.
    */
   readonly navigated: () => void
+  readonly restored: () => void
   /** The runtime's problems sink. */
   readonly report: (problem: { readonly _tag: string; readonly message: string }) => void
 }
@@ -72,6 +73,7 @@ export interface RootHooks {
   readonly afterFlush: (root: RootHandle, info: FlushInfo) => void
   /** The encoded Model a new instance at `path` adopts, if the router is restoring one. */
   readonly restore: (path: string) => unknown
+  readonly entry: () => Record<string, unknown> | undefined
   /**
    * Registers an instance's `Router.prefetch` declaration. The returned function unregisters it. The
    * Router makes the declarer, with its own walk and check, from what the runtime gives. `declared`

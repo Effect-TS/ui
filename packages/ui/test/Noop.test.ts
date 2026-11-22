@@ -39,6 +39,7 @@ const commands: Record<string, () => Command.Command<Message | Component.Noop>> 
 /** Records every message it gets, and runs the Command a `Fire` names. */
 const Recorder = Component.define({
   name: "Recorder",
+  scoped: false,
   model: Schema.Array(Schema.String),
   message: Message
 }).make({
@@ -162,11 +163,12 @@ describe("Component.noop", () => {
 
   it.effect("a component whose Message is Schema.Never runs a silent Command", () =>
     Effect.gen(function*() {
-      const Silent = Component.define({ name: "Silent", model: Schema.Number, message: Schema.Never }).make({
-        init: ($) => $.set(0).run(Quiet.make()),
-        update: (model) => model,
-        view: (model, h) => h.el("p", String(model))
-      })
+      const Silent = Component.define({ name: "Silent", scoped: false, model: Schema.Number, message: Schema.Never })
+        .make({
+          init: ($) => $.set(0).run(Quiet.make()),
+          update: (model) => model,
+          view: (model, h) => h.el("p", String(model))
+        })
       const s = yield* Story.make(Silent, {})
       s.resolve(Quiet, Component.noop).expectNone()
     }))
@@ -179,7 +181,7 @@ describe("Component.noop", () => {
         Effect.succeed(() => Effect.sleep("1 second"))
       ) {}
       let mapped = 0
-      const Child = Component.define({ name: "Child", model: Schema.Null, message: Schema.Never }).make({
+      const Child = Component.define({ name: "Child", scoped: false, model: Schema.Null, message: Schema.Never }).make({
         init: ($) =>
           $.set(null).run(
             Slow.make({}).pipe(Command.map(() => {
@@ -192,7 +194,7 @@ describe("Component.noop", () => {
       })
       const Close = UiSchema.TaggedEnum({ Close: {} })
       const Parent = Component.provide(
-        Component.define({ name: "Parent", model: Schema.Boolean, message: Close }).make({
+        Component.define({ name: "Parent", scoped: false, model: Schema.Boolean, message: Close }).make({
           init: () => true,
           update: () => false,
           view: (open, h) => h.el("div", [open ? Child(h, { key: "child", props: {} }) : null])

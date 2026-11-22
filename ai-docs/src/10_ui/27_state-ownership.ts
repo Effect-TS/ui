@@ -20,6 +20,7 @@ export const DialogEvents = UiSchema.TaggedEnum({ Dismissed: {}, Confirmed: {} }
 
 export const ConfirmDialog = Component.define({
   name: "ConfirmDialog",
+  scoped: false,
   props: Schema.Struct({ open: Schema.Boolean }),
   // Convention: no copy of `open` in the Model, so the prop is the one source.
   model: Schema.Null,
@@ -50,6 +51,7 @@ const PageMessage = UiSchema.TaggedEnum({ ClickedDelete: {}, DismissedConfirm: {
 
 export const Page = Component.define({
   name: "Page",
+  scoped: false,
   model: Schema.Struct({ confirming: Schema.Boolean, deleted: Schema.Boolean }),
   message: PageMessage,
   elements: Html
@@ -86,6 +88,7 @@ export const WizardEvents = UiSchema.TaggedEnum({ Finished: {}, Cancelled: {} })
 
 export const Wizard = Component.define({
   name: "Wizard",
+  scoped: false,
   // `steps` is the caller's to decide, so it is a prop.
   props: Schema.Struct({ steps: Schema.Number }),
   // Convention: no `open` or `step` prop, because nobody outside decides
@@ -125,6 +128,7 @@ const HostMessage = UiSchema.TaggedEnum({ ClickedImport: {}, FinishedImport: {} 
 
 export const Host = Component.define({
   name: "Host",
+  scoped: false,
   model: Schema.Struct({ imported: Schema.Number }),
   message: HostMessage,
   elements: Html
@@ -163,6 +167,7 @@ const ModalMessage = UiSchema.TaggedEnum({ RequestedOpen: {}, RequestedClose: {}
 // after Back or a reload this starts closed.
 export const ModalProvider = Component.define({
   name: "ModalProvider",
+  scoped: false,
   model: Schema.Struct({ open: Schema.Boolean }),
   message: ModalMessage,
   receives: ["RequestedOpen", "RequestedClose"],
@@ -187,6 +192,7 @@ const OpenButtonMessage = UiSchema.TaggedEnum({ ClickedOpen: {} })
 // removes.
 export const OpenButton = Component.define({
   name: "OpenButton",
+  scoped: false,
   model: Schema.Null,
   message: OpenButtonMessage,
   elements: Html
@@ -206,6 +212,7 @@ const ModalHostMessage = UiSchema.TaggedEnum({ ClosedDialog: {} })
 // source for `open`, its prop, and knows nothing about the provider.
 export const ModalHost = Component.define({
   name: "ModalHost",
+  scoped: false,
   model: Schema.Null,
   message: ModalHostMessage,
   shared: { modal: ModalProvider },
@@ -228,6 +235,7 @@ export const ModalHost = Component.define({
 
 export const Shell = Component.define({
   name: "Shell",
+  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
@@ -246,6 +254,7 @@ export const Shell = Component.define({
 const CounterMessage = UiSchema.TaggedEnum({ ClickedIncrement: {} })
 export const Counter = Component.define({
   name: "Counter",
+  scoped: false,
   props: Schema.Struct({ initialCount: Schema.Number }),
   model: Schema.Struct({ count: Schema.Number }),
   message: CounterMessage,
@@ -269,6 +278,7 @@ export const Counter = Component.define({
 const DualMessage = UiSchema.TaggedEnum({ RequestedOpen: {}, RequestedClose: {} })
 export const Dual = Component.define({
   name: "Dual",
+  scoped: false,
   props: Schema.Struct({ open: Schema.Boolean }),
   model: Schema.Struct({ open: Schema.Boolean }),
   message: DualMessage,
@@ -290,6 +300,7 @@ const ProviderRef = ModalProvider.ref("Modal")
 const AboveMessage = UiSchema.TaggedEnum({ ClickedOpen: {}, ClosedDialog: {} })
 export const Above = Component.define({
   name: "Above",
+  scoped: false,
   model: Schema.Null,
   message: AboveMessage,
   elements: Html

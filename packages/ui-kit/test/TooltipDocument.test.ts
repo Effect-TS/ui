@@ -140,6 +140,7 @@ const Message = UiSchema.TaggedEnum({ Closed: {}, Opened: {}, Restyled: {} })
 
 const Page = Component.define({
   name: "Page",
+  scoped: false,
   props: Schema.Struct({
     sideOffset: Schema.Number,
     disableAnchorTracking: Schema.Boolean,

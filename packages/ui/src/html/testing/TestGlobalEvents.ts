@@ -21,6 +21,7 @@
  *
  * const Menu = Component.define({
  *   name: "Menu",
+ *   scoped: false,
  *   model: Schema.Boolean,
  *   message: Message,
  *   elements: Html

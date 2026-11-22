@@ -89,6 +89,7 @@ const makeApp = (options?: {
     })
   const Board = Component.define({
     name: "Board",
+    scoped: false,
     props: Schema.Struct({ tag: Schema.String, ids: Schema.Array(Schema.String) }),
     model: Schema.Struct({ ids: Schema.Array(Schema.String) }),
     message: BoardMessage,
@@ -143,6 +144,7 @@ const makeApp = (options?: {
   const ListMessage = UiSchema.TaggedEnum({ Set: { boards: Schema.Array(Schema.String) } })
   const List = Component.define({
     name: "List",
+    scoped: false,
     props: Schema.Struct({ boards: Schema.Array(Schema.String) }),
     model: Schema.Array(Schema.String),
     message: ListMessage
@@ -295,6 +297,7 @@ describe("Keyed query fields", () => {
     const Message = UiSchema.TaggedEnum({ UsersChanged: { changed: Schema.Array(Schema.String) } })
     const Row = Component.define({
       name: "Row",
+      scoped: false,
       props: Schema.Struct({ ids: Schema.Array(Schema.String) }),
       model: Schema.Struct({}),
       message: Message,
@@ -321,6 +324,7 @@ describe("Keyed query fields", () => {
     const PageMessage = UiSchema.TaggedEnum({ Show: { ids: Schema.Array(Schema.String) } })
     const Page = Component.define({
       name: "Page",
+      scoped: false,
       model: Schema.Array(Schema.String),
       message: PageMessage
     }).make({
@@ -659,6 +663,7 @@ describe("Keyed query fields", () => {
     const changed: Array<ReadonlyArray<string>> = []
     const Mixed = Component.define({
       name: "Mixed",
+      scoped: false,
       model: Schema.Struct({}),
       message: Message,
       queries: {
@@ -731,6 +736,7 @@ describe("Keyed query fields", () => {
     const app = makeApp()
     const Probe = Component.define({
       name: "Probe",
+      scoped: false,
       model: Schema.Struct({}),
       message: Schema.Never,
       queries: { users: { queryMany: app.GetUser, args: () => [{ id: "2" }, { id: "1" }] } }
@@ -791,6 +797,7 @@ describe("Keyed results", () => {
     const make = (users: unknown) =>
       Component.define({
         name: "Bad",
+        scoped: false,
         model: Schema.Struct({}),
         message: Schema.Never,
         queries: { users }
@@ -818,6 +825,7 @@ describe("Keyed results", () => {
     const app = makeApp()
     const Bad = Component.define({
       name: "Bad",
+      scoped: false,
       model: Schema.Struct({}),
       message: Schema.Never,
       queries: {
@@ -835,6 +843,7 @@ describe("Keyed results", () => {
     })
     const Host = Component.define({
       name: "Host",
+      scoped: false,
       model: Schema.Struct({}),
       message: Schema.Never
     }).make({
@@ -871,6 +880,7 @@ describe("Keyed redaction", () => {
     ) {}
     const Page = Component.define({
       name: "Page",
+      scoped: false,
       props: Schema.Struct({ tokens: Schema.Array(Schema.Redacted(Schema.String)) }),
       model: Schema.Struct({}),
       message: Schema.Never,
@@ -985,6 +995,7 @@ const makeSelection = (app: ReturnType<typeof makeApp>) => {
   })
   const Selection = Component.define({
     name: "Selection",
+    scoped: false,
     model: Schema.Struct({ ids: Schema.Array(Schema.String), selected: Schema.String }),
     message: Message,
     queries: {
@@ -1096,6 +1107,7 @@ describe("Keyed history restore", () => {
     })
     const Page = Component.define({
       name: "Page",
+      scoped: false,
       model: Schema.Struct({ ids: Schema.Array(Schema.String) }),
       message: Message,
       queries: { users: { queryMany: app.GetUser, args: (model) => model.ids.map((id) => ({ id })) } }
@@ -1160,6 +1172,7 @@ describe("Keyed history restore", () => {
     })
     const Shell = Component.define({
       name: "Shell",
+      scoped: false,
       props: Schema.Struct({ route: ShellRoute }),
       model: ShellRoute,
       message: ShellMessage
