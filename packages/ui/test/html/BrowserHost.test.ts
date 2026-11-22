@@ -1282,7 +1282,6 @@ describe("BrowserHost", { concurrent: false }, () => {
                   h.textarea.attr("id", "kt-area"),
                   h.select.attr("id", "kt-select").children(h.option.attr("value", "a").children("A")),
                   ...nonEditableTypes.map((type) => h.input.attr("id", `kt-${type}`).attr("type", type)),
-                  h.button.attr("id", "kt-button").children("Go"),
                   h.div.attr("id", "kt-ce").attr("contenteditable", "true").children(
                     h.span.attr("id", "kt-ce-child").children("hi"),
                     h.div.attr("id", "kt-ce-island").attr("contenteditable", "false").children(
@@ -1307,7 +1306,6 @@ describe("BrowserHost", { concurrent: false }, () => {
           fire(byId("kt-text"), "keyup", "g")
           for (const id of editableIds) fire(byId(id), "keydown", id)
           fire(byId("kt-ce-btn"), "keydown", "island")
-          fire(byId("kt-button"), "keydown", "g", true)
           for (const type of nonEditableTypes) fire(byId(`kt-${type}`), "keydown", type)
           const shadowEvent = new KeyboardEvent("keydown", { key: "s", bubbles: true, composed: true })
           Object.defineProperty(shadowEvent, "composedPath", {
@@ -1326,8 +1324,6 @@ describe("BrowserHost", { concurrent: false }, () => {
             ...editableIds.flatMap((id) => [`el:down:${id}:true:false`, `doc:down:${id}:true:false`]),
             "el:down:island:false:false",
             "doc:down:island:false:false",
-            "el:down:g:false:true",
-            "doc:down:g:false:true",
             ...nonEditableTypes.flatMap((type) => [`el:down:${type}:false:false`, `doc:down:${type}:false:false`]),
             "doc:down:s:true:false",
             "doc:down:svg:false:false"

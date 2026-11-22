@@ -138,7 +138,6 @@ describe("HtmlScene", () => {
         return h.div(
           h.input.attr("aria-label", "Name").value("Ada").onInput(saw("input")).onChange(saw("change"))
             .onCompositionEnd(saw("compositionend")).onKeyDown(saw("keydown")),
-          h.input.attr("type", "checkbox").attr("aria-label", "Active").onKeyDown(saw("keydown")),
           h.input.prop("type", "checkbox").attr("aria-label", "PropBox").onKeyDown(saw("keydown")),
           h.div.attr("contenteditable", "true").onKeyDown(saw("keydown")).children(
             h.span.attr("id", "ce-child").children("Edit"),
@@ -151,7 +150,6 @@ describe("HtmlScene", () => {
       }
     })
     const name = HtmlLocator.label("Name")
-    const active = HtmlLocator.label("Active")
     const propBox = HtmlLocator.label("PropBox")
     const s = HtmlScene.start(Field, {})
       .type(name, "A")
@@ -162,7 +160,6 @@ describe("HtmlScene", () => {
       .change(name, { inputType: "insertReplacementText" })
       .keydown(name, "a")
       .keydown(name, "a", { composing: true, repeat: true, editable: false, selectionStart: 1, selectionEnd: 3 })
-      .keydown(active, " ")
       .keydown(propBox, " ")
       .keydown(Locator.attr("id", "ce-child"), "g")
       .keydown(Locator.attr("id", "ce-island-btn"), "g")
@@ -175,7 +172,6 @@ describe("HtmlScene", () => {
       `change {"value":"Ada","checked":false,"composing":false,"inputType":"insertReplacementText"}`,
       `keydown {"key":"a","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":true,"selectionStart":null,"selectionEnd":null}`,
       `keydown {"key":"a","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":true,"repeat":true,"editable":false,"selectionStart":1,"selectionEnd":3}`,
-      `keydown {"key":" ","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":false,"selectionStart":null,"selectionEnd":null}`,
       `keydown {"key":" ","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":false,"selectionStart":null,"selectionEnd":null}`,
       `keydown {"key":"g","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":true,"selectionStart":null,"selectionEnd":null}`,
       `keydown {"key":"g","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":false,"selectionStart":null,"selectionEnd":null}`

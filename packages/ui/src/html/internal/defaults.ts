@@ -14,7 +14,6 @@ const inputType = (node: Locator.Node): string =>
 const flag = (node: Locator.Node, name: string): boolean =>
   node.props?.[name] === true || (node.props?.[name] === undefined && node.attrs?.[name] !== undefined)
 
-/** Whether a key pressed on `path[0]`, with its ancestors innermost first in `path`, is `editable`. */
 const isEditable = (path: ReadonlyArray<Locator.Node>): boolean => {
   const tag = path[0]?.tag
   if (tag === "textarea" || tag === "select") return true

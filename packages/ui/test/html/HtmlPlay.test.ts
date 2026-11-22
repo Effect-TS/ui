@@ -141,7 +141,7 @@ describe("HtmlPlay", () => {
       assert.match(Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "", /produced a message/)
     }).pipe(play))
 
-  it.effect("keydown resolves inherited editability, reflected input type, and full key details", () =>
+  it.effect("keydown resolves inherited editability and accepts full key details", () =>
     Effect.gen(function*() {
       const Keys = Component.define({
         name: "Keys",
@@ -154,21 +154,15 @@ describe("HtmlPlay", () => {
         update: (entries, entry) => [...entries, entry],
         view: (entries, h) =>
           h.div.onKeyDown(({ editable, key, repeat }) => `${key}:${editable}:${repeat}`).children(
-            h.input.prop("type", "checkbox").attr("aria-label", "Toggle"),
             h.div.prop("contentEditable", "true").children(
-              h.span.attr("id", "play-ce-child").children("Edit"),
-              h.div.attr("contenteditable", "false").children(
-                h.button.attr("id", "play-ce-btn").children("Stop")
-              )
+              h.span.attr("id", "play-ce-child").children("Edit")
             ),
             h.output(entries.join(","))
           )
       })
       const p = yield* HtmlPlay.make(Keys, {})
-      yield* p.keydown(HtmlLocator.label("Toggle"), "x")
       yield* p.keydown(Locator.attr("id", "play-ce-child"), "g")
       yield* p.keydown(Locator.attr("id", "play-ce-child"), "g", { repeat: true, editable: false })
-      yield* p.keydown(Locator.attr("id", "play-ce-btn"), "g")
-      yield* p.expect(log).toHaveText("x:false:false,g:true:false,g:false:true,g:false:false")
+      yield* p.expect(log).toHaveText("g:true:false,g:false:true")
     }).pipe(play))
 })

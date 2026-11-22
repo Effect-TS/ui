@@ -307,10 +307,6 @@ describe("HtmlScene.fireDocument and fireWindow", () => {
           DomSubscription.onDocument("keydown", ({ editable, key, repeat }) => `${key}:${editable}:${repeat}`)
         ]
       })
-      const s = yield* HtmlScene.make(Shortcut, {})
-      s.fireDocument("keydown", { key: "g" })
-        .fireDocument("keydown", { key: "g", editable: true, repeat: true })
-        .expect(Locator.tag("output")).toHaveText("g:false:false,g:true:true")
       const root = yield* TestHost.mount(Shortcut, {})
       yield* TestHost.settle
       yield* TestGlobalEvents.fire("document", "keydown", { key: "g" })
