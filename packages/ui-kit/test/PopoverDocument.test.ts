@@ -94,7 +94,7 @@ const Page = Component.define({
         props: { open: model.open && model.triggerId === "detached", popupId: "popover" }
       }).children("Detached"),
       model.third === "gone" ? null : PopoverTrigger(h, {
-        element: h.button.attr("id", "detached-c"),
+        element: h.button.attr("id", model.third === "off" ? "replacement" : "detached-c"),
         props: {
           open: model.open && model.triggerId === "detached-c",
           popupId: "popover",
@@ -243,7 +243,7 @@ describe("Popover in a document", { concurrent: false }, () => {
       const change = (third: "on" | "off" | "gone") =>
         Effect.andThen(Effect.sync(() => send(Message.Changed({ third }))), tick)
       yield* change("off")
-      for (const id of ["c", "detached-c"]) {
+      for (const id of ["c", "replacement"]) {
         const icon = byId(id).appendChild(document.createElement("span"))
         icon.click()
         yield* tick

@@ -571,7 +571,11 @@ const TrackDetachedTrigger = Mount.makeStream(
       let current = args
       const send = (message: PopoverMessage) => detached.send(node.ownerDocument, current.popupId, message)
       const triggerId = () => node.id === "" ? null : node.id
-      const lost = () => send(PopoverMessage.LostTrigger({ triggerId: triggerId() }))
+      let entered: { readonly triggerId: string | null } | null = null
+      const lost = () => {
+        if (entered !== null) send(PopoverMessage.LostTrigger(entered))
+        entered = null
+      }
       const controller = new AbortController()
       const { signal } = controller
       return Effect.acquireRelease(
@@ -585,8 +589,9 @@ const TrackDetachedTrigger = Mount.makeStream(
           }, { signal })
           node.addEventListener("pointerenter", (event) => {
             if (current.hover === null || node.disabled || event.pointerType !== "mouse") return
+            entered = { triggerId: triggerId() }
             send(PopoverMessage.EnteredTrigger({
-              triggerId: triggerId(),
+              ...entered,
               ...current.hover,
               at: { x: event.clientX, y: event.clientY },
               drawn: false
@@ -594,6 +599,7 @@ const TrackDetachedTrigger = Mount.makeStream(
           }, { signal })
           node.addEventListener("pointerleave", (event) => {
             if (current.hover === null || event.pointerType !== "mouse") return
+            entered = null
             send(PopoverMessage.LeftTrigger({ triggerId: triggerId(), at: { x: event.clientX, y: event.clientY } }))
           }, { signal })
         }).pipe(
