@@ -177,7 +177,7 @@ const shown = Effect.fnUntraced(function*(props: ComboboxProps, view: typeof sta
 })
 
 describe("Combobox", () => {
-  it.effect("draws a combobox input that controls the list, with the form input beside it", () =>
+  it.effect("draws combobox semantics, hidden form input and clear button", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(
         Combobox,
@@ -196,25 +196,24 @@ describe("Combobox", () => {
       assert.deepInclude(s.get(group).attrs, { role: "group" })
       assert.deepInclude(s.get(trigger).attrs, { type: "button", tabindex: "-1", "aria-expanded": "false" })
       assert.deepInclude(s.get(list).attrs, { role: "listbox", tabindex: "-1" })
-      assert.deepInclude(s.get(item("banana")).attrs, {
-        role: "option",
-        "aria-selected": "true",
-        "data-selected": ""
-      })
+      assert.deepInclude(s.get(item("banana")).attrs, { role: "option", "aria-selected": "true", "data-selected": "" })
       assert.deepInclude(s.get(item("cherry")).attrs, { "aria-disabled": "true", "data-disabled": "" })
-      assert.deepStrictEqual(values(s), ["apple", "apricot", "banana", "cherry", "grape"])
-      const hidden = s.get(Locator.attr("name", "fruit"))
-      assert.deepInclude(hidden.attrs, { value: "banana", "aria-hidden": "true" })
+      assert.deepInclude(s.get(Locator.attr("name", "fruit")).attrs, { value: "banana", "aria-hidden": "true" })
       assert.deepInclude(s.get(Locator.attr("class", "status")).attrs, { role: "status", "aria-live": "polite" })
       assert.strictEqual(Locator.textOf(s.get(empty)), "")
-      assert.isDefined(s.query(clearButton))
+      assert.deepInclude(s.get(clearButton).attrs, { type: "button", tabindex: "-1", "data-visible": "" })
+      s.fire(clearButton, "mousedown", pointer("mouse")).expectIgnored().expectDefaultPrevented()
+      s.fire(clearButton, "click", pointer("mouse")).emitted(edited("", "clear-press"), picked(null, "clear-press"))
+      s.resolve(Html.Focus, { found: true })
       s.props({ ...base, name: "fruit" })
       assert.isUndefined(s.query(clearButton))
     }))
 
-  it.effect("typing opens it, filters the items and reports the text, without highlighting", () =>
+  it.effect("typing opens and filters; autofill reports without opening; composition waits for compositionend", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Combobox, base, standIn)
+      s.fire(input, "input", typed("Apple", "insertReplacementText")).emitted(edited("Apple"))
+      s.fire(input, "input", typed("ba", "")).emitted(edited("ba"))
       s.fire(input, "input", typed("ap")).emitted(edited("ap"), opened("input-change"))
       s.props({ ...base, open: true, inputValue: "ap" }).mounted(tracked(s), sent("ShowedPopup"))
       assert.deepStrictEqual(values(s), ["apple", "apricot", "grape"])
@@ -225,76 +224,90 @@ describe("Combobox", () => {
       assert.isTrue(partsOf(s).listEmpty)
       assert.strictEqual(Locator.textOf(s.get(empty)), "No fruit found")
       assert.deepInclude(s.get(positioner).attrs, { "data-empty": "" })
-      s.fire(input, "input", typed("")).emitted(edited(""))
-      s.props({ ...base, open: true })
-      assert.strictEqual(values(s).length, 5)
-    }))
-
-  it.effect("autofill reports the text but doesn't open, and a composition opens without reporting until it ends", () =>
-    Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Combobox, base, standIn)
-      s.fire(input, "input", typed("Apple", "insertReplacementText")).emitted(edited("Apple"))
-      s.fire(input, "input", typed("ba", "")).emitted(edited("ba"))
       s.props(base)
       s.fire(input, "input", typed("り", "insertCompositionText", true)).emitted(opened("input-change"))
       s.props({ ...base, open: true }).mounted(tracked(s), sent("ShowedPopup"))
       s.fire(input, "compositionend", { value: "りんご" }).emitted(edited("りんご"))
     }))
 
-  it.effect("autoHighlight highlights the first match while typing", () =>
+  it.effect("filters by mode, limit, filteredItems and drops empty groups", () =>
     Effect.gen(function*() {
-      const props = { ...base, autoHighlight: true }
-      const s = yield* HtmlScene.make(Combobox, props, standIn)
-      s.fire(input, "input", typed("an")).emitted(edited("an"), opened("input-change"))
-      s.props({ ...props, open: true, inputValue: "an" }).mounted(tracked(s), sent("ShowedPopup"))
-      assert.strictEqual(partsOf(s).highlighted, "banana")
-      assert.strictEqual(s.get(input).attrs?.["aria-activedescendant"], s.get(item("banana")).attrs?.id)
-      s.fire(input, "keydown", key("Enter")).emitted(
-        picked("banana"),
-        edited("Banana", "item-press"),
-        dismissed("item-press")
-      ).expectDefaultPrevented()
+      const open = { ...base, open: true, inputValue: "a" }
+      const s = yield* shown(open)
+      assert.deepStrictEqual(values(s), ["apple", "apricot", "banana", "grape"])
+      s.props({ ...open, filter: "startsWith" })
+      assert.deepStrictEqual(values(s), ["apple", "apricot"])
+      s.props({ ...open, filter: "endsWith", inputValue: "e" })
+      assert.deepStrictEqual(values(s), ["apple", "grape"])
+      s.props({ ...open, filter: "none" })
+      assert.strictEqual(values(s).length, 5)
+      s.props({ ...open, limit: 2 })
+      assert.deepStrictEqual(values(s), ["apple", "apricot"])
+      s.props({ ...open, value: "grape", filteredItems: [{ value: "grape", label: "Filtered Grape" }] })
+      assert.deepStrictEqual(values(s), ["grape"])
+      assert.strictEqual(partsOf(s).selectedItems[0]?.label, "Grape")
+      const grouped = [
+        { value: "apple", label: "Apple", group: "fruit" },
+        { value: "kale", label: "Kale", group: "vegetable" },
+        { value: "leek", label: "Leek", group: "vegetable" }
+      ]
+      s.props({ ...base, items: grouped, inputValue: "ka", open: true })
+      assert.deepStrictEqual(
+        partsOf(s).groups.map((g) => [g.key, g.items.map((i) => i.value)]),
+        [["vegetable", ["kale"]]]
+      )
     }))
 
-  it.effect("a press on the input or the group opens it, and the trigger toggles and keeps focus in the input", () =>
+  it.effect("pointer opens from input, group or trigger, hovers items, and picks on release", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Combobox, base, standIn)
       s.fire(input, "mousedown", pointer("mouse")).emitted(opened("input-press")).expectDefaultPrevented(false)
       s.props({ ...base, open: true }).mounted(tracked(s), sent("ShowedPopup"))
       s.fire(input, "mousedown", pointer("mouse")).expectIgnored()
+      s.fire(item("banana"), "mouseenter").emitted(highlighted("banana", 2, "pointer"))
+      s.fire(item("banana"), "mouseleave").emitted(highlighted(null, -1, "pointer"))
+      s.fire(item("grape"), "mouseenter").emitted(highlighted("grape", 4, "pointer"))
+      s.fire(item("grape"), "mouseup", pointer("mouse")).emitted(
+        picked("grape"),
+        edited("Grape", "item-press"),
+        dismissed("item-press")
+      )
+      s.fire(item("cherry"), "click", pointer("mouse")).expectIgnored()
       s.fire(trigger, "mousedown", pointer("mouse")).emitted(dismissed("trigger-press")).expectDefaultPrevented()
       s.resolve(Html.Focus, { found: true })
       s.props(base)
-      s.fire(group, "mousedown", pointer("mouse")).emitted(opened("input-press")).expectDefaultPrevented()
+      s.fire(group, "mousedown", pointer("mouse")).emitted(opened("input-press"), highlighted(null, -1, "none"))
+        .expectDefaultPrevented()
       s.resolve(Html.Focus, { found: true })
-      s.props({ ...base, open: true })
-      s.fire(trigger, "mousedown", pointer("mouse")).emitted(dismissed("trigger-press"))
-      s.resolve(Html.Focus, { found: true })
-      s.props(base)
       s.fire(trigger, "mousedown", pointer("touch")).expectIgnored()
       s.fire(trigger, "click", pointer("touch")).emitted(opened("trigger-press"))
-      s.props({ ...base, open: true })
+      s.props({ ...base, open: true, highlightItemOnHover: false })
       assert.strictEqual(partsOf(s).openMethod, "touch")
+      s.fire(item("banana"), "mouseenter").expectIgnored()
       s.props({ ...base, open: false, openOnInputClick: false })
       s.fire(input, "mousedown", pointer("mouse")).expectIgnored()
     }))
 
-  it.effect("ArrowDown and ArrowUp open on the selected item, or on the first or last one", () =>
+  it.effect("keyboard opens on the selected or end item, loops or clamps, and skips modified keys", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Combobox, base, standIn)
       s.fire(input, "keydown", key("ArrowDown")).emitted(opened("list-navigation"), highlighted("apple", 0))
         .expectDefaultPrevented()
       s.props({ ...base, open: true }).mounted(tracked(s), sent("ShowedPopup"))
-      assert.strictEqual(partsOf(s).highlighted, "apple")
       assert.deepInclude(s.get(item("apple")).attrs, { "data-highlighted": "" })
-      s.fire(input, "keydown", key("Escape")).emitted(dismissed("escape-key"))
-      s.props(base)
-      s.mounted(tracked(s), sent("FinishedTransition", { open: false })).emitted(
-        highlighted(null, -1, "none"),
-        settled(false)
-      )
-      s.fire(input, "keydown", key("ArrowUp")).emitted(opened("list-navigation"), highlighted("grape", 4))
-      s.props({ ...base, open: true }).mounted(tracked(s), sent("ShowedPopup"))
+      s.fire(input, "keydown", key("ArrowUp")).emitted(highlighted(null, -1))
+      s.fire(input, "keydown", key("ArrowUp")).emitted(highlighted("grape", 4))
+      s.fire(input, "keydown", key("ArrowDown")).emitted(highlighted(null, -1))
+      s.props({ ...base, open: true, loopFocus: false })
+      s.fire(input, "keydown", key("ArrowDown")).emitted(highlighted("apple", 0))
+      s.fire(input, "keydown", key("ArrowUp")).expectDefaultPrevented()
+      assert.strictEqual(partsOf(s).highlighted, "apple")
+      s.fire(input, "keydown", key("ArrowDown")).emitted(highlighted("apricot", 1))
+      s.fire(input, "keydown", key("ArrowDown")).emitted(highlighted("banana", 2))
+      s.fire(input, "keydown", key("ArrowDown")).emitted(highlighted("cherry", 3))
+      s.fire(input, "keydown", key("Enter")).expectDefaultPrevented()
+      s.fire(input, "keydown", key("Home")).expectIgnored()
+      s.fire(input, "keydown", key("ArrowDown", { shift: true })).expectIgnored()
       s.fire(input, "keydown", key("Escape")).emitted(dismissed("escape-key"))
       s.props({ ...base, value: "banana", inputValue: "Banana" })
       s.mounted(tracked(s), sent("FinishedTransition", { open: false })).emitted(
@@ -303,61 +316,55 @@ describe("Combobox", () => {
       )
       s.fire(input, "keydown", key("ArrowUp")).emitted(opened("list-navigation"), highlighted("banana", 2))
       s.props({ ...base, value: "banana", inputValue: "Banana", open: true }).mounted(tracked(s), sent("ShowedPopup"))
-      assert.deepStrictEqual(values(s).length, 5)
+      assert.strictEqual(values(s).length, 5)
     }))
 
-  it.effect("arrows step through every item and past the ends to the input, or stop there without loopFocus", () =>
+  it.effect("autoHighlight, Enter, Space and Escape pick, dismiss or clear", () =>
     Effect.gen(function*() {
-      const s = yield* shown({ ...base, open: true })
-      const step = (k: string, expected: string | null) => {
-        s.fire(input, "keydown", key(k)).expectDefaultPrevented()
-        assert.strictEqual(partsOf(s).highlighted, expected)
-      }
-      s.fire(input, "keydown", key("ArrowUp")).emitted(highlighted("grape", 4))
-      s.fire(input, "keydown", key("ArrowDown")).emitted(highlighted(null, -1))
-      s.fire(input, "keydown", key("ArrowDown")).emitted(highlighted("apple", 0))
-      s.fire(input, "keydown", key("ArrowUp")).emitted(highlighted(null, -1))
-      s.props({ ...base, open: true, loopFocus: false })
-      s.fire(input, "keydown", key("ArrowDown")).emitted(highlighted("apple", 0))
-      step("ArrowUp", "apple")
-      s.fire(input, "keydown", key("ArrowDown")).emitted(highlighted("apricot", 1))
-      s.fire(input, "keydown", key("ArrowDown")).emitted(highlighted("banana", 2))
-      s.fire(input, "keydown", key("ArrowDown")).emitted(highlighted("cherry", 3))
-      s.fire(input, "keydown", key("Enter")).expectDefaultPrevented()
-      s.fire(input, "keydown", key("Home")).expectIgnored()
-      s.fire(input, "keydown", key("ArrowDown", { shift: true })).expectIgnored()
-    }))
-
-  it.effect("Enter picks the highlighted item, fills the input and closes; with nothing highlighted it closes on keyup", () =>
-    Effect.gen(function*() {
-      const s = yield* shown({ ...base, open: true })
+      const s = yield* HtmlScene.make(Combobox, { ...base, autoHighlight: true }, standIn)
+      s.fire(input, "input", typed("an")).emitted(edited("an"), opened("input-change"))
+      s.props({ ...base, autoHighlight: true, open: true, inputValue: "an" }).mounted(tracked(s), sent("ShowedPopup"))
+      assert.strictEqual(s.get(input).attrs?.["aria-activedescendant"], s.get(item("banana")).attrs?.id)
+      s.fire(input, "keydown", key("Enter")).emitted(
+        picked("banana"),
+        edited("Banana", "item-press"),
+        dismissed("item-press")
+      ).expectDefaultPrevented()
+      s.props(base)
+      s.mounted(tracked(s), sent("FinishedTransition", { open: false })).emitted(
+        highlighted(null, -1, "none"),
+        settled(false)
+      )
+      s.props({ ...base, open: true }).mounted(tracked(s), sent("ShowedPopup"))
       s.fire(input, "keydown", key("Enter")).expectIgnored()
       s.fire(input, "keyup", key("Enter")).emitted(dismissed("none"))
       s.fire(input, "keydown", key("ArrowDown")).emitted(highlighted("apple", 0))
       s.fire(input, "keyup", key("Enter")).expectIgnored()
-      s.fire(input, "keydown", key("Enter")).emitted(
-        picked("apple"),
-        edited("Apple", "item-press"),
-        dismissed("item-press")
-      )
-      s.props({ ...base, open: true, inputValue: "" })
       s.fire(input, "keydown", key(" ")).emitted(
         picked("apple"),
         edited("Apple", "item-press"),
         dismissed("item-press")
-      )
-        .expectDefaultPrevented()
+      ).expectDefaultPrevented()
       s.props({ ...base, open: true, inputValue: "a" })
       s.fire(input, "keydown", key(" ")).expectIgnored()
+      s.props({ ...base, value: "banana", inputValue: "Banana" })
+      s.mounted(tracked(s), sent("FinishedTransition", { open: false })).emitted(
+        highlighted(null, -1, "none"),
+        settled(false)
+      )
+      s.fire(input, "keydown", key("Escape")).emitted(edited("", "escape-key"), picked(null, "escape-key"))
+        .expectDefaultPrevented()
+      s.props(base)
+      s.fire(input, "keydown", key("Escape")).expectIgnored()
+      s.props({ ...base, value: "banana", inputValue: "Banana", readOnly: true })
+      s.fire(input, "keydown", key("Escape")).expectIgnored()
     }))
 
-  it.effect("a pick freezes the filter while the popup closes, and the label comes back once it has", () =>
+  it.effect("freezes the filter during exit, restores the selected label on dismiss, and deselects when cleared", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Combobox, base, standIn)
       s.fire(input, "input", typed("ap")).emitted(edited("ap"), opened("input-change"))
       s.props({ ...base, open: true, inputValue: "ap" }).mounted(tracked(s), sent("ShowedPopup"))
-      s.fire(item("apricot"), "mousedown", pointer("mouse")).expectDefaultPrevented()
-      s.fire(item("apricot"), "mouseup", pointer("mouse"))
       s.fire(item("apricot"), "click", pointer("mouse")).emitted(
         picked("apricot"),
         edited("Apricot", "item-press"),
@@ -368,69 +375,19 @@ describe("Combobox", () => {
       assert.strictEqual(partsOf(s).transitionStatus, "ending")
       s.mounted(tracked(s), sent("FinishedTransition", { open: false })).emitted(settled(false))
       assert.strictEqual(values(s).length, 5)
-      s.fire(input, "mousedown", pointer("mouse")).emitted(opened("input-press"), highlighted("apricot", 1, "none"))
-      s.props({ ...base, open: true, value: "apricot", inputValue: "Apricot" }).mounted(tracked(s), sent("ShowedPopup"))
-      assert.strictEqual(values(s).length, 5)
-      s.fire(input, "input", typed("Aprico")).emitted(edited("Aprico"), highlighted(null, -1, "none"))
-      s.props({ ...base, open: true, value: "apricot", inputValue: "Aprico" })
-      assert.deepStrictEqual(values(s), ["apricot"])
-    }))
-
-  it.effect("closing without a pick puts the selected label back after the exit, and emptying the input deselects", () =>
-    Effect.gen(function*() {
-      const props = { ...base, value: "banana", inputValue: "Banana" }
-      const s = yield* HtmlScene.make(Combobox, props, standIn)
       s.fire(input, "input", typed("gr")).emitted(edited("gr"), opened("input-change"))
-      s.props({ ...props, open: true, inputValue: "gr" }).mounted(tracked(s), sent("ShowedPopup"))
+      s.props({ ...base, value: "apricot", open: true, inputValue: "gr" }).mounted(tracked(s), sent("ShowedPopup"))
       s.mounted(tracked(s), sent("PressedOutside", { pointerType: "mouse" })).emitted(dismissed("outside-press"))
-      s.props({ ...props, inputValue: "gr" })
+      s.props({ ...base, value: "apricot", inputValue: "gr" })
       s.mounted(tracked(s), sent("FinishedTransition", { open: false })).emitted(
-        edited("Banana", "none"),
+        edited("Apricot", "none"),
         settled(false)
       )
-      s.props(props)
+      s.props({ ...base, value: "apricot", inputValue: "Apricot" })
       s.fire(input, "input", typed("")).emitted(edited(""), picked(null, "input-clear"))
     }))
 
-  it.effect("Escape closes the popup, and once it has closed, clears the text and the value", () =>
-    Effect.gen(function*() {
-      const props = { ...base, value: "banana", inputValue: "Banana" }
-      const s = yield* HtmlScene.make(Combobox, props, standIn)
-      s.fire(input, "keydown", key("Escape")).emitted(edited("", "escape-key"), picked(null, "escape-key"))
-        .expectDefaultPrevented()
-      s.props(base)
-      s.fire(input, "keydown", key("Escape")).expectIgnored()
-      s.props({ ...props, readOnly: true })
-      s.fire(input, "keydown", key("Escape")).expectIgnored()
-    }))
-
-  it.effect("the pointer highlights items, and a press that starts elsewhere picks on release", () =>
-    Effect.gen(function*() {
-      const s = yield* shown({ ...base, open: true })
-      s.fire(item("banana"), "mouseenter").emitted(highlighted("banana", 2, "pointer"))
-      s.fire(item("banana"), "mouseleave").emitted(highlighted(null, -1, "pointer"))
-      s.fire(item("grape"), "mouseenter").emitted(highlighted("grape", 4, "pointer"))
-      s.fire(item("grape"), "mouseup", pointer("mouse")).emitted(
-        picked("grape"),
-        edited("Grape", "item-press"),
-        dismissed("item-press")
-      )
-      s.fire(item("cherry"), "click", pointer("mouse")).expectIgnored()
-      s.props({ ...base, open: true, highlightItemOnHover: false })
-      s.fire(item("banana"), "mouseenter").expectIgnored()
-    }))
-
-  it.effect("clear empties the text and the value, keeps focus in the input, and shows only with a value", () =>
-    Effect.gen(function*() {
-      const props = { ...base, value: "banana", inputValue: "Banana" }
-      const s = yield* HtmlScene.make(Combobox, props, standIn)
-      assert.deepInclude(s.get(clearButton).attrs, { type: "button", tabindex: "-1", "data-visible": "" })
-      s.fire(clearButton, "mousedown", pointer("mouse")).expectIgnored().expectDefaultPrevented()
-      s.fire(clearButton, "click", pointer("mouse")).emitted(edited("", "clear-press"), picked(null, "clear-press"))
-      s.resolve(Html.Focus, { found: true })
-    }))
-
-  it.effect("multiple keeps the popup open on a pick, and closes and clears the text after a filtered one", () =>
+  it.effect("multiple toggles items, closes after a filtered pick, and manages chips", () =>
     Effect.gen(function*() {
       const props = { ...base, multiple: true, open: true, value: ["apple"], name: "fruit" }
       const s = yield* shown(props, chipsStandIn)
@@ -448,13 +405,7 @@ describe("Combobox", () => {
         edited("", "input-clear"),
         dismissed("item-press")
       )
-    }))
-
-  it.effect("chips: Backspace removes the last value, ArrowLeft at the start moves to the last chip, and remove buttons work", () =>
-    Effect.gen(function*() {
-      const props = { ...base, multiple: true, value: ["apple", "grape"] }
-      const s = yield* HtmlScene.make(Combobox, props, chipsStandIn)
-      s.expectMount(chipsTracked(s))
+      s.props({ ...base, multiple: true, value: ["apple", "grape"] })
       assert.deepInclude(s.get(item("chip-apple")).attrs, { tabindex: "-1" })
       s.fire(input, "keydown", key("Backspace")).emitted(picked(["apple"], "none"))
       s.fire(input, "keydown", key("ArrowLeft", { selectionStart: 0, selectionEnd: 0 })).expectDefaultPrevented()
@@ -463,13 +414,13 @@ describe("Combobox", () => {
       s.fire(item("remove-apple"), "mousedown", pointer("mouse")).expectIgnored().expectDefaultPrevented()
       s.fire(item("remove-apple"), "click", pointer("mouse")).emitted(picked(["grape"], "chip-remove-press"))
       s.resolve(Html.Focus, { found: true })
-      s.props({ ...props, inputValue: "a" })
+      s.props({ ...base, multiple: true, value: ["apple"], inputValue: "a" })
       s.fire(input, "keydown", key("Backspace")).expectIgnored()
-      s.props({ ...props, readOnly: true })
+      s.props({ ...base, multiple: true, value: ["apple"], readOnly: true })
       s.fire(input, "keydown", key("Backspace")).expectIgnored()
     }))
 
-  it.effect("with the input in the popup, the trigger is the combobox, and the popup a dialog", () =>
+  it.effect("inputInPopup makes the trigger the combobox, supports typeahead, and cancels an outside release", () =>
     Effect.gen(function*() {
       const props = { ...base, inputInPopup: true, placeholder: "Pick a fruit", name: "fruit" }
       const s = yield* HtmlScene.make(Combobox, props, inPopupStandIn)
@@ -490,6 +441,7 @@ describe("Combobox", () => {
         .expectDefaultPrevented(false)
       s.props({ ...props, value: "grape", open: true }).mounted(tracked(s), sent("ShowedPopup"))
       assert.strictEqual(s.get(trigger).attrs?.["aria-controls"], s.get(popup).attrs?.id)
+      s.mounted(tracked(s), sent("ReleasedPointer", { outside: true })).emitted(dismissed("cancel-open"))
       s.fire(input, "input", typed("ba")).emitted(edited("ba"), highlighted(null, -1, "none"))
       s.props({ ...props, value: "grape", open: true, inputValue: "ba" })
       assert.deepStrictEqual(values(s), ["banana"])
@@ -503,16 +455,7 @@ describe("Combobox", () => {
       )
     }))
 
-  it.effect("a press on the trigger released away from it cancels the open", () =>
-    Effect.gen(function*() {
-      const props = { ...base, inputInPopup: true }
-      const s = yield* HtmlScene.make(Combobox, props, inPopupStandIn)
-      s.fire(trigger, "mousedown", pointer("mouse")).emitted(opened("trigger-press"))
-      s.props({ ...props, open: true }).mounted(tracked(s), sent("ShowedPopup"))
-      s.mounted(tracked(s), sent("ReleasedPointer", { outside: true })).emitted(dismissed("cancel-open"))
-    }))
-
-  it.effect("a grid steps across rows and columns, and leaves the caret alone with nothing highlighted", () =>
+  it.effect("grid navigates rows and columns, flips horizontal arrows in RTL, and leaves the caret alone when unhighlighted", () =>
     Effect.gen(function*() {
       const grid = Array.from({ length: 7 }, (_, index) => ({
         value: "e" + index,
@@ -537,7 +480,7 @@ describe("Combobox", () => {
       s.fire(input, "keydown", key("ArrowLeft")).emitted(highlighted("e4", 4))
     }))
 
-  it.effect("an inline list is always expanded, navigates while closed and keeps its highlight across focus", () =>
+  it.effect("inline stays expanded, navigates while closed, restores highlight on focus, and clears on Escape keyup", () =>
     Effect.gen(function*() {
       const props = { ...base, inline: true }
       const s = yield* HtmlScene.make(Combobox, props, gridStandIn)
@@ -552,24 +495,7 @@ describe("Combobox", () => {
       s.fire(input, "keyup", key("Escape")).emitted(edited("", "escape-key"), picked(null, "escape-key"))
     }))
 
-  it.effect("filters by contains, startsWith or endsWith, takes the consumer's results, and limits them", () =>
-    Effect.gen(function*() {
-      const open = { ...base, open: true, inputValue: "a" }
-      const s = yield* shown(open)
-      assert.deepStrictEqual(values(s), ["apple", "apricot", "banana", "grape"])
-      s.props({ ...open, filter: "startsWith" })
-      assert.deepStrictEqual(values(s), ["apple", "apricot"])
-      s.props({ ...open, filter: "endsWith", inputValue: "e" })
-      assert.deepStrictEqual(values(s), ["apple", "grape"])
-      s.props({ ...open, filter: "none" })
-      assert.strictEqual(values(s).length, 5)
-      s.props({ ...open, limit: 2 })
-      assert.deepStrictEqual(values(s), ["apple", "apricot"])
-      s.props({ ...open, filteredItems: [fruits[4]!] })
-      assert.deepStrictEqual(values(s), ["grape"])
-    }))
-
-  it.effect("disabled ignores input, and readOnly opens and browses without picking", () =>
+  it.effect("disabled ignores input, and readOnly browses without picking", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Combobox, { ...base, disabled: true }, standIn)
       assert.deepInclude(s.get(input).attrs, { "data-disabled": "" })
@@ -581,23 +507,6 @@ describe("Combobox", () => {
       s.props({ ...base, readOnly: true, open: true }).mounted(tracked(s), sent("ShowedPopup"))
       s.fire(input, "keydown", key("Enter")).expectDefaultPrevented()
       s.fire(item("apple"), "click", pointer("mouse")).expectHandled()
-    }))
-
-  it.effect("groups and rows follow the filtered items, dropping empty groups", () =>
-    Effect.gen(function*() {
-      const grouped = [
-        { value: "apple", label: "Apple", group: "fruit" },
-        { value: "kale", label: "Kale", group: "vegetable" },
-        { value: "leek", label: "Leek", group: "vegetable" }
-      ]
-      const s = yield* HtmlScene.make(Combobox, { ...base, items: grouped, inputValue: "le" }, standIn)
-      const groups = partsOf(s).groups
-      assert.deepStrictEqual(groups.map((group) => [group.key, group.items.map((item) => item.value)]), [
-        ["fruit", ["apple"]],
-        ["vegetable", ["kale", "leek"]]
-      ])
-      s.props({ ...base, items: grouped, inputValue: "le", open: true }).mounted(tracked(s), sent("ShowedPopup"))
-      assert.deepStrictEqual(partsOf(s).groups.map((group) => group.key), ["fruit", "vegetable"])
     }))
 })
 

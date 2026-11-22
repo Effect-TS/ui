@@ -200,7 +200,7 @@ const type = (value: string) => {
 }
 
 describe("Combobox in a document", { concurrent: false }, () => {
-  it.effect("typing filters the list below the input, and Enter picks, fills the input and closes", () =>
+  it.effect("typing filters below the input, and Enter or clicking an item picks while keeping focus in the input", () =>
     Effect.gen(function*() {
       const { log } = yield* mountPage()
       type("ap")
@@ -221,11 +221,25 @@ describe("Combobox in a document", { concurrent: false }, () => {
       assert.strictEqual(input().value, "Apricot")
       assert.strictEqual(document.activeElement, input())
       assert.deepStrictEqual(drawn(), ["Apple", "Apricot", "Banana", "Grape"])
+      mousedown(byId("trigger"))
+      yield* tick
+      assert.isTrue(shown())
+      assert.strictEqual(document.activeElement, input())
+      assert.isTrue(mousedown(item("banana")).defaultPrevented)
+      item("banana").dispatchEvent(new PointerEvent("click", { bubbles: true, detail: 1, pointerType: "mouse" }))
+      yield* tick
+      assert.isFalse(shown())
+      assert.strictEqual(input().value, "Banana")
+      assert.strictEqual(document.activeElement, input())
       assert.deepStrictEqual(log(), [
         "EditedInput \"ap\" input-change",
         "Opened input-change",
         "Picked apricot",
         "EditedInput \"Apricot\" item-press",
+        "Dismissed item-press",
+        "Opened trigger-press",
+        "Picked banana",
+        "EditedInput \"Banana\" item-press",
         "Dismissed item-press"
       ])
     }).pipe(Effect.scoped))
@@ -257,27 +271,6 @@ describe("Combobox in a document", { concurrent: false }, () => {
         "Dismissed outside-press",
         "Opened input-press",
         "Dismissed focus-out"
-      ])
-    }).pipe(Effect.scoped))
-
-  it.effect("a press on an item picks it without taking focus from the input", () =>
-    Effect.gen(function*() {
-      const { log } = yield* mountPage()
-      mousedown(byId("trigger"))
-      yield* tick
-      assert.isTrue(shown())
-      assert.strictEqual(document.activeElement, input())
-      const down = mousedown(item("banana"))
-      assert.isTrue(down.defaultPrevented)
-      item("banana").dispatchEvent(new PointerEvent("click", { bubbles: true, detail: 1, pointerType: "mouse" }))
-      yield* tick
-      assert.isFalse(shown())
-      assert.strictEqual(input().value, "Banana")
-      assert.deepStrictEqual(log(), [
-        "Opened trigger-press",
-        "Picked banana",
-        "EditedInput \"Banana\" item-press",
-        "Dismissed item-press"
       ])
     }).pipe(Effect.scoped))
 

@@ -1514,7 +1514,7 @@ export const Combobox = Component.define({
     const items = shownOf(model, props)
     const listEmpty = items.length === 0
     const highlighted = navigable || model.mounted ? highlightedOf(model, items) : null
-    const known = new Map([...props.items, ...(props.filteredItems ?? [])].map((item) => [item.value, item] as const))
+    const known = new Map([...(props.filteredItems ?? []), ...props.items].map((item) => [item.value, item] as const))
     const owner = p.id("combobox")
     const inputId = inPopup ? p.id("input") : props.id ?? p.id("input")
     const triggerId = inPopup ? props.id ?? p.id("trigger") : p.id("trigger")

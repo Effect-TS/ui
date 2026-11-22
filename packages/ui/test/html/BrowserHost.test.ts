@@ -1122,7 +1122,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           expect(selections).toEqual([[1, 4], [null, null], [null, null]])
         }).pipe(Effect.scoped))
 
-      it.effect("a composing field's value isn't written until compositionend, then the Model's is put back", () =>
+      it.effect("a composing field's value isn't written until compositionend, including inside shadow DOM", () =>
         Effect.gen(function*() {
           const Typed = UiSchema.TaggedEnum({ Typed: { value: Schema.String } })
           const Upper = Component.define({
@@ -1140,22 +1140,28 @@ describe("BrowserHost", { concurrent: false }, () => {
               )
           })
           const app = yield* container
+          const shadowHost = yield* container
+          const shadow = shadowHost.attachShadow({ mode: "open" })
           yield* BrowserHost.mountEffect(Upper, {}, app)
+          yield* BrowserHost.mountEffect(Upper, {}, shadow as unknown as Element)
           const compose = (field: HTMLInputElement, value: string) => {
             field.value = value
-            field.dispatchEvent(new InputEvent("input", { bubbles: true, isComposing: true }))
+            field.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true, isComposing: true }))
           }
           const upper = HtmlLocator.getByRole(app, "textbox", { name: "Upper" }) as HTMLInputElement
           const fixed = HtmlLocator.getByRole(app, "textbox", { name: "Fixed" }) as HTMLInputElement
+          const shadowUpper = shadow.querySelector<HTMLInputElement>("[aria-label=Upper]")!
           HtmlLocator.type(fixed, "x")
           fixed.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }))
           compose(upper, "ka")
+          compose(shadowUpper, "ka")
           yield* tick
-          expect([upper.value, fixed.value]).toEqual(["ka", "x"])
+          expect([upper.value, fixed.value, shadowUpper.value]).toEqual(["ka", "x", "ka"])
           upper.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true }))
           fixed.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true }))
+          shadowUpper.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true, composed: true }))
           yield* tick
-          expect([upper.value, fixed.value]).toEqual(["KA", "fixed"])
+          expect([upper.value, fixed.value, shadowUpper.value]).toEqual(["KA", "fixed", "KA"])
         }).pipe(Effect.scoped))
     })
 

@@ -354,13 +354,13 @@ const isDisabled = (target: EventTarget | null): boolean =>
   typeof (target as globalThis.Element | null)?.matches === "function" &&
   (target as globalThis.Element).matches(":disabled")
 
+const fieldOf = (target: EventTarget | null, element: globalThis.Element) =>
+  (target !== null && "value" in (target as object) ? target : element) as HTMLInputElement
+
 /**
  * Builds the payload a handler gets: plain data, read from the event and the
  * elements involved.
  */
-const fieldOf = (target: EventTarget | null, element: globalThis.Element) =>
-  (target !== null && "value" in (target as object) ? target : element) as HTMLInputElement
-
 const payloadOf = (
   name: string,
   event: Event,
@@ -950,14 +950,6 @@ export const makeHost = (
 
   const listener = (name: string) => (event: Event) => {
     if (dropTargetEvents.has(name)) return onDropTarget(name, event as DragEvent)
-    if (
-      (name === "compositionstart" || name === "compositionend" || name === "input") &&
-      event.target !== null && "nodeType" in event.target
-    ) {
-      const field = event.target as globalThis.Node
-      if (name === "compositionstart" || (event as Partial<InputEvent>).isComposing === true) composing.add(field)
-      else composing.delete(field)
-    }
     if ((name === "cancel" || name === "close") && event.target !== null && isDialog(event.target as globalThis.Node)) {
       const dialog = event.target as HTMLDialogElement
       if (name === "cancel") {
@@ -974,6 +966,14 @@ export const makeHost = (
       }
     }
     const path = event.composedPath() as Array<globalThis.Node>
+    const target = path[0] ?? event.target
+    if (name === "compositionstart" || name === "compositionend" || name === "input") {
+      if (target !== null && target !== undefined && "nodeType" in target) {
+        if (name === "compositionstart" || (event as Partial<InputEvent>).isComposing === true) {
+          composing.add(target as globalThis.Node)
+        } else composing.delete(target as globalThis.Node)
+      }
+    }
     const entries = eventsAlong(path)
     if (name === "dragstart") startDrag(event as DragEvent, entries)
     // The app owns its forms' submissions, handled or not. Other forms in the document are left alone.
@@ -1008,7 +1008,7 @@ export const makeHost = (
       }
       if (own) break
     }
-    if (changeEvents.includes(name)) restoreSoon(event.target)
+    if (changeEvents.includes(name)) restoreSoon(target)
     if (name === "dragend") endTargets()
   }
 
