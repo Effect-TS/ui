@@ -2124,6 +2124,98 @@ describe("BrowserHost", { concurrent: false }, () => {
           expect(root.model()).toEqual(["mounted input", "found true", "found false", "measured true"])
         }).pipe(Effect.scoped)
     )
+
+    const Code = Html.ref("Code", "input")
+    const Loose = Html.ref("Loose", "input")
+    const EntryMessage = UiSchema.TaggedEnum({
+      Typed: { value: Schema.String },
+      Composed: { value: Schema.String },
+      Pasted: { text: Schema.String },
+      Select: {},
+      Selected: { found: Schema.Boolean },
+      Submit: { loose: Schema.Boolean },
+      Submitted: { submitted: Schema.Boolean },
+      Sent: { code: Schema.String }
+    })
+    const Entry = Component.define({
+      name: "Entry",
+      model: Schema.Array(Schema.String),
+      message: EntryMessage,
+      elements: Html
+    }).make({
+      init: (): ReadonlyArray<string> => [],
+      update: (log, message, $) =>
+        EntryMessage.match(message, {
+          Typed: ({ value }) => [...log, `typed ${value}`],
+          Composed: ({ value }) => [...log, `composed ${value}`],
+          Pasted: ({ text }) => [...log, `pasted ${text}`],
+          Select: () => $.run(Html.select(Code, ({ found }) => EntryMessage.Selected({ found }))),
+          Selected: ({ found }) => [...log, `selected ${found}`],
+          Submit: ({ loose }) =>
+            $.run(Html.requestSubmit(loose ? Loose : Code, ({ submitted }) => EntryMessage.Submitted({ submitted }))),
+          Submitted: ({ submitted }) => [...log, `submitted ${submitted}`],
+          Sent: ({ code }) => [...log, `sent ${code}`]
+        }),
+      view: (_, h) =>
+        h.div(
+          h.form.onSubmit(({ fields }) => EntryMessage.Sent({ code: fields.code ?? "" })).children(
+            // The value never changes: update keeps no text.
+            h.input.attr("aria-label", "Code").attr("name", "code").ref(Code).value("7")
+              .onInput(({ composing, value }) => composing ? undefined : EntryMessage.Typed({ value }))
+              .onCompositionEnd(({ value }) => EntryMessage.Composed({ value }))
+              .onPaste(({ text }) => EntryMessage.Pasted({ text }), { preventDefault: true })
+          ),
+          h.input.attr("aria-label", "Loose").ref(Loose)
+        )
+    })
+
+    it.effect("a field reports pasted and composed text, is selected, and submits its form", () =>
+      Effect.gen(function*() {
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Entry, {}, app)
+        yield* tick
+        const code = HtmlLocator.getByRole(app, "textbox", { name: "Code" }) as HTMLInputElement
+        const fire = (event: Event, value?: string) => {
+          if (value !== undefined) code.value = value
+          code.dispatchEvent(event)
+          return event
+        }
+        const pasted = fire(Object.assign(new Event("paste", { bubbles: true, cancelable: true }), {
+          clipboardData: { getData: (type: string) => (type === "text/plain" ? "12 34" : "") }
+        }))
+        expect(pasted.defaultPrevented).toBe(true)
+        yield* tick
+
+        // The text an input method is composing stays in the field until the composition ends.
+        fire(new InputEvent("input", { bubbles: true, isComposing: true }), "k")
+        yield* tick
+        expect(code.value).toBe("k")
+        fire(new CompositionEvent("compositionend", { bubbles: true, data: "か" }), "か")
+        yield* tick
+        expect(code.value).toBe("7")
+        fire(new InputEvent("input", { bubbles: true }), "8")
+        yield* tick
+        expect(code.value).toBe("7")
+
+        // Selecting writes the value the view gives first, so the selection isn't lost to the restore.
+        code.value = "rejected"
+        root.send(EntryMessage.Select())
+        yield* tick
+        expect([code.value, code.selectionStart, code.selectionEnd]).toEqual(["7", 0, 1])
+
+        root.send(EntryMessage.Submit({ loose: false }))
+        root.send(EntryMessage.Submit({ loose: true }))
+        yield* tick
+        expect(root.model()).toEqual([
+          "pasted 12 34",
+          "composed か",
+          "typed 8",
+          "selected true",
+          "sent 7",
+          "submitted true",
+          "submitted false"
+        ])
+      }).pipe(Effect.scoped))
   })
 
   describe("hosts", () => {
