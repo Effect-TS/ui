@@ -169,11 +169,9 @@ const FocusInvalid = Command.make(
   "FocusInvalid",
   { args: {} },
   () =>
-    Renderer.Refs.use((refs) =>
-      Effect.map(refs.lookup(Root), (form) => {
-        Option.map(form, focusInvalid)
-        return Component.noop
-      })
+    Renderer.Refs.use((refs) => refs.lookup(Root)).pipe(
+      Effect.map(Option.map(focusInvalid)),
+      Effect.as(Component.noop)
     )
 )
 
@@ -215,8 +213,8 @@ export const Form = Component.define({
   init: () => ({}),
   update: {
     SubmittedRoot: (_model, { entries, fields }, $) =>
-      $.run(FocusInvalid()).emit(FormEvents.Submitted({ fields, entries })),
-    RejectedSubmit: (_model, _message, $) => $.run(FocusInvalid())
+      $.run(FocusInvalid.make()).emit(FormEvents.Submitted({ fields, entries })),
+    RejectedSubmit: (_model, _message, $) => $.run(FocusInvalid.make())
   },
   parts: (_model, p) => ({
     root: p.part("form", (b) =>

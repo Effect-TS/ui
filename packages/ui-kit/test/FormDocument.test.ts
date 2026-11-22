@@ -45,7 +45,7 @@ const Signup = Component.define({
       const form = SignupValidation.submit(model.form)
       return Option.match(SignupValidation.validate(form).value, {
         onNone: () => ({ ...model, form }),
-        onSome: ({ email }) => $.set({ form, saving: true }).run(Save({ email }))
+        onSome: ({ email }) => $.set({ form, saving: true }).run(Save.make({ email }))
       })
     },
     SucceededSave: (model) => ({ ...model, saving: false }),
@@ -86,59 +86,56 @@ const Signup = Component.define({
   }
 })
 
+const type = (input: HTMLInputElement, value: string) => {
+  input.value = value
+  input.dispatchEvent(new Event("input", { bubbles: true }))
+}
+
+const mountSignup = Effect.gen(function*() {
+  const app = yield* container
+  yield* BrowserHost.mountEffect(Signup, {}, app)
+  yield* tick
+  const submit = app.querySelector<HTMLButtonElement>("button[type=submit]")!
+  return {
+    submit,
+    email: app.querySelector<HTMLInputElement>("input[name=email]")!,
+    name: app.querySelector<HTMLInputElement>("input[name=name]")!,
+    team: app.querySelector<HTMLButtonElement>("[data-plan=team]")!,
+    submitForm: Effect.sync(() => {
+      submit.focus()
+      submit.click()
+    }).pipe(Effect.andThen(tick))
+  }
+})
+
 describe("Form in a document", { concurrent: false }, () => {
   it.effect("a failed submit focuses the first invalid control: a group's tabbable member, then an input with its text selected", () =>
     Effect.gen(function*() {
       yield* focusability
-      const app = yield* container
-      yield* BrowserHost.mountEffect(Signup, {}, app)
-      yield* tick
-      const email = app.querySelector<HTMLInputElement>("input[name=email]")!
-      const submit = app.querySelector<HTMLButtonElement>("button[type=submit]")!
-      const type = (input: HTMLInputElement, value: string) => {
-        input.value = value
-        input.dispatchEvent(new Event("input", { bubbles: true }))
-      }
-      const press = Effect.sync(() => {
-        submit.focus()
-        submit.click()
-      }).pipe(Effect.andThen(tick))
+      const { email, submitForm, team } = yield* mountSignup
 
       type(email, "nope")
-      yield* press
-      assert.strictEqual(document.activeElement, app.querySelector("[data-plan=team]"))
+      yield* submitForm
+      assert.strictEqual(document.activeElement, team)
 
-      app.querySelector<HTMLButtonElement>("[data-plan=team]")!.click()
-      yield* press
+      team.click()
+      yield* submitForm
       assert.strictEqual(document.activeElement, email)
       assert.deepStrictEqual([email.selectionStart, email.selectionEnd], [0, 4])
     }).pipe(Effect.scoped))
 
   it.effect("an error that arrives after the submit focuses its control, and a valid submit leaves focus alone", () =>
     Effect.gen(function*() {
-      const app = yield* container
-      yield* BrowserHost.mountEffect(Signup, {}, app)
-      yield* tick
-      const email = app.querySelector<HTMLInputElement>("input[name=email]")!
-      const name = app.querySelector<HTMLInputElement>("input[name=name]")!
-      const submit = app.querySelector<HTMLButtonElement>("button[type=submit]")!
-      const type = (input: HTMLInputElement, value: string) => {
-        input.value = value
-        input.dispatchEvent(new Event("input", { bubbles: true }))
-      }
-      const press = Effect.sync(() => {
-        submit.focus()
-        submit.click()
-      }).pipe(Effect.andThen(tick))
+      const { email, name, submit, submitForm, team } = yield* mountSignup
 
-      app.querySelector<HTMLButtonElement>("[data-plan=team]")!.click()
+      team.click()
       type(name, "Ada")
       type(email, "taken@example.com")
-      yield* press
+      yield* submitForm
       assert.strictEqual(document.activeElement, email)
 
       type(email, "ada@example.com")
-      yield* press
+      yield* submitForm
       assert.strictEqual(document.activeElement, submit)
     }).pipe(Effect.scoped))
 })
