@@ -585,7 +585,8 @@ export declare namespace Shared {
  * itself yet: an instance reads the nearest instance of its own kind above
  * it, as a nested menu or dialog reads the one it's in. Such an entry is
  * `optional: true`, since the outermost instance has none above it, and the
- * component must share state itself.
+ * component must share state itself. Its `update` sends to that instance
+ * with `$.send("self", message)`.
  *
  * `report` and `onChange` are typed by `define`, which knows the reader's
  * Model and props and the owner's value. Here they're `unknown`.
@@ -850,6 +851,32 @@ export interface Update<
   readonly queries: { readonly [K in keyof L]: QueryResultOf<L[K]> }
   /** Each owner's current value, by the name `shared` lists it under, as `h.shared` reads it. */
   readonly shared: SharedValues<SR>
+  /** Sends `message` to the direct child rendered with `ref`, as `Step`'s `send` does. */
+  send<Rcv>(ref: Ref<Rcv>, message: NoInfer<SendMessage<Rcv>>): Step<Model, Msg, Events, never, L>
+  /** Sends `message` to the nearest instance of `owner` above this one, as `Step`'s `send` does. */
+  send<O extends Headless.Any>(
+    owner: O,
+    message: NoInfer<SendMessage<Shared.Receives<O>>>
+  ): Step<Model, Msg, Events, Shared.Of<O> & SendTarget<O>, L>
+  /**
+   * Sends `message` to the nearest instance of this component above this
+   * one, the instance a `shared` entry with `owner: "self"` reads, as this
+   * `update` applies, before its emits are delivered. `message` is one of
+   * the messages this component `receives`.
+   *
+   * **Details**
+   *
+   * Only a component whose `shared` has an entry for `"self"` can send to
+   * itself: in any other, `message` is `never`. The send adds nothing to
+   * `R`. The outermost instance has none above it, so its send is dropped
+   * and logged as `SendDropped`, as a send to any optional owner is. A step
+   * records the send as one to this component, which `Story` and `Scene`
+   * acknowledge with `sent(Component, message)`.
+   *
+   * Only `$` has it, and not the steps its other methods return, so send
+   * first: `$.send("self", message).set(model)`.
+   */
+  send(owner: "self", message: SendMessage<SelfReceives<SR>>): Step<Model, Msg, Events, never, L>
   /**
    * Runs update functions one after another, each with the message this
    * `update` received.
@@ -948,9 +975,14 @@ const makeStep = (
 
 type AnyUpdate = (model: unknown, msg: unknown, $: Update<any, any, any, any>) => unknown
 
+type AnyUpdate$ = Update<any, any, any, any> & { readonly "~message": unknown; readonly "~self": Any }
+
 const UpdateProto = {
   ...StepProto,
-  combine(this: Update<any, any, any, any> & { readonly "~message": unknown }, ...updates: ReadonlyArray<AnyUpdate>) {
+  send(this: AnyUpdate$, target: Ref.Any | Headless.Any | "self", message: unknown) {
+    return StepProto.send.call(this, target === "self" ? this["~self"] as unknown as Headless.Any : target, message)
+  },
+  combine(this: AnyUpdate$, ...updates: ReadonlyArray<AnyUpdate>) {
     const msg = this["~message"]
     let model = this.model
     const commands: Array<Command.Command<any, any>> = [...this.commands]
@@ -958,7 +990,9 @@ const UpdateProto = {
     const lists = [...this.lists]
     const sends = [...this.sends]
     for (const update of updates) {
-      const next = toNext(update(model, msg, makeUpdate(model, this.props, this.queries, this.shared, msg)))
+      const next = toNext(
+        update(model, msg, makeUpdate(model, this.props, this.queries, this.shared, msg, this["~self"]))
+      )
       model = next.model
       commands.push(...next.commands)
       emitted.push(...next.events)
@@ -975,7 +1009,8 @@ const makeUpdate = (
   props: unknown,
   queries: unknown,
   shared: unknown,
-  message: unknown
+  message: unknown,
+  self: Any
 ): Update<any, any, any, any> =>
   Object.assign(Object.create(UpdateProto), {
     model,
@@ -986,7 +1021,8 @@ const makeUpdate = (
     props,
     queries,
     shared,
-    "~message": message
+    "~message": message,
+    "~self": self
   })
 
 const initSet = (model: unknown) => makeStep(model, [], [], [], []) as Step<any, any, any, never>
@@ -2243,6 +2279,12 @@ type ReadsSelf<SR> = {
   readonly [K in keyof SR]: SR[K] extends { readonly owner: infer O } ? "self" extends O ? true : never : never
 }[keyof SR]
 
+type SelfReceives<SR> = {
+  readonly [K in keyof SR]: SR[K] extends { readonly owner: infer O } ?
+    "self" extends O ? Shared.Receives<Exclude<O, "self">> : never
+    : never
+}[keyof SR]
+
 // A component that reads its own kind must be an owner itself.
 type SelfShares<SR, SV> = [ReadsSelf<SR>] extends [never] ? unknown
   : [SV] extends [never] ? { readonly "A component that reads its own kind must share state: add shares": never }
@@ -3125,7 +3167,7 @@ export const define = <
     update: ((...args: ReadonlyArray<any>) => {
       const update: AnyUpdate = args[args.length - 1]
       return (model: unknown, msg: unknown, $: Update<any, any, any, any>) =>
-        update(model, msg, makeUpdate(model, $.props, $.queries, $.shared, msg))
+        update(model, msg, makeUpdate(model, $.props, $.queries, $.shared, msg, ($ as AnyUpdate$)["~self"]))
     }) as any,
     view: (view) => view,
     fragment: (fragment) => fragment,
@@ -3209,7 +3251,13 @@ const finish = (
     receives: definition.receives,
     init: (props: unknown) => toNext(options.init(makeInit(props))),
     update: (model: unknown, msg: unknown, props: unknown, results?: Results, shared?: SharedRecord) =>
-      toNext(updateFn(model, msg, makeUpdate(model, props, open(model, props, results), shared ?? unsupplied, msg))),
+      toNext(
+        updateFn(
+          model,
+          msg,
+          makeUpdate(model, props, open(model, props, results), shared ?? unsupplied, msg, component)
+        )
+      ),
     view: view === undefined
       ? undefined
       : View.readsPathLazily((

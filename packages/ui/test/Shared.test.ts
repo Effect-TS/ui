@@ -1,4 +1,5 @@
 import { Component, MessageLog, UiSchema } from "@effect/ui"
+import { Html } from "@effect/ui/html"
 import * as services from "@effect/ui/internal/services"
 import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -739,6 +740,71 @@ describe("a component that reads its own kind", () => {
       scene.expect(Locator.text("outermost")).toExist()
       scene.shared(Nest, { open: true }).expect(Locator.text("nested")).toExist()
     }).pipe(Effect.scoped))
+
+  const MenuMessage = UiSchema.TaggedEnum({ Pick: {}, Picked: {} })
+  const Menu = Component.define({
+    name: "Menu",
+    scoped: false,
+    model: Schema.Number,
+    message: MenuMessage,
+    receives: ["Picked"],
+    elements: Html,
+    shares: (picked) => picked,
+    shared: { parent: { owner: "self", optional: true } }
+  }).make({
+    init: () => 0,
+    update: (picked, message, $) =>
+      MenuMessage.match(message, {
+        Pick: () => $.send("self", MenuMessage.Picked()),
+        Picked: () => $.send("self", MenuMessage.Picked()).set(picked + 1)
+      }),
+    parts: (picked, p) => ({ picked, item: p.part("button", (b) => b.onClick(MenuMessage.Pick())) })
+  })
+  const Menus = Component.define({
+    name: "Menus",
+    scoped: false,
+    model: Schema.Null,
+    message: Schema.Never,
+    elements: Html
+  }).make({
+    init: () => null,
+    update: (model) => model,
+    view: (_, h) =>
+      Menu(h, {
+        key: "outer",
+        view: (outer) =>
+          h.div(
+            outer.item(h.button.children(`outer ${outer.picked}`)),
+            Menu(h, { key: "inner", view: (inner) => inner.item(h.button.children(`inner ${inner.picked}`)) })
+          )
+      })
+  })
+
+  it.effect("sends to the nearest instance of its own kind above it, and the outermost one's send is dropped", () =>
+    provideHost(Effect.gen(function*() {
+      const root = yield* TestHost.mount(Menus, {})
+      yield* TestHost.settle
+      Locator.fire(root.get(Locator.text("inner 0", { exact: true })), "click")
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "outer 1inner 0")
+      const dropped = root.log().filter((entry): entry is MessageLog.SendDropped => entry._tag === "SendDropped")
+      assert.deepStrictEqual(dropped.map((entry) => [entry.ref, entry.reason]), [["Menu", "absent"]])
+      const [sent] = updatesAt(root.log(), "/Menus/Menu[outer]/Menu[inner]")
+      assert.strictEqual(sent.sends[0].owner, Menu)
+      const [received] = updatesAt(root.log(), "/Menus/Menu[outer]")
+      assert.deepStrictEqual(received.source, { _tag: "Send", path: "/Menus/Menu[outer]/Menu[inner]", seq: sent.seq })
+    })))
+
+  it("in a scene, a send to its own kind goes to the one given, and is dropped without one", () => {
+    const scene = () =>
+      Scene.start(Menu, {}, { elements: Html, view: (menu, h) => menu.item(h.button.children("pick")) })
+    const alone = scene()
+    alone.click("pick")
+    assert.deepStrictEqual(alone.current.sent, [])
+    const nested = scene().shared(Menu, 0)
+    nested.click("pick")
+    assert.lengthOf(nested.sent(Menu, MenuMessage.Picked()).current.sent, 0)
+  })
 
   it("rejects a read of its own kind that isn't optional, or in a component that shares nothing", () => {
     const self = { owner: "self", optional: true } as const

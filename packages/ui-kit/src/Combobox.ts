@@ -256,6 +256,7 @@ import {
 } from "./internal/attributes.ts"
 import { backdropBox, blockers, cutPath } from "./internal/blocker.ts"
 import { byAttribute, focusFinal } from "./internal/dom.ts"
+import { type TextFilter, textFilter } from "./internal/filter.ts"
 import { autofillMatch, filledOf, formInputs, toggled, valuesOf } from "./internal/formInputs.ts"
 import { methodOf } from "./internal/interaction.ts"
 import { available, keyed, type Loop, stepped } from "./internal/list.ts"
@@ -621,13 +622,7 @@ export interface ComboboxGroup {
  * @category models
  * @since 0.1.0
  */
-export interface ComboboxFilter {
-  readonly contains: (text: string, query: string) => boolean
-  readonly startsWith: (text: string, query: string) => boolean
-  readonly endsWith: (text: string, query: string) => boolean
-}
-
-const filters = new Map<string, ComboboxFilter>()
+export interface ComboboxFilter extends TextFilter {}
 
 /**
  * The `ComboboxFilter` for a locale, the runtime's when left out. It's
@@ -646,26 +641,7 @@ const filters = new Map<string, ComboboxFilter>()
  * @category constructors
  * @since 0.1.0
  */
-export const makeComboboxFilter = (locale?: string | undefined): ComboboxFilter => {
-  const cached = filters.get(locale ?? "")
-  if (cached !== undefined) return cached
-  const collator = new Intl.Collator(locale, { usage: "search", sensitivity: "base", ignorePunctuation: true })
-  const same = (a: string, b: string) => collator.compare(a, b) === 0
-  const filter: ComboboxFilter = {
-    contains: (text, query) => {
-      if (query === "") return true
-      for (let at = 0; at <= text.length - query.length; at++) {
-        if (same(text.slice(at, at + query.length), query)) return true
-      }
-      return false
-    },
-    startsWith: (text, query) => query === "" || same(text.slice(0, query.length), query),
-    endsWith: (text, query) =>
-      query === "" || (text.length >= query.length && same(text.slice(text.length - query.length), query))
-  }
-  filters.set(locale ?? "", filter)
-  return filter
-}
+export const makeComboboxFilter = (locale?: string | undefined): ComboboxFilter => textFilter(locale)
 
 const Message = UiSchema.TaggedEnum({
   PressedInput: { pointerType: Schema.String },

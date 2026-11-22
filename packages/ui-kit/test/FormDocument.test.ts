@@ -35,6 +35,7 @@ const SignupForm = Form.ref("Signup")
 
 const Signup = Component.define({
   name: "Signup",
+  scoped: false,
   model: Schema.Struct({ form: SignupValidation.State, saving: Schema.Boolean }),
   message: Message,
   elements: Html

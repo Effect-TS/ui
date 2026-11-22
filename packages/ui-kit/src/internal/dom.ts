@@ -47,3 +47,21 @@ export const saved = (element: HTMLElement, names: ReadonlyArray<StyleName>): ()
   const values = names.map((name) => element.style[name])
   return () => names.forEach((name, i) => (element.style[name] = values[i]!))
 }
+
+export const override = (
+  element: HTMLElement,
+  styles: Readonly<Record<string, string>>,
+  priority = ""
+): () => void => {
+  const style = element.style
+  const before = Object.keys(styles).map((name) =>
+    [name, style.getPropertyValue(name), style.getPropertyPriority(name)] as const
+  )
+  for (const [name, value] of Object.entries(styles)) style.setProperty(name, value, priority)
+  return () => {
+    for (const [name, value, priority] of before) {
+      if (value === "") style.removeProperty(name)
+      else style.setProperty(name, value, priority)
+    }
+  }
+}
