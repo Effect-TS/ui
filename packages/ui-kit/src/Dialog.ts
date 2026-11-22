@@ -212,7 +212,7 @@ import * as Stream from "effect/Stream"
 import { type Attributed, flag, idOf, noSelect, withStyle } from "./internal/attributes.ts"
 import { radioGroup } from "./internal/dom.ts"
 import { methodOf, onScrollbar } from "./internal/interaction.ts"
-import { hideOthers, lockScroll } from "./internal/modal.ts"
+import { hideOthers, lockScroll, nextLayerOrder } from "./internal/modal.ts"
 import { isAndroid } from "./internal/platform.ts"
 import { inKept, raiseAbove } from "./internal/topLayer.ts"
 import { frameOf, settling, statusOf, transitionAttrs } from "./internal/transition.ts"
@@ -499,7 +499,6 @@ type Showing = {
   readonly watch: () => CloseWatcher | undefined
 }
 
-let nextOrder = 0
 const showing: Array<Showing> = []
 let watched: { readonly entry: Showing; readonly watcher: CloseWatcher } | undefined
 const rewatch = () => {
@@ -570,7 +569,7 @@ const TrackDialog = Mount.makeStream(
       const Watcher = closeWatcherOf(view)
       const entry: Showing = {
         node,
-        order: ++nextOrder,
+        order: nextLayerOrder(),
         open: () => current.open,
         top: () => current.open && topmost(),
         watch: () => {

@@ -7,9 +7,9 @@
  * importing `@effect/ui/html/register`, or set it on one component with
  * `elements: Html`.
  *
- * Event handlers get plain data, never a DOM event: `input` is `{ value }`,
- * `keydown` is `{ key, shift, ctrl, alt, meta, composing }` and `submit` is
- * `{ fields }`. A handler set with `{ preventDefault: true }` cancels the
+ * Event handlers get plain data, never a DOM event: `input` has the field's
+ * `value`, `keydown` the `key` and the modifier keys, and `submit` the
+ * form's `fields`. A handler set with `{ preventDefault: true }` cancels the
  * browser's default when it produces a message and leaves it alone when it
  * returns `undefined`, so it decides per event. A form's `submit` is always
  * cancelled, with or without a handler. Nothing stops an event's propagation:
@@ -24,7 +24,9 @@
  *
  * `value`, `checked`, `selected` and `open` are controlled: the host puts the
  * Model's value back after every patch and after every event that could have
- * changed it, so the element always shows what the Model says.
+ * changed it, so the element always shows what the Model says. While an input
+ * method composes text in a field, its `value` is left alone until
+ * `compositionend`.
  *
  * A `dialog` is closed, open, or open as a modal: `.open(b)` and `.modal(b)`
  * set the same state, and the last call wins. A modal's close requests, such
@@ -232,6 +234,14 @@ export interface PointerPayload {
  * method composes text, including for the key that ends the composition, so
  * a handler for Enter can leave it to the input method.
  *
+ * **Details**
+ *
+ * `selectionStart` and `selectionEnd` are the caret or selection of the
+ * event's target, as the key finds it, when the target is a `textarea` or
+ * an `input` whose type has a selection, such as `text` or `search`. They
+ * are `null` for any other target, including an `email` or `number`
+ * input, which browsers don't report a selection for.
+ *
  * @stability experimental
  * @category events
  * @since 0.1.0
@@ -243,11 +253,22 @@ export interface KeyPayload {
   readonly alt: boolean
   readonly meta: boolean
   readonly composing: boolean
+  readonly selectionStart: number | null
+  readonly selectionEnd: number | null
 }
 
 /**
  * The payload of `input` and `change` on a `textarea` or `select`: the
- * value the user left in the element.
+ * value the user left in the element, and how the edit was made.
+ *
+ * **Details**
+ *
+ * `composing` is true for an `input` sent while an input method composes
+ * text, which `compositionend` commits. `inputType` is the browser's name
+ * for the edit, such as `"insertText"`, `"deleteContentBackward"` or
+ * `"insertReplacementText"` for autofill and spelling corrections. It is
+ * `""` for a `change`, and for an `input` the browser names no edit for,
+ * such as choosing an option.
  *
  * @stability experimental
  * @category events
@@ -255,19 +276,33 @@ export interface KeyPayload {
  */
 export interface ValuePayload {
   readonly value: string
+  readonly composing: boolean
+  readonly inputType: string
 }
 
 /**
- * The payload of `input` and `change` on an `input`: its value, and whether
- * it's checked (a checkbox or radio button).
+ * The payload of `input` and `change` on an `input`: its value, whether
+ * it's checked (a checkbox or radio button), and how the edit was made, as
+ * `ValuePayload` describes.
  *
  * @stability experimental
  * @category events
  * @since 0.1.0
  */
-export interface InputPayload {
-  readonly value: string
+export interface InputPayload extends ValuePayload {
   readonly checked: boolean
+}
+
+/**
+ * The payload of `compositionend` on an `input` or `textarea`: the value
+ * the field holds once an input method has committed the composed text.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface CompositionPayload {
+  readonly value: string
 }
 
 /**
@@ -555,6 +590,7 @@ export type EventsOf<K extends string> =
   & Events
   & (K extends "input" ? { readonly input: InputPayload; readonly change: InputPayload } : {})
   & (K extends "textarea" | "select" ? { readonly input: ValuePayload; readonly change: ValuePayload } : {})
+  & (K extends "input" | "textarea" ? { readonly compositionend: CompositionPayload } : {})
   & (K extends "form" ? { readonly submit: SubmitPayload; readonly reset: {} } : {})
   & (K extends "details" ? { readonly toggle: TogglePayload } : {})
   & (K extends "dialog" ? {
@@ -1315,6 +1351,20 @@ export class VoidElement<
     handler: View.Handler<Msg, E2["change"]>
   ): this {
     return this.on("change", handler) as any
+  }
+  /**
+   * Sugar for `on("compositionend", handler)`, on an `input` or
+   * `textarea`: an input method committed the text it composed. The
+   * `input` events sent while it composed have `composing` set, so a
+   * handler can wait for this one to act on the text.
+   *
+   * @since 0.1.0
+   */
+  onCompositionEnd<E2 extends E & { readonly compositionend: unknown }>(
+    this: VoidElement<Msg, R, E2, Node>,
+    handler: View.Handler<Msg, E2["compositionend"]>
+  ): this {
+    return this.on("compositionend", handler) as any
   }
   /**
    * Sugar for `on("submit", handler)`, on a `form`. The browser host always

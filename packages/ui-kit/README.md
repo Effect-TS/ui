@@ -25,6 +25,7 @@ A component that keeps no state, such as `Switch`, is a plain view function inst
 - [Avatar](src/Avatar.ts): an image with a fallback.
 - [Button](src/Button.ts): a native button that can stay focusable while disabled.
 - [Checkbox](src/Checkbox.ts): a controlled checkbox with an indicator.
+- [Combobox](src/Combobox.ts): an input that filters a list of options as the user types, whose open state, value and text live in your Model, with single or multiple selection, chips, an input inside the popup, grids, inline lists and inputs for a form.
 - [Dialog](src/Dialog.ts): a popup in the top layer whose open state lives in your Model, as a modal, a focus trap or a non-modal panel, with `DialogTrigger` to open it from another component.
 - [Drawer](src/Drawer.ts): a `Dialog` that slides in from an edge of the screen. A swipe toward that edge dismisses it once it travels far enough or is released fast enough. It has snap points, drawers nested in one another, and swipe areas that open it.
 - [DrawerProvider](src/Drawer.ts): scales the page behind the drawers inside it while one is open, as a native sheet does.

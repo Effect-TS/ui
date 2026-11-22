@@ -24,6 +24,20 @@ export const onRange = (event: Event): boolean =>
 export const byAttribute = (document: Document, name: string, value: string): HTMLElement | null =>
   document.querySelector<HTMLElement>("[" + name + "=\"" + CSS.escape(value) + "\"]")
 
+export const focusFinal = (
+  document: Document,
+  popupId: string,
+  fallback: HTMLElement | null,
+  lost: boolean,
+  keyboard: boolean
+): void => {
+  const marked = byAttribute(document, "data-final-focus", popupId)
+  const back = marked ?? fallback
+  if (back !== null && (marked !== null || lost)) {
+    back.focus({ preventScroll: true, focusVisible: keyboard } as FocusOptions)
+  }
+}
+
 type StyleName = Exclude<
   { [K in keyof CSSStyleDeclaration]: CSSStyleDeclaration[K] extends string ? K : never }[keyof CSSStyleDeclaration],
   number

@@ -197,8 +197,26 @@ describe("Html", () => {
         expect(h.button.onClick).type.toBeCallableWith(({ shift }: Html.PointerPayload) =>
           shift ? undefined : Msg.Mounted()
         )
+        expect(h.input.onCompositionEnd).type.toBeCallableWith(
+          ({ value }: Html.CompositionPayload) => Msg.Typed({ value })
+        )
+        expect(h.textarea.on).type.toBeCallableWith(
+          "compositionend",
+          ({ value }: Html.CompositionPayload) => Msg.Typed({ value })
+        )
+        expect(h.input.onInput).type.toBeCallableWith(
+          ({ composing, inputType, value }: Html.InputPayload) =>
+            composing || inputType === "insertReplacementText" ? undefined : Msg.Typed({ value })
+        )
+        expect(h.input.onKeyDown).type.toBeCallableWith(
+          ({ selectionEnd, selectionStart }: Html.KeyPayload) =>
+            selectionStart === selectionEnd ? undefined : Msg.Mounted()
+        )
+        expect<Html.KeyPayload["selectionStart"]>().type.toBe<number | null>()
         expect(h.div.on).type.not.toBeCallableWith("input", Msg.Mounted())
         expect(h.div.on).type.not.toBeCallableWith("submit", Msg.Mounted())
+        expect(h.select.on).type.not.toBeCallableWith("compositionend", Msg.Mounted())
+        expect(h.div.on).type.not.toBeCallableWith("compositionend", Msg.Mounted())
         expect(h.button.onClick).type.not.toBeCallableWith("not a message")
         return h.div()
       }
