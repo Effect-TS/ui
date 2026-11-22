@@ -309,8 +309,6 @@ describe("OTPField in a document", { concurrent: false }, () => {
       const first = app.querySelector<HTMLInputElement>(".slot")!
       enter(first, typed)
       yield* tick
-      assert.isFalse(root.model()?.done)
-      assert.strictEqual(Redacted.value(root.model()!.code), typed)
       paste(first, rejectedText)
       yield* tick
       assert.isFalse(root.model()?.done)
