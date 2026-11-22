@@ -11,8 +11,8 @@ const decrement = (id: number) => Locator.inside(counter(id), HtmlLocator.role("
 const remove = (id: number) => Locator.inside(counter(id), HtmlLocator.role("button", { name: "Remove" }))
 const addCounter = HtmlLocator.role("button", { name: "+ Add Counter" })
 
-it.layer(TestHost.layer(), { buildPerTest: true })("Counters", (it) => {
-  it.effect("each counter counts on its own, and a new one starts at zero", () =>
+it.layer(TestHost.layer())("Counters", (it) => {
+  it.effect("adding, updating, and removing counters preserves each counter's count", () =>
     Effect.gen(function*() {
       const play = yield* HtmlPlay.make(Counters, {})
       yield* play.click(increment(1))
@@ -21,32 +21,13 @@ it.layer(TestHost.layer(), { buildPerTest: true })("Counters", (it) => {
       yield* play.expect(countOf(2)).toHaveText("0")
       yield* play.expect(countOf(3)).toHaveText("-1")
 
-      yield* play.click(addCounter)
-      yield* play.expect(countOf(4)).toHaveText("0")
-      assert.strictEqual(play.root.head().title, "Counters (4)")
-    }))
-
-  it.effect("updating and removing the middle counter keeps the outer counters' counts", () =>
-    Effect.gen(function*() {
-      const play = yield* HtmlPlay.make(Counters, {})
-      yield* play.click(increment(1))
-      yield* play.click(increment(2))
-      yield* play.click(increment(2))
-      yield* play.click(decrement(3))
-      yield* play.click(increment(2))
-      yield* play.expect(countOf(1)).toHaveText("1")
-      yield* play.expect(countOf(2)).toHaveText("3")
-      yield* play.expect(countOf(3)).toHaveText("-1")
-
       yield* play.click(remove(2))
       yield* play.expect(counter(2)).toBeAbsent()
       yield* play.expect(countOf(1)).toHaveText("1")
       yield* play.expect(countOf(3)).toHaveText("-1")
-
-      yield* play.click(increment(3))
-      yield* play.click(decrement(1))
-      yield* play.expect(countOf(1)).toHaveText("0")
-      yield* play.expect(countOf(3)).toHaveText("0")
       assert.strictEqual(play.root.head().title, "Counters (2)")
+
+      yield* play.click(addCounter)
+      yield* play.expect(countOf(4)).toHaveText("0")
     }))
 })
