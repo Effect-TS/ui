@@ -1,6 +1,7 @@
 export const isHTMLElement = (node: unknown): node is HTMLElement => {
-  const view = (node as Node | null)?.ownerDocument?.defaultView
-  return view != null && node instanceof view.HTMLElement
+  if (node == null || typeof node !== "object") return false
+  const ctor = (node as Node).ownerDocument?.defaultView?.HTMLElement ?? globalThis.HTMLElement
+  return ctor !== undefined && node instanceof ctor
 }
 
 export const focusVisible = (element: Element): boolean => {

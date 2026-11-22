@@ -292,6 +292,14 @@ describe("Menu in a document", { concurrent: false }, () => {
       ])
       assert.isTrue(shown("positioner"))
       assert.isNull(popupOf("positioner").closest("[inert]"))
+      item("copy").focus()
+      keydown(item("copy"), "Enter")
+      yield* tick
+      assert.isTrue(shown("positioner"))
+      assert.deepStrictEqual(log().slice(-2), [
+        "root Picked copy",
+        "root RequestedClose item-press"
+      ])
     }))
 
   it.effect("Escape on the page closes a menu that hovering opened, unless something already handled it", () =>

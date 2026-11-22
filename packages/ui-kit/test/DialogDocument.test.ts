@@ -249,6 +249,27 @@ const elsewhere = Effect.acquireRelease(
   (element) => Effect.sync(() => element.remove())
 )
 
+const inIframe = Effect.acquireRelease(
+  Effect.sync(() => {
+    const iframe = document.createElement("iframe")
+    iframe.srcdoc = "<!doctype html><html><body></body></html>"
+    document.body.appendChild(iframe)
+    const doc = iframe.contentDocument!
+    const view = iframe.contentWindow!
+    const RealHTMLElement = globalThis.HTMLElement
+    // happy-dom shares HTMLElement across frames; give the parent realm its own constructor.
+    class ParentHTMLElement extends RealHTMLElement {}
+    Object.defineProperty(view, "HTMLElement", { value: RealHTMLElement, configurable: true })
+    Object.defineProperty(globalThis, "HTMLElement", { value: ParentHTMLElement, configurable: true })
+    return { app: doc.body.appendChild(doc.createElement("div")), iframe, RealHTMLElement }
+  }),
+  ({ RealHTMLElement, iframe }) =>
+    Effect.sync(() => {
+      Object.defineProperty(globalThis, "HTMLElement", { value: RealHTMLElement, configurable: true })
+      iframe.remove()
+    })
+)
+
 const closeWatchers = (platform: { readonly android: boolean; readonly closeWatcher: boolean }) =>
   Effect.acquireRelease(
     Effect.sync(() => {
@@ -961,10 +982,10 @@ describe("Dialog in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(dismissals(second.log()), ["RequestedClose a escape-key"])
     }))
 
-  it.effect("focus goes back to what had it before the open, in the dialog's own document", () =>
+  it.effect("focus goes back to what had it before the open, and stays there without initialFocus, in an iframe", () =>
     Effect.gen(function*() {
       yield* popovers
-      const app = yield* elsewhere
+      const { app } = yield* inIframe
       const other = app.ownerDocument
       yield* mountPage({ detached: true, a: false }, app)
       other.getElementById("page")!.focus()
@@ -976,5 +997,12 @@ describe("Dialog in a document", { concurrent: false }, () => {
       yield* tick
       yield* tick
       assert.strictEqual(other.activeElement?.id, "page")
+
+      const app2 = other.body.appendChild(other.createElement("div"))
+      yield* mountPage({ detached: true, a: false, initialFocus: false }, app2)
+      app2.querySelector<HTMLElement>("#page")!.focus()
+      app2.querySelector<HTMLElement>("#detached")!.click()
+      yield* tick
+      assert.strictEqual(other.activeElement, app2.querySelector("#page"))
     }))
 })

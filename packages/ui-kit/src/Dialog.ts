@@ -216,7 +216,7 @@ import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { type Attributed, flag, idOf, noSelect, withStyle, withTokens } from "./internal/attributes.ts"
-import { byAttribute, radioGroup } from "./internal/dom.ts"
+import { byAttribute, isHTMLElement, radioGroup } from "./internal/dom.ts"
 import { methodOf, onScrollbar } from "./internal/interaction.ts"
 import { hideOthers, lockScroll, nextLayerOrder } from "./internal/modal.ts"
 import { isAndroid } from "./internal/platform.ts"
@@ -446,16 +446,17 @@ const tabbableSelector = [
 ].join(",")
 
 const closestOf = (target: Node, selector: string): Element | null | undefined =>
-  (target instanceof Element ? target : target.parentElement)?.closest(selector)
+  (target.nodeType === 1 ? target as Element : target.parentElement)?.closest(selector)
 
 const inNested = (dialog: Element, element: Element): boolean => element.parentElement?.closest("dialog") !== dialog
 
 const radioOut = (element: HTMLElement): boolean => {
-  if (!(element instanceof HTMLInputElement) || element.type !== "radio" || element.name === "" || element.checked) {
+  const radio = element as HTMLInputElement
+  if (radio.localName !== "input" || radio.type !== "radio" || radio.name === "" || radio.checked) {
     return false
   }
-  const group = radioGroup(element)
-  return group.some((radio) => radio.checked) || group[0] !== element
+  const group = radioGroup(radio)
+  return group.some((other) => other.checked) || group[0] !== radio
 }
 
 const tabbables = (dialog: Element, root: Element): Array<HTMLElement> => {
@@ -598,14 +599,14 @@ const TrackDialog = Mount.makeStream(
         closestOf(target, anyTrigger) != null || trigger?.contains(target) === true
       const findTrigger = (): HTMLElement | null =>
         (current.triggerId === null ? null : document.getElementById(current.triggerId)) ??
-          (document.activeElement instanceof HTMLElement && document.activeElement.matches(controls)
+          (isHTMLElement(document.activeElement) && document.activeElement.matches(controls)
             ? document.activeElement
             : document.querySelector<HTMLElement>(controls))
       let trigger = findTrigger()
       const active = document.activeElement
       let focusInside = node.contains(active)
       let lastFocused: HTMLElement | null = focusInside ? active as HTMLElement : null
-      let before: HTMLElement | null = active instanceof HTMLElement && !focusInside ? active : null
+      let before: HTMLElement | null = isHTMLElement(active) && !focusInside ? active : null
       const visited: Array<HTMLElement> = []
       let added = new WeakSet<Node>()
       const record = (records: ReadonlyArray<MutationRecord>) => {
@@ -626,7 +627,7 @@ const TrackDialog = Mount.makeStream(
         if (!current.initialFocus) {
           const focused = document.activeElement
           if (focused === null || !node.contains(focused)) return
-          if (from instanceof HTMLElement && from !== document.body && from.isConnected) handOff(from)
+          if (isHTMLElement(from) && from !== document.body && from.isConnected) handOff(from)
           else (focused as HTMLElement).blur()
           return
         }
@@ -691,8 +692,8 @@ const TrackDialog = Mount.makeStream(
         const root = popup()
         if (root.contains(target) || onTrigger(target)) return false
         if (current.modal === true) {
-          return target instanceof Element && target !== node && target.closest("dialog") === node &&
-            (target.contains(root) || target.getAttribute("role") === "presentation")
+          return target.nodeType === 1 && target !== node && (target as Element).closest("dialog") === node &&
+            ((target as Element).contains(root) || (target as Element).getAttribute("role") === "presentation")
         }
         return node.contains(target) || inKept(target) || !addedSince(target)
       }
@@ -757,7 +758,7 @@ const TrackDialog = Mount.makeStream(
         const target = event.target as Node | null
         focusInside = target !== null && node.contains(target)
         if (focusInside) lastFocused = target as HTMLElement
-        else if (target instanceof HTMLElement && visited.push(target) > 20) visited.shift()
+        else if (isHTMLElement(target) && visited.push(target) > 20) visited.shift()
         if (focusInside || target === null || current.modal !== false || !current.open || !showed) return
         if (!topmost() || inDialogAbove(stack, node, target) || (ignored !== null && target.contains(ignored))) return
         if (current.dismissible && handingOff === 0 && !onTrigger(target)) send(DialogMessage.FocusedOutside())
@@ -844,7 +845,7 @@ const TrackDialog = Mount.makeStream(
           page.takeRecords()
           added = new WeakSet()
           const focused = document.activeElement
-          if (focused instanceof HTMLElement && !node.contains(focused)) before = focused
+          if (isHTMLElement(focused) && !node.contains(focused)) before = focused
           opening(focused)
         }
         transition.follow(previous, next)

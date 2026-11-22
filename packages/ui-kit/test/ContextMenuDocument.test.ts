@@ -200,6 +200,15 @@ describe("ContextMenu in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(log(), ["outer RequestedOpen trigger-press", "outer RequestedClose focus-out"])
       assert.isTrue(shown("outer-positioner"))
       assert.isNull(popupOf("outer").closest("[inert]"))
+      const copy = document.querySelector<HTMLElement>("[data-testid=outer-copy]")!
+      copy.focus()
+      copy.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }))
+      yield* tick
+      assert.isTrue(shown("outer-positioner"))
+      assert.deepStrictEqual(log().slice(-2), [
+        "outer Picked copy",
+        "outer RequestedClose item-press"
+      ])
     }))
 
   it.effect("a context menu inside another's trigger takes the right clicks on its own trigger", () =>
