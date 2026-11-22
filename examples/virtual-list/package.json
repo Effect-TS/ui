@@ -4,7 +4,8 @@
   "type": "module",
   "version": "0.0.0",
   "scripts": {
-    "dev": "vite"
+    "dev": "vite",
+    "check-history": "node check-history.mjs"
   },
   "dependencies": {
     "@effect/ui": "workspace:*",
