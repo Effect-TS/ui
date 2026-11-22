@@ -40,28 +40,6 @@ const itemScene = (props: AccordionItemProps, value: Partial<Shared> = {}) =>
   )
 
 describe("Accordion", () => {
-  it("the root writes its orientation and disabled state over the consumer's", () => {
-    const attrsOf = (props: AccordionProps) =>
-      View.build(
-        Story.parts(Accordion, { model: {}, props }).root(
-          h.div.class("mine").attrs({ "data-orientation": "x", "data-disabled": "x" })
-        ),
-        []
-      ).attrs
-    assert.deepStrictEqual(attrsOf({ value: [] }), { class: "mine", "data-orientation": "vertical" })
-    assert.deepStrictEqual(attrsOf({ value: [], disabled: true, orientation: "horizontal" }), {
-      class: "mine",
-      "data-orientation": "horizontal",
-      "data-disabled": ""
-    })
-    assert.throws(
-      () => Story.parts(Accordion, { model: {}, props: { value: [] } }).root(h.span as any),
-      /a part for <div> was given <span>/
-    )
-  })
-})
-
-describe("AccordionItem", () => {
   it.effect("opens from the accordion's value, names its panel by its trigger, and asks the accordion to toggle", () =>
     Effect.gen(function*() {
       const s = yield* itemScene({ value: "a", index: 2 })
@@ -122,21 +100,53 @@ describe("AccordionItem", () => {
       assert.isUndefined(overridden.query(panel))
     }))
 
-  it.effect("each part rejects another tag, and the header takes any heading", () =>
+  it.effect("the root names the panel by its rendered trigger regardless of build order, and leaves it unlabelled without one", () =>
     Effect.gen(function*() {
       const s = yield* itemScene({ value: "a" }, { value: ["a"] })
       s.parts((item) => {
-        assert.strictEqual(View.build(item.header(h.h2), []).tag, "h2")
-        assert.strictEqual(View.build(item.header(h.h6), []).tag, "h6")
-        assert.throws(() => item.root(h.span as any), /a part for <div> was given <span>/)
-        assert.throws(() => item.header(h.div as any), /a part for <h1>/)
-        assert.throws(() => item.trigger(h.div as any), /a part for <button> was given <div>/)
-        assert.throws(() => item.panel(h.section as any), /a part for <div> was given <section>/)
+        const body = h.section.children(item.panel(h.div.attr("id", "panel-a")))
+        const node = View.build(
+          item.root(h.div).children(
+            item.header(h.h3).children(item.trigger(h.button.attr("id", "trigger-a"))),
+            body
+          ),
+          []
+        )
+        const triggerAttrs = ((node.children[0] as View.Element<never>).children[0] as View.Element<never>).attrs
+        const panelAttrs = ((node.children[1] as View.Element<never>).children[0] as View.Element<never>).attrs
+        assert.strictEqual(panelAttrs["aria-labelledby"], "trigger-a")
+        assert.strictEqual(triggerAttrs["aria-controls"], "panel-a")
+      })
+      s.parts((item) => {
+        assert.isUndefined(View.build(item.panel(h.div)!, []).attrs["aria-labelledby"])
+      })
+      s.parts((item) => {
+        item.trigger(h.button.attr("id", "unused"))
+        const node = View.build(item.root(h.div).children(item.panel(h.div.class("panel"))), [])
+        assert.isUndefined((node.children[0] as View.Element<never>).attrs["aria-labelledby"])
       })
     }))
 
-  it.effect("each part keeps the consumer's attributes and ids, while its own win, present or absent", () =>
+  it.effect("parts keep the consumer's attributes and ids while their own win, and reject other tags", () =>
     Effect.gen(function*() {
+      const accordionAttrs = (props: AccordionProps) =>
+        View.build(
+          Story.parts(Accordion, { model: {}, props }).root(
+            h.div.class("mine").attrs({ "data-orientation": "x", "data-disabled": "x" })
+          ),
+          []
+        ).attrs
+      assert.deepStrictEqual(accordionAttrs({ value: [] }), { class: "mine", "data-orientation": "vertical" })
+      assert.deepStrictEqual(accordionAttrs({ value: [], disabled: true, orientation: "horizontal" }), {
+        class: "mine",
+        "data-orientation": "horizontal",
+        "data-disabled": ""
+      })
+      assert.throws(
+        () => Story.parts(Accordion, { model: {}, props: { value: [] } }).root(h.span as any),
+        /a part for <div> was given <span>/
+      )
+
       const s = yield* itemScene({ value: "a" }, { value: ["a"] })
       s.parts((item) => {
         const stale = {
@@ -185,38 +195,13 @@ describe("AccordionItem", () => {
           panelNode.attrs.style ?? "",
           /^color:red;--accordion-panel-height:1px;--accordion-panel-height:var/
         )
-      })
-    }))
 
-  it.effect("a panel drawn without a trigger isn't labelled", () =>
-    Effect.gen(function*() {
-      const s = yield* itemScene({ value: "a" }, { value: ["a"] })
-      s.parts((item) => {
-        assert.isUndefined(View.build(item.panel(h.div)!, []).attrs["aria-labelledby"])
-      })
-      s.parts((item) => {
-        item.trigger(h.button.attr("id", "unused"))
-        const node = View.build(item.root(h.div).children(item.panel(h.div.class("panel"))), [])
-        assert.isUndefined((node.children[0] as View.Element<never>).attrs["aria-labelledby"])
-      })
-    }))
-
-  it.effect("the root names the panel by its trigger when the panel is built first", () =>
-    Effect.gen(function*() {
-      const s = yield* itemScene({ value: "a" }, { value: ["a"] })
-      s.parts((item) => {
-        const body = h.section.children(item.panel(h.div.attr("id", "panel-a")))
-        const node = View.build(
-          item.root(h.div).children(
-            item.header(h.h3).children(item.trigger(h.button.attr("id", "trigger-a"))),
-            body
-          ),
-          []
-        )
-        const trigger = ((node.children[0] as View.Element<never>).children[0] as View.Element<never>).attrs
-        const panel = ((node.children[1] as View.Element<never>).children[0] as View.Element<never>).attrs
-        assert.strictEqual(panel["aria-labelledby"], "trigger-a")
-        assert.strictEqual(trigger["aria-controls"], "panel-a")
+        assert.strictEqual(View.build(item.header(h.h2), []).tag, "h2")
+        assert.strictEqual(View.build(item.header(h.h6), []).tag, "h6")
+        assert.throws(() => item.root(h.span as any), /a part for <div> was given <span>/)
+        assert.throws(() => item.header(h.div as any), /a part for <h1>/)
+        assert.throws(() => item.trigger(h.div as any), /a part for <button> was given <div>/)
+        assert.throws(() => item.panel(h.section as any), /a part for <div> was given <section>/)
       })
     }))
 })

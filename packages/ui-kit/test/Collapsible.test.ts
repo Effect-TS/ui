@@ -70,40 +70,13 @@ describe("Collapsible", () => {
       assert.deepInclude(untilFound.get(panel).attrs, { hidden: "until-found", "data-starting-style": "" })
     }))
 
-  it("the root points a trigger built before the panel at the consumer's panel id", () => {
-    const collapsible = parts({ open: true })
-    const node = View.build(
-      collapsible.root(h.div).children(
-        h.h3.children(collapsible.trigger(h.button)),
-        collapsible.panel(h.div.attr("id", "shipping"))
-      ),
-      []
-    )
-    const heading = node.children[0] as View.Element<never>
-    assert.strictEqual((heading.children[0] as View.Element<never>).attrs["aria-controls"], "shipping")
-  })
-
-  it("the root repoints only its own trigger, not another element controlling the generated id", () => {
+  it("the root repoints a trigger built before the panel to the consumer's panel id, on the button itself and not another element", () => {
     const generated = View.build(parts({ open: true }).panel(h.div)!, []).attrs.id!
     const collapsible = parts({ open: true })
     const node = View.build(
       collapsible.root(h.div).children(
-        h.h3.children(collapsible.trigger(h.button)),
-        h.button.attr("aria-controls", generated),
-        collapsible.panel(h.div.attr("id", "shipping"))
-      ),
-      []
-    )
-    const heading = node.children[0] as View.Element<never>
-    assert.strictEqual((heading.children[0] as View.Element<never>).attrs["aria-controls"], "shipping")
-    assert.strictEqual((node.children[1] as View.Element<never>).attrs["aria-controls"], generated)
-  })
-
-  it("the root repoints the trigger's button, not a wrapper the consumer adds with forward", () => {
-    const collapsible = parts({ open: true })
-    const node = View.build(
-      collapsible.root(h.div).children(
         h.h3.children(collapsible.trigger(h.button.forward((button) => h.span.class("wrapper").children(button)))),
+        h.button.attr("aria-controls", generated),
         collapsible.panel(h.div.attr("id", "shipping"))
       ),
       []
@@ -112,6 +85,7 @@ describe("Collapsible", () => {
     assert.strictEqual(wrapper.attrs.class, "wrapper")
     assert.isUndefined(wrapper.attrs["aria-controls"])
     assert.strictEqual((wrapper.children[0] as View.Element<never>).attrs["aria-controls"], "shipping")
+    assert.strictEqual((node.children[1] as View.Element<never>).attrs["aria-controls"], generated)
   })
 
   it("each part rejects another tag", () => {

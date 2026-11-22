@@ -84,58 +84,58 @@ const open = () => items.filter((value) => document.getElementById("panel-" + va
 const press = (value: string) => Effect.sync(() => byId("trigger-" + value).click()).pipe(Effect.andThen(tick))
 
 describe("AccordionDocument", { concurrent: false }, () => {
-  it.effect("opening an item closes the open one, and pressing it again closes it", () =>
+  it.effect("toggles items in single and multiple mode, and ignores disabled items or a disabled accordion", () =>
     Effect.gen(function*() {
-      const app = yield* container
-      const handle = yield* BrowserHost.mountEffect(Page, { multiple: false, initial: ["a"] }, app)
-      yield* tick
-      assert.deepStrictEqual(open(), ["a"])
-      assert.strictEqual(byId("panel-a").getAttribute("aria-labelledby"), "trigger-a")
-      assert.strictEqual(byId("trigger-a").getAttribute("aria-controls"), "panel-a")
+      yield* Effect.scoped(Effect.gen(function*() {
+        const app = yield* container
+        const handle = yield* BrowserHost.mountEffect(Page, { multiple: false, initial: ["a"] }, app)
+        yield* tick
+        assert.deepStrictEqual(open(), ["a"])
+        assert.strictEqual(byId("panel-a").getAttribute("aria-labelledby"), "trigger-a")
+        assert.strictEqual(byId("trigger-a").getAttribute("aria-controls"), "panel-a")
 
-      yield* press("b")
-      assert.deepStrictEqual(byId("trigger-b").getAttribute("aria-expanded"), "true")
-      assert.strictEqual(byId("trigger-a").getAttribute("aria-expanded"), "false")
-      assert.isTrue(byId("item-b").hasAttribute("data-open"))
+        yield* press("b")
+        assert.strictEqual(byId("trigger-b").getAttribute("aria-expanded"), "true")
+        assert.strictEqual(byId("trigger-a").getAttribute("aria-expanded"), "false")
+        assert.isTrue(byId("item-b").hasAttribute("data-open"))
 
-      yield* press("b")
-      assert.strictEqual(byId("trigger-b").getAttribute("aria-expanded"), "false")
+        yield* press("b")
+        assert.strictEqual(byId("trigger-b").getAttribute("aria-expanded"), "false")
 
-      yield* press("c")
-      assert.isTrue((byId("trigger-c") as HTMLButtonElement).disabled)
-      assert.deepStrictEqual(handle.model()!.log, [
-        "Toggled [b] trigger-press",
-        "ToggledItem b true",
-        "Toggled [] trigger-press",
-        "ToggledItem b false"
-      ])
-    }).pipe(Effect.scoped))
+        yield* press("c")
+        assert.isTrue((byId("trigger-c") as HTMLButtonElement).disabled)
+        assert.deepStrictEqual(handle.model()!.log, [
+          "Toggled [b] trigger-press",
+          "ToggledItem b true",
+          "Toggled [] trigger-press",
+          "ToggledItem b false"
+        ])
+      }))
 
-  it.effect("with multiple, several items stay open", () =>
-    Effect.gen(function*() {
-      const app = yield* container
-      yield* BrowserHost.mountEffect(Page, { multiple: true, initial: [] }, app)
-      yield* tick
-      yield* press("a")
-      yield* press("b")
-      assert.strictEqual(byId("trigger-a").getAttribute("aria-expanded"), "true")
-      assert.strictEqual(byId("trigger-b").getAttribute("aria-expanded"), "true")
-      yield* press("a")
-      assert.strictEqual(byId("trigger-a").getAttribute("aria-expanded"), "false")
-      assert.strictEqual(byId("trigger-b").getAttribute("aria-expanded"), "true")
-    }).pipe(Effect.scoped))
+      yield* Effect.scoped(Effect.gen(function*() {
+        const app = yield* container
+        yield* BrowserHost.mountEffect(Page, { multiple: true, initial: [] }, app)
+        yield* tick
+        yield* press("a")
+        yield* press("b")
+        assert.strictEqual(byId("trigger-a").getAttribute("aria-expanded"), "true")
+        assert.strictEqual(byId("trigger-b").getAttribute("aria-expanded"), "true")
+        yield* press("a")
+        assert.strictEqual(byId("trigger-a").getAttribute("aria-expanded"), "false")
+        assert.strictEqual(byId("trigger-b").getAttribute("aria-expanded"), "true")
+      }))
 
-  it.effect("a disabled accordion disables every trigger and opens nothing", () =>
-    Effect.gen(function*() {
-      const app = yield* container
-      const handle = yield* BrowserHost.mountEffect(Page, { multiple: false, disabled: true, initial: [] }, app)
-      yield* tick
-      yield* press("a")
-      assert.isTrue((byId("trigger-a") as HTMLButtonElement).disabled)
-      assert.isTrue(byId("root").hasAttribute("data-disabled"))
-      assert.strictEqual(byId("trigger-a").getAttribute("aria-expanded"), "false")
-      assert.deepStrictEqual(handle.model()!.log, [])
-    }).pipe(Effect.scoped))
+      yield* Effect.scoped(Effect.gen(function*() {
+        const app = yield* container
+        const handle = yield* BrowserHost.mountEffect(Page, { multiple: false, disabled: true, initial: [] }, app)
+        yield* tick
+        yield* press("a")
+        assert.isTrue((byId("trigger-a") as HTMLButtonElement).disabled)
+        assert.isTrue(byId("root").hasAttribute("data-disabled"))
+        assert.strictEqual(byId("trigger-a").getAttribute("aria-expanded"), "false")
+        assert.deepStrictEqual(handle.model()!.log, [])
+      }))
+    }))
 
   it.effect("numbers items in the order they're drawn, and renumbers them after a reorder", () =>
     Effect.gen(function*() {
