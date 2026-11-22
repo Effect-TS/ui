@@ -57,41 +57,6 @@ const layout = Effect.acquireRelease(
   ({ original }) => Effect.sync(() => (Element.prototype.getBoundingClientRect = original))
 )
 
-const mountList = Effect.fnUntraced(function*(props: Partial<VirtualListProps> = {}) {
-  const geometry = yield* layout
-  const Demo = Component.define({
-    name: "Demo",
-    scoped: false,
-    model: Schema.Struct({}),
-    message: Schema.Never,
-    elements: Html
-  }).make({
-    init: () => ({}),
-    update: (model) => model,
-    view: (_model, h) =>
-      VirtualList(h, {
-        props: { count: 1000, itemSize, ...props },
-        view: (virtualList) =>
-          virtualList.viewport(h.div.class("viewport")).children(
-            virtualList.list(h.ul.class("list")).children(
-              virtualList.items.map((index) =>
-                virtualList.item({ element: h.li.class("item").key(String(index)), index }).children(
-                  h.button.children("Item " + index)
-                )
-              )
-            )
-          )
-      })
-  })
-  const app = yield* container
-  yield* BrowserHost.mountEffect(Demo, {}, app)
-  geometry.install()
-  yield* tick
-  const indices = () => Array.from(app.querySelectorAll(".item"), (item) => Number(item.getAttribute("data-index")))
-  const item = (index: number) => app.querySelector<HTMLElement>(`.item[data-index="${index}"]`)
-  return { ...geometry, indices, item, list: app.querySelector<HTMLElement>(".list")! }
-})
-
 const Steps = Effect.fnUntraced(function*(steps: ReadonlyArray<Partial<VirtualListProps>>) {
   const geometry = yield* layout
   const Message = UiSchema.TaggedEnum({ Advanced: {} })
@@ -113,7 +78,9 @@ const Steps = Effect.fnUntraced(function*(steps: ReadonlyArray<Partial<VirtualLi
             virtualList.viewport(h.div.class("viewport")).children(
               virtualList.list(h.ul.class("list")).children(
                 virtualList.items.map((index) =>
-                  virtualList.item({ element: h.li.class("item").key(String(index)), index })
+                  virtualList.item({ element: h.li.class("item").key(String(index)), index }).children(
+                    h.button.children("Item " + index)
+                  )
                 )
               )
             )
@@ -130,7 +97,9 @@ const Steps = Effect.fnUntraced(function*(steps: ReadonlyArray<Partial<VirtualLi
     yield* tick
     yield* tick
   })
-  return { ...geometry, next }
+  const indices = () => Array.from(app.querySelectorAll(".item"), (item) => Number(item.getAttribute("data-index")))
+  const item = (index: number) => app.querySelector<HTMLElement>(`.item[data-index="${index}"]`)!
+  return { ...geometry, next, indices, item }
 })
 
 const keysWith = (count: number, index: number, key: string) =>
@@ -144,26 +113,10 @@ const toKey = (key: string, id?: string): VirtualListScrollTo => ({
 const span = (start: number, end: number) => Array.from({ length: end - start + 1 }, (_, i) => start + i)
 
 describe("VirtualList in a document", { concurrent: false }, () => {
-  it.effect("renders the rows the viewport scrolls to", () =>
-    Effect.gen(function*() {
-      const { indices, list, scrollTo } = yield* mountList()
-      scrollTo(0)
-      yield* tick
-      assert.deepStrictEqual(indices(), span(0, 7))
-
-      scrollTo(1000)
-      yield* tick
-      assert.deepStrictEqual(indices(), span(47, 57))
-      assert.strictEqual(padding(list, "start"), 940)
-      assert.strictEqual(padding(list, "end"), 18840)
-    }))
-
   it.effect("keeps the focused item rendered while the list scrolls away from it", () =>
     Effect.gen(function*() {
-      const { indices, item, scrollTo } = yield* mountList()
-      scrollTo(0)
-      yield* tick
-      const button = item(2)!.querySelector("button")!
+      const { indices, item, scrollTo } = yield* Steps([{}])
+      const button = item(2).querySelector("button")!
       button.focus()
       yield* tick
 
@@ -171,31 +124,21 @@ describe("VirtualList in a document", { concurrent: false }, () => {
       yield* tick
       assert.deepStrictEqual(indices(), [...span(1, 3), ...span(47, 57)])
       assert.strictEqual(document.activeElement, button)
-      assert.strictEqual(item(47)!.style.marginBlockStart, "860px")
+      assert.strictEqual(item(47).style.marginBlockStart, "860px")
 
       button.blur()
       yield* tick
       assert.deepStrictEqual(indices(), span(47, 57))
     }))
 
-  it.effect("scrolls to a requested item once it's rendered", () =>
-    Effect.gen(function*() {
-      const { indices, scrollTop } = yield* mountList({
-        scrollTo: { target: VirtualListScrollTarget.Index({ index: 500 }), align: "end" }
-      })
-      yield* tick
-      assert.strictEqual(scrollTop(), 500 * itemSize + itemSize - 100)
-      assert.deepStrictEqual(indices(), span(493, 503))
-    }))
-
-  it.effect("scrolls to the first request once the items load, after the parent drops it", () =>
+  it.effect("scrolls to a request once its items load, after the parent drops it", () =>
     Effect.gen(function*() {
       const { next, scrollTop } = yield* Steps([
-        { count: 0, scrollTo: { target: VirtualListScrollTarget.Index({ index: 500 }) } },
+        { count: 0, scrollTo: { target: VirtualListScrollTarget.Index({ index: 500 }), align: "end" } },
         {}
       ])
       yield* next
-      assert.strictEqual(scrollTop(), 500 * itemSize)
+      assert.strictEqual(scrollTop(), 501 * itemSize - 100)
     }))
 
   it.effect("scrolls to a newer request that replaced the first while the list was empty", () =>
@@ -283,5 +226,42 @@ describe("VirtualList in a document", { concurrent: false }, () => {
       assert.strictEqual(scrollTop(), 6000)
       yield* next
       assert.strictEqual(scrollTop(), 100 * itemSize)
+    }))
+
+  it.effect("keeps the item in view in place when keyed items are added before it", () =>
+    Effect.gen(function*() {
+      const keys = Array.from({ length: 1000 }, (_, i) => "k" + i)
+      const added = (count: number) => [...Array.from({ length: count }, (_, i) => "n" + i), ...keys]
+      const { next, scrollTo, scrollTop } = yield* Steps([
+        { keys, scrollTo: toKey("k100") },
+        { count: 1010, keys: added(10), scrollTo: toKey("k100") },
+        { count: 1020, keys: added(20), scrollTo: toKey("k100") }
+      ])
+      assert.strictEqual(scrollTop(), 100 * itemSize)
+      yield* next
+      assert.strictEqual(scrollTop(), 110 * itemSize)
+
+      scrollTo(4000)
+      yield* tick
+      yield* next
+      assert.strictEqual(scrollTop(), 4200)
+    }))
+
+  it.effect("follows the end as the list grows until the user scrolls away from it", () =>
+    Effect.gen(function*() {
+      const { next, scrollTo, scrollTop } = yield* Steps([
+        { followEnd: true },
+        { followEnd: true, count: 1010 },
+        { followEnd: true, count: 1020 }
+      ])
+      scrollTo(1000 * itemSize - 100)
+      yield* tick
+      yield* next
+      assert.strictEqual(scrollTop(), 1010 * itemSize - 100)
+
+      scrollTo(4000)
+      yield* tick
+      yield* next
+      assert.strictEqual(scrollTop(), 4000)
     }))
 })

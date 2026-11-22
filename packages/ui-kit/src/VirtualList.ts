@@ -855,7 +855,12 @@ const TrackVirtualList = Mount.makeStream(
         const go = ({ index, offset, scrollTo }: typeof ScrollRequest.Type) => {
           const view = box()
           if (index !== null) {
-            const item = itemsOf().find((item) => item.getAttribute("data-index") === String(index))
+            const target = scrollTo.target
+            const item = itemsOf().find((item) =>
+              target._tag === "Key"
+                ? item.getAttribute("data-key") === target.key
+                : item.getAttribute("data-index") === String(index)
+            )
             if (item === undefined) return
             const { bottom, top } = item.getBoundingClientRect()
             scrollBy(alignedStart(top, bottom, view.top, view.height, scrollTo.align ?? "start") - view.top)
