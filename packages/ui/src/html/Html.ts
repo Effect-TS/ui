@@ -476,6 +476,37 @@ export interface FocusWithinPayload {
 }
 
 /**
+ * The payload of `blur`: whether the element that lost focus is disabled
+ * as the event fires.
+ *
+ * **Details**
+ *
+ * A user can't leave a disabled element, so `disabled` is `true` only when
+ * the element lost focus by being disabled, by its own `disabled` or by a
+ * `<fieldset disabled>` around it. A browser may send no `blur` at all for
+ * that. One that does can send it while a render is still writing, before
+ * the components below the disabled element have their new props, so a
+ * handler reads it here and not from its own state.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface BlurPayload {
+  readonly disabled: boolean
+}
+
+/**
+ * The payload of `focusout`: `within`, as for `focusin`, and `disabled`,
+ * as for `blur`, read from the descendant that lost focus.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface FocusOutPayload extends FocusWithinPayload, BlurPayload {}
+
+/**
  * The events every HTML element has, with their payloads.
  *
  * **Details**
@@ -500,9 +531,9 @@ export interface Events {
   readonly keydown: KeyPayload
   readonly keyup: KeyPayload
   readonly focus: {}
-  readonly blur: {}
+  readonly blur: BlurPayload
   readonly focusin: FocusWithinPayload
-  readonly focusout: FocusWithinPayload
+  readonly focusout: FocusOutPayload
   readonly scroll: ScrollPayload
   readonly dragstart: {}
   readonly dragend: DragEndPayload
@@ -1157,7 +1188,7 @@ export class VoidElement<
    *
    * @since 0.1.0
    */
-  onBlur(handler: View.Handler<Msg, {}>): this {
+  onBlur(handler: View.Handler<Msg, BlurPayload>): this {
     return this.on("blur" as any, handler as any)
   }
   /**

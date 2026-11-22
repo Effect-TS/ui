@@ -9,7 +9,7 @@ import { Command, Component, Query, UiSchema, Validation } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
 import { Story } from "@effect/ui/testing"
-import { Context, Effect, Option, Schema } from "effect"
+import { Context, Effect, Equal, Option, Redacted, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 
 // ---------------------------------------------------------------------------
@@ -24,7 +24,7 @@ export class SignupRejected extends Schema.TaggedError<SignupRejected>()("Signup
 export interface NewAccount {
   readonly username: string
   readonly email: string
-  readonly password: string
+  readonly password: Redacted.Redacted<string>
 }
 
 // The app's own API. Its Layer calls the server and is provided where the
@@ -56,12 +56,23 @@ export const SignupValidation = Validation.make({
     rules: [Rule.minLength(3), Rule.pattern(/^[a-z0-9_]+$/, "Use lowercase letters, digits and _")]
   },
   email: { required: "Email is required", rules: [Rule.email("Please enter a valid email address")] },
-  password: { required: "Password is required", rules: [Rule.minLength(8)] },
+  // A secret is `Schema.Redacted(Schema.String)`. That keeps this
+  // component's whole state out of `history.state` and the server's page
+  // state, so no field of the form restores or hydrates: keep such a form a
+  // leaf component. `required` still sees an empty one, and a rule unwraps
+  // it with `Redacted.value`.
+  password: {
+    value: Schema.Redacted(Schema.String),
+    required: "Password is required",
+    rules: [[(password) => Redacted.value(password).length >= 8, "Must be at least 8 characters"]]
+  },
   // A predicate also gets every value, so it can compare two fields. It
-  // runs whether or not the password passes its own rules.
+  // runs whether or not the password passes its own rules. Two `Redacted`
+  // compare by what they hold, so nothing is unwrapped.
   confirm: {
+    value: Schema.Redacted(Schema.String),
     required: "Confirm your password",
-    rules: [[(confirm, values) => confirm === values.password, "Passwords must match"]]
+    rules: [[(confirm, values) => Equal.equals(confirm, values.password), "Passwords must match"]]
   }
 }, { mode: "onChange", errors: "all" })
 
@@ -81,10 +92,15 @@ export class IsUsernameTaken extends Query.Service<IsUsernameTaken>()(
   })
 ) {}
 
-const FieldName = Schema.Literals(["username", "email", "password", "confirm"])
+const TextFieldName = Schema.Literals(["username", "email"])
+const SecretFieldName = Schema.Literals(["password", "confirm"])
 
+// Secret inputs carry `Schema.Redacted(Schema.String)` in their message and
+// Command args too, so a devtools message log never receives a password in
+// plain text.
 export const SignupMessage = UiSchema.TaggedEnum({
-  UpdatedField: { name: FieldName, value: Schema.String },
+  UpdatedField: { name: TextFieldName, value: Schema.String },
+  UpdatedSecret: { name: SecretFieldName, value: Schema.Redacted(Schema.String) },
   SubmittedForm: {},
   SucceededCreateAccount: {},
   FailedCreateAccount: { field: SignupRejected.fields.field, message: Schema.String }
@@ -94,7 +110,7 @@ export const SignupEvents = UiSchema.TaggedEnum({ SignedUp: { username: Schema.S
 
 export class CreateAccount extends Command.Service<CreateAccount>()(
   "accounts/CreateAccount",
-  { args: { username: Schema.String, email: Schema.String, password: Schema.String } },
+  { args: { username: Schema.String, email: Schema.String, password: Schema.Redacted(Schema.String) } },
   Effect.gen(function*() {
     const accounts = yield* Accounts
     return (account) =>
@@ -146,7 +162,12 @@ export const SignupForm = Component.define({
   }
 }).make({
   init: () => ({
-    form: SignupValidation.init({ username: "", email: "", password: "", confirm: "" }),
+    form: SignupValidation.init({
+      username: "",
+      email: "",
+      password: Redacted.make(""),
+      confirm: Redacted.make("")
+    }),
     submitting: false
   }),
   update: {
@@ -156,6 +177,8 @@ export const SignupForm = Component.define({
     // edit that still arrives is dropped, so the result always belongs to
     // the values that were sent.
     UpdatedField: (model, { name, value }) =>
+      model.submitting ? model : { ...model, form: SignupValidation.change(model.form, name, value) },
+    UpdatedSecret: (model, { name, value }) =>
       model.submitting ? model : { ...model, form: SignupValidation.change(model.form, name, value) },
     // A tried submit shows every field. `value` is `Some` only when every
     // field passes, so it gates the Command.
@@ -181,31 +204,49 @@ export const SignupForm = Component.define({
     // One field's markup, by its derived state. A ui-kit `Field` takes the
     // same facts: pass `invalid: true` for `Invalid`, `false` for `Valid`,
     // and leave it out otherwise, so a pending check doesn't show as valid.
-    const input = (name: typeof FieldName.Type, label: string, type: string) => {
-      const field = fields[name]
-      return h.div.children(
+    const row = (
+      field: Validation.Field<unknown>,
+      label: string,
+      type: string,
+      value: string,
+      onInput: (value: string) => typeof SignupMessage.Type
+    ) =>
+      h.div.children(
         h.label.children(
           label,
           h.input.attr("type", type).attr("aria-invalid", field._tag === "Invalid" ? "true" : undefined)
             .attr("aria-required", field.required ? "true" : undefined)
-            .value(field.value)
+            .value(value)
             .disabled(model.submitting)
-            .onInput(({ value }) => SignupMessage.UpdatedField({ name, value }))
+            .onInput(({ value }) => onInput(value))
         ),
         field._tag === "Validating" ? h.span.children("Checking…") : null,
         field._tag === "Invalid"
           ? h.ul.attr("role", "alert").children(...field.errors.map((error) => h.li.children(error)))
           : null
       )
-    }
+
+    const text = (name: typeof TextFieldName.Type, label: string, type: string) =>
+      row(fields[name], label, type, fields[name].value, (value) => SignupMessage.UpdatedField({ name, value }))
+
+    // A secret is unwrapped only for the input, and what was typed is
+    // wrapped again before it leaves the view.
+    const secret = (name: typeof SecretFieldName.Type, label: string) =>
+      row(
+        fields[name],
+        label,
+        "password",
+        Redacted.value(fields[name].value),
+        (value) => SignupMessage.UpdatedSecret({ name, value: Redacted.make(value) })
+      )
 
     // `novalidate` turns the browser's own checks off. The rules above are
     // the only ones, and they run the same in a test and on the server.
     return h.form.attr("novalidate", "").onSubmit(SignupMessage.SubmittedForm()).children(
-      input("username", "Username", "text"),
-      input("email", "Email", "email"),
-      input("password", "Password", "password"),
-      input("confirm", "Confirm password", "password"),
+      text("username", "Username", "text"),
+      text("email", "Email", "email"),
+      secret("password", "Password"),
+      secret("confirm", "Confirm password"),
       h.button.attr("type", "submit").disabled(model.submitting)
         .children(model.submitting ? "Creating account…" : "Create account")
     )
@@ -237,12 +278,12 @@ export const checkedUsername = Effect.gen(function*() {
 // The server's error lands on its field, and editing the field clears it.
 export const rejectedEmail = Effect.gen(function*() {
   const s = yield* Story.make(SignupForm, {})
-  const account = { username: "ada_l", email: "ada@example.com", password: "correct horse" }
+  const account = { username: "ada_l", email: "ada@example.com", password: Redacted.make("correct horse") }
   s.send(SignupMessage.UpdatedField({ name: "username", value: account.username }))
     .loaded("usernameTaken", false)
     .send(SignupMessage.UpdatedField({ name: "email", value: account.email }))
-    .send(SignupMessage.UpdatedField({ name: "password", value: account.password }))
-    .send(SignupMessage.UpdatedField({ name: "confirm", value: account.password }))
+    .send(SignupMessage.UpdatedSecret({ name: "password", value: account.password }))
+    .send(SignupMessage.UpdatedSecret({ name: "confirm", value: account.password }))
     .send(SignupMessage.SubmittedForm())
     .expectExact(CreateAccount)
     // An edit that arrives while the account is being created is dropped.

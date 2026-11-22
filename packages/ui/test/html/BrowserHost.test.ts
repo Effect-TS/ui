@@ -1062,6 +1062,44 @@ describe("BrowserHost", { concurrent: false }, () => {
         ])
       }).pipe(Effect.scoped))
 
+    it.effect("blur and focusout say whether the element that lost focus is disabled", () =>
+      Effect.gen(function*() {
+        const Left = UiSchema.TaggedEnum({ Left: { event: Schema.String, disabled: Schema.Boolean } })
+        const Leaving = Component.define({
+          name: "Leaving",
+          scoped: false,
+          model: Schema.Array(Schema.String),
+          message: Left,
+          elements: Html
+        }).make({
+          init: (): ReadonlyArray<string> => [],
+          update: (log, { disabled, event }) => [...log, `${event}${disabled ? " disabled" : ""}`],
+          view: (_, h) =>
+            h.div.on("focusout", ({ disabled }) => Left.Left({ event: "focusout", disabled })).children(
+              h.input.onBlur(({ disabled }) => Left.Left({ event: "blur", disabled })),
+              h.form.attr("tabindex", "0").onBlur(({ disabled }) => Left.Left({ event: "blur", disabled })).children(
+                h.input.attr("name", "matches")
+              )
+            )
+        })
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Leaving, {}, app)
+        const input = app.querySelector("input")!
+        const form = app.querySelector("form")!
+        const leave = (element: Element) => {
+          element.dispatchEvent(new FocusEvent("blur"))
+          element.dispatchEvent(new FocusEvent("focusout", { bubbles: true }))
+        }
+        leave(input)
+        input.disabled = true
+        leave(input)
+        // A browser puts a form's named control over the form's own method of that name. happy-dom doesn't.
+        Object.defineProperty(form, "matches", { value: form.querySelector("input") })
+        leave(form)
+        yield* tick
+        expect(root.model()).toEqual(["blur", "focusout", "blur disabled", "focusout disabled", "blur", "focusout"])
+      }).pipe(Effect.scoped))
+
     it.effect("payloads are plain data", () =>
       Effect.gen(function*() {
         const app = yield* container
