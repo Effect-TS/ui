@@ -134,5 +134,10 @@ describe("Progress", () => {
     assert.strictEqual(unknown.status, "indeterminate")
     assert.isNull(unknown.percentage)
     assert.strictEqual(build(unknown.indicator(h.div.style({ width: "30%" }))).attrs.style, "width:30%")
+
+    const empty = parts({ value: 10, min: 5, max: 5 })
+    assert.strictEqual(empty.percentage, 0)
+    assert.strictEqual(empty.valueText, "0%")
+    assert.strictEqual(build(empty.indicator(h.div)).attrs.style, "inset-inline-start:0;height:inherit;width:0%")
   })
 })

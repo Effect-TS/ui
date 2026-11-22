@@ -87,5 +87,6 @@ describe("Meter", () => {
     assert.deepStrictEqual(at({ value: -5 }), ["0", 0, "0%"])
     assert.deepStrictEqual(at({ value: Number.NaN, min: 10, max: 20 }), ["10", 0, "0%"])
     assert.deepStrictEqual(at({ value: 5, min: 5, max: 5 }), ["5", 0, "0%"])
+    assert.deepStrictEqual(at({ value: 10, min: 5, max: 5 }), ["5", 0, "0%"])
   })
 })

@@ -12,7 +12,8 @@ export const placeInRange = (
   min: number,
   max: number
 ): { readonly value: number; readonly percentage: number } => {
-  const raw = ((value - min) * 100) / (max - min)
+  const span = max - min
+  const raw = span <= 0 ? 0 : ((value - min) * 100) / span
   return {
     value: clamp(Number.isNaN(value) ? min : value, min, max),
     percentage: clamp(Number.isNaN(raw) ? 0 : raw, 0, 100)

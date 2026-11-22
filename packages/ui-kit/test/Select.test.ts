@@ -407,4 +407,33 @@ describe("Select", () => {
       s.mounted(tracked(s), sent("FinishedTransition", { open: false })).emitted({ _tag: "Settled", open: false })
       assert.isFalse(s.get(positioner).props?.popoverOpen)
     }))
+
+  it.effect("keeps custom value children and validates hidden part tags", () =>
+    Effect.gen(function*() {
+      const s = yield* HtmlScene.make(Select, { open: false, items, value: "dark", placeholder: "Pick one" }, {
+        elements: Html,
+        view: (select, h) =>
+          h.div(
+            select.trigger(h.button.class("trigger")).children(select.value(h.span.class("value")).children("Custom"))
+          )
+      })
+      assert.strictEqual(Locator.textOf(s.get(value)), "Custom")
+
+      const hiddenTagCases: ReadonlyArray<(select: Parts, h: H) => View.Content<never>> = [
+        (select, h) => h.div(select.arrow(h.span as never)),
+        (select, h) => h.div(select.itemIndicator(h.div as never, "light")),
+        (select, h) => h.div(select.scrollUpArrow(h.span as never)),
+        (select, h) => h.div(select.scrollDownArrow(h.span as never))
+      ]
+      for (const render of hiddenTagCases) {
+        const exit = yield* Effect.exit(
+          HtmlScene.make(Select, { open: false, items, value: "dark" }, {
+            elements: Html,
+            view: render
+          })
+        )
+        if (exit._tag !== "Failure") assert.fail("expected failure")
+        assert.include(String(exit.cause), "a part for")
+      }
+    }))
 })

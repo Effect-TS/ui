@@ -215,7 +215,7 @@ import { methodOf } from "./internal/interaction.ts"
 import { available, keyed, stepped } from "./internal/list.ts"
 import { holdScroll } from "./internal/modal.ts"
 import { listenOutside, releasedOutside } from "./internal/outside.ts"
-import { clamp } from "./internal/range.ts"
+import { clamp, fillValue } from "./internal/range.ts"
 import { raiseAbove } from "./internal/topLayer.ts"
 import { frameOf, settling, statusOf, transitionAttrs } from "./internal/transition.ts"
 import { printable, typeahead } from "./internal/typeahead.ts"
@@ -1348,7 +1348,7 @@ export const Select = Component.define({
 
     const value = p.part("span", (b) =>
       b.attrs({ "data-select-value": "", "data-placeholder": flag(!filled) })
-        .forward((node) => node.children.length > 0 ? node : node.children(text)))
+        .forward((node) => fillValue(node, text)))
 
     const icon = p.part("span", (b) => b.attrs({ "aria-hidden": "true", "data-popup-open": flag(open) }))
 
@@ -1440,8 +1440,10 @@ export const Select = Component.define({
         .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, arrowStyle))))
     const arrow = View.wrapPart(
       arrowPart,
-      <B extends View.PartTarget<"div">>(element: B): ReturnType<B["attr"]> | undefined =>
-        aligned ? undefined : arrowPart(element)
+      <B extends View.PartTarget<"div">>(element: B): ReturnType<B["attr"]> | undefined => {
+        const applied = arrowPart(element)
+        return aligned ? undefined : applied
+      }
     )
 
     const itemPart = p.part("div", (b, value: string) => {
@@ -1480,8 +1482,10 @@ export const Select = Component.define({
         element: B,
         value: string,
         keepMounted?: boolean
-      ): ReturnType<B["attr"]> | undefined =>
-        chosen.has(itemOf(value).value) || keepMounted === true ? indicatorPart(element) : undefined
+      ): ReturnType<B["attr"]> | undefined => {
+        const applied = indicatorPart(element)
+        return chosen.has(itemOf(value).value) || keepMounted === true ? applied : undefined
+      }
     )
 
     const group = p.part("div", (b, key: string) => b.attrs({ role: "group", "aria-labelledby": groupLabelId(key) }))
@@ -1501,8 +1505,10 @@ export const Select = Component.define({
           .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, "position:absolute"))))
       return View.wrapPart(
         part,
-        <B extends View.PartTarget<"div">>(element: B, keepMounted?: boolean): ReturnType<B["attr"]> | undefined =>
-          visible || keepMounted === true ? part(element) : undefined
+        <B extends View.PartTarget<"div">>(element: B, keepMounted?: boolean): ReturnType<B["attr"]> | undefined => {
+          const applied = part(element)
+          return visible || keepMounted === true ? applied : undefined
+        }
       )
     }
 

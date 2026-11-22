@@ -369,10 +369,12 @@ const endThreshold = (props: VirtualListProps): number | null =>
     ? defaultEndThreshold
     : props.followEnd.threshold ?? defaultEndThreshold
 
-const current = (model: VirtualListModel, props: VirtualListProps): VirtualListModel =>
-  props.dataset === undefined || props.dataset === model.dataset
+const current = (model: VirtualListModel, props: VirtualListProps): VirtualListModel => {
+  const dataset = props.dataset ?? null
+  return dataset === model.dataset
     ? model
-    : { ...model, dataset: props.dataset, sizes: {}, focused: null, epoch: model.epoch + 1 }
+    : { ...model, dataset, sizes: {}, focused: null, epoch: model.epoch + 1 }
+}
 
 const resolve = (props: VirtualListProps, ref: typeof ItemRef.Type, fallback: boolean): number | null => {
   const count = countOf(props)
@@ -1021,7 +1023,7 @@ export const VirtualList = Component.define({
     const inset = props.contentAlignment === "end" && model.position !== null && model.height > layout.total
       ? model.height - layout.total
       : 0
-    const pushed = ranges.length === 1 ? -1 : ranges[1]![0]
+    const pushed = ranges[1]?.[0]
 
     const itemPart = p.part(["div", "li"], (b, index: number) =>
       (b as Div)
@@ -1034,7 +1036,7 @@ export const VirtualList = Component.define({
         })
         .forward((node) => {
           const item = defaults(node, { role: "listitem" })
-          return index >= pushed && index < pushed + layout.lanes
+          return pushed !== undefined && index >= pushed && index < pushed + layout.lanes
             ? ownStyle(`margin-block-start:${between}px`)(item)
             : item
         }))

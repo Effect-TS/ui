@@ -140,7 +140,8 @@ describe("NumberField", () => {
                   inputmode: "tel",
                   "aria-roledescription": "Amount",
                   autocomplete: "transaction-amount",
-                  readonly: ""
+                  readonly: "",
+                  "aria-disabled": "true"
                 }).value("nine").disabled(false)
               ),
               numberField.increment({ element: h.button.class("increment").attr("aria-disabled", "false") })
@@ -172,7 +173,12 @@ describe("NumberField", () => {
         disabled: ""
       })
       assert.isUndefined(custom.get(input).attrs?.readonly)
+      assert.isUndefined(custom.get(input).attrs?.["aria-disabled"])
       assert.strictEqual(text(custom), "5")
+
+      custom.props({ value: 5, max: 5, disabled: false })
+      assert.isUndefined(custom.get(input).attrs?.disabled)
+      assert.isUndefined(custom.get(input).attrs?.["aria-disabled"])
     }))
 
   it.effect("propagates state attributes, bound disabled states, part state, and element guards", () =>

@@ -150,12 +150,25 @@ describe("Field", () => {
             ),
             formField(
               "terms",
-              (field) => Checkbox(h, { props, view: (checkbox) => checkbox.root(field.control(h.button)) })
+              (field) =>
+                Checkbox(h, {
+                  props,
+                  view: (checkbox) =>
+                    checkbox.root(field.control(h.button)).children(
+                      h.input.attrs({ type: "hidden", name: "extra", value: "kept" })
+                    )
+                })
             ),
             formField(
               "news",
               (field) =>
-                Switch(h, { props: { ...props, name: "news" }, view: (parts) => parts.root(field.control(h.button)) })
+                Switch(h, {
+                  props: { ...props, name: "news" },
+                  view: (parts) =>
+                    parts.root(field.control(h.button)).children(
+                      h.input.attrs({ type: "hidden", name: "other", value: "also-kept" })
+                    )
+                })
             )
           )
         }
@@ -166,8 +179,14 @@ describe("Field", () => {
           form.innerHTML = html
           return [...new FormData(form.querySelector("form")!).entries()]
         }))
-      assert.deepStrictEqual(yield* submitted(false), [["name", "Ada"], ["terms", "on"], ["news", "on"]])
-      assert.deepStrictEqual(yield* submitted(true), [])
+      assert.deepStrictEqual(yield* submitted(false), [
+        ["name", "Ada"],
+        ["terms", "on"],
+        ["extra", "kept"],
+        ["news", "on"],
+        ["other", "also-kept"]
+      ])
+      assert.deepStrictEqual(yield* submitted(true), [["extra", "kept"], ["other", "also-kept"]])
     }))
 
   it("the label and the control take only their own tags, and a description needs the described prop", () => {

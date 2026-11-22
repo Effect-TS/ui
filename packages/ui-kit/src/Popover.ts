@@ -687,7 +687,11 @@ export const PopoverTrigger = <Msg, R = never>(
   return DialogTrigger(h, { element: options.element, props: { open, popupId } })
     .forward((node) =>
       node
-        .attrs({ "data-pressed": flag(open && pressed === true), "data-disabled": flag(disabled) })
+        .attrs({
+          "data-pressed": flag(open && pressed === true),
+          "data-disabled": flag(disabled),
+          "aria-disabled": undefined
+        })
         .disabled(disabled === true)
     )
     .onMount(TrackDetachedTrigger({ popupId, hover: hoverOf(options.props) }))
@@ -842,7 +846,8 @@ export const Popover = Component.define({
         const button = b
           .attrs({
             "data-pressed": flag(open && active === key && reason === "trigger-press"),
-            "data-disabled": flag(disabled)
+            "data-disabled": flag(disabled),
+            "aria-disabled": undefined
           })
           .disabled(disabled)
         return hover === null ? button : button

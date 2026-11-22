@@ -126,7 +126,13 @@ describe("Collapsible", () => {
       assert.isUndefined(triggerNode.attrs["aria-disabled"])
       assert.isUndefined(triggerNode.attrs["data-ending-style"])
       assert.strictEqual(triggerNode.attrs["data-starting-style"], isOpen ? "" : undefined)
-      if (!isOpen) assert.isUndefined(triggerNode.attrs["aria-controls"])
+      if (isOpen) {
+        const controls = triggerNode.attrs["aria-controls"]?.split(" ") ?? []
+        assert.include(controls, "elsewhere")
+        assert.strictEqual(controls.length, 2)
+      } else {
+        assert.strictEqual(triggerNode.attrs["aria-controls"], "elsewhere")
+      }
 
       const panelNode = View.build(
         collapsible.panel(
@@ -148,6 +154,15 @@ describe("Collapsible", () => {
       )
       if (isOpen) {
         assert.strictEqual(View.build(collapsible.trigger(h.button), []).attrs["aria-controls"], "shipping")
+        assert.strictEqual(
+          View.build(collapsible.trigger(h.button.attr("aria-controls", "more\u00a0shipping")), [])
+            .attrs["aria-controls"],
+          "more\u00a0shipping shipping"
+        )
+        assert.strictEqual(
+          View.build(collapsible.trigger(h.button.attr("aria-controls", "\u00a0")), []).attrs["aria-controls"],
+          "\u00a0 shipping"
+        )
       }
     }
   })

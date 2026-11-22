@@ -151,6 +151,8 @@ describe("VirtualList", () => {
         .emitted(scrolled(0, 11))
       assert.deepStrictEqual(indices(s), span(0, 11))
       assert.include(s.get(listLoc).attrs?.style ?? "", "padding-block-end:9900px")
+      assert.isUndefined(s.get(Locator.attr("data-index", "0")).attrs?.style)
+      assert.isUndefined(s.get(Locator.attr("data-index", "1")).attrs?.style)
     }))
 
   it.effect("reports reaching and leaving either edge while the rows stay", () =>
@@ -206,6 +208,17 @@ describe("VirtualList", () => {
         })
       ).emitted(scrolled(0, 2))
       s.props({ ...props, dataset: "b" })
+      assert.deepStrictEqual(indices(s), span(0, 4))
+      s.mounted(
+        tracked(s),
+        sent("MeasuredItems", {
+          epoch: 1,
+          width: 300,
+          items: span(0, 4).map((index) => ({ index, key: null, top: index * 40, left: 0, size: 40 }))
+        })
+      )
+      assert.deepStrictEqual(indices(s), span(0, 2))
+      s.props({ ...base, overscan: 0 })
       assert.deepStrictEqual(indices(s), span(0, 4))
     }))
 

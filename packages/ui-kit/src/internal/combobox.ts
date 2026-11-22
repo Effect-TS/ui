@@ -20,6 +20,7 @@ import { methodOf } from "./interaction.ts"
 import { available, keyed, type Loop, stepped } from "./list.ts"
 import { hideOthers, holdScroll, nextLayerOrder } from "./modal.ts"
 import { listenOutside, releasedOutside } from "./outside.ts"
+import { fillValue } from "./range.ts"
 import { raiseAbove } from "./topLayer.ts"
 import { frameOf, settling, statusOf, transitionAttrs, type TransitionStatus } from "./transition.ts"
 import { printable, typeahead } from "./typeahead.ts"
@@ -1091,7 +1092,7 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
 
     const value = p.part("span", (b) =>
       b.attr("data-placeholder", flag(placeholding))
-        .forward((node) => node.children.length > 0 ? node : node.children(text)))
+        .forward((node) => fillValue(node, text)))
 
     const pressGroup = ({ button, pointerType }: Html.PointerPayload) =>
       button === 0 ? Message.PressedGroup({ pointerType }) : undefined
@@ -1150,7 +1151,8 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
           spellcheck: "false",
           autocorrect: "off",
           autocapitalize: "none",
-          readonly: flag(readOnly)
+          readonly: flag(readOnly),
+          "aria-disabled": undefined
         })
         .disabled(disabled)
         .on(
@@ -1201,7 +1203,8 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
           "data-placeholder": flag(placeholding),
           "aria-expanded": String(open),
           "aria-haspopup": inPopup ? "dialog" : "listbox",
-          "aria-controls": open ? (inPopup ? popupId : listId) : undefined
+          "aria-controls": open ? (inPopup ? popupId : listId) : undefined,
+          "aria-disabled": undefined
         })
         .disabled(disabled)
         .on(
@@ -1250,15 +1253,18 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
           tabindex: "-1",
           "data-popup-open": flag(open),
           "data-disabled": flag(disabled),
-          "data-visible": flag(filled)
+          "data-visible": flag(filled),
+          "aria-disabled": undefined
         })
         .disabled(disabled)
         .on("mousedown", () => undefined, { preventDefault: "always" })
         .onClick(Message.PressedClear()))
     const clearButton = View.wrapPart(
       clearPart,
-      <B extends View.PartTarget<"button">>(element: B, keepMounted?: boolean): ReturnType<B["attr"]> | undefined =>
-        filled || keepMounted === true ? clearPart(element) : undefined
+      <B extends View.PartTarget<"button">>(element: B, keepMounted?: boolean): ReturnType<B["attr"]> | undefined => {
+        const applied = clearPart(element)
+        return filled || keepMounted === true ? applied : undefined
+      }
     )
 
     const chips = p.part("div", (b) => {
@@ -1285,7 +1291,8 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         .attrs({
           type: "button",
           tabindex: "-1",
-          "data-disabled": flag(disabled)
+          "data-disabled": flag(disabled),
+          "aria-disabled": undefined
         })
         .disabled(disabled)
         .on("mousedown", () => undefined, { preventDefault: "always" })
@@ -1420,8 +1427,10 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         element: B,
         value: string,
         keepMounted?: boolean
-      ): ReturnType<B["attr"]> | undefined =>
-        chosen.has(value) || keepMounted === true ? indicatorPart(element) : undefined
+      ): ReturnType<B["attr"]> | undefined => {
+        const applied = indicatorPart(element)
+        return chosen.has(value) || keepMounted === true ? applied : undefined
+      }
     )
 
     const group = p.part(

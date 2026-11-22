@@ -1339,7 +1339,8 @@ export const NumberField = Component.define({
           inputmode: !model.ios ? "numeric" : lowest(s) >= 0 ? "decimal" : "text",
           form: props.form,
           required: flag(required),
-          readonly: flag(readOnly)
+          readonly: flag(readOnly),
+          "aria-disabled": undefined
         })
         .disabled(disabled)
         .value(text)
