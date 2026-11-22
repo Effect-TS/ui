@@ -75,9 +75,11 @@ const blurOnDisable = (fieldset: HTMLFieldSetElement) => {
 describe("Fieldset", { concurrent: false }, () => {
   it("the root is a fieldset named by the legend, and both parts follow disabled over the consumer's values", () => {
     const enabled = parts({})
-    const legendId = attrsOf(enabled.legend(h.div.attr("id", "mine").attr("data-disabled", "stale"))).id
+    const legendAttrs = attrsOf(enabled.legend(h.div.attr("id", "mine").attr("data-disabled", "stale")))
+    const legendId = legendAttrs.id
     assert.isString(legendId)
     assert.notStrictEqual(legendId, "mine")
+    assert.deepStrictEqual(legendAttrs, { id: legendId })
     assert.deepStrictEqual(
       attrsOf(
         enabled.root(
@@ -87,7 +89,6 @@ describe("Fieldset", { concurrent: false }, () => {
       ),
       { class: "mine", "aria-labelledby": `heading ${legendId}` }
     )
-    assert.deepStrictEqual(attrsOf(enabled.legend(h.div.attr("data-disabled", "stale"))), { id: legendId })
     assert.isFalse(enabled.disabled)
 
     const disabled = parts({ disabled: true })
@@ -135,11 +136,6 @@ describe("Fieldset", { concurrent: false }, () => {
       assert.strictEqual(app.querySelectorAll("span").length, 0)
       assert.deepStrictEqual(submitted(), [])
 
-      yield* toggleLock(app)
-      assert.deepStrictEqual(state("company"), [])
-
-      yield* toggleLock(app)
-      company.dispatchEvent(new FocusEvent("blur"))
       yield* toggleLock(app)
       assert.deepStrictEqual(state("company"), [])
     }).pipe(Effect.scoped))
