@@ -140,8 +140,8 @@ import * as Effect from "effect/Effect"
 import * as Option from "effect/Option"
 import * as Schema from "effect/Schema"
 import { DirectionProvider } from "./DirectionProvider.ts"
-import { type Attributed, flag, type Keyed, separatorAttrs } from "./internal/attributes.ts"
-import { arrowKeys, stepped } from "./internal/list.ts"
+import { type Attributed, flag, separatorAttrs } from "./internal/attributes.ts"
+import { arrowKeys, valued, stepped } from "./internal/list.ts"
 
 /**
  * The direction a toolbar's items run in, which picks its arrow keys.
@@ -293,6 +293,10 @@ const FocusItem = Command.make(
     ).pipe(Effect.as(Component.noop))
 )
 
+const cancelClick = <N extends { readonly onClick: (handler: () => undefined, options: View.EventOptions) => N }>(
+  node: N
+): N => node.onClick(() => undefined, { preventDefault: "always" })
+
 const groupOf = (props: ToolbarProps, value: string): ToolbarGroup | undefined =>
   props.groups?.find((group) => group.value === value)
 
@@ -312,10 +316,17 @@ type ToolbarUpdate = Component.Update<ToolbarModel, typeof ToolbarMessage.Type, 
   readonly shared: { readonly provider?: { readonly direction: "ltr" | "rtl" } | undefined }
 }
 
-const targetOf = (value: string, key: string, $: ToolbarUpdate): ToolbarItem | undefined => {
+const keysOf = ($: ToolbarUpdate) =>
+  arrowKeys($.props.orientation ?? "horizontal", $.shared.provider?.direction === "rtl")
+
+const targetOf = (
+  value: string,
+  key: string,
+  { next, previous }: ReturnType<typeof keysOf>,
+  $: ToolbarUpdate
+): ToolbarItem | undefined => {
   const items = $.props.items.filter((item) => reachable($.props, item))
   const last = items.length - 1
-  const { next, previous } = arrowKeys($.props.orientation ?? "horizontal", $.shared.provider?.direction === "rtl")
   if (key !== next && key !== previous && key !== "Home" && key !== "End") return undefined
   const target = items[
     key === "Home"
@@ -331,6 +342,9 @@ const targetOf = (value: string, key: string, $: ToolbarUpdate): ToolbarItem | u
   ]
   return target === undefined || target.value === value ? undefined : target
 }
+
+const moveTo = (model: ToolbarModel, target: ToolbarItem, $: ToolbarUpdate) =>
+  $.set({ ...model, active: target.value }).run(FocusItem.make({ ref: Item.at(target.value) }))
 
 /**
  * A headless toolbar. Call it with the consumer's `h`, the `props`, and a `view`
@@ -405,23 +419,18 @@ export const Toolbar = Component.define({
   update: {
     FocusedItem: (model, { value }) => model.active === value ? model : { ...model, active: value },
     PressedItemKey: (model, { key, value }, $) => {
-      const target = targetOf(value, key, $)
-      if (target === undefined) return model
-      return $.set({ ...model, active: target.value }).run(FocusItem.make({ ref: Item.at(target.value) }))
+      const target = targetOf(value, key, keysOf($), $)
+      return target === undefined ? model : moveTo(model, target, $)
     },
     PressedInputKey: (model, { caret, key, value }, $) => {
-      const target = targetOf(value, key, $)
+      const keys = keysOf($)
+      const target = targetOf(value, key, keys, $)
       if (target === undefined) return model
-      const { next } = arrowKeys($.props.orientation ?? "horizontal", $.shared.provider?.direction === "rtl")
-      if (caret === null) {
-        return $.set({ ...model, active: target.value }).run(FocusItem.make({ ref: Item.at(target.value) }))
+      if (caret === null) return moveTo(model, target, $)
+      if (key === keys.next) {
+        return $.run(FocusItem.make({ ref: Item.at(target.value), leaving: { ref: Item.at(value), caret } }))
       }
-      if (key !== next) {
-        return caret > 0 ? model : $.set({ ...model, active: target.value }).run(
-          FocusItem.make({ ref: Item.at(target.value) })
-        )
-      }
-      return $.run(FocusItem.make({ ref: Item.at(target.value), leaving: { ref: Item.at(value), caret } }))
+      return caret > 0 ? model : moveTo(model, target, $)
     }
   },
   parts: (model, p) => {
@@ -448,10 +457,13 @@ export const Toolbar = Component.define({
     }
     const isDisabled = (value: string): boolean => disabledOf(props, entryOf(value))
 
-    const itemAttrs = (value: string) => ({
-      "data-orientation": orientation,
-      tabindex: value === tabStop ? "0" : "-1"
-    })
+    const roving = <N extends Html.VoidElement<typeof ToolbarMessage.Type, any, any, any, any>>(
+      node: N,
+      value: string
+    ): N =>
+      node.attrs({ "data-orientation": orientation, tabindex: value === tabStop ? "0" : "-1" })
+        .ref(Item.at(value) as never)
+        .onFocus(ToolbarMessage.FocusedItem({ value }))
 
     const disabledAttrs = <N extends Attributed<N> & { readonly disabled: (disabled: boolean) => N }>(
       node: N,
@@ -465,47 +477,38 @@ export const Toolbar = Component.define({
       !alt && !ctrl && !meta && !shift &&
       (key === axis.next || key === axis.previous || key === "Home" || key === "End")
 
+    const movesFocus = <N extends Html.VoidElement<typeof ToolbarMessage.Type, any, any, any, any>>(
+      node: N,
+      value: string
+    ): N =>
+      roving(node, value).onKeyDown(
+        (key) => moves(key) ? ToolbarMessage.PressedItemKey({ value, key: key.key }) : undefined,
+        { preventDefault: true }
+      )
+
     const buttonPart = p.part("button", (b, value: string) => {
       const entry = entryOf(value)
       const off = disabledOf(props, entry)
       const focusable = entry.focusableWhenDisabled !== false
-      const own = disabledAttrs(b.attrs(itemAttrs(value)), off, focusable)
+      const silent = off && focusable
+      const own = disabledAttrs(movesFocus(b, value), off, focusable)
         .attrs({ type: "button", "data-focusable": flag(focusable) })
-        .ref(Item.at(value) as never)
-        .onFocus(ToolbarMessage.FocusedItem({ value }))
-        .onKeyDown((key) => moves(key) ? ToolbarMessage.PressedItemKey({ value, key: key.key }) : undefined, {
-          preventDefault: true
-        })
-      if (!(off && focusable)) return own.forward((node) => disabledAttrs(node, off, focusable))
-      return own
-        .onClick(() => undefined, { preventDefault: "always" })
-        .forward((node) => {
-          const silenced = node.handlers.click === undefined
-            ? node
-            : node.onClick(() => undefined, { preventDefault: "always" })
-          return disabledAttrs(silenced, off, focusable)
-        })
+      return (silent ? cancelClick(own) : own).forward((node) =>
+        disabledAttrs(silent && node.handlers.click !== undefined ? cancelClick(node) : node, off, focusable)
+      )
     })
 
     const linkPart = p.part("a", (b, value: string) => {
       entryOf(value)
-      return b.attrs(itemAttrs(value))
-        .ref(Item.at(value) as never)
-        .onFocus(ToolbarMessage.FocusedItem({ value }))
-        .onKeyDown(
-          (key) => moves(key) ? ToolbarMessage.PressedItemKey({ value, key: key.key }) : undefined,
-          { preventDefault: true }
-        )
+      return movesFocus(b, value)
     })
 
     const inputPart = p.part("input", (b, value: string) => {
       const entry = entryOf(value)
       const off = disabledOf(props, entry)
       const focusable = entry.focusableWhenDisabled !== false
-      const own = disabledAttrs(b.attrs(itemAttrs(value)), off, focusable)
+      const own = disabledAttrs(roving(b, value), off, focusable)
         .attr("data-focusable", flag(focusable))
-        .ref(Item.at(value) as never)
-        .onFocus(ToolbarMessage.FocusedItem({ value }))
         .onKeyDown(({ alt, composing, ctrl, key, meta, selectionEnd, selectionStart, shift }) =>
           alt || ctrl || meta || shift || composing || (key !== axis.next && key !== axis.previous) ||
             selectionStart !== selectionEnd
@@ -515,14 +518,6 @@ export const Toolbar = Component.define({
       const readOnly = <N extends Attributed<N>>(node: N): N => off && focusable ? node.attr("readonly", "") : node
       return readOnly(own).forward((node) => readOnly(disabledAttrs(node, off, focusable)))
     })
-
-    const options = <Tag extends string, R>(part: View.Part<Tag, [value: string], R>) =>
-      View.wrapPart(
-        part,
-        <B extends Keyed<Tag>>({ element, value }: { readonly element: B; readonly value: string }): ReturnType<
-          B["attr"]
-        > => part(element.key(value), value) as ReturnType<B["attr"]>
-      )
 
     const groupPart = p.part("div", (b, value: string) => {
       const group = groupOf(props, value)
@@ -551,9 +546,9 @@ export const Toolbar = Component.define({
           { element, value }: { readonly element: B; readonly value: string }
         ): ReturnType<B["attr"]> => groupPart(element, value)
       ),
-      button: options(buttonPart),
-      link: options(linkPart),
-      input: options(inputPart),
+      button: valued(buttonPart),
+      link: valued(linkPart),
+      input: valued(inputPart),
       separator: p.part("div", (b) => separatorAttrs(b, orientation === "vertical" ? "horizontal" : "vertical"))
     }
   }

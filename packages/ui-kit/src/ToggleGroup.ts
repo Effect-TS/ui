@@ -113,11 +113,10 @@ import * as Component from "@effect/ui/Component"
 import * as DomCommand from "@effect/ui/html/DomCommand"
 import * as Html from "@effect/ui/html/Html"
 import * as UiSchema from "@effect/ui/UiSchema"
-import * as View from "@effect/ui/View"
 import * as Schema from "effect/Schema"
 import { DirectionProvider } from "./DirectionProvider.ts"
 import { flag, pressedAttrs } from "./internal/attributes.ts"
-import { arrowKeys, available, stepped } from "./internal/list.ts"
+import { arrowKeys, available, valued, stepped } from "./internal/list.ts"
 import { Toolbar } from "./Toolbar.ts"
 
 /**
@@ -247,11 +246,11 @@ interface InToolbar {
 const disabledOf = (props: ToggleGroupProps, toolbar: InToolbar | undefined): boolean =>
   props.disabled === true || toolbar?.disabled === true
 
-const offInToolbar = (toolbar: InToolbar | undefined, value: string): boolean =>
-  toolbar?.disabledItems.includes(value) === true
+const itemDisabled = (props: ToggleGroupProps, toolbar: InToolbar | undefined, item: ToggleGroupItem): boolean =>
+  disabledOf(props, toolbar) || !available(item) || toolbar?.disabledItems.includes(item.value) === true
 
 const enabledOf = (props: ToggleGroupProps, toolbar: InToolbar | undefined): ReadonlyArray<ToggleGroupItem> =>
-  disabledOf(props, toolbar) ? [] : props.items.filter((item) => available(item) && !offInToolbar(toolbar, item.value))
+  props.items.filter((item) => !itemDisabled(props, toolbar, item))
 
 const enabled = (props: ToggleGroupProps, toolbar: InToolbar | undefined, value: string): boolean =>
   enabledOf(props, toolbar).some((item) => item.value === value)
@@ -262,8 +261,8 @@ const toggled = (props: ToggleGroupProps, value: string): ReadonlyArray<string> 
   return pressed ? props.value.filter((other) => other !== value) : [...props.value, value]
 }
 
-const tabStopOf = (model: ToggleGroupModel, props: ToggleGroupProps): string | null => {
-  const items = enabledOf(props, undefined)
+const tabStopOf = (model: ToggleGroupModel, props: ToggleGroupProps, toolbar: InToolbar | undefined): string | null => {
+  const items = enabledOf(props, toolbar)
   return (items.find((item) => item.value === model.active) ?? items[0])?.value ?? null
 }
 
@@ -352,16 +351,12 @@ export const ToggleGroup = Component.define({
     const disabled = disabledOf(props, toolbar)
     const multiple = props.multiple === true
     const orientation = props.orientation ?? "horizontal"
-    const tabStop = tabStopOf(model, props)
+    const tabStop = tabStopOf(model, props, toolbar)
     const axis = arrowKeys(orientation, false)
     const item = p.part("button", (b, value: string) => {
       const entry = props.items.find((item) => item.value === value)
       if (entry === undefined) throw new Error("ToggleGroup: no item with value \"" + value + "\" in items")
-      const pressed = pressedAttrs(
-        b,
-        props.value.includes(value),
-        disabled || entry.disabled === true || offInToolbar(toolbar, value)
-      )
+      const pressed = pressedAttrs(b, props.value.includes(value), itemDisabled(props, toolbar, entry))
         .onClick(ToggleGroupMessage.ClickedItem({ value }))
       if (toolbar !== undefined) return pressed
       return pressed
@@ -389,12 +384,7 @@ export const ToggleGroup = Component.define({
           "data-disabled": flag(disabled),
           "data-multiple": flag(multiple)
         })),
-      item: View.wrapPart(
-        item,
-        <B extends View.PartTarget<"button"> & { readonly key: (key: string) => View.PartTarget<"button"> }>(
-          { element, value }: { readonly element: B; readonly value: string }
-        ): ReturnType<B["attr"]> => item(element.key(value), value)
-      )
+      item: valued(item)
     }
   }
 })
