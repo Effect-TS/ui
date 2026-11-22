@@ -371,7 +371,8 @@ describe("BrowserHost", { concurrent: false }, () => {
             new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText" })
           )
           push()
-          yield* tick
+          yield* Effect.promise(() => Promise.resolve())
+          expect(pushed.value).toBe("hello world")
           pushed.setSelectionRange(3, 3)
           push()
           yield* tick

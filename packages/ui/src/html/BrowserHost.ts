@@ -542,11 +542,25 @@ export const makeHost = (
   const eventsOf = (node: globalThis.Node): Renderer.Events | undefined => eventsAlong(pathFrom(node))[0]
   const composing = new WeakSet<globalThis.Node>()
   const beforeEdits = new WeakMap<globalThis.Node, Array<FieldState>>()
-  const recordEdit = (target: EventTarget) => {
-    const state = fieldStateOf(target)
+  let pendingEdit: { readonly node: globalThis.Node; readonly state: FieldState } | undefined
+  let dropsPendingEdit = false
+  const expectEdit = (node: globalThis.Node) => {
+    const state = fieldStateOf(node)
+    pendingEdit = state === undefined ? undefined : { node, state }
+    // An edit's `input` comes in the same task as its `beforeinput`, and a cancelled edit has none.
+    if (pendingEdit !== undefined && !dropsPendingEdit) {
+      dropsPendingEdit = true
+      setTimeout(() => {
+        dropsPendingEdit = false
+        pendingEdit = undefined
+      }, 0)
+    }
+  }
+  const recordEdit = (node: globalThis.Node, state: FieldState | undefined) => {
+    pendingEdit = undefined
     if (state === undefined) return
-    const edits = beforeEdits.get(target as globalThis.Node)
-    if (edits === undefined) beforeEdits.set(target as globalThis.Node, [state])
+    const edits = beforeEdits.get(node)
+    if (edits === undefined) beforeEdits.set(node, [state])
     else edits.push(state)
   }
   // Assigning a value that changes the text moves the caret to the end, so the selection is put back.
@@ -1083,14 +1097,15 @@ export const makeHost = (
       if (target !== null && target !== undefined && "nodeType" in target) {
         const node = target as globalThis.Node
         if (name === "beforeinput") {
-          if ((event as Partial<InputEvent>).isComposing !== true && !composing.has(node)) {
-            recordEdit(node)
-            restoreSoon(node)
-          }
-        } else if (name === "compositionstart" || (event as Partial<InputEvent>).isComposing === true) {
-          if (name === "compositionstart") recordEdit(node)
+          if ((event as Partial<InputEvent>).isComposing !== true && !composing.has(node)) expectEdit(node)
+        } else if (name === "compositionstart") {
+          recordEdit(node, fieldStateOf(node))
           composing.add(node)
-        } else composing.delete(node)
+        } else {
+          if (name === "input" && pendingEdit?.node === node) recordEdit(node, pendingEdit.state)
+          if ((event as Partial<InputEvent>).isComposing === true) composing.add(node)
+          else composing.delete(node)
+        }
       }
     }
     const entries = eventsAlong(path)
