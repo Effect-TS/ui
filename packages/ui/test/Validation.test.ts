@@ -83,22 +83,7 @@ describe("Validation", () => {
     })
   })
 
-  it("treats an empty Redacted value as empty for required", () => {
-    const Login = Validation.make({
-      password: { value: Schema.Redacted(Schema.String), required: "Password is required" }
-    })
-    const state = Login.submit(Login.init({ password: Redacted.make("") }))
-    const result = Login.validate(state)
-    assert.deepStrictEqual(result.fields.password, {
-      _tag: "Invalid",
-      value: Redacted.make(""),
-      required: true,
-      errors: ["Password is required"]
-    })
-    assert.isTrue(Option.isNone(result.value))
-  })
-
-  it("does not run rules on an empty Redacted value", () => {
+  it("treats an empty Redacted value as empty for required and skips its rules", () => {
     let called = 0
     const Login = Validation.make({
       password: {
@@ -112,12 +97,14 @@ describe("Validation", () => {
     })
     const result = Login.validate(Login.submit(Login.init({ password: Redacted.make("") })))
     assert.strictEqual(called, 0)
-    assert.deepStrictEqual(result.fields.password, {
-      _tag: "Invalid",
-      value: Redacted.make(""),
-      required: true,
-      errors: ["Password is required"]
-    })
+    const { password } = result.fields
+    assert.strictEqual(password._tag, "Invalid")
+    if (password._tag === "Invalid") {
+      assert.deepStrictEqual(password.errors, ["Password is required"])
+      assert.isTrue(password.required)
+    }
+    assert.strictEqual(Redacted.value(password.value), "")
+    assert.isTrue(Option.isNone(result.value))
   })
 
   it("lists every rule of a field as met or unmet, before the field shows", () => {
