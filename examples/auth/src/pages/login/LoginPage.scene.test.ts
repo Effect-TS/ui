@@ -1,7 +1,7 @@
 import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Redacted } from "effect"
+import { Effect, Equal, Redacted } from "effect"
 import { LoginPage, LoginPageEvents, LoginPageMessage, SimulateAuthRequest } from "./LoginPage.ts"
 
 const alice = { userId: "1", email: "alice@example.com", name: "alice" }
@@ -41,7 +41,12 @@ describe("LoginPage", () => {
         .expect(emailField).toBeDisabled()
         .expect(passwordField).toBeDisabled()
         .expectExact(SimulateAuthRequest)
-      assert.deepStrictEqual(s.pending[0].command.args, { email: alice.email, password: Redacted.make("password") })
+      const args = s.pending[0].command.args as {
+        readonly email: string
+        readonly password: Redacted.Redacted<string>
+      }
+      assert.strictEqual(args.email, alice.email)
+      assert.isTrue(Equal.equals(args.password, Redacted.make("password")))
       s.resolve(SimulateAuthRequest, LoginPageMessage.SucceededSimulateAuthRequest({ session: alice }))
         .emitted(LoginPageEvents.SignedIn({ session: alice }))
     }))
