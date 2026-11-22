@@ -15,6 +15,7 @@ const Message = UiSchema.TaggedEnum({
 
 const Page = Component.define({
   name: "Page",
+  scoped: false,
   props: Schema.Struct({ autoSubmit: Schema.Boolean, upper: Schema.Boolean, locked: Schema.Boolean }),
   model: Schema.Struct({ code: Schema.String, log: Schema.Array(Schema.String) }),
   message: Message,
@@ -85,6 +86,7 @@ const FrameMessage = UiSchema.TaggedEnum({ Pressed: {} })
 
 const Frame = Component.define({
   name: "Frame",
+  scoped: false,
   model: Schema.Number,
   message: FrameMessage,
   elements: Html
@@ -98,6 +100,7 @@ const Frame = Component.define({
 
 const Labelled = Component.define({
   name: "Labelled",
+  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html

@@ -2139,6 +2139,7 @@ describe("BrowserHost", { concurrent: false }, () => {
     })
     const Entry = Component.define({
       name: "Entry",
+      scoped: false,
       model: Schema.Array(Schema.String),
       message: EntryMessage,
       elements: Html
