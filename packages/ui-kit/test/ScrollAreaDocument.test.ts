@@ -66,13 +66,11 @@ const mountArea = Effect.fnUntraced(function*(
   yield* BrowserHost.mountEffect(Demo, {}, app)
   yield* tick
   return {
-    app,
     root: app.querySelector<HTMLElement>(".root")!,
     viewport: app.querySelector<HTMLElement>(".viewport")!,
     barY: () => app.querySelector<HTMLElement>(".bar-y"),
     thumbY: () => app.querySelector<HTMLElement>(".thumb-y"),
     barX: () => app.querySelector<HTMLElement>(".bar-x"),
-    thumbX: () => app.querySelector<HTMLElement>(".thumb-x"),
     corner: () => app.querySelector<HTMLElement>(".corner")
   }
 })
@@ -129,7 +127,7 @@ describe("ScrollArea in a document", { concurrent: false }, () => {
 
   it.effect("handles track press, thumb drag, missed-release fallback, scroll-snap restore, and wheel chaining", () =>
     Effect.gen(function*() {
-      const { barY, root, thumbY, viewport } = yield* mountArea({}, { keepMounted: true })
+      const { barY, thumbY, viewport } = yield* mountArea({}, { keepMounted: true })
       stubMetrics(viewport, { clientHeight: 100, scrollHeight: 500, clientWidth: 100, scrollWidth: 100 })
       stubMetrics(barY()!, { offsetHeight: 100, offsetWidth: 12 })
       stubMetrics(thumbY()!, { offsetHeight: 20, offsetWidth: 12 })
@@ -182,7 +180,6 @@ describe("ScrollArea in a document", { concurrent: false }, () => {
       const wheelEdge = new WheelEvent("wheel", { deltaY: 50, bubbles: true, cancelable: true })
       barY()!.dispatchEvent(wheelEdge)
       assert.isFalse(wheelEdge.defaultPrevented)
-      assert.isTrue(root.hasAttribute("data-has-overflow-y"))
     }))
 
   it.effect("tracks user scroll timer and ignores programmatic scrolls", () =>

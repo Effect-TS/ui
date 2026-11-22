@@ -24,10 +24,10 @@ const tracked = (s: Rendered): Track =>
     ?.mount as unknown as Track
 const sent = (tag: string, fields: object = {}) => ({ _tag: tag, ...fields }) as never
 
-const makeStandIn = (keepMounted = false, snapshot?: (parts: Parts) => void) => ({
+const makeStandIn = (snapshot: (parts: Parts) => void) => ({
   elements: Html,
   view: (scrollArea: Parts, h: H) => {
-    snapshot?.(scrollArea)
+    snapshot(scrollArea)
     return scrollArea.root(
       h.div.class("root")
         .attr("role", "region")
@@ -57,14 +57,13 @@ const makeStandIn = (keepMounted = false, snapshot?: (parts: Parts) => void) => 
           .attr("style", "width:8px"),
         thumb: h.div.class("thumb-y")
           .attr("data-orientation", "horizontal")
-          .attr("data-scrolling", "x"),
-        keepMounted
+          .attr("data-scrolling", "x")
       }),
       scrollArea.scrollbar({
         element: h.div.class("bar-x"),
         thumb: h.div.class("thumb-x"),
         orientation: "horizontal",
-        keepMounted
+        keepMounted: true
       }),
       scrollArea.corner(
         h.div.class("corner")
@@ -79,7 +78,7 @@ describe("ScrollArea", () => {
   it.effect("manages overflow, scrolling, hover, tabindex, visibility, and attribute precedence", () =>
     Effect.gen(function*() {
       let latest!: Parts
-      const s = yield* Scene.make(ScrollArea, {}, makeStandIn(false, (p) => (latest = p)))
+      const s = yield* Scene.make(ScrollArea, {}, makeStandIn((p) => (latest = p)))
       s.expectMount(tracked(s))
 
       assert.strictEqual(s.get(rootLoc).attrs?.role, "presentation")
@@ -97,8 +96,9 @@ describe("ScrollArea", () => {
       assert.strictEqual(s.get(contentLoc).attrs?.style, "min-width:fit-content")
 
       assert.strictEqual(s.query(barYLoc), undefined)
-      assert.strictEqual(s.query(barXLoc), undefined)
       assert.strictEqual(s.query(cornerLoc), undefined)
+      assert.isDefined(s.query(barXLoc))
+      assert.include(s.get(thumbXLoc).attrs?.style ?? "", "visibility:hidden")
       assert.strictEqual(latest.cornerHidden, true)
 
       s.mounted(
@@ -131,6 +131,7 @@ describe("ScrollArea", () => {
       assert.strictEqual(s.get(thumbYLoc).attrs?.["data-orientation"], "vertical")
       assert.strictEqual(s.get(thumbYLoc).attrs?.["data-scrolling"], undefined)
       assert.notInclude(s.get(thumbYLoc).attrs?.style ?? "", "visibility:hidden")
+      assert.notInclude(s.get(thumbXLoc).attrs?.style ?? "", "visibility:hidden")
 
       assert.strictEqual(s.get(barXLoc).attrs?.["data-orientation"], "horizontal")
       assert.strictEqual(s.get(thumbXLoc).attrs?.["data-orientation"], "horizontal")
@@ -161,27 +162,6 @@ describe("ScrollArea", () => {
       assert.strictEqual(s.get(barYLoc).attrs?.["data-hovering"], undefined)
       assert.strictEqual(latest.scrolling, false)
       assert.strictEqual(latest.hovering, false)
-    }))
-
-  it.effect("keeps mounted scrollbars hidden on thumb until first measurement", () =>
-    Effect.gen(function*() {
-      const s = yield* Scene.make(ScrollArea, {}, makeStandIn(true))
-      s.expectMount(tracked(s))
-      assert.isDefined(s.query(barYLoc))
-      assert.include(s.get(thumbYLoc).attrs?.style ?? "", "visibility:hidden")
-
-      s.mounted(
-        tracked(s),
-        sent("MeasuredOverflow", {
-          hasOverflowX: false,
-          hasOverflowY: false,
-          overflowXStart: false,
-          overflowXEnd: false,
-          overflowYStart: false,
-          overflowYEnd: false
-        })
-      )
-      assert.notInclude(s.get(thumbYLoc).attrs?.style ?? "", "visibility:hidden")
     }))
 
   it.effect("rejects non-div tags on every part even when hidden", () =>
