@@ -428,6 +428,7 @@ const Message = UiSchema.TaggedEnum({
   SwitchedTrigger: {},
   SettledSwitch: {},
   Closed: {},
+  Reopened: {},
   StartedTransition: { direction: Schema.NullOr(Schema.String) },
   AdvancedTransition: {},
   EndedTransition: {},
@@ -621,12 +622,13 @@ const TrackSwitch = Mount.makeStream(
         const previous = current
         current = next
         if (!next.open) generation++
-        if (previous.open && !next.open) Queue.offerUnsafe(queue, Message.Closed())
+        if (previous.open !== next.open) Queue.offerUnsafe(queue, next.open ? Message.Reopened() : Message.Closed())
         if (!next.open || !previous.open || previous.trigger === null || next.trigger === null) return
         if (next.trigger === previous.trigger) return
         Queue.offerUnsafe(queue, Message.SwitchedTrigger())
         settle(++generation)
       }
+      if (args.open) Queue.offerUnsafe(queue, Message.Reopened())
       return Effect.acquireRelease(
         Effect.forkScoped(Stream.runForEach(changes, (next) => Effect.sync(() => onChange(next)))),
         () =>
@@ -997,6 +999,7 @@ export const Popover = Component.define({
     SwitchedTrigger: (model) => ({ ...model, switched: false }),
     SettledSwitch: (model, _message, $) => $.props.open ? { ...model, switched: true } : model,
     Closed: (model) => ({ ...model, stale: true, patient: false, method: null }),
+    Reopened: (model) => model.stale ? { ...model, reason: null, stale: false } : model,
     StartedTransition: (model, { direction }, $) =>
       $.props.open ? { ...model, transition: { direction, entered: false } } : model,
     AdvancedTransition: (model) =>

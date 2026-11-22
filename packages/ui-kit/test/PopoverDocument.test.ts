@@ -17,23 +17,25 @@ const Page = Component.define({
   name: "Page",
   props: Schema.Struct({
     modal: Schema.optional(Schema.Boolean),
-    holdExit: Schema.optional(Schema.Boolean),
+    holdHoverExit: Schema.optional(Schema.Boolean),
     anchor: Schema.optional(Schema.String)
   }),
   model: Schema.Struct({
     open: Schema.Boolean,
     triggerId: Schema.NullOr(Schema.String),
+    hovered: Schema.Boolean,
     log: Schema.Array(Schema.String)
   }),
   message: Message,
   elements: Html
 }).make({
-  init: () => ({ open: false, triggerId: null, log: [] }),
+  init: () => ({ open: false, triggerId: null, hovered: false, log: [] }),
   update: {
-    Shown: (model) => ({ ...model, open: true }),
+    Shown: (model) => ({ ...model, open: true, hovered: false }),
     Opened: (model, { reason, triggerId }) => ({
       open: true,
       triggerId,
+      hovered: reason === "trigger-hover",
       log: [...model.log, `Opened ${triggerId} ${reason}`]
     }),
     Dismissed: (model, { reason }) => ({ ...model, open: false, log: [...model.log, `Dismissed ${reason}`] }),
@@ -44,7 +46,14 @@ const Page = Component.define({
       h.button.attr("id", "show").onClick(Message.Shown()).children("Show"),
       h.span.attr("id", "anchor"),
       Popover(h, {
-        props: { ...h.props, open: model.open, triggerId: model.triggerId, id: "popover" },
+        props: {
+          modal: h.props.modal,
+          anchor: h.props.anchor,
+          holdExit: h.props.holdHoverExit === true && model.hovered,
+          open: model.open,
+          triggerId: model.triggerId,
+          id: "popover"
+        },
         onEmit: {
           Opened: ({ reason, triggerId }) => Message.Opened({ triggerId, reason }),
           Dismissed: ({ reason }) => Message.Dismissed({ reason }),
@@ -54,6 +63,7 @@ const Page = Component.define({
           h.div(
             popover.trigger({ element: h.button.attr("id", "a"), openOnHover: true, delay: 0 }).children("A"),
             popover.trigger({ element: h.button.attr("id", "b"), openOnHover: true, delay: 0 }).children("B"),
+            popover.finalFocus(h.button.attr("id", "final")).children("Final"),
             popover.portal(h.dialog)?.children(
               popover.positioner(h.div.attr("data-positioner", "")).children(
                 popover.popup(h.div).children(
@@ -131,7 +141,7 @@ describe("Popover in a document", { concurrent: false }, () => {
 
   it.effect("hover opens without focus and closes once the pointer leaves, and a press or the consumer's open takes focus", () =>
     Effect.gen(function*() {
-      const { log } = yield* mountPage({ modal: true, holdExit: true })
+      const { log } = yield* mountPage({ modal: true, holdHoverExit: true })
       const show = byId("show")
       const focusedInside = () => byId("popover").contains(document.activeElement)
       const positioner = () => document.querySelector("[data-positioner]")!
@@ -170,5 +180,9 @@ describe("Popover in a document", { concurrent: false }, () => {
       yield* tick
       yield* tick
       assert.isTrue(focusedInside())
+      document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+      yield* tick
+      yield* tick
+      assert.strictEqual(document.activeElement, byId("final"))
     }))
 })
