@@ -121,7 +121,7 @@ import * as Stream from "effect/Stream"
 import { type Attributed, flag, idOf, ownStyle, withTokens } from "./internal/attributes.ts"
 import { override } from "./internal/dom.ts"
 import { frameOf, settling, statusOf, transitionAttrs } from "./internal/transition.ts"
-import { carries, layerOf, rewrite, withAttr } from "./internal/tree.ts"
+import { layerOf, rewrite, withAttr } from "./internal/tree.ts"
 
 /**
  * Controls whether the panel is open and how it stays in the page while

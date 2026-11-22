@@ -127,7 +127,7 @@ import * as View from "@effect/ui/View"
 import * as Schema from "effect/Schema"
 import { Collapsible, CollapsibleToggleReason, type CollapsibleTransitionStatus } from "./Collapsible.ts"
 import { type Attributed, flag, idOf, ownStyle } from "./internal/attributes.ts"
-import { carries, find, layerOf, rewrite, withAttr } from "./internal/tree.ts"
+import { carries, find, layerOf, rewrite, setOn } from "./internal/tree.ts"
 
 /**
  * The axis an accordion's items are laid out along.
@@ -232,11 +232,18 @@ const toggled = (props: AccordionProps, item: string, open: boolean): ReadonlyAr
   return props.value.includes(item) ? props.value : [...props.value, item]
 }
 
+const resolved = (props: AccordionProps): typeof AccordionShared.Type => ({
+  value: props.value,
+  disabled: props.disabled === true,
+  keepMounted: props.keepMounted === true,
+  hiddenUntilFound: props.hiddenUntilFound === true,
+  orientation: props.orientation ?? "vertical"
+})
+
 const numbered = <N extends View.Node<any, any>>(node: N): N => {
   let index = 0
   return rewrite(node, (child) => {
-    if (child._tag !== "Child") return undefined
-    if ((child.component as unknown) !== AccordionItem) return child
+    if (child._tag !== "Child" || (child.component as unknown) !== AccordionItem) return undefined
     const at = index++
     const props = child.props as AccordionItemProps
     return props.index === undefined ? { ...child, props: { ...props, index: at } } : child
@@ -280,13 +287,7 @@ export const Accordion = Component.define({
   message: AccordionMessage,
   events: AccordionEvents,
   shares: {
-    value: (_model, props) => ({
-      value: props.value,
-      disabled: props.disabled === true,
-      keepMounted: props.keepMounted === true,
-      hiddenUntilFound: props.hiddenUntilFound === true,
-      orientation: props.orientation ?? "vertical"
-    }),
+    value: (_model, props) => resolved(props),
     schema: AccordionShared,
     receives: ["ToggledItem"]
   },
@@ -300,13 +301,11 @@ export const Accordion = Component.define({
         : $.emit(AccordionEvents.Toggled({ value: toggled($.props, item, open), reason }))
   },
   parts: (_model, p) => {
-    const props = p.props
-    const disabled = props.disabled === true
-    const orientation = props.orientation ?? "vertical"
+    const { disabled, orientation, value } = resolved(p.props)
     return {
-      value: props.value,
+      value,
       disabled,
-      multiple: props.multiple === true,
+      multiple: p.props.multiple === true,
       orientation,
       root: p.part(
         "div",
@@ -457,7 +456,7 @@ export const AccordionItem = Component.define({
     const disabled = props.disabled === true || accordion.disabled
     const orientation = accordion.orientation
     const index = props.index
-    let triggerId: string | null = null
+    let triggerId: string | undefined
     const triggers = new Set<View.Owned>()
     const panels = new Set<View.Owned>()
     const states = <B extends Attributed<B>>(builder: B): B =>
@@ -470,11 +469,7 @@ export const AccordionItem = Component.define({
       states(b).forward((node) => {
         if (panels.size === 0) return node
         const root = View.build(node, [])
-        const labelledBy = find(root, (element) => carries(element, triggers))?.attrs.id
-        return rewrite(root, (element) =>
-          element._tag === "Element" && carries(element, panels)
-            ? withAttr(element, "aria-labelledby", labelledBy)
-            : undefined)
+        return setOn(root, panels, "aria-labelledby", find(root, (element) => carries(element, triggers))?.attrs.id)
       }))
     const header = p.part(headings, (b) =>
       states(b).attrs({
@@ -497,7 +492,7 @@ export const AccordionItem = Component.define({
           panels.add(layerOf(node))
           return ownStyle(
             "--accordion-panel-height:var(--collapsible-panel-height);--accordion-panel-width:var(--collapsible-panel-width)"
-          )(node.attr("aria-labelledby", triggerId ?? undefined))
+          )(node.attr("aria-labelledby", triggerId))
         }))
 
     return p.child(Collapsible, {
@@ -527,11 +522,8 @@ export const AccordionItem = Component.define({
         header,
         trigger: View.wrapPart(
           triggerPart,
-          <B extends View.PartTarget<"button">>(element: B): ReturnType<B["attr"]> => {
-            const id = idOf(element) ?? p.id("trigger")
-            triggerId = id
-            return triggerPart(collapsible.trigger(element), id)
-          }
+          <B extends View.PartTarget<"button">>(element: B): ReturnType<B["attr"]> =>
+            triggerPart(collapsible.trigger(element), idOf(element) ?? p.id("trigger"))
         ),
         panel: View.wrapPart(
           panelPart,
