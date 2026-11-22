@@ -56,14 +56,10 @@ describe("Collapsible", () => {
       disabled.expectMount(tracked(disabled))
       assert.deepInclude(disabled.get(trigger).attrs, { disabled: "", "data-disabled": "" })
       assert.deepInclude(disabled.get(root).attrs, { "data-disabled": "" })
-      assert.deepInclude(disabled.get(panel).attrs, { "data-disabled": "" })
+      assert.deepInclude(disabled.get(panel).attrs, { hidden: "", "data-closed": "", "data-disabled": "" })
+      assert.isUndefined(disabled.get(panel).attrs?.["data-starting-style"])
       disabled.click(trigger)
       assert.deepStrictEqual(disabled.current.emitted, [])
-
-      const kept = yield* Scene.make(Collapsible, { open: false, keepMounted: true }, standIn)
-      kept.expectMount(tracked(kept))
-      assert.deepInclude(kept.get(panel).attrs, { hidden: "", "data-closed": "" })
-      assert.isUndefined(kept.get(panel).attrs?.["data-starting-style"])
 
       const untilFound = yield* Scene.make(
         Collapsible,

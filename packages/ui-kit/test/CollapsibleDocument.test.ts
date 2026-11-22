@@ -202,9 +202,11 @@ describe("Collapsible in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(log().slice(2), ["Toggled false trigger-press", "Settled false"])
 
       yield* Effect.scoped(Effect.gen(function*() {
-        const opened = yield* mountPage({ initialOpen: true })
-        assert.isFalse(byId("panel").hasAttribute("data-starting-style"))
-        assert.include(byId("panel").getAttribute("style") ?? "", "--collapsible-panel-height:auto")
+        const opened = yield* mountPage({ initialOpen: true, style: "animation-name:slide-in" })
+        const panel = byId("panel")
+        assert.isFalse(panel.hasAttribute("data-starting-style"))
+        assert.strictEqual(panel.style.animationName, "none")
+        assert.include(panel.getAttribute("style") ?? "", "--collapsible-panel-height:auto")
         assert.deepStrictEqual(opened.log(), [])
       }))
     }))
@@ -259,7 +261,11 @@ describe("Collapsible in a document", { concurrent: false }, () => {
         assert.isTrue(panel.hasAttribute("data-ending-style"))
       }))
 
-      const { log } = yield* mountPage({ hiddenUntilFound: true })
+      const { finish } = yield* animations
+      const { log } = yield* mountPage({
+        hiddenUntilFound: true,
+        style: "transition-duration:150ms;animation-duration:150ms"
+      })
       const panel = byId("panel")
       assert.strictEqual(panel.getAttribute("hidden"), "until-found")
       assert.isTrue(panel.hasAttribute("data-starting-style"))
@@ -273,11 +279,17 @@ describe("Collapsible in a document", { concurrent: false }, () => {
       panel.removeAttribute("hidden")
       assert.isFalse(panel.hasAttribute("data-starting-style"))
       yield* tick
+      assert.strictEqual(panel.style.transitionDuration, "0s")
+      assert.strictEqual(panel.style.animationDuration, "0s")
+      assert.deepStrictEqual(log(), ["Toggled true find-in-page"])
+
+      finish()
       yield* tick
       assert.deepStrictEqual(log(), ["Toggled true find-in-page", "Settled true"])
       assert.isFalse(panel.hasAttribute("hidden"))
       assert.isFalse(panel.hasAttribute("data-starting-style"))
-      assert.notInclude(panel.getAttribute("style") ?? "", "duration")
+      assert.strictEqual(panel.style.transitionDuration, "150ms")
+      assert.strictEqual(panel.style.animationDuration, "150ms")
     }))
 
   it.effect("refused, overlapping, and disabled reveals restore hidden until found and starting style", () =>
