@@ -77,7 +77,7 @@ describe("Menu", () => {
         expect(menu.radioGroup(h.div, "copy")).type.toBe<Div>()
         expect(menu.radioGroup(h.div, null)).type.toBe<Div>()
         expect(menu.radioItem(h.div, "copy")).type.toBe<Div>()
-        expect(menu.radioItemIndicator(h.span, "copy")).type.toBe<Span | undefined>()
+        expect(menu.radioItemIndicator).type.toBe<typeof menu.checkboxItemIndicator>()
         expect(menu.group(h.div, "edit")).type.toBe<Div>()
         expect(menu.groupLabel(h.div, "edit")).type.toBe<Div>()
         expect(menu.separator(h.div)).type.toBe<Div>()
