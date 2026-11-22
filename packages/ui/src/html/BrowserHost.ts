@@ -153,6 +153,9 @@ const dragSourceEvents: ReadonlyArray<string> = ["dragstart", "dragend"]
 /** Events the host listens to whether or not a handler wants them. */
 const alwaysEvents: ReadonlyArray<string> = [...changeEvents, "submit", "compositionstart"]
 
+/** The Model's value of each controlled property, by node. One map for every host, so `htmlHost` reads it too. */
+const wanted = new WeakMap<globalThis.Node, Map<string, unknown>>()
+
 const controlled: ReadonlySet<string> = new Set(["value", "checked", "selected", "open", "popoverOpen"])
 
 const emptyValue = (name: string): unknown => name === "value" ? "" : false
@@ -335,6 +338,15 @@ const selectionOf = (target: EventTarget | null) => {
   }
 }
 
+/** The clipboard's plain text. A browser may refuse the read, which counts as no text. */
+const pastedText = (event: Event): string => {
+  try {
+    return (event as ClipboardEvent).clipboardData?.getData("text/plain") ?? ""
+  } catch {
+    return ""
+  }
+}
+
 /**
  * Whether `target`, where focus came from or goes, is inside `element`.
  * `null`, another window or nowhere, is not. An event a script made can name
@@ -396,6 +408,8 @@ const payloadOf = (
       return controlPayload(fieldOf(target, element), event)
     case "compositionend":
       return { value: String(fieldOf(target, element).value ?? "") }
+    case "paste":
+      return { text: pastedText(event) }
     case "submit": {
       const form = (element.localName === "form" ? element : target) as HTMLFormElement
       return fieldsOf(form, (event as SubmitEvent).submitter ?? null)
@@ -477,8 +491,6 @@ export const makeHost = (
   const eventsAlong = stored.along
   /** The events of `node` itself. */
   const eventsOf = (node: globalThis.Node): Renderer.Events | undefined => eventsAlong(pathFrom(node))[0]
-  // The last value the renderer set for each controlled property: what the element must show.
-  const wanted = new WeakMap<globalThis.Node, Map<string, unknown>>()
   const composing = new WeakSet<globalThis.Node>()
   const listening = new Map<string, (event: Event) => void>()
   // The pointer of the last `pointerdown`, which the click-like events that follow it report.
@@ -1251,8 +1263,8 @@ export const makeHost = (
 }
 
 /**
- * The element operations behind `Html.focus`, `blur`, `scrollIntoView` and
- * `measure`, on DOM elements.
+ * The element operations behind `Html.focus`, `blur`, `scrollIntoView`,
+ * `measure`, `select` and `requestSubmit`, on DOM elements.
  *
  * @stability experimental
  * @category constructors
@@ -1274,6 +1286,22 @@ export const htmlHost: Context.Service.Shape<typeof Html.Host> = {
       bottom: box.bottom,
       left: box.left
     }
+  },
+  select: (element) => {
+    const field = element as HTMLInputElement
+    // Written first: the host would otherwise put a value `update` rejected back a frame later, which
+    // drops the selection.
+    const value = wanted.get(field)?.get("value")
+    if (typeof value === "string" && field.value !== value) field.value = value
+    if (typeof field.select === "function") field.select()
+  },
+  requestSubmit: (element) => {
+    const form = element.localName === "form"
+      ? element as HTMLFormElement
+      : (element as HTMLInputElement).form ?? null
+    if (form === null || typeof form.requestSubmit !== "function") return false
+    form.requestSubmit()
+    return true
   }
 }
 

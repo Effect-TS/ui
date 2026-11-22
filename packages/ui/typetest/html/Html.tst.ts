@@ -213,6 +213,11 @@ describe("Html", () => {
             selectionStart === selectionEnd ? undefined : Msg.Mounted()
         )
         expect<Html.KeyPayload["selectionStart"]>().type.toBe<number | null>()
+        expect(h.input.onPaste).type.toBeCallableWith(
+          ({ text }: Html.PastePayload) => Msg.Typed({ value: text }),
+          { preventDefault: true }
+        )
+        expect(h.div.on).type.toBeCallableWith("paste", ({ text }: Html.PastePayload) => Msg.Typed({ value: text }))
         expect(h.div.on).type.not.toBeCallableWith("input", Msg.Mounted())
         expect(h.div.on).type.not.toBeCallableWith("submit", Msg.Mounted())
         expect(h.select.on).type.not.toBeCallableWith("compositionend", Msg.Mounted())

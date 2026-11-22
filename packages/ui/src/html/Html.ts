@@ -149,6 +149,8 @@ export class Host extends Context.Service<Host, {
   readonly blur: (element: globalThis.Element) => void
   readonly scrollIntoView: (element: globalThis.Element, options: ScrollOptions) => void
   readonly measure: (element: globalThis.Element) => Rect
+  readonly select: (element: globalThis.Element) => void
+  readonly requestSubmit: (element: globalThis.Element) => boolean
 }>()("@effect/ui/html/Html/Host") {}
 
 declare module "../Command.ts" {
@@ -291,6 +293,18 @@ export interface ValuePayload {
  */
 export interface InputPayload extends ValuePayload {
   readonly checked: boolean
+}
+
+/**
+ * The payload of `paste`: the clipboard's plain text, or `""` when it has
+ * none or the browser won't let it be read.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface PastePayload {
+  readonly text: string
 }
 
 /**
@@ -577,6 +591,7 @@ export interface Events {
   readonly dragover: DragOverPayload
   readonly drop: DropPayload
   readonly toggle: PopoverTogglePayload
+  readonly paste: PastePayload
 }
 
 /**
@@ -1228,6 +1243,17 @@ export class VoidElement<
     return this.on("blur" as any, handler as any)
   }
   /**
+   * Sugar for `on("paste", handler, options)`. The handler gets the
+   * clipboard's plain text. With `{ preventDefault: true }` a handler that
+   * returns a message cancels the paste, so the element's text stays as it
+   * is and the Model decides what the pasted text does.
+   *
+   * @since 0.1.0
+   */
+  onPaste(handler: View.Handler<Msg, PastePayload>, options?: View.EventOptions | undefined): this {
+    return this.on("paste" as any, handler as any, options)
+  }
+  /**
    * Makes this element a drag source carrying `data`, strings by type such
    * as `{ "application/x-todo": id }`, and sets `draggable="true"`. The host
    * puts the data on the drag when it starts. Calling it again replaces the
@@ -1856,6 +1882,8 @@ const withElement = <A>(
         : Host.useSync((host) => Option.some(f(host, node.value as globalThis.Element))))
   )
 
+const found = (done: Option.Option<unknown>): Found => ({ found: Option.isSome(done) })
+
 const FocusOptions = Schema.Struct({ preventScroll: Schema.optional(Schema.Boolean) })
 const ScrollOptionsSchema = Schema.Struct({
   behavior: Schema.optional(Schema.Literals(["auto", "instant", "smooth"])),
@@ -1879,7 +1907,7 @@ export const Focus: Command.Factory<
   ({ options, ref }) =>
     Effect.map(
       withElement(ref, (host, element) => host.focus(element, options ?? {})),
-      (done): Found => ({ found: Option.isSome(done) })
+      found
     )
 )
 
@@ -1893,10 +1921,7 @@ export const Focus: Command.Factory<
 export const Blur: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Found> = Command.make(
   "Html.blur",
   { args: { ref: Renderer.Ref } },
-  ({ ref }) =>
-    Effect.map(withElement(ref, (host, element) => host.blur(element)), (done): Found => ({
-      found: Option.isSome(done)
-    }))
+  ({ ref }) => Effect.map(withElement(ref, (host, element) => host.blur(element)), found)
 )
 
 /**
@@ -1913,9 +1938,7 @@ export const ScrollIntoView: Command.Factory<
   "Html.scrollIntoView",
   { args: { ref: Renderer.Ref, options: Schema.optional(ScrollOptionsSchema) } },
   ({ options, ref }) =>
-    Effect.map(withElement(ref, (host, element) => host.scrollIntoView(element, options ?? {})), (done): Found => ({
-      found: Option.isSome(done)
-    }))
+    Effect.map(withElement(ref, (host, element) => host.scrollIntoView(element, options ?? {})), found)
 )
 
 /**
@@ -1929,6 +1952,48 @@ export const Measure: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Optio
   "Html.measure",
   { args: { ref: Renderer.Ref } },
   ({ ref }) => withElement(ref, (host, element) => host.measure(element))
+)
+
+/**
+ * The Command behind `select`.
+ *
+ * @stability experimental
+ * @category refs
+ * @since 0.1.0
+ */
+export const Select: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Found> = Command.make(
+  "Html.select",
+  { args: { ref: Renderer.Ref } },
+  ({ ref }) => Effect.map(withElement(ref, (host, element) => host.select(element)), found)
+)
+
+/**
+ * What `requestSubmit` reports: whether the ref was rendered, and whether
+ * it had a form to submit.
+ *
+ * @stability experimental
+ * @category refs
+ * @since 0.1.0
+ */
+export interface Submitted extends Found {
+  readonly submitted: boolean
+}
+
+/**
+ * The Command behind `requestSubmit`.
+ *
+ * @stability experimental
+ * @category refs
+ * @since 0.1.0
+ */
+export const RequestSubmit: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Submitted> = Command.make(
+  "Html.requestSubmit",
+  { args: { ref: Renderer.Ref } },
+  ({ ref }) =>
+    Effect.map(withElement(ref, (host, element) => host.requestSubmit(element)), (done): Submitted => ({
+      ...found(done),
+      submitted: Option.getOrElse(done, () => false)
+    }))
 )
 
 /**
@@ -2004,3 +2069,56 @@ export const measure = <N extends globalThis.Element, Msg>(
   f: (rect: Option.Option<Rect>) => Msg
 ): Command.Mapped<Command.Issued<Option.Option<Rect>, never, Option.Option<Rect>, "Effect">, Msg> =>
   Command.map(Measure.make({ ref }), f)
+
+/**
+ * Selects all the text in the `input` or `textarea` `ref` names, once the
+ * render the issuing `update` caused is committed, and sends `f`'s message.
+ *
+ * **Details**
+ *
+ * It doesn't move focus: issue `focus` for that. The browser host first
+ * writes the element's controlled `value` if the element shows something
+ * else, such as a character `update` rejected, since writing it afterward
+ * would drop the selection.
+ *
+ * **Example** (Selecting a field's text once it has focus)
+ *
+ * ```ts
+ * import { Html } from "@effect/ui/html"
+ * import { UiSchema } from "@effect/ui"
+ *
+ * const Message = UiSchema.TaggedEnum({ FocusedAmount: {}, CompletedSelectAmount: {} })
+ * const Amount = Html.ref("Amount", "input")
+ *
+ * const command = Html.select(Amount, () => Message.CompletedSelectAmount())
+ * ```
+ *
+ * @stability experimental
+ * @category refs
+ * @since 0.1.0
+ */
+export const select = <N extends HTMLInputElement | HTMLTextAreaElement, Msg>(
+  ref: Renderer.Ref<N>,
+  f: (result: Found) => Msg
+): Command.Mapped<Command.Issued<Found, never, Found, "Effect">, Msg> => Command.map(Select.make({ ref }), f)
+
+/**
+ * Submits the form of the element `ref` names, as a press on its submit
+ * button would, and sends `f`'s message.
+ *
+ * **Details**
+ *
+ * `ref` names a `form`, or a control that belongs to one, by nesting or by
+ * its `form` attribute. The browser validates the form first, unless it has
+ * `novalidate`, and then fires `submit`, which reaches the form's
+ * `onSubmit`. `submitted` is `false` when the element has no form.
+ *
+ * @stability experimental
+ * @category refs
+ * @since 0.1.0
+ */
+export const requestSubmit = <N extends HTMLElement, Msg>(
+  ref: Renderer.Ref<N>,
+  f: (result: Submitted) => Msg
+): Command.Mapped<Command.Issued<Submitted, never, Submitted, "Effect">, Msg> =>
+  Command.map(RequestSubmit.make({ ref }), f)

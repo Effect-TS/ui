@@ -2124,6 +2124,74 @@ describe("BrowserHost", { concurrent: false }, () => {
           expect(root.model()).toEqual(["mounted input", "found true", "found false", "measured true"])
         }).pipe(Effect.scoped)
     )
+
+    const Code = Html.ref("Code", "input")
+    const Loose = Html.ref("Loose", "input")
+    const EntryMessage = UiSchema.TaggedEnum({
+      Pasted: { text: Schema.String },
+      Select: {},
+      Selected: { found: Schema.Boolean },
+      Submit: { loose: Schema.Boolean },
+      Submitted: { submitted: Schema.Boolean },
+      Sent: { code: Schema.String }
+    })
+    const Entry = Component.define({
+      name: "Entry",
+      scoped: false,
+      model: Schema.Array(Schema.String),
+      message: EntryMessage,
+      elements: Html
+    }).make({
+      init: (): ReadonlyArray<string> => [],
+      update: (log, message, $) =>
+        EntryMessage.match(message, {
+          Pasted: ({ text }) => [...log, `pasted ${text}`],
+          Select: () => $.run(Html.select(Code, ({ found }) => EntryMessage.Selected({ found }))),
+          Selected: ({ found }) => [...log, `selected ${found}`],
+          Submit: ({ loose }) =>
+            $.run(Html.requestSubmit(loose ? Loose : Code, ({ submitted }) => EntryMessage.Submitted({ submitted }))),
+          Submitted: ({ submitted }) => [...log, `submitted ${submitted}`],
+          Sent: ({ code }) => [...log, `sent ${code}`]
+        }),
+      view: (_, h) =>
+        h.div(
+          h.form.onSubmit(({ fields }) => EntryMessage.Sent({ code: fields.code ?? "" })).children(
+            h.input.attr("aria-label", "Code").attr("name", "code").ref(Code).value("7")
+              .onPaste(({ text }) => EntryMessage.Pasted({ text }), { preventDefault: true })
+          ),
+          h.input.attr("aria-label", "Loose").ref(Loose)
+        )
+    })
+
+    it.effect("a field reports pasted text, is selected, and submits its form", () =>
+      Effect.gen(function*() {
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Entry, {}, app)
+        yield* tick
+        const code = HtmlLocator.getByRole(app, "textbox", { name: "Code" }) as HTMLInputElement
+        const pasted = Object.assign(new Event("paste", { bubbles: true, cancelable: true }), {
+          clipboardData: { getData: (type: string) => (type === "text/plain" ? "12 34" : "") }
+        })
+        code.dispatchEvent(pasted)
+        expect(pasted.defaultPrevented).toBe(true)
+        yield* tick
+
+        code.value = "rejected"
+        root.send(EntryMessage.Select())
+        yield* tick
+        expect([code.value, code.selectionStart, code.selectionEnd]).toEqual(["7", 0, 1])
+
+        root.send(EntryMessage.Submit({ loose: false }))
+        root.send(EntryMessage.Submit({ loose: true }))
+        yield* tick
+        expect(root.model()).toEqual([
+          "pasted 12 34",
+          "selected true",
+          "sent 7",
+          "submitted true",
+          "submitted false"
+        ])
+      }).pipe(Effect.scoped))
   })
 
   describe("hosts", () => {
