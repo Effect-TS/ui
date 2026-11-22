@@ -352,9 +352,14 @@ describe("Dialog in a document", { concurrent: false }, () => {
 
   it.effect("a touch-opened dialog honors marked initial focus and can skip return focus", () =>
     Effect.gen(function*() {
+      const { finish } = yield* holdExits
       const { app } = yield* mountPage({ openMethod: "touch", marked: true, finalFocus: false })
       assert.strictEqual(document.activeElement?.id, "second")
       escape()
+      yield* tick
+      assert.isNotNull(app.querySelector("dialog"))
+      assert.strictEqual(document.activeElement, document.body)
+      finish()
       yield* tick
       yield* tick
       assert.isNull(app.querySelector("dialog"))
@@ -728,24 +733,6 @@ describe("Dialog in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(calls.at(-1), ["trigger", true])
     }))
 
-  it.effect("as the close starts, a finalFocus part takes focus, and finalFocus: false lets it go", () =>
-    Effect.gen(function*() {
-      for (const options of [{ finalMark: true }, { finalFocus: false }]) {
-        yield* Effect.scoped(Effect.gen(function*() {
-          yield* holdExits
-          const { log } = yield* mountPage(options)
-          byId("shut").click()
-          yield* tick
-          assert.notInclude(log(), "Settled a false")
-          assert.strictEqual(
-            document.activeElement?.id ?? "",
-            options.finalMark ? "final" : "",
-            JSON.stringify(options)
-          )
-        }))
-      }
-    }))
-
   it.effect("focus leaving or a press that focuses the page keeps focus where it went as the close starts", () =>
     Effect.gen(function*() {
       for (const modal of [false, "trap-focus"] as const) {
@@ -788,7 +775,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
   it.effect("a press that opens another dialog leaves focus in it as the first one closes", () =>
     Effect.gen(function*() {
       yield* holdExits
-      const { log } = yield* mountPage({ modal: false, siblings: true })
+      const { log } = yield* mountPage({ modal: false, siblings: true, finalMark: true })
       click(byId("trigger-b"))
       yield* tick
       yield* tick

@@ -776,13 +776,14 @@ const TrackDialog = Mount.makeStream(
           if (current.open && !current.started) frame(() => send(DialogMessage.RenderedFirstFrame()))
         })
 
-      const restoreFocus = () => {
+      const parentsOf = () => showing.filter((other) => other.node.contains(node))
+      const restoreFocus = (parents: ReadonlyArray<typeof entry>) => {
         const { closedByFocusOut, closeMethod, finalFocus, portalId } = current
         const focused = document.activeElement as HTMLElement | null
         const away = focused !== null && focused !== document.body && !node.contains(focused)
         if (
           focused !== null &&
-          showing.some((other) => other.open() && other.node.contains(focused) && !other.node.contains(node))
+          showing.some((other) => other.open() && other.node.contains(focused) && !parents.includes(other))
         ) return
         if (!finalFocus) {
           if (focusInside && node.contains(focused)) focused?.blur()
@@ -797,19 +798,20 @@ const TrackDialog = Mount.makeStream(
         )
         handOff(back, visible)
       }
-      const restore = () =>
+      const restore = (parents: ReadonlyArray<typeof entry>) =>
         frame(() => {
-          if (!current.open) restoreFocus()
+          if (!current.open) restoreFocus(parents)
         })
       const closing = () => {
+        const parents = parentsOf()
         const press = dismissing
-        if (press === undefined) return restore()
+        if (press === undefined) return restore(parents)
         const done = new AbortController()
         const options = { capture: true, signal: done.signal }
         const end = (event: PointerEvent) => {
           if (event.pointerId !== press) return
           done.abort()
-          restore()
+          restore(parents)
         }
         document.addEventListener("pointerup", end, options)
         document.addEventListener("pointercancel", end, options)
@@ -875,7 +877,10 @@ const TrackDialog = Mount.makeStream(
             page.disconnect()
             release?.()
             transition.cancel()
-            if (current.open) frame(restoreFocus)
+            if (current.open) {
+              const parents = parentsOf()
+              frame(() => restoreFocus(parents))
+            }
           })
       )
     })
