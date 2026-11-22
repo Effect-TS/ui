@@ -269,7 +269,10 @@ export const changePayload = (
 }
 
 /** @internal */
-export const keyPayload = (key: string, details: Partial<Omit<Html.KeyPayload, "key">> | undefined): Html.KeyPayload => ({
+export const keyPayload = (
+  key: string,
+  details: Partial<Omit<Html.KeyPayload, "key">> | undefined
+): Html.KeyPayload => ({
   key,
   shift: details?.shift === true,
   ctrl: details?.ctrl === true,

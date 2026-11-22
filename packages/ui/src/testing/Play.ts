@@ -164,10 +164,9 @@ export const make = <
   Events,
   R,
   V extends View.Elements,
-  RP = never,
-  Rcv = never
+  RP = never
 >(
-  component: Component.Component<Name, Props, Model, Msg, Events, R, V, any, Rcv>,
+  component: Component.Members<Name, Props, Model, Msg, Events, R, V, any>,
   props: Props | Effect.Effect<Props, never, RP>
 ): Effect.Effect<Play<Model, Msg, Events>, StepError, R | RP | TestHost.TestHost | Scope.Scope> =>
   internal.begin(internal.PlayCursor, "Play", make, component, props) as any

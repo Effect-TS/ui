@@ -77,6 +77,7 @@ const redirectTo = (route: AppRoute) => Router.replace(AppRoute, route).pipe(Com
 
 export const AppNoDeps = Component.define({
   name: "App",
+  scoped: false,
   props: AppProps,
   model: AppModel,
   message: AppMessage
@@ -104,9 +105,9 @@ export const AppNoDeps = Component.define({
         redirectTo(LoggedOutRoute.Home())
       ),
 
-    FailedSaveSession: (_model, { error }, $) => $.run(LogError({ entries: ["Failed to save session:", error] })),
+    FailedSaveSession: (_model, { error }, $) => $.run(LogError.make({ entries: ["Failed to save session:", error] })),
 
-    FailedClearSession: (_model, { error }, $) => $.run(LogError({ entries: ["Failed to clear session:", error] }))
+    FailedClearSession: (_model, { error }, $) => $.run(LogError.make({ entries: ["Failed to clear session:", error] }))
   },
 
   subscriptions: (model) => [

@@ -12,6 +12,7 @@ export const LoggedOutEvents = UiSchema.TaggedEnum({ SignedIn: { session: Sessio
 
 export const LoggedOut = Component.define({
   name: "LoggedOut",
+  scoped: false,
   props: Schema.Struct({ route: LoggedOutRoute }),
   model: Schema.Null,
   message: LoggedOutMessage,

@@ -10,6 +10,7 @@ import { Settings } from "./fixtures/settings.ts"
 
 const Checkout = Component.define({
   name: "Checkout",
+  scoped: false,
   model: Schema.Struct({ log: Schema.Array(Schema.String), zip: Schema.String }),
   message: Schema.String,
   elements: Html
@@ -115,7 +116,13 @@ describe("HtmlPlay", () => {
 
   it.effect("a part's message counts as handled, and a key no part takes is ignored", () =>
     Effect.gen(function*() {
-      const Toolbar = Component.define({ name: "Toolbar", model: Schema.Null, message: Schema.Never, elements: Html })
+      const Toolbar = Component.define({
+        name: "Toolbar",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      })
         .make({
           init: () => null,
           update: (model) => model,

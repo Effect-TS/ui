@@ -84,6 +84,7 @@ import type * as Html from "../Html.ts"
 import * as defaults from "../internal/defaults.ts"
 import * as fireGlobal from "../internal/fireGlobal.ts"
 import * as globalEvents from "../internal/globalEvents.ts"
+import * as HtmlLocator from "./HtmlLocator.ts"
 
 /**
  * The assertions `expect(locator)` offers in an `HtmlScene`: the scene's,

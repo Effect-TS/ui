@@ -246,10 +246,9 @@ export const make = <
   Events,
   R,
   V extends View.Elements,
-  RP = never,
-  Rcv = never
+  RP = never
 >(
-  component: Component.Component<Name, Props, Model, Msg, Events, R, V, any, Rcv>,
+  component: Component.Members<Name, Props, Model, Msg, Events, R, V, any>,
   props: Props | Effect.Effect<Props, never, RP>
 ): Effect.Effect<HtmlPlay<Model, Msg, Events>, Play.StepError, R | RP | TestHost.TestHost | Scope.Scope> =>
   internal.begin(HtmlPlayCursor, "HtmlPlay", make, component, props) as any
