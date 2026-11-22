@@ -114,13 +114,13 @@
  * import { OTPField } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
- * const Message = UiSchema.TaggedEnum({ UpdatedCode: { value: Schema.String } })
+ * const VerifyMessage = UiSchema.TaggedEnum({ UpdatedCode: { value: Schema.String } })
  *
  * const Verify = Component.define({
  *   name: "Verify",
  *   scoped: false,
  *   model: Schema.Struct({ code: Schema.String }),
- *   message: Message,
+ *   message: VerifyMessage,
  *   elements: Html
  * }).make({
  *   init: () => ({ code: "12" }),
@@ -129,7 +129,7 @@
  *     OTPField(h, {
  *       props: { value: model.code, length: 6, name: "code" },
  *       onEmit: {
- *         Updated: ({ value }) => Message.UpdatedCode({ value }),
+ *         Updated: ({ value }) => VerifyMessage.UpdatedCode({ value }),
  *         Completed: () => undefined,
  *         Rejected: () => undefined
  *       },
@@ -356,7 +356,7 @@ export const OTPFieldEvents = UiSchema.TaggedEnum({
  */
 export type OTPFieldEvents = typeof OTPFieldEvents.Type
 
-const Message = UiSchema.TaggedEnum({
+const OTPFieldMessage = UiSchema.TaggedEnum({
   UpdatedSlot: { index: Schema.Number, value: Schema.String, composing: Schema.Boolean },
   EndedComposition: { index: Schema.Number, value: Schema.String },
   PastedText: { index: Schema.Number, text: Schema.String },
@@ -372,9 +372,9 @@ const Message = UiSchema.TaggedEnum({
   CompletedInspectFirstSlot: { label: Schema.NullOr(Schema.String), android: Schema.Boolean }
 })
 
-type Message = typeof Message.Type
+type OTPFieldMessage = typeof OTPFieldMessage.Type
 
-const Model = Schema.Struct({
+const OTPFieldModel = Schema.Struct({
   focused: Schema.Boolean,
   focusedIndex: Schema.Number,
   target: Schema.NullOr(Schema.Number),
@@ -392,9 +392,9 @@ const Model = Schema.Struct({
   android: Schema.Boolean
 })
 
-type Model = typeof Model.Type
+type OTPFieldModel = typeof OTPFieldModel.Type
 
-type OTPFieldUpdate = Component.Update<Model, Message, OTPFieldEvents, OTPFieldProps>
+type OTPFieldUpdate = Component.Update<OTPFieldModel, OTPFieldMessage, OTPFieldEvents, OTPFieldProps>
 
 interface Rule {
   readonly accepted: string
@@ -437,7 +437,7 @@ interface Settings {
 const storedOf = (props: OTPFieldProps): ReadonlyArray<string> =>
   normalize(props.value, props.length, props.validationType ?? "numeric")[0]
 
-const settingsOf = (props: OTPFieldProps, edit: Model["edit"] = null): Settings => {
+const settingsOf = (props: OTPFieldProps, edit: OTPFieldModel["edit"] = null): Settings => {
   const characters = storedOf(props)
   const stored = characters.join("")
   const unanswered = edit !== null && !edit.settled && edit.before === stored
@@ -454,19 +454,19 @@ const settingsOf = (props: OTPFieldProps, edit: Model["edit"] = null): Settings 
 
 const locked = (props: OTPFieldProps): boolean => props.disabled === true || props.readOnly === true
 
-type Edit = NonNullable<Model["edit"]>
+type Edit = NonNullable<OTPFieldModel["edit"]>
 
 const completes = (edit: Edit, length: number): boolean =>
   edit.reason === "input-paste" || Array.from(edit.before).length !== length
 
-const completed = (edit: Model["edit"], s: Settings): OTPFieldEntryReason | null =>
+const completed = (edit: OTPFieldModel["edit"], s: Settings): OTPFieldEntryReason | null =>
   edit === null || edit.reason === null || edit.before === s.stored || s.characters.length !== s.length
     ? null
     : (edit.settled ? edit.asked === s.stored : completes(edit, s.length))
     ? edit.reason
     : null
 
-const settle = (edit: Model["edit"], s: Settings): Model["edit"] => {
+const settle = (edit: OTPFieldModel["edit"], s: Settings): OTPFieldModel["edit"] => {
   if (edit === null || edit.before !== s.stored) return null
   if (edit.settled) return edit
   return edit.reason !== null && Array.from(edit.asked).length === s.length && completes(edit, s.length)
@@ -477,7 +477,7 @@ const settle = (edit: Model["edit"], s: Settings): Model["edit"] => {
 const Slot = Html.ref("OTPFieldSlot", "input")
 const HiddenInput = Html.ref("OTPFieldHiddenInput", "input")
 
-const selectSlot = (index: number) => DomCommand.select(Slot.at(index), () => Message.CompletedSelectSlot())
+const selectSlot = (index: number) => DomCommand.select(Slot.at(index), () => OTPFieldMessage.CompletedSelectSlot())
 
 const focusSlot = (index: number) => [
   DomCommand.Focus.make({ ref: Slot.at(index) }).pipe(Command.asNoop),
@@ -491,13 +491,19 @@ const firstEmpty = (s: Settings): number => Math.min(s.characters.length, s.leng
 // A Command moves focus and selects a slot's text a moment after the edit that asked for it, and
 // a key pressed in between reaches the slot as it was. So the Model keeps the slot focus is on its
 // way to, as `target`, until the last `selectSlot` it issued has run, and `moving` counts those.
-const aim = (model: Model, index: number): Model => ({ ...model, target: index, moving: model.moving + 1 })
+const aim = (model: OTPFieldModel, index: number): OTPFieldModel => ({
+  ...model,
+  target: index,
+  moving: model.moving + 1
+})
 
-const moveTo = (model: Model, $: OTPFieldUpdate, index: number) => $.set(aim(model, index)).run(...focusSlot(index))
+const moveTo = (model: OTPFieldModel, $: OTPFieldUpdate, index: number) =>
+  $.set(aim(model, index)).run(...focusSlot(index))
 
-const reselect = (model: Model, $: OTPFieldUpdate, index: number) => $.set(aim(model, index)).run(selectSlot(index))
+const reselect = (model: OTPFieldModel, $: OTPFieldUpdate, index: number) =>
+  $.set(aim(model, index)).run(selectSlot(index))
 
-const aimedAt = (model: Model, s: Settings, index: number): number =>
+const aimedAt = (model: OTPFieldModel, s: Settings, index: number): number =>
   model.target === null || model.target === index ? index : Math.min(model.target, firstEmpty(s))
 
 const InspectFirstSlot = Mount.make(
@@ -513,14 +519,17 @@ const InspectFirstSlot = Mount.make(
 )
 
 const settled = (value: string, edits: number) =>
-  Subscription.make("settled", [value, edits], () => Stream.make(Message.Settled()))
+  Subscription.make("settled", [value, edits], () => Stream.make(OTPFieldMessage.Settled()))
 
 // A browser may send no blur event for an input disabled while it has
 // focus, so the field reports the blur itself.
-const disabledWhileFocused = Subscription.make("disabledWhileFocused", Stream.make(Message.DisabledWhileFocused()))
+const disabledWhileFocused = Subscription.make(
+  "disabledWhileFocused",
+  Stream.make(OTPFieldMessage.DisabledWhileFocused())
+)
 
 const setValue = (
-  model: Model,
+  model: OTPFieldModel,
   $: OTPFieldUpdate,
   s: Settings,
   characters: ReadonlyArray<string>,
@@ -559,7 +568,7 @@ const setValue = (
 }
 
 const enter = (
-  model: Model,
+  model: OTPFieldModel,
   $: OTPFieldUpdate,
   s: Settings,
   slot: number,
@@ -591,7 +600,7 @@ const navigationKeys = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown
 const editingKeys = new Set(["Backspace", "Delete"])
 
 const pressKey = (
-  model: Model,
+  model: OTPFieldModel,
   message: { readonly index: number; readonly key: string; readonly boundary: boolean },
   $: OTPFieldUpdate,
   rtl: boolean
@@ -695,8 +704,8 @@ export const OTPField = Component.define({
   name: "OTPField",
   scoped: false,
   props: OTPFieldProps,
-  model: Model,
-  message: Message,
+  model: OTPFieldModel,
+  message: OTPFieldMessage,
   events: OTPFieldEvents,
   shared: {
     provider: { owner: DirectionProvider, optional: true }
@@ -828,8 +837,8 @@ export const OTPField = Component.define({
         })
         .disabled(disabled)
         .value(value)
-        .onFocus(Message.FocusedHiddenInput())
-        .onInput(({ value }) => Message.UpdatedHiddenInput({ value })))
+        .onFocus(OTPFieldMessage.FocusedHiddenInput())
+        .onInput(({ value }) => OTPFieldMessage.UpdatedHiddenInput({ value })))
     const slot = p.part("input", (b, index: number) => {
       const character = characters[index] ?? ""
       const identified = props.id === undefined
@@ -837,7 +846,7 @@ export const OTPField = Component.define({
         : b.attr("id", index === 0 ? props.id : props.id + "-" + (index + 1))
       const first = index === 0
         ? identified.onMount(
-          InspectFirstSlot({ id: p.id("label") }).pipe(Mount.map(Message.CompletedInspectFirstSlot))
+          InspectFirstSlot({ id: p.id("label") }).pipe(Mount.map(OTPFieldMessage.CompletedInspectFirstSlot))
         )
         : identified
       return state(first)
@@ -865,19 +874,23 @@ export const OTPField = Component.define({
             composing || model.composing !== null ||
               !(navigationKeys.has(key) || (!readOnly && editingKeys.has(key)))
               ? undefined
-              : Message.PressedKey({ index, key, boundary: (ctrl || meta) && !alt }),
+              : OTPFieldMessage.PressedKey({ index, key, boundary: (ctrl || meta) && !alt }),
           { preventDefault: true }
         )
-        .onInput(({ composing, value }) => Message.UpdatedSlot({ index, value, composing }))
-        .onCompositionEnd(({ value }) => Message.EndedComposition({ index, value }))
-        .onPaste(({ text }) => Message.PastedText({ index, text }), { preventDefault: true })
+        .onInput(({ composing, value }) => OTPFieldMessage.UpdatedSlot({ index, value, composing }))
+        .onCompositionEnd(({ value }) => OTPFieldMessage.EndedComposition({ index, value }))
+        .onPaste(({ text }) => OTPFieldMessage.PastedText({ index, text }), { preventDefault: true })
         // Only on the slot that has focus: a press elsewhere moves focus natively, at once, where a
         // Command would move it a moment later and lose a key typed right after the press.
-        .on("mousedown", () => (focused && model.focusedIndex === index ? Message.PressedSlot({ index }) : undefined), {
-          preventDefault: true
-        })
-        .onFocus(Message.FocusedSlot({ index }))
-        .onBlur(Message.BlurredSlot({ index }))
+        .on(
+          "mousedown",
+          () => (focused && model.focusedIndex === index ? OTPFieldMessage.PressedSlot({ index }) : undefined),
+          {
+            preventDefault: true
+          }
+        )
+        .onFocus(OTPFieldMessage.FocusedSlot({ index }))
+        .onBlur(OTPFieldMessage.BlurredSlot({ index }))
         .forward((node) => {
           const typed = node.elementAttrs.type === undefined
             ? node.attr("type", props.mask === true ? "password" : "text")

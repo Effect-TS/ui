@@ -295,7 +295,7 @@ export type TooltipEvents = typeof TooltipEvents.Type
 
 // Pointer, focus and key facts from the trigger, the positioner and the
 // document, and the ends of the two timers.
-const Message = UiSchema.TaggedEnum({
+const TooltipMessage = UiSchema.TaggedEnum({
   EnteredTrigger: {},
   LeftTrigger: {},
   FocusedTrigger: {},
@@ -324,7 +324,7 @@ const Message = UiSchema.TaggedEnum({
 // one it took when it was last shown, 0 while it hasn't taken one or isn't
 // shown. `yieldedTo` is the turn it last asked to close for, so a refused
 // request isn't repeated.
-const Model = Schema.Struct({
+const TooltipModel = Schema.Struct({
   hovered: Schema.Boolean,
   focused: Schema.Boolean,
   pressed: Schema.Boolean,
@@ -339,13 +339,13 @@ const Model = Schema.Struct({
 const WaitBeforeOpening = Command.make(
   "WaitBeforeOpening",
   { args: { delay: Schema.Number }, mode: "switch" },
-  ({ delay }) => Effect.as(Effect.sleep(Duration.millis(delay)), Message.CompletedWaitBeforeOpening())
+  ({ delay }) => Effect.as(Effect.sleep(Duration.millis(delay)), TooltipMessage.CompletedWaitBeforeOpening())
 )
 
 const WaitBeforeClosing = Command.make(
   "WaitBeforeClosing",
   { args: { delay: Schema.Number }, mode: "switch" },
-  ({ delay }) => Effect.as(Effect.sleep(Duration.millis(delay)), Message.CompletedWaitBeforeClosing())
+  ({ delay }) => Effect.as(Effect.sleep(Duration.millis(delay)), TooltipMessage.CompletedWaitBeforeClosing())
 )
 
 // The two dismissals no part hears, listened for on the document while the
@@ -359,10 +359,10 @@ const dismissals = [
   DomSubscription.onDocument(
     "keydown",
     ({ composing, defaultPrevented, key }) =>
-      key === "Escape" && !composing && !defaultPrevented ? Message.PressedEscape() : undefined,
+      key === "Escape" && !composing && !defaultPrevented ? TooltipMessage.PressedEscape() : undefined,
     { preventDefault: true }
   ),
-  DomSubscription.onDocument("mousedown", Message.PressedDocument(), { capture: true })
+  DomSubscription.onDocument("mousedown", TooltipMessage.PressedDocument(), { capture: true })
 ]
 
 const opened = TooltipEvents.Opened()
@@ -380,17 +380,17 @@ const shownBy = (props: TooltipProps): boolean => props.open && props.disabled !
 
 // `$` in any handler of the Tooltip's `update`: a tag's `$` fits the one
 // over the whole message type.
-type TooltipUpdate = Component.Update<typeof Model.Type, typeof Message.Type, TooltipEvents, TooltipProps>
+type TooltipUpdate = Component.Update<typeof TooltipModel.Type, typeof TooltipMessage.Type, TooltipEvents, TooltipProps>
 
 // The user closed the tooltip, if it shows. Any wait for `closeDelay` is over.
-const dismiss = (model: typeof Model.Type, $: TooltipUpdate, instant = model.instant) =>
+const dismiss = (model: typeof TooltipModel.Type, $: TooltipUpdate, instant = model.instant) =>
   shownBy($.props)
     ? $.set({ ...model, instant }).run(Command.interrupt(WaitBeforeClosing)).emit(dismissed)
     : model
 
 // The pointer left the trigger or the positioner: a pending open stops, and
 // an open tooltip closes after `closeDelay` unless keyboard focus holds it.
-const left = (model: typeof Model.Type, _message: unknown, $: TooltipUpdate) => {
+const left = (model: typeof TooltipModel.Type, _message: unknown, $: TooltipUpdate) => {
   const next = { ...model, hovered: false, pressed: false }
   if (!shownBy($.props)) return $.set(next).run(Command.interrupt(WaitBeforeOpening))
   if (model.focused) return next
@@ -425,7 +425,7 @@ export type TooltipProviderProps = typeof TooltipProviderProps.Type
 // The turns of the tooltips below that show, from their reports, sorted so
 // the message doesn't depend on their order, with 0 for one that hasn't
 // taken a turn yet. And the end of the window after the last one closed.
-const ProviderMessage = UiSchema.TaggedEnum({
+const TooltipProviderMessage = UiSchema.TaggedEnum({
   ChangedShown: { turns: Schema.Array(Schema.Number) },
   CompletedWaitBeforeCooling: {}
 })
@@ -433,7 +433,8 @@ const ProviderMessage = UiSchema.TaggedEnum({
 const WaitBeforeCooling = Command.make(
   "WaitBeforeCooling",
   { args: { timeout: Schema.Number }, mode: "switch" },
-  ({ timeout }) => Effect.as(Effect.sleep(Duration.millis(timeout)), ProviderMessage.CompletedWaitBeforeCooling())
+  ({ timeout }) =>
+    Effect.as(Effect.sleep(Duration.millis(timeout)), TooltipProviderMessage.CompletedWaitBeforeCooling())
 )
 
 /**
@@ -500,14 +501,14 @@ export const TooltipProvider = Component.define({
     turns: Schema.Array(Schema.Number),
     next: Schema.Number
   }),
-  message: ProviderMessage,
+  message: TooltipProviderMessage,
   shares: {
     value: (model) => ({ open: model.open, instant: model.instant, turns: model.turns, next: model.next }),
     collects: {
       // Each tooltip's turn while it shows, `null` while it doesn't.
       schema: Schema.NullOr(Schema.Number),
       onChange: (collected) =>
-        ProviderMessage.ChangedShown({
+        TooltipProviderMessage.ChangedShown({
           turns: collected.filter((turn): turn is number => turn !== null).sort((a, b) => a - b)
         })
     }
@@ -569,8 +570,8 @@ export const Tooltip = Component.define({
   name: "Tooltip",
   scoped: false,
   props: TooltipProps,
-  model: Model,
-  message: Message,
+  model: TooltipModel,
+  message: TooltipMessage,
   events: TooltipEvents,
   // A TooltipProvider above, if there is one. Each tooltip tells it its turn
   // while it shows, and hears when the shown tooltips change.
@@ -579,7 +580,7 @@ export const Tooltip = Component.define({
       owner: TooltipProvider,
       optional: true,
       report: (model, props) => (shownBy(props) ? model.turn : null),
-      onChange: (value) => Message.ChangedGroup({ newest: newestOf(value.turns), next: value.next })
+      onChange: (value) => TooltipMessage.ChangedGroup({ newest: newestOf(value.turns), next: value.next })
     }
   },
   restore: false,
@@ -687,12 +688,12 @@ export const Tooltip = Component.define({
       "button",
       (b) =>
         b.attrs({ "data-popup-open": flag(shown), "data-trigger-disabled": flag(p.props.disabled) })
-          .on("mouseenter", Message.EnteredTrigger())
-          .on("mouseleave", Message.LeftTrigger())
-          .on("mousedown", Message.PressedTrigger())
-          .onClick(Message.ClickedTrigger())
-          .onFocus(Message.FocusedTrigger())
-          .onBlur(Message.BlurredTrigger())
+          .on("mouseenter", TooltipMessage.EnteredTrigger())
+          .on("mouseleave", TooltipMessage.LeftTrigger())
+          .on("mousedown", TooltipMessage.PressedTrigger())
+          .onClick(TooltipMessage.ClickedTrigger())
+          .onFocus(TooltipMessage.FocusedTrigger())
+          .onBlur(TooltipMessage.BlurredTrigger())
           .attr("data-tooltip-trigger", triggerId)
     )
     const style = Positioning.positionerStyle(tracked.positionMethod) +
@@ -704,10 +705,15 @@ export const Tooltip = Component.define({
         .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, style)))
       const hoverable = p.props.disableHoverablePopup === true
         ? decorated
-        : decorated.on("mouseenter", Message.EnteredPositioner()).on("mouseleave", Message.LeftPositioner())
+        : decorated.on("mouseenter", TooltipMessage.EnteredPositioner()).on(
+          "mouseleave",
+          TooltipMessage.LeftPositioner()
+        )
       return shown
         ? hoverable.onMount(
-          Positioning.TrackPosition(tracked).pipe(Mount.map((placement) => Message.ChangedPlacement({ placement })))
+          Positioning.TrackPosition(tracked).pipe(
+            Mount.map((placement) => TooltipMessage.ChangedPlacement({ placement }))
+          )
         )
         : hoverable
     })

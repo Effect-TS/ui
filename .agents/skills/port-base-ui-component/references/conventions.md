@@ -16,7 +16,7 @@ the components that already follow it.
   // In a view:
   Switch(h, {
     props: { checked: model.notify },
-    onToggle: ({ checked }) => Message.ToggledNotify({ checked }),
+    onToggle: ({ checked }) => SettingsMessage.ToggledNotify({ checked }),
     view: (parts) => h.label(parts.root(h.button).children(parts.thumb(h.span.class("thumb"))), "Notify")
   })
   ```
@@ -35,7 +35,8 @@ the components that already follow it.
   - `<Name>Parts` for a view function that takes `view`
   - any other type the API needs (`SwitchButton`, `ListboxOption`)
 
-  A component's message Schema stays private.
+  A component's `<Name>Model` and `<Name>Message` Schemas and their types
+  stay private, named the same way.
 - A public module that isn't a component, such as `Positioning`, has
   unprefixed exports (`Positioning.place`), so the barrel exports it as a
   namespace: `export * as Positioning from "./Positioning.ts"`.
@@ -143,20 +144,20 @@ returns it (see "Parts").
 // One element: finish the returned builder.
 Button(h, {
   props: { disabled: model.saving },
-  onPress: Message.PressedSave()
+  onPress: SettingsMessage.PressedSave()
 }).class("save").children("Save")
 
 // Several elements: the consumer arranges them in `view`.
 Switch(h, {
   props: { checked: model.notify },
-  onToggle: ({ checked }) => Message.ToggledNotify({ checked }),
+  onToggle: ({ checked }) => SettingsMessage.ToggledNotify({ checked }),
   view: (parts) => parts.root(h.button).children(parts.thumb(h.span.class("thumb")))
 })
 
 // A component: core's `onEmit`, and a `key` when it needs one.
 Checkbox(h, {
   props: { checked: model.terms },
-  onEmit: ({ checked }) => Message.ToggledTerms({ checked }),
+  onEmit: ({ checked }) => SettingsMessage.ToggledTerms({ checked }),
   view: (checkbox) => checkbox.root(h.button).children(checkbox.indicator(h.span))
 })
 ```
@@ -287,7 +288,7 @@ model.advanced
   ```ts
   Button(h, {
     element: tooltip.trigger(h.button),
-    onPress: Message.PressedBold()
+    onPress: EditorMessage.PressedBold()
   }).class("tool").children("B")
   ```
 - **The kit's attributes win** over the consumer's. A part or view

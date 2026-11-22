@@ -155,7 +155,7 @@ export const FormEvents = UiSchema.TaggedEnum({
  */
 export type FormEvents = typeof FormEvents.Type
 
-const Message = UiSchema.TaggedEnum({ SubmittedRoot: Submission })
+const FormMessage = UiSchema.TaggedEnum({ SubmittedRoot: Submission })
 
 const Root = Html.ref("FormRoot", "form")
 
@@ -213,7 +213,7 @@ export const Form = Component.define({
   name: "Form",
   scoped: false,
   model: Schema.Struct({}),
-  message: Message,
+  message: FormMessage,
   events: FormEvents,
   elements: Html
 }).make({
@@ -224,6 +224,6 @@ export const Form = Component.define({
     root: p.part("form", (b) =>
       b.ref(Root)
         .attr("novalidate", "")
-        .onSubmit(({ entries, fields }) => Message.SubmittedRoot({ fields, entries })))
+        .onSubmit(({ entries, fields }) => FormMessage.SubmittedRoot({ fields, entries })))
   })
 })

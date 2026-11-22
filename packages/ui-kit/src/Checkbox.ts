@@ -181,7 +181,7 @@ export type CheckboxEvents = typeof CheckboxEvents.Type
 
 // A click on the root, which Space on the native button arrives as. Enter
 // is its own message so the root can cancel the button's click on Enter.
-const Message = UiSchema.TaggedEnum({ ClickedRoot: {}, PressedEnter: {} })
+const CheckboxMessage = UiSchema.TaggedEnum({ ClickedRoot: {}, PressedEnter: {} })
 
 const interactive = (props: CheckboxProps): boolean => props.disabled !== true && props.readOnly !== true
 
@@ -240,7 +240,7 @@ export const Checkbox = Component.define({
   scoped: false,
   props: CheckboxProps,
   model: Schema.Struct({}),
-  message: Message,
+  message: CheckboxMessage,
   events: CheckboxEvents,
   elements: Html
 }).make({
@@ -276,9 +276,9 @@ export const Checkbox = Component.define({
             "aria-disabled": undefined
           })
           .disabled(p.props.disabled === true)
-          .onClick(Message.ClickedRoot())
+          .onClick(CheckboxMessage.ClickedRoot())
           .onKeyDown(
-            ({ key }) => key === "Enter" ? Message.PressedEnter() : undefined,
+            ({ key }) => key === "Enter" ? CheckboxMessage.PressedEnter() : undefined,
             // Cancels Enter's click on the button, and leaves every other key alone.
             { preventDefault: true }
           )

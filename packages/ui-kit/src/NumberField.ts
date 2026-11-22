@@ -463,7 +463,7 @@ interface Modifiers {
   readonly alt: boolean
 }
 
-const Message = UiSchema.TaggedEnum({
+const NumberFieldMessage = UiSchema.TaggedEnum({
   UpdatedInput: { value: Schema.String },
   PastedText: { value: Schema.String },
   BlurredInput: { disabled: Schema.Boolean },
@@ -482,9 +482,9 @@ const Message = UiSchema.TaggedEnum({
   Autofilled: { value: Schema.String }
 })
 
-type Message = typeof Message.Type
+type NumberFieldMessage = typeof NumberFieldMessage.Type
 
-const Model = Schema.Struct({
+const NumberFieldModel = Schema.Struct({
   text: Schema.NullOr(Schema.String),
   pending: Schema.Boolean,
   scrubbing: Schema.Boolean,
@@ -493,9 +493,9 @@ const Model = Schema.Struct({
   ios: Schema.Boolean
 })
 
-type Model = typeof Model.Type
+type NumberFieldModel = typeof NumberFieldModel.Type
 
-type NumberFieldUpdate = Component.Update<Model, Message, NumberFieldEvents, NumberFieldProps>
+type NumberFieldUpdate = Component.Update<NumberFieldModel, NumberFieldMessage, NumberFieldEvents, NumberFieldProps>
 
 interface Settings extends Range {
   readonly value: number | null
@@ -531,7 +531,7 @@ const atBound = (s: Settings, direction: Direction): boolean =>
 const reasonOf = (direction: Direction) => direction === 1 ? "increment-press" : "decrement-press"
 
 interface Change {
-  readonly model: Model
+  readonly model: NumberFieldModel
   readonly events: ReadonlyArray<NumberFieldEvents>
   readonly value: number | null
   readonly fired: boolean
@@ -550,7 +550,7 @@ const settled = (
     : validated(asked, s, { step: options.step, small: options.small === true, clamp: !s.allowOutOfRange || !entered })
 
 const setValue = (
-  model: Model,
+  model: NumberFieldModel,
   s: Settings,
   asked: number | null,
   reason: NumberFieldChangeReason,
@@ -573,7 +573,7 @@ const setValue = (
 const amountOf = (s: Settings, { alt, shift }: Modifiers): number => alt ? s.smallStep : shift ? s.largeStep : s.step
 
 const stepBy = (
-  model: Model,
+  model: NumberFieldModel,
   s: Settings,
   amount: number,
   modifiers: Modifiers,
@@ -585,7 +585,7 @@ const stepBy = (
   return setValue(model, s, from + amount * size, reason, { step: size * Math.sign(amount), small: modifiers.alt })
 }
 
-const shown = (model: Model, s: Settings): number | null =>
+const shown = (model: NumberFieldModel, s: Settings): number | null =>
   (model.text === null ? null : parse(s, model.text)) ?? s.value
 
 const apply = ($: NumberFieldUpdate, change: Change) =>
@@ -605,7 +605,7 @@ const settle = ($: NumberFieldUpdate, change: Change, reason: NumberFieldCommitR
   change.fired ? commit($, change, reason) : change.model
 
 const press = (
-  model: Model,
+  model: NumberFieldModel,
   s: Settings,
   direction: Direction,
   modifiers: Modifiers,
@@ -636,12 +636,12 @@ const TrackInput = Mount.makeStream(
     }
   },
   (node: HTMLInputElement, args, changes) =>
-    Stream.callback<Message>((queue) =>
+    Stream.callback<NumberFieldMessage>((queue) =>
       Effect.gen(function*() {
         const document = node.ownerDocument
         let current = args
         let wheel: AbortController | undefined
-        if (isIOS(document.defaultView)) Queue.offerUnsafe(queue, Message.DetectedIOS())
+        if (isIOS(document.defaultView)) Queue.offerUnsafe(queue, NumberFieldMessage.DetectedIOS())
         const onKeyDown = (event: KeyboardEvent) => {
           if (event.defaultPrevented || current.locked) return
           const stroke = {
@@ -664,7 +664,7 @@ const TrackInput = Mount.makeStream(
           const text = node.value.slice(0, start) + pasted + node.value.slice(end)
           if (parseNumber(text, current.locale, current.format as Format | undefined) === null) return
           node.setRangeText(pasted, start, end, "end")
-          Queue.offerUnsafe(queue, Message.PastedText({ value: node.value }))
+          Queue.offerUnsafe(queue, NumberFieldMessage.PastedText({ value: node.value }))
         }
         const onWheel = (event: WheelEvent) => {
           if (event.ctrlKey || document.activeElement !== node) return
@@ -675,7 +675,7 @@ const TrackInput = Mount.makeStream(
           event.preventDefault()
           Queue.offerUnsafe(
             queue,
-            Message.TurnedWheel({ direction: delta > 0 ? -1 : 1, shift: event.shiftKey, alt: event.altKey })
+            NumberFieldMessage.TurnedWheel({ direction: delta > 0 ? -1 : 1, shift: event.shiftKey, alt: event.altKey })
           )
         }
         const listening = new AbortController()
@@ -713,7 +713,7 @@ const TrackStepper = Mount.makeStream(
   "TrackStepper",
   { args: { direction: Direction, disabled: Schema.Boolean } },
   (node: HTMLButtonElement, args, changes) =>
-    Stream.callback<Message>((queue) =>
+    Stream.callback<NumberFieldMessage>((queue) =>
       Effect.gen(function*() {
         const view = node.ownerDocument.defaultView
         if (view === null) return
@@ -739,14 +739,14 @@ const TrackStepper = Mount.makeStream(
           menu?.abort()
           moves = 0
         }
-        const held = () => Queue.offerUnsafe(queue, Message.HeldStepper({ direction, ...modifiers }))
+        const held = () => Queue.offerUnsafe(queue, NumberFieldMessage.HeldStepper({ direction, ...modifiers }))
         const finish = (event: PointerEvent) => {
           if (event.pointerId !== pointerId) return
           release?.abort()
           release = undefined
           pressed = false
           stop()
-          Queue.offerUnsafe(queue, Message.ReleasedStepper({ direction }))
+          Queue.offerUnsafe(queue, NumberFieldMessage.ReleasedStepper({ direction }))
         }
         const start = (first: boolean, focus: boolean) => {
           stop()
@@ -756,7 +756,7 @@ const TrackStepper = Mount.makeStream(
           release?.abort()
           release = new AbortController()
           view.addEventListener("pointerup", finish, { signal: release.signal })
-          if (first) Queue.offerUnsafe(queue, Message.PressedStepper({ direction, focus, ...modifiers }))
+          if (first) Queue.offerUnsafe(queue, NumberFieldMessage.PressedStepper({ direction, focus, ...modifiers }))
           else held()
           delay = setTimeout(() => {
             repeat = setInterval(held, 60)
@@ -816,7 +816,7 @@ const TrackStepper = Mount.makeStream(
           if (touchLike(pointerType) ? ignoreClick : event.detail !== 0) return
           Queue.offerUnsafe(
             queue,
-            Message.ClickedStepper({ direction, shift: event.shiftKey, alt: event.altKey })
+            NumberFieldMessage.ClickedStepper({ direction, shift: event.shiftKey, alt: event.altKey })
           )
         }
         const onTouch = (event: TouchEvent) => {
@@ -879,7 +879,7 @@ const TrackScrub = Mount.makeStream(
     }
   },
   (element: unknown, args, changes) =>
-    Stream.callback<Message>((queue) =>
+    Stream.callback<NumberFieldMessage>((queue) =>
       Effect.gen(function*() {
         const node = element as HTMLElement
         const document = node.ownerDocument
@@ -901,7 +901,7 @@ const TrackScrub = Mount.makeStream(
         let dragging: AbortController | undefined
         let exit: ReturnType<typeof setTimeout> | undefined
         let click: ReturnType<typeof setTimeout> | undefined
-        if (args.scrubbing) Queue.offerUnsafe(queue, Message.EndedScrub({ commit: false }))
+        if (args.scrubbing) Queue.offerUnsafe(queue, NumberFieldMessage.EndedScrub({ commit: false }))
         const unlock = () => {
           try {
             document.exitPointerLock()
@@ -946,7 +946,7 @@ const TrackScrub = Mount.makeStream(
         const stop = (commit: boolean) => {
           scrubbing = false
           dragging?.abort()
-          Queue.offerUnsafe(queue, Message.EndedScrub({ commit }))
+          Queue.offerUnsafe(queue, NumberFieldMessage.EndedScrub({ commit }))
         }
         const onUp = (event: PointerEvent) => {
           if (!scrubbing || event.pointerId !== pointerId) return
@@ -997,7 +997,10 @@ const TrackScrub = Mount.makeStream(
           moved = true
           const amount = current.vertical ? -y : x
           if (amount !== 0) {
-            Queue.offerUnsafe(queue, Message.MovedScrub({ amount, shift: event.shiftKey, alt: event.altKey }))
+            Queue.offerUnsafe(
+              queue,
+              NumberFieldMessage.MovedScrub({ amount, shift: event.shiftKey, alt: event.altKey })
+            )
           }
         }
         const onDown = (event: PointerEvent) => {
@@ -1021,11 +1024,11 @@ const TrackScrub = Mount.makeStream(
           view.addEventListener("pointerup", onUp, options)
           view.addEventListener("pointercancel", onCancel, options)
           view.addEventListener("pointermove", onMove, options)
-          Queue.offerUnsafe(queue, Message.StartedScrub({ focus: mouse }))
+          Queue.offerUnsafe(queue, NumberFieldMessage.StartedScrub({ focus: mouse }))
           // WebKit shifts the page for the notice it shows with the lock.
           if (event.pointerType === "touch" || webkit) return
           if (document.pointerLockElement != null) {
-            return Queue.offerUnsafe(queue, Message.ChangedPointerLock({ locked: true }))
+            return Queue.offerUnsafe(queue, NumberFieldMessage.ChangedPointerLock({ locked: true }))
           }
           asked = true
           try {
@@ -1042,9 +1045,9 @@ const TrackScrub = Mount.makeStream(
         const onLockChange = () => {
           if (document.pointerLockElement == null) {
             asked = false
-            if (scrubbing) Queue.offerUnsafe(queue, Message.ChangedPointerLock({ locked: false }))
+            if (scrubbing) Queue.offerUnsafe(queue, NumberFieldMessage.ChangedPointerLock({ locked: false }))
           } else if (asked) {
-            if (scrubbing) Queue.offerUnsafe(queue, Message.ChangedPointerLock({ locked: true }))
+            if (scrubbing) Queue.offerUnsafe(queue, NumberFieldMessage.ChangedPointerLock({ locked: true }))
             else unlock()
           }
         }
@@ -1100,10 +1103,10 @@ const WatchScrub = Mount.makeStream(
   "WatchScrub",
   { args: { cursorId: Schema.String } },
   (_node: unknown, args) =>
-    Stream.callback<Message>((queue) =>
+    Stream.callback<NumberFieldMessage>((queue) =>
       Effect.acquireRelease(
         Effect.sync(() => {
-          const end = () => Queue.offerUnsafe(queue, Message.EndedScrub({ commit: false }))
+          const end = () => Queue.offerUnsafe(queue, NumberFieldMessage.EndedScrub({ commit: false }))
           scrubRoots.set(args.cursorId, end)
           if (!liveScrubs.has(args.cursorId)) end()
         }),
@@ -1165,8 +1168,8 @@ export const NumberField = Component.define({
   name: "NumberField",
   scoped: false,
   props: NumberFieldProps,
-  model: Model,
-  message: Message,
+  model: NumberFieldModel,
+  message: NumberFieldMessage,
   events: NumberFieldEvents,
   elements: Html
 }).make({
@@ -1195,7 +1198,7 @@ export const NumberField = Component.define({
       if (disabled || s.locked) return model
       const typed = model.text !== null
       const text = model.text ?? formatNumber(s.value, s.locale, s.format)
-      const synced: Model = typed ? { ...model, text: null } : model
+      const synced: NumberFieldModel = typed ? { ...model, text: null } : model
       const empty = text.trim() === ""
       const read = empty ? null : typed ? parse(s, text) : s.value
       if (read === null && !empty) return synced
@@ -1316,8 +1319,8 @@ export const NumberField = Component.define({
         })
         .value(value)
         .disabled(disabled)
-        .on("focus", Message.FocusedFormInput())
-        .on("change", ({ value }) => Message.Autofilled({ value }))
+        .on("focus", NumberFieldMessage.FocusedFormInput())
+        .on("change", ({ value }) => NumberFieldMessage.Autofilled({ value }))
     })
     const form = View.toNode(
       formInput(new Html.VoidElement<never, never, Html.EventsOf<"input">, HTMLInputElement, "input">("input"))
@@ -1336,14 +1339,14 @@ export const NumberField = Component.define({
         })
         .disabled(disabled)
         .value(text)
-        .onInput(({ value }) => Message.UpdatedInput({ value }))
-        .onBlur((payload) => Message.BlurredInput({ disabled: payload.disabled === true }))
+        .onInput(({ value }) => NumberFieldMessage.UpdatedInput({ value }))
+        .onBlur((payload) => NumberFieldMessage.BlurredInput({ disabled: payload.disabled === true }))
         .onKeyDown(
           ({ alt, composing, ctrl, key, meta, shift }) => {
             if (s.locked || composing || ctrl || meta) return undefined
             const steps = key === "ArrowUp" || key === "ArrowDown"
             const bounds = !alt && ((key === "Home" && s.min !== undefined) || (key === "End" && s.max !== undefined))
-            return steps || bounds ? Message.PressedKey({ key, shift, alt }) : undefined
+            return steps || bounds ? NumberFieldMessage.PressedKey({ key, shift, alt }) : undefined
           },
           { preventDefault: true }
         )

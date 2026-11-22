@@ -99,7 +99,7 @@ const SecretFieldName = Schema.Literals(["password", "confirm"])
 // Secret inputs carry `Schema.Redacted(Schema.String)` in their message and
 // Command args too, so a devtools message log never receives a password in
 // plain text.
-export const SignupMessage = UiSchema.TaggedEnum({
+export const SignupFormMessage = UiSchema.TaggedEnum({
   UpdatedField: { name: TextFieldName, value: Schema.String },
   UpdatedSecret: { name: SecretFieldName, value: Schema.Redacted(Schema.String) },
   SubmittedForm: {},
@@ -107,7 +107,7 @@ export const SignupMessage = UiSchema.TaggedEnum({
   FailedCreateAccount: { field: SignupRejected.fields.field, message: Schema.String }
 })
 
-export const SignupEvents = UiSchema.TaggedEnum({ SignedUp: { username: Schema.String } })
+export const SignupFormEvents = UiSchema.TaggedEnum({ SignedUp: { username: Schema.String } })
 
 export class CreateAccount extends Command.Service<CreateAccount>()(
   "accounts/CreateAccount",
@@ -117,8 +117,8 @@ export class CreateAccount extends Command.Service<CreateAccount>()(
     return (account) =>
       accounts.create(account).pipe(
         Effect.match({
-          onSuccess: () => SignupMessage.SucceededCreateAccount(),
-          onFailure: ({ field, message }) => SignupMessage.FailedCreateAccount({ field, message })
+          onSuccess: () => SignupFormMessage.SucceededCreateAccount(),
+          onFailure: ({ field, message }) => SignupFormMessage.FailedCreateAccount({ field, message })
         })
       )
   })
@@ -148,8 +148,8 @@ export const SignupForm = Component.define({
   name: "SignupForm",
   scoped: false,
   model: Schema.Struct({ form: SignupValidation.State, submitting: Schema.Boolean }),
-  message: SignupMessage,
-  events: SignupEvents,
+  message: SignupFormMessage,
+  events: SignupFormEvents,
   elements: Html,
   queries: {
     usernameTaken: {
@@ -192,7 +192,7 @@ export const SignupForm = Component.define({
       })
     },
     SucceededCreateAccount: (model, _message, $) =>
-      $.set({ ...model, submitting: false }).emit(SignupEvents.SignedUp({ username: model.form.values.username })),
+      $.set({ ...model, submitting: false }).emit(SignupFormEvents.SignedUp({ username: model.form.values.username })),
     // The server's error sits on its field until that field changes.
     FailedCreateAccount: (model, { field, message }) => ({
       submitting: false,
@@ -210,7 +210,7 @@ export const SignupForm = Component.define({
       label: string,
       type: string,
       value: string,
-      onInput: (value: string) => typeof SignupMessage.Type
+      onInput: (value: string) => typeof SignupFormMessage.Type
     ) =>
       h.div.children(
         h.label.children(
@@ -231,7 +231,7 @@ export const SignupForm = Component.define({
       )
 
     const text = (name: typeof TextFieldName.Type, label: string, type: string) =>
-      row(fields[name], label, type, fields[name].value, (value) => SignupMessage.UpdatedField({ name, value }))
+      row(fields[name], label, type, fields[name].value, (value) => SignupFormMessage.UpdatedField({ name, value }))
 
     // A secret is unwrapped only for the input, and what was typed is
     // wrapped again before it leaves the view.
@@ -241,12 +241,12 @@ export const SignupForm = Component.define({
         label,
         "password",
         Redacted.value(fields[name].value),
-        (value) => SignupMessage.UpdatedSecret({ name, value: Redacted.make(value) })
+        (value) => SignupFormMessage.UpdatedSecret({ name, value: Redacted.make(value) })
       )
 
     // `novalidate` turns the browser's own checks off. The rules above are
     // the only ones, and they run the same in a test and on the server.
-    return h.form.attr("novalidate", "").onSubmit(SignupMessage.SubmittedForm()).children(
+    return h.form.attr("novalidate", "").onSubmit(SignupFormMessage.SubmittedForm()).children(
       text("username", "Username", "text"),
       text("email", "Email", "email"),
       secret("password", "Password"),
@@ -267,13 +267,13 @@ export const checkedUsername = Effect.gen(function*() {
   const s = yield* Story.make(SignupForm, {})
   const username = () => validateSignup(s.model.form, s.queries.usernameTaken).fields.username
 
-  s.send(SignupMessage.UpdatedField({ name: "username", value: "ad" }))
+  s.send(SignupFormMessage.UpdatedField({ name: "username", value: "ad" }))
   // { _tag: "Invalid", errors: ["Must be at least 3 characters"], ... }, and the query is disabled.
-  s.send(SignupMessage.UpdatedField({ name: "username", value: "ada" }))
+  s.send(SignupFormMessage.UpdatedField({ name: "username", value: "ada" }))
   // "Validating" until the query answers.
   s.loaded("usernameTaken", true)
   // { _tag: "Invalid", errors: ["That username is taken"], ... }
-  s.send(SignupMessage.UpdatedField({ name: "username", value: "ada_l" }))
+  s.send(SignupFormMessage.UpdatedField({ name: "username", value: "ada_l" }))
   // "Validating" again: the answer for "ada" isn't shown for "ada_l".
   s.loaded("usernameTaken", false)
   return username()._tag // "Valid"
@@ -283,22 +283,22 @@ export const checkedUsername = Effect.gen(function*() {
 export const rejectedEmail = Effect.gen(function*() {
   const s = yield* Story.make(SignupForm, {})
   const account = { username: "ada_l", email: "ada@example.com", password: Redacted.make("correct horse") }
-  s.send(SignupMessage.UpdatedField({ name: "username", value: account.username }))
+  s.send(SignupFormMessage.UpdatedField({ name: "username", value: account.username }))
     .loaded("usernameTaken", false)
-    .send(SignupMessage.UpdatedField({ name: "email", value: account.email }))
-    .send(SignupMessage.UpdatedSecret({ name: "password", value: account.password }))
-    .send(SignupMessage.UpdatedSecret({ name: "confirm", value: account.password }))
-    .send(SignupMessage.SubmittedForm())
+    .send(SignupFormMessage.UpdatedField({ name: "email", value: account.email }))
+    .send(SignupFormMessage.UpdatedSecret({ name: "password", value: account.password }))
+    .send(SignupFormMessage.UpdatedSecret({ name: "confirm", value: account.password }))
+    .send(SignupFormMessage.SubmittedForm())
     .expectExact(CreateAccount)
     // An edit that arrives while the account is being created is dropped.
     .keepPending(CreateAccount)
-    .send(SignupMessage.UpdatedField({ name: "email", value: "grace@example.com" }))
+    .send(SignupFormMessage.UpdatedField({ name: "email", value: "grace@example.com" }))
     .resolve(
       CreateAccount,
-      SignupMessage.FailedCreateAccount({ field: "email", message: "That email already has an account" })
+      SignupFormMessage.FailedCreateAccount({ field: "email", message: "That email already has an account" })
     )
   const before = validateSignup(s.model.form, s.queries.usernameTaken).fields.email
-  s.send(SignupMessage.UpdatedField({ name: "email", value: "ada@example.org" }))
+  s.send(SignupFormMessage.UpdatedField({ name: "email", value: "ada@example.org" }))
   const after = validateSignup(s.model.form, s.queries.usernameTaken).fields.email
   return [before._tag, after._tag] // ["Invalid", "Valid"]
 })

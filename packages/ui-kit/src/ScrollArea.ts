@@ -244,7 +244,7 @@ const noOverflow: Overflow = {
   overflowYEnd: false
 }
 
-const Model = Schema.Struct({
+const ScrollAreaModel = Schema.Struct({
   measured: Schema.Boolean,
   hovering: Schema.Boolean,
   scrollingX: Schema.Boolean,
@@ -252,9 +252,9 @@ const Model = Schema.Struct({
   ...Overflow.fields
 })
 
-type Model = typeof Model.Type
+type ScrollAreaModel = typeof ScrollAreaModel.Type
 
-const Message = UiSchema.TaggedEnum({
+const ScrollAreaMessage = UiSchema.TaggedEnum({
   MeasuredOverflow: Overflow.fields,
   StartedScrolling: { orientation: ScrollAreaOrientation },
   StoppedScrolling: { orientation: ScrollAreaOrientation },
@@ -262,7 +262,7 @@ const Message = UiSchema.TaggedEnum({
   LeftPointer: {}
 })
 
-type Message = typeof Message.Type
+type ScrollAreaMessage = typeof ScrollAreaMessage.Type
 
 const thresholdsOf = (threshold: ScrollAreaOverflowEdgeThreshold | undefined) => {
   const t = typeof threshold === "number"
@@ -404,12 +404,12 @@ const TrackScrollArea = Mount.makeStream(
   "TrackScrollArea",
   { args: TrackScrollAreaArgs },
   (root: HTMLElement, initial, changes) =>
-    Stream.callback<Message>((queue) =>
+    Stream.callback<ScrollAreaMessage>((queue) =>
       Effect.gen(function*() {
         registerOverflowVars(root.ownerDocument.defaultView)
 
         let args: TrackScrollAreaArgs = initial
-        const send = (message: Message) => Queue.offerUnsafe(queue, message)
+        const send = (message: ScrollAreaMessage) => Queue.offerUnsafe(queue, message)
         const find = (attr: string) => root.querySelector<HTMLElement>(attrSelector(attr, args.id))
 
         const y = axisOf("vertical")
@@ -443,7 +443,7 @@ const TrackScrollArea = Mount.makeStream(
         const setHovering = (next: boolean) => {
           if (next === hovering) return
           hovering = next
-          send(next ? Message.EnteredPointer() : Message.LeftPointer())
+          send(next ? ScrollAreaMessage.EnteredPointer() : ScrollAreaMessage.LeftPointer())
         }
 
         const stopScrolling = (axis: Axis) => {
@@ -451,13 +451,13 @@ const TrackScrollArea = Mount.makeStream(
           axis.timer = undefined
           if (!axis.scrolling) return
           axis.scrolling = false
-          send(Message.StoppedScrolling({ orientation: axis.orientation }))
+          send(ScrollAreaMessage.StoppedScrolling({ orientation: axis.orientation }))
         }
 
         const startScrolling = (axis: Axis) => {
           if (!axis.scrolling) {
             axis.scrolling = true
-            send(Message.StartedScrolling({ orientation: axis.orientation }))
+            send(ScrollAreaMessage.StartedScrolling({ orientation: axis.orientation }))
           }
           clearTimeout(axis.timer)
           axis.timer = setTimeout(() => stopScrolling(axis), SCROLL_TIMEOUT)
@@ -485,7 +485,7 @@ const TrackScrollArea = Mount.makeStream(
         const report = (overflow: Overflow) => {
           if (lastReport !== null && sameOverflow(lastReport, overflow)) return
           lastReport = overflow
-          send(Message.MeasuredOverflow(overflow))
+          send(ScrollAreaMessage.MeasuredOverflow(overflow))
         }
 
         const measure = () => {
@@ -771,7 +771,7 @@ type ScrollbarOf<B extends View.PartTarget<"div">, T extends View.PartTarget<"di
   View.Requirements<T>
 >
 
-const overflowData = <B extends Attributed<B>>(builder: B, model: Model): B =>
+const overflowData = <B extends Attributed<B>>(builder: B, model: ScrollAreaModel): B =>
   builder
     .attrs({
       "data-has-overflow-x": flag(model.hasOverflowX),
@@ -814,8 +814,8 @@ export const ScrollArea = Component.define({
   name: "ScrollArea",
   scoped: false,
   props: ScrollAreaProps,
-  model: Model,
-  message: Message,
+  model: ScrollAreaModel,
+  message: ScrollAreaMessage,
   elements: Html
 }).make({
   init: () => ({ measured: false, hovering: false, scrollingX: false, scrollingY: false, ...noOverflow }),

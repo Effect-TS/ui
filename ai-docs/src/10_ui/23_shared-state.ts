@@ -16,7 +16,7 @@ import { Effect, Schema } from "effect"
 // The owner: a headless component with `shares`
 // ---------------------------------------------------------------------------
 
-const ProviderMessage = UiSchema.TaggedEnum({
+const TooltipProviderMessage = UiSchema.TaggedEnum({
   FocusedTooltip: { id: Schema.String },
   BlurredTooltip: { id: Schema.String }
 })
@@ -33,7 +33,7 @@ export const TooltipProvider = Component.define({
   // Every prop optional, so a scene of a reader has a default value.
   props: Schema.Struct({ delay: Schema.optional(Schema.Number) }),
   model: Schema.Struct({ open: Schema.NullOr(Schema.String) }),
-  message: ProviderMessage,
+  message: TooltipProviderMessage,
   // `receives` lists what `$.send(TooltipProvider, message)` takes. They are
   // facts, named like any other message.
   shares: { value: (model) => ({ open: model.open }), receives: ["FocusedTooltip", "BlurredTooltip"] },
@@ -42,7 +42,7 @@ export const TooltipProvider = Component.define({
 }).make({
   init: () => ({ open: null }),
   update: (model, message) =>
-    ProviderMessage.match(message, {
+    TooltipProviderMessage.match(message, {
       FocusedTooltip: ({ id }) => ({ open: id }),
       BlurredTooltip: ({ id }) => model.open === id ? { open: null } : model
     }),
@@ -157,7 +157,7 @@ export const focused = Effect.gen(function*() {
 // An optional owner, reports and onChange
 // ---------------------------------------------------------------------------
 
-const GroupMessage = UiSchema.TaggedEnum({ ChangedOpen: { open: Schema.Boolean } })
+const PanelGroupMessage = UiSchema.TaggedEnum({ ChangedOpen: { open: Schema.Boolean } })
 
 // `shares` in its long form. `value` is what readers read, and `schema` its
 // Schema, which encodes it in a reader's `Update` on the Wire. Without one,
@@ -174,13 +174,13 @@ export const PanelGroup = Component.define({
   name: "PanelGroup",
   scoped: false,
   model: Schema.Struct({ anyOpen: Schema.Boolean }),
-  message: GroupMessage,
+  message: PanelGroupMessage,
   shares: {
     value: (model) => ({ anyOpen: model.anyOpen }),
     schema: Schema.Struct({ anyOpen: Schema.Boolean }),
     collects: {
       schema: Schema.Boolean,
-      onChange: (collected) => GroupMessage.ChangedOpen({ open: collected.includes(true) })
+      onChange: (collected) => PanelGroupMessage.ChangedOpen({ open: collected.includes(true) })
     }
   },
   elements: Html

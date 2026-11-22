@@ -1399,14 +1399,14 @@ export const trackPosition = (
  * import { Positioning } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
- * const Message = UiSchema.TaggedEnum({ ChangedPlacement: { placement: Positioning.Placement } })
+ * const HintMessage = UiSchema.TaggedEnum({ ChangedPlacement: { placement: Positioning.Placement } })
  *
  * const Hint = Component.define({
  *   name: "Hint",
  *   scoped: false,
  *   props: Schema.Struct({ open: Schema.Boolean, ...Positioning.PositionerFields }),
  *   model: Schema.Struct({ placement: Schema.NullOr(Positioning.Placement) }),
- *   message: Message,
+ *   message: HintMessage,
  *   elements: Html
  * }).make({
  *   init: () => ({ placement: null }),
@@ -1427,7 +1427,7 @@ export const trackPosition = (
  *       h.button.id(anchorId).children("Save"),
  *       h.props.open
  *         ? positioner.onMount(
- *           Positioning.TrackPosition(args).pipe(Mount.map((placement) => Message.ChangedPlacement({ placement })))
+ *           Positioning.TrackPosition(args).pipe(Mount.map((placement) => HintMessage.ChangedPlacement({ placement })))
  *         )
  *         : positioner
  *     )

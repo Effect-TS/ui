@@ -15,8 +15,8 @@ import { Schema } from "effect"
 // ---------------------------------------------------------------------------
 // A controlled dialog: the caller decides `open`, and closing is a request
 // ---------------------------------------------------------------------------
-const DialogMessage = UiSchema.TaggedEnum({ CancelledDialog: {}, ClosedDialog: {}, ClickedConfirm: {} })
-export const DialogEvents = UiSchema.TaggedEnum({ Dismissed: {}, Confirmed: {} })
+const ConfirmDialogMessage = UiSchema.TaggedEnum({ CancelledDialog: {}, ClosedDialog: {}, ClickedConfirm: {} })
+export const ConfirmDialogEvents = UiSchema.TaggedEnum({ Dismissed: {}, Confirmed: {} })
 
 export const ConfirmDialog = Component.define({
   name: "ConfirmDialog",
@@ -24,24 +24,24 @@ export const ConfirmDialog = Component.define({
   props: Schema.Struct({ open: Schema.Boolean }),
   // Convention: no copy of `open` in the Model, so the prop is the one source.
   model: Schema.Null,
-  message: DialogMessage,
-  events: DialogEvents,
+  message: ConfirmDialogMessage,
+  events: ConfirmDialogEvents,
   elements: Html
 }).make({
   init: () => null,
   update: (model, message, $) =>
-    DialogMessage.match(message, {
-      CancelledDialog: () => $.emit(DialogEvents.Dismissed()),
+    ConfirmDialogMessage.match(message, {
+      CancelledDialog: () => $.emit(ConfirmDialogEvents.Dismissed()),
       // A close while `open` is still true is the browser's. One after the
       // caller set `open` to false only confirms the caller's decision.
-      ClosedDialog: () => $.props.open ? $.emit(DialogEvents.Dismissed()) : model,
-      ClickedConfirm: () => $.emit(DialogEvents.Confirmed())
+      ClosedDialog: () => $.props.open ? $.emit(ConfirmDialogEvents.Dismissed()) : model,
+      ClickedConfirm: () => $.emit(ConfirmDialogEvents.Confirmed())
     }),
   view: (_, h) =>
     h.dialog.attr("aria-label", "Confirm").modal(h.props.open)
-      .onCancel(DialogMessage.CancelledDialog())
-      .onClose(DialogMessage.ClosedDialog())
-      .children(h.button.onClick(DialogMessage.ClickedConfirm()).children("Confirm"))
+      .onCancel(ConfirmDialogMessage.CancelledDialog())
+      .onClose(ConfirmDialogMessage.ClosedDialog())
+      .children(h.button.onClick(ConfirmDialogMessage.ClickedConfirm()).children("Confirm"))
 })
 
 // ---------------------------------------------------------------------------
@@ -155,7 +155,7 @@ export const Host = Component.define({
 // A provider owning visibility. Descendants send it occurrences, and a reader
 // passes `open` on to the controlled dialog as a prop.
 // ---------------------------------------------------------------------------
-const ModalMessage = UiSchema.TaggedEnum({ RequestedOpen: {}, RequestedClose: {} })
+const ModalProviderMessage = UiSchema.TaggedEnum({ RequestedOpen: {}, RequestedClose: {} })
 
 // The provider is the one writer of `open`. Descendants read it without
 // owning it. `restore: false` starts it from `init` after Back or a reload,
@@ -164,14 +164,14 @@ export const ModalProvider = Component.define({
   name: "ModalProvider",
   scoped: false,
   model: Schema.Struct({ open: Schema.Boolean }),
-  message: ModalMessage,
+  message: ModalProviderMessage,
   shares: { value: (model) => ({ open: model.open }), receives: ["RequestedOpen", "RequestedClose"] },
   restore: false,
   elements: Html
 }).make({
   init: () => ({ open: false }),
   update: (_model, message) =>
-    ModalMessage.match(message, {
+    ModalProviderMessage.match(message, {
       RequestedOpen: () => ({ open: true }),
       RequestedClose: () => ({ open: false })
     }),
@@ -195,7 +195,7 @@ export const OpenButton = Component.define({
   init: () => null,
   update: (_model, message, $) =>
     OpenButtonMessage.match(message, {
-      ClickedOpen: () => $.send(ModalProvider, ModalMessage.RequestedOpen())
+      ClickedOpen: () => $.send(ModalProvider, ModalProviderMessage.RequestedOpen())
     }),
   view: (_, h) => h.button.onClick(OpenButtonMessage.ClickedOpen()).children("Open")
 })
@@ -216,7 +216,7 @@ export const ModalHost = Component.define({
   init: () => null,
   update: (_model, message, $) =>
     ModalHostMessage.match(message, {
-      ClosedDialog: () => $.send(ModalProvider, ModalMessage.RequestedClose())
+      ClosedDialog: () => $.send(ModalProvider, ModalProviderMessage.RequestedClose())
     }),
   view: (_, h) =>
     ConfirmDialog(h, {

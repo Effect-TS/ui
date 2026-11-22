@@ -282,7 +282,7 @@ export type ToastProviderEvents = typeof ToastProviderEvents.Type
 
 // The first three are what senders post. The rest are facts from the parts,
 // the viewport's and the toasts' mounts, and the timers.
-const Message = UiSchema.TaggedEnum({
+const ToastProviderMessage = UiSchema.TaggedEnum({
   AddedToast: { toast: ToastData },
   // Every field but `id` is optional, so a toast's fields are also a change's.
   UpdatedToast: ToastData.fields,
@@ -302,7 +302,7 @@ const Message = UiSchema.TaggedEnum({
   CompletedWaitBeforeDismissal: { id: Schema.String }
 })
 
-type Message = typeof Message.Type
+type ToastProviderMessage = typeof ToastProviderMessage.Type
 
 // A toast in the Model: its content, where it is in its life, and its
 // natural height, 0 until measured and once it closes.
@@ -318,7 +318,7 @@ type Entry = typeof Entry.Type
 // keyboard focus is in it. `windowFocused`: the window has focus. The
 // timers run only while all three allow it. `closeFocused`: the toast whose
 // close button has focus, from the keyboard or a press.
-const Model = Schema.Struct({
+const ToastProviderModel = Schema.Struct({
   toasts: Schema.Array(Entry),
   hovering: Schema.Boolean,
   focused: Schema.Boolean,
@@ -326,14 +326,15 @@ const Model = Schema.Struct({
   closeFocused: Schema.NullOr(Schema.String)
 })
 
-type Model = typeof Model.Type
+type ToastProviderModel = typeof ToastProviderModel.Type
 
 // One run per toast: a new run for a toast replaces its running one, and a
 // pause interrupts them all, so a cut wait sends nothing.
 const WaitBeforeDismissal = Command.make(
   "WaitBeforeDismissal",
   { args: { id: Schema.String, timeout: Schema.Number }, mode: "switch", group: ["id"] },
-  ({ id, timeout }) => Effect.as(Effect.sleep(Duration.millis(timeout)), Message.CompletedWaitBeforeDismissal({ id }))
+  ({ id, timeout }) =>
+    Effect.as(Effect.sleep(Duration.millis(timeout)), ToastProviderMessage.CompletedWaitBeforeDismissal({ id }))
 )
 
 type Tracked = { readonly _tag: "Measured"; readonly height: number } | { readonly _tag: "Finished" }
@@ -508,15 +509,15 @@ const TrackViewport = Mount.makeStream(
 
 // The window's focus, since the timers pause while it's elsewhere.
 const windowFocus = [
-  DomSubscription.onWindow("focus", Message.FocusedWindow()),
-  DomSubscription.onWindow("blur", Message.BlurredWindow())
+  DomSubscription.onWindow("focus", ToastProviderMessage.FocusedWindow()),
+  DomSubscription.onWindow("blur", ToastProviderMessage.BlurredWindow())
 ]
 
 // The stack is expanded while the pointer is on it or keyboard focus is in it.
-const expandedBy = (model: Model): boolean => model.hovering || model.focused
+const expandedBy = (model: ToastProviderModel): boolean => model.hovering || model.focused
 
 // The timers run while the stack is collapsed and the window has focus.
-const pausedBy = (model: Model): boolean => expandedBy(model) || !model.windowFocused
+const pausedBy = (model: ToastProviderModel): boolean => expandedBy(model) || !model.windowFocused
 
 const timeoutOf = (toast: ToastData, props: ToastProviderProps): number => toast.timeout ?? props.timeout ?? 5000
 
@@ -551,21 +552,27 @@ const stackOf = (toasts: ReadonlyArray<Entry>, limit: number) => {
 
 // `$` in any handler of the provider's `update`: a tag's `$` fits the one
 // over the whole message type.
-type ProviderUpdate = Component.Update<Model, Message, ToastProviderEvents, ToastProviderProps>
+type ProviderUpdate = Component.Update<
+  ToastProviderModel,
+  ToastProviderMessage,
+  ToastProviderEvents,
+  ToastProviderProps
+>
 
 // The toast `id` while it shows. A closing one only waits for its exit.
-const shown = (model: Model, id: string) =>
+const shown = (model: ToastProviderModel, id: string) =>
   model.toasts.find((toast) => toast.id === id && toast.transition !== "ending")
 
-const replace = (model: Model, entry: Entry) => model.toasts.map((toast) => (toast.id === entry.id ? entry : toast))
+const replace = (model: ToastProviderModel, entry: Entry) =>
+  model.toasts.map((toast) => (toast.id === entry.id ? entry : toast))
 
 // Start a toast's timer, unless the timers are paused, or stop it.
-const timer = (model: Model, $: ProviderUpdate, entry: Entry) =>
+const timer = (model: ToastProviderModel, $: ProviderUpdate, entry: Entry) =>
   timed(entry, $.props) ? (pausedBy(model) ? [] : [wait(entry, $.props)]) : [stop(entry.id)]
 
 // Move to `next`, pausing every timer or starting them again when the pause
 // changes.
-const settle = (model: Model, $: ProviderUpdate, next: Model) => {
+const settle = (model: ToastProviderModel, $: ProviderUpdate, next: ToastProviderModel) => {
   const step = $.set(next)
   const paused = pausedBy(model)
   if (!paused && pausedBy(next)) return step.run(Command.interrupt(WaitBeforeDismissal))
@@ -577,7 +584,7 @@ const settle = (model: Model, $: ProviderUpdate, next: Model) => {
 
 // A toast that shows starts closing. Once none shows, the pointer is taken
 // to have left, since a viewport that empties sends no mouseleave.
-const close = (model: Model, $: ProviderUpdate, id: string, user: boolean) => {
+const close = (model: ToastProviderModel, $: ProviderUpdate, id: string, user: boolean) => {
   const entry = shown(model, id)
   if (entry === undefined) return model
   const toasts = replace(model, { ...entry, transition: "ending", height: 0 })
@@ -588,7 +595,8 @@ const close = (model: Model, $: ProviderUpdate, id: string, user: boolean) => {
 
 // The user closed the toast, with the close part or Escape, or its timeout
 // ran out.
-const dismiss = (model: Model, { id }: { readonly id: string }, $: ProviderUpdate) => close(model, $, id, true)
+const dismiss = (model: ToastProviderModel, { id }: { readonly id: string }, $: ProviderUpdate) =>
+  close(model, $, id, true)
 
 // A part that takes the toast it draws with the builder, as `{ element, toast }`.
 const withToast = <Tag extends string, R>(part: View.Part<Tag, [toast: ToastItem], R>) =>
@@ -641,8 +649,8 @@ export const ToastProvider = Component.define({
   name: "ToastProvider",
   scoped: false,
   props: ToastProviderProps,
-  model: Model,
-  message: Message,
+  model: ToastProviderModel,
+  message: ToastProviderMessage,
   events: ToastProviderEvents,
   // Senders only post, so there's nothing for them to read.
   shares: { value: () => ({}), receives: ["AddedToast", "UpdatedToast", "ClosedToast"] },
@@ -731,10 +739,12 @@ export const ToastProvider = Component.define({
         "aria-relevant": "additions text",
         "data-expanded": flag(expanded)
       })
-        .on("mouseenter", Message.EnteredViewport())
-        .on("mouseleave", Message.LeftViewport())
+        .on("mouseenter", ToastProviderMessage.EnteredViewport())
+        .on("mouseleave", ToastProviderMessage.LeftViewport())
         .popover("manual", true)
-        .onMount(TrackViewport({ empty, hovering: model.hovering }).pipe(Mount.map((fact) => Message[fact]())))
+        .onMount(
+          TrackViewport({ empty, hovering: model.hovering }).pipe(Mount.map((fact) => ToastProviderMessage[fact]()))
+        )
         .forward((node) => {
           const labelled = node.elementAttrs["aria-label"] === undefined
             ? node.attr("aria-label", "Notifications")
@@ -768,13 +778,13 @@ export const ToastProvider = Component.define({
         "data-starting-style": flag(toast.transitionStatus === "starting"),
         "data-ending-style": flag(ending)
       })
-        .onKeyDown(({ key }) => (key === "Escape" ? Message.PressedEscape({ id: toast.id }) : undefined))
+        .onKeyDown(({ key }) => (key === "Escape" ? ToastProviderMessage.PressedEscape({ id: toast.id }) : undefined))
         .onMount(
           TrackToast({ id: toast.id, ending }).pipe(
             Mount.map((tracked) =>
               tracked._tag === "Measured"
-                ? Message.MeasuredToast({ id: toast.id, height: tracked.height })
-                : Message.FinishedExit({ id: toast.id })
+                ? ToastProviderMessage.MeasuredToast({ id: toast.id, height: tracked.height })
+                : ToastProviderMessage.FinishedExit({ id: toast.id })
             )
           )
         )
@@ -811,9 +821,9 @@ export const ToastProvider = Component.define({
         "data-type": toast.type,
         "aria-hidden": expanded || model.closeFocused === toast.id ? undefined : "true"
       })
-        .onClick(Message.ClickedClose({ id: toast.id }))
-        .onFocus(Message.FocusedClose({ id: toast.id }))
-        .onBlur(Message.BlurredClose({ id: toast.id })))
+        .onClick(ToastProviderMessage.ClickedClose({ id: toast.id }))
+        .onFocus(ToastProviderMessage.FocusedClose({ id: toast.id }))
+        .onBlur(ToastProviderMessage.BlurredClose({ id: toast.id })))
     return {
       toasts,
       expanded,
