@@ -47,10 +47,10 @@ const pressLines: Record<string, string> = {
 const eventSteps = (events: ReadonlyArray<unknown>, where: string): Array<FlowStep> =>
   events.map((event) => {
     const name = tagOf(event)
-    const caption = name === "Opened"
-      ? "The Dialog emits Opened, asking to open. It doesn't open itself."
-      : name === "Dismissed"
-      ? "The Dialog emits Dismissed, asking to close. The page can refuse."
+    const caption = name === "RequestedOpen"
+      ? "The Dialog emits RequestedOpen. It doesn't open itself."
+      : name === "RequestedClose"
+      ? "The Dialog emits RequestedClose. The page can refuse."
       : "The Dialog emits Settled: the transition finished. The page maps it to nothing."
     return step({
       kind: "event",
@@ -104,7 +104,7 @@ export const toSteps = (entry: MessageLog.Entry): ReadonlyArray<FlowStep> => {
           caption: (fromMount ? mountCaptions[name] : pressCaptions[name]) ?? `The Dialog's update handles ${name}.`,
           line: fromMount ? (name === "ShowedPortal" ? "dialog.portal(" : "dialog.popup(") : pressLines[name] ?? "",
           dialog: dialogState(entry.model),
-          starts: !fromMount && entry.events.some((event) => tagOf(event) === "Opened")
+          starts: !fromMount && entry.events.some((event) => tagOf(event) === "RequestedOpen")
         }),
         ...eventSteps(entry.events, where)
       ]

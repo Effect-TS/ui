@@ -24,7 +24,7 @@ describe("Flow", () => {
         .expect(lit).toBeAbsent()
         .click(step)
         .expect(caption).toHaveText("The page sets confirm to true.")
-        .expect(lit).toHaveText("OpenedConfirm: (_model) => model")
+        .expect(lit).toHaveText("RequestedOpenConfirm: (_model) => model")
         .expect(Locator.text("confirm: true", { exact: true })).toExist()
         .expect(step).toBeDisabled()
         .click(HtmlLocator.role("button", { name: "Step 1: ClickedTrigger" }))
