@@ -16,6 +16,9 @@ declare const needsClock: View.Child<never, Clock>
 type Div<R> = Html.Element<Msg, R, Html.EventsOf<"div">, HTMLDivElement, "div">
 type Ul<R> = Html.Element<Msg, R, Html.EventsOf<"ul">, HTMLUListElement, "ul">
 type Li<R> = Html.Element<Msg, R, Html.EventsOf<"li">, HTMLLIElement, "li">
+type Table = Html.Element<Msg, never, Html.EventsOf<"table">, HTMLTableElement, "table">
+type Tbody = Html.Element<Msg, never, Html.EventsOf<"tbody">, HTMLTableSectionElement, "tbody">
+type Tr = Html.Element<Msg, never, Html.EventsOf<"tr">, HTMLTableRowElement, "tr">
 
 const h = View.makeHelper<Msg, {}, Html.Elements>({}, Html)
 
@@ -34,7 +37,17 @@ describe("VirtualList", () => {
             readonly atEnd: boolean
           }>()
           return Msg.Scrolled({ first: event.first, last: event.last })
-        }
+        },
+        ScrolledTo: (event) => {
+          expect(event).type.toBe<{
+            readonly _tag: "ScrolledTo"
+            readonly offset: number
+            readonly height: number
+            readonly length: number
+          }>()
+          return undefined
+        },
+        StoppedScrolling: () => undefined
       },
       view: (virtualList) => {
         expect(virtualList.items).type.toBe<Array<number>>()
@@ -53,6 +66,34 @@ describe("VirtualList", () => {
       }
     })
     expect<View.Requirements<typeof child>>().type.toBe<Clock>()
+  })
+
+  it("takes a table and the layout props", () => {
+    VirtualList(h, {
+      props: {
+        count: 100,
+        itemSize: 32,
+        scrollContainer: { selector: "main" },
+        reserveStart: 400,
+        setSize: -1,
+        firstPosition: 2,
+        trackScroll: true
+      },
+      view: (virtualList) => {
+        expect(virtualList.table(h.table)).type.toBe<Table>()
+        expect(virtualList.list(h.tbody)).type.toBe<Tbody>()
+        expect(virtualList.item({ element: h.tr, index: 0 })).type.toBe<Tr>()
+        return virtualList.table(h.table).children(virtualList.list(h.tbody))
+      }
+    })
+    expect(VirtualList).type.toBeCallableWith(h, {
+      props: { count: 1, itemSize: 20, scrollContainer: "nearest" as const, layout: "absolute" as const },
+      view: () => h.div
+    })
+    expect(VirtualList).type.not.toBeCallableWith(h, {
+      props: { count: 1, itemSize: 20, layout: "grid" },
+      view: () => h.div
+    })
   })
 
   it("takes every scroll target", () => {

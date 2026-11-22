@@ -57,7 +57,10 @@ const layout = Effect.acquireRelease(
   ({ original }) => Effect.sync(() => (Element.prototype.getBoundingClientRect = original))
 )
 
-const Steps = Effect.fnUntraced(function*(steps: ReadonlyArray<Partial<VirtualListProps>>) {
+const Steps = Effect.fnUntraced(function*(
+  steps: ReadonlyArray<Partial<VirtualListProps>>,
+  { ownViewport = false }: { readonly ownViewport?: boolean } = {}
+) {
   const geometry = yield* layout
   const Message = UiSchema.TaggedEnum({ Advanced: {} })
   const Demo = Component.define({
@@ -75,15 +78,17 @@ const Steps = Effect.fnUntraced(function*(steps: ReadonlyArray<Partial<VirtualLi
         VirtualList(h, {
           props: { count: 1000, itemSize, ...steps[model.step] },
           view: (virtualList) =>
-            virtualList.viewport(h.div.class("viewport")).children(
-              virtualList.list(h.ul.class("list")).children(
-                virtualList.items.map((index) =>
-                  virtualList.item({ element: h.li.class("item").key(String(index)), index }).children(
-                    h.button.children("Item " + index)
+            (ownViewport
+              ? h.div.class("viewport").attr("style", "overflow-y:auto")
+              : virtualList.viewport(h.div.class("viewport"))).children(
+                virtualList.list(h.ul.class("list")).children(
+                  virtualList.items.map((index) =>
+                    virtualList.item({ element: h.li.class("item").key(String(index)), index }).children(
+                      h.button.children("Item " + index)
+                    )
                   )
                 )
               )
-            )
         })
       )
   })
@@ -129,6 +134,19 @@ describe("VirtualList in a document", { concurrent: false }, () => {
       button.blur()
       yield* tick
       assert.deepStrictEqual(indices(), span(47, 57))
+    }))
+
+  it.effect("scrolls with the nearest scrolling element when it renders none", () =>
+    Effect.gen(function*() {
+      const { indices, next, scrollTo, scrollTop } = yield* Steps([
+        { scrollContainer: "nearest" },
+        { scrollContainer: "nearest", scrollTo: { target: VirtualListScrollTarget.Index({ index: 500 }) } }
+      ], { ownViewport: true })
+      scrollTo(1000)
+      yield* tick
+      assert.deepStrictEqual(indices(), span(47, 57))
+      yield* next
+      assert.strictEqual(scrollTop(), 500 * itemSize)
     }))
 
   it.effect("scrolls to a request once its items load, after the parent drops it", () =>

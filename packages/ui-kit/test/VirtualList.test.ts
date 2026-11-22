@@ -1,9 +1,9 @@
-import type { Component, Mount, View } from "@effect/ui"
+import { Component, type Mount, type View } from "@effect/ui"
 import { VirtualList, VirtualListEvents, type VirtualListProps } from "@effect/ui-kit"
-import { Html } from "@effect/ui/html"
+import { Html, HtmlServer } from "@effect/ui/html"
 import { Locator, Scene } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 
 type Parts = Component.Headless.Parts<typeof VirtualList>
 type H = View.Helper<never, VirtualListProps> & View.Tags<Html.Elements, never>
@@ -192,6 +192,140 @@ describe("VirtualList", () => {
       )
       s.mounted(tracked(s), moved(60, 60)).emitted(scrolled(1, 3))
       assert.include(s.get(listLoc).attrs?.style ?? "", "padding-block-start:50px;padding-block-end:40px")
+    }))
+
+  it.effect("says where the items sit in a longer set", () =>
+    Effect.gen(function*() {
+      const s = yield* Scene.make(VirtualList, { ...base, setSize: 10000, firstPosition: 201 }, makeStandIn())
+      s.expectMount(tracked(s))
+      assert.strictEqual(s.all(itemLoc)[0]!.attrs?.["aria-posinset"], "201")
+      assert.strictEqual(s.all(itemLoc)[0]!.attrs?.["aria-setsize"], "10000")
+      s.props({ ...base, setSize: -1 })
+      assert.strictEqual(s.all(itemLoc)[0]!.attrs?.["aria-posinset"], "1")
+      assert.strictEqual(s.all(itemLoc)[0]!.attrs?.["aria-setsize"], "-1")
+    }))
+
+  it.effect("writes the size of each item it doesn't measure", () =>
+    Effect.gen(function*() {
+      const s = yield* Scene.make(VirtualList, { count: 3, itemSize: 32, sizes: [40], measure: false }, makeStandIn())
+      s.expectMount(tracked(s))
+      assert.deepStrictEqual(
+        s.all(itemLoc).map((node) => node.attrs?.style),
+        [
+          "box-sizing:border-box;block-size:40px",
+          "box-sizing:border-box;block-size:32px",
+          "box-sizing:border-box;block-size:32px"
+        ]
+      )
+    }))
+
+  it.effect("holds space above the first item for items still to load", () =>
+    Effect.gen(function*() {
+      const s = yield* Scene.make(VirtualList, { ...base, reserveStart: 400 }, makeStandIn())
+      s.mounted(tracked(s), moved(0)).emitted(scrolled(0, 4))
+      assert.include(s.get(listLoc).attrs?.style ?? "", "padding-block-start:400px")
+      s.props(base)
+      assert.include(s.get(listLoc).attrs?.style ?? "", "padding-block-start:0px")
+    }))
+
+  it.effect("stands in for the rows left out of a table body with empty rows", () =>
+    Effect.gen(function*() {
+      const s = yield* Scene.make(VirtualList, { ...base, firstPosition: 2, overscan: 0 }, {
+        elements: Html,
+        view: (virtualList: Parts, h: H) =>
+          virtualList.table(h.table.class("table")).children(
+            virtualList.list(h.tbody.class("list")).children(
+              virtualList.items.map((index) =>
+                virtualList.item({ element: h.tr.class("item").key(String(index)), index }).children(
+                  h.td.children(String(index))
+                )
+              )
+            )
+          )
+      })
+      s.mounted(tracked(s), moved(1000)).emitted(scrolled(50, 54))
+      const rows = (s.get(listLoc).children ?? []).map((
+        node
+      ) => [node.attrs?.style ?? "", node.attrs?.["aria-rowindex"]])
+      assert.deepStrictEqual(rows, [
+        ["height:1000px", undefined],
+        ...span(50, 54).map((index) => ["", String(index + 2)]),
+        ["height:18900px", undefined]
+      ])
+      assert.strictEqual(s.get(listLoc).attrs?.role, undefined)
+      assert.strictEqual(s.get(Locator.attr("class", "table")).attrs?.["aria-rowcount"], "1001")
+    }))
+
+  it.effect("renders the first rows of a table and of the absolute layout on the server", () =>
+    Effect.gen(function*() {
+      const Rows = Component.define({
+        name: "Rows",
+        scoped: false,
+        model: Schema.Struct({}),
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => ({}),
+        update: (model) => model,
+        view: (_model, h) =>
+          h.div.children(
+            VirtualList(h, {
+              key: "table",
+              props: { count: 100, itemSize: 20, initialCount: 2 },
+              view: (virtualList) =>
+                virtualList.table(h.table).children(
+                  virtualList.list(h.tbody).children(
+                    virtualList.items.map((index) =>
+                      virtualList.item({ element: h.tr.key(String(index)), index }).children(h.td.children("T" + index))
+                    )
+                  )
+                )
+            }),
+            VirtualList(h, {
+              key: "absolute",
+              props: { count: 100, itemSize: 20, initialCount: 2, layout: "absolute" },
+              view: (virtualList) =>
+                virtualList.list(h.div).children(
+                  virtualList.items.map((index) =>
+                    virtualList.item({ element: h.div.key(String(index)), index }).children("A" + index)
+                  )
+                )
+            })
+          )
+      })
+      const { html } = yield* HtmlServer.renderToHtml(Rows, {})
+      const rows = Array.from(html.matchAll(/<tr[^>]*>/g), ([tag]) =>
+        tag.includes("data-virtual-list-spacer") ? "spacer" : "row")
+      assert.deepStrictEqual(rows, ["row", "row", "spacer"])
+      assert.include(html, "height:1960px")
+      assert.include(html, "translateY(20px)")
+      assert.notInclude(html, "A2<")
+    }))
+
+  it.effect("places each item with a transform in the absolute layout", () =>
+    Effect.gen(function*() {
+      const s = yield* Scene.make(VirtualList, { ...base, layout: "absolute", overscan: 0 }, makeStandIn())
+      s.mounted(tracked(s), moved(1000)).emitted(scrolled(50, 54))
+      assert.strictEqual(
+        s.get(listLoc).attrs?.style,
+        "color:red;position:relative;padding-block-start:0px;padding-block-end:20000px;overflow-anchor:none"
+      )
+      assert.strictEqual(
+        s.all(itemLoc)[0]!.attrs?.style,
+        "position:absolute;inset-inline:0;top:0;transform:translateY(1000px)"
+      )
+    }))
+
+  it.effect("reports each scroll and its end only when asked", () =>
+    Effect.gen(function*() {
+      const at = { offset: 120, height: 100, length: 20000 }
+      const quiet = yield* Scene.make(VirtualList, base, makeStandIn())
+      quiet.mounted(tracked(quiet), sent("ScrolledViewport", at))
+      assert.deepStrictEqual(quiet.current.emitted, [])
+
+      const s = yield* Scene.make(VirtualList, { ...base, trackScroll: true }, makeStandIn())
+      s.mounted(tracked(s), sent("ScrolledViewport", at)).emitted(VirtualListEvents.ScrolledTo(at))
+      s.mounted(tracked(s), sent("EndedScroll")).emitted(VirtualListEvents.StoppedScrolling())
     }))
 
   it.effect("drops what it measured when the dataset changes", () =>
