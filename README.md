@@ -24,6 +24,7 @@ pnpm add https://pkg.pr.new/Effect-TS/ui/@effect/ui@<sha>
 `examples/` holds apps ported from [Foldkit's examples](https://github.com/devinjameson/foldkit/tree/main/examples). Each one is a private workspace package that `pnpm check`, `pnpm lint` and `pnpm test` cover. Run one with Vite:
 
 ```sh
+pnpm --filter auth dev
 pnpm --filter interrupting-commands dev
 pnpm --filter snake dev
 ```

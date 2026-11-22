@@ -9,8 +9,10 @@
  * and the render flush all go through, so `settle` can drain everything, and
  * provides `MessageLog.memory`, so `root.log()` reads back what happened.
  *
- * Runtime tests are plain scoped Effects. Anything that crosses into a child
- * is tested here; one instance on its own is a `Story`.
+ * Runtime tests are plain scoped Effects. An app's tests drive a tree on
+ * `TestHost` through `Play` and `HtmlPlay`, which act as a user does and
+ * settle on their own. Use `TestHost` directly to assert on what happens
+ * between settles. One instance on its own is a `Story` or a `Scene`.
  *
  * **Example** (Counting on a TestHost)
  *
@@ -61,6 +63,7 @@ import * as Stream from "effect/Stream"
 import * as Component from "../Component.ts"
 import * as Feature from "../Feature.ts"
 import type * as Head from "../Head.ts"
+import * as controlled from "../internal/controlled.ts"
 import * as Executor from "../internal/executor.ts"
 import * as hostEvents from "../internal/hostEvents.ts"
 import * as runtime from "../internal/runtime.ts"
@@ -136,6 +139,8 @@ type EventsAlong = (path: ReadonlyArray<TestNode>) => ReadonlyArray<Renderer.Eve
 
 const noLookup: EventsAlong = () => []
 
+const controlledProps: ReadonlySet<string> = new Set(["value", "checked", "selected", "open"])
+
 /** `node` and its ancestors. */
 const pathFrom = (node: TestNode): Array<TestNode> => {
   const path: Array<TestNode> = []
@@ -143,7 +148,7 @@ const pathFrom = (node: TestNode): Array<TestNode> => {
   return path
 }
 
-const fireFrom = (along: EventsAlong, node: TestNode, event: string, payload: unknown): void => {
+const fireFrom = (along: EventsAlong, node: TestNode, event: string, payload: unknown): boolean => {
   for (const entry of along(pathFrom(node))) {
     const handler = entry?.handlers[event]
     if (entry !== undefined && handler !== undefined) return entry.dispatch(event, handler, payload)
@@ -252,6 +257,7 @@ export const makeHost = (): Renderer.Host<TestNode> & {
     },
     setProp(node, name, value) {
       const element = node as TestElement
+      if (controlledProps.has(name)) controlled.want(element, name, value)
       // A no-op is skipped, as the browser host does for controlled properties.
       if (element.props[name] === value && name in element.props) return
       operations.push(`prop ${describe(node)} ${name}`)
@@ -280,7 +286,7 @@ export const makeHost = (): Renderer.Host<TestNode> & {
     },
     events: { connect, listen() {} },
     elements: "any",
-    controlled: new Set(["value", "checked", "selected", "open"]),
+    controlled: controlledProps,
     runsMounts: false,
     commit: () => {
       commits++
@@ -1060,7 +1066,7 @@ export interface Stub<Self, Props, Events> {
 }
 
 /**
- * Stands in for a feature in a runtime test: it renders a `<stub>` element
+ * Stands in for a feature in a `Play` or a runtime test: it renders a `<stub>` element
  * with a `data-stub` attribute naming the feature, records the props it gets,
  * and emits what the test sends.
  *

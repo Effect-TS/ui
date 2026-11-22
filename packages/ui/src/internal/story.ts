@@ -1421,7 +1421,11 @@ const pathTo = (root: View.Node<any, any>, node: Locator.Node): Array<View.Node<
  *
  * @internal
  */
-export const findOne = (story: State<any, any, any, any>, locator: Locator.Locator, step: string): Locator.Node => {
+export const findOne = <N extends Locator.Node>(
+  story: { readonly all: (locator: Locator.Locator) => ReadonlyArray<N>; readonly root: Locator.Node },
+  locator: Locator.Locator,
+  step: string
+): N => {
   const found = story.all(locator)
   if (found.length !== 1) {
     throw new Error(
@@ -1511,7 +1515,7 @@ export const fireNode = <Props, Model, Msg, Events>(
     const owners = owned.filter((layer) => Object.hasOwn(layer.handlers, event)).map((layer) => layer.owner.path)
     throw new Error(
       `${step}: only ${owners.join(" and ")} handles "${event}" at ${description}. ` +
-        "A scene doesn't run a child's update: use givenChild for its Model, or a TestHost test."
+        "A scene doesn't run a child's update: use givenChild for its Model, or a Play."
     )
   }
   // `"always"` from any layer cancels, a child's included. Then each layer runs once, in the runtime's
