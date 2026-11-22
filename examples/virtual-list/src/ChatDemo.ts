@@ -3,9 +3,6 @@ import { VirtualList, VirtualListScrollTarget } from "@effect/ui-kit"
 import { Duration, Effect, Schema } from "effect"
 import { Html, textOf } from "./shared.ts"
 
-// Phase 2, item 5: a chat that loads older messages as the user scrolls up.
-// 50 of 500 messages are loaded, a page of 50 takes 500ms, and `reserveStart`
-// keeps room above the oldest loaded message until the first one arrives.
 const total = 500
 const page = 50
 const reserve = 2000
@@ -56,7 +53,6 @@ const ChatDemoNoDeps = Component.define({
       VirtualList(h, {
         props: {
           itemSize: 48,
-          // One key per message sets the count, and keyed items stay in place on screen when a page lands before them.
           keys: ids,
           reserveStart: model.start === 0 ? 0 : reserve,
           contentAlignment: "end",
@@ -64,7 +60,6 @@ const ChatDemoNoDeps = Component.define({
           scrollTo: { target: VirtualListScrollTarget.End() }
         },
         onEmit: {
-          // Ask for the next page while a few screens of messages are left.
           Scrolled: ({ first }) => first < 20 ? ChatMessage.ApproachedStart() : undefined
         },
         view: (virtualList) =>

@@ -3,8 +3,6 @@ import { VirtualList } from "@effect/ui-kit"
 import { Schema } from "effect"
 import { Html } from "./shared.ts"
 
-// Phase 1, item 3: the 50 results of page 5 of a 10,000 result search. Each
-// result says where it is in the whole set, not in the 50 that are loaded.
 const Total = Schema.Literals(["known", "unknown", "none"])
 
 const PagedMessage = UiSchema.TaggedEnum({ PickedTotal: { total: Total } })
@@ -31,8 +29,6 @@ export const PagedDemo = Component.define({
         props: {
           count: 50,
           itemSize: 40,
-          // Page 5 of 50 per page starts at result 201. -1 says the total
-          // isn't known, as `aria-setsize` does.
           ...(model.total === "none" ? {} : { firstPosition: 201, setSize: model.total === "known" ? 10_000 : -1 })
         },
         view: (virtualList) =>

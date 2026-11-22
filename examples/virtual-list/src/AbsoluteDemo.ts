@@ -3,12 +3,6 @@ import { VirtualList } from "@effect/ui-kit"
 import { Schema } from "effect"
 import { Html } from "./shared.ts"
 
-// Phase 3, item 8: rows placed with a transform. The same rows render in
-// either layout, and a row that grows moves the ones after it. Only the
-// absolute layout animates the rows: a transition on rows in the flow layout
-// would animate the switch between the two. `sizes` gives every row its real
-// height up front, so the rows above never shift as estimates change, which
-// the transition would show as a jump.
 const AbsoluteMessage = UiSchema.TaggedEnum({ ToggledLayout: {}, ToggledRow: { index: Schema.Number } })
 
 const heightOf = (index: number, grown: ReadonlyArray<number>) =>

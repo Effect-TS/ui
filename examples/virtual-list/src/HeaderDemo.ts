@@ -3,9 +3,6 @@ import { VirtualList } from "@effect/ui-kit"
 import { Schema } from "effect"
 import { Html } from "./shared.ts"
 
-// Phase 1, item 1: content above the list changes size without a scroll. The
-// header grows from 100px to 600px; the rows on screen have to follow it
-// whether the page scrolls or a `viewport` around the header and list does.
 const HeaderMessage = UiSchema.TaggedEnum({ ToggledHeader: {}, ToggledScroller: {} })
 
 export const HeaderDemo = Component.define({
@@ -33,8 +30,6 @@ export const HeaderDemo = Component.define({
       VirtualList(h, {
         props: { count: 10_000, itemSize: 32 },
         view: (virtualList) => {
-          // The header sits before the list in the same scroller, so its
-          // height moves the list without scrolling it.
           const header = h.header.class("banner").attr("style", `height:${model.tall ? 600 : 100}px`).children(
             h.h1.children("Rows under a header"),
             h.p.children("Scroll down, then grow the header without scrolling.")

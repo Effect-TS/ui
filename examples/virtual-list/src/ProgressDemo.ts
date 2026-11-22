@@ -3,11 +3,6 @@ import { VirtualList } from "@effect/ui-kit"
 import { Schema } from "effect"
 import { Html, textOf } from "./shared.ts"
 
-// Phase 2, item 6: a reading-progress bar from the scroll offset, and a count
-// of finished scrolls. Every `Scrolled` carries the offset and `scrolling`.
-// With `trackScroll` the list sends one for each change of the offset; with it
-// off, only when the visible rows, an edge or `scrolling` changes, so the bar
-// moves in steps and catches up when a scroll ends.
 const ProgressMessage = UiSchema.TaggedEnum({
   ToggledTracking: {},
   Scrolled: {
@@ -71,11 +66,9 @@ export const ProgressDemo = Component.define({
       atStart,
       atEnd,
       scrolled: model.scrolled + 1,
-      // Events where the visible rows or an edge changed, apart from a scroll starting or ending.
       moves: first !== model.first || last !== model.last || atStart !== model.atStart || atEnd !== model.atEnd
         ? model.moves + 1
         : model.moves,
-      // A scroll has finished when `scrolling` turns false.
       stops: model.scrolling && !scrolling ? model.stops + 1 : model.stops
     })
   },
@@ -104,7 +97,6 @@ export const ProgressDemo = Component.define({
             ProgressMessage.Scrolled({ first, last, atStart, atEnd, offset, height, length, scrolling })
         },
         view: (virtualList) =>
-          // The parts say whether the list is scrolling too, for rows that skip costly content meanwhile.
           virtualList.list(h.div.class("article").attr("data-scrolling", String(virtualList.scrolling))).children(
             virtualList.items.map((index) =>
               virtualList.item({ element: h.div.class("paragraph").key(String(index)), index }).children(

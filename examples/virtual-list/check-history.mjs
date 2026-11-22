@@ -1,30 +1,3 @@
-// Loads every older page of the chat demo in a real browser and checks that the
-// message under the pointer stays where it was when each page lands. It is the
-// history check of item 5, kept here so it can be rerun.
-//
-// Run from the repository root, or as `pnpm check-history` in this folder:
-//
-//   node examples/virtual-list/check-history.mjs [chromium|firefox|webkit] [--executable <path>]
-//
-// It needs the browsers of the `playwright` dev dependency
-// (`pnpm exec playwright install`); --executable picks another build.
-//
-// It starts the example's Vite server itself and drives the page with
-// Playwright's synthesized wheel. The chat starts at message 450 of 500, so
-// there are nine landings: 450 to 400, and so on down to 50 to 0, where
-// `reserveStart` is dropped. Each one must be measured. A landing that never
-// arrives, or arrives while the wheel is still moving the list, fails the run.
-//
-// Every frame, after it is painted, the page records the loaded start, the
-// scroll position and the top of each message, in one task. For a landing the
-// check takes the message under the pointer, or the first below it when the
-// pointer is between two, in the last frame before the new page. It compares
-// that message with itself in the first frame after the page lands and three
-// frames later, unrounded. Neither may move more than 1px.
-//
-// After the run, the check replays its own samples three ways that must fail:
-// one landing missing, one landing still scrolling, and one message moved by
-// 1.01px. The process exits with 1 when the run fails or a replay passes.
 import { chromium, firefox, webkit } from "playwright"
 import { createServer } from "vite"
 

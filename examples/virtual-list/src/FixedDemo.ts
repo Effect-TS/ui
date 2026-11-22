@@ -3,10 +3,6 @@ import { VirtualList, VirtualListScrollTarget } from "@effect/ui-kit"
 import { Schema } from "effect"
 import { Html } from "./shared.ts"
 
-// Phase 1, item 4: `measure: false` with CSS that disagrees. `.row` has
-// `min-height: 32px`, and `.padded` puts 12px of padding above and below a
-// 16px line, and a 1px border, so each row would be 41px tall; the list writes
-// 32px on each row, so the layout it computes is the one on screen.
 const FixedMessage = UiSchema.TaggedEnum({ ClickedLast: {} })
 
 export const FixedDemo = Component.define({

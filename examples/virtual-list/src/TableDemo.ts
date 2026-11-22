@@ -3,9 +3,6 @@ import { VirtualList } from "@effect/ui-kit"
 import { Schema } from "effect"
 import { Html, textOf } from "./shared.ts"
 
-// Phase 3, item 7: a native table of 10,000 rows with a sticky header. The
-// browser sizes the columns, and the list stands in for the rows it leaves
-// out with empty rows in the `<tbody>`.
 const statuses = ["Paid", "Pending", "Refunded"]
 
 export const TableDemo = Component.define({
@@ -20,7 +17,6 @@ export const TableDemo = Component.define({
   view: (_model, h) =>
     h.div.class("page").children(
       VirtualList(h, {
-        // The header row is row 1, so the first body row is row 2.
         props: { count: 10_000, itemSize: 37, firstPosition: 2 },
         view: (virtualList) =>
           virtualList.viewport(h.div.class("scroller")).children(

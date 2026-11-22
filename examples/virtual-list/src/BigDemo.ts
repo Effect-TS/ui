@@ -3,7 +3,6 @@ import { VirtualList, VirtualListScrollTarget } from "@effect/ui-kit"
 import { Schema } from "effect"
 import { Html, textOf } from "./shared.ts"
 
-// 100,000 measured rows of three heights, for a performance trace.
 const BigMessage = UiSchema.TaggedEnum({ ClickedJump: { index: Schema.Number } })
 
 export const BigDemo = Component.define({

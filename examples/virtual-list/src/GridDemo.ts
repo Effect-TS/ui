@@ -3,8 +3,6 @@ import { VirtualList } from "@effect/ui-kit"
 import { Schema } from "effect"
 import { Html, textOf } from "./shared.ts"
 
-// Existing behavior: a responsive grid scrolled by the page. The lanes and
-// the gap come from the CSS, so resizing the window changes the columns.
 export const GridDemo = Component.define({
   name: "GridDemo",
   scoped: false,
