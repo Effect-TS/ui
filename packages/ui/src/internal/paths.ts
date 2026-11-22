@@ -20,7 +20,7 @@ export const childName = (component: Component.Any | Feature.Any): string =>
  * of a key's `]/` as `%2F`, and `%` as `%25` in both. Two different children
  * never share a path: a key `a]/B[b` can't stand for a grandchild. Names
  * and keys keep `/` and brackets otherwise, as in `test/Badge`, a route
- * path or a ref's `Row[b]`, and a root's name is its path as given.
+ * path or a key's `Row[b]`, and a root's name is its path as given.
  *
  * @internal
  */
@@ -60,7 +60,7 @@ const escapeKey = (key: string): string =>
 const escapeChar = (char: string): string => "%" + char.charCodeAt(0).toString(16).toUpperCase()
 
 /**
- * The paths and ref keys one render of an instance uses, each with the child
+ * The paths one render of an instance uses, each with the child
  * that holds it: its view's children, then the children of each fallback shown
  * in this render, as they're shown.
  *
@@ -68,23 +68,21 @@ const escapeChar = (char: string): string => "%" + char.charCodeAt(0).toString(1
  */
 export interface ChildPaths {
   readonly at: At
-  // Each Map is made for its first entry: most views render no child, and none with a ref.
   /**
    * The children by their component's name, then by their key. A name and a key make one segment, and
    * two that differ make two, so this finds a taken path without writing every child's segment.
    */
   paths: Map<string, Map<string, View.Child<any, any>>> | undefined
-  refs: Map<string, View.Child<any, any>> | undefined
   /** The slots the view places, its own outlets and those it forwards to its children. */
   placed: Set<string> | undefined
 }
 
-/** The paths of a tree that held a child and no ref or outlet, once its render is over. */
-const heldChildren: ChildPaths = Object.freeze({ at: "", paths: undefined, refs: undefined, placed: undefined }) as any
+/** The paths of a tree that held a child and no outlet, once its render is over. */
+const heldChildren: ChildPaths = Object.freeze({ at: "", paths: undefined, placed: undefined }) as any
 
 /**
  * What an instance keeps of `paths` once its render is over. Fallbacks are only shown while their
- * instance renders, so the map of children by name and key goes. The refs and placed slots, which its
+ * instance renders, so the map of children by name and key goes. The placed slots, which its
  * author's checks read later, stay, and a tree that held a child keeps a value, so `h.lazy` can tell it
  * from one that held none.
  *
@@ -92,7 +90,7 @@ const heldChildren: ChildPaths = Object.freeze({ at: "", paths: undefined, refs:
  */
 export const settledPaths = (paths: ChildPaths | undefined): ChildPaths | undefined => {
   if (paths === undefined || paths.paths === undefined) return paths
-  if (paths.refs === undefined && paths.placed === undefined) return heldChildren
+  if (paths.placed === undefined) return heldChildren
   paths.paths = undefined
   return paths
 }
@@ -103,13 +101,12 @@ const failure = (at: At, what: string): never => {
 
 /**
  * Throws when two children of `tree`, at any depth below its elements,
- * have the same path, or were rendered with refs that have the same key. Two
- * instances at one path would share a log path, a server state entry and a
- * hydration marker, and a send matches a child by its ref's key alone, so the
- * parent fails instead. Returns what the view uses, for its fallbacks.
+ * have the same path. Two instances at one path would share a log path, a
+ * server state entry and a hydration marker, so the parent fails instead.
+ * Returns what the view uses, for its fallbacks.
  *
- * `last` is the tree the view rendered last time, when it held no child, ref
- * or outlet: a node the new tree holds again at the same place, as `h.lazy`
+ * `last` is the tree the view rendered last time, when it held no child or
+ * outlet: a node the new tree holds again at the same place, as `h.lazy`
  * gives it, holds none either, and is passed over. Places are compared below
  * elements a patch would pair, of one tag and key, as a list's rows are.
  *
@@ -120,7 +117,7 @@ export const checkChildPaths = (
   tree: View.Node<any, any>,
   last?: View.Element<any, any> | undefined
 ): ChildPaths => {
-  const paths: ChildPaths = { at, paths: undefined, refs: undefined, placed: undefined }
+  const paths: ChildPaths = { at, paths: undefined, placed: undefined }
   if (tree !== last) visit(paths, tree, undefined, "", last)
   return paths
 }
@@ -133,7 +130,7 @@ export const checkChildPaths = (
  * @internal
  */
 export const checkContentPaths = (at: At, nodes: ReadonlyArray<View.Node<any, any>>): ChildPaths => {
-  const paths: ChildPaths = { at, paths: undefined, refs: undefined, placed: undefined }
+  const paths: ChildPaths = { at, paths: undefined, placed: undefined }
   for (const node of nodes) visit(paths, node, undefined, "")
   paths.placed = undefined
   return paths
@@ -141,7 +138,7 @@ export const checkContentPaths = (at: At, nodes: ReadonlyArray<View.Node<any, an
 
 /**
  * Adds the children of `tree` to `paths`, as rendered by the fallback of
- * `replaced`, or by the view without one. Throws on a path or ref key another
+ * `replaced`, or by the view without one. Throws on a path another
  * child holds. `replaced`'s own are free, since the child that failed there is
  * gone: its fallback's children take them over, so a fallback nested in
  * another fallback can reuse its child's path too.
@@ -177,13 +174,6 @@ const visit = (
       failure(paths.at, `at ${segment(node)}${where}${keyHint(name, node)}`)
     }
     taken.set(node.key, node)
-    const ref = node.ref
-    if (ref !== undefined) {
-      const refs = paths.refs ??= new Map()
-      const refHolder = refs.get(ref.key)
-      if (refHolder !== undefined && refHolder !== replaced) failure(paths.at, `with the ref ${ref.key}${where}`)
-      refs.set(ref.key, node)
-    }
     if (node.slots !== undefined) { for (const name in node.slots) visitPlaced(paths, node.slots[name]) }
   } else if (node._tag === "Outlet") {
     place(paths, node.name)
@@ -197,9 +187,7 @@ const pairs = (node: View.Node<any, any>, was: View.Node<any, any> | undefined):
 
 // A missing key is a runtime error, not a type error, so the message names the fix.
 const keyHint = (name: string, node: View.Child<any, any>): string =>
-  node.ref !== undefined
-    ? ""
-    : node.key === ""
+  node.key === ""
     ? `. A child without a key must be the only ${name} where it is rendered: give each ${name} its own \`key\``
     : `. Give each ${name} its own \`key\``
 
@@ -226,10 +214,10 @@ const visitPlaced = (paths: ChildPaths, input: unknown): void => {
 
 /**
  * Throws when `fallback`, shown in place of the child `replaced`, renders a child
- * at a path or ref key that another child holds: one of the view's, or a child
- * of a fallback already shown in this render. A fallback's children are the
- * parent's children, so they share its paths. Only `replaced`'s own path and ref
- * key are free, since the child that failed there is gone.
+ * at a path that another child holds: one of the view's, or a child of a
+ * fallback already shown in this render. A fallback's children are the
+ * parent's children, so they share its paths. Only `replaced`'s own path is
+ * free, since the child that failed there is gone.
  *
  * @internal
  */
@@ -244,26 +232,7 @@ export const checkFallbackPaths = (
 /**
  * Throws when two of `written`, the paths of one author's view, of each
  * closure it gave a headless child and of the content it passed for a child's
- * slots, hold children with refs of one key. The
- * author wrote all of them, and a send finds a child by its ref's key alone,
- * across all of them. One view's own refs are checked as it renders.
- *
- * @internal
- */
-export const checkAuthorRefs = (at: At, written: ReadonlyArray<ChildPaths>): void => {
-  const taken = new Set<string>()
-  for (const paths of written) {
-    if (paths.refs === undefined) continue
-    for (const key of paths.refs.keys()) {
-      if (taken.has(key)) failure(at, `with the ref ${key}, in the view it gives ${pathAt(paths.at)}`)
-      taken.add(key)
-    }
-  }
-}
-
-/**
- * Throws when two of `written`, as `checkAuthorRefs` takes them, place one of
- * the author's slots between them. Each tree's own are checked as it renders.
+ * slots, place one of the author's slots between them. Each tree's own are checked as it renders.
  *
  * @internal
  */
@@ -277,6 +246,23 @@ export const checkAuthorPlacements = (at: At, written: ReadonlyArray<ChildPaths>
         throw new Error(`${pathAt(at)} places its slot ${name} twice, in the view it gives ${pathAt(paths.at)}`)
       }
       taken.add(name)
+    }
+  }
+}
+
+/** @internal */
+export const checkAuthorWrites = (at: At, written: ReadonlyArray<ChildPaths>): void => {
+  if (written.length < 2) return
+  const taken = new Set<string>()
+  for (const paths of written) {
+    if (paths.paths === undefined) continue
+    for (const byKey of paths.paths.values()) {
+      for (const child of byKey.values()) {
+        if (child.alive === undefined) continue
+        const named = segment(child)
+        if (taken.has(named)) throw new Error(`${pathAt(at)} writes ${named} twice in one render`)
+        taken.add(named)
+      }
     }
   }
 }

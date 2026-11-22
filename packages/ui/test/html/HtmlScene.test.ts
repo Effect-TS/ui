@@ -9,6 +9,7 @@ import { Settings } from "./fixtures/settings.ts"
 
 const Board = Component.define({
   name: "Board",
+  scoped: false,
   model: Schema.Array(Schema.String),
   message: Schema.String,
   elements: Html
@@ -52,6 +53,7 @@ describe("HtmlScene", () => {
       fire: (s) => s.fire(missing, "click"),
       type: (s) => s.type(missing, "x"),
       change: (s) => s.change(missing, "x"),
+      compositionEnd: (s) => s.compositionEnd(missing),
       keydown: (s) => s.keydown(missing, "a"),
       submit: (s) => s.submit(missing),
       focus: (s) => s.focus(missing),
@@ -78,6 +80,7 @@ describe("HtmlScene", () => {
       )
       const Chart = Component.define({
         name: "Chart",
+        scoped: false,
         model: Schema.Struct({ points: Schema.Array(Schema.Number), width: Schema.Number }),
         message: Message,
         elements: Html
@@ -119,6 +122,47 @@ describe("HtmlScene", () => {
         .keydown(HtmlLocator.label("Zip code"), "Enter", { shift: true })
         .expect(log).toHaveText("zip:10001|key:Enter+shift")
     }))
+
+  it("type, change, compositionEnd and keydown default the edit, the composition and the selection, and take them", () => {
+    const Field = Component.define({
+      name: "Field",
+      scoped: false,
+      model: Schema.Array(Schema.String),
+      message: Schema.String,
+      elements: Html
+    }).make({
+      init: (): ReadonlyArray<string> => [],
+      update: (log, message) => [...log, message],
+      view: (log, h) => {
+        const saw = (event: string) => (payload: object) => `${event} ${JSON.stringify(payload)}`
+        return h.div(
+          h.input.attr("aria-label", "Name").value("Ada").onInput(saw("input")).onChange(saw("change"))
+            .onCompositionEnd(saw("compositionend")).onKeyDown(saw("keydown")),
+          h.output(log.join("\n"))
+        )
+      }
+    })
+    const name = HtmlLocator.label("Name")
+    const s = HtmlScene.start(Field, {})
+      .type(name, "A")
+      .type(name, "Ad", { composing: true, inputType: "insertCompositionText" })
+      .compositionEnd(name, "Adam")
+      .compositionEnd(name)
+      .change(name, "Ada")
+      .change(name, { inputType: "insertReplacementText" })
+      .keydown(name, "a")
+      .keydown(name, "a", { composing: true, selectionStart: 1, selectionEnd: 3 })
+    assert.deepStrictEqual(s.get(log).children?.map((child) => child.text).join("").split("\n"), [
+      `input {"value":"A","checked":false,"composing":false,"inputType":"insertText"}`,
+      `input {"value":"Ad","checked":false,"composing":true,"inputType":"insertCompositionText"}`,
+      `compositionend {"value":"Adam"}`,
+      `compositionend {"value":"Ada"}`,
+      `change {"value":"Ada","checked":false,"composing":false,"inputType":""}`,
+      `change {"value":"Ada","checked":false,"composing":false,"inputType":"insertReplacementText"}`,
+      `keydown {"key":"a","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"selectionStart":null,"selectionEnd":null}`,
+      `keydown {"key":"a","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":true,"selectionStart":1,"selectionEnd":3}`
+    ])
+  })
 
   it.effect("a submit button submits its form with the fields read from the view", () =>
     Effect.gen(function*() {
@@ -196,6 +240,7 @@ describe("HtmlScene", () => {
   describe("a click's defaults", () => {
     const Checkout = Component.define({
       name: "Checkout",
+      scoped: false,
       model: Schema.Struct({ log: Schema.Array(Schema.String), zip: Schema.String }),
       message: Schema.String,
       elements: Html
@@ -210,19 +255,19 @@ describe("HtmlScene", () => {
           h.form.attr("id", "f").onSubmit(({ entries }) =>
             `submit:${entries.map(([name, value]) => `${name}=${value}`).join("&")}`
           ).children(
-            h.input.attr("name", "zip").attr("aria-label", "Zip").value(model.zip),
+            h.input.attrs({ name: "zip", "aria-label": "Zip" }).value(model.zip),
             // Inside the form, but owned by another one.
-            h.input.attr("name", "elsewhere").attr("form", "other").value("x"),
+            h.input.attrs({ name: "elsewhere", form: "other" }).value("x"),
             h.button.onClick("fill").children("Fill"),
             h.button.onClick("stopped", { preventDefault: true }).children("Stop"),
-            h.input.attr("type", "checkbox").attr("aria-label", "Agree")
+            h.input.attrs({ type: "checkbox", "aria-label": "Agree" })
               .onClick("checked?", { preventDefault: true })
               .onChange(({ checked }) => `agree:${checked}`)
           ),
           // Outside the form, owned by it through its form attribute.
-          h.input.attr("name", "note").attr("form", "f").value("hi"),
+          h.input.attrs({ name: "note", form: "f" }).value("hi"),
           h.button.attr("popovertarget", "menu").onClick("menu?", { preventDefault: true }).children("Menu"),
-          h.div.attr("id", "menu").attr("popover", "").onToggle(({ newState }) => `toggle:${newState}`),
+          h.div.attrs({ id: "menu", popover: "" }).onToggle(({ newState }) => `toggle:${newState}`),
           h.fieldset.attr("disabled", "").children(
             h.legend(h.button.attr("type", "button").onClick("legend").children("In legend")),
             h.button.attr("type", "button").onClick("body").children("In body")

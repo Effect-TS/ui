@@ -1,0 +1,28 @@
+import * as Html from "@effect/ui/html/Html"
+import * as View from "@effect/ui/View"
+import { noSelect } from "./attributes.ts"
+
+export const blockers = (attribute: string) => {
+  const blocker = new Html.Element<never>("div")
+    .attrs({
+      role: "presentation",
+      [attribute]: "",
+      style: "position:fixed;inset:0;z-index:-1;" + noSelect
+    })
+  const is = (target: Node): boolean => target instanceof Element && target.hasAttribute(attribute)
+  return {
+    open: View.toNode(blocker),
+    closed: View.toNode(blocker.attr("inert", "")),
+    is,
+    owns: (layer: Node, target: Node): boolean => is(target) && target.parentNode === layer
+  }
+}
+
+export const backdropBox = "position:fixed;inset:0;width:auto;height:auto;max-width:none;max-height:none;margin:0;" +
+  noSelect
+
+export const cutPath = (holes: ReadonlyArray<DOMRect>): string =>
+  "polygon(0% 0%,100% 0%,100% 100%,0% 100%,0% 0%," +
+  holes.flatMap((r) => [[r.left, r.top], [r.left, r.bottom], [r.right, r.bottom], [r.right, r.top], [r.left, r.top]])
+    .map(([x, y]) => x + "px " + y + "px").join(",") +
+  ")"

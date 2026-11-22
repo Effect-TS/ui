@@ -21,6 +21,7 @@ export const SearchPageMessage = UiSchema.TaggedEnum({
 
 export const SearchPageNoDeps = Component.define({
   name: "SearchPage",
+  scoped: false,
   // The page takes its whole route as props. The URL is the only copy of
   // the text, the order and the page number. The Model holds no draft of
   // them, so there is nothing to keep in sync with the URL. The results live
@@ -92,7 +93,7 @@ export const SearchPageNoDeps = Component.define({
       // and where the caret is. The browser Router writes the address bar at
       // most every 200 ms, to stay under the browsers' limits on history
       // calls.
-      h.input.attr("type", "search").attr("aria-label", "Search").value(q ?? "")
+      h.input.attrs({ type: "search", "aria-label": "Search" }).value(q ?? "")
         .onInput(({ value }) => SearchPageMessage.UpdatedSearch({ text: value })),
       h.select.attr("aria-label", "Order").value(sort)
         .onChange(({ value }) => SearchPageMessage.SelectedOrder({ sort: value === "desc" ? "desc" : "asc" }))

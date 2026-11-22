@@ -13,12 +13,13 @@ const Message = UiSchema.TaggedEnum({ Clicked: {} })
 
 const Def = Component.define({
   name: "Checkout",
+  scoped: false,
   model: Schema.Struct({ coupon: Coupon, maybe: Schema.NullOr(Coupon), attempts: Schema.Number }),
   message: Message
 })
 type Step = Component.Step<typeof Def.model.Type, typeof Message.Type, never>
-const AuthDef = Component.define({ name: "Auth", model: Auth, message: Message })
-const CountDef = Component.define({ name: "Count", model: Schema.Number, message: Message })
+const AuthDef = Component.define({ name: "Auth", scoped: false, model: Auth, message: Message })
+const CountDef = Component.define({ name: "Count", scoped: false, model: Schema.Number, message: Message })
 
 declare const coupon: Coupon
 declare const auth: Auth

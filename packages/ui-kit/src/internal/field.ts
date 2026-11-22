@@ -9,6 +9,7 @@ interface FieldProps {
   readonly name?: string | undefined
   readonly value?: string | undefined
   readonly uncheckedValue?: string | undefined
+  readonly form?: string | undefined
 }
 
 // What the form submits for these props, or nothing, like a checkbox: an off
@@ -28,9 +29,12 @@ export const field = (props: FieldProps): View.Node<never> | undefined => {
     ? undefined
     : View.toNode(
       new Html.VoidElement<never>("input")
-        .attr("type", "hidden")
-        .attr("name", props.name)
-        .attr("value", value)
+        .attrs({
+          type: "hidden",
+          name: props.name,
+          value,
+          form: props.form
+        })
     )
 }
 

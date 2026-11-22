@@ -241,14 +241,16 @@ describe("Slider", () => {
   it("the thumb keeps the consumer's attributes on the input, but the slider's own win, present or absent", () => {
     const element = h.input
       .class("range")
-      .attr("name", "volume")
-      .attr("aria-label", "Volume")
-      .attr("aria-valuetext", "Loud")
-      .attr("type", "text")
-      .attr("min", "5")
-      .attr("value", "3")
-      .attr("aria-disabled", "true")
-      .attr("style", "color:red")
+      .attrs({
+        name: "volume",
+        "aria-label": "Volume",
+        "aria-valuetext": "Loud",
+        type: "text",
+        min: "5",
+        value: "3",
+        "aria-disabled": "true",
+        style: "color:red"
+      })
       .disabled(true)
     const built = View.build(parts({ value: 40 }).thumb({ element: h.div.class("thumb"), input: element }), [])
     const inner = built.children?.[0] as View.Element<unknown>

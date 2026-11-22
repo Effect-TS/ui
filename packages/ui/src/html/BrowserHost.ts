@@ -36,6 +36,12 @@
  * Every `toggle` is sent, including a coalesced one whose states are equal,
  * since it may be the only report of a change.
  *
+ * Showing a modal dialog or a popover doesn't scroll the page. A browser
+ * focuses something inside a `<dialog>` as it shows it and scrolls to it,
+ * so the host puts the page's scroll position back after a `showModal()`
+ * or a `showPopover()` that moved focus, which also stops a smooth scroll
+ * the focus started.
+ *
  * A handler set with `{ preventDefault: true }` cancels its event's default
  * when it produces a message, before the message is sent, and leaves the
  * event alone when it returns `undefined`. Nothing else is cancelled, and the
@@ -62,6 +68,10 @@
  * after the element's children exist, skips a no-op so the caret doesn't jump,
  * and puts the Model's value back after the user changes it and the Model
  * didn't follow, whether `update` rejected the change or nothing handled it.
+ * A field's `value` isn't written while an input method composes text in it,
+ * from `compositionstart`, or an `input` that says it's composing, to
+ * `compositionend`, so a patch or a rejected `input` can't replace the text
+ * being composed; it's put back after `compositionend` instead.
  *
  * A server-rendered control the user changed before its instance adopted
  * keeps what it shows, and the host sends its state to the element's
@@ -84,6 +94,7 @@
  *
  * const Counter = Component.define({
  *   name: "Counter",
+ *   scoped: false,
  *   model: Schema.Number,
  *   message: Message,
  *   elements: Html
@@ -110,31 +121,20 @@ import * as hostEvents from "../internal/hostEvents.ts"
 import * as queryCore from "../internal/queryCore.ts"
 import * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
+import * as DomImages from "./DomImages.ts"
+import * as DomSubscription from "./DomSubscription.ts"
 import * as Html from "./Html.ts"
 import * as elements from "./internal/elements.ts"
 import * as headSync from "./internal/head.ts"
 import * as markers from "./internal/markers.ts"
+import { ownEvents } from "./internal/ownEvents.ts"
 import * as server from "./internal/server.ts"
 import * as submit from "./internal/submit.ts"
 
 const SVG = "http://www.w3.org/2000/svg"
 
-/** Events that don't bubble: only the element they happen on gets them. */
-const ownEvents: ReadonlySet<string> = new Set([
-  "focus",
-  "blur",
-  "mouseenter",
-  "mouseleave",
-  "scroll",
-  "toggle",
-  "load",
-  "error",
-  "close",
-  "cancel"
-])
-
 /** Events after which a controlled property may differ from what the Model says. */
-const changeEvents: ReadonlyArray<string> = ["input", "change", "toggle", "close", "reset"]
+const changeEvents: ReadonlyArray<string> = ["input", "change", "compositionend", "toggle", "close", "reset"]
 
 const isDialog = (node: globalThis.Node): node is HTMLDialogElement =>
   node.nodeType === 1 && (node as globalThis.Element).localName === "dialog"
@@ -146,7 +146,10 @@ const dropTargetEvents: ReadonlySet<string> = new Set(["dragenter", "dragleave",
 const dragSourceEvents: ReadonlyArray<string> = ["dragstart", "dragend"]
 
 /** Events the host listens to whether or not a handler wants them. */
-const alwaysEvents: ReadonlyArray<string> = [...changeEvents, "submit"]
+const alwaysEvents: ReadonlyArray<string> = [...changeEvents, "submit", "compositionstart"]
+
+/** The Model's value of each controlled property, by node. One map for every host, so `htmlHost` reads it too. */
+const wanted = new WeakMap<globalThis.Node, Map<string, unknown>>()
 
 const controlled: ReadonlySet<string> = new Set(["value", "checked", "selected", "open", "popoverOpen"])
 
@@ -302,11 +305,41 @@ const fieldsOf = (form: HTMLFormElement, submitter: HTMLElement | null) => {
 }
 
 /** The payload of `input` and `change` from `source`, the control that changed. */
-const controlPayload = (source: globalThis.Element): unknown => {
+const controlPayload = (source: globalThis.Element, event: Event | undefined): unknown => {
   const control = source as HTMLInputElement
+  const e = event as Partial<InputEvent> | undefined
+  const composing = e?.isComposing === true
+  const inputType = typeof e?.inputType === "string" ? e.inputType : ""
   return control.localName === "input"
-    ? { value: control.value, checked: control.checked === true }
-    : { value: String(control.value ?? "") }
+    ? { value: control.value, checked: control.checked === true, composing, inputType }
+    : { value: String(control.value ?? ""), composing, inputType }
+}
+
+const noSelection = { selectionStart: null, selectionEnd: null }
+
+const selectionOf = (target: EventTarget | null) => {
+  const field = target as HTMLInputElement | null
+  const tag = (field as globalThis.Element | null)?.localName
+  if (tag !== "input" && tag !== "textarea") return noSelection
+  try {
+    const start = field!.selectionStart
+    const end = field!.selectionEnd
+    return typeof start === "number" && typeof end === "number"
+      ? { selectionStart: start, selectionEnd: end }
+      : noSelection
+  } catch {
+    // Older browsers throw, rather than return `null`, for an input type without a selection.
+    return noSelection
+  }
+}
+
+/** The clipboard's plain text. A browser may refuse the read, which counts as no text. */
+const pastedText = (event: Event): string => {
+  try {
+    return (event as ClipboardEvent).clipboardData?.getData("text/plain") ?? ""
+  } catch {
+    return ""
+  }
 }
 
 /**
@@ -325,6 +358,22 @@ const containsTarget = (element: globalThis.Element, target: EventTarget | null)
   }
 }
 
+const isDisabled = (target: EventTarget | null): boolean =>
+  typeof (target as globalThis.Element | null)?.matches === "function" &&
+  (target as globalThis.Element).matches(":disabled")
+
+const isFocusVisible = (target: EventTarget | null): boolean => {
+  if (typeof (target as globalThis.Element | null)?.matches !== "function") return true
+  try {
+    return (target as globalThis.Element).matches(":focus-visible")
+  } catch {
+    return true
+  }
+}
+
+const fieldOf = (target: EventTarget | null, element: globalThis.Element) =>
+  (target !== null && "value" in (target as object) ? target : element) as HTMLInputElement
+
 /**
  * Builds the payload a handler gets: plain data, read from the event and the
  * elements involved.
@@ -341,7 +390,10 @@ const payloadOf = (
     case "dblclick":
     case "contextmenu":
     case "mousedown":
-    case "mouseup": {
+    case "mouseup":
+    case "pointerdown":
+    case "pointerup":
+    case "pointercancel": {
       const e = event as MouseEvent
       return {
         button: e.button ?? 0,
@@ -351,16 +403,25 @@ const payloadOf = (
         pointerType: pressedWith(name, event, pointer)
       }
     }
+    case "mouseenter":
+    case "mouseleave": {
+      const e = event as MouseEvent
+      return { x: e.clientX ?? 0, y: e.clientY ?? 0 }
+    }
     case "keydown":
     case "keyup": {
       const e = event as KeyboardEvent
       // Safari reports the key that ends a composition with `isComposing` false and `keyCode` 229.
       const composing = e.isComposing === true || (e as { readonly keyCode?: number }).keyCode === 229
-      return { key: e.key ?? "", ...modifiers(event), composing }
+      return { key: e.key ?? "", ...modifiers(event), composing, ...selectionOf(target) }
     }
     case "input":
     case "change":
-      return controlPayload((target !== null && "value" in (target as object) ? target : element) as globalThis.Element)
+      return controlPayload(fieldOf(target, element), event)
+    case "compositionend":
+      return { value: String(fieldOf(target, element).value ?? "") }
+    case "paste":
+      return { text: pastedText(event) }
     case "submit": {
       const form = (element.localName === "form" ? element : target) as HTMLFormElement
       return fieldsOf(form, (event as SubmitEvent).submitter ?? null)
@@ -386,9 +447,18 @@ const payloadOf = (
       return { cancelable: event.cancelable }
     case "scroll":
       return { top: element.scrollTop, left: element.scrollLeft }
+    case "focus":
+      return { focusVisible: isFocusVisible(target) }
+    case "blur":
+      // A window listener's `blur` has no element that lost focus.
+      return target === element ? { disabled: isDisabled(target) } : {}
     case "focusin":
-    case "focusout":
       return { within: containsTarget(element, (event as FocusEvent).relatedTarget) }
+    case "focusout":
+      return {
+        within: containsTarget(element, (event as FocusEvent).relatedTarget),
+        disabled: isDisabled(target)
+      }
     default:
       return {}
   }
@@ -435,8 +505,7 @@ export const makeHost = (
   const eventsAlong = stored.along
   /** The events of `node` itself. */
   const eventsOf = (node: globalThis.Node): Renderer.Events | undefined => eventsAlong(pathFrom(node))[0]
-  // The last value the renderer set for each controlled property: what the element must show.
-  const wanted = new WeakMap<globalThis.Node, Map<string, unknown>>()
+  const composing = new WeakSet<globalThis.Node>()
   const listening = new Map<string, (event: Event) => void>()
   // The pointer of the last `pointerdown`, which the click-like events that follow it report.
   let lastPointer: Html.PointerType | undefined
@@ -452,6 +521,18 @@ export const makeHost = (
     : (f) => {
       setTimeout(f, 0)
     }
+
+  // A browser focuses inside a dialog as it shows it and scrolls there. Scrolling back to where the page
+  // was, even when it hasn't moved yet, also cancels a smooth scroll the focus started.
+  const keepingScroll = (show: () => void) => {
+    const view = document.defaultView
+    if (view === null || typeof view.scrollTo !== "function") return show()
+    const focused = document.activeElement
+    const left = view.scrollX
+    const top = view.scrollY
+    show()
+    if (document.activeElement !== focused) view.scrollTo({ left, top, behavior: "instant" })
+  }
 
   // -- dialogs -----------------------------------------------------------------
   // A dialog's `open` is `false`, `true` or `"modal"`. `showModal()` needs a connected dialog, so a modal
@@ -545,7 +626,7 @@ export const makeHost = (
     // Between non-modal and modal the browser needs a close first. That close isn't the app's.
     if (current !== false) closeDialog(dialog, true)
     if (want === "modal") {
-      dialog.showModal()
+      keepingScroll(() => dialog.showModal())
       modals.add(dialog)
       modalPseudo ??= matchesModal(dialog)
     } else {
@@ -585,7 +666,7 @@ export const makeHost = (
     if (want) {
       if (!now) popoversToShow.add(element)
       else if (element.isConnected && element.hasAttribute("popover") && !popoverShowing(element)) {
-        element.showPopover()
+        keepingScroll(() => element.showPopover())
       }
       return
     }
@@ -611,7 +692,7 @@ export const makeHost = (
       // One that left the document is forgotten; a render that brings it back queues it again.
       if (!element.isConnected || !element.hasAttribute("popover")) continue
       if (wanted.get(element)?.get("popoverOpen") !== true || popoverShowing(element)) continue
-      element.showPopover()
+      keepingScroll(() => element.showPopover())
     }
   }
 
@@ -620,6 +701,7 @@ export const makeHost = (
     if (values === undefined) return
     const element = node as any
     for (const [name, value] of values) {
+      if (name === "value" && composing.has(node)) continue
       if (name === "open" && isDialog(node)) {
         // A dialog that left the document can't be shown; a later commit shows it if it comes back.
         if (node.isConnected) showDialog(node, value as boolean | "modal")
@@ -703,7 +785,9 @@ export const makeHost = (
   const report = (control: globalThis.Element, name: string) => {
     for (const entry of eventsAlong(pathFrom(control))) {
       const handler = entry?.handlers[name]
-      if (entry !== undefined && handler !== undefined) return entry.dispatch(name, handler, controlPayload(control))
+      if (entry !== undefined && handler !== undefined) {
+        return entry.dispatch(name, handler, controlPayload(control, undefined))
+      }
     }
   }
 
@@ -921,6 +1005,14 @@ export const makeHost = (
       }
     }
     const path = event.composedPath() as Array<globalThis.Node>
+    const target = path[0] ?? event.target
+    if (name === "compositionstart" || name === "compositionend" || name === "input") {
+      if (target !== null && target !== undefined && "nodeType" in target) {
+        if (name === "compositionstart" || (event as Partial<InputEvent>).isComposing === true) {
+          composing.add(target as globalThis.Node)
+        } else composing.delete(target as globalThis.Node)
+      }
+    }
     const entries = eventsAlong(path)
     if (name === "dragstart") startDrag(event as DragEvent, entries)
     // The app owns its forms' submissions, handled or not. Other forms in the document are left alone.
@@ -948,14 +1040,14 @@ export const makeHost = (
           handler,
           name === "dragend"
             ? dragEndPayload(event as DragEvent)
-            : payloadOf(name, event, event.target, node as globalThis.Element, lastPointer),
+            : payloadOf(name, event, target, node as globalThis.Element, lastPointer),
           preventDefault === true ? () => event.preventDefault() : undefined
         )
         break
       }
       if (own) break
     }
-    if (changeEvents.includes(name)) restoreSoon(event.target)
+    if (changeEvents.includes(name)) restoreSoon(target)
     if (name === "dragend") endTargets()
   }
 
@@ -1103,6 +1195,7 @@ export const makeHost = (
         }
         // A control changed before it adopted shows the change until the commit reports it.
         if (edited.size > 0 && edited.has(controlOf(node)) && name === userProp(node)) return
+        if (name === "value" && composing.has(node)) return
         // Skip a no-op, so a caret in the middle of the text stays where it is.
         if (element[name] !== value) element[name] = value
         return
@@ -1196,8 +1289,8 @@ export const makeHost = (
 }
 
 /**
- * The element operations behind `Html.focus`, `blur`, `scrollIntoView` and
- * `measure`, on DOM elements.
+ * The element operations behind `DomCommand.focus`, `blur`,
+ * `scrollIntoView`, `measure`, `select` and `requestSubmit`, on DOM elements.
  *
  * @stability experimental
  * @category constructors
@@ -1219,6 +1312,22 @@ export const htmlHost: Context.Service.Shape<typeof Html.Host> = {
       bottom: box.bottom,
       left: box.left
     }
+  },
+  select: (element) => {
+    const field = element as HTMLInputElement
+    // Written first: the host would otherwise put a value `update` rejected back a frame later, which
+    // drops the selection.
+    const value = wanted.get(field)?.get("value")
+    if (typeof value === "string" && field.value !== value) field.value = value
+    if (typeof field.select === "function") field.select()
+  },
+  requestSubmit: (element) => {
+    const form = element.localName === "form"
+      ? element as HTMLFormElement
+      : (element as HTMLInputElement).form ?? null
+    if (form === null || typeof form.requestSubmit !== "function") return false
+    form.requestSubmit()
+    return true
   }
 }
 
@@ -1245,9 +1354,9 @@ const signals = (document: Document) => {
   }
 }
 
-// `Html.onDocument` and `Html.onWindow` listen here. Each Subscription removes its own listener as
-// it stops. A pointer payload's `pointerType` comes from the event alone.
-const globalEventsOf = (document: Document): Html.GlobalEvents => ({
+// `DomSubscription.onDocument` and `DomSubscription.onWindow` listen here. Each Subscription
+// removes its own listener as it stops. A pointer payload's `pointerType` comes from the event alone.
+const globalEventsOf = (document: Document): DomSubscription.GlobalEvents => ({
   listen: (target, name, { capture }, listener) => {
     const on = target === "document" ? document : document.defaultView
     if (on === null) return () => {}
@@ -1265,7 +1374,7 @@ const globalEventsOf = (document: Document): Html.GlobalEvents => ({
 })
 
 // Loads in a detached <img>. A cached image may already be complete.
-const imagesOf = (document: Document): Html.Images => ({
+const imagesOf = (document: Document): DomImages.Images => ({
   load: (source) =>
     Effect.callback((resume) => {
       const image = document.createElement("img")
@@ -1288,14 +1397,14 @@ const imagesOf = (document: Document): Html.Images => ({
 /**
  * Provides the DOM host as the `Renderer`, `Html.Host`, the document's
  * `Query.Visibility` and `Query.Connectivity`, its events as
- * `Html.GlobalEvents`, and an `Html.Images` over it, for the life of the
- * Layer.
+ * `DomSubscription.GlobalEvents`, and a `DomImages.Images` over it, for the
+ * life of the Layer.
  *
  * **Details**
  *
  * `document` defaults to the global `document`. Closing the Layer removes the
- * host's listeners. The signals, `Html.GlobalEvents` and `Html.Images` use
- * the document and its `defaultView`, never globals.
+ * host's listeners. The signals, `DomSubscription.GlobalEvents` and
+ * `DomImages.Images` use the document and its `defaultView`, never globals.
  *
  * @stability experimental
  * @category layers
@@ -1314,8 +1423,8 @@ export const layer = (options?: {
       Context.add(Html.Host, htmlHost),
       Context.add(queryCore.Visibility, signal.visibility),
       Context.add(queryCore.Connectivity, signal.connectivity),
-      Context.add(Html.GlobalEvents, globalEventsOf(document)),
-      Context.add(Html.Images, imagesOf(document))
+      Context.add(DomSubscription.GlobalEvents, globalEventsOf(document)),
+      Context.add(DomImages.Images, imagesOf(document))
     )
   }))
 
@@ -1421,6 +1530,7 @@ export interface MountOptions<V extends View.Elements, RF = never> {
  *
  * const App = Component.define({
  *   name: "App",
+ *   scoped: false,
  *   model: Schema.Struct({}),
  *   message: Schema.Never,
  *   elements: Html
@@ -1447,10 +1557,9 @@ export const mount = <
   R,
   V extends View.Elements,
   RF = never,
-  RP = never,
-  Rcv = never
+  RP = never
 >(
-  component: Component.Component<Name, Props, Model, Msg, Events, R, V, any, Rcv> & HtmlRoot<V>,
+  component: Component.Members<Name, Props, Model, Msg, Events, R, V, any> & HtmlRoot<V>,
   props: Props | Effect.Effect<Props, never, RP>,
   container: globalThis.Element,
   options?: MountOptions<V, RF>
@@ -1484,10 +1593,9 @@ export const mountEffect = <
   R,
   V extends View.Elements,
   RF = never,
-  RP = never,
-  Rcv = never
+  RP = never
 >(
-  component: Component.Component<Name, Props, Model, Msg, Events, R, V, any, Rcv> & HtmlRoot<V>,
+  component: Component.Members<Name, Props, Model, Msg, Events, R, V, any> & HtmlRoot<V>,
   props: Props | Effect.Effect<Props, never, RP>,
   container: globalThis.Element,
   options?: MountOptions<V, RF>

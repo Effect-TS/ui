@@ -8,11 +8,12 @@ import { AsyncResult } from "effect/reactivity"
 const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(TestHost.layer()))
 
 class Editor extends Feature.Service<Editor>()("SlotStatus/Editor", { props: Schema.Struct({}) }) {}
-const EditorView = Component.define({ name: "EditorView", model: Schema.Null, message: Schema.Never }).make({
-  init: () => null,
-  update: (model) => model,
-  view: (_, h) => h.text("editor")
-})
+const EditorView = Component.define({ name: "EditorView", scoped: false, model: Schema.Null, message: Schema.Never })
+  .make({
+    init: () => null,
+    update: (model) => model,
+    view: (_, h) => h.text("editor")
+  })
 const shown = (result: AsyncResult.AsyncResult<never, unknown>) => AsyncResult.isFailure(result) ? "down" : "loading"
 
 /** The text a view shows: a child the scene didn't expand shows none. */
@@ -29,7 +30,7 @@ const showsChild = (node: View.Node<any, any>, component: unknown): boolean =>
 const replayed = (component: Parameters<typeof Story.fromLog>[0], entries: Parameters<typeof Story.fromLog>[1]) =>
   replay.viewOf(Story.fromLog(component, entries))
 
-const Doc = Component.define({ name: "Doc", model: Schema.Null, message: Schema.Never }).make({
+const Doc = Component.define({ name: "Doc", scoped: false, model: Schema.Null, message: Schema.Never }).make({
   init: () => null,
   update: (model) => model,
   view: (_, h) => h.el("div", "doc:", Editor.render(h, { key: "e", props: {}, fallback: (r) => h.text(shown(r)) }))
@@ -40,7 +41,12 @@ describe("slot status", () => {
     provideHost(Effect.gen(function*() {
       const Message = UiSchema.TaggedEnum({ Move: { room: Schema.Literals(["a", "b", "c"]) }, Failed: {} })
       const gates = { a: yield* Deferred.make<void, string>(), c: yield* Deferred.make<void, string>() }
-      const Room = Component.define({ name: "Room", model: Schema.Literals(["a", "b", "c"]), message: Message }).make({
+      const Room = Component.define({
+        name: "Room",
+        scoped: false,
+        model: Schema.Literals(["a", "b", "c"]),
+        message: Message
+      }).make({
         init: () => "a" as const,
         update: (room, message) => Message.match(message, { Move: ({ room }) => room, Failed: () => room }),
         view: (room, h) =>
@@ -82,14 +88,15 @@ describe("slot status", () => {
       const gate = yield* Deferred.make<void>()
       // A plain child below a pending provider reads that provider's Layer.
       // A component a pending provider's fallback placed renders against the settled services above it.
-      const Spinner = Component.define({ name: "Spinner", model: Schema.Null, message: Schema.Never }).make({
-        init: () => null,
-        update: (model) => model,
-        view: (_, h) =>
-          h.el("div", "spinner:", Editor.render(h, { key: "e", props: {}, fallback: (r) => h.text(shown(r)) }))
-      })
+      const Spinner = Component.define({ name: "Spinner", scoped: false, model: Schema.Null, message: Schema.Never })
+        .make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) =>
+            h.el("div", "spinner:", Editor.render(h, { key: "e", props: {}, fallback: (r) => h.text(shown(r)) }))
+        })
       const Inner = Component.provide(
-        Component.define({ name: "Inner", model: Schema.Null, message: Schema.Never }).make({
+        Component.define({ name: "Inner", scoped: false, model: Schema.Null, message: Schema.Never }).make({
           init: () => null,
           update: (model) => model,
           view: (_, h) =>
@@ -104,7 +111,7 @@ describe("slot status", () => {
         )
       )
       const Outer = Component.provide(
-        Component.define({ name: "Outer", model: Schema.Null, message: Schema.Never }).make({
+        Component.define({ name: "Outer", scoped: false, model: Schema.Null, message: Schema.Never }).make({
           init: () => null,
           update: (model) => model,
           view: (_, h) => h.el("div", Inner(h, { key: "i" }))
@@ -142,11 +149,11 @@ describe("slot status", () => {
         () => Effect.never.pipe(Effect.onInterrupt(() => Deferred.await(cleanup)))
       )
       const Msg = UiSchema.TaggedEnum({ Go: {}, Stop: {} })
-      const Jobs = Component.define({ name: "Jobs", model: Schema.Null, message: Msg }).make({
+      const Jobs = Component.define({ name: "Jobs", scoped: false, model: Schema.Null, message: Msg }).make({
         init: () => null,
         update: (model, message, $) =>
           Msg.match(message, {
-            Go: () => $.set(model).run(Job().pipe(Command.asNoop)),
+            Go: () => $.set(model).run(Job.make().pipe(Command.asNoop)),
             Stop: () => $.set(model).run(Command.interrupt(Job))
           }),
         view: (_, h) => h.text(h.isRunning(Job) ? "running" : "idle")

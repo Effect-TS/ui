@@ -42,6 +42,7 @@ describe("HtmlServerHttp.layerHttp", () => {
     const HomeRoute = Route.union({ Home: Route.make("/") })
     const Root = Component.define({
       name: "Root",
+      scoped: false,
       props: Schema.Struct({ route: HomeRoute }),
       model: Schema.Struct({}),
       message: Schema.Never,
@@ -72,6 +73,7 @@ describe("HtmlServerHttp.layerHttp", () => {
     })
     const List = Component.define({
       name: "List",
+      scoped: false,
       props: Schema.Struct({ route: ListRoute }),
       model: Schema.Struct({}),
       message: Schema.Never,

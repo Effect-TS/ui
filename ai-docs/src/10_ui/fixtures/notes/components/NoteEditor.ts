@@ -9,9 +9,8 @@ import { Notes } from "../services/Notes.ts"
 // `NoteEditorMessage.RequestedSave()`.
 //
 // A message is a fact about what happened, named verb first in the past
-// tense: the cause, then the control. `RequestedSave` has four causes, the
-// form, Ctrl+S, the autosave and a parent's send, so it names the fact they
-// share.
+// tense: the cause, then the control. `RequestedSave` has three causes, the
+// form, Ctrl+S and the autosave, so it names the fact they share.
 export const NoteEditorMessage = UiSchema.TaggedEnum({
   UpdatedBody: { body: Schema.String },
   RequestedSave: {},
@@ -32,34 +31,30 @@ export const NoteEditorEvents = UiSchema.TaggedEnum({ Saved: { note: Note } })
 // `Notes`. `Command.make` is only for bodies that need no service. Calling
 // `fetch` in one compiles, but a test can't fake it.
 //
-// The command lives in the file of the component that runs it. A second
-// component that needs the same write shares `Notes.save` and keeps its own
-// command.
+// The command lives in the file of the component that runs it. Only
+// `NoteEditor` consumes its result, so its body returns a `NoteEditorMessage`
+// for the success and for the typed failure. A second component that needs
+// the same write shares `Notes.save` and keeps its own command.
 export class SaveNote extends Command.Service<SaveNote>()(
   "notes/SaveNote",
   {
     args: { note: Note },
     // Saves from one editor run one at a time, in order.
     mode: "queue",
-    // Required. Returns the tags of the queries a run makes stale, or `[]`.
+    // Optional. Returns the tags of the queries a run makes stale.
     invalidates: () => [NotesTag]
   },
   Effect.gen(function*() {
     const notes = yield* Notes
-    return ({ note }) => notes.save(note)
+    return ({ note }) =>
+      notes.save(note).pipe(
+        Effect.match({
+          onSuccess: (note) => NoteEditorMessage.SucceededSaveNote({ note }),
+          onFailure: (error) => NoteEditorMessage.FailedSaveNote({ reason: error.reason })
+        })
+      )
   })
 ) {}
-
-// Each Command maps to its messages once, here, next to the Message union
-// and the Command. This function is all that ties `SucceededSaveNote` and
-// `FailedSaveNote` to `SaveNote`, so `update` calls it and never maps the
-// Command inline. `SaveNote` can fail, so `Command.match` maps
-// its success and its failure. A Command that can't fail takes `Command.map`.
-const saveNote = (note: Note) =>
-  SaveNote.make({ note }).pipe(Command.match({
-    onSuccess: (note) => NoteEditorMessage.SucceededSaveNote({ note }),
-    onFailure: (error) => NoteEditorMessage.FailedSaveNote({ reason: error.reason })
-  }))
 
 // The editor is large, so it is written in pieces. `Component.define`
 // takes what nothing is inferred from: the name and the Schemas, plus
@@ -71,6 +66,7 @@ const saveNote = (note: Note) =>
 // fits in one piece chains the two calls, like `NotePage`.
 const NoteEditorDef = Component.define({
   name: "NoteEditor",
+  scoped: false,
   props: Schema.Struct({ note: Note }),
   model: Schema.Struct({
     draft: Schema.String,
@@ -81,11 +77,7 @@ const NoteEditorDef = Component.define({
     actionsOpen: Schema.Boolean
   }),
   message: NoteEditorMessage,
-  events: NoteEditorEvents,
-  // The messages a parent may send with `$.send`. The rest of the Message
-  // union stays private, so the editor can change it without breaking a
-  // parent.
-  receives: ["RequestedSave"]
+  events: NoteEditorEvents
 })
 
 // An update function without a tag takes every message, so `$.combine` in
@@ -106,7 +98,7 @@ const save = NoteEditorDef.update("RequestedSave", (model, _message, $) =>
     // before returned, and returns a step, so `.run` follows it. Ctrl+S can
     // save while the menu is open, so a save closes it. `$.run` only takes
     // Commands whose result is one of this component's messages.
-    : $.combine(closeActions, clearError).run(saveNote({ ...$.props.note, body: model.draft })))
+    : $.combine(closeActions, clearError).run(SaveNote.make({ note: { ...$.props.note, body: model.draft } })))
 
 // Choosing a menu item closes the menu, and the confirm dialog's state is in
 // the Model, like any other.
@@ -135,8 +127,8 @@ const discardDialog = NoteEditorDef.fragment((h, open: boolean) =>
           choice: entries.find(([name]) => name === "choice")?.[1] ?? ""
         })
       ).children(
-        h.button.attr("name", "choice").attr("value", "keep").children("Keep editing"),
-        h.button.attr("name", "choice").attr("value", "discard").children("Discard")
+        h.button.attrs({ name: "choice", value: "keep" }).children("Keep editing"),
+        h.button.attrs({ name: "choice", value: "discard" }).children("Discard")
       )
     )
 )
@@ -178,10 +170,17 @@ const noteEditorView = NoteEditorDef.view((model, h) =>
       // the Model in step with that and with Escape or a click outside.
       // CSS anchor positioning puts the menu under its button; a browser
       // without it shows the menu centred.
-      h.button.attr("type", "button").attr("popovertarget", `actions-${h.props.note.id}`)
-        .attr("style", `anchor-name: --actions-${h.props.note.id}`).children("More actions"),
-      h.div.attr("id", `actions-${h.props.note.id}`).attr("role", "menu").attr("aria-label", "Note actions")
-        .attr("style", `position-anchor: --actions-${h.props.note.id}; position-area: bottom span-left; margin: 0`)
+      h.button.attrs({
+        type: "button",
+        popovertarget: `actions-${h.props.note.id}`,
+        style: `anchor-name: --actions-${h.props.note.id}`
+      }).children("More actions"),
+      h.div.attrs({
+        id: `actions-${h.props.note.id}`,
+        role: "menu",
+        "aria-label": "Note actions",
+        style: `position-anchor: --actions-${h.props.note.id}; position-area: bottom span-left; margin: 0`
+      })
         .popover("auto", model.actionsOpen)
         .onToggle(({ open }) => NoteEditorMessage.ToggledActions({ open })).children(
           h.button.attr("type", "button").disabled(model.draft === model.saved)

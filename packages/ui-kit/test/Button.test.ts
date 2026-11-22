@@ -11,6 +11,7 @@ const CardMessage = UiSchema.TaggedEnum({ PressedSave: {}, ClickedCard: {} })
 // see which one a click reaches.
 const Card = Component.define({
   name: "Card",
+  scoped: false,
   props: Schema.Struct({
     press: Schema.Boolean,
     button: Schema.Struct({
@@ -68,9 +69,11 @@ describe("Button", () => {
   it("the caller chains a class, attributes and children, the button's own win, and a click handler clashing with onPress throws", () => {
     const styled = Button(h, { props: { disabled: true }, element: h.button.attr("aria-disabled", "true") })
       .class("save")
-      .attr("aria-label", "Save note")
-      .attr("type", "submit")
-      .attr("data-disabled", "x")
+      .attrs({
+        "aria-label": "Save note",
+        type: "submit",
+        "data-disabled": "x"
+      })
       .disabled(false)
       .children("Save")
     const node = View.build(styled, [])

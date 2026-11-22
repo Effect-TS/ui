@@ -21,11 +21,12 @@ import type * as Subscription from "../Subscription.ts"
 import * as Locator from "../testing/Locator.ts"
 import type { AwaitedQuery, KeyedLoad, Pending, QueryInfo, StreamTarget, Target } from "../testing/Steps.ts"
 import * as View from "../View.ts"
+import * as childOf from "./child.ts"
 import { sharedEqual } from "./equal.ts"
 import { isNoop } from "./noop.ts"
 import {
   checkAuthorPlacements,
-  checkAuthorRefs,
+  checkAuthorWrites,
   checkChildPaths,
   checkContentPaths,
   childName,
@@ -34,7 +35,6 @@ import {
   slotSegment
 } from "./paths.ts"
 import * as componentQueries from "./queries.ts"
-import * as childRef from "./ref.ts"
 import * as schedule from "./schedule.ts"
 import * as sharedReads from "./shared.ts"
 import type { SlotResult } from "./slotStatus.ts"
@@ -393,9 +393,10 @@ export const withReports = (
 export const reportsOf = (story: State<any, any, any, any>): { readonly [name: string]: unknown } => {
   const out: { [name: string]: unknown } = {}
   const given = sharedGiven.get(story)
+  const own = "/" + story.component.definition.name
   for (const read of sharedReads.readsOf(story.component.definition)) {
     if (read.report === undefined || (read.optional && !given?.has(read.owner.definition))) continue
-    out[read.name] = read.report(story.model, story.props)
+    out[read.name] = read.report(story.model, story.props, (name, key) => View.idOf(own, name, key))
   }
   return out
 }
@@ -418,16 +419,16 @@ const expandRoot = <Msg>(
   shared: Owners | undefined,
   root: Owners,
   status: ReadonlyMap<string, SlotResult> | undefined,
-  slotStatus: SlotResult | undefined
+  slotStatus: SlotResult | undefined,
+  author: Pick<Fields<any, any, any, any>, "model" | "props" | "results">
 ): View.Node<Msg, any> => {
   const replaced: Array<View.Child<any, any>> = []
   const placed: Array<Occurrence> = []
-  // As the runtime does: two children at one path fail the view or the closure that holds them, and
-  // so do two children with one ref key across the view and the closures it gives its headless children.
-  // Nor can two of them place one slot.
+  // As the runtime does: two children at one path fail the view or the closure that holds them, and the
+  // view and the closures it gives its headless children can't place one slot twice between them.
   const written = [checkChildPaths("/" + name, view)]
   // Content is shown under `children`, where a query looks, at the path the runtime gives it.
-  // `own`: the story's component wrote it, so its refs count with the component's. Content the story
+  // `own`: the story's component wrote it, so its slots count with the component's. Content the story
   // passed for its slots was written by a parent, and so were the closures in it.
   // `reads`: what the feature slots there read, if their services aren't ready. See `Fields.slotStatus`.
   const content = (
@@ -480,6 +481,10 @@ const expandRoot = <Msg>(
       case "Child": {
         const component = node.component as unknown as Component.Headless.Any
         const childPath = path + "/" + segment(node)
+        if (
+          own && typeof node.alive === "function" &&
+          !node.alive({ key: node.key, model: author.model, props: author.props, queries: author.results })
+        ) return emptyText
         placed.push({ child: node, path: childPath, scope })
         const result = status?.get(childPath) ??
           (reads !== undefined && Feature.isService(node.component) ? reads : undefined)
@@ -517,7 +522,7 @@ const expandRoot = <Msg>(
           owner: { path: childPath, depth: depth + 1 },
           shared: sharedLookup(shared, owners)
         })
-        const tree = View.toNode(node.view(parts))
+        const tree = View.toNode(childOf.expand(parts, node.view))
         const paths = checkChildPaths(childPath, tree)
         if (own) written.push(paths)
         // An owner expanded here is the nearest one for the readers in its closure.
@@ -540,8 +545,8 @@ const expandRoot = <Msg>(
     }
   }
   const expanded = expand(view, "/" + name, 0, true, root, (label) => checkChildPaths(label, view), slotStatus)
-  checkAuthorRefs("/" + name, written)
   checkAuthorPlacements("/" + name, written)
+  checkAuthorWrites("/" + name, written)
   if (replaced.length > 0) expandedChildren.set(expanded, replaced)
   // A root the expansion left as it was may be a node the component cached and another story shows,
   // and its children are all declared by the view itself, so it keeps nothing.
@@ -668,7 +673,8 @@ export const expandedView = (fields: Fields<any, any, any, any>): View.Node<any,
     fields.shared,
     ownersBelow(noOwners, fields.component, fields.model, fields.props),
     fields.childStatus,
-    fields.slotStatus
+    fields.slotStatus,
+    fields
   )
 
 /** The story's component's own view, before its headless children are expanded. */
@@ -1383,7 +1389,16 @@ export const dispatch = <Props, Model, Msg, Events>(
   // `undefined` is a handler's "no message", and `Component.noop` a Command's or a mount's.
   message === undefined || isNoop(message)
     ? story
-    : apply(story, story.component.update(story.model, message, story.props, story.results))
+    : apply(
+      story,
+      story.component.update(
+        story.model,
+        message,
+        story.props,
+        story.results,
+        sharedReads.record(story.component, rootShared(sharedGiven.get(story)))
+      )
+    )
 
 /** `node` and its ancestors in `root`, innermost first, or `undefined` when `node` isn't in `root`. */
 const pathTo = (root: View.Node<any, any>, node: Locator.Node): Array<View.Node<any, any>> | undefined => {
@@ -1406,7 +1421,11 @@ const pathTo = (root: View.Node<any, any>, node: Locator.Node): Array<View.Node<
  *
  * @internal
  */
-export const findOne = (story: State<any, any, any, any>, locator: Locator.Locator, step: string): Locator.Node => {
+export const findOne = <N extends Locator.Node>(
+  story: { readonly all: (locator: Locator.Locator) => ReadonlyArray<N>; readonly root: Locator.Node },
+  locator: Locator.Locator,
+  step: string
+): N => {
   const found = story.all(locator)
   if (found.length !== 1) {
     throw new Error(
@@ -1496,7 +1515,7 @@ export const fireNode = <Props, Model, Msg, Events>(
     const owners = owned.filter((layer) => Object.hasOwn(layer.handlers, event)).map((layer) => layer.owner.path)
     throw new Error(
       `${step}: only ${owners.join(" and ")} handles "${event}" at ${description}. ` +
-        "A scene doesn't run a child's update: use givenChild for its Model, or a TestHost test."
+        "A scene doesn't run a child's update: use givenChild for its Model, or a Play."
     )
   }
   // `"always"` from any layer cancels, a child's included. Then each layer runs once, in the runtime's
@@ -1531,9 +1550,7 @@ const show = (schema: Schema.Top | undefined, value: unknown): string =>
 const describeEvent = (story: State<any, any, any, any>, event: unknown): string => show(story.component.events, event)
 
 const describeSend = (send: Component.Send): string =>
-  send.ref !== undefined
-    ? `${show(send.ref.receives, send.message)} to ${send.ref.key}`
-    : `${show(send.owner.receives, send.message)} to the owner ${send.owner.definition.name}`
+  `${show(send.owner.receives, send.message)} to the owner ${send.owner.definition.name}`
 
 /** Whether a Command's mode lets a message arrive while it runs: what such a mode is for. */
 const exempt = (entry: Pending<any>): boolean =>
@@ -1778,31 +1795,24 @@ export const acknowledgeEmitted = <Props, Model, Msg, Events>(
 }
 
 /**
- * Acknowledges the oldest unacknowledged send, after checking it went to `target` with `message`, compared
- * with the target's `receives` Schema.
+ * Acknowledges the oldest unacknowledged send, after checking it went to `owner` with `message`, compared
+ * with the owner's `receives` Schema.
  *
  * @internal
  */
 export const acknowledgeSent = <Props, Model, Msg, Events>(
   story: State<Props, Model, Msg, Events>,
-  target: Component.Ref.Any | Component.Headless.Any,
+  owner: Component.Headless.Any,
   message: unknown,
   step: string
 ): State<Props, Model, Msg, Events> => {
   const oldest = story.sent[0]
-  const isRef = childRef.TypeId in target
-  const receives = (target as { readonly receives: Schema.Codec<unknown, unknown> }).receives
-  const to = isRef
-    ? (target as Component.Ref.Any).key
-    : `the owner ${(target as Component.Headless.Any).definition.name}`
-  const matched = oldest !== undefined &&
-    (isRef
-      ? oldest.ref !== undefined && oldest.ref.key === (target as Component.Ref.Any).key
-      : oldest.owner !== undefined && oldest.owner.definition === (target as Component.Headless.Any).definition) &&
+  const receives: Schema.Codec<unknown, unknown> = owner.receives
+  const matched = oldest !== undefined && oldest.owner.definition === owner.definition &&
     Schema.toEquivalence(receives)(oldest.message, message)
   if (!matched) {
     throw new Error(
-      `${step}: expected ${show(receives, message)} to ${to}; unacknowledged: ${
+      `${step}: expected ${describeSend({ owner, message })}; unacknowledged: ${
         story.sent.length === 0 ? "nothing" : story.sent.map(describeSend).join(", ")
       }`
     )
@@ -1823,6 +1833,44 @@ export const findStream = (story: State<any, any, any, any>, target: StreamTarge
     throw new Error(`${step}: ${describe(entry.command)} is not a stream Command`)
   }
   return entry
+}
+
+/** @internal */
+export const rootParts = <Props, Parts>(
+  component: Pick<Component.Headless<Props, any, Parts, any, any>, "definition" | "parts">,
+  model: unknown,
+  props: Props,
+  lookup: object
+): Parts => {
+  const shared = sharedGiven.get(lookup)
+  const given = childModels.get(lookup)
+  const resolve = (
+    value: unknown,
+    owner: View.Owner,
+    owners: Owners
+  ): readonly [unknown, View.Owner, Owners] => {
+    while (childOf.isComposed(value)) {
+      const child = value.child
+      const owned = child.component as unknown as Component.Headless.Any
+      const at: View.Owner = { path: owner.path + "/" + segment(child), depth: owner.depth + 1 }
+      const ownedModel = given?.has(at.path) ? given.get(at.path) : owned.init(child.props).model
+      const [parts, inner, below] = resolve(
+        owned.parts(ownedModel, child.props, { owner: at, shared: sharedLookup(shared, owners) }),
+        at,
+        ownersBelow(owners, owned, ownedModel, child.props)
+      )
+      value = value.parts(parts)
+      owner = inner
+      owners = below
+    }
+    return [value, owner, owners]
+  }
+  const owner: View.Owner = { path: "/" + component.definition.name, depth: 0 }
+  return resolve(
+    component.parts(model, props, { owner, shared: rootShared(shared) }),
+    owner,
+    ownersBelow(noOwners, component, model, props)
+  )[0] as Parts
 }
 
 /**
@@ -1849,7 +1897,9 @@ export const withView = (
       shared?: Component.SharedLookup
     ) => {
       const h = View.makeHelper(props, elements ?? component.elements(), running, owner.path)
-      return View.toNode(view(component.parts(model, props, { owner, running, queries, shared }), h))
+      return View.toNode(
+        childOf.expand(component.parts(model, props, { owner, running, queries, shared }), (parts) => view(parts, h))
+      )
     }
   })
 }
@@ -1910,40 +1960,34 @@ const isChildOf = (child: View.Child<any, any>, component: object): boolean => {
 }
 
 /**
- * The one child of `component` with `key`: a string matches a child rendered with that key, a ref a child
- * rendered with it, and no key a child rendered without a key or a ref.
+ * The one child of `component` with `key`: a string matches a child rendered with that key, and no key a
+ * child rendered without one.
  *
  * @internal
  */
 export const findChild = (
   view: View.Node<any, any>,
-  component: Component.Any | Component.Headless.Any | Feature.Any,
-  key: string | Component.Ref.Any | undefined,
+  component: Component.AnyRoot | Component.Headless.Any | Feature.Any,
+  key: string | undefined,
   step: string
 ): Occurrence => {
   const all = occurrences.get(view) ??
     children(view).map((child): Occurrence => ({ child, path: undefined, scope: undefined }))
-  const found = all.filter(({ child }) =>
-    isChildOf(child, component) && (
-      key === undefined
-        ? child.key === "" && child.ref === undefined
-        : typeof key === "string"
-        ? child.key === key && child.ref === undefined
-        : child.ref !== undefined && child.ref.key === key.key
-    )
-  )
+  const found = all.filter(({ child }) => isChildOf(child, component) && child.key === (key ?? ""))
   if (found.length === 1) return found[0]!
   const name = childName(component as Component.Any)
-  const which = key === undefined
-    ? "without a key"
-    : typeof key === "string"
-    ? `with key "${key}"`
-    : `with the ref ${key.key}`
+  const which = key === undefined ? "without a key" : `with key "${key}"`
+  if (found.length === 0) {
+    throw new Error(
+      `${step}: no child ${name} ${which}; children: ${all.map(({ child }) => segment(child)).join(", ")}`
+    )
+  }
+  const owners = found.flatMap(({ child }) => child.owner === undefined ? [] : [child.owner.path])
   throw new Error(
-    found.length === 0
-      ? `${step}: no child ${name} ${which}; children: ${
-        all.map(({ child }) => segment(child) + (child.ref !== undefined ? " (ref)" : "")).join(", ")
-      }`
-      : `${step}: ${found.length} children ${name} ${which}: give each one its own key or ref`
+    owners.length === 0
+      ? `${step}: ${found.length} children ${name} ${which}: give each one its own key`
+      : `${step}: ${found.length} children ${name} ${which}, declared with p.child by ${
+        owners.join(" and ")
+      }. A scene can't choose between the children that one component owns in several places`
   )
 }

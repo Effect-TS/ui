@@ -1,5 +1,6 @@
 /**
- * The HTML vocabulary, browser host, browser router and server renderer for
+ * The HTML vocabulary, browser host, browser router, server renderer, and
+ * the Commands, Subscriptions and services of the live document for
  * `@effect/ui`.
  *
  * @stability experimental
@@ -19,6 +20,24 @@ export * as BrowserHost from "./BrowserHost.ts"
  * @since 0.1.0
  */
 export * as BrowserRouter from "./BrowserRouter.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
+export * as DomCommand from "./DomCommand.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
+export * as DomImages from "./DomImages.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
+export * as DomSubscription from "./DomSubscription.ts"
 
 /**
  * @stability experimental

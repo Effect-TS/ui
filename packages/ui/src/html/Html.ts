@@ -1,15 +1,16 @@
 /**
  * The HTML element vocabulary for `@effect/ui`: element names on `h`, typed
- * events with plain payloads, controlled properties, refs typed by tag, and
- * ref Commands.
+ * events with plain payloads, controlled properties, and refs typed by tag.
+ * The Commands that use those refs are in `DomCommand`, and document and
+ * window events in `DomSubscription`.
  *
  * The module is itself a vocabulary. Register it once for the app by
  * importing `@effect/ui/html/register`, or set it on one component with
  * `elements: Html`.
  *
- * Event handlers get plain data, never a DOM event: `input` is `{ value }`,
- * `keydown` is `{ key, shift, ctrl, alt, meta, composing }` and `submit` is
- * `{ fields }`. A handler set with `{ preventDefault: true }` cancels the
+ * Event handlers get plain data, never a DOM event: `input` has the field's
+ * `value`, `keydown` the `key` and the modifier keys, and `submit` the
+ * form's `fields`. A handler set with `{ preventDefault: true }` cancels the
  * browser's default when it produces a message and leaves it alone when it
  * returns `undefined`, so it decides per event. A form's `submit` is always
  * cancelled, with or without a handler. Nothing stops an event's propagation:
@@ -24,7 +25,9 @@
  *
  * `value`, `checked`, `selected` and `open` are controlled: the host puts the
  * Model's value back after every patch and after every event that could have
- * changed it, so the element always shows what the Model says.
+ * changed it, so the element always shows what the Model says. While an input
+ * method composes text in a field, its `value` is left alone until
+ * `compositionend`.
  *
  * A `dialog` is closed, open, or open as a modal: `.open(b)` and `.modal(b)`
  * set the same state, and the last call wins. A modal's close requests, such
@@ -58,6 +61,7 @@
  *
  * const Form = Component.define({
  *   name: "Form",
+ *   scoped: false,
  *   model: Schema.String,
  *   message: Message,
  *   elements: Html
@@ -84,6 +88,7 @@
  *
  * const Composer = Component.define({
  *   name: "Composer",
+ *   scoped: false,
  *   model: Schema.String,
  *   message: Message,
  *   elements: Html
@@ -105,21 +110,12 @@
  * @stability experimental
  * @since 0.1.0
  */
-import * as Cause from "effect/Cause"
 import * as Context from "effect/Context"
-import * as Effect from "effect/Effect"
-import * as Option from "effect/Option"
-import * as Schema from "effect/Schema"
-import * as Stream from "effect/Stream"
-import * as Command from "../Command.ts"
 import type * as Component from "../Component.ts"
-import * as services from "../internal/services.ts"
 import type * as Mount from "../Mount.ts"
 import * as Renderer from "../Renderer.ts"
-import * as Subscription from "../Subscription.ts"
 import * as View from "../View.ts"
 import * as HtmlHead from "./HtmlHead.ts"
-import * as globalEvents from "./internal/globalEvents.ts"
 
 // ---------------------------------------------------------------------------
 // host
@@ -141,10 +137,12 @@ import * as globalEvents from "./internal/globalEvents.ts"
  * @since 0.1.0
  */
 export class Host extends Context.Service<Host, {
-  readonly focus: (element: globalThis.Element, options: { readonly preventScroll?: boolean | undefined }) => void
+  readonly focus: (element: globalThis.Element, options: FocusOptions) => void
   readonly blur: (element: globalThis.Element) => void
   readonly scrollIntoView: (element: globalThis.Element, options: ScrollOptions) => void
   readonly measure: (element: globalThis.Element) => Rect
+  readonly select: (element: globalThis.Element) => void
+  readonly requestSubmit: (element: globalThis.Element) => boolean
 }>()("@effect/ui/html/Html/Host") {}
 
 declare module "../Command.ts" {
@@ -169,6 +167,17 @@ export interface Rect {
   readonly right: number
   readonly bottom: number
   readonly left: number
+}
+
+/**
+ * The options of `focus`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface FocusOptions {
+  readonly preventScroll?: boolean | undefined
 }
 
 /**
@@ -199,9 +208,9 @@ export interface ScrollOptions {
 export type PointerType = "mouse" | "touch" | "pen" | ""
 
 /**
- * The payload of `click`, `dblclick`, `contextmenu`, `mousedown` and
- * `mouseup`: the button, the position in the viewport, the modifier keys,
- * and the kind of pointer.
+ * The payload of `click`, `dblclick`, `contextmenu`, `mousedown`,
+ * `mouseup` and `pointerdown`: the button, the position in the viewport,
+ * the modifier keys, and the kind of pointer.
  *
  * **Details**
  *
@@ -226,9 +235,37 @@ export interface PointerPayload {
 }
 
 /**
+ * The payload of `mouseenter` and `mouseleave`: where the pointer is in the
+ * viewport.
+ *
+ * **Details**
+ *
+ * An element drawn over another takes the pointer off the one below without
+ * a move, and gives it back once it is gone. The `mouseleave` and the
+ * `mouseenter` then report the same position, which tells them from the
+ * pointer leaving and coming back.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface HoverPayload {
+  readonly x: number
+  readonly y: number
+}
+
+/**
  * The payload of `keydown` and `keyup`. `composing` is true while an input
  * method composes text, including for the key that ends the composition, so
  * a handler for Enter can leave it to the input method.
+ *
+ * **Details**
+ *
+ * `selectionStart` and `selectionEnd` are the caret or selection of the
+ * event's target, as the key finds it, when the target is a `textarea` or
+ * an `input` whose type has a selection, such as `text` or `search`. They
+ * are `null` for any other target, including an `email` or `number`
+ * input, which browsers don't report a selection for.
  *
  * @stability experimental
  * @category events
@@ -241,11 +278,22 @@ export interface KeyPayload {
   readonly alt: boolean
   readonly meta: boolean
   readonly composing: boolean
+  readonly selectionStart: number | null
+  readonly selectionEnd: number | null
 }
 
 /**
  * The payload of `input` and `change` on a `textarea` or `select`: the
- * value the user left in the element.
+ * value the user left in the element, and how the edit was made.
+ *
+ * **Details**
+ *
+ * `composing` is true for an `input` sent while an input method composes
+ * text, which `compositionend` commits. `inputType` is the browser's name
+ * for the edit, such as `"insertText"`, `"deleteContentBackward"` or
+ * `"insertReplacementText"` for autofill and spelling corrections. It is
+ * `""` for a `change`, and for an `input` the browser names no edit for,
+ * such as choosing an option.
  *
  * @stability experimental
  * @category events
@@ -253,19 +301,45 @@ export interface KeyPayload {
  */
 export interface ValuePayload {
   readonly value: string
+  readonly composing: boolean
+  readonly inputType: string
 }
 
 /**
- * The payload of `input` and `change` on an `input`: its value, and whether
- * it's checked (a checkbox or radio button).
+ * The payload of `input` and `change` on an `input`: its value, whether
+ * it's checked (a checkbox or radio button), and how the edit was made, as
+ * `ValuePayload` describes.
  *
  * @stability experimental
  * @category events
  * @since 0.1.0
  */
-export interface InputPayload {
-  readonly value: string
+export interface InputPayload extends ValuePayload {
   readonly checked: boolean
+}
+
+/**
+ * The payload of `paste`: the clipboard's plain text, or `""` when it has
+ * none or the browser won't let it be read.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface PastePayload {
+  readonly text: string
+}
+
+/**
+ * The payload of `compositionend` on an `input` or `textarea`: the value
+ * the field holds once an input method has committed the composed text.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface CompositionPayload {
+  readonly value: string
 }
 
 /**
@@ -474,6 +548,56 @@ export interface FocusWithinPayload {
 }
 
 /**
+ * The payload of `focus`: whether the element shows a focus ring, as
+ * `:focus-visible` matches it as the event fires.
+ *
+ * **Details**
+ *
+ * A browser shows the ring for focus that came from the keyboard, and not
+ * for focus that came from a press, on the element or on another one whose
+ * handler moved focus. A component that opens on keyboard focus only reads
+ * it here. `focusVisible` is `true` where the browser can't tell.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface FocusPayload {
+  readonly focusVisible: boolean
+}
+
+/**
+ * The payload of `blur`: whether the element that lost focus is disabled
+ * as the event fires.
+ *
+ * **Details**
+ *
+ * A user can't leave a disabled element, so `disabled` is `true` only when
+ * the element lost focus by being disabled, by its own `disabled` or by a
+ * `<fieldset disabled>` around it. A browser may send no `blur` at all for
+ * that. One that does can send it while a render is still writing, before
+ * the components below the disabled element have their new props, so a
+ * handler reads it here and not from its own state.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface BlurPayload {
+  readonly disabled: boolean
+}
+
+/**
+ * The payload of `focusout`: `within`, as for `focusin`, and `disabled`,
+ * as for `blur`, read from the descendant that lost focus.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface FocusOutPayload extends FocusWithinPayload, BlurPayload {}
+
+/**
  * The events every HTML element has, with their payloads.
  *
  * **Details**
@@ -482,6 +606,10 @@ export interface FocusWithinPayload {
  * the element they happen on gets them. The others go to the innermost element
  * with a handler, except the drop target's events: `dragenter`, `dragleave`,
  * `dragover` and `drop` go to the active drop target, as `onDrop` describes.
+ *
+ * `pointerdown` starts every press. A `mousedown` may not follow it: a
+ * touch may send no mouse events, and a `pointerdown` whose default was
+ * cancelled sends none.
  *
  * @stability experimental
  * @category events
@@ -493,14 +621,15 @@ export interface Events {
   readonly contextmenu: PointerPayload
   readonly mousedown: PointerPayload
   readonly mouseup: PointerPayload
-  readonly mouseenter: {}
-  readonly mouseleave: {}
+  readonly pointerdown: PointerPayload
+  readonly mouseenter: HoverPayload
+  readonly mouseleave: HoverPayload
   readonly keydown: KeyPayload
   readonly keyup: KeyPayload
-  readonly focus: {}
-  readonly blur: {}
+  readonly focus: FocusPayload
+  readonly blur: BlurPayload
   readonly focusin: FocusWithinPayload
-  readonly focusout: FocusWithinPayload
+  readonly focusout: FocusOutPayload
   readonly scroll: ScrollPayload
   readonly dragstart: {}
   readonly dragend: DragEndPayload
@@ -509,6 +638,7 @@ export interface Events {
   readonly dragover: DragOverPayload
   readonly drop: DropPayload
   readonly toggle: PopoverTogglePayload
+  readonly paste: PastePayload
 }
 
 /**
@@ -522,6 +652,7 @@ export type EventsOf<K extends string> =
   & Events
   & (K extends "input" ? { readonly input: InputPayload; readonly change: InputPayload } : {})
   & (K extends "textarea" | "select" ? { readonly input: ValuePayload; readonly change: ValuePayload } : {})
+  & (K extends "input" | "textarea" ? { readonly compositionend: CompositionPayload } : {})
   & (K extends "form" ? { readonly submit: SubmitPayload; readonly reset: {} } : {})
   & (K extends "details" ? { readonly toggle: TogglePayload } : {})
   & (K extends "dialog" ? {
@@ -531,324 +662,6 @@ export type EventsOf<K extends string> =
     }
     : {})
   & (K extends "img" | "iframe" | "video" | "audio" ? { readonly load: {}; readonly error: {} } : {})
-
-// ---------------------------------------------------------------------------
-// document and window events
-// ---------------------------------------------------------------------------
-
-/**
- * The events `onDocument` listens for, with their payloads: the same ones
- * an element's handler gets.
- *
- * @stability experimental
- * @category events
- * @since 0.1.0
- */
-export interface DocumentEvents {
-  readonly keydown: KeyPayload
-  readonly keyup: KeyPayload
-  readonly mousedown: PointerPayload
-  readonly mouseup: PointerPayload
-  readonly click: PointerPayload
-}
-
-/**
- * The events `onWindow` listens for, with their payloads.
- *
- * **Details**
- *
- * `focus` and `blur` don't bubble, so a listener in the bubble phase hears
- * only the window's own: the window gaining and losing focus, not an element
- * in it.
- *
- * @stability experimental
- * @category events
- * @since 0.1.0
- */
-export interface WindowEvents {
-  readonly focus: {}
-  readonly blur: {}
-}
-
-/**
- * The payload of a document or window listener: the event's payload, and
- * whether something already cancelled the event's default.
- *
- * **Details**
- *
- * In the bubble phase `defaultPrevented` includes every element handler
- * set with `preventDefault`, since the host's own listeners run on the
- * document in the capture phase. In the capture phase it depends on the
- * order the listeners were added in, so don't read it there.
- *
- * @stability experimental
- * @category events
- * @since 0.1.0
- */
-export type GlobalPayload<P> = P & { readonly defaultPrevented: boolean }
-
-/**
- * The options of `onDocument` and `onWindow`: `preventDefault`, as on an
- * element's handler, and `capture`, to listen in the capture phase, before
- * any element sees the event, so a handler that stops it can't hide it.
- *
- * @stability experimental
- * @category events
- * @since 0.1.0
- */
-export interface GlobalEventOptions extends View.EventOptions {
-  readonly capture?: boolean | undefined
-}
-
-/**
- * The source of document and window events, which `onDocument` and
- * `onWindow` listen to.
- *
- * **Details**
- *
- * `listen` adds a listener to the host's `document` or its window and
- * returns the function that removes it. The listener gets the plain payload,
- * `defaultPrevented` included, and a function that cancels the event's
- * default.
- *
- * `BrowserHost.layer` provides the one over its `document` and that
- * document's `defaultView`, so an app in an iframe hears its own document.
- * The default never fires, so a host without a document, and a test that
- * doesn't fire events, need nothing. A test fires them with `HtmlScene`'s
- * `fireDocument` and `fireWindow`, or with `TestGlobalEvents` from
- * `@effect/ui/html/testing`.
- *
- * @stability experimental
- * @category services
- * @since 0.1.0
- */
-export interface GlobalEvents {
-  readonly listen: (
-    target: "document" | "window",
-    event: string,
-    options: { readonly capture: boolean },
-    listener: (payload: unknown, preventDefault: () => void) => void
-  ) => () => void
-}
-
-/**
- * The source of document and window events. It defaults to one that never
- * fires.
- *
- * @stability experimental
- * @category references
- * @since 0.1.0
- */
-export const GlobalEvents: Context.Reference<GlobalEvents> = Context.Reference<GlobalEvents>(
-  "@effect/ui/html/Html/GlobalEvents",
-  { defaultValue: () => silent }
-)
-
-const silent: GlobalEvents = { listen: () => () => {} }
-
-const listenFor = (
-  target: "document" | "window",
-  event: string,
-  handler: View.Handler<unknown, any>,
-  options: GlobalEventOptions | undefined
-): Subscription.Subscription<any> => {
-  const capture = options?.capture === true
-  const declared: globalEvents.Listener = {
-    target,
-    event,
-    capture,
-    handler,
-    preventDefault: options?.preventDefault
-  }
-  // The runtime attaches the listener here and runs no Stream, as for `Router.prefetch`. `enter`
-  // renders the pending ancestors first, so an event goes to the latest declaration, or nowhere if
-  // they removed it.
-  const direct: NonNullable<services.Direct[typeof services.direct]> = (context, emit, fail, enter) => ({
-    initial: Effect.void,
-    close: Context.get(context, GlobalEvents).listen(
-      target,
-      event,
-      { capture },
-      (payload, preventDefault) =>
-        enter((latest) => {
-          try {
-            globalEvents.run(globalEvents.listenerOf(latest) ?? declared, payload, preventDefault, emit)
-          } catch (error) {
-            fail(Cause.die(error))
-          }
-        })
-    )
-  })
-  return Object.assign(
-    Subscription.make(`@effect/ui/html/${target}`, capture ? [event, "capture"] : [event], () => Stream.never),
-    { [globalEvents.listener]: declared, [services.direct]: direct }
-  )
-}
-
-/**
- * A Subscription that listens for an event on the host's document.
- *
- * **When to use**
- *
- * Use when the input is one no element of the component hears: a keyboard shortcut, a
- * game's arrow keys, a press outside a popup. Gate the entry on the Model,
- * so the listener exists only while it's wanted.
- *
- * **Details**
- *
- * `handler` is a message or a function of the payload, as on an element,
- * and the payload is plain data with `defaultPrevented` added. With
- * `preventDefault: true` the default is cancelled only when the handler
- * returns a message, and with `"always"` whatever it returns. `capture:
- * true` listens in the capture phase.
- *
- * The listener calls the handler of the latest `subscriptions` result, so a
- * handler that reads the Model sees the current one. The source is
- * `GlobalEvents`, which `BrowserHost.layer` provides, so nothing listens on
- * the server and a test fires the event without a document.
- *
- * The key is `@effect/ui/html/document` with the event as its dep, and
- * `"capture"` after it for a capture listener:
- * `@effect/ui/html/document:"keydown"`. An instance has one listener per
- * event and phase. Listing a second fails the instance as a duplicate key,
- * so put both cases in one handler.
- *
- * **Example** (Steering with the arrow keys while the game runs)
- *
- * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
- * import { Html } from "@effect/ui/html"
- * import { HtmlScene } from "@effect/ui/html/testing"
- * import { Locator } from "@effect/ui/testing"
- * import { Effect, Schema } from "effect"
- *
- * const Direction = Schema.Literals(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"])
- * const Message = UiSchema.TaggedEnum({ PressedArrow: { key: Direction } })
- *
- * const Snake = Component.define({
- *   name: "Snake",
- *   model: Schema.Struct({ running: Schema.Boolean, heading: Direction }),
- *   message: Message,
- *   elements: Html
- * }).make({
- *   init: () => ({ running: true, heading: "ArrowRight" as const }),
- *   update: { PressedArrow: (_model, { key }, $) => $.evolve({ heading: key }) },
- *   view: (model, h) => h.p(model.heading),
- *   subscriptions: (model) => [
- *     model.running && Html.onDocument(
- *       "keydown",
- *       // The page doesn't scroll on an arrow key, and other keys keep their default.
- *       ({ key }) => Schema.is(Direction)(key) ? Message.PressedArrow({ key }) : undefined,
- *       { preventDefault: true }
- *     )
- *   ]
- * })
- *
- * Effect.gen(function*() {
- *   const s = yield* HtmlScene.make(Snake, {})
- *   s.fireDocument("keydown", { key: "ArrowUp" })
- *     .expectDefaultPrevented()
- *     .expect(Locator.text("ArrowUp")).toExist()
- * }).pipe(Effect.scoped, Effect.runSync)
- * ```
- *
- * @stability experimental
- * @category subscriptions
- * @since 0.1.0
- */
-export const onDocument = <K extends keyof DocumentEvents, Msg>(
-  event: K,
-  handler: View.Handler<Msg, GlobalPayload<DocumentEvents[K]>>,
-  options?: GlobalEventOptions | undefined
-): Subscription.Subscription<Msg> => listenFor("document", event, handler, options)
-
-/**
- * A Subscription that listens for an event on the host's window.
- *
- * **Details**
- *
- * It works as `onDocument` does, with the key `@effect/ui/html/window`.
- * Its events are the window's `focus` and `blur`, such as to pause a timer
- * while the user is in another window.
- *
- * **Example** (Following the window's focus)
- *
- * ```ts import.meta.vitest
- * import { UiSchema } from "@effect/ui"
- * import { Html } from "@effect/ui/html"
- *
- * const Message = UiSchema.TaggedEnum({ FocusedWindow: {}, BlurredWindow: {} })
- *
- * const subscriptions = () => [
- *   Html.onWindow("focus", Message.FocusedWindow()),
- *   Html.onWindow("blur", Message.BlurredWindow())
- * ]
- *
- * subscriptions().map((subscription) => subscription.key) // => ['@effect/ui/html/window:"focus"', '@effect/ui/html/window:"blur"']
- * ```
- *
- * @stability experimental
- * @category subscriptions
- * @since 0.1.0
- */
-export const onWindow = <K extends keyof WindowEvents, Msg>(
-  event: K,
-  handler: View.Handler<Msg, GlobalPayload<WindowEvents[K]>>,
-  options?: GlobalEventOptions | undefined
-): Subscription.Subscription<Msg> => listenFor("window", event, handler, options)
-
-// ---------------------------------------------------------------------------
-// images
-// ---------------------------------------------------------------------------
-
-/**
- * An image to load, as the `<img>` attributes of the same names.
- *
- * @stability experimental
- * @category models
- * @since 0.1.0
- */
-export interface ImageSource {
-  readonly src?: string | undefined
-  readonly srcSet?: string | undefined
-  readonly sizes?: string | undefined
-  readonly crossOrigin?: "anonymous" | "use-credentials" | undefined
-  readonly referrerPolicy?: string | undefined
-}
-
-/**
- * Loads images the page doesn't show, such as to show an `<img>` only once
- * its source has loaded.
- *
- * **Details**
- *
- * `load` settles with `"loaded"` or `"error"`, and interrupting it drops
- * the load. `BrowserHost.layer` provides one that loads in a detached
- * `<img>` of its document. The default never settles, so on a host without
- * a document an image stays loading. A test settles loads with `TestImages`
- * from `@effect/ui/html/testing`.
- *
- * @stability experimental
- * @category services
- * @since 0.1.0
- */
-export interface Images {
-  readonly load: (source: ImageSource) => Effect.Effect<"loaded" | "error">
-}
-
-/**
- * The image loader. It defaults to one whose loads never settle.
- *
- * @stability experimental
- * @category references
- * @since 0.1.0
- */
-export const Images: Context.Reference<Images> = Context.Reference<Images>(
-  "@effect/ui/html/Html/Images",
-  { defaultValue: () => pending }
-)
-
-const pending: Images = { load: () => Effect.never }
 
 // ---------------------------------------------------------------------------
 // elements
@@ -1146,7 +959,7 @@ export class VoidElement<
    *
    * @since 0.1.0
    */
-  onFocus(handler: View.Handler<Msg, {}>): this {
+  onFocus(handler: View.Handler<Msg, FocusPayload>): this {
     return this.on("focus" as any, handler as any)
   }
   /**
@@ -1154,8 +967,19 @@ export class VoidElement<
    *
    * @since 0.1.0
    */
-  onBlur(handler: View.Handler<Msg, {}>): this {
+  onBlur(handler: View.Handler<Msg, BlurPayload>): this {
     return this.on("blur" as any, handler as any)
+  }
+  /**
+   * Sugar for `on("paste", handler, options)`. The handler gets the
+   * clipboard's plain text. With `{ preventDefault: true }` a handler that
+   * returns a message cancels the paste, so the element's text stays as it
+   * is and the Model decides what the pasted text does.
+   *
+   * @since 0.1.0
+   */
+  onPaste(handler: View.Handler<Msg, PastePayload>, options?: View.EventOptions | undefined): this {
+    return this.on("paste" as any, handler as any, options)
   }
   /**
    * Makes this element a drag source carrying `data`, strings by type such
@@ -1281,6 +1105,20 @@ export class VoidElement<
     handler: View.Handler<Msg, E2["change"]>
   ): this {
     return this.on("change", handler) as any
+  }
+  /**
+   * Sugar for `on("compositionend", handler)`, on an `input` or
+   * `textarea`: an input method committed the text it composed. The
+   * `input` events sent while it composed have `composing` set, so a
+   * handler can wait for this one to act on the text.
+   *
+   * @since 0.1.0
+   */
+  onCompositionEnd<E2 extends E & { readonly compositionend: unknown }>(
+    this: VoidElement<Msg, R, E2, Node>,
+    handler: View.Handler<Msg, E2["compositionend"]>
+  ): this {
+    return this.on("compositionend", handler) as any
   }
   /**
    * Sugar for `on("submit", handler)`, on a `form`. The browser host always
@@ -1703,7 +1541,7 @@ export const tags: Readonly<Record<string, VoidElement<any, any, any, any>>> = m
  *
  * Use as a component's `elements` in place of the module, when the size of
  * the bundle matters. A bundler keeps every export of a module that is passed
- * as a value, and this module also exports Commands and what they need. With
+ * as a value, such as `Host`, `classNames` and `ref`. With
  * `Html.vocabulary` a bundle holds only the exports the app names.
  *
  * **Example** (Naming the vocabulary)
@@ -1715,6 +1553,7 @@ export const tags: Readonly<Record<string, VoidElement<any, any, any, any>>> = m
  *
  * const Label = Component.define({
  *   name: "Label",
+ *   scoped: false,
  *   model: Schema.Void,
  *   message: Schema.Never,
  *   elements: Html.vocabulary
@@ -1747,175 +1586,3 @@ export const ref = <K extends keyof HTMLElementTagNameMap>(
   name: string,
   _tag: K
 ): Renderer.Ref<HTMLElementTagNameMap[K]> => Renderer.ref<HTMLElementTagNameMap[K]>(name)
-
-/**
- * What `focus`, `blur` and `scrollIntoView` report: whether the ref was
- * rendered.
- *
- * @stability experimental
- * @category refs
- * @since 0.1.0
- */
-export interface Found {
-  readonly found: boolean
-}
-
-const withElement = <A>(
-  ref: Renderer.Ref<any>,
-  f: (host: Context.Service.Shape<typeof Host>, element: globalThis.Element) => A
-): Effect.Effect<Option.Option<A>, never, Renderer.Refs | Host> =>
-  Renderer.Refs.use((refs) =>
-    Effect.flatMap(refs.lookup(ref), (node) =>
-      Option.isNone(node)
-        ? Effect.succeed(Option.none())
-        : Host.useSync((host) => Option.some(f(host, node.value as globalThis.Element))))
-  )
-
-const FocusOptions = Schema.Struct({ preventScroll: Schema.optional(Schema.Boolean) })
-const ScrollOptionsSchema = Schema.Struct({
-  behavior: Schema.optional(Schema.Literals(["auto", "instant", "smooth"])),
-  block: Schema.optional(Schema.Literals(["center", "end", "nearest", "start"])),
-  inline: Schema.optional(Schema.Literals(["center", "end", "nearest", "start"]))
-})
-
-/**
- * The Command behind `focus`, for a story's `.resolve(Html.Focus, { found })`.
- *
- * @stability experimental
- * @category refs
- * @since 0.1.0
- */
-export const Focus: Command.Factory<
-  { readonly ref: Renderer.Ref<any>; readonly options?: { readonly preventScroll?: boolean | undefined } | undefined },
-  Found
-> = Command.make(
-  "Html.focus",
-  { args: { ref: Renderer.Ref, options: Schema.optional(FocusOptions) } },
-  ({ options, ref }) =>
-    Effect.map(
-      withElement(ref, (host, element) => host.focus(element, options ?? {})),
-      (done): Found => ({ found: Option.isSome(done) })
-    )
-)
-
-/**
- * The Command behind `blur`.
- *
- * @stability experimental
- * @category refs
- * @since 0.1.0
- */
-export const Blur: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Found> = Command.make(
-  "Html.blur",
-  { args: { ref: Renderer.Ref } },
-  ({ ref }) =>
-    Effect.map(withElement(ref, (host, element) => host.blur(element)), (done): Found => ({
-      found: Option.isSome(done)
-    }))
-)
-
-/**
- * The Command behind `scrollIntoView`.
- *
- * @stability experimental
- * @category refs
- * @since 0.1.0
- */
-export const ScrollIntoView: Command.Factory<
-  { readonly ref: Renderer.Ref<any>; readonly options?: ScrollOptions | undefined },
-  Found
-> = Command.make(
-  "Html.scrollIntoView",
-  { args: { ref: Renderer.Ref, options: Schema.optional(ScrollOptionsSchema) } },
-  ({ options, ref }) =>
-    Effect.map(withElement(ref, (host, element) => host.scrollIntoView(element, options ?? {})), (done): Found => ({
-      found: Option.isSome(done)
-    }))
-)
-
-/**
- * The Command behind `measure`.
- *
- * @stability experimental
- * @category refs
- * @since 0.1.0
- */
-export const Measure: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Option.Option<Rect>> = Command.make(
-  "Html.measure",
-  { args: { ref: Renderer.Ref } },
-  ({ ref }) => withElement(ref, (host, element) => host.measure(element))
-)
-
-/**
- * Focuses the element `ref` names, once the render the issuing `update`
- * caused is committed, and sends `f`'s message.
- *
- * **Details**
- *
- * A ref that isn't rendered gives `{ found: false }`. The ref resolves within
- * the issuing instance. `Refs` and `Html.Host` are framework services, so
- * this adds nothing to a component's requirements.
- *
- * **Example** (Focusing the new-todo field after adding)
- *
- * ```ts
- * import { Html } from "@effect/ui/html"
- * import { UiSchema } from "@effect/ui"
- * import { Schema } from "effect"
- *
- * const Message = UiSchema.TaggedEnum({ SubmittedForm: {}, CompletedFocusNewTodo: {} })
- * const NewTodo = Html.ref("NewTodo", "input")
- *
- * const command = Html.focus(NewTodo, () => Message.CompletedFocusNewTodo())
- * ```
- *
- * @stability experimental
- * @category refs
- * @since 0.1.0
- */
-export const focus = <N extends HTMLElement | SVGElement, Msg>(
-  ref: Renderer.Ref<N>,
-  f: (result: Found) => Msg,
-  options?: { readonly preventScroll?: boolean | undefined }
-): Command.Mapped<Command.Issued<Found, never, Found, "Effect">, Msg> =>
-  Command.map(Focus(options === undefined ? { ref } : { ref, options }), f)
-
-/**
- * Takes focus away from the element `ref` names, and sends `f`'s message.
- *
- * @stability experimental
- * @category refs
- * @since 0.1.0
- */
-export const blur = <N extends HTMLElement | SVGElement, Msg>(
-  ref: Renderer.Ref<N>,
-  f: (result: Found) => Msg
-): Command.Mapped<Command.Issued<Found, never, Found, "Effect">, Msg> => Command.map(Blur({ ref }), f)
-
-/**
- * Scrolls the element `ref` names into view, and sends `f`'s message.
- *
- * @stability experimental
- * @category refs
- * @since 0.1.0
- */
-export const scrollIntoView = <N extends globalThis.Element, Msg>(
-  ref: Renderer.Ref<N>,
-  f: (result: Found) => Msg,
-  options?: ScrollOptions
-): Command.Mapped<Command.Issued<Found, never, Found, "Effect">, Msg> =>
-  Command.map(ScrollIntoView(options === undefined ? { ref } : { ref, options }), f)
-
-/**
- * Measures the element `ref` names, and sends `f`'s message with its box, or
- * `Option.none()` when the ref isn't rendered.
- *
- * @stability experimental
- * @category refs
- * @since 0.1.0
- */
-export const measure = <N extends globalThis.Element, Msg>(
-  ref: Renderer.Ref<N>,
-  f: (rect: Option.Option<Rect>) => Msg
-): Command.Mapped<Command.Issued<Option.Option<Rect>, never, Option.Option<Rect>, "Effect">, Msg> =>
-  Command.map(Measure({ ref }), f)

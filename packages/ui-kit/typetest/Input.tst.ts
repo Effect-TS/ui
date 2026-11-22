@@ -14,7 +14,7 @@ const Other = UiSchema.TaggedEnum({ UpdatedOther: { value: Schema.String } })
 
 describe("Input", () => {
   it("returns an input of the caller's message type, keeps the element's requirements, and rejects another tag or message", () => {
-    Component.define({ name: "App", model: Schema.String, message: Msg, elements: Html }).make({
+    Component.define({ name: "App", scoped: false, model: Schema.String, message: Msg, elements: Html }).make({
       init: () => "",
       update: (model) => model,
       view: (model, h) => {

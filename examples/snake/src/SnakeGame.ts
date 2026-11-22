@@ -1,5 +1,5 @@
 import { Command, Component, Head, Subscription, UiSchema } from "@effect/ui"
-import { Html } from "@effect/ui/html"
+import { DomSubscription } from "@effect/ui/html"
 import { Array, Duration, Schema, Stream } from "effect"
 import { GAME, GAME_SPEED } from "./constants.ts"
 import { Apple, Direction, Position, Snake } from "./domain/index.ts"
@@ -31,7 +31,7 @@ export const GenerateApplePosition = Command.make(
 )
 
 const generateApplePosition = (snake: Snake.Snake) =>
-  GenerateApplePosition({ snake }).pipe(
+  GenerateApplePosition.make({ snake }).pipe(
     Command.map((position) => SnakeGameMessage.CompletedGenerateApplePosition({ position }))
   )
 
@@ -82,6 +82,7 @@ const GAME_STATE_TEXT: Record<GameState, string> = {
 
 export const SnakeGame = Component.define({
   name: "SnakeGame",
+  scoped: false,
   model: SnakeGameModel,
   message: SnakeGameMessage
 }).make({
@@ -138,7 +139,7 @@ export const SnakeGame = Component.define({
           Stream.as(SnakeGameMessage.TickedClock())
         )
     ),
-    Html.onDocument(
+    DomSubscription.onDocument(
       "keydown",
       ({ key, ctrl, alt, meta, defaultPrevented }) =>
         defaultPrevented || ctrl || alt || meta || !HANDLED_KEYS.has(key)

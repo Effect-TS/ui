@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { Component, Mount, UiSchema } from "@effect/ui"
-import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
+import { BrowserHost, DomCommand, Html, HtmlServer } from "@effect/ui/html"
 import { HtmlLocator, ssr } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -34,6 +34,7 @@ const PickerMessage = UiSchema.TaggedEnum({
 
 const Picker = Component.define({
   name: "Picker",
+  scoped: false,
   model: Schema.Array(Schema.String),
   message: PickerMessage,
   elements: Html
@@ -88,6 +89,7 @@ const ToolbarMessage = UiSchema.TaggedEnum({
 
 const Toolbar = Component.define({
   name: "Toolbar",
+  scoped: false,
   model: Schema.Array(Schema.String),
   message: ToolbarMessage,
   elements: Html
@@ -96,7 +98,7 @@ const Toolbar = Component.define({
   update: (log, message, $) =>
     ToolbarMessage.match(message, {
       Picked: ({ id }) => [...log, "picked " + id],
-      Focus: () => $.run(Html.focus(Mine, ({ found }) => ToolbarMessage.Focused({ found }))),
+      Focus: () => $.run(DomCommand.focus(Mine, ({ found }) => ToolbarMessage.Focused({ found }))),
       Focused: ({ found }) => [...log, "focused " + String(found)]
     }),
   view: (log, h) =>
@@ -135,6 +137,7 @@ const PlaceAnchor = Mount.make("PlaceAnchor", { args: {} }, (node: HTMLElement) 
 
 const Anchor = Component.define({
   name: "Anchor",
+  scoped: false,
   model: Schema.Number,
   message: Schema.Literal("placed"),
   elements: Html
@@ -149,6 +152,7 @@ const Anchor = Component.define({
 
 const Tip = Component.define({
   name: "Tip",
+  scoped: false,
   model: Schema.Boolean,
   message: Schema.Literal("toggle"),
   elements: Html
@@ -171,36 +175,9 @@ const Tip = Component.define({
 
 const flaky = { throws: false }
 
-// The closure's second child takes the ref `Actions` on the client only, at the path the server gave it.
-const twin = { client: false }
-const TwinActions = Menu.ref("Actions")
-const Twin = Component.define({ name: "Twin", model: Schema.Null, message: Schema.Never, elements: Html }).make({
-  init: () => null,
-  update: (model) => model,
-  view: (_, h) =>
-    Menu(h, {
-      ref: TwinActions,
-      props: { items },
-      view: (menu) =>
-        h.div(
-          menu.trigger(h.button).children("Actions"),
-          Menu(h, {
-            ...(twin.client ? { ref: TwinActions } : { key: "Actions" }),
-            props: { items },
-            view: () => h.span("again")
-          })
-        )
-    })
-})
-const TwinShell = Component.define({ name: "Shell", model: Schema.Null, message: Schema.Never, elements: Html })
-  .make({
-    init: () => null,
-    update: (model) => model,
-    view: (_, h) => h.main(Twin(h, { key: "t", props: {}, fallback: () => h.p("twin down") }))
-  })
-
 const Page = Component.define({
   name: "Page",
+  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
@@ -238,6 +215,7 @@ const Page = Component.define({
 
 const Keys = Component.define({
   name: "Keys",
+  scoped: false,
   model: Schema.Array(Schema.String),
   message: Schema.String,
   elements: Html
@@ -253,6 +231,7 @@ const Keys = Component.define({
 
 const KeysApp = Component.define({
   name: "KeysApp",
+  scoped: false,
   model: Schema.Array(Schema.String),
   message: Schema.String,
   elements: Html
@@ -279,6 +258,7 @@ const KeysApp = Component.define({
 
 const Confirm = Component.define({
   name: "Confirm",
+  scoped: false,
   model: Schema.Number,
   message: Schema.Literal("closed"),
   elements: Html
@@ -343,7 +323,13 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
     Effect.gen(function*() {
       // The closure throws once: on the server, which renders before the client mounts.
       flaky.throws = true
-      const failing = Component.define({ name: "Shell", model: Schema.Null, message: Schema.Never, elements: Html })
+      const failing = Component.define({
+        name: "Shell",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      })
         .make({
           init: () => null,
           update: (model) => model,
@@ -495,24 +481,11 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
       assert.strictEqual(app.querySelectorAll("button")[1]!.textContent, "More")
     }).pipe(Effect.scoped))
 
-  it.effect("an adopted render fails whoever gives a ref to a child in its view and one in a closure", () =>
-    Effect.gen(function*() {
-      twin.client = false
-      const rendered = yield* HtmlServer.renderToHtml(TwinShell, {})
-      assert.include(rendered.html, "again")
-      const app = yield* container
-      app.innerHTML = rendered.html
-      twin.client = true
-      const root = yield* BrowserHost.mountEffect(TwinShell, {}, app, { state: rendered.state })
-      yield* root.adopted
-      yield* tick
-      assert.strictEqual(app.textContent, "twin down")
-    }).pipe(Effect.scoped, Effect.ensuring(Effect.sync(() => twin.client = false))))
-
   it.effect("a layer's preventDefault false leaves another layer's prevention in place", () =>
     Effect.gen(function*() {
       const Hit = Component.define({
         name: "Hit",
+        scoped: false,
         model: Schema.Number,
         message: Schema.Literal("hit"),
         elements: Html
@@ -522,7 +495,13 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
           update: (count) => count + 1,
           parts: (_, p) => ({ button: p.part("button", (b) => b.onClick("hit", { preventDefault: true })) })
         })
-      const App = Component.define({ name: "App", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+      const App = Component.define({
+        name: "App",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
         init: () => null,
         update: (model) => model,
         view: (_, h) =>
@@ -542,6 +521,7 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
     Effect.gen(function*() {
       const Plain = Component.define({
         name: "Plain",
+        scoped: false,
         model: Schema.Null,
         message: Schema.Literal("hit"),
         elements: Html
@@ -550,7 +530,13 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
         update: (model) => model,
         parts: (_, p) => ({ button: p.part("button", (b) => b.onClick("hit")) })
       })
-      const App = Component.define({ name: "App", model: Schema.Null, message: Schema.Literal("own"), elements: Html })
+      const App = Component.define({
+        name: "App",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Literal("own"),
+        elements: Html
+      })
         .make({
           init: () => null,
           update: (model) => model,
@@ -565,5 +551,61 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
       const event = new MouseEvent("click", { bubbles: true, cancelable: true })
       app.querySelector("button")!.dispatchEvent(event)
       assert.isTrue(event.defaultPrevented)
+    }).pipe(Effect.scoped))
+
+  it.effect("synchronous focusout during removal of a headless part does not throw or invoke the closed owner", () =>
+    Effect.gen(function*() {
+      let calls = 0
+      const Frame = Component.define({
+        name: "Frame",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Literal("out"),
+        elements: Html
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        parts: (_, p) => ({
+          root: p.part("div", (b) =>
+            b.on("focusout", () => {
+              calls++
+              return "out" as const
+            }))
+        })
+      })
+      const Page = Component.define({
+        name: "Page",
+        scoped: false,
+        model: Schema.Boolean,
+        message: Schema.Literal("hide"),
+        elements: Html
+      }).make({
+        init: () => true,
+        update: () => false,
+        view: (shown, h) =>
+          h.main(shown ? Frame(h, { view: (frame) => frame.root(h.div).children(h.button) }) : h.p("gone"))
+      })
+      const app = yield* container
+      const root = yield* BrowserHost.mountEffect(Page, {}, app)
+      const main = app.querySelector("main")!
+      const button = main.querySelector("button")!
+      const focusout = () => button.dispatchEvent(new FocusEvent("focusout", { bubbles: true }))
+      focusout()
+      assert.strictEqual(calls, 1)
+      let thrown: unknown
+      const removeChild = main.removeChild.bind(main)
+      main.removeChild = ((child: Node) => {
+        try {
+          focusout()
+        } catch (error) {
+          thrown = error
+        }
+        return removeChild(child)
+      }) as typeof main.removeChild
+      root.send("hide")
+      yield* tick
+      assert.isUndefined(thrown)
+      assert.strictEqual(calls, 1)
+      assert.strictEqual(main.textContent, "gone")
     }).pipe(Effect.scoped))
 })

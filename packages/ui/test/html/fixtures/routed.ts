@@ -19,6 +19,7 @@ export type AppRoute = typeof AppRoute.Type
 
 export const Home = Component.define({
   name: "Home",
+  scoped: false,
   model: Schema.Struct({}),
   message: Schema.Never,
   elements: Html
@@ -46,6 +47,7 @@ export class GetBio extends Query.Service<GetBio>()("GetBio", {
 
 export const Person = Component.define({
   name: "Person",
+  scoped: false,
   props: Schema.Struct({ id: Schema.Number }),
   model: Schema.Struct({ id: Schema.Number }),
   message: Schema.Never,
@@ -71,6 +73,7 @@ export class SlowData extends Context.Service<SlowData, string>()("test/SlowData
 /** A page whose provided Layer takes a second of the TestClock to build. */
 export const Slow = Component.define({
   name: "Slow",
+  scoped: false,
   model: Schema.Struct({}),
   message: Schema.Never,
   elements: Html
@@ -85,6 +88,7 @@ export const Message = UiSchema.TaggedEnum({ ChangedRoute: { route: AppRoute }, 
 
 export const App = Component.define({
   name: "App",
+  scoped: false,
   props: Schema.Struct({ route: AppRoute }),
   model: Schema.Struct({ route: AppRoute, blocked: Schema.Boolean }),
   message: Message,
@@ -114,18 +118,22 @@ export const App = Component.define({
         h.a.attr("href", AppRoute.print(AppRoute.Slow())).children("Slow"),
         h.button.onClick(Message.Block()).children("Block"),
         h.form
-          .attr("method", "get")
-          .attr("action", "/search")
-          .attr("aria-label", "Search").children(
-            h.input.attr("name", "q").attr("value", "ada"),
+          .attrs({
+            method: "get",
+            action: "/search",
+            "aria-label": "Search"
+          }).children(
+            h.input.attrs({ name: "q", value: "ada" }),
             h.button.attr("type", "submit").children("Search")
           ),
         h.form
-          .attr("method", "get")
-          .attr("action", "/search")
-          .attr("aria-label", "Filter")
+          .attrs({
+            method: "get",
+            action: "/search",
+            "aria-label": "Filter"
+          })
           .onSubmit(Message.Filter()).children(
-            h.input.attr("name", "q").attr("value", "x"),
+            h.input.attrs({ name: "q", value: "x" }),
             h.button.attr("type", "submit").children("Filter")
           )
       ),

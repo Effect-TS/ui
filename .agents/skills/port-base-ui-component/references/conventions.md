@@ -16,7 +16,7 @@ the components that already follow it.
   // In a view:
   Switch(h, {
     props: { checked: model.notify },
-    onToggle: ({ checked }) => Message.ToggledNotify({ checked }),
+    onToggle: ({ checked }) => SettingsMessage.ToggledNotify({ checked }),
     view: (parts) => h.label(parts.root(h.button).children(parts.thumb(h.span.class("thumb"))), "Notify")
   })
   ```
@@ -35,7 +35,8 @@ the components that already follow it.
   - `<Name>Parts` for a view function that takes `view`
   - any other type the API needs (`SwitchButton`, `ListboxOption`)
 
-  A component's message Schema stays private.
+  A component's `<Name>Model` and `<Name>Message` Schemas and their types
+  stay private, named the same way.
 - A public module that isn't a component, such as `Positioning`, has
   unprefixed exports (`Positioning.place`), so the barrel exports it as a
   namespace: `export * as Positioning from "./Positioning.ts"`.
@@ -99,6 +100,14 @@ tracks focus as `field.group` does and writes no `role` and no
 `aria-labelledby`, so the control's own label part names the trigger. The
 same rule about `focusin` and `focusout` applies.
 
+A context that wraps several fields, as `Fieldset` does, reaches `Field`
+through shared state: `Fieldset` has `shares`, and `Field` reads it with an
+optional `shared` entry, so a field with no fieldset above needs nothing.
+The chain stops at the field. A control still takes `disabled` from its
+field's parts, and never reads the fieldset. A component can't share what it
+read from its own kind, so a nested `Fieldset` takes the outer one's state as
+a prop, `disabled: outer.disabled || own`.
+
 ARIA allows `aria-invalid` on `radiogroup` and not on `radio`, the reverse
 of a checkbox or a slider. So RadioGroup takes `invalid: field.invalid` and
 writes `aria-invalid` on its root, and the radio's root removes the one
@@ -111,6 +120,19 @@ need to add a `key`. A one-element view function returns a builder, but a
 component returns a `View.Child`. Consumers can no longer chain on the
 result, so ship that swap as a breaking change.
 
+When Base UI builds a component on another one, such as Drawer on Dialog,
+the kind follows the outer component's own state. If it keeps a Model,
+make it a headless component whose `parts` returns
+`p.child(Dialog, { props, onEmit, parts: (dialog) => ({ ...dialog, ...own }) })`.
+The inner component's events then go through the outer one's `update`, so
+the outer one can react to them and re-emit what its consumer needs. The
+consumer sees one component and one set of parts. Don't wrap the inner
+component in a function and link prototypes to pass it off as the outer
+one. If the outer component keeps no state of its own, as with
+`AlertDialog`, keep it a plain function that calls the inner component and
+passes its options through: forwarding every event through an `update`
+adds code and gains nothing.
+
 ## Call shape
 
 Both kinds take `h` and one options object, with the same field names, so
@@ -122,20 +144,20 @@ returns it (see "Parts").
 // One element: finish the returned builder.
 Button(h, {
   props: { disabled: model.saving },
-  onPress: Message.PressedSave()
+  onPress: SettingsMessage.PressedSave()
 }).class("save").children("Save")
 
 // Several elements: the consumer arranges them in `view`.
 Switch(h, {
   props: { checked: model.notify },
-  onToggle: ({ checked }) => Message.ToggledNotify({ checked }),
+  onToggle: ({ checked }) => SettingsMessage.ToggledNotify({ checked }),
   view: (parts) => parts.root(h.button).children(parts.thumb(h.span.class("thumb")))
 })
 
 // A component: core's `onEmit`, and a `key` when it needs one.
 Checkbox(h, {
   props: { checked: model.terms },
-  onEmit: ({ checked }) => Message.ToggledTerms({ checked }),
+  onEmit: ({ checked }) => SettingsMessage.ToggledTerms({ checked }),
   view: (checkbox) => checkbox.root(h.button).children(checkbox.indicator(h.span))
 })
 ```
@@ -266,7 +288,7 @@ model.advanced
   ```ts
   Button(h, {
     element: tooltip.trigger(h.button),
-    onPress: Message.PressedBold()
+    onPress: EditorMessage.PressedBold()
   }).class("tool").children("B")
   ```
 - **The kit's attributes win** over the consumer's. A part or view
@@ -429,8 +451,8 @@ portal. The details are in the JSDoc of `popover` and `modal` in
   delay or the consumer keeps open. A popup that opens with focus inside
   handles Escape on the focused part. One that opens without focus, such
   as `Tooltip` on hover, hears neither on a part, so it listens on its
-  document: `subscriptions` holds `Html.onDocument` entries gated on the
-  popup showing, one for Escape and one for mouse presses in the capture
+  document: `subscriptions` holds `DomSubscription.onDocument` entries gated
+  on the popup showing, one for Escape and one for mouse presses in the capture
   phase, as `Tooltip` does. The Escape entry cancels the key's default and
   skips one that's `defaultPrevented`, so a field inside or an enclosing
   dialog keeps its own. Which presses are outside is the component's call:
@@ -463,8 +485,10 @@ portal. The details are in the JSDoc of `popover` and `modal` in
 - Attributes only a Field has, such as `data-invalid` and
   `data-touched`, reach the control through `field.control` or `field.member`,
   so the control doesn't set them. One both write, such as `disabled`, is the field's
-  while the field is disabled. Attributes that come from a Form context
-  wait for that component.
+  while the field is disabled. `Form` shares no state, so a control gets no
+  attribute from it. It finds an invalid control only by `aria-invalid="true"`,
+  so an invalid control carries it on the element that takes focus, or on a
+  root around that element. `field.control` and `field.member` write it.
 - ARIA follows Base UI's source, not just its docs page. Prefer a native
   attribute (`disabled`) where Base UI's native mode uses one.
 

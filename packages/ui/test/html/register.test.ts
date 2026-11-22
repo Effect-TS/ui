@@ -22,6 +22,7 @@ describe("@effect/ui/html/register", () => {
 
       const Greeting = Component.define({
         name: "Greeting",
+        scoped: false,
         model: Schema.Struct({}),
         message: Schema.Never
       }).make({

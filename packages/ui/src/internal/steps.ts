@@ -170,13 +170,6 @@ export abstract class Cursor {
       (state) => engine.update(state, { props: typeof next === "function" ? next(state.props) : next })
     )
   }
-  receive(message: unknown): this {
-    return this.act(
-      "receive",
-      "message",
-      (state) => engine.dispatch(state, typeof message === "function" ? message(state.model) : message)
-    )
-  }
   subscription(key: string, message: unknown): this {
     const keys = this.state.subscriptions()
     if (isWatchKey(key) || !keys.includes(key)) {
@@ -309,8 +302,8 @@ export abstract class Cursor {
   emitted(...events: ReadonlyArray<unknown>): this {
     return this.replace(engine.acknowledgeEmitted(this.state, events, this.name("emitted")))
   }
-  sent(target: Component.Ref.Any | Component.Headless.Any, message: unknown): this {
-    return this.replace(engine.acknowledgeSent(this.state, target, message, this.name("sent")))
+  sent(owner: Component.Headless.Any, message: unknown): this {
+    return this.replace(engine.acknowledgeSent(this.state, owner, message, this.name("sent")))
   }
   keepPending(target: Steps.Target | string): this {
     return this.replace(engine.keep(this.state, target, this.name("keepPending")))
@@ -361,24 +354,30 @@ export abstract class Cursor {
  * @internal
  */
 export const scoped = <S extends Cursor>(make: Function, begin: () => S): Effect.Effect<S, never, Scope.Scope> => {
-  const site = new Error()
-  ;(Error as { captureStackTrace?: (target: object, fn: Function) => void }).captureStackTrace?.(site, make)
+  const site = callSite(make)
   return Effect.acquireRelease(
     Effect.sync(begin),
-    (steps, exit) =>
-      Exit.isSuccess(exit)
-        ? Effect.sync(() => {
-          try {
-            steps.finish()
-          } catch (error) {
-            if (error instanceof Error && site.stack !== undefined) {
-              error.stack = `${error.name}: ${error.message}\n${site.stack.split("\n").slice(1).join("\n")}`
-            }
-            throw error
-          }
-        })
-        : Effect.void
+    (steps, exit) => Exit.isSuccess(exit) ? Effect.sync(() => atSite(site, () => steps.finish())) : Effect.void
   )
+}
+
+/** @internal */
+export const callSite = (fn: Function): Error => {
+  const site = new Error()
+  ;(Error as { captureStackTrace?: (target: object, fn: Function) => void }).captureStackTrace?.(site, fn)
+  return site
+}
+
+/** @internal */
+export const atSite = <A>(site: Error, f: () => A): A => {
+  try {
+    return f()
+  } catch (error) {
+    if (error instanceof Error && site.stack !== undefined) {
+      error.stack = `${error.name}: ${error.message}\n${site.stack.split("\n").slice(1).join("\n")}`
+    }
+    throw error
+  }
 }
 
 /**

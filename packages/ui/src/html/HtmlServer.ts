@@ -26,6 +26,7 @@
  *
  * const App = Component.define({
  *   name: "App",
+ *   scoped: false,
  *   model: Schema.Struct({}),
  *   message: Schema.Never,
  *   elements: Html
@@ -107,7 +108,9 @@ const serverHtmlHost: Context.Service.Shape<typeof Html.Host> = {
   focus: () => {},
   blur: () => {},
   scrollIntoView: () => {},
-  measure: () => ({ x: 0, y: 0, width: 0, height: 0, top: 0, right: 0, bottom: 0, left: 0 })
+  measure: () => ({ x: 0, y: 0, width: 0, height: 0, top: 0, right: 0, bottom: 0, left: 0 }),
+  select: () => {},
+  requestSubmit: () => false
 }
 
 /**
@@ -169,10 +172,9 @@ export const renderToHtml = <
   Events,
   R,
   V extends View.Elements,
-  RP = never,
-  Rcv = never
+  RP = never
 >(
-  component: Component.Component<Name, Props, Model, Msg, Events, R, V, any, Rcv> & BrowserHost.HtmlRoot<V>,
+  component: Component.Members<Name, Props, Model, Msg, Events, R, V, any> & BrowserHost.HtmlRoot<V>,
   props: Props | Effect.Effect<Props, never, RP>,
   options?: {
     readonly budget?: Duration.Input | undefined
@@ -182,7 +184,7 @@ export const renderToHtml = <
   Effect.suspend(() => {
     const writer = server.makeWriter()
     // `Renderer.prerender`, with the writer as the tree's sink.
-    return runtime.prerender(component, props, {
+    return runtime.prerender(component as any, props, {
       budget: options?.budget ?? "500 millis",
       elements: [Html.name],
       static: options?.static,

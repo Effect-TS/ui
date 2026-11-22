@@ -42,6 +42,7 @@
  *
  * const Editor = Component.define({
  *   name: "Editor",
+ *   scoped: false,
  *   model: Schema.Struct({ bold: Schema.Boolean }),
  *   message: EditorMessage,
  *   elements: Html
@@ -69,7 +70,7 @@
  * @since 0.1.0
  */
 import type * as Html from "@effect/ui/html/Html"
-import { flag } from "./internal/attributes.ts"
+import { pressedAttrs } from "./internal/attributes.ts"
 
 /**
  * The controlled value and interaction state for `Toggle`.
@@ -153,15 +154,7 @@ export const Toggle = <Msg, R = never>(
         "Toggle: the element already handles click, which onToggle would replace. Send the message from onToggle"
       )
     }
-    const button = node
-      // Inside a form a button submits by default.
-      .attr("type", "button")
-      .attr("aria-pressed", String(props.pressed))
-      // Never set: the native `disabled` reports it.
-      .attr("aria-disabled", undefined)
-      .attr("data-pressed", flag(props.pressed))
-      .attr("data-disabled", flag(disabled))
-      .disabled(disabled)
+    const button = pressedAttrs(node, props.pressed, disabled)
     return !disabled && onToggle !== undefined
       ? button.onClick(() => onToggle({ pressed: !props.pressed }))
       : button

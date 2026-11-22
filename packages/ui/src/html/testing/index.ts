@@ -28,6 +28,12 @@ export * as HtmlLocator from "./HtmlLocator.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * as HtmlPlay from "./HtmlPlay.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * as HtmlScene from "./HtmlScene.ts"
 
 /**

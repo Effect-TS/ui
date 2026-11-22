@@ -1,5 +1,5 @@
 import { Component, MessageLog, UiSchema } from "@effect/ui"
-import * as services from "@effect/ui/internal/services"
+import { Html } from "@effect/ui/html"
 import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Effect, Schema } from "effect"
@@ -7,7 +7,7 @@ import { defect } from "./utils/scoped.ts"
 
 const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.scoped, Effect.provide(TestHost.layer()))
-const click = (root: TestHost.TestRoot<any, any, any>, text: string) =>
+const click = (root: TestHost.TestRoot<unknown, never, unknown>, text: string) =>
   Locator.fire(root.get(Locator.text(text, { exact: true })), "click")
 const updatesAt = (log: ReadonlyArray<MessageLog.Entry>, path: string) =>
   log.filter((entry): entry is MessageLog.Update => entry._tag === "Update" && entry.path === path)
@@ -17,16 +17,17 @@ const TipMessage = UiSchema.TaggedEnum({ Enter: { id: Schema.String } })
 /** An owner: which tip is open. Its `label` prop is shared too. */
 const TipsProvider = Component.define({
   name: "TipsProvider",
+  scoped: false,
   props: Schema.Struct({ label: Schema.optional(Schema.String) }),
   model: Schema.NullOr(Schema.String),
   message: TipMessage,
-  receives: ["Enter"],
-  shares: (open, props) => ({ open, label: props.label ?? "" })
+  shares: { value: (open, props) => ({ open, label: props.label ?? "" }), receives: ["Enter"] }
 }).make({ init: () => null, update: (_, message) => message.id, parts: () => ({}) })
 
 /** A reader that opens its tip on click. */
 const Tip = Component.define({
   name: "Tip",
+  scoped: false,
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.Null,
   message: TipMessage,
@@ -43,6 +44,7 @@ const Tip = Component.define({
 /** A headless reader: its part is the open tip. */
 const Trigger = Component.define({
   name: "Trigger",
+  scoped: false,
   model: Schema.Null,
   message: TipMessage,
   shared: { provider: TipsProvider }
@@ -56,6 +58,7 @@ const Trigger = Component.define({
 /** TipsProvider with a Tip and a Trigger in its closure. Its Model is the label it passes to TipsProvider. */
 const App = Component.define({
   name: "App",
+  scoped: false,
   model: Schema.String,
   message: UiSchema.TaggedEnum({ Label: { label: Schema.String } })
 }).make({
@@ -105,14 +108,15 @@ describe("shared state", () => {
       const Tick = UiSchema.TaggedEnum({ Tick: {} })
       const ClockProvider = Component.define({
         name: "ClockProvider",
+        scoped: false,
         model: Schema.Number,
         message: Tick,
-        receives: ["Tick"],
-        shares: (ticks) => new Date(Math.floor(ticks / 2))
+        shares: { value: (ticks) => new Date(Math.floor(ticks / 2)), receives: ["Tick"] }
       }).make({ init: () => 0, update: (ticks) => ticks + 1, parts: () => ({}) })
       let renders = 0
       const Face = Component.define({
         name: "Face",
+        scoped: false,
         model: Schema.Null,
         message: Tick,
         shared: { provider: ClockProvider }
@@ -125,12 +129,12 @@ describe("shared state", () => {
             return h.el("p", String(h.shared.provider.getTime()))
           }
         })
-      const Ticker = Component.define({ name: "Ticker", model: Schema.Null, message: Tick }).make({
+      const Ticker = Component.define({ name: "Ticker", scoped: false, model: Schema.Null, message: Tick }).make({
         init: () => null,
         update: (model, message, $) => $.set(model).send(ClockProvider, message),
         view: (_, h) => h.el("button").on("click", Tick.Tick()).children("tick")
       })
-      const Host = Component.define({ name: "Host", model: Schema.Null, message: Tick }).make({
+      const Host = Component.define({ name: "Host", scoped: false, model: Schema.Null, message: Tick }).make({
         init: () => null,
         update: (model) => model,
         view: (_, h) =>
@@ -153,13 +157,14 @@ describe("shared state", () => {
     provideHost(Effect.gen(function*() {
       const BrokenProvider = Component.define({
         name: "BrokenProvider",
+        scoped: false,
         model: Schema.Null,
         message: TipMessage,
         shares: (): string => {
           throw new Error("boom")
         }
       }).make({ init: () => null, update: (model) => model, parts: () => ({}) })
-      const Host = Component.define({ name: "Host", model: Schema.Null, message: TipMessage }).make({
+      const Host = Component.define({ name: "Host", scoped: false, model: Schema.Null, message: TipMessage }).make({
         init: () => null,
         update: (model) => model,
         view: (_, h) =>
@@ -171,33 +176,6 @@ describe("shared state", () => {
       const failed = root.log().filter((entry): entry is MessageLog.Failed => entry._tag === "Failed")
       assert.deepStrictEqual(failed.map((entry) => entry.in), ["shares"])
     })))
-
-  it.effect("leaves an owner out of the history snapshot and never restores it", () =>
-    Effect.gen(function*() {
-      let handle: services.RootHandle | undefined
-      const restored: Array<string> = []
-      const hooks: services.RootHooks = {
-        attach: (root) => {
-          handle = root
-          return () => {}
-        },
-        afterFlush: () => {},
-        restore: (path) => {
-          restored.push(path)
-          return undefined
-        },
-        prefetch: () => () => {}
-      }
-      yield* TestHost.mount(App, {}).pipe(Effect.provideService(services.RootHooks, hooks))
-      yield* TestHost.settle
-      const out: Record<string, unknown> = {}
-      handle!.snapshot(out)
-      const snapshot = Object.keys(out)
-      assert.notInclude(snapshot, "/App/TipsProvider[tips]")
-      assert.include(snapshot, "/App/TipsProvider[tips]/Tip[a]")
-      assert.notInclude(restored, "/App/TipsProvider[tips]")
-      assert.include(restored, "/App/TipsProvider[tips]/Tip[a]")
-    }).pipe(provideHost))
 })
 
 describe("shared state in a Scene", () => {
@@ -205,7 +183,7 @@ describe("shared state in a Scene", () => {
     Effect.gen(function*() {
       const s = yield* Scene.make(Tip, { id: "a" })
       s.click("a:closed")
-      assert.deepStrictEqual(s.current.sent.map((send) => [send.owner?.definition.name, send.message]), [
+      assert.deepStrictEqual(s.current.sent.map((send) => [send.owner.definition.name, send.message]), [
         ["TipsProvider", { _tag: "Enter", id: "a" }]
       ])
       s.sent(TipsProvider, { _tag: "Enter", id: "a" })
@@ -224,7 +202,13 @@ describe("shared state in a Scene", () => {
   // A scene with no steps keeps the view it expanded, where the owner placing the slot is already gone.
   it.effect("gives slot content the owner that places it", () =>
     Effect.gen(function*() {
-      const Frame = Component.define({ name: "Frame", model: Schema.Null, message: TipMessage, slots: ["body"] }).make({
+      const Frame = Component.define({
+        name: "Frame",
+        scoped: false,
+        model: Schema.Null,
+        message: TipMessage,
+        slots: ["body"]
+      }).make({
         init: () => null,
         update: (model) => model,
         view: (_, h) => TipsProvider(h, { key: "tips", props: { label: "placed" }, view: () => h.slots.body })
@@ -235,8 +219,18 @@ describe("shared state in a Scene", () => {
       assert.strictEqual(Locator.textOf(s.root), "placed")
     }))
 
-  it("gives the parts of a headless reader the shared value", () => {
+  it("gives the parts of a headless reader the shared value, from an owner declared with p.child too", () => {
     assert.deepStrictEqual(Story.parts(Trigger, { model: null, props: {} }), { open: null, label: "" })
+    const Tagged = Component.define({ name: "Tagged", scoped: false, model: Schema.Null, message: TipMessage }).make({
+      init: () => null,
+      update: (model) => model,
+      parts: (_, p) =>
+        p.child(TipsProvider, {
+          props: { label: "inside" },
+          parts: () => p.child(Trigger, { parts: (trigger) => trigger })
+        })
+    })
+    assert.strictEqual(Story.parts(Tagged, { model: null, props: {} }).label, "inside")
   })
 
   it.effect(
@@ -246,6 +240,7 @@ describe("shared state in a Scene", () => {
         const required = (name: string) =>
           Component.define({
             name,
+            scoped: false,
             props: Schema.Struct({ value: Schema.Number }),
             model: Schema.Number,
             message: TipMessage,
@@ -255,6 +250,7 @@ describe("shared state in a Scene", () => {
         const BProvider = required("BProvider")
         const Sum = Component.define({
           name: "Sum",
+          scoped: false,
           model: Schema.Null,
           message: TipMessage,
           shared: { a: AProvider, b: BProvider }
@@ -284,11 +280,12 @@ const GroupMessage = UiSchema.TaggedEnum({ ChangedOn: { on: Schema.Boolean }, Bu
 /** An owner that is on while any reader reports `true`, and counts bumps. */
 const Group = Component.define({
   name: "Group",
+  scoped: false,
   model: Schema.Struct({ on: Schema.Boolean, bumps: Schema.Number }),
   message: GroupMessage,
-  receives: ["Bumped"],
   shares: {
     value: (model) => ({ on: model.on, bumps: model.bumps }),
+    receives: ["Bumped"],
     collects: {
       schema: Schema.Boolean,
       onChange: (collected) => GroupMessage.ChangedOn({ on: collected.includes(true) })
@@ -313,6 +310,7 @@ const ReaderMessage = UiSchema.TaggedEnum({
 const makeReader = (answer: (told: boolean) => boolean) =>
   Component.define({
     name: "Reader",
+    scoped: false,
     model: Schema.Boolean,
     message: ReaderMessage,
     shared: {
@@ -328,20 +326,38 @@ const makeReader = (answer: (told: boolean) => boolean) =>
     view: (_, h) => h.el("button").on("click", ReaderMessage.Clicked()).children("reader")
   })
 
-const GroupRef = Group.ref("Group")
-const PageMessage = UiSchema.TaggedEnum({ Bump: { times: Schema.Number } })
+const BumperMessage = UiSchema.TaggedEnum({ Bump: { times: Schema.Number } })
+
+const Bumper = Component.define({
+  name: "Bumper",
+  scoped: false,
+  props: Schema.Struct({ times: Schema.Number }),
+  model: Schema.Null,
+  message: BumperMessage,
+  shared: { group: Group }
+}).make({
+  init: () => null,
+  update: (model, { times }, $) => {
+    let next = $.set(model).send(Group, { _tag: "Bumped" })
+    for (let i = 1; i < times; i++) next = next.send(Group, { _tag: "Bumped" })
+    return next
+  },
+  view: (_, h) => h.el("button").on("click", BumperMessage.Bump({ times: h.props.times })).children("bump")
+})
+
 const makePage = (Reader: ReturnType<typeof makeReader>) =>
-  Component.define({ name: "Page", model: Schema.Null, message: PageMessage }).make({
+  Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
     init: () => null,
-    update: (model, { times }, $) => {
-      let next = $.set(model)
-      for (let i = 0; i < times; i++) next = next.send(GroupRef, { _tag: "Bumped" })
-      return next
-    },
-    view: (_, h) => Group(h, { ref: GroupRef, fallback: () => h.text("looped"), view: () => Reader(h, { key: "r" }) })
+    update: (model) => model,
+    view: (_, h) =>
+      Group(h, {
+        key: "g",
+        fallback: () => h.text("looped"),
+        view: () => h.el("div", Bumper(h, { key: "b", props: { times: 150 } }), Reader(h, { key: "r" }))
+      })
   })
 
-const group = "/Page/Group[Group]"
+const group = "/Page/Group[g]"
 const reader = group + "/Reader[r]"
 
 describe("optional owners, reports and onChange", () => {
@@ -349,6 +365,7 @@ describe("optional owners, reports and onChange", () => {
     provideHost(Effect.gen(function*() {
       const Lone = Component.define({
         name: "Lone",
+        scoped: false,
         model: Schema.Null,
         message: TipMessage,
         shared: { provider: { owner: TipsProvider, optional: true } }
@@ -365,20 +382,21 @@ describe("optional owners, reports and onChange", () => {
       click(root, "alone")
       yield* TestHost.settle
       const dropped = root.log().filter((entry): entry is MessageLog.SendDropped => entry._tag === "SendDropped")
-      assert.deepStrictEqual(dropped.map((entry) => [entry.ref, entry.reason]), [["TipsProvider", "absent"]])
+      assert.deepStrictEqual(dropped.map((entry) => entry.owner), ["TipsProvider"])
     })))
 
   it.effect("an owner reads its readers' reports once the pass settles: a swap in one render sends nothing, an unmount does", () =>
     provideHost(Effect.gen(function*() {
       const Toggle = Component.define({
         name: "Toggle",
+        scoped: false,
         props: Schema.Struct({ open: Schema.Boolean }),
         model: Schema.Null,
         message: Schema.Never,
         shared: { group: { owner: Group, report: (_, props) => props.open } }
       }).make({ init: () => null, update: (model) => model, view: (_, h) => h.text("") })
       const Open = UiSchema.TaggedEnum({ Open: { which: Schema.String } })
-      const Bar = Component.define({ name: "Bar", model: Schema.String, message: Open }).make({
+      const Bar = Component.define({ name: "Bar", scoped: false, model: Schema.String, message: Open }).make({
         init: () => "a",
         update: (_, { which }) => which,
         view: (open, h) =>
@@ -405,11 +423,52 @@ describe("optional owners, reports and onChange", () => {
       ])
     })))
 
+  it.effect("a report's id is the reader's own, in an app and in a Scene", () =>
+    provideHost(Effect.gen(function*() {
+      const IdsMessage = UiSchema.TaggedEnum({ ChangedIds: { ids: Schema.Array(Schema.String) } })
+      const Controls = Component.define({
+        name: "Controls",
+        scoped: false,
+        model: Schema.Array(Schema.String),
+        message: IdsMessage,
+        shares: {
+          value: () => null,
+          collects: { schema: Schema.String, onChange: (ids) => IdsMessage.ChangedIds({ ids: [...ids].sort() }) }
+        }
+      }).make({ init: () => [], update: (_, { ids }) => ids, parts: (ids) => ({ ids }) })
+      const Box = Component.define({
+        name: "Box",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never,
+        shared: { controls: { owner: Controls, report: (_, __, id) => id("box") } }
+      }).make({ init: () => null, update: (model) => model, view: (_, h) => h.el("span").attr("id", h.id("box")) })
+      const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) =>
+          Controls(h, {
+            key: "c",
+            view: (controls) =>
+              h.el("div", h.el("p", controls.ids.join(" ")), Box(h, { key: "a" }), Box(h, { key: "b" }))
+          })
+      })
+      const root = yield* TestHost.mount(Page, {})
+      yield* TestHost.settle
+      const rendered = root.all(Locator.tag("span")).map((span) => span.attrs?.id).sort()
+      assert.lengthOf(rendered, 2)
+      assert.strictEqual(Locator.textOf(root.get(Locator.tag("p"))), rendered.join(" "))
+
+      const box = yield* Scene.make(Box, {})
+      box.shared(Controls, null)
+      assert.deepStrictEqual(box.current.reports, { controls: box.get(Locator.tag("span")).attrs?.id })
+    })))
+
   it.effect("a reader's onChange gets the new value, pointing at the owner's entry that changed it", () =>
     provideHost(Effect.gen(function*() {
       const root = yield* TestHost.mount(makePage(makeReader((told) => told)), {})
       yield* TestHost.settle
-      Locator.fire(root.get(Locator.text("reader")), "click")
+      click(root, "reader")
       yield* TestHost.settle
       const [changed] = updatesAt(root.log(), group)
       assert.deepStrictEqual(updatesAt(root.log(), reader).map((entry) => [entry.message, entry.source]), [
@@ -430,7 +489,7 @@ describe("optional owners, reports and onChange", () => {
       // Reports the opposite of what it's told, so equality never stops the pair.
       const root = yield* TestHost.mount(makePage(makeReader((told) => !told)), {})
       yield* TestHost.settle
-      Locator.fire(root.get(Locator.text("reader")), "click")
+      click(root, "reader")
       yield* TestHost.settle
       assert.strictEqual(root.text(), "looped")
       const failed = root.log().filter((entry): entry is MessageLog.Failed => entry._tag === "Failed")
@@ -442,7 +501,7 @@ describe("optional owners, reports and onChange", () => {
     provideHost(Effect.gen(function*() {
       const root = yield* TestHost.mount(makePage(makeReader((told) => told)), {})
       yield* TestHost.settle
-      root.send(PageMessage.Bump({ times: 150 }))
+      click(root, "bump")
       yield* TestHost.settle
       assert.lengthOf(updatesAt(root.log(), group), 150)
       assert.deepStrictEqual(updatesAt(root.log(), reader).map((entry) => entry.message), [
@@ -451,12 +510,93 @@ describe("optional owners, reports and onChange", () => {
     })))
 })
 
+describe("shared state in update", () => {
+  const ClockMessage = UiSchema.TaggedEnum({ Ticked: {} })
+  const Clock = Component.define({
+    name: "Clock",
+    scoped: false,
+    model: Schema.Number,
+    message: ClockMessage,
+    shares: {
+      value: (ticks) => ({ at: new Date(ticks), "~redacted": false }),
+      receives: ["Ticked"],
+      schema: Schema.Struct({ at: Schema.Date, "~redacted": Schema.Boolean })
+    }
+  }).make({ init: () => 0, update: (ticks) => ticks + 1, parts: () => ({}) })
+  const WatchMessage = UiSchema.TaggedEnum({ Clicked: {} })
+  const Watch = Component.define({
+    name: "Watch",
+    scoped: false,
+    model: Schema.Array(Schema.Number),
+    message: WatchMessage,
+    shared: { clock: Clock, tips: { owner: TipsProvider, optional: true } }
+  }).make({
+    init: () => [],
+    update: (seen, _, $) =>
+      $.set([
+        ...seen,
+        Object.hasOwn($.shared, "tips") && $.shared.tips === undefined ? $.shared.clock.at.getTime() : -1
+      ])
+        .send(Clock, ClockMessage.Ticked()),
+    view: (seen, h) => h.el("button").on("click", WatchMessage.Clicked()).children(`saw [${seen.join(",")}]`)
+  })
+  const Ticker = Component.define({
+    name: "Ticker",
+    scoped: false,
+    model: Schema.Null,
+    message: ClockMessage,
+    shared: { clock: Clock }
+  }).make({
+    init: () => null,
+    update: (model, message, $) => $.set(model).send(Clock, message),
+    view: (_, h) => h.el("button").on("click", ClockMessage.Ticked()).children("tick")
+  })
+  const Face = Component.define({ name: "Face", scoped: false, model: Schema.Null, message: Schema.Never }).make({
+    init: () => null,
+    update: (model) => model,
+    view: (_, h) => Clock(h, { key: "clock", view: () => h.el("div", Watch(h, { key: "w" }), Ticker(h, { key: "t" })) })
+  })
+
+  it.effect("reads the owner's value as update runs, logs it, and replays it from entries and Wire frames", () =>
+    provideHost(Effect.gen(function*() {
+      const root = yield* TestHost.mount(Face, {})
+      yield* TestHost.settle
+      click(root, "saw []")
+      yield* TestHost.settle
+      click(root, "tick")
+      click(root, "saw [0]")
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "saw [0,2]tick")
+      const log = root.log()
+      assert.deepStrictEqual(updatesAt(log, "/Face/Clock[clock]/Watch[w]").map((entry) => entry.shared), [
+        { clock: { at: new Date(0), "~redacted": false }, tips: undefined },
+        { clock: { at: new Date(2), "~redacted": false }, tips: undefined }
+      ])
+      for (
+        const replay of [Story.fromLog(Watch, log), Story.fromLog(Watch, log.map(MessageLog.makeEncoder().encode))]
+      ) {
+        assert.isUndefined(replay.divergence)
+        assert.deepStrictEqual(replay.model, [0, 2])
+      }
+      assert.throws(
+        () => Story.fromLog(Watch, log.map(MessageLog.makeEncoder({ maxEntryBytes: 30 }).encode)),
+        /entry #\d+ \(\/Face\/Clock\[clock\]\/Watch\[w\]\) has a shared value .* ~truncated placeholder/
+      )
+    })))
+
+  it("throws for an update called with no shared values only when it reads one", () => {
+    assert.isTrue(makeReader(() => false).update(false, ReaderMessage.Clicked(), {}).model)
+    assert.throws(() => Watch.update([], WatchMessage.Clicked(), {}), /render it below a Clock/)
+  })
+})
+
 describe("onChange rounds and declarations", () => {
   it.effect("a reader that changes the owner mid-round leaves the next reader's message pointing at its value's entry", () =>
     provideHost(Effect.gen(function*() {
       // Answers the first bump with another, inside the round that tells it.
       const Replier = Component.define({
         name: "Replier",
+        scoped: false,
         model: Schema.Null,
         message: ReaderMessage,
         shared: { group: { owner: Group, onChange: (value) => ReaderMessage.ChangedGroup({ ...value }) } }
@@ -467,15 +607,24 @@ describe("onChange rounds and declarations", () => {
         view: (_, h) => h.text("")
       })
       const Reader = makeReader((told) => told)
-      const Page = Component.define({ name: "Page", model: Schema.Null, message: PageMessage }).make({
+      const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
         init: () => null,
-        update: (model, _, $) => $.set(model).send(GroupRef, { _tag: "Bumped" }),
+        update: (model) => model,
         view: (_, h) =>
-          Group(h, { ref: GroupRef, view: () => h.el("div", Replier(h, { key: "a" }), Reader(h, { key: "r" })) })
+          Group(h, {
+            key: "g",
+            view: () =>
+              h.el(
+                "div",
+                Bumper(h, { key: "b", props: { times: 1 } }),
+                Replier(h, { key: "a" }),
+                Reader(h, { key: "r" })
+              )
+          })
       })
       const root = yield* TestHost.mount(Page, {})
       yield* TestHost.settle
-      root.send(PageMessage.Bump({ times: 1 }))
+      click(root, "bump")
       yield* TestHost.settle
       const [first, second] = updatesAt(root.log(), group)
       assert.deepStrictEqual(updatesAt(root.log(), reader).map((entry) => [entry.message, entry.source]), [
@@ -490,6 +639,7 @@ describe("onChange rounds and declarations", () => {
       () =>
         Component.define({
           name: "Twice",
+          scoped: false,
           model: Schema.Null,
           message: ReaderMessage,
           shared: { a: { owner: Group, onChange }, b: { owner: Group, optional: true, onChange } }
@@ -498,6 +648,7 @@ describe("onChange rounds and declarations", () => {
     )
     Component.define({
       name: "Aliased",
+      scoped: false,
       model: Schema.Null,
       message: ReaderMessage,
       shared: { a: { owner: Group, onChange }, b: Group, c: { owner: Group, report: () => true } }
@@ -508,6 +659,7 @@ describe("onChange rounds and declarations", () => {
 describe("optional owners, reports and onChange in a Story", () => {
   const OptionalReader = Component.define({
     name: "OptionalReader",
+    scoped: false,
     model: Schema.Boolean,
     message: ReaderMessage,
     shared: {
@@ -573,6 +725,7 @@ describe("a component that reads its own kind", () => {
   const NestMessage = UiSchema.TaggedEnum({ ChangedBelow: { open: Schema.Number } })
   const Nest = Component.define({
     name: "Nest",
+    scoped: false,
     props: Schema.Struct({ open: Schema.Boolean }),
     model: Schema.Number,
     message: NestMessage,
@@ -590,7 +743,7 @@ describe("a component that reads its own kind", () => {
     parts: (below, p) => ({ nested: p.shared.parent !== undefined, below })
   })
   const Toggle = UiSchema.TaggedEnum({ Toggled: {} })
-  const Nests = Component.define({ name: "Nests", model: Schema.Boolean, message: Toggle }).make({
+  const Nests = Component.define({ name: "Nests", scoped: false, model: Schema.Boolean, message: Toggle }).make({
     init: () => true,
     update: (open) => !open,
     view: (open, h) => {
@@ -635,17 +788,88 @@ describe("a component that reads its own kind", () => {
       scene.shared(Nest, { open: true }).expect(Locator.text("nested")).toExist()
     }).pipe(Effect.scoped))
 
+  const MenuMessage = UiSchema.TaggedEnum({ Pick: {}, Picked: {} })
+  const Menu = Component.define({
+    name: "Menu",
+    scoped: false,
+    model: Schema.Number,
+    message: MenuMessage,
+    elements: Html,
+    shares: { value: (picked) => picked, receives: ["Picked"] },
+    shared: { parent: { owner: "self", optional: true } }
+  }).make({
+    init: () => 0,
+    update: (picked, message, $) =>
+      MenuMessage.match(message, {
+        Pick: () => $.send("self", MenuMessage.Picked()),
+        Picked: () => $.send("self", MenuMessage.Picked()).set(picked + 1)
+      }),
+    parts: (picked, p) => ({ picked, item: p.part("button", (b) => b.onClick(MenuMessage.Pick())) })
+  })
+  const Menus = Component.define({
+    name: "Menus",
+    scoped: false,
+    model: Schema.Null,
+    message: Schema.Never,
+    elements: Html
+  }).make({
+    init: () => null,
+    update: (model) => model,
+    view: (_, h) =>
+      Menu(h, {
+        key: "outer",
+        view: (outer) =>
+          h.div(
+            outer.item(h.button.children(`outer ${outer.picked}`)),
+            Menu(h, { key: "inner", view: (inner) => inner.item(h.button.children(`inner ${inner.picked}`)) })
+          )
+      })
+  })
+
+  it.effect("sends to the nearest instance of its own kind above it, and the outermost one's send is dropped", () =>
+    provideHost(Effect.gen(function*() {
+      const root = yield* TestHost.mount(Menus, {})
+      yield* TestHost.settle
+      Locator.fire(root.get(Locator.text("inner 0", { exact: true })), "click")
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "outer 1inner 0")
+      const dropped = root.log().filter((entry): entry is MessageLog.SendDropped => entry._tag === "SendDropped")
+      assert.deepStrictEqual(dropped.map((entry) => entry.owner), ["Menu"])
+      const [sent] = updatesAt(root.log(), "/Menus/Menu[outer]/Menu[inner]")
+      assert.strictEqual(sent.sends[0].owner, Menu)
+      const [received] = updatesAt(root.log(), "/Menus/Menu[outer]")
+      assert.deepStrictEqual(received.source, { _tag: "Send", path: "/Menus/Menu[outer]/Menu[inner]", seq: sent.seq })
+    })))
+
+  it("in a scene, a send to its own kind goes to the one given, and is dropped without one", () => {
+    const scene = () =>
+      Scene.start(Menu, {}, { elements: Html, view: (menu, h) => menu.item(h.button.children("pick")) })
+    const alone = scene()
+    alone.click("pick")
+    assert.deepStrictEqual(alone.current.sent, [])
+    const nested = scene().shared(Menu, 0)
+    nested.click("pick")
+    assert.lengthOf(nested.sent(Menu, MenuMessage.Picked()).current.sent, 0)
+  })
+
   it("rejects a read of its own kind that isn't optional, or in a component that shares nothing", () => {
     const self = { owner: "self", optional: true } as const
     assert.throws(
       () =>
-        Component.define({ name: "Bare", model: Schema.Null, message: Schema.Never, shared: { parent: self } as any }),
+        Component.define({
+          name: "Bare",
+          scoped: false,
+          model: Schema.Null,
+          message: Schema.Never,
+          shared: { parent: self } as any
+        }),
       /Bare reads its own kind under parent, so it must share state: add shares/
     )
     assert.throws(
       () =>
         Component.define({
           name: "Required",
+          scoped: false,
           model: Schema.Null,
           message: Schema.Never,
           shares: () => null,

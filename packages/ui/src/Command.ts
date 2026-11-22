@@ -11,19 +11,31 @@
  * a body that receives the args as one struct:
  *
  * - `Command.make(name, { args }, body)` for Commands that need nothing beyond
- *   the framework services. It returns a factory: `RollDie({ sides: 6 })`.
- *   Its body can't fail.
+ *   the framework services. Issue one with `RollDie.make({ sides: 6 })`. Its
+ *   body can't fail.
  * - `Command.Service<Self>()(key, { args, invalidates }, implementation)` for
  *   Commands that reach any other service. The implementation runs once per
  *   Layer build and captures the services it uses, so a component's
  *   requirements name the Command service, never what its implementation
  *   uses. Issue one with `DeleteTodo.make({ id })` and fake it with
- *   `Layer.succeed(DeleteTodo, ({ id }) => ...)`. Its body may fail with a
- *   typed error, which the issue site maps to a message with `Command.match`.
+ *   `Layer.succeed(DeleteTodo, ({ id }) => ...)`.
  *
  * A `Command.Service` declares what it does to the query cache:
  * `invalidates`, `optimistic` and `writes` are optional. Omitting
  * `invalidates` means the run invalidates nothing.
+ *
+ * When one component consumes a Command's result, the usual case for an
+ * app's own Commands, the body returns that component's message and handles
+ * a typed failure with `Effect.match`. A body that leaves a typed error
+ * gives an `Unmatched` Command, which `$.run` rejects.
+ *
+ * `Command.match`, `Command.map` and `Command.asNoop` are for a Command that
+ * can't know its caller's messages: one from a library, such as
+ * `Router.replace`, or one that several components issue.
+ *
+ * In a `Story` or `Scene`, `resolve` takes what the body returns: the
+ * message in the first case, and the Command's own value in the second, where
+ * `fail` takes its typed error and the mapping runs in the test.
  *
  * **Example** (A Command service with a captured dependency)
  *
@@ -38,16 +50,16 @@
  *   args: { id: Schema.String },
  * }, Effect.gen(function*() {
  *   const kv = yield* KeyValueStore.KeyValueStore
- *   return ({ id }) => kv.remove(`todo/${id}`)
+ *   return ({ id }) =>
+ *     kv.remove(`todo/${id}`).pipe(
+ *       Effect.match({
+ *         onSuccess: () => Message.SucceededDeleteTodo(),
+ *         onFailure: () => Message.FailedDeleteTodo()
+ *       })
+ *     )
  * })) {}
  *
- * // Maps both channels to messages, once, beside the Message union.
- * // `update` calls it, and the component requires `DeleteTodo`.
- * const deleteTodo = (id: string) =>
- *   DeleteTodo.make({ id }).pipe(Command.match({
- *     onSuccess: () => Message.SucceededDeleteTodo(),
- *     onFailure: () => Message.FailedDeleteTodo()
- *   }))
+ * // `update` issues `DeleteTodo.make({ id })`, and the component requires `DeleteTodo`.
  * // The live wiring provides `DeleteTodo.layer`, which requires `KeyValueStore`.
  * ```
  *
@@ -417,8 +429,8 @@ export interface Variance<out Msg, in Source, in SourceE = never> {
 export type Kind = "Effect" | "Stream"
 
 /**
- * An issued Command: what a definition's factory or `make` returns, or what
- * `match` makes of an `Unmatched` one.
+ * An issued Command: what a definition's `make` returns, or what `match` makes
+ * of an `Unmatched` one.
  *
  * **Details**
  *
@@ -656,7 +668,8 @@ export declare namespace Definition {
 }
 
 /**
- * What `make` returns: call it with the Command's args struct to issue it.
+ * What `Command.make` returns: a definition whose `make` issues the Command
+ * from its args struct.
  *
  * @stability experimental
  * @category models
@@ -665,7 +678,8 @@ export declare namespace Definition {
 export interface Factory<in out Args, in out Msg, out IsStream extends boolean = false, out G extends string = never>
   extends Definition<Args, Msg, IsStream, never, G>
 {
-  (
+  /** Issues the Command. */
+  make(
     ...args: MakeArgs<Args>
   ): IsStream extends true ? Issued<Msg, never, Msg, "Stream"> : Issued<Msg, never, Msg, "Effect">
   readonly name: string
@@ -707,8 +721,9 @@ export interface Service<
   readonly args: Schema.Top
   /**
    * Issues the Command. The component requires `Self`. When the body can
-   * fail (`Err` isn't `never`) the result is `Unmatched`: map both channels
-   * with `Command.match` before running it.
+   * fail (`Err` isn't `never`) the result is `Unmatched`, which `$.run`
+   * rejects: handle the failure in the body, or map both channels with
+   * `Command.match`.
    */
   make(
     ...args: MakeArgs<Args>
@@ -849,6 +864,43 @@ const makeGroup = (
   }
 }
 
+const define = (
+  name: string,
+  options: Options<ArgsInput, string>,
+  unmatched: boolean,
+  issue: (args: any) => Pick<Fields, "service" | "invalidates" | "optimistic" | "writes" | "work">
+) => {
+  const stream = options.stream === true
+  const mode = options.mode ?? "concurrent"
+  const group = options.group ?? []
+  const argsSchema = argsSchemaOf(options.args)
+  const groupOf = makeGroup(name, argsSchema, group)
+  return {
+    [DefinitionTypeId]: DefinitionTypeId,
+    stream,
+    mode,
+    group,
+    args: argsSchema,
+    "~group": groupOf,
+    make(args: unknown = {}) {
+      const source = groupOf(args)
+      return makeIssued({
+        _tag: stream ? "Stream" : "Effect",
+        name,
+        args,
+        mode,
+        groupKey: source?.key,
+        "~group": source,
+        argsSchema,
+        afterRefetch: undefined,
+        resolve: identity,
+        reject: undefined,
+        ...issue(args)
+      }, unmatched)
+    }
+  }
+}
+
 /**
  * Returns `true` if `u` is a Command.
  *
@@ -909,13 +961,13 @@ export const groupKeyOf = (definition: Definition.Any, group: unknown): string |
  *
  * **Details**
  *
- * Requires an `args` Schema and returns a factory that takes the args struct
- * and issues a Command. Story tests can inspect its `args` without running
- * the Effect. The body can't fail. Its requirements may only be framework
- * services, which are removed from `R`. A body that requires anything else
- * doesn't compile, and the error names `FrameworkService` rather than the
- * missing service. With `stream: true` the body returns a `Stream` instead.
- * A `make` Command declares nothing about the query cache.
+ * Requires an `args` Schema and returns a definition whose `make` method takes
+ * the args struct and issues a Command. Story tests can inspect its `args`
+ * without running the Effect. The body can't fail. Its requirements may only
+ * be framework services, which are removed from `R`. A body that requires
+ * anything else doesn't compile, and the error names `FrameworkService` rather
+ * than the missing service. With `stream: true` the body returns a `Stream`
+ * instead. A `make` Command declares nothing about the query cache.
  *
  * **Gotchas**
  *
@@ -933,7 +985,7 @@ export const groupKeyOf = (definition: Definition.Any, group: unknown): string |
  * const RollDie = Command.make("RollDie", { args: { sides: Schema.Number } }, ({ sides }) =>
  *   Random.nextIntBetween(1, sides).pipe(Effect.map((n) => DieMessage.CompletedRollDie({ n }))))
  *
- * // In a component: `$.run(RollDie({ sides: 6 }))`, pending in a story as { name: "RollDie", args: { sides: 6 } }
+ * // In a component: `$.run(RollDie.make({ sides: 6 }))`, pending in a story as { name: "RollDie", args: { sides: 6 } }
  * ```
  *
  * @stability experimental
@@ -967,42 +1019,16 @@ export const make: {
   name: string,
   options: Options<ArgsInput, string>,
   run: (args: any) => any
-): any => {
-  const stream = options.stream === true
-  const mode = options.mode ?? "concurrent"
-  const group = options.group ?? []
-  const argsSchema = argsSchemaOf(options.args)
-  const groupOf = makeGroup(name, argsSchema, group)
-  const factory = (args: unknown = {}) => {
-    const source = groupOf(args)
-    return makeIssued({
-      _tag: stream ? "Stream" : "Effect",
-      name,
-      args,
-      mode,
-      groupKey: source?.key,
-      "~group": source,
-      argsSchema,
-      service: undefined,
-      invalidates: noTargets,
-      optimistic: noTargets,
-      writes: undefined,
-      afterRefetch: undefined,
-      work: run(args),
-      resolve: identity,
-      reject: undefined
-    })
-  }
-  Object.defineProperty(factory, "name", { value: name })
-  return Object.assign(factory, {
-    [DefinitionTypeId]: DefinitionTypeId,
-    stream,
-    mode,
-    group,
-    args: argsSchema,
-    "~group": groupOf
-  })
-}
+): any => ({
+  name,
+  ...define(name, options, false, (args) => ({
+    service: undefined,
+    invalidates: noTargets,
+    optimistic: noTargets,
+    writes: undefined,
+    work: run(args)
+  }))
+})
 
 /**
  * Defines a Command whose implementation is a service.
@@ -1024,10 +1050,12 @@ export const make: {
  * key is the Command's name in the log and in story tests.
  *
  * The body may use framework services on each call without them appearing in
- * `layer`'s requirements, and it may fail with a typed error. `make` then
- * issues an `Unmatched` Command, and the issue site maps both channels to
- * messages with `Command.match({ onSuccess, onFailure })`. A body that can't
- * fail issues a Command directly, mapped with `Command.map`.
+ * `layer`'s requirements. When one component consumes the result, the body
+ * returns that component's message and handles a typed failure with
+ * `Effect.match`. A library or shared Command returns its own result
+ * instead, and the issue site maps it: `Command.match` when the body can
+ * fail, since `make` then issues an `Unmatched` Command, and `Command.map`
+ * or `Command.asNoop` when it can't.
  *
  * The options declare what a run does to the query cache, from the args:
  * `invalidates` (optional), `optimistic` patches, live from issue, and
@@ -1058,18 +1086,20 @@ export const make: {
  *   group: ["id"],
  * }, Effect.gen(function*() {
  *   const kv = yield* KeyValueStore.KeyValueStore
- *   return ({ id, title }) => kv.set(`todo/${id}`, title)
+ *   return ({ id, title }) =>
+ *     kv.set(`todo/${id}`, title).pipe(
+ *       Effect.match({
+ *         onSuccess: () => Message.SucceededSaveTodo(),
+ *         onFailure: (e) => Message.FailedSaveTodo({ reason: e.message })
+ *       })
+ *     )
  * })) {}
  *
- * // Maps both channels to messages, once, beside the Message union. `update` calls it.
- * const saveTodo = (todo: { readonly id: string; readonly title: string }) =>
- *   SaveTodo.make(todo).pipe(Command.match({
- *     onSuccess: () => Message.SucceededSaveTodo(),
- *     onFailure: (e) => Message.FailedSaveTodo({ reason: e.message })
- *   }))
+ * // Issue: `$.run` takes the Command as is
+ * const command = SaveTodo.make({ id: "1", title: "Buy milk" })
  * // Live: provide `SaveTodo.layer`, which requires `KeyValueStore`
  * // Test: a fake that needs nothing
- * const Fake = Layer.succeed(SaveTodo, () => Effect.void)
+ * const Fake = Layer.succeed(SaveTodo, () => Effect.succeed(Message.SucceededSaveTodo()))
  * ```
  *
  * @stability experimental
@@ -1119,45 +1149,23 @@ export const Service: <Self>() => {
   implementation: Effect.Effect<(args: any) => any, any, any>
 ): any => {
   const Base = Context.Service<any, any>()(key)
-  const stream = options.stream === true
-  const mode = options.mode ?? "concurrent"
-  const group = options.group ?? []
-  const argsSchema = argsSchemaOf(options.args)
-  const groupOf = makeGroup(key, argsSchema, group)
-  const { invalidates, optimistic, writes } = options
+  const { invalidates, optimistic, stream, writes } = options
   const service = Base as Effect.Effect<(args: unknown) => any, never, any>
   class CommandService extends Base {
-    static readonly [DefinitionTypeId] = DefinitionTypeId
-    static readonly stream = stream
-    static readonly mode = mode
-    static readonly group = group
-    static readonly args = argsSchema
-    static readonly "~group" = groupOf
     static readonly layer = Layer.effect(Base, implementation)
-    static make(args: any = {}) {
-      const source = groupOf(args)
-      return makeIssued({
-        _tag: stream ? "Stream" : "Effect",
-        name: key,
-        args,
-        mode,
-        groupKey: source?.key,
-        "~group": source,
-        argsSchema,
-        service: Base,
-        invalidates: invalidates?.(args) ?? noTargets,
-        optimistic: optimistic?.(args) ?? noTargets,
-        writes: writes === undefined ? undefined : (success) => writes(success, args),
-        afterRefetch: undefined,
-        work: stream
-          ? Stream.unwrap(Effect.map(service, (run) => run(args)))
-          : Effect.flatMap(service, (run) => run(args)),
-        resolve: identity,
-        reject: undefined
-      }, true)
-    }
   }
-  return CommandService
+  return Object.assign(
+    CommandService,
+    define(key, options, true, (args) => ({
+      service: Base,
+      invalidates: invalidates?.(args) ?? noTargets,
+      optimistic: optimistic?.(args) ?? noTargets,
+      writes: writes === undefined ? undefined : (success) => writes(success, args),
+      work: stream
+        ? Stream.unwrap(Effect.map(service, (run) => run(args)))
+        : Effect.flatMap(service, (run) => run(args))
+    }))
+  )
 }
 
 /**
@@ -1165,9 +1173,9 @@ export const Service: <Self>() => {
  *
  * **When to use**
  *
- * Use to reuse a Command whose result isn't the component's own message, such
- * as a shared `UploadFile` Command that returns a URL. A Command whose body
- * can fail takes `match` instead.
+ * Use when issuing a Command that can't know its caller's messages, such as
+ * `Router.replace` or a shared `UploadFile` Command that returns a URL. A
+ * Command whose body can fail takes `match` instead.
  *
  * **Details**
  *
@@ -1195,7 +1203,7 @@ export const Service: <Self>() => {
  * const UploadFile = Command.make("UploadFile", { args: { name: Schema.String } }, ({ name }) =>
  *   Effect.succeed(`https://cdn/${name}`))
  *
- * const upload = UploadFile({ name: "photo.png" }).pipe(
+ * const upload = UploadFile.make({ name: "photo.png" }).pipe(
  *   Command.map((url) => Message.CompletedUploadFile({ url }))
  * )
  * ```
@@ -1286,7 +1294,7 @@ export const as: {
  *
  * const Track = Command.make("Track", { args: { event: Schema.String } }, () => Effect.succeed(200))
  *
- * const track = Track({ event: "opened" }).pipe(Command.asNoop)
+ * const track = Track.make({ event: "opened" }).pipe(Command.asNoop)
  * ```
  *
  * @see as
@@ -1302,8 +1310,10 @@ export const asNoop = <C extends Command<any, any>>(self: C): Mapped<C, Componen
  *
  * **When to use**
  *
- * Use when issuing a `Command.Service` whose body has a typed error:
- * `$.run` doesn't take the `Unmatched` Command its `make` returns.
+ * Use when issuing a library or shared `Command.Service` whose body has a
+ * typed error: `$.run` rejects the `Unmatched` Command its `make` returns.
+ * A Command that one component consumes handles the error in its body
+ * instead.
  *
  * **Details**
  *
@@ -1312,7 +1322,11 @@ export const asNoop = <C extends Command<any, any>>(self: C): Mapped<C, Componen
  * an interrupt isn't mapped. A Command whose body can't fail takes `map`, and
  * `match` on it doesn't compile.
  *
- * **Example** (Mapping a save that can fail)
+ * In a `Story` or `Scene` the mapping runs in the test: `resolve` takes the
+ * body's success and `fail` its typed error. A Stream Command takes `next`
+ * for each element and `end` when it completes.
+ *
+ * **Example** (Mapping a shared Command that can fail)
  *
  * ```ts import.meta.vitest
  * import { Command, UiSchema } from "@effect/ui"

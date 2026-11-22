@@ -120,6 +120,21 @@ describe("place", () => {
     assert.isTrue(place(input({}, { anchorClip: { x: 0, y: 0, width: 1000, height: 300 } })).anchorHidden)
   })
 
+  it("calls a point anchor hidden only past the clip's edge, and with shiftCrossAxis slides over it instead of flipping", () => {
+    const point = (x: number, y: number) => ({ anchor: { x, y, width: 0, height: 0 } })
+    assert.isFalse(place(input({}, point(0, 400))).anchorHidden)
+    assert.isTrue(place(input({}, point(-1, 400))).anchorHidden)
+    const low = point(400, 750)
+    assert.deepStrictEqual(at({ align: "start" }, low), { side: "top", align: "start", x: 400, y: 650 })
+    const sliding = resolveOptions({ align: "start" }, {
+      side: "bottom",
+      collisionAvoidance: { fallbackAxisSide: "none" },
+      shiftCrossAxis: true
+    })
+    const { align, side, x, y } = place({ ...input({}, low), options: sliding })
+    assert.deepStrictEqual({ side, align, x, y }, { side: "bottom", align: "start", x: 400, y: 695 })
+  })
+
   it("points the arrow at the anchor, keeping it the arrow padding from the popup's corners", () => {
     const arrow = { width: 10, height: 10 }
     assert.deepStrictEqual(place(input({}, { arrow })).arrow, { x: 95, y: null, uncentered: false })
@@ -179,18 +194,31 @@ describe("trackArgs", () => {
         collisionAvoidance: { side: "flip", align: "flip", fallbackAxisSide: "end" },
         collisionPadding: { top: 5, right: 5, bottom: 5, left: 5 },
         sticky: false,
-        arrowPadding: 5
+        arrowPadding: 5,
+        shiftCrossAxis: false
       },
       positionMethod: "absolute",
       collisionBoundary: "clipping-ancestors",
       disableAnchorTracking: false,
       anchorSelector: "#save",
+      anchorRect: null,
       arrowId: null,
-      offsetAsPadding: false
+      offsetAsPadding: false,
+      leaveCoordinates: false,
+      inline: false,
+      inlineHit: null
     })
+    assert.isTrue(
+      trackArgs({}, { side: "bottom", anchorSelector: "#save", leaveCoordinates: true }).leaveCoordinates
+    )
     assert.strictEqual(
       trackArgs({ anchor: "save\"as" }, { side: "bottom", anchorSelector: "#save" }).anchorSelector,
       "[id=\"save\\\"as\"]"
     )
+    const point = { x: 10, y: 20, width: 0, height: 0 }
+    assert.deepStrictEqual(trackArgs({ anchor: point }, { side: "bottom", anchorSelector: "#save" }).anchorRect, point)
+    const own = { side: "bottom", anchorSelector: "#save", anchorRect: point } as const
+    assert.deepStrictEqual(trackArgs({}, own).anchorRect, point)
+    assert.isNull(trackArgs({ anchor: "save" }, own).anchorRect)
   })
 })

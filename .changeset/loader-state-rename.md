@@ -14,5 +14,4 @@ Query results:
 
 Children:
 
-- `Component.Ref.Slot` is now `Component.Ref.For`.
-- Error messages say "child" instead of "slot", such as "A child takes exactly one of key and ref".
+- Error messages say "child" instead of "slot", such as "the child has no fallback to show while it's pending".

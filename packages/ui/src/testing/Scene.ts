@@ -12,8 +12,8 @@
  * and every step follows the acknowledgement rule described in `Steps`. An
  * interaction that no handler turned into a message must be followed by
  * `expectIgnored()`. A child is a leaf: `childEmit` stands in for what it
- * emits, and anything that crosses into one is a runtime test. A child step
- * names the child by its component, then by its key or ref when it has one:
+ * emits, and anything that crosses into one is a `Play`. A child step
+ * names the child by its component, then by its key when it has one:
  * `childEmit(Listbox, event)`, `childEmit(TodoItem, "t1", event)`.
  *
  * **Example** (Save, resolve its Command, see the result)
@@ -33,6 +33,7 @@
  *
  * const TodoItem = Component.define({
  *   name: "TodoItem",
+ *   scoped: false,
  *   props: Schema.Struct({ id: Schema.String }),
  *   model: Schema.Struct({ saved: Schema.Boolean }),
  *   message: Message
@@ -159,19 +160,15 @@ export interface Expect<S> {
   toHaveCount(count: number): S
 }
 
-// A component with no messages has `Msg = never`, and its `update` can't take `any`, so it needs its own member.
-// `Rcv` is invariant, and `any` doesn't stand for `never`, so one that receives nothing needs its own members too.
 /** The events a child emits: a component's, a headless component's or a feature's. */
-type EventsOf<Child> = Child extends Feature.Service<any, any, infer E, any> ? E
-  : Child extends Component.Headless<any, infer E, any, any, any, never> ? E
+type EventsOf<Child> = Child extends Feature.Service<any, any, infer E> ? E
+  : Child extends Component.Headless<any, infer E, any, any, infer _Rcv, never> ? E
   : Component.Events<Child>
 
 // The same union as `Steps.ts`'s, so `Scene.Steps.Any` extends `Steps.Steps.Any`.
 type AnyComponent =
-  | Component.Component<any, any, any, any, any, any, any, any, any>
-  | Component.Component<any, any, any, never, any, any, any, any, any>
-  | Component.Component<any, any, any, any, any, any, any, any, never>
-  | Component.Component<any, any, any, never, any, any, any, any, never>
+  | Component.Members<any, any, any, any, any, any, any, any>
+  | Component.Members<any, any, any, never, any, any, any, any>
 
 /**
  * A cursor over one scene. It has the steps every kind of test shares, from
@@ -245,18 +242,17 @@ export interface Steps<C extends AnyComponent, Parts = never, Report = never> ex
    * child, or several, as two unkeyed children in different headless
    * closures would be.
    */
-  childEmit<Child extends Component.Any | Component.Headless.Any | Feature.Any>(
+  childEmit<Child extends Component.AnyRoot | Component.Headless.Any | Feature.Any>(
     child: Child,
     event: EventsOf<Child>
   ): this
   /**
    * Sends the message the parent's `onEmit` maps `event` from the child of
-   * `child` at `key` to, if any. A string finds the child rendered with that
-   * key, and a ref the child rendered with it. A message step.
+   * `child` at `key` to, if any. A message step.
    */
-  childEmit<Child extends Component.Any | Component.Headless.Any | Feature.Any>(
+  childEmit<Child extends Component.AnyRoot | Component.Headless.Any | Feature.Any>(
     child: Child,
-    key: string | Component.Ref.Any,
+    key: string,
     event: EventsOf<Child>
   ): this
   /**
@@ -269,11 +265,11 @@ export interface Steps<C extends AnyComponent, Parts = never, Report = never> ex
   childFailure(child: Component.Any | Component.Headless.Any | Feature.Any, cause: Cause.Cause<unknown>): this
   /**
    * Fails the child of `child` at `key`, as `childFailure` without a key
-   * does. A ref finds the child rendered with it. A message step.
+   * does. A message step.
    */
   childFailure(
     child: Component.Any | Component.Headless.Any | Feature.Any,
-    key: string | Component.Ref.Any,
+    key: string,
     cause: Cause.Cause<unknown>
   ): this
   /**
@@ -289,12 +285,11 @@ export interface Steps<C extends AnyComponent, Parts = never, Report = never> ex
    */
   childPending(child: Component.Any | Component.Headless.Any | Feature.Any): this
   /**
-   * Shows the slot of the child of `child` at `key` as pending. A ref finds
-   * the child rendered with it.
+   * Shows the slot of the child of `child` at `key` as pending.
    */
   childPending(
     child: Component.Any | Component.Headless.Any | Feature.Any,
-    key: string | Component.Ref.Any
+    key: string
   ): this
   /**
    * Sets the Model the headless child of `child` without a key is expanded
@@ -310,10 +305,8 @@ export interface Steps<C extends AnyComponent, Parts = never, Report = never> ex
   givenChild(child: Component.Headless.Any, model: unknown): this
   /**
    * Sets the Model the headless child of `child` at `key` is expanded from.
-   * A string finds the child rendered with that key, and a ref the child
-   * rendered with it.
    */
-  givenChild(child: Component.Headless.Any, key: string | Component.Ref.Any, model: unknown): this
+  givenChild(child: Component.Headless.Any, key: string, model: unknown): this
   /**
    * Ends the one mount matching `target` with the result its body would have
    * produced, and sends the message the view's `Mount.map` makes of it.
@@ -479,10 +472,9 @@ export const children = <Msg>(
 /**
  * What a child of `child` shows for `result`: its `fallback` evaluated with an
  * `AsyncResult.Initial` or `AsyncResult.Failure`, or `undefined` without one.
- * The child is the one without a key, or the one at `key`; a ref finds the
- * child rendered with it.
+ * The child is the one without a key, or the one at `key`.
  * Throws, as the runtime fails the parent, if the fallback renders two
- * children at one path, or a child at the path or ref key of another child of
+ * children at one path, or a child at the path of another child of
  * the view, closure or slot content that declared the child. It sees one fallback, so it can't check two shown at once, as the
  * runtime does.
  *
@@ -499,12 +491,12 @@ export const fallback: {
   <Msg>(
     view: View.Node<Msg, any>,
     child: Component.Any | Component.Headless.Any | Feature.Any,
-    key: string | Component.Ref.Any,
+    key: string,
     result: AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>
   ): View.Node<Msg, any> | undefined
 } = <Msg>(
   view: View.Node<Msg, any>,
-  component: Component.Any | Component.Headless.Any | Feature.Any,
+  component: Component.AnyRoot | Component.Headless.Any | Feature.Any,
   ...args: ReadonlyArray<any>
 ): View.Node<Msg, any> | undefined => {
   const [key, result] = args.length === 1 ? [undefined, args[0]] : args

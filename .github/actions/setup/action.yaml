@@ -25,8 +25,14 @@ runs:
       uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
       with:
         node-version: ${{ inputs.node-version || '26.12.1' }}
-        cache: pnpm
+        package-manager-cache: ${{ env.NSC_CONTAINER_REGISTRY == '' }}
+        cache: ${{ env.NSC_CONTAINER_REGISTRY == '' && 'pnpm' || '' }}
         cache-dependency-path: pnpm-lock.yaml
+    - name: Configure pnpm cache
+      if: ${{ env.NSC_CONTAINER_REGISTRY != '' }}
+      uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
+      with:
+        cache: pnpm
     - name: Install deno
       uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
       if: ${{ inputs.deno-version != '' }}

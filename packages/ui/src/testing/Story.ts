@@ -33,6 +33,7 @@
  *
  * const TodoItem = Component.define({
  *   name: "TodoItem",
+ *   scoped: false,
  *   props: Schema.Struct({ id: Schema.String }),
  *   model: Schema.Struct({ saved: Schema.Boolean }),
  *   message: Message
@@ -141,13 +142,10 @@ export interface Story<Props, Model, Msg, Events, Queries = { readonly [name: st
 }
 
 // A component with no messages has `Msg = never`, and its `update` can't take `any`, so it needs its own member.
-// `Rcv` is invariant, and `any` doesn't stand for `never`, so one that receives nothing needs its own members too.
 // The same union as `Steps.ts`'s, so `Story.Steps.Any` extends `Steps.Steps.Any`.
 type AnyComponent =
-  | Component.Component<any, any, any, any, any, any, any, any, any>
-  | Component.Component<any, any, any, never, any, any, any, any, any>
-  | Component.Component<any, any, any, any, any, any, any, any, never>
-  | Component.Component<any, any, any, never, any, any, any, any, never>
+  | Component.Members<any, any, any, any, any, any, any, any>
+  | Component.Members<any, any, any, never, any, any, any, any>
 
 /**
  * A cursor over one story. It has the steps every kind of test shares, from
@@ -170,6 +168,7 @@ type AnyComponent =
  * const Message = UiSchema.TaggedEnum({ ClickedIncrement: {} })
  * const Counter = Component.define({
  *   name: "Counter",
+ *   scoped: false,
  *   model: Schema.Struct({ count: Schema.Number }),
  *   message: Message
  * }).make({
@@ -283,7 +282,10 @@ export const make = <C extends AnyComponent>(
 ): Effect.Effect<Steps<C>, never, Scope.Scope> =>
   cursor.scoped(
     make,
-    () => new StepsImpl("Story", cursor.initial(component, props)) as unknown as cursor.Cursor & Steps<C>
+    () =>
+      new StepsImpl("Story", cursor.initial(component as unknown as Component.Any, props)) as unknown as
+        & cursor.Cursor
+        & Steps<C>
   )
 
 /**
@@ -295,7 +297,7 @@ export const make = <C extends AnyComponent>(
  * @since 0.1.0
  */
 export const start = <C extends AnyComponent>(component: C, props: Component.Props<C>): Steps<C> =>
-  new StepsImpl("Story", cursor.initial(component, props)) as unknown as Steps<C>
+  new StepsImpl("Story", cursor.initial(component as unknown as Component.Any, props)) as unknown as Steps<C>
 
 /**
  * The parts of a headless component for a Model and props: the plain values
@@ -307,6 +309,10 @@ export const start = <C extends AnyComponent>(component: C, props: Component.Pro
  * `shared` steps gave, or else each owner's default, as the scene's view
  * does.
  *
+ * For a component that builds on another with `p.child`, the parts are the
+ * ones the consumer gets. Each child it declares gives the parts of its
+ * `init` Model, or, given a Scene's record, of the Model `givenChild` set.
+ *
  * @stability experimental
  * @category queries
  * @since 0.1.0
@@ -317,18 +323,14 @@ export const parts = <Props, Events, Parts, R, Rcv>(
 ): Parts => {
   const state = cursor.stateOf.get(record)
   const model = state !== undefined ? state.model : (record as { readonly model: unknown }).model
-  const lookup = state ?? record
-  return component.parts(model, record.props, {
-    owner: { path: "/" + component.definition.name, depth: 0 },
-    shared: engine.rootShared(engine.sharedGiven.get(lookup))
-  })
+  return engine.rootParts(component, model, record.props, state ?? record)
 }
 
 /**
  * One instance's head entries for a Model and props, or for the Model,
  * props and queries of a story's or a scene's record: what its `head` option returns, or none without one.
  * The entries are typed by the component's vocabulary. The fold across the
- * tree is a runtime test's.
+ * tree is a `Play`'s.
  *
  * **Details**
  *
@@ -345,6 +347,7 @@ export const parts = <Props, Events, Parts, R, Rcv>(
  *
  * const Person = Component.define({
  *   name: "Person",
+ *   scoped: false,
  *   model: Schema.Struct({ name: Schema.String }),
  *   message: Schema.Never
  * }).make({
@@ -362,8 +365,8 @@ export const parts = <Props, Events, Parts, R, Rcv>(
  * @since 0.1.0
  */
 export const head: {
-  <Name extends string, Props, Model, Msg, Events, R, V extends View.Elements, Rcv = never>(
-    component: Component.Component<Name, Props, Model, Msg, Events, R, V, any, Rcv>,
+  <Name extends string, Props, Model, Msg, Events, R, V extends View.Elements>(
+    component: Component.Component<Name, Props, Model, Msg, Events, R, V, any>,
     model: Model,
     ...props: {} extends Props ? [props?: Props] : [props: Props]
   ): ReadonlyArray<View.HeadEntry<V>>

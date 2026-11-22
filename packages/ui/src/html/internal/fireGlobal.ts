@@ -10,7 +10,8 @@ import * as scene from "../../internal/scene.ts"
 export type Listener = (payload: unknown, preventDefault: () => void) => void
 
 const { alt, ctrl, meta, shift } = scene.pointer
-const key = { key: "", shift, ctrl, alt, meta, composing: false }
+const key = { key: "", shift, ctrl, alt, meta, composing: false, selectionStart: null, selectionEnd: null }
+const pointerEvents: ReadonlySet<string> = new Set(["click", "mousedown", "mouseup", "pointerup", "pointercancel"])
 
 /**
  * Fires `event` at the capture listeners, then at the bubble ones, and
@@ -31,7 +32,7 @@ export const fire = (
 ): boolean => {
   const defaults = event === "keydown" || event === "keyup"
     ? key
-    : event === "click" || event === "mousedown" || event === "mouseup"
+    : pointerEvents.has(event)
     ? scene.pointer
     : undefined
   const prevented = (given as { readonly defaultPrevented?: unknown } | undefined)?.defaultPrevented === true

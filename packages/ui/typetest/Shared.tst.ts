@@ -8,11 +8,11 @@ const TipsMessage = UiSchema.TaggedEnum({ Enter: { id: Schema.String }, Elapsed:
 
 const TipsProvider = Component.define({
   name: "TipsProvider",
+  scoped: false,
   props: Schema.Struct({ delay: Schema.optional(Schema.Number) }),
   model: Schema.Struct({ open: Schema.NullOr(Schema.String) }),
   message: TipsMessage,
-  receives: ["Enter"],
-  shares: (model) => ({ open: model.open })
+  shares: { value: (model) => ({ open: model.open }), receives: ["Enter"] }
 }).make({
   init: () => ({ open: null }),
   update: (model) => model,
@@ -20,7 +20,7 @@ const TipsProvider = Component.define({
 })
 
 // Not an owner: it shares nothing.
-const Plain = Component.define({ name: "Plain", model: Schema.Null, message: TipsMessage }).make({
+const Plain = Component.define({ name: "Plain", scoped: false, model: Schema.Null, message: TipsMessage }).make({
   init: () => null,
   update: (model) => model,
   parts: () => ({})
@@ -30,6 +30,7 @@ const TipMessage = UiSchema.TaggedEnum({ Enter: { id: Schema.String } })
 
 const Tip = Component.define({
   name: "Tip",
+  scoped: false,
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.Null,
   message: TipMessage,
@@ -45,7 +46,7 @@ const Tip = Component.define({
 })
 
 // Sends to the owner with no `shared` declaration.
-const Sender = Component.define({ name: "Sender", model: Schema.Null, message: TipMessage }).make({
+const Sender = Component.define({ name: "Sender", scoped: false, model: Schema.Null, message: TipMessage }).make({
   init: () => null,
   update: (model, message, $) => $.set(model).send(TipsProvider, message),
   view: (_, h) => h.el("p")
@@ -68,7 +69,13 @@ describe("shared state", () => {
   })
 
   it("removes the requirement in the owner's closure only, and never with provide", () => {
-    const def = Component.define({ name: "Host", model: Schema.Null, message: TipMessage, elements: Html })
+    const def = Component.define({
+      name: "Host",
+      scoped: false,
+      model: Schema.Null,
+      message: TipMessage,
+      elements: Html
+    })
     const Inside = def.make({
       init: () => null,
       update: (model) => model,
@@ -85,8 +92,46 @@ describe("shared state", () => {
     expect<Component.Requirements<typeof provided>>().type.toBe<TipsShared>()
   })
 
+  it("types $.shared in update by the entries of shared, undefined for an optional owner", () => {
+    const def = Component.define({
+      name: "Reads",
+      scoped: false,
+      model: Schema.Null,
+      message: TipMessage,
+      shared: { provider: TipsProvider, maybe: { owner: TipsProvider, optional: true } }
+    })
+    def.update((model, _msg, $) => {
+      expect($.shared).type.toBe<{
+        readonly provider: { open: string | null }
+        readonly maybe: { open: string | null } | undefined
+      }>()
+      return model
+    })
+    def.update("Enter", (model, _msg, $) => {
+      expect($.shared.maybe).type.toBe<{ open: string | null } | undefined>()
+      return model
+    })
+  })
+
+  it("checks the schema of shares against its value", () => {
+    const options = {
+      name: "Owner",
+      scoped: false as const,
+      model: Schema.Struct({ n: Schema.Number }),
+      message: TipMessage
+    }
+    expect(Component.define).type.toBeCallableWith({
+      ...options,
+      shares: { value: (model: { readonly n: number }) => model.n, schema: Schema.Number }
+    })
+    expect(Component.define).type.not.toBeCallableWith({
+      ...options,
+      shares: { value: (model: { readonly n: number }) => model.n, schema: Schema.String }
+    })
+  })
+
   it("checks a send against the owner's receives", () => {
-    Component.define({ name: "S", model: Schema.Null, message: TipMessage }).update((model, _msg, $) => {
+    Component.define({ name: "S", scoped: false, model: Schema.Null, message: TipMessage }).update((model, _msg, $) => {
       expect($.send(TipsProvider, { _tag: "Enter", id: "a" })).type.not.toRaiseError()
       expect($.send).type.not.toBeCallableWith(TipsProvider, { _tag: "Elapsed" })
       expect($.send).type.not.toBeCallableWith(Plain, { _tag: "Enter", id: "a" })
@@ -96,10 +141,11 @@ describe("shared state", () => {
 
   it("rejects an owner that isn't headless, and a component in shared that isn't an owner", () => {
     const options = { init: () => null, update: (model: null) => model, view: (_: null, h: any) => h.el("p") }
-    const NotOwner = Component.define({ name: "NotOwner", model: Schema.Null, message: TipMessage })
+    const NotOwner = Component.define({ name: "NotOwner", scoped: false, model: Schema.Null, message: TipMessage })
     expect(NotOwner.make).type.toBeCallableWith(options)
     const DrawnProvider = Component.define({
       name: "DrawnProvider",
+      scoped: false,
       model: Schema.Null,
       message: TipMessage,
       shares: () => 1
@@ -133,6 +179,7 @@ describe("a component that reads its own kind", () => {
   it("reads its own shares and reports its own collects, with no requirement", () => {
     const Nest = Component.define({
       name: "Nest",
+      scoped: false,
       props: Schema.Struct({ open: Schema.Boolean }),
       model: Schema.Number,
       message: NestMessage,
@@ -182,6 +229,7 @@ describe("a component that reads its own kind", () => {
     })
     const Bare = Component.define({
       name: "Bare",
+      scoped: false,
       model: Schema.Null,
       message: NestMessage,
       shared: { parent: { owner: "self", optional: true } }

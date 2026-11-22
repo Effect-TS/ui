@@ -16,15 +16,14 @@ const BUTTON_CLASS = "bg-black text-white hover:bg-gray-700 px-4 py-2 transition
 
 export const Counter = Component.define({
   name: "Counter",
+  scoped: false,
   model: CounterModel,
   message: CounterMessage
 }).make({
   init: () => ({ count: 0 }),
   update: {
     ClickedDecrement: (_model, _message, $) => $.evolve({ count: (count) => count - 1 }),
-
     ClickedIncrement: (_model, _message, $) => $.evolve({ count: (count) => count + 1 }),
-
     ClickedReset: (_model, _message, $) => $.evolve({ count: 0 })
   },
   head: (model) => [Head.title(`Counter: ${model.count}`)],

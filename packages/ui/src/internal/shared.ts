@@ -8,11 +8,13 @@ import type * as Component from "../Component.ts"
 
 /** @internal */
 export interface Read {
-  /** The local name `h.shared` and `p.shared` read the owner under. */
+  /** The local name `h.shared`, `p.shared` and `$.shared` read the owner under. */
   readonly name: string
   readonly owner: Component.Headless.Any
   readonly optional: boolean
-  readonly report: ((model: unknown, props: unknown) => unknown) | undefined
+  readonly report:
+    | ((model: unknown, props: unknown, id: Component.PartsHelper<never, unknown, any>["id"]) => unknown)
+    | undefined
   readonly onChange: ((value: unknown) => unknown) | undefined
 }
 
@@ -45,6 +47,48 @@ export const readsOf = (definition: Component.Definition.Any, self?: Component.A
     cache.set(shared, reads)
   }
   return reads
+}
+
+const missing = (name: string, read: Read): never => {
+  throw new Error(
+    `${name} reads the shared state of ${read.owner.definition.name}, and nothing supplies it: render it below a ${read.owner.definition.name}`
+  )
+}
+
+/** @internal */
+export const values = (
+  name: string,
+  reads: ReadonlyArray<Read>,
+  lookup: Component.SharedLookup | undefined
+): Component.SharedRecord => {
+  const out: { [name: string]: unknown } = {}
+  for (const read of reads) {
+    out[read.name] = lookup !== undefined
+      ? lookup(read.owner, read.optional)
+      : read.optional
+      ? undefined
+      : missing(name, read)
+  }
+  return out
+}
+
+/** @internal */
+export const record = (
+  component: Component.Any,
+  lookup: Component.SharedLookup | undefined
+): Component.SharedRecord | undefined => {
+  const reads = readsOf(component.definition)
+  return reads.length === 0 ? undefined : values(component.definition.name, reads, lookup)
+}
+
+/** @internal */
+export const unsupplied = (name: string, reads: ReadonlyArray<Read>): Component.SharedRecord => {
+  const out: { [name: string]: unknown } = {}
+  for (const read of reads) {
+    if (read.optional) out[read.name] = undefined
+    else Object.defineProperty(out, read.name, { enumerable: true, get: () => missing(name, read) })
+  }
+  return Object.freeze(out)
 }
 
 /**

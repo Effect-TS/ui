@@ -1,30 +1,27 @@
 /**
  * A note editor for the acknowledgement rule: a Command per mode, a stream
- * Command, an event, a send to a child, a query, and a handler that can
- * produce no message.
+ * Command, an event, a child, a query, and a handler that can produce no
+ * message.
  */
 import { Command, Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Effect, Schema, Stream } from "effect"
 import * as users from "./users.ts"
 
-export const BadgeMessage = UiSchema.TaggedEnum({ Clear: {} })
 export const BadgeEvents = UiSchema.TaggedEnum({ Opened: { count: Schema.Number } })
 
 export const Badge = Component.define({
   name: "Badge",
+  scoped: false,
   model: Schema.Number,
-  message: BadgeMessage,
+  message: Schema.Never,
   events: BadgeEvents,
-  receives: ["Clear"],
   elements: Html
 }).make({
   init: () => 0,
   update: () => 0,
   view: (count, h) => h.span(String(count))
 })
-
-export const BadgeRef = Badge.ref("Badge")
 
 export const NoteMessage = UiSchema.TaggedEnum({
   Edit: { text: Schema.String },
@@ -36,7 +33,6 @@ export const NoteMessage = UiSchema.TaggedEnum({
   Line: { line: Schema.String },
   Sync: {},
   Synced: {},
-  Clear: {},
   Opened: { count: Schema.Number },
   Author: { id: Schema.String }
 })
@@ -67,6 +63,7 @@ export const FollowNotes = Command.make(
 
 export const Note = Component.define({
   name: "Note",
+  scoped: false,
   props: Schema.Struct({ author: Schema.optional(Schema.String) }),
   model: Schema.Struct({
     text: Schema.String,
@@ -92,15 +89,14 @@ export const Note = Component.define({
   update: (model, message, $) =>
     NoteMessage.match(message, {
       Edit: ({ text }) => ({ ...model, text, saved: false }),
-      Save: () => $.run(SaveNote({ text: model.text })),
+      Save: () => $.run(SaveNote.make({ text: model.text })),
       Saved: () => $.set({ ...model, saved: true }).emit(NoteEvents.Saved({ text: model.text })),
-      Find: ({ text }) => $.run(FindNotes({ text })),
+      Find: ({ text }) => $.run(FindNotes.make({ text })),
       Found: ({ items }) => ({ ...model, items }),
-      Follow: () => $.run(FollowNotes({})),
+      Follow: () => $.run(FollowNotes.make({})),
       Line: () => ({ ...model, lines: model.lines + 1 }),
-      Sync: () => $.run(SyncNote({})),
+      Sync: () => $.run(SyncNote.make({})),
       Synced: () => model,
-      Clear: () => $.send(BadgeRef, { _tag: "Clear" }),
       Opened: ({ count }) => ({ ...model, text: `opened ${count}` }),
       Author: ({ id }) => ({ ...model, author: id })
     }),
@@ -112,6 +108,6 @@ export const Note = Component.define({
       h.button.onClick(() => NoteMessage.Save()).children(h.isRunning(SaveNote) ? "saving" : "save"),
       h.button.onClick(() => model.saved ? undefined : NoteMessage.Save()).children("save again"),
       h.p.attr("role", "status").children(model.saved ? `saved ${model.text}` : model.text),
-      Badge(h, { ref: BadgeRef, onEmit: (event) => NoteMessage.Opened({ count: event.count }) })
+      Badge(h, { key: "Badge", onEmit: (event) => NoteMessage.Opened({ count: event.count }) })
     )
 })

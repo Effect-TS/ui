@@ -11,11 +11,12 @@ export const CollapsibleMessage = UiSchema.TaggedEnum({ ClickedToggle: {} })
 
 export const Collapsible = Component.define({
   name: "Collapsible",
+  scoped: false,
   model: Schema.Struct({ open: Schema.Boolean }),
   message: CollapsibleMessage,
   elements: Html,
-  // The slot names, as `receives` lists message tags. A parent can pass
-  // content for any of them, and a slot it leaves out shows nothing.
+  // The slot names. A parent can pass content for any of them, and a slot
+  // it leaves out shows nothing.
   slots: ["summary", "body"]
 }).make({
   init: () => ({ open: true }),
@@ -29,8 +30,7 @@ export const Collapsible = Component.define({
       h.header(
         h.slots.summary,
         h.button
-          .attr("type", "button")
-          .attr("aria-expanded", model.open ? "true" : "false")
+          .attrs({ type: "button", "aria-expanded": model.open ? "true" : "false" })
           .onClick(CollapsibleMessage.ClickedToggle())
           .children(model.open ? "Hide" : "Show")
       ),

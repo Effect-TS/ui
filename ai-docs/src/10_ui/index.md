@@ -24,24 +24,113 @@ row arrives. Two children at one path are one instance: in
 `cond ? Listbox(h, { props: a }) : Listbox(h, { props: b })` the Listbox
 keeps its Model when `cond` changes, so key each branch when that state
 shouldn't carry over. A `Scene` names a child by its component, then by its
-key or ref when it has one: `s.childEmit(Listbox, event)`,
-`s.childFailure(NoteEditor, Editor.at(id), cause)`.
+key when it has one: `s.childEmit(Listbox, event)`,
+`s.childFailure(NoteEditor, note.id, cause)`.
 
 A parent passes a child state through props, and a child answers through
-`events`. A one-shot instruction, such as "save now" or "clear your draft",
-is a send: the child lists the tags it accepts in `receives`, the parent
-renders the child with a ref from `Child.ref("Name")`, and its `update` calls
-`$.send(ref, message)`. Don't send what the child shows: that belongs in its
-props.
+`events`. A parent can't send a child a message. To restart a child, such as
+a wizard, stop rendering it or change its key, and it mounts fresh. A
+control that the parent lays out but that starts the child's own work is a
+part of a headless child. TagPicker's remove button is one: the consumer
+draws `tagPicker.remove(h.button, tag)`, and the click goes through
+TagPicker's `update` (see "Composing headless components"). NoteEditor
+draws its own view and has no parts, so the note page hears its `Saved` but
+can't start a save. See **Who owns the state** below.
 
-A child the view stops declaring unmounts and loses its Model. To hide a tab
-or a wizard step the user will come back to, keep declaring it with
-`detached: tab !== "profile"`: its nodes leave the document, and its Model,
-Commands in flight and typed input stay. It still gets props, sends and query
-results, and emits through the latest `onEmit`. Its element mounts stop
-until it's attached again, and its Subscriptions keep running, so gate those
-on the Model. Declare a wizard step once it has been visited, not every step
-up front.
+### Scoped children
+
+Every `Component.define` says whether the component is `scoped`. Most set
+`scoped: false`, and a child of theirs that the view stops declaring
+unmounts and loses its Model. Set `scoped: true` when the user should find
+the component as they left it after it goes out of view: a tab with a
+half-filled form, a wizard step, a list row that a filter hides. A headless
+component can't be scoped.
+
+A view writes scoped children inside `h.scoped`, calling them with the `s`
+it passes instead of `h`. A scoped child belongs to the component whose
+view called `h.scoped`, its author, and its path is `Name[key]` under the
+author wherever the view puts it. Moving it to another element, or into
+another child's slot, keeps the instance. Placing one `Name[key]` twice in
+a render fails the author. So do an ordinary child and a scoped child of
+the same name and key that resolve to one path.
+
+```ts
+const view = (model: SettingsModel, h: H) =>
+  model.tab === "profile"
+    ? h.scoped((s) => Profile(s, { key: "profile" }))
+    : h.scoped((s) => Billing(s, { key: "billing" }))
+```
+
+A scoped child that no view writes is kept. Its nodes leave the document,
+and its Model, Commands in flight, Subscriptions and typed input stay. Its
+element mounts stop, and it adds nothing to the head or to an owner's
+`collects`, until a view writes it again. It keeps the props and `onEmit`
+of the last render that placed it, and its events reach the author's `update`, with
+the current Model, through that `onEmit`. When a kept child needs fresh
+props, write it inside a `hidden` element instead. Subscriptions keep
+running while it's kept, so gate those on the Model.
+
+Without a predicate, a scope's children live as long as the author, and
+their keys must be literals. A list needs a predicate, `h.scoped(alive,
+content)`, which the runtime asks about each live child on every render of
+the author, whether that render wrote the child or not. It ends the child
+once the predicate returns false. Destructure the Model from the argument
+and look the key up:
+
+```ts
+h.scoped(
+  ({ key, model }) => key in model.notes,
+  (s) => visible.map((id) => NoteRow(s, { key: id, props: { note: model.notes[id] } }))
+)
+```
+
+Read `model`, `props` or `queries` from the argument, never from the
+view's closure, which is stale on the renders that don't write the child. A
+predicate that reads none of them fails the author, so `() => model.open`
+and `($) => model.notes[$.key] !== undefined` fail on their first call.
+The predicate runs once per live child per render, so look the key up in a
+record or a `Map`: scanning an array makes the render quadratic. All the
+children of one `h.scoped` share its predicate, so children with different
+lifetimes go in different scopes.
+
+There is no call that ends a child. To start one over, change its key and
+have the predicate reject the old one: with
+`({ key, model }) => key === model.draftId`, a new `draftId` ends the old
+draft and the next render writes a fresh one.
+
+A scoped child starts the first time it's placed in the tree while its
+predicate holds. One written into a slot that nothing places, such as a
+closed Collapsible's, or into the slot of a component still waiting for its
+Layer, hasn't started: it runs nothing.
+
+A scoped component mounted as the root needs no scope and behaves like any
+other. Saved state from the server or from a history entry holds the Model
+of a child that hasn't started, with everything below it. The state belongs
+to the author it arrived with, the child takes it when it starts, and it's
+dropped when the author ends or the predicate is false as the child is
+placed. On the client a child adopts the server's nodes only where the
+server drew it. Placed anywhere else, it keeps the state and builds new
+nodes.
+
+Known limits:
+
+- The guard also fails a predicate that returns from `key` alone, and it
+  misses one that reads `$.model` and also the view's `model`.
+- A kept child has stale props and `onEmit`.
+- Saved state for a child that hasn't started has no predicate to end it, so
+  a later child at that key takes it. That includes a row deleted before its
+  child ever started.
+- A child the server rendered runs nothing on the client until it's placed.
+  Its Subscriptions don't run and its predicate isn't asked.
+- What the user typed into a server-rendered field before hydration is lost
+  when the field's child is built again: moved out of a component that's
+  still waiting for its Layer, or moved while it waits for its own.
+- While a moved child's server-rendered copy sits in a waiting component, the
+  form shows twice, with the same ids and field names.
+- A child moved while it waits for its own Layer builds that Layer again.
+- After Back, saved state for a part of the page the view doesn't draw again
+  is gone once a push leaves the entry. Only a push made while a component
+  still waits to start carries what the entry saved below it.
 
 ### Naming
 
@@ -59,6 +148,7 @@ the current Model. `Set*`, `Update*` and bare imperatives such as `Save` or
 | Message from a child's event                  | The event's verb, then the parent's name for the child    | `ToggledNotify`, `SavedNote`, `PickedLink`                      |
 | Message from a child's failure                | `Failed`, then the parent's name for the child            | `FailedEditor`                                                  |
 | Message with more than one cause              | The fact the causes share                                 | `RequestedSave`                                                 |
+| Two events a payload could tell apart         | One message each, named for its own cause                 | `FocusedSearchInput`, `BlurredSearchInput`                      |
 | Event                                         | What the user did, past tense, with no cause              | `Toggled`, `Picked`, `Saved`                                    |
 | Command                                       | Imperative, for what its body does                        | `SaveNote`, `WaitBeforeDismissal`                               |
 | Mount                                         | Imperative, for what it does to the element               | `DrawChart`, `Measure`, `TrackPointer`                          |
@@ -68,8 +158,20 @@ A Command result takes `Succeeded` and `Failed` when the Command can fail,
 and `Completed` otherwise. Name a Command for what its body does, not for
 what `update` does with its result: a timer that waits before a toast is
 dismissed is `WaitBeforeDismissal`, not `DismissAfter`. `RequestedSave` in
-`NoteEditor` comes from the form, Ctrl+S, the autosave Subscription and a
-parent's send, so it names what all four report.
+`NoteEditor` comes from the form, Ctrl+S and the autosave Subscription, so
+it names what all three report.
+
+A message is one fact. The tag says which fact, and the payload holds what the
+event reported. Two events get two messages, even when their handlers differ
+only by a constant. Focus and blur are `FocusedSearchInput` and
+`BlurredSearchInput`, not `ChangedSearchInputFocus({ focused })` sent with
+`true` from `onFocus` and `false` from `onBlur`. A payload the view writes as
+a literal is choosing between two facts, which is the tag's job. Keep one
+message when one event reports a value, as in `UpdatedBody({ body })` or
+`ToggledActions({ open })`, or when the payload says which of many, as in
+`UpdatedField({ name, value })` and `PressedKey({ key })`. Events and `onEmit`
+follow the same rule, so a child's `Opened` and `Dismissed` become
+`OpenedSettings` and `DismissedSettings`.
 
 A definition's binding and its name string match:
 `const DrawChart = Mount.make("DrawChart", ...)`. A `Command.Service` keeps
@@ -81,17 +183,10 @@ A component with `shares` takes the `Provider` suffix, as in
 `h.shared.provider`. A reader of several owners names each one after its
 owner instead, such as `tooltip` and `theme`.
 
-Map each `Command.Service` to its messages once, beside the Message union,
-and call that function from `update`. A result is mapped where the Command
-is issued, so nothing else ties `SaveNote` to `SucceededSaveNote`:
-
-```ts
-const saveNote = (note: Note) =>
-  SaveNote.make({ note }).pipe(Command.match({
-    onSuccess: (note) => NoteEditorMessage.SucceededSaveNote({ note }),
-    onFailure: (error) => NoteEditorMessage.FailedSaveNote({ reason: error.reason })
-  }))
-```
+The Schemas a component defines are `<Component>Props`, `<Component>Model`,
+`<Component>Message` and `<Component>Events`, exported or not, and the type
+alias has the same name. Import them by name. Never import a component's
+module as a namespace.
 
 Never write a no-op message, such as `Noop` or a tag added only so a result
 has something to send. A Command with nothing to report ends in `Component.noop`,
@@ -100,14 +195,63 @@ its `CommandEnded` with `silent: true`. A mount that returns `Component.noop`
 likewise sends no message and logs `MountEnded` with `silent: true`. A
 component with no messages takes `message: Schema.Never`.
 
-Effect UI differs from Foldkit in three places:
+Effect UI differs from Foldkit in five places:
 
+- A child declares what it tells its parent in `events`. Foldkit calls these
+  OutMessages.
 - There is no `Got*`. A parent never wraps a child's messages: it maps the
   child's events in `onEmit`, so its message is the event's verb and its
   name for the child.
-- A message listed in `receives` has no prefix of its own. It is named like
-  any other message, for the fact it reports.
+- A message listed in an owner's `receives` has no prefix of its own. It is
+  named like any other message, for the fact it reports.
 - A Command or mount with nothing to report needs no `Completed*` message. `Component.noop` is enough.
+- A parent can't send a child a message. When porting, Foldkit's
+  `informOf*` InMessages become props, and `request*` InMessages have no
+  equivalent yet. See **Who owns the state**.
+
+### Command results
+
+A Command whose result one component consumes returns that component's
+message from its body. This is the usual form for an app's own Commands,
+which live in the file of the component that runs them. `Effect.match` turns
+a typed failure into a message as well:
+
+```ts
+export class SaveNote extends Command.Service<SaveNote>()(
+  "notes/SaveNote",
+  { args: { note: Note }, mode: "queue", invalidates: () => [NotesTag] },
+  Effect.gen(function*() {
+    const notes = yield* Notes
+    return ({ note }) =>
+      notes.save(note).pipe(
+        Effect.match({
+          onSuccess: (note) => NoteEditorMessage.SucceededSaveNote({ note }),
+          onFailure: (error) => NoteEditorMessage.FailedSaveNote({ reason: error.reason })
+        })
+      )
+  })
+) {}
+```
+
+A body that leaves a typed error gives an unmatched Command, which `$.run`
+rejects.
+
+`Command.map`, `Command.asNoop` and `Command.match` are for a Command that
+can't know its caller's messages: one from a library, such as
+`Router.replace`, or one that two components issue. Map or silence one that
+can't fail with `Command.map` or `Command.asNoop`:
+
+```ts
+Router.replace(AppRoute, route).pipe(Command.map((outcome) => AppMessage.CompletedReplace({ outcome })))
+Router.replace(AppRoute, route).pipe(Command.asNoop)
+```
+
+For one whose body can fail, `Command.match` maps both channels to messages.
+
+In a `Story` or `Scene`, a Command that returns a message resolves with the
+message: `s.resolve(SaveNote, NoteEditorMessage.SucceededSaveNote({ note }))`.
+A mapped Command takes its own value in `s.resolve`, or its typed error in
+`s.fail`, and the mapping runs in the test.
 
 ### Changing the Model
 
@@ -284,20 +428,19 @@ Collapsible(h, {
   key: "note",
   slots: {
     summary: h.h2(note.title),
-    body: NoteEditor(h, { ref: Editor.at(note.id), props: { note }, onEmit: { Saved: () => SavedNote } })
+    body: NoteEditor(h, { key: note.id, props: { note }, onEmit: { Saved: () => SavedNote } })
   }
 })
 ```
 
 The content is the parent's. Its handlers send the parent's messages, its
-children's events and failures map to the parent's messages, the parent's
-`$.send` and refs reach into it, and its services come from where the
-parent declared the child, not from the child's Layers. A parent re-render
+children's events and failures map to the parent's messages, and its
+services come from where the parent declared the child, not from the child's Layers. A parent re-render
 updates the content without running the child's view. The child decides
 whether and where each slot shows. A slot it doesn't place isn't mounted,
 and a slot it places again mounts fresh. A slot the parent leaves out shows
 nothing. A child in a slot gets a path under the slot, such as
-`/NotePage/Collapsible[note]/[body]/NoteEditor[Editor[n1]]`.
+`/NotePage/Collapsible[note]/[body]/NoteEditor[n1]`.
 
 Use slots when the child owns the frame and its state, and the parent owns
 what goes inside. Use a headless component when the parent draws all the
@@ -330,21 +473,53 @@ nested get a role in front, `outerDialog` and `innerDialog`. Parts built
 outside a closure follow the same rule:
 `const listbox = Story.parts(Listbox, { model, props })`.
 
+A headless component can build on another: `parts` returns
+`p.child(Listbox, { props, onEmit, parts: (listbox) => ({ ...listbox, tags }) })`,
+and the consumer's closure gets what that `parts` returns. The component owns
+the child: the child's events and failures go through its `update`. A child
+that fails shows nothing, the consumer's closure with it, and the failure
+goes no further than its `onFailure`. A `Scene` of the
+component stands in for the child with `childEmit`, and a `Scene` of a
+consumer refuses to, because it doesn't run the component's `update`.
+
 ### Shared state
 
 A headless component with `shares: (model, props) => value` owns shared
 state: every component in its `view` closure, at any depth, can read the
 value. A reader lists the owners it reads in
 `shared: { provider: TooltipProvider }` and reads `h.shared.provider` or
-`p.shared.provider` in `view` or `parts`. Any `update` below the owner can
-call `$.send(TooltipProvider, message)` with one of the messages the owner
-`receives`. Reads and sends put `Component.Shared<"TooltipProvider">`
-in a component's requirements, and the owner's closure removes it, so a
-reader with no owner of that name above it doesn't compile. Use distinct owner
-names: a different definition with the same name satisfies the type, but a
-required read still fails at mount. To name the requirement from the component,
-use `Component.Shared.Of<typeof TooltipProvider>`. The state is the owner's
-Model, so the log records every change. In a `Scene`,
+`p.shared.provider` in `view` or `parts`, and `$.shared.provider` in
+`update`. The long form of an entry, `{ owner: TooltipProvider, ... }`, adds
+three options. `optional: true` lets the reader work with no owner above it,
+where the value reads as `undefined`. `report` is what the reader tells an
+owner whose `shares` has `collects`. `onChange` is the reader's message when
+the shared value changes, for an `update` that must act on the change. To
+read the value, `update` has `$.shared`, so a reader doesn't copy it into its
+Model.
+
+`$.shared` follows the rule of `$.props`: it is the owner's value as the
+reader's `update` runs. A reader that sends to its owner still reads the old
+value in that `update`. An `onChange` message can be older than `$.shared`,
+when another reader changed the owner within the same round.
+
+A descendant's `update` can call `$.send(TooltipProvider, message)` without a
+`shared` entry. The owner lists the tags it takes in `shares.receives`, and
+can't tell which descendant sent a message. A read or a send
+puts `Component.Shared<"TooltipProvider">` in a component's requirements,
+unless the owner's entry is optional, and the owner's closure removes it. The
+component compiles on its own: with no owner of that name above it, the type
+error appears where the tree's mount effect is run, as a missing service.
+Use distinct owner names: a different definition with the same name
+satisfies the type, but a required read still fails at mount. To name the
+requirement from the component, use
+`Component.Shared.Of<typeof TooltipProvider>`.
+
+The state is the owner's Model, so the log records every change, and each
+reader's `Update` records what `$.shared` held, so `Story.fromLog` replays
+it. On the Wire the value is encoded through the `schema` of the owner's
+`shares`, `{ value, schema }`, or best effort without one. An owner
+restores from history like any other component, as **History restore**
+describes. In a `Scene`,
 `s.shared(TooltipProvider, value)` or
 `s.given(model, {}, [[TooltipProvider, value]])` gives readers a value, and
 each send to the owner is acknowledged with
@@ -362,15 +537,85 @@ re-render each time, so put normal components directly under an owner.
 Every reader re-renders when the shared value changes, so keep readers few
 and the shared value small.
 
+### Who owns the state
+
+As a convention, give each value one authoritative source:
+
+- If the caller sets the value or can refuse a change, pass a controlled prop.
+- If nobody outside decides the value, keep it in the component's Model.
+- Observing a value doesn't move ownership. Part values, shared reads,
+  reports and event payloads let other components observe it.
+- A prop read only in `init` is a seed, not a mirror: later changes to it
+  don't reach the Model. Name it `initial*`.
+
+| Direction            | A current value                | A request or something that happened |
+| -------------------- | ------------------------------ | ------------------------------------ |
+| Parent to child      | props                          | props                                |
+| Child to parent      | a headless child's part values | `events`                             |
+| Owner to descendants | `shares`                       | `shared.onChange`                    |
+| Descendant to owner  | `report` and `collects`        | `receives` and `$.send(Owner)`       |
+
+The columns differ in how long they last. A send happens once. If an
+optional owner is absent, the log records `SendDropped` and nothing is
+queued, and `init` can't send. Unmounting the sender doesn't withdraw a
+send, while a report goes away with the reader that made it. So if a fact
+should stop being true when the sender unmounts, or would need sending
+again when the receiver remounts, use the current-value column.
+
+A parent has only props, so a request to a child is a prop too, or a
+mount. "Open the import wizard" renders the wizard
+(`model.importing && Wizard(h, ...)`): each mount starts it over, and it
+emits `Finished` or `Cancelled` for the parent to stop rendering it. "The
+dialog must stay open" is an `open` prop, even if it rarely changes.
+
+Not supported yet: a parent asking a child to act on state only the child
+holds, such as scrolling to a row or saving a private draft. Lifting that
+state into the parent works for a draft, not for scroll position or
+selection inside a widget. A counter prop that the child watches replays
+when the child remounts, so don't use one. The child's own controls,
+Subscriptions or parts have to trigger the work.
+
+A component with a controlled value reads it from props and emits what the
+user asked for, instead of updating a second copy. Its Model holds only
+interaction state the caller would never store, such as a typeahead buffer.
+A disabled or read-only control reports nothing: guard its `update`, or omit
+the DOM event handler in a view function. `@effect/ui-kit` goes further for
+its own components and takes no seed props.
+
+Choose a popup by who decides when it closes:
+
+- With an `open` prop, use `.popover("manual", open)`. Report Escape and an
+  outside press as dismissal requests, which the caller can refuse.
+- Use `.popover("auto", open)` with `onToggle` only if the component owns
+  `open` in its Model and nobody can refuse a browser dismissal.
+- For a controlled modal, use a dialog with `.modal(open)`. `onCancel` is a
+  dismissal request. `onClose` reports a close, the caller's own included,
+  so treat it as a dismissal only while `$.props.open` is still true: a
+  browser can force a modal closed, and the host reopens it while the prop
+  stays true. TestHost doesn't model the forced close.
+
+Nothing is dispatched when a prop changes: the log records `PropsChanged`,
+and the next `update` reads the new value from `$.props`. To act on the
+change itself, re-key the child if the new value should start a fresh
+instance. If work should restart without resetting the Model, key a
+Subscription on the prop with `Subscription.make(name, deps, build)`. If the
+work needs a host node, pass the prop as a mount argument and observe
+argument changes in the mount.
+
+The **Who owns the state** example has a controlled modal, a workflow started
+by a send, a provider that owns visibility, a seed, and three patterns that
+compile but shouldn't be written.
+
 ### Mounts
 
 Work that needs an element's host node, such as measuring it or hosting a
 chart, map or editor, is a mount. Define it once at module level, like a
 Command: `Mount.make(name, { args }, (node, args, changes) => effect)` for
 work that ends with one result, or `Mount.makeStream` for work that sends a
-result per event for as long as the element lives. Annotate `node` with the
-node the body needs. A view issues it with its args and maps the result to a
-message: `h.canvas.onMount(DrawChart({ points }).pipe(Mount.map(toMessage)))`.
+result per stream emission, such as a DOM event, for as long as the element
+lives. Annotate `node` with the node the body needs. A view issues it with
+its args and maps the result to a message:
+`h.canvas.onMount(DrawChart({ points }).pipe(Mount.map(toMessage)))`.
 If the body has nothing to report, end it with `Effect.as(Component.noop)`. An element takes one mount. Args with no real Schema, such as a
 callback, need `Schema.declare`. Mounts never run on the server or in
 `TestHost`. A `Scene` tracks the mounts in its view:
@@ -383,19 +628,20 @@ and the end of the test.
 
 Keys and presses that no element hears, such as a game's arrow keys or an
 Escape that closes a popup opened by hovering, are entries in
-`subscriptions`: `Html.onDocument("keydown", handler, options)`, and
-`Html.onWindow("focus" | "blur", handler)` for the window's focus. The
-handler and `preventDefault` mean what they mean on an element, and the
-payload adds `defaultPrevented`, so a listener can skip a key an element
-already took. `capture: true` hears a press before any element can stop it.
+`subscriptions`: `DomSubscription.onDocument("keydown", handler, options)`,
+and `DomSubscription.onWindow("focus" | "blur", handler)` for the window's
+focus. The handler and `preventDefault` mean what they mean on an element,
+and the payload adds `defaultPrevented`, so a listener can skip a key an
+element already took. `capture: true` hears a press before any element can stop it.
 Gate an entry on the Model to listen only while it's needed. The listener
 always runs the handler from the latest `subscriptions` result, so it may
 read the Model. An instance has one listener per target, event and phase.
 `BrowserHost.layer` provides the source; elsewhere nothing fires. A
 `Story` delivers one with `s.subscription(key, message)`, an `HtmlScene`
 fires one with `s.fireDocument("keydown", { key: "Escape" })`, and a
-`TestHost` test adds `TestGlobalEvents.layer` and calls
-`TestGlobalEvents.fire("document", "keydown", { key: "Escape" })`.
+`Play` adds `TestGlobalEvents.layer` and calls
+`TestGlobalEvents.fire("document", "keydown", { key: "Escape" })`, which
+its next step settles.
 
 ### Forms
 
@@ -435,6 +681,60 @@ the query loads, and `value` is `None`, so a submit waits for the answer.
 A query keeps its result per args, so an answer about an earlier value is
 never shown. Forms set `novalidate`, so the browser's own checks stay out of
 the way.
+
+A form's values live in the Model, so history restore writes them into
+`history.state` and the server ships them in the page state. Declare a secret
+field such as a password with `value: Schema.Redacted(Schema.String)`. A
+component whose state holds a `Schema.Redacted` anywhere is left out of
+both, so none of the form's fields restore or hydrate: keep the form a leaf
+component. When only history is the concern, keep the field a plain string
+and clear it with `restore`, as **History restore** shows. Carry the secret
+as `Schema.Redacted(Schema.String)` in messages and Command args too, so the
+message log redacts it. The default `isEmpty` unwraps a `Redacted`, and a
+rule or the view reads it with `Redacted.value`.
+
+### History restore
+
+Before the Router leaves a history entry, it saves the state of every mounted
+instance: its Model and query results. On Back and forward, and on a reload of
+an entry a push left, an instance mounted for that entry starts from its saved
+state, and `init` runs again only for its Commands. An owner of shared state
+restores like any other component. One whose `shares` has `collects` also
+saves the message its readers' reports last sent, and compares their reports
+with it after Back.
+
+The `restore` option of `Component.define` changes what is saved:
+
+```ts
+const LoginPage = Component.define({
+  name: "LoginPage",
+  model: Schema.Struct({ email: Schema.String, password: Schema.String, submitting: Schema.Boolean }),
+  message: LoginPageMessage,
+  restore: (model) => ({ ...model, password: "", submitting: false })
+})
+```
+
+A function gets the Model and props and returns the Model to save. It runs
+when the Router saves, not on Back, so a field it clears is never written:
+here the password never reaches `history.state`, and no submit is left
+running. `restore: false` saves nothing, so the instance starts from `init`.
+The components below it are saved as usual. Hydration doesn't read
+`restore`: the server still sends the whole Model, and an instance the server
+rendered starts from it, not from the saved one.
+
+Leave a field out when it depends on a Command an `update` started, such as
+a timer or a request, or on something only the DOM knew, such as hover, focus
+or a measurement. Restore runs `init`'s Commands and no others, so after Back
+`submitting: true` would wait for a request that isn't running. A secret goes
+too. Use `Schema.Redacted` when a value must never be serialised, the
+server's page state included, and `restore` when only history is the
+concern.
+
+In `@effect/ui-kit`, `Tooltip`, `TooltipProvider`, `ToastProvider`,
+`Dialog`, `Drawer`, `DrawerProvider` and `Tabs` set `restore: false`, and
+`Field` saves `touched` without `focused`. Their props are the consumer's, so
+a consumer's `open` field or active tab still restores. A page that wants its dialog closed
+after Back clears that field in its own `restore`.
 
 ### Organizing an app
 

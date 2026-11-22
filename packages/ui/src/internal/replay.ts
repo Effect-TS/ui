@@ -12,6 +12,7 @@ import * as MessageLog from "../MessageLog.ts"
 import type { Divergence, Replay } from "../testing/Story.ts"
 import type * as View from "../View.ts"
 import * as componentQueries from "./queries.ts"
+import * as sharedReads from "./shared.ts"
 import { serverFailure, type SlotResult } from "./slotStatus.ts"
 import * as engine from "./story.ts"
 
@@ -90,11 +91,18 @@ const causeOf = (entry: Extract<Layer, { _tag: "LayerFailed" }>) => {
   ))
 }
 
-const placeholders = ["~unserialisable", "~redacted", "~truncated"]
+const placeholders: Record<string, (value: unknown) => boolean> = {
+  "~unserialisable": (value) => typeof value === "string",
+  "~redacted": (value) => value === true,
+  "~truncated": (value) => typeof value === "number"
+}
 const findPlaceholder = (value: unknown): string | undefined => {
   if (typeof value !== "object" || value === null) return undefined
-  for (const key of Object.keys(value)) {
-    if (placeholders.includes(key)) return key
+  const keys = Object.keys(value)
+  if (keys.length === 1 && Object.hasOwn(placeholders, keys[0]) && placeholders[keys[0]]((value as any)[keys[0]])) {
+    return keys[0]
+  }
+  for (const key of keys) {
     const inner = findPlaceholder((value as any)[key])
     if (inner !== undefined) return inner
   }
@@ -107,9 +115,9 @@ const findPlaceholder = (value: unknown): string | undefined => {
  *
  * @internal
  */
-export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends View.Elements, Rcv>(
+export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends View.Elements>(
   label: string,
-  component: Component.Component<Name, Props, Model, Msg, Events, R, V, any, Rcv>,
+  component: Component.Component<Name, Props, Model, Msg, Events, R, V, any>,
   entries: ReadonlyArray<MessageLog.Entry | MessageLog.Wire>,
   options?: { readonly path?: string | undefined }
 ): Replay<Model, Msg, Events, any, any> => {
@@ -175,10 +183,31 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
       )
     }
   }
+  const reads = sharedReads.readsOf(component.definition)
+  const sharedOf = (wire: Extract<MessageLog.Wire, { _tag: "Update" }>): Component.SharedRecord | undefined => {
+    const encoded = wire.shared as { readonly [name: string]: unknown } | undefined
+    if (encoded === undefined) return undefined
+    const placeholder = findPlaceholder(encoded)
+    if (placeholder !== undefined) {
+      throw new Error(
+        `${label}: entry #${wire.seq} (${path}) has a shared value that can't be decoded, because it was logged as a ${placeholder} placeholder`
+      )
+    }
+    const out: { [name: string]: unknown } = {}
+    for (const read of reads) {
+      const value = Object.hasOwn(encoded, read.name) ? encoded[read.name] : undefined
+      const schema = read.owner.definition.sharesSchema
+      out[read.name] = value === undefined || schema === undefined
+        ? value
+        : decodeWith(wire, `shared "${read.name}"`, schema, value)
+    }
+    return out
+  }
   const read = (entry: typeof first) => {
     if (typeof entry.component !== "string") {
       return {
         results: (entry as MessageLog.Update | MessageLog.Mounted).queries,
+        shared: entry._tag === "Update" ? (entry as MessageLog.Update).shared : undefined,
         props: entry.props as Props,
         model: entry.model as Model,
         events: entry.events as ReadonlyArray<Events>,
@@ -193,6 +222,7 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
       results: wire.queries !== undefined && bound !== undefined
         ? decodeWith(entry, "queries", bound.logSchema, wire.queries) as Component.Results
         : undefined,
+      shared: wire._tag === "Update" ? sharedOf(wire) : undefined,
       props: decode(entry, "props", wire.props) as Props,
       model: decode(entry, "model", wire.model) as Model,
       events: wire.events.map((emitted) => decode(entry, "events", emitted)) as ReadonlyArray<Events>,
@@ -307,7 +337,13 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
     state.props = recorded.props
     state.boundary = entry.boundary
     if (recorded.results !== undefined) state.results = recorded.results
-    const next = component.update(state.model, recorded.message as Msg, recorded.props as Props, state.results)
+    const next = component.update(
+      state.model,
+      recorded.message as Msg,
+      recorded.props as Props,
+      state.results,
+      recorded.shared
+    )
     replayed++
     const recomputed = {
       model: next.model,

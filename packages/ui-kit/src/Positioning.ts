@@ -2,9 +2,9 @@
  * Places a popup against an anchor element, keeps it inside a boundary, and
  * reports where it ended up.
  *
- * The kit's own popups, such as `Tooltip`, are placed with this module. Use
- * it for a popup the kit doesn't have. The options have the names and
- * defaults of Base UI's positioner props.
+ * The kit's own popups, such as `Tooltip` and `Select`, are placed with this
+ * module. Use it for a popup the kit doesn't have. The options have the
+ * same names and defaults as the positioner props of those popups.
  *
  * It has two layers:
  *
@@ -43,13 +43,19 @@
  * - with `offsetAsPadding`, the side offset as padding on the side that
  *   faces the anchor
  *
+ * With `leaveCoordinates`, it writes everything but `left` and `top`, for
+ * a component that places the positioner itself and still wants the
+ * variables and the `Placement`.
+ *
  * They survive view-rendered changes to the positioner's `style` attribute,
  * and stay after the mount ends, so a closing popup keeps its place through
  * an exit transition.
  *
  * While it runs, the mount places the popup again when the window resizes,
  * when the positioner changes size, and, unless `disableAnchorTracking` is
- * set, when anything scrolls or the anchor changes size or moves.
+ * set, when anything outside the positioner scrolls or the anchor changes size
+ * or moves. Scrolling inside the positioner, such as a long list, doesn't
+ * move it.
  *
  * **Gotchas**
  *
@@ -63,9 +69,13 @@
  *   `anchorSelector`, so build the selector from `h.id` to keep two
  *   instances apart. While nothing matches, the mount reports
  *   `anchorHidden`.
+ * - `anchorRect` places the popup against a rectangle in the viewport, such
+ *   as the point a context menu opened at, instead of an element. Nothing
+ *   moves it, so use `"fixed"` as the `positionMethod`.
  * - An arrow needs an id, passed as `arrowId`, and a size of its own.
- * - There are no virtual anchors, no placing against one line of an inline
- *   anchor and no function-valued offsets.
+ * - `inline` places the popup against one line of a link that wraps,
+ *   instead of the box around all its lines.
+ * - There are no function-valued offsets.
  *
  * **Example** (A popup below its anchor, and above it when it doesn't fit)
  *
@@ -106,6 +116,8 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
+import { idSelector } from "./internal/attributes.ts"
+import { inlineEdges, lineAt, type Lines, linesOf } from "./internal/inlineRect.ts"
 
 /**
  * The side of the anchor a popup shows on. `"inline-start"` and
@@ -199,6 +211,30 @@ export const Rect = Schema.Struct({ x: Schema.Number, y: Schema.Number, width: S
  * @since 0.1.0
  */
 export type Rect = typeof Rect.Type
+
+/**
+ * Where the pointer rested on an inline anchor: the point, in viewport
+ * coordinates, and `line`, the index of the line under it among the
+ * anchor's lines from the top, or `null` when it was on none.
+ *
+ * @stability experimental
+ * @category schemas
+ * @since 0.1.0
+ */
+export const InlineHit = Schema.Struct({
+  x: Schema.Number,
+  y: Schema.Number,
+  line: Schema.NullOr(Schema.Number)
+})
+
+/**
+ * Where the pointer rested on an inline anchor.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type InlineHit = typeof InlineHit.Type
 
 /**
  * The area a popup keeps inside: `"clipping-ancestors"`, which is the
@@ -297,8 +333,8 @@ export type PositionMethod = typeof PositionMethod.Type
  * - `disableAnchorTracking`: the popup is placed only when it opens, when
  *   the window resizes and when its own size changes, not when the page
  *   scrolls or the anchor moves or changes size.
- * - `anchor`: the id of an element to place the popup against instead of
- *   the component's own anchor.
+ * - `anchor`: the id of an element, or a `Rect` in the viewport, to place
+ *   the popup against instead of the component's own anchor.
  *
  * @stability experimental
  * @category schemas
@@ -316,7 +352,7 @@ export const PositionerFields = {
   arrowPadding: Schema.optional(Schema.Number),
   positionMethod: Schema.optional(PositionMethod),
   disableAnchorTracking: Schema.optional(Schema.Boolean),
-  anchor: Schema.optional(Schema.String)
+  anchor: Schema.optional(Schema.Union([Schema.String, Rect]))
 }
 
 /**
@@ -386,7 +422,8 @@ export const PlaceOptions = Schema.Struct({
     left: Schema.Number
   }),
   sticky: Schema.Boolean,
-  arrowPadding: Schema.Number
+  arrowPadding: Schema.Number,
+  shiftCrossAxis: Schema.Boolean
 })
 
 /**
@@ -405,8 +442,11 @@ type Sides = PlaceOptions["collisionPadding"]
  * **Details**
  *
  * `defaults` holds what differs between components: the `side` a popup shows
- * on when its props name none, and its `collisionAvoidance`, which is
- * `popupCollisionAvoidance` when left out.
+ * on when its props name none, its `collisionAvoidance`, which is
+ * `popupCollisionAvoidance` when left out, and `shiftCrossAxis`, false when
+ * left out. With `shiftCrossAxis`, unless `collisionAvoidance.side` is
+ * `"flip"`, the popup keeps its side and slides toward the anchor to stay
+ * inside the boundary, as with `sticky`, so it can cover the anchor.
  *
  * @stability experimental
  * @category constructors
@@ -414,9 +454,14 @@ type Sides = PlaceOptions["collisionPadding"]
  */
 export const resolveOptions = (
   options: PositionerOptions,
-  defaults: { readonly side: Side; readonly collisionAvoidance?: CollisionAvoidance | undefined }
+  defaults: {
+    readonly side: Side
+    readonly collisionAvoidance?: CollisionAvoidance | undefined
+    readonly shiftCrossAxis?: boolean | undefined
+  }
 ): PlaceOptions => {
   const avoidance = options.collisionAvoidance ?? defaults.collisionAvoidance ?? popupCollisionAvoidance
+  const shiftCrossAxis = defaults.shiftCrossAxis === true && avoidance.side !== "flip"
   const padding = options.collisionPadding ?? 5
   return {
     side: options.side ?? defaults.side,
@@ -431,8 +476,9 @@ export const resolveOptions = (
     collisionPadding: typeof padding === "number"
       ? { top: padding, right: padding, bottom: padding, left: padding }
       : { top: padding.top ?? 0, right: padding.right ?? 0, bottom: padding.bottom ?? 0, left: padding.left ?? 0 },
-    sticky: options.sticky ?? false,
-    arrowPadding: options.arrowPadding ?? 5
+    sticky: options.sticky === true || shiftCrossAxis,
+    arrowPadding: options.arrowPadding ?? 5,
+    shiftCrossAxis
   }
 }
 
@@ -475,8 +521,8 @@ export interface PlaceInput {
  *   options after a flip. A logical side stays logical.
  * - `availableWidth`, `availableHeight`: the space between the anchor and
  *   the boundary's edge on that side.
- * - `anchorHidden`: the anchor is outside `anchorClip`, or has no size and
- *   no position.
+ * - `anchorHidden`: the anchor is outside `anchorClip`. An anchor with no
+ *   width or height is outside only past the clip's edge, not on it.
  * - `arrow`: `null` without an arrow. Otherwise its offset from the popup's
  *   left edge as `x` or from its top edge as `y`, the other being `null`,
  *   and `uncentered` when it can't point at the anchor's middle.
@@ -667,7 +713,7 @@ export const place = (input: PlaceInput): PlaceResult => {
     bottom: biased("bottom"),
     left: biased("left")
   }
-  const flipMainAxis = avoidSide === "flip"
+  const flipMainAxis = avoidSide === "flip" && !options.shiftCrossAxis
   const flipCrossAxis = avoidAlign === "flip"
   const initialSideAxis = sideAxisOf(initialPlacement)
   const placements: Array<FloatingPlacement> = [
@@ -861,9 +907,9 @@ export const place = (input: PlaceInput): PlaceResult => {
   }
 
   const anchorOverflow = overflowOf(anchor, anchorClip, { top: 0, right: 0, bottom: 0, left: 0 })
-  const anchorEmpty = anchor.width === 0 && anchor.height === 0 && anchor.x === 0 && anchor.y === 0
-  const anchorClipped = anchorOverflow.top - anchor.height >= 0 || anchorOverflow.right - anchor.width >= 0 ||
-    anchorOverflow.bottom - anchor.height >= 0 || anchorOverflow.left - anchor.width >= 0
+  const outside = (overflow: number, length: number) => length === 0 ? overflow > 0 : overflow - length >= 0
+  const anchorClipped = outside(anchorOverflow.top, anchor.height) || outside(anchorOverflow.right, anchor.width) ||
+    outside(anchorOverflow.bottom, anchor.height) || outside(anchorOverflow.left, anchor.width)
 
   return {
     x,
@@ -872,7 +918,7 @@ export const place = (input: PlaceInput): PlaceResult => {
     align: alignment ?? "center",
     availableWidth,
     availableHeight,
-    anchorHidden: anchorClipped || anchorEmpty,
+    anchorHidden: anchorClipped,
     arrow: arrow === null || arrowData === undefined ? null : {
       x: arrowData.x ?? null,
       y: arrowData.y ?? null,
@@ -926,11 +972,24 @@ export type Placement = typeof Placement.Type
  * - `collisionBoundary`: the area the popup keeps inside.
  * - `disableAnchorTracking`: don't follow scrolling or the anchor.
  * - `anchorSelector`: a CSS selector for the anchor.
+ * - `anchorRect`: a rectangle in the viewport to place against instead of
+ *   the element `anchorSelector` matches, or `null`.
  * - `arrowId`: the id of the arrow, or `null` without one.
  * - `offsetAsPadding`: write `sideOffset` as padding on the positioner's
  *   side facing the anchor, and move the positioner up against the anchor.
  *   The gap is then part of the positioner, so a pointer can cross it
  *   without leaving the popup.
+ * - `leaveCoordinates`: don't write `left` and `top`, and leave whatever
+ *   is there. False when left out.
+ * - `inline`: the anchor is inline text, such as a link, that can wrap over
+ *   several lines. The popup is placed against one line instead of the box
+ *   around all of them: the line `inlineHit` names, or else the line under
+ *   its point. Without a hit for the anchor, or when no line is under the
+ *   point, it is placed against the first line for `"top"`, the last line
+ *   for `"bottom"`, and the lines that reach furthest toward the side for
+ *   `"left"` and `"right"`. An anchor on one line is measured as a whole.
+ *   False when left out.
+ * - `inlineHit`: where the pointer rested on the anchor, for `inline`.
  *
  * @stability experimental
  * @category schemas
@@ -942,8 +1001,12 @@ export const TrackPositionArgs = Schema.Struct({
   collisionBoundary: CollisionBoundary,
   disableAnchorTracking: Schema.Boolean,
   anchorSelector: Schema.String,
+  anchorRect: Schema.optional(Schema.NullOr(Rect)),
   arrowId: Schema.NullOr(Schema.String),
-  offsetAsPadding: Schema.Boolean
+  offsetAsPadding: Schema.Boolean,
+  leaveCoordinates: Schema.optional(Schema.Boolean),
+  inline: Schema.optional(Schema.Boolean),
+  inlineHit: Schema.optional(Schema.NullOr(InlineHit))
 })
 
 /**
@@ -958,8 +1021,6 @@ export type TrackPositionArgs = typeof TrackPositionArgs.Type
 const arrowX = "--ui-kit-arrow-x"
 const arrowY = "--ui-kit-arrow-y"
 
-const idSelector = (id: string): string => `[id="${id.replace(/["\\]/g, "\\$&")}"]`
-
 /**
  * Makes the args of `TrackPosition` from a popup's positioning props.
  *
@@ -972,8 +1033,16 @@ const idSelector = (id: string): string => `[id="${id.replace(/["\\]/g, "\\$&")}
  *   out.
  * - `anchorSelector`: a CSS selector for its anchor, which the `anchor` prop
  *   overrides.
+ * - `anchorRect`: a rectangle in the viewport to place against instead of
+ *   that anchor, which the `anchor` prop also overrides.
+ * - `shiftCrossAxis`: see `resolveOptions`. False when left out.
  * - `arrowId`: the id of its arrow, when it draws one.
  * - `offsetAsPadding`: see `TrackPositionArgs`. False when left out.
+ * - `leaveCoordinates`: see `TrackPositionArgs`. False when left out.
+ * - `inline` and `inlineHit`: see `TrackPositionArgs`. False and `null`
+ *   when left out. `inlineHit` is dropped while `props.anchor` gives
+ *   another anchor, an element or a rectangle, since the pointer rested on
+ *   the popup's own.
  *
  * The result is plain data, so a view can also read the defaults from it:
  * `args.options.side` is the side to render before the mount first reports.
@@ -988,17 +1057,30 @@ export const trackArgs = (
     readonly side: Side
     readonly collisionAvoidance?: CollisionAvoidance | undefined
     readonly anchorSelector: string
+    readonly anchorRect?: Rect | null | undefined
+    readonly shiftCrossAxis?: boolean | undefined
     readonly arrowId?: string | null | undefined
     readonly offsetAsPadding?: boolean | undefined
+    readonly leaveCoordinates?: boolean | undefined
+    readonly inline?: boolean | undefined
+    readonly inlineHit?: InlineHit | null | undefined
   }
 ): TrackPositionArgs => ({
   options: resolveOptions(props, popup),
   positionMethod: props.positionMethod ?? "absolute",
   collisionBoundary: props.collisionBoundary ?? "clipping-ancestors",
   disableAnchorTracking: props.disableAnchorTracking === true,
-  anchorSelector: props.anchor === undefined ? popup.anchorSelector : idSelector(props.anchor),
+  anchorSelector: typeof props.anchor === "string" ? idSelector(props.anchor) : popup.anchorSelector,
+  anchorRect: typeof props.anchor === "object"
+    ? props.anchor
+    : props.anchor === undefined
+    ? popup.anchorRect ?? null
+    : null,
   arrowId: popup.arrowId ?? null,
-  offsetAsPadding: popup.offsetAsPadding === true
+  offsetAsPadding: popup.offsetAsPadding === true,
+  leaveCoordinates: popup.leaveCoordinates === true,
+  inline: popup.inline === true,
+  inlineHit: props.anchor === undefined ? popup.inlineHit ?? null : null
 })
 
 /**
@@ -1134,7 +1216,7 @@ const clipOf = (element: Element, viewport: Rect): Rect => {
   return clip
 }
 
-const sameRect = (a: DOMRect, b: DOMRect): boolean =>
+const sameRect = (a: Rect, b: Rect): boolean =>
   a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
 
 const observeMove = (element: Element, onMove: () => void): () => void => {
@@ -1247,21 +1329,47 @@ export const trackPosition = (
       height: Math.max(0, node.offsetHeight - bridged("top") - bridged("bottom"))
     })
 
+    const inlineLines = (anchor: Element): Lines | null => {
+      if (current.inline !== true) return null
+      const lines = linesOf(anchor.getClientRects())
+      return lines.lines.length < 2 ? null : lines
+    }
+
+    const lineRect = (lines: Lines, side: Physical): Rect => {
+      const hit = current.inlineHit ?? null
+      const line = hit === null
+        ? null
+        : hit.line !== null && hit.line < lines.lines.length
+        ? hit.line
+        : lineAt(lines.lines, hit)
+      const { bottom, left, right, top } = inlineEdges(lines, side, line, hit !== null)
+      return { x: left, y: top, width: right - left, height: bottom - top }
+    }
+
     const pass = (popup: Size): void => {
-      const anchor = document.querySelector(current.anchorSelector)
+      const virtual = current.anchorRect ?? null
+      const anchor = virtual === null ? document.querySelector(current.anchorSelector) : null
       const arrow = current.arrowId === null ? null : document.getElementById(current.arrowId)
       const viewport = viewportOf()
-      const anchorRect = anchor === null ? zero : clientRect(anchor)
       const rtl = view.getComputedStyle(node).direction === "rtl"
-      const placed = place({
-        anchor: anchorRect,
+      const lines = anchor === null ? null : inlineLines(anchor)
+      const input = {
         popup,
         arrow: arrow === null ? null : { width: arrow.offsetWidth, height: arrow.offsetHeight },
         boundary: boundaryOf(viewport),
         anchorClip: anchor === null ? viewport : clipOf(anchor, viewport),
         rtl,
         options: current.options
-      })
+      }
+      const requested = physicalSide(current.options.side, rtl)
+      let anchorRect = virtual ??
+        (anchor === null ? zero : lines === null ? clientRect(anchor) : lineRect(lines, requested))
+      let placed = place({ ...input, anchor: anchorRect })
+      const flipped = physicalSide(placed.side, rtl)
+      if (lines !== null && flipped !== requested) {
+        anchorRect = lineRect(lines, flipped)
+        placed = place({ ...input, anchor: anchorRect })
+      }
       const side = physicalSide(placed.side, rtl)
       const bridge = current.offsetAsPadding ? Math.max(0, current.options.sideOffset) : 0
       const scrolled = current.positionMethod === "absolute"
@@ -1285,13 +1393,15 @@ export const trackPosition = (
       }
       owned = next
       written.set(node, owned)
+      const leave = current.leaveCoordinates === true
       for (const [name, value] of owned) {
+        if (leave && (name === "left" || name === "top")) continue
         if (node.style.getPropertyValue(name) !== value) node.style.setProperty(name, value)
       }
       const report: Placement = {
         side: placed.side,
         align: placed.align,
-        anchorHidden: placed.anchorHidden,
+        anchorHidden: placed.anchorHidden || (virtual === null && sameRect(anchorRect, zero)),
         arrowUncentered: placed.arrow?.uncentered ?? false
       }
       if (reported === null || !sameReport(reported, report)) {
@@ -1307,11 +1417,17 @@ export const trackPosition = (
       if (before.width !== after.width || before.height !== after.height) pass(after)
     }
 
+    const onScroll = (event: Event): void => {
+      if (!(event.target instanceof Node && node.contains(event.target))) update()
+    }
+
     const observe = (): () => void => {
-      const anchor = current.disableAnchorTracking ? null : document.querySelector(current.anchorSelector)
+      const anchor = current.disableAnchorTracking || current.anchorRect != null
+        ? null
+        : document.querySelector(current.anchorSelector)
       view.addEventListener("resize", update)
-      if (!current.disableAnchorTracking) {
-        document.addEventListener("scroll", update, { capture: true, passive: true })
+      if (!current.disableAnchorTracking && current.anchorRect == null) {
+        document.addEventListener("scroll", onScroll, { capture: true, passive: true })
       }
       let frame = -1
       const watch = () => sizes?.observe(node, { box: "border-box" })
@@ -1331,7 +1447,7 @@ export const trackPosition = (
       const moves = anchor === null ? () => {} : observeMove(anchor, update)
       return () => {
         view.removeEventListener("resize", update)
-        document.removeEventListener("scroll", update, { capture: true })
+        document.removeEventListener("scroll", onScroll, { capture: true })
         view.cancelAnimationFrame(frame)
         sizes?.disconnect()
         moves()
@@ -1382,13 +1498,14 @@ export const trackPosition = (
  * import { Positioning } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
- * const Message = UiSchema.TaggedEnum({ ChangedPlacement: { placement: Positioning.Placement } })
+ * const HintMessage = UiSchema.TaggedEnum({ ChangedPlacement: { placement: Positioning.Placement } })
  *
  * const Hint = Component.define({
  *   name: "Hint",
+ *   scoped: false,
  *   props: Schema.Struct({ open: Schema.Boolean, ...Positioning.PositionerFields }),
  *   model: Schema.Struct({ placement: Schema.NullOr(Positioning.Placement) }),
- *   message: Message,
+ *   message: HintMessage,
  *   elements: Html
  * }).make({
  *   init: () => ({ placement: null }),
@@ -1400,14 +1517,16 @@ export const trackPosition = (
  *     const args = Positioning.trackArgs(h.props, { side: "bottom", anchorSelector: `[id="${anchorId}"]` })
  *     const positioner = h.div
  *       .popover("manual", h.props.open)
- *       .attr("style", Positioning.positionerStyle(args.positionMethod))
- *       .attr("data-side", model.placement?.side ?? args.options.side)
+ *       .attrs({
+ *         style: Positioning.positionerStyle(args.positionMethod),
+ *         "data-side": model.placement?.side ?? args.options.side
+ *       })
  *       .children("Saved")
  *     return h.span(
  *       h.button.id(anchorId).children("Save"),
  *       h.props.open
  *         ? positioner.onMount(
- *           Positioning.TrackPosition(args).pipe(Mount.map((placement) => Message.ChangedPlacement({ placement })))
+ *           Positioning.TrackPosition(args).pipe(Mount.map((placement) => HintMessage.ChangedPlacement({ placement })))
  *         )
  *         : positioner
  *     )

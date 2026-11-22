@@ -2,7 +2,7 @@ import * as Html from "@effect/ui/html/Html"
 import * as View from "@effect/ui/View"
 import { visuallyHidden } from "./attributes.ts"
 
-const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max)
+export const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max)
 
 // Where a number sits in a range: the number clamped to the range, and its
 // share of the range as a percentage from 0 to 100. `NaN` counts as `min`,
@@ -40,5 +40,5 @@ export const fillValue = <Msg, R, Handlers, HostNode, Tag extends string>(
 // its own after the label, it reads the value alone. The root appends it
 // after all its children.
 export const nvdaLabel = View.toNode(
-  new Html.Element<never>("span").attr("role", "presentation").attr("style", visuallyHidden).children("x")
+  new Html.Element<never>("span").attrs({ role: "presentation", style: visuallyHidden }).children("x")
 )

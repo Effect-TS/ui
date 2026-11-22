@@ -140,6 +140,7 @@ const Message = UiSchema.TaggedEnum({ Closed: {}, Opened: {}, Restyled: {} })
 
 const Page = Component.define({
   name: "Page",
+  scoped: false,
   props: Schema.Struct({
     sideOffset: Schema.Number,
     disableAnchorTracking: Schema.Boolean,
@@ -236,7 +237,7 @@ describe("Tooltip in a document", { concurrent: false }, () => {
       rects.set("clip", { x: 100, y: 250, width: 200, height: 200 })
       layouts.set("clip", { width: 100, height: 100 })
       const hidden = Effect.gen(function*() {
-        byId("popup").dispatchEvent(new Event("scroll"))
+        document.dispatchEvent(new Event("scroll"))
         yield* tick
         return byId("positioner").getAttribute("data-anchor-hidden") === ""
       })
@@ -322,7 +323,7 @@ describe("Tooltip in a document", { concurrent: false }, () => {
     Effect.gen(function*() {
       const root = yield* mountPage()
       rects.set("trigger", { x: 400, y: 300, width: 100, height: 40 })
-      byId("popup").dispatchEvent(new Event("scroll"))
+      document.dispatchEvent(new Event("scroll"))
       assert.strictEqual(style("top"), "340px")
       assert.strictEqual(style("padding-top"), "8px")
       assert.strictEqual(style("padding-bottom"), "")
@@ -332,7 +333,7 @@ describe("Tooltip in a document", { concurrent: false }, () => {
       root.send(Message.Closed())
       yield* tick
       rects.set("trigger", { x: 0, y: 0, width: 100, height: 40 })
-      byId("popup").dispatchEvent(new Event("scroll"))
+      document.dispatchEvent(new Event("scroll"))
       assert.strictEqual(style("top"), "340px")
 
       rects.set("trigger", { x: 400, y: 700, width: 100, height: 40 })

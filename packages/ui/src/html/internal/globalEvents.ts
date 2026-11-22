@@ -1,6 +1,7 @@
 /**
- * What `Html.onDocument` and `Html.onWindow` put on their Subscription, read
- * back by the runtime's attached listener and by the test tools.
+ * What `DomSubscription.onDocument` and `DomSubscription.onWindow` put on
+ * their Subscription, read back by the runtime's attached listener and by the
+ * test tools.
  *
  * @internal
  */
@@ -11,7 +12,7 @@ import type * as View from "../../View.ts"
  *
  * @internal
  */
-export const listener: unique symbol = Symbol.for("@effect/ui/html/Html/listener") as any
+export const listener: unique symbol = Symbol.for("@effect/ui/html/DomSubscription/listener") as any
 
 /** @internal */
 export interface Listener {
