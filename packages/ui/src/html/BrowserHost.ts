@@ -38,9 +38,9 @@
  *
  * Showing a modal dialog or a popover doesn't scroll the page. A browser
  * focuses something inside a `<dialog>` as it shows it and scrolls to it,
- * so the host puts the page's scroll position back after each
- * `showModal()` and `showPopover()`, which also stops a smooth scroll the
- * focus started.
+ * so the host puts the page's scroll position back after a `showModal()`
+ * or a `showPopover()` that moved focus, which also stops a smooth scroll
+ * the focus started.
  *
  * A handler set with `{ preventDefault: true }` cancels its event's default
  * when it produces a message, before the message is sent, and leaves the
@@ -526,10 +526,11 @@ export const makeHost = (
   const keepingScroll = (show: () => void) => {
     const view = document.defaultView
     if (view === null || typeof view.scrollTo !== "function") return show()
+    const focused = document.activeElement
     const left = view.scrollX
     const top = view.scrollY
     show()
-    view.scrollTo({ left, top, behavior: "instant" })
+    if (document.activeElement !== focused) view.scrollTo({ left, top, behavior: "instant" })
   }
 
   // -- dialogs -----------------------------------------------------------------

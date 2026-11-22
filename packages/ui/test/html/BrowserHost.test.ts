@@ -2094,7 +2094,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(stub.calls).toEqual(["showModal Settings", "showPopover Menu"])
       }).pipe(Effect.scoped))
 
-    it.effect("showing a modal dialog or a popover leaves the page's scroll where it was", () =>
+    it.effect("showing a modal dialog or a popover that takes focus leaves the page's scroll where it was", () =>
       Effect.gen(function*() {
         yield* popoverStub
         const jumps: Array<string> = []
@@ -2103,6 +2103,8 @@ describe("BrowserHost", { concurrent: false }, () => {
           return vi.spyOn(proto, name).mockImplementation(function(this: HTMLElement) {
             show.call(this)
             jumps.push(name)
+            this.tabIndex = -1
+            this.focus()
             window.scrollTo(0, 0)
           })
         }

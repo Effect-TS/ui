@@ -1,6 +1,6 @@
 import { type Attributed, flag } from "./attributes.ts"
 
-export const finite = (animation: Animation): boolean => {
+const finite = (animation: Animation): boolean => {
   const end = animation.effect?.getComputedTiming().endTime
   return typeof end === "number" && Number.isFinite(end)
 }
@@ -8,6 +8,22 @@ export const finite = (animation: Animation): boolean => {
 export const frameOf = (view: Window | null) => (f: () => void): void => {
   if (view === null) setTimeout(f, 0)
   else view.requestAnimationFrame(f)
+}
+
+export const whenFinished = (
+  elements: () => ReadonlyArray<Element | null>,
+  frame: (f: () => void) => void,
+  live: () => boolean,
+  done: () => void
+): void => {
+  if (!live()) return
+  const running = elements().flatMap((element) => element?.getAnimations?.() ?? []).filter(finite)
+  Promise.all(running.map((animation) => animation.finished)).then(
+    () => {
+      if (live()) done()
+    },
+    () => frame(() => whenFinished(elements, frame, live, done))
+  )
 }
 
 export type TransitionStatus = "starting" | "ending" | null
@@ -48,17 +64,7 @@ export const settling = (
   let generation = 0
   const settle = (open: boolean) => {
     const mine = ++generation
-    const read = () => {
-      if (mine !== generation || !node.isConnected) return
-      const running = element().getAnimations().filter(finite).map((animation) => animation.finished)
-      Promise.all(running).then(
-        () => {
-          if (mine === generation && node.isConnected) done(open)
-        },
-        () => frame(read)
-      )
-    }
-    frame(read)
+    frame(() => whenFinished(() => [element()], frame, () => mine === generation && node.isConnected, () => done(open)))
   }
   const cancel = () => {
     generation++

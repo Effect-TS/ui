@@ -215,18 +215,20 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
+import * as Struct from "effect/Struct"
 import {
   Dialog,
   DialogDismissReason,
   DialogInteraction,
-  DialogModal,
+  DialogProps,
   type DialogTransitionStatus,
   DialogTrigger,
   type DialogTriggerElement
 } from "./Dialog.ts"
 import { type Attributed, attrSelector, flag, idOf, idSelector, withStyle } from "./internal/attributes.ts"
+import { override } from "./internal/dom.ts"
 import { methodOf } from "./internal/interaction.ts"
-import { finite, frameOf } from "./internal/transition.ts"
+import { frameOf, whenFinished } from "./internal/transition.ts"
 import * as Positioning from "./Positioning.ts"
 
 /**
@@ -308,15 +310,17 @@ export type PopoverAlign = typeof PopoverAlign.Type
  * @since 0.1.0
  */
 export const PopoverProps = Schema.Struct({
-  open: Schema.Boolean,
-  modal: Schema.optional(DialogModal),
-  triggerId: Schema.optional(Schema.NullOr(Schema.String)),
-  keepMounted: Schema.optional(Schema.Boolean),
-  initialFocus: Schema.optional(Schema.Boolean),
-  finalFocus: Schema.optional(Schema.Boolean),
-  id: Schema.optional(Schema.String),
-  openMethod: Schema.optional(Schema.NullOr(DialogInteraction)),
-  holdExit: Schema.optional(Schema.Boolean),
+  ...Struct.pick(DialogProps.fields, [
+    "open",
+    "modal",
+    "triggerId",
+    "keepMounted",
+    "initialFocus",
+    "finalFocus",
+    "id",
+    "openMethod",
+    "holdExit"
+  ]),
   ...Positioning.PositionerFields
 })
 
@@ -405,16 +409,15 @@ export type PopoverInstant = "click" | "dismiss" | "focus" | "trigger-change"
 
 const Point = Schema.Struct({ x: Schema.Number, y: Schema.Number })
 
+const Hover = Schema.Struct({ delay: Schema.Number, closeDelay: Schema.Number })
+
+type Hover = typeof Hover.Type
+
 const Message = UiSchema.TaggedEnum({
   OpenedDialog: { triggerId: Schema.NullOr(Schema.String) },
   DismissedDialog: { reason: DialogDismissReason },
   SettledDialog: { open: Schema.Boolean },
-  EnteredTrigger: {
-    triggerId: Schema.NullOr(Schema.String),
-    delay: Schema.Number,
-    closeDelay: Schema.Number,
-    at: Schema.NullOr(Point)
-  },
+  EnteredTrigger: { triggerId: Schema.NullOr(Schema.String), ...Hover.fields, at: Schema.NullOr(Point) },
   LeftTrigger: { at: Schema.NullOr(Point) },
   PressedDetachedTrigger: { triggerId: Schema.NullOr(Schema.String), pointerType: Schema.String },
   EnteredPositioner: {},
@@ -452,8 +455,17 @@ type Model = typeof Model.Type
 
 type PopoverUpdate = Component.Update<Model, Message, PopoverEvents, PopoverProps>
 
-const openDelay = 300
 const patience = 500
+
+const hoverOf = (options: {
+  readonly openOnHover?: boolean | undefined
+  readonly delay?: number | undefined
+  readonly closeDelay?: number | undefined
+  readonly disabled?: boolean | undefined
+}): Hover | null =>
+  options.openOnHover === true && options.disabled !== true
+    ? { delay: options.delay ?? 300, closeDelay: options.closeDelay ?? 0 }
+    : null
 
 const WaitBeforeOpening = Command.make(
   "WaitBeforeOpening",
@@ -508,7 +520,7 @@ const dismiss = (model: Model, $: PopoverUpdate, reason: PopoverDismissReason) =
   )
 
 const pressed = (model: Model, $: PopoverUpdate) =>
-  hoverOpened(model) && model.patient
+  model.patient
     ? openFor(model, $, activeOf(model, $.props), "trigger-press", model.method)
     : dismiss(model, $, "trigger-press")
 
@@ -542,24 +554,14 @@ const fromDetached = (popupId: string) =>
       )
     ))
 
-type Hover = { readonly delay: number; readonly closeDelay: number }
-
 const TrackDetachedTrigger = Mount.makeStream(
   "TrackDetachedTrigger",
-  {
-    args: {
-      popupId: Schema.String,
-      openOnHover: Schema.Boolean,
-      delay: Schema.Number,
-      closeDelay: Schema.Number
-    }
-  },
+  { args: { popupId: Schema.String, hover: Schema.NullOr(Hover) } },
   (node: HTMLButtonElement, args, changes) =>
     Stream.callback<never>(() => {
       let current = args
       const send = (message: Message) => detached.get(current.popupId)?.(message)
       const triggerId = () => node.id === "" ? null : node.id
-      const hovers = (event: PointerEvent) => current.openOnHover && event.pointerType === "mouse"
       const controller = new AbortController()
       const { signal } = controller
       return Effect.acquireRelease(
@@ -571,16 +573,16 @@ const TrackDetachedTrigger = Mount.makeStream(
             }))
           }, { signal })
           node.addEventListener("pointerenter", (event) => {
-            if (!hovers(event)) return
+            if (current.hover === null || event.pointerType !== "mouse") return
             send(Message.EnteredTrigger({
               triggerId: triggerId(),
-              delay: current.delay,
-              closeDelay: current.closeDelay,
+              ...current.hover,
               at: { x: event.clientX, y: event.clientY }
             }))
           }, { signal })
           node.addEventListener("pointerleave", (event) => {
-            if (hovers(event)) send(Message.LeftTrigger({ at: { x: event.clientX, y: event.clientY } }))
+            if (current.hover === null || event.pointerType !== "mouse") return
+            send(Message.LeftTrigger({ at: { x: event.clientX, y: event.clientY } }))
           }, { signal })
         }).pipe(
           Effect.tap(() =>
@@ -605,17 +607,11 @@ const TrackSwitch = Mount.makeStream(
       let current = args
       let generation = 0
       const settle = (mine: number) =>
-        frame(() => {
-          if (mine !== generation) return
-          const positioner = document.getElementById(current.positionerId)
-          const running = (positioner?.getAnimations?.() ?? []).filter(finite).map((animation) => animation.finished)
-          Promise.all(running).then(
-            () => {
-              if (mine === generation && current.open) Queue.offerUnsafe(queue, Message.SettledSwitch())
-            },
-            () => settle(mine)
-          )
-        })
+        frame(() =>
+          whenFinished(() => [document.getElementById(current.positionerId)], frame, () => mine === generation, () => {
+            if (current.open) Queue.offerUnsafe(queue, Message.SettledSwitch())
+          })
+        )
       const onChange = (next: typeof args) => {
         const previous = current
         current = next
@@ -647,15 +643,6 @@ const sizeOf = (element: HTMLElement): Size => {
   return {
     width: Number.isFinite(width) ? width : element.offsetWidth,
     height: Number.isFinite(height) ? height : element.offsetHeight
-  }
-}
-
-const override = (element: HTMLElement, name: string, value: string): () => void => {
-  const before = element.style.getPropertyValue(name)
-  element.style.setProperty(name, value)
-  return () => {
-    if (before === "") element.style.removeProperty(name)
-    else element.style.setProperty(name, before)
   }
 }
 
@@ -699,13 +686,11 @@ const TrackViewport = Mount.makeStream(
   "TrackViewport",
   {
     args: {
-      mounted: Schema.Boolean,
       open: Schema.Boolean,
       anchor: Schema.String,
       side: Schema.String,
       positionerId: Schema.String,
-      transitioning: Schema.Boolean,
-      entered: Schema.Boolean
+      transitioning: Schema.Boolean
     }
   },
   (node: HTMLElement, args, changes) =>
@@ -731,29 +716,13 @@ const TrackViewport = Mount.makeStream(
         while (element !== null && element.parentElement !== positioner) element = element.parentElement
         return element
       }
-      const finished = (elements: ReadonlyArray<HTMLElement | null>, mine: () => boolean, then: () => void): void => {
-        const running = elements.flatMap((element) => element?.getAnimations?.() ?? []).filter(finite)
-        Promise.all(running.map((animation) => animation.finished)).then(
-          () => {
-            if (mine()) then()
-          },
-          () => {
-            if (mine()) frame(() => finished(elements, mine, then))
-          }
-        )
-      }
 
       const anchoring = (popup: HTMLElement): () => void => {
         const rtl = document.defaultView?.getComputedStyle(popup).direction === "rtl"
         const top = current.side === "top"
         const left = current.side === "left" || current.side === (rtl ? "inline-end" : "inline-start")
         if (!top && !left) return () => {}
-        const restores = [
-          override(popup, "position", "absolute"),
-          override(popup, top ? "bottom" : "top", "0"),
-          override(popup, left ? "right" : "left", "0")
-        ]
-        return () => restores.forEach((restore) => restore())
+        return override(popup, { position: "absolute", [top ? "bottom" : "top"]: "0", [left ? "right" : "left"]: "0" })
       }
 
       const resize = (): void => {
@@ -766,15 +735,10 @@ const TrackViewport = Mount.makeStream(
         sized(popup, "--popup", "auto")
         const previous = containerOf(node, "data-previous")
         const restores = [
-          override(popup, "position", "static"),
-          override(popup, "transform", "none"),
-          override(popup, "scale", "1"),
-          override(positioner, "--available-width", "max-content"),
-          override(positioner, "--available-height", "max-content"),
-          ...(content === null
-            ? []
-            : [override(content, "animation", "none"), override(content, "transition", "none")]),
-          ...(previous === null ? [] : [override(previous, "display", "none")])
+          override(popup, { position: "static", transform: "none", scale: "1" }),
+          override(positioner, { "--available-width": "max-content", "--available-height": "max-content" }),
+          ...(content === null ? [] : [override(content, { animation: "none", transition: "none" })]),
+          ...(previous === null ? [] : [override(previous, { display: "none" })])
         ]
         sized(positioner, "--positioner", "max-content")
         const before = committed
@@ -785,10 +749,11 @@ const TrackViewport = Mount.makeStream(
         sized(positioner, "--positioner", next)
         if (before === null) return
         outgoingSize = before
+        const live = () => mine === resizing && !released
         frame(() => {
-          if (mine !== resizing || released) return
+          if (!live()) return
           sized(popup, "--popup", next)
-          finished([popup], () => mine === resizing && !released, () => sized(popup, "--popup", "auto"))
+          whenFinished(() => [popup], frame, live, () => sized(popup, "--popup", "auto"))
         })
       }
 
@@ -800,17 +765,16 @@ const TrackViewport = Mount.makeStream(
         outgoing = null
         // The new content's style was computed when it was measured, so reaching the starting style would
         // itself transition. This computes it with no transition, for the frame below to transition out of.
-        const restore = content === null ? undefined : override(content, "transition", "none")
+        const restore = content === null ? undefined : override(content, { transition: "none" })
         void node.offsetWidth
         restore?.()
         const mine = ++transition
         const live = () => mine === transition && !released
+        const moving = [content, previous]
         frame(() => {
           if (!live()) return
           send(Message.AdvancedTransition())
-          frame(() => {
-            if (live()) finished([content, previous], live, () => send(Message.EndedTransition()))
-          })
+          frame(() => whenFinished(() => moving, frame, live, () => send(Message.EndedTransition())))
         })
       }
 
@@ -819,12 +783,6 @@ const TrackViewport = Mount.makeStream(
         current = next
         const leaving = content
         content = containerOf(node, "data-current")
-        if (!next.mounted) {
-          committed = null
-          resizing++
-          anchored()
-          anchored = () => {}
-        }
         if (!next.open) {
           outgoing = null
           transition++
@@ -833,7 +791,7 @@ const TrackViewport = Mount.makeStream(
         }
         const switched = previous.open && previous.anchor !== next.anchor && leaving !== content
         if (switched) outgoing = leaving
-        if (switched || !previous.mounted || previous.side !== next.side) resize()
+        if (switched || previous.side !== next.side) resize()
         if (switched) {
           send(Message.StartedTransition({
             direction: directionOf(document.querySelector(previous.anchor), document.querySelector(next.anchor))
@@ -842,9 +800,7 @@ const TrackViewport = Mount.makeStream(
       }
 
       return Effect.acquireRelease(
-        Effect.sync(() => {
-          if (current.mounted) resize()
-        }).pipe(
+        Effect.sync(resize).pipe(
           Effect.tap(() => Effect.forkScoped(Stream.runForEach(changes, (next) => Effect.sync(() => onChange(next)))))
         ),
         () =>
@@ -917,7 +873,7 @@ export const PopoverTrigger = <Msg, R = never>(
     readonly props: PopoverTriggerProps
   }
 ): DialogTriggerElement<Msg, R> => {
-  const { closeDelay, delay, disabled, open, openOnHover, popupId, pressed } = options.props
+  const { disabled, open, popupId, pressed } = options.props
   return DialogTrigger(h, { element: options.element, props: { open, popupId } })
     .forward((node) =>
       node
@@ -925,12 +881,7 @@ export const PopoverTrigger = <Msg, R = never>(
         .attr("data-disabled", flag(disabled))
         .disabled(disabled === true)
     )
-    .onMount(TrackDetachedTrigger({
-      popupId,
-      openOnHover: openOnHover === true,
-      delay: delay ?? openDelay,
-      closeDelay: closeDelay ?? 0
-    }))
+    .onMount(TrackDetachedTrigger({ popupId, hover: hoverOf(options.props) }))
 }
 
 /**
@@ -1176,13 +1127,11 @@ export const Popover = Component.define({
             })
           return dialog.mounted
             ? viewport.onMount(TrackViewport({
-              mounted: dialog.mounted,
               open,
               anchor: tracked.anchorSelector,
               side,
               positionerId,
-              transitioning: transition !== null,
-              entered: transition?.entered === true
+              transitioning: transition !== null
             }))
             : viewport
         })
@@ -1222,9 +1171,7 @@ export const Popover = Component.define({
               return triggerPart(
                 dialog.trigger(options.element.attr("id", key)),
                 key,
-                options.openOnHover === true && !disabled
-                  ? { delay: options.delay ?? openDelay, closeDelay: options.closeDelay ?? 0 }
-                  : null,
+                hoverOf(options),
                 disabled
               )
             }
