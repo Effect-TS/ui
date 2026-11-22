@@ -37,10 +37,11 @@ export const Counters = Component.define({
         "Each row is a Counter child keyed by its id. The parent holds only the list of ids, and each Counter keeps its own count, so adding, updating or removing one leaves the others as they were."
       ),
       h.div.class("flex flex-col gap-3 w-full max-w-md").children(
-        model.counterIds.map((id) =>
-          h.div.key(String(id)).attr("role", "group").attr("aria-labelledby", `counter-${id}-label`)
+        model.counterIds.map((id) => {
+          const labelId = h.id("label", id)
+          return h.div.key(String(id)).attr("role", "group").attr("aria-labelledby", labelId)
             .class("flex items-center gap-2").children(
-              h.span.attr("id", `counter-${id}-label`).class("w-20 text-sm text-gray-500").children(`Counter ${id}`),
+              h.span.id(labelId).class("w-20 text-sm text-gray-500").children(`Counter ${id}`),
               h.div.class("flex-1").children(Counter(h, { key: String(id) })),
               Button(h, { onPress: CountersMessage.ClickedRemoveCounter({ id }) })
                 .class(
@@ -48,7 +49,7 @@ export const Counters = Component.define({
                 )
                 .children("Remove")
             )
-        )
+        })
       ),
       Button(h, { onPress: CountersMessage.ClickedAddCounter() })
         .class(
