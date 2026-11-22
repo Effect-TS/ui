@@ -133,7 +133,7 @@ describe("Tabs in a document", { concurrent: false }, () => {
           document.removeEventListener("mousedown", count)
         })
       )
-      const selected = () => ["a", "b", "c"].filter((id) => get(id).getAttribute("aria-selected") === "true")
+      const selected = () => ["a", "b", "c", "d", "e"].filter((id) => get(id).getAttribute("aria-selected") === "true")
       const focusFrom = function*(tab: HTMLElement) {
         get("a").focus()
         yield* tick
@@ -142,13 +142,21 @@ describe("Tabs in a document", { concurrent: false }, () => {
         assert.strictEqual(document.activeElement, tab)
       }
 
-      for (const [end, id] of [["pointercancel", "b"], ["pointerup", "c"]] as const) {
-        press(get(id), "pointerdown")
+      get("d").focus()
+      yield* tick
+      assert.deepStrictEqual(selected(), ["a"])
+
+      for (const [end, id, button] of [["pointercancel", "b", 2], ["pointerup", "c", 1]] as const) {
+        press(get(id), "pointerdown", button)
         yield* focusFrom(get(id))
         yield* focusFrom(get(id))
         assert.deepStrictEqual(selected(), ["a"])
-        press(get(id), end)
-        yield* focusFrom(get(id))
+        get("e").focus()
+        yield* tick
+        assert.deepStrictEqual(selected(), ["e"])
+        press(get(id), end, button)
+        get(id).focus()
+        yield* tick
         assert.deepStrictEqual(selected(), [id])
       }
 

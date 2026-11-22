@@ -225,26 +225,6 @@ describe("Tabs", () => {
       vertical.click(tabLoc("a")).emitted(selected("a", "up"))
     }))
 
-  it.effect("with activateOnFocus, focus selects, unless a secondary button pressed that tab", () =>
-    Effect.gen(function*() {
-      const s = yield* scene(props({ activateOnFocus: true }))
-      s.focus(tabLoc("c")).emitted(selected("c", "right"))
-      s.focus(tabLoc("b"))
-      assert.deepStrictEqual(s.current.emitted, [])
-      s.fire(tabLoc("c"), "pointerdown", { button: 2 }).focus(tabLoc("c")).blur(tabLoc("c"))
-      assert.deepStrictEqual(focused(s.keydown(tabLoc("c"), "ArrowRight")), ["d"])
-      s.focus(tabLoc("c"))
-      assert.deepStrictEqual(s.current.emitted, [])
-      s.focus(tabLoc("d")).emitted(selected("d", "right"))
-      s.fireDocument("pointercancel").focus(tabLoc("c")).emitted(selected("c", "right"))
-
-      select(s, props({ value: "c", activateOnFocus: true }))
-      s.fire(tabLoc("a"), "pointerdown", { button: 1 }).focus(tabLoc("a"))
-      assert.deepStrictEqual(s.current.emitted, [])
-      s.fireDocument("pointerup").focus(tabLoc("a")).emitted(selected("a", "left"))
-      s.fire(tabLoc("d"), "pointerdown", { button: 0 }).focus(tabLoc("d")).emitted(selected("d", "right"))
-    }))
-
   it.effect("a new value moves the activation direction and plays the panels' transitions", () =>
     Effect.gen(function*() {
       const s = yield* scene(props())

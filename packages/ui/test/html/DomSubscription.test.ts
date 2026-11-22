@@ -242,17 +242,6 @@ describe("BrowserHost's GlobalEvents", { concurrent: false }, () => {
       assert.isFalse(press(document.body, "x"))
     }))
 
-  it.effect("a cancelled pointer reaches onDocument with its pointer payload", () =>
-    Effect.gen(function*() {
-      const root = yield* BrowserHost.mountEffect(Phases, {}, yield* container)
-      yield* tick
-      byId("inner").dispatchEvent(new PointerEvent("pointercancel", { bubbles: true, button: 2, pointerType: "pen" }))
-      yield* tick
-      assert.deepStrictEqual(root.model(), ["cancel 2 pen"])
-      const s = yield* HtmlScene.make(Phases, {})
-      s.fireDocument("pointercancel", { button: 1 }).expect(Locator.tag("output")).toHaveText("cancel 1 mouse")
-    }).pipe(Effect.scoped))
-
   it.effect("a capture listener hears a press an element stops, and the window's focus reaches onWindow", () =>
     Effect.gen(function*() {
       const root = yield* BrowserHost.mountEffect(Phases, {}, yield* container)
@@ -264,9 +253,12 @@ describe("BrowserHost's GlobalEvents", { concurrent: false }, () => {
       yield* tick
       press()
       window.dispatchEvent(new FocusEvent("focus"))
+      inner.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true, button: 2, pointerType: "pen" }))
       yield* tick
       // The stopped press reached capture; only the second press bubbled.
-      assert.deepStrictEqual(root.model(), ["capture", "bubble false", "focus"])
+      assert.deepStrictEqual(root.model(), ["capture", "bubble false", "focus", "cancel 2 pen"])
+      const s = yield* HtmlScene.make(Phases, {})
+      s.fireDocument("pointercancel", { button: 1 }).expect(Locator.tag("output")).toHaveText("cancel 1 mouse")
     }).pipe(Effect.scoped))
 })
 
