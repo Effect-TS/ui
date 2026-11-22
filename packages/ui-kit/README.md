@@ -22,6 +22,7 @@ A component that keeps no state, such as `Switch`, is a plain view function inst
 ## Components
 
 - [AlertDialog](src/AlertDialog.ts): a modal dialog that asks the user to answer before going on, which a press outside doesn't close.
+- [Autocomplete](src/Autocomplete.ts): an input that suggests completions from a list as the user types, whose open state and text live in your Model, with inline completion, grids, inline lists, and an input that submits with its form.
 - [Avatar](src/Avatar.ts): an image with a fallback.
 - [Button](src/Button.ts): a native button that can stay focusable while disabled.
 - [Checkbox](src/Checkbox.ts): a controlled checkbox with an indicator.

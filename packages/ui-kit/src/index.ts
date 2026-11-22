@@ -28,6 +28,12 @@ export * from "./AlertDialog.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * from "./Autocomplete.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./Avatar.ts"
 
 /**
