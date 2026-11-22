@@ -149,6 +149,8 @@ describe("Tabs in a document", { concurrent: false }, () => {
       for (const [end, id, button] of [["pointercancel", "b", 2], ["pointerup", "c", 1]] as const) {
         press(get(id), "pointerdown", button)
         yield* focusFrom(get(id))
+        key(get(id), "Home")
+        yield* tick
         yield* focusFrom(get(id))
         assert.deepStrictEqual(selected(), ["a"])
         get("e").focus()
