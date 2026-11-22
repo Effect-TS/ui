@@ -83,6 +83,7 @@ export default defineConfig({
       ...project("@effect/ui-kit", "packages/ui-kit"),
       ...example("auth"),
       ...example("counter"),
+      ...example("counters"),
       ...example("interrupting-commands"),
       ...example("routing"),
       ...example("snake")
