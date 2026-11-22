@@ -70,6 +70,12 @@ export * from "./Fieldset.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * from "./Form.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./Input.ts"
 
 /**

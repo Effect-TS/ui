@@ -484,8 +484,10 @@ portal. The details are in the JSDoc of `popover` and `modal` in
 - Attributes only a Field has, such as `data-invalid` and
   `data-touched`, reach the control through `field.control` or `field.member`,
   so the control doesn't set them. One both write, such as `disabled`, is the field's
-  while the field is disabled. Attributes that come from a Form context
-  wait for that component.
+  while the field is disabled. `Form` shares no state, so a control gets no
+  attribute from it. It finds an invalid control only by `aria-invalid="true"`,
+  so an invalid control carries it on the element that takes focus, or on a
+  root around that element. `field.control` and `field.member` write it.
 - ARIA follows Base UI's source, not just its docs page. Prefer a native
   attribute (`disabled`) where Base UI's native mode uses one.
 
